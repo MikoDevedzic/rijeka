@@ -1,4 +1,16 @@
-import { useEffect } from 'react'
+// write_day4.js
+// Rijeka — Sprint 2 Day 4
+// Writes updated App.jsx with OrgHierarchy wired.
+// Run from: C:\Users\mikod\OneDrive\Desktop\Rijeka\
+//   node write_day4.js
+
+const fs   = require('fs')
+const path = require('path')
+
+const BASE = 'C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src'
+
+const files = {
+  'App.jsx': `import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/useAuthStore'
 
@@ -92,3 +104,14 @@ export default function App() {
     </BrowserRouter>
   )
 }
+`,
+}
+
+let ok = 0
+for (const [name, content] of Object.entries(files)) {
+  const dest = path.join(BASE, name)
+  fs.writeFileSync(dest, content, 'utf8')
+  console.log('✓', dest)
+  ok++
+}
+console.log(`\n${ok} file(s) written. Vite will hot-reload automatically.\n`)
