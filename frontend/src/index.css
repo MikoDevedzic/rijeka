@@ -479,3 +479,86 @@ html, body, #root {
 .appbar-system{font-size:9px;letter-spacing:0.12em;color:var(--text-dim);text-transform:uppercase}
 .md-root{display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0}
 .md-content{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+
+/* ── Sprint 4A: IR_SWAP STRUCTURE selector ─────────────────── */
+.structure-selector {
+  margin-bottom: 18px;
+}
+.structure-selector__label {
+  color: var(--text-muted, #8899aa);
+  display: block;
+  font-family: var(--mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.structure-selector__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.structure-btn {
+  background: var(--panel-2, #0f1820);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 4px;
+  color: #6a8090;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 10px;
+  text-align: left;
+  transition: border-color 0.13s, background 0.13s, color 0.13s;
+}
+.structure-btn:hover {
+  background: rgba(14,201,160,0.05);
+  border-color: rgba(14,201,160,0.3);
+  color: #a8bfcc;
+}
+.structure-btn--active {
+  background: rgba(14,201,160,0.09);
+  border-color: var(--accent, #0ec9a0);
+  color: var(--accent, #0ec9a0);
+}
+.structure-btn__label {
+  font-family: var(--mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1;
+}
+.structure-btn__desc {
+  font-size: 9.5px;
+  line-height: 1.35;
+  opacity: 0.55;
+}
+.structure-btn--active .structure-btn__desc {
+  opacity: 0.75;
+}
+/* blotter STRUCTURE column badge */
+.structure-badge {
+  background: rgba(14,201,160,0.08);
+  border: 1px solid rgba(14,201,160,0.25);
+  border-radius: 3px;
+  color: var(--accent, #0ec9a0);
+  font-family: var(--mono, 'JetBrains Mono', monospace);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  white-space: nowrap;
+}
+.structure-badge--inflation {
+  background: rgba(61,139,200,0.08);
+  border-color: rgba(61,139,200,0.3);
+  color: var(--blue, #3d8bc8);
+}
+/* ── end Sprint 4A ─────────────────────────────────────────── */
+
+/* Sprint 4C: 5-col IR options grid — tighter desc text */
+.structure-selector__grid.grid-5col .structure-btn__desc {
+  font-size: 9px;
+  line-height: 1.3;
+}

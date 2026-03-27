@@ -78,6 +78,7 @@ class Trade(Base):
     store                = Column(String, nullable=True)
     asset_class          = Column(String, nullable=True)
     instrument_type      = Column(String, nullable=True)
+    structure            = Column(String, nullable=True)
     own_legal_entity_id  = Column(UUID(as_uuid=True), ForeignKey("legal_entities.id"), nullable=True)
     counterparty_id      = Column(UUID(as_uuid=True), ForeignKey("counterparties.id"), nullable=True)
     notional             = Column(Numeric(24, 6), nullable=True)

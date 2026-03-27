@@ -19,6 +19,7 @@ class TradeCreate(BaseModel):
     store: str = "WORKING"
     asset_class: str
     instrument_type: str
+    structure: Optional[str] = None
     own_legal_entity_id: Optional[str] = None
     counterparty_id: Optional[str] = None
     notional: Optional[float] = None

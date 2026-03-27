@@ -132,6 +132,7 @@ export default function BookTab() {
               <TH col="trade_ref" label="REF"/>
               <th>CLASS</th>
               <TH col="instrument_type" label="INSTRUMENT"/>
+              <th className="col-structure">STRUCTURE</th>
               <th>COUNTERPARTY</th>
               <TH col="notional" label="NOTIONAL"/>
               <th>TENOR</th>
@@ -158,6 +159,10 @@ export default function BookTab() {
                       <td className="td-ref" onClick={()=>openTrade(t)} style={{cursor:'pointer'}}>{t.trade_ref}</td>
                       <td><span className="ac-badge" style={{color:ac.c,borderColor:ac.c+'40'}}>{ac.a}</span></td>
                       <td className="td-dim">{t.instrument_type}</td>
+                      <td>{t.structure
+                        ? <span className={`structure-badge${['INFLATION_ZC','INFLATION_YOY'].includes(t.structure)?(' structure-badge--inflation'):''}`}>{t.structure.replace(/_/g,' ')}</span>
+                        : <span className="td-dim" style={{opacity:0.3}}>—</span>}
+                      </td>
                       <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis'}}>{t.counterparty?.name||'—'}</td>
                       <td className="td-num">{fmt(t.notional)} <span className="ccy-label">{t.notional_ccy}</span></td>
                       <td className="td-dim">{tenor(t)}</td>

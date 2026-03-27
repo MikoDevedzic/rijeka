@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import IrSwapStructureSelector from './IrSwapStructures';
 import { useTradesStore } from '../../store/useTradesStore'
 import { useTabStore } from '../../store/useTabStore'
 import { supabase } from '../../lib/supabase'
@@ -55,11 +56,89 @@ function makeLegRef(tradeRef, legIdx) {
 const ASSET_CLASSES = ['RATES','FX','CREDIT','EQUITY','COMMODITY']
 const AC_COLOR = { RATES:'var(--accent)', FX:'var(--blue)', CREDIT:'var(--amber)', EQUITY:'var(--purple)', COMMODITY:'var(--red)' }
 
+// Optgroup buckets for dropdown — RATES only for now
+const INSTRUMENT_GROUPS = {
+  RATES: [
+    {
+      group: 'IR SWAP',
+      items: ['IR_SWAP','CAPPED_SWAP','FLOORED_SWAP','COLLARED_SWAP','CALLABLE_SWAP','CANCELLABLE_SWAP'],
+      hint:  'Variants (OIS/BASIS/XCCY etc) via STRUCTURE selector on IR SWAP',
+    },
+    {
+      group: 'IR OPTIONS',
+      items: ['IR_SWAPTION','BERMUDAN_SWAPTION','INTEREST_RATE_CAP','INTEREST_RATE_FLOOR','INTEREST_RATE_COLLAR'],
+      hint:  'Standalone options with upfront, installment, deferred or contingent premium',
+    },
+    {
+      group: 'OTHER RATES',
+      items: ['FRA'],
+      hint:  '',
+    },
+  ],
+}
+
+// IR OPTIONS quick-switch set (mirrors INSTRUMENT_GROUPS.RATES[1].items)
+const IR_OPTIONS_ITEMS = [
+  { value: 'IR_SWAPTION',          label: 'IR SWAPTION',  desc: 'European / American exercise' },
+  { value: 'BERMUDAN_SWAPTION',    label: 'BERMUDAN',     desc: 'Bermudan exercise schedule'   },
+  { value: 'INTEREST_RATE_CAP',    label: 'CAP',          desc: 'Rate ceiling — pays if above strike' },
+  { value: 'INTEREST_RATE_FLOOR',  label: 'FLOOR',        desc: 'Rate floor — pays if below strike'   },
+  { value: 'INTEREST_RATE_COLLAR', label: 'COLLAR',       desc: 'Cap + floor combined'         },
+]
+const IR_OPTIONS_SET = new Set(IR_OPTIONS_ITEMS.map(x => x.value))
+
+// Display labels for instrument types (underscores → spaces, aliases)
+const INSTR_LABEL = {
+  IR_SWAP:              'IR SWAP',
+  CAPPED_SWAP:          'CAPPED SWAP',
+  FLOORED_SWAP:         'FLOORED SWAP',
+  COLLARED_SWAP:        'COLLARED SWAP',
+  CALLABLE_SWAP:        'CALLABLE SWAP',
+  CANCELLABLE_SWAP:     'CANCELLABLE SWAP',
+  IR_SWAPTION:          'IR SWAPTION',
+  BERMUDAN_SWAPTION:    'BERMUDAN SWAPTION',
+  INTEREST_RATE_CAP:    'INTEREST RATE CAP',
+  INTEREST_RATE_FLOOR:  'INTEREST RATE FLOOR',
+  INTEREST_RATE_COLLAR: 'INTEREST RATE COLLAR',
+  FRA:                  'FRA',
+  FX_FORWARD:           'FX FORWARD',
+  FX_SWAP:              'FX SWAP',
+  NDF:                  'NDF',
+  FX_OPTION:            'FX OPTION',
+  FX_DIGITAL_OPTION:    'FX DIGITAL OPTION',
+  EXTENDABLE_FORWARD:   'EXTENDABLE FORWARD',
+  CDS:                  'CDS',
+  CDS_INDEX:            'CDS INDEX',
+  TOTAL_RETURN_SWAP:    'TOTAL RETURN SWAP',
+  ASSET_SWAP:           'ASSET SWAP',
+  RISK_PARTICIPATION:   'RISK PARTICIPATION',
+  CDS_OPTION:           'CDS OPTION',
+  EQUITY_SWAP:          'EQUITY SWAP',
+  VARIANCE_SWAP:        'VARIANCE SWAP',
+  DIVIDEND_SWAP:        'DIVIDEND SWAP',
+  EQUITY_FORWARD:       'EQUITY FORWARD',
+  EQUITY_OPTION:        'EQUITY OPTION',
+  COMMODITY_SWAP:       'COMMODITY SWAP',
+  COMMODITY_BASIS_SWAP: 'COMMODITY BASIS SWAP',
+  ASIAN_COMMODITY_SWAP: 'ASIAN COMMODITY SWAP',
+  EMISSIONS_SWAP:       'EMISSIONS SWAP',
+  COMMODITY_OPTION:     'COMMODITY OPTION',
+  COMMODITY_ASIAN_OPTION:'COMMODITY ASIAN OPTION',
+}
+
 const INSTRUMENTS = {
-  RATES:     ['IR_SWAP','OIS_SWAP','BASIS_SWAP','XCCY_SWAP','FRA','ZERO_COUPON_SWAP','STEP_UP_SWAP','INFLATION_SWAP','CMS_SWAP','CMS_SPREAD_SWAP',
-               'IR_SWAPTION','BERMUDAN_SWAPTION',
-               'INTEREST_RATE_CAP','INTEREST_RATE_FLOOR','INTEREST_RATE_COLLAR',
-               'CALLABLE_SWAP','CANCELLABLE_SWAP','CAPPED_SWAP','FLOORED_SWAP','COLLARED_SWAP'],
+  RATES: [
+    // IR SWAP family (variants via STRUCTURE selector)
+    'IR_SWAP',
+    // Embedded-optionality swaps
+    'CAPPED_SWAP','FLOORED_SWAP','COLLARED_SWAP',
+    'CALLABLE_SWAP','CANCELLABLE_SWAP',
+    // IR Options (standalone, upfront/installment premium)
+    'IR_SWAPTION','BERMUDAN_SWAPTION',
+    'INTEREST_RATE_CAP','INTEREST_RATE_FLOOR','INTEREST_RATE_COLLAR',
+    // Other
+    'FRA',
+  ],
   FX:        ['FX_FORWARD','FX_SWAP','NDF','FX_OPTION','FX_DIGITAL_OPTION','EXTENDABLE_FORWARD'],
   CREDIT:    ['CDS','CDS_INDEX','TOTAL_RETURN_SWAP','ASSET_SWAP','RISK_PARTICIPATION','CDS_OPTION'],
   EQUITY:    ['EQUITY_SWAP','VARIANCE_SWAP','DIVIDEND_SWAP','EQUITY_FORWARD','EQUITY_OPTION'],
@@ -193,7 +272,7 @@ const LD = {
     exercise_style:'EUROPEAN',   // EUROPEAN | AMERICAN | BERMUDAN
     expiry_date:'',
     settlement_type:'PHYSICAL',  // PHYSICAL | CASH
-    premium:'',premium_currency:'USD',premium_date:'',
+    premium_type:'UPFRONT',premium:'',premium_currency:'USD',premium_date:'',premium_frequency:'',premium_last_date:'',
     underlying_fixed_rate:'',underlying_frequency:'SEMI-ANNUAL',
     underlying_day_count:'ACT/360',underlying_tenor:'5Y',underlying_index:'USD_SOFR',
     effective_date:'',maturity_date:'',
@@ -203,7 +282,7 @@ const LD = {
     cap_floor_type:type,          // CAP | FLOOR | COLLAR
     strike:'',floor_strike:'',
     index:'USD_SOFR',day_count:'ACT/360',frequency:'QUARTERLY',
-    premium:'',premium_currency:'USD',premium_date:'',
+    premium_type:'UPFRONT',premium:'',premium_currency:'USD',premium_date:'',premium_frequency:'',premium_last_date:'',
     effective_date:'',maturity_date:'',
   }),
   FX_OPTION: (dir='BUY') => ({
@@ -215,7 +294,7 @@ const LD = {
     settlement_type:'CASH',
     barrier_type:'NONE',barrier_level:'',
     digital_payout:'',
-    premium:'',premium_currency:'USD',premium_date:'',
+    premium_type:'UPFRONT',premium:'',premium_currency:'USD',premium_date:'',premium_frequency:'',premium_last_date:'',
   }),
   EQUITY_OPTION: (dir='BUY') => ({
     leg_type:'EQUITY_OPTION',label:'EQUITY OPTION',direction:dir,currency:'USD',notional:'10,000,000',
@@ -224,7 +303,7 @@ const LD = {
     reference:'',reference_type:'SINGLE_NAME',
     quantity:'',strike:'',initial_price:'',
     expiry_date:'',settlement_type:'CASH',
-    premium:'',premium_currency:'USD',premium_date:'',
+    premium_type:'UPFRONT',premium:'',premium_currency:'USD',premium_date:'',premium_frequency:'',premium_last_date:'',
   }),
   COMMODITY_OPTION: (dir='BUY', idx='WTI_CRUDE') => ({
     leg_type:'COMMODITY_OPTION',label:'COMMODITY OPTION',direction:dir,currency:'USD',notional:'10,000,000',
@@ -233,7 +312,7 @@ const LD = {
     commodity_index:idx,unit:'BBL',
     strike:'',quantity:'',
     expiry_date:'',settlement_type:'CASH',
-    premium:'',premium_currency:'USD',premium_date:'',
+    premium_type:'UPFRONT',premium:'',premium_currency:'USD',premium_date:'',premium_frequency:'',premium_last_date:'',
   }),
   CDS_OPTION: (dir='BUY') => ({
     leg_type:'CDS_OPTION',label:'CDS OPTION',direction:dir,currency:'USD',notional:'10,000,000',
@@ -243,7 +322,7 @@ const LD = {
     reference_entity:'',reference_isin:'',
     recovery_rate:'0.40',seniority:'SENIOR_UNSECURED',
     knockout:true,
-    premium:'',premium_currency:'USD',premium_date:'',
+    premium_type:'UPFRONT',premium:'',premium_currency:'USD',premium_date:'',premium_frequency:'',premium_last_date:'',
   }),
 
   // ── Sprint 3F extended options ────────────────────────────
@@ -260,7 +339,7 @@ const LD = {
     underlying_fixed_rate:'',underlying_frequency:'SEMI-ANNUAL',
     underlying_day_count:'ACT/360',underlying_tenor:'5Y',underlying_index:'USD_SOFR',
     effective_date:'',maturity_date:'',
-    premium:'',premium_currency:'USD',premium_date:'',
+    premium_type:'UPFRONT',premium:'',premium_currency:'USD',premium_date:'',premium_frequency:'',premium_last_date:'',
   }),
 
   // Callable/Cancellable swap: vanilla swap + embedded right to cancel
@@ -337,7 +416,7 @@ const LD = {
     settlement_style:'BULLET',        // BULLET | STAGED
 
     expiry_date:'',maturity_date:'',
-    premium:'',premium_currency:'USD',premium_date:'',
+    premium_type:'UPFRONT',premium:'',premium_currency:'USD',premium_date:'',premium_frequency:'',premium_last_date:'',
   }),
 }
 
@@ -1030,14 +1109,96 @@ function XccyFields({leg, set, legs, legIdx}) {
 function OptionPremiumFields({leg,set}) {
   return (
     <div className="sec-lbl-group">
-      <div className="sec-lbl">PREMIUM</div>
-      <div className="row3">
-        <div className="fg"><label>PREMIUM AMOUNT</label><input placeholder="0" value={leg.premium||''} onChange={e=>set('premium',e.target.value)}/></div>
-        <div className="fg"><label>PREMIUM CCY</label><select value={leg.premium_currency||'USD'} onChange={e=>set('premium_currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
-        <div className="fg"><label>PREMIUM DATE</label><input type="date" value={leg.premium_date||''} onChange={e=>set('premium_date',e.target.value)}/></div>
-      </div>
+      <PremiumSection leg={leg} set={set}/>
     </div>
   )
+}
+
+// ── Sprint 4B: PremiumSection ────────────────────────────────────────────────
+// Handles UPFRONT | INSTALLMENT | DEFERRED | CONTINGENT premium structures.
+// Used by all IR/FX/Equity/Commodity/CDS option forms.
+function PremiumSection({leg,set}) {
+  const type = leg.premium_type || 'UPFRONT'
+  return (<>
+    <div className="sec-lbl">PREMIUM</div>
+    <div className="row2">
+      <div className="fg"><label>PREMIUM TYPE</label>
+        <select value={type} onChange={e=>set('premium_type',e.target.value)}>
+          <option value="UPFRONT">UPFRONT — single date</option>
+          <option value="INSTALLMENT">INSTALLMENT — periodic payments</option>
+          <option value="DEFERRED">DEFERRED — paid at expiry</option>
+          <option value="CONTINGENT">CONTINGENT — only if ITM</option>
+        </select>
+      </div>
+      <div className="fg"><label>PREMIUM CCY</label>
+        <select value={leg.premium_currency||'USD'} onChange={e=>set('premium_currency',e.target.value)}>
+          {CCYS.map(c=><option key={c}>{c}</option>)}
+        </select>
+      </div>
+    </div>
+
+    {type==='UPFRONT'&&(
+      <div className="row2">
+        <div className="fg"><label>PREMIUM AMOUNT</label>
+          <input placeholder="0" value={leg.premium||''} onChange={e=>set('premium',e.target.value)}/>
+        </div>
+        <div className="fg"><label>PREMIUM DATE</label>
+          <input type="date" value={leg.premium_date||''} onChange={e=>set('premium_date',e.target.value)}/>
+        </div>
+      </div>
+    )}
+
+    {type==='INSTALLMENT'&&(<>
+      <div className="row2">
+        <div className="fg"><label>AMOUNT PER INSTALLMENT</label>
+          <input placeholder="0" value={leg.premium||''} onChange={e=>set('premium',e.target.value)}/>
+        </div>
+        <div className="fg"><label>FREQUENCY</label>
+          <select value={leg.premium_frequency||'MONTHLY'} onChange={e=>set('premium_frequency',e.target.value)}>
+            {FREQS.map(f=><option key={f}>{f}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="row2">
+        <div className="fg"><label>FIRST PAYMENT</label>
+          <input type="date" value={leg.premium_date||''} onChange={e=>set('premium_date',e.target.value)}/>
+        </div>
+        <div className="fg"><label>LAST PAYMENT</label>
+          <input type="date" value={leg.premium_last_date||''} onChange={e=>set('premium_last_date',e.target.value)}/>
+        </div>
+      </div>
+      <div style={{fontSize:'0.6rem',color:'var(--text-dim)',marginBottom:'0.5rem',lineHeight:1.6}}>
+        Installment option: if buyer misses a payment, option lapses and all prior premiums are forfeited.
+        Total PV of installments = equivalent upfront premium.
+      </div>
+    </>)}
+
+    {type==='DEFERRED'&&(
+      <div className="row2">
+        <div className="fg"><label>PREMIUM AMOUNT</label>
+          <input placeholder="0" value={leg.premium||''} onChange={e=>set('premium',e.target.value)}/>
+        </div>
+        <div className="fg" style={{display:'flex',alignItems:'flex-end',paddingBottom:'0.4rem'}}>
+          <span style={{fontSize:'0.6rem',color:'var(--text-dim)',lineHeight:1.5}}>
+            Paid at expiry regardless of whether the option is exercised.
+          </span>
+        </div>
+      </div>
+    )}
+
+    {type==='CONTINGENT'&&(
+      <div className="row2">
+        <div className="fg"><label>PREMIUM AMOUNT</label>
+          <input placeholder="0" value={leg.premium||''} onChange={e=>set('premium',e.target.value)}/>
+        </div>
+        <div className="fg" style={{display:'flex',alignItems:'flex-end',paddingBottom:'0.4rem'}}>
+          <span style={{fontSize:'0.6rem',color:'var(--text-dim)',lineHeight:1.5}}>
+            Only paid if option expires in-the-money. Higher amount than equivalent upfront.
+          </span>
+        </div>
+      </div>
+    )}
+  </>)
 }
 
 function IrSwaptionForm({leg,set}) {
@@ -1625,12 +1786,29 @@ function LegCard({leg,legIdx,legs,setLegs}) {
   )
 }
 
+// ── Sprint 4A: structure → template mapping ─────────────────────────────────
+// instrument_type stays IR_SWAP for all 10 variants.
+// terms.structure and trades.structure store the variant name.
+const STRUCTURE_TO_TEMPLATE = {
+  VANILLA:       () => TEMPLATES.IR_SWAP(),
+  OIS:           () => TEMPLATES.OIS_SWAP      ? TEMPLATES.OIS_SWAP()      : TEMPLATES.IR_SWAP(),
+  BASIS:         () => TEMPLATES.BASIS_SWAP    ? TEMPLATES.BASIS_SWAP()    : TEMPLATES.IR_SWAP(),
+  XCCY:          () => TEMPLATES.XCCY_SWAP     ? TEMPLATES.XCCY_SWAP()     : TEMPLATES.IR_SWAP(),
+  ZERO_COUPON:   () => TEMPLATES.ZERO_COUPON_SWAP  ? TEMPLATES.ZERO_COUPON_SWAP()  : TEMPLATES.IR_SWAP(),
+  STEP_UP:       () => TEMPLATES.STEP_UP_SWAP  ? TEMPLATES.STEP_UP_SWAP()  : TEMPLATES.IR_SWAP(),
+  INFLATION_ZC:  () => TEMPLATES.INFLATION_SWAP? TEMPLATES.INFLATION_SWAP(): TEMPLATES.IR_SWAP(),
+  INFLATION_YOY: () => TEMPLATES.INFLATION_SWAP? TEMPLATES.INFLATION_SWAP(): TEMPLATES.IR_SWAP(),
+  CMS:           () => TEMPLATES.CMS_SWAP      ? TEMPLATES.CMS_SWAP()      : TEMPLATES.IR_SWAP(),
+  CMS_SPREAD:    () => TEMPLATES.CMS_SPREAD_SWAP? TEMPLATES.CMS_SPREAD_SWAP(): TEMPLATES.IR_SWAP(),
+}
+
 export default function NewTradeWorkspace({tab}) {
   const today=new Date().toISOString().substring(0,10)
   const {addTrade}=useTradesStore()
   const {closeTab,promoteTrade,setDirty}=useTabStore()
   const [ac,setAc]=useState('RATES')
   const [instrument,setInstrument]=useState('IR_SWAP')
+  const [selectedStructure,setSelectedStructure]=useState('VANILLA')
   const [legs,setLegs]=useState(TEMPLATES.IR_SWAP())
   const [tradeRef,setTradeRef]=useState(`TRD-${Date.now().toString().slice(-8)}`)
   const [store,setStore]=useState('WORKING')
@@ -1669,8 +1847,15 @@ export default function NewTradeWorkspace({tab}) {
       })
   },[])
 
-  const changeAc=(a)=>{setAc(a);const it=INSTRUMENTS[a][0];setInstrument(it);setLegs((TEMPLATES[it]||TEMPLATES.IR_SWAP)())}
-  const changeIT=(it)=>{setInstrument(it);setLegs((TEMPLATES[it]||TEMPLATES.IR_SWAP)());setDirty(tab.id,true)}
+  const changeAc=(a)=>{
+    setAc(a)
+    const grp = INSTRUMENT_GROUPS[a]
+    const it  = grp ? grp[0].items[0] : INSTRUMENTS[a][0]
+    setInstrument(it)
+    if(it!=='IR_SWAP') setSelectedStructure('VANILLA')
+    setLegs((TEMPLATES[it]||TEMPLATES.IR_SWAP)())
+  }
+  const changeIT=(it)=>{setInstrument(it);if(it!=='IR_SWAP')setSelectedStructure('VANILLA');setLegs((TEMPLATES[it]||TEMPLATES.IR_SWAP)());setDirty(tab.id,true)}
   const cfs=genCFs(legs,effectiveDate,maturityDate)
 
   const submit=async()=>{
@@ -1680,7 +1865,7 @@ export default function NewTradeWorkspace({tab}) {
     const firstLeg=legs[0]
     const notional=firstLeg?parseFloat(String(firstLeg.notional||'').replace(/,/g,'').replace(/s/g,''))||null:null
     const terms={
-      structure: instrument,
+      structure: instrument==='IR_SWAP' ? selectedStructure : null,
       legs: legs.map((l, i) => ({
         ...l,
         leg_id:  uuidv4(),                        // UUID — independently addressable
@@ -1695,7 +1880,7 @@ export default function NewTradeWorkspace({tab}) {
       notional_exchange: notionalExchange,
       trade_hash: null,                            // Sprint 5: filled by confirmation engine
     }
-    const payload={trade_ref:tradeRef,status:'PENDING',store,asset_class:ac,instrument_type:instrument,notional,notional_ccy:notionalCcy,trade_date:tradeDate,effective_date:effectiveDate,maturity_date:maturityDate,terms}
+    const payload={trade_ref:tradeRef,status:'PENDING',store,asset_class:ac,instrument_type:instrument,structure:instrument==='IR_SWAP'?selectedStructure:null,notional,notional_ccy:notionalCcy,trade_date:tradeDate,effective_date:effectiveDate,maturity_date:maturityDate,terms}
     if(desk) payload.desk=desk
     if(book) payload.book=book
     if(counterpartyId) payload.counterparty_id=counterpartyId
@@ -1794,7 +1979,14 @@ export default function NewTradeWorkspace({tab}) {
           </div>
           <div className="fg" style={{margin:0,minWidth:220}}>
             <select style={{margin:0}} value={instrument} onChange={e=>changeIT(e.target.value)}>
-              {(INSTRUMENTS[ac]||[]).map(it=><option key={it}>{it}</option>)}
+              {INSTRUMENT_GROUPS[ac]
+                ? INSTRUMENT_GROUPS[ac].map(g=>(
+                    <optgroup key={g.group} label={`── ${g.group} ──`}>
+                      {g.items.map(it=><option key={it} value={it}>{INSTR_LABEL[it]||it.replace(/_/g,' ')}</option>)}
+                    </optgroup>
+                  ))
+                : (INSTRUMENTS[ac]||[]).map(it=><option key={it} value={it}>{INSTR_LABEL[it]||it.replace(/_/g,' ')}</option>)
+              }
             </select>
           </div>
           {instrument==='XCCY_SWAP'&&(
@@ -1899,7 +2091,45 @@ export default function NewTradeWorkspace({tab}) {
           </div>
           <div className="ntw-section-hdr">LEGS — {legs.length} LEG{legs.length!==1?'S':''}</div>
           <div className="ntw-scroll">
-            {legs.map((leg,i)=><LegCard key={i} leg={leg} legIdx={i} legs={legs} setLegs={setLegs}/>)}
+            {/* Sprint 4A: STRUCTURE selector — IR_SWAP only */}
+        {instrument === 'IR_SWAP' && (
+          <IrSwapStructureSelector
+            value={selectedStructure}
+            onChange={(newStructure) => {
+              setSelectedStructure(newStructure);
+              const tplLegs = (STRUCTURE_TO_TEMPLATE[newStructure] || STRUCTURE_TO_TEMPLATE.VANILLA)();
+              // Inherit current dates, ccy, notional into new legs
+              setLegs(tplLegs.map(l => ({
+                ...l,
+                currency: l.currency || notionalCcy || 'USD',
+                effective_date: effectiveDate || '',
+                maturity_date: maturityDate || '',
+              })));
+              setDirty(tab.id, true);
+            }}
+          />
+        )}
+        {/* Sprint 4C: IR OPTIONS quick-switch grid */}
+        {IR_OPTIONS_SET.has(instrument) && (
+          <div className="structure-selector" style={{marginBottom:'14px'}}>
+            <label className="structure-selector__label">IR OPTIONS</label>
+            <div className="structure-selector__grid" style={{gridTemplateColumns:'repeat(5,1fr)'}}>
+              {IR_OPTIONS_ITEMS.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`structure-btn${instrument === opt.value ? ' structure-btn--active' : ''}`}
+                  onClick={() => changeIT(opt.value)}
+                  title={opt.desc}
+                >
+                  <span className="structure-btn__label">{opt.label}</span>
+                  <span className="structure-btn__desc">{opt.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {legs.map((leg,i)=><LegCard key={i} leg={leg} legIdx={i} legs={legs} setLegs={setLegs}/>)}
             <button className="btn-add-leg" onClick={()=>setLegs([...legs,{...LD.FLOAT('PAY'),label:'NEW LEG'}])}>+ ADD LEG</button>
             {err&&<div className="form-err">{err}</div>}
           </div>
