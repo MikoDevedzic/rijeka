@@ -253,9 +253,9 @@ Immutable audit trail: every state change preserved with old+new hash.
 
 ---
 
-## KRATOS — Rijeka's Derivatives Intelligence
+## PROMETHEUS — Rijeka's Derivatives Intelligence
 
-KRATOS is Rijeka's AI intelligence layer, named after the Greek god of strength and power.
+PROMETHEUS is Rijeka's AI intelligence layer, named after the Greek the Titan who stole fire from the gods and gave it to mortals.
 Powered by Claude (Anthropic) via FastAPI proxy — users never need their own API key.
 
 **Access:** TRADER and ADMIN roles only. VIEWERs see upgrade prompt with hello@rijeka.app CTA.
@@ -266,21 +266,21 @@ Powered by Claude (Anthropic) via FastAPI proxy — users never need their own A
 - Full trade economics as context: legs, rates, counterparty, tenor, notional
 
 **Sprint 3 capabilities:**
-- Live NPV, Greeks, XVA in context — KRATOS sees real numbers
-- Per-trade insights on pricing tab: "KRATOS says: elevated long-end duration"
+- Live NPV, Greeks, XVA in context — PROMETHEUS sees real numbers
+- Per-trade insights on pricing tab: "PROMETHEUS says: elevated long-end duration"
 - Pre-trade analysis: compare 3 structures before booking
 
 **Sprint 4+:**
-- KRATOS alerts: VaR breach, margin call incoming, unusual position
-- KRATOS digest: daily market summary personalised to your book
-- KRATOS explain: plain English explanation of any risk metric
-- Voice interface: "Ask KRATOS" via microphone on trading floor
+- PROMETHEUS alerts: VaR breach, margin call incoming, unusual position
+- PROMETHEUS digest: daily market summary personalised to your book
+- PROMETHEUS explain: plain English explanation of any risk metric
+- Voice interface: "Ask PROMETHEUS" via microphone on trading floor
 
 **Branding:**
-- Symbol: ⚔
-- Color: Deep purple gradient (#4a0080 → #6b00b3), glow #8b00ff
+- Symbol: 🔥
+- Color: Fire gradient (#4a1800 → #c45200 → #e87000), glow rgba(232,112,0,0.5)
 - Tagline: "Your derivatives intelligence"
-- Floor chatter: "Just ask KRATOS" / "KRATOS flagged it" / "What does KRATOS say?"
+- Floor chatter: "Just ask PROMETHEUS" / "PROMETHEUS flagged it" / "What does PROMETHEUS say?"
 
 ---
 

@@ -175,24 +175,24 @@ ${ctx}`
         padding:'0.6rem 1.25rem', borderBottom:'1px solid var(--border)',
         background:'var(--panel-2)', flexShrink:0,
       }}>
-        <span style={{fontFamily:'var(--mono)',fontSize:'0.65rem',fontWeight:700,letterSpacing:'0.12em',color:'#e0aaff',textShadow:'0 0 8px rgba(139,0,255,0.6)'}}>
-          ⚔ KRATOS
+        <span style={{fontFamily:'var(--mono)',fontSize:'0.65rem',fontWeight:700,letterSpacing:'0.12em',color:'#ffd080',textShadow:'0 0 10px rgba(232,112,0,0.7)'}}>
+          🔥 PROMETHEUS
         </span>
         <span style={{fontFamily:'var(--mono)',fontSize:'0.6rem',color:'var(--text-dim)'}}>
-          {trades.length} trades loaded · Your derivatives intelligence — ask anything
+          {trades.length} trades loaded · Derivatives intelligence for everyone — ask anything
         </span>
         <div style={{marginLeft:'auto',display:'flex',gap:'0.5rem'}}>
           {messages.length === 0 && (
             <button onClick={quickAnalyse} disabled={loading} style={{
-              background:'linear-gradient(135deg, #4a0080, #6b00b3)',
-              border:'1px solid #8b00ff', color:'#e0aaff',
+              background:'linear-gradient(135deg, #7a2800, #c45200, #e87000)',
+              border:'1px solid #e87000', color:'#ffd080',
               fontFamily:'var(--mono)', fontSize:'0.65rem', fontWeight:700,
               letterSpacing:'0.1em', padding:'0.3rem 0.85rem', borderRadius:2,
               cursor:'pointer', opacity: loading ? 0.6 : 1,
-              boxShadow:'0 0 10px rgba(139,0,255,0.4)',
-              textShadow:'0 0 6px rgba(224,170,255,0.5)',
+              boxShadow:'0 0 12px rgba(232,112,0,0.4)',
+              textShadow:'0 0 6px rgba(255,208,128,0.6)',
             }}>
-              {loading ? 'ANALYSING...' : 'UNLEASH KRATOS'}
+              {loading ? 'ANALYSING...' : 'IGNITE PROMETHEUS'}
             </button>
           )}
           {messages.length > 0 && (
@@ -233,7 +233,7 @@ ${ctx}`
                   padding:'0.3rem 0.75rem', borderRadius:2, cursor:'pointer',
                   transition:'all 0.12s',
                 }}
-                onMouseEnter={e=>{e.target.style.borderColor='var(--purple)';e.target.style.color='var(--purple)'}}
+                onMouseEnter={e=>{e.target.style.borderColor='#e87000';e.target.style.color='#ffd080'}}
                 onMouseLeave={e=>{e.target.style.borderColor='var(--border)';e.target.style.color='var(--text-dim)'}}
                 >{q}</button>
               ))}
@@ -244,13 +244,13 @@ ${ctx}`
           <div key={i} style={{
             alignSelf: m.role==='user' ? 'flex-end' : 'flex-start',
             maxWidth: '85%',
-            background: m.role==='user' ? 'rgba(74,0,128,0.3)' : 'var(--panel-2)',
-            border: `1px solid ${m.role==='user' ? 'rgba(139,0,255,0.4)' : 'var(--border)'}`,
+            background: m.role==='user' ? 'rgba(122,40,0,0.3)' : 'var(--panel-2)',
+            border: `1px solid ${m.role==='user' ? 'rgba(232,112,0,0.4)' : 'var(--border)'}`,
             borderRadius: 3, padding: '0.6rem 0.85rem',
           }}>
             <div style={{
               fontFamily:'var(--mono)', fontSize:'0.68rem', lineHeight:1.6,
-              color: m.role==='user' ? '#e0aaff' : 'var(--text)',
+              color: m.role==='user' ? '#ffd080' : 'var(--text)',
               whiteSpace:'pre-wrap',
             }}>{m.content}</div>
           </div>
@@ -260,9 +260,9 @@ ${ctx}`
             alignSelf:'flex-start', background:'var(--panel-2)',
             border:'1px solid var(--border)', borderRadius:3,
             padding:'0.6rem 0.85rem', fontFamily:'var(--mono)',
-            fontSize:'0.68rem', color:'var(--text-dim)', letterSpacing:'0.08em',
+            fontSize:'0.68rem', color:'#e87000', letterSpacing:'0.08em',
           }}>
-            KRATOS IS THINKING...
+            PROMETHEUS IS THINKING...
           </div>
         )}
         {error && (
@@ -278,7 +278,7 @@ ${ctx}`
           value={question}
           onChange={e=>setQuestion(e.target.value)}
           onKeyDown={e=>{if(e.key==='Enter'&&question.trim()){analyse(question.trim());setQuestion('')}}}
-          placeholder="Ask KRATOS anything about these trades..."
+          placeholder="Ask PROMETHEUS anything about these trades..."
           style={{
             flex:1, background:'var(--bg)', border:'1px solid var(--border)',
             color:'var(--text)', fontFamily:'var(--mono)', fontSize:'0.7rem',
@@ -291,14 +291,14 @@ ${ctx}`
           onClick={()=>{if(question.trim()){analyse(question.trim());setQuestion('')}}}
           disabled={loading||!question.trim()}
           style={{
-            background:'linear-gradient(135deg, #4a0080, #6b00b3)',
-            border:'1px solid #8b00ff', color:'#e0aaff',
+            background:'linear-gradient(135deg, #7a2800, #c45200)',
+            border:'1px solid #e87000', color:'#ffd080',
             fontFamily:'var(--mono)', fontSize:'0.68rem', fontWeight:700,
             padding:'0.35rem 0.85rem', borderRadius:2, cursor:'pointer',
             opacity: loading||!question.trim() ? 0.5 : 1,
-            boxShadow:'0 0 8px rgba(139,0,255,0.3)',
+            boxShadow:'0 0 8px rgba(232,112,0,0.3)',
           }}
-        >⚔ SEND</button>
+        >🔥 SEND</button>
       </div>
     </div>
   )
@@ -358,19 +358,19 @@ export default function CompareWorkspace({ tab }) {
           onClick={() => setShowAi(v => !v)}
           style={{
             background: showAi
-              ? 'linear-gradient(135deg, #4a0080, #6b00b3)'
-              : 'linear-gradient(135deg, #2a0050, #3d0080)',
-            border: '1px solid #8b00ff',
-            color: '#e0aaff',
+              ? 'linear-gradient(135deg, #7a2800, #c45200, #e87000)'
+              : 'linear-gradient(135deg, #4a1800, #8a3600, #b85000)',
+            border: '1px solid #e87000',
+            color: '#ffd080',
             fontFamily:'var(--mono)', fontSize:'0.65rem', fontWeight:700,
             letterSpacing:'0.12em', padding:'0.28rem 0.9rem',
             borderRadius:2, cursor:'pointer', transition:'all 0.2s',
-            boxShadow: showAi ? '0 0 12px rgba(139,0,255,0.4)' : '0 0 6px rgba(139,0,255,0.2)',
-            textShadow: '0 0 8px rgba(224,170,255,0.6)',
+            boxShadow: showAi ? '0 0 14px rgba(232,112,0,0.5)' : '0 0 6px rgba(232,112,0,0.2)',
+            textShadow: '0 0 8px rgba(255,208,128,0.7)',
           }}
-          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 0 16px rgba(139,0,255,0.6)';e.currentTarget.style.color='#fff'}}
-          onMouseLeave={e=>{e.currentTarget.style.boxShadow=showAi?'0 0 12px rgba(139,0,255,0.4)':'0 0 6px rgba(139,0,255,0.2)';e.currentTarget.style.color='#e0aaff'}}
-        >⚔ KRATOS</button>
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 0 20px rgba(232,112,0,0.7)';e.currentTarget.style.color='#fff'}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow=showAi?'0 0 14px rgba(232,112,0,0.5)':'0 0 6px rgba(232,112,0,0.2)';e.currentTarget.style.color='#ffd080'}}
+        >🔥 PROMETHEUS</button>
         <button className="cmp-close-btn" onClick={() => closeTab(tab.id)}>CLOSE</button>
       </div>
 

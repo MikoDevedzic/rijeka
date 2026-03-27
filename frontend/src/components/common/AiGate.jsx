@@ -23,21 +23,21 @@ export default function AiGate({ children, fallback }) {
       fontFamily:'var(--mono)',
     }}>
       <div style={{
-        fontSize:'2rem', marginBottom:'0.5rem', opacity:0.4,
-      }}>⚔</div>
+        fontSize:'2.5rem', marginBottom:'0.5rem', opacity:0.6,
+      }}>🔥</div>
       <div style={{
         fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.15em', color:'var(--text)',
-      }}>KRATOS — TRADER ACCESS REQUIRED</div>
+      }}>PROMETHEUS — TRADER ACCESS REQUIRED</div>
       <div style={{
         fontSize:'0.68rem', color:'var(--text-dim)', lineHeight:1.7,
         maxWidth:'380px', letterSpacing:'0.04em',
       }}>
-        KRATOS derivatives intelligence is available on the Trader plan.
-        Contact us to upgrade your account and unlock battle-tested analysis.
+        PROMETHEUS derivatives intelligence is available on the Trader plan.
+        Contact us to upgrade your account and unlock knowledge for everyone.
       </div>
       <a href="mailto:hello@rijeka.app?subject=Trader Access Request" style={{
         display:'inline-block', marginTop:'0.5rem',
-        background:'var(--purple)', color:'#fff', textDecoration:'none',
+        background:'linear-gradient(135deg, #7a2800, #c45200)', color:'#fff', textDecoration:'none',
         fontFamily:'var(--mono)', fontSize:'0.68rem', fontWeight:700,
         letterSpacing:'0.1em', padding:'0.6rem 1.5rem', borderRadius:2,
         transition:'opacity 0.15s',
