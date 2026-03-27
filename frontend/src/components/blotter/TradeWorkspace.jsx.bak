@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useTradesStore } from '../../store/useTradesStore'
 import { useTabStore } from '../../store/useTabStore'
 import { supabase } from '../../lib/supabase'
-import CurveInputPanel from './CurveInputPanel';
 import usePricerStore, { fmtCcy, fmtBps, fmtPct } from '../../store/usePricerStore'
 import useCashflowsStore, { effectiveAmount, CF_STATUS_COLOR } from '../../store/useCashflowsStore'
 import './TradeWorkspace.css'
@@ -77,25 +76,38 @@ function MetricBlock({ label, value, sub, color }) {
 
 // ── PRICING PANEL ─────────────────────────────────────────────
 function PricingPanel({ trade }) {
-  const { priceTrade, resultsByTrade, loading, error } = usePricerStore()
-  const result = resultsByTrade[trade.id]
+  const { priceTrade, resultForTrade, loading, error } = usePricerStore()
+  const result = resultForTrade(trade.id)
 
   // Build initial curve inputs from trade's curve IDs, default 5.25%
   const curveIds = collectCurveIds(trade)
-  const { initCurveState, buildCurveInputs } = usePricerStore()
-  useEffect(() => { initCurveState(curveIds) }, [curveIds.join(',')]) // eslint-disable-line
+  const [curveInputs, setCurveInputs] = useState(() =>
+    curveIds.map(id => ({ curve_id: id, flat_rate: '0.0525' }))
+  )
   const [valuationDate, setValuationDate] = useState(
     () => new Date().toISOString().slice(0, 10)
   )
   const [localErr, setLocalErr] = useState(null)
 
-
+  const handleRateChange = (curve_id, val) => {
+    setCurveInputs(prev => prev.map(c => c.curve_id === curve_id ? { ...c, flat_rate: val } : c))
+  }
 
   const handlePrice = async () => {
     setLocalErr(null)
-    // Sprint 4E: validation handled in CurveInputPanel
-    const parsed = buildCurveInputs(curveIds)
-    // Sprint 4E: buildCurveInputs handles default fallback
+    // Validate rates
+    for (const c of curveInputs) {
+      const r = parseFloat(c.flat_rate)
+      if (isNaN(r) || r < 0 || r > 1) {
+        setLocalErr(`Invalid rate for ${c.curve_id} — enter decimal e.g. 0.0525 for 5.25%`)
+        return
+      }
+    }
+    const parsed = curveInputs.map(c => ({ curve_id: c.curve_id, flat_rate: parseFloat(c.flat_rate) }))
+    // Always include a default fallback
+    if (!parsed.find(c => c.curve_id === 'default')) {
+      parsed.push({ curve_id: 'default', flat_rate: parsed[0]?.flat_rate || 0.0525 })
+    }
     await priceTrade(trade.id, parsed, valuationDate)
   }
 
@@ -109,12 +121,63 @@ function PricingPanel({ trade }) {
   return (
     <div style={{ height:'100%', overflow:'auto', padding:'1.25rem' }}>
 
-            <CurveInputPanel
-        curveIds={curveIds}
-        onRunPricer={handlePrice}
-        isLoading={loading}
-        error={error || localErr}
-      />
+      {/* ── Curve Input Panel ── */}
+      <div style={{
+        background:'var(--panel-2)', border:'1px solid var(--border)',
+        borderRadius:3, padding:'1rem 1.25rem', marginBottom:'1.25rem',
+      }}>
+        <div style={{ fontSize:'0.62rem', fontWeight:700, letterSpacing:'0.14em', color:'var(--text-dim)', marginBottom:'0.75rem' }}>
+          CURVE INPUTS — FLAT RATES (SPRINT 3 STUB)
+        </div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'0.75rem', alignItems:'flex-end' }}>
+          {curveInputs.map(c => (
+            <div key={c.curve_id} style={{ display:'flex', flexDirection:'column', gap:'0.2rem' }}>
+              <span style={lbl}>{c.curve_id}</span>
+              <input
+                style={inp}
+                value={c.flat_rate}
+                onChange={e => handleRateChange(c.curve_id, e.target.value)}
+                placeholder="0.0525"
+              />
+            </div>
+          ))}
+          <div style={{ display:'flex', flexDirection:'column', gap:'0.2rem' }}>
+            <span style={lbl}>VALUATION DATE</span>
+            <input
+              type="date"
+              style={{ ...inp, width:130 }}
+              value={valuationDate}
+              onChange={e => setValuationDate(e.target.value)}
+            />
+          </div>
+          <button
+            onClick={handlePrice}
+            disabled={loading}
+            style={{
+              background: loading ? 'var(--panel-3)' : 'var(--accent)',
+              border:'none', color:'var(--bg-deep)',
+              fontFamily:'var(--mono)', fontSize:'0.68rem', fontWeight:700,
+              letterSpacing:'0.1em', padding:'0.35rem 1rem', borderRadius:2,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1, alignSelf:'flex-end',
+            }}
+          >
+            {loading ? 'PRICING...' : 'RUN PRICER'}
+          </button>
+        </div>
+        {(localErr || error) && (
+          <div style={{
+            marginTop:'0.6rem', fontSize:'0.65rem', color:'var(--red)',
+            padding:'0.3rem 0.6rem', background:'color-mix(in srgb,var(--red) 8%,transparent)',
+            border:'1px solid color-mix(in srgb,var(--red) 25%,transparent)', borderRadius:2,
+          }}>
+            {localErr || error}
+          </div>
+        )}
+        <div style={{ marginTop:'0.5rem', fontSize:'0.58rem', color:'var(--text-dim)', letterSpacing:'0.06em' }}>
+          Enter decimal rates — e.g. 0.0525 = 5.25%. Sprint 4: bootstrapped from market data automatically.
+        </div>
+      </div>
 
       {/* ── Results ── */}
       {!result && !loading && (

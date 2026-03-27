@@ -33,6 +33,8 @@ class CashflowResult:
     dcf:           float
     amount:        float        # notional * rate * dcf
     pv:            float        # amount * df(payment_date)
+    df:            float = 1.0  # discount factor to payment_date
+    zero_rate:     float = 0.0  # continuously-compounded zero rate to payment_date
 
 
 @dataclass
@@ -128,6 +130,7 @@ def price_leg(
 
         amount = float(p.notional) * rate * float(p.dcf)
         pv_cf  = amount * df
+        zero_r = discount_curve.zero_rate(p.payment_date)
 
         # Sign: PAY = negative PV from our perspective, RECEIVE = positive
         sign = -1.0 if direction == "PAY" else 1.0

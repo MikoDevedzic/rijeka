@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { INTERP_METHODS, TENOR_TO_YEARS } from '../../data/ratesCurves';
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel, DescBox } from './_DetailShared';
@@ -139,7 +139,13 @@ curve.enableExtrapolation()`;
 
 // ── Instruments tab ─────────────────────────────────────────
 function OISInstruments({ curve }) {
-  const { toggleInstrument, updateQuote } = useMarketDataStore();
+  const { toggleInstrument, updateQuote, saveSnapshot, loadLatestSnapshot, snapshotSaving, snapshotSaved, snapshotError } = useMarketDataStore();
+  const [saveDate, setSaveDate] = useState(new Date().toISOString().slice(0, 10));
+
+  // Auto-load latest snapshot on mount
+  useEffect(() => {
+    loadLatestSnapshot(curve.id);
+  }, [curve.id]);
   const active = curve.instruments.filter((i) => i.en).length;
 
   return (
@@ -185,6 +191,33 @@ function OISInstruments({ curve }) {
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Sprint 4F: Save to DB */}
+      <div style={{display:'flex',alignItems:'center',gap:'0.75rem',padding:'0.6rem 0',borderTop:'1px solid var(--border)',marginTop:'0.5rem'}}>
+        <input
+          type="date"
+          value={saveDate}
+          onChange={e => setSaveDate(e.target.value)}
+          style={{background:'var(--panel-2)',border:'1px solid var(--border)',color:'var(--text)',fontFamily:'var(--mono)',fontSize:'0.68rem',padding:'0.25rem 0.45rem',borderRadius:2,outline:'none'}}
+        />
+        <button
+          onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch(_){} }}
+          disabled={snapshotSaving?.[curve.id]}
+          style={{padding:'0.25rem 0.85rem',background:'rgba(14,201,160,0.07)',border:'1px solid var(--accent)',borderRadius:2,fontFamily:'var(--mono)',fontSize:'0.62rem',fontWeight:700,letterSpacing:'0.1em',color:'var(--accent)',cursor:'pointer'}}
+        >
+          {snapshotSaving?.[curve.id] ? 'SAVING...' : '▶ SAVE TO DB'}
+        </button>
+        {snapshotSaved?.[curve.id] && (
+          <span style={{fontSize:'0.6rem',color:'var(--accent)',fontFamily:'var(--mono)'}}>
+            ✓ saved {snapshotSaved[curve.id].date}
+          </span>
+        )}
+        {snapshotError?.[curve.id] && (
+          <span style={{fontSize:'0.6rem',color:'var(--red)',fontFamily:'var(--mono)'}}>
+            ✗ {snapshotError[curve.id]}
+          </span>
+        )}
       </div>
     </div>
   );

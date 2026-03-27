@@ -9,6 +9,7 @@ import CommandCenter    from './components/CommandCenter'
 import AppBar           from './components/layout/AppBar'
 import CfgNav           from './components/layout/CfgNav'
 import BlotterShell     from './components/blotter/BlotterShell'
+import PricerPage       from './components/pricer/PricerPage'
 import CurvesWorkspace  from './components/market-data/CurvesWorkspace'
 import OrgHierarchy     from './components/org/OrgHierarchy'
 import LegalEntities    from './components/onboarding/LegalEntities'
@@ -54,6 +55,7 @@ export default function App() {
           <Route path="/command-center" element={<CommandCenter />} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
+            <Route path="/pricer"  element={<PricerPage />} />
           </Route>
           <Route element={<ConfigLayout />}>
             <Route path="/configurations">

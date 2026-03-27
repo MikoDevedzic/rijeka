@@ -1,4 +1,11 @@
-import { create } from 'zustand';
+// SPRINT_4F_store_replace.js
+// Complete replacement of useMarketDataStore.js with real save/load implementations
+// Run from Rijeka root: node SPRINT_4F_store_replace.js
+
+const fs = require('fs');
+const FILE = 'C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src\\store\\useMarketDataStore.js';
+
+const content = `import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { RATES_CURVES, CCY_GROUPS, getCurve } from '../data/ratesCurves';
 
@@ -206,3 +213,7 @@ const useMarketDataStore = create((set, get) => ({
 }));
 
 export default useMarketDataStore;
+`;
+
+fs.writeFileSync(FILE, content, 'utf8');
+console.log('Done. useMarketDataStore.js written with real saveSnapshot + loadLatestSnapshot.');

@@ -1,4 +1,11 @@
-"""
+// REPLACE_pricer.js — complete replacement of backend/api/routes/pricer.py
+// Fixes: ORM objects passed to price_leg which expects dicts
+// Run from Rijeka root: node REPLACE_pricer.js
+
+const fs = require('fs');
+const FILE = 'C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\backend\\api\\routes\\pricer.py';
+
+const content = `"""
 Rijeka — pricer routes (Sprint 4E/4F)
 
 POST /price                    Price a trade → NPV + Greeks + per-leg PVs
@@ -203,24 +210,6 @@ async def price_trade(
     if not curves:
         raise HTTPException(status_code=422, detail="At least one curve required")
 
-    # Serialize curve pillars for transparency panel
-    curve_pillars = {}
-    for cid, curve in curves.items():
-        pils = []
-        for d, r in curve._pillars:
-            t = (d - val_date).days / 365.25
-            if t <= 0:
-                continue
-            import math as _math
-            df_val = _math.exp(-r * t)
-            pils.append({
-                "date":      d.isoformat(),
-                "zero_rate": round(r * 100, 4),      # as %
-                "df":        round(df_val, 6),
-                "t":         round(t, 4),
-            })
-        curve_pillars[cid] = pils
-
     # Price
     try:
         if trade.instrument_type in _FX:
@@ -258,11 +247,9 @@ async def price_trade(
                     "period_end":    cf.period_end.isoformat()    if cf.period_end    else None,
                     "payment_date":  cf.payment_date.isoformat()  if cf.payment_date  else None,
                     "fixing_date":   cf.fixing_date.isoformat()   if getattr(cf, "fixing_date", None) else None,
-                    "rate":          float(cf.rate)      if cf.rate      is not None else None,
-                    "dcf":           float(cf.dcf)       if cf.dcf       is not None else None,
-                    "amount":        float(cf.amount)    if cf.amount    is not None else None,
-                    "df":            float(cf.df)        if hasattr(cf, 'df')        and cf.df        is not None else None,
-                    "zero_rate":     float(cf.zero_rate) if hasattr(cf, 'zero_rate') and cf.zero_rate is not None else None,
+                    "rate":          float(cf.rate)   if cf.rate   is not None else None,
+                    "dcf":           float(cf.dcf)    if cf.dcf    is not None else None,
+                    "amount":        float(cf.amount) if cf.amount is not None else None,
                 }
                 for cf in (lr.cashflows or [])
             ],
@@ -272,7 +259,6 @@ async def price_trade(
         "trade_id":       str(trade.id),
         "valuation_date": val_date.isoformat(),
         "curve_mode":     _curve_mode(request.curves),
-        "curve_pillars":  curve_pillars,
         "npv":   float(result.npv)   if result.npv   is not None else None,
         "pv01":  float(greeks.pv01)  if greeks and greeks.pv01  is not None else None,
         "dv01":  float(greeks.dv01)  if greeks and greeks.dv01  is not None else None,
@@ -355,3 +341,8 @@ async def generate_cashflows(
         "curve_mode":        _curve_mode(request.curves),
         "valuation_date":    val_date.isoformat(),
     }
+`;
+
+fs.writeFileSync(FILE, content, 'utf8');
+console.log('Done. pricer.py fully replaced.');
+console.log('Backend will auto-reload.');

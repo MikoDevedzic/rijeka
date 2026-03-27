@@ -1,4 +1,14 @@
-// usePricerStore.js — Sprint 4E (curve bootstrap)
+// SPRINT_4E_3_pricer_store.js
+// Writes: frontend/src/store/usePricerStore.js
+// Adds: curve mode (flat|market), pillar state, buildCurveInputs()
+// Run from Rijeka root: node SPRINT_4E_3_pricer_store.js
+
+const fs = require('fs');
+const path = require('path');
+
+const RIJEKA = 'C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka';
+
+const content = `// usePricerStore.js — Sprint 4E (curve bootstrap)
 // Manages: pricing results, curve mode (flat|market), pillar quote state.
 
 import { create } from 'zustand';
@@ -57,21 +67,20 @@ function defaultPillars(curveId) {
 
 export function fmtCcy(amount, ccy = 'USD') {
   if (amount == null || isNaN(amount)) return '—';
-  const safeCcy = (ccy && ccy.length === 3) ? ccy : 'USD';
   return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: safeCcy,
+    style: 'currency', currency: ccy,
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   }).format(amount);
 }
 
 export function fmtBps(rate) {
   if (rate == null || isNaN(rate)) return '—';
-  return `${(rate * 10000).toFixed(2)} bps`;
+  return \`\${(rate * 10000).toFixed(2)} bps\`;
 }
 
 export function fmtPct(rate) {
   if (rate == null || isNaN(rate)) return '—';
-  return `${(rate * 100).toFixed(4)}%`;
+  return \`\${(rate * 100).toFixed(4)}%\`;
 }
 
 // ── Store ────────────────────────────────────────────────────────────────────
@@ -197,10 +206,10 @@ const usePricerStore = create((set, get) => ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      const res = await fetch(`${API}/api/pricer/price`, {
+      const res = await fetch(\`\${API}/api/pricer/price\`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': \`Bearer \${session.access_token}\`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -241,10 +250,10 @@ const usePricerStore = create((set, get) => ({
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('Not authenticated');
 
-      const res = await fetch(`${API}/api/pricer/cashflows/generate`, {
+      const res = await fetch(\`\${API}/api/pricer/cashflows/generate\`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': \`Bearer \${session.access_token}\`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -276,3 +285,8 @@ const usePricerStore = create((set, get) => ({
 }));
 
 export default usePricerStore;
+`;
+
+const dest = path.join(RIJEKA, 'frontend', 'src', 'store', 'usePricerStore.js');
+fs.writeFileSync(dest, content, 'utf8');
+console.log('✓ Written: ' + dest);

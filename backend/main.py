@@ -17,12 +17,13 @@ from api.routes import (
     trade_legs,
     cashflows,
     pricer,         # Sprint 3D
+    market_data,    # Sprint 4F
 )
 
 app = FastAPI(
     title="Rijeka API",
     description="Open-source full revaluation derivatives risk platform.",
-    version="0.3.3",
+    version="0.4.0",
 )
 
 app.add_middleware(
@@ -46,8 +47,9 @@ app.include_router(trade_events.router)
 app.include_router(trade_legs.router)
 app.include_router(cashflows.router)
 app.include_router(pricer.router)
+app.include_router(market_data.router)
 
 
 @app.get("/health", tags=["meta"])
 def health():
-    return {"status": "ok", "service": "rijeka-api", "version": "0.3.3"}
+    return {"status": "ok", "service": "rijeka-api", "version": "0.4.0"}
