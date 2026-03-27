@@ -1,44 +1,53 @@
+"""
+Rijeka — FastAPI application entry point
+Sprint 3D: pricer router added.
+"""
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from db.session import engine
-from db import models
-from api.routes import curves, org, legal_entities, counterparties, trades, analyse
-import os
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    models.Base.metadata.create_all(bind=engine)
-    yield
-
-app = FastAPI(
-    title="Rijeka Risk API",
-    description="Open-source full revaluation derivatives risk system",
-    version="0.1.0",
-    lifespan=lifespan,
+from api.routes import (
+    curves,
+    org,
+    legal_entities,
+    counterparties,
+    trades,
+    analyse,
+    trade_events,
+    trade_legs,
+    cashflows,
+    pricer,         # Sprint 3D
 )
 
-ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "https://app.rijeka.app",
-    os.getenv("FRONTEND_URL", ""),
-]
+app = FastAPI(
+    title="Rijeka API",
+    description="Open-source full revaluation derivatives risk platform.",
+    version="0.3.3",
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o for o in ALLOWED_ORIGINS if o],
+    allow_origins=[
+        "http://localhost:5173",
+        "https://app.rijeka.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(curves.router,         prefix="/api/curves",          tags=["Curves"])
-app.include_router(org.router,            prefix="/api/org",             tags=["Organisation"])
-app.include_router(legal_entities.router, prefix="/api/legal-entities",  tags=["Legal Entities"])
-app.include_router(counterparties.router, prefix="/api/counterparties",  tags=["Counterparties"])
-app.include_router(trades.router,         prefix="/api/trades",          tags=["Trades"])
-app.include_router(analyse.router,        prefix="/api/analyse",         tags=["AI"])
+app.include_router(curves.router)
+app.include_router(org.router)
+app.include_router(legal_entities.router)
+app.include_router(counterparties.router)
+app.include_router(trades.router)
+app.include_router(analyse.router)
+app.include_router(trade_events.router)
+app.include_router(trade_legs.router)
+app.include_router(cashflows.router)
+app.include_router(pricer.router)
 
-@app.get("/health", tags=["System"])
+
+@app.get("/health", tags=["meta"])
 def health():
-    return {"status": "ok", "service": "rijeka-risk-api", "version": "0.1.0"}
+    return {"status": "ok", "service": "rijeka-api", "version": "0.3.3"}
