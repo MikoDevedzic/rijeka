@@ -11,3 +11,23 @@ update_key.js
 docs/ARCHITECTURE_v9.md 
 docs/ARCHITECTURE_v8.md 
 docs/*.md 
+
+# Secrets — NEVER COMMIT
+*.env
+# Private business docs — keep off GitHub
+docs/ARCHITECTURE_*.md
+docs/DEPLOY_CHECKLIST.md
+# Scripts that touched secrets
+fix_ai_backend.js
+rebrand_kratos.js
+# Python cache
+*.pyc
+*.pyo
+*.pyd
+# Node
+node_modules/
+# Vite build output
+frontend/dist/
+# OS
+.DS_Store
+Thumbs.db
