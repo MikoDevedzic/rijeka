@@ -1,153 +1,278 @@
-/**
- * Rijeka — usePricerStore
- * Sprint 3D: pricing engine frontend store.
- *
- * State:
- *   resultsByTrade: { [tradeId]: PriceResponse }
- *   loading:        boolean
- *   error:          string | null
- *
- * Usage:
- *   const { priceTrade, generateCashflows, resultForTrade } = usePricerStore()
- *
- * Curve inputs (Sprint 3D — flat rates):
- *   [{ curve_id: "USD_SOFR", flat_rate: 0.0525 }, ...]
- *
- * Sprint 4: curves will be bootstrapped from market data automatically.
- */
+// usePricerStore.js — Sprint 4E (curve bootstrap)
+// Manages: pricing results, curve mode (flat|market), pillar quote state.
 
-import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { create } from 'zustand';
+import { supabase } from '../lib/supabase';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-async function getAuthHeader() {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.access_token) throw new Error('No session — please log in.')
-  return { Authorization: `Bearer ${session.access_token}` }
+// ── Default pillar templates by curve type ───────────────────────────────────
+
+const OIS_PILLARS = [
+  { tenor: 'ON',  quote_type: 'DEPOSIT',  rate: '' },
+  { tenor: '1W',  quote_type: 'DEPOSIT',  rate: '' },
+  { tenor: '1M',  quote_type: 'DEPOSIT',  rate: '' },
+  { tenor: '3M',  quote_type: 'DEPOSIT',  rate: '' },
+  { tenor: '6M',  quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '9M',  quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '1Y',  quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '2Y',  quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '3Y',  quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '5Y',  quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '7Y',  quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '10Y', quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '15Y', quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '20Y', quote_type: 'OIS_SWAP', rate: '' },
+  { tenor: '30Y', quote_type: 'OIS_SWAP', rate: '' },
+];
+
+const IRS_PILLARS = [
+  { tenor: 'ON',  quote_type: 'DEPOSIT', rate: '' },
+  { tenor: '1W',  quote_type: 'DEPOSIT', rate: '' },
+  { tenor: '1M',  quote_type: 'DEPOSIT', rate: '' },
+  { tenor: '3M',  quote_type: 'DEPOSIT', rate: '' },
+  { tenor: '6M',  quote_type: 'DEPOSIT', rate: '' },
+  { tenor: '1Y',  quote_type: 'IRS',     rate: '' },
+  { tenor: '2Y',  quote_type: 'IRS',     rate: '' },
+  { tenor: '3Y',  quote_type: 'IRS',     rate: '' },
+  { tenor: '5Y',  quote_type: 'IRS',     rate: '' },
+  { tenor: '7Y',  quote_type: 'IRS',     rate: '' },
+  { tenor: '10Y', quote_type: 'IRS',     rate: '' },
+  { tenor: '20Y', quote_type: 'IRS',     rate: '' },
+  { tenor: '30Y', quote_type: 'IRS',     rate: '' },
+];
+
+function defaultPillars(curveId) {
+  const id = (curveId || '').toUpperCase();
+  if (
+    id.includes('SOFR') || id.includes('SONIA') || id.includes('ESTR') ||
+    id.includes('TONAR') || id.includes('CORRA') || id.includes('OIS')
+  ) {
+    return OIS_PILLARS.map(p => ({ ...p }));
+  }
+  return IRS_PILLARS.map(p => ({ ...p }));
 }
 
-/**
- * Format a number as a currency string for display.
- * e.g. 1234567.89 → "1,234,567.89 USD"
- */
-export function fmtCcy(amount, currency = '', decimals = 2) {
-  if (amount == null || isNaN(amount)) return '—'
-  const n = Number(amount).toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })
-  return currency ? `${n} ${currency}` : n
+// ── Formatters (exported) ────────────────────────────────────────────────────
+
+export function fmtCcy(amount, ccy = 'USD') {
+  if (amount == null || isNaN(amount)) return '—';
+  const safeCcy = (ccy && ccy.length === 3) ? ccy : 'USD';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: safeCcy,
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(amount);
 }
 
-/** Format a rate as basis points string. e.g. 0.045 → "450.0 bp" */
 export function fmtBps(rate) {
-  if (rate == null || isNaN(rate)) return '—'
-  return (Number(rate) * 10000).toFixed(1) + ' bp'
+  if (rate == null || isNaN(rate)) return '—';
+  return `${(rate * 10000).toFixed(2)} bps`;
 }
 
-/** Format a rate as percentage. e.g. 0.045 → "4.500%" */
-export function fmtPct(rate, decimals = 3) {
-  if (rate == null || isNaN(rate)) return '—'
-  return (Number(rate) * 100).toFixed(decimals) + '%'
+export function fmtPct(rate) {
+  if (rate == null || isNaN(rate)) return '—';
+  return `${(rate * 100).toFixed(4)}%`;
 }
+
+// ── Store ────────────────────────────────────────────────────────────────────
 
 const usePricerStore = create((set, get) => ({
+
+  // Pricing results keyed by tradeId
   resultsByTrade: {},
-  loading:        false,
-  error:          null,
 
-  // ── Price a trade ────────────────────────────────────────
+  // Per-trade loading / error flags
+  loadingByTrade: {},
+  errorByTrade: {},
+
+  // Curve state keyed by curveId:
+  //   { mode: 'flat'|'market', flat_rate: number, pillars: PillarRow[] }
+  curveStates: {},
+
+  // ── Curve state management ────────────────────────────────────────────────
 
   /**
-   * Price a trade. Returns NPV, leg PVs, projected cashflows, Greeks.
-   *
-   * @param {string}   tradeId
-   * @param {object[]} curveInputs  [{ curve_id, flat_rate }, ...]
-   * @param {string}   valuationDate  ISO date string, defaults to today
+   * Initialize state for a list of curve IDs if not already present.
+   * Called by TradeWorkspace when the PRICING tab opens.
    */
-  priceTrade: async (tradeId, curveInputs, valuationDate = null) => {
-    set({ loading: true, error: null })
-    try {
-      const headers = await getAuthHeader()
-      const body = {
-        trade_id:       tradeId,
-        curves:         curveInputs,
-        valuation_date: valuationDate || new Date().toISOString().slice(0, 10),
+  initCurveState(curveIds, defaultRate = 0.0525) {
+    const existing = get().curveStates;
+    const updates = {};
+    for (const id of curveIds) {
+      if (!existing[id]) {
+        updates[id] = {
+          mode: 'flat',
+          flat_rate: defaultRate,
+          pillars: defaultPillars(id),
+        };
       }
+    }
+    if (Object.keys(updates).length > 0) {
+      set(s => ({ curveStates: { ...s.curveStates, ...updates } }));
+    }
+  },
+
+  setCurveMode(curveId, mode) {
+    set(s => ({
+      curveStates: {
+        ...s.curveStates,
+        [curveId]: { ...(s.curveStates[curveId] || {}), mode },
+      },
+    }));
+  },
+
+  setFlatRate(curveId, pctValue) {
+    // pctValue is from UI: 5.25 → stored as 0.0525
+    const rate = parseFloat(pctValue);
+    set(s => ({
+      curveStates: {
+        ...s.curveStates,
+        [curveId]: {
+          ...(s.curveStates[curveId] || {}),
+          flat_rate: isNaN(rate) ? 0 : rate / 100,
+        },
+      },
+    }));
+  },
+
+  setPillarRate(curveId, index, rawValue) {
+    set(s => {
+      const cs = s.curveStates[curveId];
+      if (!cs) return s;
+      const pillars = cs.pillars.map((p, i) =>
+        i === index ? { ...p, rate: rawValue } : p
+      );
+      return { curveStates: { ...s.curveStates, [curveId]: { ...cs, pillars } } };
+    });
+  },
+
+  setPillarType(curveId, index, quoteType) {
+    set(s => {
+      const cs = s.curveStates[curveId];
+      if (!cs) return s;
+      const pillars = cs.pillars.map((p, i) =>
+        i === index ? { ...p, quote_type: quoteType } : p
+      );
+      return { curveStates: { ...s.curveStates, [curveId]: { ...cs, pillars } } };
+    });
+  },
+
+  // ── Serialize to API payload ───────────────────────────────────────────────
+
+  /**
+   * Build the curves[] array for the /api/pricer/price request.
+   * Switches between flat_rate (mode='flat') and quotes[] (mode='market').
+   */
+  buildCurveInputs(curveIds) {
+    const { curveStates } = get();
+    return curveIds.map(id => {
+      const cs = curveStates[id];
+      if (!cs || cs.mode === 'flat') {
+        return { curve_id: id, flat_rate: cs?.flat_rate ?? 0.0525 };
+      }
+      // Market mode: filter out blank rows, convert % → decimal
+      const quotes = cs.pillars
+        .filter(p => p.rate !== '' && p.rate !== null && !isNaN(parseFloat(p.rate)))
+        .map(p => ({
+          tenor: p.tenor,
+          quote_type: p.quote_type,
+          rate: parseFloat(p.rate) / 100,
+        }));
+      if (quotes.length < 2) {
+        // Insufficient quotes — fall back to flat
+        return { curve_id: id, flat_rate: cs.flat_rate ?? 0.0525 };
+      }
+      return { curve_id: id, quotes };
+    });
+  },
+
+  // ── Price trade ────────────────────────────────────────────────────────────
+
+  async priceTrade(tradeId, curveInputs, valuationDate) {
+    set(s => ({
+      loadingByTrade: { ...s.loadingByTrade, [tradeId]: true },
+      errorByTrade:   { ...s.errorByTrade,   [tradeId]: null },
+    }));
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
       const res = await fetch(`${API}/api/pricer/price`, {
-        method:  'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      })
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trade_id: tradeId,
+          curves: curveInputs,
+          ...(valuationDate ? { valuation_date: valuationDate } : {}),
+        }),
+      });
+
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || `HTTP ${res.status}`)
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Pricing failed');
       }
-      const result = await res.json()
-      set(state => ({
-        resultsByTrade: { ...state.resultsByTrade, [String(tradeId)]: result },
-        loading: false,
-      }))
-      return result
+
+      const result = await res.json();
+      set(s => ({
+        resultsByTrade: { ...s.resultsByTrade, [tradeId]: result },
+        loadingByTrade: { ...s.loadingByTrade, [tradeId]: false },
+      }));
+      return result;
     } catch (e) {
-      set({ loading: false, error: e.message })
-      console.error('[usePricerStore] priceTrade:', e)
-      return null
+      set(s => ({
+        loadingByTrade: { ...s.loadingByTrade, [tradeId]: false },
+        errorByTrade:   { ...s.errorByTrade,   [tradeId]: e.message },
+      }));
+      throw e;
     }
   },
 
-  /**
-   * Generate and store cashflow schedule for a trade.
-   * Wipes existing PROJECTED cashflows and writes fresh ones.
-   * Call this after booking a new trade or after amending economics.
-   *
-   * @param {string}   tradeId
-   * @param {object[]} curveInputs
-   * @param {string}   valuationDate
-   * @returns {{ cashflows_written: number } | null}
-   */
-  generateCashflows: async (tradeId, curveInputs, valuationDate = null) => {
-    set({ loading: true, error: null })
+  // ── Generate cashflows ─────────────────────────────────────────────────────
+
+  async generateCashflows(tradeId, curveInputs, valuationDate) {
+    set(s => ({
+      loadingByTrade: { ...s.loadingByTrade, [tradeId]: true },
+      errorByTrade:   { ...s.errorByTrade,   [tradeId]: null },
+    }));
     try {
-      const headers = await getAuthHeader()
-      const body = {
-        trade_id:       tradeId,
-        curves:         curveInputs,
-        valuation_date: valuationDate || new Date().toISOString().slice(0, 10),
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+
       const res = await fetch(`${API}/api/pricer/cashflows/generate`, {
-        method:  'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      })
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          trade_id: tradeId,
+          curves: curveInputs,
+          ...(valuationDate ? { valuation_date: valuationDate } : {}),
+        }),
+      });
+
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || `HTTP ${res.status}`)
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Cashflow generation failed');
       }
-      const result = await res.json()
-      set({ loading: false })
-      return result
+
+      const result = await res.json();
+      set(s => ({
+        loadingByTrade: { ...s.loadingByTrade, [tradeId]: false },
+      }));
+      return result;
     } catch (e) {
-      set({ loading: false, error: e.message })
-      console.error('[usePricerStore] generateCashflows:', e)
-      return null
+      set(s => ({
+        loadingByTrade: { ...s.loadingByTrade, [tradeId]: false },
+        errorByTrade:   { ...s.errorByTrade,   [tradeId]: e.message },
+      }));
+      throw e;
     }
   },
 
-  // ── Selectors ────────────────────────────────────────────
+}));
 
-  resultForTrade: (tradeId) => get().resultsByTrade[String(tradeId)] || null,
-
-  clearTrade: (tradeId) => {
-    set(state => {
-      const next = { ...state.resultsByTrade }
-      delete next[String(tradeId)]
-      return { resultsByTrade: next }
-    })
-  },
-
-  clearError: () => set({ error: null }),
-}))
-
-export default usePricerStore
+export default usePricerStore;

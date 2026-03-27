@@ -1,266 +1,357 @@
 """
-Rijeka — /api/pricer/ routes
-Sprint 3D: IR Swap NPV, Greeks, cashflow generation.
+Rijeka — pricer routes (Sprint 4E/4F)
 
-POST /api/pricer/price              price a trade, return NPV + legs + Greeks
-POST /api/pricer/cashflows/generate generate and store cashflow schedule to DB
-
-Curve inputs for Sprint 3D:
-  User passes flat rates per curve_id.
-  Sprint 4: replace with bootstrapped curves from market data.
+POST /price                    Price a trade → NPV + Greeks + per-leg PVs
+POST /cashflows/generate       Generate + persist cashflow schedule
 """
 
+import json as _json
+from datetime import date
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-from datetime import date, datetime
-from decimal import Decimal
-import uuid
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
+from db.models import Cashflow, Trade, TradeLeg
 from db.session import get_db
-from db.models import TradeLeg, Trade, Cashflow
 from middleware.auth import verify_token
+from pricing.bootstrap import bootstrap_from_dicts
 from pricing.curve import Curve
-from pricing.ir_swap import price_swap, SwapResult
+from pricing.fx_forward import price_fx_forward
 from pricing.greeks import compute_greeks
-from pricing.day_count import dcf as calc_dcf
+from pricing.ir_swap import price_swap
 
-router = APIRouter(prefix="/api/pricer", tags=["pricer"])
-
-WRITE_ROLES = {"trader", "admin"}
+router = APIRouter()
 
 
-# ── Schemas ───────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Input models
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CurveQuote(BaseModel):
+    tenor: str
+    quote_type: str
+    rate: float
+    fra_start_tenor: Optional[str] = None
+    day_count: Optional[str] = None
+
 
 class CurveInput(BaseModel):
-    """Flat curve input for Sprint 3D. Sprint 4 will replace with pillar quotes."""
-    curve_id:  str
-    flat_rate: float            # e.g. 0.045 = 4.5%
+    curve_id: str
+    flat_rate: Optional[float] = None
+    quotes: Optional[List[CurveQuote]] = None
 
 
 class PriceRequest(BaseModel):
-    trade_id:        str
-    valuation_date:  Optional[date] = None  # defaults to today
-    curves:          List[CurveInput]       # one per curve_id used by the trade
-
-
-class CashflowGenerateRequest(BaseModel):
-    trade_id:       str
+    trade_id: str
     valuation_date: Optional[date] = None
-    curves:         List[CurveInput]
+    curves: List[CurveInput]
 
 
-class CashflowOut(BaseModel):
-    leg_id:       str
-    period_start: date
-    period_end:   date
-    payment_date: date
-    fixing_date:  Optional[date]
-    currency:     str
-    notional:     float
-    rate:         float
-    dcf:          float
-    amount:       float
-    pv:           float
+class CashflowGenRequest(BaseModel):
+    trade_id: str
+    valuation_date: Optional[date] = None
+    curves: List[CurveInput]
 
 
-class LegOut(BaseModel):
-    leg_id:     str
-    leg_ref:    str
-    leg_type:   str
-    direction:  str
-    currency:   str
-    pv:         float
-    cashflows:  List[CashflowOut]
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _leg_to_dict(leg: TradeLeg) -> dict:
+    """Convert SQLAlchemy TradeLeg ORM object to plain dict for pricing engine."""
+    return {
+        "id":                str(leg.id) if leg.id else "",
+        "leg_ref":           leg.leg_ref or "",
+        "leg_seq":           leg.leg_seq or 0,
+        "leg_type":          leg.leg_type or "FIXED",
+        "direction":         leg.direction or "PAY",
+        "currency":          leg.currency or "USD",
+        "notional":          float(leg.notional) if leg.notional is not None else 0.0,
+        "notional_type":     leg.notional_type or "BULLET",
+        "effective_date":    str(leg.effective_date) if leg.effective_date else None,
+        "maturity_date":     str(leg.maturity_date) if leg.maturity_date else None,
+        "first_period_start": str(leg.first_period_start) if leg.first_period_start else None,
+        "last_period_end":   str(leg.last_period_end) if leg.last_period_end else None,
+        "day_count":         leg.day_count or "ACT/360",
+        "payment_frequency": leg.payment_frequency or "QUARTERLY",
+        "reset_frequency":   leg.reset_frequency,
+        "bdc":               leg.bdc or "MOD_FOLLOWING",
+        "stub_type":         leg.stub_type or "SHORT_FRONT",
+        "payment_lag":       int(leg.payment_lag) if leg.payment_lag is not None else 0,
+        "fixed_rate":        float(leg.fixed_rate) if leg.fixed_rate is not None else 0.0,
+        "spread":            float(leg.spread) if leg.spread is not None else 0.0,
+        "forecast_curve_id": leg.forecast_curve_id,
+        "discount_curve_id": leg.discount_curve_id,
+        "cap_rate":          float(leg.cap_rate) if leg.cap_rate is not None else None,
+        "floor_rate":        float(leg.floor_rate) if leg.floor_rate is not None else None,
+        "leverage":          float(leg.leverage) if leg.leverage is not None else 1.0,
+        "ois_compounding":   leg.ois_compounding,
+    }
 
 
-class PriceResponse(BaseModel):
-    trade_id:  str
-    npv:       float
-    pv01:      float
-    dv01:      float
-    theta:     float
-    legs:      List[LegOut]
-    error:     Optional[str] = None
+def _require_trader(user: dict) -> None:
+    role = user.get("user_metadata", {}).get("role", "viewer").lower()
+    if role not in ("trader", "admin"):
+        raise HTTPException(status_code=403, detail="Trader or Admin role required")
 
 
-# ── Helpers ───────────────────────────────────────────────────
-
-def _build_curves(curve_inputs: List[CurveInput], val_date: date) -> Dict[str, Curve]:
-    curves = {}
-    for ci in curve_inputs:
-        curves[ci.curve_id] = Curve(val_date, flat_rate=ci.flat_rate)
-    # Always ensure a "default" fallback
-    if "default" not in curves and curve_inputs:
-        curves["default"] = Curve(val_date, flat_rate=curve_inputs[0].flat_rate)
-    return curves
-
-
-def _legs_to_dicts(legs) -> List[dict]:
-    result = []
-    for leg in legs:
-        result.append({
-            "id":                str(leg.id),
-            "leg_ref":           leg.leg_ref,
-            "leg_type":          leg.leg_type,
-            "direction":         leg.direction,
-            "currency":          leg.currency,
-            "notional":          float(leg.notional or 0),
-            "effective_date":    leg.effective_date,
-            "maturity_date":     leg.maturity_date,
-            "day_count":         leg.day_count,
-            "payment_frequency": leg.payment_frequency,
-            "bdc":               leg.bdc,
-            "payment_lag":       leg.payment_lag or 0,
-            "stub_type":         leg.stub_type,
-            "first_period_start": leg.first_period_start,
-            "last_period_end":   leg.last_period_end,
-            "fixed_rate":        float(leg.fixed_rate or 0),
-            "spread":            float(leg.spread or 0),
-            "discount_curve_id": leg.discount_curve_id,
-            "forecast_curve_id": leg.forecast_curve_id,
-            "notional_type":     leg.notional_type,
-        })
-    return result
-
-
-# ── Routes ────────────────────────────────────────────────────
-
-@router.post("/price", response_model=PriceResponse)
-def price_trade(
-    body: PriceRequest,
-    db:   Session = Depends(get_db),
-    user: dict    = Depends(verify_token),
-):
+def _build_curve(ci: CurveInput, valuation_date: date, db: Session) -> Curve:
     """
-    Price a trade. Returns NPV, per-leg PVs, projected cashflows, and Greeks.
-    Curves are passed as flat rates (Sprint 3D stub). Bootstrap in Sprint 4.
+    Build a Curve. Priority:
+      1. quotes[] with >= 2 entries  → bootstrap
+      2. flat_rate                   → flat forward
+      3. DB latest snapshot          → bootstrap from saved market data
+      4. None of the above           → raise ValueError
     """
-    val_date = body.valuation_date or date.today()
+    valid_quotes = [q for q in (ci.quotes or []) if q.rate is not None]
+    if len(valid_quotes) >= 2:
+        return bootstrap_from_dicts(valuation_date, [q.dict() for q in valid_quotes])
 
-    # Load legs from DB
-    legs_db = (
-        db.query(TradeLeg)
-        .filter(TradeLeg.trade_id == body.trade_id)
-        .order_by(TradeLeg.leg_seq)
-        .all()
-    )
-    if not legs_db:
-        raise HTTPException(status_code=404, detail="No legs found for this trade.")
+    if ci.flat_rate is not None:
+        return Curve(valuation_date=valuation_date, flat_rate=float(ci.flat_rate))
 
-    # If no curves provided, use a 4% flat default so something shows up
-    if not body.curves:
-        raise HTTPException(
-            status_code=422,
-            detail="At least one curve input required. Pass flat_rate per curve_id."
+    # Try DB snapshot
+    try:
+        result = db.execute(
+            text("SELECT quotes FROM market_data_snapshots WHERE curve_id = :cid ORDER BY valuation_date DESC LIMIT 1"),
+            {"cid": ci.curve_id}
         )
+        row = result.fetchone()
+        if row and row.quotes:
+            raw = row.quotes if isinstance(row.quotes, list) else _json.loads(row.quotes)
+            db_quotes = [
+                {
+                    "tenor":      q.get("tenor"),
+                    "quote_type": _map_qt(q.get("quote_type", "OIS")),
+                    "rate":       float(q.get("rate", 0)) / 100,
+                }
+                for q in raw
+                if q.get("enabled", True) and q.get("rate") is not None
+            ]
+            if len(db_quotes) >= 2:
+                return bootstrap_from_dicts(valuation_date, db_quotes)
+    except Exception:
+        pass
 
-    curves = _build_curves(body.curves, val_date)
-    legs   = _legs_to_dicts(legs_db)
-
-    result = price_swap(body.trade_id, legs, curves, val_date)
-    if result.error:
-        raise HTTPException(status_code=422, detail=result.error)
-
-    greeks = compute_greeks(body.trade_id, legs, curves, val_date, base_npv=result.npv)
-
-    legs_out = []
-    for lr in result.legs:
-        cfs_out = [CashflowOut(
-            leg_id=lr.leg_id,
-            period_start=cf.period_start,
-            period_end=cf.period_end,
-            payment_date=cf.payment_date,
-            fixing_date=cf.fixing_date,
-            currency=cf.currency,
-            notional=cf.notional,
-            rate=cf.rate,
-            dcf=cf.dcf,
-            amount=cf.amount,
-            pv=cf.pv,
-        ) for cf in lr.cashflows]
-        legs_out.append(LegOut(
-            leg_id=lr.leg_id,
-            leg_ref=lr.leg_ref,
-            leg_type=lr.leg_type,
-            direction=lr.direction,
-            currency=lr.currency,
-            pv=lr.pv,
-            cashflows=cfs_out,
-        ))
-
-    return PriceResponse(
-        trade_id=body.trade_id,
-        npv=result.npv,
-        pv01=greeks.pv01,
-        dv01=greeks.dv01,
-        theta=greeks.theta,
-        legs=legs_out,
+    raise ValueError(
+        f"Curve '{ci.curve_id}': no quotes, flat_rate, or saved market data. "
+        f"Go to MARKET DATA workspace and click SAVE TO DB."
     )
 
 
-@router.post("/cashflows/generate", status_code=201)
-def generate_and_store_cashflows(
-    body: CashflowGenerateRequest,
-    db:   Session = Depends(get_db),
-    user: dict    = Depends(verify_token),
+def _map_qt(qt: str) -> str:
+    return {
+        "OISDeposit": "DEPOSIT", "OIS": "OIS_SWAP", "BASIS": "IRS",
+        "FRA": "FRA", "FUTURES": "FUTURES", "Deposit": "DEPOSIT", "IRS": "IRS",
+    }.get(qt, "OIS_SWAP")
+
+
+def _curve_mode(curves: List[CurveInput]) -> str:
+    for ci in curves:
+        if ci.quotes and len([q for q in ci.quotes if q.rate is not None]) >= 2:
+            return "bootstrapped"
+    return "flat"
+
+
+_IR = {"IR_SWAP","OIS_SWAP","BASIS_SWAP","XCCY_SWAP","CAPPED_SWAP","FLOORED_SWAP",
+       "COLLARED_SWAP","CALLABLE_SWAP","CANCELLABLE_SWAP","IR_SWAPTION",
+       "BERMUDAN_SWAPTION","INTEREST_RATE_CAP","INTEREST_RATE_FLOOR",
+       "INTEREST_RATE_COLLAR","FRA"}
+_FX = {"FX_FORWARD","NDF"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /price
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/price")
+async def price_trade(
+    request: PriceRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
 ):
-    """
-    Generate cashflow schedule for a trade and write to cashflows table.
-    Wipes existing PROJECTED cashflows for the trade first (reprice).
-    Returns count of cashflows written.
-    """
-    role = (user.get("user_metadata") or {}).get("role", "viewer").lower()
-    if role not in WRITE_ROLES:
-        raise HTTPException(status_code=403, detail="Requires Trader or Admin role.")
+    _require_trader(user)
+    val_date = request.valuation_date or date.today()
 
-    val_date = body.valuation_date or date.today()
+    trade = db.query(Trade).filter(Trade.id == request.trade_id).first()
+    if not trade:
+        raise HTTPException(status_code=404, detail="Trade not found")
 
-    legs_db = (
+    orm_legs = (
         db.query(TradeLeg)
-        .filter(TradeLeg.trade_id == body.trade_id)
+        .filter(TradeLeg.trade_id == request.trade_id)
         .order_by(TradeLeg.leg_seq)
         .all()
     )
-    if not legs_db:
-        raise HTTPException(status_code=404, detail="No legs found.")
+    if not orm_legs:
+        raise HTTPException(status_code=422, detail="Trade has no legs — book legs first")
 
-    if not body.curves:
-        raise HTTPException(status_code=422, detail="At least one curve input required.")
+    # Convert ORM objects to plain dicts for the pricing engine
+    legs = [_leg_to_dict(leg) for leg in orm_legs]
 
-    curves = _build_curves(body.curves, val_date)
-    legs   = _legs_to_dicts(legs_db)
-    result = price_swap(body.trade_id, legs, curves, val_date)
-    if result.error:
-        raise HTTPException(status_code=422, detail=result.error)
+    # Build curves
+    curves: dict[str, Curve] = {}
+    for ci in request.curves:
+        try:
+            curves[ci.curve_id] = _build_curve(ci, val_date, db)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Curve '{ci.curve_id}': {exc}")
+
+    if not curves:
+        raise HTTPException(status_code=422, detail="At least one curve required")
+
+    # Serialize curve pillars for transparency panel
+    curve_pillars = {}
+    for cid, curve in curves.items():
+        pils = []
+        for d, r in curve._pillars:
+            t = (d - val_date).days / 365.25
+            if t <= 0:
+                continue
+            import math as _math
+            df_val = _math.exp(-r * t)
+            pils.append({
+                "date":      d.isoformat(),
+                "zero_rate": round(r * 100, 4),      # as %
+                "df":        round(df_val, 6),
+                "t":         round(t, 4),
+            })
+        curve_pillars[cid] = pils
+
+    # Price
+    try:
+        if trade.instrument_type in _FX:
+            result = price_fx_forward(
+                trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
+            )
+        else:
+            result = price_swap(
+                trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
+            )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+
+    # Greeks
+    greeks = None
+    try:
+        greeks = compute_greeks(
+            trade_id=str(trade.id), legs=legs, curves=curves,
+            valuation_date=val_date, base_npv=float(result.npv or 0)
+        )
+    except Exception:
+        pass
+
+    def _lr(lr):
+        return {
+            "leg_id":    str(lr.leg_id),
+            "leg_ref":   lr.leg_ref,
+            "leg_type":  lr.leg_type,
+            "direction": lr.direction,
+            "currency":  lr.currency,
+            "pv":        float(lr.pv) if lr.pv is not None else None,
+            "cashflows": [
+                {
+                    "period_start":  cf.period_start.isoformat()  if cf.period_start  else None,
+                    "period_end":    cf.period_end.isoformat()    if cf.period_end    else None,
+                    "payment_date":  cf.payment_date.isoformat()  if cf.payment_date  else None,
+                    "fixing_date":   cf.fixing_date.isoformat()   if getattr(cf, "fixing_date", None) else None,
+                    "rate":          float(cf.rate)      if cf.rate      is not None else None,
+                    "dcf":           float(cf.dcf)       if cf.dcf       is not None else None,
+                    "amount":        float(cf.amount)    if cf.amount    is not None else None,
+                    "df":            float(cf.df)        if hasattr(cf, 'df')        and cf.df        is not None else None,
+                    "zero_rate":     float(cf.zero_rate) if hasattr(cf, 'zero_rate') and cf.zero_rate is not None else None,
+                }
+                for cf in (lr.cashflows or [])
+            ],
+        }
+
+    return {
+        "trade_id":       str(trade.id),
+        "valuation_date": val_date.isoformat(),
+        "curve_mode":     _curve_mode(request.curves),
+        "curve_pillars":  curve_pillars,
+        "npv":   float(result.npv)   if result.npv   is not None else None,
+        "pv01":  float(greeks.pv01)  if greeks and greeks.pv01  is not None else None,
+        "dv01":  float(greeks.dv01)  if greeks and greeks.dv01  is not None else None,
+        "theta": float(greeks.theta) if greeks and greeks.theta is not None else None,
+        "legs":  [_lr(lr) for lr in result.legs],
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /cashflows/generate
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/cashflows/generate")
+async def generate_cashflows(
+    request: CashflowGenRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    _require_trader(user)
+    val_date = request.valuation_date or date.today()
+
+    trade = db.query(Trade).filter(Trade.id == request.trade_id).first()
+    if not trade:
+        raise HTTPException(status_code=404, detail="Trade not found")
+
+    orm_legs = (
+        db.query(TradeLeg)
+        .filter(TradeLeg.trade_id == request.trade_id)
+        .order_by(TradeLeg.leg_seq)
+        .all()
+    )
+    if not orm_legs:
+        raise HTTPException(status_code=422, detail="Trade has no legs")
+
+    legs = [_leg_to_dict(leg) for leg in orm_legs]
+
+    curves: dict[str, Curve] = {}
+    for ci in request.curves:
+        try:
+            curves[ci.curve_id] = _build_curve(ci, val_date, db)
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Curve '{ci.curve_id}': {exc}")
+
+    try:
+        result = price_swap(
+            trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Schedule generation error: {exc}")
 
     # Wipe PROJECTED only
     db.query(Cashflow).filter(
-        Cashflow.trade_id == body.trade_id,
-        Cashflow.status == "PROJECTED"
+        Cashflow.trade_id == request.trade_id,
+        Cashflow.status == "PROJECTED",
     ).delete(synchronize_session=False)
 
-    count = 0
+    written = 0
     for lr in result.legs:
-        for cf in lr.cashflows:
-            row = Cashflow(
-                id=uuid.uuid4(),
-                trade_id=body.trade_id,
-                leg_id=lr.leg_id,
+        for cf in (lr.cashflows or []):
+            db.add(Cashflow(
+                trade_id=request.trade_id,
+                leg_id=str(lr.leg_id),
                 period_start=cf.period_start,
                 period_end=cf.period_end,
                 payment_date=cf.payment_date,
-                fixing_date=cf.fixing_date,
-                currency=cf.currency,
-                notional=Decimal(str(cf.notional)),
-                rate=Decimal(str(round(cf.rate, 8))),
-                dcf=Decimal(str(round(cf.dcf, 8))),
-                amount=Decimal(str(round(cf.amount, 6))),
+                fixing_date=getattr(cf, "fixing_date", None),
+                currency=lr.currency,
+                notional=getattr(cf, "notional", None),
+                rate=float(cf.rate)   if cf.rate   is not None else None,
+                dcf=float(cf.dcf)    if cf.dcf    is not None else None,
+                amount=float(cf.amount) if cf.amount is not None else 0.0,
                 status="PROJECTED",
-            )
-            db.add(row)
-            count += 1
+            ))
+            written += 1
 
     db.commit()
-    return {"trade_id": body.trade_id, "cashflows_written": count}
+    return {
+        "trade_id":          str(trade.id),
+        "cashflows_written": written,
+        "curve_mode":        _curve_mode(request.curves),
+        "valuation_date":    val_date.isoformat(),
+    }

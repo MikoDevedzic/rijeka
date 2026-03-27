@@ -1,0 +1,115 @@
+// SPRINT_4G_4_pricer_css.js
+// Replaces PricerPage.css with full Sprint 4G styles
+// Run from Rijeka root: node SPRINT_4G_4_pricer_css.js
+
+const fs = require('fs');
+const FILE = 'C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src\\components\\pricer\\PricerPage.css';
+
+const css = `/* PricerPage.css — Sprint 4G */
+
+.pp-root { display:flex; flex-direction:column; height:100%; overflow:hidden; background:var(--bg); }
+
+.pp-header { display:flex; align-items:baseline; gap:1rem; padding:0.65rem 1.25rem; border-bottom:1px solid var(--border); background:var(--panel); flex-shrink:0; }
+.pp-title { font-size:0.78rem; font-weight:700; letter-spacing:0.14em; color:var(--accent); }
+.pp-sub { font-size:0.6rem; color:var(--text-dim); letter-spacing:0.06em; }
+.pp-bump-active-badge { margin-left:auto; font-size:0.58rem; font-weight:700; letter-spacing:0.1em; color:var(--amber); background:rgba(232,160,32,0.1); border:1px solid rgba(232,160,32,0.3); border-radius:2px; padding:0.15rem 0.5rem; }
+
+.pp-body { display:flex; flex:1; overflow:hidden; }
+
+.pp-left { width:320px; min-width:260px; border-right:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
+.pp-right { flex:1; overflow-y:auto; padding:1rem 1.25rem; }
+
+.pp-section { border-bottom:1px solid var(--border); padding:0.65rem 0.9rem; }
+.pp-section-hdr { font-size:0.58rem; font-weight:700; letter-spacing:0.14em; color:var(--text-dim); padding:0.4rem 0.9rem; background:var(--bg-deep); border-bottom:1px solid var(--border); }
+
+.pp-field { display:flex; flex-direction:column; gap:0.15rem; margin-bottom:0.5rem; }
+.pp-field label { font-size:0.55rem; font-weight:700; letter-spacing:0.1em; color:var(--text-dim); }
+.pp-date-input, .pp-select { background:var(--panel-2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:0.68rem; padding:0.28rem 0.45rem; border-radius:2px; outline:none; width:100%; box-sizing:border-box; }
+.pp-date-input:focus, .pp-select:focus { border-color:var(--accent); }
+
+.pp-trade-meta { display:flex; flex-wrap:wrap; gap:0.3rem; margin-top:0.35rem; }
+.pp-meta-item { font-size:0.55rem; font-family:var(--mono); color:var(--text-dim); background:var(--panel-2); padding:0.1rem 0.35rem; border-radius:2px; }
+
+/* Curve bump panel */
+.pp-curve-panel { display:flex; flex-direction:column; gap:2px; }
+.pp-curve-block { background:var(--panel); border:1px solid var(--border); border-radius:2px; overflow:hidden; }
+.pp-curve-hdr { display:flex; align-items:center; gap:6px; padding:6px 8px; cursor:pointer; transition:background 0.1s; user-select:none; }
+.pp-curve-hdr:hover { background:var(--panel-2); }
+.pp-curve-chevron { font-size:10px; color:var(--text-dim); width:10px; flex-shrink:0; }
+.pp-curve-id { font-family:var(--mono); font-size:11px; font-weight:700; color:var(--text); }
+.pp-curve-snap-badge { font-size:9px; font-family:var(--mono); color:var(--accent); margin-left:auto; }
+.pp-curve-snap-badge.warn { color:var(--amber); }
+
+.pp-curve-body { padding:6px 8px 8px; border-top:1px solid var(--border); }
+
+.pp-override-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.pp-override-toggle { display:flex; align-items:center; gap:4px; font-size:9px; color:var(--text-dim); cursor:pointer; }
+.pp-rate-input { background:var(--bg-deep); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:11px; padding:2px 5px; border-radius:2px; outline:none; width:55px; text-align:right; }
+.pp-rate-input:focus { border-color:var(--accent); }
+.pp-rate-unit { font-size:9px; color:var(--text-dim); }
+
+.pp-bump-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+.pp-bump-label { font-size:9px; font-weight:700; letter-spacing:0.08em; color:var(--text-dim); flex:1; }
+.pp-bump-input { background:var(--bg-deep); border:1px solid var(--border); color:var(--amber); font-family:var(--mono); font-size:11px; padding:2px 5px; border-radius:2px; outline:none; width:45px; text-align:right; }
+.pp-bump-input:focus { border-color:var(--amber); }
+.pp-bump-unit { font-size:9px; color:var(--text-dim); }
+
+/* Pillar table */
+.pp-pillar-table { width:100%; border-collapse:collapse; font-size:9px; font-family:var(--mono); }
+.pp-pillar-table th { font-size:8px; font-weight:700; letter-spacing:0.08em; color:var(--text-dim); padding:3px 4px; border-bottom:1px solid var(--border); text-align:left; }
+.pp-pillar-table th.r { text-align:right; }
+.pp-pillar-table td { padding:2px 4px; border-bottom:1px solid color-mix(in srgb,var(--border) 30%,transparent); }
+.pp-pillar-table tr.bumped td { background:rgba(232,160,32,0.04); }
+.pp-tenor-bump { background:transparent; border:1px solid transparent; color:var(--amber); font-family:var(--mono); font-size:9px; padding:1px 3px; border-radius:2px; outline:none; width:36px; text-align:right; }
+.pp-tenor-bump:focus { border-color:var(--amber); background:var(--bg-deep); }
+.bumped-val { color:var(--amber) !important; }
+
+/* Run button */
+.pp-run-btn { width:100%; margin-top:0.6rem; padding:0.45rem; background:rgba(14,201,160,0.07); border:1px solid var(--accent); border-radius:2px; font-family:var(--mono); font-size:0.65rem; font-weight:700; letter-spacing:0.1em; color:var(--accent); cursor:pointer; transition:background 0.12s; }
+.pp-run-btn:hover:not(:disabled) { background:rgba(14,201,160,0.16); }
+.pp-run-btn:disabled { opacity:0.35; cursor:not-allowed; }
+
+.pp-error { font-size:0.6rem; color:var(--red); padding:0.35rem 0; font-family:var(--mono); }
+.pp-loading { font-size:0.6rem; color:var(--text-dim); font-family:var(--mono); }
+.pp-empty { display:flex; align-items:center; justify-content:center; height:200px; font-size:0.65rem; letter-spacing:0.1em; color:var(--text-dim); text-align:center; }
+
+/* Metrics */
+.pp-metrics { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; margin-bottom:0.75rem; }
+.pp-metric { background:var(--panel); border:1px solid var(--border); border-radius:2px; padding:0.5rem 0.65rem; }
+.pp-metric.primary { grid-column:span 2; }
+.pp-metric-label { font-size:0.55rem; font-weight:700; letter-spacing:0.12em; color:var(--text-dim); margin-bottom:0.15rem; }
+.pp-metric-value { font-size:1rem; font-weight:700; font-family:var(--mono); }
+.pp-metric.primary .pp-metric-value { font-size:1.4rem; }
+.pp-metric-sub { font-size:0.55rem; color:var(--text-dim); margin-top:0.1rem; }
+
+/* Curve pillars used */
+.pp-pillars-used { margin-bottom:1rem; }
+.pp-pillar-block { margin-bottom:0.5rem; background:var(--panel); border:1px solid var(--border); border-radius:2px; overflow:hidden; }
+.pp-pillar-block-hdr { padding:4px 10px; font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:0.1em; color:var(--blue); background:var(--panel-2); border-bottom:1px solid var(--border); }
+.pp-pillar-display { width:100%; border-collapse:collapse; font-size:9px; font-family:var(--mono); }
+.pp-pillar-display th { font-size:8px; font-weight:700; letter-spacing:0.08em; color:var(--text-dim); padding:3px 8px; border-bottom:1px solid var(--border); text-align:left; }
+.pp-pillar-display th.r { text-align:right; }
+.pp-pillar-display td { padding:2px 8px; border-bottom:1px solid color-mix(in srgb,var(--border) 25%,transparent); }
+
+/* Leg table */
+.pp-leg-table { width:100%; border-collapse:collapse; font-size:0.65rem; font-family:var(--mono); margin-bottom:1rem; }
+.pp-leg-table th { padding:0.3rem 0.65rem; text-align:left; font-size:0.55rem; font-weight:700; letter-spacing:0.1em; color:var(--text-dim); border-bottom:1px solid var(--border); background:var(--panel-2); }
+.pp-leg-table td { padding:0.35rem 0.65rem; border-bottom:1px solid color-mix(in srgb,var(--border) 40%,transparent); }
+
+/* Cashflow transparency table */
+.pp-cf-transparency { margin-bottom:1rem; }
+.pp-cf-scroll { overflow-x:auto; }
+.pp-cf-detail-table { width:100%; border-collapse:collapse; font-size:0.62rem; font-family:var(--mono); white-space:nowrap; }
+.pp-cf-detail-table th { padding:0.3rem 0.6rem; text-align:left; font-size:0.55rem; font-weight:700; letter-spacing:0.08em; color:var(--text-dim); border-bottom:1px solid var(--border); background:var(--panel-2); position:sticky; top:0; }
+.pp-cf-detail-table th.r { text-align:right; }
+.pp-cf-detail-table td { padding:0.28rem 0.6rem; border-bottom:1px solid color-mix(in srgb,var(--border) 30%,transparent); }
+.pp-cf-detail-table td.r { text-align:right; }
+.pp-cf-detail-table tr:hover td { background:rgba(255,255,255,0.015); }
+
+.pp-mono { font-family:var(--mono) !important; }
+.pp-dim { color:var(--text-dim); }
+.r { text-align:right; }
+`;
+
+fs.writeFileSync(FILE, css, 'utf8');
+console.log('Done. PricerPage.css written.');
