@@ -253,6 +253,37 @@ Immutable audit trail: every state change preserved with old+new hash.
 
 ---
 
+## KRATOS — Rijeka's Derivatives Intelligence
+
+KRATOS is Rijeka's AI intelligence layer, named after the Greek god of strength and power.
+Powered by Claude (Anthropic) via FastAPI proxy — users never need their own API key.
+
+**Access:** TRADER and ADMIN roles only. VIEWERs see upgrade prompt with hello@rijeka.app CTA.
+
+**Current capabilities (Sprint 2):**
+- Trade comparison analysis — key differences, risk implications, structural concerns
+- Multi-turn conversation — follow-up questions work
+- Full trade economics as context: legs, rates, counterparty, tenor, notional
+
+**Sprint 3 capabilities:**
+- Live NPV, Greeks, XVA in context — KRATOS sees real numbers
+- Per-trade insights on pricing tab: "KRATOS says: elevated long-end duration"
+- Pre-trade analysis: compare 3 structures before booking
+
+**Sprint 4+:**
+- KRATOS alerts: VaR breach, margin call incoming, unusual position
+- KRATOS digest: daily market summary personalised to your book
+- KRATOS explain: plain English explanation of any risk metric
+- Voice interface: "Ask KRATOS" via microphone on trading floor
+
+**Branding:**
+- Symbol: ⚔
+- Color: Deep purple gradient (#4a0080 → #6b00b3), glow #8b00ff
+- Tagline: "Your derivatives intelligence"
+- Floor chatter: "Just ask KRATOS" / "KRATOS flagged it" / "What does KRATOS say?"
+
+---
+
 ## Downstream System Data Consumption
 
 | System | Reads from |

@@ -24,16 +24,16 @@ export default function AiGate({ children, fallback }) {
     }}>
       <div style={{
         fontSize:'2rem', marginBottom:'0.5rem', opacity:0.4,
-      }}>◆</div>
+      }}>⚔</div>
       <div style={{
         fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.15em', color:'var(--text)',
-      }}>AI ANALYST — TRADER ACCESS REQUIRED</div>
+      }}>KRATOS — TRADER ACCESS REQUIRED</div>
       <div style={{
         fontSize:'0.68rem', color:'var(--text-dim)', lineHeight:1.7,
         maxWidth:'380px', letterSpacing:'0.04em',
       }}>
-        AI-powered trade analysis is available on the Trader plan.
-        Contact us to upgrade your account and unlock intelligent insights.
+        KRATOS derivatives intelligence is available on the Trader plan.
+        Contact us to upgrade your account and unlock battle-tested analysis.
       </div>
       <a href="mailto:hello@rijeka.app?subject=Trader Access Request" style={{
         display:'inline-block', marginTop:'0.5rem',

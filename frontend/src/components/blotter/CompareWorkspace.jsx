@@ -175,21 +175,24 @@ ${ctx}`
         padding:'0.6rem 1.25rem', borderBottom:'1px solid var(--border)',
         background:'var(--panel-2)', flexShrink:0,
       }}>
-        <span style={{fontFamily:'var(--mono)',fontSize:'0.65rem',fontWeight:700,letterSpacing:'0.12em',color:'var(--purple)'}}>
-          ◆ AI TRADE ANALYST
+        <span style={{fontFamily:'var(--mono)',fontSize:'0.65rem',fontWeight:700,letterSpacing:'0.12em',color:'#e0aaff',textShadow:'0 0 8px rgba(139,0,255,0.6)'}}>
+          ⚔ KRATOS
         </span>
         <span style={{fontFamily:'var(--mono)',fontSize:'0.6rem',color:'var(--text-dim)'}}>
-          {trades.length} trades loaded · Ask anything about these trades
+          {trades.length} trades loaded · Your derivatives intelligence — ask anything
         </span>
         <div style={{marginLeft:'auto',display:'flex',gap:'0.5rem'}}>
           {messages.length === 0 && (
             <button onClick={quickAnalyse} disabled={loading} style={{
-              background:'var(--purple)', border:'none', color:'#fff',
+              background:'linear-gradient(135deg, #4a0080, #6b00b3)',
+              border:'1px solid #8b00ff', color:'#e0aaff',
               fontFamily:'var(--mono)', fontSize:'0.65rem', fontWeight:700,
               letterSpacing:'0.1em', padding:'0.3rem 0.85rem', borderRadius:2,
               cursor:'pointer', opacity: loading ? 0.6 : 1,
+              boxShadow:'0 0 10px rgba(139,0,255,0.4)',
+              textShadow:'0 0 6px rgba(224,170,255,0.5)',
             }}>
-              {loading ? 'ANALYSING...' : 'ANALYSE DIFFERENCES'}
+              {loading ? 'ANALYSING...' : 'UNLEASH KRATOS'}
             </button>
           )}
           {messages.length > 0 && (
@@ -221,8 +224,8 @@ ${ctx}`
               {[
                 'What are the key differences?',
                 'Which trade has more curve risk?',
-                'Compare the cashflow profiles',
                 'Any structural concerns?',
+                'Summarise for my MD',
               ].map(q => (
                 <button key={q} onClick={() => analyse(q)} style={{
                   background:'transparent', border:'1px solid var(--border)',
@@ -241,13 +244,13 @@ ${ctx}`
           <div key={i} style={{
             alignSelf: m.role==='user' ? 'flex-end' : 'flex-start',
             maxWidth: '85%',
-            background: m.role==='user' ? 'color-mix(in srgb,var(--purple) 12%,transparent)' : 'var(--panel-2)',
-            border: `1px solid ${m.role==='user' ? 'color-mix(in srgb,var(--purple) 30%,transparent)' : 'var(--border)'}`,
+            background: m.role==='user' ? 'rgba(74,0,128,0.3)' : 'var(--panel-2)',
+            border: `1px solid ${m.role==='user' ? 'rgba(139,0,255,0.4)' : 'var(--border)'}`,
             borderRadius: 3, padding: '0.6rem 0.85rem',
           }}>
             <div style={{
               fontFamily:'var(--mono)', fontSize:'0.68rem', lineHeight:1.6,
-              color: m.role==='user' ? 'var(--purple)' : 'var(--text)',
+              color: m.role==='user' ? '#e0aaff' : 'var(--text)',
               whiteSpace:'pre-wrap',
             }}>{m.content}</div>
           </div>
@@ -259,7 +262,7 @@ ${ctx}`
             padding:'0.6rem 0.85rem', fontFamily:'var(--mono)',
             fontSize:'0.68rem', color:'var(--text-dim)', letterSpacing:'0.08em',
           }}>
-            ANALYSING TRADES...
+            KRATOS IS THINKING...
           </div>
         )}
         {error && (
@@ -275,7 +278,7 @@ ${ctx}`
           value={question}
           onChange={e=>setQuestion(e.target.value)}
           onKeyDown={e=>{if(e.key==='Enter'&&question.trim()){analyse(question.trim());setQuestion('')}}}
-          placeholder="Ask about these trades... (Enter to send)"
+          placeholder="Ask KRATOS anything about these trades..."
           style={{
             flex:1, background:'var(--bg)', border:'1px solid var(--border)',
             color:'var(--text)', fontFamily:'var(--mono)', fontSize:'0.7rem',
@@ -288,12 +291,14 @@ ${ctx}`
           onClick={()=>{if(question.trim()){analyse(question.trim());setQuestion('')}}}
           disabled={loading||!question.trim()}
           style={{
-            background:'var(--purple)', border:'none', color:'#fff',
+            background:'linear-gradient(135deg, #4a0080, #6b00b3)',
+            border:'1px solid #8b00ff', color:'#e0aaff',
             fontFamily:'var(--mono)', fontSize:'0.68rem', fontWeight:700,
             padding:'0.35rem 0.85rem', borderRadius:2, cursor:'pointer',
             opacity: loading||!question.trim() ? 0.5 : 1,
+            boxShadow:'0 0 8px rgba(139,0,255,0.3)',
           }}
-        >SEND</button>
+        >⚔ SEND</button>
       </div>
     </div>
   )
@@ -352,14 +357,20 @@ export default function CompareWorkspace({ tab }) {
         <button
           onClick={() => setShowAi(v => !v)}
           style={{
-            background: showAi ? 'color-mix(in srgb,var(--purple) 15%,transparent)' : 'transparent',
-            border: `1px solid ${showAi ? 'var(--purple)' : 'var(--border)'}`,
-            color: showAi ? 'var(--purple)' : 'var(--text-dim)',
-            fontFamily:'var(--mono)', fontSize:'0.62rem', fontWeight:700,
-            letterSpacing:'0.08em', padding:'0.25rem 0.75rem',
-            borderRadius:2, cursor:'pointer', transition:'all 0.12s',
+            background: showAi
+              ? 'linear-gradient(135deg, #4a0080, #6b00b3)'
+              : 'linear-gradient(135deg, #2a0050, #3d0080)',
+            border: '1px solid #8b00ff',
+            color: '#e0aaff',
+            fontFamily:'var(--mono)', fontSize:'0.65rem', fontWeight:700,
+            letterSpacing:'0.12em', padding:'0.28rem 0.9rem',
+            borderRadius:2, cursor:'pointer', transition:'all 0.2s',
+            boxShadow: showAi ? '0 0 12px rgba(139,0,255,0.4)' : '0 0 6px rgba(139,0,255,0.2)',
+            textShadow: '0 0 8px rgba(224,170,255,0.6)',
           }}
-        >◆ AI ANALYST</button>
+          onMouseEnter={e=>{e.currentTarget.style.boxShadow='0 0 16px rgba(139,0,255,0.6)';e.currentTarget.style.color='#fff'}}
+          onMouseLeave={e=>{e.currentTarget.style.boxShadow=showAi?'0 0 12px rgba(139,0,255,0.4)':'0 0 6px rgba(139,0,255,0.2)';e.currentTarget.style.color='#e0aaff'}}
+        >⚔ KRATOS</button>
         <button className="cmp-close-btn" onClick={() => closeTab(tab.id)}>CLOSE</button>
       </div>
 
