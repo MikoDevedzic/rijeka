@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTradesStore } from '../../store/useTradesStore'
 import { useTabStore } from '../../store/useTabStore'
 import { supabase } from '../../lib/supabase'
+import usePricerStore, { fmtCcy, fmtBps, fmtPct } from '../../store/usePricerStore'
 import './TradeWorkspace.css'
 
 const AC_COLOR = { RATES:'var(--accent)', FX:'var(--blue)', CREDIT:'var(--amber)', EQUITY:'var(--purple)', COMMODITY:'var(--red)' }
@@ -9,13 +10,13 @@ const ST_COLOR = { PENDING:'var(--amber)', LIVE:'var(--accent)', MATURED:'#4a556
 const SR_COLOR = { WORKING:'var(--accent)', PRODUCTION:'var(--blue)', HISTORY:'#4a5568' }
 
 function fmtN(n, ccy) {
-  if (!n && n !== 0) return '—'
+  if (!n && n !== 0) return '\u2014'
   const num = Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   return ccy ? `${num} ${ccy}` : num
 }
-function fmtD(d) { return d?d.substring(0,10):'—' }
+function fmtD(d) { return d?d.substring(0,10):'\u2014' }
 function tenor(t) {
-  if (!t.effective_date||!t.maturity_date) return '—'
+  if (!t.effective_date||!t.maturity_date) return '\u2014'
   const y=(new Date(t.maturity_date)-new Date(t.effective_date))/(365.25*864e5)
   return y>=1?`${y.toFixed(1)}Y`:`${Math.round(y*12)}M`
 }
@@ -39,16 +40,302 @@ function genCFs(legs,eff,mat,overrides={}) {
   return all.sort((a,b)=>a.date<b.date?-1:1)
 }
 
+// ── Collect unique curve IDs from a trade ─────────────────────
+function collectCurveIds(trade) {
+  const ids = new Set()
+  if (trade.discount_curve_id) ids.add(trade.discount_curve_id)
+  if (trade.forecast_curve_id) ids.add(trade.forecast_curve_id)
+  const legs = trade.terms?.legs || []
+  legs.forEach(l => {
+    if (l.discount_curve_id) ids.add(l.discount_curve_id)
+    if (l.forecast_curve_id) ids.add(l.forecast_curve_id)
+  })
+  if (ids.size === 0) ids.add('default')
+  return [...ids]
+}
+
+// ── Formatting helpers ────────────────────────────────────────
+function npvColor(v) {
+  if (v === null || v === undefined) return 'var(--text)'
+  return Number(v) >= 0 ? 'var(--accent)' : 'var(--red)'
+}
+
+function MetricBlock({ label, value, sub, color }) {
+  return (
+    <div style={{
+      background:'var(--panel-2)', border:'1px solid var(--border)',
+      borderRadius:3, padding:'0.75rem 1rem', minWidth:140,
+    }}>
+      <div style={{fontSize:'0.58rem',fontWeight:700,letterSpacing:'0.12em',color:'var(--text-dim)',marginBottom:'0.35rem'}}>{label}</div>
+      <div style={{fontSize:'0.9rem',fontWeight:700,fontFamily:'var(--mono)',color:color||'var(--text)',lineHeight:1}}>{value}</div>
+      {sub && <div style={{fontSize:'0.58rem',color:'var(--text-dim)',marginTop:'0.25rem',letterSpacing:'0.06em'}}>{sub}</div>}
+    </div>
+  )
+}
+
+// ── PRICING PANEL ─────────────────────────────────────────────
+function PricingPanel({ trade }) {
+  const { priceTrade, resultForTrade, loading, error } = usePricerStore()
+  const result = resultForTrade(trade.id)
+
+  // Build initial curve inputs from trade's curve IDs, default 5.25%
+  const curveIds = collectCurveIds(trade)
+  const [curveInputs, setCurveInputs] = useState(() =>
+    curveIds.map(id => ({ curve_id: id, flat_rate: '0.0525' }))
+  )
+  const [valuationDate, setValuationDate] = useState(
+    () => new Date().toISOString().slice(0, 10)
+  )
+  const [localErr, setLocalErr] = useState(null)
+
+  const handleRateChange = (curve_id, val) => {
+    setCurveInputs(prev => prev.map(c => c.curve_id === curve_id ? { ...c, flat_rate: val } : c))
+  }
+
+  const handlePrice = async () => {
+    setLocalErr(null)
+    // Validate rates
+    for (const c of curveInputs) {
+      const r = parseFloat(c.flat_rate)
+      if (isNaN(r) || r < 0 || r > 1) {
+        setLocalErr(`Invalid rate for ${c.curve_id} — enter decimal e.g. 0.0525 for 5.25%`)
+        return
+      }
+    }
+    const parsed = curveInputs.map(c => ({ curve_id: c.curve_id, flat_rate: parseFloat(c.flat_rate) }))
+    // Always include a default fallback
+    if (!parsed.find(c => c.curve_id === 'default')) {
+      parsed.push({ curve_id: 'default', flat_rate: parsed[0]?.flat_rate || 0.0525 })
+    }
+    await priceTrade(trade.id, parsed, valuationDate)
+  }
+
+  const inp = {
+    background:'var(--bg)', border:'1px solid var(--border)', color:'var(--text)',
+    fontFamily:'var(--mono)', fontSize:'0.7rem', padding:'0.25rem 0.4rem',
+    borderRadius:2, outline:'none', width:110, textAlign:'right',
+  }
+  const lbl = { fontSize:'0.6rem', fontWeight:600, letterSpacing:'0.1em', color:'var(--text-dim)' }
+
+  return (
+    <div style={{ height:'100%', overflow:'auto', padding:'1.25rem' }}>
+
+      {/* ── Curve Input Panel ── */}
+      <div style={{
+        background:'var(--panel-2)', border:'1px solid var(--border)',
+        borderRadius:3, padding:'1rem 1.25rem', marginBottom:'1.25rem',
+      }}>
+        <div style={{ fontSize:'0.62rem', fontWeight:700, letterSpacing:'0.14em', color:'var(--text-dim)', marginBottom:'0.75rem' }}>
+          CURVE INPUTS — FLAT RATES (SPRINT 3 STUB)
+        </div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'0.75rem', alignItems:'flex-end' }}>
+          {curveInputs.map(c => (
+            <div key={c.curve_id} style={{ display:'flex', flexDirection:'column', gap:'0.2rem' }}>
+              <span style={lbl}>{c.curve_id}</span>
+              <input
+                style={inp}
+                value={c.flat_rate}
+                onChange={e => handleRateChange(c.curve_id, e.target.value)}
+                placeholder="0.0525"
+              />
+            </div>
+          ))}
+          <div style={{ display:'flex', flexDirection:'column', gap:'0.2rem' }}>
+            <span style={lbl}>VALUATION DATE</span>
+            <input
+              type="date"
+              style={{ ...inp, width:130 }}
+              value={valuationDate}
+              onChange={e => setValuationDate(e.target.value)}
+            />
+          </div>
+          <button
+            onClick={handlePrice}
+            disabled={loading}
+            style={{
+              background: loading ? 'var(--panel-3)' : 'var(--accent)',
+              border:'none', color:'var(--bg-deep)',
+              fontFamily:'var(--mono)', fontSize:'0.68rem', fontWeight:700,
+              letterSpacing:'0.1em', padding:'0.35rem 1rem', borderRadius:2,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.7 : 1, alignSelf:'flex-end',
+            }}
+          >
+            {loading ? 'PRICING...' : 'RUN PRICER'}
+          </button>
+        </div>
+        {(localErr || error) && (
+          <div style={{
+            marginTop:'0.6rem', fontSize:'0.65rem', color:'var(--red)',
+            padding:'0.3rem 0.6rem', background:'color-mix(in srgb,var(--red) 8%,transparent)',
+            border:'1px solid color-mix(in srgb,var(--red) 25%,transparent)', borderRadius:2,
+          }}>
+            {localErr || error}
+          </div>
+        )}
+        <div style={{ marginTop:'0.5rem', fontSize:'0.58rem', color:'var(--text-dim)', letterSpacing:'0.06em' }}>
+          Enter decimal rates — e.g. 0.0525 = 5.25%. Sprint 4: bootstrapped from market data automatically.
+        </div>
+      </div>
+
+      {/* ── Results ── */}
+      {!result && !loading && (
+        <div style={{ padding:'3rem', textAlign:'center', color:'var(--text-dim)', fontSize:'0.68rem', letterSpacing:'0.1em' }}>
+          ENTER CURVE RATES AND CLICK RUN PRICER
+        </div>
+      )}
+
+      {result && (
+        <>
+          {/* Top-line metrics */}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'0.75rem', marginBottom:'1.25rem' }}>
+            <MetricBlock
+              label="NPV"
+              value={fmtCcy(result.npv, trade.notional_ccy)}
+              sub={valuationDate}
+              color={npvColor(result.npv)}
+            />
+            <MetricBlock
+              label="PV01"
+              value={fmtCcy(result.pv01, trade.notional_ccy)}
+              sub="+1bp parallel shift"
+              color="var(--blue)"
+            />
+            <MetricBlock
+              label="DV01"
+              value={fmtCcy(result.dv01, trade.notional_ccy)}
+              sub="+1bp discount curve"
+              color="var(--blue)"
+            />
+            <MetricBlock
+              label="THETA"
+              value={fmtCcy(result.theta, trade.notional_ccy)}
+              sub="1-day time decay"
+              color={npvColor(result.theta)}
+            />
+          </div>
+
+          {/* Per-leg PV breakdown */}
+          <div style={{
+            background:'var(--panel-2)', border:'1px solid var(--border)',
+            borderRadius:3, marginBottom:'1.25rem', overflow:'hidden',
+          }}>
+            <div style={{
+              padding:'0.5rem 1rem', borderBottom:'1px solid var(--border)',
+              fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.14em', color:'var(--text-dim)',
+            }}>
+              LEG PV BREAKDOWN
+            </div>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:'var(--mono)', fontSize:'0.68rem' }}>
+              <thead>
+                <tr style={{ background:'var(--panel-3)' }}>
+                  {['LEG','TYPE','DIR','CCY','PV','CASHFLOWS'].map(h => (
+                    <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign: h==='PV'||h==='CASHFLOWS' ? 'right' : 'left', fontSize:'0.58rem', fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)', whiteSpace:'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {result.legs.map((leg, i) => {
+                  const dc = leg.direction === 'PAY' ? 'var(--red)' : 'var(--accent)'
+                  return (
+                    <tr key={leg.leg_id} style={{ borderBottom:'1px solid var(--border)' }}>
+                      <td style={{ padding:'0.5rem 0.75rem', color:'var(--text-dim)', fontSize:'0.62rem' }}>{leg.leg_ref || `L${i+1}`}</td>
+                      <td style={{ padding:'0.5rem 0.75rem', color:'var(--text-dim)' }}>{leg.leg_type}</td>
+                      <td style={{ padding:'0.5rem 0.75rem' }}>
+                        <span style={{ color:dc, fontWeight:700, fontSize:'0.62rem' }}>{leg.direction}</span>
+                      </td>
+                      <td style={{ padding:'0.5rem 0.75rem', color:'var(--text-dim)' }}>{leg.currency}</td>
+                      <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:npvColor(leg.pv), fontWeight:700 }}>
+                        {fmtCcy(leg.pv, '')}
+                      </td>
+                      <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'var(--text-dim)', fontSize:'0.62rem' }}>
+                        {leg.cashflows?.length || 0}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Cashflow schedule from pricer */}
+          {result.legs.some(l => l.cashflows?.length > 0) && (
+            <div style={{
+              background:'var(--panel-2)', border:'1px solid var(--border)',
+              borderRadius:3, overflow:'hidden',
+            }}>
+              <div style={{
+                padding:'0.5rem 1rem', borderBottom:'1px solid var(--border)',
+                fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.14em', color:'var(--text-dim)',
+              }}>
+                PROJECTED CASHFLOW SCHEDULE
+              </div>
+              <div style={{ maxHeight:300, overflow:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:'var(--mono)', fontSize:'0.65rem' }}>
+                  <thead style={{ position:'sticky', top:0, background:'var(--panel-3)', zIndex:1 }}>
+                    <tr>
+                      {['PAYMENT DATE','LEG','DIR','NOTIONAL','RATE','DCF','AMOUNT','PV'].map(h => (
+                        <th key={h} style={{
+                          padding:'0.35rem 0.6rem',
+                          textAlign: ['NOTIONAL','RATE','DCF','AMOUNT','PV'].includes(h) ? 'right' : 'left',
+                          fontSize:'0.56rem', fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)', whiteSpace:'nowrap',
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.legs.flatMap(leg =>
+                      (leg.cashflows || []).map((cf, ci) => {
+                        const dc = leg.direction === 'PAY' ? 'var(--red)' : 'var(--accent)'
+                        return (
+                          <tr key={`${leg.leg_id}-${ci}`} style={{ borderBottom:'1px solid color-mix(in srgb,var(--border) 50%,transparent)' }}>
+                            <td style={{ padding:'0.3rem 0.6rem', color:'var(--text)' }}>{cf.payment_date}</td>
+                            <td style={{ padding:'0.3rem 0.6rem', color:'var(--text-dim)', fontSize:'0.6rem' }}>{leg.leg_ref}</td>
+                            <td style={{ padding:'0.3rem 0.6rem' }}>
+                              <span style={{ color:dc, fontWeight:700, fontSize:'0.6rem' }}>{leg.direction}</span>
+                            </td>
+                            <td style={{ padding:'0.3rem 0.6rem', textAlign:'right', color:'var(--text-dim)' }}>
+                              {Number(cf.notional).toLocaleString('en-US', {maximumFractionDigits:0})}
+                            </td>
+                            <td style={{ padding:'0.3rem 0.6rem', textAlign:'right', color:'var(--text-dim)' }}>
+                              {fmtPct(cf.rate)}
+                            </td>
+                            <td style={{ padding:'0.3rem 0.6rem', textAlign:'right', color:'var(--text-dim)' }}>
+                              {Number(cf.dcf).toFixed(4)}
+                            </td>
+                            <td style={{ padding:'0.3rem 0.6rem', textAlign:'right', color: leg.direction==='PAY'?'var(--red)':'var(--accent)', fontWeight:600 }}>
+                              {Number(cf.amount).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0})}
+                            </td>
+                            <td style={{ padding:'0.3rem 0.6rem', textAlign:'right', color:npvColor(cf.pv), fontWeight:600 }}>
+                              {Number(cf.pv).toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:0})}
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Existing panels (unchanged) ───────────────────────────────
+
 function OverviewPanel({trade:t}) {
   const ac=t.asset_class, acColor=AC_COLOR[ac]||'var(--text)'
   const terms=t.terms||{}, legs=terms.legs||[]
   const fields=[
     ['TRADE REF',t.trade_ref],['ASSET CLASS',t.asset_class],['INSTRUMENT',t.instrument_type],
-    ['STATUS',t.status],['STORE',t.store],['COUNTERPARTY',t.counterparty?.name||'—'],
-    ['OWN ENTITY',t.own_entity?.short_name||'—'],['NOTIONAL',fmtN(t.notional, t.notional_ccy)],
+    ['STATUS',t.status],['STORE',t.store],['COUNTERPARTY',t.counterparty?.name||'\u2014'],
+    ['OWN ENTITY',t.own_entity?.short_name||'\u2014'],['NOTIONAL',fmtN(t.notional, t.notional_ccy)],
     ['CURRENCY',t.notional_ccy],['TENOR',tenor(t)],
     ['TRADE DATE',fmtD(t.trade_date)],['EFFECTIVE DATE',fmtD(t.effective_date)],
-    ['MATURITY DATE',fmtD(t.maturity_date)],['DESK',t.desk||'—'],['BOOK',t.book||'—'],['LEGS',legs.length||'—'],
+    ['MATURITY DATE',fmtD(t.maturity_date)],['DESK',t.desk||'\u2014'],['BOOK',t.book||'\u2014'],['LEGS',legs.length||'\u2014'],
   ]
   return (
     <div>
@@ -79,7 +366,7 @@ function LegsPanel({trade:t}) {
   if (!legs.length) return <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.7rem',letterSpacing:'0.1em'}}>NO LEG DATA</div>
   const SKIP=['leg_id','label','leg_type','direction','currency','notional_type','notional_schedule','rate_schedule','spread_schedule']
   const fmtKey=k=>k.replace(/_/g,' ').toUpperCase()
-  const fmtVal=v=>{ if(v===null||v===undefined||v==='') return '—'; if(typeof v==='boolean') return v?'YES':'NO'; if(Array.isArray(v)) return v.length?`${v.length} entries`:'—'; return String(v) }
+  const fmtVal=v=>{ if(v===null||v===undefined||v==='') return '\u2014'; if(typeof v==='boolean') return v?'YES':'NO'; if(Array.isArray(v)) return v.length?`${v.length} entries`:'\u2014'; return String(v) }
   return (
     <div className="legs-view">
       {legs.map((leg,i)=>{
@@ -136,12 +423,12 @@ function CashflowsPanel({trade:t,onOverride}) {
       <div className="cf-legend">
         <span style={{color:'var(--red)',fontWeight:700,fontSize:'0.65rem'}}>PAY</span>
         <span style={{color:'var(--accent)',fontWeight:700,fontSize:'0.65rem'}}>RECEIVE</span>
-        <span style={{fontSize:'0.62rem',color:'var(--text-dim)'}}>● OVERRIDDEN — click amount to edit</span>
+        <span style={{fontSize:'0.62rem',color:'var(--text-dim)'}}>&#9679; OVERRIDDEN &#8212; click amount to edit</span>
         <span style={{fontSize:'0.62rem',color:'var(--text-dim)',marginLeft:'auto'}}>{displayed.length} cashflows</span>
       </div>
       <div style={{flex:1,overflow:'auto'}}>
         {cfs.length===0
-          ? <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.68rem',letterSpacing:'0.1em'}}>NO CASHFLOWS — ADD LEGS WITH DATES</div>
+          ? <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.68rem',letterSpacing:'0.1em'}}>NO CASHFLOWS &#8212; ADD LEGS WITH DATES</div>
           : <table className="cf-tbl">
               <thead><tr><th>DATE</th><th>LEG</th><th>DIR</th><th>TYPE</th><th>CCY</th><th>AMOUNT</th><th/></tr></thead>
               <tbody>
@@ -163,7 +450,7 @@ function CashflowsPanel({trade:t,onOverride}) {
                           </span>
                       }
                     </td>
-                    <td><button className="cf-edit-btn" onClick={()=>{setEditId(cf.id);setEditVal(cf.amount??'')}}>✎</button></td>
+                    <td><button className="cf-edit-btn" onClick={()=>{setEditId(cf.id);setEditVal(cf.amount??'')}}>&#9998;</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -184,7 +471,7 @@ function StubPanel({title,sprint,desc,blocks}) {
         {blocks.map(b=>(
           <div className="stub-block" key={b.label}>
             <div className="stub-block-label">{b.label}</div>
-            <div className="stub-block-val">—</div>
+            <div className="stub-block-val">&#8212;</div>
             <div className="stub-block-sub">{b.sub}</div>
           </div>
         ))}
@@ -192,7 +479,6 @@ function StubPanel({title,sprint,desc,blocks}) {
     </div>
   )
 }
-
 
 function EditPanel({ trade, onSave, onClose }) {
   const [desks, setDesks] = useState([])
@@ -211,7 +497,6 @@ function EditPanel({ trade, onSave, onClose }) {
       const b = nodes.filter(n => n.node_type === 'book')
       setDesks(d)
       setBooks(b)
-      // Pre-select current desk and book if they match
       const currentDesk = d.find(x => x.name === trade.desk)
       if (currentDesk) {
         setDeskId(currentDesk.id)
@@ -229,11 +514,7 @@ function EditPanel({ trade, onSave, onClose }) {
     setBusy(true); setErr('')
     const desk = desks.find(d => d.id === deskId)
     const book = books.find(b => b.id === bookId)
-    const updates = {
-      store,
-      desk: desk?.name || trade.desk || null,
-      book: book?.name || trade.book || null,
-    }
+    const updates = { store, desk: desk?.name || trade.desk || null, book: book?.name || trade.book || null }
     const { error } = await supabase.from('trades').update(updates).eq('id', trade.id)
     if (error) { setErr(error.message); setBusy(false); return }
     onSave({ ...trade, ...updates })
@@ -255,15 +536,13 @@ function EditPanel({ trade, onSave, onClose }) {
     }}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1rem 1.25rem',borderBottom:'1px solid var(--border)',background:'var(--panel-2)',flexShrink:0}}>
         <span style={{fontFamily:'var(--mono)',fontSize:'0.72rem',fontWeight:700,letterSpacing:'0.12em',color:'var(--accent)'}}>EDIT PORTFOLIO</span>
-        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'0.9rem'}}>✕</button>
+        <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'0.9rem'}}>&#10005;</button>
       </div>
-
       <div style={{flex:1,overflow:'auto',padding:'1rem 1.25rem',display:'flex',flexDirection:'column',gap:'0.75rem'}}>
         <div style={{fontSize:'0.6rem',color:'var(--text-dim)',letterSpacing:'0.08em',lineHeight:1.6,padding:'0.5rem',background:'var(--bg-deep)',borderRadius:2,border:'1px solid var(--border)'}}>
-          Portfolio fields only — desk, book, store.<br/>
+          Portfolio fields only &#8212; desk, book, store.<br/>
           Economic amendments (notional, rate, dates) available Sprint 4.
         </div>
-
         <div style={fg}>
           <label style={lbl}>STORE</label>
           <select value={store} onChange={e=>setStore(e.target.value)} style={inp}>
@@ -272,32 +551,25 @@ function EditPanel({ trade, onSave, onClose }) {
             <option value="HISTORY">HISTORY</option>
           </select>
         </div>
-
         <div style={fg}>
           <label style={lbl}>DESK</label>
           <select value={deskId} onChange={e=>{
-            const id=e.target.value
-            setDeskId(id)
-            const fb=books.filter(b=>b.parent_id===id)
-            setFilteredBooks(fb)
-            setBookId('')
+            const id=e.target.value; setDeskId(id)
+            const fb=books.filter(b=>b.parent_id===id); setFilteredBooks(fb); setBookId('')
           }} style={inp}>
-            <option value="">— select desk —</option>
+            <option value="">&#8212; select desk &#8212;</option>
             {desks.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </div>
-
         <div style={fg}>
           <label style={lbl}>BOOK</label>
           <select value={bookId} onChange={e=>setBookId(e.target.value)} style={inp} disabled={!deskId}>
-            <option value="">{deskId?'— select book —':'— select desk first —'}</option>
+            <option value="">{deskId?'&#8212; select book &#8212;':'&#8212; select desk first &#8212;'}</option>
             {filteredBooks.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
-
         {err && <div style={{fontSize:'0.68rem',color:'var(--red)',padding:'0.35rem 0.6rem',background:'color-mix(in srgb,var(--red) 8%,transparent)',border:'1px solid color-mix(in srgb,var(--red) 30%,transparent)',borderRadius:2}}>{err}</div>}
       </div>
-
       <div style={{display:'flex',gap:'0.6rem',padding:'1rem 1.25rem',borderTop:'1px solid var(--border)',background:'var(--panel-2)',flexShrink:0}}>
         <button onClick={onClose} style={{flex:1,background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',fontFamily:'var(--mono)',fontSize:'0.65rem',fontWeight:600,letterSpacing:'0.08em',padding:'0.5rem',borderRadius:2,cursor:'pointer'}}>CANCEL</button>
         <button onClick={submit} disabled={busy} style={{flex:2,background:'var(--accent)',border:'none',color:'var(--bg-deep)',fontFamily:'var(--mono)',fontSize:'0.7rem',fontWeight:700,letterSpacing:'0.08em',padding:'0.5rem',borderRadius:2,cursor:'pointer',opacity:busy?0.6:1}}>
@@ -307,6 +579,8 @@ function EditPanel({ trade, onSave, onClose }) {
     </div>
   )
 }
+
+// ── Main component ────────────────────────────────────────────
 export default function TradeWorkspace({tab}) {
   const {updateTradeStatus,trades}=useTradesStore()
   const {setPanel,refreshTrade}=useTabStore()
@@ -355,20 +629,16 @@ export default function TradeWorkspace({tab}) {
           {panel==='overview'  && <OverviewPanel trade={trade}/>}
           {panel==='legs'      && <LegsPanel trade={trade}/>}
           {panel==='cashflows' && <CashflowsPanel trade={trade} onOverride={handleOverride}/>}
-          {panel==='pricing'   && <StubPanel title="FULL REVALUATION ENGINE" sprint="SPRINT 3"
-              desc={`Curve bootstrap → cashflow discounting → full Greeks. Supports: ${trade.asset_class} — ${trade.instrument_type}`}
-              blocks={[{label:'NPV (CLEAN)',sub:'USD'},{label:'NPV (DIRTY)',sub:'USD'},{label:'ACCRUED INT.',sub:'USD'},{label:'PV01',sub:'USD/bp'},{label:'DV01',sub:'USD/bp'},{label:'GAMMA',sub:'USD/bp²'},{label:'VEGA',sub:'USD/%'},{label:'THETA',sub:'USD/day'},{label:'CARRY',sub:'USD/year'}]}/>}
-          {panel==='xva'       && <StubPanel title="XVA COST STACK" sprint="SPRINT 3"
-              desc={`Counterparty: ${trade.counterparty?.name||'—'} · CSA: ${trade.counterparty?.csa_type||'—'}`}
+          {panel==='pricing'   && <PricingPanel trade={trade}/>}
+          {panel==='xva'       && <StubPanel title="XVA COST STACK" sprint="SPRINT 5"
+              desc={`Counterparty: ${trade.counterparty?.name||'\u2014'} \u00B7 CSA: ${trade.counterparty?.csa_type||'\u2014'}`}
               blocks={[{label:'CVA',sub:'Credit Valuation Adj.'},{label:'DVA',sub:'Debit Valuation Adj.'},{label:'FVA',sub:'Funding Valuation Adj.'},{label:'MVA',sub:'Margin Valuation Adj.'},{label:'KVA',sub:'Capital Valuation Adj.'},{label:'TOTAL XVA',sub:'All-in cost'}]}/>}
         </div>
         {editing && (
           <EditPanel
             trade={trade}
             onSave={(updated) => {
-              // Update tab state
               refreshTrade(trade.id, updated)
-              // Update trades store so blotter list also reflects change
               useTradesStore.getState().fetchTrades()
               setEditing(false)
             }}

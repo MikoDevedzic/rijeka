@@ -3,6 +3,8 @@ import { useTradesStore } from '../../store/useTradesStore'
 import { useTabStore } from '../../store/useTabStore'
 import { supabase } from '../../lib/supabase'
 import './NewTradeWorkspace.css'
+import useTradeLegsStore from '../../store/useTradeLegsStore'
+import useTradeEventsStore from '../../store/useTradeEventsStore'
 
 // ── UUID v4 generator (crypto API — no external dependency) ───────────────────
 function uuidv4() {
@@ -932,9 +934,69 @@ export default function NewTradeWorkspace({tab}) {
     if(counterpartyId) payload.counterparty_id=counterpartyId
     if(ownEntityId) payload.own_legal_entity_id=ownEntityId
     const res=await addTrade(payload)
+    if(res?.error) { setBusy(false); return setErr(res.error.message) }
+
+    const bookedTrade = res.data
+    const tradeId = bookedTrade.id
+    const bookedAt = new Date().toISOString()
+
+    // ── Book legs into trade_legs table ──────────────────────
+    const { bookAllLegs } = useTradeLegsStore.getState()
+    const legPayloads = terms.legs.map((l, i) => ({
+      id:                 l.leg_id,
+      trade_id:           tradeId,
+      leg_ref:            l.leg_ref,
+      leg_seq:            i,
+      leg_type:           l.leg_type || 'FIXED',
+      direction:          l.direction || 'PAY',
+      currency:           l.currency || notionalCcy,
+      notional:           parseFloat(String(l.notional || notional || 0).replace(/,/g, '')) || null,
+      notional_type:      l.notional_type || 'BULLET',
+      effective_date:     l.effective_date || effectiveDate || null,
+      maturity_date:      l.maturity_date || maturityDate || null,
+      day_count:          l.day_count || null,
+      payment_frequency:  l.frequency || l.payment_frequency || null,
+      reset_frequency:    l.reset_frequency || null,
+      bdc:                l.bdc || null,
+      stub_type:          l.stub_type || null,
+      payment_calendar:   l.payment_calendar || null,
+      payment_lag:        l.payment_lag || 0,
+      fixed_rate:         l.fixed_rate != null ? parseFloat(String(l.fixed_rate).replace(/,/g, '')) : null,
+      fixed_rate_type:    l.fixed_rate_type || 'FLAT',
+      spread:             l.spread != null ? parseFloat(String(l.spread).replace(/,/g, '')) : null,
+      spread_type:        l.spread_type || 'FLAT',
+      forecast_curve_id:  l.forecast_curve_id || null,
+      discount_curve_id:  l.discount_curve_id || null,
+      cap_rate:           l.cap_rate || null,
+      floor_rate:         l.floor_rate || null,
+      leverage:           l.leverage || 1.0,
+      ois_compounding:    l.ois_compounding || null,
+      terms:              l,
+      leg_hash:           null,
+      booked_at:          bookedAt,
+    }))
+    await bookAllLegs(legPayloads)
+
+    // ── Append BOOKED event ───────────────────────────────────
+    const { appendEvent } = useTradeEventsStore.getState()
+    await appendEvent({
+      trade_id:       tradeId,
+      event_type:     'BOOKED',
+      event_date:     tradeDate || new Date().toISOString().slice(0, 10),
+      effective_date: effectiveDate || tradeDate || new Date().toISOString().slice(0, 10),
+      payload: {
+        instrument:   instrument,
+        asset_class:  ac,
+        notional:     notional,
+        currency:     notionalCcy,
+        leg_count:    terms.legs.length,
+      },
+      pre_state:  {},
+      post_state: { status: 'PENDING', store },
+    })
+
     setBusy(false)
-    if(res?.error) return setErr(res.error.message)
-    promoteTrade(tab.id,res.data)
+    promoteTrade(tab.id, bookedTrade)
   }
 
   const ownLEs=les.filter(e=>e.is_own_entity&&e.is_active)
