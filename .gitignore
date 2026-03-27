@@ -8,3 +8,6 @@ write_env*.js
 backend/.env 
 backend/__pycache__/ 
 update_key.js 
+docs/ARCHITECTURE_v9.md 
+docs/ARCHITECTURE_v8.md 
+docs/*.md 
