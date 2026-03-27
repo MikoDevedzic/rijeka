@@ -3,6 +3,7 @@ import { useTradesStore } from '../../store/useTradesStore'
 import { useTabStore } from '../../store/useTabStore'
 import { supabase } from '../../lib/supabase'
 import usePricerStore, { fmtCcy, fmtBps, fmtPct } from '../../store/usePricerStore'
+import useCashflowsStore, { effectiveAmount, CF_STATUS_COLOR } from '../../store/useCashflowsStore'
 import './TradeWorkspace.css'
 
 const AC_COLOR = { RATES:'var(--accent)', FX:'var(--blue)', CREDIT:'var(--amber)', EQUITY:'var(--purple)', COMMODITY:'var(--red)' }
@@ -394,69 +395,146 @@ function LegsPanel({trade:t}) {
   )
 }
 
-function CashflowsPanel({trade:t,onOverride}) {
-  const legs=t.terms?.legs||[], overrides=t.terms?.cashflow_overrides||{}
-  const [filterLeg,setFilterLeg]=useState('ALL')
-  const [editId,setEditId]=useState(null)
-  const [editVal,setEditVal]=useState('')
-  const cfs=genCFs(legs,t.effective_date,t.maturity_date,overrides)
-  const displayed=filterLeg==='ALL'?cfs:cfs.filter(c=>String(c.leg)===String(filterLeg))
-  const overrideCount=Object.keys(overrides).length
+function CashflowsPanel({trade:t}) {
+  const { fetchCashflows, cashflowsForTrade, overrideCashflow, loading } = useCashflowsStore()
+  const cfs = cashflowsForTrade(t.id)
+  const [filterLeg, setFilterLeg] = useState('ALL')
+  const [editId, setEditId] = useState(null)
+  const [editVal, setEditVal] = useState('')
+  const [fetched, setFetched] = useState(false)
 
-  const saveEdit=(cf)=>{
-    const newOv={...overrides}
-    if(editVal==='') { delete newOv[cf.id] } else { newOv[cf.id]={amount:parseFloat(editVal),currency:cf.ccy,modified_by:'user',modified_at:new Date().toISOString()} }
-    const newMod=Object.keys(newOv).length>0?(t.terms?.structure?t.terms.structure+' [MODIFIED]':'CUSTOM'):null
-    onOverride(newOv,newMod); setEditId(null)
+  useEffect(() => {
+    if (!fetched) {
+      fetchCashflows(t.id).then(() => setFetched(true))
+    }
+  }, [t.id])
+
+  // Unique leg refs for filter tabs
+  const legRefs = [...new Set(cfs.map(c => c.leg_id))]
+  const displayed = filterLeg === 'ALL' ? cfs : cfs.filter(c => c.leg_id === filterLeg)
+  const overrideCount = cfs.filter(c => c.is_overridden).length
+
+  const saveEdit = async (cf) => {
+    const val = editVal === '' ? null : parseFloat(editVal)
+    if (val !== null && isNaN(val)) { setEditId(null); return }
+    await overrideCashflow(cf.id, t.id, val ?? cf.amount)
+    setEditId(null)
+  }
+
+  // Find leg ref label for a leg_id
+  const legLabel = (legId) => {
+    const cf = cfs.find(c => c.leg_id === legId)
+    return cf?.leg_ref || legId?.slice(0, 8) || legId
+  }
+
+  if (!fetched && loading) {
+    return <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.68rem',letterSpacing:'0.1em'}}>LOADING CASHFLOWS...</div>
   }
 
   return (
     <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
       <div className="cf-tab-bar">
-        {['ALL',...legs.map((_,i)=>String(i))].map(f=>(
-          <button key={f} className={`chip-s ${filterLeg===f?'chip-s-on':''}`} onClick={()=>setFilterLeg(f)}>
-            {f==='ALL'?'ALL LEGS':`LEG ${parseInt(f)+1}: ${legs[parseInt(f)]?.label||f}`}
+        {['ALL', ...legRefs].map(f => (
+          <button key={f} className={`chip-s ${filterLeg===f?'chip-s-on':''}`} onClick={() => setFilterLeg(f)}>
+            {f === 'ALL' ? `ALL LEGS (${cfs.length})` : legLabel(f)}
           </button>
         ))}
-        {overrideCount>0&&<span style={{marginLeft:'auto',fontSize:'0.62rem',color:'var(--amber)',fontWeight:700}}>{overrideCount} OVERRIDE{overrideCount!==1?'S':''}</span>}
+        {overrideCount > 0 && (
+          <span style={{marginLeft:'auto',fontSize:'0.62rem',color:'var(--amber)',fontWeight:700}}>
+            {overrideCount} OVERRIDE{overrideCount !== 1 ? 'S' : ''}
+          </span>
+        )}
+        <button
+          onClick={() => { setFetched(false); fetchCashflows(t.id).then(() => setFetched(true)) }}
+          style={{marginLeft: overrideCount > 0 ? '0.5rem' : 'auto', fontSize:'0.58rem', color:'var(--text-dim)', background:'none', border:'1px solid var(--border)', borderRadius:2, padding:'0.1rem 0.4rem', cursor:'pointer'}}
+        >
+          &#8635; REFRESH
+        </button>
       </div>
-      <div className="cf-legend">
-        <span style={{color:'var(--red)',fontWeight:700,fontSize:'0.65rem'}}>PAY</span>
-        <span style={{color:'var(--accent)',fontWeight:700,fontSize:'0.65rem'}}>RECEIVE</span>
-        <span style={{fontSize:'0.62rem',color:'var(--text-dim)'}}>&#9679; OVERRIDDEN &#8212; click amount to edit</span>
-        <span style={{fontSize:'0.62rem',color:'var(--text-dim)',marginLeft:'auto'}}>{displayed.length} cashflows</span>
-      </div>
-      <div style={{flex:1,overflow:'auto'}}>
-        {cfs.length===0
-          ? <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.68rem',letterSpacing:'0.1em'}}>NO CASHFLOWS &#8212; ADD LEGS WITH DATES</div>
-          : <table className="cf-tbl">
-              <thead><tr><th>DATE</th><th>LEG</th><th>DIR</th><th>TYPE</th><th>CCY</th><th>AMOUNT</th><th/></tr></thead>
-              <tbody>
-                {displayed.map(cf=>(
-                  <tr key={cf.id} className={cf.overridden?'cf-row-overridden':''}>
-                    <td>{cf.date}</td>
-                    <td style={{color:'var(--text-dim)',fontSize:'0.62rem'}}>{cf.label}</td>
-                    <td><span style={{color:cf.dir==='PAY'?'var(--red)':'var(--accent)',fontWeight:700,fontSize:'0.62rem'}}>{cf.dir}</span></td>
-                    <td style={{color:'var(--text-dim)',fontSize:'0.62rem'}}>{cf.type}</td>
-                    <td style={{color:'var(--text-dim)'}}>{cf.ccy}</td>
-                    <td style={{textAlign:'right',cursor:'pointer'}} onClick={()=>{setEditId(cf.id);setEditVal(cf.amount??'')}}>
-                      {editId===cf.id
-                        ? <input autoFocus style={{background:'var(--bg)',border:'1px solid var(--accent)',color:'var(--text)',fontFamily:'var(--mono)',fontSize:'0.7rem',padding:'0.15rem 0.3rem',width:120,borderRadius:2,textAlign:'right'}}
-                            value={editVal} onChange={e=>setEditVal(e.target.value)}
-                            onBlur={()=>saveEdit(cf)} onKeyDown={e=>{if(e.key==='Enter')saveEdit(cf);if(e.key==='Escape')setEditId(null)}}/>
-                        : <span style={{color:cf.overridden?'var(--amber)':'var(--text-dim)',fontSize:'0.68rem',fontWeight:cf.overridden?700:400}}>
-                            {cf.amount!==null?cf.amount.toLocaleString():'SPRINT 3'}
-                            {cf.overridden&&<span className="cf-override-badge">OVERRIDE</span>}
-                          </span>
-                      }
+
+      {cfs.length === 0 ? (
+        <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.68rem',letterSpacing:'0.1em',lineHeight:1.8}}>
+          NO CASHFLOWS IN DATABASE<br/>
+          <span style={{fontSize:'0.6rem'}}>Go to PRICING tab &#8594; RUN PRICER to generate the schedule</span>
+        </div>
+      ) : (
+        <div style={{flex:1,overflow:'auto'}}>
+          <table className="cf-tbl" style={{fontSize:'0.63rem'}}>
+            <thead>
+              <tr>
+                <th>PERIOD START</th>
+                <th>PERIOD END</th>
+                <th>PAYMENT DATE</th>
+                <th>FIXING DATE</th>
+                <th>LEG</th>
+                <th>DIR</th>
+                <th>CCY</th>
+                <th style={{textAlign:'right'}}>NOTIONAL</th>
+                <th style={{textAlign:'right'}}>RATE</th>
+                <th style={{textAlign:'right'}}>DCF</th>
+                <th style={{textAlign:'right'}}>AMOUNT</th>
+                <th>STATUS</th>
+                <th/>
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.map(cf => {
+                const amt = effectiveAmount(cf)
+                const isNeg = Number(amt) < 0
+                const amtColor = cf.is_overridden ? 'var(--amber)' : (isNeg ? 'var(--red)' : 'var(--text-dim)')
+                const statusColor = CF_STATUS_COLOR[cf.status] || 'var(--text-dim)'
+                return (
+                  <tr key={cf.id} style={{borderBottom:'1px solid color-mix(in srgb,var(--border) 60%,transparent)'}}>
+                    <td style={{color:'var(--text-dim)'}}>{cf.period_start}</td>
+                    <td style={{color:'var(--text-dim)'}}>{cf.period_end}</td>
+                    <td style={{color:'var(--text)'}}>{cf.payment_date}</td>
+                    <td style={{color:'var(--text-dim)',fontSize:'0.6rem'}}>{cf.fixing_date || '\u2014'}</td>
+                    <td style={{color:'var(--text-dim)',fontSize:'0.6rem'}}>{cf.leg_id?.slice(0,8)}...</td>
+                    <td>
+                      <span style={{color: Number(amt) < 0 ? 'var(--red)' : 'var(--accent)', fontWeight:700, fontSize:'0.6rem'}}>
+                        {Number(amt) < 0 ? 'PAY' : 'RCV'}
+                      </span>
                     </td>
-                    <td><button className="cf-edit-btn" onClick={()=>{setEditId(cf.id);setEditVal(cf.amount??'')}}>&#9998;</button></td>
+                    <td style={{color:'var(--text-dim)'}}>{cf.currency}</td>
+                    <td style={{textAlign:'right',color:'var(--text-dim)'}}>
+                      {cf.notional ? Number(cf.notional).toLocaleString('en-US',{maximumFractionDigits:0}) : '\u2014'}
+                    </td>
+                    <td style={{textAlign:'right',color:'var(--text-dim)'}}>
+                      {cf.rate != null ? (Number(cf.rate)*100).toFixed(4)+'%' : '\u2014'}
+                    </td>
+                    <td style={{textAlign:'right',color:'var(--text-dim)'}}>
+                      {cf.dcf != null ? Number(cf.dcf).toFixed(4) : '\u2014'}
+                    </td>
+                    <td style={{textAlign:'right',cursor:'pointer'}} onClick={() => {setEditId(cf.id); setEditVal(String(amt))}}>
+                      {editId === cf.id ? (
+                        <input
+                          autoFocus
+                          style={{background:'var(--bg)',border:'1px solid var(--accent)',color:'var(--text)',fontFamily:'var(--mono)',fontSize:'0.68rem',padding:'0.1rem 0.3rem',width:110,borderRadius:2,textAlign:'right'}}
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onBlur={() => saveEdit(cf)}
+                          onKeyDown={e => {if(e.key==='Enter') saveEdit(cf); if(e.key==='Escape') setEditId(null)}}
+                        />
+                      ) : (
+                        <span style={{color:amtColor,fontWeight:cf.is_overridden?700:400}}>
+                          {Number(amt).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0})}
+                          {cf.is_overridden && <span className="cf-override-badge">OVRD</span>}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{fontSize:'0.58rem',color:statusColor,fontWeight:600,letterSpacing:'0.06em'}}>{cf.status}</span>
+                    </td>
+                    <td>
+                      <button className="cf-edit-btn" onClick={() => {setEditId(cf.id); setEditVal(String(amt))}}>&#9998;</button>
+                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-        }
-      </div>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -628,7 +706,7 @@ export default function TradeWorkspace({tab}) {
         <div className="tw-content">
           {panel==='overview'  && <OverviewPanel trade={trade}/>}
           {panel==='legs'      && <LegsPanel trade={trade}/>}
-          {panel==='cashflows' && <CashflowsPanel trade={trade} onOverride={handleOverride}/>}
+          {panel==='cashflows' && <CashflowsPanel trade={trade}/>}
           {panel==='pricing'   && <PricingPanel trade={trade}/>}
           {panel==='xva'       && <StubPanel title="XVA COST STACK" sprint="SPRINT 5"
               desc={`Counterparty: ${trade.counterparty?.name||'\u2014'} \u00B7 CSA: ${trade.counterparty?.csa_type||'\u2014'}`}

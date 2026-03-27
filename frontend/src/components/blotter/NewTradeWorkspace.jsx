@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import './NewTradeWorkspace.css'
 import useTradeLegsStore from '../../store/useTradeLegsStore'
 import useTradeEventsStore from '../../store/useTradeEventsStore'
+import usePricerStore from '../../store/usePricerStore'
 
 // ── UUID v4 generator (crypto API — no external dependency) ───────────────────
 function uuidv4() {
@@ -994,6 +995,18 @@ export default function NewTradeWorkspace({tab}) {
       pre_state:  {},
       post_state: { status: 'PENDING', store },
     })
+
+    // ── Generate cashflow schedule ────────────────────────────
+    // Use a flat 5% default curve — user can reprice from PRICING tab
+    const { generateCashflows } = usePricerStore.getState()
+    const discCurveId = legs[0]?.discount_curve_id || 'default'
+    const foreCurveId = legs[0]?.forecast_curve_id || discCurveId
+    const curveIds = [...new Set([discCurveId, foreCurveId, 'default'])]
+    const curveInputs = curveIds.map(id => ({ curve_id: id, flat_rate: 0.05 }))
+    // Fire-and-forget — cashflows generate in background, no spinner needed
+    generateCashflows(tradeId, curveInputs).catch(e =>
+      console.warn('[booking] generateCashflows failed (non-critical):', e)
+    )
 
     setBusy(false)
     promoteTrade(tab.id, bookedTrade)
