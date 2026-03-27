@@ -251,7 +251,9 @@ async def price_trade(
             "leg_type":  lr.leg_type,
             "direction": lr.direction,
             "currency":  lr.currency,
-            "pv":        float(lr.pv) if lr.pv is not None else None,
+            "pv":        float(lr.pv)        if lr.pv        is not None else None,
+            "ir01":      float(lr.ir01)      if hasattr(lr, 'ir01')      else None,
+            "ir01_disc": float(lr.ir01_disc) if hasattr(lr, 'ir01_disc') else None,
             "cashflows": [
                 {
                     "period_start":  cf.period_start.isoformat()  if cf.period_start  else None,
@@ -274,8 +276,8 @@ async def price_trade(
         "curve_mode":     _curve_mode(request.curves),
         "curve_pillars":  curve_pillars,
         "npv":   float(result.npv)   if result.npv   is not None else None,
-        "pv01":  float(greeks.pv01)  if greeks and greeks.pv01  is not None else None,
-        "dv01":  float(greeks.dv01)  if greeks and greeks.dv01  is not None else None,
+        "ir01":  float(greeks.ir01)  if greeks and greeks.ir01  is not None else None,
+        "ir01_disc":  float(greeks.ir01_disc)  if greeks and greeks.ir01_disc  is not None else None,
         "theta": float(greeks.theta) if greeks and greeks.theta is not None else None,
         "legs":  [_lr(lr) for lr in result.legs],
     }

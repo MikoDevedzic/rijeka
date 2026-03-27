@@ -134,15 +134,15 @@ function PricingPanel({ trade }) {
               color={npvColor(result.npv)}
             />
             <MetricBlock
-              label="PV01"
-              value={fmtCcy(result.pv01, trade.notional_ccy)}
-              sub="+1bp parallel shift"
+              label="IR01"
+              value={fmtCcy(result.ir01, trade.notional_ccy)}
+              sub="+1bp all curves"
               color="var(--blue)"
             />
             <MetricBlock
-              label="DV01"
-              value={fmtCcy(result.dv01, trade.notional_ccy)}
-              sub="+1bp discount curve"
+              label="IR01_DISC"
+              value={fmtCcy(result.ir01_disc, trade.notional_ccy)}
+              sub="+1bp disc only"
               color="var(--blue)"
             />
             <MetricBlock

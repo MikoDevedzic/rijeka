@@ -1,5 +1,5 @@
 // PricerPage.jsx — Sprint 4G (curve bump + transparency)
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import './PricerPage.css';
 
@@ -16,6 +16,82 @@ const QT_MAP = {
   'OIS': 'OIS_SWAP', 'BASIS': 'IRS', 'FRA': 'FRA', 'FUTURES': 'FUTURES', 'IRS': 'IRS',
 };
 const mapQt = qt => QT_MAP[qt] || qt;
+
+
+const TIPS = {
+  CS01:{title:'CS01 — Credit Spread Sensitivity',body:'+1bp shift in CDS/credit spread curve. Exposure to reference entity credit quality.',pos:'> 0: Long credit. Credit quality improves = PNL gain (CDS protection seller).',neg:'< 0: Short credit. Credit deteriorates = PNL gain (CDS protection buyer).'},
+  FX01:{title:'FX01 — FX Spot Sensitivity',body:'+1% move in FX spot rate. Direct spot exposure for FX forwards, NDFs, XCCY swaps and FX option delta.',pos:'> 0: Long base currency. Spot rises = PNL gain.',neg:'< 0: Short base currency. Spot falls = PNL gain.'},
+  CMD01:{title:'CMD01 — Commodity Delta',body:'+1bp shift in commodity forward curve.',pos:'> 0: Long commodity. Prices rise = PNL gain.',neg:'< 0: Short commodity.'},
+  INF01:{title:'INF01 — Inflation Sensitivity',body:'+1bp shift in inflation curve. ZC inflation swaps, YoY swaps.',pos:'> 0: Long inflation. Higher inflation = PNL gain.',neg:'< 0: Short inflation.'},
+  BASIS01:{title:'BASIS01 — Tenor Basis Sensitivity',body:'+1bp in IBOR tenor basis spread (e.g. 3M vs 6M). Never aggregate with IR01.',pos:'> 0: Long basis. Spread widens = PNL gain.',neg:'< 0: Short basis.'},
+  XCCY01:{title:'XCCY01 — Cross-Currency Basis',body:'+1bp in cross-currency basis spread. Never aggregate with BASIS01 or IR01.',pos:'> 0: Long XCCY basis.',neg:'< 0: Short XCCY basis.'},
+  IR_VEGA:{title:'IR_VEGA — IR Vol Sensitivity',body:'+1% shift in IR vol surface. Swaptions, caps, floors.',pos:'> 0: Long vol. Vol rises = PNL gain (option buyer).',neg:'< 0: Short vol. Vol falls = PNL gain (option seller).'},
+  FX_VEGA:{title:'FX_VEGA — FX Vol Sensitivity',body:'+1% shift in FX vol surface. FX options.',pos:'> 0: Long FX vol.',neg:'< 0: Short FX vol.'},
+  GAMMA:{title:'GAMMA — Convexity',body:'Change in IR01 per 1bp rate move. How IR01 itself changes as rates move.',pos:'> 0: Positive convexity. Long options, receiver swaps at low rates.',neg:'< 0: Negative convexity. Short options, callable bonds.'},
+  IR01: {
+    title: 'IR01 — Interest Rate Sensitivity',
+    body: '+1bp parallel shift on ALL rate curves (discount + forecast). Measures full exposure to interest rate moves.',
+    pos: 'IR01 > 0 → Long duration. Rates ↑ = you gain PNL. You benefit when rates rise (e.g. receiver of floating).',
+    neg: 'IR01 < 0 → Short duration. Rates ↑ = you lose PNL. You lose when rates rise (e.g. payer of fixed).',
+  },
+  IR01_DISC: {
+    title: 'IR01_DISC — Discount-Only Sensitivity',
+    body: '+1bp shift on DISCOUNT curve only. Forecast rates held flat. Isolates the PV effect of discounting from the forecasting effect.',
+    pos: 'Typically 10–20% of IR01. For a vanilla IRS, most rate sensitivity comes from forecast rate changes, not discounting.',
+    neg: 'If IR01_DISC ≈ IR01, your position has mostly fixed cashflows (fixed leg dominates).',
+  },
+  THETA: {
+    title: 'THETA — Time Decay',
+    body: 'NPV change from today to tomorrow, all curves held fixed. The cost of carrying the position for one day.',
+    pos: 'THETA > 0 → You earn carry. Position generates daily income (e.g. premium received, positive carry).',
+    neg: 'THETA < 0 → You pay carry. Position costs money to hold daily (typical for long optionality or long-dated swaps).',
+  },
+  NPV: {
+    title: 'NPV — Net Present Value',
+    body: 'Sum of present values of all projected cashflows, discounted to today using your curve. PAY cashflows are negative, RECEIVE cashflows are positive.',
+    pos: 'NPV > 0 → Position is in-the-money. If you closed today, counterparty would owe you this amount (before XVA).',
+    neg: 'NPV < 0 → Position is out-of-the-money. You would owe this amount to close today (before XVA).',
+  },
+};
+
+function Tip({metric, children}) {
+  const t = TIPS[metric];
+  if (!t) return <span>{children}</span>;
+  const wrapRef = React.useRef(null);
+  const tipRef  = React.useRef(null);
+  const show = () => {
+    const tip  = tipRef.current;
+    const wrap = wrapRef.current;
+    if (!tip || !wrap) return;
+    tip.style.display = 'block';
+    const r   = wrap.getBoundingClientRect();
+    const tw  = 240;
+    const th  = tip.offsetHeight || 200;
+    let left  = r.left;
+    let top   = r.bottom + 8;
+    if (left + tw > window.innerWidth - 10) left = window.innerWidth - tw - 10;
+    if (left < 10) left = 10;
+    if (top + th > window.innerHeight - 10) top = r.top - th - 8;
+    if (top < 10) top = 10;
+    tip.style.left = left + 'px';
+    tip.style.top  = top  + 'px';
+  };
+  const hide = () => { if (tipRef.current) tipRef.current.style.display = 'none'; };
+  return (
+    <span ref={wrapRef} className="pp-tip-wrap" onMouseEnter={show} onMouseLeave={hide}>
+      {children}
+      <span className="pp-tip-icon">?</span>
+      <div ref={tipRef} className="pp-tip">
+        <div className="pp-tip-title">{t.title}</div>
+        <div className="pp-tip-body">{t.body}</div>
+        <hr className="pp-tip-divider"/>
+        <div className="pp-tip-row pp-tip-pos">{t.pos}</div>
+        <div className="pp-tip-row pp-tip-neg">{t.neg}</div>
+      </div>
+    </span>
+
+  );
+}
 
 const fmtAmt  = v => v == null ? '—' : (v >= 0 ? '+' : '-') + '$' + Math.abs(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const fmtPct  = v => v == null ? '—' : v.toFixed(4) + '%';
@@ -408,22 +484,22 @@ export default function PricerPage() {
               {/* Top metrics */}
               <div className="pp-metrics">
                 <div className="pp-metric primary">
-                  <div className="pp-metric-label">NPV {hasBumps ? '(SCENARIO)' : ''}</div>
+                  <div className="pp-metric-label"><Tip metric="NPV">NPV {hasBumps ? '(SCENARIO)' : ''}</Tip></div>
                   <div className="pp-metric-value" style={{color:npvClr(result.npv)}}>{fmtAmt(result.npv)}</div>
                   <div className="pp-metric-sub">{result.valuation_date} · {result.curve_mode}</div>
                 </div>
                 <div className="pp-metric">
-                  <div className="pp-metric-label">PV01</div>
-                  <div className="pp-metric-value" style={{color:'var(--blue)'}}>{fmtAmt(result.pv01)}</div>
+                  <div className="pp-metric-label"><Tip metric="IR01">IR01</Tip></div>
+                  <div className="pp-metric-value" style={{color:'var(--blue)'}}>{fmtAmt(result.ir01)}</div>
                   <div className="pp-metric-sub">+1bp parallel</div>
                 </div>
                 <div className="pp-metric">
-                  <div className="pp-metric-label">DV01</div>
-                  <div className="pp-metric-value" style={{color:'var(--blue)'}}>{fmtAmt(result.dv01)}</div>
+                  <div className="pp-metric-label"><Tip metric="IR01_DISC">IR01_DISC</Tip></div>
+                  <div className="pp-metric-value" style={{color:'var(--blue)'}}>{fmtAmt(result.ir01_disc)}</div>
                   <div className="pp-metric-sub">discount only</div>
                 </div>
                 <div className="pp-metric">
-                  <div className="pp-metric-label">THETA</div>
+                  <div className="pp-metric-label"><Tip metric="THETA">THETA</Tip></div>
                   <div className="pp-metric-value" style={{color:npvClr(result.theta)}}>{fmtAmt(result.theta)}</div>
                   <div className="pp-metric-sub">per day</div>
                 </div>
@@ -435,7 +511,7 @@ export default function PricerPage() {
               <div className="pp-section-hdr" style={{marginTop:'1rem'}}>LEG PV BREAKDOWN</div>
               <table className="pp-leg-table">
                 <thead>
-                  <tr><th>LEG</th><th>TYPE</th><th>DIR</th><th>DISC CURVE</th><th>FCAST CURVE</th><th className="r">PV</th></tr>
+                  <tr><th>LEG</th><th>TYPE</th><th>DIR</th><th>DISC CURVE</th><th>FCAST CURVE</th><th style={{textAlign:"right"}}>PV</th><th style={{textAlign:"right"}}><Tip metric="IR01">IR01</Tip></th><th style={{textAlign:"right"}}><Tip metric="IR01_DISC">IR01_DISC</Tip></th></tr>
                 </thead>
                 <tbody>
                   {result.legs.map((leg, i) => (
@@ -446,6 +522,8 @@ export default function PricerPage() {
                       <td className="pp-dim pp-mono" style={{fontSize:'0.6rem'}}>{leg.discount_curve_id || curveIds[0] || '—'}</td>
                       <td className="pp-dim pp-mono" style={{fontSize:'0.6rem'}}>{leg.forecast_curve_id || curveIds[0] || '—'}</td>
                       <td className="r pp-mono" style={{color:npvClr(leg.pv),fontWeight:700}}>{fmtAmt(leg.pv)}</td>
+                      <td className="r pp-mono" style={{color:'var(--blue)',fontSize:'0.6rem'}}>{leg.ir01 != null ? fmtAmt(leg.ir01) : '—'}</td>
+                      <td className="r pp-mono" style={{color:'var(--text-dim)',fontSize:'0.6rem'}}>{leg.ir01_disc != null ? fmtAmt(leg.ir01_disc) : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
