@@ -31,3 +31,30 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Delivery scripts
+build_*.js
+deliver_*.js
+fix_*.js
+patch_*.js
+rebrand_*.js
+rijeka_script*.js
+write_*.js
+setup_auth*
+update_gitignore.js
+dopamine_ui.js
+rebuild_*.js
+
+# Accidental files
+copy
+node
+l.trim()
+
+# Handoff docs
+SPRINT2_*.md
+
+# Methodology
+docs/Rijeka_Methodology*
+
+# Sprint folders
+sprint 1 Market Data/
