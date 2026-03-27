@@ -56,11 +56,14 @@ const ASSET_CLASSES = ['RATES','FX','CREDIT','EQUITY','COMMODITY']
 const AC_COLOR = { RATES:'var(--accent)', FX:'var(--blue)', CREDIT:'var(--amber)', EQUITY:'var(--purple)', COMMODITY:'var(--red)' }
 
 const INSTRUMENTS = {
-  RATES:     ['IR_SWAP','OIS_SWAP','BASIS_SWAP','XCCY_SWAP','FRA','ZERO_COUPON_SWAP','STEP_UP_SWAP','INFLATION_SWAP','CMS_SWAP','CMS_SPREAD_SWAP'],
-  FX:        ['FX_FORWARD','FX_SWAP','NDF'],
-  CREDIT:    ['CDS','CDS_INDEX','TOTAL_RETURN_SWAP','ASSET_SWAP','RISK_PARTICIPATION'],
-  EQUITY:    ['EQUITY_SWAP','VARIANCE_SWAP','DIVIDEND_SWAP','EQUITY_FORWARD'],
-  COMMODITY: ['COMMODITY_SWAP','COMMODITY_BASIS_SWAP','ASIAN_COMMODITY_SWAP','EMISSIONS_SWAP'],
+  RATES:     ['IR_SWAP','OIS_SWAP','BASIS_SWAP','XCCY_SWAP','FRA','ZERO_COUPON_SWAP','STEP_UP_SWAP','INFLATION_SWAP','CMS_SWAP','CMS_SPREAD_SWAP',
+               'IR_SWAPTION','BERMUDAN_SWAPTION',
+               'INTEREST_RATE_CAP','INTEREST_RATE_FLOOR','INTEREST_RATE_COLLAR',
+               'CALLABLE_SWAP','CANCELLABLE_SWAP','CAPPED_SWAP','FLOORED_SWAP','COLLARED_SWAP'],
+  FX:        ['FX_FORWARD','FX_SWAP','NDF','FX_OPTION','FX_DIGITAL_OPTION','EXTENDABLE_FORWARD'],
+  CREDIT:    ['CDS','CDS_INDEX','TOTAL_RETURN_SWAP','ASSET_SWAP','RISK_PARTICIPATION','CDS_OPTION'],
+  EQUITY:    ['EQUITY_SWAP','VARIANCE_SWAP','DIVIDEND_SWAP','EQUITY_FORWARD','EQUITY_OPTION'],
+  COMMODITY: ['COMMODITY_SWAP','COMMODITY_BASIS_SWAP','ASIAN_COMMODITY_SWAP','EMISSIONS_SWAP','COMMODITY_OPTION','COMMODITY_ASIAN_OPTION'],
 }
 
 const DAY_COUNTS   = ['ACT/360','ACT/365','ACT/ACT','30/360','30E/360']
@@ -183,6 +186,159 @@ const LD = {
     underlying_obligor:'',underlying_facility:'',underlying_facility_type:'LOAN',
     recovery_rate:'0.40',documentation:'LMA',underlying_trade_id:'',
   }),
+  // ── Options (Sprint 3E) ──────────────────────────────────────
+  IR_SWAPTION: (dir='BUY') => ({
+    leg_type:'IR_SWAPTION',label:'IR SWAPTION',direction:dir,currency:'USD',notional:'10,000,000',
+    option_type:'PAYER',          // PAYER | RECEIVER
+    exercise_style:'EUROPEAN',   // EUROPEAN | AMERICAN | BERMUDAN
+    expiry_date:'',
+    settlement_type:'PHYSICAL',  // PHYSICAL | CASH
+    premium:'',premium_currency:'USD',premium_date:'',
+    underlying_fixed_rate:'',underlying_frequency:'SEMI-ANNUAL',
+    underlying_day_count:'ACT/360',underlying_tenor:'5Y',underlying_index:'USD_SOFR',
+    effective_date:'',maturity_date:'',
+  }),
+  CAP_FLOOR: (dir='BUY', type='CAP') => ({
+    leg_type:'CAP_FLOOR',label:type,direction:dir,currency:'USD',notional:'10,000,000',
+    cap_floor_type:type,          // CAP | FLOOR | COLLAR
+    strike:'',floor_strike:'',
+    index:'USD_SOFR',day_count:'ACT/360',frequency:'QUARTERLY',
+    premium:'',premium_currency:'USD',premium_date:'',
+    effective_date:'',maturity_date:'',
+  }),
+  FX_OPTION: (dir='BUY') => ({
+    leg_type:'FX_OPTION',label:'FX OPTION',direction:dir,currency:'USD',notional:'10,000,000',
+    option_type:'CALL',           // CALL | PUT
+    exercise_style:'EUROPEAN',
+    fx_pair:'EURUSD',strike:'',
+    expiry_date:'',delivery_date:'',
+    settlement_type:'CASH',
+    barrier_type:'NONE',barrier_level:'',
+    digital_payout:'',
+    premium:'',premium_currency:'USD',premium_date:'',
+  }),
+  EQUITY_OPTION: (dir='BUY') => ({
+    leg_type:'EQUITY_OPTION',label:'EQUITY OPTION',direction:dir,currency:'USD',notional:'10,000,000',
+    option_type:'CALL',
+    exercise_style:'EUROPEAN',
+    reference:'',reference_type:'SINGLE_NAME',
+    quantity:'',strike:'',initial_price:'',
+    expiry_date:'',settlement_type:'CASH',
+    premium:'',premium_currency:'USD',premium_date:'',
+  }),
+  COMMODITY_OPTION: (dir='BUY', idx='WTI_CRUDE') => ({
+    leg_type:'COMMODITY_OPTION',label:'COMMODITY OPTION',direction:dir,currency:'USD',notional:'10,000,000',
+    option_type:'CALL',
+    exercise_style:'EUROPEAN',
+    commodity_index:idx,unit:'BBL',
+    strike:'',quantity:'',
+    expiry_date:'',settlement_type:'CASH',
+    premium:'',premium_currency:'USD',premium_date:'',
+  }),
+  CDS_OPTION: (dir='BUY') => ({
+    leg_type:'CDS_OPTION',label:'CDS OPTION',direction:dir,currency:'USD',notional:'10,000,000',
+    option_type:'PAYER',
+    exercise_style:'EUROPEAN',
+    expiry_date:'',strike_spread:'',
+    reference_entity:'',reference_isin:'',
+    recovery_rate:'0.40',seniority:'SENIOR_UNSECURED',
+    knockout:true,
+    premium:'',premium_currency:'USD',premium_date:'',
+  }),
+
+  // ── Sprint 3F extended options ────────────────────────────
+
+  BERMUDAN_SWAPTION: (dir='BUY') => ({
+    leg_type:'BERMUDAN_SWAPTION',label:'BERMUDAN SWAPTION',direction:dir,currency:'USD',notional:'10,000,000',
+    option_type:'PAYER',           // PAYER | RECEIVER
+    exercise_dates:[],             // [{date, can_exercise}] — the Bermudan schedule
+    first_exercise_date:'',
+    last_exercise_date:'',
+    exercise_frequency:'SEMI-ANNUAL', // how often exercise dates fall
+    notice_days:'2',               // business days notice required to exercise
+    settlement_type:'PHYSICAL',
+    underlying_fixed_rate:'',underlying_frequency:'SEMI-ANNUAL',
+    underlying_day_count:'ACT/360',underlying_tenor:'5Y',underlying_index:'USD_SOFR',
+    effective_date:'',maturity_date:'',
+    premium:'',premium_currency:'USD',premium_date:'',
+  }),
+
+  // Callable/Cancellable swap: vanilla swap + embedded right to cancel
+  // The optional swaption leg is what gives the right to cancel.
+  // Booked as: regular IR_SWAP legs + one CALLABLE_SWAP_OPTION leg
+  CALLABLE_SWAP_OPTION: (dir='BUY', callable_party='FIXED_PAYER') => ({
+    leg_type:'CALLABLE_SWAP_OPTION',label:'CALLABLE/CANCELLABLE OPTION',direction:dir,
+    currency:'USD',notional:'10,000,000',
+    callable_party,             // FIXED_PAYER | FIXED_RECEIVER | EITHER
+    exercise_style:'BERMUDAN',  // EUROPEAN (one call date) | BERMUDAN (schedule)
+    first_call_date:'',
+    call_frequency:'ANNUAL',    // after first call date, how often callable
+    notice_days:'5',
+    settlement_type:'PHYSICAL',
+    // No premium — callable feature priced into swap rate
+    effective_date:'',maturity_date:'',
+  }),
+
+  // Float leg with embedded cap/floor/collar — used in CAPPED/FLOORED/COLLARED SWAP
+  CAPPED_FLOORED_FLOAT: (dir='RECEIVE', embedded='CAP') => ({
+    leg_type:'CAPPED_FLOORED_FLOAT',label:embedded+' FLOAT LEG',direction:dir,
+    currency:'USD',notional:'10,000,000',
+    notional_type:'BULLET',notional_schedule:[],
+    day_count:'ACT/360',frequency:'QUARTERLY',bdc:'MODIFIED_FOLLOWING',
+    calendar:'USD',stub_type:'SHORT_FIRST',
+    index:'USD_SOFR',leverage:'1.0',spread_type:'FLAT',spread:'0',spread_schedule:[],
+    compounding:'NONE',
+    embedded_optionality:embedded,    // CAP | FLOOR | COLLAR
+    cap_strike:'',                    // for CAP and COLLAR
+    floor_strike:'',                  // for FLOOR and COLLAR
+    cap_floor_premium_included:true,  // usually yes — premium rolled into swap rate
+    payment_lag:'0',
+    effective_date:'',maturity_date:'',
+  }),
+
+  EXTENDABLE_FORWARD: (dir='BUY') => ({
+    leg_type:'EXTENDABLE_FORWARD',label:'EXTENDABLE FORWARD',direction:dir,
+    currency:'USD',notional:'10,000,000',
+    fx_pair:'EURUSD',
+    original_maturity:'',
+    original_strike:'',
+    extension_right:'BUYER',         // BUYER | SELLER | EITHER
+    extension_period:'3M',           // how far it can be extended
+    extended_maturity:'',            // auto-calculated or manual
+    extended_strike:'',              // may differ from original
+    extension_premium:'',           // premium paid to extend
+    settlement_type:'PHYSICAL',
+    effective_date:'',maturity_date:'',
+  }),
+
+  // Enhanced commodity option with full averaging control
+  COMMODITY_ASIAN_OPTION: (dir='BUY', idx='WTI_CRUDE') => ({
+    leg_type:'COMMODITY_ASIAN_OPTION',label:'COMMODITY ASIAN OPTION',direction:dir,
+    currency:'USD',notional:'10,000,000',
+    option_type:'CALL',
+    exercise_style:'ASIAN',           // averaging-based payoff
+    commodity_index:idx,unit:'BBL',
+    strike:'',quantity:'',
+
+    // Averaging window — this is the key distinction vs vanilla
+    averaging_type:'FULL_PERIOD',     // FULL_PERIOD | PARTIAL_PERIOD | BULLET | CUSTOM
+    observation_start:'',             // for PARTIAL_PERIOD: when obs window opens
+    observation_end:'',               // for PARTIAL_PERIOD: when obs window closes
+    // For CUSTOM: user builds schedule below
+    observation_schedule:[],          // [{date, weight}] — custom observation dates + weights
+    averaging_method:'ARITHMETIC',    // ARITHMETIC | GEOMETRIC | HARMONIC
+    averaging_frequency:'DAILY',      // DAILY | WEEKLY | MONTHLY
+
+    // Settlement
+    settlement_type:'CASH',
+    settlement_currency:'USD',
+    // Bullet settlement: single payment at maturity
+    // vs staged: settlement at each averaging period end
+    settlement_style:'BULLET',        // BULLET | STAGED
+
+    expiry_date:'',maturity_date:'',
+    premium:'',premium_currency:'USD',premium_date:'',
+  }),
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
@@ -235,6 +391,26 @@ const TEMPLATES = {
   COMMODITY_BASIS_SWAP: () => [{...LD.COMMODITY_FLOAT('PAY','WTI_CRUDE'), label:'NEAR MONTH'}, {...LD.COMMODITY_FLOAT('RECEIVE','WTI_CRUDE'), label:'FAR MONTH'}],
   ASIAN_COMMODITY_SWAP: () => [{...LD.COMMODITY_FLOAT('RECEIVE','WTI_CRUDE'), fixing_type:'AVERAGE_DAILY', label:'ASIAN FLOAT LEG'}, LD.FIXED('PAY')],
   EMISSIONS_SWAP:    () => [LD.EMISSIONS('RECEIVE','EUA'), LD.FIXED('PAY')],
+  // ── Options (Sprint 3E) ──────────────────────────────────────
+  IR_SWAPTION:           () => [LD.IR_SWAPTION('BUY')],
+  BERMUDAN_SWAPTION:     () => [LD.BERMUDAN_SWAPTION('BUY')],
+  // Callable/Cancellable = IR_SWAP legs + embedded option leg
+  CALLABLE_SWAP:         () => [LD.FIXED('PAY'), LD.FLOAT('RECEIVE'), LD.CALLABLE_SWAP_OPTION('BUY','FIXED_PAYER')],
+  CANCELLABLE_SWAP:      () => [LD.FIXED('PAY'), LD.FLOAT('RECEIVE'), {...LD.CALLABLE_SWAP_OPTION('BUY','FIXED_PAYER'), label:'CANCELLABLE OPTION'}],
+  // Capped/Floored/Collared swap = fixed leg + optionality-embedded float leg
+  CAPPED_SWAP:           () => [LD.FIXED('PAY'), LD.CAPPED_FLOORED_FLOAT('RECEIVE','CAP')],
+  FLOORED_SWAP:          () => [LD.FIXED('PAY'), LD.CAPPED_FLOORED_FLOAT('RECEIVE','FLOOR')],
+  COLLARED_SWAP:         () => [LD.FIXED('PAY'), LD.CAPPED_FLOORED_FLOAT('RECEIVE','COLLAR')],
+  EXTENDABLE_FORWARD:    () => [LD.EXTENDABLE_FORWARD('BUY')],
+  COMMODITY_ASIAN_OPTION:() => [LD.COMMODITY_ASIAN_OPTION('BUY','WTI_CRUDE')],
+  INTEREST_RATE_CAP:     () => [LD.CAP_FLOOR('BUY','CAP')],
+  INTEREST_RATE_FLOOR:   () => [LD.CAP_FLOOR('BUY','FLOOR')],
+  INTEREST_RATE_COLLAR:  () => [{...LD.CAP_FLOOR('BUY','COLLAR'),cap_floor_type:'COLLAR',label:'COLLAR'}],
+  FX_OPTION:             () => [LD.FX_OPTION('BUY')],
+  FX_DIGITAL_OPTION:     () => [{...LD.FX_OPTION('BUY'),label:'FX DIGITAL OPTION',barrier_type:'DIGITAL'}],
+  CDS_OPTION:            () => [LD.CDS_OPTION('BUY')],
+  EQUITY_OPTION:         () => [LD.EQUITY_OPTION('BUY')],
+  COMMODITY_OPTION:      () => [LD.COMMODITY_OPTION('BUY','WTI_CRUDE')],
 }
 
 // ── Cashflow generator ────────────────────────────────────────────────────────
@@ -388,12 +564,56 @@ function FloatForm({leg,set,legs,legIdx}) {
         <div className="fg"><label>SPREAD TYPE</label><select value={leg.spread_type} onChange={e=>set('spread_type',e.target.value)}><option>FLAT</option><option>STEP</option></select></div>
         {leg.spread_type==='FLAT'&&<div className="fg"><label>SPREAD (bps)</label><input placeholder="0" value={leg.spread} onChange={e=>set('spread',e.target.value)}/></div>}
       </div>
-      <div className="row4">
+      <div className="row2">
         <div className="fg"><label>COMPOUNDING</label><select value={leg.compounding} onChange={e=>set('compounding',e.target.value)}>{COMPOUNDINGS.map(c=><option key={c}>{c}</option>)}</select></div>
-        <div className="fg"><label>CAP</label><input placeholder="none" value={leg.cap} onChange={e=>set('cap',e.target.value)}/></div>
-        <div className="fg"><label>FLOOR</label><input placeholder="none" value={leg.floor} onChange={e=>set('floor',e.target.value)}/></div>
         <div className="fg"><label>FIX LAG (d)</label><input placeholder="2" value={leg.fixing_lag} onChange={e=>set('fixing_lag',e.target.value)}/></div>
-      </div></>}
+      </div>
+      <div className="sec-lbl" style={{marginTop:'0.6rem'}}>EMBEDDED OPTIONALITY</div>
+      <div style={{fontSize:'0.6rem',color:'var(--text-dim)',marginBottom:'0.4rem',lineHeight:1.6}}>
+        Add a cap, floor, or collar to this float leg. Premium is typically rolled into the fixed rate — use CAP / FLOOR / COLLAR as standalone instruments if booking with upfront premium.
+      </div>
+      <div className="row2">
+        <div className="fg"><label>OPTIONALITY TYPE</label>
+          <select
+            value={leg.embedded_optionality || 'NONE'}
+            onChange={e => {
+              const v = e.target.value
+              set('embedded_optionality', v)
+              // Auto-update leg label to reflect embedded structure
+              const base = leg.label.replace(/ [CAP]| [FLOOR]| [COLLAR]/g, '')
+              if (v !== 'NONE') set('label', base + ' [' + v + ']')
+              else set('label', base)
+            }}
+          >
+            <option value="NONE">NONE (vanilla float)</option>
+            <option value="CAP">CAP (rate ceiling)</option>
+            <option value="FLOOR">FLOOR (rate floor)</option>
+            <option value="COLLAR">COLLAR (cap + floor)</option>
+          </select>
+        </div>
+        <div className="fg"><label>PREMIUM TREATMENT</label>
+          <select value={leg.cap_floor_premium_included !== false ? 'true' : 'false'} onChange={e=>set('cap_floor_premium_included', e.target.value === 'true')} disabled={!leg.embedded_optionality || leg.embedded_optionality === 'NONE'}>
+            <option value="true">ROLLED INTO FIXED RATE</option>
+            <option value="false">SEPARATE PREMIUM LEG</option>
+          </select>
+        </div>
+      </div>
+      {leg.embedded_optionality && leg.embedded_optionality !== 'NONE' && (
+        <div className="row2">
+          {(leg.embedded_optionality === 'CAP' || leg.embedded_optionality === 'COLLAR') && (
+            <div className="fg"><label>CAP STRIKE</label><input placeholder="0.0600" value={leg.cap || ''} onChange={e=>set('cap', e.target.value)}/></div>
+          )}
+          {(leg.embedded_optionality === 'FLOOR' || leg.embedded_optionality === 'COLLAR') && (
+            <div className="fg"><label>FLOOR STRIKE</label><input placeholder="0.0200" value={leg.floor || ''} onChange={e=>set('floor', e.target.value)}/></div>
+          )}
+        </div>
+      )}
+      {(!leg.embedded_optionality || leg.embedded_optionality === 'NONE') && (
+        <div className="row2">
+          <div className="fg"><label>CAP (legacy)</label><input placeholder="none" value={leg.cap || ''} onChange={e=>set('cap',e.target.value)}/></div>
+          <div className="fg"><label>FLOOR (legacy)</label><input placeholder="none" value={leg.floor || ''} onChange={e=>set('floor',e.target.value)}/></div>
+        </div>
+      )}</>}
     {tab==='schedule'&&<SchedFields leg={leg} set={set}/>}
     {tab==='spread'&&<>{leg.spread_type==='STEP'?<SpreadSched leg={leg} set={set}/>:<div style={{fontSize:'0.65rem',color:'var(--text-dim)'}}>Switch spread type to STEP for a spread schedule.</div>}</>}
   </>)
@@ -805,6 +1025,541 @@ function XccyFields({leg, set, legs, legIdx}) {
   )
 }
 
+// ── Option form components (Sprint 3E) ───────────────────────
+
+function OptionPremiumFields({leg,set}) {
+  return (
+    <div className="sec-lbl-group">
+      <div className="sec-lbl">PREMIUM</div>
+      <div className="row3">
+        <div className="fg"><label>PREMIUM AMOUNT</label><input placeholder="0" value={leg.premium||''} onChange={e=>set('premium',e.target.value)}/></div>
+        <div className="fg"><label>PREMIUM CCY</label><select value={leg.premium_currency||'USD'} onChange={e=>set('premium_currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+        <div className="fg"><label>PREMIUM DATE</label><input type="date" value={leg.premium_date||''} onChange={e=>set('premium_date',e.target.value)}/></div>
+      </div>
+    </div>
+  )
+}
+
+function IrSwaptionForm({leg,set}) {
+  return (<>
+    <div className="sec-lbl">SWAPTION TERMS</div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>OPTION TYPE</label><select value={leg.option_type} onChange={e=>set('option_type',e.target.value)}><option>PAYER</option><option>RECEIVER</option></select></div>
+      <div className="fg"><label>EXERCISE STYLE</label><select value={leg.exercise_style} onChange={e=>set('exercise_style',e.target.value)}><option>EUROPEAN</option><option>AMERICAN</option><option>BERMUDAN</option></select></div>
+      <div className="fg"><label>SETTLEMENT</label><select value={leg.settlement_type} onChange={e=>set('settlement_type',e.target.value)}><option>PHYSICAL</option><option>CASH</option></select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EXPIRY DATE</label><input type="date" value={leg.expiry_date||''} onChange={e=>set('expiry_date',e.target.value)}/></div>
+      <div className="fg"><label>EFFECTIVE DATE (swap)</label><input type="date" value={leg.effective_date||''} onChange={e=>set('effective_date',e.target.value)}/></div>
+    </div>
+    <div className="sec-lbl">UNDERLYING SWAP</div>
+    <div className="row3">
+      <div className="fg"><label>UNDERLYING TENOR</label><input placeholder="5Y" value={leg.underlying_tenor||''} onChange={e=>set('underlying_tenor',e.target.value)}/></div>
+      <div className="fg"><label>STRIKE (fixed rate)</label><input placeholder="0.0450" value={leg.underlying_fixed_rate||''} onChange={e=>set('underlying_fixed_rate',e.target.value)}/></div>
+      <div className="fg"><label>FLOAT INDEX</label><select value={leg.underlying_index||'USD_SOFR'} onChange={e=>set('underlying_index',e.target.value)}>{INDICES.map(i=><option key={i}>{i}</option>)}</select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>FREQUENCY</label><select value={leg.underlying_frequency||'SEMI-ANNUAL'} onChange={e=>set('underlying_frequency',e.target.value)}>{FREQS.map(f=><option key={f}>{f}</option>)}</select></div>
+      <div className="fg"><label>DAY COUNT</label><select value={leg.underlying_day_count||'ACT/360'} onChange={e=>set('underlying_day_count',e.target.value)}>{DAY_COUNTS.map(d=><option key={d}>{d}</option>)}</select></div>
+    </div>
+    <div className="fg"><label>MATURITY DATE (swap)</label><input type="date" value={leg.maturity_date||''} onChange={e=>set('maturity_date',e.target.value)}/></div>
+    <OptionPremiumFields leg={leg} set={set}/>
+  </>)
+}
+
+function CapFloorForm({leg,set}) {
+  const isCollar = leg.cap_floor_type === 'COLLAR'
+  return (<>
+    <div className="sec-lbl">CAP / FLOOR / COLLAR</div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>TYPE</label><select value={leg.cap_floor_type} onChange={e=>set('cap_floor_type',e.target.value)}><option>CAP</option><option>FLOOR</option><option>COLLAR</option></select></div>
+      <div className="fg"><label>{isCollar?'CAP STRIKE':'STRIKE'}</label><input placeholder="0.0550" value={leg.strike||''} onChange={e=>set('strike',e.target.value)}/></div>
+      {isCollar&&<div className="fg"><label>FLOOR STRIKE</label><input placeholder="0.0300" value={leg.floor_strike||''} onChange={e=>set('floor_strike',e.target.value)}/></div>}
+    </div>
+    <div className="row3">
+      <div className="fg"><label>FLOAT INDEX</label><select value={leg.index||'USD_SOFR'} onChange={e=>set('index',e.target.value)}>{INDICES.map(i=><option key={i}>{i}</option>)}</select></div>
+      <div className="fg"><label>FREQUENCY</label><select value={leg.frequency||'QUARTERLY'} onChange={e=>set('frequency',e.target.value)}>{FREQS.map(f=><option key={f}>{f}</option>)}</select></div>
+      <div className="fg"><label>DAY COUNT</label><select value={leg.day_count||'ACT/360'} onChange={e=>set('day_count',e.target.value)}>{DAY_COUNTS.map(d=><option key={d}>{d}</option>)}</select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EFFECTIVE DATE</label><input type="date" value={leg.effective_date||''} onChange={e=>set('effective_date',e.target.value)}/></div>
+      <div className="fg"><label>MATURITY DATE</label><input type="date" value={leg.maturity_date||''} onChange={e=>set('maturity_date',e.target.value)}/></div>
+    </div>
+    <OptionPremiumFields leg={leg} set={set}/>
+  </>)
+}
+
+function FxOptionForm({leg,set}) {
+  const isDigital = leg.barrier_type === 'DIGITAL'
+  const hasBarrier = leg.barrier_type && leg.barrier_type !== 'NONE' && !isDigital
+  return (<>
+    <div className="sec-lbl">FX OPTION TERMS</div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY (premium)</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>OPTION TYPE</label><select value={leg.option_type} onChange={e=>set('option_type',e.target.value)}><option>CALL</option><option>PUT</option></select></div>
+      <div className="fg"><label>EXERCISE STYLE</label><select value={leg.exercise_style} onChange={e=>set('exercise_style',e.target.value)}><option>EUROPEAN</option><option>AMERICAN</option></select></div>
+      <div className="fg"><label>SETTLEMENT</label><select value={leg.settlement_type} onChange={e=>set('settlement_type',e.target.value)}><option>CASH</option><option>PHYSICAL</option></select></div>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>FX PAIR</label><input placeholder="EURUSD" value={leg.fx_pair||''} onChange={e=>set('fx_pair',e.target.value)}/></div>
+      <div className="fg"><label>STRIKE</label><input placeholder="1.0850" value={leg.strike||''} onChange={e=>set('strike',e.target.value)}/></div>
+      <div className="fg"><label>BARRIER TYPE</label>
+        <select value={leg.barrier_type||'NONE'} onChange={e=>set('barrier_type',e.target.value)}>
+          {['NONE','UP_AND_IN','UP_AND_OUT','DOWN_AND_IN','DOWN_AND_OUT','DIGITAL'].map(b=><option key={b}>{b}</option>)}
+        </select>
+      </div>
+    </div>
+    {hasBarrier&&<div className="fg"><label>BARRIER LEVEL</label><input placeholder="1.1200" value={leg.barrier_level||''} onChange={e=>set('barrier_level',e.target.value)}/></div>}
+    {isDigital&&<div className="fg"><label>DIGITAL PAYOUT</label><input placeholder="1,000,000" value={leg.digital_payout||''} onChange={e=>set('digital_payout',e.target.value)}/></div>}
+    <div className="row2">
+      <div className="fg"><label>EXPIRY DATE</label><input type="date" value={leg.expiry_date||''} onChange={e=>set('expiry_date',e.target.value)}/></div>
+      <div className="fg"><label>DELIVERY DATE</label><input type="date" value={leg.delivery_date||''} onChange={e=>set('delivery_date',e.target.value)}/></div>
+    </div>
+    <OptionPremiumFields leg={leg} set={set}/>
+  </>)
+}
+
+function EquityOptionForm({leg,set}) {
+  return (<>
+    <div className="sec-lbl">EQUITY OPTION TERMS</div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>OPTION TYPE</label><select value={leg.option_type} onChange={e=>set('option_type',e.target.value)}><option>CALL</option><option>PUT</option></select></div>
+      <div className="fg"><label>EXERCISE STYLE</label><select value={leg.exercise_style} onChange={e=>set('exercise_style',e.target.value)}><option>EUROPEAN</option><option>AMERICAN</option></select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>REFERENCE</label><input placeholder="AAPL / SPX" value={leg.reference||''} onChange={e=>set('reference',e.target.value)}/></div>
+      <div className="fg"><label>TYPE</label><select value={leg.reference_type} onChange={e=>set('reference_type',e.target.value)}><option>SINGLE_NAME</option><option>INDEX</option><option>BASKET</option></select></div>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>QUANTITY</label><input placeholder="10,000" value={leg.quantity||''} onChange={e=>set('quantity',e.target.value)}/></div>
+      <div className="fg"><label>STRIKE</label><input placeholder="185.00" value={leg.strike||''} onChange={e=>set('strike',e.target.value)}/></div>
+      <div className="fg"><label>INITIAL PRICE</label><input placeholder="180.00" value={leg.initial_price||''} onChange={e=>set('initial_price',e.target.value)}/></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EXPIRY DATE</label><input type="date" value={leg.expiry_date||''} onChange={e=>set('expiry_date',e.target.value)}/></div>
+      <div className="fg"><label>SETTLEMENT</label><select value={leg.settlement_type} onChange={e=>set('settlement_type',e.target.value)}><option>CASH</option><option>PHYSICAL</option></select></div>
+    </div>
+    <OptionPremiumFields leg={leg} set={set}/>
+  </>)
+}
+
+function CommodityOptionForm({leg,set}) {
+  return (<>
+    <div className="sec-lbl">COMMODITY OPTION TERMS</div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>OPTION TYPE</label><select value={leg.option_type} onChange={e=>set('option_type',e.target.value)}><option>CALL</option><option>PUT</option></select></div>
+      <div className="fg"><label>EXERCISE STYLE</label><select value={leg.exercise_style} onChange={e=>set('exercise_style',e.target.value)}><option>EUROPEAN</option><option>AMERICAN</option><option>ASIAN</option></select></div>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>COMMODITY INDEX</label><select value={leg.commodity_index||'WTI_CRUDE'} onChange={e=>set('commodity_index',e.target.value)}>{COMMODITY_INDICES.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>UNIT</label><select value={leg.unit||'BBL'} onChange={e=>set('unit',e.target.value)}>{['BBL','MMBTU','MT','OZ','BU','LB'].map(u=><option key={u}>{u}</option>)}</select></div>
+      <div className="fg"><label>SETTLEMENT</label><select value={leg.settlement_type} onChange={e=>set('settlement_type',e.target.value)}><option>CASH</option><option>PHYSICAL</option></select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>STRIKE</label><input placeholder="75.00" value={leg.strike||''} onChange={e=>set('strike',e.target.value)}/></div>
+      <div className="fg"><label>QUANTITY</label><input placeholder="10,000" value={leg.quantity||''} onChange={e=>set('quantity',e.target.value)}/></div>
+    </div>
+    <div className="fg"><label>EXPIRY DATE</label><input type="date" value={leg.expiry_date||''} onChange={e=>set('expiry_date',e.target.value)}/></div>
+    <OptionPremiumFields leg={leg} set={set}/>
+  </>)
+}
+
+function CdsOptionForm({leg,set}) {
+  return (<>
+    <div className="sec-lbl">CDS OPTION TERMS</div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>OPTION TYPE</label><select value={leg.option_type} onChange={e=>set('option_type',e.target.value)}><option>PAYER</option><option>RECEIVER</option></select></div>
+      <div className="fg"><label>EXERCISE STYLE</label><select value={leg.exercise_style} onChange={e=>set('exercise_style',e.target.value)}><option>EUROPEAN</option><option>AMERICAN</option></select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>REFERENCE ENTITY</label><input placeholder="APPLE INC" value={leg.reference_entity||''} onChange={e=>set('reference_entity',e.target.value)}/></div>
+      <div className="fg"><label>REFERENCE ISIN</label><input placeholder="US0378331005" value={leg.reference_isin||''} onChange={e=>set('reference_isin',e.target.value)}/></div>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>STRIKE SPREAD (bps)</label><input placeholder="120" value={leg.strike_spread||''} onChange={e=>set('strike_spread',e.target.value)}/></div>
+      <div className="fg"><label>RECOVERY RATE</label><input placeholder="0.40" value={leg.recovery_rate||''} onChange={e=>set('recovery_rate',e.target.value)}/></div>
+      <div className="fg"><label>SENIORITY</label><select value={leg.seniority||'SENIOR_UNSECURED'} onChange={e=>set('seniority',e.target.value)}>{SENIORITY.map(s=><option key={s}>{s}</option>)}</select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EXPIRY DATE</label><input type="date" value={leg.expiry_date||''} onChange={e=>set('expiry_date',e.target.value)}/></div>
+      <div className="fg"><label>KNOCKOUT ON CREDIT EVENT</label><select value={String(leg.knockout||true)} onChange={e=>set('knockout',e.target.value==='true')}><option value="true">YES (standard)</option><option value="false">NO</option></select></div>
+    </div>
+    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0'}}>
+      PAYER = buy protection (profit if spreads widen). RECEIVER = sell protection.
+      Knockout: option expires worthless if credit event occurs before option expiry.
+    </div>
+    <OptionPremiumFields leg={leg} set={set}/>
+  </>)
+}
+
+// ── Sprint 3F form components ────────────────────────────────
+
+function ExerciseDateSched({leg,set}) {
+  const rows = leg.exercise_dates || []
+  return (
+    <div>
+      <div className="sec-lbl" style={{marginTop:'0.5rem'}}>EXERCISE DATE SCHEDULE</div>
+      <div style={{fontSize:'0.6rem',color:'var(--text-dim)',marginBottom:'0.4rem',lineHeight:1.6}}>
+        Add each Bermudan exercise date. Dates between first and last exercise at the selected frequency are auto-generated on pricing.
+      </div>
+      {rows.length > 0 && (
+        <table className="sched-table">
+          <thead><tr><th>EXERCISE DATE</th><th>NOTICE BY</th><th/></tr></thead>
+          <tbody>
+            {rows.map((r,i) => (
+              <tr key={i}>
+                <td><input type="date" value={r.date||''} onChange={e=>set('exercise_dates',rows.map((x,j)=>j===i?{...x,date:e.target.value}:x))}/></td>
+                <td><input type="date" value={r.notice_by||''} onChange={e=>set('exercise_dates',rows.map((x,j)=>j===i?{...x,notice_by:e.target.value}:x))}/></td>
+                <td><button className="btn-row-del" onClick={()=>set('exercise_dates',rows.filter((_,j)=>j!==i))}>&#10005;</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <button className="btn-row-add" onClick={()=>set('exercise_dates',[...rows,{date:'',notice_by:''}])}>+ ADD EXERCISE DATE</button>
+    </div>
+  )
+}
+
+function ObservationSched({leg,set}) {
+  const rows = leg.observation_schedule || []
+  return (
+    <div>
+      <div className="sec-lbl" style={{marginTop:'0.5rem'}}>CUSTOM OBSERVATION SCHEDULE</div>
+      <div style={{fontSize:'0.6rem',color:'var(--text-dim)',marginBottom:'0.4rem',lineHeight:1.6}}>
+        Define custom observation dates and weights. Weights must sum to 1.0.
+        Used for partial-period or non-standard averaging windows.
+      </div>
+      {rows.length > 0 && (
+        <table className="sched-table">
+          <thead><tr><th>OBSERVATION DATE</th><th>WEIGHT</th><th/></tr></thead>
+          <tbody>
+            {rows.map((r,i) => (
+              <tr key={i}>
+                <td><input type="date" value={r.date||''} onChange={e=>set('observation_schedule',rows.map((x,j)=>j===i?{...x,date:e.target.value}:x))}/></td>
+                <td><input placeholder="1.0" value={r.weight||''} onChange={e=>set('observation_schedule',rows.map((x,j)=>j===i?{...x,weight:e.target.value}:x))}/></td>
+                <td><button className="btn-row-del" onClick={()=>set('observation_schedule',rows.filter((_,j)=>j!==i))}>&#10005;</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <button className="btn-row-add" onClick={()=>set('observation_schedule',[...rows,{date:'',weight:''}])}>+ ADD OBSERVATION DATE</button>
+    </div>
+  )
+}
+
+function BermudanSwaptionForm({leg,set}) {
+  return (<>
+    <div className="sec-lbl">BERMUDAN SWAPTION</div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>OPTION TYPE</label><select value={leg.option_type} onChange={e=>set('option_type',e.target.value)}><option>PAYER</option><option>RECEIVER</option></select></div>
+      <div className="fg"><label>SETTLEMENT</label><select value={leg.settlement_type} onChange={e=>set('settlement_type',e.target.value)}><option>PHYSICAL</option><option>CASH</option></select></div>
+    </div>
+    <div className="sec-lbl" style={{marginTop:'0.75rem'}}>EXERCISE SCHEDULE</div>
+    <div className="row3">
+      <div className="fg"><label>FIRST EXERCISE DATE</label><input type="date" value={leg.first_exercise_date||''} onChange={e=>set('first_exercise_date',e.target.value)}/></div>
+      <div className="fg"><label>LAST EXERCISE DATE</label><input type="date" value={leg.last_exercise_date||''} onChange={e=>set('last_exercise_date',e.target.value)}/></div>
+      <div className="fg"><label>EXERCISE FREQUENCY</label>
+        <select value={leg.exercise_frequency||'SEMI-ANNUAL'} onChange={e=>set('exercise_frequency',e.target.value)}>
+          {['MONTHLY','QUARTERLY','SEMI-ANNUAL','ANNUAL'].map(f=><option key={f}>{f}</option>)}
+        </select>
+      </div>
+    </div>
+    <div className="fg"><label>NOTICE DAYS (business days)</label><input placeholder="2" value={leg.notice_days||''} onChange={e=>set('notice_days',e.target.value)}/></div>
+    <ExerciseDateSched leg={leg} set={set}/>
+    <div className="sec-lbl">UNDERLYING SWAP</div>
+    <div className="row3">
+      <div className="fg"><label>UNDERLYING TENOR</label><input placeholder="5Y" value={leg.underlying_tenor||''} onChange={e=>set('underlying_tenor',e.target.value)}/></div>
+      <div className="fg"><label>STRIKE (fixed rate)</label><input placeholder="0.0450" value={leg.underlying_fixed_rate||''} onChange={e=>set('underlying_fixed_rate',e.target.value)}/></div>
+      <div className="fg"><label>FLOAT INDEX</label><select value={leg.underlying_index||'USD_SOFR'} onChange={e=>set('underlying_index',e.target.value)}>{INDICES.map(i=><option key={i}>{i}</option>)}</select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>FREQUENCY</label><select value={leg.underlying_frequency||'SEMI-ANNUAL'} onChange={e=>set('underlying_frequency',e.target.value)}>{FREQS.map(f=><option key={f}>{f}</option>)}</select></div>
+      <div className="fg"><label>DAY COUNT</label><select value={leg.underlying_day_count||'ACT/360'} onChange={e=>set('underlying_day_count',e.target.value)}>{DAY_COUNTS.map(d=><option key={d}>{d}</option>)}</select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EFFECTIVE DATE</label><input type="date" value={leg.effective_date||''} onChange={e=>set('effective_date',e.target.value)}/></div>
+      <div className="fg"><label>MATURITY DATE</label><input type="date" value={leg.maturity_date||''} onChange={e=>set('maturity_date',e.target.value)}/></div>
+    </div>
+    <OptionPremiumFields leg={leg} set={set}/>
+  </>)
+}
+
+function CallableSwapOptionForm({leg,set}) {
+  return (<>
+    <div className="sec-lbl">CALLABLE / CANCELLABLE OPTION LEG</div>
+    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
+      This leg represents the embedded right to terminate the swap.
+      The swap itself is defined by the FIXED and FLOAT legs above.
+      Callable = fixed-rate payer right. Cancellable = fixed-rate receiver right.
+      No separate premium — optionality is priced into the swap rate.
+    </div>
+    <div className="row2">
+      <div className="fg"><label>CALLABLE PARTY</label>
+        <select value={leg.callable_party||'FIXED_PAYER'} onChange={e=>set('callable_party',e.target.value)}>
+          <option value="FIXED_PAYER">FIXED PAYER (callable)</option>
+          <option value="FIXED_RECEIVER">FIXED RECEIVER (cancellable)</option>
+          <option value="EITHER">EITHER PARTY</option>
+        </select>
+      </div>
+      <div className="fg"><label>EXERCISE STYLE</label>
+        <select value={leg.exercise_style||'BERMUDAN'} onChange={e=>set('exercise_style',e.target.value)}>
+          <option>EUROPEAN</option>
+          <option>BERMUDAN</option>
+        </select>
+      </div>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>FIRST CALL DATE</label><input type="date" value={leg.first_call_date||''} onChange={e=>set('first_call_date',e.target.value)}/></div>
+      <div className="fg"><label>CALL FREQUENCY</label>
+        <select value={leg.call_frequency||'ANNUAL'} onChange={e=>set('call_frequency',e.target.value)}>
+          {['MONTHLY','QUARTERLY','SEMI-ANNUAL','ANNUAL'].map(f=><option key={f}>{f}</option>)}
+        </select>
+      </div>
+      <div className="fg"><label>NOTICE DAYS</label><input placeholder="5" value={leg.notice_days||''} onChange={e=>set('notice_days',e.target.value)}/></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EFFECTIVE DATE</label><input type="date" value={leg.effective_date||''} onChange={e=>set('effective_date',e.target.value)}/></div>
+      <div className="fg"><label>MATURITY DATE</label><input type="date" value={leg.maturity_date||''} onChange={e=>set('maturity_date',e.target.value)}/></div>
+    </div>
+  </>)
+}
+
+function CappedFloredFloatForm({leg,set}) {
+  const embedded = leg.embedded_optionality || 'CAP'
+  const showCap = embedded === 'CAP' || embedded === 'COLLAR'
+  const showFloor = embedded === 'FLOOR' || embedded === 'COLLAR'
+  return (<>
+    <div className="sec-lbl">FLOAT LEG WITH EMBEDDED OPTIONALITY</div>
+    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
+      Standard float leg with embedded cap/floor/collar. The optionality premium is
+      typically included in the fixed rate of the swap, not charged separately.
+    </div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>PAY</option><option>RECEIVE</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>FLOAT INDEX</label><select value={leg.index||'USD_SOFR'} onChange={e=>set('index',e.target.value)}>{INDICES.map(i=><option key={i}>{i}</option>)}</select></div>
+      <div className="fg"><label>SPREAD (bps)</label><input placeholder="0" value={leg.spread||''} onChange={e=>set('spread',e.target.value)}/></div>
+      <div className="fg"><label>LEVERAGE</label><input placeholder="1.0" value={leg.leverage||''} onChange={e=>set('leverage',e.target.value)}/></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EMBEDDED OPTIONALITY</label>
+        <select value={embedded} onChange={e=>set('embedded_optionality',e.target.value)}>
+          <option>CAP</option><option>FLOOR</option><option>COLLAR</option>
+        </select>
+      </div>
+      <div className="fg"><label>PREMIUM INCLUDED IN RATE?</label>
+        <select value={String(leg.cap_floor_premium_included!==false)} onChange={e=>set('cap_floor_premium_included',e.target.value==='true')}>
+          <option value="true">YES (rolled into swap rate)</option>
+          <option value="false">NO (separate premium)</option>
+        </select>
+      </div>
+    </div>
+    <div className="row2">
+      {showCap&&<div className="fg"><label>CAP STRIKE</label><input placeholder="0.0600" value={leg.cap_strike||''} onChange={e=>set('cap_strike',e.target.value)}/></div>}
+      {showFloor&&<div className="fg"><label>FLOOR STRIKE</label><input placeholder="0.0200" value={leg.floor_strike||''} onChange={e=>set('floor_strike',e.target.value)}/></div>}
+    </div>
+    <div className="row3">
+      <div className="fg"><label>FREQUENCY</label><select value={leg.frequency||'QUARTERLY'} onChange={e=>set('frequency',e.target.value)}>{FREQS.map(f=><option key={f}>{f}</option>)}</select></div>
+      <div className="fg"><label>DAY COUNT</label><select value={leg.day_count||'ACT/360'} onChange={e=>set('day_count',e.target.value)}>{DAY_COUNTS.map(d=><option key={d}>{d}</option>)}</select></div>
+      <div className="fg"><label>BDC</label><select value={leg.bdc||'MODIFIED_FOLLOWING'} onChange={e=>set('bdc',e.target.value)}>{BDCS.map(b=><option key={b}>{b}</option>)}</select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EFFECTIVE DATE</label><input type="date" value={leg.effective_date||''} onChange={e=>set('effective_date',e.target.value)}/></div>
+      <div className="fg"><label>MATURITY DATE</label><input type="date" value={leg.maturity_date||''} onChange={e=>set('maturity_date',e.target.value)}/></div>
+    </div>
+  </>)
+}
+
+function ExtendableForwardForm({leg,set}) {
+  return (<>
+    <div className="sec-lbl">EXTENDABLE FORWARD</div>
+    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
+      FX forward where one counterparty holds the right to extend maturity.
+      Commonly used when the client wants protection against settlement timing uncertainty.
+    </div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY (notional)</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>FX PAIR</label><input placeholder="EURUSD" value={leg.fx_pair||''} onChange={e=>set('fx_pair',e.target.value)}/></div>
+      <div className="fg"><label>EXTENSION RIGHT</label>
+        <select value={leg.extension_right||'BUYER'} onChange={e=>set('extension_right',e.target.value)}>
+          <option>BUYER</option><option>SELLER</option><option>EITHER</option>
+        </select>
+      </div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>ORIGINAL STRIKE</label><input placeholder="1.0850" value={leg.original_strike||''} onChange={e=>set('original_strike',e.target.value)}/></div>
+      <div className="fg"><label>EXTENDED STRIKE</label><input placeholder="1.0900 (if different)" value={leg.extended_strike||''} onChange={e=>set('extended_strike',e.target.value)}/></div>
+    </div>
+    <div className="row3">
+      <div className="fg"><label>ORIGINAL MATURITY</label><input type="date" value={leg.original_maturity||''} onChange={e=>set('original_maturity',e.target.value)}/></div>
+      <div className="fg"><label>EXTENSION PERIOD</label><input placeholder="3M" value={leg.extension_period||''} onChange={e=>set('extension_period',e.target.value)}/></div>
+      <div className="fg"><label>EXTENDED MATURITY</label><input type="date" value={leg.extended_maturity||''} onChange={e=>set('extended_maturity',e.target.value)}/></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>EXTENSION PREMIUM</label><input placeholder="0" value={leg.extension_premium||''} onChange={e=>set('extension_premium',e.target.value)}/></div>
+      <div className="fg"><label>SETTLEMENT</label><select value={leg.settlement_type||'PHYSICAL'} onChange={e=>set('settlement_type',e.target.value)}><option>PHYSICAL</option><option>CASH</option></select></div>
+    </div>
+  </>)
+}
+
+function CommodityAsianOptionForm({leg,set}) {
+  const avgType = leg.averaging_type || 'FULL_PERIOD'
+  const isCustom = avgType === 'CUSTOM'
+  const isPartial = avgType === 'PARTIAL_PERIOD'
+  return (<>
+    <div className="sec-lbl">COMMODITY ASIAN OPTION</div>
+    <div className="row2">
+      <div className="fg"><label>CURRENCY</label><select value={leg.currency} onChange={e=>set('currency',e.target.value)}>{CCYS.map(c=><option key={c}>{c}</option>)}</select></div>
+      <div className="fg"><label>DIRECTION</label><select value={leg.direction} onChange={e=>set('direction',e.target.value)}><option>BUY</option><option>SELL</option></select></div>
+    </div>
+    <div className="fg"><label>NOTIONAL</label>
+      <input placeholder="10,000,000" value={leg.notional} onChange={e=>set('notional',e.target.value)}
+        onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))set('notional',r.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0}))}}/>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>OPTION TYPE</label><select value={leg.option_type||'CALL'} onChange={e=>set('option_type',e.target.value)}><option>CALL</option><option>PUT</option></select></div>
+      <div className="fg"><label>COMMODITY</label><select value={leg.commodity_index||'WTI_CRUDE'} onChange={e=>set('commodity_index',e.target.value)}>{COMMODITY_INDICES.map(c=><option key={c}>{c}</option>)}</select></div>
+    </div>
+    <div className="row2">
+      <div className="fg"><label>STRIKE</label><input placeholder="75.00" value={leg.strike||''} onChange={e=>set('strike',e.target.value)}/></div>
+      <div className="fg"><label>QUANTITY</label><input placeholder="10,000" value={leg.quantity||''} onChange={e=>set('quantity',e.target.value)}/></div>
+    </div>
+    <div className="fg"><label>UNIT</label>
+      <select value={leg.unit||'BBL'} onChange={e=>set('unit',e.target.value)}>
+        {['BBL','MMBTU','MT','OZ','BU','LB'].map(u=><option key={u}>{u}</option>)}
+      </select>
+    </div>
+
+    <div className="sec-lbl" style={{marginTop:'0.75rem'}}>AVERAGING WINDOW</div>
+    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,marginBottom:'0.4rem'}}>
+      FULL PERIOD: average all fixings from effective to expiry.
+      PARTIAL: custom observation window within the period (common in energy).
+      BULLET: single observation at expiry (vanilla).
+      CUSTOM: define exact dates and weights below.
+    </div>
+    <div className="row2">
+      <div className="fg"><label>AVERAGING TYPE</label>
+        <select value={avgType} onChange={e=>set('averaging_type',e.target.value)}>
+          <option value="FULL_PERIOD">FULL PERIOD</option>
+          <option value="PARTIAL_PERIOD">PARTIAL PERIOD</option>
+          <option value="BULLET">BULLET (single obs)</option>
+          <option value="CUSTOM">CUSTOM SCHEDULE</option>
+        </select>
+      </div>
+      <div className="fg"><label>AVERAGING METHOD</label>
+        <select value={leg.averaging_method||'ARITHMETIC'} onChange={e=>set('averaging_method',e.target.value)}>
+          <option>ARITHMETIC</option><option>GEOMETRIC</option><option>HARMONIC</option>
+        </select>
+      </div>
+    </div>
+    {isPartial&&(
+      <div className="row2">
+        <div className="fg"><label>OBS WINDOW START</label><input type="date" value={leg.observation_start||''} onChange={e=>set('observation_start',e.target.value)}/></div>
+        <div className="fg"><label>OBS WINDOW END</label><input type="date" value={leg.observation_end||''} onChange={e=>set('observation_end',e.target.value)}/></div>
+      </div>
+    )}
+    {!isCustom&&!isPartial&&(
+      <div className="fg"><label>OBSERVATION FREQUENCY</label>
+        <select value={leg.averaging_frequency||'DAILY'} onChange={e=>set('averaging_frequency',e.target.value)}>
+          <option>DAILY</option><option>WEEKLY</option><option>MONTHLY</option>
+        </select>
+      </div>
+    )}
+    {isCustom&&<ObservationSched leg={leg} set={set}/>}
+
+    <div className="sec-lbl" style={{marginTop:'0.75rem'}}>SETTLEMENT</div>
+    <div className="row2">
+      <div className="fg"><label>SETTLEMENT TYPE</label>
+        <select value={leg.settlement_type||'CASH'} onChange={e=>set('settlement_type',e.target.value)}>
+          <option>CASH</option><option>PHYSICAL</option>
+        </select>
+      </div>
+      <div className="fg"><label>SETTLEMENT STYLE</label>
+        <select value={leg.settlement_style||'BULLET'} onChange={e=>set('settlement_style',e.target.value)}>
+          <option value="BULLET">BULLET (at maturity)</option>
+          <option value="STAGED">STAGED (each period)</option>
+        </select>
+      </div>
+    </div>
+
+    <div className="row2">
+      <div className="fg"><label>EXPIRY DATE</label><input type="date" value={leg.expiry_date||''} onChange={e=>set('expiry_date',e.target.value)}/></div>
+      <div className="fg"><label>MATURITY DATE</label><input type="date" value={leg.maturity_date||''} onChange={e=>set('maturity_date',e.target.value)}/></div>
+    </div>
+    <OptionPremiumFields leg={leg} set={set}/>
+  </>)
+}
+
 function LegForm({leg,set,legs,legIdx}) {
   switch(leg.leg_type) {
     case 'FIXED':          return <FixedForm leg={leg} set={set}/>
@@ -823,6 +1578,17 @@ function LegForm({leg,set,legs,legIdx}) {
     case 'EMISSIONS_FLOAT':return <EmissionsForm leg={leg} set={set}/>
     case 'RPA_FEE':        return <RpaFeeForm leg={leg} set={set}/>
     case 'RPA_CONTINGENT': return <RpaContingentForm leg={leg} set={set}/>
+    case 'IR_SWAPTION':      return <IrSwaptionForm leg={leg} set={set}/>
+    case 'CAP_FLOOR':          return <CapFloorForm leg={leg} set={set}/>
+    case 'FX_OPTION':          return <FxOptionForm leg={leg} set={set}/>
+    case 'EQUITY_OPTION':      return <EquityOptionForm leg={leg} set={set}/>
+    case 'COMMODITY_OPTION':   return <CommodityOptionForm leg={leg} set={set}/>
+    case 'CDS_OPTION':           return <CdsOptionForm leg={leg} set={set}/>
+    case 'BERMUDAN_SWAPTION':    return <BermudanSwaptionForm leg={leg} set={set}/>
+    case 'CALLABLE_SWAP_OPTION': return <CallableSwapOptionForm leg={leg} set={set}/>
+    case 'CAPPED_FLOORED_FLOAT': return <CappedFloredFloatForm leg={leg} set={set}/>
+    case 'EXTENDABLE_FORWARD':   return <ExtendableForwardForm leg={leg} set={set}/>
+    case 'COMMODITY_ASIAN_OPTION': return <CommodityAsianOptionForm leg={leg} set={set}/>
     default:               return <FloatForm leg={leg} set={set}/>
   }
 }
@@ -1170,3 +1936,4 @@ export default function NewTradeWorkspace({tab}) {
     </div>
   )
 }
+
