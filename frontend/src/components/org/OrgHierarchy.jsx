@@ -15,13 +15,13 @@ import { CSS } from '@dnd-kit/utilities'
 
 const NODE_COLOR = {
   firm: 'var(--accent)', division: 'var(--blue)', desk: 'var(--amber)',
-  sub_desk: 'var(--purple)', custom: '#2a3f52',
+  book: '#3d8bc8', strategy: 'var(--purple)', custom: '#2a3f52',
 }
 const CHILD_TYPE = {
-  firm: 'division', division: 'desk', desk: 'sub_desk', sub_desk: 'custom', custom: 'custom',
+  firm: 'division', division: 'desk', desk: 'book', book: 'strategy', strategy: null, custom: 'custom',
 }
 const TYPE_LABEL = {
-  firm: 'FIRM', division: 'DIV', desk: 'DESK', sub_desk: 'SUB', custom: 'CUST',
+  firm: 'FIRM', division: 'DIV', desk: 'DESK', book: 'BOOK', strategy: 'STRAT', custom: 'CUST',
 }
 
 function buildTree(flat, showInactive) {
@@ -119,9 +119,11 @@ function NodeRow({ node, depth, collapsed, toggleCollapse, editing, setEditing, 
         <div style={{ display: 'flex', gap: '5px', flexShrink: 0, marginLeft: 'auto' }}>
           {node.is_active ? (
             <>
-              <Btn color={color} onClick={() => onAdd(node.id, CHILD_TYPE[node.node_type])}>
-                {'+ ' + TYPE_LABEL[CHILD_TYPE[node.node_type]]}
-              </Btn>
+              {CHILD_TYPE[node.node_type] && (
+                <Btn color={color} onClick={() => onAdd(node.id, CHILD_TYPE[node.node_type])}>
+                  {'+ ' + (TYPE_LABEL[CHILD_TYPE[node.node_type]] || CHILD_TYPE[node.node_type].toUpperCase())}
+                </Btn>
+              )}
               <Btn color="var(--red)" onClick={() => onDeactivate(node.id)} title="Deactivate">✕</Btn>
             </>
           ) : canDelete ? (
