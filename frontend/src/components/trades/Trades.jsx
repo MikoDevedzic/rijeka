@@ -1,0 +1,682 @@
+import { useState, useEffect } from 'react'
+import { useTradesStore } from '../../store/useTradesStore'
+import { supabase } from '../../lib/supabase'
+import './Trades.css'
+
+// ── Constants ──────────────────────────────────────────────────────────────────
+
+const ASSET_CLASSES = ['RATES', 'FX', 'CREDIT', 'EQUITY', 'COMMODITY']
+
+const INSTRUMENT_TYPES = {
+  RATES:     ['IR_SWAP', 'OIS_SWAP', 'XCCY_SWAP', 'FRA', 'IR_CAP', 'IR_FLOOR', 'IR_SWAPTION'],
+  FX:        ['FX_FORWARD', 'FX_SWAP', 'FX_OPTION', 'FX_NDF'],
+  CREDIT:    ['CDS', 'CDS_INDEX', 'TOTAL_RETURN_SWAP'],
+  EQUITY:    ['EQUITY_OPTION', 'EQUITY_SWAP', 'VARIANCE_SWAP'],
+  COMMODITY: ['COMMODITY_SWAP', 'COMMODITY_OPTION'],
+}
+
+const STATUS_META = {
+  PENDING:    { color: 'var(--amber)',  label: 'PENDING'    },
+  LIVE:       { color: 'var(--accent)', label: 'LIVE'       },
+  MATURED:    { color: '#4a5568',       label: 'MATURED'    },
+  CANCELLED:  { color: 'var(--red)',    label: 'CANCELLED'  },
+  TERMINATED: { color: 'var(--red)',    label: 'TERMINATED' },
+}
+
+const AC_META = {
+  RATES:     { color: 'var(--accent)', abbr: 'RTS' },
+  FX:        { color: 'var(--blue)',   abbr: 'FX'  },
+  CREDIT:    { color: 'var(--amber)',  abbr: 'CRD' },
+  EQUITY:    { color: 'var(--purple)', abbr: 'EQT' },
+  COMMODITY: { color: 'var(--red)',    abbr: 'CMD' },
+}
+
+const STORE_META = {
+  WORKING:    { color: 'var(--accent)', label: 'W' },
+  PRODUCTION: { color: 'var(--blue)',   label: 'P' },
+  HISTORY:    { color: '#4a5568',       label: 'H' },
+}
+
+const FLOAT_INDICES = [
+  'USD_SOFR','USD_LIBOR_3M','EUR_EURIBOR_3M','EUR_EURIBOR_6M',
+  'GBP_SONIA','JPY_TONAR','CHF_SARON','CAD_CORRA','AUD_AONIA',
+]
+const CURRENCIES = ['USD','EUR','GBP','JPY','CHF','CAD','AUD','NOK','SEK','DKK','SGD','HKD']
+const DAY_COUNTS = ['ACT/360','ACT/365','ACT/ACT','30/360','30E/360']
+const FREQUENCIES = ['MONTHLY','QUARTERLY','SEMI-ANNUAL','ANNUAL']
+
+// ── Default terms per instrument ───────────────────────────────────────────────
+
+function defaultTerms(it) {
+  if (['IR_SWAP','OIS_SWAP'].includes(it)) return {
+    pay_receive: 'PAY', fixed_rate: '', fixed_day_count: 'ACT/360',
+    fixed_frequency: 'SEMI-ANNUAL', float_index: 'USD_SOFR',
+    float_spread: '0', float_day_count: 'ACT/360', float_frequency: 'QUARTERLY',
+  }
+  if (['FX_FORWARD','FX_NDF'].includes(it)) return {
+    buy_currency: 'EUR', sell_currency: 'USD',
+    buy_notional: '', sell_notional: '', fx_rate: '', settlement_type: 'PHYSICAL',
+  }
+  if (it === 'FX_SWAP') return {
+    near_buy_currency: 'EUR', near_sell_currency: 'USD',
+    near_fx_rate: '', far_fx_rate: '', near_date: '',
+  }
+  if (it === 'XCCY_SWAP') return {
+    pay_currency: 'EUR', receive_currency: 'USD',
+    pay_index: 'EUR_EURIBOR_3M', receive_index: 'USD_SOFR',
+    pay_spread: '0', receive_spread: '0',
+  }
+  if (it === 'CDS') return {
+    reference_entity: '', protection_buy_sell: 'BUY',
+    cds_spread_bps: '', recovery_rate: '0.40', seniority: 'SENIOR_UNSECURED',
+  }
+  return {}
+}
+
+// ── Terms form ─────────────────────────────────────────────────────────────────
+
+function TermsForm({ it, terms, onChange }) {
+  const s = (k, v) => onChange({ ...terms, [k]: v })
+  if (!it) return null
+
+  if (['IR_SWAP','OIS_SWAP'].includes(it)) return (
+    <div className="terms-form">
+      <div className="form-row-2">
+        <div className="form-field">
+          <label>PAY / RECEIVE</label>
+          <select value={terms.pay_receive||'PAY'} onChange={e=>s('pay_receive',e.target.value)}>
+            <option>PAY</option><option>RECEIVE</option>
+          </select>
+        </div>
+        <div className="form-field">
+          <label>FIXED RATE</label>
+          <input placeholder="0.0425" value={terms.fixed_rate||''} onChange={e=>s('fixed_rate',e.target.value)}/>
+        </div>
+      </div>
+      <div className="form-row-2">
+        <div className="form-field">
+          <label>FIXED DAY COUNT</label>
+          <select value={terms.fixed_day_count||'ACT/360'} onChange={e=>s('fixed_day_count',e.target.value)}>
+            {DAY_COUNTS.map(d=><option key={d}>{d}</option>)}
+          </select>
+        </div>
+        <div className="form-field">
+          <label>FIXED FREQ</label>
+          <select value={terms.fixed_frequency||'SEMI-ANNUAL'} onChange={e=>s('fixed_frequency',e.target.value)}>
+            {FREQUENCIES.map(f=><option key={f}>{f}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="form-divider">FLOATING LEG</div>
+      <div className="form-row-2">
+        <div className="form-field">
+          <label>FLOAT INDEX</label>
+          <select value={terms.float_index||'USD_SOFR'} onChange={e=>s('float_index',e.target.value)}>
+            {FLOAT_INDICES.map(i=><option key={i}>{i}</option>)}
+          </select>
+        </div>
+        <div className="form-field">
+          <label>SPREAD (bps)</label>
+          <input placeholder="0" value={terms.float_spread||''} onChange={e=>s('float_spread',e.target.value)}/>
+        </div>
+      </div>
+      <div className="form-row-2">
+        <div className="form-field">
+          <label>FLOAT DAY COUNT</label>
+          <select value={terms.float_day_count||'ACT/360'} onChange={e=>s('float_day_count',e.target.value)}>
+            {DAY_COUNTS.map(d=><option key={d}>{d}</option>)}
+          </select>
+        </div>
+        <div className="form-field">
+          <label>FLOAT FREQ</label>
+          <select value={terms.float_frequency||'QUARTERLY'} onChange={e=>s('float_frequency',e.target.value)}>
+            {FREQUENCIES.map(f=><option key={f}>{f}</option>)}
+          </select>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (['FX_FORWARD','FX_NDF'].includes(it)) return (
+    <div className="terms-form">
+      <div className="form-row-2">
+        <div className="form-field"><label>BUY CURRENCY</label>
+          <select value={terms.buy_currency||'EUR'} onChange={e=>s('buy_currency',e.target.value)}>
+            {CURRENCIES.map(c=><option key={c}>{c}</option>)}
+          </select></div>
+        <div className="form-field"><label>BUY NOTIONAL</label>
+          <input placeholder="10,000,000" value={terms.buy_notional||''} onChange={e=>s('buy_notional',e.target.value)}/></div>
+      </div>
+      <div className="form-row-2">
+        <div className="form-field"><label>SELL CURRENCY</label>
+          <select value={terms.sell_currency||'USD'} onChange={e=>s('sell_currency',e.target.value)}>
+            {CURRENCIES.map(c=><option key={c}>{c}</option>)}
+          </select></div>
+        <div className="form-field"><label>SELL NOTIONAL</label>
+          <input placeholder="10,850,000" value={terms.sell_notional||''} onChange={e=>s('sell_notional',e.target.value)}/></div>
+      </div>
+      <div className="form-row-2">
+        <div className="form-field"><label>FX RATE</label>
+          <input placeholder="1.0850" value={terms.fx_rate||''} onChange={e=>s('fx_rate',e.target.value)}/></div>
+        <div className="form-field"><label>SETTLEMENT</label>
+          <select value={terms.settlement_type||'PHYSICAL'} onChange={e=>s('settlement_type',e.target.value)}>
+            <option>PHYSICAL</option><option>CASH</option>
+          </select></div>
+      </div>
+    </div>
+  )
+
+  if (it === 'XCCY_SWAP') return (
+    <div className="terms-form">
+      <div className="form-divider">PAY LEG</div>
+      <div className="form-row-2">
+        <div className="form-field"><label>PAY CURRENCY</label>
+          <select value={terms.pay_currency||'EUR'} onChange={e=>s('pay_currency',e.target.value)}>
+            {CURRENCIES.map(c=><option key={c}>{c}</option>)}
+          </select></div>
+        <div className="form-field"><label>PAY INDEX</label>
+          <select value={terms.pay_index||'EUR_EURIBOR_3M'} onChange={e=>s('pay_index',e.target.value)}>
+            {FLOAT_INDICES.map(i=><option key={i}>{i}</option>)}
+          </select></div>
+      </div>
+      <div className="form-divider">RECEIVE LEG</div>
+      <div className="form-row-2">
+        <div className="form-field"><label>RECEIVE CURRENCY</label>
+          <select value={terms.receive_currency||'USD'} onChange={e=>s('receive_currency',e.target.value)}>
+            {CURRENCIES.map(c=><option key={c}>{c}</option>)}
+          </select></div>
+        <div className="form-field"><label>RECEIVE INDEX</label>
+          <select value={terms.receive_index||'USD_SOFR'} onChange={e=>s('receive_index',e.target.value)}>
+            {FLOAT_INDICES.map(i=><option key={i}>{i}</option>)}
+          </select></div>
+      </div>
+    </div>
+  )
+
+  if (it === 'CDS') return (
+    <div className="terms-form">
+      <div className="form-field"><label>REFERENCE ENTITY</label>
+        <input placeholder="APPLE INC" value={terms.reference_entity||''} onChange={e=>s('reference_entity',e.target.value)}/></div>
+      <div className="form-row-2">
+        <div className="form-field"><label>PROTECTION</label>
+          <select value={terms.protection_buy_sell||'BUY'} onChange={e=>s('protection_buy_sell',e.target.value)}>
+            <option>BUY</option><option>SELL</option>
+          </select></div>
+        <div className="form-field"><label>SPREAD (bps)</label>
+          <input placeholder="120" value={terms.cds_spread_bps||''} onChange={e=>s('cds_spread_bps',e.target.value)}/></div>
+      </div>
+      <div className="form-row-2">
+        <div className="form-field"><label>RECOVERY RATE</label>
+          <input placeholder="0.40" value={terms.recovery_rate||''} onChange={e=>s('recovery_rate',e.target.value)}/></div>
+        <div className="form-field"><label>SENIORITY</label>
+          <select value={terms.seniority||'SENIOR_UNSECURED'} onChange={e=>s('seniority',e.target.value)}>
+            <option value="SENIOR_UNSECURED">SENIOR UNSECURED</option>
+            <option value="SUBORDINATED">SUBORDINATED</option>
+          </select></div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="terms-form">
+      <p style={{color:'var(--text-dim)',fontSize:'0.72rem'}}>
+        Generic — no specific form for {it}
+      </p>
+    </div>
+  )
+}
+
+// ── Format helpers ─────────────────────────────────────────────────────────────
+
+function fmtN(n) {
+  if (!n) return '—'
+  if (n >= 1e9) return `${(n/1e9).toFixed(1)}B`
+  if (n >= 1e6) return `${(n/1e6).toFixed(0)}M`
+  if (n >= 1e3) return `${(n/1e3).toFixed(0)}K`
+  return String(n)
+}
+
+function fmtD(d) { return d ? d.substring(0,10) : '—' }
+
+function tenor(t) {
+  if (!t.effective_date || !t.maturity_date) return '—'
+  const yrs = (new Date(t.maturity_date) - new Date(t.effective_date)) / (365.25*864e5)
+  if (yrs >= 1) return `${yrs.toFixed(1)}Y`
+  return `${Math.round(yrs*12)}M`
+}
+
+// ── Trade row ──────────────────────────────────────────────────────────────────
+
+function TradeRow({ trade: t, selected, onSelect }) {
+  const ac = AC_META[t.asset_class] || { color:'#fff', abbr: t.asset_class }
+  const st = STATUS_META[t.status]  || { color:'#fff', label: t.status }
+  const sr = STORE_META[t.store]    || { color:'#fff', label: t.store }
+  return (
+    <tr className={`trade-row ${selected?'selected':''}`}
+        style={{ borderLeft: `3px solid ${ac.color}` }}
+        onClick={() => onSelect(t)}>
+      <td className="td-ref">{t.trade_ref}</td>
+      <td><span className="badge" style={{color:ac.color, borderColor:ac.color+'40'}}>{ac.abbr}</span></td>
+      <td className="td-instrument">{t.instrument_type}</td>
+      <td className="td-cp">{t.counterparty?.name || '—'}</td>
+      <td className="td-notional">{fmtN(t.notional)}<span className="ccy">{t.notional_ccy}</span></td>
+      <td className="td-tenor">{tenor(t)}</td>
+      <td className="td-date">{fmtD(t.trade_date)}</td>
+      <td className="td-date">{fmtD(t.maturity_date)}</td>
+      <td>
+        <span className="status-dot" style={{background:st.color}}/>
+        <span className="status-label" style={{color:st.color}}>{st.label}</span>
+      </td>
+      <td><span className="store-badge" style={{color:sr.color}}>{sr.label}</span></td>
+    </tr>
+  )
+}
+
+// ── Trade detail ───────────────────────────────────────────────────────────────
+
+function TradeDetail({ trade: t, onClose, onStatusUpdate }) {
+  const [busy, setBusy] = useState(false)
+  if (!t) return null
+  const ac = AC_META[t.asset_class] || {}
+  const terms = t.terms || {}
+
+  const upd = async (status) => {
+    setBusy(true)
+    await onStatusUpdate(t.id, status)
+    setBusy(false)
+  }
+
+  return (
+    <div className="trade-detail-panel">
+      <div className="detail-header">
+        <div>
+          <div className="detail-ref">{t.trade_ref}</div>
+          <div className="detail-sub" style={{color:ac.color}}>
+            {t.instrument_type} · {t.asset_class}
+          </div>
+        </div>
+        <button className="detail-close" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="detail-section" style={{overflowY:'auto',flex:1}}>
+        <div className="detail-grid-2">
+          <div><span className="dl">COUNTERPARTY</span><span className="dv">{t.counterparty?.name||'—'}</span></div>
+          <div><span className="dl">OWN ENTITY</span><span className="dv">{t.own_entity?.short_name||'—'}</span></div>
+          <div><span className="dl">NOTIONAL</span><span className="dv">{t.notional?.toLocaleString()} {t.notional_ccy}</span></div>
+          <div><span className="dl">TENOR</span><span className="dv">{tenor(t)}</span></div>
+          <div><span className="dl">TRADE DATE</span><span className="dv">{fmtD(t.trade_date)}</span></div>
+          <div><span className="dl">EFFECTIVE</span><span className="dv">{fmtD(t.effective_date)}</span></div>
+          <div><span className="dl">MATURITY</span><span className="dv">{fmtD(t.maturity_date)}</span></div>
+          <div><span className="dl">STORE</span><span className="dv">{t.store}</span></div>
+          {t.desk && <div><span className="dl">DESK</span><span className="dv">{t.desk}</span></div>}
+          {t.book && <div><span className="dl">BOOK</span><span className="dv">{t.book}</span></div>}
+          {t.discount_curve_id && <div><span className="dl">DISCOUNT CURVE</span><span className="dv">{t.discount_curve_id}</span></div>}
+          {t.forecast_curve_id && <div><span className="dl">FORECAST CURVE</span><span className="dv">{t.forecast_curve_id}</span></div>}
+        </div>
+
+        {Object.keys(terms).length > 0 && <>
+          <div className="detail-section-title" style={{marginTop:'0.75rem'}}>ECONOMIC TERMS</div>
+          <div className="detail-grid-2">
+            {Object.entries(terms).map(([k,v]) => (
+              <div key={k}>
+                <span className="dl">{k.replace(/_/g,' ').toUpperCase()}</span>
+                <span className="dv">{v?.toString()||'—'}</span>
+              </div>
+            ))}
+          </div>
+        </>}
+
+        <div className="detail-section-title" style={{marginTop:'0.75rem'}}>LIFECYCLE</div>
+        <div className="detail-actions">
+          {t.status==='PENDING' && <button className="act-btn act-live" onClick={()=>upd('LIVE')} disabled={busy}>ACTIVATE</button>}
+          {t.status==='LIVE'    && <button className="act-btn act-mat"  onClick={()=>upd('MATURED')} disabled={busy}>MATURE</button>}
+          {['PENDING','LIVE'].includes(t.status) &&
+            <button className="act-btn act-cancel" onClick={()=>upd('CANCELLED')} disabled={busy}>CANCEL</button>}
+          {!['PENDING','LIVE'].includes(t.status) &&
+            <span style={{fontSize:'0.65rem',color:'var(--text-dim)'}}>No actions available for {t.status}</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Add trade panel ────────────────────────────────────────────────────────────
+
+function AddPanel({ cps, les, onAdd, onClose }) {
+  const today = new Date().toISOString().substring(0,10)
+  const [f, setF] = useState({
+    trade_ref: `TRD-${Date.now().toString().slice(-8)}`,
+    asset_class: 'RATES', instrument_type: 'IR_SWAP',
+    notional: '', notional_ccy: 'USD',
+    trade_date: today, effective_date: today, maturity_date: '',
+    counterparty_id: '', own_legal_entity_id: '',
+    discount_curve_id: '', forecast_curve_id: '',
+    desk: '', book: '', store: 'WORKING',
+    terms: defaultTerms('IR_SWAP'),
+  })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr]   = useState('')
+
+  const set = (k,v) => setF(x => ({...x,[k]:v}))
+
+  const setAC = (ac) => {
+    const it = INSTRUMENT_TYPES[ac]?.[0] || ''
+    setF(x => ({...x, asset_class:ac, instrument_type:it, terms:defaultTerms(it)}))
+  }
+  const setIT = (it) => setF(x => ({...x, instrument_type:it, terms:defaultTerms(it)}))
+
+  const submit = async () => {
+    if (!f.trade_ref)    return setErr('Trade ref required')
+    if (!f.maturity_date) return setErr('Maturity date required')
+    if (!f.notional)     return setErr('Notional required')
+    setErr(''); setBusy(true)
+
+    const payload = {
+      ...f,
+      notional: parseFloat(f.notional.replace(/,/g,'')),
+      status: 'PENDING',
+    }
+    ;['counterparty_id','own_legal_entity_id','discount_curve_id','forecast_curve_id','desk','book']
+      .forEach(k => { if (!payload[k]) delete payload[k] })
+
+    const res = await onAdd(payload)
+    setBusy(false)
+    if (res?.error) return setErr(res.error.message)
+    onClose()
+  }
+
+  const ownLEs = les.filter(e => e.is_own_entity && e.is_active)
+
+  return (
+    <div className="add-panel">
+      <div className="add-panel-header">
+        <span>NEW TRADE</span>
+        <button className="detail-close" onClick={onClose}>✕</button>
+      </div>
+
+      <div className="add-panel-body">
+        <div className="form-section-title">IDENTIFICATION</div>
+        <div className="form-row-2">
+          <div className="form-field">
+            <label>TRADE REF *</label>
+            <input value={f.trade_ref} onChange={e=>set('trade_ref',e.target.value)}/>
+          </div>
+          <div className="form-field">
+            <label>STORE</label>
+            <select value={f.store} onChange={e=>set('store',e.target.value)}>
+              <option>WORKING</option><option>PRODUCTION</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="form-section-title">CLASSIFICATION</div>
+        <div className="form-field">
+          <label>ASSET CLASS</label>
+          <div className="chip-row">
+            {ASSET_CLASSES.map(ac=>(
+              <button key={ac}
+                className={`chip ${f.asset_class===ac?'chip-active':''}`}
+                style={f.asset_class===ac&&AC_META[ac]?{borderColor:AC_META[ac].color,color:AC_META[ac].color}:{}}
+                onClick={()=>setAC(ac)}>{ac}</button>
+            ))}
+          </div>
+        </div>
+        <div className="form-field">
+          <label>INSTRUMENT TYPE</label>
+          <select value={f.instrument_type} onChange={e=>setIT(e.target.value)}>
+            {(INSTRUMENT_TYPES[f.asset_class]||[]).map(it=><option key={it}>{it}</option>)}
+          </select>
+        </div>
+
+        <div className="form-section-title">ENTITIES</div>
+        <div className="form-row-2">
+          <div className="form-field">
+            <label>OWN ENTITY</label>
+            <select value={f.own_legal_entity_id} onChange={e=>set('own_legal_entity_id',e.target.value)}>
+              <option value="">— select —</option>
+              {ownLEs.map(e=><option key={e.id} value={e.id}>{e.short_name||e.name}</option>)}
+            </select>
+          </div>
+          <div className="form-field">
+            <label>COUNTERPARTY</label>
+            <select value={f.counterparty_id} onChange={e=>set('counterparty_id',e.target.value)}>
+              <option value="">— select —</option>
+              {cps.filter(c=>c.is_active).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="form-section-title">ECONOMICS</div>
+        <div className="form-row-2">
+          <div className="form-field">
+            <label>NOTIONAL *</label>
+            <input placeholder="10,000,000" value={f.notional} onChange={e=>set('notional',e.target.value)}/>
+          </div>
+          <div className="form-field">
+            <label>CURRENCY</label>
+            <select value={f.notional_ccy} onChange={e=>set('notional_ccy',e.target.value)}>
+              {CURRENCIES.map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-row-3">
+          <div className="form-field">
+            <label>TRADE DATE</label>
+            <input type="date" value={f.trade_date} onChange={e=>set('trade_date',e.target.value)}/>
+          </div>
+          <div className="form-field">
+            <label>EFFECTIVE DATE</label>
+            <input type="date" value={f.effective_date} onChange={e=>set('effective_date',e.target.value)}/>
+          </div>
+          <div className="form-field">
+            <label>MATURITY DATE *</label>
+            <input type="date" value={f.maturity_date} onChange={e=>set('maturity_date',e.target.value)}/>
+          </div>
+        </div>
+
+        <div className="form-section-title">INSTRUMENT TERMS</div>
+        <TermsForm it={f.instrument_type} terms={f.terms} onChange={t=>set('terms',t)}/>
+
+        <div className="form-section-title">PORTFOLIO</div>
+        <div className="form-row-2">
+          <div className="form-field">
+            <label>DESK</label>
+            <input placeholder="RATES TRADING" value={f.desk} onChange={e=>set('desk',e.target.value)}/>
+          </div>
+          <div className="form-field">
+            <label>BOOK</label>
+            <input placeholder="G10 RATES" value={f.book} onChange={e=>set('book',e.target.value)}/>
+          </div>
+        </div>
+
+        {err && <div className="form-error">{err}</div>}
+      </div>
+
+      <div className="add-panel-footer">
+        <button className="btn-cancel" onClick={onClose}>CANCEL</button>
+        <button className="btn-confirm" onClick={submit} disabled={busy}>
+          {busy ? 'BOOKING...' : 'BOOK TRADE'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Summary bar ────────────────────────────────────────────────────────────────
+
+function SummaryBar({ trades }) {
+  const live    = trades.filter(t=>t.status==='LIVE').length
+  const pending = trades.filter(t=>t.status==='PENDING').length
+
+  const byCCY = {}
+  trades.filter(t=>t.status==='LIVE'&&t.notional&&t.notional_ccy).forEach(t=>{
+    byCCY[t.notional_ccy] = (byCCY[t.notional_ccy]||0) + Number(t.notional)
+  })
+  const top = Object.entries(byCCY).sort(([,a],[,b])=>b-a).slice(0,3)
+
+  return (
+    <div className="summary-bar">
+      <div className="summary-stat">
+        <span className="summary-val">{trades.length}</span>
+        <span className="summary-lbl">TOTAL</span>
+      </div>
+      <div className="summary-divider"/>
+      <div className="summary-stat">
+        <span className="summary-val" style={{color:'var(--accent)'}}>{live}</span>
+        <span className="summary-lbl">LIVE</span>
+      </div>
+      <div className="summary-divider"/>
+      <div className="summary-stat">
+        <span className="summary-val" style={{color:'var(--amber)'}}>{pending}</span>
+        <span className="summary-lbl">PENDING</span>
+      </div>
+      {top.map(([ccy,n])=>(
+        <><div className="summary-divider" key={ccy+'-div'}/>
+        <div className="summary-stat" key={ccy}>
+          <span className="summary-val">
+            {fmtN(n)}<span style={{fontSize:'0.62rem',opacity:0.55,marginLeft:'0.25rem'}}>{ccy}</span>
+          </span>
+          <span className="summary-lbl">LIVE NOTIONAL</span>
+        </div></>
+      ))}
+    </div>
+  )
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────────
+
+export default function Trades() {
+  const {
+    trades, loading, error,
+    filters, setFilter,
+    fetchTrades, addTrade, updateTradeStatus,
+    filteredTrades,
+  } = useTradesStore()
+
+  const [cps, setCps] = useState([])
+  const [les, setLes] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [showAdd, setShowAdd]   = useState(false)
+  const [sortCol, setSortCol]   = useState('trade_date')
+  const [sortDir, setSortDir]   = useState('desc')
+
+  useEffect(() => {
+    fetchTrades()
+    supabase.from('counterparties').select('*').then(({data})=>setCps(data||[]))
+    supabase.from('legal_entities').select('*').then(({data})=>setLes(data||[]))
+  }, [])
+
+  const toggleSort = (col) => {
+    if (sortCol===col) setSortDir(d=>d==='asc'?'desc':'asc')
+    else { setSortCol(col); setSortDir('asc') }
+  }
+
+  const displayed = filteredTrades().slice().sort((a,b) => {
+    const av = a[sortCol]??'', bv = b[sortCol]??''
+    const c = av<bv?-1:av>bv?1:0
+    return sortDir==='asc'?c:-c
+  })
+
+  const SH = ({col,label}) => (
+    <th className={`th-sortable ${sortCol===col?'th-active':''}`} onClick={()=>toggleSort(col)}>
+      {label} {sortCol===col?(sortDir==='asc'?'↑':'↓'):''}
+    </th>
+  )
+
+  return (
+    <div className="trades-workspace">
+      <div className="trades-header">
+        <div className="trades-title">
+          <h2>TRADE BLOTTER</h2>
+          <span className="trades-count">{displayed.length} of {trades.length} trades</span>
+        </div>
+        <button className="btn-add-trade" onClick={()=>{setShowAdd(true);setSelected(null)}}>
+          + BOOK TRADE
+        </button>
+      </div>
+
+      <SummaryBar trades={trades}/>
+
+      <div className="trades-filters">
+        <input className="filter-search"
+          placeholder="SEARCH — ref, counterparty, desk, instrument..."
+          value={filters.search}
+          onChange={e=>setFilter('search',e.target.value)}/>
+        <div className="filter-chips">
+          {['ALL','PENDING','LIVE','MATURED','CANCELLED'].map(s=>(
+            <button key={s}
+              className={`chip ${filters.status===s?'chip-active':''}`}
+              style={filters.status===s&&STATUS_META[s]?{borderColor:STATUS_META[s].color,color:STATUS_META[s].color}:{}}
+              onClick={()=>setFilter('status',s)}>{s}</button>
+          ))}
+        </div>
+        <div className="filter-chips">
+          {['ALL',...ASSET_CLASSES].map(ac=>(
+            <button key={ac}
+              className={`chip ${filters.assetClass===ac?'chip-active':''}`}
+              style={filters.assetClass===ac&&AC_META[ac]?{borderColor:AC_META[ac].color,color:AC_META[ac].color}:{}}
+              onClick={()=>setFilter('assetClass',ac)}>{ac==='ALL'?'ALL CLASSES':ac}</button>
+          ))}
+        </div>
+        <div className="filter-chips">
+          {['ALL','WORKING','PRODUCTION','HISTORY'].map(s=>(
+            <button key={s}
+              className={`chip ${filters.store===s?'chip-active':''}`}
+              onClick={()=>setFilter('store',s)}>{s==='ALL'?'ALL STORES':s}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className={`trades-main ${selected||showAdd?'with-panel':''}`}>
+        <div className="trades-grid-wrapper">
+          {loading && <div className="trades-loading">LOADING BLOTTER...</div>}
+          {error   && <div className="trades-error">{error}</div>}
+          {!loading && !error && (
+            <table className="trades-table">
+              <thead>
+                <tr>
+                  <SH col="trade_ref"      label="REF"/>
+                  <th>CLASS</th>
+                  <SH col="instrument_type" label="INSTRUMENT"/>
+                  <th>COUNTERPARTY</th>
+                  <SH col="notional"       label="NOTIONAL"/>
+                  <th>TENOR</th>
+                  <SH col="trade_date"     label="TRADE DATE"/>
+                  <SH col="maturity_date"  label="MATURITY"/>
+                  <SH col="status"         label="STATUS"/>
+                  <th>STORE</th>
+                </tr>
+              </thead>
+              <tbody>
+                {displayed.length===0
+                  ? <tr><td colSpan={10} className="empty-row">
+                      {trades.length===0
+                        ? 'NO TRADES — CLICK + BOOK TRADE TO BEGIN'
+                        : 'NO TRADES MATCH CURRENT FILTERS'}
+                    </td></tr>
+                  : displayed.map(t=>(
+                    <TradeRow key={t.id} trade={t}
+                      selected={selected?.id===t.id}
+                      onSelect={t=>{setSelected(t);setShowAdd(false)}}/>
+                  ))
+                }
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {selected && !showAdd && (
+          <TradeDetail trade={selected} onClose={()=>setSelected(null)}
+            onStatusUpdate={async (id,status)=>{
+              await updateTradeStatus(id,status)
+              setSelected(p=>p?{...p,status}:null)
+            }}/>
+        )}
+        {showAdd && (
+          <AddPanel cps={cps} les={les} onAdd={addTrade}
+            onClose={()=>setShowAdd(false)}/>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -1,1 +1,9 @@
 .env 
+write_anthropic_key.js 
+write_env*.js 
+backend/.env 
+backend/__pycache__/ 
+write_anthropic_key.js 
+write_env*.js 
+backend/.env 
+backend/__pycache__/ 

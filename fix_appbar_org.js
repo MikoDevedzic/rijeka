@@ -1,4 +1,15 @@
-import { useNavigate, useLocation } from 'react-router-dom'
+const fs = require('fs');
+const path = require('path');
+const ROOT = 'C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src';
+
+function write(rel, content) {
+  const full = path.join(ROOT, rel);
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  fs.writeFileSync(full, content, 'utf8');
+  console.log('wrote:', rel);
+}
+
+write('components/layout/AppBar.jsx', `import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 
 const MODULES = [
@@ -64,3 +75,42 @@ export default function AppBar() {
     </header>
   )
 }
+`);
+
+// ── Fix OrgHierarchy — add book/strategy to type color map ───────────────────
+const orgPath = path.join(ROOT, 'components', 'org', 'OrgHierarchy.jsx');
+let org = fs.readFileSync(orgPath, 'utf8');
+
+// Find the TYPE_COLOR or similar map and add book/strategy
+// Also find child type selector and add book as option under desk
+const before = org;
+
+// Add book and strategy colors wherever the node type color map is defined
+org = org.replace(
+  /sub_desk\s*:\s*['"]([^'"]+)['"]/g,
+  `sub_desk: '$1', book: 'var(--blue)', strategy: 'var(--purple)'`
+);
+
+// Add book as a selectable child type (when adding child under desk)
+org = org.replace(
+  /['"]sub_desk['"]/g,
+  `'book'`
+);
+
+// Fix the legend/key if sub is shown
+org = org.replace(/SUB.*?sub_desk/gs, match =>
+  match.replace('sub_desk', 'book').replace('SUB', 'BOOK')
+);
+
+if (org !== before) {
+  fs.writeFileSync(orgPath, org, 'utf8');
+  console.log('✅  OrgHierarchy.jsx — book node type added to color map');
+} else {
+  console.log('⚠️   OrgHierarchy.jsx — no changes made (pattern not found)');
+  console.log('    The loading issue may be a DB/RLS issue, not a render issue.');
+  console.log('    Check: Supabase → Authentication → Policies → org_nodes');
+}
+
+console.log('\n✅  AppBar.jsx — module switcher live');
+console.log('    HOME | BLOTTER | CONFIGURATIONS in top bar');
+console.log('    No Command Center round-trip needed');

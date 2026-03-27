@@ -1,70 +1,73 @@
 import { useEffect } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/useAuthStore'
-import LoginPage     from './components/auth/LoginPage'
-import SignupPage    from './components/auth/SignupPage'
-import ConfirmPage   from './components/auth/ConfirmPage'
-import AuthGuard     from './components/auth/AuthGuard'
-import CommandCenter from './components/CommandCenter'
-import AppBar        from './components/layout/AppBar'
-import CfgNav        from './components/layout/CfgNav'
+import AuthGuard        from './components/auth/AuthGuard'
+import LoginPage        from './components/auth/LoginPage'
+import SignupPage       from './components/auth/SignupPage'
+import ConfirmPage      from './components/auth/ConfirmPage'
+import CommandCenter    from './components/CommandCenter'
+import AppBar           from './components/layout/AppBar'
+import CfgNav           from './components/layout/CfgNav'
+import BlotterShell     from './components/blotter/BlotterShell'
+import CurvesWorkspace  from './components/market-data/CurvesWorkspace'
+import OrgHierarchy     from './components/org/OrgHierarchy'
+import LegalEntities    from './components/onboarding/LegalEntities'
+import Counterparties   from './components/onboarding/Counterparties'
+import Users            from './components/admin/Users'
 
-// ⚠️ VERIFY: adjust filename if yours differs
-import CurvesWorkspace from './components/market-data/CurvesWorkspace'
-
-import OrgHierarchy   from './components/org/OrgHierarchy'
-import LegalEntities  from './components/onboarding/LegalEntities'
-import Counterparties from './components/onboarding/Counterparties'
-
-// Layout wrapper for all /configurations/* routes
-function CfgLayout() {
+function BlotterLayout() {
   return (
-    <div style={{
-      display:'flex', flexDirection:'column',
-      height:'100vh', background:'var(--bg)', overflow:'hidden'
-    }}>
+    <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
-      <div style={{ display:'flex', flex:1, overflow:'hidden' }}>
+      <div style={{flex:1,overflow:'hidden'}}><AuthGuard /></div>
+    </div>
+  )
+}
+
+function ConfigLayout() {
+  return (
+    <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
+      <AppBar />
+      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
         <CfgNav />
-        <main style={{ flex:1, overflowY:'auto' }}>
-          <Outlet />
-        </main>
+        <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><AuthGuard /></main>
       </div>
     </div>
   )
 }
 
 export default function App() {
-  const initAuth = useAuthStore((s) => s.initAuth)
-
-  // ← this was the missing line — kicks off session check on mount
-  useEffect(() => { initAuth() }, [initAuth])
-
+  const { initAuth, loading } = useAuthStore()
+  useEffect(() => { initAuth() }, [])
+  if (loading) return (
+    <div style={{height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)',color:'var(--accent)',fontFamily:'var(--mono)',fontSize:'0.75rem',letterSpacing:'0.15em'}}>
+      INITIALISING...
+    </div>
+  )
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
-        {/* ── Public ── */}
         <Route path="/login"   element={<LoginPage />} />
         <Route path="/signup"  element={<SignupPage />} />
         <Route path="/confirm" element={<ConfirmPage />} />
-
-        {/* ── Protected ── */}
         <Route element={<AuthGuard />}>
           <Route path="/command-center" element={<CommandCenter />} />
-
-          {/* Configurations workspace */}
-          <Route element={<CfgLayout />}>
-            <Route path="/configurations/market-data/curves" element={<CurvesWorkspace />} />
-            <Route path="/configurations/org-hierarchy"      element={<OrgHierarchy />} />
-            <Route path="/configurations/legal-entities"     element={<LegalEntities />} />
-            <Route path="/configurations/counterparties"     element={<Counterparties />} />
+          <Route element={<BlotterLayout />}>
+            <Route path="/blotter" element={<BlotterShell />} />
+          </Route>
+          <Route element={<ConfigLayout />}>
+            <Route path="/configurations">
+              <Route index element={<Navigate to="market-data/curves" replace />} />
+              <Route path="market-data/curves" element={<CurvesWorkspace />} />
+              <Route path="org-hierarchy"      element={<OrgHierarchy />} />
+              <Route path="legal-entities"     element={<LegalEntities />} />
+              <Route path="counterparties"     element={<Counterparties />} />
+              <Route path="users"              element={<Users />} />
+            </Route>
           </Route>
         </Route>
-
-        {/* ── Fallbacks ── */}
-        <Route path="/"  element={<Navigate to="/command-center" replace />} />
-        <Route path="*"  element={<Navigate to="/command-center" replace />} />
+        <Route path="*" element={<Navigate to="/command-center" replace />} />
       </Routes>
-    </Router>
+    </BrowserRouter>
   )
 }
