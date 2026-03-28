@@ -1,7 +1,7 @@
 """
 Rijeka — Greeks / Risk Sensitivities
 Sprint 3D: bump-and-reprice framework.
-Sprint 4G: renamed PV01→IR01, DV01→IR01_DISC. Fixed IR01_DISC calculation.
+Sprint 4G: renamed IR01→IR01, IR01_DISC→IR01_DISC. Fixed IR01_DISC calculation.
 
 RISK TAXONOMY (Rijeka Standard — see Architecture Section 26):
   IR01       — parallel +1bp shift on ALL rate curves (discount + forecast)

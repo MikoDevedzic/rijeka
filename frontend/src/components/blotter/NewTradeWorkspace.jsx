@@ -1892,7 +1892,7 @@ export default function NewTradeWorkspace({tab}) {
       totalNPV += legPV
       legPVs.push({label: leg.label || ('L' + (li+1)), direction: leg.direction, pv: legPV})
     })
-    // PV01: bump 1bp
+    // IR01: bump 1bp
     let npv1bp = 0
     const r1 = r + 0.0001
     legs.forEach((leg) => {
@@ -1913,8 +1913,8 @@ export default function NewTradeWorkspace({tab}) {
       }
       npv1bp += sign * legPV
     })
-    const pv01 = npv1bp - totalNPV
-    setIndResult({npv: totalNPV, pv01, legs: legPVs})
+    const ir01 = npv1bp - totalNPV
+    setIndResult({npv: totalNPV, ir01, legs: legPVs})
     setIndBusy(false)
   }, [legs, effectiveDate, maturityDate, indRate])
 
@@ -2228,7 +2228,7 @@ export default function NewTradeWorkspace({tab}) {
 
             {indResult && (() => {
               const npv = indResult.npv
-              const pv01 = indResult.pv01
+              const ir01 = indResult.ir01
               const npvColor = npv >= 0 ? 'var(--accent)' : 'var(--red)'
               const fmtAmt = v => (v >= 0 ? '+' : '-') + '$' + Math.round(Math.abs(v)).toLocaleString('en-US')
               return (
@@ -2240,8 +2240,8 @@ export default function NewTradeWorkspace({tab}) {
                       <div className="ntw-metric-sub">indicative</div>
                     </div>
                     <div className="ntw-metric">
-                      <div className="ntw-metric-label">PV01</div>
-                      <div className="ntw-metric-value" style={{color:'var(--blue)'}}>{fmtAmt(pv01)}</div>
+                      <div className="ntw-metric-label">IR01</div>
+                      <div className="ntw-metric-value" style={{color:'var(--blue)'}}>{fmtAmt(ir01)}</div>
                       <div className="ntw-metric-sub">+1bp parallel</div>
                     </div>
                   </div>

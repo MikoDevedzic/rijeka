@@ -59,8 +59,8 @@ const SECTIONS = {
   PRICING: [
     { label:'NPV (CLEAN)',    fn: t => ({ val: null, stub:'SPRINT 3' }) },
     { label:'NPV (DIRTY)',    fn: t => ({ val: null, stub:'SPRINT 3' }) },
-    { label:'PV01',           fn: t => ({ val: null, stub:'SPRINT 3' }) },
-    { label:'DV01',           fn: t => ({ val: null, stub:'SPRINT 3' }) },
+    { label:'IR01',           fn: t => ({ val: null, stub:'SPRINT 3' }) },
+    { label:'IR01_DISC',           fn: t => ({ val: null, stub:'SPRINT 3' }) },
     { label:'VEGA',           fn: t => ({ val: null, stub:'SPRINT 3' }) },
     { label:'THETA',          fn: t => ({ val: null, stub:'SPRINT 3' }) },
   ],
