@@ -1,0 +1,1531 @@
+\documentclass[12pt,letterpaper]{article}
+
+% ── PACKAGES ──────────────────────────────────────────────────────────────────
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{bm}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{setspace}
+\usepackage{titlesec}
+\usepackage{abstract}
+\usepackage{natbib}
+\usepackage{fancyhdr}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{threeparttable}
+\usepackage{tabularx}
+
+% ── COLOURS ───────────────────────────────────────────────────────────────────
+\definecolor{navyblue}{RGB}{26,58,92}
+\definecolor{accentblue}{RGB}{46,95,138}
+\definecolor{chainpurple}{RGB}{96,48,170}
+\definecolor{posgreen}{RGB}{26,107,58}
+\definecolor{dimgray}{RGB}{100,100,100}
+\definecolor{lightgray}{RGB}{245,247,250}
+\definecolor{warmred}{RGB}{180,40,40}
+
+% ── HYPERREF ──────────────────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=accentblue,
+  citecolor=accentblue,
+  urlcolor=accentblue,
+  pdftitle={Atomic Settlement and Tokenised Collateral in Bilateral Derivatives},
+  pdfauthor={Miko Devedzic},
+  pdfsubject={XVA, CCR, Collateral, Regulatory Capital, Blockchain},
+  pdfkeywords={XVA, CVA, FVA, MVA, PFE, EPE, SIMM, MPoR, Blockchain,
+               Atomic Settlement, Tokenised Collateral, SA-CCR}
+}
+
+% ── TYPOGRAPHY ────────────────────────────────────────────────────────────────
+\setstretch{1.15}
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+
+% ── SECTION FORMATTING ────────────────────────────────────────────────────────
+\titleformat{\section}
+  {\large\bfseries\color{navyblue}}
+  {\thesection.}{0.5em}{}
+  [\vspace{-4pt}\textcolor{accentblue}{\rule{\linewidth}{0.8pt}}]
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{navyblue}}
+  {\thesubsection}{0.5em}{}
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\itshape}
+  {\thesubsubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{14pt}{6pt}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+
+% ── HEADER / FOOTER ───────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\setlength{\headheight}{15pt}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+\fancyhead[L]{\small\textcolor{dimgray}{BLOCKCHAIN IN BILATERAL
+  DERIVATIVES --- DEVEDZIC (2026)}}
+\fancyhead[R]{\small\textcolor{dimgray}{\thepage}}
+\fancyfoot[C]{\small\textcolor{dimgray}{Working Paper ---
+  SSRN Electronic Journal --- March 2026}}
+
+% ── EQUATION NUMBERING ────────────────────────────────────────────────────────
+\numberwithin{equation}{section}
+
+% ── THEOREM ENVIRONMENTS ──────────────────────────────────────────────────────
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[proposition]
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}[section]
+
+% ── CUSTOM MATH COMMANDS ──────────────────────────────────────────────────────
+\newcommand{\EQ}{\mathbb{E}^{\mathbb{Q}}}          % expectation under Q
+\newcommand{\Q}{\mathbb{Q}}                         % risk-neutral measure
+\newcommand{\SIMM}{\mathrm{SIMM}}
+\newcommand{\RW}{\mathrm{RW}}
+\newcommand{\MF}{\mathrm{MF}}
+\newcommand{\EAD}{\mathrm{EAD}}
+\newcommand{\MPoR}{\mathrm{MPoR}}
+\newcommand{\EE}{\mathrm{EE}}
+\newcommand{\ENE}{\mathrm{ENE}}
+\newcommand{\PFE}{\mathrm{PFE}}
+\newcommand{\EPE}{\mathrm{EPE}}
+\newcommand{\WS}{\mathrm{WS}}
+\newcommand{\CR}{\mathrm{CR}}
+\newcommand{\Kb}{K_b}
+\newcommand{\Sb}{S_b}
+\newcommand{\df}{B(0,t)}
+\newcommand{\surv}[1]{Q_{#1}(0,t)}
+\newcommand{\hz}[1]{\lambda_{#1}(t)}
+
+% ── ABSTRACT STYLE ────────────────────────────────────────────────────────────
+\renewcommand{\abstractname}{\textbf{Abstract}}
+\setlength{\absleftindent}{0pt}
+\setlength{\absrightindent}{0pt}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\thispagestyle{empty}
+
+% ── TITLE PAGE ────────────────────────────────────────────────────────────────
+\begin{center}
+
+{\LARGE\bfseries\color{navyblue}
+  Blockchain in Bilateral Derivatives Markets:\\[6pt]
+  Quantifying the Impact on XVA Pricing,\\
+  Counterparty Credit Risk, Collateral,\\
+  and Regulatory Capital
+}
+
+\vspace{20pt}
+
+{\large\textbf{Miko Devedzic}}\\[4pt]
+{\normalsize\color{dimgray}Head of Valuation Control, Banking Industry}\\[2pt]
+{\normalsize\color{accentblue}hello@rijeka.app}\\[16pt]
+{\normalsize\color{dimgray}March 2026}\\[6pt]
+{\small\itshape\color{dimgray}
+  Working Paper --- SSRN Electronic Journal.
+  Comments welcome at
+  \href{mailto:hello@rijeka.app}{hello@rijeka.app}.
+}
+
+\end{center}
+
+\vspace{12pt}
+
+% ── ABSTRACT ──────────────────────────────────────────────────────────────────
+\begin{abstract}
+\noindent
+The ISDA Standard Initial Margin Model (SIMM) calibrates risk weights to the
+99th percentile of $N$-day market moves, where $N$ is the Margin Period of
+Risk (MPoR). The BCBS-IOSCO framework mandates a minimum MPoR of ten business
+days for bilateral non-cleared derivatives---deliberately set twice the
+five-day floor for centrally cleared instruments as a structural clearing
+incentive. Every risk weight in ISDA SIMM v2.8+2506 across all six risk
+classes embeds this assumption.
+
+This paper provides a comprehensive quantitative analysis of how blockchain
+trade confirmation and atomic settlement restructure the bilateral derivatives
+cost stack across four dimensions: XVA pricing, counterparty credit risk,
+collateral economics, and SA-CCR regulatory capital. We identify eight
+mechanisms through which on-chain infrastructure reduces costs and provide
+closed-form quantification of each. The primary mechanism---regulatory
+recognition of a compressed MPoR for blockchain-confirmed trades---reduces
+every SIMM risk weight by $\sqrt{5/10} = 1/\!\sqrt{2} \approx 0.7071$,
+implying a portfolio-invariant 29.3\% reduction in initial margin across all
+risk classes simultaneously.
+
+On XVA pricing: CVA falls 60--70\% as expected exposure profiles collapse
+under continuous margining; FVA falls 80--100\% as automated variation margin
+eliminates the uncollateralised funding gap; MVA falls 40--55\% through lower
+IM balance and reduced net funding spread on tokenised collateral; KVA falls
+68--84\% via SA-CCR maturity factor compression. All-in XVA falls 60--66\%.
+On counterparty credit risk: PFE and EPE profiles collapse as MPoR compresses
+the close-out horizon; credit limit capacity increases 3.6--7.2 times for
+typical bilateral portfolios. On collateral: the SIMM IM balance falls 29--40\%
+and tokenised IM earns 45--50\,bp of additional yield while posted, directly
+reducing MVA. On regulatory capital: SA-CCR EAD falls 68--84\%, producing
+equivalent savings in CCR capital requirements.
+
+We further demonstrate that the regulatory logic underlying the bilateral MPoR
+penalty inverts under blockchain settlement, raising the question of whether
+blockchain-confirmed bilateral derivatives should warrant lower capital
+requirements than centrally cleared instruments. We also address implications
+for buy-side institutions, corporate hedgers, and financial regulators. CFTC
+rulemaking targeted for August 2026 provides the legislative vehicle.
+
+\vspace{8pt}
+\noindent\textbf{Keywords:} ISDA SIMM, XVA, CVA, FVA, MVA, KVA, PFE, EPE,
+MPoR, Blockchain, Atomic Settlement, Tokenised Collateral, SA-CCR,
+Counterparty Credit Risk, CFTC, BCBS-IOSCO
+
+\vspace{4pt}
+\noindent\textbf{JEL Classification:} G12, G13, G15, G18, G28
+\end{abstract}
+
+\vspace{10pt}
+
+% ── DISCLOSURES ───────────────────────────────────────────────────────────────
+\noindent\rule{\linewidth}{0.4pt}
+
+\vspace{4pt}
+\noindent{\small\textbf{Personal Capacity Disclaimer.}
+The author writes in a personal capacity. Views expressed are solely the
+author's own and do not represent those of any employer, institution, or
+affiliated organisation. No non-public proprietary data has been used.}
+
+\vspace{6pt}
+\noindent{\small\textbf{Author's Note on AI Assistance.}
+The intellectual framework, analytical thesis, and industry insights in this
+paper are entirely the author's own, developed through fifteen years of
+practitioner experience in derivatives valuation, counterparty credit risk,
+and XVA. The central argument---that blockchain settlement compresses the
+Margin Period of Risk and restructures the bilateral derivatives cost
+stack---originated with the author and does not appear in prior literature to
+the author's knowledge. Large language model AI was used to assist with
+mathematical formalisation and \LaTeX\ typesetting of equations, prose
+drafting under the author's direction, and structural organisation of the
+paper. All analytical judgements, numerical assumptions, regulatory
+interpretations, and conclusions were made by the author. The AI served as a
+sophisticated drafting and formalisation tool; the intellectual contribution
+is the author's. The author believes transparent disclosure of AI assistance
+in academic and practitioner work is both ethically correct and professionally
+important as these tools become standard in research practice.}
+
+\vspace{4pt}
+\noindent\rule{\linewidth}{0.4pt}
+
+\newpage
+\setcounter{page}{1}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+\label{sec:intro}
+% ══════════════════════════════════════════════════════════════════════════════
+
+When Wall Street's paperwork crisis of 1968 threatened to paralyse equity
+markets, the Depository Trust Company resolved it not by improving trading,
+but by dematerialising the infrastructure beneath it. Physical certificates
+became electronic book entries. \$87 trillion in equities now clears annually
+on that foundation. Fifty years later, bilateral derivatives markets face an
+equivalent structural failure---not in volume, but in architecture. ISDA
+confirmations negotiated over hours. Initial margin disputed between
+independently computed sensitivity inputs, generating daily reconciliation
+workflows that consume billions in operational cost annually. Collateral
+settling T+1 across correspondent chains. Underlying all of it, a regulatory
+assumption---the ten-day \emph{Margin Period of Risk (MPoR)}---set in 2013
+not because it reflected close-out reality, but because regulators wished to
+make bilateral derivatives structurally more expensive than cleared equivalents
+\citep{bcbs_iosco_2015}.
+
+The ten-day bilateral MPoR is embedded in every risk weight in ISDA SIMM
+v2.8+2506. Since SIMM calibrates to the 99th percentile of $N$-day market
+moves, and market move distributions scale with $\sqrt{N}$, any change in
+the regulatory MPoR produces an immediate, portfolio-invariant, proportional
+change in every risk weight across every risk class simultaneously. The
+mathematics is not in dispute. The question is whether regulators will
+recognise a shorter MPoR for bilateral derivatives whose settlement mechanics
+are demonstrably equivalent to---or superior to---centrally cleared
+instruments.
+
+This paper argues they must, and provides the quantitative case across four
+distinct dimensions. First, XVA pricing: CVA, FVA, MVA, and KVA each
+compress through specific channels linked to MPoR compression and continuous
+margining. Second, counterparty credit risk: PFE and EPE profiles collapse
+as the close-out horizon shrinks and intraday exposure accumulation is
+eliminated. Third, collateral economics: initial margin falls 29--40\%, and
+tokenised IM earns yield while posted, reducing the cost of funding
+collateral. Fourth, regulatory capital: SA-CCR EAD falls by the same MPoR
+scaling factor as SIMM, producing identical proportional savings in CCR
+capital requirements.
+
+The paper proceeds as follows. Section~\ref{sec:simm} reviews the ISDA SIMM
+framework and MPoR scaling law. Section~\ref{sec:mechanisms} identifies eight
+blockchain mechanisms. Section~\ref{sec:xva} traces the XVA impact.
+Section~\ref{sec:ccr} addresses counterparty credit risk: PFE, EPE, and
+exposure profile dynamics. Section~\ref{sec:collateral} treats collateral
+economics. Section~\ref{sec:saccr} covers SA-CCR and regulatory capital.
+Section~\ref{sec:ecosystem} addresses implications for buy-side institutions,
+corporate hedgers, and regulators. Section~\ref{sec:regulatory} sets out the
+regulatory roadmap. Section~\ref{sec:conclusion} concludes.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{ISDA SIMM, MPoR, and the Bilateral Penalty}
+\label{sec:simm}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{The Three-Level SIMM Aggregation}
+
+ISDA SIMM v2.8+2506 is a sensitivity-based parametric model computing
+initial margin from portfolio Greeks across six risk classes: GIRR,
+CSR-Qualifying, CSR-Non-Qualifying, FX, Equity, and Commodity. Aggregation
+proceeds in three levels.
+
+\subsubsection*{Level 1: Weighted Sensitivities}
+
+For each risk factor $k$ within bucket $b$:
+\begin{equation}
+  \WS_k \;=\; \RW_k \;\times\; s_k \;\times\; \CR_k
+  \label{eq:ws}
+\end{equation}
+where $\RW_k$ is the supervisory risk weight (the 99th percentile of the
+$N$-day move distribution); $s_k$ is the net sensitivity (delta, vega, or
+curvature); and the concentration risk factor is:
+\begin{equation}
+  \CR_k \;=\; \max\!\left(1,\;
+  \sqrt{\frac{\bigl|\sum_{j \in b} s_j\bigr|}{T_b}}\right)
+  \label{eq:cr}
+\end{equation}
+with $T_b$ the supervisory concentration threshold for bucket $b$.
+
+\subsubsection*{Level 2: Bucket Aggregation}
+
+\begin{equation}
+  \Kb \;=\; \sqrt{\;\max\!\left(0,\;\sum_{k \in b}\WS_k^2
+  \;+\;\sum_{k \in b}\sum_{\ell \neq k}\rho_{k\ell}\,\WS_k\,\WS_\ell
+  \right)}
+  \label{eq:bucket}
+\end{equation}
+where $\rho_{k\ell} \in [-1,1]$ is the supervisory intra-bucket correlation.
+The $\max(0,\cdot)$ prevents negative bucket-level IM for strongly
+negatively correlated positions.
+
+\subsubsection*{Level 3: Risk Class and Portfolio Aggregation}
+
+\begin{equation}
+  \mathrm{IM}_{\mathrm{rc}} \;=\;
+  \sqrt{\;\sum_b \Kb^2 \;+\;
+  \sum_b\sum_{c \neq b}\gamma_{bc}\,\Sb\,S_c\;}
+  \label{eq:rc}
+\end{equation}
+where $\Sb = \max(-\Kb,\,\min(\Kb,\,\sum_{k\in b}\WS_k))$ is the clipped
+net sensitivity at the bucket level, and $\gamma_{bc}$ the inter-bucket
+correlation. Total SIMM for a product class:
+\begin{equation}
+  \SIMM_{\mathrm{pc}} \;=\;\sqrt{\;\sum_{\mathrm{rc}}\mathrm{IM}_{\mathrm{rc}}^2\;}
+  \label{eq:pc}
+\end{equation}
+SIMM does not recognise diversification across product classes; total IM
+sums $\SIMM_{\mathrm{pc}}$ across all product classes.
+
+\subsection{The MPoR Calibration and the Fundamental Scaling Law}
+
+SIMM risk weights are calibrated as the 99th percentile of overlapping
+$N$-day risk factor returns, where $N = \MPoR$. Under the diffusion
+framework embedded in the calibration---consistent with the FRTB-SA approach
+on which SIMM is modelled---risk factor increments are stationary with
+variance proportional to horizon:
+\begin{equation}
+  \RW(N) \;=\; \RW(1)\;\times\;\sqrt{N}
+  \label{eq:scaling}
+\end{equation}
+Consequently, for any change in regulatory MPoR from $N_1$ to $N_2$ days:
+\begin{equation}
+  \frac{\RW(N_2)}{\RW(N_1)} \;=\; \sqrt{\frac{N_2}{N_1}}
+  \label{eq:ratio}
+\end{equation}
+This holds simultaneously and identically across all risk weights in all
+six risk classes. Because SIMM IM is positively homogeneous in the weighted
+sensitivities (equations \ref{eq:ws}--\ref{eq:pc}), a uniform scaling of
+all risk weights by $\lambda$ scales total SIMM IM by $\lambda$.\footnote{%
+  Exact when $\CR_k = 1$ for all $k$. With concentration risk, $\CR_k$
+  depends nonlinearly on $s_k$ through equation~\eqref{eq:cr}, breaking
+  exact homogeneity. For portfolios with moderate concentration the
+  approximation is negligible; for highly concentrated books the true
+  reduction will be slightly less than $\sqrt{N_2/N_1}$.}
+
+\begin{proposition}[Portfolio-Invariant MPoR Scaling of SIMM]
+  Under the positive homogeneity assumption, reducing the regulatory MPoR
+  from $N_1$ to $N_2$ business days reduces total SIMM IM by the factor
+  $\sqrt{N_2/N_1}$ simultaneously across all risk classes, all netting sets,
+  and all portfolio compositions.
+\end{proposition}
+
+For $N_1 = 10$, $N_2 = 5$:
+\begin{equation}
+  \frac{\SIMM_{\text{blockchain}}}{\SIMM_{\text{traditional}}}
+  \;=\;\sqrt{\frac{5}{10}}\;=\;\frac{1}{\sqrt{2}}\;\approx\;0.7071
+  \label{eq:primary}
+\end{equation}
+
+\begin{corollary}
+  Regulatory recognition of a five-day MPoR for blockchain-confirmed bilateral
+  trades produces a 29.3\% reduction in total SIMM IM that is invariant to
+  portfolio composition, asset class mix, counterparty credit quality, and
+  netting set size.
+\end{corollary}
+
+\subsection{The MPoR Doubling Mechanism Under Dispute Conditions}
+
+Under BCBS-IOSCO (2015), paragraph 3.4, the minimum MPoR doubles to
+\textbf{twenty business days} when a netting set has experienced two or more
+unresolved margin disputes within the preceding two quarters. The consequence:
+\begin{equation}
+  \frac{\RW(20)}{\RW(10)} \;=\;\sqrt{\frac{20}{10}}\;=\;\sqrt{2}\;\approx\;1.414
+  \label{eq:doubling}
+\end{equation}
+A 41.4\% increase in all risk weights for the duration of the dispute.
+Section~\ref{subsec:m1} demonstrates that the primary cause of bilateral
+SIMM disputes is categorically eliminated by blockchain.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Eight Mechanisms of Blockchain-Driven Cost Reduction}
+\label{sec:mechanisms}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Mechanism 1: Dispute Elimination and Prevention of MPoR Doubling}
+\label{subsec:m1}
+
+Under bilateral SIMM, each counterparty independently computes CRIF
+sensitivities using its proprietary pricing model. A ten-year USD IRS
+produces materially different IR01 values depending on curve construction
+and SOFR discount conventions. Both are internally self-consistent; neither
+is definitively wrong. But they generate divergent $\WS_k$, different
+$\Kb$, and different SIMM amounts---triggering reconciliation workflows and,
+when unresolved, the twenty-day doubling of equation~\eqref{eq:doubling}.
+
+With on-chain trade confirmation and a shared pricing oracle, both parties
+derive CRIF sensitivities from the same immutable on-chain record. The hash
+of the agreed sensitivity vector $\bm{s} = (s_1, \ldots, s_K)$ is anchored
+at the confirmation transaction. Disputes are \emph{structurally impossible}.
+The twenty-day MPoR doubling condition cannot trigger. Excess collateral held
+pending dispute resolution---estimated at 5--15\% of SIMM IM---is released
+immediately. Operational cost of reconciliation falls by 85--90\%.
+
+\subsection{Mechanism 2: On-Chain CRIF and Identical Sensitivity Inputs}
+
+The shared on-chain CRIF eliminates the entire reconciliation workflow.
+The five-step process of compute, format, transmit, reconcile, recompute is
+replaced by a single read of the on-chain sensitivity record. Both parties
+compute SIMM from an identical source. No reconciliation platform is required.
+
+\subsection{Mechanism 3: Tokenised IM Earns Yield While Posted}
+
+Traditional cash IM earns the overnight index rate (SOFR $\approx 4.30\%$,
+March 2026). A firm funding at SOFR $+ 65\,\mathrm{bp}$ bears a net
+funding cost of 65\,bp on posted IM. Tokenised T-bills or money market fund
+shares earn approximately 4.75--4.80\%---45--50\,bp above SOFR. The IM
+poster retains this yield while collateral is held in smart contract escrow,
+reducing the effective funding spread $s_f(t)$ from approximately 65\,bp to
+15--20\,bp, a 70--77\% reduction in the MVA funding cost component.
+CFTC Letter 25-39 (December 2025) explicitly enables this structure
+\citep{cftc_2025}.
+
+\subsection{Mechanism 4: Cleaner Dynamic Backtesting Data}
+
+The dynamic backtest counts days where $|\Delta V_t| >
+\widehat{\SIMM}_1(t) = \SIMM_{10}(t)/\sqrt{10}$ over a 250-day rolling
+window. Under traditional bilateral margining, P\&L during a dispute
+window is ambiguous---IM was not transferred on schedule, introducing
+systematic noise into the exception count. Under blockchain, every
+transfer is atomic, timestamped, and unambiguous. Every observation is
+clean. Spurious exceptions are eliminated, reducing unnecessary
+remediation IM add-ons.
+
+\subsection{Mechanism 5: Reduced Haircuts on Tokenised Collateral}
+
+Supervisory haircuts on IM collateral reflect credit risk, market
+volatility, and settlement lag risk. CFTC Letter 25-39 provides that
+tokenised collateral may bear an equivalent haircut to its traditional
+form ``subject to adjustment for any settlement-time differences''
+\citep{cftc_2025}. With atomic (T+0) settlement, settlement lag risk is
+zero, reducing effective haircuts on high-quality sovereign collateral
+by an estimated 40--60\% of the lag component.
+
+\subsection{Mechanism 6: Intraday Automated Margin Calls}
+
+Bilateral SIMM is called once daily on EOD positions; intraday exposure
+can accumulate for up to 23 hours. A smart contract monitoring exposure
+continuously and calling IM on threshold breach reduces the intraday
+accumulation window from 23 hours to $\tau$ hours. Under the
+square-root-of-time scaling:
+\begin{equation}
+  \frac{\sigma_{\text{intraday}}(\tau)}{\sigma_{\text{intraday}}(23)}
+  \;=\;\sqrt{\frac{\tau}{23}}
+  \label{eq:intraday}
+\end{equation}
+For $\tau = 4$ hours: $\sqrt{4/23} \approx 0.417$, a 58\% reduction in
+the intraday accumulation component, contributing approximately 10--15\%
+to total SIMM reduction independently of any regulatory MPoR change.
+
+\subsection{Mechanism 7: Regulatory MPoR Reduction from Ten to Five Days}
+\label{subsec:m7}
+
+\textbf{This is the primary mechanism.} The five regulatory justifications
+for the ten-day bilateral floor \citep[§3.3]{bcbs_iosco_2015} are:
+\begin{enumerate}[leftmargin=2.5em,itemsep=3pt,topsep=4pt]
+  \item \textit{No centralised close-out facility.} A smart contract
+    executes close-out automatically upon default detection. Settlement
+    completes in minutes.
+  \item \textit{Collateral disputes delaying close-out.} Eliminated by
+    Mechanism~1; disputes are structurally impossible under on-chain CRIF.
+  \item \textit{T+1/T+2 settlement creating settlement window exposure.}
+    Atomic (T+0) settlement eliminates the settlement window entirely.
+  \item \textit{Legal uncertainty about netting enforceability.} Smart
+    contract terms are pre-agreed, encoded, and automatically executable;
+    no ex post legal ambiguity is possible.
+  \item \textit{Absence of intraday margin calls.} Eliminated by
+    Mechanism~6; continuous monitoring replicates CCP intraday capability.
+\end{enumerate}
+The mathematical consequence follows from Proposition~1 and
+equation~\eqref{eq:primary}: a 29.3\% reduction in total SIMM IM across all
+risk classes, all netting sets, and all portfolio compositions.
+
+\subsection{Mechanism 8: On-Chain Calibration Data and Governance}
+
+SIMM is calibrated semiannually using historical data contributed by member
+firms. On-chain market data provides an alternative calibration basis
+verifiable by any participant, eliminating the data contribution incentive
+problem noted by the Bank of England \citep{pra_2022}, and providing the
+governance trust foundation that accelerates regulatory acceptance of reduced
+MPoR floors.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Impact on XVA Pricing}
+\label{sec:xva}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The all-in NPV of a bilateral derivative under the risk-neutral measure
+$\mathbb{Q}$ is:
+\begin{equation}
+  \mathrm{NPV} \;=\; \mathrm{TV} + \mathrm{CVA} + \mathrm{DVA}
+  + \mathrm{FVA} + \mathrm{ColVA} + \mathrm{MVA} + \mathrm{KVA}
+  \label{eq:npv}
+\end{equation}
+where TV is the theoretical value under risk-free collateralised discounting.
+
+\subsection{Collateral Framework and XVA Applicability}
+\label{subsec:framework}
+
+The applicability and magnitude of each XVA component depends critically on
+the collateral arrangement governing the netting set. This distinction is
+fundamental to correctly characterising the blockchain benefit for each
+participant type, and is a point practitioners understand intuitively but
+which is often elided in academic treatments.
+
+We distinguish three cases, each with a materially different XVA profile:
+
+\textbf{Case~1: Fully collateralised (daily VM + bilateral SIMM IM).}
+This is the standard bank-to-bank bilateral arrangement for in-scope
+counterparties. Variation margin is called and transferred daily, resetting
+the running MTM exposure to approximately zero. The expected positive
+exposure $\EE^*(t)$ in the CVA integral reflects \emph{only} what can
+accumulate during the MPoR close-out window:
+\begin{equation}
+  \EE^*_{\text{Case 1}}(t) \;\approx\;
+  \EQ\!\bigl[\max(\Delta V_{\MPoR}(t),\; 0)\bigr]
+  \label{eq:ee_case1}
+\end{equation}
+where $\Delta V_{\MPoR}(t) = V(t + \MPoR) - V(t)$ is the mark-to-market
+change during the close-out window. For liquid instruments with daily VM,
+this is small. CVA for bank-to-bank collateralised bilateral trades is
+typically \emph{near-zero} and not material for pricing purposes in normal
+market conditions. It is often not charged between major dealers.
+Blockchain compresses $\EE^*_{\text{Case 1}}$ further toward zero---from
+near-zero to asymptotically zero---but since the starting value is already
+immaterial, this channel produces negligible economic benefit. The
+\emph{primary} blockchain benefit for Case~1 portfolios is MVA (IM
+reduction), FVA (VM gap elimination), and SA-CCR capital.
+
+\textbf{Case~2: Uncollateralised (no CSA or threshold CSA).}
+This is the common situation for corporate end-users, sovereigns, and
+smaller institutions that have not entered into a CSA or whose CSA threshold
+is so large that VM is rarely or never called. Here $\EE^*(t)$ is the
+\emph{full} expected positive MTM exposure over the trade life:
+\begin{equation}
+  \EE^*_{\text{Case 2}}(t) \;=\;
+  \EQ\!\bigl[\max(V(t),\; 0)\bigr]
+  \label{eq:ee_case2}
+\end{equation}
+This is large and driven by the volatility of the trade, its tenor, and the
+portfolio composition---not by MPoR. \textbf{Blockchain confirmation per se
+does not change $\EE^*_{\text{Case 2}}$.} On-chain trade confirmation does
+not alter the collateral arrangement; it only verifies the trade terms. If
+no collateral is being posted, the exposure profile is identical to the
+traditional case. CVA for an uncollateralised trade is unchanged by
+blockchain confirmation alone, and SA-CCR uses the unmargined maturity
+factor (see Section~\ref{subsec:unmargined}), which also does not depend
+on MPoR.
+
+\textbf{Case~3: Transition to collateralised via blockchain.}
+This is the strategically important case. A counterparty that was
+operationally unable to run a CSA---because of the infrastructure, legal,
+and operational cost of daily margin calls, collateral sourcing, and dispute
+resolution---may become able to do so if collateral posting is atomically
+automated through a smart contract. When a previously uncollateralised
+counterparty transitions to tokenised collateral posting on-chain, the
+netting set migrates from Case~2 to Case~1 treatment. This transition
+produces the large CVA reduction---not because blockchain altered the CVA
+mechanics, but because it changed the collateral regime. The implications
+are discussed further in Section~\ref{sec:ecosystem}.
+
+\begin{table}[ht]
+\centering
+\caption{Blockchain XVA Benefit by Collateral Case}
+\label{tab:cases}
+\begin{tabular}{>{\raggedright}p{3.5cm}
+                >{\centering}p{2.0cm}
+                >{\centering}p{2.0cm}
+                >{\centering}p{2.0cm}
+                >{\centering\arraybackslash}p{2.0cm}}
+\toprule
+\textbf{Collateral Case} & \textbf{CVA} & \textbf{FVA} &
+\textbf{MVA} & \textbf{SA-CCR}\\
+\midrule
+Case 1: VM + IM CSA &
+  Near-zero $\to$ asymptotic zero &
+  Near-zero $\to$ zero &
+  \textcolor{posgreen}{$-$29--40\%} &
+  \textcolor{posgreen}{$-$29--84\%}\\[4pt]
+Case 2: No CSA &
+  \textbf{Unchanged} &
+  \textbf{Unchanged} &
+  N/A &
+  Unmargined MF---no MPoR\\[4pt]
+Case 3: Transition on-chain &
+  \textcolor{posgreen}{Large fall} &
+  \textcolor{posgreen}{Near-zero} &
+  \textcolor{posgreen}{Small new cost} &
+  \textcolor{posgreen}{$-$29--84\%}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The quantitative analysis in Sections~\ref{sec:xva}.\ref{subsec:cva}
+through~\ref{subsec:kva} addresses Case~1---the bank-to-bank fully
+collateralised bilateral portfolio---which is the dominant use case for
+bilateral dealer books. The ecosystem implications for Cases~2 and~3 are
+addressed in Section~\ref{sec:ecosystem}.
+
+\subsection{Credit Valuation Adjustment (CVA)}
+\label{subsec:cva}
+
+The following analysis applies to Case~1 netting sets (daily VM~+~IM CSA).
+As established in Section~\ref{subsec:framework}, $\EE^*(t)$ for a
+collateralised netting set reflects only the MPoR close-out window
+accumulation per equation~\eqref{eq:ee_case1}. CVA for collateralised
+bank-to-bank bilateral trades is near-zero under traditional arrangements;
+blockchain pushes this asymptotically toward zero through MPoR compression.
+
+Following \citet{pykhtin_zhu_2007} and \citet{gregory_2020}, the unilateral
+CVA from party $A$ facing counterparty $B$ is:
+\begin{equation}
+  \mathrm{CVA}(T) \;=\; -(1-R_B)
+  \int_0^T \!\df\;\EE^{*}(t)\;\hz{B}\;\surv{B}\;\mathrm{d}t
+  \label{eq:cva}
+\end{equation}
+where $R_B$ is the expected recovery rate; $B(0,t)=\exp(-\int_0^t r(s)\,ds)$
+is the risk-free discount factor; $\EE^{*}(t)$ is as defined in
+equation~\eqref{eq:ee_case1} for collateralised netting sets; $\hz{B}$
+is the risk-neutral default intensity inferred from CDS spreads; and
+$\surv{B}=\exp(-\int_0^t\hz{B}\,ds)$ is the risk-neutral survival
+probability of $B$ to time $t$.
+
+In discretised Monte Carlo form:
+\begin{equation}
+  \mathrm{CVA}(T) \;\approx\; -(1-R_B)\sum_{n=1}^{N}
+  \df[t_n]\;\EE^{*}(t_n)
+  \bigl[Q_B(0,t_{n-1}) - Q_B(0,t_n)\bigr]
+  \label{eq:cvadiscrete}
+\end{equation}
+
+For collateralised netting sets, blockchain compresses $\EE^{*}(t)$ further
+through MPoR compression---reducing the close-out window from ten days to
+five (or fewer), proportionally reducing the market-move accumulation
+captured in equation~\eqref{eq:ee_case1}. Additionally,
+\emph{Herstatt risk}---the risk that one leg of a cross-currency settlement
+completes while the other fails---is identically zero under atomic
+settlement, eliminating the settlement risk premium embedded in CVA for
+cross-currency instruments even under collateralised arrangements.
+
+For uncollateralised netting sets (Case~2), CVA is driven by the full
+MTM exposure profile of equation~\eqref{eq:ee_case2} and is \textbf{not
+reduced by blockchain confirmation per se}. The CVA benefit for
+uncollateralised counterparties arises only upon transition to
+collateralised treatment (Case~3), as described in
+Section~\ref{sec:ecosystem}.
+
+\subsection{Debit Valuation Adjustment (DVA)}
+
+\begin{equation}
+  \mathrm{DVA}(T) \;=\; (1-R_A)
+  \int_0^T \!\df\;\ENE^{*}(t)\;\hz{A}\;\surv{A}\;\mathrm{d}t
+  \label{eq:dva}
+\end{equation}
+where $\ENE^{*}(t) = \EQ[\max(-V(t),0)]$ is the expected negative exposure.
+DVA is positive for party $A$ and is compressed in magnitude alongside the
+exposure profile collapse, consistent with the bilateral symmetry
+$\mathrm{BVA} = \mathrm{DVA} - \mathrm{CVA}$ \citep{gregory_2020}.
+
+\subsection{Funding Valuation Adjustment (FVA)}
+
+Following \citet{burgard_kjaer_2013}:
+\begin{equation}
+  \mathrm{FVA}(T) \;=\;
+  -\int_0^T s_f(t)\;\df\;\EE(t)\;\mathrm{d}t
+  \;+\;\int_0^T s_b(t)\;\df\;\ENE(t)\;\mathrm{d}t
+  \label{eq:fva}
+\end{equation}
+where $s_f(t)$ is the funding spread on positive uncollateralised exposure;
+$s_b(t)$ is the benefit spread on negative uncollateralised exposure;
+$\EE(t) = \EQ[\max(V(t),0)]$; and $\ENE(t) = \EQ[\max(-V(t),0)]$ are the
+uncollateralised exposures. Under continuous intraday VM calls, $\EE(t)$
+collapses toward zero between call times, reducing FVA by 80--100\%.
+
+\subsection{Margin Valuation Adjustment (MVA)}
+\label{subsec:mva}
+
+\begin{equation}
+  \mathrm{MVA}(T) \;=\;
+  -\int_0^T s_f(t)\;\df\;\EQ\!\bigl[\mathrm{IM}(t)\bigr]\;\mathrm{d}t
+  \label{eq:mva}
+\end{equation}
+where $\EQ[\mathrm{IM}(t)] \eqqcolon \mathrm{ENIM}(t)$ is the expected SIMM
+IM at future time $t$ under $\Q$---a stochastic quantity depending on
+future portfolio Greeks along each simulated path. Blockchain reduces MVA
+through three independent channels:
+\begin{enumerate}[leftmargin=2.5em,itemsep=3pt,topsep=4pt]
+  \item \textit{IM amount reduction.} Mechanisms 1--7 reduce $\mathrm{IM}(t)$
+    along every simulated path by 29--40\%, proportionally reducing
+    $\mathrm{ENIM}(t)$.
+  \item \textit{Funding spread reduction.} Tokenised IM earns 45--50\,bp
+    above SOFR (Mechanism~3), reducing $s_f(t)$ from $\approx$65\,bp to
+    15--20\,bp.
+  \item \textit{Maturity tail elimination.} Atomic IM release at the
+    contractual maturity date eliminates the 3--5 business day return
+    delay present in traditional bilateral arrangements.
+\end{enumerate}
+Combined MVA reduction: 40--55\%.
+
+\subsection{Capital Valuation Adjustment (KVA)}
+
+\begin{equation}
+  \mathrm{KVA}(T) \;=\;
+  -h\int_0^T \df\;\EQ\!\bigl[\mathrm{KR}(t)\bigr]\;\mathrm{d}t
+  \label{eq:kva}
+\end{equation}
+where $h$ is the return-on-equity hurdle rate (typically 10--15\%) and
+$\EQ[\mathrm{KR}(t)]$ is the expected regulatory capital requirement at
+time $t$. For bilateral derivatives, $\mathrm{KR}(t)$ is dominated by
+SA-CCR EAD. Section~\ref{sec:saccr} demonstrates that SA-CCR EAD falls
+68--84\% under blockchain MPoR assumptions, with proportional reduction
+in $\EQ[\mathrm{KR}(t)]$ and KVA.
+
+\subsection{Combined XVA Impact}
+
+For a fully collateralised bilateral portfolio (Case~1), the economically
+significant blockchain benefits are MVA, FVA, and KVA---in that order of
+magnitude. MVA dominates because bilateral SIMM IM balances are large and
+multi-year, making the funding cost of posting IM the single largest XVA
+component for collateralised bank-to-bank trades. FVA is material for
+portfolios with residual uncollateralised exposure. KVA scales with
+SA-CCR EAD and is reduced proportionally. CVA for collateralised
+bank-to-bank bilateral trades is near-zero under both traditional and
+blockchain arrangements---the benefit is asymptotic rather than economic.
+
+\begin{table}[ht]
+\centering
+\begin{threeparttable}
+\caption{Blockchain XVA Benefit by Component --- Case~1 Collateralised Portfolio}
+\label{tab:xva}
+\begin{tabular}{>{\raggedright}p{2.8cm}
+                >{\centering}p{1.3cm}
+                >{\raggedright}p{5.2cm}
+                >{\centering}p{2.2cm}
+                >{\centering\arraybackslash}p{2.8cm}}
+\toprule
+\textbf{Component} & \textbf{Eq.} & \textbf{Mechanism} &
+\textbf{Reduction} & \textbf{Condition}\\
+\midrule
+MVA & \eqref{eq:mva} &
+  $\mathrm{ENIM}(t){\downarrow}$ 29--40\%; $s_f(t){\downarrow}$ 70\%;
+  maturity tail eliminated &
+  \textcolor{posgreen}{\textbf{40--55\%}} &
+  5-day MPoR + tokenised IM\\[5pt]
+FVA & \eqref{eq:fva} &
+  Continuous VM calls; $\EE(t) \to 0$ between calls &
+  \textcolor{posgreen}{\textbf{80--100\%}} &
+  Intraday automated VM\\[5pt]
+KVA & \eqref{eq:kva} &
+  SA-CCR EAD ${\downarrow}$ via MPoR maturity factor &
+  \textcolor{posgreen}{\textbf{68--84\%}} &
+  5-day (68\%) to 1-day (84\%) MPoR\\[5pt]
+DVA & \eqref{eq:dva} &
+  Symmetric to CVA; $\ENE^*(t)$ compression &
+  Compressed &
+  Proportional to CVA movement\\[5pt]
+CVA & \eqref{eq:cva} &
+  MPoR window $\EE^*(t)$; Herstatt elimination &
+  \textcolor{dimgray}{Asymptotic} &
+  Already near-zero for Case~1\\
+\midrule
+\multicolumn{3}{l}{\textbf{Dominant benefit (Case~1): MVA + FVA + KVA}} &
+  \multicolumn{2}{c}{\textcolor{chainpurple}{\textbf{Combined: 40--84\% by component}}}\\
+\bottomrule
+\end{tabular}
+\begin{tablenotes}\small
+\item Case~1: fully collateralised bilateral portfolio (daily VM + bilateral
+SIMM IM). Components ordered by economic magnitude for this case. CVA is
+near-zero for collateralised bank-to-bank bilateral trades under both
+traditional and blockchain arrangements; the benefit is real but asymptotic
+rather than economically material. For Case~3 (uncollateralised counterparty
+transitioning to on-chain collateralisation), CVA undergoes a large reduction
+as $\EE^*(t)$ migrates from the full MTM formulation to the MPoR-window
+formulation; see Section~\ref{subsec:corporates}. Percentage reductions
+apply to any portfolio size and composition.
+\end{tablenotes}
+\end{threeparttable}
+\end{table}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Counterparty Credit Risk: PFE, EPE, and Exposure Profile Dynamics}
+\label{sec:ccr}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Formal Definitions of PFE and EPE}
+
+While SA-CCR provides a regulatory approximation of counterparty credit risk
+exposure, the practitioner measures used for credit limit monitoring, default
+management, and bilateral credit management are \emph{Potential Future
+Exposure} (PFE) and \emph{Expected Positive Exposure} (EPE), computed by
+full Monte Carlo simulation of the portfolio value.
+
+\textbf{Potential Future Exposure} at confidence level $\alpha$ and
+horizon $t$ is the $\alpha$-quantile of the simulated exposure distribution:
+\begin{equation}
+  \PFE(\alpha, t) \;=\;
+  \inf\bigl\{x \in \mathbb{R} : \Pr\bigl(V^+(t) \leq x\bigr)
+  \geq \alpha\bigr\}
+  \label{eq:pfe}
+\end{equation}
+where $V^+(t) = \max(V(t), 0)$ is the positive part of portfolio value at
+time $t$ and the probability is taken under the real-world or risk-neutral
+measure as appropriate. PFE is typically computed at $\alpha = 95\%$ for
+credit limit monitoring and at $\alpha = 99\%$ to be consistent with SIMM
+risk weight calibration.
+
+\textbf{Expected Positive Exposure} at horizon $t$ is:
+\begin{equation}
+  \EPE(t) \;=\; \EQ\!\bigl[V^+(t)\bigr]
+  \;=\; \EQ\!\bigl[\max(V(t), 0)\bigr]
+  \label{eq:epe}
+\end{equation}
+
+This is identical to the $\EE^{*}(t)$ term in the CVA integral
+\eqref{eq:cva}, confirming that EPE is the bridge between counterparty
+credit risk management and XVA pricing: the same expected exposure profile
+that drives credit limit utilisation also drives CVA. Compressing the EPE
+profile therefore simultaneously reduces CVA and improves credit limit
+headroom.
+
+The \textbf{Effective EPE}---the running maximum of EPE used in regulatory
+capital calculations---is:
+\begin{equation}
+  \overline{\EPE}(t) \;=\;
+  \max_{0 \leq s \leq t}\,\EPE(s)
+  \label{eq:effe}
+\end{equation}
+
+\subsection{The Role of MPoR in Exposure Simulation}
+
+The close-out mechanics assumed in the Monte Carlo simulation directly
+determine the shape of the PFE and EPE profiles. At any future simulation
+date $t_n$ at which a counterparty default is hypothesised, the exposure
+is not the instantaneous mark-to-market $V(t_n)$ but the \emph{close-out
+value}: the mark-to-market at the end of the MPoR window following the
+default detection date. Formally, under the standard close-out assumption:
+\begin{equation}
+  V^+_{\text{close-out}}(t_n) \;=\;
+  \max\bigl(V(t_n + \MPoR) - V(t_n),\; 0\bigr)
+  + \max(V(t_n), 0)
+  \label{eq:closeout}
+\end{equation}
+The first term captures market moves during the close-out window; the
+second term is the running exposure at default detection. It follows
+directly that:
+
+\begin{proposition}[MPoR Compression and PFE Profile]
+  Under the standard close-out simulation assumption, the market-move
+  contribution to close-out exposure scales with $\sqrt{\MPoR}$. Reducing
+  the regulatory MPoR from $N_1$ to $N_2$ days reduces the close-out
+  contribution to PFE by the factor $\sqrt{N_2/N_1}$, compressing the
+  peak of the PFE profile by the same factor that reduces SIMM risk weights.
+\end{proposition}
+
+This proposition establishes the structural consistency between the SIMM
+analysis (equation~\ref{eq:primary}) and the full-simulation PFE analysis.
+The same $\sqrt{N_2/N_1}$ factor that scales SIMM risk weights
+simultaneously compresses the PFE profile, confirming that the blockchain
+benefit is not merely a regulatory capital artefact but a genuine reduction
+in economic exposure.
+
+\subsection{The Four-Layer Exposure Waterfall}
+
+Under the collateral framework applicable to bilateral derivatives, the
+economically relevant exposure proceeds through four distinct layers.
+For a netting set with gross mark-to-market $V_{\text{gross}}(t)$:
+
+The four exposure layers are defined as follows, where $\mathrm{VM}(t)$ is
+the variation margin received or posted under the CSA, $\mathrm{IM}(t)$ is
+the initial margin held covering the MPoR close-out window, and
+$\MPoR_{\text{chain}}$ is the compressed MPoR for blockchain-confirmed trades:
+\begin{alignat}{3}
+  &\text{Layer 1 (Gross MTM):}\qquad
+    &E_1(t) &\;=\; V^+(t)
+    \label{eq:layer1}\\
+  &\text{Layer 2 (VM-adjusted):}\qquad
+    &E_2(t) &\;=\; \max\bigl(V(t) - \mathrm{VM}(t),\; 0\bigr)
+    \label{eq:layer2}\\
+  &\text{Layer 3 (IM-adjusted):}\qquad
+    &E_3(t) &\;=\; \max\bigl(V(t) - \mathrm{VM}(t) - \mathrm{IM}(t),\; 0\bigr)
+    \label{eq:layer3}\\
+  &\text{Layer 4 (Blockchain):}\qquad
+    &E_4(t) &\;=\; \max\bigl(V(t_n + \MPoR_{\text{chain}})
+    - V(t_n) - \mathrm{IM}(t),\; 0\bigr)
+    \label{eq:layer4}
+\end{alignat}
+
+Taking PFE at the 95th percentile across the four layers:
+\begin{align}
+  \PFE_1 &\;=\; \PFE_{95\%}(E_1) \qquad\text{(traditional, no collateral)}
+  \label{eq:pfe1}\\
+  \PFE_2 &\;=\; \PFE_{95\%}(E_2) \qquad\text{(VM-adjusted)}
+  \label{eq:pfe2}\\
+  \PFE_3 &\;=\; \PFE_{95\%}(E_3) \qquad\text{(IM-adjusted)}
+  \label{eq:pfe3}\\
+  \PFE_4 &\;=\; \PFE_{95\%}(E_4) \qquad\text{(blockchain)}
+  \label{eq:pfe4}
+\end{align}
+
+For a typical bilateral rates netting set (10Y USD IRS, \$10M notional),
+the four-layer PFE reduction is:
+\begin{align}
+  \PFE_1 &\;\approx\; \$2{,}400{,}000 \quad (100\%) \label{eq:pfe1val}\\
+  \PFE_2 &\;\approx\; \$1{,}720{,}000 \quad (\phantom{0}72\%)
+    \label{eq:pfe2val}\\
+  \PFE_3 &\;\approx\; \$1{,}360{,}000 \quad (\phantom{0}57\%)
+    \label{eq:pfe3val}\\
+  \PFE_4 &\;\approx\; \$380{,}000     \quad (\phantom{0}16\%)
+    \label{eq:pfenumbers}
+\end{align}
+
+The blockchain PFE of \$380,000 reflects both IM absorption of MPoR tail
+risk and the atomic settlement elimination of the settlement window
+exposure. The 84\% reduction from Layer 1 to Layer 4 is the economically
+meaningful number for credit limit management.
+
+\subsection{Credit Limit Capacity Under Blockchain}
+
+Credit limits in bilateral derivatives are set against PFE, typically at
+the 95th percentile horizon. For a counterparty at utilisation $u_0 =
+\PFE_0 / L$ where $L$ is the credit limit, a reduction in PFE by factor
+$\phi$ yields capacity multiplier:
+\begin{equation}
+  C(\phi, u_0) \;=\; \frac{1 - \phi\, u_0}{1 - u_0}
+  \label{eq:capacity}
+\end{equation}
+
+For the blockchain Layer 4 reduction ($\phi \approx 0.16$, from
+equation~\ref{eq:pfenumbers}) at 90\% initial utilisation:
+\begin{equation}
+  C(0.16,\,0.90) \;=\;
+  \frac{1 - 0.16 \times 0.90}{0.10} \;=\; \frac{0.856}{0.10} \;=\; 8.56\times
+  \label{eq:capblockchain}
+\end{equation}
+
+For the regulatory 5-day MPoR reduction only ($\phi = 1/\sqrt{2}
+\approx 0.707$) at the same utilisation:
+\begin{equation}
+  C(0.707,\,0.90) \;=\;
+  \frac{1 - 0.707 \times 0.90}{0.10} \;=\; \frac{0.364}{0.10} \;=\; 3.64\times
+  \label{eq:cap5day}
+\end{equation}
+
+Additionally, existing limit breaches can be cured by moving trades
+on-chain, compressing PFE below the existing limit without altering
+underlying economic exposure---without requiring credit approval or
+trade termination.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Collateral Economics}
+\label{sec:collateral}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{Bilateral SIMM IM Reduction}
+
+The primary collateral impact is the 29--40\% reduction in bilateral SIMM
+IM established in Section~\ref{sec:simm} and Section~\ref{sec:mechanisms}.
+This directly reduces the gross collateral balance that must be sourced,
+custodied, and funded. At a portfolio level, for a firm with \$1 billion
+in bilateral SIMM IM at a weighted average funding cost of 65\,bp, the
+annual funding saving from a 29\% reduction is:
+\begin{equation}
+  \Delta_{\mathrm{fund}} \;=\; \$1{,}000{,}000{,}000 \times 0.29
+  \times 0.0065 \;\approx\; \$1{,}885{,}000\;\text{per annum}
+  \label{eq:imsaving}
+\end{equation}
+
+\subsection{Tokenised Collateral and the Yield Pickup}
+
+Under traditional arrangements, cash IM earns the overnight index rate
+$r_{\mathrm{OIS}}(t)$. Tokenised T-bill or money market fund IM earns
+the yield of the underlying instrument $r_{\mathrm{tok}}(t)$. The
+annual yield pickup $\Delta r = r_{\mathrm{tok}}(t) - r_{\mathrm{OIS}}(t)$
+reduces the effective net funding cost. The net MVA benefit from this
+channel is:
+\begin{equation}
+  \Delta\mathrm{MVA}_{\mathrm{yield}} \;=\;
+  \int_0^T \Delta r(t)\;\df\;\mathrm{ENIM}(t)\;\mathrm{d}t
+  \label{eq:mvayield}
+\end{equation}
+For $\Delta r \approx 45$--$50\,\mathrm{bp}$ and a ten-year ENIM profile
+with average IM of \$280 million over the trade life, the NPV benefit
+is approximately \$12--14 million per netting set.
+
+\subsection{Haircut Reduction on Tokenised Sovereign Collateral}
+
+Let $h_{\mathrm{trad}}$ denote the standard haircut on a sovereign bond
+posted as IM collateral. This decomposes as:
+\begin{equation}
+  h_{\mathrm{trad}} \;=\; h_{\mathrm{credit}} + h_{\mathrm{vol}}
+  + h_{\mathrm{settle}}
+  \label{eq:haircut}
+\end{equation}
+where $h_{\mathrm{credit}}$ is the credit risk component, $h_{\mathrm{vol}}$
+the market volatility component, and $h_{\mathrm{settle}}$ the settlement
+lag risk component. With atomic T+0 settlement, $h_{\mathrm{settle}} = 0$,
+reducing the effective haircut:
+\begin{equation}
+  h_{\mathrm{token}} \;=\; h_{\mathrm{credit}} + h_{\mathrm{vol}}
+  \label{eq:haircuttoken}
+\end{equation}
+For a 5-year US Treasury bond with $h_{\mathrm{trad}} = 2\%$, the
+settlement lag component at one-day volatility $\sigma_d \approx 0.04\%$
+over T+2 settlement contributes approximately
+$\sigma_d\sqrt{2} \approx 0.057\%$---small in isolation but material
+across large IM balances.
+
+\subsection{CCP IM vs Bilateral SIMM IM}
+
+Central counterparty initial margin (e.g.\ LCH SwapClear) is calculated
+using proprietary CCP models (typically historical VaR-based, 5-day MPoR)
+and posted directly to the CCP---not to a third-party custodian. This
+creates a structural distinction:
+
+\begin{itemize}[leftmargin=2em,itemsep=3pt]
+  \item CCP IM does \emph{not} offset bilateral credit limits; the CCP
+    provides its own guarantee rather than reducing counterparty credit
+    exposure.
+  \item CCP IM participates in the default waterfall and is partially
+    exposed to CCP own-default risk, unlike segregated bilateral IM.
+  \item MVA on CCP IM ($\approx \$27{,}000$/year on \$420,000 CCP IM at
+    SOFR\,$+$\,65\,bp) is separate from bilateral MVA and is not reduced
+    by blockchain bilateral mechanisms---though tokenised CCP IM would
+    reduce this component through the yield pickup of equation
+    \eqref{eq:mvayield}.
+\end{itemize}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{SA-CCR and Regulatory Capital}
+\label{sec:saccr}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\subsection{The SA-CCR Maturity Factor and MPoR}
+
+Under the Standardised Approach for Counterparty Credit Risk
+\citep[CRE52]{bcbs_2014}:
+\begin{equation}
+  \EAD_{\mathcal{N}} \;=\;
+  \alpha\,\bigl(\mathrm{RC}_{\mathcal{N}} + \mathrm{PFE}_{\mathcal{N}}\bigr),
+  \qquad \alpha = 1.4
+  \label{eq:ead}
+\end{equation}
+For a margined netting set, the trade-level PFE contribution is:
+\begin{equation}
+  \mathrm{PFE}_i \;=\; \delta_i\;\times\; d_i\;\times\;
+  \MF_i^{(\mathrm{marg})}\;\times\;\mathrm{SF}_j
+  \label{eq:pfesaccr}
+\end{equation}
+where the maturity factor for margined trades is:
+\begin{equation}
+  \MF_i^{(\mathrm{marg})} \;=\;
+  \sqrt{\frac{\MPoR}{1\;\mathrm{year}}}
+  \label{eq:mf}
+\end{equation}
+Converting business days to years as $N_{\mathrm{days}}/250$:
+\begin{align}
+  \MF^{(10\,\mathrm{d})} &= \sqrt{10/250} = 0.2000 \label{eq:mf10}\\
+  \MF^{(5\,\mathrm{d})}  &= \sqrt{5/250}  = 1/\sqrt{50} \approx 0.1414
+  \label{eq:mf5}\\
+  \MF^{(1\,\mathrm{d})}  &= \sqrt{1/250}  = 1/\sqrt{250} \approx 0.0632
+  \label{eq:mf1}\\
+  \MF^{(0.1\,\mathrm{d})}&= \sqrt{0.1/250}= \sqrt{0.0004} = 0.0200
+  \label{eq:mf01}
+\end{align}
+
+\begin{remark}
+  The ratio $\MF^{(5\,\mathrm{d})}/\MF^{(10\,\mathrm{d})} =
+  0.1414/0.2000 = 1/\sqrt{2}$---identical to the SIMM scaling of
+  equation~\eqref{eq:primary}. This confirms structural consistency:
+  the same MPoR scaling factor applies simultaneously in SIMM risk
+  weights, SA-CCR maturity factors, and full-simulation PFE profiles
+  (Proposition~2). Blockchain MPoR compression therefore produces
+  identical proportional savings across all three frameworks.
+\end{remark}
+
+The EAD reductions implied by equations \eqref{eq:mf10}--\eqref{eq:mf01}
+are as follows. For a five-day regulatory MPoR:
+\begin{equation}
+  1 - \frac{\MF^{(5\,\mathrm{d})}}{\MF^{(10\,\mathrm{d})}}
+  \;=\; 1 - \frac{1}{\sqrt{2}} \;\approx\; 29.3\%
+  \label{eq:ead5}
+\end{equation}
+For a one-day effective MPoR (intraday atomic settlement):
+\begin{equation}
+  1 - \frac{0.0632}{0.2000} \;=\; 68.4\%
+  \label{eq:ead1}
+\end{equation}
+For a sub-day MPoR of 0.1 days (approximately a 48-minute settlement window):
+\begin{equation}
+  1 - \frac{0.0200}{0.2000} \;=\; 90.0\%
+  \label{eq:ead01}
+\end{equation}
+
+\subsection{The Unmargined Maturity Factor}
+\label{subsec:unmargined}
+
+For completeness, and to clarify the Case~2 (uncollateralised) position
+from Section~\ref{subsec:framework}, the SA-CCR maturity factor for
+\emph{unmargined} netting sets is:
+\begin{equation}
+  \MF_i^{(\mathrm{unmarg})} \;=\;
+  \sqrt{\frac{\min(M_i,\; 1\;\mathrm{year})}{1\;\mathrm{year}}}
+  \label{eq:mfunmarg}
+\end{equation}
+where $M_i$ is the remaining maturity of trade $i$. Critically,
+\textbf{MPoR does not appear in equation~\eqref{eq:mfunmarg}}.
+The unmargined maturity factor is driven entirely by trade tenor, not by
+the close-out window. For a 10-year IRS:
+$\MF^{(\mathrm{unmarg})} = \sqrt{1} = 1.000$---five times larger than the
+margined ten-day equivalent of 0.200.
+
+This confirms two important points. First, blockchain MPoR compression
+produces \emph{no SA-CCR capital benefit} for uncollateralised netting sets
+(Case~2)---the maturity factor is independent of MPoR. Second, the SA-CCR
+capital saving from MPoR compression is exclusively a feature of margined
+netting sets (Cases~1 and~3). The transition from uncollateralised to
+collateralised treatment (Case~3) therefore produces a dramatic SA-CCR
+benefit: not only does the maturity factor become MPoR-sensitive and
+therefore compressible by blockchain, but the starting maturity factor
+falls from 1.000 to 0.200 (a five-fold reduction from the switch to
+margined treatment alone, before any blockchain MPoR compression is applied).
+
+\subsection{Regulatory Capital Saving}
+
+CCR capital is $K_{\mathrm{CCR}} = 0.08\times w_{\mathrm{cp}} \times \EAD$
+where $w_{\mathrm{cp}}$ is the risk weight of the counterparty. For a
+typical bilateral portfolio with EAD of \$18.4 million at 8\% capital
+ratio and 100\% risk weight:
+\begin{equation}
+  K_{\mathrm{CCR}}^{\mathrm{trad}} = 0.08 \times \$18{,}400{,}000
+  = \$1{,}472{,}000
+  \label{eq:capccr}
+\end{equation}
+Under blockchain 5-day MPoR:
+\begin{equation}
+  K_{\mathrm{CCR}}^{\mathrm{chain}} \approx
+  0.08 \times \$18{,}400{,}000 \times (1 - 0.293)
+  = \$1{,}040{,}000
+  \label{eq:capccrchain}
+\end{equation}
+Annual saving: \$432,000 from this mechanism alone. Under 1-day effective
+MPoR, EAD falls to $0.316 \times \$18.4\mathrm{M} = \$5.8\mathrm{M}$,
+implying capital of \$467,000 and a saving of \$1,005,000.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Ecosystem Impact: Buy-Side, Corporate Hedgers, and Regulators}
+\label{sec:ecosystem}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The quantitative analysis in Sections~\ref{sec:xva}--\ref{sec:saccr}
+addresses the sell-side bilateral derivatives dealer book under a fully
+collateralised CSA (Case~1). The cost reductions propagate through the
+derivatives ecosystem differently for each participant type, reflecting the
+collateral case distinctions established in Section~\ref{subsec:framework}.
+
+\subsection{Buy-Side Institutions and Asset Managers}
+
+Asset managers and hedge funds subject to the Uncleared Margin Rules (UMR)
+above the \texteuro{}8 billion AANA threshold are direct bilateral SIMM IM
+posters and operate under fully collateralised CSAs (Case~1). The 29--40\%
+reduction in SIMM IM established in Sections~\ref{sec:simm} and
+\ref{sec:mechanisms} frees capital that would otherwise be trapped as
+segregated initial margin. For a Phase~5 or Phase~6 fund posting
+\$500 million in bilateral SIMM IM, a 29\% reduction releases
+approximately \$145 million in investable capital---a direct improvement
+in fund performance unrelated to investment strategy.
+
+Beyond the direct IM saving, buy-side firms benefit from tighter bid-offer
+spreads as dealer XVA loads fall. The FVA, MVA, and KVA reductions of
+Table~\ref{tab:xva} flow through to dealer pricing on new transactions.
+Note that for collateralised bank-to-fund relationships, CVA is already
+near-zero under current arrangements (Section~\ref{subsec:framework},
+Case~1); the spread benefit here is predominantly from MVA and KVA
+compression. For a buy-side firm executing large notional FX forwards or
+interest rate swaps, MVA and KVA compression translates directly into a
+tighter offered spread.
+
+Tokenised IM eliminates the yield drag of cash collateral. Traditional
+bilateral cash IM earns OIS, typically below the fund's internal hurdle
+rate. Tokenised T-bills or money market fund shares posted as IM earn their
+natural yield while held in smart contract escrow, eliminating the
+opportunity cost and improving net returns.
+
+On-chain CRIF sensitivities allow buy-side firms to independently verify
+that dealer SIMM calculations are correct, replacing the current information
+asymmetry in which only the dealer can verify its own sensitivity inputs.
+
+\subsection{Corporate Hedgers and End Users}
+\label{subsec:corporates}
+
+Corporate treasury departments hedging FX, interest rate, or commodity risk
+require careful treatment because their situation differs structurally from
+the buy-side. Most corporate hedgers transact bilaterally without a CSA---
+or with a threshold CSA that is rarely triggered---placing them in Case~2
+(uncollateralised) of Section~\ref{subsec:framework}.
+
+\textbf{What blockchain confirmation alone changes (no collateral posted):}
+On-chain trade confirmation means both parties cryptographically attest to
+the economic terms. The trade exists on a shared immutable ledger. This is
+a significant operational improvement---it eliminates confirmation disputes,
+accelerates settlement of cashflows, and provides an immutable legal record.
+However, since no collateral is posted, the CVA applicable to the corporate
+counterparty is the full MTM CVA of equation~\eqref{eq:ee_case2}.
+Blockchain confirmation does not compress this. FVA likewise is unchanged.
+SA-CCR uses the unmargined maturity factor of equation~\eqref{eq:mfunmarg}.
+Blockchain confirmation alone produces operational improvements but not
+the quantitative XVA reductions of Table~\ref{tab:xva}.
+
+\textbf{What blockchain-enabled collateral posting changes (Case~3
+transition):}
+The more important question is whether blockchain lowers the operational
+barrier to collateralised trading sufficiently to enable corporate
+counterparties to post tokenised collateral where they previously could not.
+The barriers to bilateral collateralised trading for corporates have never
+been primarily conceptual. They are operational:
+
+\begin{itemize}[leftmargin=2em,itemsep=3pt]
+  \item ISDA Master Agreement and CSA documentation requires months of
+    legal negotiation.
+  \item Daily margin calls require treasury operations infrastructure to
+    monitor and respond in time.
+  \item Eligible collateral must be sourced, custodied, and transferred
+    through the correspondent banking system.
+  \item Disputes require legal teams and can take weeks to resolve.
+  \item For smaller corporates and emerging market firms, this infrastructure
+    cost is prohibitive relative to derivatives volumes.
+\end{itemize}
+
+A smart contract CSA eliminates every one of these barriers. The smart
+contract \emph{is} the CSA---pre-agreed terms, automatically executable,
+legally binding upon on-chain signature by both parties. Margin calls are
+automated; no treasury operations team is required to monitor thresholds.
+Eligible collateral held as tokenised T-bills or stablecoins (compliant
+with the GENIUS Act framework) is posted atomically to the smart contract
+escrow on confirmation. Disputes are structurally impossible (Mechanism~1).
+
+When a corporate transitions from uncollateralised to on-chain
+collateralised treatment, the netting set migrates from Case~2 to Case~3.
+The CVA applicable to the bank changes from the full MTM formulation of
+equation~\eqref{eq:ee_case2} to the MPoR-window formulation of
+equation~\eqref{eq:ee_case1}. SA-CCR switches from the unmargined maturity
+factor (equation~\ref{eq:mfunmarg}) to the margined maturity factor
+(equation~\ref{eq:mf}), producing an immediate five-fold reduction in the
+maturity factor before any blockchain MPoR compression is applied. This
+transition---not blockchain per se---is what produces the large CVA and
+SA-CCR benefit for corporate counterparties.
+
+\textbf{What the corporate gains:}
+The corporate posting tokenised collateral incurs an IM cost that did not
+exist before. However, that IM earns yield at approximately 4.75--4.80\%
+(tokenised T-bills)---superior to SOFR in the current rate environment.
+Against this cost, the corporate benefits from substantially tighter
+dealer pricing: CVA falls from full MTM to near-zero, FVA falls to
+near-zero with continuous VM, KVA falls with SA-CCR capital. For a
+corporate hedging \$200 million of annual FX exposure, the improvement in
+dealer bid-offer spreads from this XVA compression can substantially exceed
+the funding cost of posting IM---particularly for longer-dated or complex
+hedges where CVA loading is most significant.
+
+\textbf{Custody and infrastructure:}
+Tokenised collateral requires a custodial anchor. For corporate
+counterparties, this is provided by one of: (i) a traditional custodian
+with digital asset capability (BNY Mellon, State Street, Citi have live or
+near-live digital custody operations); or (ii) direct smart contract escrow
+for stablecoin collateral, where the GENIUS Act framework creates a legally
+recognised custodial arrangement without requiring a traditional custodian.
+The derivatives platform (Rijeka or equivalent) provides the confirmation
+and collateral call infrastructure; the custodian provides the off-chain
+asset anchor for non-stablecoin collateral. These are complementary roles,
+not competing ones.
+
+\textbf{Longer-horizon structural observation:}
+A further implication---speculative but intellectually honest to note---is
+that blockchain-enabled collateralised derivatives infrastructure could, in
+principle, lower the barrier to non-intermediated end-user derivatives
+transactions. Under current Dodd-Frank and EMIR frameworks, standardised
+derivatives require a registered swap dealer on at least one side for most
+transaction types. If a derivatives platform incorporating pricing,
+confirmation, and automated collateral were to seek regulatory designation
+as a Swap Execution Facility (SEF) or equivalent, and if regulatory
+frameworks evolve to accommodate this, bilateral hedging between
+non-dealer counterparties---a corporate treasury hedging with a pension
+fund, for example---could become feasible for plain vanilla instruments. The
+practical constraint is not technology but regulatory designation and the
+pricing expertise that dealers currently provide alongside their counterparty
+function. Most corporates currently rely on dealers for pricing reference as
+well as execution. Addressing the pricing knowledge gap is a prerequisite
+for disintermediation that is distinct from the infrastructure question.
+This is a longer-horizon structural question that blockchain settlement
+raises rather than resolves.
+
+\subsection{Financial Regulators: OCC, FRB, and CFTC}
+
+The regulatory benefits of blockchain bilateral settlement address the core
+objectives regulators hold for the derivatives market.
+
+\textbf{Systemic risk reduction.} Atomic settlement eliminates the
+settlement contagion mechanism that amplified the 2008 crisis: the risk
+that one party completes settlement while the other fails, creating
+asymmetric losses that cascade through the correspondent banking system.
+Under atomic settlement, both legs complete or neither does.
+
+\textbf{Real-time supervisory visibility.} On-chain trade repositories
+provide live aggregate exposure data, not T+1 or T+2 reporting. Position
+concentration, limit utilisation, and collateral adequacy are visible in
+real time, qualitatively superior to anything achievable under current
+infrastructure.
+
+\textbf{Immutable audit trail.} Every IM call, close-out trigger, and
+collateral transfer is timestamped on-chain and cryptographically verifiable.
+Regulatory model validation can use on-chain records rather than
+firm-submitted data, permanently reducing the information asymmetry that
+currently requires regulators to accept firms' characterisations of their
+own models.
+
+\textbf{Evidence base for MPoR reform.} The CFTC's August 2026 rulemaking
+requires quantitative evidence that blockchain settlement genuinely compresses
+close-out mechanics. On-chain data from executed bilateral derivatives
+provides this evidence on a demonstrated rather than theoretical basis.
+
+\textbf{Clearing mandate recalibration.} If blockchain bilateral derivatives
+achieve operational equivalence with or superiority to cleared derivatives
+in close-out speed, collateral certainty, and transparency, the policy
+basis for mandatory clearing---the operational inferiority of bilateral
+arrangements---is eroding. Regulators have an independent interest in
+assessing whether the current clearing mandate remains optimally calibrated
+for a world in which bilateral settlement can be atomic.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Regulatory Framework and Roadmap}
+\label{sec:regulatory}
+% ══════════════════════════════════════════════════════════════════════════════
+
+The regulatory environment for blockchain-based derivatives collateral has
+shifted materially since 2024:
+
+\begin{itemize}[leftmargin=2em,itemsep=4pt]
+  \item \textbf{CFTC Letter 25-39 (December 8, 2025):} Formal CFTC guidance
+    that tokenised assets retain margin eligibility if ``functionally
+    equivalent'' to their traditional form. BTC, ETH, and USDC pilot
+    programme launched \citep{cftc_2025}.
+  \item \textbf{GENIUS Act (July 2025):} Federal statutory framework for
+    payment stablecoins, creating legally recognised instruments eligible for
+    use as derivatives margin.
+  \item \textbf{BCBS chair statement (November 2025):} Confirmed that growth
+    of stablecoins and US/UK decisions not to implement the 1250\% public
+    blockchain risk weight ``calls for a different approach.'' Formal BCBS
+    review underway.
+  \item \textbf{CFTC rulemaking target (August 2026):} Acting Chairman Pham
+    outlined a timeline for technical amendments to CFTC regulations for
+    margin, clearing, settlement, reporting, and recordkeeping to enable
+    blockchain. This is the primary legislative vehicle for MPoR reduction
+    recognition \citep{dwt_2025}.
+  \item \textbf{ISDA position (2018):} ISDA stated that the ten-day bilateral
+    MPoR ``should be reviewed'' once clearing volumes exceeded mandated
+    levels \citep{isda_2018}. Those volumes have long been exceeded.
+\end{itemize}
+
+The MPoR reform argument is not merely policy preference. It follows
+directly from the regulatory intent behind the ten-day floor: bilateral
+derivatives were harder to close out than cleared ones. Section~\ref{subsec:m7}
+demonstrates that this is no longer true for blockchain-confirmed bilateral
+trades. If regulators accept the operational comparisons in that section---
+and the CFTC August 2026 rulemaking provides exactly the forum to do so---the
+appropriate regulatory outcome is not MPoR parity with the five-day cleared
+floor but a shorter bilateral MPoR for fully on-chain portfolios. The EAD
+reductions of equations~\eqref{eq:ead1}--\eqref{eq:ead01} show what one-day
+and sub-day MPoR recognition would mean for regulatory capital.
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+\label{sec:conclusion}
+% ══════════════════════════════════════════════════════════════════════════════
+
+This paper has provided a comprehensive quantitative analysis of how
+blockchain trade confirmation and atomic settlement restructure the bilateral
+derivatives cost stack across four dimensions. The primary analytical result
+is that MPoR compression reduces SIMM risk weights, SA-CCR maturity factors,
+and full-simulation PFE profiles by the same factor $\sqrt{N_2/N_1}$
+simultaneously---establishing structural consistency across all three
+frameworks through Propositions~1 and~2. For the regulatory five-day MPoR
+recognition, this factor is $1/\!\sqrt{2} \approx 0.707$, producing a
+29.3\% reduction that is invariant to portfolio composition, counterparty
+credit quality, and netting set size.
+
+Combined with seven secondary mechanisms, aggregate effects are: SIMM IM
+down 40\%; all-in XVA down 60--66\%; SA-CCR capital down 68--84\%; credit
+limit capacity up 3.6--8.6 times. These are not marginal refinements. They
+are a structural repricing of bilateral derivatives risk available to any
+institution that confirms trades on-chain and settles atomically.
+
+The deeper argument is that the regulatory logic underlying the bilateral
+MPoR penalty inverts under blockchain. Blockchain-confirmed bilateral
+derivatives exhibit faster close-out than CCP default management procedures,
+greater collateral certainty than CCP default waterfall exposure, zero
+settlement risk compared to T+2 clearing settlement, and no systemic
+concentration compared to too-big-to-fail central counterparties. If
+regulators accept these operational comparisons---and the CFTC August 2026
+rulemaking provides exactly the forum---the correct policy outcome is not
+MPoR parity with the five-day cleared floor. It is a shorter bilateral
+MPoR, potentially one day or less for fully on-chain portfolios. Equations
+\eqref{eq:ead1} and \eqref{eq:ead01} show what that means for regulatory
+capital. The question is not whether this will be recognised. It is when.
+
+When Wall Street's 1968 paperwork crisis was resolved, the Depository Trust
+Company did not improve the securities. It replaced the infrastructure
+beneath them. What DTC achieved for equity settlement---dematerialisation
+of paper into book entries, confirmation reduced to a computational event,
+settlement made certain---blockchain achieves for bilateral derivatives.
+The regulatory and pricing consequences are now quantifiable. The
+infrastructure to realise them is operational. The work is to make the
+argument clearly enough that regulators recognise what has already changed.
+
+% ── BIBLIOGRAPHY ──────────────────────────────────────────────────────────────
+\bibliographystyle{apalike}
+
+\begin{thebibliography}{99}
+
+\bibitem[BCBS(2014)]{bcbs_2014}
+Basel Committee on Banking Supervision (2014).
+\newblock \emph{The Standardised Approach for Measuring Counterparty Credit
+  Risk Exposures} (CRE52).
+\newblock Bank for International Settlements.
+
+\bibitem[BCBS-IOSCO(2015)]{bcbs_iosco_2015}
+Basel Committee on Banking Supervision and International Organization of
+  Securities Commissions (2015).
+\newblock \emph{Margin Requirements for Non-Centrally Cleared Derivatives}.
+\newblock Final Rule. Bank for International Settlements / IOSCO.
+
+\bibitem[Bank of England(2022)]{pra_2022}
+Bank of England / Prudential Regulation Authority (2022).
+\newblock PRA's review of the use of the SIMM model: Conclusions.
+\newblock Letter from D.~Mackinnon, D.~Bailey, and N.~Benjamin, June 2022.
+
+\bibitem[Burgard and Kjaer(2013)]{burgard_kjaer_2013}
+Burgard, C. and Kjaer, M. (2013).
+\newblock Funding strategies, funding costs.
+\newblock \emph{Risk Magazine}, December 2013, 82--87.
+
+\bibitem[CFTC(2025)]{cftc_2025}
+Commodity Futures Trading Commission (2025).
+\newblock \emph{Letter No.\ 25-39: Tokenized Collateral Guidance}.
+\newblock December 8, 2025.
+
+\bibitem[Davis Wright Tremaine(2025)]{dwt_2025}
+Davis Wright Tremaine LLP (2025).
+\newblock CFTC Issues Guidance on Tokenized Collateral and Other Crypto
+  Sprint Developments.
+\newblock December 2025.
+
+\bibitem[Green and Kenyon(2014)]{green_kenyon_2014}
+Green, A. and Kenyon, C. (2014).
+\newblock KVA: Capital valuation adjustment.
+\newblock \emph{Risk Magazine}, December 2014.
+
+\bibitem[Gregory(2020)]{gregory_2020}
+Gregory, J. (2020).
+\newblock \emph{The XVA Challenge: Counterparty Risk, Funding, Collateral,
+  Capital and Initial Margin}. 4th~ed.
+\newblock Wiley Finance.
+
+\bibitem[IOSCO(2023)]{iosco_2023}
+International Organization of Securities Commissions (2023).
+\newblock \emph{Streamlining Variation Margin Processes and Initial Margin
+  Responsiveness of Margin Models in Non-Centrally Cleared Markets}.
+\newblock Final Report. IOSCOPD787.
+
+\bibitem[ISDA(2018)]{isda_2018}
+International Swaps and Derivatives Association (2018).
+\newblock Margin Rules and ISDA SIMM.
+\newblock Position Paper, May 25, 2018.
+
+\bibitem[ISDA(2022)]{isda_gov_2022}
+International Swaps and Derivatives Association (2022).
+\newblock \emph{ISDA SIMM Governance Framework}.
+\newblock Version July 2022.
+
+\bibitem[ISDA(2025a)]{isda_2025a}
+International Swaps and Derivatives Association (2025a).
+\newblock \emph{ISDA SIMM Methodology, Version 2.8+2506}.
+\newblock Effective December 6, 2025.
+
+\bibitem[ISDA(2025b)]{isda_2025b}
+International Swaps and Derivatives Association (2025b).
+\newblock \emph{ISDA SIMM: The Trusted Standard for Initial Margin
+  Calculations}.
+\newblock White Paper, November 2025.
+
+\bibitem[Pykhtin and Zhu(2007)]{pykhtin_zhu_2007}
+Pykhtin, M. and Zhu, S. (2007).
+\newblock A guide to modelling counterparty credit risk.
+\newblock \emph{GARP Risk Review}, July/August 2007, 16--22.
+
+\bibitem[SIFMA(2025)]{sifma_2025}
+Securities Industry and Financial Markets Association (2025).
+\newblock Request for Input on the Use of Tokenized Collateral Including
+  Stablecoins in Derivatives Markets.
+\newblock Letter to CFTC, November 25, 2025.
+
+\end{thebibliography}
+
+\end{document}

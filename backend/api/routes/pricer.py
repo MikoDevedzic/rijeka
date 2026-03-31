@@ -167,6 +167,8 @@ _FX = {"FX_FORWARD","NDF"}
 # POST /price
 # ─────────────────────────────────────────────────────────────────────────────
 
+
+
 @router.post("/price")
 async def price_trade(
     request: PriceRequest,
@@ -271,6 +273,7 @@ async def price_trade(
         }
 
     return {
+
         "trade_id":       str(trade.id),
         "valuation_date": val_date.isoformat(),
         "curve_mode":     _curve_mode(request.curves),
@@ -352,6 +355,7 @@ async def generate_cashflows(
 
     db.commit()
     return {
+
         "trade_id":          str(trade.id),
         "cashflows_written": written,
         "curve_mode":        _curve_mode(request.curves),

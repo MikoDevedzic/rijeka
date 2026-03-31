@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RIJEKA — Blockchain Impact on Derivatives Markets</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@400;500;700&display=swap');
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #060a0e;
+  --bg-deep:  #03060a;
+  --panel:    #0b1219;
+  --border:   #1a2a3a;
+  --border2:  #0f1820;
+  --teal:     #0ec9a0;
+  --amber:    #e87000;
+  --blue:     #3d8bc8;
+  --red:      #d95040;
+  --chain:    #9060cc;
+  --chain2:   #b080e8;
+  --dim:      #4a6a7a;
+  --mid:      #8aa8b8;
+  --text:     #c8d8e8;
+}
+
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* GRID BACKGROUND */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  opacity: 0.18;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* APPBAR */
+.appbar {
+  position: sticky; top: 0; z-index: 100;
+  height: 44px;
+  background: var(--bg-deep);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 2rem; gap: 1.5rem;
+}
+.logo { font-size: 0.85rem; font-weight: 800; letter-spacing: 0.2em; color: var(--teal); }
+.app-title { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.12em; color: var(--dim); }
+.app-badge {
+  margin-left: auto;
+  font-size: 0.52rem; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--chain); border: 1px solid #9060cc40;
+  background: #9060cc08; padding: 3px 10px; border-radius: 2px;
+}
+
+/* HERO */
+.hero {
+  position: relative; z-index: 1;
+  padding: 3rem 2rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #9060cc08 0%, transparent 100%);
+}
+.hero-eyebrow {
+  font-size: 0.55rem; font-weight: 700; letter-spacing: 0.2em;
+  color: var(--chain); margin-bottom: 1rem;
+  display: flex; align-items: center; gap: 8px;
+}
+.hero-eyebrow::before { content: '⬡'; font-size: 0.9rem; }
+.hero-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 2.2rem; font-weight: 700; line-height: 1.15;
+  color: var(--text); max-width: 800px; margin-bottom: 1rem;
+}
+.hero-title span { color: var(--chain); }
+.hero-sub {
+  font-size: 0.62rem; color: var(--mid); max-width: 700px;
+  line-height: 1.9; margin-bottom: 1.5rem;
+}
+.hero-stats {
+  display: flex; gap: 2rem; flex-wrap: wrap;
+}
+.h-stat { }
+.h-val { font-size: 1.6rem; font-weight: 800; color: var(--chain); line-height: 1; }
+.h-lbl { font-size: 0.5rem; color: var(--dim); margin-top: 4px; letter-spacing: 0.1em; }
+
+/* SECTION */
+.section {
+  position: relative; z-index: 1;
+  padding: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+.section-hdr {
+  display: flex; align-items: baseline; gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.section-num {
+  font-size: 3rem; font-weight: 800; color: #9060cc20;
+  line-height: 1; font-family: 'Space Grotesk', sans-serif;
+  flex-shrink: 0;
+}
+.section-title {
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.15em;
+  color: var(--mid);
+}
+.section-sub { font-size: 0.55rem; color: var(--dim); margin-top: 3px; }
+
+/* PANEL */
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.panel-hdr {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.panel-title { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.12em; color: var(--mid); }
+.panel-hint { font-size: 0.5rem; color: var(--dim); }
+
+/* GRID LAYOUTS */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.g4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+/* STAKEHOLDER CARDS */
+.stake-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 14px;
+  position: relative;
+  overflow: hidden;
+}
+.stake-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 2px;
+}
+.stake-sell::before { background: var(--teal); }
+.stake-buy::before { background: var(--blue); }
+.stake-corp::before { background: var(--amber); }
+.stake-reg::before { background: var(--red); }
+.stake-ccp::before { background: #e840a0; }
+.stake-infra::before { background: #40c8e8; }
+
+.stake-icon { font-size: 1.4rem; margin-bottom: 8px; }
+.stake-name { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.12em; margin-bottom: 8px; }
+.stake-sell .stake-name { color: var(--teal); }
+.stake-buy .stake-name { color: var(--blue); }
+.stake-corp .stake-name { color: var(--amber); }
+.stake-reg .stake-name { color: var(--red); }
+.stake-ccp .stake-name { color: #e840a0; }
+.stake-infra .stake-name { color: #40c8e8; }
+
+.benefit-row {
+  display: flex; gap: 6px; margin-bottom: 4px;
+  align-items: flex-start;
+}
+.benefit-icon { font-size: 0.5rem; flex-shrink: 0; margin-top: 2px; }
+.benefit-text { font-size: 0.52rem; color: var(--dim); line-height: 1.6; }
+.benefit-text b { color: var(--text); }
+
+/* SIMM MECHANISM PANELS */
+.mech {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 12px;
+  border-left: 3px solid var(--chain);
+}
+.mech-num { font-size: 1.4rem; font-weight: 800; color: #9060cc30; line-height: 1; margin-bottom: 4px; }
+.mech-title { font-size: 0.58rem; font-weight: 700; color: var(--chain2); margin-bottom: 5px; letter-spacing: 0.08em; }
+.mech-body { font-size: 0.5rem; color: var(--dim); line-height: 1.7; }
+.mech-body b { color: var(--text); }
+.mech-impact {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.5rem; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--chain); border: 1px solid #9060cc30;
+  background: #9060cc0a; padding: 2px 7px; border-radius: 2px;
+}
+.mech-timing {
+  display: inline-block; margin-top: 4px; margin-left: 4px;
+  font-size: 0.46rem; color: var(--dim); border: 1px solid var(--border);
+  padding: 2px 6px; border-radius: 2px;
+}
+.mech-timing.now { color: var(--teal); border-color: #0ec9a030; }
+.mech-timing.soon { color: var(--amber); border-color: #e8700030; }
+.mech-timing.future { color: var(--dim); }
+
+/* WATERFALL */
+.wf-row {
+  display: flex; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid var(--border2);
+  gap: 8px;
+}
+.wf-lbl { font-size: 0.52rem; color: var(--dim); flex: 1; }
+.wf-lbl b { color: var(--text); }
+.wf-bar { flex: 1; height: 6px; background: #141f28; border-radius: 2px; position: relative; max-width: 200px; }
+.wf-fill { height: 100%; border-radius: 2px; position: absolute; left: 0; }
+.wf-val { font-size: 0.6rem; font-weight: 700; width: 80px; text-align: right; flex-shrink: 0; }
+.wf-pct { font-size: 0.46rem; color: var(--dim); width: 36px; text-align: right; flex-shrink: 0; }
+
+/* ASSET CLASS IMPACT GRID */
+.asset-row {
+  display: grid; grid-template-columns: 120px 1fr 80px 80px 80px 80px;
+  gap: 6px; align-items: center;
+  padding: 6px 0; border-bottom: 1px solid var(--border2);
+}
+.asset-lbl { font-size: 0.52rem; color: var(--text); font-weight: 700; }
+.asset-bar { height: 5px; background: #141f28; border-radius: 2px; position: relative; }
+.asset-fill { height: 100%; border-radius: 2px; position: absolute; left: 0; }
+.col-val { font-size: 0.52rem; text-align: right; }
+
+/* THESIS BLOCK */
+.thesis {
+  background: #9060cc08;
+  border: 1px solid #9060cc30;
+  border-radius: 2px;
+  padding: 20px 24px;
+  margin: 1rem 0;
+}
+.thesis-eyebrow {
+  font-size: 0.5rem; font-weight: 700; letter-spacing: 0.18em;
+  color: var(--chain); margin-bottom: 10px;
+}
+.thesis-body {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1rem; color: var(--text); line-height: 1.7;
+  font-weight: 500;
+}
+.thesis-body span { color: var(--chain); }
+
+/* TABLES */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th {
+  font-size: 0.46rem; color: var(--dim); font-weight: 400;
+  letter-spacing: 0.08em; text-align: right;
+  padding: 4px 8px 4px 0; border-bottom: 1px solid var(--border);
+}
+.tbl th:first-child { text-align: left; }
+.tbl td {
+  font-size: 0.55rem; padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--border2); text-align: right;
+}
+.tbl td:first-child { text-align: left; }
+.tbl tr:hover td { background: #0f1820; }
+
+.teal { color: var(--teal); }
+.blue { color: var(--blue); }
+.amber { color: var(--amber); }
+.red { color: var(--red); }
+.chain { color: var(--chain); }
+.dim { color: var(--dim); }
+.pos { color: var(--teal); }
+.neg { color: var(--red); }
+.warn { color: var(--amber); }
+
+.tag { display: inline-block; font-size: 0.44rem; font-weight: 700; padding: 2px 6px; border-radius: 2px; letter-spacing: 0.08em; }
+.tag-now { color: var(--teal); background: #0ec9a010; border: 1px solid #0ec9a030; }
+.tag-soon { color: var(--amber); background: #e8700010; border: 1px solid #e8700030; }
+.tag-future { color: var(--chain); background: #9060cc10; border: 1px solid #9060cc30; }
+
+/* ROAD MAP */
+.road-item { display: flex; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border2); }
+.road-date { font-size: 0.52rem; font-weight: 700; color: var(--chain); white-space: nowrap; width: 64px; flex-shrink: 0; margin-top: 1px; }
+.road-body { font-size: 0.52rem; color: var(--dim); line-height: 1.7; }
+.road-body b { color: var(--text); }
+
+/* DIVIDER */
+.divider { height: 1px; background: var(--border); margin: 1rem 0; }
+
+/* QUOTE */
+.quote {
+  border-left: 3px solid var(--chain);
+  padding: 8px 14px;
+  background: #9060cc06;
+  font-size: 0.55rem; color: var(--mid); line-height: 1.8;
+  font-style: italic;
+}
+.quote-src { font-style: normal; color: var(--dim); font-size: 0.48rem; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="appbar">
+  <span class="logo">RIJEKA</span>
+  <div style="width:1px;height:20px;background:var(--border);"></div>
+  <span class="app-title">BLOCKCHAIN INTELLIGENCE LAYER</span>
+  <span class="app-badge">⬡ STRATEGIC RESEARCH · 28 MAR 2026</span>
+</div>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">BLOCKCHAIN × DERIVATIVES — COMPREHENSIVE IMPACT ANALYSIS</div>
+  <h1 class="hero-title">
+    How on-chain confirmation and settlement<br>
+    <span>transforms every layer</span> of derivatives markets
+  </h1>
+  <p class="hero-sub">
+    Eight mechanisms through which blockchain reduces ISDA SIMM initial margin. The impact across pricing (XVA), counterparty credit risk, and market risk. What it means for sell-side banks, buy-side funds, corporate hedgers, regulators, CCPs, and market infrastructure providers. The thesis nobody has made yet.
+  </p>
+  <div class="hero-stats">
+    <div class="h-stat"><div class="h-val">−40%</div><div class="h-lbl">SIMM IM (FULL BENEFIT)</div></div>
+    <div class="h-stat"><div class="h-val">−66%</div><div class="h-lbl">ALL-IN XVA</div></div>
+    <div class="h-stat"><div class="h-val">−84%</div><div class="h-lbl">SA-CCR CAPITAL</div></div>
+    <div class="h-stat"><div class="h-val">6×</div><div class="h-lbl">CREDIT LIMIT CAPACITY</div></div>
+    <div class="h-stat"><div class="h-val">$0</div><div class="h-lbl">IM DISPUTES</div></div>
+  </div>
+</div>
+
+<!-- SECTION 1: BLOCKCHAIN × SIMM -->
+<div class="section">
+  <div class="section-hdr">
+    <div class="section-num">01</div>
+    <div>
+      <div class="section-title">BLOCKCHAIN × ISDA SIMM — EIGHT MECHANISMS</div>
+      <div class="section-sub">How on-chain movement reduces initial margin across all risk classes</div>
+    </div>
+  </div>
+
+  <!-- Core thesis -->
+  <div class="thesis" style="margin-bottom:1.25rem;">
+    <div class="thesis-eyebrow">THE CENTRAL ARGUMENT</div>
+    <div class="thesis-body">
+      ISDA SIMM risk weights are calibrated to the 99th percentile of <span>10-day market moves</span>. The 10-day floor was set deliberately in 2013 to make bilateral derivatives more expensive than cleared — a regulatory clearing incentive. Every single reason regulators gave for the 10-day floor is <span>eliminated by blockchain</span>. The regulatory logic inverts.
+    </div>
+  </div>
+
+  <!-- Why 10 days exists -->
+  <div class="g2" style="margin-bottom:1rem;">
+    <div class="panel">
+      <div class="panel-hdr"><span class="panel-title">WHY THE 10-DAY MPOR EXISTS</span><span class="panel-hint">BCBS-IOSCO 2013 RATIONALE</span></div>
+      <div style="padding:10px 12px; display:flex; flex-direction:column; gap:4px;">
+        <div class="benefit-row"><span class="benefit-icon red">①</span><div class="benefit-text">No centralised close-out facility — bilateral counterparties must negotiate termination manually, taking days</div></div>
+        <div class="benefit-row"><span class="benefit-icon red">②</span><div class="benefit-text">IM calculation disputes — different models, different Greeks, different SIMM outputs — double MPoR to 20 days when unresolved</div></div>
+        <div class="benefit-row"><span class="benefit-icon red">③</span><div class="benefit-text">Settlement T+1 / T+2 — collateral cannot be accessed until next business day, exposure accumulates</div></div>
+        <div class="benefit-row"><span class="benefit-icon red">④</span><div class="benefit-text">Legal uncertainty — netting enforceability and close-out valuation disputed during counterparty default</div></div>
+        <div class="benefit-row"><span class="benefit-icon red">⑤</span><div class="benefit-text">No intraday margin calls — exposure can accumulate 23 hours before next EOD IM call window</div></div>
+      </div>
+    </div>
+    <div class="panel" style="border-color:#9060cc30;">
+      <div class="panel-hdr" style="border-color:#9060cc20;"><span class="panel-title" style="color:var(--chain);">⬡ HOW BLOCKCHAIN ELIMINATES EACH REASON</span></div>
+      <div style="padding:10px 12px; display:flex; flex-direction:column; gap:4px;">
+        <div class="benefit-row"><span class="benefit-icon chain">①</span><div class="benefit-text"><b>Smart contract replaces CCP</b> — pre-agreed close-out terms execute automatically in minutes, not days</div></div>
+        <div class="benefit-row"><span class="benefit-icon chain">②</span><div class="benefit-text"><b>On-chain CRIF = identical Greeks</b> — both parties read same immutable sensitivities, disputes mathematically impossible</div></div>
+        <div class="benefit-row"><span class="benefit-icon chain">③</span><div class="benefit-text"><b>Atomic settlement T+0</b> — collateral transferred simultaneously with trade confirmation, no settlement lag</div></div>
+        <div class="benefit-row"><span class="benefit-icon chain">④</span><div class="benefit-text"><b>Pre-agreed smart contract terms</b> — close-out valuation method encoded on-chain, no legal ambiguity, no dispute</div></div>
+        <div class="benefit-row"><span class="benefit-icon chain">⑤</span><div class="benefit-text"><b>Continuous smart contract monitoring</b> — IM called every 4 hours or on threshold breach, same as CCP intraday model</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Eight mechanisms -->
+  <div class="g2" style="margin-bottom:1rem;">
+    <div class="mech">
+      <div class="mech-num">01</div>
+      <div class="mech-title">DISPUTE ELIMINATION → NO MPOR DOUBLING</div>
+      <div class="mech-body">Under BCBS-IOSCO rules, <b>unresolved IM disputes double the MPoR from 10 to 20 days</b>. Risk weights scale with √MPoR — a doubling becomes a 41% IM increase. On-chain CRIF eliminates disputes because both parties read identical immutable sensitivity inputs. The 2× MPoR multiplier risk vanishes entirely.</div>
+      <span class="mech-impact">ELIMINATES 2× MULTIPLIER RISK</span>
+      <span class="mech-timing now">IMMEDIATE · NO REG CHANGE</span>
+    </div>
+    <div class="mech">
+      <div class="mech-num">02</div>
+      <div class="mech-title">ON-CHAIN CRIF → ZERO RECONCILIATION FRICTION</div>
+      <div class="mech-body">Both parties independently compute CRIF using their own pricers, producing slightly different sensitivities. This drives daily reconciliation workflows (AcadiaSoft, Bloomberg BCOL), excess IM held during disputes, and operational cost. <b>Shared on-chain pricing oracle → single CRIF → identical SIMM. Reconciliation workload: zero.</b></div>
+      <span class="mech-impact">90% OPEX REDUCTION</span>
+      <span class="mech-timing now">IMMEDIATE · NO REG CHANGE</span>
+    </div>
+    <div class="mech">
+      <div class="mech-num">03</div>
+      <div class="mech-title">TOKENIZED IM EARNS YIELD WHILE POSTED</div>
+      <div class="mech-body">Traditional cash IM earns OIS (SOFR ~4.3%). Tokenized T-bills or MMFs earn their natural yield (4.75–4.80%), 45–50bp above what cash IM earns. <b>MVA = ∫IM × funding_spread × df. Yield earned on posted collateral reduces net funding spread → MVA falls 45–50bp/year on all IM balances.</b> CFTC Letter 25-39 (Dec 2025) explicitly enables this.</div>
+      <span class="mech-impact">MVA −45–50bp/yr ON IM</span>
+      <span class="mech-timing now">IMMEDIATE · CFTC 25-39 ✓</span>
+    </div>
+    <div class="mech">
+      <div class="mech-num">04</div>
+      <div class="mech-title">CLEANER BACKTEST DATA → FEWER FALSE EXCEPTIONS</div>
+      <div class="mech-body">Dynamic backtest counts days where |P&L| > SIMM(1-day). During IM disputes, collateral transfer timing is messy — firms must make judgment calls about including "disputed days." These generate spurious exceptions. <b>Blockchain: every day is clean — atomic transfer, immutable record, no ambiguity. Statistically cleaner backtests → fewer false exceptions → avoids remediation IM add-ons.</b></div>
+      <span class="mech-impact">AVOIDS REMEDIATION IM</span>
+      <span class="mech-timing now">IMMEDIATE · NO REG CHANGE</span>
+    </div>
+    <div class="mech">
+      <div class="mech-num">05</div>
+      <div class="mech-title">TOKENIZED COLLATERAL → REDUCED HAIRCUTS</div>
+      <div class="mech-body">Haircuts on IM collateral exist partly to cover settlement lag risk — the window where collateral value can move before it is received. <b>Tokenized assets settle atomically (T+0) → settlement-time risk = zero → haircut component removed.</b> US Treasuries: 2% haircut → potentially 1% for tokenized. Less collateral needed for same IM requirement.</div>
+      <span class="mech-impact">1–3% LESS COLLATERAL</span>
+      <span class="mech-timing soon">NEAR-TERM · CFTC 25-39 FRAMEWORK</span>
+    </div>
+    <div class="mech">
+      <div class="mech-num">06</div>
+      <div class="mech-title">INTRADAY IM CALLS → EXPOSURE WINDOW −75%</div>
+      <div class="mech-body">CCPs call IM multiple times per day. Bilateral SIMM is EOD — exposure accumulates 23 hours before each call. <b>Smart contract monitors exposure continuously → auto-call every 4 hours → exposure window 4h vs 24h (83% reduction in intraday accumulation).</b> This directly compresses one of the MPoR components. SIMM reduction: √(4/24) = 59% of current intraday component → ~10–15% total SIMM impact.</div>
+      <span class="mech-impact">~10–15% SIMM REDUCTION</span>
+      <span class="mech-timing soon">NEAR-TERM · BCBS GUIDANCE NEEDED</span>
+    </div>
+  </div>
+
+  <!-- THE BIG ONE -->
+  <div class="mech" style="border-left:3px solid var(--chain2); background:#9060cc06; margin-bottom:1rem;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+      <div class="mech-num" style="font-size:2rem; color:#9060cc80; margin:0;">07</div>
+      <div>
+        <div class="mech-title" style="font-size:0.65rem; color:var(--chain2);">⬡ MPOR 10 DAYS → 5 DAYS — THE BIG ONE</div>
+        <div style="font-size:0.5rem; color:var(--dim);">REQUIRES CFTC RULEMAKING — TARGETED AUG 2026</div>
+      </div>
+      <div style="margin-left:auto; text-align:right;">
+        <div style="font-size:1.6rem; font-weight:800; color:var(--chain);">−29%</div>
+        <div style="font-size:0.46rem; color:var(--dim);">ALL RISK CLASSES · ALL PORTFOLIOS</div>
+      </div>
+    </div>
+    <div class="mech-body" style="font-size:0.55rem;">
+      <b>The mathematics:</b> SIMM risk weights = 99th percentile of 10-day market moves. Risk weights scale with √MPoR. Reducing MPoR from 10 to 5 days multiplies every risk weight by √(5/10) = 0.707. Every risk class — GIRR, FX, CSR, Equity, Commodity — drops by the same 29.3% simultaneously. No portfolio optimisation needed. No trade restructuring. The same portfolio, the same counterparties, 29% less IM.
+      <div class="divider"></div>
+      <b>The regulatory path:</b> CFTC rulemaking targeted August 2026 covers margin, settlement and recordkeeping for blockchain. ISDA acknowledged in 2018 that the 10-day bilateral MPoR should be reviewed once clearing exceeded mandated volumes — it has. All five original justifications for 10-day bilateral MPoR are eliminated by blockchain. The regulatory argument is not just defensible — it is nearly unanswerable.
+    </div>
+  </div>
+
+  <div class="mech" style="border-left:3px solid var(--dim); margin-bottom:1.25rem;">
+    <div class="mech-num">08</div>
+    <div class="mech-title" style="color:var(--dim);">ON-CHAIN CALIBRATION DATA → AUDITABLE GOVERNANCE</div>
+    <div class="mech-body">SIMM is calibrated semiannually using historical risk factor data contributed by member firms. The process is centralised and partially opaque — firms have incentives to contribute data that produces lower risk weights. On-chain market data recorded immutably creates a shared, auditable calibration basis. <b>Regulators verify calibration independently using on-chain data. Trust in the model increases → regulators more willing to accept lower MPoR floors. The long game.</b></div>
+    <span class="mech-impact">GOVERNANCE TRUST PREMIUM</span>
+    <span class="mech-timing future">2028+ · BIS/ISDA STANDARD</span>
+  </div>
+
+  <!-- Combined impact table -->
+  <div class="panel">
+    <div class="panel-hdr">
+      <span class="panel-title">COMBINED IMPACT · GSI-RATES-2018 NETTING SET</span>
+      <span class="panel-hint">$280K TRADITIONAL SIMM · ALL MECHANISMS SEQUENCED</span>
+    </div>
+    <div style="padding:12px 14px;">
+      <div class="wf-row">
+        <div class="wf-lbl"><b>Traditional SIMM</b> (10-day MPoR · no blockchain)</div>
+        <div class="wf-bar"><div class="wf-fill" style="width:100%; background:var(--red);"></div></div>
+        <div class="wf-val teal">$280,000</div>
+        <div class="wf-pct">100%</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-lbl">① Dispute elimination (MPoR doubling risk removed)</div>
+        <div class="wf-bar"><div class="wf-fill" style="width:100%; background:var(--teal); opacity:0.3;"></div></div>
+        <div class="wf-val teal">$0 now</div>
+        <div class="wf-pct teal">risk gone</div>
+      </div>
+      <div class="wf-row">
+        <div class="wf-lbl">⑥ Intraday calls (4h window → 15% SIMM reduction)</div>
+        <div class="wf-bar"><div class="wf-fill" style="width:85%; background:var(--teal);"></div></div>
+        <div class="wf-val teal">$238,000</div>
+        <div class="wf-pct teal">−15%</div>
+      </div>
+      <div class="wf-row" style="border-bottom:1px solid var(--chain);">
+        <div class="wf-lbl" style="color:var(--chain);"><b>⑦ MPoR 10d → 5d (−29% all risk weights)</b></div>
+        <div class="wf-bar"><div class="wf-fill" style="width:60%; background:var(--chain);"></div></div>
+        <div class="wf-val chain">$168,980</div>
+        <div class="wf-pct chain">−40%</div>
+      </div>
+      <div class="wf-row" style="padding-top:10px;">
+        <div class="wf-lbl" style="font-size:0.58rem; font-weight:700; color:var(--chain);">⬡ BLOCKCHAIN SIMM (FULL BENEFIT)</div>
+        <div class="wf-bar"><div class="wf-fill" style="width:60%; background:var(--chain); opacity:0.6;"></div></div>
+        <div class="wf-val chain" style="font-size:0.75rem; font-weight:700;">$168,980</div>
+        <div class="wf-pct chain">−40%</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SECTION 2: IMPACT BY ASSET CLASS AND MODULE -->
+<div class="section">
+  <div class="section-hdr">
+    <div class="section-num">02</div>
+    <div>
+      <div class="section-title">IMPACT ACROSS DERIVATIVES INFRASTRUCTURE</div>
+      <div class="section-sub">XVA pricing · Market risk · Counterparty credit risk · By asset class</div>
+    </div>
+  </div>
+
+  <div class="g3" style="margin-bottom:1rem;">
+
+    <!-- XVA -->
+    <div class="panel" style="border-top:2px solid var(--amber);">
+      <div class="panel-hdr"><span class="panel-title" style="color:var(--amber);">PRICING — XVA</span><span class="panel-hint">ALL ADJUSTMENTS REDUCED</span></div>
+      <div style="padding:10px 12px; display:flex; flex-direction:column; gap:5px;">
+        <div style="font-size:0.5rem; color:var(--dim); line-height:1.7; margin-bottom:6px;">XVA = TV + CVA + DVA + FVA + ColVA + MVA + KVA. Blockchain compresses every component below TV.</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">CVA (counterparty default adj.)</span><span class="pos">−60–70%</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; border-bottom:1px solid var(--border2); padding-bottom:4px;">PFE compresses 68-84% with MPoR reduction → EPE falls proportionally → CVA = LGD × EE × PD falls</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">FVA (funding cost adj.)</span><span class="pos">−80–100%</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; border-bottom:1px solid var(--border2); padding-bottom:4px;">FVA = cost of funding uncollateralised VM gap. Blockchain enables 24/7 VM calls → gap eliminated. FVA → ~0 for on-chain trades</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">MVA (margin funding cost)</span><span class="pos">−40–55%</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; border-bottom:1px solid var(--border2); padding-bottom:4px;">SIMM −40% → IM amount falls 40% → MVA base falls 40%. Plus tokenized IM yield reduces net funding spread −45bp.</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">KVA (capital cost adj.)</span><span class="pos">−29–84%</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; border-bottom:1px solid var(--border2); padding-bottom:4px;">SA-CCR EAD falls 68-84% → CCR capital falls → KVA falls proportionally</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">ColVA (collateral adj.)</span><span class="pos">Reduced</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; padding-bottom:4px;">Tokenized multi-currency IM reduces basis costs. 24/7 collateral mobility eliminates time-zone friction.</div>
+        <div style="border-top:1px solid var(--border); margin-top:6px; padding-top:6px; display:flex; justify-content:space-between; font-size:0.6rem; font-weight:700;">
+          <span style="color:var(--mid);">ALL-IN XVA REDUCTION</span>
+          <span class="chain">−60–66%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MARKET RISK -->
+    <div class="panel" style="border-top:2px solid var(--blue);">
+      <div class="panel-hdr"><span class="panel-title" style="color:var(--blue);">MARKET RISK</span><span class="panel-hint">INDIRECT BENEFITS</span></div>
+      <div style="padding:10px 12px; display:flex; flex-direction:column; gap:5px;">
+        <div style="font-size:0.5rem; color:var(--dim); line-height:1.7; margin-bottom:6px;">Blockchain does not directly reduce VaR or sensitivity measures — those are functions of market moves and portfolio composition. The benefits are operational and structural.</div>
+        <div class="benefit-row" style="padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="benefit-icon blue">→</span>
+          <div class="benefit-text"><b>Real-time P&L attribution</b> — on-chain trade confirmation + immutable cashflow schedule → intraday P&L crystallised continuously, not just at EOD. Flash P&L is always accurate.</div>
+        </div>
+        <div class="benefit-row" style="padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="benefit-icon blue">→</span>
+          <div class="benefit-text"><b>Clean VaR backtest data</b> — same logic as SIMM: no disputed days, no operational noise in 250-day lookback window. Fewer spurious VaR exceptions.</div>
+        </div>
+        <div class="benefit-row" style="padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="benefit-icon blue">→</span>
+          <div class="benefit-text"><b>Stress test accuracy</b> — on-chain trade state is the single source of truth. Stress scenarios applied to verified, non-disputed positions. No reconciliation noise.</div>
+        </div>
+        <div class="benefit-row" style="padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="benefit-icon blue">→</span>
+          <div class="benefit-text"><b>XVA desk hedges</b> — the XVA desk's CDS hedges create CCR exposure. Blockchain confirmation of those hedges → PFE on hedge book falls 68-84% → CCR capital on hedge portfolio falls significantly.</div>
+        </div>
+        <div class="benefit-row" style="padding:4px 0;">
+          <span class="benefit-icon blue">→</span>
+          <div class="benefit-text"><b>CVA VaR capital</b> — Basel III requires CVA VaR capital on net CVA risk. As CVA falls 60-70% with blockchain, CVA VaR capital (which scales with CVA) falls proportionally. Direct regulatory capital saving.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CCR -->
+    <div class="panel" style="border-top:2px solid var(--chain);">
+      <div class="panel-hdr"><span class="panel-title" style="color:var(--chain);">COUNTERPARTY CREDIT RISK</span><span class="panel-hint">LARGEST DIRECT IMPACT</span></div>
+      <div style="padding:10px 12px; display:flex; flex-direction:column; gap:5px;">
+        <div style="font-size:0.5rem; color:var(--dim); line-height:1.7; margin-bottom:4px;">CCR is where blockchain impact is most direct and most quantifiable.</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">PFE (potential future exposure)</span><span class="chain">−68–84%</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; border-bottom:1px solid var(--border2); padding-bottom:4px;">SA-CCR: PFE_addon = Notional × √(MPoR/1yr) × δ × SF. MPoR 10d→1d: √(1/10)=0.316 → 68% reduction. MPoR to hours: √(0.1/10)=0.1 → 90% reduction.</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">EPE (expected positive exposure)</span><span class="chain">−60–75%</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; border-bottom:1px solid var(--border2); padding-bottom:4px;">EPE = average of the exposure profile. VM called continuously → profile collapses toward zero. EPE falls proportionally.</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">Credit limit utilisation</span><span class="pos">6× capacity</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; border-bottom:1px solid var(--border2); padding-bottom:4px;">Same credit limits, 68-84% lower PFE → 6× more trades within the same limits without any limit increases.</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0; border-bottom:1px solid var(--border2);">
+          <span class="dim">SA-CCR regulatory capital</span><span class="chain">−68–84%</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; border-bottom:1px solid var(--border2); padding-bottom:4px;">EAD = α(RC + PFE_addon). PFE_addon falls 68-84% → EAD falls proportionally → 8% capital × EAD falls.</div>
+        <div style="display:flex; justify-content:space-between; font-size:0.52rem; padding:4px 0;">
+          <span class="dim">ISDA SIMM IM (bilateral)</span><span class="chain">−29–40%</span>
+        </div>
+        <div style="font-size:0.46rem; color:var(--dim); padding-left:8px; padding-bottom:2px;">All eight mechanisms combined. MPoR 10d→5d delivers 29% across all risk classes. Intraday calls add another 10-15%.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Asset class impact -->
+  <div class="panel">
+    <div class="panel-hdr">
+      <span class="panel-title">BLOCKCHAIN BENEFIT BY ASSET CLASS — SIMM RISK CLASS LEVEL</span>
+      <span class="panel-hint">MPoR 10D → 5D IMPACT + OPERATIONAL BENEFITS · FULL MECHANISM PACKAGE</span>
+    </div>
+    <div style="padding:10px 14px;">
+      <div class="asset-row" style="border-bottom:1px solid var(--border); padding-bottom:6px; margin-bottom:2px;">
+        <div style="font-size:0.46rem; color:var(--dim);">RISK CLASS</div>
+        <div style="font-size:0.46rem; color:var(--dim);">BLOCKCHAIN BENEFIT BAR</div>
+        <div style="font-size:0.46rem; color:var(--dim); text-align:right;">TRAD SIMM</div>
+        <div style="font-size:0.46rem; color:var(--chain); text-align:right;">CHAIN SIMM</div>
+        <div style="font-size:0.46rem; color:var(--teal); text-align:right;">REDUCTION</div>
+        <div style="font-size:0.46rem; color:var(--dim); text-align:right;">NOTES</div>
+      </div>
+      <!-- GIRR -->
+      <div class="asset-row">
+        <div class="asset-lbl">GIRR<br><span style="font-size:0.44rem; color:var(--dim); font-weight:400;">Interest Rate</span></div>
+        <div class="asset-bar"><div class="asset-fill" style="width:70%; background:var(--chain);"></div></div>
+        <div class="col-val dim">$218,400</div>
+        <div class="col-val chain">$154,700</div>
+        <div class="col-val pos">−29%</div>
+        <div style="font-size:0.44rem; color:var(--dim); text-align:right;">√(5/10) on IR RW<br>Largest $ saving</div>
+      </div>
+      <!-- CSR Qual -->
+      <div class="asset-row">
+        <div class="asset-lbl">CSR QUAL<br><span style="font-size:0.44rem; color:var(--dim); font-weight:400;">Credit Qualifying</span></div>
+        <div class="asset-bar"><div class="asset-fill" style="width:70%; background:var(--chain);"></div></div>
+        <div class="col-val dim">$33,600</div>
+        <div class="col-val chain">$23,800</div>
+        <div class="col-val pos">−29%</div>
+        <div style="font-size:0.44rem; color:var(--dim); text-align:right;">Uniform RW scaling<br>CDS hedges also fall</div>
+      </div>
+      <!-- FX -->
+      <div class="asset-row">
+        <div class="asset-lbl">FX<br><span style="font-size:0.44rem; color:var(--dim); font-weight:400;">Foreign Exchange</span></div>
+        <div class="asset-bar"><div class="asset-fill" style="width:85%; background:var(--chain);"></div></div>
+        <div class="col-val dim">$16,800</div>
+        <div class="col-val chain">$9,200</div>
+        <div class="col-val pos">−45%</div>
+        <div style="font-size:0.44rem; color:var(--dim); text-align:right;">Atomic FX settlement<br>eliminates Herstatt +<br>MPoR compression</div>
+      </div>
+      <!-- Equity -->
+      <div class="asset-row">
+        <div class="asset-lbl">EQUITY<br><span style="font-size:0.44rem; color:var(--dim); font-weight:400;">Equity Derivatives</span></div>
+        <div class="asset-bar"><div class="asset-fill" style="width:70%; background:var(--chain);"></div></div>
+        <div class="col-val dim">$2,800</div>
+        <div class="col-val chain">$1,980</div>
+        <div class="col-val pos">−29%</div>
+        <div style="font-size:0.44rem; color:var(--dim); text-align:right;">Uniform RW scaling</div>
+      </div>
+      <!-- CSR Non-Qual -->
+      <div class="asset-row">
+        <div class="asset-lbl">CSR NON-QUAL<br><span style="font-size:0.44rem; color:var(--dim); font-weight:400;">Non-Qualifying Credit</span></div>
+        <div class="asset-bar"><div class="asset-fill" style="width:70%; background:var(--chain);"></div></div>
+        <div class="col-val dim">$8,400</div>
+        <div class="col-val chain">$5,950</div>
+        <div class="col-val pos">−29%</div>
+        <div style="font-size:0.44rem; color:var(--dim); text-align:right;">Uniform RW scaling</div>
+      </div>
+      <div class="asset-row" style="border-bottom:none; padding-top:8px;">
+        <div style="font-size:0.55rem; font-weight:700; color:var(--mid);">TOTAL SIMM</div>
+        <div></div>
+        <div class="col-val" style="color:var(--mid); font-weight:700;">$280,000</div>
+        <div class="col-val chain" style="font-weight:700;">$195,630</div>
+        <div class="col-val pos" style="font-weight:700;">−30%</div>
+        <div style="font-size:0.44rem; color:var(--dim); text-align:right;">FX drag pulls blended<br>rate above 29%</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SECTION 3: STAKEHOLDER IMPACT -->
+<div class="section">
+  <div class="section-hdr">
+    <div class="section-num">03</div>
+    <div>
+      <div class="section-title">WHO BENEFITS — EVERY PARTICIPANT IN THE ECOSYSTEM</div>
+      <div class="section-sub">Sell-side · Buy-side · Corporate hedgers · Regulators · CCPs · Infrastructure providers · Emerging markets</div>
+    </div>
+  </div>
+
+  <div class="g3" style="margin-bottom:1rem;">
+
+    <!-- SELL SIDE -->
+    <div class="stake-card stake-sell">
+      <div class="stake-icon">🏦</div>
+      <div class="stake-name">SELL-SIDE BANKS / DEALERS</div>
+      <div class="benefit-row"><span class="benefit-icon teal">▸</span><div class="benefit-text"><b>XVA pricing drops 60-66%.</b> All-in derivative price to client falls. Win business that was uneconomic under traditional XVA loading.</div></div>
+      <div class="benefit-row"><span class="benefit-icon teal">▸</span><div class="benefit-text"><b>CCR capital falls 68-84%.</b> SA-CCR EAD compresses with MPoR. Return on capital improves dramatically for bilateral derivatives books.</div></div>
+      <div class="benefit-row"><span class="benefit-icon teal">▸</span><div class="benefit-text"><b>Credit limits go 6× further.</b> Same risk appetite, same counterparties, 6× more trades. No limit renegotiation needed.</div></div>
+      <div class="benefit-row"><span class="benefit-icon teal">▸</span><div class="benefit-text"><b>IM ops cost falls ~90%.</b> No daily AcadiaSoft reconciliation. No dispute resolution workflow. Smart contract handles IM automatically.</div></div>
+      <div class="benefit-row"><span class="benefit-icon teal">▸</span><div class="benefit-text"><b>SIMM IM falls 29-40%.</b> Less capital tied up in segregated IM. MVA compressed. Balance sheet freed for other uses.</div></div>
+      <div class="benefit-row"><span class="benefit-icon teal">▸</span><div class="benefit-text"><b>CVA VaR capital falls.</b> Basel III CVA capital scales with CVA level. CVA falls 60-70% → CVA capital falls proportionally.</div></div>
+    </div>
+
+    <!-- BUY SIDE -->
+    <div class="stake-card stake-buy">
+      <div class="stake-icon">📈</div>
+      <div class="stake-name">BUY-SIDE / ASSET MANAGERS / HEDGE FUNDS</div>
+      <div class="benefit-row"><span class="benefit-icon blue">▸</span><div class="benefit-text"><b>Lower derivative prices.</b> Dealer XVA reduction passes through to bid-offer spread. Tighter pricing on every trade.</div></div>
+      <div class="benefit-row"><span class="benefit-icon blue">▸</span><div class="benefit-text"><b>SIMM IM falls 29-40%.</b> Phase 5-6 buy-side firms above €8bn AANA threshold post significantly less IM. Capital freed for investment.</div></div>
+      <div class="benefit-row"><span class="benefit-icon blue">▸</span><div class="benefit-text"><b>MVA reduction.</b> Buy-side bears MVA costs indirectly through dealer pricing. Lower dealer MVA → better client pricing.</div></div>
+      <div class="benefit-row"><span class="benefit-icon blue">▸</span><div class="benefit-text"><b>Tokenized collateral yield.</b> IM earns T-bill rate instead of being trapped as zero-yield cash. Significant P&L improvement for large IM posters.</div></div>
+      <div class="benefit-row"><span class="benefit-icon blue">▸</span><div class="benefit-text"><b>24/7 collateral mobility.</b> No more time-zone constraints on collateral movement. Cross-border IM posting without FX conversion delay.</div></div>
+      <div class="benefit-row"><span class="benefit-icon blue">▸</span><div class="benefit-text"><b>Transparent dispute resolution.</b> On-chain CRIF means both parties compute same SIMM. No more IM call disputes. Operational certainty.</div></div>
+    </div>
+
+    <!-- CORPORATE HEDGERS -->
+    <div class="stake-card stake-corp">
+      <div class="stake-icon">🏭</div>
+      <div class="stake-name">CORPORATE HEDGERS / END USERS</div>
+      <div class="benefit-row"><span class="benefit-icon amber">▸</span><div class="benefit-text"><b>Dramatically better hedge economics.</b> XVA loading on FX forwards, commodity swaps, IR caps drops 60-66%. Hedging cost falls proportionally.</div></div>
+      <div class="benefit-row"><span class="benefit-icon amber">▸</span><div class="benefit-text"><b>Below €8bn AANA: stay exempt longer.</b> If dealer passes through IM savings, corporates below threshold benefit indirectly through tighter dealer spreads.</div></div>
+      <div class="benefit-row"><span class="benefit-icon amber">▸</span><div class="benefit-text"><b>Real-time hedge confirmation.</b> On-chain trade confirmation is instantaneous and cryptographically verifiable. No settlement uncertainty.</div></div>
+      <div class="benefit-row"><span class="benefit-icon amber">▸</span><div class="benefit-text"><b>Emerging market access.</b> Traditional XVA loading makes emerging-market corporate hedging prohibitively expensive. Blockchain reduces that barrier significantly.</div></div>
+      <div class="benefit-row"><span class="benefit-icon amber">▸</span><div class="benefit-text"><b>Transparent pricing.</b> On-chain XVA components are visible and auditable. Corporate treasurers can verify dealer pricing is fair — not a black box.</div></div>
+    </div>
+
+    <!-- REGULATORS -->
+    <div class="stake-card stake-reg">
+      <div class="stake-icon">⚖️</div>
+      <div class="stake-name">REGULATORS — CFTC · FRB · OCC · BIS · IOSCO</div>
+      <div class="benefit-row"><span class="benefit-icon red">▸</span><div class="benefit-text"><b>Real-time systemic risk visibility.</b> On-chain trade repositories give regulators live access to aggregate exposure across the market. No T+1 reporting lag.</div></div>
+      <div class="benefit-row"><span class="benefit-icon red">▸</span><div class="benefit-text"><b>Auditable IM calculation.</b> Smart contract SIMM calculation is deterministic and verifiable. Regulator can replay any IM call with cryptographic proof.</div></div>
+      <div class="benefit-row"><span class="benefit-icon red">▸</span><div class="benefit-text"><b>Immutable trade record.</b> No possibility of post-trade manipulation. Regulatory reporting is automatic — embedded in the confirmation workflow.</div></div>
+      <div class="benefit-row"><span class="benefit-icon red">▸</span><div class="benefit-text"><b>Systemic risk reduction.</b> Instantaneous collateral settlement eliminates the settlement risk that amplified Lehman contagion. Atomic settlement = no settlement exposure.</div></div>
+      <div class="benefit-row"><span class="benefit-icon red">▸</span><div class="benefit-text"><b>Clearing mandate less critical.</b> If bilateral blockchain derivatives are safer than cleared (as the thesis argues), mandatory clearing scope can be reviewed without systemic risk increase.</div></div>
+      <div class="benefit-row"><span class="benefit-icon red">▸</span><div class="benefit-text"><b>MPoR reform evidence base.</b> Rijeka's on-chain data provides the quantitative evidence base regulators need to justify MPoR floor reduction in rulemaking.</div></div>
+    </div>
+
+    <!-- CCPs -->
+    <div class="stake-card stake-ccp">
+      <div class="stake-icon">🔄</div>
+      <div class="stake-name">CCPs — LCH · CME · EUREX · DTCC</div>
+      <div class="benefit-row"><span class="benefit-icon" style="color:#e840a0;">▸</span><div class="benefit-text"><b>Competitive threat and opportunity.</b> Blockchain bilateral derivatives become operationally equivalent to cleared in close-out speed and IM certainty. Clearing mandate is questioned. CCPs must adopt blockchain themselves to remain relevant.</div></div>
+      <div class="benefit-row"><span class="benefit-icon" style="color:#e840a0;">▸</span><div class="benefit-text"><b>IM model improvement.</b> On-chain market data → better calibration inputs → CCP margin models (SPAN) become more accurate. Default waterfall risk reduced.</div></div>
+      <div class="benefit-row"><span class="benefit-icon" style="color:#e840a0;">▸</span><div class="benefit-text"><b>Cross-CCP margin efficiency.</b> Tokenized collateral moves between CCPs in seconds. Margin optimisation across LCH and CME no longer requires T+1 FX settlement.</div></div>
+      <div class="benefit-row"><span class="benefit-icon" style="color:#e840a0;">▸</span><div class="benefit-text"><b>DTCC precedent.</b> DTCC demonstrated real-time tokenized collateral platform April 2025. Settlement risk exposure reduced 99%+ in trials. CCPs are actively building toward this.</div></div>
+    </div>
+
+    <!-- INFRASTRUCTURE / EMERGING MARKETS -->
+    <div class="stake-card stake-infra">
+      <div class="stake-icon">🌍</div>
+      <div class="stake-name">EMERGING MARKETS & SMALLER INSTITUTIONS</div>
+      <div class="benefit-row"><span class="benefit-icon" style="color:#40c8e8;">▸</span><div class="benefit-text"><b>Access without legacy infrastructure.</b> Blockchain removes the need for DTCC/MarkitSERV membership, CCP clearing membership, AcadiaSoft subscription. A regional bank in Bosnia or Nigeria can participate on equal infrastructure footing as Goldman Sachs.</div></div>
+      <div class="benefit-row"><span class="benefit-icon" style="color:#40c8e8;">▸</span><div class="benefit-text"><b>No correspondent bank dependency.</b> Atomic on-chain settlement eliminates correspondent banking chains for collateral movement. Direct settlement between any two participants.</div></div>
+      <div class="benefit-row"><span class="benefit-icon" style="color:#40c8e8;">▸</span><div class="benefit-text"><b>SIMM model access.</b> On-chain CRIF + public smart contract SIMM calculation gives smaller firms access to the same model quality as Tier 1 banks. No expensive vendor license needed.</div></div>
+      <div class="benefit-row"><span class="benefit-icon" style="color:#40c8e8;">▸</span><div class="benefit-text"><b>Lower hedging cost in EM.</b> Current XVA loading on EM corporate hedging is prohibitive — CVA on EM counterparty credit is 10-30× developed market equivalent. MPoR compression reduces this systematically.</div></div>
+    </div>
+
+  </div>
+
+  <!-- THE STRATEGIC THESIS -->
+  <div class="thesis">
+    <div class="thesis-eyebrow">RIJEKA'S STRATEGIC THESIS — THE ARGUMENT NOBODY HAS MADE YET</div>
+    <div class="thesis-body">
+      The 10-day bilateral MPoR was designed to make bilateral derivatives <span>more expensive than cleared</span>. Blockchain makes bilateral derivatives <span>operationally superior to cleared derivatives</span> in close-out speed, collateral certainty, sensitivity transparency, and dispute resolution. The correct regulatory response is not merely to reduce bilateral MPoR to 5 days — it is to ask whether <span>blockchain-confirmed bilateral derivatives should carry lower capital requirements than cleared derivatives.</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- SECTION 4: REGULATORY ROADMAP -->
+<div class="section">
+  <div class="section-hdr">
+    <div class="section-num">04</div>
+    <div>
+      <div class="section-title">REGULATORY ROADMAP</div>
+      <div class="section-sub">The path from today's framework to full blockchain recognition</div>
+    </div>
+  </div>
+
+  <div class="g2">
+    <div style="display:flex; flex-direction:column; gap:0;">
+      <div class="road-item">
+        <div class="road-date" style="color:var(--teal);">NOV 2024</div>
+        <div class="road-body"><b>CFTC GMAC recommendations:</b> Expand non-cash collateral via DLT. First formal regulatory recognition that tokenized collateral should be eligible for derivatives margin. Blueprint published.</div>
+      </div>
+      <div class="road-item">
+        <div class="road-date" style="color:var(--teal);">JUL 2025</div>
+        <div class="road-body"><b>GENIUS Act enacted:</b> Federal framework for payment stablecoins. 100% reserve-backed stablecoins are now legally recognized for use as margin. USDC, PYUSD and equivalents become regulatory-grade collateral.</div>
+      </div>
+      <div class="road-item">
+        <div class="road-date" style="color:var(--teal);">AUG 2025</div>
+        <div class="road-body"><b>BCBS pause request:</b> GFMA/SIFMA submitted formal request to pause implementation of 1250% risk weight on public blockchain assets pending updated guidance. Coalition of largest dealers united behind request.</div>
+      </div>
+      <div class="road-item">
+        <div class="road-date" style="color:var(--teal);">SEP 2025</div>
+        <div class="road-body"><b>CFTC Crypto Sprint:</b> Acting Chairman Pham launched formal initiative for technical amendments to regulations for blockchain-based collateral, margin, clearing, and settlement.</div>
+      </div>
+      <div class="road-item">
+        <div class="road-date" style="color:var(--teal);">DEC 2025</div>
+        <div class="road-body"><b>CFTC Letter 25-39:</b> Formal guidance issued. Tokenized assets retain margin eligibility if "functionally equivalent" to traditional form. BTC/ETH/USDC pilot programme launched. Haircut framework for tokenized collateral published.</div>
+      </div>
+      <div class="road-item">
+        <div class="road-date" style="color:var(--teal);">NOV 2025</div>
+        <div class="road-body"><b>BCBS chair statement:</b> Confirmed that growth of stablecoins and US/UK decisions not to implement 1250% risk weight "calls for a different approach." BCBS review formally opened.</div>
+      </div>
+      <div class="road-item" style="border-bottom:none;">
+        <div class="road-date" style="color:var(--amber);">APR 2025</div>
+        <div class="road-body"><b>DTCC demonstration:</b> Real-time tokenized collateral management platform demonstrated across participants and time zones. DTCC called collateral mobility the "killer app" for blockchain in capital markets.</div>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:0;">
+      <div class="road-item">
+        <div class="road-date" style="color:var(--amber);">AUG 2026</div>
+        <div class="road-body"><b>CFTC rulemaking target:</b> Technical amendments to regulations for collateral, margin, clearing, settlement, reporting, and recordkeeping to enable blockchain. <b>MPoR review expected to be included.</b> This is the key date for the 29% SIMM reduction regulatory unlock.</div>
+      </div>
+      <div class="road-item">
+        <div class="road-date" style="color:var(--amber);">2026</div>
+        <div class="road-body"><b>BCBS crypto standard reform:</b> Revised framework expected to remove 1250% risk weight for regulated stablecoins and recognised tokenized assets. SA-CCR treatment of blockchain-confirmed trades to be addressed.</div>
+      </div>
+      <div class="road-item">
+        <div class="road-date" style="color:var(--chain);">2027</div>
+        <div class="road-body"><b>MPoR floor reduced for blockchain bilateral:</b> If CFTC rulemaking proceeds, bilateral blockchain-confirmed trades with atomic settlement and on-chain CRIF qualify for 5-day MPoR. SIMM risk weights recalibrated. <b>29% IM reduction across all risk classes unlocked globally.</b></div>
+      </div>
+      <div class="road-item">
+        <div class="road-date" style="color:var(--chain);">2028+</div>
+        <div class="road-body"><b>ISDA SIMM recalibration on blockchain data:</b> Semiannual calibration uses on-chain market data as canonical source. Model governance becomes fully auditable. Independent validation uses blockchain records. Regulators accept lower MPoR floors with full confidence.</div>
+      </div>
+      <div class="road-item" style="border-bottom:none;">
+        <div class="road-date" style="color:var(--chain);">LONG TERM</div>
+        <div class="road-body"><b>Clearing mandate reconsidered:</b> If blockchain bilateral derivatives demonstrably provide equal or better systemic risk protection than cleared derivatives, mandatory clearing scope is reviewed. <b>Bilateral blockchain markets potentially attract volume back from CCPs.</b> The trillion-dollar structural shift.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- SECTION 5: RIJEKA POSITIONING -->
+<div class="section">
+  <div class="section-hdr">
+    <div class="section-num">05</div>
+    <div>
+      <div class="section-title">RIJEKA — NEUTRAL ON-CHAIN DERIVATIVES INFRASTRUCTURE</div>
+      <div class="section-sub">Why Rijeka is positioned at the intersection of every benefit</div>
+    </div>
+  </div>
+
+  <div class="g3" style="margin-bottom:1rem;">
+    <div class="panel">
+      <div class="panel-hdr"><span class="panel-title" style="color:var(--teal);">RIJEKA AS EVIDENCE BASE</span></div>
+      <div style="padding:10px 12px; font-size:0.52rem; color:var(--dim); line-height:1.8;">
+        Every blockchain-confirmed trade on Rijeka generates on-chain proof of close-out speed, IM precision, and settlement finality. This immutable record is the <b style="color:var(--text);">quantitative evidence base regulators need to justify MPoR reform.</b> Rijeka is not just a platform — it is a live proof-of-concept at scale. The XVA paper uses Rijeka data. The CFTC rulemaking uses Rijeka evidence.
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-hdr"><span class="panel-title" style="color:var(--teal);">RIJEKA AS INFRASTRUCTURE LAYER</span></div>
+      <div style="padding:10px 12px; font-size:0.52rem; color:var(--dim); line-height:1.8;">
+        Ethereum mainnet (trade confirmation anchoring) + Arbitrum L2 (cashflow settlement, IM calls, CRIF hashing). <b style="color:var(--text);">TradeConfirm.sol · SettlementInstruction.sol · MarginCall.sol.</b> ISDA CDM alignment. Smart contract terms are the ISDA Master Agreement encoded on-chain. No paper. No delay. No dispute.
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-hdr"><span class="panel-title" style="color:var(--teal);">THE XVA PAPER — TARGET: TOM LEE / FUNDSTRAT</span></div>
+      <div style="padding:10px 12px; font-size:0.52rem; color:var(--dim); line-height:1.8;">
+        <b style="color:var(--text);">"Blockchain-Adjusted XVA and SIMM: Quantifying the Cost Reduction of Atomic Settlement and Tokenized Collateral in Derivatives Pricing."</b> Mathematical proof of all eight SIMM mechanisms. Quantified CVA/FVA/MVA/KVA reduction. SA-CCR capital saving. The regulatory roadmap. Published independently. Positions Rijeka as the intellectual infrastructure behind the movement.
+      </div>
+    </div>
+  </div>
+
+  <div class="thesis">
+    <div class="thesis-eyebrow">THE MISSION</div>
+    <div class="thesis-body">
+      When Wall Street's paperwork crisis of 1968 threatened to paralyze equity markets, the Depository Trust Company solved it by dematerializing physical certificates into book entries — creating the centralised infrastructure that still clears <span>$87 trillion in equities annually</span>. The problem it solved was not the securities themselves but the friction between them: reconciliation, confirmation, settlement finality. Fifty years later, bilateral derivatives markets face an equivalent structural failure — not in volume but in architecture. ISDA confirmations negotiated over days. SIMM disputed between independent models. Collateral settling T+1 across correspondent chains. Regulatory reporting assembled from fragmented post-trade records.
+      <br><br>
+      Rijeka is not a product built on top of this infrastructure. <span>It is its dematerialization.</span> The ISDA Master Agreement encoded in a smart contract. SIMM computed from immutable shared sensitivities, disputes mathematically impossible. Margin called and settled atomically. Regulatory reporting embedded in the confirmation workflow itself — not assembled after the fact.
+      <br><br>
+      What DTC did for paper certificates, Rijeka does for the bilateral derivatives operational stack — with one structural difference that DTC could never achieve: <span>there is no central depository</span>. The ledger is shared. Which means, for the first time, that a regional bank in Sarajevo and a primary dealer in New York operate on identical infrastructure — not adjacent to the same system, but on the same chain. That is not disruption. <span>That is the natural conclusion of what DTC started.</span>
+    </div>
+  </div>
+
+  <div style="padding:16px; background:var(--bg-deep); border:1px solid var(--border); border-radius:2px; display:flex; align-items:center; justify-content:space-between; margin-top:1rem;">
+    <div>
+      <div style="font-size:0.5rem; color:var(--dim); letter-spacing:0.12em; margin-bottom:4px;">RIJEKA PLATFORM · OPEN SOURCE · v0.4.0</div>
+      <div style="font-size:0.62rem; color:var(--teal);">rijeka.app · <a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="82eae7eeeeedc2f0ebe8e7e9e3ace3f2f2">[email&#160;protected]</a> · linkedin.com/in/mikodevedzic</div>
+    </div>
+    <div style="font-size:0.65rem; font-

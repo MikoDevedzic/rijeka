@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/useAuthStore'
 const MODULES = [
   { label: 'HOME',           path: '/command-center', exact: true  },
   { label: 'BLOTTER',        path: '/blotter',        exact: false },
+  { label: 'PRICER',         path: '/pricer',         exact: false },
   { label: 'CONFIGURATIONS', path: '/configurations', exact: false },
 ]
 
