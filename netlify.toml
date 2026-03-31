@@ -6,17 +6,13 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# xva.html is a static file — must come BEFORE the SPA catch-all
+# SPA fallback — force=false means static files in dist/ are served first
+# xva.html exists in dist/ so Netlify serves it directly, no rewrite needed
 [[redirects]]
-  from   = "/xva.html"
-  to     = "/xva.html"
+  from  = "/*"
+  to    = "/index.html"
   status = 200
-
-# SPA fallback — all other routes serve index.html
-[[redirects]]
-  from   = "/*"
-  to     = "/index.html"
-  status = 200
+  force  = false
 
 # Security headers
 [[headers]]
