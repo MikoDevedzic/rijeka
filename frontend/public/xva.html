@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XVA Simulator — Rijeka</title>
+<meta name="description" content="Interactive Monte Carlo simulation of a 5Y interest rate swap. Visualise EE, ENE, EPE exposure profiles and how CVA is priced. Built by Rijeka.">
+<meta property="og:title" content="XVA Simulator — Rijeka">
+<meta property="og:description" content="Interactive Monte Carlo simulation showing how XVA components are derived from simulated rate paths. Adjust notional, volatility, and CDS spread in real time.">
+<meta property="og:url" content="https://rijeka.app/xva.html">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;900&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0f14;--bg-deep:#070b0f;--panel:#0f1823;--panel-2:#152030;--panel-3:#1c2a3a;
+  --border:#1e3045;--border-2:#243850;
+  --accent:#0dd4a8;--amber:#f0a020;--blue:#4a9ad4;--red:#e05040;
+  --text:#e8f0f8;--text-dim:#526878;--text-mid:#8ab0c8;
+  --mono:'JetBrains Mono',monospace;
+  --ee:#4a9ad4;--ene:#0dd4a8;--epe:#e05040;
+}
+html,body{
+  height:100%;background:var(--bg);color:var(--text);
+  font-family:var(--mono);font-size:13px;
+  display:flex;flex-direction:column;min-height:100vh;
+}
+
+/* HEADER */
+.header{
+  background:var(--bg-deep);border-bottom:1px solid var(--border);
+  padding:14px 24px;display:flex;align-items:center;gap:16px;flex-shrink:0;
+}
+.logo{font-size:.85rem;font-weight:900;letter-spacing:.2em;color:var(--accent)}
+.header-title{font-size:.60rem;font-weight:700;letter-spacing:.1em;color:var(--text-mid)}
+.header-sub{font-size:.50rem;color:var(--text-dim);margin-left:auto}
+.header-link{font-size:.50rem;color:var(--accent);text-decoration:none;margin-left:16px;padding:3px 10px;border:1px solid rgba(13,212,168,.3);border-radius:2px}
+.header-link:hover{background:rgba(13,212,168,.08)}
+
+/* MAIN */
+.main{flex:1;display:flex;overflow:hidden;min-height:0}
+
+/* LEFT — CONTROLS */
+.controls{
+  width:220px;flex-shrink:0;background:var(--bg-deep);
+  border-right:1px solid var(--border);padding:16px 14px;
+  display:flex;flex-direction:column;gap:0;overflow-y:auto;
+}
+.ctrl-section{margin-bottom:20px}
+.ctrl-title{font-size:.44rem;font-weight:700;letter-spacing:.12em;color:var(--text-dim);margin-bottom:10px;display:block}
+
+/* SLIDERS */
+.slider-wrap{margin-bottom:12px}
+.slider-hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+.slider-lbl{font-size:.50rem;color:var(--text-mid)}
+.slider-val{font-size:.62rem;font-weight:700;color:var(--text)}
+input[type=range]{
+  width:100%;height:4px;
+  -webkit-appearance:none;appearance:none;
+  background:var(--border-2);border-radius:2px;outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--accent);cursor:pointer;border:2px solid var(--bg-deep);
+}
+input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;
+  background:var(--accent);cursor:pointer;border:2px solid var(--bg-deep);
+}
+
+/* BUTTONS */
+.btn-resim{
+  width:100%;background:rgba(13,212,168,.1);border:1px solid var(--accent);
+  color:var(--accent);font-family:var(--mono);font-size:.60rem;font-weight:700;
+  padding:8px;border-radius:2px;cursor:pointer;letter-spacing:.08em;margin-bottom:10px;
+}
+.btn-resim:hover{background:rgba(13,212,168,.18)}
+.btn-resim:active{transform:scale(.98)}
+
+/* METRIC CARDS */
+.metric-grid{display:flex;flex-direction:column;gap:6px}
+.mc{background:var(--panel);border:1px solid var(--border);border-radius:2px;padding:8px 10px}
+.mc-lbl{font-size:.40rem;font-weight:700;letter-spacing:.08em;color:var(--text-dim);margin-bottom:3px}
+.mc-val{font-size:.80rem;font-weight:700}
+.mc-sub{font-size:.40rem;color:var(--text-dim);margin-top:2px}
+
+/* LEGEND */
+.legend{margin-top:auto;padding-top:16px;border-top:1px solid var(--border)}
+.leg-item{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px}
+.leg-line{width:24px;height:3px;border-radius:1px;flex-shrink:0;margin-top:5px}
+.leg-line.dashed{background:none;border-top:2px dashed}
+.leg-text{font-size:.44rem;color:var(--text-dim);line-height:1.6}
+.leg-text strong{color:var(--text-mid);font-weight:700}
+
+/* FORMULA BOX */
+.formula-box{background:var(--panel-2);border:1px solid var(--border);border-radius:2px;padding:8px 10px;margin-top:8px}
+.fb-title{font-size:.40rem;font-weight:700;letter-spacing:.1em;color:var(--text-dim);margin-bottom:5px}
+.fb-eq{font-size:.52rem;color:var(--accent);line-height:1.9}
+.fb-eq .dim{color:var(--text-dim)}
+
+/* RIGHT — CHARTS */
+.charts{flex:1;display:flex;flex-direction:column;padding:16px 16px 10px;gap:0;overflow:hidden}
+.chart-label{font-size:.44rem;font-weight:700;letter-spacing:.1em;color:var(--text-dim);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.chart-label span{font-size:.42rem;color:var(--text-dim);font-weight:400;letter-spacing:0}
+.chart-wrap{position:relative;width:100%}
+#paths-wrap{height:44%;margin-bottom:6px}
+#exp-wrap{height:calc(56% - 6px)}
+
+/* STATUS BAR */
+.statusbar{
+  height:26px;background:var(--bg-deep);border-top:1px solid var(--border);
+  display:flex;align-items:center;padding:0 16px;gap:16px;flex-shrink:0;
+}
+.sb{font-size:.42rem;color:var(--text-dim);display:flex;align-items:center;gap:5px}
+.sb-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sim-time{margin-left:auto;font-size:.42rem;color:var(--text-dim)}
+
+/* ANNOTATION */
+.annotation{
+  position:absolute;background:var(--panel-2);border:1px solid var(--border);
+  border-radius:2px;padding:4px 8px;font-size:.42rem;color:var(--text-mid);
+  pointer-events:none;white-space:nowrap;
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <span class="logo">RIJEKA</span>
+  <div style="width:1px;height:18px;background:var(--border)"></div>
+  <span class="header-title">XVA SIMULATOR — MONTE CARLO INTEREST RATE SWAP</span>
+  <span class="header-sub">500 paths · Hull-White model · risk-neutral Q measure</span>
+  <a class="header-link" href="https://rijeka.app" target="_blank">← RIJEKA PLATFORM</a>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- CONTROLS -->
+  <div class="controls">
+
+    <div class="ctrl-section">
+      <span class="ctrl-title">SIMULATION INPUTS</span>
+
+      <div class="slider-wrap">
+        <div class="slider-hdr">
+          <span class="slider-lbl">Notional</span>
+          <span class="slider-val" id="v-notional">$10M</span>
+        </div>
+        <input type="range" id="s-notional" min="5" max="50" value="10" step="5">
+      </div>
+
+      <div class="slider-wrap">
+        <div class="slider-hdr">
+          <span class="slider-lbl">Fixed rate</span>
+          <span class="slider-val" id="v-rate">4.25%</span>
+        </div>
+        <input type="range" id="s-rate" min="200" max="700" value="425" step="5">
+      </div>
+
+      <div class="slider-wrap">
+        <div class="slider-hdr">
+          <span class="slider-lbl">Rate volatility (σ)</span>
+          <span class="slider-val" id="v-vol">70bp</span>
+        </div>
+        <input type="range" id="s-vol" min="20" max="150" value="70" step="5">
+      </div>
+
+      <div class="slider-wrap">
+        <div class="slider-hdr">
+          <span class="slider-lbl">Mean reversion (κ)</span>
+          <span class="slider-val" id="v-kappa">0.30</span>
+        </div>
+        <input type="range" id="s-kappa" min="5" max="80" value="30" step="5">
+      </div>
+
+      <div class="slider-wrap">
+        <div class="slider-hdr">
+          <span class="slider-lbl">CDS spread</span>
+          <span class="slider-val" id="v-cds">42bp</span>
+        </div>
+        <input type="range" id="s-cds" min="10" max="200" value="42" step="2">
+      </div>
+
+      <div class="slider-wrap">
+        <div class="slider-hdr">
+          <span class="slider-lbl">Recovery rate (R)</span>
+          <span class="slider-val" id="v-rec">40%</span>
+        </div>
+        <input type="range" id="s-rec" min="0" max="70" value="40" step="5">
+      </div>
+
+      <div class="slider-wrap">
+        <div class="slider-hdr">
+          <span class="slider-lbl">Tenor</span>
+          <span class="slider-val" id="v-tenor">5Y</span>
+        </div>
+        <input type="range" id="s-tenor" min="1" max="30" value="5" step="1">
+      </div>
+
+      <button class="btn-resim" onclick="runSim()">▶ RESIMULATE</button>
+    </div>
+
+    <!-- METRICS -->
+    <div class="ctrl-section">
+      <span class="ctrl-title">CVA OUTPUTS</span>
+      <div class="metric-grid">
+        <div class="mc" style="border-top:2px solid var(--red)">
+          <div class="mc-lbl">CVA</div>
+          <div class="mc-val" style="color:var(--red)" id="m-cva">—</div>
+          <div class="mc-sub">credit valuation adjustment</div>
+        </div>
+        <div class="mc" style="border-top:2px solid var(--blue)">
+          <div class="mc-lbl">CVA (basis points)</div>
+          <div class="mc-val" style="color:var(--blue)" id="m-cvabp">—</div>
+          <div class="mc-sub">loaded into quoted rate</div>
+        </div>
+        <div class="mc" style="border-top:2px solid var(--red)">
+          <div class="mc-lbl">PEAK EPE</div>
+          <div class="mc-val" style="color:var(--red)" id="m-epe">—</div>
+          <div class="mc-sub">95th pct positive exposure</div>
+        </div>
+        <div class="mc" style="border-top:2px solid var(--accent)">
+          <div class="mc-lbl">PEAK EE</div>
+          <div class="mc-val" style="color:var(--accent)" id="m-ee">—</div>
+          <div class="mc-sub">expected exposure (CVA driver)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="legend">
+      <div class="leg-item">
+        <div class="leg-line" style="background:var(--ee)"></div>
+        <div class="leg-text"><strong>EE</strong> — Expected Exposure. Avg of positive MTM across paths. Drives CVA pricing (Q measure).</div>
+      </div>
+      <div class="leg-item">
+        <div class="leg-line" style="background:var(--ene)"></div>
+        <div class="leg-text"><strong>ENE</strong> — Expected Negative Exposure. Avg of negative MTM. Drives DVA.</div>
+      </div>
+      <div class="leg-item">
+        <div class="leg-line dashed" style="border-color:var(--epe)"></div>
+        <div class="leg-text"><strong>EPE</strong> — 95th percentile positive exposure. Credit limit utilisation (real-world P measure).</div>
+      </div>
+
+      <!-- CVA FORMULA -->
+      <div class="formula-box">
+        <div class="fb-title">CVA FORMULA</div>
+        <div class="fb-eq">
+          CVA = <span class="dim">−</span>(1<span class="dim">−</span>R)<br>
+          &nbsp;&nbsp;&nbsp;× Σ EE(t)<br>
+          &nbsp;&nbsp;&nbsp;× PD(t) × df(t)
+        </div>
+        <div style="margin-top:6px;font-size:.42rem;color:var(--text-dim);line-height:1.7">
+          PD(t) from CDS via hazard rate:<br>
+          λ = CDS / (1−R)<br>
+          PD(t) = 1 − e<sup>−λt</sup>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /controls -->
+
+  <!-- CHARTS -->
+  <div class="charts">
+
+    <div class="chart-label">
+      SIMULATED SOFR RATE PATHS
+      <span id="path-count">500 paths shown (60 visible)</span>
+    </div>
+    <div class="chart-wrap" id="paths-wrap">
+      <canvas id="pathsChart"></canvas>
+    </div>
+
+    <div class="chart-label" style="margin-top:8px">
+      EXPOSURE PROFILES — EE · ENE · EPE
+      <span>derived from all 500 paths · hover for values</span>
+    </div>
+    <div class="chart-wrap" id="exp-wrap">
+      <canvas id="exposureChart"></canvas>
+    </div>
+
+  </div><!-- /charts -->
+</div><!-- /main -->
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <div class="sb"><div class="sb-dot"></div>LIVE SIMULATION</div>
+  <div class="sb" id="sb-params">—</div>
+  <div class="sb" id="sb-paths">500 paths · 60 steps</div>
+  <div class="sim-time" id="sb-time">—</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+let pathsChart, exposureChart;
+const N_PATHS = 500;
+const N_SHOW  = 60;
+
+function getParams() {
+  return {
+    notional: parseInt(document.getElementById('s-notional').value),
+    rate:     parseInt(document.getElementById('s-rate').value) / 10000,
+    vol:      parseInt(document.getElementById('s-vol').value) / 10000,
+    kappa:    parseInt(document.getElementById('s-kappa').value) / 100,
+    cds:      parseInt(document.getElementById('s-cds').value) / 10000,
+    rec:      parseInt(document.getElementById('s-rec').value) / 100,
+    tenor:    parseInt(document.getElementById('s-tenor').value),
+  };
+}
+
+function updateLabels(p) {
+  document.getElementById('v-notional').textContent = '$' + p.notional + 'M';
+  document.getElementById('v-rate').textContent     = (p.rate * 100).toFixed(2) + '%';
+  document.getElementById('v-vol').textContent      = Math.round(p.vol * 10000) + 'bp';
+  document.getElementById('v-kappa').textContent    = p.kappa.toFixed(2);
+  document.getElementById('v-cds').textContent      = Math.round(p.cds * 10000) + 'bp';
+  document.getElementById('v-rec').textContent      = Math.round(p.rec * 100) + '%';
+  document.getElementById('v-tenor').textContent    = p.tenor + 'Y';
+}
+
+function simPaths(p) {
+  const STEPS = Math.min(p.tenor * 12, 60);
+  const dt = p.tenor / STEPS;
+  const paths = [];
+  for (let i = 0; i < N_PATHS; i++) {
+    const path = [p.rate];
+    let r = p.rate;
+    for (let s = 0; s < STEPS; s++) {
+      const z = boxMuller();
+      r = r + p.kappa * (p.rate - r) * dt + p.vol * Math.sqrt(Math.max(r, 0.001)) * z * Math.sqrt(dt);
+      r = Math.max(r, -0.03);
+      path.push(r);
+    }
+    paths.push(path);
+  }
+  return { paths, STEPS, dt };
+}
+
+function boxMuller() {
+  let u = 0, v = 0;
+  while (!u) u = Math.random();
+  while (!v) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function mtm(r, r0, notional_M, remaining_years) {
+  if (remaining_years < 0.05) return 0;
+  const dv01_approx = remaining_years * notional_M * 1e6 * 0.0001;
+  return (r - r0) * dv01_approx / 0.0001 * (1 + 0.15 * Math.sqrt(remaining_years));
+}
+
+function computeProfiles(paths, p, STEPS, dt) {
+  const ee = [], ene = [], epe = [];
+  for (let s = 0; s <= STEPS; s++) {
+    const t = s * dt;
+    const remaining = p.tenor - t;
+    const vals = paths.map(path => mtm(path[s], p.rate, p.notional, remaining));
+    const pos = vals.filter(v => v > 0);
+    const neg = vals.filter(v => v < 0);
+    ee.push(pos.length  ? pos.reduce((a,b) => a+b, 0) / vals.length / 1e6 : 0);
+    ene.push(neg.length ? neg.reduce((a,b) => a+b, 0) / vals.length / 1e6 : 0);
+    const sorted = [...vals].sort((a,b) => a - b);
+    epe.push(sorted[Math.floor(sorted.length * 0.95)] / 1e6);
+  }
+  return { ee, ene, epe };
+}
+
+function computeCVA(ee, p, STEPS, dt) {
+  const lambda = p.cds / (1 - p.rec);
+  let cva = 0;
+  for (let s = 0; s < STEPS; s++) {
+    const t1 = s * dt, t2 = (s + 1) * dt;
+    const survDiff = Math.exp(-lambda * t1) - Math.exp(-lambda * t2);
+    const df = Math.exp(-p.rate * (s + 0.5) * dt);
+    cva += -(1 - p.rec) * ee[s] * 1e6 * survDiff * df;
+  }
+  return cva;
+}
+
+function runSim() {
+  const t0 = performance.now();
+  const p = getParams();
+  updateLabels(p);
+
+  const { paths, STEPS, dt } = simPaths(p);
+  const times = Array.from({length: STEPS + 1}, (_, i) => +((i * dt).toFixed(2)));
+  const { ee, ene, epe } = computeProfiles(paths, p, STEPS, dt);
+  const cva = computeCVA(ee, p, STEPS, dt);
+  const cvaBp = Math.abs(cva) / (p.notional * 1e6 * p.tenor) * 10000;
+  const peakEE  = Math.max(...ee);
+  const peakEPE = Math.max(...epe);
+
+  // Update metrics
+  document.getElementById('m-cva').textContent   = '−$' + Math.abs(Math.round(cva / 100) * 100).toLocaleString();
+  document.getElementById('m-cvabp').textContent = cvaBp.toFixed(1) + 'bp';
+  document.getElementById('m-epe').textContent   = '$' + peakEPE.toFixed(2) + 'M';
+  document.getElementById('m-ee').textContent    = '$' + peakEE.toFixed(2) + 'M';
+
+  // Status bar
+  document.getElementById('sb-params').textContent =
+    '$' + p.notional + 'M · ' + (p.rate*100).toFixed(2) + '% · ' +
+    Math.round(p.vol*10000) + 'bp vol · ' + Math.round(p.cds*10000) + 'bp CDS · ' +
+    p.tenor + 'Y';
+  document.getElementById('sb-time').textContent =
+    'Simulated ' + N_PATHS + ' paths in ' + Math.round(performance.now() - t0) + 'ms';
+
+  drawCharts(paths, times, ee, ene, epe, p, STEPS);
+}
+
+function drawCharts(paths, times, ee, ene, epe, p, STEPS) {
+  // COLOURS — no CSS vars on canvas
+  const colPath    = 'rgba(74,154,212,0.055)';
+  const colMean    = 'rgba(13,212,168,0.9)';
+  const colEE      = '#4a9ad4';
+  const colENE     = '#0dd4a8';
+  const colEPE     = '#e05040';
+  const colGrid    = 'rgba(255,255,255,0.06)';
+  const colTick    = '#526878';
+  const colZero    = 'rgba(255,255,255,0.18)';
+  const colFillEE  = 'rgba(74,154,212,0.12)';
+  const colFillENE = 'rgba(13,212,168,0.10)';
+
+  // ── PATHS CHART ──
+  const meanPath = times.map((t, si) => {
+    const vals = paths.map(path => path[Math.min(si, STEPS)] * 100);
+    return +(vals.reduce((a,b) => a+b, 0) / vals.length).toFixed(4);
+  });
+
+  const pathDatasets = paths.slice(0, N_SHOW).map(path => ({
+    data: path.map(r => +(r * 100).toFixed(4)),
+    borderColor: colPath,
+    borderWidth: 0.8,
+    pointRadius: 0,
+    tension: 0.3,
+  }));
+  pathDatasets.push({
+    label: 'mean',
+    data: meanPath,
+    borderColor: colMean,
+    borderWidth: 2,
+    pointRadius: 0,
+    tension: 0.4,
+  });
+
+  const pathOpts = {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 200 },
+    plugins: {
+      legend: { display: false },
+      tooltip: { enabled: false },
+    },
+    scales: {
+      x: {
+        ticks: { maxTicksLimit: 7, color: colTick, font: { size: 10, family: 'JetBrains Mono' } },
+        grid: { color: colGrid },
+        title: { display: true, text: 'years', color: colTick, font: { size: 10 } }
+      },
+      y: {
+        ticks: {
+          callback: v => v.toFixed(2) + '%',
+          color: colTick, font: { size: 10, family: 'JetBrains Mono' }
+        },
+        grid: { color: colGrid },
+        title: { display: true, text: 'SOFR rate', color: colTick, font: { size: 10 } }
+      }
+    }
+  };
+
+  if (pathsChart) pathsChart.destroy();
+  pathsChart = new Chart(document.getElementById('pathsChart'), {
+    type: 'line',
+    data: { labels: times, datasets: pathDatasets },
+    options: pathOpts,
+  });
+
+  // ── EXPOSURE CHART ──
+  const expDatasets = [
+    {
+      label: 'EPE (95th pct)',
+      data: epe.map(v => +(v).toFixed(3)),
+      borderColor: colEPE,
+      borderWidth: 1.5,
+      borderDash: [5, 4],
+      pointRadius: 0,
+      fill: false,
+      tension: 0.4,
+    },
+    {
+      label: 'EE',
+      data: ee.map(v => +(v).toFixed(3)),
+      borderColor: colEE,
+      borderWidth: 2.5,
+      backgroundColor: colFillEE,
+      pointRadius: 0,
+      fill: 'origin',
+      tension: 0.4,
+    },
+    {
+      label: 'ENE',
+      data: ene.map(v => +(v).toFixed(3)),
+      borderColor: colENE,
+      borderWidth: 2.5,
+      backgroundColor: colFillENE,
+      pointRadius: 0,
+      fill: 'origin',
+      tension: 0.4,
+    },
+    {
+      label: '',
+      data: times.map(() => 0),
+      borderColor: colZero,
+      borderWidth: 1,
+      pointRadius: 0,
+      fill: false,
+    }
+  ];
+
+  const expOpts = {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 200 },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        mode: 'index', intersect: false,
+        backgroundColor: '#0f1823',
+        borderColor: '#1e3045',
+        borderWidth: 1,
+        titleColor: '#8ab0c8',
+        bodyColor: '#e8f0f8',
+        titleFont: { family: 'JetBrains Mono', size: 10 },
+        bodyFont:  { family: 'JetBrains Mono', size: 10 },
+        callbacks: {
+          title: items => 'T = ' + items[0].label + 'Y',
+          label: ctx => {
+            if (!ctx.dataset.label) return null;
+            const v = ctx.raw;
+            return ctx.dataset.label + ': $' + Math.abs(v).toFixed(3) + 'M';
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { maxTicksLimit: 7, color: colTick, font: { size: 10, family: 'JetBrains Mono' } },
+        grid: { color: colGrid },
+        title: { display: true, text: 'years', color: colTick, font: { size: 10 } }
+      },
+      y: {
+        ticks: {
+          callback: v => '$' + v.toFixed(1) + 'M',
+          color: colTick, font: { size: 10, family: 'JetBrains Mono' }
+        },
+        grid: { color: colGrid },
+        title: { display: true, text: 'exposure ($M)', color: colTick, font: { size: 10 } }
+      }
+    }
+  };
+
+  if (exposureChart) exposureChart.destroy();
+  exposureChart = new Chart(document.getElementById('exposureChart'), {
+    type: 'line',
+    data: { labels: times, datasets: expDatasets },
+    options: expOpts,
+  });
+}
+
+// Wire sliders
+['s-notional','s-rate','s-vol','s-kappa','s-cds','s-rec','s-tenor'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => runSim());
+});
+
+// Initial run
+runSim();
+</script>
+</body>
+</html>
