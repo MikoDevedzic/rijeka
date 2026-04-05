@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>IRS Pricer — Rijeka</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:#000000; --surface:#0C0C0C; --surface2:#141414;
+  --border:#1E1E1E; --text:#F0F0F0; --muted:#666666; --muted2:#2A2A2A;
+  --accent:#00D4A8; --blue:#4A9EFF; --amber:#F5C842; --red:#FF6B6B;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+/* Header */
+header{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-bottom:1px solid var(--border);background:var(--surface)}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:28px;height:28px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:12px;font-weight:600;color:#000}
+.logo-text{font-size:16px;font-weight:600;letter-spacing:0.02em}
+.header-links{display:flex;align-items:center;gap:20px}
+.header-links a{font-size:13px;color:var(--muted);font-weight:500;transition:color .12s}
+.header-links a:hover{color:var(--text)}
+.header-badge{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:2px;border:1px solid rgba(0,212,168,0.3);background:rgba(0,212,168,0.06);color:var(--accent)}
+/* Hero */
+.hero{padding:40px 32px 24px;border-bottom:1px solid var(--border)}
+.hero h1{font-size:28px;font-weight:600;letter-spacing:-0.3px;margin-bottom:8px}
+.hero h1 span{color:var(--accent)}
+.hero p{font-size:14px;color:var(--muted);max-width:600px;line-height:1.7}
+.ccy-tabs{display:flex;gap:1px;margin-top:20px;background:var(--border);border-radius:4px;overflow:hidden;width:fit-content}
+.ccy-tab{padding:8px 20px;font-family:var(--sans);font-size:13px;font-weight:600;background:var(--surface2);color:var(--muted);cursor:pointer;border:none;transition:all .12s;letter-spacing:0.04em}
+.ccy-tab.active{background:var(--accent);color:#000}
+/* Main layout */
+.main{display:grid;grid-template-columns:420px 1fr;min-height:calc(100vh - 200px)}
+/* Left panel */
+.left{border-right:1px solid var(--border);display:flex;flex-direction:column}
+.panel-section{padding:20px 24px;border-bottom:1px solid var(--border)}
+.section-label{font-size:11px;font-weight:600;letter-spacing:.10em;color:var(--muted);margin-bottom:14px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-bottom:4px;letter-spacing:.04em}
+.field input,.field select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--mono);font-size:14px;padding:8px 10px;outline:none;transition:border-color .12s}
+.field input:focus,.field select:focus{border-color:rgba(0,212,168,0.5)}
+.field input.par-mode{color:var(--accent);border-color:rgba(0,212,168,0.3)}
+.dir-row{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.dir-btn{padding:9px 6px;font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.04em;border-radius:3px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .12s;white-space:nowrap}
+.dir-btn.pay.active{border-color:var(--red);background:rgba(255,107,107,0.08);color:var(--red)}
+.dir-btn.rec.active{border-color:var(--accent);background:rgba(0,212,168,0.08);color:var(--accent)}
+.price-btn{width:100%;padding:12px;background:var(--amber);border:none;border-radius:3px;color:#000;font-family:var(--sans);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.04em;transition:opacity .12s}
+.price-btn:hover{opacity:.9}
+.price-btn:disabled{opacity:.4;cursor:default}
+/* Analytics */
+.analytics-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:14px}
+.metric{background:var(--surface2);padding:12px 14px}
+.metric-label{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.08em;margin-bottom:4px}
+.metric-value{font-family:var(--mono);font-size:18px;font-weight:600}
+.metric-value.pos{color:var(--accent)}
+.metric-value.neg{color:var(--red)}
+.metric-value.neu{color:var(--blue)}
+.metric-value.amber{color:var(--amber)}
+.legs-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12px}
+.legs-table th{text-align:left;color:var(--muted);font-weight:400;font-size:11px;padding:4px 6px;border-bottom:1px solid var(--border)}
+.legs-table td{padding:5px 6px;border-bottom:1px solid var(--muted2)}
+/* Solve */
+.solve-row{display:flex;gap:6px;align-items:center}
+.solve-row input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--blue);font-family:var(--mono);font-size:13px;padding:7px 10px;outline:none}
+.solve-row input::placeholder{color:var(--muted)}
+.solve-btn{padding:7px 12px;background:rgba(74,158,255,.1);border:1px solid rgba(74,158,255,.4);border-radius:3px;color:var(--blue);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.par-btn{padding:7px 12px;background:rgba(0,212,168,.06);border:1px solid rgba(0,212,168,.3);border-radius:3px;color:var(--accent);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+/* Right panel */
+.right{display:flex;flex-direction:column}
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);flex-shrink:0}
+.stat-card{background:var(--surface);padding:14px 20px}
+.stat-label{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--muted);margin-bottom:5px}
+.stat-value{font-family:var(--mono);font-size:22px;font-weight:700}
+/* Canvas */
+.chart-wrap{flex:1 1 280px;position:relative;background:#0C0C0C;min-height:280px;border-bottom:1px solid var(--border)}
+.chart-wrap canvas{display:block;cursor:crosshair}
+.hover-tip{position:absolute;pointer-events:none;z-index:10;background:#0C0C0C;border-radius:3px;padding:8px 12px;font-family:var(--mono);font-size:12px;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.9)}
+.drag-tip{position:absolute;pointer-events:none;z-index:10;background:#0C0C0C;border-radius:3px;padding:4px 10px;font-family:var(--mono);font-size:13px;font-weight:700;white-space:nowrap}
+/* Scenario controls */
+.scenario{padding:16px 24px;border-bottom:1px solid var(--border)}
+.ctrl-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ctrl-label{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap}
+.ctrl-select{background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--text);font-family:var(--sans);font-size:12px;padding:5px 8px;outline:none}
+.ripple-val{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--blue);min-width:24px}
+input[type=range]{accent-color:var(--accent)}
+.reprice-btn{padding:6px 14px;background:rgba(0,212,168,.08);border:1px solid rgba(0,212,168,.4);border-radius:3px;color:var(--accent);font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;margin-left:auto}
+.reprice-btn.active{background:rgba(245,200,66,.1);border-color:rgba(245,200,66,.5);color:var(--amber)}
+/* Rate table */
+.rate-table-wrap{overflow-y:auto;max-height:200px;border-bottom:1px solid var(--border)}
+.rate-table{width:100%;border-collapse:collapse}
+.rate-table th{font-size:11px;color:var(--muted);font-weight:500;letter-spacing:.08em;padding:6px 10px;text-align:right;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0}
+.rate-table th:first-child{text-align:left}
+.rate-table td{padding:5px 8px;border-bottom:1px solid var(--muted2);font-family:var(--mono);font-size:12px;text-align:right}
+.rate-table td:first-child{text-align:left;font-weight:700;color:var(--accent)}
+.rate-table td input{width:90px;background:transparent;border:1px solid transparent;border-radius:2px;color:var(--text);font-family:var(--mono);font-size:12px;padding:2px 5px;text-align:right;outline:none}
+.rate-table td input:focus{border-color:rgba(0,212,168,.4);background:var(--surface2)}
+.rate-table td input.override{color:var(--amber);border-color:rgba(245,200,66,.4)}
+/* Footer */
+footer{padding:20px 32px;border-top:1px solid var(--border);background:var(--surface);display:flex;align-items:center;justify-content:space-between}
+.footer-note{font-size:12px;color:var(--muted);line-height:1.7}
+.footer-note a{color:var(--accent)}
+.build-badge{font-family:var(--mono);font-size:11px;color:var(--muted);padding:3px 8px;border:1px solid var(--border);border-radius:2px}
+/* Off-market banner */
+.offmarket{padding:8px 14px;background:rgba(245,200,66,.06);border:1px solid rgba(245,200,66,.2);border-radius:3px;display:flex;align-items:center;gap:10px;font-size:12px;margin-bottom:12px}
+.empty-state{padding:20px;color:var(--muted);font-size:13px;line-height:1.7;text-align:center}
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo">
+    <div class="logo-mark">R</div>
+    <span class="logo-text">Rijeka</span>
+  </a>
+  <div class="header-links">
+    <a href="/xva.html">XVA Calculator</a>
+    <a href="/irs.html" style="color:var(--text)">IRS Pricer</a>
+    <a href="https://rijeka.app">Platform</a>
+    <span class="header-badge">BETA</span>
+  </div>
+</header>
+
+<div class="hero">
+  <h1>Interest Rate Swap <span>Pricer</span></h1>
+  <p>Book a vanilla IRS, solve for par rate, reshape the yield curve and see real-time repricing. Powered by an in-browser OIS bootstrap engine — no server, no signup.</p>
+  <div class="ccy-tabs">
+    <button class="ccy-tab active" data-ccy="USD">USD · SOFR</button>
+    <button class="ccy-tab" data-ccy="EUR">EUR · €STR</button>
+    <button class="ccy-tab" data-ccy="GBP">GBP · SONIA</button>
+  </div>
+</div>
+
+<div class="main">
+  <!-- LEFT: Trade builder -->
+  <div class="left">
+    <div class="panel-section">
+      <div class="section-label">TRADE ECONOMICS</div>
+      <div class="field">
+        <label>NOTIONAL</label>
+        <input type="text" id="notional" value="10,000,000"/>
+      </div>
+      <div class="field">
+        <label>DIRECTION</label>
+        <div class="dir-row">
+          <button class="dir-btn pay active" id="btnPay" onclick="setDir('PAY')">PAY FIXED</button>
+          <button class="dir-btn rec" id="btnRec" onclick="setDir('RECEIVE')">RECEIVE FIXED</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>TENOR</label>
+        <select id="tenor" onchange="onTenorChange()">
+          <option value="1">1Y</option>
+          <option value="2">2Y</option>
+          <option value="3">3Y</option>
+          <option value="5" selected>5Y</option>
+          <option value="7">7Y</option>
+          <option value="10">10Y</option>
+          <option value="15">15Y</option>
+          <option value="20">20Y</option>
+          <option value="30">30Y</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>FIXED COUPON (%)</label>
+        <input type="text" id="coupon" class="par-mode" placeholder="—"/>
+        <div style="display:flex;gap:6px;margin-top:4px">
+          <button class="par-btn" onclick="resetToPar()" style="flex:1;font-size:11px;padding:4px 8px">◉ RESET TO PAR</button>
+        </div>
+      </div>
+      <button class="price-btn" onclick="priceIRS()">▶ PRICE</button>
+    </div>
+
+    <div class="panel-section" id="analyticsSection" style="display:none">
+      <div class="section-label">ANALYTICS</div>
+      <div id="offmarketBanner" class="offmarket" style="display:none"></div>
+      <div class="analytics-grid" id="analyticsGrid"></div>
+      <table class="legs-table">
+        <thead>
+          <tr>
+            <th>LEG</th><th>TYPE</th><th>DIR</th>
+            <th style="text-align:right">PV</th>
+            <th style="text-align:right">IR01</th>
+          </tr>
+        </thead>
+        <tbody id="legsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel-section" id="solveSection" style="display:none">
+      <div class="section-label">SOLVE</div>
+      <div style="margin-bottom:8px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">TARGET NPV</label>
+        <div class="solve-row">
+          <input type="text" id="targetNpv" placeholder="e.g. 50000"/>
+          <button class="solve-btn" onclick="solveRate()">→ SOLVE</button>
+          <button class="par-btn" onclick="resetToPar()">◉ PAR</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Curve + scenario -->
+  <div class="right">
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">30Y DISCOUNT FACTOR</div>
+        <div class="stat-value" id="stat-df" style="color:var(--blue)">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">5Y ZERO RATE</div>
+        <div class="stat-value" id="stat-zero" style="color:var(--accent)">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">10Y FWD RATE (5Y×5Y)</div>
+        <div class="stat-value" id="stat-fwd" style="color:var(--amber)">—</div>
+      </div>
+    </div>
+
+    <div class="chart-wrap" id="chartWrap">
+      <canvas id="curveChart"></canvas>
+      <div class="hover-tip" id="hoverTip" style="display:none"></div>
+      <div class="drag-tip" id="dragTip" style="display:none"></div>
+      <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(102,102,102,.5);font-family:var(--mono);pointer-events:none">
+        DRAG ANY POINT TO RESHAPE · GAUSSIAN RIPPLE
+      </div>
+    </div>
+
+    <div class="scenario">
+      <div class="ctrl-row">
+        <span class="ctrl-label">PRESET</span>
+        <select class="ctrl-select" id="presetSel" onchange="applyPreset()">
+          <optgroup label="── Parallel ──">
+            <option value="flat">Base (no shift)</option>
+            <option value="up25">+25bp</option>
+            <option value="up50">+50bp</option>
+            <option value="up100">+100bp</option>
+            <option value="dn25">−25bp</option>
+            <option value="dn50">−50bp</option>
+            <option value="dn100">−100bp</option>
+          </optgroup>
+          <optgroup label="── Reshaping ──">
+            <option value="bear_steep">Bear Steepener</option>
+            <option value="bull_flat">Bull Flattener</option>
+            <option value="bear_flat">Bear Flattener</option>
+            <option value="bull_steep">Bull Steepener</option>
+          </optgroup>
+          <optgroup label="── Central Bank ──">
+            <option value="hike">Hike +25bp (front)</option>
+            <option value="cut">Cut −25bp (front)</option>
+            <option value="hike_cycle">Hike Cycle</option>
+          </optgroup>
+        </select>
+        <span class="ctrl-label">RIPPLE</span>
+        <input type="range" min="1" max="10" value="4" step="1" id="ripple" style="width:80px"
+          oninput="sigma=parseFloat(this.value);document.getElementById('rippleVal').textContent=this.value+'Y'"/>
+        <span class="ripple-val" id="rippleVal">4Y</span>
+        <button class="reprice-btn" id="repriceBtn" onclick="repriceScenario()" style="display:none">CONFIRM & REPRICE →</button>
+        <button style="padding:6px 12px;background:transparent;border:1px solid var(--border);border-radius:3px;color:var(--muted);font-family:var(--sans);font-size:12px;cursor:pointer;margin-left:4px" onclick="resetScenario()">RESET</button>
+      </div>
+    </div>
+
+    <div class="rate-table-wrap">
+      <table class="rate-table">
+        <thead>
+          <tr>
+            <th>TENOR</th>
+            <th>PAR RATE</th>
+            <th>SHIFT bp</th>
+            <th>SHOCKED</th>
+            <th>DF</th>
+          </tr>
+        </thead>
+        <tbody id="rateTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="footer-note">
+    Built by <a href="https://rijeka.app">Rijeka</a> — open-source institutional-grade derivatives pricing &amp; risk.<br/>
+    In-browser OIS bootstrap · Par rate solver · Real-time curve scenario · No server required
+  </div>
+  <div class="build-badge">🔨 Building in public</div>
+</footer>
+
+<script>
+// ── Curve definitions ────────────────────────────────────────────────────────
+const TENORS_DEF = [
+  {label:'1W', y:7/365},   {label:'1M', y:1/12},
+  {label:'3M', y:3/12},    {label:'6M', y:6/12},
+  {label:'1Y', y:1},       {label:'2Y', y:2},
+  {label:'3Y', y:3},       {label:'4Y', y:4},
+  {label:'5Y', y:5},       {label:'7Y', y:7},
+  {label:'10Y',y:10},      {label:'15Y',y:15},
+  {label:'20Y',y:20},      {label:'30Y',y:30},
+]
+const CURVES = {
+  USD: {
+    name:'USD SOFR',
+    rates:[4.33,4.31,4.28,4.18,3.94,3.73,3.69,3.65,3.665,3.75,3.82,3.90,4.05,4.02]
+  },
+  EUR: {
+    name:'EUR €STR',
+    rates:[2.38,2.38,2.36,2.30,2.20,2.15,2.20,2.25,2.30,2.40,2.55,2.65,2.70,2.72]
+  },
+  GBP: {
+    name:'GBP SONIA',
+    rates:[4.44,4.44,4.42,4.35,4.18,4.00,3.90,3.86,3.85,3.88,3.95,4.05,4.12,4.15]
+  },
+}
+
+let ccy = 'USD'
+let direction = 'PAY'
+let shifts = TENORS_DEF.map(()=>0)
+let baseRates = [...CURVES[ccy].rates]
+let dragIdx = null, dragStartY = 0, dragOrigShifts = null
+let sigma = 4
+let lastAnalytics = null
+let parRate = null
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+function bootstrap(rates) {
+  const dfs = {0: 1.0}
+  for (let i=0; i<TENORS_DEF.length; i++) {
+    const {y} = TENORS_DEF[i]
+    const r = rates[i] / 100
+    let df
+    if (y <= 1.0) {
+      df = 1 / (1 + r * y)
+    } else {
+      let sumDf = 0
+      for (let t=1; t<y; t++) sumDf += interpDf(dfs, t)
+      df = (1 - r * sumDf) / (1 + r)
+    }
+    dfs[y] = Math.max(df, 0.0001)
+  }
+  return dfs
+}
+
+function interpDf(dfs, t) {
+  const keys = Object.keys(dfs).map(Number).sort((a,b)=>a-b)
+  if (t <= keys[0]) return dfs[keys[0]]
+  if (t >= keys[keys.length-1]) return dfs[keys[keys.length-1]]
+  for (let i=0; i<keys.length-1; i++) {
+    if (keys[i] <= t && t <= keys[i+1]) {
+      const t1=keys[i], t2=keys[i+1], alpha=(t-t1)/(t2-t1)
+      return Math.exp(Math.log(dfs[t1])*(1-alpha) + Math.log(dfs[t2])*alpha)
+    }
+  }
+  return 1.0
+}
+
+// ── IRS Pricing ──────────────────────────────────────────────────────────────
+function priceSwap(dfs, notional, fixedRate, maturity, dir) {
+  // Fixed leg: annual payments
+  let fixedPV = 0, annuity = 0
+  for (let yr=1; yr<=maturity; yr++) {
+    const df = interpDf(dfs, yr)
+    fixedPV += notional * fixedRate/100 * df
+    annuity += df
+  }
+  // Float leg: OIS approximation
+  const dfMat = interpDf(dfs, maturity)
+  const floatPV = notional * (1 - dfMat)
+
+  const sign = dir === 'RECEIVE' ? 1 : -1
+  const npv = sign * (fixedPV - floatPV)
+
+  // IR01: bump all rates by 1bp
+  const bumpedRates = getShockedRates().map(r => r + 0.01)
+  const bumpedDfs = bootstrap(bumpedRates)
+  let fixedPV_b=0, annuity_b=0
+  for (let yr=1; yr<=maturity; yr++) {
+    const df=interpDf(bumpedDfs,yr)
+    fixedPV_b += notional * fixedRate/100 * df
+    annuity_b += df
+  }
+  const floatPV_b = notional * (1 - interpDf(bumpedDfs, maturity))
+  const npv_b = sign * (fixedPV_b - floatPV_b)
+  const ir01 = npv_b - npv
+
+  // Gamma
+  const bumpedDn = bootstrap(getShockedRates().map(r => r - 0.01))
+  let fixedPV_d=0
+  for (let yr=1; yr<=maturity; yr++) fixedPV_d += notional * fixedRate/100 * interpDf(bumpedDn,yr)
+  const floatPV_d = notional * (1 - interpDf(bumpedDn, maturity))
+  const npv_d = sign * (fixedPV_d - floatPV_d)
+  const gamma = (npv_b + npv_d - 2*npv)
+
+  // Theta: approximate 1-day carry
+  const theta = -Math.abs(ir01) / 365
+
+  return {
+    npv, ir01, gamma, theta, fixedPV, floatPV, annuity, dfMat,
+    fixedIR01: sign*(fixedPV_b-fixedPV), floatIR01: sign*(floatPV-floatPV_b)
+  }
+}
+
+function calcParRate(dfs, maturity) {
+  const dfMat = interpDf(dfs, maturity)
+  let annuity = 0
+  for (let yr=1; yr<=maturity; yr++) annuity += interpDf(dfs, yr)
+  return ((1-dfMat)/annuity)*100
+}
+
+function getShockedRates() {
+  return TENORS_DEF.map((t,i) => baseRates[i] + Math.max(-300,Math.min(300,shifts[i]))/100)
+}
+
+function getCurrentDfs() {
+  return bootstrap(getShockedRates())
+}
+
+// ── UI ───────────────────────────────────────────────────────────────────────
+function setDir(d) {
+  direction = d
+  document.getElementById('btnPay').classList.toggle('active', d==='PAY')
+  document.getElementById('btnRec').classList.toggle('active', d==='RECEIVE')
+  document.getElementById('btnPay').className = 'dir-btn pay' + (d==='PAY'?' active':'')
+  document.getElementById('btnRec').className = 'dir-btn rec' + (d==='RECEIVE'?' active':'')
+  if (lastAnalytics) priceIRS()
+}
+
+function setCcy(c) {
+  ccy = c
+  baseRates = [...CURVES[c].rates]
+  shifts = TENORS_DEF.map(()=>0)
+  parRate = null
+  document.getElementById('coupon').value = ''
+  document.getElementById('coupon').className = 'par-mode'
+  document.getElementById('analyticsSection').style.display = 'none'
+  document.getElementById('solveSection').style.display = 'none'
+  document.getElementById('repriceBtn').style.display = 'none'
+  lastAnalytics = null
+  updateStats()
+  buildRateTable()
+  drawChart()
+  resetToPar()
+}
+
+function onTenorChange() {
+  if (parRate !== null || document.getElementById('coupon').className === 'par-mode') {
+    resetToPar()
+  }
+}
+
+function getNotional() {
+  return parseFloat(document.getElementById('notional').value.replace(/,/g,'')) || 10000000
+}
+function getMaturity() {
+  return parseFloat(document.getElementById('tenor').value)
+}
+function getCoupon() {
+  return parseFloat(document.getElementById('coupon').value) || 0
+}
+
+function resetToPar() {
+  const dfs = getCurrentDfs()
+  parRate = calcParRate(dfs, getMaturity())
+  const inp = document.getElementById('coupon')
+  inp.value = parRate.toFixed(8)
+  inp.className = 'par-mode'
+}
+
+function priceIRS() {
+  const notional = getNotional()
+  const coupon = getCoupon()
+  const maturity = getMaturity()
+  const dfs = getCurrentDfs()
+
+  if (!parRate) parRate = calcParRate(dfs, maturity)
+
+  const res = priceSwap(dfs, notional, coupon, maturity, direction)
+  lastAnalytics = res
+
+  // Show analytics
+  document.getElementById('analyticsSection').style.display = 'block'
+  document.getElementById('solveSection').style.display = 'block'
+
+  // Off-market check
+  const offBps = ((coupon - parRate)*100).toFixed(1)
+  const banner = document.getElementById('offmarketBanner')
+  if (Math.abs(coupon - parRate) > 0.00005) {
+    banner.style.display = 'flex'
+    banner.innerHTML = `
+      <span style="color:var(--muted)">PAR</span>
+      <span style="color:var(--accent);font-family:var(--mono);font-weight:700">${parRate.toFixed(4)}%</span>
+      <span style="color:var(--muted)">YOU</span>
+      <span style="color:var(--amber);font-family:var(--mono);font-weight:700">${coupon.toFixed(4)}%</span>
+      <span style="color:var(--muted)">SPREAD</span>
+      <span style="color:${parseFloat(offBps)>0?'var(--red)':'var(--accent)'};font-family:var(--mono);font-weight:700">${parseFloat(offBps)>0?'+':''}${offBps}bp</span>
+      <span style="margin-left:auto;color:var(--muted);font-size:11px">OFF-MARKET</span>`
+  } else {
+    banner.style.display = 'none'
+  }
+
+  // Metrics grid
+  const npvClr = res.npv>0.5?'pos':res.npv<-0.5?'neg':'neu'
+  document.getElementById('analyticsGrid').innerHTML = `
+    <div class="metric">
+      <div class="metric-label">NET NPV</div>
+      <div class="metric-value ${npvClr}">${fmtPnl(res.npv)}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">IR01</div>
+      <div class="metric-value neu">${fmtPnl(res.ir01)}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">GAMMA</div>
+      <div class="metric-value" style="color:var(--blue);font-size:15px">${res.gamma>=0?'+':''}${res.gamma.toFixed(4)}</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">THETA / day</div>
+      <div class="metric-value amber">${fmtPnl(res.theta)}</div>
+    </div>`
+
+  // Legs table
+  const fixedSign = direction==='PAY' ? -1 : 1
+  const floatSign = direction==='PAY' ? 1 : -1
+  const fixedPv = fixedSign * res.fixedPV
+  const floatPv = floatSign * res.floatPV
+  document.getElementById('legsBody').innerHTML = `
+    <tr>
+      <td>FIXED-1</td>
+      <td style="color:var(--blue)">FIXED</td>
+      <td style="color:${direction==='PAY'?'var(--red)':'var(--accent)'}">${direction==='PAY'?'PAY':'RCV'}</td>
+      <td style="text-align:right;color:${fixedPv>=0?'var(--accent)':'var(--red)'};font-weight:600">${fmtPnl(fixedPv)}</td>
+      <td style="text-align:right;color:var(--blue)">${fmtPnl(res.fixedIR01)}</td>
+    </tr>
+    <tr>
+      <td>FLOAT-1</td>
+      <td style="color:var(--accent)">FLOAT</td>
+      <td style="color:${direction==='RECEIVE'?'var(--red)':'var(--accent)'}">${direction==='RECEIVE'?'PAY':'RCV'}</td>
+      <td style="text-align:right;color:${floatPv>=0?'var(--accent)':'var(--red)'};font-weight:600">${fmtPnl(floatPv)}</td>
+      <td style="text-align:right;color:var(--blue)">${fmtPnl(res.floatIR01)}</td>
+    </tr>`
+}
+
+function solveRate() {
+  if (!lastAnalytics) return
+  const target = parseFloat(document.getElementById('targetNpv').value.replace(/,/g,''))
+  if (isNaN(target)) return
+  const deltaNpv = target - lastAnalytics.npv
+  const ir01PerUnit = lastAnalytics.ir01 / 0.0001
+  const deltaRate = -deltaNpv / ir01PerUnit
+  const current = getCoupon()
+  const newRate = current + deltaRate * 100
+  const inp = document.getElementById('coupon')
+  inp.value = Math.max(0, newRate).toFixed(8)
+  inp.className = ''
+  priceIRS()
+}
+
+function fmtPnl(n) {
+  if (n==null) return '—'
+  const s = n>=0?'+':'-', a=Math.abs(n)
+  return s+'$'+Math.floor(a).toLocaleString('en-US')+'.'+a.toFixed(2).slice(-2)
+}
+function fmtN(n) { return n==null?'—':n.toFixed(4)+'%' }
+
+// ── Stats cards ──────────────────────────────────────────────────────────────
+function updateStats() {
+  const dfs = getCurrentDfs()
+  const df30 = interpDf(dfs, 30)
+  const df5  = interpDf(dfs, 5)
+  const df10 = interpDf(dfs, 10)
+  const zero5 = getShockedRates()[TENORS_DEF.findIndex(t=>t.label==='5Y')]
+  const fwd5y5y = df5>0&&df10>0 ? (-Math.log(df10/df5)/5)*100 : 0
+  document.getElementById('stat-df').textContent   = df30.toFixed(4)
+  document.getElementById('stat-zero').textContent = zero5.toFixed(3)+'%'
+  document.getElementById('stat-fwd').textContent  = fwd5y5y.toFixed(3)+'%'
+}
+
+// ── Rate table ───────────────────────────────────────────────────────────────
+function buildRateTable() {
+  const dfs = getCurrentDfs()
+  const shocked = getShockedRates()
+  let html = ''
+  TENORS_DEF.forEach((t,i) => {
+    const sh = Math.round(shifts[i]*10)/10
+    const df = interpDf(dfs, t.y).toFixed(5)
+    const shClr = sh>0?'var(--red)':sh<0?'var(--blue)':'var(--muted)'
+    html += `<tr>
+      <td>${t.label}</td>
+      <td><input type="text" value="${baseRates[i].toFixed(8)}" data-i="${i}" onblur="onRateEdit(this)" class="${shifts[i]!==0?'override':''}"/></td>
+      <td style="color:${shClr};font-weight:${sh!==0?700:400}">${sh===0?'—':(sh>0?'+':'')+sh+'bp'}</td>
+      <td style="color:${sh!==0?(sh>0?'var(--red)':'var(--blue)'):'var(--muted)'}">${shocked[i].toFixed(4)}%</td>
+      <td style="color:var(--muted)">${df}</td>
+    </tr>`
+  })
+  document.getElementById('rateTableBody').innerHTML = html
+}
+
+function onRateEdit(inp) {
+  const i = parseInt(inp.dataset.i)
+  const v = parseFloat(inp.value)
+  if (!isNaN(v)&&v>0&&v<20) { baseRates[i]=v; inp.value=v.toFixed(8) }
+  else inp.value = baseRates[i].toFixed(8)
+  updateStats(); buildRateTable(); drawChart()
+  resetToPar()
+}
+
+// ── Scenario ─────────────────────────────────────────────────────────────────
+const PRESETS = {
+  flat: TENORS_DEF.map(()=>0),
+  up25: TENORS_DEF.map(()=>25), up50: TENORS_DEF.map(()=>50), up100: TENORS_DEF.map(()=>100),
+  dn25: TENORS_DEF.map(()=>-25), dn50: TENORS_DEF.map(()=>-50), dn100: TENORS_DEF.map(()=>-100),
+  bear_steep: TENORS_DEF.map(t=>t.y<=2?50:100),
+  bull_flat:  TENORS_DEF.map(t=>t.y<=2?-25:-75),
+  bear_flat:  TENORS_DEF.map(t=>t.y<=2?100:50),
+  bull_steep: TENORS_DEF.map(t=>t.y<=2?-75:-25),
+  hike:       TENORS_DEF.map(t=>t.y<=1?25:t.y<=3?10:0),
+  cut:        TENORS_DEF.map(t=>t.y<=1?-25:t.y<=3?-10:0),
+  hike_cycle: TENORS_DEF.map(t=>Math.max(0,Math.round(100-t.y*3.5))),
+}
+
+function applyPreset() {
+  const key = document.getElementById('presetSel').value
+  shifts = [...(PRESETS[key]||PRESETS.flat)]
+  onShiftsChanged()
+}
+
+function resetScenario() {
+  shifts = TENORS_DEF.map(()=>0)
+  document.getElementById('presetSel').value = 'flat'
+  onShiftsChanged()
+  document.getElementById('repriceBtn').style.display = 'none'
+}
+
+function onShiftsChanged() {
+  updateStats(); buildRateTable(); drawChart(); resetToPar()
+  const any = shifts.some(s=>Math.abs(s)>0.05)
+  const btn = document.getElementById('repriceBtn')
+  btn.style.display = any ? 'inline-block' : 'none'
+}
+
+function repriceScenario() {
+  resetToPar()
+  priceIRS()
+}
+
+// ── Canvas chart ─────────────────────────────────────────────────────────────
+const canvas  = document.getElementById('curveChart')
+const ctx     = canvas.getContext('2d')
+let hoverIdx  = -1
+
+function sizeCanvas() {
+  const wrap = document.getElementById('chartWrap')
+  const dpr  = window.devicePixelRatio||2
+  canvas.width  = wrap.offsetWidth  * dpr
+  canvas.height = wrap.offsetHeight * dpr
+  canvas.style.width  = wrap.offsetWidth  + 'px'
+  canvas.style.height = wrap.offsetHeight + 'px'
+  ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr,dpr)
+  drawChart()
+}
+
+function drawChart() {
+  const dpr = window.devicePixelRatio||2
+  const W = canvas.width/dpr, H = canvas.height/dpr
+  const PAD = {l:14,r:14,t:30,b:34}
+  const CW = W-PAD.l-PAD.r, CH = H-PAD.t-PAD.b
+
+  const baseRts  = TENORS_DEF.map((_,i)=>baseRates[i])
+  const shockRts = TENORS_DEF.map((_,i)=>baseRates[i]+Math.max(-300,Math.min(300,shifts[i]))/100)
+  const midR     = baseRts.reduce((a,b)=>a+b,0)/baseRts.length
+  const visHalf  = Math.max(0.65, Math.max(...shifts.map(Math.abs))/100+0.25)
+  const minR = midR-visHalf, maxR = midR+visHalf
+  const xS = t => PAD.l + Math.sqrt(t/30)*CW
+  const yS = r => PAD.t + CH - (r-minR)/(maxR-minR)*CH
+
+  // Background
+  ctx.fillStyle = '#0C0C0C'; ctx.fillRect(0,0,W,H)
+
+  // Grid
+  const gStep = visHalf>0.5?0.25:0.1
+  for (let r=Math.ceil(minR/gStep)*gStep; r<=maxR+0.001; r=Math.round((r+gStep)*10000)/10000) {
+    const y=yS(r); if(y<PAD.t-2||y>H-PAD.b+2) continue
+    ctx.strokeStyle='rgba(30,30,30,0.8)'; ctx.lineWidth=0.5
+    ctx.beginPath(); ctx.moveTo(PAD.l,y); ctx.lineTo(W-PAD.r,y); ctx.stroke()
+  }
+  ctx.strokeStyle='rgba(30,30,30,0.6)'; ctx.lineWidth=0.5
+  ctx.beginPath(); ctx.moveTo(PAD.l,H-PAD.b); ctx.lineTo(W-PAD.r,H-PAD.b); ctx.stroke()
+  ctx.font='9px IBM Plex Mono,monospace'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='#666'
+  ;['1M','6M','1Y','2Y','5Y','10Y','20Y','30Y'].forEach(lab=>{
+    const t = TENORS_DEF.find(t=>t.label===lab)
+    if (!t) return
+    const x = xS(t.y); ctx.fillText(lab,x,H-PAD.b+5)
+    ctx.strokeStyle='rgba(30,30,30,0.4)'; ctx.lineWidth=0.4
+    ctx.beginPath(); ctx.moveTo(x,PAD.t); ctx.lineTo(x,H-PAD.b); ctx.stroke()
+  })
+
+  const avgSh = shifts.reduce((a,b)=>a+b,0)/shifts.length
+  const shClr    = avgSh<=0 ? '#4A9EFF' : '#FF6B6B'
+  const shClrRgb = avgSh<=0 ? '74,158,255' : '255,107,107'
+  const anyShift = shifts.some(s=>Math.abs(s)>0.05)
+
+  // Base fill
+  ctx.beginPath()
+  TENORS_DEF.forEach((t,i)=>{const x=xS(t.y),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
+  ctx.lineTo(xS(TENORS_DEF[TENORS_DEF.length-1].y),H-PAD.b)
+  ctx.lineTo(xS(TENORS_DEF[0].y),H-PAD.b); ctx.closePath()
+  const gBase=ctx.createLinearGradient(0,PAD.t,0,H-PAD.b)
+  gBase.addColorStop(0,'rgba(0,212,168,0.12)'); gBase.addColorStop(1,'rgba(0,212,168,0)')
+  ctx.fillStyle=gBase; ctx.fill()
+
+  // Base glow pass
+  ctx.setLineDash([]); ctx.lineJoin='round'; ctx.lineCap='round'
+  ctx.beginPath()
+  TENORS_DEF.forEach((t,i)=>{const x=xS(t.y),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
+  ctx.strokeStyle='rgba(0,212,168,0.15)'; ctx.lineWidth=7; ctx.stroke()
+  // Base sharp pass
+  ctx.beginPath()
+  TENORS_DEF.forEach((t,i)=>{const x=xS(t.y),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
+  ctx.strokeStyle='#00D4A8'; ctx.lineWidth=2; ctx.stroke()
+  // Base dots + halos
+  TENORS_DEF.forEach((t,i)=>{
+    const cx=xS(t.y),cy=yS(baseRts[i])
+    ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2); ctx.strokeStyle='rgba(0,212,168,0.25)'; ctx.lineWidth=3; ctx.stroke()
+    ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2); ctx.fillStyle='#00D4A8'; ctx.fill()
+  })
+
+  if (anyShift) {
+    // Shocked fill
+    ctx.beginPath()
+    TENORS_DEF.forEach((t,i)=>{const x=xS(t.y),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
+    ;[...TENORS_DEF].reverse().forEach((t,ri)=>{const i=TENORS_DEF.length-1-ri;ctx.lineTo(xS(t.y),yS(shockRts[i]))})
+    ctx.closePath(); ctx.fillStyle=`rgba(${shClrRgb},0.06)`; ctx.fill()
+    // Shocked glow
+    ctx.setLineDash([5,3])
+    ctx.beginPath()
+    TENORS_DEF.forEach((t,i)=>{const x=xS(t.y),y=yS(shockRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
+    ctx.strokeStyle=`rgba(${shClrRgb},0.2)`; ctx.lineWidth=7; ctx.stroke()
+    // Shocked sharp
+    ctx.beginPath()
+    TENORS_DEF.forEach((t,i)=>{const x=xS(t.y),y=yS(shockRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
+    ctx.strokeStyle=shClr; ctx.lineWidth=2; ctx.stroke(); ctx.setLineDash([])
+    // Shocked dots
+    TENORS_DEF.forEach((t,i)=>{
+      const cx=xS(t.y),cy=yS(shockRts[i]),cyB=yS(baseRts[i]),bp=Math.round(shifts[i])
+      const isActive=dragIdx===i||hoverIdx===i
+      if(Math.abs(bp)>0.5){
+        ctx.strokeStyle=`rgba(${shClrRgb},0.2)`;ctx.lineWidth=0.8;ctx.setLineDash([2,2])
+        ctx.beginPath();ctx.moveTo(cx,cyB);ctx.lineTo(cx,cy);ctx.stroke();ctx.setLineDash([])
+      }
+      if(isActive){
+        ctx.shadowColor=shClr;ctx.shadowBlur=14
+        ctx.beginPath();ctx.arc(cx,cy,5.5,0,Math.PI*2);ctx.fillStyle=shClr;ctx.fill()
+        ctx.shadowBlur=0
+        ctx.beginPath();ctx.arc(cx,cy,5.5,0,Math.PI*2);ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=1;ctx.stroke()
+      } else {
+        ctx.beginPath();ctx.arc(cx,cy,4.5,0,Math.PI*2);ctx.strokeStyle=`rgba(${shClrRgb},0.3)`;ctx.lineWidth=3;ctx.stroke()
+        ctx.beginPath();ctx.arc(cx,cy,3,0,Math.PI*2);ctx.fillStyle=shClr;ctx.fill()
+      }
+    })
+  }
+
+  // Legend
+  ctx.font='9px IBM Plex Mono,monospace'; ctx.textBaseline='middle'; ctx.setLineDash([])
+  ctx.strokeStyle='#00D4A8'; ctx.lineWidth=2
+  ctx.beginPath();ctx.moveTo(PAD.l,PAD.t-14);ctx.lineTo(PAD.l+20,PAD.t-14);ctx.stroke()
+  ctx.fillStyle='#00D4A8';ctx.textAlign='left';ctx.fillText('BASE',PAD.l+24,PAD.t-14)
+  if (anyShift) {
+    ctx.setLineDash([4,2]);ctx.strokeStyle=shClr
+    ctx.beginPath();ctx.moveTo(PAD.l+66,PAD.t-14);ctx.lineTo(PAD.l+86,PAD.t-14);ctx.stroke();ctx.setLineDash([])
+    ctx.fillStyle=shClr;ctx.fillText('SHOCKED',PAD.l+90,PAD.t-14)
+    const avgBp=Math.round(avgSh)
+    ctx.fillStyle=avgBp>0?'#FF6B6B':'#4A9EFF';ctx.textAlign='right'
+    ctx.fillText((avgBp>0?'+':'')+avgBp+'bp AVG',W-PAD.r,PAD.t-14)
+  }
+}
+
+// ── Canvas drag events ───────────────────────────────────────────────────────
+function getHit(mx, my) {
+  const dpr=window.devicePixelRatio||2, W=canvas.width/dpr, H=canvas.height/dpr
+  const PAD={l:14,r:14,t:30,b:34}, CW=W-PAD.l-PAD.r, CH=H-PAD.t-PAD.b
+  const shockRts=TENORS_DEF.map((_,i)=>baseRates[i]+shifts[i]/100)
+  const midR=baseRates.reduce((a,b)=>a+b,0)/baseRates.length
+  const visHalf=Math.max(0.65,Math.max(...shifts.map(Math.abs))/100+0.25)
+  const minR=midR-visHalf,maxR=midR+visHalf
+  const xS=t=>PAD.l+Math.sqrt(t/30)*CW,yS=r=>PAD.t+CH-(r-minR)/(maxR-minR)*CH
+  let bi=-1,bd=9999
+  TENORS_DEF.forEach((t,i)=>{const d=Math.hypot(mx-xS(t.y),my-yS(shockRts[i]));if(d<bd){bd=d;bi=i}})
+  return bd<30?bi:-1
+}
+
+canvas.addEventListener('mousedown',e=>{
+  const r=canvas.getBoundingClientRect()
+  const idx=getHit(e.clientX-r.left,e.clientY-r.top)
+  if(idx>=0){e.preventDefault();dragIdx=idx;dragStartY=e.clientY;dragOrigShifts=[...shifts]}
+})
+canvas.addEventListener('mousemove',e=>{
+  const r=canvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top
+  if(dragIdx!==null){
+    const dy=dragStartY-e.clientY,bpDelta=dy*0.4,dty=TENORS_DEF[dragIdx].y
+    shifts=dragOrigShifts.map((s,i)=>{
+      const dist=TENORS_DEF[i].y-dty
+      return Math.max(-300,Math.min(300,Math.round((s+bpDelta*Math.exp(-(dist*dist)/(2*sigma*sigma)))*10)/10))
+    })
+    const bp=Math.round(shifts[dragIdx])
+    const tip=document.getElementById('dragTip')
+    tip.style.display='block';tip.style.left=(mx+14)+'px';tip.style.top=Math.max(my-32,4)+'px'
+    tip.style.color=bp>=0?'var(--red)':'var(--blue)'
+    tip.style.border=`1px solid ${bp>=0?'rgba(255,107,107,.7)':'rgba(74,158,255,.7)'}`
+    tip.textContent=(bp>=0?'+':'')+bp+'bp @ '+TENORS_DEF[dragIdx].label
+    drawChart();return
+  }
+  const hIdx=getHit(mx,my)
+  canvas.style.cursor=hIdx>=0?'ns-resize':'crosshair'
+  if(hIdx>=0&&dragIdx===null){
+    hoverIdx=hIdx
+    const t=TENORS_DEF[hIdx]
+    const base=baseRates[hIdx],bp=Math.round(shifts[hIdx]),shocked=base+bp/100
+    const tip=document.getElementById('hoverTip')
+    tip.style.display='block';tip.style.left=Math.min(mx+14,W-170)+'px';tip.style.top=Math.max(my-80,4)+'px'
+    const shClr=bp>0?'var(--red)':bp<0?'var(--blue)':'var(--muted)'
+    tip.innerHTML=`<div style="font-weight:700;color:var(--text);margin-bottom:5px">${t.label}</div>
+      <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:3px">
+        <span style="color:var(--muted)">Base</span>
+        <span style="color:var(--accent)">${base.toFixed(4)}%</span>
+      </div>
+      ${bp!==0?`<div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:3px">
+        <span style="color:var(--muted)">Shocked</span>
+        <span style="color:${shClr}">${shocked.toFixed(4)}%</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:16px;border-top:1px solid var(--border);padding-top:3px;margin-top:3px">
+        <span style="color:var(--muted)">Shift</span>
+        <span style="color:${shClr};font-weight:700">${bp>0?'+':''}${bp}bp</span>
+      </div>`:''}
+    `
+    tip.style.border='1px solid var(--border)'
+    drawChart()
+  } else {
+    hoverIdx=-1
+    document.getElementById('hoverTip').style.display='none'
+    if(dragIdx===null) drawChart()
+  }
+})
+window.addEventListener('mouseup',()=>{
+  if(dragIdx!==null){
+    dragIdx=null;document.getElementById('dragTip').style.display='none'
+    onShiftsChanged()
+  }
+})
+canvas.addEventListener('mouseleave',()=>{
+  hoverIdx=-1;document.getElementById('hoverTip').style.display='none';drawChart()
+})
+
+// ── CCY tabs ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.ccy-tab').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.ccy-tab').forEach(b=>b.classList.remove('active'))
+    btn.classList.add('active')
+    setCcy(btn.dataset.ccy)
+  })
+})
+
+// ── Notional formatting ──────────────────────────────────────────────────────
+document.getElementById('notional').addEventListener('blur',e=>{
+  const raw=e.target.value.replace(/[^0-9]/g,'')
+  if(raw) e.target.value=Number(raw).toLocaleString('en-US')
+})
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('resize',()=>{clearTimeout(window._rsz);window._rsz=setTimeout(sizeCanvas,60)})
+setTimeout(sizeCanvas, 60)
+updateStats()
+buildRateTable()
+resetToPar()
+</script>
+</body>
+</html>
