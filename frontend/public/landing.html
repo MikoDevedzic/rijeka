@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rijeka — Open-Source Derivatives Infrastructure</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0f14;--bg-deep:#070b0f;--panel:#0f1823;--panel-2:#152030;--panel-3:#1c2a3a;
+  --border:#1e3045;--border-2:#243850;
+  --accent:#0dd4a8;--amber:#f0a020;--blue:#4a9ad4;--red:#e05040;--chain:#f07820;
+  --text:#e8f0f8;--text-dim:#526878;--text-mid:#8ab0c8;
+}
+body{background:var(--bg);color:var(--text);font-family:monospace;line-height:1.6;overflow-x:hidden}
+
+/* HERO CANVAS — behind everything */
+#hero-canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;display:block}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;background:rgba(7,11,15,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);height:52px;display:flex;align-items:center;padding:0 32px;z-index:99}
+.logo{font-size:1rem;font-weight:900;letter-spacing:.22em;color:var(--accent);margin-right:auto}
+.nav-link{color:var(--text-dim);text-decoration:none;padding:0 12px;font-size:.68rem;font-weight:700;letter-spacing:.06em;transition:color .15s}
+.nav-link:hover{color:var(--text)}
+.nav-cta{color:var(--accent);border:1px solid rgba(13,212,168,.35);padding:6px 14px;border-radius:2px;margin-left:8px}
+.nav-cta:hover{background:rgba(13,212,168,.08)}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;align-items:center;padding:80px 32px 60px;position:relative;overflow:hidden;border-bottom:1px solid var(--border)}
+.hero-content{max-width:680px;position:relative;z-index:2}
+.eyebrow{font-size:.58rem;font-weight:700;letter-spacing:.2em;color:var(--accent);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+.eyebrow::before{content:'';width:28px;height:1px;background:var(--accent)}
+h1{font-size:clamp(2.2rem,4.5vw,3.6rem);font-weight:900;line-height:1.04;margin-bottom:18px;color:#fff;letter-spacing:-.01em}
+h1 .teal{color:var(--accent)}
+h1 .mid{color:var(--text-mid)}
+.sub{font-size:.78rem;color:var(--text-mid);max-width:520px;margin-bottom:32px;line-height:1.85}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:52px}
+.btn-p{background:rgba(13,212,168,.1);border:1px solid var(--accent);color:var(--accent);padding:11px 22px;border-radius:2px;text-decoration:none;font-weight:700;font-size:.70rem;letter-spacing:.06em;transition:background .15s}
+.btn-p:hover{background:rgba(13,212,168,.2)}
+.btn-s{background:transparent;border:1px solid var(--border-2);color:var(--text-mid);padding:11px 22px;border-radius:2px;text-decoration:none;font-weight:700;font-size:.70rem;letter-spacing:.06em;transition:all .15s}
+.btn-s:hover{border-color:var(--blue);color:var(--blue)}
+.stats{display:flex;gap:36px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:28px}
+.stat-val{font-size:1.8rem;font-weight:900;color:#fff;display:block;line-height:1}
+.stat-lbl{font-size:.50rem;font-weight:700;letter-spacing:.1em;color:var(--text-dim);display:block;margin-top:4px}
+
+/* LIVE METRICS STRIP */
+.metrics-strip{background:var(--bg-deep);border-bottom:1px solid var(--border);padding:8px 32px;display:flex;gap:24px;align-items:center;overflow:hidden}
+.ms-item{display:flex;flex-direction:column;gap:1px;flex-shrink:0}
+.ms-lbl{font-size:.42rem;font-weight:700;letter-spacing:.1em;color:var(--text-dim)}
+.ms-val{font-size:.62rem;font-weight:700}
+.ms-div{width:1px;height:28px;background:var(--border);flex-shrink:0}
+.ms-badge{font-size:.42rem;font-weight:700;padding:2px 6px;border-radius:2px;background:rgba(13,212,168,.08);border:1px solid rgba(13,212,168,.2);color:var(--accent)}
+
+/* VOL SURFACE SECTION */
+
+
+@media(max-width:780px){.vol-inner{grid-template-columns:1fr}}
+
+.vol-text h2{font-size:2rem;font-weight:900;color:#fff;margin-bottom:14px;line-height:1.1}
+.vol-text p{font-size:.68rem;color:var(--text-mid);line-height:1.9;margin-bottom:20px}
+
+
+
+.fb-line .dim{color:var(--text-dim)}
+
+
+/* MC PATHS SECTION */
+
+
+
+
+
+
+
+
+
+/* PLATFORM GRID */
+.platform-section{padding:72px 32px;border-bottom:1px solid var(--border)}
+.platform-inner{max-width:1100px;margin:0 auto}
+.s-label{font-size:.52rem;font-weight:700;letter-spacing:.18em;color:var(--accent);margin-bottom:10px}
+h2{font-size:2rem;font-weight:900;color:#fff;margin-bottom:12px}
+.s-sub{font-size:.70rem;color:var(--text-mid);max-width:540px;line-height:1.85;margin-bottom:36px}
+.grid-3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1px;background:var(--border);border:1px solid var(--border);border-radius:3px;overflow:hidden}
+.card{background:var(--panel);padding:22px;transition:background .15s}
+.card:hover{background:var(--panel-2)}
+.tag{display:inline-block;font-size:.48rem;font-weight:700;letter-spacing:.08em;padding:2px 7px;border-radius:2px;margin-bottom:10px}
+.tag-teal{background:rgba(13,212,168,.08);border:1px solid rgba(13,212,168,.2);color:var(--accent)}
+.tag-blue{background:rgba(74,154,212,.08);border:1px solid rgba(74,154,212,.2);color:var(--blue)}
+.tag-red{background:rgba(224,80,64,.08);border:1px solid rgba(224,80,64,.2);color:var(--red)}
+.tag-orange{background:rgba(240,120,32,.08);border:1px solid rgba(240,120,32,.2);color:var(--chain)}
+.tag-amber{background:rgba(240,160,32,.08);border:1px solid rgba(240,160,32,.2);color:var(--amber)}
+.card-title{font-size:.76rem;font-weight:700;color:var(--text);margin-bottom:7px}
+.card-desc{font-size:.58rem;color:var(--text-dim);line-height:1.75}
+.chips{display:flex;flex-wrap:wrap;gap:3px;margin-top:10px}
+.chip{font-size:.44rem;font-weight:700;padding:2px 6px;border:1px solid var(--border-2);border-radius:2px;color:var(--text-dim)}
+
+/* THESIS */
+.thesis-section{padding:72px 32px;border-bottom:1px solid var(--border);background:var(--bg-deep)}
+.thesis-inner{max-width:1100px;margin:0 auto}
+.thesis-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:3px;overflow:hidden;margin-top:36px}
+@media(max-width:700px){.thesis-grid{grid-template-columns:1fr}}
+.tc{background:var(--panel);padding:28px 32px}
+.tc:hover{background:var(--panel-2)}
+.tc-n{font-size:2.8rem;font-weight:900;color:var(--panel-3);margin-bottom:10px;line-height:1}
+.tc-t{font-size:.74rem;font-weight:700;color:var(--text);margin-bottom:8px}
+.tc-b{font-size:.60rem;color:var(--text-dim);line-height:1.85}
+.tc-b .hl{color:var(--accent)}
+
+/* XVA WATERFALL */
+.xva-section{padding:72px 32px;border-bottom:1px solid var(--border)}
+.xva-inner{max-width:1100px;margin:0 auto}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:3px;overflow:hidden}
+@media(max-width:700px){.split{grid-template-columns:1fr}}
+.split-l{background:var(--panel);padding:32px 36px}
+.split-r{background:var(--panel);padding:32px 36px}
+.wf-row{display:flex;justify-content:space-between;font-size:.62rem;padding:6px 0;border-bottom:1px solid var(--panel-2)}
+.wf-lbl{color:var(--text-dim)}.wf-red{color:var(--red);font-weight:700}.wf-teal{color:var(--accent);font-weight:700}
+.wf-total{border-top:1px solid var(--border-2);margin-top:4px;padding-top:8px;border-bottom:none}
+
+/* CONTACT */
+.contact-section{padding:72px 32px;border-bottom:1px solid var(--border)}
+.contact-inner{max-width:1100px;margin:0 auto}
+.cta-box{background:var(--panel);border:1px solid var(--border);border-radius:3px;padding:52px 48px;text-align:center}
+.cf{max-width:460px;margin:28px auto 0;text-align:left}
+.cf-l{display:block;font-size:.50rem;font-weight:700;letter-spacing:.08em;color:var(--text-dim);margin-bottom:4px;margin-top:12px}
+.cf-i{width:100%;background:var(--bg-deep);border:1px solid var(--border);color:var(--text);font-family:monospace;font-size:.65rem;padding:8px 10px;border-radius:2px}
+.cf-i:focus{outline:none;border-color:var(--blue)}
+.cf-ta{resize:vertical;min-height:72px}
+.cf-btn{width:100%;margin-top:12px;background:rgba(13,212,168,.1);border:1px solid var(--accent);color:var(--accent);font-family:monospace;font-size:.68rem;font-weight:700;padding:10px;border-radius:2px;cursor:pointer;letter-spacing:.06em}
+.cf-btn:hover{background:rgba(13,212,168,.18)}
+.cf-note{font-size:.50rem;color:var(--text-dim);text-align:center;margin-top:8px}
+
+/* FOOTER + DISCLAIMER */
+footer{padding:22px 32px;background:var(--bg-deep);border-top:1px solid var(--border);display:flex;align-items:center;flex-wrap:wrap;gap:16px}
+.footer-logo{font-size:.85rem;font-weight:900;color:var(--accent);letter-spacing:.2em;margin-right:auto}
+.footer-link{color:var(--text-dim);text-decoration:none;font-size:.52rem}
+.footer-link:hover{color:var(--text)}
+.disc{background:var(--bg-deep);border-top:1px solid var(--border);padding:18px 32px}
+.disc-inner{max-width:900px;margin:0 auto}
+.disc-title{font-size:.46rem;font-weight:700;letter-spacing:.1em;color:var(--text-dim);margin-bottom:7px}
+.disc-text{font-size:.48rem;color:var(--text-dim);line-height:1.9}
+.disc-text strong{color:var(--text-mid)}
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">RIJEKA</span>
+  <a class="nav-link" href="#platform">Platform</a>
+  <a class="nav-link" href="#thesis">Thesis</a>
+  <a class="nav-link" href="#xva">XVA</a>
+  <a class="nav-link" href="#contact">Contact</a>
+  <a class="nav-link" href="xva.html">XVA Simulator</a>
+  <a class="nav-link nav-cta" href="#contact">→ GET ACCESS</a>
+</nav>
+
+<!-- HERO with animated MC paths in background -->
+<div class="hero">
+  <canvas id="hero-canvas"></canvas>
+  <div class="hero-content">
+    <div class="eyebrow">OPEN-SOURCE DERIVATIVES INFRASTRUCTURE</div>
+    <h1>Institutional-grade<br><span class="teal">derivatives pricing</span><br><span class="mid">built in public.</span></h1>
+    <p class="sub">Full-revaluation pricing engine. XVA, CCR, PNL attribution, market risk. Every model documented. Every formula auditable. No proprietary black boxes.</p>
+    <div class="actions">
+      <a class="btn-p" href="xva.html">▶ XVA SIMULATOR — LIVE DEMO</a>
+      <a class="btn-s" href="#platform">EXPLORE THE PLATFORM</a>
+      <a class="btn-s" href="https://github.com/MikoDevedzic/open-source-cross-asset-pricing-and-risk-platform" target="_blank">GITHUB →</a>
+    </div>
+    <div class="stats">
+      <div><span class="stat-val">43</span><span class="stat-lbl">INSTRUMENTS PRICED</span></div>
+      <div><span class="stat-val">6</span><span class="stat-lbl">XVA COMPONENTS</span></div>
+      <div><span class="stat-val">5</span><span class="stat-lbl">ASSET CLASSES</span></div>
+      <div><span class="stat-val">500</span><span class="stat-lbl">MONTE CARLO PATHS</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- LIVE METRICS STRIP -->
+<div class="metrics-strip">
+  <span style="font-size:.46rem;font-weight:700;letter-spacing:.12em;color:var(--accent)">LIVE INDICATIVE</span>
+  <div class="ms-div"></div>
+  <div class="ms-item"><span class="ms-lbl">5Y SOFR MID</span><span class="ms-val" style="color:var(--accent)" id="m-sofr">4.2150%</span></div>
+  <div class="ms-item"><span class="ms-lbl">10Y SOFR</span><span class="ms-val" style="color:var(--text-mid)" id="m-10y">4.1276%</span></div>
+  <div class="ms-item"><span class="ms-lbl">CVA — $10M 5Y</span><span class="ms-val" style="color:var(--red)" id="m-cva">−$12,840</span></div>
+  <div class="ms-item"><span class="ms-lbl">XVA TOTAL</span><span class="ms-val" style="color:var(--red)" id="m-xva">−$20,260</span></div>
+  <div class="ms-item"><span class="ms-lbl">XVA (bp)</span><span class="ms-val" style="color:var(--red)" id="m-bp">−7.4bp</span></div>
+  <div class="ms-item"><span class="ms-lbl">⬡ BLOCKCHAIN XVA</span><span class="ms-val" style="color:var(--chain)" id="m-chain">−$5,411</span></div>
+  <div class="ms-div"></div>
+  <span class="ms-badge">DEMO DATA</span>
+</div>
+
+<!-- PLATFORM -->
+<div class="platform-section" id="platform">
+  <div class="platform-inner">
+    <div class="s-label">PLATFORM</div>
+    <h2>Everything a derivatives desk needs.</h2>
+    <p class="s-sub">Cross-asset pricing, risk, PNL and XVA in a single platform. Open-source foundations — no licence fees, no black boxes, no vendor lock-in.</p>
+    <div class="grid-3">
+      <div class="card"><span class="tag tag-teal">PRICING</span><div class="card-title">Unified Pricer</div><div class="card-desc">Full-revaluation pricing for booked trades and new quotes. XVA waterfall always shown — traditional vs blockchain. Counterparty optimizer ranks all counterparties by NPV all-in.</div><div class="chips"><span class="chip">IR SWAP</span><span class="chip">SWAPTION</span><span class="chip">CAP/FLOOR</span><span class="chip">XCCY</span><span class="chip">BERMUDAN</span></div></div>
+      <div class="card"><span class="tag tag-red">XVA</span><div class="card-title">XVA Engine</div><div class="card-desc">CVA, DVA, FVA, ColVA, MVA, KVA — all six components priced natively. Risk-neutral EE/ENE/EPE via Monte Carlo. Blockchain-adjusted XVA for on-network counterparties.</div><div class="chips"><span class="chip">CVA</span><span class="chip">DVA</span><span class="chip">FVA</span><span class="chip">ColVA</span><span class="chip">MVA</span><span class="chip">KVA</span></div></div>
+      <div class="card"><span class="tag tag-blue">RISK</span><div class="card-title">Market Risk</div><div class="card-desc">IR01, IR01_DISC, theta, vega, CS01 by tenor bucket. VaR/ES full revaluation. FRTB SBM sensitivity calculations. Greeks on forecast and discount curves separately.</div><div class="chips"><span class="chip">IR01</span><span class="chip">VEGA</span><span class="chip">VaR/ES</span><span class="chip">FRTB</span></div></div>
+      <div class="card"><span class="tag tag-blue">CCR</span><div class="card-title">Counterparty Credit Risk</div><div class="card-desc">PFE under real-world P measure. SA-CCR EAD. ISDA SIMM with dynamic and static backtesting. Credit limit utilisation with blockchain PFE compression.</div><div class="chips"><span class="chip">PFE</span><span class="chip">SA-CCR</span><span class="chip">SIMM</span></div></div>
+      <div class="card"><span class="tag tag-amber">PNL</span><div class="card-title">PNL Attribution</div><div class="card-desc">Daily PNL decomposed into rate moves, spread changes, theta, carry, rolldown, new trades, unexplained. IPV with threshold. Book marking vs official mark.</div><div class="chips"><span class="chip">ATTRIBUTION</span><span class="chip">IPV</span><span class="chip">MARKING</span></div></div>
+      <div class="card"><span class="tag tag-orange">⬡ CONFIRMATIONS</span><div class="card-title">On-Chain Confirmations</div><div class="card-desc">Blockchain trade confirmation via cashflow fingerprinting. SHA-256 canonical JSON. Eliminates reconciliation. MPoR 10 days → sub-day. CVA −70%, FVA −90%.</div><div class="chips"><span class="chip">SHA-256</span><span class="chip">MPoR↓</span><span class="chip">CVA−70%</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- THESIS -->
+<div class="thesis-section" id="thesis">
+  <div class="thesis-inner">
+    <div class="s-label">THESIS</div>
+    <h2>Why open-source derivatives infrastructure matters.</h2>
+    <p class="s-sub">The derivatives market runs on proprietary systems that nobody can audit. That's a problem for markets, regulators, and participants alike.</p>
+    <div class="thesis-grid">
+      <div class="tc"><div class="tc-n">01</div><div class="tc-t">The model is the moat.</div><div class="tc-b">Regulators are deeply suspicious of proprietary black boxes. An open-source platform where every pricing formula is <span class="hl">auditable, reproducible, and peer-reviewed</span> creates trust that no proprietary system can match.</div></div>
+      <div class="tc"><div class="tc-n">02</div><div class="tc-t">Blockchain compresses XVA.</div><div class="tc-b">MPoR compression from 10 days to sub-day eliminates five regulatory justifications for the margin period. <span class="hl">CVA drops ~70%. FVA drops ~90%.</span> The same trade with blockchain confirmation is worth materially more.</div></div>
+      <div class="tc"><div class="tc-n">03</div><div class="tc-t">Democratise institutional infrastructure.</div><div class="tc-b">Smaller banks, hedge funds, universities, emerging market participants — all deserve the same pricing infrastructure as tier-1 dealers. <span class="hl">No licence fees. No vendor lock-in. No black boxes.</span></div></div>
+      <div class="tc"><div class="tc-n">04</div><div class="tc-t">Built by practitioners.</div><div class="tc-b">15+ years across XVA, CCR, ISDA SIMM, PNL attribution, and market risk. Every model choice reflects production experience at institutional level. <span class="hl">Not a research project — a production platform.</span></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- XVA WATERFALL -->
+<div class="xva-section" id="xva">
+  <div class="xva-inner">
+    <div class="s-label">XVA WATERFALL</div>
+    <h2>TV → CVA → DVA → FVA → ColVA → MVA → KVA → NPV</h2>
+    <p class="s-sub" style="margin-bottom:28px">Every valuation adjustment priced natively. Traditional vs blockchain side by side — always, for every trade.</p>
+    <div class="split">
+      <div class="split-l">
+        <div style="font-size:.64rem;font-weight:700;color:var(--text);margin-bottom:16px">SAMPLE — 5Y USD IRS · $10M · GSI · 42bp CDS</div>
+        <div class="wf-row"><span class="wf-lbl">TV (theoretical value)</span><span class="wf-teal">+$1,727,394</span></div>
+        <div class="wf-row"><span class="wf-lbl">CVA — credit adj (−4.1bp)</span><span class="wf-red">−$12,840</span></div>
+        <div class="wf-row"><span class="wf-lbl">DVA — debit adj (+1.2bp)</span><span class="wf-teal">+$4,280</span></div>
+        <div class="wf-row"><span class="wf-lbl">FVA — funding adj (−2.6bp)</span><span class="wf-red">−$8,420</span></div>
+        <div class="wf-row"><span class="wf-lbl">ColVA — collateral adj (−0.2bp)</span><span class="wf-red">−$840</span></div>
+        <div class="wf-row"><span class="wf-lbl">MVA — margin adj (−0.7bp)</span><span class="wf-red">−$1,420</span></div>
+        <div class="wf-row"><span class="wf-lbl">KVA — capital adj (−0.6bp)</span><span class="wf-red">−$1,020</span></div>
+        <div class="wf-row wf-total"><span style="font-weight:700;color:var(--text-mid);font-size:.68rem">NPV ALL-IN</span><span style="font-size:.90rem;font-weight:900;color:var(--accent)">+$1,707,134</span></div>
+      </div>
+      <div class="split-r" style="background:var(--panel-2)">
+        <div style="font-size:.64rem;font-weight:700;color:var(--chain);margin-bottom:16px">⬡ BLOCKCHAIN ADJUSTED — same trade, same counterparty</div>
+        <div class="wf-row"><span class="wf-lbl">TV</span><span class="wf-teal">+$1,727,394</span></div>
+        <div class="wf-row"><span class="wf-lbl">CVA (MPoR↓ → −70%)</span><span style="color:var(--chain);font-weight:700">−$3,852</span></div>
+        <div class="wf-row"><span class="wf-lbl">DVA</span><span style="color:var(--chain);font-weight:700">+$1,284</span></div>
+        <div class="wf-row"><span class="wf-lbl">FVA (atomic settlement → −90%)</span><span style="color:var(--chain);font-weight:700">−$842</span></div>
+        <div class="wf-row"><span class="wf-lbl">ColVA (smart contract)</span><span style="color:var(--chain);font-weight:700">−$42</span></div>
+        <div class="wf-row"><span class="wf-lbl">MVA (tokenised IM)</span><span style="color:var(--chain);font-weight:700">−$994</span></div>
+        <div class="wf-row"><span class="wf-lbl">KVA</span><span style="color:var(--chain);font-weight:700">−$765</span></div>
+        <div class="wf-row wf-total"><span style="font-weight:700;color:var(--chain);font-size:.68rem">⬡ NPV ALL-IN</span><span style="font-size:.90rem;font-weight:900;color:var(--chain)">+$1,721,983</span></div>
+        <div style="margin-top:12px;background:rgba(240,120,32,.08);border:1px solid rgba(240,120,32,.2);border-radius:2px;padding:8px 12px;font-size:.52rem;color:var(--chain)">⬡ Blockchain premium: <strong>+$14,849</strong> on this trade. Same counterparty. Same economics. Different infrastructure.</div>
+      </div>
+    </div>
+    <div style="margin-top:16px;text-align:center">
+      <a href="xva.html" class="btn-p" style="display:inline-block">▶ INTERACTIVE XVA SIMULATOR</a>
+    </div>
+  </div>
+</div>
+
+<!-- CONTACT -->
+<div class="contact-section" id="contact">
+  <div class="contact-inner">
+    <div class="cta-box">
+      <div class="s-label" style="justify-content:center;margin-bottom:10px;display:flex">GET IN TOUCH</div>
+      <h2>Request access or collaborate.</h2>
+      <p class="s-sub" style="margin:10px auto 0;text-align:center">Whether you're a bank, hedge fund, academic institution, or someone who thinks derivatives infrastructure should be open — reach out.</p>
+      <div class="cf">
+        <label class="cf-l">NAME</label><input class="cf-i" type="text" id="cf-name" placeholder="Your name">
+        <label class="cf-l">ORGANISATION</label><input class="cf-i" type="text" id="cf-org" placeholder="Bank, fund, university, or independent">
+        <label class="cf-l">EMAIL</label><input class="cf-i" type="email" id="cf-email" placeholder="your@email.com">
+        <label class="cf-l">MESSAGE</label><textarea class="cf-i cf-ta" id="cf-msg" placeholder="What are you working on?"></textarea>
+        <button class="cf-btn" onclick="send()">SEND MESSAGE →</button>
+        <div class="cf-note">Or email: <span style="color:var(--accent)">miko.devedzic@gmail.com</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span class="footer-logo">RIJEKA</span>
+  <a class="footer-link" href="xva.html">XVA Simulator</a>
+  <a class="footer-link" href="https://github.com/MikoDevedzic/open-source-cross-asset-pricing-and-risk-platform" target="_blank">GitHub</a>
+  <span style="color:var(--text-dim);font-size:.50rem">Open-source derivatives infrastructure · v0.4.0</span>
+</footer>
+
+<div class="disc">
+  <div class="disc-inner">
+    <div class="disc-title">DISCLAIMER</div>
+    <div class="disc-text">Rijeka is an independent open-source research and educational project. All models, simulations, and outputs are for <strong>educational and demonstration purposes only</strong> and do not constitute financial advice, investment recommendations, or regulatory guidance. The platform has not been independently validated for production use. Results should not be used for actual trading, hedging, or risk management without independent verification by a qualified professional. This project is unaffiliated with any financial institution. Views are those of the individual developer and do not represent any employer, past or present.</div>
+  </div>
+</div>
+
+<script>
+// ─── HERO CANVAS — animated MC rate paths ───
+(function(){
+  const canvas = document.getElementById('hero-canvas');
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const N = 60, STEPS = 80;
+  let paths = [], W, H;
+
+  function resize(){
+    W = canvas.width  = canvas.offsetWidth  || window.innerWidth;
+    H = canvas.height = canvas.offsetHeight || window.innerHeight;
+    generatePaths();
+  }
+
+  function boxMuller(){
+    let u=0,v=0;
+    while(!u)u=Math.random();
+    while(!v)v=Math.random();
+    return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+  }
+
+  function generatePaths(){
+    paths=[];
+    const r0=0.0425, kappa=0.08, theta=0.0425, sigma=0.045, dt=5/STEPS;
+    for(let i=0;i<N;i++){
+      const path=[r0]; let r=r0;
+      for(let s=0;s<STEPS;s++){
+        r = r + kappa*(theta-r)*dt + sigma*Math.sqrt(Math.max(r,0.001))*boxMuller()*Math.sqrt(dt);
+        r = Math.max(r,-0.02);
+        path.push(r);
+      }
+      paths.push(path);
+    }
+  }
+
+  let t=0;
+  function draw(){
+    requestAnimationFrame(draw);
+    ctx.clearRect(0,0,W,H);
+
+    const rMin=-0.01, rMax=0.08;
+    const PL=0, PR=0, PT=20, PB=20;
+    const cW=W-PL-PR, cH=H-PT-PB;
+    const xOf=i=>PL+(i/STEPS)*cW;
+    const yOf=r=>PT+cH-((r-rMin)/(rMax-rMin))*cH;
+
+    // Animated phase offset for drift
+    t+=0.003;
+
+    paths.forEach((path,pi)=>{
+      const phase=(pi/N)*Math.PI*2;
+      ctx.beginPath();
+      path.forEach((r,si)=>{
+        const animR=r+Math.sin(t+phase+si*0.05)*0.002;
+        const x=xOf(si), y=yOf(animR);
+        si===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      });
+      const isHighlight=pi<5;
+      ctx.strokeStyle=isHighlight
+        ?`rgba(13,212,168,${0.18+Math.sin(t+phase)*0.08})`
+        :`rgba(74,154,212,${0.04+Math.sin(t+phase)*0.02})`;
+      ctx.lineWidth=isHighlight?1.2:0.6;
+      ctx.stroke();
+    });
+
+    // EE profile
+    ctx.beginPath();
+    for(let si=0;si<=STEPS;si++){
+      const vals=paths.map(p=>p[si]);
+      const pos=vals.filter(v=>v>0.0425);
+      const ee=pos.length?pos.reduce((a,b)=>a+b,0)/vals.length:0.0425;
+      const x=xOf(si), y=yOf(ee);
+      si===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle='rgba(13,212,168,0.5)';
+    ctx.lineWidth=2;
+    ctx.stroke();
+
+    // Right side label
+    ctx.font='bold 10px monospace';
+    ctx.fillStyle='rgba(13,212,168,0.6)';
+    ctx.fillText('EE →',W-48,yOf(0.0445));
+  }
+
+  window.addEventListener('resize',resize);
+  window.addEventListener('load',()=>{resize();draw();});
+  setTimeout(()=>{resize();draw();},100);
+})();
+
+// ─── ANIMATED METRICS ───
+(function(){
+  let t=0;
+  setInterval(()=>{
+    t+=0.02;
+    const sofr=4.2150+Math.sin(t)*0.008;
+    const y10=4.1276+Math.sin(t*0.7)*0.006;
+    document.getElementById('m-sofr').textContent=sofr.toFixed(4)+'%';
+    document.getElementById('m-10y').textContent=y10.toFixed(4)+'%';
+  },200);
+})();
+
+// ─── FORM ───
+function send(){
+  const n=document.getElementById('cf-name').value;
+  const o=document.getElementById('cf-org').value;
+  const e=document.getElementById('cf-email').value;
+  const m=document.getElementById('cf-msg').value;
+  if(!n||!e){alert('Please enter your name and email.');return;}
+  const s=encodeURIComponent('Rijeka — '+(o||'Enquiry'));
+  const b=encodeURIComponent('Name: '+n+'\nOrg: '+o+'\n\n'+m);
+  window.location.href='mailto:miko.devedzic@gmail.com?subject='+s+'&body='+b;
+}
+</script>
+</body>
+</html>
