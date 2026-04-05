@@ -6,6 +6,19 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# Serve landing page at root
+[[redirects]]
+  from   = "/"
+  to     = "/landing.html"
+  status = 200
+
+# Serve IRS pricer (already static, no redirect needed — just in case)
+[[redirects]]
+  from   = "/irs.html"
+  to     = "/irs.html"
+  status = 200
+
+# SPA catch-all — must be LAST
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
