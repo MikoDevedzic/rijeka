@@ -1,17 +1,18 @@
 """
 Rijeka — Curve Object
-Sprint 3D: flat-forward stub curves.
-Sprint 4+: bootstrapped from deposit/futures/swap quotes.
+Sprint 4G: Direct DF storage — eliminates ln/exp round-trip precision loss.
 
-Curve stores (pillar_date, zero_rate) pairs.
-Discount factors: df(t) = exp(-r * T)  where T = act365f(valuation_date, t)
-Interpolation: log-linear on discount factors (= linear on zero rates for this DCF).
-Forward rate between d1, d2: (df(d1)/df(d2) - 1) / dcf(d1, d2)
+Curve stores (pillar_date, discount_factor) pairs internally.
+Interpolation: log-linear on DFs using calendar day fractions.
+This matches the bootstrap's _interp_df exactly, ensuring NPV = $0 at par rate.
+
+df(t)           = log-linear interpolation on stored DFs
+zero_rate(d)    = -ln(df(d)) / ACT365F(val, d)   [derived, not stored]
+forward_rate    = (df(d1)/df(d2) - 1) / ACT365F(d1, d2)
 """
 
 import math
 from datetime import date
-from decimal import Decimal
 from typing import List, Tuple, Optional
 
 from pricing.day_count import act365f
@@ -19,103 +20,162 @@ from pricing.day_count import act365f
 
 class Curve:
     """
-    Interpolated discount curve.
+    Interpolated discount curve storing DFs directly.
 
     Parameters
     ----------
     valuation_date : date
-    pillars : list of (pillar_date, zero_rate_decimal)
-        e.g. [(date(2026,6,27), 0.045), (date(2027,3,27), 0.0455), ...]
+    df_pillars : list of (pillar_date, discount_factor)
+        Primary constructor. DFs must be <= 1.0, positive.
+        e.g. [(date(2026,4,7), 0.9998), (date(2027,4,7), 0.9633), ...]
+    pillars : list of (pillar_date, zero_rate)
+        Legacy constructor. Converted to DFs internally.
     flat_rate : float | None
-        If provided, curve is flat at this rate (overrides pillars).
+        Flat curve at this continuously-compounded zero rate.
     """
 
     def __init__(
         self,
         valuation_date: date,
+        df_pillars: Optional[List[Tuple[date, float]]] = None,
         pillars: Optional[List[Tuple[date, float]]] = None,
         flat_rate: Optional[float] = None,
     ):
         self.valuation_date = valuation_date
 
         if flat_rate is not None:
-            # Flat curve — two pillars far enough apart
-            self._pillars = [
-                (valuation_date, flat_rate),
-                (date(valuation_date.year + 50, valuation_date.month, valuation_date.day), flat_rate),
+            # Flat curve — two sentinel pillars
+            far = date(valuation_date.year + 60, valuation_date.month, valuation_date.day)
+            T_far = float(act365f(valuation_date, far))
+            self._df_pillars: List[Tuple[date, float]] = [
+                (valuation_date, 1.0),
+                (far, math.exp(-flat_rate * T_far)),
             ]
-        elif pillars:
-            # Sort by date
-            self._pillars = sorted(pillars, key=lambda x: x[0])
-        else:
-            raise ValueError("Curve requires either flat_rate or pillars.")
 
-    # ── Core methods ─────────────────────────────────────────
+        elif df_pillars is not None:
+            # Primary: DFs supplied directly from bootstrap
+            # Ensure val_date anchor present
+            pairs = sorted(df_pillars, key=lambda x: x[0])
+            if not pairs or pairs[0][0] != valuation_date:
+                pairs = [(valuation_date, 1.0)] + pairs
+            self._df_pillars = pairs
+
+        elif pillars is not None:
+            # Legacy: zero rates supplied — convert to DFs
+            pairs = sorted(pillars, key=lambda x: x[0])
+            self._df_pillars = [(valuation_date, 1.0)]
+            for d, r in pairs:
+                if d <= valuation_date:
+                    continue
+                T = float(act365f(valuation_date, d))
+                df = math.exp(-r * T) if T > 0 else 1.0
+                self._df_pillars.append((d, df))
+
+        else:
+            raise ValueError("Curve requires df_pillars, pillars, or flat_rate.")
+
+    # ── Core methods ──────────────────────────────────────────────────────────
 
     def df(self, d: date) -> float:
-        """Discount factor from valuation_date to d."""
+        """
+        Discount factor from valuation_date to d.
+        Log-linear interpolation using calendar day fractions —
+        identical to bootstrap._interp_df for exact NPV = $0 at par rate.
+        """
         if d <= self.valuation_date:
             return 1.0
+        return self._interp_df(d)
+
+    def zero_rate(self, d: date) -> float:
+        """Continuously-compounded zero rate to d. Derived from DF."""
+        if d <= self.valuation_date:
+            return 0.0
         T = float(act365f(self.valuation_date, d))
-        r = self._interp_rate(d)
-        return math.exp(-r * T)
+        if T <= 0:
+            return 0.0
+        df_val = self._interp_df(d)
+        if df_val <= 0:
+            return 0.0
+        return -math.log(df_val) / T
 
     def forward_rate(self, d1: date, d2: date) -> float:
         """
         Simply-compounded forward rate for period [d1, d2].
-        forward = (df(d1)/df(d2) - 1) / T  where T = act365f(d1, d2)
+        forward = (df(d1)/df(d2) - 1) / ACT365F(d1, d2)
         """
         if d1 >= d2:
             return 0.0
         df1 = self.df(d1)
         df2 = self.df(d2)
-        if df2 == 0:
+        if df2 <= 0:
             return 0.0
         T = float(act365f(d1, d2))
-        if T == 0:
+        if T <= 0:
             return 0.0
         return (df1 / df2 - 1.0) / T
 
-    def zero_rate(self, d: date) -> float:
-        """Continuously-compounded zero rate to d."""
-        if d <= self.valuation_date:
-            return self._pillars[0][1]
-        return self._interp_rate(d)
+    # ── Interpolation ─────────────────────────────────────────────────────────
 
-    # ── Interpolation ────────────────────────────────────────
+    def _interp_df(self, d: date) -> float:
+        """
+        Log-linear interpolation on stored DFs using calendar day fractions.
+        Matches bootstrap._interp_df exactly — same method, same result.
+        """
+        pil = self._df_pillars
 
-    def _interp_rate(self, d: date) -> float:
-        """Log-linear interpolation (= linear on zero rates * T)."""
-        dates  = [p[0] for p in self._pillars]
-        rates  = [p[1] for p in self._pillars]
+        if not pil:
+            return 1.0
+        if d <= pil[0][0]:
+            return pil[0][1]
 
-        if d <= dates[0]:
-            return rates[0]
-        if d >= dates[-1]:
-            return rates[-1]
+        # Flat extrapolation beyond last pillar via constant zero rate
+        if d >= pil[-1][0]:
+            d0, df0 = pil[-1]
+            origin = pil[0][0]
+            t0 = max((d0 - origin).days, 1) / 365.25
+            t1 = (d - origin).days / 365.25
+            r = -math.log(df0) / t0 if df0 > 0 and t0 > 0 else 0.0
+            return math.exp(-r * t1)
 
-        # Find surrounding pillars
-        for i in range(len(dates) - 1):
-            if dates[i] <= d < dates[i + 1]:
-                t  = float(act365f(self.valuation_date, d))
-                t1 = float(act365f(self.valuation_date, dates[i]))
-                t2 = float(act365f(self.valuation_date, dates[i + 1]))
-                if t2 == t1:
-                    return rates[i]
-                # Interpolate on r*T (log-linear on df)
-                rt1 = rates[i]     * t1
-                rt2 = rates[i + 1] * t2
-                if t == 0:
-                    return rates[i]
-                rt = rt1 + (rt2 - rt1) * (t - t1) / (t2 - t1)
-                return rt / t
+        # Binary search for surrounding pillars
+        lo, hi = 0, len(pil) - 1
+        while lo + 1 < hi:
+            mid = (lo + hi) // 2
+            if pil[mid][0] <= d:
+                lo = mid
+            else:
+                hi = mid
 
-        return rates[-1]
+        d0, df0 = pil[lo]
+        d1, df1 = pil[hi]
+        days_total = max((d1 - d0).days, 1)
+        days_query = (d - d0).days
+        t = days_query / days_total   # calendar day fraction — matches bootstrap
 
-    # ── Shift (for Greeks) ───────────────────────────────────
+        if df0 <= 0 or df1 <= 0:
+            return max(df0, df1)
+
+        # Log-linear: df = exp((1-t)*ln(df0) + t*ln(df1))
+        return math.exp((1.0 - t) * math.log(df0) + t * math.log(df1))
+
+    # ── Shift (for Greeks) ────────────────────────────────────────────────────
 
     def shifted(self, bump_bps: float) -> "Curve":
-        """Return a new curve with all rates shifted by bump_bps basis points."""
-        shift = bump_bps / 10000.0
-        new_pillars = [(d, r + shift) for d, r in self._pillars]
-        return Curve(self.valuation_date, pillars=new_pillars)
+        """
+        Return a new curve with all zero rates shifted by bump_bps basis points.
+        Converts DF -> r -> shift -> r_new -> DF_new.
+        """
+        shift = bump_bps / 10_000.0
+        new_pillars: List[Tuple[date, float]] = []
+        for d, df_val in self._df_pillars:
+            if d == self.valuation_date:
+                new_pillars.append((d, 1.0))
+                continue
+            T = float(act365f(self.valuation_date, d))
+            if T <= 0 or df_val <= 0:
+                new_pillars.append((d, df_val))
+                continue
+            r = -math.log(df_val) / T
+            r_new = r + shift
+            new_pillars.append((d, math.exp(-r_new * T)))
+        return Curve(self.valuation_date, df_pillars=new_pillars)

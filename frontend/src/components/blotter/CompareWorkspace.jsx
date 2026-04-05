@@ -175,10 +175,10 @@ ${ctx}`
         padding:'0.6rem 1.25rem', borderBottom:'1px solid var(--border)',
         background:'var(--panel-2)', flexShrink:0,
       }}>
-        <span style={{fontFamily:'var(--mono)',fontSize:'0.65rem',fontWeight:700,letterSpacing:'0.12em',color:'#ffd080',textShadow:'0 0 10px rgba(232,112,0,0.7)'}}>
+        <span style={{fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',fontWeight:700,letterSpacing:'0.12em',color:'#ffd080',textShadow:'0 0 10px rgba(232,112,0,0.7)'}}>
           🔥 PROMETHEUS
         </span>
-        <span style={{fontFamily:'var(--mono)',fontSize:'0.6rem',color:'var(--text-dim)'}}>
+        <span style={{fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'0.6rem',color:'var(--text-dim)'}}>
           {trades.length} trades loaded · Derivatives intelligence for everyone — ask anything
         </span>
         <div style={{marginLeft:'auto',display:'flex',gap:'0.5rem'}}>
@@ -186,7 +186,7 @@ ${ctx}`
             <button onClick={quickAnalyse} disabled={loading} style={{
               background:'linear-gradient(135deg, #7a2800, #c45200, #e87000)',
               border:'1px solid #e87000', color:'#ffd080',
-              fontFamily:'var(--mono)', fontSize:'0.65rem', fontWeight:700,
+              fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', fontWeight:700,
               letterSpacing:'0.1em', padding:'0.3rem 0.85rem', borderRadius:2,
               cursor:'pointer', opacity: loading ? 0.6 : 1,
               boxShadow:'0 0 12px rgba(232,112,0,0.4)',
@@ -198,13 +198,13 @@ ${ctx}`
           {messages.length > 0 && (
             <button onClick={() => setMessages([])} style={{
               background:'transparent', border:'1px solid var(--border)',
-              color:'var(--text-dim)', fontFamily:'var(--mono)', fontSize:'0.62rem',
+              color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem',
               padding:'0.25rem 0.65rem', borderRadius:2, cursor:'pointer',
             }}>CLEAR</button>
           )}
           <button onClick={onClose} style={{
             background:'transparent', border:'1px solid var(--border)',
-            color:'var(--text-dim)', fontFamily:'var(--mono)', fontSize:'0.62rem',
+            color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem',
             padding:'0.25rem 0.65rem', borderRadius:2, cursor:'pointer',
           }}>HIDE</button>
         </div>
@@ -217,7 +217,7 @@ ${ctx}`
             display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
             height:'100%', gap:'0.75rem', color:'var(--text-dim)',
           }}>
-            <span style={{fontFamily:'var(--mono)',fontSize:'0.72rem',letterSpacing:'0.1em'}}>
+            <span style={{fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1.0625rem',letterSpacing:'0.1em'}}>
               READY TO ANALYSE {trades.length} TRADES
             </span>
             <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap',justifyContent:'center'}}>
@@ -229,7 +229,7 @@ ${ctx}`
               ].map(q => (
                 <button key={q} onClick={() => analyse(q)} style={{
                   background:'transparent', border:'1px solid var(--border)',
-                  color:'var(--text-dim)', fontFamily:'var(--mono)', fontSize:'0.62rem',
+                  color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem',
                   padding:'0.3rem 0.75rem', borderRadius:2, cursor:'pointer',
                   transition:'all 0.12s',
                 }}
@@ -249,7 +249,7 @@ ${ctx}`
             borderRadius: 3, padding: '0.6rem 0.85rem',
           }}>
             <div style={{
-              fontFamily:'var(--mono)', fontSize:'0.68rem', lineHeight:1.6,
+              fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1.0625rem', lineHeight:1.6,
               color: m.role==='user' ? '#ffd080' : 'var(--text)',
               whiteSpace:'pre-wrap',
             }}>{m.content}</div>
@@ -259,14 +259,14 @@ ${ctx}`
           <div style={{
             alignSelf:'flex-start', background:'var(--panel-2)',
             border:'1px solid var(--border)', borderRadius:3,
-            padding:'0.6rem 0.85rem', fontFamily:'var(--mono)',
-            fontSize:'0.68rem', color:'#e87000', letterSpacing:'0.08em',
+            padding:'0.6rem 0.85rem', fontFamily:"'IBM Plex Mono',var(--mono)",
+            fontSize:'1.0625rem', color:'#e87000', letterSpacing:'0.08em',
           }}>
             PROMETHEUS IS THINKING...
           </div>
         )}
         {error && (
-          <div style={{fontSize:'0.68rem',color:'var(--red)',padding:'0.4rem 0.6rem',background:'color-mix(in srgb,var(--red) 8%,transparent)',border:'1px solid color-mix(in srgb,var(--red) 30%,transparent)',borderRadius:2}}>
+          <div style={{fontSize:'1.0625rem',color:'var(--red)',padding:'0.4rem 0.6rem',background:'color-mix(in srgb,var(--red) 8%,transparent)',border:'1px solid color-mix(in srgb,var(--red) 30%,transparent)',borderRadius:2}}>
             {error}
           </div>
         )}
@@ -281,7 +281,7 @@ ${ctx}`
           placeholder="Ask PROMETHEUS anything about these trades..."
           style={{
             flex:1, background:'var(--bg)', border:'1px solid var(--border)',
-            color:'var(--text)', fontFamily:'var(--mono)', fontSize:'0.7rem',
+            color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.7rem',
             padding:'0.35rem 0.65rem', borderRadius:2, outline:'none',
           }}
           onFocus={e=>e.target.style.borderColor='var(--purple)'}
@@ -293,7 +293,7 @@ ${ctx}`
           style={{
             background:'linear-gradient(135deg, #7a2800, #c45200)',
             border:'1px solid #e87000', color:'#ffd080',
-            fontFamily:'var(--mono)', fontSize:'0.68rem', fontWeight:700,
+            fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1.0625rem', fontWeight:700,
             padding:'0.35rem 0.85rem', borderRadius:2, cursor:'pointer',
             opacity: loading||!question.trim() ? 0.5 : 1,
             boxShadow:'0 0 8px rgba(232,112,0,0.3)',
@@ -338,7 +338,7 @@ export default function CompareWorkspace({ tab }) {
         <span className="cmp-count">{trades.length} trades</span>
         {totalDiffs > 0 && (
           <span style={{
-            fontFamily:'var(--mono)', fontSize:'0.62rem', fontWeight:700,
+            fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', fontWeight:700,
             color:'var(--amber)', letterSpacing:'0.08em',
             padding:'0.15rem 0.5rem', borderRadius:2,
             background:'color-mix(in srgb,var(--amber) 10%,transparent)',
@@ -362,7 +362,7 @@ export default function CompareWorkspace({ tab }) {
               : 'linear-gradient(135deg, #4a1800, #8a3600, #b85000)',
             border: '1px solid #e87000',
             color: '#ffd080',
-            fontFamily:'var(--mono)', fontSize:'0.65rem', fontWeight:700,
+            fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', fontWeight:700,
             letterSpacing:'0.12em', padding:'0.28rem 0.9rem',
             borderRadius:2, cursor:'pointer', transition:'all 0.2s',
             boxShadow: showAi ? '0 0 14px rgba(232,112,0,0.5)' : '0 0 6px rgba(232,112,0,0.2)',
@@ -381,7 +381,7 @@ export default function CompareWorkspace({ tab }) {
             <thead>
               <tr>
                 <th className="cmp-corner">
-                  <span style={{fontSize:'0.58rem',fontWeight:700,letterSpacing:'0.1em',color:'var(--text-dim)'}}>FIELD</span>
+                  <span style={{fontSize:'0.9375rem',fontWeight:700,letterSpacing:'0.1em',color:'var(--text-dim)'}}>FIELD</span>
                 </th>
                 {trades.map(t => {
                   const acColor = AC_COLOR[t.asset_class] || 'var(--text)'
@@ -399,7 +399,7 @@ export default function CompareWorkspace({ tab }) {
                       <div style={{marginTop:'0.25rem'}}>
                         <button onClick={() => openTrade(t)} style={{
                           background:'none',border:'1px solid var(--border)',color:'var(--text-dim)',
-                          fontFamily:'var(--mono)',fontSize:'0.58rem',padding:'0.1rem 0.4rem',
+                          fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'0.9375rem',padding:'0.1rem 0.4rem',
                           borderRadius:2,cursor:'pointer',letterSpacing:'0.06em',
                         }}>OPEN →</button>
                       </div>
@@ -418,7 +418,7 @@ export default function CompareWorkspace({ tab }) {
                       {sectionKey}
                       {sectionDiffs > 0 && (
                         <span style={{
-                          marginLeft:'0.75rem', fontSize:'0.58rem',
+                          marginLeft:'0.75rem', fontSize:'0.9375rem',
                           color:'var(--amber)', fontWeight:700,
                           background:'color-mix(in srgb,var(--amber) 15%,transparent)',
                           padding:'0.1rem 0.4rem', borderRadius:2,

@@ -15,12 +15,16 @@ import OrgHierarchy     from './components/org/OrgHierarchy'
 import LegalEntities    from './components/onboarding/LegalEntities'
 import Counterparties   from './components/onboarding/Counterparties'
 import Users            from './components/admin/Users'
+import PrometheusPanel  from './components/PrometheusPanel'
+import TradeBookingWindow from './components/blotter/TradeBookingWindow'
+import useBookingStore    from './store/useBookingStore'
 
 function BlotterLayout() {
   return (
     <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
       <div style={{flex:1,overflow:'hidden'}}><AuthGuard /></div>
+      <PrometheusPanel />
     </div>
   )
 }
@@ -33,7 +37,28 @@ function ConfigLayout() {
         <CfgNav />
         <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><AuthGuard /></main>
       </div>
+      <PrometheusPanel />
     </div>
+  )
+}
+
+
+// Renders one window per entry in store — survives navigation
+function PersistentBookingWindow() {
+  const { windows, close } = useBookingStore()
+  if (!windows.length) return null
+  return (
+    <>
+      {windows.map(w => (
+        <TradeBookingWindow
+          key={w.id}
+          windowId={w.id}
+          initialPos={{ x: w.x, y: w.y }}
+          trade={w.trade || null}
+          onClose={() => close(w.id)}
+        />
+      ))}
+    </>
   )
 }
 
@@ -41,7 +66,7 @@ export default function App() {
   const { initAuth, loading } = useAuthStore()
   useEffect(() => { initAuth() }, [])
   if (loading) return (
-    <div style={{height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)',color:'var(--accent)',fontFamily:'var(--mono)',fontSize:'0.75rem',letterSpacing:'0.15em'}}>
+    <div style={{height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)',color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'0.875rem',letterSpacing:'0.15em'}}>
       INITIALISING...
     </div>
   )
@@ -52,7 +77,7 @@ export default function App() {
         <Route path="/signup"  element={<SignupPage />} />
         <Route path="/confirm" element={<ConfirmPage />} />
         <Route element={<AuthGuard />}>
-          <Route path="/command-center" element={<CommandCenter />} />
+          <Route path="/command-center" element={<><CommandCenter /><PrometheusPanel /></>} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pricer"  element={<PricerPage />} />
@@ -70,6 +95,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/command-center" replace />} />
       </Routes>
+      <PersistentBookingWindow />
     </BrowserRouter>
   )
 }

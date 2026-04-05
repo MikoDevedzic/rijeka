@@ -69,12 +69,12 @@ export default function BookTab() {
           {selected.size >= 2 && (
             <button
               onClick={() => { openComparison(rows.filter(t=>selected.has(t.id))); setSelected(new Set()) }}
-              style={{background:'var(--blue)',color:'#fff',border:'none',padding:'0.4rem 1rem',fontFamily:'var(--mono)',fontSize:'0.65rem',fontWeight:700,letterSpacing:'0.1em',cursor:'pointer',borderRadius:2}}>
+              style={{background:'var(--blue)',color:'#fff',border:'none',padding:'0.4rem 1rem',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',fontWeight:700,letterSpacing:'0.1em',cursor:'pointer',borderRadius:2}}>
               COMPARE ({selected.size})
             </button>
           )}
           {selected.size > 0 && (
-            <button onClick={()=>setSelected(new Set())} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',fontFamily:'var(--mono)',fontSize:'0.62rem',padding:'0.4rem 0.65rem',cursor:'pointer',borderRadius:2}}>
+            <button onClick={()=>setSelected(new Set())} style={{background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',padding:'0.4rem 0.65rem',cursor:'pointer',borderRadius:2}}>
               CLEAR
             </button>
           )}
@@ -166,8 +166,8 @@ export default function BookTab() {
                       <td style={{maxWidth:160,overflow:'hidden',textOverflow:'ellipsis'}}>{t.counterparty?.name||'—'}</td>
                       <td className="td-num">{fmt(t.notional)} <span className="ccy-label">{t.notional_ccy}</span></td>
                       <td className="td-dim">{tenor(t)}</td>
-                      <td className="td-dim" style={{fontSize:'0.65rem'}}>{fmtD(t.trade_date)}</td>
-                      <td className="td-dim" style={{fontSize:'0.65rem'}}>{fmtD(t.maturity_date)}</td>
+                      <td className="td-dim" style={{fontSize:'1rem'}}>{fmtD(t.trade_date)}</td>
+                      <td className="td-dim" style={{fontSize:'1rem'}}>{fmtD(t.maturity_date)}</td>
                       <td><span className="status-pip" style={{background:st.c}}/><span className="status-txt" style={{color:st.c}}>{st.l}</span></td>
                       <td><span className="store-txt" style={{color:sr.c}}>{sr.l}</span></td>
                     </tr>

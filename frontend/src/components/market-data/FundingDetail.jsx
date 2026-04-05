@@ -194,7 +194,7 @@ function FundingPreview({ curve }) {
                     {oisRate != null ? `${oisRate.toFixed(4)}%` : '—'}
                   </td>
                   <td className="am">+{sp}bp</td>
-                  <td style={{ color: '#f0a030', fontFamily: 'var(--mono)' }}>{fundingRate}</td>
+                  <td style={{ color: '#f0a030', fontFamily:"'IBM Plex Mono',var(--mono)" }}>{fundingRate}</td>
                 </tr>
               );
             })}

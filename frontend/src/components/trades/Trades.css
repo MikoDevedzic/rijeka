@@ -34,7 +34,7 @@
   color: var(--bg-deep);
   border: none;
   padding: 0.45rem 1.1rem;
-  font-family: var(--mono);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -59,7 +59,7 @@
 .summary-val {
   font-size: 1.1rem;
   font-weight: 700;
-  font-family: var(--mono);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   color: var(--text);
   line-height: 1;
 }
@@ -85,7 +85,7 @@
   background: var(--panel);
   border: 1px solid var(--border);
   color: var(--text);
-  font-family: var(--mono);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 0.72rem;
   padding: 0.45rem 0.75rem;
   border-radius: 2px;
@@ -101,8 +101,8 @@
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 0.65rem;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   padding: 0.25rem 0.65rem;
@@ -153,7 +153,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.72rem;
-  font-family: var(--mono);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
 }
 .trades-table thead {
   position: sticky;
@@ -164,7 +164,7 @@
 .trades-table th {
   padding: 0.6rem 0.8rem;
   text-align: left;
-  font-size: 0.62rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--text-dim);
@@ -194,8 +194,8 @@
 .td-cp    { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
 .td-notional { text-align: right; font-variant-numeric: tabular-nums; }
 .td-tenor  { color: var(--text-dim) !important; }
-.td-date  { color: var(--text-dim) !important; font-size: 0.68rem; }
-.ccy      { font-size: 0.65rem; opacity: 0.6; margin-left: 0.25rem; }
+.td-date  { color: var(--text-dim) !important; font-size: 1.0625rem; }
+.ccy      { font-size: 1rem; opacity: 0.6; margin-left: 0.25rem; }
 
 .badge {
   display: inline-block;
@@ -214,13 +214,13 @@
   vertical-align: middle;
 }
 .status-label {
-  font-size: 0.65rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.08em;
   vertical-align: middle;
 }
 .store-badge {
-  font-size: 0.65rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
 }
@@ -261,7 +261,7 @@
   letter-spacing: 0.06em;
 }
 .detail-sub {
-  font-size: 0.65rem;
+  font-size: 1rem;
   letter-spacing: 0.08em;
   margin-top: 0.15rem;
 }
@@ -297,7 +297,7 @@
 }
 .detail-grid-2 > div { display: flex; flex-direction: column; gap: 0.1rem; }
 .dl {
-  font-size: 0.58rem;
+  font-size: 0.9375rem;
   color: var(--text-dim);
   letter-spacing: 0.1em;
 }
@@ -311,8 +311,8 @@
 .act-btn {
   border: 1px solid;
   background: transparent;
-  font-family: var(--mono);
-  font-size: 0.65rem;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.1em;
   padding: 0.35rem 0.75rem;
@@ -363,8 +363,8 @@
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-dim);
-  font-family: var(--mono);
-  font-size: 0.65rem;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   padding: 0.5rem;
@@ -378,7 +378,7 @@
   background: var(--accent);
   border: none;
   color: var(--bg-deep);
-  font-family: var(--mono);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -392,7 +392,7 @@
 
 /* Form elements */
 .form-section-title {
-  font-size: 0.58rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   color: var(--accent);
@@ -402,7 +402,7 @@
 }
 .form-field { display: flex; flex-direction: column; gap: 0.25rem; }
 .form-field label {
-  font-size: 0.58rem;
+  font-size: 0.9375rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   color: var(--text-dim);
@@ -412,7 +412,7 @@
   background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
-  font-family: var(--mono);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
   font-size: 0.7rem;
   padding: 0.35rem 0.5rem;
   border-radius: 2px;
@@ -430,7 +430,7 @@
 .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; }
 
 .form-divider {
-  font-size: 0.58rem;
+  font-size: 0.9375rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--text-dim);
@@ -443,7 +443,7 @@
 .chip-row { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 
 .form-error {
-  font-size: 0.68rem;
+  font-size: 1.0625rem;
   color: var(--red);
   letter-spacing: 0.06em;
   padding: 0.4rem 0.6rem;

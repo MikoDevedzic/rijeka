@@ -18,7 +18,7 @@ export default function AuthGuard() {
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         height: '100vh', background: 'var(--bg)',
-        fontFamily: 'var(--mono)', color: 'var(--accent)', fontSize: '13px',
+        fontFamily:"'IBM Plex Mono',var(--mono)", color: 'var(--accent)', fontSize: '13px',
         letterSpacing: '0.1em'
       }}>
         INITIALISING...

@@ -28,7 +28,7 @@ export default function MdNav() {
             display: 'inline-flex', alignItems: 'center',
             padding: '2px 9px', borderRadius: 2,
             textDecoration: 'none', fontSize: '11px',
-            fontFamily: 'var(--mono)', letterSpacing: '0.04em',
+            fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing: '0.04em',
             color: active ? 'var(--text-hi)' : 'var(--text)',
             borderBottom: active ? '1px solid var(--text-hi)' : '1px solid transparent',
           }}>

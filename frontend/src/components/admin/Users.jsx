@@ -67,7 +67,7 @@ export default function Users() {
     active: users.filter(u => u.is_active !== false).length,
   }
 
-  const mono = { fontFamily: 'var(--mono)' }
+  const mono = { fontFamily:"'IBM Plex Mono',var(--mono)" }
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'var(--bg)', ...mono }}>
@@ -77,13 +77,13 @@ export default function Users() {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem' }}>
           <div>
             <h2 style={{ fontSize:'1rem', fontWeight:700, letterSpacing:'0.14em', margin:0, color:'var(--text)' }}>USER MANAGEMENT</h2>
-            <p style={{ fontSize:'0.65rem', color:'var(--text-dim)', margin:'0.25rem 0 0', letterSpacing:'0.06em' }}>
+            <p style={{ fontSize:'1rem', color:'var(--text-dim)', margin:'0.25rem 0 0', letterSpacing:'0.06em' }}>
               Manage access levels and AI permissions
             </p>
           </div>
           <button onClick={fetchUsers} style={{
             background:'transparent', border:'1px solid var(--border)', color:'var(--text-dim)',
-            ...mono, fontSize:'0.62rem', fontWeight:700, letterSpacing:'0.1em',
+            ...mono, fontSize:'1rem', fontWeight:700, letterSpacing:'0.1em',
             padding:'0.35rem 0.85rem', borderRadius:2, cursor:'pointer',
           }}>REFRESH</button>
         </div>
@@ -99,7 +99,7 @@ export default function Users() {
           ].map(s => (
             <div key={s.label} style={{ display:'flex', flexDirection:'column', gap:'0.1rem' }}>
               <span style={{ fontSize:'1.1rem', fontWeight:700, color:s.color, lineHeight:1 }}>{s.val}</span>
-              <span style={{ fontSize:'0.58rem', color:'var(--text-dim)', letterSpacing:'0.1em' }}>{s.label}</span>
+              <span style={{ fontSize:'0.9375rem', color:'var(--text-dim)', letterSpacing:'0.1em' }}>{s.label}</span>
             </div>
           ))}
         </div>
@@ -175,20 +175,20 @@ export default function Users() {
                     <td style={{ padding:'0.65rem 1.25rem' }}>
                       <div style={{ fontWeight:600, color:'var(--text)' }}>
                         {u.full_name || u.email?.split('@')[0] || '—'}
-                        {isMe && <span style={{ marginLeft:'0.5rem', fontSize:'0.58rem', color:'var(--accent)', border:'1px solid var(--accent)', padding:'0.05rem 0.3rem', borderRadius:2 }}>YOU</span>}
+                        {isMe && <span style={{ marginLeft:'0.5rem', fontSize:'0.9375rem', color:'var(--accent)', border:'1px solid var(--accent)', padding:'0.05rem 0.3rem', borderRadius:2 }}>YOU</span>}
                       </div>
-                      <div style={{ fontSize:'0.62rem', color:'var(--text-dim)', marginTop:'0.1rem' }}>{u.email || '—'}</div>
+                      <div style={{ fontSize:'1rem', color:'var(--text-dim)', marginTop:'0.1rem' }}>{u.email || '—'}</div>
                     </td>
 
                     {/* Trader ID */}
-                    <td style={{ padding:'0.65rem 1.25rem', color:'var(--text-dim)', fontSize:'0.65rem', letterSpacing:'0.04em' }}>
+                    <td style={{ padding:'0.65rem 1.25rem', color:'var(--text-dim)', fontSize:'1rem', letterSpacing:'0.04em' }}>
                       {u.trader_id || '—'}
                     </td>
 
                     {/* Role */}
                     <td style={{ padding:'0.65rem 1.25rem' }}>
                       {isMe ? (
-                        <span style={{ fontSize:'0.65rem', fontWeight:700, letterSpacing:'0.1em', color:rm.color, padding:'0.15rem 0.5rem', border:`1px solid ${rm.color}60`, borderRadius:2 }}>{rm.label}</span>
+                        <span style={{ fontSize:'1rem', fontWeight:700, letterSpacing:'0.1em', color:rm.color, padding:'0.15rem 0.5rem', border:`1px solid ${rm.color}60`, borderRadius:2 }}>{rm.label}</span>
                       ) : (
                         <select
                           value={u.role}
@@ -196,7 +196,7 @@ export default function Users() {
                           onChange={e => updateRole(u.id, e.target.value)}
                           style={{
                             background:'var(--panel-2)', border:`1px solid ${rm.color}60`,
-                            color:rm.color, ...mono, fontSize:'0.65rem', fontWeight:700,
+                            color:rm.color, ...mono, fontSize:'1rem', fontWeight:700,
                             letterSpacing:'0.08em', padding:'0.2rem 0.5rem', borderRadius:2,
                             cursor:'pointer', outline:'none',
                           }}
@@ -211,7 +211,7 @@ export default function Users() {
                     {/* AI Access */}
                     <td style={{ padding:'0.65rem 1.25rem' }}>
                       <span style={{
-                        fontSize:'0.62rem', fontWeight:700, letterSpacing:'0.08em',
+                        fontSize:'1rem', fontWeight:700, letterSpacing:'0.08em',
                         color: aiEnabled ? 'var(--accent)' : 'var(--text-dim)',
                         padding:'0.15rem 0.5rem',
                         background: aiEnabled ? 'color-mix(in srgb,var(--accent) 10%,transparent)' : 'transparent',
@@ -225,7 +225,7 @@ export default function Users() {
                     {/* Status */}
                     <td style={{ padding:'0.65rem 1.25rem' }}>
                       <span style={{
-                        fontSize:'0.62rem', fontWeight:700, letterSpacing:'0.08em',
+                        fontSize:'1rem', fontWeight:700, letterSpacing:'0.08em',
                         color: u.is_active !== false ? 'var(--accent)' : 'var(--red)',
                       }}>
                         {u.is_active !== false ? '● ACTIVE' : '● INACTIVE'}
@@ -233,7 +233,7 @@ export default function Users() {
                     </td>
 
                     {/* Joined */}
-                    <td style={{ padding:'0.65rem 1.25rem', color:'var(--text-dim)', fontSize:'0.65rem' }}>
+                    <td style={{ padding:'0.65rem 1.25rem', color:'var(--text-dim)', fontSize:'1rem' }}>
                       {joined}
                     </td>
 

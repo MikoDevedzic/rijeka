@@ -17,6 +17,7 @@ KEY: When discount_curve_id == forecast_curve_id (single-curve mode),
      an UNBUMPED copy for forecasting. This is what makes IR01_DISC < IR01.
 """
 
+import math
 from datetime import date, timedelta
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
@@ -30,6 +31,7 @@ class Greeks:
     ir01:       float   # parallel +1bp all curves → ΔNPV
     ir01_disc:  float   # parallel +1bp discount curves only → ΔNPV
     theta:      float   # 1-day time decay
+    gamma:      float   # dollar convexity: NPV(+1bp) + NPV(−1bp) − 2·NPV(0)
 
 
 def compute_greeks(
@@ -55,6 +57,11 @@ def compute_greeks(
     bumped_all = {k: v.shifted(1.0) for k, v in curves.items()}
     ir01_result = price_swap(trade_id, legs, bumped_all, valuation_date)
     ir01 = float(ir01_result.npv or 0) - base_npv
+
+    # Gamma: dollar convexity for 1bp parallel move
+    bumped_down  = {k: v.shifted(-1.0) for k, v in curves.items()}
+    gamma_result = price_swap(trade_id, legs, bumped_down, valuation_date)
+    gamma        = float(ir01_result.npv or 0) + float(gamma_result.npv or 0) - 2.0 * base_npv
 
     # ── IR01_DISC: shift DISCOUNT curves only, keep forecast curves flat ─────
     # Step 1: identify which curve IDs are used for discounting vs forecasting
@@ -112,9 +119,28 @@ def compute_greeks(
     ir01_disc = float(disc_result.npv or 0) - base_npv
 
     # ── Theta: price as of tomorrow ──────────────────────────────────────────
-    tomorrow = valuation_date + timedelta(days=1)
-    theta_curves = {k: Curve(tomorrow, pillars=v._pillars) for k, v in curves.items()}
-    theta_result = price_swap(trade_id, legs, theta_curves, tomorrow)
-    theta = float(theta_result.npv or 0) - base_npv
+    # Correct roll: extract zero rates from today's pillars, reanchor from tomorrow.
+    # Keeps the SAME market zero rates — only time has passed.
+    # Wrong approach: Curve(tomorrow, df_pillars=v._df_pillars) reuses absolute DFs
+    # unchanged, so NPV(tomorrow) == NPV(today) and theta = $0.
+    def _roll_curve(curve: Curve, new_val_date: date) -> Curve:
+        new_pillars = []
+        for d, df_val in curve._df_pillars:
+            if d <= curve.valuation_date:
+                continue
+            t_old = (d - curve.valuation_date).days / 365.25
+            if t_old <= 0 or df_val <= 0:
+                continue
+            r = -math.log(df_val) / t_old
+            t_new = (d - new_val_date).days / 365.25
+            if t_new <= 0:
+                continue
+            new_pillars.append((d, math.exp(-r * t_new)))
+        return Curve(new_val_date, df_pillars=new_pillars)
 
-    return Greeks(ir01=ir01, ir01_disc=ir01_disc, theta=theta)
+    tomorrow     = valuation_date + timedelta(days=1)
+    theta_curves = {k: _roll_curve(v, tomorrow) for k, v in curves.items()}
+    theta_result = price_swap(trade_id, legs, theta_curves, tomorrow)
+    theta        = float(theta_result.npv or 0) - base_npv
+
+    return Greeks(ir01=ir01, ir01_disc=ir01_disc, theta=theta, gamma=gamma)

@@ -25,7 +25,7 @@ const useMarketDataStore = create((set, get) => ({
   // ── Curves workspace state ────────────────────────────────────────────────
   selectedCurveId: null,
   innerTab: 'def',
-  typeFilter: 'all',
+  typeFilter: 'OIS',
   openGroups: initialOpenGroups,
   curveInterp: {},
   fundingMode: {},

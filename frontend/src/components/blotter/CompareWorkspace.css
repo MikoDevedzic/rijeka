@@ -5,18 +5,18 @@
   border-bottom:1px solid var(--border); background:var(--panel); flex-shrink:0;
 }
 .cmp-title { font-size:0.8rem; font-weight:700; letter-spacing:0.14em; color:var(--text); }
-.cmp-count { font-size:0.65rem; color:var(--text-dim); letter-spacing:0.08em; }
+.cmp-count { font-size:1rem; color:var(--text-dim); letter-spacing:0.08em; }
 .cmp-section-btns { display:flex; gap:0.35rem; margin-left:auto; }
 .cmp-sec-btn {
   background:transparent; border:1px solid var(--border); color:var(--text-dim);
-  font-family:var(--mono); font-size:0.62rem; font-weight:600; letter-spacing:0.08em;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size:1rem; font-weight:600; letter-spacing:0.08em;
   padding:0.25rem 0.65rem; border-radius:2px; cursor:pointer; transition:all 0.12s;
 }
 .cmp-sec-btn:hover { border-color:var(--text-dim); color:var(--text); }
 .cmp-sec-btn-active { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,transparent); }
 .cmp-close-btn {
   background:transparent; border:1px solid var(--border); color:var(--text-dim);
-  font-family:var(--mono); font-size:0.62rem; font-weight:600; letter-spacing:0.08em;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size:1rem; font-weight:600; letter-spacing:0.08em;
   padding:0.25rem 0.65rem; border-radius:2px; cursor:pointer; transition:all 0.12s;
 }
 .cmp-close-btn:hover { border-color:var(--red); color:var(--red); }
@@ -24,7 +24,7 @@
 /* Grid */
 .cmp-grid { flex:1; overflow:auto; }
 .cmp-table {
-  width:100%; border-collapse:collapse; font-family:var(--mono); font-size:0.7rem;
+  width:100%; border-collapse:collapse; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size:0.7rem;
 }
 /* Row label column */
 .cmp-table .row-lbl {
@@ -40,7 +40,7 @@
   padding:0.6rem 1rem; min-width:200px; max-width:260px;
 }
 .cmp-hdr-ref { font-size:0.75rem; font-weight:700; letter-spacing:0.06em; color:var(--text); }
-.cmp-hdr-sub { font-size:0.62rem; color:var(--text-dim); margin-top:0.15rem; }
+.cmp-hdr-sub { font-size:1rem; color:var(--text-dim); margin-top:0.15rem; }
 
 /* Top-left corner cell */
 .cmp-corner {
@@ -52,7 +52,7 @@
 /* Section header rows */
 .cmp-section-row td {
   background:var(--bg-deep) !important;
-  font-size:0.58rem; font-weight:700; letter-spacing:0.14em;
+  font-size:0.9375rem; font-weight:700; letter-spacing:0.14em;
   color:var(--accent); padding:0.4rem 1rem;
   border-bottom:1px solid var(--border);
 }
@@ -68,7 +68,7 @@
 .cmp-val-accent { font-size:0.72rem; color:var(--accent); font-weight:700; }
 .cmp-val-amber { font-size:0.72rem; color:var(--amber); font-weight:700; }
 .cmp-val-red { font-size:0.72rem; color:var(--red); font-weight:700; }
-.cmp-val-stub { font-size:0.65rem; color:var(--text-dim); font-style:italic; }
+.cmp-val-stub { font-size:1rem; color:var(--text-dim); font-style:italic; }
 
 /* Highlight differences */
 .cmp-diff { background:color-mix(in srgb,var(--amber) 5%,transparent) !important; }

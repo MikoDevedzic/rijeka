@@ -40,7 +40,6 @@ function curveDisplayVal(c) {
       ? { val: `${inst.quote.toFixed(1)}bp`, cls: 'bl' }
       : { val: `${inst.quote.toFixed(2)}%`,  cls: 'bl' };
   }
-  // OIS
   const on = c.instruments.find((i) => i.type === 'OISDeposit') || c.instruments[0];
   return { val: `${on.quote.toFixed(2)}%`, cls: 'ac' };
 }
@@ -51,8 +50,6 @@ export default function CurvesSidebar() {
     useMarketDataStore();
 
   const flt = search.toUpperCase();
-
-  let totalVisible = 0;
 
   return (
     <div className="crv-sidebar">
@@ -79,7 +76,7 @@ export default function CurvesSidebar() {
         </div>
       </div>
 
-      {/* Stats row — computed after render below */}
+      {/* Stats */}
       <SidebarStats curves={curves} typeFilter={typeFilter} search={flt} />
 
       {/* Groups */}
@@ -155,7 +152,5 @@ function SidebarStats({ curves, typeFilter, search }) {
       count++;
     });
   });
-  return (
-    <div className="sb-stats">{count} curves</div>
-  );
+  return <div className="sb-stats">{count} curves</div>;
 }

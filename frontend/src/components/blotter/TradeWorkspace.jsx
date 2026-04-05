@@ -68,9 +68,9 @@ function MetricBlock({ label, value, sub, color }) {
       background:'var(--panel-2)', border:'1px solid var(--border)',
       borderRadius:3, padding:'0.75rem 1rem', minWidth:140,
     }}>
-      <div style={{fontSize:'0.58rem',fontWeight:700,letterSpacing:'0.12em',color:'var(--text-dim)',marginBottom:'0.35rem'}}>{label}</div>
-      <div style={{fontSize:'0.9rem',fontWeight:700,fontFamily:'var(--mono)',color:color||'var(--text)',lineHeight:1}}>{value}</div>
-      {sub && <div style={{fontSize:'0.58rem',color:'var(--text-dim)',marginTop:'0.25rem',letterSpacing:'0.06em'}}>{sub}</div>}
+      <div style={{fontSize:'0.9375rem',fontWeight:700,letterSpacing:'0.12em',color:'var(--text-dim)',marginBottom:'0.35rem'}}>{label}</div>
+      <div style={{fontSize:'0.9rem',fontWeight:700,fontFamily:"'IBM Plex Mono',var(--mono)",color:color||'var(--text)',lineHeight:1}}>{value}</div>
+      {sub && <div style={{fontSize:'0.9375rem',color:'var(--text-dim)',marginTop:'0.25rem',letterSpacing:'0.06em'}}>{sub}</div>}
     </div>
   )
 }
@@ -101,7 +101,7 @@ function PricingPanel({ trade }) {
 
   const inp = {
     background:'var(--bg)', border:'1px solid var(--border)', color:'var(--text)',
-    fontFamily:'var(--mono)', fontSize:'0.7rem', padding:'0.25rem 0.4rem',
+    fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.7rem', padding:'0.25rem 0.4rem',
     borderRadius:2, outline:'none', width:110, textAlign:'right',
   }
   const lbl = { fontSize:'0.6rem', fontWeight:600, letterSpacing:'0.1em', color:'var(--text-dim)' }
@@ -118,7 +118,7 @@ function PricingPanel({ trade }) {
 
       {/* ── Results ── */}
       {!result && !loading && (
-        <div style={{ padding:'3rem', textAlign:'center', color:'var(--text-dim)', fontSize:'0.68rem', letterSpacing:'0.1em' }}>
+        <div style={{ padding:'3rem', textAlign:'center', color:'var(--text-dim)', fontSize:'1.0625rem', letterSpacing:'0.1em' }}>
           ENTER CURVE RATES AND CLICK RUN PRICER
         </div>
       )}
@@ -164,11 +164,11 @@ function PricingPanel({ trade }) {
             }}>
               LEG PV BREAKDOWN
             </div>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:'var(--mono)', fontSize:'0.68rem' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1.0625rem' }}>
               <thead>
                 <tr style={{ background:'var(--panel-3)' }}>
                   {['LEG','TYPE','DIR','CCY','PV','CASHFLOWS'].map(h => (
-                    <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign: h==='PV'||h==='CASHFLOWS' ? 'right' : 'left', fontSize:'0.58rem', fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)', whiteSpace:'nowrap' }}>{h}</th>
+                    <th key={h} style={{ padding:'0.4rem 0.75rem', textAlign: h==='PV'||h==='CASHFLOWS' ? 'right' : 'left', fontSize:'0.9375rem', fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)', whiteSpace:'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -177,16 +177,16 @@ function PricingPanel({ trade }) {
                   const dc = leg.direction === 'PAY' ? 'var(--red)' : 'var(--accent)'
                   return (
                     <tr key={leg.leg_id} style={{ borderBottom:'1px solid var(--border)' }}>
-                      <td style={{ padding:'0.5rem 0.75rem', color:'var(--text-dim)', fontSize:'0.62rem' }}>{leg.leg_ref || `L${i+1}`}</td>
+                      <td style={{ padding:'0.5rem 0.75rem', color:'var(--text-dim)', fontSize:'1rem' }}>{leg.leg_ref || `L${i+1}`}</td>
                       <td style={{ padding:'0.5rem 0.75rem', color:'var(--text-dim)' }}>{leg.leg_type}</td>
                       <td style={{ padding:'0.5rem 0.75rem' }}>
-                        <span style={{ color:dc, fontWeight:700, fontSize:'0.62rem' }}>{leg.direction}</span>
+                        <span style={{ color:dc, fontWeight:700, fontSize:'1rem' }}>{leg.direction}</span>
                       </td>
                       <td style={{ padding:'0.5rem 0.75rem', color:'var(--text-dim)' }}>{leg.currency}</td>
                       <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:npvColor(leg.pv), fontWeight:700 }}>
                         {fmtCcy(leg.pv, '')}
                       </td>
-                      <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'var(--text-dim)', fontSize:'0.62rem' }}>
+                      <td style={{ padding:'0.5rem 0.75rem', textAlign:'right', color:'var(--text-dim)', fontSize:'1rem' }}>
                         {leg.cashflows?.length || 0}
                       </td>
                     </tr>
@@ -209,14 +209,14 @@ function PricingPanel({ trade }) {
                 PROJECTED CASHFLOW SCHEDULE
               </div>
               <div style={{ maxHeight:300, overflow:'auto' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:'var(--mono)', fontSize:'0.65rem' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem' }}>
                   <thead style={{ position:'sticky', top:0, background:'var(--panel-3)', zIndex:1 }}>
                     <tr>
                       {['PAYMENT DATE','LEG','DIR','NOTIONAL','RATE','DCF','AMOUNT','PV'].map(h => (
                         <th key={h} style={{
                           padding:'0.35rem 0.6rem',
                           textAlign: ['NOTIONAL','RATE','DCF','AMOUNT','PV'].includes(h) ? 'right' : 'left',
-                          fontSize:'0.56rem', fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)', whiteSpace:'nowrap',
+                          fontSize:'0.9375rem', fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)', whiteSpace:'nowrap',
                         }}>{h}</th>
                       ))}
                     </tr>
@@ -289,7 +289,7 @@ function OverviewPanel({trade:t}) {
         <div style={{padding:'1rem 1.25rem',borderBottom:'1px solid var(--border)'}}>
           <div style={{fontSize:'0.6rem',fontWeight:700,letterSpacing:'0.14em',color:'var(--text-dim)',marginBottom:'0.5rem'}}>STRUCTURE</div>
           <div style={{display:'flex',gap:'0.5rem',flexWrap:'wrap'}}>
-            <span style={{fontSize:'0.65rem',color:'var(--text)',fontWeight:600}}>{terms.structure}</span>
+            <span style={{fontSize:'1rem',color:'var(--text)',fontWeight:600}}>{terms.structure}</span>
             {terms.notional_exchange&&<span style={{fontSize:'0.6rem',color:'var(--blue)',border:'1px solid var(--blue)',padding:'0.1rem 0.4rem',borderRadius:2}}>NOTIONAL EXCHANGE</span>}
             {terms.instrument_modifier&&<span style={{fontSize:'0.6rem',color:'var(--amber)',border:'1px solid var(--amber)',padding:'0.1rem 0.4rem',borderRadius:2}}>{terms.instrument_modifier}</span>}
           </div>
@@ -314,9 +314,9 @@ function LegsPanel({trade:t}) {
           <div className="leg-summary-card" key={i}>
             <div className="leg-summary-hdr">
               <span style={{fontSize:'0.6rem',fontWeight:700,letterSpacing:'0.1em',padding:'0.12rem 0.4rem',border:`1px solid ${dc}60`,borderRadius:2,color:dc}}>{leg.direction}</span>
-              <span style={{fontSize:'0.72rem',fontWeight:700,letterSpacing:'0.06em',color:'var(--text)'}}>{leg.label}</span>
-              <span style={{fontSize:'0.65rem',color:'var(--text-dim)',marginLeft:'auto'}}>{leg.leg_type}</span>
-              <span style={{fontSize:'0.65rem',color:'var(--text-dim)'}}>{leg.currency}</span>
+              <span style={{fontSize:'1.0625rem',fontWeight:700,letterSpacing:'0.06em',color:'var(--text)'}}>{leg.label}</span>
+              <span style={{fontSize:'1rem',color:'var(--text-dim)',marginLeft:'auto'}}>{leg.leg_type}</span>
+              <span style={{fontSize:'1rem',color:'var(--text-dim)'}}>{leg.currency}</span>
             </div>
             <div className="leg-summary-body">
               <div className="leg-fields-grid">
@@ -365,7 +365,7 @@ function CashflowsPanel({trade:t}) {
   }
 
   if (!fetched && loading) {
-    return <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.68rem',letterSpacing:'0.1em'}}>LOADING CASHFLOWS...</div>
+    return <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'1.0625rem',letterSpacing:'0.1em'}}>LOADING CASHFLOWS...</div>
   }
 
   return (
@@ -377,20 +377,20 @@ function CashflowsPanel({trade:t}) {
           </button>
         ))}
         {overrideCount > 0 && (
-          <span style={{marginLeft:'auto',fontSize:'0.62rem',color:'var(--amber)',fontWeight:700}}>
+          <span style={{marginLeft:'auto',fontSize:'1rem',color:'var(--amber)',fontWeight:700}}>
             {overrideCount} OVERRIDE{overrideCount !== 1 ? 'S' : ''}
           </span>
         )}
         <button
           onClick={() => { setFetched(false); fetchCashflows(t.id).then(() => setFetched(true)) }}
-          style={{marginLeft: overrideCount > 0 ? '0.5rem' : 'auto', fontSize:'0.58rem', color:'var(--text-dim)', background:'none', border:'1px solid var(--border)', borderRadius:2, padding:'0.1rem 0.4rem', cursor:'pointer'}}
+          style={{marginLeft: overrideCount > 0 ? '0.5rem' : 'auto', fontSize:'0.9375rem', color:'var(--text-dim)', background:'none', border:'1px solid var(--border)', borderRadius:2, padding:'0.1rem 0.4rem', cursor:'pointer'}}
         >
           &#8635; REFRESH
         </button>
       </div>
 
       {cfs.length === 0 ? (
-        <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.68rem',letterSpacing:'0.1em',lineHeight:1.8}}>
+        <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'1.0625rem',letterSpacing:'0.1em',lineHeight:1.8}}>
           NO CASHFLOWS IN DATABASE<br/>
           <span style={{fontSize:'0.6rem'}}>Go to PRICING tab &#8594; RUN PRICER to generate the schedule</span>
         </div>
@@ -446,7 +446,7 @@ function CashflowsPanel({trade:t}) {
                       {editId === cf.id ? (
                         <input
                           autoFocus
-                          style={{background:'var(--bg)',border:'1px solid var(--accent)',color:'var(--text)',fontFamily:'var(--mono)',fontSize:'0.68rem',padding:'0.1rem 0.3rem',width:110,borderRadius:2,textAlign:'right'}}
+                          style={{background:'var(--bg)',border:'1px solid var(--accent)',color:'var(--text)',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1.0625rem',padding:'0.1rem 0.3rem',width:110,borderRadius:2,textAlign:'right'}}
                           value={editVal}
                           onChange={e => setEditVal(e.target.value)}
                           onBlur={() => saveEdit(cf)}
@@ -460,7 +460,7 @@ function CashflowsPanel({trade:t}) {
                       )}
                     </td>
                     <td>
-                      <span style={{fontSize:'0.58rem',color:statusColor,fontWeight:600,letterSpacing:'0.06em'}}>{cf.status}</span>
+                      <span style={{fontSize:'0.9375rem',color:statusColor,fontWeight:600,letterSpacing:'0.06em'}}>{cf.status}</span>
                     </td>
                     <td>
                       <button className="cf-edit-btn" onClick={() => {setEditId(cf.id); setEditVal(String(amt))}}>&#9998;</button>
@@ -481,7 +481,7 @@ function StubPanel({title,sprint,desc,blocks}) {
     <div className="stub-panel">
       <div className="stub-title">{title}</div>
       <div className="stub-badge">{sprint}</div>
-      <p style={{fontSize:'0.65rem',color:'var(--text-dim)',letterSpacing:'0.04em',marginBottom:'1.5rem'}}>{desc}</p>
+      <p style={{fontSize:'1rem',color:'var(--text-dim)',letterSpacing:'0.04em',marginBottom:'1.5rem'}}>{desc}</p>
       <div className="stub-grid">
         {blocks.map(b=>(
           <div className="stub-block" key={b.label}>
@@ -538,8 +538,8 @@ function EditPanel({ trade, onSave, onClose }) {
   }
 
   const fg = { display:'flex', flexDirection:'column', gap:'0.2rem' }
-  const lbl = { fontSize:'0.58rem', fontWeight:600, letterSpacing:'0.1em', color:'var(--text-dim)' }
-  const inp = { background:'var(--panel-2)', border:'1px solid var(--border)', color:'var(--text)', fontFamily:'var(--mono)', fontSize:'0.7rem', padding:'0.3rem 0.5rem', borderRadius:'2px', outline:'none', width:'100%', boxSizing:'border-box' }
+  const lbl = { fontSize:'0.9375rem', fontWeight:600, letterSpacing:'0.1em', color:'var(--text-dim)' }
+  const inp = { background:'var(--panel-2)', border:'1px solid var(--border)', color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.7rem', padding:'0.3rem 0.5rem', borderRadius:'2px', outline:'none', width:'100%', boxSizing:'border-box' }
 
   return (
     <div style={{
@@ -550,7 +550,7 @@ function EditPanel({ trade, onSave, onClose }) {
       zIndex:10, boxShadow:'-4px 0 20px rgba(0,0,0,0.4)',
     }}>
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'1rem 1.25rem',borderBottom:'1px solid var(--border)',background:'var(--panel-2)',flexShrink:0}}>
-        <span style={{fontFamily:'var(--mono)',fontSize:'0.72rem',fontWeight:700,letterSpacing:'0.12em',color:'var(--accent)'}}>EDIT PORTFOLIO</span>
+        <span style={{fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1.0625rem',fontWeight:700,letterSpacing:'0.12em',color:'var(--accent)'}}>EDIT PORTFOLIO</span>
         <button onClick={onClose} style={{background:'none',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'0.9rem'}}>&#10005;</button>
       </div>
       <div style={{flex:1,overflow:'auto',padding:'1rem 1.25rem',display:'flex',flexDirection:'column',gap:'0.75rem'}}>
@@ -583,11 +583,11 @@ function EditPanel({ trade, onSave, onClose }) {
             {filteredBooks.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
-        {err && <div style={{fontSize:'0.68rem',color:'var(--red)',padding:'0.35rem 0.6rem',background:'color-mix(in srgb,var(--red) 8%,transparent)',border:'1px solid color-mix(in srgb,var(--red) 30%,transparent)',borderRadius:2}}>{err}</div>}
+        {err && <div style={{fontSize:'1.0625rem',color:'var(--red)',padding:'0.35rem 0.6rem',background:'color-mix(in srgb,var(--red) 8%,transparent)',border:'1px solid color-mix(in srgb,var(--red) 30%,transparent)',borderRadius:2}}>{err}</div>}
       </div>
       <div style={{display:'flex',gap:'0.6rem',padding:'1rem 1.25rem',borderTop:'1px solid var(--border)',background:'var(--panel-2)',flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',fontFamily:'var(--mono)',fontSize:'0.65rem',fontWeight:600,letterSpacing:'0.08em',padding:'0.5rem',borderRadius:2,cursor:'pointer'}}>CANCEL</button>
-        <button onClick={submit} disabled={busy} style={{flex:2,background:'var(--accent)',border:'none',color:'var(--bg-deep)',fontFamily:'var(--mono)',fontSize:'0.7rem',fontWeight:700,letterSpacing:'0.08em',padding:'0.5rem',borderRadius:2,cursor:'pointer',opacity:busy?0.6:1}}>
+        <button onClick={onClose} style={{flex:1,background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',fontWeight:600,letterSpacing:'0.08em',padding:'0.5rem',borderRadius:2,cursor:'pointer'}}>CANCEL</button>
+        <button onClick={submit} disabled={busy} style={{flex:2,background:'var(--accent)',border:'none',color:'var(--bg-deep)',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'0.7rem',fontWeight:700,letterSpacing:'0.08em',padding:'0.5rem',borderRadius:2,cursor:'pointer',opacity:busy?0.6:1}}>
           {busy?'SAVING...':'SAVE CHANGES'}
         </button>
       </div>
@@ -626,7 +626,7 @@ export default function TradeWorkspace({tab}) {
         <span className="tw-badge" style={{color:'var(--text-dim)',borderColor:'var(--border)'}}>{trade.instrument_type}</span>
         <span className="tw-badge" style={{color:stColor,borderColor:stColor+'50'}}>{trade.status}</span>
         <span className="tw-badge" style={{color:srColor,borderColor:srColor+'50'}}>{trade.store}</span>
-        {trade.counterparty&&<span style={{fontSize:'0.65rem',color:'var(--text-dim)'}}>{trade.counterparty.name}</span>}
+        {trade.counterparty&&<span style={{fontSize:'1rem',color:'var(--text-dim)'}}>{trade.counterparty.name}</span>}
         <div className="tw-strip-actions">
           <button className="tw-act" style={{borderColor:'var(--blue)',color:'var(--blue)'}} onClick={()=>setEditing(true)}>EDIT PORTFOLIO</button>
           {trade.status==='PENDING'&&<button className="tw-act tw-act-live" onClick={()=>act('LIVE')} disabled={busy}>ACTIVATE</button>}

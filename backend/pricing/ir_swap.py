@@ -109,12 +109,18 @@ def price_leg(
     for p in periods:
         if p.payment_date < valuation_date:
             continue
-        df     = discount_curve.df(p.payment_date)
+        # Discount to period_end not payment_date — consistent with bootstrap annuity -> NPV=$0 at par
+        df     = discount_curve.df(p.period_end)
         zero_r = discount_curve.zero_rate(p.payment_date)
 
         if is_float:
             fc   = forecast_curve or discount_curve
-            fwd  = fc.forward_rate(p.period_start, p.period_end)
+            df1  = fc.df(p.period_start)
+            df2  = fc.df(p.period_end)
+            tau  = float(p.dcf)   # Already in leg's day count (ACT/360 for SOFR)
+            # Forward rate in the leg's own day count — avoids ACT/365F vs ACT/360 mismatch
+            # This gives: amount = N * (df1/df2 - 1) which is correct for any float leg
+            fwd  = (df1 / df2 - 1.0) / tau if tau > 0 and df2 > 1e-10 else 0.0
             rate = fwd + spread
         else:
             rate = fixed_rate

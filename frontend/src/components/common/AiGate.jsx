@@ -20,7 +20,7 @@ export default function AiGate({ children, fallback }) {
     <div style={{
       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
       height:'100%', gap:'1rem', padding:'3rem', textAlign:'center',
-      fontFamily:'var(--mono)',
+      fontFamily:"'IBM Plex Mono',var(--mono)",
     }}>
       <div style={{
         fontSize:'2.5rem', marginBottom:'0.5rem', opacity:0.6,
@@ -29,7 +29,7 @@ export default function AiGate({ children, fallback }) {
         fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.15em', color:'var(--text)',
       }}>PROMETHEUS — TRADER ACCESS REQUIRED</div>
       <div style={{
-        fontSize:'0.68rem', color:'var(--text-dim)', lineHeight:1.7,
+        fontSize:'1.0625rem', color:'var(--text-dim)', lineHeight:1.7,
         maxWidth:'380px', letterSpacing:'0.04em',
       }}>
         PROMETHEUS derivatives intelligence is available on the Trader plan.
@@ -38,7 +38,7 @@ export default function AiGate({ children, fallback }) {
       <a href="mailto:hello@rijeka.app?subject=Trader Access Request" style={{
         display:'inline-block', marginTop:'0.5rem',
         background:'linear-gradient(135deg, #7a2800, #c45200)', color:'#fff', textDecoration:'none',
-        fontFamily:'var(--mono)', fontSize:'0.68rem', fontWeight:700,
+        fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1.0625rem', fontWeight:700,
         letterSpacing:'0.1em', padding:'0.6rem 1.5rem', borderRadius:2,
         transition:'opacity 0.15s',
       }}

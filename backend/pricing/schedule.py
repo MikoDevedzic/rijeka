@@ -14,6 +14,7 @@ from typing import List, Optional
 
 from dateutil.relativedelta import relativedelta
 from pricing.day_count import dcf as calc_dcf
+from pricing.calendars import apply_bdc as _cal_apply_bdc, add_business_days as _cal_add_bd
 
 
 @dataclass
@@ -44,8 +45,12 @@ def _prev_bd(d: date) -> date:
     return d
 
 
-def apply_bdc(d: date, bdc: str) -> date:
-    """Apply business day convention to a raw schedule date."""
+def apply_bdc(d: date, bdc: str, calendar: str = "NEW_YORK") -> date:
+    """Apply business day convention with holiday-aware calendar."""
+    return _cal_apply_bdc(d, bdc, calendar)
+
+def _apply_bdc_legacy(d: date, bdc: str) -> date:
+    """Legacy weekend-only fallback."""
     bdc = (bdc or "MOD_FOLLOWING").upper().replace(" ", "_")
     if bdc == "UNADJUSTED":
         return d

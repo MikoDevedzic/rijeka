@@ -1,0 +1,253 @@
+/* ── Chat Strip — fixed right edge, all authenticated pages ── */
+.cs-root {
+  position: fixed;
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  pointer-events: none;
+}
+
+/* ── Collapsed tab ── */
+.cs-tab {
+  width: 26px;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: all;
+  transition: background 0.15s;
+  flex-shrink: 0;
+  gap: 8px;
+}
+.cs-tab:hover { background: var(--panel-2); }
+.cs-tab-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  transform: rotate(180deg);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  user-select: none;
+}
+.cs-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.cs-tab-dot.visible { opacity: 1; }
+
+/* ── Panel ── */
+.cs-panel {
+  width: 0;
+  overflow: hidden;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  pointer-events: all;
+  transition: width 0.2s ease;
+}
+.cs-panel.open { width: 340px; }
+
+/* ── Panel header ── */
+.cs-header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  gap: 0;
+  flex-shrink: 0;
+  background: var(--bg-deep);
+}
+.cs-htab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 0 10px;
+  height: 36px;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: color 0.15s, border-color 0.15s;
+}
+.cs-htab:hover { color: var(--text); }
+.cs-htab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.cs-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 4px;
+  transition: color 0.15s;
+  line-height: 1;
+}
+.cs-close:hover { color: var(--text); }
+
+/* ── Chat tab ── */
+.cs-chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.cs-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cs-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 92%;
+}
+.cs-msg.user { align-self: flex-end; }
+.cs-msg.assistant { align-self: flex-start; }
+.cs-msg-who {
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.cs-msg.user .cs-msg-who { text-align: right; color: var(--accent); }
+.cs-msg.assistant .cs-msg-who { color: var(--amber); }
+.cs-msg-body {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 9.5px;
+  line-height: 1.6;
+  padding: 6px 9px;
+  border-radius: 2px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.cs-msg.user .cs-msg-body {
+  background: rgba(13,212,168,0.08);
+  border: 1px solid rgba(13,212,168,0.2);
+  color: var(--text);
+}
+.cs-msg.assistant .cs-msg-body {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.cs-msg-body.thinking {
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* ── Chat input ── */
+.cs-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-deep);
+  flex-shrink: 0;
+}
+.cs-input {
+  flex: 1;
+  background: var(--panel-2);
+  border: 1px solid var(--border-hi);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 9.5px;
+  padding: 5px 8px;
+  border-radius: 2px;
+  outline: none;
+  resize: none;
+  min-height: 32px;
+  max-height: 80px;
+  line-height: 1.5;
+  transition: border-color 0.15s;
+}
+.cs-input:focus { border-color: var(--accent-dim); }
+.cs-input::placeholder { color: var(--text-dim); }
+.cs-send {
+  background: rgba(13,212,168,0.08);
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 0 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  align-self: flex-end;
+  height: 32px;
+}
+.cs-send:hover { background: rgba(13,212,168,0.15); }
+.cs-send:disabled { opacity: 0.4; cursor: default; }
+
+/* ── News tab ── */
+.cs-news {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cs-news-item {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: var(--panel-2);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 5px;
+}
+.cs-news-item:hover { border-color: var(--border-hi); background: var(--panel-3); }
+.cs-news-tag {
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.cs-news-tag.rates   { color: var(--accent); }
+.cs-news-tag.credit  { color: var(--red); }
+.cs-news-tag.macro   { color: var(--amber); }
+.cs-news-tag.reg     { color: var(--blue); }
+.cs-news-tag.fx      { color: var(--purple); }
+.cs-news-headline {
+  font-size: 9.5px;
+  color: var(--text);
+  line-height: 1.45;
+  margin-bottom: 3px;
+}
+.cs-news-meta {
+  font-size: 8px;
+  color: var(--text-dim);
+}

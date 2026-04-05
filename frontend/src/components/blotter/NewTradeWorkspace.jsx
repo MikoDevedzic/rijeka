@@ -625,7 +625,7 @@ function FixedForm({leg,set}) {
         {leg.rate_type==='FLAT'&&<div className="fg"><label>FIXED RATE</label><input placeholder="0.0425" value={leg.fixed_rate} onChange={e=>set('fixed_rate',e.target.value)}/></div>}
       </div></>}
     {tab==='schedule'&&<SchedFields leg={leg} set={set}/>}
-    {tab==='rates'&&<>{leg.rate_type==='STEP'?<RateSched leg={leg} set={set}/>:<div style={{fontSize:'0.65rem',color:'var(--text-dim)'}}>Switch to STEP rate type to enable rollercoaster rates.</div>}</>}
+    {tab==='rates'&&<>{leg.rate_type==='STEP'?<RateSched leg={leg} set={set}/>:<div style={{fontSize:'1rem',color:'var(--text-dim)'}}>Switch to STEP rate type to enable rollercoaster rates.</div>}</>}
   </>)
 }
 
@@ -694,7 +694,7 @@ function FloatForm({leg,set,legs,legIdx}) {
         </div>
       )}</>}
     {tab==='schedule'&&<SchedFields leg={leg} set={set}/>}
-    {tab==='spread'&&<>{leg.spread_type==='STEP'?<SpreadSched leg={leg} set={set}/>:<div style={{fontSize:'0.65rem',color:'var(--text-dim)'}}>Switch spread type to STEP for a spread schedule.</div>}</>}
+    {tab==='spread'&&<>{leg.spread_type==='STEP'?<SpreadSched leg={leg} set={set}/>:<div style={{fontSize:'1rem',color:'var(--text-dim)'}}>Switch spread type to STEP for a spread schedule.</div>}</>}
   </>)
 }
 
@@ -714,7 +714,7 @@ function InflationForm({leg,set}) {
       <div className="fg"><label>FLOOR</label><input placeholder="0" value={leg.floor} onChange={e=>set('floor',e.target.value)}/></div>
       <div className="fg"><label>CAP</label><input placeholder="none" value={leg.cap} onChange={e=>set('cap',e.target.value)}/></div>
     </div>
-    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',padding:'0.4rem 0',lineHeight:1.6}}>
+    <div style={{fontSize:'1rem',color:'var(--text-dim)',padding:'0.4rem 0',lineHeight:1.6}}>
       {leg.inflation_type==='ZERO_COUPON'?'● ZC: Single payment at maturity = Notional × (Index_final / Index_base − 1)':'● YoY: Annual payments = Notional × (Index_t / Index_{t-1} − 1)'}
     </div>
     <SchedFields leg={leg} set={set}/>
@@ -971,7 +971,7 @@ function RpaContingentForm({leg,set}) {
         <input placeholder="TRD-12345678" value={leg.underlying_trade_id||''} onChange={e=>set('underlying_trade_id',e.target.value)}/>
       </div>
     )}
-    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',padding:'0.5rem 0',lineHeight:1.6}}>
+    <div style={{fontSize:'1rem',color:'var(--text-dim)',padding:'0.5rem 0',lineHeight:1.6}}>
       {leg.funded==='FUNDED'?'● FUNDED: Participant pays participated amount upfront.':'● UNFUNDED: No upfront payment. Participant pays loss share only on default event.'}
     </div>
   </>)
@@ -1040,7 +1040,7 @@ function XccyFields({leg, set, legs, legIdx}) {
 
         {isMtm && <>
           <div style={{
-            fontSize:'0.62rem', color:'var(--blue)', padding:'0.4rem 0.6rem',
+            fontSize:'1rem', color:'var(--blue)', padding:'0.4rem 0.6rem',
             background:'color-mix(in srgb, var(--blue) 8%, transparent)',
             border:'1px solid color-mix(in srgb, var(--blue) 30%, transparent)',
             borderRadius:2, lineHeight:1.6, marginTop:'0.25rem'
@@ -1078,7 +1078,7 @@ function XccyFields({leg, set, legs, legIdx}) {
 
         {!isMtm && (
           <div style={{
-            fontSize:'0.62rem', color:'var(--text-dim)', padding:'0.4rem 0.6rem',
+            fontSize:'1rem', color:'var(--text-dim)', padding:'0.4rem 0.6rem',
             background:'color-mix(in srgb, var(--border) 30%, transparent)',
             border:'1px solid var(--border)', borderRadius:2, lineHeight:1.6, marginTop:'0.25rem'
           }}>
@@ -1090,7 +1090,7 @@ function XccyFields({leg, set, legs, legIdx}) {
 
       {!isFirstLeg && leg.xccy_is_mtm_leg && isMtm && (
         <div style={{
-          fontSize:'0.62rem', color:'var(--amber)', padding:'0.4rem 0.6rem',
+          fontSize:'1rem', color:'var(--amber)', padding:'0.4rem 0.6rem',
           background:'color-mix(in srgb, var(--amber) 8%, transparent)',
           border:'1px solid color-mix(in srgb, var(--amber) 30%, transparent)',
           borderRadius:2, lineHeight:1.6
@@ -1392,7 +1392,7 @@ function CdsOptionForm({leg,set}) {
       <div className="fg"><label>EXPIRY DATE</label><input type="date" value={leg.expiry_date||''} onChange={e=>set('expiry_date',e.target.value)}/></div>
       <div className="fg"><label>KNOCKOUT ON CREDIT EVENT</label><select value={String(leg.knockout||true)} onChange={e=>set('knockout',e.target.value==='true')}><option value="true">YES (standard)</option><option value="false">NO</option></select></div>
     </div>
-    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0'}}>
+    <div style={{fontSize:'1rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0'}}>
       PAYER = buy protection (profit if spreads widen). RECEIVER = sell protection.
       Knockout: option expires worthless if credit event occurs before option expiry.
     </div>
@@ -1505,7 +1505,7 @@ function BermudanSwaptionForm({leg,set}) {
 function CallableSwapOptionForm({leg,set}) {
   return (<>
     <div className="sec-lbl">CALLABLE / CANCELLABLE OPTION LEG</div>
-    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
+    <div style={{fontSize:'1rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
       This leg represents the embedded right to terminate the swap.
       The swap itself is defined by the FIXED and FLOAT legs above.
       Callable = fixed-rate payer right. Cancellable = fixed-rate receiver right.
@@ -1548,7 +1548,7 @@ function CappedFloredFloatForm({leg,set}) {
   const showFloor = embedded === 'FLOOR' || embedded === 'COLLAR'
   return (<>
     <div className="sec-lbl">FLOAT LEG WITH EMBEDDED OPTIONALITY</div>
-    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
+    <div style={{fontSize:'1rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
       Standard float leg with embedded cap/floor/collar. The optionality premium is
       typically included in the fixed rate of the swap, not charged separately.
     </div>
@@ -1597,7 +1597,7 @@ function CappedFloredFloatForm({leg,set}) {
 function ExtendableForwardForm({leg,set}) {
   return (<>
     <div className="sec-lbl">EXTENDABLE FORWARD</div>
-    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
+    <div style={{fontSize:'1rem',color:'var(--text-dim)',lineHeight:1.6,padding:'0.3rem 0',marginBottom:'0.5rem'}}>
       FX forward where one counterparty holds the right to extend maturity.
       Commonly used when the client wants protection against settlement timing uncertainty.
     </div>
@@ -1662,7 +1662,7 @@ function CommodityAsianOptionForm({leg,set}) {
     </div>
 
     <div className="sec-lbl" style={{marginTop:'0.75rem'}}>AVERAGING WINDOW</div>
-    <div style={{fontSize:'0.62rem',color:'var(--text-dim)',lineHeight:1.6,marginBottom:'0.4rem'}}>
+    <div style={{fontSize:'1rem',color:'var(--text-dim)',lineHeight:1.6,marginBottom:'0.4rem'}}>
       FULL PERIOD: average all fixings from effective to expiry.
       PARTIAL: custom observation window within the period (common in energy).
       BULLET: single observation at expiry (vanilla).
@@ -2052,7 +2052,7 @@ export default function NewTradeWorkspace({tab}) {
             </select>
           </div>
           {instrument==='XCCY_SWAP'&&(
-            <label style={{fontSize:'0.62rem',color:'var(--text-dim)',display:'flex',gap:'0.3rem',alignItems:'center'}}>
+            <label style={{fontSize:'1rem',color:'var(--text-dim)',display:'flex',gap:'0.3rem',alignItems:'center'}}>
               <input type="checkbox" checked={notionalExchange} onChange={e=>setNotionalExchange(e.target.checked)}/>
               NOTIONAL EXCHANGE
             </label>
@@ -2264,18 +2264,18 @@ export default function NewTradeWorkspace({tab}) {
           </div>
           <div className="cf-preview">
             {cfs.length === 0
-              ? <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'0.68rem',letterSpacing:'0.1em'}}>SET EFFECTIVE AND MATURITY DATES TO PREVIEW</div>
+              ? <div style={{padding:'3rem',textAlign:'center',color:'var(--text-dim)',fontSize:'1.0625rem',letterSpacing:'0.1em'}}>SET EFFECTIVE AND MATURITY DATES TO PREVIEW</div>
               : <table className="cf-table">
                   <thead><tr><th>DATE</th><th>LEG</th><th>DIR</th><th>TYPE</th><th>CCY</th><th style={{textAlign:'right'}}>EST. AMOUNT</th></tr></thead>
                   <tbody>
                     {cfs.map((cf, i) => (
                       <tr key={i}>
                         <td>{cf.date}</td>
-                        <td style={{color:'var(--text-dim)',fontSize:'0.62rem'}}>{cf.label}</td>
-                        <td><span style={{color:cf.dir==='PAY'?'var(--red)':'var(--accent)',fontWeight:700,fontSize:'0.62rem'}}>{cf.dir}</span></td>
-                        <td style={{color:'var(--text-dim)',fontSize:'0.62rem'}}>{cf.type}</td>
+                        <td style={{color:'var(--text-dim)',fontSize:'1rem'}}>{cf.label}</td>
+                        <td><span style={{color:cf.dir==='PAY'?'var(--red)':'var(--accent)',fontWeight:700,fontSize:'1rem'}}>{cf.dir}</span></td>
+                        <td style={{color:'var(--text-dim)',fontSize:'1rem'}}>{cf.type}</td>
                         <td style={{color:'var(--text-dim)'}}>{cf.ccy}</td>
-                        <td style={{textAlign:'right',fontFamily:'var(--mono)',fontSize:'0.68rem',color:cf.dir==='PAY'?'var(--red)':'var(--accent)',opacity:0.75}}>
+                        <td style={{textAlign:'right',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1.0625rem',color:cf.dir==='PAY'?'var(--red)':'var(--accent)',opacity:0.75}}>
                           {cf.amount
                             ? (cf.dir==='PAY'?'-':'+')+Math.round(cf.amount).toLocaleString('en-US')
                             : <span style={{color:'var(--text-dim)'}}>—</span>}

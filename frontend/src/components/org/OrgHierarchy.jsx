@@ -53,7 +53,7 @@ function Btn({ color, onClick, title, children }) {
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         background: hover ? color + '22' : 'none', border: '1px solid ' + color,
-        borderRadius: '2px', color, fontFamily: 'var(--mono)', fontSize: '9px',
+        borderRadius: '2px', color, fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '9px',
         padding: '2px 7px', cursor: 'pointer', letterSpacing: '0.06em',
         transition: 'background 0.12s', whiteSpace: 'nowrap',
       }}
@@ -103,7 +103,7 @@ function NodeRow({ node, depth, collapsed, toggleCollapse, editing, setEditing, 
             if (e.key === 'Enter' && editing.value.trim()) onRename(node.id, editing.value.trim())
             if (e.key === 'Escape') setEditing(null)
           }}
-          style={{ flex: 1, background: 'var(--panel-3)', border: '1px solid ' + color, borderRadius: '2px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '12px', padding: '2px 6px', outline: 'none' }}
+          style={{ flex: 1, background: 'var(--panel-3)', border: '1px solid ' + color, borderRadius: '2px', color: 'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '12px', padding: '2px 6px', outline: 'none' }}
         />
       ) : (
         <span onDoubleClick={() => node.is_active && setEditing({ id: node.id, value: node.name })}
@@ -168,7 +168,7 @@ function AddRow({ nodeType, depth, onConfirm, onCancel }) {
           if (e.key === 'Escape') onCancel()
         }}
         placeholder={nodeType.replace('_', '-') + ' name...'}
-        style={{ flex: 1, background: 'var(--bg)', border: '1px solid ' + color, borderRadius: '2px', color: 'var(--text)', fontFamily: 'var(--mono)', fontSize: '12px', padding: '2px 6px', outline: 'none' }}
+        style={{ flex: 1, background: 'var(--bg)', border: '1px solid ' + color, borderRadius: '2px', color: 'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '12px', padding: '2px 6px', outline: 'none' }}
       />
       <div style={{ display: 'flex', gap: '5px', flexShrink: 0, marginLeft: 'auto' }}>
         <Btn color={color} onClick={() => name.trim() && onConfirm(name.trim())}>✓</Btn>
@@ -300,7 +300,7 @@ export default function OrgHierarchy() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0, background: 'var(--bg)', fontFamily: 'var(--mono)', color: 'var(--text)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minHeight: 0, background: 'var(--bg)', fontFamily:"'IBM Plex Mono',var(--mono)", color: 'var(--text)' }}>
 
       {/* Slim control bar — no duplicate header, just status + toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '5px 16px', borderBottom: '1px solid var(--border)', background: 'var(--panel-2)', flexShrink: 0, minHeight: '28px' }}>
@@ -321,7 +321,7 @@ export default function OrgHierarchy() {
               marginLeft: 'auto', background: showInactive ? 'rgba(217,80,64,0.12)' : 'none',
               border: '1px solid ' + (showInactive ? 'var(--red)' : 'var(--border)'),
               borderRadius: '2px', color: showInactive ? 'var(--red)' : 'var(--text-dim)',
-              fontFamily: 'var(--mono)', fontSize: '9px', padding: '2px 8px', cursor: 'pointer',
+              fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '9px', padding: '2px 8px', cursor: 'pointer',
               letterSpacing: '0.08em', transition: 'all 0.15s',
             }}>
             {showInactive ? 'HIDE INACTIVE (' + inactiveCount + ')' : 'SHOW INACTIVE (' + inactiveCount + ')'}
@@ -344,7 +344,7 @@ export default function OrgHierarchy() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', gap: '12px', color: 'var(--text-dim)', fontSize: '12px' }}>
             <span style={{ letterSpacing: '0.08em' }}>NO ORG STRUCTURE DEFINED</span>
             <button onClick={initFirm} disabled={saving}
-              style={{ background: 'none', border: '1px solid var(--accent)', borderRadius: '3px', color: 'var(--accent)', fontFamily: 'var(--mono)', fontSize: '11px', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.08em' }}
+              style={{ background: 'none', border: '1px solid var(--accent)', borderRadius: '3px', color: 'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '11px', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.08em' }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(14,201,160,0.1)'}
               onMouseLeave={e => e.currentTarget.style.background = 'none'}>
               {saving ? 'INITIALIZING...' : 'INITIALIZE FIRM NODE'}

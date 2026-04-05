@@ -219,7 +219,7 @@ function TermsForm({ it, terms, onChange }) {
 
   return (
     <div className="terms-form">
-      <p style={{color:'var(--text-dim)',fontSize:'0.72rem'}}>
+      <p style={{color:'var(--text-dim)',fontSize:'1.0625rem'}}>
         Generic — no specific form for {it}
       </p>
     </div>
@@ -333,7 +333,7 @@ function TradeDetail({ trade: t, onClose, onStatusUpdate }) {
           {['PENDING','LIVE'].includes(t.status) &&
             <button className="act-btn act-cancel" onClick={()=>upd('CANCELLED')} disabled={busy}>CANCEL</button>}
           {!['PENDING','LIVE'].includes(t.status) &&
-            <span style={{fontSize:'0.65rem',color:'var(--text-dim)'}}>No actions available for {t.status}</span>}
+            <span style={{fontSize:'1rem',color:'var(--text-dim)'}}>No actions available for {t.status}</span>}
         </div>
       </div>
     </div>
@@ -534,7 +534,7 @@ function SummaryBar({ trades }) {
         <><div className="summary-divider" key={ccy+'-div'}/>
         <div className="summary-stat" key={ccy}>
           <span className="summary-val">
-            {fmtN(n)}<span style={{fontSize:'0.62rem',opacity:0.55,marginLeft:'0.25rem'}}>{ccy}</span>
+            {fmtN(n)}<span style={{fontSize:'1rem',opacity:0.55,marginLeft:'0.25rem'}}>{ccy}</span>
           </span>
           <span className="summary-lbl">LIVE NOTIONAL</span>
         </div></>
