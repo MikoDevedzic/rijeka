@@ -1,5 +1,0 @@
-const fs = require('fs')
-const s = fs.readFileSync('C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src\\components\\blotter\\TradeBookingWindow.jsx','utf8')
-const i = s.indexOf("activeTab==='scenario'")
-console.log('Found at index:', i)
-console.log(JSON.stringify(s.slice(i, i+200)))

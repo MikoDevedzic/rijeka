@@ -1,5 +1,0 @@
-const fs = require('fs')
-const s = fs.readFileSync('C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src\\components\\blotter\\TradeBookingWindow.jsx','utf8')
-const i = s.indexOf('36px 1fr auto')
-console.log('Found at:', i)
-console.log(JSON.stringify(s.slice(i-50, i+400)))
