@@ -2,6 +2,7 @@
 Rijeka — IR Swap Pricer
 Sprint 3D: fixed NPV + float NPV, full ISDA schedule.
 Sprint 4G: per-leg IR01/IR01_DISC, df/zero_rate in CashflowResult.
+Sprint 5B: ZERO_COUPON leg type, STEP_UP via fixed_rate_schedule.
 """
 
 from datetime import date
@@ -62,6 +63,72 @@ def _parse_date(v):
         return None
 
 
+def _resolve_step_up_rate(fixed_rate_schedule, period_start: date, default_rate: float) -> float:
+    """
+    Given a step-up schedule (list of {date, rate} or dict {date_str: rate}),
+    return the applicable rate for period_start.
+    Rule: last schedule entry where entry.date <= period_start.
+    Falls back to default_rate if no entry qualifies.
+    """
+    if not fixed_rate_schedule:
+        return default_rate
+    # Normalise to list of (date, rate) tuples
+    if isinstance(fixed_rate_schedule, dict):
+        entries = [(k, float(v)) for k, v in fixed_rate_schedule.items()]
+    else:
+        entries = [
+            (
+                e.get("date") or e.get("effective_date"),
+                float(e.get("rate", default_rate))
+            )
+            for e in fixed_rate_schedule
+        ]
+    parsed = []
+    for d, r in entries:
+        pd = _parse_date(d)
+        if pd:
+            parsed.append((pd, r))
+    parsed.sort(key=lambda x: x[0])
+    applicable = default_rate
+    for entry_date, entry_rate in parsed:
+        if entry_date <= period_start:
+            applicable = entry_rate
+    return applicable
+
+
+def _resolve_spread_schedule(spread_schedule, period_start, default_spread: float) -> float:
+    """
+    Given a spread schedule (list of {date, spread} or dict {date_str: spread}),
+    return the applicable spread (as decimal) for period_start.
+    Rule: last schedule entry where entry.date <= period_start.
+    Falls back to default_spread if no entry qualifies.
+    Spread values in schedule are already in decimal (converted from bp in frontend).
+    """
+    if not spread_schedule:
+        return default_spread
+    if isinstance(spread_schedule, dict):
+        entries = [(k, float(v)) for k, v in spread_schedule.items()]
+    else:
+        entries = [
+            (
+                e.get("date") or e.get("effective_date"),
+                float(e.get("spread", default_spread))
+            )
+            for e in spread_schedule
+        ]
+    parsed = []
+    for d, r in entries:
+        pd = _parse_date(d)
+        if pd:
+            parsed.append((pd, r))
+    parsed.sort(key=lambda x: x[0])
+    applicable = default_spread
+    for entry_date, entry_rate in parsed:
+        if entry_date <= period_start:
+            applicable = entry_rate
+    return applicable
+
+
 def price_leg(
     leg:            Dict[str, Any],
     discount_curve: Curve,
@@ -81,6 +148,8 @@ def price_leg(
     stub_type   = leg.get("stub_type") or "SHORT_FRONT"
     fixed_rate  = float(leg.get("fixed_rate") or 0)
     spread      = float(leg.get("spread") or 0)
+    fixed_rate_schedule  = leg.get("fixed_rate_schedule") or None
+    spread_schedule      = leg.get("spread_schedule") or None
 
     eff = _parse_date(leg.get("effective_date"))
     mat = _parse_date(leg.get("maturity_date"))
@@ -91,6 +160,30 @@ def price_leg(
         return LegResult(leg_id=leg_id, leg_ref=leg_ref, leg_type=leg_type,
                          direction=direction, currency=currency, pv=0.0)
 
+    sign = -1.0 if direction == "PAY" else 1.0
+
+    # ── ZERO COUPON: single terminal cashflow ──────────────────────────────────
+    # Amount = N x ((1 + r)^T - 1), compounded annually ACT/365F
+    # IR01 is computed correctly by price_swap bumped curve logic
+    if leg_type == "ZERO_COUPON":
+        T       = calc_dcf(eff, mat, "ACT/365F")
+        amount  = notional * ((1.0 + fixed_rate) ** T - 1.0)
+        df_mat  = discount_curve.df(mat)
+        zero_r  = discount_curve.zero_rate(mat)
+        pv_cf   = amount * df_mat * sign
+        cf = CashflowResult(
+            period_start=eff, period_end=mat, payment_date=mat,
+            fixing_date=None, currency=currency, notional=notional,
+            rate=fixed_rate, dcf=T, amount=amount,
+            pv=pv_cf, df=df_mat, zero_rate=zero_r,
+        )
+        return LegResult(
+            leg_id=leg_id, leg_ref=leg_ref, leg_type=leg_type,
+            direction=direction, currency=currency,
+            pv=pv_cf, cashflows=[cf],
+        )
+
+    # ── Standard periodic schedule ─────────────────────────────────────────────
     is_float = leg_type in ("FLOAT", "CMS", "OIS")
 
     periods = generate_schedule(
@@ -104,12 +197,11 @@ def price_leg(
 
     cashflows = []
     leg_pv = 0.0
-    sign = -1.0 if direction == "PAY" else 1.0
 
     for p in periods:
         if p.payment_date < valuation_date:
             continue
-        # Discount to period_end not payment_date — consistent with bootstrap annuity -> NPV=$0 at par
+        # Discount to period_end — consistent with bootstrap annuity -> NPV=$0 at par
         df     = discount_curve.df(p.period_end)
         zero_r = discount_curve.zero_rate(p.payment_date)
 
@@ -117,17 +209,20 @@ def price_leg(
             fc   = forecast_curve or discount_curve
             df1  = fc.df(p.period_start)
             df2  = fc.df(p.period_end)
-            tau  = float(p.dcf)   # Already in leg's day count (ACT/360 for SOFR)
-            # Forward rate in the leg's own day count — avoids ACT/365F vs ACT/360 mismatch
-            # This gives: amount = N * (df1/df2 - 1) which is correct for any float leg
+            tau  = float(p.dcf)
             fwd  = (df1 / df2 - 1.0) / tau if tau > 0 and df2 > 1e-10 else 0.0
-            rate = fwd + spread
+            # Spread schedule: per-period spread override
+            eff_spread = _resolve_spread_schedule(spread_schedule, p.period_start, spread) if spread_schedule else spread
+            rate = fwd + eff_spread
         else:
-            rate = fixed_rate
+            # Step-up: resolve rate per period from schedule if present
+            if fixed_rate_schedule:
+                rate = _resolve_step_up_rate(fixed_rate_schedule, p.period_start, fixed_rate)
+            else:
+                rate = fixed_rate
 
         amount = float(p.notional) * rate * float(p.dcf)
         pv_cf  = amount * df
-
         cashflows.append(CashflowResult(
             period_start=p.period_start, period_end=p.period_end,
             payment_date=p.payment_date,
@@ -154,8 +249,8 @@ def price_swap(
     """
     Price a multi-leg swap. Computes per-leg IR01 and IR01_DISC.
 
-    IR01      — bump ALL curves +1bp, reprice leg → ΔPNL
-    IR01_DISC — bump ONLY discount curve +1bp, keep forecast flat → ΔPNL
+    IR01      — bump ALL curves +1bp, reprice leg -> delta PNL
+    IR01_DISC — bump ONLY discount curve +1bp, keep forecast flat -> delta PNL
                 When disc == forecast curve, we create a split copy so
                 forecasting is unaffected by the discount bump.
     """
@@ -166,9 +261,7 @@ def price_swap(
     # Pre-compute bumped curves for greeks
     bumped_all = {k: v.shifted(1.0) for k, v in curves.items()}
 
-    # For IR01_DISC: build a copy where disc curves are bumped but
-    # forecast curves are NOT bumped (even if they share the same curve ID)
-    # We achieve this by adding "__disc" suffixed entries for bumped discount
+    # For IR01_DISC: disc curves bumped, forecast curves NOT bumped
     bumped_disc_curves = dict(curves)
     for k, v in curves.items():
         bumped_disc_curves[k + "__disc"] = v.shifted(1.0)
@@ -197,7 +290,7 @@ def price_swap(
 
         # IR01_DISC: bump only discount, keep forecast flat
         disc_only = bumped_disc_curves.get(disc_id + "__disc") or bumped_disc_curves.get("default__disc")
-        fore_flat = curves.get(fore_id) or curves.get("default")  # UNBUMPED forecast
+        fore_flat = curves.get(fore_id) or curves.get("default")
         lr_disc = price_leg(leg, disc_only, fore_flat, valuation_date) if disc_only else lr
         lr.ir01_disc = lr_disc.pv - lr.pv
 
