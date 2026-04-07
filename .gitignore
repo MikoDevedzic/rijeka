@@ -1,60 +1,11 @@
-.env 
-write_anthropic_key.js 
-write_env*.js 
-backend/.env 
-backend/__pycache__/ 
-write_anthropic_key.js 
-write_env*.js 
-backend/.env 
-backend/__pycache__/ 
-update_key.js 
-docs/ARCHITECTURE_v9.md 
-docs/ARCHITECTURE_v8.md 
-docs/*.md 
-
-# Secrets — NEVER COMMIT
-*.env
-# Private business docs — keep off GitHub
-docs/ARCHITECTURE_*.md
-docs/DEPLOY_CHECKLIST.md
-# Scripts that touched secrets
-fix_ai_backend.js
-rebrand_kratos.js
-# Python cache
-*.pyc
-*.pyo
-*.pyd
-# Node
-node_modules/
-# Vite build output
-frontend/dist/
-# OS
-.DS_Store
-Thumbs.db
-
-# Delivery scripts
-build_*.js
-deliver_*.js
-fix_*.js
-patch_*.js
-rebrand_*.js
-rijeka_script*.js
-write_*.js
-setup_auth*
-update_gitignore.js
-dopamine_ui.js
-rebuild_*.js
-
-# Accidental files
-copy
-node
-l.trim()
-
-# Handoff docs
-SPRINT2_*.md
-
-# Methodology
-docs/Rijeka_Methodology*
-
-# Sprint folders
-sprint 1 Market Data/
+sprint5b_*.js  
+fix_unicode.js  
+LegDetailsTab_FINAL.js  
+sprint5b_MASTER*.js  
+add_license.js  
+deploy_pages.js  
+find_landing.js  
+link_register.js  
+read_landing2.js  
+rijeka_xva_ee_rijeka.html  
+netlify_drop/ 

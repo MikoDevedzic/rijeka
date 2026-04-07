@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import CurveDesignerWindow from './CurveDesignerWindow'
+import LegDetailsTab from './LegDetailsTab'
 import { useTradesStore } from '../../store/useTradesStore'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { supabase } from '../../lib/supabase'
@@ -729,14 +730,37 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const isViewMode = !!viewTrade
 
   // SCENARIO tab state moved to <ScenarioTab /> component
-  const [rateMode,      setRateMode]     = useState('PAR')
   const [parRate,       setParRate]      = useState(null)
+  const [notionalState, setNotionalState] = useState(10000000)
+  const [zcToggle,      setZcToggle]      = useState(false)
+  const [rateSchedule,  setRateSchedule]  = useState([])
+  const [notionalSchedule,setNotionalSchedule] = useState([])
+  const [spreadSchedule,setSpreadSchedule]= useState([])
+  const [rateMode,      setRateMode]      = useState('PAR')
   const [targetNpv,     setTargetNpv]    = useState('')
   const [solvingNpv,    setSolvingNpv]   = useState(false)
 
   const applyIndexDefaults = (idx) => {
     const [reset, pay, dc] = INDEX_DEFAULTS[idx] || ['DAILY','ANNUAL','ACT/360']
     setFloatResetFreq(reset); setFloatPayFreq(pay); setFloatDc(dc)
+  }
+
+  const deriveStructLabel = () => {
+    const hasRate     = rateSchedule.filter(r => r.date && r.rate !== '').length > 0
+    const hasNotional = notionalSchedule.filter(r => r.date && r.notional !== '').length > 0
+    const hasSpread   = spreadSchedule.filter(r => r.date && r.spread_bps !== '').length > 0
+    const features    = [hasRate, hasNotional, hasSpread].filter(Boolean).length
+    if (zcToggle && features > 0) return 'CUSTOM_SWAP'
+    if (zcToggle)                 return 'ZERO_COUPON'
+    if (features === 0)           return struct
+    if (features >= 3)            return 'CUSTOM_SWAP'
+    if (hasRate   && hasSpread)   return 'STEP_UP_SPREAD'
+    if (hasRate   && hasNotional) return 'STEP_UP_AMORTIZING'
+    if (hasNotional && hasSpread) return 'AMORTIZING_SPREAD'
+    if (hasRate)                  return 'STEP_UP'
+    if (hasNotional)              return 'AMORTIZING'
+    if (hasSpread)                return 'SPREAD_SWAP'
+    return struct
   }
 
   const getSession = async () => {
@@ -787,7 +811,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       if (!res.ok) return
       const data = await res.json()
       if (data.par_rate && rateRef.current && !rateRef.current.dataset.userEdited) {
-        rateRef.current.value = data.par_rate.toFixed(4)
+        rateRef.current.value = data.par_rate.toFixed(8)
+        setParRate(data.par_rate)
         console.log('[RIJEKA] Par rate: ' + data.par_rate.toFixed(4) + '% | NPV check: ' + data.npv_check)
       }
     } catch(e) { /* silent */ }
@@ -955,32 +980,43 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const floatDir = dir === 'PAY' ? 'RECEIVE' : 'PAY'
 
   const buildLegs = (tradeId, notional) => {
-    const curveId    = CCY_CURVE[ccy] || 'USD_SOFR'
-    const forecastId = INDEX_CURVE[index] || curveId
-    const isOIS      = struct === 'OIS'
-    const fixedRate  = parseFloat(rateRef.current ? rateRef.current.value : '0') / 100
-    const spreadVal  = parseFloat(spreadRef.current ? spreadRef.current.value : '0') / 10000
-    const leverageVal= parseFloat(leverageRef.current ? leverageRef.current.value : '1.0')
-    const payLag     = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
-    return [
-      { id:crypto.randomUUID(), trade_id:tradeId, leg_ref:'FIXED-1', leg_seq:1, leg_type:'FIXED',
-        direction:dir, currency:ccy, notional, notional_type:'BULLET',
-        effective_date:effDate, maturity_date:matDate,
-        day_count:fixedDc, payment_frequency:fixedPayFreq,
-        bdc:fixedBdc, payment_calendar:fixedCal,
-        stub_type:'SHORT_FRONT', payment_lag:payLag, fixed_rate:fixedRate,
-        discount_curve_id:curveId, forecast_curve_id:null, ois_compounding:null },
-      { id:crypto.randomUUID(), trade_id:tradeId, leg_ref:'FLOAT-1', leg_seq:2, leg_type:'FLOAT',
-        direction:floatDir, currency:ccy, notional, notional_type:'BULLET',
-        effective_date:effDate, maturity_date:matDate,
-        day_count:floatDc, payment_frequency:floatPayFreq,
-        reset_frequency: isOIS ? 'DAILY' : floatResetFreq,
-        bdc:floatBdc, payment_calendar:floatCal,
-        stub_type:'SHORT_FRONT', payment_lag:payLag, fixed_rate:0,
-        spread:isNaN(spreadVal)?0:spreadVal, leverage:isNaN(leverageVal)?1.0:leverageVal,
-        discount_curve_id:curveId, forecast_curve_id:forecastId,
-        ois_compounding: isOIS ? 'COMPOUNDING' : null },
-    ]
+    const structLabel = deriveStructLabel()
+    const curveId     = CCY_CURVE[ccy] || 'USD_SOFR'
+    const forecastId  = INDEX_CURVE[index] || curveId
+    const isOIS       = struct === 'OIS'
+    const isZC        = zcToggle
+    const fixedRate   = parRate ? parRate/100 : parseFloat(rateRef.current ? rateRef.current.value : '0') / 100
+    const spreadVal   = parseFloat(spreadRef.current ? spreadRef.current.value : '0') / 10000
+    const leverageVal = parseFloat(leverageRef.current ? leverageRef.current.value : '1.0')
+    const payLag      = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
+    const rateSchedDecimal = rateSchedule.filter(r=>r.date&&r.rate!=='').map(r=>({date:r.date,rate:parseFloat(r.rate)/100}))
+    const spreadSchedDecimal = spreadSchedule.filter(r=>r.date&&r.spread_bps!=='').map(r=>({date:r.date,spread:parseFloat(r.spread_bps)/10000}))
+    const fixedLeg = {
+      id:crypto.randomUUID(), trade_id:tradeId, leg_ref:'FIXED-1', leg_seq:1,
+      leg_type: isZC ? 'ZERO_COUPON' : 'FIXED',
+      direction:dir, currency:ccy, notional, notional_type:'BULLET',
+      effective_date:effDate, maturity_date:matDate,
+      day_count:fixedDc, payment_frequency: isZC ? 'ZERO_COUPON' : fixedPayFreq,
+      bdc:fixedBdc, payment_calendar:fixedCal,
+      stub_type:'SHORT_FRONT', payment_lag:payLag, fixed_rate:fixedRate,
+      fixed_rate_schedule: rateSchedDecimal.length > 0 ? rateSchedDecimal : null,
+      discount_curve_id:curveId, forecast_curve_id:null, ois_compounding:null,
+    }
+    const floatLeg = {
+      id:crypto.randomUUID(), trade_id:tradeId, leg_ref:'FLOAT-1', leg_seq:2, leg_type:'FLOAT',
+      direction:floatDir, currency:ccy, notional, notional_type:'BULLET',
+      effective_date:effDate, maturity_date:matDate,
+      day_count:floatDc, payment_frequency:floatPayFreq,
+      reset_frequency: isOIS ? 'DAILY' : floatResetFreq,
+      bdc:floatBdc, payment_calendar:floatCal,
+      stub_type:'SHORT_FRONT', payment_lag:payLag, fixed_rate:0,
+      spread: isNaN(spreadVal) ? 0 : spreadVal,
+      spread_schedule: spreadSchedDecimal.length > 0 ? spreadSchedDecimal : null,
+      leverage: isNaN(leverageVal) ? 1.0 : leverageVal,
+      discount_curve_id:curveId, forecast_curve_id:forecastId,
+      ois_compounding: isOIS ? 'COMPOUNDING' : null,
+    }
+    return [fixedLeg, floatLeg]
   }
 
   const executeBooking = async (finalBook=false) => {
@@ -1022,27 +1058,31 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   // Stateless pre-trade pricer — calls /price/preview, zero DB writes
   const pricePreview = async () => {
     const raw = notionalRef.current ? notionalRef.current.value.replace(/,/g,'') : ''
-    if (!raw || isNaN(parseFloat(raw))) throw new Error('Notional is required.')
+    if (!raw && !notionalState) throw new Error('Notional is required.')
     if (!effDate || !matDate) throw new Error('Dates are required.')
-    const notional   = parseFloat(raw)
-    const rateVal    = parseFloat(rateRef.current ? rateRef.current.value : '0')
+    const notional   = parseFloat(raw) || notionalState
+    const rateVal    = parRate || parseFloat(rateRef.current ? rateRef.current.value : '0')
     const spreadVal  = parseFloat(spreadRef.current ? spreadRef.current.value : '0') / 10000
     const leverageVal= parseFloat(leverageRef.current ? leverageRef.current.value : '1.0')
     const payLag     = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
     const curveId    = CCY_CURVE[ccy] || 'USD_SOFR'
     const forecastId = INDEX_CURVE[index] || curveId
     const isOIS      = struct === 'OIS'
+    const isZC       = zcToggle
+    const rateSchedPrev = rateSchedule.filter(r=>r.date&&r.rate!=='').map(r=>({date:r.date,rate:parseFloat(r.rate)/100}))
+    const spreadSchedPrev = spreadSchedule.filter(r=>r.date&&r.spread_bps!=='').map(r=>({date:r.date,spread:parseFloat(r.spread_bps)/10000}))
     const session    = await getSession()
     const h = { Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' }
 
     const legs = [
       {
-        leg_ref:'FIXED-1', leg_seq:1, leg_type:'FIXED',
+        leg_ref:'FIXED-1', leg_seq:1, leg_type: isZC ? 'ZERO_COUPON' : 'FIXED',
         direction:dir, currency:ccy, notional,
         effective_date:effDate, maturity_date:matDate,
         day_count:fixedDc, payment_frequency:fixedPayFreq,
         bdc:fixedBdc, payment_lag:payLag,
         fixed_rate: isNaN(rateVal) ? 0 : rateVal / 100,
+        fixed_rate_schedule: rateSchedPrev.length > 0 ? rateSchedPrev : null,
         discount_curve_id:curveId, forecast_curve_id:null,
         ois_compounding:null,
       },
@@ -1236,13 +1276,28 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
           </span>
         </div>
         <div className='tbw-tabs tbw-no-drag'>
-          {[{id:'main',label:bookedTrade?'✓ TRADE':'TRADE'},{id:'price',label:'ALL-IN PRICE'},{id:'cashflows',label:'CASHFLOWS'},{id:'scenario',label:'CURVE SCENARIO'},{id:'confirm',label:'⯁ CONFIRM'}].map(t=>(
+          {[{id:'main',label:bookedTrade?'✓ TRADE':'TRADE'},{id:'details',label:'DETAILS'},{id:'cashflows',label:'CASHFLOWS'},{id:'price',label:'XVA'},{id:'scenario',label:'CURVE SCENARIO'},{id:'confirm',label:'⯁ CONFIRM'}].map(t=>(
             <button key={t.id} className={'tbw-tab '+(activeTab===t.id?'active':'')}
               onClick={()=>setActiveTab(t.id)}
               style={t.id==='main'&&bookedTrade?{color:'var(--accent)'}:{}}
             >{t.label}</button>
           ))}
         </div>
+        {activeTab==='details' && (
+          <LegDetailsTab
+            struct={struct} dir={dir} floatDir={floatDir}
+            ccy={ccy} index={index} effDate={effDate} matDate={matDate} valDate={valDate}
+            notionalRef={notionalRef} rateRef={rateRef} spreadRef={spreadRef} parRate={parRate}
+            fixedPayFreq={fixedPayFreq} fixedDc={fixedDc} fixedBdc={fixedBdc} fixedCal={fixedCal}
+            floatPayFreq={floatPayFreq} floatDc={floatDc} floatBdc={floatBdc} floatCal={floatCal}
+            floatResetFreq={floatResetFreq}
+            zcToggle={zcToggle} setZcToggle={setZcToggle}
+            rateSchedule={rateSchedule} setRateSchedule={setRateSchedule}
+            notionalSchedule={notionalSchedule} setNotionalSchedule={setNotionalSchedule}
+            spreadSchedule={spreadSchedule} setSpreadSchedule={setSpreadSchedule}
+            deriveStructLabel={deriveStructLabel} getSession={getSession}
+          />
+        )}
         {activeTab==='scenario' && (
           <ScenarioTab
             ccy={ccy}
@@ -1383,7 +1438,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             </Row>
             <SectionHdr>PRIMARY ECONOMICS</SectionHdr>
             <Row>
-              <Fld label='NOTIONAL' flex={2.5}><input ref={notionalRef} style={{...inp,fontSize:'1.0625rem',fontWeight:700}} type='text' defaultValue='10,000,000' placeholder='10,000,000' autoComplete='off' onBlur={e=>{const r=e.target.value.replace(/[^0-9]/g,'');e.target.value=r?Number(r).toLocaleString('en-US'):''}}/></Fld>
+              <Fld label='NOTIONAL' flex={2.5}><input ref={notionalRef} style={{...inp,fontSize:'1.0625rem',fontWeight:700}} type='text' defaultValue='10,000,000' placeholder='10,000,000' autoComplete='off' onChange={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))setNotionalState(r)}} onBlur={e=>{const r=e.target.value.replace(/[^0-9]/g,'');e.target.value=r?Number(r).toLocaleString('en-US'):''}}/></Fld>
               <Fld label='CCY' flex={0.9}><select style={{...sel,fontSize:'1.0625rem',fontWeight:700}} value={ccy} onChange={e=>setCcy(e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
               <Fld label='DIRECTION' flex={1.8}>
                 <div style={{display:'flex',gap:'5px',minHeight:'34px'}}>
@@ -1408,8 +1463,13 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                       borderColor: rateMode==='PAR' ? 'rgba(13,212,168,0.4)' : 'rgba(240,160,32,0.4)',
                     }}
                     type='text' placeholder='—' autoComplete='off'
+                    value={parRate != null ? String(parRate) : ''}
                     readOnly={rateMode==='PAR'}
-                    onChange={()=>{ if(rateRef.current) rateRef.current.dataset.userEdited='1' }}
+                    onChange={e=>{
+                      const v = e.target.value
+                      setParRate(v === '' ? null : parseFloat(v) || null)
+                      if(rateRef.current) { rateRef.current.value = v; rateRef.current.dataset.userEdited='1' }
+                    }}
                   />
                   <button
                     onClick={()=>{
@@ -1703,9 +1763,34 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             }}/>
           </div>
         )}
-        {activeTab==='main'&&!bookedTrade&&(
-          <div className='tbw-footer tbw-no-drag'>
+        <div className='tbw-footer tbw-no-drag'>
             {err&&<div className='tbw-error'>{err}</div>}
+            {activeTab!=='scenario' && <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid #1E1E1E',background:'#050505',padding:'5px 14px',gap:'0',marginBottom:'6px'}}>
+              {[
+                {label:'NET NPV',val:analytics!=null&&analytics.npv!=null?(analytics.npv>=0?'+':'')+String.fromCharCode(36)+Math.abs(Math.round(analytics.npv)).toLocaleString('en-US'):'—',color:analytics!=null&&analytics.npv!=null?(analytics.npv>=0?'#00D4A8':'#FF6B6B'):'#444'},
+                {label:'IR01',val:analytics!=null&&analytics.ir01!=null?(analytics.ir01>=0?'+':'')+String.fromCharCode(36)+Math.abs(Math.round(analytics.ir01)).toLocaleString('en-US'):'—',color:'#4A9EFF'},
+                {label:'IR01 DISC',val:analytics!=null&&analytics.ir01_disc!=null?(analytics.ir01_disc>=0?'+':'')+String.fromCharCode(36)+Math.abs(Math.round(analytics.ir01_disc)).toLocaleString('en-US'):'—',color:'#4A9EFF'},
+                {label:'THETA',val:analytics!=null&&analytics.theta!=null?(analytics.theta>=0?'+':'')+String.fromCharCode(36)+Math.abs(Math.round(analytics.theta)).toLocaleString('en-US'):'—',color:'#FF6B6B'},
+              ].map((m,i)=>(
+                <div key={i} style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid #1E1E1E'}}>
+                  <span style={{fontSize:'9px',color:'#444',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
+                  <span style={{fontSize:'11px',color:m.color,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>{m.val}</span>
+                </div>
+              ))}
+              <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid #1E1E1E'}}>
+                <span style={{fontSize:'9px',color:'#444',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>STRUCTURE</span>
+                <span style={{fontSize:'9px',color:'#F5C842',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
+              </div>
+              {activeTab==='scenario' ? (
+                <button style={{marginLeft:'auto',background:anyShift&&!confirmed?'rgba(0,212,168,0.1)':'rgba(255,255,255,0.04)',border:anyShift&&!confirmed?'1px solid rgba(0,212,168,0.3)':'1px solid #1E1E1E',color:anyShift&&!confirmed?'#00D4A8':'#666',borderRadius:'2px',padding:'3px 14px',fontSize:'11px',letterSpacing:'0.07em',cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',fontFamily:"'IBM Plex Sans',sans-serif"}} onClick={handleConfirm} disabled={!anyShift||confirmed||scenarioPricing}>
+                  {scenarioPricing?'REPRICING...':(anyShift&&!confirmed)?'CONFIRM SHAPE →':'SHAPE CONFIRMED'}
+                </button>
+              ) : (
+                <button style={{marginLeft:'auto',background:'rgba(0,212,168,0.1)',border:'1px solid rgba(0,212,168,0.3)',color:'#00D4A8',borderRadius:'2px',padding:'3px 12px',fontSize:'11px',letterSpacing:'0.07em',cursor:pricing?'not-allowed':'pointer',opacity:pricing?0.5:1,fontFamily:"'IBM Plex Sans',sans-serif"}} onClick={handlePrice} disabled={pricing}>
+                {pricing?'PRICING...':'▶ PRICE'}
+              </button>
+              )}
+            </div>}
             <div className='tbw-footer-btns'>
               {viewTrade ? (
                 <>
@@ -1745,7 +1830,6 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               )}
             </div>
           </div>
-        )}
       </div>
     </div>
   )

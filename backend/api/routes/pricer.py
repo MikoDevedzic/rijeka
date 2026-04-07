@@ -192,6 +192,7 @@ def _leg_to_dict(leg: TradeLeg) -> dict:
         "floor_rate":        float(leg.floor_rate) if leg.floor_rate is not None else None,
         "leverage":          float(leg.leverage) if leg.leverage is not None else 1.0,
         "ois_compounding":   leg.ois_compounding,
+        "fixed_rate_schedule": leg.fixed_rate_schedule if leg.fixed_rate_schedule else None,
     }
 
 
@@ -538,6 +539,7 @@ class LegPreview(BaseModel):
     ois_compounding:    Optional[str]   = None
     cap_rate:           Optional[float] = None
     floor_rate:         Optional[float] = None
+    fixed_rate_schedule: Optional[dict]  = None
 
 
 class PreviewRequest(BaseModel):
@@ -602,6 +604,7 @@ async def price_preview(
             "ois_compounding":   lp.ois_compounding,
             "cap_rate":          lp.cap_rate,
             "floor_rate":        lp.floor_rate,
+            "fixed_rate_schedule": lp.fixed_rate_schedule if lp.fixed_rate_schedule else None,
         })
 
     # Price
