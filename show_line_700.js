@@ -1,5 +1,0 @@
-const fs = require('fs')
-const s = fs.readFileSync('C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src\\components\\blotter\\TradeBookingWindow.jsx','utf8')
-const lines = s.split('\n')
-console.log('=== LINES 695-710 ===')
-lines.slice(694,710).forEach((l,i)=>console.log(695+i+':', l))

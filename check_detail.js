@@ -1,7 +1,0 @@
-const fs = require('fs')
-const s = fs.readFileSync('C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src\\components\\blotter\\TradeBookingWindow.jsx','utf8')
-const tabStart = s.indexOf('function ScenarioTab(')
-const tab = s.slice(tabStart, tabStart+29000)
-const i = tab.indexOf('Impact analytics')
-console.log('=== AROUND IMPACT ANALYTICS ===')
-console.log(JSON.stringify(tab.slice(i-200, i+100)))

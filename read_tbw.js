@@ -1,6 +1,0 @@
-const fs = require('fs')
-const s = fs.readFileSync('C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\frontend\\src\\components\\blotter\\TradeBookingWindow.jsx','utf8')
-fs.writeFileSync('C:\\Users\\mikod\\OneDrive\\Desktop\\Rijeka\\TradeBookingWindow_READ.txt', s, 'utf8')
-console.log('Lines:', s.split('\n').length)
-console.log('Chars:', s.length)
-console.log('Written to TradeBookingWindow_READ.txt')
