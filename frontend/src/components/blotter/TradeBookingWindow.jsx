@@ -815,6 +815,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [xvaResult,     setXvaResult]    = useState(null)
   const [xvaPricing,    setXvaPricing]   = useState(false)
   const [xvaApplied,    setXvaApplied]   = useState(false)
+  const xvaParamsRef = useRef(null) // populated by XVATab on every param change
   const [xvaErr,        setXvaErr]       = useState(null)
   const [valDate,       setValDate]      = useState('')
   // VIEW MODE — set when opening existing trade from blotter
@@ -1261,7 +1262,10 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       const res = await fetch(API+'/api/xva/simulate', {
         method:'POST',
         headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
-        body: JSON.stringify({ notional:isNaN(n)?10000000:n, maturity_y:Math.max(0.5,matY), fixed_rate:isNaN(fr)?0.0365:fr, paths:2000 })
+        body: JSON.stringify(Object.assign(
+          { notional:isNaN(n)?10000000:n, maturity_y:Math.max(0.5,matY), fixed_rate:isNaN(fr)?0.0365:fr, paths:2000 },
+          typeof xvaParamsRef.current === 'function' ? xvaParamsRef.current() : (xvaParamsRef.current || {})
+        ))
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.detail||'XVA failed')
@@ -1462,7 +1466,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             getSession={getSession}
           />
         )}
-        {activeTab==='price' && <div className='tbw-body tbw-no-drag' style={{display:'flex',flexDirection:'column',overflow:'hidden'}}><XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} getSession={getSession} analytics={analytics} parRate={parRate}/></div>}
+        <div className='tbw-body tbw-no-drag' style={{display:activeTab==='price'?'flex':'none',flexDirection:'column',overflow:'hidden'}}><XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} getSession={getSession} analytics={analytics} parRate={parRate} xvaParamsRef={xvaParamsRef} onSimResult={(d)=>{setXvaResult(d);setXvaApplied(false)}} direction={dir}/></div>
         {activeTab==='confirm' && <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Cashflow fingerprint · On-chain signing</div><div className='tbw-stub-sprint'>SPRINT 6A</div></div></div>}
 
         {activeTab==='cashflows' && (
@@ -1891,9 +1895,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 <button style={{marginLeft:'auto',background:'rgba(245,200,66,0.08)',border:'1px solid rgba(245,200,66,0.4)',color:'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:pricing?'not-allowed':'pointer',opacity:pricing?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}} onClick={handlePrice} disabled={pricing}>
                 {pricing?'PRICING...':'▶ PRICE'}
               </button>
-              <button style={{background:xvaResult?'rgba(0,212,168,0.07)':'rgba(245,200,66,0.08)',border:xvaResult?'1px solid rgba(0,212,168,0.4)':'1px solid rgba(245,200,66,0.4)',color:xvaResult?'#00D4A8':'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:xvaPricing||!effDate||!matDate?'not-allowed':'pointer',opacity:xvaPricing||!effDate||!matDate?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}} onClick={handlePriceXva} disabled={xvaPricing||!effDate||!matDate}>
-                {xvaPricing?'PRICING XVA...':xvaResult?'⟳ RE-PRICE XVA':'▶ PRICE XVA'}
-              </button>
+              {!xvaResult && <span style={{fontSize:'10px',color:'#444',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em',padding:'0 8px'}}>XVA → SIMULATE to price</span>}
                 </>
               )}
             </div>}

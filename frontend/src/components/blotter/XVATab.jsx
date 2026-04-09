@@ -296,7 +296,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, getSession, analytics }) {
+export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, getSession, analytics, xvaParamsRef, onSimResult, direction }) {
   const canvasRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
   const [calib, setCalibState] = useState(() => {
@@ -388,21 +388,27 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         if (!eff||!mat) return 5
         return (new Date(mat) - new Date(eff)) / (365.25*24*3600*1000)
       })()
+      const TENOR_YEARS = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
+      const toCurve = obj => Object.entries(TENOR_YEARS).map(([k,t]) => ({ t, spread_bp: parseFloat(obj[k]) || 0 }))
       const flatSpread = obj => {
-        const v = obj['5Y'] || Object.values(obj).find(x => x!=='') || '85'
-        return parseFloat(v) || 85
+        const raw = obj['5Y']
+        const v = (raw !== null && raw !== undefined && raw !== '') ? raw
+          : (Object.values(obj).find(x => x !== null && x !== undefined && x !== '') ?? '85')
+        const n = parseFloat(v)
+        return isNaN(n) ? 85 : n
       }
       const body = {
         notional: isNaN(notional) ? 10000000 : notional,
         maturity_y: Math.max(0.5, matYears),
         fixed_rate: isNaN(fixedRate) ? 0.0365 : fixedRate,
         paths,
+        direction: direction || trade?.direction || 'PAY',
         a:        aOverride   ? parseFloat(aOverride)   : undefined,
         sigma_bp: sigOverride ? parseFloat(sigOverride) : undefined,
-        cp_cds_bp:   flatSpread(cpCdsRef.current),
-        own_cds_bp:  flatSpread(ownCdsRef.current),
-        lgd:         parseFloat(lgd)/100,
-        ftp_bp:      flatSpread(ftpRef.current),
+        cp_cds_curve:  toCurve(cpCdsRef.current),
+        own_cds_curve: toCurve(ownCdsRef.current),
+        lgd:           parseFloat(lgd)/100,
+        ftp_curve:     toCurve(ftpRef.current),
         fba_ratio:   parseFloat(fbaRatio)/100,
         hurdle_rate: parseFloat(hurdle)/100,
         capital_model: capModel,
@@ -416,6 +422,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
       const d = await res.json()
       if (!res.ok) throw new Error(d.detail || 'Simulation failed')
       setSimResult(d)
+      if (onSimResult) onSimResult(d)
     } catch(e) { setSimErr(e.message) }
     finally { setSimulating(false) }
   }
@@ -429,6 +436,32 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const secHdr = { fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.10em',
     color:'#333', fontFamily:"'IBM Plex Mono',monospace", marginTop:'10px', marginBottom:'6px' }
 
+  // Called by TradeBookingWindow at simulate time to get current XVA params
+  if (xvaParamsRef) {
+    xvaParamsRef.current = () => {
+      const TMAP = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
+      const toCurveP = obj => Object.entries(TMAP).map(([k,t]) => ({ t, spread_bp: parseFloat(obj[k]) || 0 }))
+      const flat = obj => {
+        const raw = obj['5Y']
+        const v = (raw !== null && raw !== undefined && raw !== '') ? raw
+          : (Object.values(obj).find(x => x !== null && x !== undefined && x !== '') ?? '85')
+        const n = parseFloat(v)
+        return isNaN(n) ? 0 : n
+      }
+      return {
+        cp_cds_curve:  toCurveP(cpCdsRef.current),
+        own_cds_curve: toCurveP(ownCdsRef.current),
+        ftp_curve:     toCurveP(ftpRef.current),
+        lgd:          parseFloat(lgd)/100,
+        fba_ratio:    parseFloat(fbaRatio)/100,
+        hurdle_rate:  parseFloat(hurdle)/100,
+        capital_model: capModel,
+        wwr_multiplier: wwr,
+        simm_im_m:    parseFloat(simmIm),
+        paths,
+      }
+    }
+  }
   const SpreadRow = ({ label, stateRef, tipKey }) => (
     <div style={{ marginBottom:'4px' }}>
       <div style={{ display:'grid', gridTemplateColumns:'56px repeat(6,1fr)', gap:'3px', alignItems:'center' }}>

@@ -72,6 +72,10 @@ class SimulateRequest(BaseModel):
     # XVA inputs
     cp_cds_bp: float = 85.0
     own_cds_bp: float = 42.0
+    # Full term structure (overrides flat if provided)
+    cp_cds_curve: Optional[list] = None   # [{t: float, spread_bp: float}]
+    own_cds_curve: Optional[list] = None
+    ftp_curve: Optional[list] = None
     lgd: float = 0.40
     ftp_bp: float = 55.0
     fba_ratio: float = 0.55
@@ -79,6 +83,7 @@ class SimulateRequest(BaseModel):
     capital_model: str = "sa_ccr"        # sa_ccr | cem | imm
     wwr_multiplier: float = 1.0
     simm_im_m: float = 0.85              # IM in $M for MVA proxy
+    direction: str = "PAY"                # PAY or RECEIVE — flips EE/ENE
 
 
 # ── Calibrate ─────────────────────────────────────────────────────────────────
@@ -385,16 +390,34 @@ async def simulate(
         paths[:, i] = (K * ann - (1 - df_m)) * N
 
     # ── Exposure profiles ────────────────────────────────────────────────────
+    # Flip sign for RECEIVE FIXED — receiver has mirror exposure profile
+    if body.direction.upper() == "RECEIVE":
+        paths = -paths
     ee  = np.mean(np.maximum(paths, 0), axis=0).tolist()
     ene = np.mean(np.minimum(paths, 0), axis=0).tolist()
     pfe = np.percentile(paths, 95, axis=0).tolist()
 
     # ── XVA waterfall ────────────────────────────────────────────────────────
-    cp_h  = body.cp_cds_bp  / 10000.0
-    ow_h  = body.own_cds_bp / 10000.0
-    ftp   = body.ftp_bp     / 10000.0
     lgd   = body.lgd
-    fba_s = ftp * body.fba_ratio
+
+    # ── Spread interpolation helper ──────────────────────────────────────
+    def interp_spread(curve, flat_bp, t):
+        """Linear interpolation of spread at time t from term structure."""
+        if not curve:
+            return flat_bp / 10000.0
+        pts = sorted(curve, key=lambda x: x['t'])
+        if t <= pts[0]['t']:
+            return pts[0]['spread_bp'] / 10000.0
+        if t >= pts[-1]['t']:
+            return pts[-1]['spread_bp'] / 10000.0
+        for i in range(len(pts)-1):
+            t0, t1 = pts[i]['t'], pts[i+1]['t']
+            if t0 <= t <= t1:
+                w = (t - t0) / (t1 - t0)
+                return (pts[i]['spread_bp'] * (1-w) + pts[i+1]['spread_bp'] * w) / 10000.0
+        return flat_bp / 10000.0
+
+    ftp_flat = body.ftp_bp / 10000.0
     hurdle= body.hurdle_rate
     wwr   = body.wwr_multiplier
     rwa   = {"sa_ccr": 0.015, "cem": 0.018, "imm": 0.010}.get(body.capital_model, 0.015)
@@ -406,12 +429,16 @@ async def simulate(
     for i in range(T):
         t    = (i + 1) * DT
         disc = math.exp(-disc_rate * t)
-        nqcp = math.exp(-cp_h / lgd * t)
-        nqow = math.exp(-ow_h / lgd * t)
+        cp_h_t = interp_spread(body.cp_cds_curve, body.cp_cds_bp, t)
+        ow_h_t = interp_spread(body.own_cds_curve, body.own_cds_bp, t)
+        ftp_t  = interp_spread(body.ftp_curve, body.ftp_bp, t) if body.ftp_curve else ftp_flat
+        fba_s_t= ftp_t * body.fba_ratio
+        nqcp = math.exp(-cp_h_t * t)
+        nqow = math.exp(-ow_h_t * t)
         cva  += lgd * ee[i]          * (qcp - nqcp) * disc * wwr
         dva  -= lgd * abs(ene[i])    * (qow - nqow) * disc
-        fva  += ftp   * ee[i]        * DT           * disc
-        fba_v-= fba_s * abs(ene[i])  * DT           * disc
+        fva  += ftp_t  * ee[i]       * DT           * disc
+        fba_v-= fba_s_t* abs(ene[i]) * DT           * disc
         kva  += hurdle * N * rwa     * math.exp(-disc_rate * t) * DT * disc
         qcp   = nqcp
         qow   = nqow
@@ -421,7 +448,7 @@ async def simulate(
     fva   = -abs(fva)
     fba_v =  abs(fba_v)
     kva   = -abs(kva)
-    mva   = -(body.simm_im_m * 1e6 * ftp * body.maturity_y / 2.0)
+    mva   = -(body.simm_im_m * 1e6 * ftp_flat * body.maturity_y / 2.0)
 
     # Stub NPV — in production this comes from the pricer
     npv   = 0.0
