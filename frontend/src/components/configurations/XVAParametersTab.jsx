@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import useXVAStore from '../../store/useXVAStore';
 import { SWAPTION_EXPIRIES, SWAPTION_TENORS, HW1F_CALIBRATION_BASKET } from '../../data/swaptionVols';
 import './XVAParametersTab.css';
+import { supabase as _supa } from '../../lib/supabase';
+const _API  = import.meta.env?.VITE_API_URL || 'http://localhost:8000';
 
 const INNER_TABS = ['RATES · HW1F','FX','CREDIT','EQUITY'];
 const BASKET_KEYS = new Set(HW1F_CALIBRATION_BASKET.map((b)=>b.expiry+'|'+b.tenor));
@@ -32,7 +34,25 @@ function RatesHW1FTab(){
   const loadLatest     = useXVAStore((s)=>s.loadLatestSnapshot);
   const filledCount    = useXVAStore((s)=>s.filledCount);
   const [saveDate,setSaveDate]=useState(new Date().toISOString().slice(0,10));
+  const [calibrating,setCalibrating]=useState(false);
+  const [calibResult,setCalibResult]=useState(null);
+  const [calibErr,setCalibErr]=useState(null);
   useEffect(()=>{loadLatest();},[]);
+  const handleCalibrate = async () => {
+    setCalibrating(true); setCalibErr(null);
+    try {
+      const { data:{ session } } = await _supa.auth.getSession();
+      const res = await fetch(_API + '/api/xva/calibrate', {
+        method:'POST',
+        headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
+        body: JSON.stringify({ curve_id:'USD_SOFR', valuation_date: saveDate })
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.detail||'Calibration failed');
+      setCalibResult(d);
+    } catch(e) { setCalibErr(e.message); }
+    finally { setCalibrating(false); }
+  };
   const filled=filledCount();
   const total=SWAPTION_EXPIRIES.length*SWAPTION_TENORS.length;
   return(
@@ -80,12 +100,15 @@ function RatesHW1FTab(){
           <button className='xva-save-btn' onClick={()=>saveSnapshot(saveDate)} disabled={snapshotSaving||filled===0}>
             {snapshotSaving?'↻  SAVING…':'↓  SAVE TO DB'}
           </button>
+          <button className='xva-calib-btn' onClick={handleCalibrate} disabled={calibrating||filled===0}>
+            {calibrating?'CALIBRATING...':'⎋  CALIBRATE HW1F'}
+          </button>
         </div>
       </div>
+      {calibErr&&<div style={{fontSize:'0.75rem',color:'#FF6B6B',padding:'4px 0'}}>✘ {calibErr}</div>}
+      {calibResult&&<div style={{fontSize:'0.75rem',color:'#00D4A8',padding:'4px 0',fontFamily:"'IBM Plex Mono',monospace"}}>✔ CALIBRATED · a={calibResult.a?.toFixed(4)} · σ={calibResult.sigma_bp?.toFixed(1)}bp · RMSE {calibResult.fit_rmse_bp?.toFixed(2)}bp · {calibResult.basket_size} instruments</div>}
       <div className='xva-calib-note'>
-        After saving, hit <strong>↻ CALIBRATE</strong> in the XVA tab of any trade window to fit HW1F
-        parameters a and σ from this surface (Q-measure, ATM swaptions). Calibrated values persist in
-        Supabase and load automatically on next simulation.
+                After saving the vol surface, hit <strong>⎋ CALIBRATE HW1F</strong> above to fit HW1F parameters a and σ to the 5Y-tenor column (Q-measure, ATM swaptions). Calibrated values are stored as the <strong>master calibration</strong> and load automatically into all trade XVA simulations.
       </div>
     </div>
   );

@@ -135,6 +135,167 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
   })
 }
 
+// ── Calibration Proof Panel ────────────────────────────────────────────
+const CalibProofPanel = ({ calib }) => {
+  const [open, setOpen] = useState(false)
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    if (!open || !calib?.fit_details || !canvasRef.current) return
+    const canvas = canvasRef.current
+    const dpr    = window.devicePixelRatio || 1
+    const W = canvas.offsetWidth, H = 140
+    canvas.width  = W * dpr
+    canvas.height = H * dpr
+    canvas.style.height = H + 'px'
+    const ctx = canvas.getContext('2d')
+    ctx.scale(dpr, dpr)
+
+    const rows  = calib.fit_details
+    const n     = rows.length
+    const pad   = { l:40, r:12, t:14, b:28 }
+    const cw    = (W - pad.l - pad.r) / n
+    const barW  = Math.min(cw * 0.32, 14)
+    const gap   = 3
+    const vols  = rows.flatMap(r => [r.mkt_vol_bp||0, r.mdl_vol_bp||0])
+    const maxV  = Math.max(...vols) * 1.15 || 100
+    const scaleY = v => pad.t + (H - pad.t - pad.b) * (1 - v / maxV)
+
+    // background
+    ctx.fillStyle = '#0D0F17'
+    ctx.fillRect(0, 0, W, H)
+
+    // gridlines
+    const ticks = 4
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'
+    ctx.lineWidth   = 1
+    for (let i = 0; i <= ticks; i++) {
+      const y = pad.t + (H - pad.t - pad.b) * (i / ticks)
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke()
+      const val = maxV * (1 - i / ticks)
+      ctx.fillStyle = '#444'
+      ctx.font = '9px IBM Plex Mono, monospace'
+      ctx.textAlign = 'right'
+      ctx.fillText(val.toFixed(0), pad.l - 3, y + 3)
+    }
+
+    // bars + labels
+    rows.forEach((row, i) => {
+      const cx = pad.l + i * cw + cw / 2
+      const mkt = row.mkt_vol_bp || 0
+      const mdl = row.mdl_vol_bp || 0
+
+      // market bar (teal glow)
+      const x1 = cx - barW - gap / 2
+      const y1 = scaleY(mkt)
+      const bh1 = H - pad.b - y1
+      ctx.shadowColor = '#00D4A8'; ctx.shadowBlur = 6
+      ctx.fillStyle = '#00D4A8'
+      ctx.fillRect(x1, y1, barW, bh1)
+
+      // model bar (amber glow)
+      const x2 = cx + gap / 2
+      const y2 = scaleY(mdl)
+      const bh2 = H - pad.b - y2
+      ctx.shadowColor = '#F5C842'; ctx.shadowBlur = 6
+      ctx.fillStyle = '#F5C842'
+      ctx.fillRect(x2, y2, barW, bh2)
+
+      ctx.shadowBlur = 0
+
+      // x label
+      ctx.fillStyle = '#555'
+      ctx.font = '8px IBM Plex Mono, monospace'
+      ctx.textAlign = 'center'
+      const label = row.ticker ? row.ticker.replace('USD', '').replace(' ICPL Curncy','') : (row.expiry_y + 'Y×' + row.tenor_y + 'Y')
+      ctx.fillText(label, cx, H - pad.b + 10)
+    })
+
+    // legend
+    ctx.shadowBlur = 0
+    ctx.fillStyle = '#00D4A8'; ctx.fillRect(W - 90, 4, 8, 8)
+    ctx.fillStyle = '#888'; ctx.font = '9px IBM Plex Mono, monospace'; ctx.textAlign = 'left'
+    ctx.fillText('Market', W - 79, 12)
+    ctx.fillStyle = '#F5C842'; ctx.fillRect(W - 35, 4, 8, 8)
+    ctx.fillStyle = '#888'; ctx.fillText('Model', W - 24, 12)
+  }, [open, calib])
+
+  if (!calib?.fit_details) return null
+
+  const errColor = e => {
+    if (e == null) return '#555'
+    const abs = Math.abs(e)
+    if (abs < 0.5) return '#00D4A8'
+    if (abs < 2.0) return '#F5C842'
+    return '#FF6B6B'
+  }
+
+  return (
+    <div style={{marginBottom:'10px'}}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',
+          padding:'4px 7px',borderRadius:'2px',
+          background:'rgba(255,255,255,0.02)',border:'1px solid #1E1E1E',
+          marginBottom: open ? '8px' : '0'}}
+      >
+        <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',
+          color:'#555',fontFamily:"'IBM Plex Mono',monospace"}}>
+          {open ? '▼' : '►'} CALIBRATION PROOF
+        </span>
+        <span style={{marginLeft:'auto',fontSize:'0.6875rem',color: calib.fit_rmse_bp < 1 ? '#00D4A8' : calib.fit_rmse_bp < 3 ? '#F5C842' : '#FF6B6B',
+          fontFamily:"'IBM Plex Mono',monospace",fontWeight:700}}>
+          RMSE {calib.fit_rmse_bp?.toFixed(2)}bp
+        </span>
+      </div>
+      {open && (
+        <div style={{background:'#0C0C0C',border:'1px solid #1E1E1E',borderRadius:'2px',padding:'8px',marginBottom:'4px'}}>
+          {/* Chart */}
+          <canvas ref={canvasRef} style={{width:'100%',display:'block',marginBottom:'8px'}}/>
+          {/* Table */}
+          <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed',fontFamily:"'IBM Plex Mono',monospace",fontSize:'0.6875rem'}}>
+            <thead>
+              <tr style={{borderBottom:'1px solid #1E1E1E'}}>
+                {['INSTRUMENT','EXPIRY','TENOR','MKT VOL','MDL VOL','ERROR'].map(h => (
+                  <th key={h} style={{padding:'3px 5px',textAlign: h==='INSTRUMENT'?'left':'right',
+                    color:'#444',fontWeight:700,letterSpacing:'.08em'}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {calib.fit_details.map((row, i) => (
+                <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
+                  <td style={{padding:'3px 5px',color:'#888',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                    {row.ticker || (row.expiry_y + 'Y×' + row.tenor_y + 'Y')}
+                  </td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color:'#666'}}>{row.expiry_y}Y</td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color:'#666'}}>{row.tenor_y}Y</td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color:'#00D4A8',fontWeight:600}}>{row.mkt_vol_bp?.toFixed(1)}</td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color:'#F5C842',fontWeight:600}}>{row.mdl_vol_bp?.toFixed(1)}</td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color: errColor(row.error_bp),fontWeight:700}}>
+                    {row.error_bp != null ? (row.error_bp >= 0 ? '+' : '') + row.error_bp.toFixed(2) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {/* Footer */}
+          <div style={{display:'flex',gap:'12px',marginTop:'6px',paddingTop:'6px',borderTop:'1px solid #1E1E1E'}}>
+            <span style={{fontSize:'0.6875rem',color:'#444',fontFamily:"'IBM Plex Mono',monospace"}}>
+              Basket: {calib.basket_size} instruments · 5Y-tenor column
+            </span>
+            <span style={{marginLeft:'auto',fontSize:'0.6875rem',fontFamily:"'IBM Plex Mono',monospace",
+              color: calib.converged ? '#00D4A8' : '#FF6B6B'}}>
+              {calib.converged ? '✔ CONVERGED' : '⚠ NOT CONVERGED'} · {calib.iterations} iter
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, getSession, analytics }) {
   const canvasRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
@@ -344,20 +505,17 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
             ✔ CALIBRATED {calib.valuation_date} · RMSE {calib.fit_rmse_bp?.toFixed(2)}bp · {calib.basket_size} instruments
           </div>
         ) : (
-          <div style={{fontSize:'0.75rem',color:'#333',marginBottom:'8px'}}>No calibration — save swaption vols then calibrate.</div>
+          <div style={{fontSize:'0.75rem',color:'#333',marginBottom:'8px'}}>No master calibration — go to Configurations → XVA Parameters to calibrate.</div>
         )}
         {calibErr && <div style={{fontSize:'0.75rem',color:'#FF6B6B',marginBottom:'6px'}}>✘ {calibErr}</div>}
 
         <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
-          <button onClick={handleCalibrate} disabled={calibrating}
-            style={{flex:1,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:"'IBM Plex Mono',monospace",border:'1px solid rgba(245,200,66,0.4)',background:'rgba(245,200,66,0.06)',color:'#F5C842',opacity:calibrating?0.5:1}}>
-            {calibrating?'CALIBRATING...':'⟳ CALIBRATE'}
-          </button>
           <button onClick={handleSimulate} disabled={simulating}
             style={{flex:1,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:"'IBM Plex Mono',monospace",border:'1px solid rgba(0,212,168,0.4)',background:'rgba(0,212,168,0.06)',color:'#00D4A8',opacity:simulating?0.5:1}}>
             {simulating?'SIMULATING...':'▶ SIMULATE'}
           </button>
         </div>
+        <CalibProofPanel calib={calib}/>
         {simErr && <div style={{fontSize:'0.75rem',color:'#FF6B6B',marginBottom:'6px'}}>✘ {simErr}</div>}
 
         <div style={secHdr}>SPREAD CURVES (bp)</div>
