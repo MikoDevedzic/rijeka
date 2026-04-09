@@ -6,13 +6,13 @@ import './CommandCenter.css'
 const NAV = [
   { label: 'HOME',           path: '/command-center' },
   { label: 'BLOTTER',        path: '/blotter' },
-  { label: 'PRICER',         path: '/pricer' },
   { label: 'CONFIGURATIONS', path: '/configurations/market-data/curves' },
 ]
 
 const TILES = [
   { id:'blotter',       label:'BLOTTER',            sub:'Trade Entry · Lifecycle · Positions',    sprint:'LIVE',     live:true,  path:'/blotter',                           color:'var(--accent)' },
-  { id:'pricer',        label:'PRICER',              sub:'IRS · CDS · FX · Swaption · XVA',       sprint:'LIVE',     live:true,  path:'/pricer',                            color:'var(--accent)' },
+  // { id:'pricer', -- REMOVED Sprint 5E
+  //         label:'PRICER',              sub:'IRS · CDS · FX · Swaption · XVA',       sprint:'LIVE',     live:true,  path:'/pricer',                            color:'var(--accent)' },
   { id:'market-risk',   label:'MARKET RISK',         sub:'VaR · Stress · Greeks · FRTB ES',       sprint:'SPRINT 5', live:false, color:'var(--text-dim)' },
   { id:'pnl',           label:'PNL',                 sub:'Attribution · Desk · Trader · IPV',     sprint:'SPRINT 5', live:false, color:'var(--text-dim)' },
   { id:'credit',        label:'COUNTERPARTY CREDIT', sub:'CVA · Exposure · Limits · IM',          sprint:'SPRINT 5', live:false, color:'var(--text-dim)' },

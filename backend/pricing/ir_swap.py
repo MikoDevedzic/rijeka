@@ -3,6 +3,7 @@ Rijeka — IR Swap Pricer
 Sprint 3D: fixed NPV + float NPV, full ISDA schedule.
 Sprint 4G: per-leg IR01/IR01_DISC, df/zero_rate in CashflowResult.
 Sprint 5B: ZERO_COUPON leg type, STEP_UP via fixed_rate_schedule.
+Sprint 5D: AMORTIZING via notional_schedule per period.
 """
 
 from datetime import date
@@ -72,7 +73,6 @@ def _resolve_step_up_rate(fixed_rate_schedule, period_start: date, default_rate:
     """
     if not fixed_rate_schedule:
         return default_rate
-    # Normalise to list of (date, rate) tuples
     if isinstance(fixed_rate_schedule, dict):
         entries = [(k, float(v)) for k, v in fixed_rate_schedule.items()]
     else:
@@ -129,6 +129,39 @@ def _resolve_spread_schedule(spread_schedule, period_start, default_spread: floa
     return applicable
 
 
+def _resolve_notional_schedule(notional_schedule, period_start: date, default_notional: float) -> float:
+    """
+    Given a notional schedule (list of {date, notional} or dict {date_str: notional}),
+    return the applicable notional for period_start.
+    Rule: last schedule entry where entry.date <= period_start.
+    Falls back to default_notional if no entry qualifies.
+    Used for amortizing and accreting swaps.
+    """
+    if not notional_schedule:
+        return default_notional
+    if isinstance(notional_schedule, dict):
+        entries = [(k, float(v)) for k, v in notional_schedule.items()]
+    else:
+        entries = [
+            (
+                e.get("date") or e.get("effective_date"),
+                float(e.get("notional", default_notional))
+            )
+            for e in notional_schedule
+        ]
+    parsed = []
+    for d, n in entries:
+        pd = _parse_date(d)
+        if pd:
+            parsed.append((pd, n))
+    parsed.sort(key=lambda x: x[0])
+    applicable = default_notional
+    for entry_date, entry_notional in parsed:
+        if entry_date <= period_start:
+            applicable = entry_notional
+    return applicable
+
+
 def price_leg(
     leg:            Dict[str, Any],
     discount_curve: Curve,
@@ -150,6 +183,7 @@ def price_leg(
     spread      = float(leg.get("spread") or 0)
     fixed_rate_schedule  = leg.get("fixed_rate_schedule") or None
     spread_schedule      = leg.get("spread_schedule") or None
+    notional_schedule    = leg.get("notional_schedule") or None
 
     eff = _parse_date(leg.get("effective_date"))
     mat = _parse_date(leg.get("maturity_date"))
@@ -162,18 +196,19 @@ def price_leg(
 
     sign = -1.0 if direction == "PAY" else 1.0
 
-    # ── ZERO COUPON: single terminal cashflow ──────────────────────────────────
+    # ── ZERO COUPON: single terminal cashflow ─────────────────────────────────
     # Amount = N x ((1 + r)^T - 1), compounded annually ACT/365F
-    # IR01 is computed correctly by price_swap bumped curve logic
     if leg_type == "ZERO_COUPON":
+        # Apply notional schedule if present (e.g. ZC on amortizing structure)
+        eff_notional = _resolve_notional_schedule(notional_schedule, eff, notional) if notional_schedule else notional
         T       = calc_dcf(eff, mat, "ACT/365F")
-        amount  = notional * ((1.0 + fixed_rate) ** T - 1.0)
+        amount  = eff_notional * ((1.0 + fixed_rate) ** T - 1.0)
         df_mat  = discount_curve.df(mat)
         zero_r  = discount_curve.zero_rate(mat)
         pv_cf   = amount * df_mat * sign
         cf = CashflowResult(
             period_start=eff, period_end=mat, payment_date=mat,
-            fixing_date=None, currency=currency, notional=notional,
+            fixing_date=None, currency=currency, notional=eff_notional,
             rate=fixed_rate, dcf=T, amount=amount,
             pv=pv_cf, df=df_mat, zero_rate=zero_r,
         )
@@ -183,7 +218,7 @@ def price_leg(
             pv=pv_cf, cashflows=[cf],
         )
 
-    # ── Standard periodic schedule ─────────────────────────────────────────────
+    # ── Standard periodic schedule ────────────────────────────────────────────
     is_float = leg_type in ("FLOAT", "CMS", "OIS")
 
     periods = generate_schedule(
@@ -201,6 +236,10 @@ def price_leg(
     for p in periods:
         if p.payment_date < valuation_date:
             continue
+
+        # Per-period notional override (amortizing / accreting)
+        period_notional = _resolve_notional_schedule(notional_schedule, p.period_start, float(p.notional)) if notional_schedule else float(p.notional)
+
         # Discount to period_end — consistent with bootstrap annuity -> NPV=$0 at par
         df     = discount_curve.df(p.period_end)
         zero_r = discount_curve.zero_rate(p.payment_date)
@@ -211,23 +250,21 @@ def price_leg(
             df2  = fc.df(p.period_end)
             tau  = float(p.dcf)
             fwd  = (df1 / df2 - 1.0) / tau if tau > 0 and df2 > 1e-10 else 0.0
-            # Spread schedule: per-period spread override
             eff_spread = _resolve_spread_schedule(spread_schedule, p.period_start, spread) if spread_schedule else spread
             rate = fwd + eff_spread
         else:
-            # Step-up: resolve rate per period from schedule if present
             if fixed_rate_schedule:
                 rate = _resolve_step_up_rate(fixed_rate_schedule, p.period_start, fixed_rate)
             else:
                 rate = fixed_rate
 
-        amount = float(p.notional) * rate * float(p.dcf)
+        amount = period_notional * rate * float(p.dcf)
         pv_cf  = amount * df
         cashflows.append(CashflowResult(
             period_start=p.period_start, period_end=p.period_end,
             payment_date=p.payment_date,
             fixing_date=p.fixing_date if hasattr(p, 'fixing_date') else None,
-            currency=currency, notional=float(p.notional),
+            currency=currency, notional=period_notional,
             rate=rate, dcf=float(p.dcf), amount=amount,
             pv=pv_cf * sign, df=df, zero_rate=zero_r,
         ))

@@ -89,7 +89,7 @@ async def bloomberg_snap(
 
     try:
         if req.mode == "live":
-            prices = snap_live(ticker_list)
+            prices = snap_live(ticker_list, field="MID")
         else:
             prices = snap_historical(ticker_list, snap_date)
     except RuntimeError as e:
@@ -169,3 +169,110 @@ async def save_ticker_overrides(
         )
     db.commit()
     return {"saved": True, "count": len(req.overrides)}
+
+
+class SwvolSnapRequest(BaseModel):
+    snap_date: str
+    tickers: list[dict]   # [{expiry, tenor, ticker}]
+
+
+@router.post("/bloomberg/snap-swvol")
+async def bloomberg_snap_swvol(
+    req: SwvolSnapRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """
+    Snap ATM normal swaption vols from Bloomberg.
+    Tickers: USSNA[expiry][tenor] Curncy
+    Field: MID (bp normal vol, leave source blank)
+    Returns quotes ready for useXVAStore + auto-saves to market_data_snapshots.
+    """
+    role = user.get("user_metadata", {}).get("role", "viewer")
+    if role not in ("trader", "admin"):
+        raise HTTPException(403, "TRADER or ADMIN role required")
+
+    if not BLOOMBERG_AVAILABLE:
+        raise HTTPException(503, "blpapi not installed")
+
+    if not req.tickers:
+        raise HTTPException(422, "No tickers provided")
+
+    ticker_list = [t["ticker"] for t in req.tickers]
+    snap_date   = date.fromisoformat(req.snap_date)
+
+    try:
+        prices = snap_live(ticker_list)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+
+    # Build vol quotes — MID is already in bp for normal vol
+    ticker_map = {t["ticker"]: t for t in req.tickers}
+    quotes     = []
+    failed     = []
+
+    for ticker, price in prices.items():
+        inst = ticker_map.get(ticker)
+        if inst is None:
+            continue
+        if price is not None:
+            quotes.append({
+                "expiry":  inst["expiry"],
+                "tenor":   inst["tenor"],
+                "ticker":  ticker,
+                "vol_bp":  price,
+                "enabled": True,
+                # PillarQuoteIn-compatible fields for market_data_snapshots
+                "quote_type": "SWVOL",
+                "rate":        price,
+                "swp_tenor":   inst["tenor"],
+            })
+        else:
+            failed.append(inst["expiry"] + "x" + inst["tenor"])
+
+    if not quotes:
+        raise HTTPException(422, f"Bloomberg returned no vol prices. Failed: {failed}")
+
+    # Build tenor keys as "expiry x tenor" for PillarQuoteIn compatibility
+    db_quotes = [
+        {
+            "tenor":      q["expiry"] + "x" + q["tenor"],
+            "quote_type": "SWVOL",
+            "rate":       q["vol_bp"],
+            "enabled":    True,
+            "expiry":     q["expiry"],
+            "swp_tenor":  q["tenor"],
+            "ticker":     q["ticker"],
+        }
+        for q in quotes
+    ]
+    db_quotes_json = json.dumps(db_quotes)
+
+    # UPSERT into market_data_snapshots (same table as rate curves)
+    existing = db.execute(
+        text("SELECT id FROM market_data_snapshots WHERE curve_id = 'USD_SWVOL_ATM' AND valuation_date = :dt"),
+        {"dt": snap_date},
+    ).fetchone()
+
+    if existing:
+        db.execute(
+            text("UPDATE market_data_snapshots SET quotes = cast(:q as jsonb), source = 'BLOOMBERG', created_by = :uid WHERE id = :id"),
+            {"q": db_quotes_json, "uid": user["sub"], "id": str(existing.id)},
+        )
+    else:
+        db.execute(
+            text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by) VALUES ('USD_SWVOL_ATM', :dt, cast(:q as jsonb), 'BLOOMBERG', :uid)"),
+            {"dt": snap_date, "q": db_quotes_json, "uid": user["sub"]},
+        )
+
+    db.commit()
+
+    return {
+        "saved":        True,
+        "snap_date":    req.snap_date,
+        "source":       "BLOOMBERG",
+        "quotes_saved": len(quotes),
+        "quotes":       quotes,
+        "failed":       failed,
+    }
+

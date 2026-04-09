@@ -29,7 +29,7 @@ from pricing.ir_swap import price_swap, price_leg
 router = APIRouter()
 
 
-# ── OIS day count convention per curve ───────────────────────────────────────
+# ── OIS day count convention per curve ────────────────────────────────────────
 # ACT/360 : USD SOFR, EUR ESTR, CHF SARON, SEK SWESTR
 # ACT/365F: GBP SONIA, JPY TONAR, AUD AONIA, CAD CORRA, NOK NOWA, NZD, SGD, HKD
 CURVE_DC = {
@@ -193,6 +193,7 @@ def _leg_to_dict(leg: TradeLeg) -> dict:
         "leverage":          float(leg.leverage) if leg.leverage is not None else 1.0,
         "ois_compounding":   leg.ois_compounding,
         "fixed_rate_schedule": leg.fixed_rate_schedule if leg.fixed_rate_schedule else None,
+        "notional_schedule":   leg.notional_schedule  if leg.notional_schedule  else None,
     }
 
 
@@ -208,10 +209,6 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session) -> Curve:
       1. quotes[] with >= 2 entries -> bootstrap
       2. flat_rate                  -> flat forward
       3. DB latest snapshot         -> bootstrap from saved market data
-
-    Calendar, spot_lag, and currency are resolved from CURVE_CAL/CURVE_SPOT_LAG
-    and passed to each quote so bootstrap uses the correct CCY conventions.
-    NPV = $0.000000 for any CCY at market par rate.
     """
     curve_dc       = CURVE_DC.get(ci.curve_id, 'ACT/360')
     curve_cal      = CURVE_CAL.get(ci.curve_id, 'NEW_YORK')
@@ -430,7 +427,7 @@ async def price_trade(
     if not curves:
         raise HTTPException(status_code=422, detail="At least one curve required")
 
-    # Curve pillars for UI display — df_pillars stores DFs directly
+    # Curve pillars for UI display
     curve_pillars = {}
     for cid, curve in curves.items():
         pils = []
@@ -484,9 +481,11 @@ async def price_trade(
                     "period_end":    cf.period_end.isoformat()     if cf.period_end    else None,
                     "payment_date":  cf.payment_date.isoformat()   if cf.payment_date  else None,
                     "fixing_date":   cf.fixing_date.isoformat()    if getattr(cf, "fixing_date", None) else None,
+                    "notional":      float(cf.notional)  if cf.notional  is not None else None,
                     "rate":          float(cf.rate)      if cf.rate      is not None else None,
                     "dcf":           float(cf.dcf)       if cf.dcf       is not None else None,
                     "amount":        float(cf.amount)    if cf.amount    is not None else None,
+                    "pv":            float(cf.pv)        if hasattr(cf, 'pv') and cf.pv is not None else None,
                     "df":            float(cf.df)        if hasattr(cf, 'df') and cf.df is not None else None,
                     "zero_rate":     float(cf.zero_rate) if hasattr(cf, 'zero_rate') and cf.zero_rate is not None else None,
                 }
@@ -508,7 +507,7 @@ async def price_trade(
     }
 
 
-# ── POST /price/preview ──────────────────────────────────────────────────────
+# ── POST /price/preview ───────────────────────────────────────────────────────
 # Stateless pricer — takes legs directly, no trade_id, no DB write.
 # Used by the pre-trade PRICE button. Never creates blotter entries.
 
@@ -539,7 +538,9 @@ class LegPreview(BaseModel):
     ois_compounding:    Optional[str]   = None
     cap_rate:           Optional[float] = None
     floor_rate:         Optional[float] = None
-    fixed_rate_schedule: Optional[dict]  = None
+    fixed_rate_schedule: Optional[list]  = None
+    notional_schedule:   Optional[list]  = None
+    spread_schedule:     Optional[list]  = None
 
 
 class PreviewRequest(BaseModel):
@@ -605,6 +606,8 @@ async def price_preview(
             "cap_rate":          lp.cap_rate,
             "floor_rate":        lp.floor_rate,
             "fixed_rate_schedule": lp.fixed_rate_schedule if lp.fixed_rate_schedule else None,
+            "notional_schedule":   lp.notional_schedule if lp.notional_schedule else None,
+            "spread_schedule":     lp.spread_schedule     if lp.spread_schedule     else None,
         })
 
     # Price
@@ -664,9 +667,11 @@ async def price_preview(
                     "period_end":    cf.period_end.isoformat()     if cf.period_end    else None,
                     "payment_date":  cf.payment_date.isoformat()   if cf.payment_date  else None,
                     "fixing_date":   cf.fixing_date.isoformat()    if getattr(cf, "fixing_date", None) else None,
+                    "notional":      float(cf.notional)  if cf.notional  is not None else None,
                     "rate":          float(cf.rate)      if cf.rate      is not None else None,
                     "dcf":           float(cf.dcf)       if cf.dcf       is not None else None,
                     "amount":        float(cf.amount)    if cf.amount    is not None else None,
+                    "pv":            float(cf.pv)        if hasattr(cf, 'pv') and cf.pv is not None else None,
                     "df":            float(cf.df)        if hasattr(cf, 'df') and cf.df is not None else None,
                     "zero_rate":     float(cf.zero_rate) if hasattr(cf, 'zero_rate') and cf.zero_rate is not None else None,
                 }

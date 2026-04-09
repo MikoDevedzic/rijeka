@@ -22,6 +22,7 @@ from api.routes import (
     pricer,
     market_data,
     bloomberg,
+    xva,
 )
 
 app = FastAPI(
@@ -55,6 +56,7 @@ app.include_router(trade_legs.router)
 app.include_router(cashflows.router)
 app.include_router(pricer.router)
 app.include_router(market_data.router)
+app.include_router(xva.router)
 app.include_router(bloomberg.router, prefix="/api")
 app.include_router(schedules.router)
 

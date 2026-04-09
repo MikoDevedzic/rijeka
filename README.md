@@ -1,53 +1,38 @@
-# Rijeka — Open-Source Cross-Asset Pricing & Risk Platform
+# Rijeka
 
-> Institutional-grade derivatives intelligence. Built in the open.
+**Institutional-grade cross-asset pricing and risk — open source.**
 
-**Live demo:** [rijeka.app](https://rijeka.app) &nbsp;·&nbsp; **API:** [xva-engine.onrender.com](https://xva-engine.onrender.com/docs)
+Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging market participants, and academic researchers operate blind — without the tools to price, hedge, or understand the true cost of a trade. Rijeka exists to change that.
 
----
-
-## What is Rijeka?
-
-Rijeka is a full-stack derivatives pricing and risk platform built to democratize access to institutional-grade analytics. Banks, hedge funds, regional dealers, and academic institutions use Bloomberg and Murex at $100K+ per seat. Rijeka delivers the same core capability — curve bootstrapping, swap pricing, XVA waterfall, ISDA SIMM, scenario analysis — as open-source software.
-
-The name comes from a city in Bosnia. The project is built with the same ethos: give people tools that were previously only available to those with resources.
+Named after a village in Bosnia — *rijeka* means "river" in Bosnian, Croatian, and Serbian — this platform is built on the belief that the mathematics of modern finance should be accessible to anyone with the ambition to use it.
 
 ---
 
-## Capabilities
+## What It Does
 
-### Interest Rate Derivatives
-- **IR Swap Pricing** — Fixed vs Float, OIS, Basis across 7 CCYs (USD, EUR, GBP, JPY, CHF, AUD, CAD)
-- **Curve Bootstrap** — Sequential OIS bootstrap, dense annual grid, frozen spot DF pillar
-- **Par Rate Solver** — Bisection solver for breakeven fixed rate at any NPV target
-- **Greeks** — IR01, IR01_DISC (forecast/discount curve split), Gamma, Theta
-- **Schedule Generation** — Full ISDA cashflow schedule with MOD_FOLLOWING, stub handling, payment lag
-- **Validated** — USD/SOFR OIS NPV = $0.000000 at par for all tenors 1W–50Y. Bloomberg reference: 5Y $10M @ 3.665% → NPV=$0.02, PV01=$4,552
+Rijeka is a full-stack derivatives platform covering the complete lifecycle of an interest rate swap — from trade booking and curve construction through XVA computation and margin estimation.
 
-### Trade Lifecycle
-- Multi-window trade booking with full leg builder
-- Trade status: DRAFT → PENDING → CONFIRMED → LIVE → MATURED
-- Append-only trade event stream (BOOKED, AMENDED, NOVATED, TERMINATED...)
-- Cashflow schedule generation and persistence
-- Per-leg Greeks with IR01/IR01_DISC separation (DV01/PV01 explicitly banned per ISDA convention)
+**Pricing & Analytics**
+- OIS curve bootstrapping (SOFR, €STR, SONIA) validated to Bloomberg reference prices
+- Interest rate swap pricing with per-leg Greeks: IR01, IR01_DISC, Theta, Gamma
+- Par rate solving, cashflow generation, and scenario analysis
 
-### Risk Analytics
-- **DETAILS Tab** — Per-period schedule editor with rate, notional, and spread overrides
-- **Curve Scenario** — Interactive drag-to-reshape yield curve with Gaussian ripple propagation
-- **Scenario Analytics** — Base vs shocked NPV, IR01, Gamma, Theta
-- **Excel Export** — Styled schedule export (ExcelJS, dark theme, teal/red color coding)
-- **Paste/Import** — Clipboard paste and drag-drop Excel import for amortization schedules
+**XVA — Valuation Adjustments**
+- Hull-White one-factor (HW1F) Monte Carlo simulation calibrated to ATM swaption vol surface
+- Full XVA waterfall: CVA, DVA, FVA, FBA, KVA, MVA
+- All-in rate computation: par rate adjusted for the true cost of the trade
+- RMSE 0.23bp on 5Y-tenor calibration basket (Andersen-Piterbarg formula)
 
-### XVA (Standalone Tools)
-Two standalone HTML tools for desks running Calypso or similar systems with no XVA module:
-- **`rijeka_xva_parametric.html`** — Parametric EE profile → CVA/DVA/FCA/FBA/MVA/KVA waterfall
-- **`rijeka_xva_ee.html`** — Monte Carlo EE profile paste → full XVA waterfall
-- No server required. No IT approval needed. Paste and price.
+**Market Data**
+- 54-curve data layer across USD, EUR, GBP, cross-currency, and fixing indices
+- Bloomberg, Refinitiv, and manual snap support
+- ATM swaption vol surface (6×6 grid) with live Bloomberg integration
 
-### Counterparty & Legal Entity Master
-- Legal entity hierarchy (firm → division → desk → sub-desk)
-- Counterparty master with LEI, jurisdiction, ISDA/CSA terms
-- Discount curve assignment per counterparty
+**Trade Infrastructure**
+- Multi-asset trade blotter with 43 instrument types across 5 asset classes
+- Full org hierarchy: firm → division → desk → book
+- Legal entity and counterparty master data
+- Role-based access: VIEWER / TRADER / ADMIN
 
 ---
 
@@ -55,73 +40,136 @@ Two standalone HTML tools for desks running Calypso or similar systems with no X
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React + Vite, Netlify |
-| Backend | FastAPI, Render |
+| Frontend | React + Vite |
+| Backend | FastAPI (Python) |
 | Database | Supabase (Postgres) |
-| Auth | Supabase JWT, role-based (viewer/trader/admin) |
-| Pricing | Pure Python — no QuantLib dependency |
+| Deployment | Netlify (frontend) · Render (backend) |
 
 ---
 
-## Design Philosophy
+## Live Tools
 
-**Pure Black theme.** IBM Plex Mono for numbers, IBM Plex Sans for labels. 16px base. Every canvas chart follows a strict two-pass line drawing standard (thick glow + sharp line on top) with gradient fill and dot halos. The UI is built to feel like a professional terminal, not a web app.
+Public-facing tools at **[rijeka.app](https://rijeka.app)** — no login required:
 
-**No DV01/PV01.** The platform uses IR01 (parallel bump, all curves) and IR01_DISC (discount curve only, forecast flat) exclusively. This is the correct ISDA-aligned sensitivity taxonomy.
-
-**Append-only event stream.** Trades are never mutated. Every lifecycle event is a new record with pre/post state, counterparty confirmation flag, and hash.
+- **IRS Pricer** — price a vanilla interest rate swap against a live SOFR curve
+- **XVA Simulator** — compute CVA/DVA/FVA/KVA from a HW1F Monte Carlo simulation
+- **XVA Waterfall Calculator** — build an XVA waterfall from a pasted EE profile
 
 ---
 
-## Running Locally
+## Getting Started
 
+**Backend**
 ```bash
-# Backend
 cd backend
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
+```
 
-# Frontend
+**Frontend**
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Create a `.env` file in `backend/` with:
+Environment variables required:
 ```
-SUPABASE_URL=your_supabase_url
-SUPABASE_JWT_SECRET=your_jwt_secret
-DATABASE_URL=your_postgres_url
+VITE_SUPABASE_URL
+VITE_SUPABASE_ANON_KEY
+VITE_API_URL
 ```
+
+---
+
+## Documentation
+
+- [`docs/Rijeka_Methodology_v1.1.pdf`](docs/Rijeka_Methodology_v1.1.pdf) — mathematical methodology: curve construction, swap pricing, XVA waterfall
+- [`docs/EXOTIC_OPTIONS_ROADMAP.md`](docs/EXOTIC_OPTIONS_ROADMAP.md) — roadmap for exotic options coverage
+- [`docs/DEPLOY_CHECKLIST.md`](docs/DEPLOY_CHECKLIST.md) — deployment reference
+
+---
+
+## Design Principles
+
+- **No black boxes.** Every formula is documented. Every number is traceable.
+- **Institutional quality, open access.** The same mathematics used at tier-1 banks, available to anyone.
+- **SIMM-aligned risk taxonomy.** Greeks follow ISDA SIMM conventions — IR01 not DV01, SIMM buckets, proper sensitivity aggregation.
+- **Audit-ready.** All market data snaps are timestamped and sourced. Calibration results are stored with full fit diagnostics.
 
 ---
 
 ## Roadmap
 
-- [ ] Basis swaps (two-curve bootstrap, SOFR vs EURIBOR)
-- [ ] Zero coupon swaps
-- [ ] Amortizing / step-up swaps
-- [ ] Swaptions (SABR vol surface)
-- [ ] XVA integration into main platform
-- [ ] ISDA SIMM v2.8 (delta/vega/curvature, all risk classes)
-- [ ] CVaR / Expected Shortfall
-- [ ] Bloomberg plugin distribution
-- [ ] On-chain trade confirmation (Ethereum)
+**XVA & Risk**
+- [ ] Full ISDA SIMM MVA (replacing linear proxy)
+- [ ] CVaR / Expected Shortfall from Monte Carlo engine
+- [ ] Bloomberg plugin for XVA
 
----
+**Interest Rates**
+- [ ] Cross-currency swap pricing (XCCY basis)
+- [ ] Exotic IR options: caps, floors, swaptions, CMS products
 
-## Why Open Source?
+**FX & FX Options**
+- [ ] FX spot, forward, and swap pricing
+- [ ] FX options: vanilla, barrier, digital — Garman-Kohlhagen / local vol
+- [ ] FX vol surface construction and smile calibration
 
-Derivatives risk infrastructure is expensive, opaque, and concentrated in a handful of vendors. A trader at a regional bank in Sarajevo or Lagos should have access to the same pricing tools as Goldman Sachs. Rijeka is built on the belief that financial infrastructure should be a public good.
+**Credit & Credit Options**
+- [ ] CDS pricing and hazard rate bootstrapping
+- [ ] Credit options and index tranches
+- [ ] Wrong-way risk in CVA
 
-The XVA standalone tools were built specifically for desks that can't get IT approval for new systems — they work in a browser with no installation required.
+**Equity**
+- [ ] Equity swaps and total return swaps
+- [ ] Equity options: Black-Scholes, local vol, stochastic vol (Heston)
+
+**Commodity & Commodity Options**
+- [ ] Commodity swaps: energy, metals, agriculture
+- [ ] Commodity options with seasonality and mean-reversion models
+- [ ] Exchange IM integration (ICE, CME)
+
+**Cash Instruments** *(post-derivatives)*
+- [ ] Bond pricing: fixed rate, floating rate, inflation-linked
+- [ ] Repo and securities financing
+- [ ] Unified derivatives + cash risk view
+
+**PnL Attribution**
+- [ ] Daily PnL explain: delta, gamma, vega, theta, rho, new trades, carry
+- [ ] Greeks-based attribution across all asset classes
+- [ ] IPV integration: independent price verification vs. trader marks
+
+**Collateral Management**
+- [ ] ISDA CSA management: thresholds, MTA, independent amounts
+- [ ] Margin call workflow: call generation, dispute tracking, settlement
+- [ ] Collateral optimization: cheapest-to-deliver across eligible assets
+- [ ] Real-time collateral inventory and rehypothecation tracking
+
+**Market Risk**
+- [ ] VaR: historical simulation, parametric, Monte Carlo
+- [ ] Stressed VaR and Expected Shortfall (ES) per FRTB
+- [ ] Sensitivity-based approach (SBA) under FRTB SA
+- [ ] Risk factor bucketing and aggregation across desks
+
+**Counterparty Credit Risk**
+- [ ] PFE profiles: SA-CCR and internal model (IMM)
+- [ ] Credit limits: utilization tracking and breach alerting
+- [ ] Netting set and collateral agreement management
+- [ ] CVA capital: BA-CVA and SA-CVA under Basel IV
+
+**PROMETHEUS — AI Intelligence Layer**
+- [ ] Contextual chat: ask questions about your book in plain language
+- [ ] AI-powered PnL explain and attribution
+- [ ] Hedging recommendations and what-if analysis
+- [ ] XVA commentary and regulatory narrative generation
+- [ ] Market news integration with portfolio impact scoring
 
 ---
 
 ## License
 
-MIT © 2026 Miko Devedzic
+MIT License — © 2026 Miko Devedzic / Rijeka
 
 ---
 
-*Built by a derivatives risk professional with 15 years across XVA, ISDA SIMM, CCR, IPV, and valuation control. Domain expertise is the hardest part — the code is just the expression of it.*
+*Built by someone who spent a career inside trading floor infrastructure — pricing systems, risk frameworks, and margin engines — and believed the tools deserved to be free.*

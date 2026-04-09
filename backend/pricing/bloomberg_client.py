@@ -522,7 +522,7 @@ def check_connection() -> dict:
         return {"connected": False, "installed": True, "error": str(e)}
 
 
-def snap_live(tickers: list[str]) -> dict[str, float | None]:
+def snap_live(tickers: list[str], field: str = "PX_MID") -> dict[str, float | None]:
     """
     Fetch current BGN PX_LAST for each ticker.
     Returns {ticker: rate} — rate in % (e.g. 5.310 = 5.310%).
@@ -537,7 +537,7 @@ def snap_live(tickers: list[str]) -> dict[str, float | None]:
         req = svc.createRequest("ReferenceDataRequest")
         for t in tickers:
             req.getElement("securities").appendValue(t)
-        req.getElement("fields").appendValue("PX_MID")
+        req.getElement("fields").appendValue(field)
 
         session.sendRequest(req)
 
@@ -551,8 +551,8 @@ def snap_live(tickers: list[str]) -> dict[str, float | None]:
                         sec = arr.getValue(i)
                         ticker = sec.getElementAsString("security")
                         fd = sec.getElement("fieldData")
-                        if fd.hasElement("PX_MID"):
-                            results[ticker] = fd.getElementAsFloat("PX_MID")
+                        if fd.hasElement(field):
+                            results[ticker] = fd.getElementAsFloat(field)
                         else:
                             results[ticker] = None
             if ev.eventType() == blpapi.Event.RESPONSE:

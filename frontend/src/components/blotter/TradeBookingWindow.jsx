@@ -5,6 +5,7 @@ import { useTradesStore } from '../../store/useTradesStore'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { supabase } from '../../lib/supabase'
 import './TradeBookingWindow.css'
+import XVATab from './XVATab'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -671,6 +672,91 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 }
 
 
+function xvaCalc(xva, notionalRef, rateRef, effDate, matDate, parRate) {
+  try {
+    const n = parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))
+    const m = (effDate&&matDate)?(new Date(matDate)-new Date(effDate))/(365.25*24*3600*1000):5
+    const dv = (isNaN(n)?10000000:n)*m/10000
+    const bp = [xva.cva,xva.dva,xva.fva,xva.fba,xva.kva,xva.mva].reduce((s,v)=>s+(v||0),0)/dv
+    const par = parRate||parseFloat(rateRef.current?.value||'3.665')
+    return { allIn:par+bp/100, bp, dv01:dv, par }
+  } catch(_) { return { allIn:3.665, bp:0, dv01:1, par:3.665 } }
+}
+
+function XvaFooterRate({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
+  const {allIn} = xvaCalc(xva,notionalRef,rateRef,effDate,matDate,parRate)
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderLeft:'1px solid rgba(0,212,168,0.3)',marginLeft:'4px'}}>
+      <span style={{fontSize:'9px',color:'#00D4A8',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>ALL-IN RATE</span>
+      <span style={{fontSize:'13px',fontWeight:700,color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace"}}>{allIn.toFixed(3)}%</span>
+    </div>
+  )
+}
+
+function XvaBookLabel({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
+  const {allIn} = xvaCalc(xva,notionalRef,rateRef,effDate,matDate,parRate)
+  return <>▶ BOOK AT {allIn.toFixed(3)}%</>
+}
+
+function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply}) {
+  const {allIn,bp:xvaBp,dv01,par:cur} = xvaCalc(xva,notionalRef,rateRef,effDate,matDate,parRate)
+  const fD = v => { if(v==null) return '—'; return (v>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(v)).toLocaleString('en-US') }
+  const fB = v => v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'bp'
+  const cells = [
+    {k:'npv',   l:'NPV',    v:xva.npv,    col:'var(--text)',   b:cur.toFixed(3)+'%',   s:'par rate'},
+    {k:'cva',   l:'CVA',    v:xva.cva,    col:'var(--red)',    b:fB(xva.cva/dv01),     s:'bp on rate'},
+    {k:'dva',   l:'DVA',    v:xva.dva,    col:'var(--blue)',   b:fB(xva.dva/dv01),     s:'bp on rate'},
+    {k:'fva',   l:'FVA',    v:xva.fva,    col:'var(--red)',    b:fB(xva.fva/dv01),     s:'bp on rate'},
+    {k:'fba',   l:'FBA',    v:xva.fba,    col:'var(--blue)',   b:fB(xva.fba/dv01),     s:'bp on rate'},
+    {k:'kva',   l:'KVA',    v:xva.kva,    col:'var(--red)',    b:fB(xva.kva/dv01),     s:'bp on rate'},
+    {k:'mva',   l:'MVA~',   v:xva.mva,    col:'var(--amber)',  b:fB(xva.mva/dv01),     s:'bp on rate'},
+    {k:'all_in',l:'ALL-IN', v:xva.all_in, col:'var(--accent)', b:allIn.toFixed(3)+'%', s:'all-in rate'},
+  ]
+  return (
+    <>
+      <div style={{display:'flex',alignItems:'center',gap:'14px',padding:'8px 12px',background:'rgba(0,212,168,0.04)',border:'1px solid rgba(0,212,168,0.2)',borderRadius:'2px',marginBottom:'8px'}}>
+        <div style={{display:'flex',flexDirection:'column',gap:'2px',minWidth:'90px'}}>
+          <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.10em',color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>ALL-IN RATE</div>
+          <div style={{fontSize:'1.25rem',fontWeight:700,color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{allIn.toFixed(3)}%</div>
+        </div>
+        <div style={{width:'1px',height:'40px',background:'var(--border)',flexShrink:0}}/>
+        <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',minWidth:'64px'}}>PAR rate</span>
+            <span style={{fontSize:'0.875rem',fontWeight:600,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{cur.toFixed(4)}%</span>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',minWidth:'64px'}}>XVA cost</span>
+            <span style={{fontSize:'0.875rem',fontWeight:600,color:'var(--red)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{fD(xva.all_in)} / {fB(xvaBp)}</span>
+          </div>
+          <div style={{height:'1px',background:'var(--border)'}}/>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <span style={{fontSize:'0.8125rem',color:'var(--accent)',minWidth:'64px'}}>All-in NPV</span>
+            <span style={{fontSize:'0.875rem',fontWeight:600,color:'var(--red)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{fD(xva.all_in)}</span>
+          </div>
+        </div>
+        <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'4px'}}>
+          <button onClick={onApply} style={{padding:'4px 12px',borderRadius:'2px',fontSize:'0.8125rem',fontWeight:700,cursor:'pointer',fontFamily:"'IBM Plex Mono',var(--mono)",border:'1px solid rgba(0,212,168,0.4)',background:'rgba(0,212,168,0.07)',color:'var(--accent)'}}>APPLY TO RATE</button>
+          <div style={{fontSize:'0.75rem',color:'var(--text-dim)'}}>embed {fB(xvaBp)} into fixed rate</div>
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)',borderRadius:'2px',overflow:'hidden'}}>
+        {cells.map(({k,l,v,col,b,s}) => (
+          <div key={k} style={{background:k==='all_in'?'rgba(0,212,168,0.04)':'var(--bg)',padding:'7px 8px',borderLeft:k==='all_in'?'1px solid rgba(0,212,168,0.15)':'none'}}>
+            <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'3px'}}>{l}</div>
+            <div style={{fontSize:'0.9375rem',fontWeight:700,color:col,fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'2px'}}>{fD(v)}</div>
+            <div style={{borderTop:'1px solid var(--panel-2)',paddingTop:'2px'}}>
+              <div style={{fontSize:'0.75rem',fontWeight:600,color:col,fontFamily:"'IBM Plex Mono',var(--mono)",opacity:.8}}>{b}</div>
+              <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',opacity:.5}}>{s}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+
 export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, windowId, trade: initialTrade }) {
   const { fetchTrades } = useTradesStore()
   const { curves }      = useMarketDataStore()
@@ -685,7 +771,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const defs = getDefaults()
   const [pos,      setPos]      = useState(initialPos || { x:40, y:20 })
   const [dragging, setDragging] = useState(false)
-  const [size,     setSize]     = useState({ w: Math.min(1200, Math.round(window.innerWidth*0.88)), h: Math.min(980, Math.round(window.innerHeight*0.96)) })
+  const [size,     setSize]     = useState({ w: Math.min(1170, Math.round(window.innerWidth*0.846)), h: Math.round(window.innerHeight*0.873) })
   const [resizing, setResizing] = useState(null) // {edge, startX, startY, startW, startH}
   const [activeTab,setActiveTab]= useState('main')
   const [cps,         setCps]         = useState([])
@@ -724,6 +810,12 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [bookedTrade,   setBookedTrade]  = useState(null)
   const [analytics,     setAnalytics]    = useState(null)
   const [analyticsErr,  setAnalyticsErr] = useState(null)
+  // Clear stale errors on mount
+  React.useEffect(()=>{setAnalyticsErr(null)},[])
+  const [xvaResult,     setXvaResult]    = useState(null)
+  const [xvaPricing,    setXvaPricing]   = useState(false)
+  const [xvaApplied,    setXvaApplied]   = useState(false)
+  const [xvaErr,        setXvaErr]       = useState(null)
   const [valDate,       setValDate]      = useState('')
   // VIEW MODE — set when opening existing trade from blotter
   const [viewTrade,     setViewTrade]    = useState(initialTrade || null)
@@ -739,6 +831,16 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [rateMode,      setRateMode]      = useState('PAR')
   const [targetNpv,     setTargetNpv]    = useState('')
   const [solvingNpv,    setSolvingNpv]   = useState(false)
+
+  // Auto-price on mount when dates are available
+  useEffect(() => {
+    if (effDate && matDate && !viewTrade) {
+      const timer = setTimeout(() => {
+        if (notionalRef.current && rateRef.current) handlePrice()
+      }, 800)
+      return () => clearTimeout(timer)
+    }
+  }, [effDate, matDate])
 
   const applyIndexDefaults = (idx) => {
     const [reset, pay, dc] = INDEX_DEFAULTS[idx] || ['DAILY','ANNUAL','ACT/360']
@@ -1122,8 +1224,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     const h = { Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' }
     const curveId = CCY_CURVE[viewTrade.notional_ccy || ccy] || 'USD_SOFR'
     const res = await fetch(API+'/price', {
-      method:'POST', headers:h,
-      body: JSON.stringify({
+      method:'POST', headers:h, body: JSON.stringify({
         trade_id: viewTrade.id,
         valuation_date: valDate,
         curves: [{ curve_id: curveId, quotes: [] }],
@@ -1135,14 +1236,54 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
 
   const handlePrice = async () => {
     setErr(''); setAnalyticsErr(null); setPricing(true); setAnalytics(null)
+    const timeoutPromise = new Promise((_,reject) => setTimeout(() => reject(new Error('TIMEOUT')), 15000))
     try {
-      const data = viewTrade ? await repriceExisting() : await pricePreview()
+      const data = await Promise.race([
+        viewTrade ? repriceExisting() : pricePreview(),
+        timeoutPromise
+      ])
       setAnalytics(data)
       setTimeout(()=>{ analyticsRef.current?.scrollIntoView({ behavior:'smooth', block:'nearest' }) }, 120)
     }
-    catch(e) { setAnalyticsErr(e.message) }
+    catch(e) {
+      if (e?.message === 'TIMEOUT') setAnalyticsErr('Pricing timed out — check backend connection')
+      else setAnalyticsErr(e?.message||String(e))
+    }
     finally { setPricing(false) }
   }
+  const handlePriceXva = async () => {
+    setXvaPricing(true); setXvaErr(null)
+    try {
+      const session = await getSession()
+      const n = parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))
+      const fr = parseFloat(rateRef.current?.value||'3.665') / 100
+      const matY = (new Date(matDate)-new Date(effDate))/(365.25*24*3600*1000)
+      const res = await fetch(API+'/api/xva/simulate', {
+        method:'POST',
+        headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
+        body: JSON.stringify({ notional:isNaN(n)?10000000:n, maturity_y:Math.max(0.5,matY), fixed_rate:isNaN(fr)?0.0365:fr, paths:2000 })
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.detail||'XVA failed')
+      setXvaResult(d); setXvaApplied(false)
+      try { sessionStorage.setItem('rijeka_xva_sim', JSON.stringify(d)) } catch(_) {}
+    } catch(e) { setXvaErr(e.message) }
+    finally { setXvaPricing(false) }
+  }
+
+  const handleApplyXvaToRate = () => {
+    if (!xvaResult?.xva||!rateRef.current||xvaApplied) return
+    const n = parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))
+    const matY = (new Date(matDate)-new Date(effDate))/(365.25*24*3600*1000)
+    const dv = (isNaN(n)?10000000:n)*matY/10000
+    const bp = [xvaResult.xva.cva,xvaResult.xva.dva,xvaResult.xva.fva,xvaResult.xva.fba,xvaResult.xva.kva,xvaResult.xva.mva].reduce((s,v)=>s+(v||0),0)/dv
+    const cur = parseFloat(rateRef.current.value||'0')
+    rateRef.current.value = (cur + bp/100).toFixed(6)
+    rateRef.current.dataset.userEdited = '1'
+    setXvaApplied(true)
+    setRateMode('FIXED'); setAnalytics(null)
+  }
+
   const handleBook = async () => {
     setErr(''); setBooking(true)
     try {
@@ -1321,7 +1462,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             getSession={getSession}
           />
         )}
-        {activeTab==='price' && <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>ALL-IN PRICE</div><div className='tbw-stub-sub'>XVA waterfall · CVA · DVA · FVA</div><div className='tbw-stub-sprint'>SPRINT 6D</div></div></div>}
+        {activeTab==='price' && <div className='tbw-body tbw-no-drag' style={{display:'flex',flexDirection:'column',overflow:'hidden'}}><XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} getSession={getSession} analytics={analytics} parRate={parRate}/></div>}
         {activeTab==='confirm' && <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Cashflow fingerprint · On-chain signing</div><div className='tbw-stub-sprint'>SPRINT 6A</div></div></div>}
 
         {activeTab==='cashflows' && (
@@ -1545,21 +1686,10 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     color:'var(--text)',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'0.875rem',
                     padding:'2px 5px',outline:'none'}}/>
               </div>
-              <button onClick={handlePrice} disabled={pricing||booking} style={{
-                fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.08em',
-                padding:'3px 10px',borderRadius:'2px',cursor:pricing?'default':'pointer',
-                fontFamily:"'IBM Plex Mono',var(--mono)",background:'transparent',
-                border:'1px solid '+(pricing?'var(--border)':'var(--accent)'),
-                color:pricing?'var(--text-dim)':'var(--accent)',opacity:pricing?0.5:1,
-              }}>{pricing?'PRICING...':'▶ PRICE'}</button>
+              
             </SectionHdr>
-            {analyticsErr&&!pricing&&(
+            {false&&(
               <div style={{fontSize:'0.875rem',color:'var(--amber)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'4px'}}>\u26a0 {analyticsErr}</div>
-            )}
-            {!analytics&&!pricing&&!analyticsErr&&(
-              <div style={{fontSize:'0.875rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",padding:'4px 0 8px'}}>
-                Click ▶ PRICE for pre-trade analytics, or BOOK TRADE to book and price simultaneously.
-              </div>
             )}
             {pricing&&(
               <div style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text-dim)',fontSize:'0.875rem',marginBottom:'8px'}}>
@@ -1568,7 +1698,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 <style>{'@keyframes spin{to{transform:rotate(360deg)}}'}</style>
               </div>
             )}
-            {analytics&&(<>
+            {true&&(<>
               <div style={{border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden',marginBottom:'12px'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
                   <colgroup>
@@ -1660,77 +1790,47 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 )
               })()}
 
-              {/* NPV → Rate solver */}
-              <div style={{
-                display:'flex',alignItems:'center',gap:'8px',
-                padding:'6px 10px',marginBottom:'8px',
-                background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'2px',
-              }}>
-                <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",letterSpacing:'0.08em',whiteSpace:'nowrap'}}>SOLVE RATE AT NPV</span>
-                <input
-                  type='text' value={targetNpv}
-                  onChange={e=>setTargetNpv(e.target.value)}
-                  placeholder='e.g. 50000'
-                  style={{...inp,fontSize:'0.875rem',fontWeight:600,flex:1,
-                    color:'var(--blue)',borderColor:'rgba(74,154,212,0.3)'}}
-                />
-                <button
-                  disabled={solvingNpv||!analytics}
-                  onClick={async ()=>{
-                    const target = parseFloat(String(targetNpv).replace(/,/g,''))
-                    if (isNaN(target)||!analytics||!analytics.ir01) return
-                    setSolvingNpv(true)
-                    try {
-                      const currentNpv  = analytics.npv || 0
-                      const deltaNpv    = target - currentNpv
-                      const ir01PerUnit = analytics.ir01 / 0.0001
-                      const deltaRate   = -deltaNpv / ir01PerUnit
-                      const currentRate = parseFloat(rateRef.current ? rateRef.current.value : '0')
-                      const newRate     = currentRate + deltaRate * 100
-                      if (rateRef.current) {
-                        rateRef.current.value = Math.max(0, newRate).toFixed(8)
-                        rateRef.current.dataset.userEdited = '1'
-                      }
-                      setRateMode('FIXED')
-                      setTargetNpv('')
-                      setErr(''); setAnalyticsErr(null); setPricing(true); setAnalytics(null)
-                      const r = await executeBooking(false)
-                      if (r) setAnalytics(r.priceData)
-                    } catch(e) { setAnalyticsErr(e.message) }
-                    finally { setSolvingNpv(false); setPricing(false) }
-                  }}
-                  style={{
-                    padding:'4px 10px',borderRadius:'2px',cursor:'pointer',
-                    fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',fontWeight:700,
-                    letterSpacing:'0.06em',whiteSpace:'nowrap',
-                    border:'1px solid rgba(74,154,212,0.5)',
-                    background:'rgba(74,154,212,0.08)',
-                    color:'var(--blue)',
-                    opacity:solvingNpv||!analytics?0.4:1,
-                  }}
-                >{solvingNpv?'SOLVING...':'→ SOLVE'}</button>
-                <button
-                  onClick={()=>{
-                    setRateMode('PAR')
-                    if (rateRef.current) { rateRef.current.dataset.userEdited=''; rateRef.current.value='' }
-                    const tenorY = (new Date(matDate) - new Date(effDate)) / (365.25 * 24 * 3600 * 1000)
-                    const curveId = CCY_CURVE[ccy] || 'USD_SOFR'
-                    const rate = getParRateFromStore(curves, curveId, tenorY)
-                    if (rate && rateRef.current) { rateRef.current.value = rate; setParRate(parseFloat(rate)) }
-                    setAnalytics(null); setTargetNpv('')
-                  }}
-                  style={{
-                    padding:'4px 8px',borderRadius:'2px',cursor:'pointer',
-                    fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',fontWeight:700,
-                    letterSpacing:'0.06em',whiteSpace:'nowrap',
-                    border:'1px solid rgba(13,212,168,0.4)',
-                    background:'rgba(13,212,168,0.06)',
-                    color:'var(--accent)',
-                  }}
-                >◉ RESET TO PAR</button>
-              </div>
-
             </>)}
+          {/* XVA inline section */}
+          {activeTab==='main' && (
+            <div style={{margin:'0 16px 12px',borderTop:'1px solid rgba(0,212,168,0.15)',paddingTop:'10px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px'}}>
+                <span style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:xvaResult?'var(--accent)':'#F5C842'}}>XVA</span>
+                {xvaResult?.params && (
+                  <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'.03em'}}>
+                    HW1F · a={xvaResult.params.a.toFixed(4)} · σ={xvaResult.params.sigma_bp.toFixed(1)}bp · {xvaResult.n_paths.toLocaleString()} paths
+                  </span>
+                )}
+                <div style={{marginLeft:'auto',display:'flex',gap:'6px',alignItems:'center'}}>
+                  {xvaErr && <span style={{fontSize:'0.8125rem',color:'var(--red)'}}>{xvaErr}</span>}
+                  
+                </div>
+              </div>
+              {xvaResult?.xva ? (
+                <XvaInlinePanel
+                  xva={xvaResult.xva}
+                  notionalRef={notionalRef}
+                  rateRef={rateRef}
+                  effDate={effDate}
+                  matDate={matDate}
+                  parRate={parRate}
+                  onApply={handleApplyXvaToRate}
+                />
+              ) : (
+                <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)',borderRadius:'2px',overflow:'hidden'}}>
+                  {['NPV','CVA','DVA','FVA','FBA','KVA','MVA~','ALL-IN'].map(l=>(
+                    <div key={l} style={{background:'var(--bg)',padding:'7px 8px'}}>
+                      <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'3px'}}>{l}</div>
+                      <div style={{fontSize:'0.9375rem',fontWeight:700,color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'2px'}}>—</div>
+                      <div style={{borderTop:'1px solid var(--panel-2)',paddingTop:'2px'}}>
+                        <div style={{fontSize:'0.75rem',color:'var(--text-dim)',opacity:.3}}>—</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           </div>
         )}
         {/* Floating tooltip portal */}
@@ -1781,14 +1881,20 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 <span style={{fontSize:'9px',color:'#444',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>STRUCTURE</span>
                 <span style={{fontSize:'9px',color:'#F5C842',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
               </div>
+              {xvaResult?.xva && <XvaFooterRate xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>}
               {activeTab==='scenario' ? (
                 <button style={{marginLeft:'auto',background:anyShift&&!confirmed?'rgba(0,212,168,0.1)':'rgba(255,255,255,0.04)',border:anyShift&&!confirmed?'1px solid rgba(0,212,168,0.3)':'1px solid #1E1E1E',color:anyShift&&!confirmed?'#00D4A8':'#666',borderRadius:'2px',padding:'3px 14px',fontSize:'11px',letterSpacing:'0.07em',cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',fontFamily:"'IBM Plex Sans',sans-serif"}} onClick={handleConfirm} disabled={!anyShift||confirmed||scenarioPricing}>
                   {scenarioPricing?'REPRICING...':(anyShift&&!confirmed)?'CONFIRM SHAPE →':'SHAPE CONFIRMED'}
                 </button>
               ) : (
-                <button style={{marginLeft:'auto',background:'rgba(0,212,168,0.1)',border:'1px solid rgba(0,212,168,0.3)',color:'#00D4A8',borderRadius:'2px',padding:'3px 12px',fontSize:'11px',letterSpacing:'0.07em',cursor:pricing?'not-allowed':'pointer',opacity:pricing?0.5:1,fontFamily:"'IBM Plex Sans',sans-serif"}} onClick={handlePrice} disabled={pricing}>
+                <>
+                <button style={{marginLeft:'auto',background:'rgba(245,200,66,0.08)',border:'1px solid rgba(245,200,66,0.4)',color:'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:pricing?'not-allowed':'pointer',opacity:pricing?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}} onClick={handlePrice} disabled={pricing}>
                 {pricing?'PRICING...':'▶ PRICE'}
               </button>
+              <button style={{background:xvaResult?'rgba(0,212,168,0.07)':'rgba(245,200,66,0.08)',border:xvaResult?'1px solid rgba(0,212,168,0.4)':'1px solid rgba(245,200,66,0.4)',color:xvaResult?'#00D4A8':'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:xvaPricing||!effDate||!matDate?'not-allowed':'pointer',opacity:xvaPricing||!effDate||!matDate?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}} onClick={handlePriceXva} disabled={xvaPricing||!effDate||!matDate}>
+                {xvaPricing?'PRICING XVA...':xvaResult?'⟳ RE-PRICE XVA':'▶ PRICE XVA'}
+              </button>
+                </>
               )}
             </div>}
             <div className='tbw-footer-btns'>
@@ -1823,8 +1929,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               ) : (
                 <>
                   <button className='tbw-btn-cancel' onClick={onClose}>CANCEL</button>
-                  <button className='tbw-btn-book' onClick={handleBook} disabled={booking||pricing}>
-                    {booking?(bookingStep||'BOOKING...'):'▶ BOOK TRADE'}
+                  <button className='tbw-btn-book' onClick={handleBook} disabled={booking||pricing} style={xvaResult?.xva?{background:'#00D4A8',color:'#000'}:{}}>
+                    {booking?(bookingStep||'BOOKING...'):xvaResult?.xva?<XvaBookLabel xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>:'▶ BOOK TRADE'}
                   </button>
                 </>
               )}
