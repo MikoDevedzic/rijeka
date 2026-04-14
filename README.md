@@ -1,6 +1,6 @@
 # Rijeka
 
-**Institutional-grade cross-asset pricing and risk — open source.**
+**Institutional-grade derivatives pricing and risk — open source.**
 
 Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging market participants, and academic researchers operate blind — without the tools to price, hedge, or understand the true cost of a trade. Rijeka exists to change that.
 
@@ -8,28 +8,68 @@ Named after a village in Bosnia — *rijeka* means "river" in Bosnian, Croatian,
 
 ---
 
+## Live Tools
+
+No login required. Open in any browser.
+
+| Tool | URL | What it does |
+|------|-----|-------------|
+| IRS Pricer | [rijeka.app/irs](https://rijeka.app/irs) | Price a vanilla IRS, drag the yield curve, reprice live |
+| XVA Simulator | [rijeka.app/xva](https://rijeka.app/xva) | HW1F Monte Carlo EE/ENE/PFE profiles and CVA |
+| XVA Waterfall | [rijeka.app/xva_ee](https://rijeka.app/xva_ee) | Paste an EE profile, get full XVA waterfall |
+| Vol Surface Scenario | [rijeka.app/vol_surface](https://rijeka.app/vol_surface) | 3D SABR swaption vol surface — shock it, reprice live |
+
+---
+
 ## What It Does
 
-Rijeka is a full-stack derivatives platform covering the complete lifecycle of an interest rate swap — from trade booking and curve construction through XVA computation and margin estimation.
+### Pricing & Analytics
 
-**Pricing & Analytics**
-- OIS curve bootstrapping (SOFR, €STR, SONIA) validated to Bloomberg reference prices
+- OIS curve bootstrapping (SOFR, €STR, SONIA) — validated to Bloomberg SWPM reference prices
 - Interest rate swap pricing with per-leg Greeks: IR01, IR01_DISC, Theta, Gamma
-- Par rate solving, cashflow generation, and scenario analysis
+- European swaption pricing — Bachelier normal vol model, Bloomberg-validated ($3 NPV delta on $10M 5Y trade)
+- Par rate solving, cashflow generation, T+2 spot lag, ACT/360 DCF
 
-**XVA — Valuation Adjustments**
-- Hull-White one-factor (HW1F) Monte Carlo simulation calibrated to ATM swaption vol surface
+### Vol Surface — β=0 Normal SABR
+
+- Full swaption vol surface calibration using Hagan 2002 β=0 Normal SABR
+- Bloomberg OTM ticker integration (SMKO) — 8 strikes per expiry/tenor bucket, ±200bp
+- α (level), ρ (skew), ν (curvature) calibrated per expiry/tenor bucket via L-BFGS-B
+- Interactive 3D surface: rotate, apply preset scenarios, or drag to create custom vol shocks
+- Live Bachelier repricing: ΔNPV, Vega, IR01 update on every scenario change
+
+### XVA — Valuation Adjustments
+
+- Hull-White one-factor (HW1F) Monte Carlo — calibrated to ATM swaption vol surface
 - Full XVA waterfall: CVA, DVA, FVA, FBA, KVA, MVA
-- All-in rate computation: par rate adjusted for the true cost of the trade
-- RMSE 0.23bp on 5Y-tenor calibration basket (Andersen-Piterbarg formula)
+- Swaption XVA: Andersen-Piterbarg 2-phase EE (option value pre-expiry, conditional swap post-expiry)
+- All-in rate: par rate adjusted for the true bilateral cost of the trade
+- HW1F calibration RMSE: 0.08bp on 5Y-tenor basket
 
-**Market Data**
-- 54-curve data layer across USD, EUR, GBP, cross-currency, and fixing indices
-- Bloomberg, Refinitiv, and manual snap support
-- ATM swaption vol surface (6×6 grid) with live Bloomberg integration
+### Joint Rate + Vol Scenario Engine
 
-**Trade Infrastructure**
-- Multi-asset trade blotter with 43 instrument types across 5 asset classes
+The trade window CURVE SCENARIO tab for swaptions shows both axes simultaneously:
+
+- **Top panel:** yield curve — drag any tenor point to reshape, Gaussian ripple propagation
+- **Bottom panel:** 3D SABR vol surface — ROTATE or RESHAPE mode, raycast-accurate drag deformation
+- **Single repricing button** runs 4 parallel calls and decomposes P&L:
+
+```
+ΔNPV rate only   =  shocked rate,  base vol
+ΔNPV vol only    =  base rate,     shocked vol
+ΔNPV joint       =  shocked rate,  shocked vol
+ΔNPV cross-gamma =  joint − rate − vol  (the non-linear term no system shows)
+```
+
+### Market Data
+
+- Market data snapshot layer: Bloomberg, Refinitiv, and manual sources
+- ATM + OTM swaption vol surface snap with unified button (ATM ICPL + SMKO OTM in one pass)
+- SABR calibration runs automatically after each surface snap, results stored with fit diagnostics
+
+### Trade Infrastructure
+
+- Multi-instrument trade blotter: IRS, OIS, FRA, Basis Swap, European Swaption
 - Full org hierarchy: firm → division → desk → book
 - Legal entity and counterparty master data
 - Role-based access: VIEWER / TRADER / ADMIN
@@ -44,16 +84,6 @@ Rijeka is a full-stack derivatives platform covering the complete lifecycle of a
 | Backend | FastAPI (Python) |
 | Database | Supabase (Postgres) |
 | Deployment | Netlify (frontend) · Render (backend) |
-
----
-
-## Live Tools
-
-Public-facing tools at **[rijeka.app](https://rijeka.app)** — no login required:
-
-- **IRS Pricer** — price a vanilla interest rate swap against a live SOFR curve
-- **XVA Simulator** — compute CVA/DVA/FVA/KVA from a HW1F Monte Carlo simulation
-- **XVA Waterfall Calculator** — build an XVA waterfall from a pasted EE profile
 
 ---
 
@@ -73,7 +103,7 @@ npm install
 npm run dev
 ```
 
-Environment variables required:
+**Environment variables required:**
 ```
 VITE_SUPABASE_URL
 VITE_SUPABASE_ANON_KEY
@@ -82,87 +112,66 @@ VITE_API_URL
 
 ---
 
-## Documentation
+## Model Validation
 
-- [`docs/Rijeka_Methodology_v1.1.pdf`](docs/Rijeka_Methodology_v1.1.pdf) — mathematical methodology: curve construction, swap pricing, XVA waterfall
-- [`docs/EXOTIC_OPTIONS_ROADMAP.md`](docs/EXOTIC_OPTIONS_ROADMAP.md) — roadmap for exotic options coverage
-- [`docs/DEPLOY_CHECKLIST.md`](docs/DEPLOY_CHECKLIST.md) — deployment reference
+Every instrument goes through documented validation before it's considered production-ready.
+
+| Version | Instruments | Status |
+|---------|-------------|--------|
+| v0.4.2 | IRS, OIS — OIS bootstrap | ✅ 38/38 tests passed |
+| v0.5.0 | European Swaption — Bachelier + HW1F | ✅ Bloomberg delta $3 on $10M 5Y |
+| v0.6.0 | SABR calibration, joint scenario P&L attribution | 🔲 Planned |
+
+Validation reports and Python test packages in `model_validation/`.
 
 ---
 
 ## Design Principles
 
-- **No black boxes.** Every formula is documented. Every number is traceable.
-- **Institutional quality, open access.** The same mathematics used at tier-1 banks, available to anyone.
-- **SIMM-aligned risk taxonomy.** Greeks follow ISDA SIMM conventions — IR01 not DV01, SIMM buckets, proper sensitivity aggregation.
-- **Audit-ready.** All market data snaps are timestamped and sourced. Calibration results are stored with full fit diagnostics.
+**No black boxes.** Every formula is documented. Every number is traceable.
+
+**Institutional quality, open access.** The same mathematics used at tier-1 banks, available to anyone.
+
+**SIMM-aligned risk taxonomy.** Greeks follow ISDA SIMM conventions — IR01 not DV01, proper sensitivity aggregation.
+
+**Audit-ready.** All market data snaps are timestamped and sourced. Calibration results are stored with full fit diagnostics.
 
 ---
 
 ## Roadmap
 
-**XVA & Risk**
-- [ ] Full ISDA SIMM MVA (replacing linear proxy)
-- [ ] CVaR / Expected Shortfall from Monte Carlo engine
-- [ ] Bloomberg plugin for XVA
+### Phase 1 — Rates (current)
 
-**Interest Rates**
-- [ ] Cross-currency swap pricing (XCCY basis)
-- [ ] Exotic IR options: caps, floors, swaptions, CMS products
+| Instrument | Status |
+|-----------|--------|
+| Vanilla IRS / OIS | ✅ Live |
+| FRA | ✅ Live |
+| Basis Swap | ✅ Live |
+| European Swaption | ✅ Live |
+| Interest Rate Cap / Floor | Sprint 9 |
+| Collar | Sprint 9 |
+| XCCY Swap | Sprint 10 |
+| Bermudan Swaption | Sprint 11 |
 
-**FX & FX Options**
-- [ ] FX spot, forward, and swap pricing
-- [ ] FX options: vanilla, barrier, digital — Garman-Kohlhagen / local vol
-- [ ] FX vol surface construction and smile calibration
+### Phase 2 — FX & Credit
+FX spot/forward/options, CDS, credit options, wrong-way risk in CVA.
 
-**Credit & Credit Options**
-- [ ] CDS pricing and hazard rate bootstrapping
-- [ ] Credit options and index tranches
-- [ ] Wrong-way risk in CVA
+### Phase 3 — Equity & Commodity
+Equity swaps, equity options (Black-Scholes / Heston), commodity swaps and options.
 
-**Equity**
-- [ ] Equity swaps and total return swaps
-- [ ] Equity options: Black-Scholes, local vol, stochastic vol (Heston)
+### Phase 4 — Risk Infrastructure
+Full market risk (VaR, SVaR, FRTB), CCR (PFE, SA-CCR, IMM), collateral management, PnL attribution.
 
-**Commodity & Commodity Options**
-- [ ] Commodity swaps: energy, metals, agriculture
-- [ ] Commodity options with seasonality and mean-reversion models
-- [ ] Exchange IM integration (ICE, CME)
+### PROMETHEUS — AI Layer
+Contextual chat over your book, AI-powered PnL explain, hedging recommendations, XVA commentary.
 
-**Cash Instruments** *(post-derivatives)*
-- [ ] Bond pricing: fixed rate, floating rate, inflation-linked
-- [ ] Repo and securities financing
-- [ ] Unified derivatives + cash risk view
+---
 
-**PnL Attribution**
-- [ ] Daily PnL explain: delta, gamma, vega, theta, rho, new trades, carry
-- [ ] Greeks-based attribution across all asset classes
-- [ ] IPV integration: independent price verification vs. trader marks
+## Documentation
 
-**Collateral Management**
-- [ ] ISDA CSA management: thresholds, MTA, independent amounts
-- [ ] Margin call workflow: call generation, dispute tracking, settlement
-- [ ] Collateral optimization: cheapest-to-deliver across eligible assets
-- [ ] Real-time collateral inventory and rehypothecation tracking
-
-**Market Risk**
-- [ ] VaR: historical simulation, parametric, Monte Carlo
-- [ ] Stressed VaR and Expected Shortfall (ES) per FRTB
-- [ ] Sensitivity-based approach (SBA) under FRTB SA
-- [ ] Risk factor bucketing and aggregation across desks
-
-**Counterparty Credit Risk**
-- [ ] PFE profiles: SA-CCR and internal model (IMM)
-- [ ] Credit limits: utilization tracking and breach alerting
-- [ ] Netting set and collateral agreement management
-- [ ] CVA capital: BA-CVA and SA-CVA under Basel IV
-
-**PROMETHEUS — AI Intelligence Layer**
-- [ ] Contextual chat: ask questions about your book in plain language
-- [ ] AI-powered PnL explain and attribution
-- [ ] Hedging recommendations and what-if analysis
-- [ ] XVA commentary and regulatory narrative generation
-- [ ] Market news integration with portfolio impact scoring
+- `docs/Rijeka_Methodology_v1.1.pdf` — curve construction, swap pricing, XVA waterfall
+- `docs/EXOTIC_OPTIONS_ROADMAP.md` — options coverage roadmap
+- `docs/DEPLOY_CHECKLIST.md` — deployment reference
 
 ---
 
@@ -170,6 +179,4 @@ VITE_API_URL
 
 MIT License — © 2026 Miko Devedzic / Rijeka
 
----
-
-*Built by someone who spent a career inside trading floor infrastructure — pricing systems, risk frameworks, and margin engines — and believed the tools deserved to be free.*
+Built by someone who spent a career inside trading floor infrastructure — pricing systems, risk frameworks, and margin engines — and believed the tools deserved to be free.
