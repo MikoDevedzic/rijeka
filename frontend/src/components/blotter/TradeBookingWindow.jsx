@@ -12,15 +12,15 @@ const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const ASSET_CLASSES = ['RATES','FX','CREDIT','EQUITY','COMMODITY']
 const LIVE_AC       = ['RATES']
 const INSTRUMENTS   = {
-  RATES:     ['IR_SWAP','IR_SWAPTION','INTEREST_RATE_CAP','INTEREST_RATE_FLOOR','INTEREST_RATE_COLLAR','FRA'],
+  RATES:     ['IR_SWAP','IR_SWAPTION','INTEREST_RATE_CAP','INTEREST_RATE_FLOOR','INTEREST_RATE_COLLAR'],
   FX:        ['FX_FORWARD','FX_SWAP','NDF'],
   CREDIT:    ['CDS','CDS_INDEX','TOTAL_RETURN_SWAP','ASSET_SWAP'],
   EQUITY:    ['EQUITY_SWAP','VARIANCE_SWAP','DIVIDEND_SWAP','EQUITY_FORWARD'],
   COMMODITY: ['COMMODITY_SWAP','COMMODITY_BASIS_SWAP','ASIAN_COMMODITY_SWAP'],
 }
-const LIVE_INST   = { RATES: ['IR_SWAP'] }
+const LIVE_INST   = { RATES: ['IR_SWAP', 'IR_SWAPTION'] }
 const IR_STRUCTS  = ['VANILLA','OIS','BASIS','XCCY','ZERO_COUPON','STEP_UP','INFLATION_ZC','CMS','CMS_SPREAD']
-const LIVE_STRUCT = ['VANILLA','OIS']
+const LIVE_STRUCT = ['VANILLA','OIS','BASIS']
 const DAY_COUNTS  = ['ACT/360','ACT/365F','30/360','ACT/ACT ISDA']
 const PAY_FREQS   = ['MONTHLY','QUARTERLY','SEMI_ANNUAL','ANNUAL','ZERO_COUPON']
 const RESET_FREQS = ['DAILY','WEEKLY','MONTHLY','QUARTERLY','SEMI_ANNUAL','ANNUAL']
@@ -179,7 +179,8 @@ const DirBtn = ({label, active, color, onClick}) => (
 
 // ── ScenarioTab: fully self-contained, all hooks at top level ────────────────
 function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curves, analytics,
-  notionalRef, rateRef, fixedPayFreq, fixedDc, fixedBdc, floatResetFreq, floatPayFreq, floatDc, floatBdc, getSession }) {
+  notionalRef, rateRef, fixedPayFreq, fixedDc, fixedBdc, floatResetFreq, floatPayFreq, floatDc, floatBdc, getSession,
+  inst, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, curveId: curveIdProp }) {
 
   const TENORS  = ['1W','1M','3M','6M','1Y','2Y','3Y','4Y','5Y','7Y','10Y','15Y','20Y','30Y']
   const TENOR_Y = {'1W':0.02,'1M':0.083,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'4Y':4,'5Y':5,'7Y':7,'10Y':10,'15Y':15,'20Y':20,'30Y':30}
@@ -214,6 +215,336 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
   const [scenarioCalc, setScenarioCalc] = useState(null)
   const [scenarioPricing,setScenarioPricing]=useState(false)
   const [thetaApproxVisible,setThetaApproxVisible]=useState(false)
+
+
+  // ── Vol scenario (swaption only) ─────────────────────────────────────────
+  const IS_SWPN = inst === 'IR_SWAPTION'
+  const EXPIRY_Y_MAP = {'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
+  const TENOR_Y_MAP  = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'9Y':9,'10Y':10,'15Y':15,'20Y':20,'30Y':30}
+
+  const SABR_BASE = [
+    {T:0.25,F:0.03595,alpha:0.0940,rho:-0.320,nu:1.350},
+    {T:0.50,F:0.03610,alpha:0.0915,rho:-0.220,nu:1.050},
+    {T:1.00,F:0.03650,alpha:0.0851,rho:-0.061,nu:0.675},
+    {T:2.00,F:0.03562,alpha:0.0878,rho:-0.042,nu:0.510},
+    {T:3.00,F:0.03600,alpha:0.0850,rho:-0.020,nu:0.410},
+    {T:5.00,F:0.03672,alpha:0.0835,rho: 0.018,nu:0.315},
+    {T:7.00,F:0.03900,alpha:0.0820,rho: 0.038,nu:0.255},
+    {T:10.0,F:0.04050,alpha:0.0782,rho: 0.052,nu:0.200},
+  ]
+  const VOL_SCEN = {
+    base:  {l:'BASE',           d:'Live calibrated surface',                   f:(p)=>({...p})},
+    up15:  {l:'PARALLEL +15bp', d:'Surface-wide vol expansion',                f:(p)=>({...p,alpha:p.alpha+0.0015})},
+    dn15:  {l:'PARALLEL −15bp', d:'Vol compression',                           f:(p)=>({...p,alpha:p.alpha-0.0015})},
+    skew:  {l:'RECEIVER SKEW',  d:'ρ → −0.40 — rate/vol correlation spike',   f:(p)=>({...p,rho:Math.min(p.rho-0.25,-0.30)})},
+    wing:  {l:'WING EXPANSION', d:'ν × 1.5 — smile curvature increase',       f:(p)=>({...p,nu:p.nu*1.5})},
+    stress:{l:'STRESS +30bp',   d:'Full surface +30bp — 2020 analogue',        f:(p)=>({...p,alpha:p.alpha+0.0030})},
+    flat:  {l:'TERM FLATTEN',   d:'Short vol up · long end anchored',          f:(p,i)=>({...p,alpha:p.alpha+0.0025*(1-i/7)})},
+    custom:{l:'CUSTOM RESHAPE',  d:'Manually deformed via drag',                f:(p)=>({...p})},
+  }
+
+  function sabrVolCalc(F, K, T, alpha, rho, nu) {
+    if (T <= 0) return alpha * 10000
+    const x = K - F, c = 1 + ((2 - 3*rho*rho)/24)*nu*nu*T
+    if (Math.abs(x) < 1e-8) return Math.max(alpha * c * 10000, 1)
+    const z = (nu/alpha)*x
+    const chi = Math.log((Math.sqrt(1-2*rho*z+z*z)+z-rho)/(1-rho))
+    return Math.abs(chi) < 1e-10 ? Math.max(alpha*c*10000,1) : Math.max(alpha*(z/chi)*c*10000,1)
+  }
+
+  const [volScenKey, setVolScenKey] = useState('base')
+  const [isVolThreeReady, setIsVolThreeReady] = useState(false)
+  const [volMode, setVolMode] = useState('rotate')  // 'rotate' | 'reshape'
+  const [activeVolP, setActiveVolP] = useState(SABR_BASE.map(p=>({...p})))
+  const [jointResult, setJointResult] = useState(null)
+  const [unsavedVol,  setUnsavedVol]  = useState(false) // {rateOnly, volOnly, joint, base}
+  const smileCanvasRef = useRef(null)  // kept for compat but unused
+  const volCanvasRef   = useRef(null)
+  const volWrapRef     = useRef(null)
+  const volThreeRef    = useRef(null)   // { renderer, scene, camera, meshes, sph, alive }
+  const volSphRef      = useRef({ r:11, th:0.52, ph:0.50 })
+  const volDragRef     = useRef(null)   // { ds, dsph }
+
+  const getShockedVolBp = (volParams) => {
+    if (!IS_SWPN) return parseFloat(swaptionVol) || 85
+    const expY = EXPIRY_Y_MAP[swaptionExpiry] || 1
+    const ei = volParams.reduce((best,p,i) => Math.abs(p.T-expY)<Math.abs(volParams[best].T-expY)?i:best, 0)
+    const p = volParams[ei]
+    const F = swaptionResult?.forward_rate || p.F
+    return sabrVolCalc(F, F, expY, p.alpha, p.rho, p.nu)
+  }
+
+  const applyVolScen = (key) => {
+    const newP = SABR_BASE.map((p,i) => VOL_SCEN[key].f(p,i))
+    setVolScenKey(key)
+    setActiveVolP(newP)
+    setConfirmed(false)
+    setJointResult(null)
+  }
+
+  // ── Three.js vol surface (3D) ────────────────────────────────────────────
+  const SABR_STRIKES = []; for(let s=-200;s<=200;s+=20) SABR_STRIKES.push(s)
+  const NS3 = SABR_STRIKES.length  // 21
+
+  function sabrV(F,K,T,a,rho,nu){
+    if(T<=0)return a*10000; const x=K-F,c=1+((2-3*rho*rho)/24)*nu*nu*T
+    if(Math.abs(x)<1e-8)return Math.max(a*c*10000,1)
+    const z=(nu/a)*x,chi=Math.log((Math.sqrt(1-2*rho*z+z*z)+z-rho)/(1-rho))
+    return Math.abs(chi)<1e-10?Math.max(a*c*10000,1):Math.max(a*(z/chi)*c*10000,1)
+  }
+  function baseClr(sp){
+    if(sp<-15)return[0.18,0.48,0.95]; if(sp<0){const t=(sp+15)/15;return[0.18*(1-t),0.48+t*0.35,0.95*(1-t)+0.66*t]}
+    if(sp<6)return[0,0.83,0.66]; if(sp<20){const t=(sp-6)/14;return[t*0.96,0.83-t*0.09,0.66-t*0.40]}
+    if(sp<45){const t=(sp-20)/25;return[0.96+t*0.04,0.74-t*0.32,0.26-t*0.10]}; return[1,0.42,0.42]
+  }
+  function shockClr(d){
+    if(d>30)return[1,0.35,0.35]; if(d>12)return[0.96,0.62,0.20]; if(d>4)return[0.96,0.78,0.26]
+    if(d>0)return[0.90,0.88,0.50]; if(d>-4)return[0,0.83,0.66]; if(d>-12)return[0.29,0.62,0.99]
+    return[0.10,0.35,0.92]
+  }
+
+  function buildVolGeom(THREE, params, colorFn, rMinV, rMaxV){
+    const verts=[],cols=[],idx=[],grid=[]
+    for(let ei=0;ei<SABR_BASE.length;ei++){
+      const row=[],{T,F,alpha,rho,nu}=params[ei]
+      for(let si=0;si<NS3;si++) row.push(sabrV(F,F+SABR_STRIKES[si]/10000,T,alpha,rho,nu))
+      grid.push(row)
+    }
+    const all=grid.flat()
+    const minV=rMinV??Math.min(...all),maxV=rMaxV??Math.max(...all),range=maxV-minV||1
+    const XS=8,ZS=6,YS=3.8
+    for(let ei=0;ei<SABR_BASE.length;ei++)
+      for(let si=0;si<NS3;si++){
+        verts.push((si/(NS3-1)-0.5)*XS,((grid[ei][si]-minV)/range)*YS,(ei/(SABR_BASE.length-1)-0.5)*ZS)
+        cols.push(...colorFn(grid[ei][si],grid[ei][10],ei,si))
+      }
+    for(let ei=0;ei<SABR_BASE.length-1;ei++)
+      for(let si=0;si<NS3-1;si++){const a=ei*NS3+si,b=a+1,c=a+NS3,d=c+1;idx.push(a,b,c,b,d,c)}
+    const geo=new THREE.BufferGeometry()
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3))
+    geo.setAttribute('color',new THREE.Float32BufferAttribute(cols,3))
+    geo.setIndex(idx); geo.computeVertexNormals()
+    return{geo,grid,minV,maxV,range,YS}
+  }
+
+  function rebuildVolSurf(){
+    const t=volThreeRef.current; if(!t||!t.THREE)return
+    const{THREE,scene,meshes,alive}=t; if(!alive)return
+    const isBase=volScenKey==='base'
+    const bd=buildVolGeom(THREE,SABR_BASE,(vol,atm)=>baseClr(vol-atm),null,null)
+    if(meshes.bm){scene.remove(meshes.bm);meshes.bm.geometry.dispose()}
+    if(meshes.bw){scene.remove(meshes.bw);meshes.bw.geometry.dispose()}
+    meshes.bm=new THREE.Mesh(bd.geo,new THREE.MeshLambertMaterial({vertexColors:true,transparent:true,opacity:isBase?0.88:0.25,side:THREE.DoubleSide}))
+    scene.add(meshes.bm)
+    meshes.bw=new THREE.Mesh(bd.geo.clone(),new THREE.MeshBasicMaterial({color:isBase?0x00D4A8:0x0D1A14,wireframe:true,transparent:true,opacity:isBase?0.09:0.03}))
+    scene.add(meshes.bw)
+    if(meshes.sm){scene.remove(meshes.sm);meshes.sm.geometry.dispose()}
+    if(meshes.sw){scene.remove(meshes.sw);meshes.sw.geometry.dispose()}
+    meshes.sm=null;meshes.sw=null
+    if(!isBase){
+      const sd=buildVolGeom(THREE,activeVolP,(vol,atm,ei,si)=>{
+        const bv=sabrV(SABR_BASE[ei].F,SABR_BASE[ei].F+SABR_STRIKES[si]/10000,SABR_BASE[ei].T,SABR_BASE[ei].alpha,SABR_BASE[ei].rho,SABR_BASE[ei].nu)
+        return shockClr(vol-bv)
+      },bd.minV,bd.maxV)
+      meshes.sm=new THREE.Mesh(sd.geo,new THREE.MeshLambertMaterial({vertexColors:true,transparent:true,opacity:0.88,side:THREE.DoubleSide}))
+      scene.add(meshes.sm)
+      meshes.sw=new THREE.Mesh(sd.geo.clone(),new THREE.MeshBasicMaterial({color:0xF5C842,wireframe:true,transparent:true,opacity:0.09}))
+      scene.add(meshes.sw)
+    }
+    // Trade strike marker
+    if(meshes.mk){scene.remove(meshes.mk)}
+    const expY=EXPIRY_Y_MAP[swaptionExpiry]||1
+    const tradeEi=SABR_BASE.reduce((b,p,i)=>Math.abs(p.T-expY)<Math.abs(SABR_BASE[b].T-expY)?i:b,0)
+    const vol=bd.grid[tradeEi][10]
+    const x=(10/(NS3-1)-0.5)*8, z=(tradeEi/(SABR_BASE.length-1)-0.5)*6, y=((vol-bd.minV)/bd.range)*bd.YS+0.2
+    const mg=new THREE.SphereGeometry(0.18,8,8)
+    meshes.mk=new THREE.Mesh(mg,new THREE.MeshBasicMaterial({color:0xF5C842}))
+    meshes.mk.position.set(x,y,z)
+    scene.add(meshes.mk)
+    // Dots
+    if(meshes.dm){scene.remove(meshes.dm);meshes.dm.geometry.dispose()}
+    const dp=[],dc=[]
+    bd.grid.forEach((row,ei)=>{[0,10,NS3-1].forEach(si=>{
+      dp.push((si/(NS3-1)-0.5)*8,((row[si]-bd.minV)/bd.range)*bd.YS+0.1,(ei/(SABR_BASE.length-1)-0.5)*6)
+      dc.push(...(si===10?[0,0.83,0.66]:[1,0.42,0.42]))
+    })})
+    const dg=new THREE.BufferGeometry()
+    dg.setAttribute('position',new THREE.Float32BufferAttribute(dp,3))
+    dg.setAttribute('color',new THREE.Float32BufferAttribute(dc,3))
+    meshes.dm=new THREE.Points(dg,new THREE.PointsMaterial({vertexColors:true,size:4,sizeAttenuation:false,transparent:true,opacity:0.8}))
+    scene.add(meshes.dm)
+  }
+
+  function volCamUpdate(){
+    const t=volThreeRef.current; if(!t)return
+    const{r,th,ph}=volSphRef.current
+    t.camera.position.set(r*Math.sin(ph)*Math.sin(th),r*Math.cos(ph)+1.2,r*Math.sin(ph)*Math.cos(th))
+    t.camera.lookAt(0,1.2,0)
+  }
+
+  useEffect(()=>{
+    if(!IS_SWPN)return
+    const load=()=>new Promise(res=>{
+      if(window.THREE){res();return}
+      const s=document.createElement('script')
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+      s.onload=res; document.head.appendChild(s)
+    })
+    load().then(()=>{
+      const canvas=volCanvasRef.current,wrap=volWrapRef.current
+      if(!canvas||!wrap)return
+      const THREE=window.THREE
+      const renderer=new THREE.WebGLRenderer({canvas,antialias:true})
+      renderer.setPixelRatio(window.devicePixelRatio)
+      renderer.setClearColor(0x0A0A0E)
+      const scene=new THREE.Scene()
+      const camera=new THREE.PerspectiveCamera(42,1,0.1,200)
+      scene.add(new THREE.AmbientLight(0x203040,1.5))
+      const dl=new THREE.DirectionalLight(0x00D4A8,0.5);dl.position.set(5,10,8);scene.add(dl)
+      const dl2=new THREE.DirectionalLight(0x4A9EFF,0.25);dl2.position.set(-5,4,-4);scene.add(dl2)
+      const gh=new THREE.GridHelper(12,12,0x181B24,0x101318);gh.position.y=-0.05;scene.add(gh)
+      volThreeRef.current={THREE,renderer,scene,camera,meshes:{},alive:true}
+      volCamUpdate()
+      const resize=()=>{
+        if(!wrap||!volThreeRef.current?.alive)return
+        const W=wrap.clientWidth,H=wrap.clientHeight
+        renderer.setSize(W,H); camera.aspect=W/H; camera.updateProjectionMatrix()
+      }
+      const ro=new ResizeObserver(resize); ro.observe(wrap)
+      volThreeRef.current.ro=ro
+      resize()
+      rebuildVolSurf()
+      setIsVolThreeReady(true)
+      let alive=true
+      const loop=()=>{if(!alive)return;requestAnimationFrame(loop);renderer.render(scene,camera)}
+      loop()
+      volThreeRef.current.stopLoop=()=>{alive=false}
+
+      // Native mouse/wheel events — React synthetic events don't work reliably with Three.js
+      const onDown=e=>{
+        volDragRef.current={ds:{x:e.clientX,y:e.clientY},dsph:{...volSphRef.current}}
+        canvas.style.cursor='grabbing'
+      }
+      const onMove=e=>{
+        if(!volDragRef.current)return
+        const{ds,dsph}=volDragRef.current
+        volSphRef.current.th=dsph.th-(e.clientX-ds.x)*0.005
+        volSphRef.current.ph=Math.max(0.08,Math.min(1.5,dsph.ph-(e.clientY-ds.y)*0.005))
+        volCamUpdate()
+      }
+      const onUp=()=>{ volDragRef.current=null; canvas.style.cursor='grab' }
+      const onWheel=e=>{
+        volSphRef.current.r=Math.max(5,Math.min(22,volSphRef.current.r+e.deltaY*0.012))
+        volCamUpdate(); e.preventDefault()
+      }
+    })
+    return()=>{
+      const t=volThreeRef.current; if(!t)return
+      t.alive=false; t.stopLoop?.(); t.ro?.disconnect(); t.renderer?.dispose()
+    }
+  },[IS_SWPN])
+
+  // Vol surface mouse controls — re-attaches when mode or ready state changes
+  useEffect(()=>{
+    if(!IS_SWPN || !isVolThreeReady) return
+    const canvas=volCanvasRef.current
+    if(!canvas) return
+
+    // ROTATE mode
+    const onDownRotate=e=>{
+      volDragRef.current={ds:{x:e.clientX,y:e.clientY},dsph:{...volSphRef.current}}
+      canvas.style.cursor='grabbing'
+    }
+    const onMoveRotate=e=>{
+      if(!volDragRef.current) return
+      const{ds,dsph}=volDragRef.current
+      volSphRef.current.th=dsph.th-(e.clientX-ds.x)*0.005
+      volSphRef.current.ph=Math.max(0.08,Math.min(1.55,dsph.ph-(e.clientY-ds.y)*0.005))
+      volCamUpdate()
+    }
+    const onUpRotate=()=>{volDragRef.current=null; canvas.style.cursor='grab'}
+
+    // RESHAPE mode — raycast to find exact mesh point, drag Y to shift vol
+    const onDownReshape=e=>{
+      const t=volThreeRef.current; if(!t?.alive) return
+      const rect=canvas.getBoundingClientRect()
+      const mx=((e.clientX-rect.left)/rect.width)*2-1
+      const my=-((e.clientY-rect.top)/rect.height)*2+1
+      const THREE=t.THREE
+      const ray=new THREE.Raycaster()
+      const mv2=new THREE.Vector2(mx,my)
+      ray.setFromCamera(mv2,t.camera)
+      const hits=ray.intersectObjects([t.meshes.sm||t.meshes.bm].filter(Boolean))
+      if(!hits.length) return
+      const pt=hits[0].point
+      // Map Z coordinate back to expiry index (ZS=6, range -3 to +3)
+      const ei=Math.max(0,Math.min(SABR_BASE.length-1,
+        Math.round((pt.z/6+0.5)*(SABR_BASE.length-1))))
+      volDragRef.current={ei, startY:e.clientY, startAlpha:activeVolP[ei].alpha}
+      canvas.style.cursor='ns-resize'
+    }
+    const onMoveReshape=e=>{
+      if(!volDragRef.current) return
+      const{ei,startY,startAlpha}=volDragRef.current
+      const dy=(startY-e.clientY)*0.00030
+      const newP=activeVolP.map((p,i)=>i===ei?{...p,alpha:Math.max(0.025,startAlpha+dy)}:{...p})
+      // Update ref immediately so next move uses latest value
+      volDragRef.current.startAlpha=Math.max(0.025,startAlpha+dy)
+      volDragRef.current.startY=e.clientY
+      setActiveVolP(newP)
+      // Live rebuild shocked mesh only (fast path)
+      const t=volThreeRef.current; if(!t?.alive) return
+      const{THREE,scene,meshes}=t
+      const bd2=buildVolGeom(THREE,SABR_BASE,(vol,atm)=>baseClr(vol-atm),null,null)
+      const sd2=buildVolGeom(THREE,newP,(vol,atm,ei2,si)=>{
+        const bv=sabrV(SABR_BASE[ei2].F,SABR_BASE[ei2].F+SABR_STRIKES[si]/10000,
+          SABR_BASE[ei2].T,SABR_BASE[ei2].alpha,SABR_BASE[ei2].rho,SABR_BASE[ei2].nu)
+        return shockClr(vol-bv)
+      },bd2.minV,bd2.maxV)
+      if(meshes.sm){scene.remove(meshes.sm);meshes.sm.geometry.dispose()}
+      meshes.sm=new THREE.Mesh(sd2.geo,new THREE.MeshLambertMaterial(
+        {vertexColors:true,transparent:true,opacity:0.88,side:THREE.DoubleSide}))
+      scene.add(meshes.sm)
+      if(meshes.bm) meshes.bm.material.opacity=0.25
+    }
+    const onUpReshape=()=>{
+      if(volDragRef.current){
+        volDragRef.current=null
+        canvas.style.cursor='crosshair'
+        setVolScenKey('custom')
+        setUnsavedVol(true)
+      }
+    }
+
+    const onWheel=e=>{
+      volSphRef.current.r=Math.max(5,Math.min(22,volSphRef.current.r+e.deltaY*0.012))
+      volCamUpdate(); e.preventDefault()
+    }
+
+    const isReshape = volMode==='reshape'
+    canvas.style.cursor = isReshape ? 'crosshair' : 'grab'
+
+    const onDown = isReshape ? onDownReshape : onDownRotate
+    const onMove = isReshape ? onMoveReshape : onMoveRotate
+    const onUp   = isReshape ? onUpReshape   : onUpRotate
+
+    canvas.addEventListener('mousedown', onDown)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup',   onUp)
+    canvas.addEventListener('wheel',     onWheel, {passive:false})
+    return()=>{
+      canvas.removeEventListener('mousedown', onDown)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup',   onUp)
+      canvas.removeEventListener('wheel',     onWheel)
+    }
+  },[IS_SWPN, isVolThreeReady, volMode, activeVolP])
+
+  useEffect(()=>{
+    if(IS_SWPN && volThreeRef.current?.alive) rebuildVolSurf()
+  },[volScenKey, IS_SWPN])
+
+  // ── End vol scenario state ────────────────────────────────────────────────
 
   const getBaseMarket = (t) => {
     const curve=curves.find(c=>c.id===curveId)
@@ -395,17 +726,68 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
       const shockedQuotes=[{tenor:'ON',quote_type:'DEPOSIT',rate:onRate}]
       TENORS.forEach((t,i)=>{const base=getBase(t);const fr=overrides&&overrides[t]!=null?parseFloat(overrides[t]):base+shiftsRef.current[i]/100;shockedQuotes.push({tenor:t,quote_type:'OIS_SWAP',rate:fr/100})})
       const [bR,sR]=await Promise.all([
-        fetch(API+'/price/preview',{method:'POST',headers:h,body:JSON.stringify({legs,valuation_date:valDate,curves:[{curve_id:curveId,quotes:[]}]})}),
-        fetch(API+'/price/preview',{method:'POST',headers:h,body:JSON.stringify({legs,valuation_date:valDate,curves:[{curve_id:curveId,quotes:shockedQuotes}]})}),
+        fetch(API+'/price/preview',{method:'POST',headers:h,body:JSON.stringify({legs,valuation_date:valDate,curves:[curveObj(curveId)]})}),
+        fetch(API+'/price/preview',{method:'POST',headers:h,body:JSON.stringify({legs,valuation_date:valDate,curves:[curveObj(curveId, shockedQuotes)]})}),
       ])
       if(bR.ok)setScenarioBase(await bR.json())
       if(sR.ok)setScenarioCalc(await sR.json())
+
+      // ── Swaption joint repricing ────────────────────────────────────────────
+      if (IS_SWPN && swaptionResult) {
+        try {
+          const expY  = EXPIRY_Y_MAP[swaptionExpiry] || 1
+          const tenY  = TENOR_Y_MAP[swaptionTenor]   || 5
+          const baseVol   = parseFloat(swaptionVol) || 85
+          const shockVol  = getShockedVolBp(activeVolP)
+          const curveIdU  = curveIdProp || curveId
+          const swpBase = {
+            notional, expiry_y: expY, tenor_y: tenY,
+            strike: swaptionResult.strike || null,
+            is_payer: dir === 'PAY',
+            pay_freq_y: 1.0, valuation_date: valDate,
+            effective_date: swaptionResult.effective_date || effDate,
+            maturity_date:  swaptionResult.maturity_date  || matDate,
+            curve_id: curveIdU,
+          }
+          const [r1,r2,r3,r4] = await Promise.all([
+            // 1. base rate + base vol
+            fetch(API+'/api/price/swaption',{method:'POST',headers:h,body:JSON.stringify({...swpBase, vol_bp:baseVol})}),
+            // 2. shocked rate + base vol
+            fetch(API+'/api/price/swaption',{method:'POST',headers:h,body:JSON.stringify({...swpBase, vol_bp:baseVol, shocked_quotes:shockedQuotes})}),
+            // 3. base rate + shocked vol
+            fetch(API+'/api/price/swaption',{method:'POST',headers:h,body:JSON.stringify({...swpBase, vol_bp:shockVol})}),
+            // 4. shocked rate + shocked vol (JOINT)
+            fetch(API+'/api/price/swaption',{method:'POST',headers:h,body:JSON.stringify({...swpBase, vol_bp:shockVol, shocked_quotes:shockedQuotes})}),
+          ])
+          const [d1,d2,d3,d4] = await Promise.all([r1.json(),r2.json(),r3.json(),r4.json()])
+          if(r1.ok && r2.ok && r3.ok && r4.ok) {
+            const base   = d1.npv, rateOnly = d2.npv, volOnly = d3.npv, joint = d4.npv
+            const dRate  = rateOnly - base
+            const dVol   = volOnly  - base
+            const dJoint = joint    - base
+            const dCross = dJoint   - dRate - dVol
+            setJointResult({ base, rateOnly, volOnly, joint, dRate, dVol, dJoint, dCross,
+              baseVol, shockVol, volScenLabel: VOL_SCEN[volScenKey]?.l })
+          }
+        } catch(eSwpn) { console.error('[JOINT SWPN]', eSwpn) }
+      }
     }catch(e){console.error('[SCENARIO]',e)}
     finally{setScenarioPricing(false)}
   }
 
   const applyPreset=key=>{setPresetKey(key);shiftsRef.current=[...(PRESETS[key]||PRESETS.flat0)];setConfirmed(false);setTick(t=>t+1);scheduleDraw()}
-  const handleReset=()=>{shiftsRef.current=TENORS.map(()=>0);setPresetKey('flat0');setBaseOverrides({});setConfirmed(true);setScenarioBase(null);setScenarioCalc(null);setTick(t=>t+1);scheduleDraw()}
+  const handleReset=()=>{
+    shiftsRef.current=TENORS.map(()=>0)
+    setPresetKey('flat0'); setBaseOverrides({})
+    setConfirmed(true); setScenarioBase(null); setScenarioCalc(null)
+    setTick(t=>t+1); scheduleDraw()
+    // Also reset vol scenario
+    setVolScenKey('base')
+    setActiveVolP(SABR_BASE.map(p=>({...p})))
+    setUnsavedVol(false)
+    setJointResult(null)
+    setVolMode('rotate')
+  }
   const handleConfirm=()=>{setConfirmed(true);const ov={};TENORS.forEach((t,i)=>{ov[t]=(getBase(t)+shiftsRef.current[i]/100).toFixed(5)});handleRunScenario(ov)}
 
   const sh=shiftsRef.current
@@ -430,7 +812,9 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
       <div style={{background:'rgba(240,160,32,0.06)',borderBottom:'1px solid rgba(240,160,32,0.15)',
         padding:'5px 16px',fontSize:'0.8125rem',color:'#F5C842',letterSpacing:'0.02em',flexShrink:0,
         fontFamily:"'IBM Plex Sans',var(--sans)"}}>
-        ⚠ Curve Scenario — changes are for analysis only and are not saved to Configurations.
+        {IS_SWPN
+          ? '⚠ Curve + Vol Scenario — joint rate & vol shock. Changes are for analysis only.'
+          : '⚠ Curve Scenario — changes are for analysis only and are not saved to Configurations.'}
       </div>
 
       {/* Two-column body */}
@@ -477,14 +861,14 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                     fontSize:'0.8125rem',fontWeight:500,border:'1px solid #1E1E1E',background:'transparent',color:'#666666'}}>
                   Reset
                 </button>
-                <button onClick={handleConfirm} disabled={!anyShift||confirmed||scenarioPricing}
+                <button onClick={handleConfirm} disabled={(!anyShift&&!unsavedVol)||confirmed||scenarioPricing}
                   style={{flex:2,padding:'7px',borderRadius:'3px',
                     cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',
                     fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',fontWeight:600,
                     border:anyShift&&!confirmed?'1px solid rgba(0,212,168,0.6)':'1px solid #1E1E1E',
                     background:anyShift&&!confirmed?'rgba(0,212,168,0.1)':'transparent',
                     color:anyShift&&!confirmed?'#00D4A8':'#666666'}}>
-                  {scenarioPricing?'Repricing...':(anyShift&&!confirmed)?'Confirm & reprice →':'Confirm shape'}
+                  {scenarioPricing?'Repricing...':(anyShift&&!confirmed)?(IS_SWPN?'Confirm & reprice (rate+vol) →':'Confirm & reprice →'):'Confirm shape'}
                 </button>
               </div>
               {anyShift&&!confirmed&&(
@@ -492,6 +876,44 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   background:'rgba(245,200,66,0.06)',border:'1px solid rgba(245,200,66,0.2)',
                   borderRadius:'3px',padding:'4px 8px'}}>
                   Shape unsaved — confirm to reprice · avg {avgBp>0?'+':''}{avgBp}bp
+                </div>
+              )}
+
+              {/* Vol scenario controls — swaption only */}
+              {IS_SWPN && (
+                <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid #1E1E1E'}}>
+                  <div style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',
+                    color:'#F5C842',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'8px',
+                    display:'flex',alignItems:'center',gap:'8px'}}>
+                    VOL SCENARIO
+                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'#444'}}>β=0 Normal SABR</span>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+                    {Object.entries(VOL_SCEN).map(([key,sc]) => (
+                      <button key={key} onClick={()=>applyVolScen(key)}
+                        style={{display:'flex',alignItems:'center',gap:'7px',padding:'5px 7px',
+                          border:'1px solid '+(volScenKey===key?(key==='base'?'rgba(0,212,168,.5)':'rgba(245,200,66,.5)'):'#1A1A1A'),
+                          borderRadius:'2px',cursor:'pointer',background:volScenKey===key?(key==='base'?'rgba(0,212,168,.07)':'rgba(245,200,66,.06)'):'transparent',
+                          color:volScenKey===key?(key==='base'?'#00D4A8':'#F5C842'):'#555',
+                          fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',
+                          transition:'all .12s',textAlign:'left'}}>
+                        <span style={{width:5,height:5,borderRadius:'50%',flexShrink:0,
+                          background:key==='base'?'#00D4A8':key==='dn15'?'#4A9EFF':key==='stress'?'#FF6B6B':'#F5C842',
+                          display:'inline-block'}}/>
+                        <span>{sc.l}</span>
+                        {volScenKey===key&&key!=='base'&&(
+                          <span style={{fontSize:'0.6875rem',color:'#555',marginLeft:'auto'}}>{sc.d.slice(0,24)}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {volScenKey!=='base'&&(
+                    <div style={{marginTop:'6px',fontSize:'0.75rem',color:'#F5C842',
+                      background:'rgba(245,200,66,0.04)',border:'1px solid rgba(245,200,66,0.15)',
+                      borderRadius:'2px',padding:'4px 8px',fontFamily:"'IBM Plex Mono',monospace"}}>
+                      σ base: {(parseFloat(swaptionVol)||85).toFixed(1)}bp → shocked: {getShockedVolBp(activeVolP).toFixed(1)}bp
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -560,7 +982,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
         </div>
 
         {/* RIGHT PANEL — chart + stats */}
-        <div style={{display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{display:'flex',flexDirection:'column',overflow:'hidden',flex:1,minHeight:0}}>
 
           {/* Stats cards */}
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'#1E1E1E',borderBottom:'1px solid #1E1E1E',flexShrink:0}}>
@@ -577,8 +999,10 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
             ))}
           </div>
 
-          {/* Chart */}
-          <div style={{flex:1,position:'relative',background:'#0C0C0C',overflow:'hidden',minHeight:'200px'}}>
+          {/* Charts container — rate + vol stacked */}
+          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
+          {/* Chart — rate curve */}
+          <div style={{flex:IS_SWPN?'0 0 52%':'1',position:'relative',background:'#0C0C0C',overflow:'hidden',minHeight:'160px'}}>
             <canvas ref={canvasRef} style={{display:'block',cursor:'crosshair'}}/>
             {dragTip&&(
               <div style={{position:'absolute',left:dragTip.x,top:dragTip.y,pointerEvents:'none',zIndex:10,
@@ -618,6 +1042,113 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           </div>
 
           {/* Impact analytics */}
+          {/* 3D Vol surface — swaption only, hover-activated orbit */}
+          {IS_SWPN && (
+            <div ref={volWrapRef}
+              style={{flex:'1 1 0',borderTop:'1px solid #1E1E1E',background:'#0A0A0E',
+                position:'relative',minHeight:'180px',overflow:'hidden'}}
+>
+              <div style={{position:'absolute',top:5,left:8,fontSize:'0.5rem',
+                color:'#F5C842',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
+                VOL SURFACE — β=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'#555',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
+              </div>
+              {/* Mode button — top right of vol pane */}
+              <div style={{position:'absolute',top:5,right:8,zIndex:3,display:'flex',gap:3}}>
+                <button
+                  onClick={()=>setVolMode('rotate')}
+                  style={{padding:'3px 8px',fontSize:'0.5rem',fontWeight:600,letterSpacing:'.08em',
+                    cursor:'pointer',borderRadius:'1px',fontFamily:"'IBM Plex Mono',monospace",
+                    border: volMode==='rotate'?'1px solid rgba(74,158,255,.5)':'1px solid #1a1c26',
+                    color: volMode==='rotate'?'#4A9EFF':'#444',
+                    background: volMode==='rotate'?'rgba(74,158,255,.07)':'transparent'}}>
+                  ⟳ ROTATE
+                </button>
+                <button
+                  onClick={()=>setVolMode(m=>m==='reshape'?'rotate':'reshape')}
+                  style={{padding:'3px 8px',fontSize:'0.5rem',fontWeight:600,letterSpacing:'.08em',
+                    cursor:'pointer',borderRadius:'1px',fontFamily:"'IBM Plex Mono',monospace",
+                    border: volMode==='reshape'?'1px solid rgba(245,200,66,.5)':'1px solid #1a1c26',
+                    color: volMode==='reshape'?'#F5C842':'#444',
+                    background: volMode==='reshape'?'rgba(245,200,66,.07)':'transparent'}}>
+                  ✦ {volMode==='reshape'?'RESHAPING...':'RESHAPE'}
+                </button>
+              </div>
+              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.4375rem',
+                color:'#1E2028',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
+                {volMode==='rotate'?'DRAG TO ROTATE · SCROLL TO ZOOM':'DRAG UP/DOWN TO DEFORM VOL · REPRICE FOR ΔP&L'}
+              </div>
+              {!isVolThreeReady && (
+                <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
+                  justifyContent:'center',color:'#2A2A2A',fontSize:'0.75rem',
+                  fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'.08em'}}>
+                  PRICE SWAPTION FIRST TO LOAD SURFACE
+                </div>
+              )}
+              {/* Legend */}
+              <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',
+                gap:4,pointerEvents:'none',zIndex:2}}>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <div style={{width:16,height:2,background:'rgba(0,212,168,.6)',borderRadius:1}}/>
+                  <span style={{fontSize:'0.4375rem',color:'rgba(0,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>BASE</span>
+                </div>
+                {volScenKey!=='base'&&(
+                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                    <div style={{width:16,height:2,background:'#F5C842',borderRadius:1}}/>
+                    <span style={{fontSize:'0.4375rem',color:'#F5C842',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>SHOCKED</span>
+                  </div>
+                )}
+              </div>
+              <canvas ref={volCanvasRef}
+                style={{display:'block',width:'100%',height:'100%',cursor:'grab'}}
+              />
+            </div>
+          )}
+          </div>{/* /charts container */}
+
+          {/* Joint P&L attribution — swaption only */}
+          {IS_SWPN && jointResult && (
+            <div style={{flexShrink:0,borderTop:'1px solid #1E1E1E',background:'#000'}}>
+              <div style={{padding:'6px 14px 4px',display:'flex',alignItems:'center',gap:'10px'}}>
+                <span style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'.08em',
+                  color:'#666',fontFamily:"'IBM Plex Sans',var(--sans)"}}>
+                  JOINT RATE + VOL P&L ATTRIBUTION
+                </span>
+                <span style={{fontSize:'0.6875rem',color:'#F5C842',
+                  fontFamily:"'IBM Plex Mono',monospace"}}>
+                  Vol: {jointResult.volScenLabel}
+                </span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1px',
+                background:'#1E1E1E',margin:'0 0 0 0'}}>
+                {[
+                  {l:'ΔNPV RATE ONLY',   v:jointResult.dRate,  c:'#4A9EFF',
+                   s:'rate shock · vol held'},
+                  {l:'ΔNPV VOL ONLY',    v:jointResult.dVol,   c:'#F5C842',
+                   s:`${jointResult.baseVol?.toFixed(1)}→${jointResult.shockVol?.toFixed(1)}bp`},
+                  {l:'ΔNPV JOINT',       v:jointResult.dJoint, c:'#00D4A8',
+                   s:'rate + vol combined'},
+                  {l:'ΔNPV CROSS-GAMMA', v:jointResult.dCross,
+                   c:Math.abs(jointResult.dCross)<500?'#666':'#FF6B6B',
+                   s:'joint − sum (non-linear)'},
+                ].map(({l,v,c,s}) => (
+                  <div key={l} style={{background:'#050505',padding:'8px 10px'}}>
+                    <div style={{fontSize:'0.6875rem',fontWeight:600,letterSpacing:'.08em',
+                      color:'#444',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:3}}>{l}</div>
+                    <div style={{fontSize:'1rem',fontWeight:700,color:v!=null?c:'#333',
+                      fontFamily:"'IBM Plex Mono',monospace",marginBottom:2}}>
+                      {v!=null ? (v>=0?'+':'-')+'$'+Math.abs(Math.round(v)).toLocaleString() : '—'}
+                    </div>
+                    <div style={{fontSize:'0.6875rem',color:'#333'}}>{s}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'#1A1A1A',
+                fontFamily:"'IBM Plex Mono',monospace"}}>
+                Cross-gamma = joint P&L − (rate P&L + vol P&L) · Non-zero = rate and vol move are correlated
+              </div>
+            </div>
+          )}
+
           {(scenarioBase||scenarioCalc)&&(
             <div style={{flexShrink:0,borderTop:'1px solid #1E1E1E',
               display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1px',background:'#1E1E1E'}}>
@@ -757,9 +1288,88 @@ function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply
 }
 
 
+// ── Swaption theta decay sparkline ───────────────────────────────────────────
+function SwaptionDecayChart({ result, expiry }) {
+  const ref = useRef(null)
+  const EXPIRY_Y = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
+  const T = EXPIRY_Y[expiry] || 1
+
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas || !result) return
+    const dpr = window.devicePixelRatio || 2
+    const W = canvas.parentElement.offsetWidth || 500
+    const H = 90
+    canvas.width = W * dpr; canvas.height = H * dpr
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px'
+    const ctx = canvas.getContext('2d')
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr, dpr)
+
+    const NPV = result.npv
+    const sigma = parseFloat(result.vol_bp||86.5) / 10000
+    const PAD = {l:8, r:60, t:10, b:20}
+    const CW = W - PAD.l - PAD.r
+    const CH = H - PAD.t - PAD.b
+
+    ctx.fillStyle = '#0D0F17'; ctx.fillRect(0,0,W,H)
+
+    // Generate decay curve using Bachelier time value approximation
+    // V(t) ≈ NPV × sqrt((T-t)/T) — approximate convex decay
+    const N = 80
+    const pts = []
+    for (let i = 0; i <= N; i++) {
+      const frac = i / N
+      const t_rem = T * (1 - frac)
+      const v = Math.abs(NPV) * Math.sqrt(t_rem / T)
+      pts.push({x: PAD.l + frac * CW, y: PAD.t + CH - (v / Math.abs(NPV)) * CH})
+    }
+
+    // Gradient fill
+    const grad = ctx.createLinearGradient(0, PAD.t, 0, H - PAD.b)
+    grad.addColorStop(0, 'rgba(74,158,255,0.15)')
+    grad.addColorStop(1, 'rgba(74,158,255,0)')
+    ctx.beginPath()
+    pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+    ctx.lineTo(pts[pts.length-1].x, H-PAD.b)
+    ctx.lineTo(pts[0].x, H-PAD.b)
+    ctx.closePath()
+    ctx.fillStyle = grad; ctx.fill()
+
+    // Glow
+    ctx.beginPath()
+    pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+    ctx.strokeStyle = 'rgba(74,158,255,0.2)'; ctx.lineWidth = 6; ctx.lineJoin='round'; ctx.stroke()
+
+    // Line
+    ctx.beginPath()
+    pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+    ctx.strokeStyle = '#4A9EFF'; ctx.lineWidth = 1.5; ctx.stroke()
+
+    // Today dot
+    ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 3, 0, Math.PI*2)
+    ctx.strokeStyle='rgba(74,158,255,.3)'; ctx.lineWidth=3; ctx.stroke()
+    ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 2, 0, Math.PI*2)
+    ctx.fillStyle='#4A9EFF'; ctx.fill()
+
+    // X labels
+    ctx.fillStyle='#555'; ctx.font='9px DM Mono,monospace'; ctx.textBaseline='top'
+    ctx.textAlign='left'; ctx.fillText('Today', PAD.l, H-PAD.b+3)
+    ctx.textAlign='right'; ctx.fillText('Expiry', W-PAD.r+4, H-PAD.b+3)
+
+    // Y label
+    ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillStyle='#4A9EFF'
+    ctx.fillText('$'+Math.round(Math.abs(NPV)).toLocaleString(), W-4, pts[0].y)
+    ctx.fillStyle='#555'
+    ctx.fillText('$0', W-4, H-PAD.b)
+
+  }, [result?.npv, expiry])
+
+  return <canvas ref={ref} style={{display:'block'}}/>
+}
+
 export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, windowId, trade: initialTrade }) {
   const { fetchTrades } = useTradesStore()
-  const { curves }      = useMarketDataStore()
+  const { curves, curveInterp } = useMarketDataStore()
   const dataLoaded    = useRef(false)
   const dragStart     = useRef(null)
   const analyticsRef  = useRef(null)
@@ -825,6 +1435,27 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   // SCENARIO tab state moved to <ScenarioTab /> component
   const [parRate,       setParRate]      = useState(null)
   const [notionalState, setNotionalState] = useState(10000000)
+  const [fraDay,         setFraDay]         = useState('ACT/360')
+  const [index2,         setIndex2]         = useState('EFFR')
+  const [floatResetFreq2,setFloatResetFreq2] = useState('DAILY')
+  const [floatPayFreq2,  setFloatPayFreq2]   = useState('ANNUAL')
+  const [floatDc2,       setFloatDc2]        = useState('ACT/360')
+  // ── Swaption state ────────────────────────────────────────────────────────
+  const [swaptionExpiry,       setSwaptionExpiry]       = useState('1Y')
+  const [swaptionVol,          setSwaptionVol]          = useState('86.5')
+  const [swaptionStrike,       setSwaptionStrike]       = useState('')    // blank = ATM
+  const [exerciseType,         setExerciseType]         = useState('EUROPEAN')  // EUROPEAN | BERMUDAN | AMERICAN
+  const [bermudanFirst,        setBermudanFirst]        = useState('')
+  const [bermudanLast,         setBermudanLast]         = useState('')
+  const [bermudanFreq,         setBermudanFreq]         = useState('3M')
+  const [feeAmount,            setFeeAmount]            = useState('')
+  const [feeAmountType,        setFeeAmountType]        = useState('BP')        // BP | $
+  const [feeSettleDate,        setFeeSettleDate]        = useState('')
+  const [showFeeSchedule,      setShowFeeSchedule]      = useState(false)
+  const [feeSchedule,          setFeeSchedule]          = useState([{date:'',amount:''}])
+  const [swaptionResult,       setSwaptionResult]       = useState(null)
+  const [swaptionPricing,      setSwaptionPricing]      = useState(false)
+  const [swaptionErr,          setSwaptionErr]          = useState('')
   const [zcToggle,      setZcToggle]      = useState(false)
   const [rateSchedule,  setRateSchedule]  = useState([])
   const [notionalSchedule,setNotionalSchedule] = useState([])
@@ -1016,6 +1647,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   // Populate fixed rate from market data store when dates are set
   // For vanilla OIS: the market quote IS the par rate by definition
   useEffect(() => {
+    if (isViewMode) return
+    if (inst === 'FRA') return  // FRA has no par rate — forward rate shown after pricing
     if (!effDate || !matDate) return
     if (rateRef.current && rateRef.current.dataset.userEdited) return
     const tenorY = (new Date(matDate) - new Date(effDate)) / (365.25 * 24 * 3600 * 1000)
@@ -1094,6 +1727,55 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     const payLag      = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
     const rateSchedDecimal = rateSchedule.filter(r=>r.date&&r.rate!=='').map(r=>({date:r.date,rate:parseFloat(r.rate)/100}))
     const spreadSchedDecimal = spreadSchedule.filter(r=>r.date&&r.spread_bps!=='').map(r=>({date:r.date,spread:parseFloat(r.spread_bps)/10000}))
+
+    // ── FRA: single settlement leg ──────────────────────────────────────────
+    if (inst === 'FRA') {
+      return [{
+        id: crypto.randomUUID(), trade_id: tradeId,
+        leg_ref: 'FRA-1', leg_seq: 1, leg_type: 'FRA',
+        direction: dir, currency: ccy, notional, notional_type: 'BULLET',
+        effective_date: effDate, maturity_date: matDate,
+        day_count: fraDay || 'ACT/360',
+        payment_frequency: 'ANNUAL', bdc: 'MOD_FOLLOWING',
+        stub_type: 'SHORT_FRONT', payment_lag: 0,
+        fixed_rate: fixedRate,
+        discount_curve_id: curveId, forecast_curve_id: forecastId,
+        ois_compounding: null,
+      }]
+    }
+
+    // ── BASIS SWAP: two float legs ─────────────────────────────────────────
+    if (struct === 'BASIS') {
+      const forecastId2 = INDEX_CURVE[index2] || curveId
+      return [
+        {
+          id:crypto.randomUUID(), trade_id:tradeId, leg_ref:'FLOAT-1', leg_seq:1, leg_type:'FLOAT',
+          direction:dir, currency:ccy, notional, notional_type:'BULLET',
+          effective_date:effDate, maturity_date:matDate,
+          day_count:floatDc, payment_frequency:floatPayFreq,
+          reset_frequency:floatResetFreq,
+          bdc:floatBdc, payment_calendar:floatCal,
+          stub_type:'SHORT_FRONT', payment_lag:payLag,
+          fixed_rate:0, spread:0, leverage:1.0,
+          discount_curve_id:curveId, forecast_curve_id:forecastId,
+          ois_compounding:null,
+        },
+        {
+          id:crypto.randomUUID(), trade_id:tradeId, leg_ref:'FLOAT-2', leg_seq:2, leg_type:'FLOAT',
+          direction:dir==='PAY'?'RECEIVE':'PAY',
+          currency:ccy, notional, notional_type:'BULLET',
+          effective_date:effDate, maturity_date:matDate,
+          day_count:floatDc2, payment_frequency:floatPayFreq2,
+          reset_frequency:floatResetFreq2,
+          bdc:floatBdc, payment_calendar:floatCal,
+          stub_type:'SHORT_FRONT', payment_lag:payLag,
+          fixed_rate:0, spread:isNaN(spreadVal)?0:spreadVal, leverage:1.0,
+          discount_curve_id:curveId, forecast_curve_id:forecastId2,
+          ois_compounding:null,
+        },
+      ]
+    }
+
     const fixedLeg = {
       id:crypto.randomUUID(), trade_id:tradeId, leg_ref:'FIXED-1', leg_seq:1,
       leg_type: isZC ? 'ZERO_COUPON' : 'FIXED',
@@ -1136,7 +1818,20 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       own_legal_entity_id:ownEntityId||null, counterparty_id:cpId||null,
       notional, notional_ccy:ccy, trade_date:tdate, effective_date:effDate, maturity_date:matDate,
       desk:desk||null, book:book||null,
-      terms:{ direction:dir, float_direction:floatDir,
+      terms: inst === 'FRA' ? {
+        direction: dir,
+        fixed_rate: isNaN(rateVal) ? null : rateVal/100,
+        float_index: index,
+        fra_day_count: fraDay || 'ACT/360',
+      } : struct === 'BASIS' ? {
+        direction: dir,
+        index1: index, index2: index2,
+        spread: isNaN(parseFloat(spreadRef.current?.value)) ? 0 : parseFloat(spreadRef.current.value)/10000,
+        float_reset_freq: floatResetFreq, float_pay_freq: floatPayFreq,
+        float_day_count: floatDc, float_bdc: floatBdc,
+        float_reset_freq2: floatResetFreq2, float_pay_freq2: floatPayFreq2,
+        float_day_count2: floatDc2,
+      } : { direction:dir, float_direction:floatDir,
         fixed_rate:isNaN(rateVal)?null:rateVal/100,
         fixed_pay_freq:fixedPayFreq, fixed_day_count:fixedDc, fixed_bdc:fixedBdc, fixed_calendar:fixedCal,
         float_index:index, float_reset_freq:floatResetFreq, float_pay_freq:floatPayFreq,
@@ -1153,7 +1848,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     const curveId = CCY_CURVE[ccy]||'USD_SOFR'
     const vd = valDate
     const priceRes = await fetch(API+'/price',{method:'POST',headers:h,
-      body:JSON.stringify({trade_id:tradeId,valuation_date:vd,curves:[{curve_id:curveId,quotes:[]}]})})
+      body:JSON.stringify({trade_id:tradeId,valuation_date:vd,curves:[curveObj(curveId)]})})
     if (!priceRes.ok) throw new Error('Pricing failed')
     return { trade, priceData: await priceRes.json() }
   }
@@ -1164,7 +1859,9 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     if (!raw && !notionalState) throw new Error('Notional is required.')
     if (!effDate || !matDate) throw new Error('Dates are required.')
     const notional   = parseFloat(raw) || notionalState
-    const rateVal    = parRate || parseFloat(rateRef.current ? rateRef.current.value : '0')
+    const rateVal    = inst === 'FRA'
+      ? (parseFloat(rateRef.current ? rateRef.current.value : '0') || 0)
+      : (parRate || parseFloat(rateRef.current ? rateRef.current.value : '0'))
     const spreadVal  = parseFloat(spreadRef.current ? spreadRef.current.value : '0') / 10000
     const leverageVal= parseFloat(leverageRef.current ? leverageRef.current.value : '1.0')
     const payLag     = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
@@ -1177,40 +1874,84 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     const session    = await getSession()
     const h = { Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' }
 
-    const legs = [
-      {
-        leg_ref:'FIXED-1', leg_seq:1, leg_type: isZC ? 'ZERO_COUPON' : 'FIXED',
-        direction:dir, currency:ccy, notional,
-        effective_date:effDate, maturity_date:matDate,
-        day_count:fixedDc, payment_frequency:fixedPayFreq,
-        bdc:fixedBdc, payment_lag:payLag,
+    // ── FRA: single settlement cashflow leg ──────────────────────────────────
+    let legs
+    if (inst === 'FRA') {
+      legs = [{
+        leg_ref: 'FRA-1', leg_seq: 1, leg_type: 'FRA',
+        direction: dir, currency: ccy, notional,
+        effective_date: effDate, maturity_date: matDate,
+        day_count: fraDay || 'ACT/360',
+        payment_frequency: 'ANNUAL',
+        bdc: 'MOD_FOLLOWING', payment_lag: 0,
         fixed_rate: isNaN(rateVal) ? 0 : rateVal / 100,
-        fixed_rate_schedule: rateSchedPrev.length > 0 ? rateSchedPrev : null,
-        discount_curve_id:curveId, forecast_curve_id:null,
-        ois_compounding:null,
-      },
-      {
-        leg_ref:'FLOAT-1', leg_seq:2, leg_type:'FLOAT',
-        direction: dir==='PAY'?'RECEIVE':'PAY',
-        currency:ccy, notional,
-        effective_date:effDate, maturity_date:matDate,
-        day_count:floatDc, payment_frequency:floatPayFreq,
-        reset_frequency: isOIS ? 'DAILY' : floatResetFreq,
-        bdc:floatBdc, payment_lag:payLag,
-        fixed_rate:0,
-        spread: isNaN(spreadVal) ? 0 : spreadVal,
-        leverage: isNaN(leverageVal) ? 1.0 : leverageVal,
-        discount_curve_id:curveId, forecast_curve_id:forecastId,
-        ois_compounding: isOIS ? 'COMPOUNDING' : null,
-      },
-    ]
+        discount_curve_id: curveId,
+        forecast_curve_id: forecastId,
+      }]
+    } else if (struct === 'BASIS') {
+      // ── BASIS SWAP: two float legs, different indices ────────────────────
+      const forecastId2 = INDEX_CURVE[index2] || curveId
+      legs = [
+        {
+          leg_ref:'FLOAT-1', leg_seq:1, leg_type:'FLOAT',
+          direction:dir, currency:ccy, notional,
+          effective_date:effDate, maturity_date:matDate,
+          day_count:floatDc, payment_frequency:floatPayFreq,
+          reset_frequency:floatResetFreq,
+          bdc:floatBdc, payment_lag:payLag,
+          fixed_rate:0, spread:0, leverage:1.0,
+          discount_curve_id:curveId, forecast_curve_id:forecastId,
+          ois_compounding:null,
+        },
+        {
+          leg_ref:'FLOAT-2', leg_seq:2, leg_type:'FLOAT',
+          direction:dir==='PAY'?'RECEIVE':'PAY',
+          currency:ccy, notional,
+          effective_date:effDate, maturity_date:matDate,
+          day_count:floatDc2, payment_frequency:floatPayFreq2,
+          reset_frequency:floatResetFreq2,
+          bdc:floatBdc, payment_lag:payLag,
+          fixed_rate:0, spread:isNaN(spreadVal)?0:spreadVal, leverage:1.0,
+          discount_curve_id:curveId, forecast_curve_id:forecastId2,
+          ois_compounding:null,
+        },
+      ]
+    } else {
+      legs = [
+        {
+          leg_ref:'FIXED-1', leg_seq:1, leg_type: isZC ? 'ZERO_COUPON' : 'FIXED',
+          direction:dir, currency:ccy, notional,
+          effective_date:effDate, maturity_date:matDate,
+          day_count:fixedDc, payment_frequency:fixedPayFreq,
+          bdc:fixedBdc, payment_lag:payLag,
+          fixed_rate: isNaN(rateVal) ? 0 : rateVal / 100,
+          fixed_rate_schedule: rateSchedPrev.length > 0 ? rateSchedPrev : null,
+          discount_curve_id:curveId, forecast_curve_id:null,
+          ois_compounding:null,
+        },
+        {
+          leg_ref:'FLOAT-1', leg_seq:2, leg_type:'FLOAT',
+          direction: dir==='PAY'?'RECEIVE':'PAY',
+          currency:ccy, notional,
+          effective_date:effDate, maturity_date:matDate,
+          day_count:floatDc, payment_frequency:floatPayFreq,
+          reset_frequency: isOIS ? 'DAILY' : floatResetFreq,
+          bdc:floatBdc, payment_lag:payLag,
+          fixed_rate:0,
+          spread: isNaN(spreadVal) ? 0 : spreadVal,
+          leverage: isNaN(leverageVal) ? 1.0 : leverageVal,
+          discount_curve_id:curveId, forecast_curve_id:forecastId,
+          ois_compounding: isOIS ? 'COMPOUNDING' : null,
+        },
+      ]
+    }
 
     const res = await fetch(API + '/price/preview', {
       method:'POST', headers:h,
       body: JSON.stringify({
         legs,
         valuation_date: valDate,
-        curves: [{ curve_id: curveId, quotes: [] }],
+        curves: [curveObj(curveId)],
       }),
     })
     if (!res.ok) {
@@ -1228,7 +1969,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       method:'POST', headers:h, body: JSON.stringify({
         trade_id: viewTrade.id,
         valuation_date: valDate,
-        curves: [{ curve_id: curveId, quotes: [] }],
+        curves: [curveObj(curveId)],
       }),
     })
     if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(e.detail||'Pricing failed') }
@@ -1252,6 +1993,161 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     }
     finally { setPricing(false) }
   }
+  // Helper: build curve input with selected interpolation method
+  const curveObj = (curveId, quotes = []) => ({
+    curve_id: curveId,
+    quotes,
+    interp_method: curveInterp?.[curveId] || 'LogLinearDiscount',
+  })
+
+  const handlePriceSwaption = async () => {
+    setSwaptionPricing(true); setSwaptionErr(''); setSwaptionResult(null)
+    try {
+      const session = await getSession()
+      const h = { Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' }
+      const notional = parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,'')) || 10000000
+      // Strike: use dedicated swaptionStrike state — blank means ATM (backend computes forward)
+      const strike = swaptionStrike.trim() ? parseFloat(swaptionStrike) / 100 : null
+      const curveId  = CCY_CURVE[ccy] || 'USD_SOFR'
+      // is_payer: PAY FIXED = Payer swaption (right to enter as fixed payer)
+      const is_payer = dir === 'PAY'
+      // Expiry in years
+      const EXPIRY_Y = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
+      const expiry_y = EXPIRY_Y[swaptionExpiry] || 1.0
+      // Underlying tenor from main tenor selector
+      const TENOR_Y  = {'1Y':1,'2Y':2,'3Y':3,'4Y':4,'5Y':5,'6Y':6,'7Y':7,'8Y':8,'9Y':9,'10Y':10,'12Y':12,'15Y':15,'20Y':20,'25Y':25,'30Y':30}
+      const tenor_y  = TENOR_Y[tenor] || 5.0
+      // Fee economics
+      const feeAmt = feeAmount ? parseFloat(feeAmount) : 0
+      const feeDlr = feeAmountType === 'BP' ? (feeAmt / 10000) * notional : feeAmt
+      // Forward swap dates: shift effDate/matDate forward by expiry_y years
+      // These carry the correct T+2 spot lag from the schedule calculation
+      const fwdEffDate = (() => {
+        const d = new Date(effDate)
+        d.setDate(d.getDate() + Math.round(expiry_y * 365.25))
+        return d.toISOString().slice(0,10)
+      })()
+      const fwdMatDate = (() => {
+        const d = new Date(matDate)
+        d.setDate(d.getDate() + Math.round(expiry_y * 365.25))
+        return d.toISOString().slice(0,10)
+      })()
+
+      const res = await fetch(API + '/api/price/swaption', {
+        method: 'POST', headers: h,
+        body: JSON.stringify({
+          notional, expiry_y, tenor_y,
+          strike: strike || null,
+          vol_bp: parseFloat(swaptionVol) || 86.5,
+          is_payer,
+          pay_freq_y: 1.0,
+          valuation_date: valDate,
+          effective_date: fwdEffDate,
+          maturity_date:  fwdMatDate,
+          curve_id: curveId,
+          exercise_type: exerciseType,
+        })
+      })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.detail || 'Swaption pricing failed')
+      setSwaptionResult({...d, fee_usd: feeDlr, pnl: d.npv - feeDlr})
+
+      // ── Generate forward swap cashflow schedule ─────────────────────────────
+      // The swaption delivers into a forward-starting swap on exercise.
+      // Call /cashflows/generate with swaption_expiry_y to shift leg dates forward.
+      // This populates the CASHFLOWS tab with the underlying swap's period schedule.
+      if (viewTrade?.id) {
+        try {
+          const cfRes = await fetch(API + '/cashflows/generate', {
+            method: 'POST', headers: h,
+            body: JSON.stringify({
+              trade_id: viewTrade.id,
+              valuation_date: localDate(),
+              curves: [curveObj(curveId)],
+              swaption_expiry_y: expiry_y,
+            }),
+          })
+          if (cfRes.ok) {
+            // Re-fetch the price to get legs with cashflows populated
+            const priceRes = await fetch(API + '/price', {
+              method: 'POST', headers: h,
+              body: JSON.stringify({
+                trade_id: viewTrade.id,
+                valuation_date: localDate(),
+                curves: [curveObj(curveId)],
+              }),
+            })
+            if (priceRes.ok) {
+              const priceData = await priceRes.json()
+              // Merge swaption analytics with IRS leg cashflows
+              setAnalytics({
+                ...priceData,
+                npv: d.npv,
+                ir01: d.ir01,
+                ir01_disc: d.ir01,
+                theta: d.theta,
+                _swaption_cashflows: true,
+              })
+            } else {
+              setAnalytics({ npv: d.npv, ir01: d.ir01, ir01_disc: d.ir01, theta: d.theta, legs: [] })
+            }
+          } else {
+            setAnalytics({ npv: d.npv, ir01: d.ir01, ir01_disc: d.ir01, theta: d.theta, legs: [] })
+          }
+        } catch {
+          setAnalytics({ npv: d.npv, ir01: d.ir01, ir01_disc: d.ir01, theta: d.theta, legs: [] })
+        }
+      } else {
+        // ── Pre-trade: build forward swap legs and call /price/preview ────────
+        // Shift effective and maturity dates forward by expiry_y years
+        try {
+          const fwdEff2 = new Date(effDate); fwdEff2.setDate(fwdEff2.getDate() + Math.round(expiry_y * 365.25))
+          const fwdMat2 = new Date(matDate); fwdMat2.setDate(fwdMat2.getDate() + Math.round(expiry_y * 365.25))
+          const fmt = dt => dt.toISOString().slice(0,10)
+
+          const K = strike || d.forward_rate  // ATM strike from swaption result
+          const fwdLegs = [
+            { leg_ref:'FIXED-1', leg_seq:1, leg_type:'FIXED',
+              direction: dir, currency: ccy, notional,
+              effective_date: fmt(fwdEff2), maturity_date: fmt(fwdMat2),
+              day_count: fixedDc, payment_frequency: fixedPayFreq,
+              bdc: fixedBdc, payment_lag: 0,
+              fixed_rate: K,
+              discount_curve_id: curveId, forecast_curve_id: null },
+            { leg_ref:'FLOAT-1', leg_seq:2, leg_type:'FLOAT',
+              direction: dir==='PAY'?'RECEIVE':'PAY', currency: ccy, notional,
+              effective_date: fmt(fwdEff2), maturity_date: fmt(fwdMat2),
+              day_count: floatDc, payment_frequency: floatPayFreq,
+              reset_frequency: 'DAILY', bdc: floatBdc, payment_lag: 0,
+              fixed_rate: 0, spread: 0, leverage: 1.0,
+              discount_curve_id: curveId, forecast_curve_id: curveId,
+              ois_compounding: 'COMPOUNDING' },
+          ]
+          const previewRes = await fetch(API + '/price/preview', {
+            method: 'POST', headers: h,
+            body: JSON.stringify({ legs: fwdLegs, valuation_date: valDate, curves: [curveObj(curveId)] }),
+          })
+          if (previewRes.ok) {
+            const previewData = await previewRes.json()
+            setAnalytics({
+              ...previewData,
+              npv: d.npv,
+              ir01: d.ir01,
+              ir01_disc: d.ir01,
+              theta: d.theta,
+              _swaption_cashflows: true,
+            })
+          } else {
+            setAnalytics({ npv: d.npv, ir01: d.ir01, ir01_disc: d.ir01, theta: d.theta, legs: [] })
+          }
+        } catch {
+          setAnalytics({ npv: d.npv, ir01: d.ir01, ir01_disc: d.ir01, theta: d.theta, legs: [] })
+        }
+      }
+    } catch(e) { setSwaptionErr(e.message) }
+    finally { setSwaptionPricing(false) }
+  }
+
   const handlePriceXva = async () => {
     setXvaPricing(true); setXvaErr(null)
     try {
@@ -1264,6 +2160,23 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
         headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
         body: JSON.stringify(Object.assign(
           { notional:isNaN(n)?10000000:n, maturity_y:Math.max(0.5,matY), fixed_rate:isNaN(fr)?0.0365:fr, paths:2000 },
+          // Swaption-specific fields — add expiry/vol/direction for 2-phase EE
+          inst === 'IR_SWAPTION' ? (() => {
+            const EXPIRY_Y = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
+            const TENOR_Y  = {'1Y':1,'2Y':2,'3Y':3,'4Y':4,'5Y':5,'6Y':6,'7Y':7,'8Y':8,'9Y':9,'10Y':10,'12Y':12,'15Y':15,'20Y':20,'25Y':25,'30Y':30}
+            return {
+              instrument_type:    'IR_SWAPTION',
+              swaption_expiry_y:  EXPIRY_Y[swaptionExpiry] || 1.0,
+              swaption_tenor_y:   TENOR_Y[tenor] || 5.0,
+              swaption_vol_bp:    parseFloat(swaptionVol) || 84.0,
+              swaption_is_payer:  dir === 'PAY',
+              direction:          dir === 'PAY' ? 'PAY' : 'RECEIVE',
+              // Override maturity to full swaption life (expiry + tenor)
+              maturity_y: (EXPIRY_Y[swaptionExpiry]||1) + (TENOR_Y[tenor]||5),
+              // Strike: ATM forward if blank
+              fixed_rate: swaptionResult?.forward_rate || isNaN(fr) ? 0.0365 : fr,
+            }
+          })() : {},
           typeof xvaParamsRef.current === 'function' ? xvaParamsRef.current() : (xvaParamsRef.current || {})
         ))
       })
@@ -1421,10 +2334,10 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
           </span>
         </div>
         <div className='tbw-tabs tbw-no-drag'>
-          {[{id:'main',label:bookedTrade?'✓ TRADE':'TRADE'},{id:'details',label:'DETAILS'},{id:'cashflows',label:'CASHFLOWS'},{id:'price',label:'XVA'},{id:'scenario',label:'CURVE SCENARIO'},{id:'confirm',label:'⯁ CONFIRM'}].map(t=>(
+          {[{id:'main',label:bookedTrade?'✓ TRADE':'TRADE'},...(inst==='IR_SWAPTION'?[{id:'options',label:'OPTIONS ANALYTICS'}]:[]),{id:'details',label:'DETAILS'},{id:'cashflows',label:'CASHFLOWS'},{id:'price',label:'XVA'},{id:'scenario',label:'CURVE SCENARIO'},{id:'confirm',label:'⯁ CONFIRM'}].map(t=>(
             <button key={t.id} className={'tbw-tab '+(activeTab===t.id?'active':'')}
               onClick={()=>setActiveTab(t.id)}
-              style={t.id==='main'&&bookedTrade?{color:'var(--accent)'}:{}}
+              style={t.id==='main'&&bookedTrade?{color:'var(--accent)'}:t.id==='options'?{color:'var(--blue)',borderBottomColor:activeTab==='options'?'var(--blue)':'transparent'}:{}}
             >{t.label}</button>
           ))}
         </div>
@@ -1441,6 +2354,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             notionalSchedule={notionalSchedule} setNotionalSchedule={setNotionalSchedule}
             spreadSchedule={spreadSchedule} setSpreadSchedule={setSpreadSchedule}
             deriveStructLabel={deriveStructLabel} getSession={getSession}
+            index2={index2} floatDc2={floatDc2} floatPayFreq2={floatPayFreq2} floatResetFreq2={floatResetFreq2}
+            inst={inst}
+            feeSchedule={feeSchedule} setFeeSchedule={setFeeSchedule}
+            feeAmount={feeAmount} feeAmountType={feeAmountType} feeSettleDate={feeSettleDate}
+            exerciseType={exerciseType}
           />
         )}
         {activeTab==='scenario' && (
@@ -1464,10 +2382,236 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             floatDc={floatDc}
             floatBdc={floatBdc}
             getSession={getSession}
+            inst={inst}
+            swaptionExpiry={swaptionExpiry}
+            swaptionTenor={tenor}
+            swaptionVol={swaptionVol}
+            swaptionResult={swaptionResult}
           />
         )}
-        <div className='tbw-body tbw-no-drag' style={{display:activeTab==='price'?'flex':'none',flexDirection:'column',overflow:'hidden'}}><XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} getSession={getSession} analytics={analytics} parRate={parRate} xvaParamsRef={xvaParamsRef} onSimResult={(d)=>{setXvaResult(d);setXvaApplied(false)}} direction={dir}/></div>
+        <div className='tbw-body tbw-no-drag' style={{display:activeTab==='price'?'flex':'none',flexDirection:'column',overflow:'hidden'}}>
+          {/* Swaption XVA context banner */}
+          {inst==='IR_SWAPTION' && (
+            <div style={{
+              background:'rgba(74,158,255,0.05)',border:'1px solid rgba(74,158,255,0.2)',
+              borderRadius:'2px',margin:'8px 12px 0',padding:'7px 12px',
+              display:'flex',flexDirection:'column',gap:'3px',flexShrink:0,
+            }}>
+              <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
+                <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.12em',
+                  color:'var(--blue)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                  SWAPTION XVA — 2-PHASE EE
+                </span>
+                <span style={{fontSize:'0.6875rem',padding:'1px 6px',borderRadius:'2px',
+                  background:'rgba(74,158,255,0.1)',border:'1px solid rgba(74,158,255,0.3)',
+                  color:'var(--blue)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                  {swaptionExpiry}×{tenor} · {dir==='PAY'?'Payer':'Receiver'}
+                </span>
+                <span style={{fontSize:'0.6875rem',color:'var(--text-dim)',
+                  fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                  Andersen-Piterbarg approximation · HW1F paths · {swaptionVol}bp Normal Vol
+                </span>
+              </div>
+              <div style={{fontSize:'0.75rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",lineHeight:1.6}}>
+                <span style={{color:'var(--accent)'}}>Pre-expiry (0→{swaptionExpiry}):</span>
+                {' '}EE = E[Bachelier(F(t),K,T_exp−t,σ)] on HW1F paths — option always ≥0, no negative exposure.
+                &nbsp;·&nbsp;
+                <span style={{color:'var(--blue)'}}>Post-expiry ({swaptionExpiry}→{swaptionExpiry}+{tenor}):</span>
+                {' '}EE = E[max(IRS NPV,0) × 1(F(T_exp){dir==='PAY'?'>':'<'}K)] — exercised paths only.
+              </div>
+            </div>
+          )}
+          <XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} getSession={getSession} analytics={analytics} parRate={parRate} xvaParamsRef={xvaParamsRef} onSimResult={(d)=>{setXvaResult(d);setXvaApplied(false)}} direction={dir} instrumentType={inst} swaptionExpiry={swaptionExpiry} swaptionTenor={tenor} swaptionVol={swaptionVol} swaptionResult={swaptionResult}/>
+        </div>
         {activeTab==='confirm' && <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Cashflow fingerprint · On-chain signing</div><div className='tbw-stub-sprint'>SPRINT 6A</div></div></div>}
+
+        <div className='tbw-body tbw-no-drag' style={{display:activeTab==='price'?'flex':'none',flexDirection:'column',overflow:'hidden'}}>
+          {/* Swaption XVA context banner */}
+          {inst==='IR_SWAPTION' && (
+            <div style={{
+              background:'rgba(74,158,255,0.05)',border:'1px solid rgba(74,158,255,0.2)',
+              borderRadius:'2px',margin:'8px 12px 0',padding:'7px 12px',
+              display:'flex',flexDirection:'column',gap:'3px',flexShrink:0,
+            }}>
+              <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap'}}>
+                <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.12em',
+                  color:'var(--blue)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                  SWAPTION XVA — 2-PHASE EE
+                </span>
+                <span style={{fontSize:'0.6875rem',padding:'1px 6px',borderRadius:'2px',
+                  background:'rgba(74,158,255,0.1)',border:'1px solid rgba(74,158,255,0.3)',
+                  color:'var(--blue)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                  {swaptionExpiry}×{tenor} · {dir==='PAY'?'Payer':'Receiver'}
+                </span>
+                <span style={{fontSize:'0.6875rem',color:'var(--text-dim)',
+                  fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                  Andersen-Piterbarg approximation · HW1F paths · {swaptionVol}bp Normal Vol
+                </span>
+              </div>
+              <div style={{fontSize:'0.75rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",lineHeight:1.6}}>
+                <span style={{color:'var(--accent)'}}>Pre-expiry (0→{swaptionExpiry}):</span>
+                {' '}EE = E[Bachelier(F(t),K,T_exp−t,σ)] on HW1F paths — option always ≥0, no negative exposure.
+                &nbsp;·&nbsp;
+                <span style={{color:'var(--blue)'}}>Post-expiry ({swaptionExpiry}→{swaptionExpiry}+{tenor}):</span>
+                {' '}EE = E[max(IRS NPV,0) × 1(F(T_exp){dir==='PAY'?'>':'<'}K)] — exercised paths only.
+              </div>
+            </div>
+          )}
+          <XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} getSession={getSession} analytics={analytics} parRate={parRate} xvaParamsRef={xvaParamsRef} onSimResult={(d)=>{setXvaResult(d);setXvaApplied(false)}} direction={dir} instrumentType={inst} swaptionExpiry={swaptionExpiry} swaptionTenor={tenor} swaptionVol={swaptionVol} swaptionResult={swaptionResult}/>
+        </div>
+        {activeTab==='confirm' && <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Cashflow fingerprint · On-chain signing</div><div className='tbw-stub-sprint'>SPRINT 6A</div></div></div>}
+
+        {/* ── OPTIONS ANALYTICS TAB ─────────────────────────────────── */}
+        {activeTab==='options' && (
+          <div className='tbw-no-drag' style={{flex:1,overflowY:'auto',padding:'10px 16px',display:'flex',flexDirection:'column',gap:'10px'}}>
+            {!swaptionResult ? (
+              <div style={{fontSize:'0.875rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",padding:'12px 0'}}>
+                Price the swaption first — go to TRADE tab and click ▶ PRICE.
+              </div>
+            ) : (
+              <>
+                {/* Identity strip */}
+                <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
+                  <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.08em',padding:'2px 7px',borderRadius:'2px',
+                    background:'rgba(74,158,255,.1)',color:'var(--blue)',border:'1px solid rgba(74,158,255,.3)'}}>
+                    {exerciseType} · {swaptionExpiry}×{tenor}
+                  </span>
+                  <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
+                    background:dir==='PAY'?'rgba(255,107,107,.1)':'rgba(0,212,168,.1)',
+                    color:dir==='PAY'?'var(--red)':'var(--accent)',
+                    border:`1px solid ${dir==='PAY'?'rgba(255,107,107,.3)':'rgba(0,212,168,.3)'}`}}>
+                    {dir==='PAY'?'PAYER':'RECEIVER'}
+                  </span>
+                  <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
+                    background:'rgba(0,212,168,.06)',color:'var(--accent)',border:'1px solid rgba(0,212,168,.2)'}}>
+                    PHYSICAL SETTLEMENT
+                  </span>
+                  <span style={{fontSize:'0.6875rem',padding:'2px 7px',borderRadius:'2px',color:'var(--text-dim)',
+                    background:'rgba(255,255,255,.03)',border:'1px solid var(--border)'}}>
+                    Normal vol {swaptionVol}bp
+                  </span>
+                  <span style={{marginLeft:'auto',fontSize:'0.6875rem',color:'var(--text-dim)',letterSpacing:'.06em'}}>
+                    USD_SOFR · VAL {valDate}
+                  </span>
+                </div>
+
+                {/* Primary option analytics */}
+                <div>
+                  <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--text-dim)',marginBottom:'6px'}}>OPTION ANALYTICS</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'1px',background:'var(--border)',border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden'}}>
+                    {[
+                      {l:'OPTION NPV',    v:swaptionResult.npv,           color:'var(--accent)', fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${(Math.abs(swaptionResult.npv)/parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))*100).toFixed(3)}% of notional`},
+                      {l:'VEGA / 1bp',    v:swaptionResult.vega,          color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${swaptionResult.vega_pct_premium?.toFixed(2)}% of premium`},
+                      {l:'IR01 (DELTA)',  v:swaptionResult.ir01,          color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`N(d) = ${swaptionResult.n_d?.toFixed(4)}`},
+                      {l:'THETA / day',   v:swaptionResult.theta,         color:'var(--amber)',  fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${swaptionResult.theta!=null?(swaptionResult.theta/swaptionResult.npv*100).toFixed(3):'—'}% / day`},
+                      {l:'FORWARD RATE',  v:swaptionResult.forward_pct,   color:'var(--accent)', fmt:v=>v.toFixed(4)+'%', sub:'ATM strike'},
+                      {l:'MONEYNESS',     v:swaptionResult.moneyness_bp,  color:'var(--text-dim)', fmt:v=>`${Math.abs(v).toFixed(1)}bp ${v>=0?'ITM':'OTM'}`, sub:`d = ${swaptionResult.d?.toFixed(3)}`},
+                    ].map(({l,v,color,fmt,sub})=>(
+                      <div key={l} style={{background:'var(--bg)',padding:'8px 10px'}}>
+                        <div style={{fontSize:'0.625rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',marginBottom:'3px'}}>{l}</div>
+                        <div style={{fontSize:'0.9375rem',fontWeight:700,color,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{v!=null?fmt(v):'—'}</div>
+                        <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',marginTop:'2px',opacity:.7}}>{sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Second-order sensitivities */}
+                <div>
+                  <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--text-dim)',marginBottom:'6px',display:'flex',alignItems:'center',gap:'8px'}}>
+                    SECOND-ORDER SENSITIVITIES
+                    <span style={{fontSize:'0.6875rem',color:'var(--blue)',fontWeight:400,letterSpacing:'.04em'}}>hover each for definition</span>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'1px',background:'rgba(74,158,255,.15)',border:'1px solid rgba(74,158,255,.2)',borderRadius:'2px',overflow:'hidden'}}>
+                    {[
+                      {l:'VOLGA / (1bp)²',   v:swaptionResult.volga,             color:'var(--blue)',    fmt:v=>(v>=0?'+':'')+' $'+Math.abs(v).toFixed(2), sub:'vol convexity',    tip:'∂²V/∂σ². ATM=0, grows with moneyness. Long on every long option.'},
+                      {l:'VANNA / (bp×bp)',   v:swaptionResult.vanna,             color:'var(--blue)',    fmt:v=>(v>=0?'+':'')+' $'+Math.abs(v).toFixed(2), sub:'rate-vol cross',   tip:'∂²V/∂F∂σ. P&L when rates and vol move together. Dominant risk in stress regimes.'},
+                      {l:'$ GAMMA / (1bp)²',  v:swaptionResult.dollar_gamma,     color:'var(--blue)',    fmt:v=>'$'+Math.abs(v).toFixed(2),                 sub:'rate convexity',   tip:'½∂²V/∂F². P&L from rate convexity per 1bp² move.'},
+                      {l:'B/E VOL bp/day',    v:swaptionResult.break_even_vol_bp,
+                        color:swaptionResult.break_even_vol_bp<2?'var(--accent)':'var(--amber)',
+                        fmt:v=>v.toFixed(2)+'bp', sub:swaptionResult.break_even_vol_bp<2?'cheap ← <2bp':'expensive → >2bp',
+                        tip:'|Theta|/Vega. Vol must move this much daily to cover decay. <2bp = cheap.'},
+                      {l:'Δ HEDGE NOTIONAL',  v:swaptionResult.delta_hedge_notl,  color:'var(--text-dim)', fmt:v=>'$'+Math.round(v/1e6*10)/10+'M IRS',       sub:'to go delta-flat',  tip:'IRS notional to delta-neutralize. Enter opposite-direction IRS of this size.'},
+                      {l:'VEGA % PREMIUM',    v:swaptionResult.vega_pct_premium,  color:'var(--blue)',    fmt:v=>v.toFixed(2)+'%',                            sub:'normalized vega',  tip:'Vega as % of option premium. Normalized across strikes and tenors for comparison.'},
+                    ].map(({l,v,color,fmt,sub,tip})=>(
+                      <div key={l} style={{background:'var(--bg)',padding:'7px 10px',cursor:'help'}} title={tip}>
+                        <div style={{fontSize:'0.5625rem',fontWeight:700,letterSpacing:'.08em',color:'var(--blue)',marginBottom:'2px',lineHeight:1.3}}>{l}</div>
+                        <div style={{fontSize:'0.875rem',fontWeight:700,color,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{v!=null?fmt(v):'—'}</div>
+                        <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',marginTop:'2px',opacity:.7}}>{sub}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* HW1F cross-check */}
+                {/* Vol source tier badge */}
+                {swaptionResult.vol_tier && swaptionResult.vol_tier !== 'MANUAL' && (
+                  <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
+                    <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                      VOL SOURCE
+                    </span>
+                    {[{tier:'QUOTED',  color:'var(--accent)', bg:'rgba(13,212,168,0.08)',  bd:'rgba(13,212,168,0.3)',  desc:'Market quote — Bloomberg SMKO snap'},
+                      {tier:'AUTO',    color:'var(--accent)', bg:'rgba(13,212,168,0.08)',  bd:'rgba(13,212,168,0.3)',  desc:'SABR calibrated from market quotes'},
+                      {tier:'INTERPOLATED', color:'var(--amber)', bg:'rgba(245,200,66,0.08)', bd:'rgba(245,200,66,0.3)', desc:'SABR bilinear interpolation — no market data for this bucket'},
+                      {tier:'MANUAL',  color:'var(--text-dim)', bg:'transparent', bd:'var(--border)', desc:'User-entered vol — no surface loaded'},
+                    ].filter(t => t.tier === (swaptionResult.vol_tier==='AUTO'?'AUTO':swaptionResult.vol_tier)).map(t => (
+                      <span key={t.tier} title={t.desc} style={{
+                        fontSize:'0.75rem',fontWeight:700,letterSpacing:'.08em',
+                        padding:'2px 8px',borderRadius:'2px',
+                        color:t.color,background:t.bg,border:`1px solid ${t.bd}`,
+                        fontFamily:"'IBM Plex Mono',var(--mono)",cursor:'help',
+                      }}>{t.tier==='AUTO'?'SABR QUOTED':t.tier==='INTERPOLATED'?'SABR INTERP':t.tier}</span>
+                    ))}
+                    {swaptionResult.sabr_vol_bp && (
+                      <span style={{fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--text-dim)'}}>
+                        σ(K) = <strong style={{color:swaptionResult.vol_tier==='INTERPOLATED'?'var(--amber)':'var(--accent)'}}>{swaptionResult.sabr_vol_bp.toFixed(2)}bp</strong>
+                        <span style={{fontSize:'0.75rem',color:'var(--text-dim)',marginLeft:'4px'}}>
+                          vs ATM {swaptionResult.vol_bp?.toFixed(1)}bp
+                          ({swaptionResult.sabr_vol_bp > swaptionResult.vol_bp ? '+' : ''}{(swaptionResult.sabr_vol_bp - swaptionResult.vol_bp)?.toFixed(2)}bp smile adj)
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                )}
+                {swaptionResult.hw1f_vol_bp && (
+                  <div style={{border:'1px solid rgba(74,158,255,.15)',borderRadius:'2px',background:'rgba(74,158,255,.02)',
+                    padding:'8px 12px',display:'flex',gap:'16px',alignItems:'center',flexWrap:'wrap'}}>
+                    <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)'}}>HW1F CROSS-CHECK</span>
+                    <span style={{fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
+                      Model: <strong style={{color:'var(--text)'}}>{swaptionResult.hw1f_vol_bp.toFixed(1)}bp</strong>
+                    </span>
+                    <span style={{fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--text-dim)'}}>
+                      Mkt: <strong style={{color:'var(--text)'}}>{swaptionResult.vol_bp.toFixed(1)}bp</strong>
+                    </span>
+                    <span style={{fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',var(--mono)",
+                      color:Math.abs(swaptionResult.hw1f_error_bp)<2?'var(--accent)':'var(--amber)'}}>
+                      Δ {swaptionResult.hw1f_error_bp>0?'+':''}{swaptionResult.hw1f_error_bp.toFixed(2)}bp
+                      {Math.abs(swaptionResult.hw1f_error_bp)<2?' ✓':' ⚠'}
+                    </span>
+                    {swaptionResult.hw1f_npv!=null && (
+                      <span style={{marginLeft:'auto',fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
+                        HW1F NPV: {swaptionResult.hw1f_npv>=0?'+':''} ${Math.round(swaptionResult.hw1f_npv).toLocaleString()}
+                      </span>
+                    )}
+                    <span style={{fontSize:'0.75rem',color:'var(--text-dim)'}}>
+                      a={swaptionResult.hw1f_params?.a?.toFixed(4)} · σ={swaptionResult.hw1f_params?.sigma_bp?.toFixed(1)}bp
+                    </span>
+                  </div>
+                )}
+
+                {/* Theta decay profile */}
+                <div>
+                  <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--text-dim)',marginBottom:'6px'}}>
+                    THETA DECAY PROFILE — time value remaining
+                  </div>
+                  <div style={{border:'1px solid var(--border)',borderRadius:'2px',background:'#0D0F17',overflow:'hidden',height:'90px'}}>
+                    <SwaptionDecayChart result={swaptionResult} expiry={swaptionExpiry}/>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {activeTab==='cashflows' && (
           <div className='tbw-no-drag' style={{flex:1,overflowY:'auto',padding:'10px 16px',display:'flex',flexDirection:'column',gap:'10px'}}>
@@ -1475,12 +2619,38 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               <div style={{fontSize:'0.875rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",padding:'12px 0'}}>Price the trade first to view cashflow schedule.</div>
             ) : (
               <>
+                {/* ── Swaption context banner ─────────────────────────── */}
+                {inst==='IR_SWAPTION' && (
+                  <div style={{background:'rgba(74,158,255,0.05)',border:'1px solid rgba(74,158,255,0.2)',borderRadius:'2px',padding:'8px 12px',display:'flex',flexDirection:'column',gap:'3px'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.12em',color:'var(--blue)'}}>UNDERLYING FORWARD SWAP CASHFLOWS</span>
+                      <span style={{fontSize:'0.6875rem',padding:'1px 6px',borderRadius:'2px',background:'rgba(74,158,255,0.1)',border:'1px solid rgba(74,158,255,0.3)',color:'var(--blue)'}}>
+                        {swaptionExpiry}×{tenor} · Physical Settlement
+                      </span>
+                    </div>
+                    <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'.03em'}}>
+                      On exercise, this swaption delivers into the swap schedule below.
+                      Effective date shifts forward by {swaptionExpiry} from today.
+                      Sum of PV column = forward swap NPV (= $0 at ATM strike).
+                      Annuity = Σ (DCF × DF) = {analytics.legs?.find(l=>l.leg_type==='FIXED')?.cashflows
+                        ?.reduce((s,cf)=>s+(cf.dcf||1)*(cf.df||1),0)?.toFixed(6) || '—'}.
+                    </div>
+                  </div>
+                )}
                 <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px'}}>
                   {[
-                    {label:'NET NPV', val:fmtPnl(npv), color: npv!=null&&npv>=0?'var(--accent)':'var(--red)'},
-                    {label:'FIXED LEG PV', val:fmtPnl(legs.find(l=>l.leg_type==='FIXED')?(legs.find(l=>l.leg_type==='FIXED').pv):null), color:'var(--red)'},
-                    {label:'FLOAT LEG PV', val:fmtPnl(legs.find(l=>l.leg_type==='FLOAT')?(legs.find(l=>l.leg_type==='FLOAT').pv):null), color:'var(--accent)'},
-                    {label:'PERIODS', val:(legs.find(l=>l.leg_type==='FIXED')?((legs.find(l=>l.leg_type==='FIXED').cashflows||[]).length):0)+' + '+(legs.find(l=>l.leg_type==='FLOAT')?((legs.find(l=>l.leg_type==='FLOAT').cashflows||[]).length):0), color:'var(--blue)'},
+                    {label: inst==='IR_SWAPTION' ? 'OPTION NPV' : 'NET NPV',
+                     val: fmtPnl(npv),
+                     color: npv!=null&&npv>=0?'var(--accent)':'var(--red)'},
+                    {label: inst==='IR_SWAPTION' ? 'FWD FIXED LEG PV' : 'FIXED LEG PV',
+                     val: fmtPnl(inst==='FRA' ? null : legs.find(l=>l.leg_type==='FIXED')?(legs.find(l=>l.leg_type==='FIXED').pv):null),
+                     color:'var(--red)'},
+                    {label: inst==='IR_SWAPTION' ? 'FWD FLOAT LEG PV' : (inst==='FRA' ? 'FRA LEG PV' : 'FLOAT LEG PV'),
+                     val: fmtPnl(inst==='FRA' ? legs.find(l=>l.leg_type==='FRA')?.pv : legs.find(l=>l.leg_type==='FLOAT')?(legs.find(l=>l.leg_type==='FLOAT').pv):null),
+                     color:'var(--accent)'},
+                    {label:'PERIODS',
+                     val:(legs.find(l=>l.leg_type==='FIXED')?((legs.find(l=>l.leg_type==='FIXED').cashflows||[]).length):0)+' + '+(legs.find(l=>l.leg_type==='FLOAT')?((legs.find(l=>l.leg_type==='FLOAT').cashflows||[]).length):0),
+                     color:'var(--blue)'},
                   ].map(s=>(
                     <div key={s.label} style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',padding:'6px 8px'}}>
                       <div style={{fontSize:'0.875rem',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'2px'}}>{s.label}</div>
@@ -1566,7 +2736,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               {ASSET_CLASSES.map(a=><Chip key={a} label={a} active={ac===a} live={LIVE_AC.includes(a)} onClick={()=>{setAc(a);setInst(INSTRUMENTS[a][0])}}/>)}
             </div>
             <div className='tbw-chip-row' style={{marginTop:'3px'}}>
-              {(INSTRUMENTS[ac]||[]).map(i=><Chip key={i} label={i.replace(/_/g,' ')} active={inst===i} live={(LIVE_INST[ac]||[]).includes(i)} onClick={()=>setInst(i)}/>)}
+              {(INSTRUMENTS[ac]||[]).map(i=><Chip key={i} label={i.replace(/_/g,' ')} active={inst===i} live={(LIVE_INST[ac]||[]).includes(i)} onClick={()=>{ setInst(i); if(i==='FRA'){ setParRate(null); if(rateRef.current){ rateRef.current.value=''; rateRef.current.dataset.userEdited='' } } }}/>)}
             </div>
             {inst==='IR_SWAP'&&(
               <div className='tbw-chip-row' style={{marginTop:'3px'}}>
@@ -1583,90 +2753,319 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             </Row>
             <SectionHdr>PRIMARY ECONOMICS</SectionHdr>
             <Row>
-              <Fld label='NOTIONAL' flex={2.5}><input ref={notionalRef} style={{...inp,fontSize:'1.0625rem',fontWeight:700}} type='text' defaultValue='10,000,000' placeholder='10,000,000' autoComplete='off' onChange={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))setNotionalState(r)}} onBlur={e=>{const r=e.target.value.replace(/[^0-9]/g,'');e.target.value=r?Number(r).toLocaleString('en-US'):''}}/></Fld>
+              <Fld label='NOTIONAL' flex={2.5}><input ref={notionalRef} style={{...inp,fontSize:'1.0625rem',fontWeight:700}} type='text' value={notionalState.toLocaleString('en-US')} placeholder='10,000,000' autoComplete='off' onChange={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))setNotionalState(r)}} onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))setNotionalState(r)}}/></Fld>
               <Fld label='CCY' flex={0.9}><select style={{...sel,fontSize:'1.0625rem',fontWeight:700}} value={ccy} onChange={e=>setCcy(e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
               <Fld label='DIRECTION' flex={1.8}>
                 <div style={{display:'flex',gap:'5px',minHeight:'34px'}}>
-                  <DirBtn label='PAY FIXED'     active={dir==='PAY'}     color='var(--red)'    onClick={()=>setDir('PAY')}/>
-                  <DirBtn label='RECEIVE FIXED' active={dir==='RECEIVE'} color='var(--accent)' onClick={()=>setDir('RECEIVE')}/>
+                  <DirBtn label={struct==='BASIS'?'PAY LEG 1':'PAY FIXED'}         active={dir==='PAY'}     color='var(--red)'    onClick={()=>setDir('PAY')}/>
+                  <DirBtn label={struct==='BASIS'?'RECEIVE LEG 1':'RECEIVE FIXED'} active={dir==='RECEIVE'} color='var(--accent)' onClick={()=>setDir('RECEIVE')}/>
                 </div>
               </Fld>
               <Fld label='TENOR' flex={1.0}><select style={{...sel,fontSize:'1.0625rem',fontWeight:700}} value={tenor} onChange={e=>handleTenorChange(e.target.value)}>{TENORS.map(t=><option key={t} value={t}>{t}</option>)}</select></Fld>
               <Fld label={'EFF DATE'+(datesLoading?' ⟳':'')} flex={1.5}><input style={{...inp,fontSize:'1rem',color:datesLoading?'var(--text-dim)':'var(--text)'}} type='date' value={effDate} onChange={e=>setEffDate(e.target.value)}/></Fld>
               <Fld label={'MAT DATE'+(datesLoading?' ⟳':'')} flex={1.5}><input style={{...inp,fontSize:'1rem',color:datesLoading?'var(--text-dim)':'var(--text)'}} type='date' value={matDate} onChange={e=>setMatDate(e.target.value)}/></Fld>
             </Row>
-            <SectionHdr>
-              FIXED LEG
-              <Badge label={dir==='PAY'?'→ PAY FIXED':'← RECEIVE FIXED'} color={dir==='PAY'?'var(--red)':'var(--accent)'}/>
-            </SectionHdr>
-            <Row>
-              <Fld label='COUPON (%)' flex={1.4}>
-                <div style={{display:'flex',gap:'4px',alignItems:'stretch'}}>
-                  <input ref={rateRef}
-                    style={{...inp,fontSize:'1.0625rem',fontWeight:700,flex:1,
-                      color: rateMode==='PAR' ? 'var(--accent)' : 'var(--amber)',
-                      borderColor: rateMode==='PAR' ? 'rgba(13,212,168,0.4)' : 'rgba(240,160,32,0.4)',
-                    }}
-                    type='text' placeholder='—' autoComplete='off'
-                    value={parRate != null ? String(parRate) : ''}
-                    readOnly={rateMode==='PAR'}
-                    onChange={e=>{
-                      const v = e.target.value
-                      setParRate(v === '' ? null : parseFloat(v) || null)
-                      if(rateRef.current) { rateRef.current.value = v; rateRef.current.dataset.userEdited='1' }
-                    }}
+            {inst === 'IR_SWAPTION' && (
+              <>
+                {/* ── SWAPTION EXERCISE TERMS ── addon on top of swap legs ── */}
+                <SectionHdr>
+                  OPTION TERMS
+                  <Badge
+                    label={dir==='PAY' ? '→ PAYER (right to pay fixed)' : '← RECEIVER (right to receive fixed)'}
+                    color={dir==='PAY' ? 'var(--red)' : 'var(--accent)'}
                   />
-                  <button
-                    onClick={()=>{
-                      if (rateMode==='PAR') {
-                        setRateMode('FIXED')
-                        if (rateRef.current) rateRef.current.dataset.userEdited='1'
-                      } else {
-                        setRateMode('PAR')
-                        if (rateRef.current) { rateRef.current.dataset.userEdited=''; rateRef.current.value='' }
-                        const tenorY = (new Date(matDate) - new Date(effDate)) / (365.25 * 24 * 3600 * 1000)
-                        const curveId = CCY_CURVE[ccy] || 'USD_SOFR'
-                        const rate = getParRateFromStore(curves, curveId, tenorY)
-                        if (rate && rateRef.current) { rateRef.current.value = rate; setParRate(parseFloat(rate)) }
-                        setAnalytics(null)
-                      }
-                    }}
-                    style={{
-                      padding:'0 8px', borderRadius:'2px', cursor:'pointer',
-                      fontFamily:"'IBM Plex Sans',var(--sans)", fontSize:'0.8125rem', fontWeight:700,
-                      letterSpacing:'0.06em', whiteSpace:'nowrap',
-                      border: rateMode==='PAR'
-                        ? '1px solid rgba(13,212,168,0.5)'
-                        : '1px solid rgba(240,160,32,0.5)',
-                      background: rateMode==='PAR'
-                        ? 'rgba(13,212,168,0.08)'
-                        : 'rgba(240,160,32,0.08)',
-                      color: rateMode==='PAR' ? 'var(--accent)' : 'var(--amber)',
-                    }}
-                  >
-                    {rateMode==='PAR' ? '◉ PAR' : '◎ FIXED'}
-                  </button>
+                </SectionHdr>
+                <Row>
+                  {/* Exercise type */}
+                  <Fld label='EXERCISE TYPE' flex={1.6}>
+                    <div style={{display:'flex',gap:'5px',height:'34px'}}>
+                      {['EUROPEAN','BERMUDAN','AMERICAN'].map(t=>(
+                        <DirBtn key={t} label={t} active={exerciseType===t} color='var(--blue)'
+                          onClick={()=>setExerciseType(t)}/>
+                      ))}
+                    </div>
+                  </Fld>
+                  {/* Expiry — varies by exercise type */}
+                  {exerciseType === 'EUROPEAN' && (
+                    <Fld label='OPTION EXPIRY' flex={1.0}>
+                      <select style={{...sel,fontSize:'1.0625rem',fontWeight:700}}
+                        value={swaptionExpiry} onChange={e=>setSwaptionExpiry(e.target.value)}>
+                        {['1M','3M','6M','1Y','2Y','3Y','5Y','7Y','10Y'].map(t=><option key={t}>{t}</option>)}
+                      </select>
+                    </Fld>
+                  )}
+                  {exerciseType === 'BERMUDAN' && (<>
+                    <Fld label='FIRST EXERCISE' flex={1.0}>
+                      <input type='date' style={{...inp,fontSize:'0.9375rem'}}
+                        value={bermudanFirst} onChange={e=>setBermudanFirst(e.target.value)}/>
+                    </Fld>
+                    <Fld label='LAST EXERCISE' flex={1.0}>
+                      <input type='date' style={{...inp,fontSize:'0.9375rem'}}
+                        value={bermudanLast} onChange={e=>setBermudanLast(e.target.value)}/>
+                    </Fld>
+                    <Fld label='FREQ' flex={0.6}>
+                      <select style={sel} value={bermudanFreq} onChange={e=>setBermudanFreq(e.target.value)}>
+                        {['1M','3M','6M','1Y'].map(t=><option key={t}>{t}</option>)}
+                      </select>
+                    </Fld>
+                  </>)}
+                  {exerciseType === 'AMERICAN' && (<>
+                    <Fld label='EXERCISE START' flex={1.0}>
+                      <input type='date' style={{...inp,fontSize:'0.9375rem'}}
+                        value={bermudanFirst} onChange={e=>setBermudanFirst(e.target.value)}/>
+                    </Fld>
+                    <Fld label='EXERCISE END' flex={1.0}>
+                      <input type='date' style={{...inp,fontSize:'0.9375rem'}}
+                        value={bermudanLast} onChange={e=>setBermudanLast(e.target.value)}/>
+                    </Fld>
+                  </>)}
+                  {/* Normal vol — always shown */}
+                  <Fld label='NORMAL VOL (bp)' flex={0.9}>
+                    <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--blue)',borderColor:'rgba(74,158,255,0.4)'}}
+                      type='text' value={swaptionVol} placeholder='86.5'
+                      onChange={e=>setSwaptionVol(e.target.value)} autoComplete='off'/>
+                  </Fld>
+                  {/* Strike — blank = ATM */}
+                  <Fld label='STRIKE (%) blank=ATM' flex={1.1}>
+                    <input
+                      style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--amber)',
+                        borderColor:swaptionStrike?'rgba(240,160,32,0.5)':'var(--border)'}}
+                      type='text'
+                      value={swaptionStrike}
+                      placeholder={swaptionResult ? swaptionResult.forward_pct?.toFixed(4) : 'ATM'}
+                      autoComplete='off'
+                      onChange={e=>setSwaptionStrike(e.target.value)}
+                    />
+                  </Fld>
+                </Row>
+                <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
+                  {exerciseType==='EUROPEAN'?'Black/Bachelier normal vol · HW1F cross-check':exerciseType==='BERMUDAN'?'HW1F trinomial tree — Sprint 8':'American approximation — Sprint 8'}
+                  {' · Physical settlement · Strike blank = ATM forward (computed from OIS curve)'}
+                  {swaptionResult && !swaptionStrike && ` · ATM = ${swaptionResult.forward_pct?.toFixed(4)}%`}
                 </div>
-              </Fld>
-              <Fld label='PAY FREQ' flex={1.5}><select style={sel} value={fixedPayFreq} onChange={e=>setFixedPayFreq(e.target.value)}>{PAY_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
-              <Fld label='DAY COUNT' flex={1.4}><select style={sel} value={fixedDc} onChange={e=>setFixedDc(e.target.value)}>{DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}</select></Fld>
-              <Fld label='BDC' flex={1.6}><select style={sel} value={fixedBdc} onChange={e=>setFixedBdc(e.target.value)}>{BDCS.map(b=><option key={b} value={b}>{b}</option>)}</select></Fld>
-              <Fld label='CALENDAR' flex={1.8}><select style={sel} value={fixedCal} onChange={e=>setFixedCal(e.target.value)}>{CALENDARS.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
-            </Row>
-            <SectionHdr>
-              FLOATING LEG
-              <Badge label={floatDir==='RECEIVE'?'← RECEIVE FLOAT':'→ PAY FLOAT'} color={floatDir==='RECEIVE'?'var(--accent)':'var(--red)'}/>
-            </SectionHdr>
-            <Row>
-              <Fld label='INDEX' flex={1.8}><select style={{...sel,fontSize:'1rem',fontWeight:600}} value={index} onChange={e=>handleIndexChange(e.target.value)}>{(CCY_INDICES[ccy]||[]).map(idx=><option key={idx} value={idx}>{idx}</option>)}</select></Fld>
-              <Fld label='SPREAD (bp)' flex={0.9}><input ref={spreadRef} style={inp} type='text' defaultValue='0' placeholder='0' autoComplete='off'/></Fld>
-              <Fld label='LEVERAGE' flex={0.9}><input ref={leverageRef} style={inp} type='text' defaultValue='1.0' placeholder='1.0' autoComplete='off'/></Fld>
-              <Fld label='RESET FREQ' flex={1.4}><select style={sel} value={floatResetFreq} onChange={e=>setFloatResetFreq(e.target.value)}>{RESET_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
-              <Fld label='PAY FREQ' flex={1.4}><select style={sel} value={floatPayFreq} onChange={e=>setFloatPayFreq(e.target.value)}>{PAY_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
-              <Fld label='DAY COUNT' flex={1.3}><select style={sel} value={floatDc} onChange={e=>setFloatDc(e.target.value)}>{DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}</select></Fld>
-              <Fld label='BDC' flex={1.6}><select style={sel} value={floatBdc} onChange={e=>setFloatBdc(e.target.value)}>{BDCS.map(b=><option key={b} value={b}>{b}</option>)}</select></Fld>
-              <Fld label='CALENDAR' flex={1.8}><select style={sel} value={floatCal} onChange={e=>setFloatCal(e.target.value)}>{CALENDARS.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
-            </Row>
+
+                {/* ── OPTION FEE ────────────────────────────────────────────── */}
+                <SectionHdr>
+                  OPTION FEE
+                  <span style={{fontSize:'0.6875rem',color:'var(--text-dim)',fontWeight:400,letterSpacing:'0.04em',marginLeft:'8px'}}>
+                    {feeAmount ? (feeAmountType==='BP' ? `${feeAmount}bp upfront` : `$${parseFloat(feeAmount).toLocaleString()} upfront`) : 'no premium entered'}
+                    {feeSchedule.filter(r=>r.date&&r.amount).length > 0 && ` · ${feeSchedule.filter(r=>r.date&&r.amount).length} scheduled payments`}
+                  </span>
+                  <span style={{marginLeft:'auto',fontSize:'0.6875rem',color:'var(--accent)',letterSpacing:'0.04em',cursor:'pointer'}}
+                    onClick={()=>{ /* switch to details tab handled by parent */ }}>
+                    full schedule → DETAILS tab
+                  </span>
+                </SectionHdr>
+                <Row>
+                  <Fld label='PREMIUM AMOUNT' flex={1.2}>
+                    <div style={{display:'flex',gap:'4px',height:'34px'}}>
+                      <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--amber)',flex:1}}
+                        type='text' value={feeAmount} placeholder='0.00'
+                        onChange={e=>setFeeAmount(e.target.value)} autoComplete='off'/>
+                      <div style={{display:'flex',gap:'2px'}}>
+                        {['BP','$'].map(t=>(
+                          <DirBtn key={t} label={t} active={feeAmountType===t} color='var(--amber)'
+                            onClick={()=>setFeeAmountType(t)}/>
+                        ))}
+                      </div>
+                    </div>
+                  </Fld>
+                  <Fld label='SETTLE DATE' flex={1.0}>
+                    <input type='date' style={{...inp,fontSize:'0.9375rem'}}
+                      value={feeSettleDate} onChange={e=>setFeeSettleDate(e.target.value)}/>
+                  </Fld>
+                  <Fld label='' flex={1.6}>
+                    <div style={{height:'34px',display:'flex',alignItems:'center',
+                      fontSize:'0.75rem',color:'var(--text-dim)',letterSpacing:'0.06em'}}>
+                      Multi-payment schedule available in DETAILS tab
+                    </div>
+                  </Fld>
+                </Row>
+
+                {/* ── Swaption analytics ────────────────────────────────────── */}
+                {swaptionResult && (
+                  <div style={{marginTop:'8px',border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden'}}>
+                    {/* ── Primary analytics grid ─────────────────────────── */}
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'1px',background:'var(--border)'}}>
+                      {[
+                        {l:'OPTION NPV',   v:swaptionResult.npv,         color:'var(--accent)', fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
+                        {l:'PREMIUM PAID', v:swaptionResult.fee_usd||0,  color:'var(--amber)',  fmt:v=>v?'-$'+Math.round(Math.abs(v)).toLocaleString():'—'},
+                        {l:'P&L',          v:swaptionResult.pnl,         color:(swaptionResult.pnl||0)>=0?'var(--accent)':'var(--red)', fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
+                        {l:'VEGA / 1bp',   v:swaptionResult.vega,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
+                        {l:'IR01',         v:swaptionResult.ir01,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
+                        {l:'FWD RATE',     v:swaptionResult.forward_pct, color:'var(--accent)', fmt:v=>v.toFixed(4)+'%'},
+                      ].map(({l,v,color,fmt})=>(
+                        <div key={l} style={{background:'var(--bg)',padding:'7px 10px'}}>
+                          <div style={{fontSize:'0.625rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',marginBottom:'3px'}}>{l}</div>
+                          <div style={{fontSize:'0.875rem',fontWeight:700,color,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{v!=null?fmt(v):'—'}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── HW1F cross-check ──────────────────────────────── */}
+                    {swaptionResult.hw1f_vol_bp && (
+                      <div style={{background:'rgba(74,158,255,0.03)',padding:'5px 10px',borderTop:'1px solid var(--border)',
+                        display:'flex',gap:'16px',alignItems:'center',flexWrap:'wrap'}}>
+                        <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.10em',color:'var(--text-dim)'}}>HW1F CROSS-CHECK</span>
+                        <span style={{fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
+                          Model: {swaptionResult.hw1f_vol_bp.toFixed(1)}bp
+                        </span>
+                        <span style={{fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--text-dim)'}}>
+                          Mkt: {swaptionResult.vol_bp.toFixed(1)}bp
+                        </span>
+                        <span style={{fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)",
+                          color:Math.abs(swaptionResult.hw1f_error_bp)<2?'var(--accent)':'var(--amber)'}}>
+                          Δ {swaptionResult.hw1f_error_bp>0?'+':''}{swaptionResult.hw1f_error_bp.toFixed(2)}bp
+                          {Math.abs(swaptionResult.hw1f_error_bp)<2?' ✓':' ⚠'}
+                        </span>
+                        {swaptionResult.hw1f_npv!=null && (
+                          <span style={{marginLeft:'auto',fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
+                            HW1F: {swaptionResult.hw1f_npv>=0?'+':''} ${Math.round(swaptionResult.hw1f_npv).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {swaptionErr && <div style={{padding:'5px 10px',color:'var(--red)',fontSize:'0.8125rem'}}>{swaptionErr}</div>}
+                  </div>
+                )}
+                {swaptionErr && !swaptionResult && (
+                  <div style={{color:'var(--red)',fontSize:'0.8125rem',padding:'4px 0'}}>{swaptionErr}</div>
+                )}
+              </>
+            )}
+            {inst === 'FRA' ? (
+              <>
+                {/* ── FRA TERMS — single settlement cashflow ─────────────────── */}
+                <SectionHdr>
+                  FRA TERMS
+                  <Badge label={dir==='PAY'?'→ PAY FRA RATE (short rate)':'← RECEIVE FRA RATE (long rate)'} color={dir==='PAY'?'var(--red)':'var(--accent)'}/>
+                </SectionHdr>
+                <Row>
+                  <Fld label='CONTRACT RATE (%)' flex={1.6}>
+                    <input ref={rateRef}
+                      style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--amber)',borderColor:'rgba(240,160,32,0.4)'}}
+                      type='text' placeholder='0.000000 — at-market = 0' autoComplete='off'
+                      defaultValue=''
+                      onChange={e=>{ if(rateRef.current) rateRef.current.dataset.userEdited='1' }}
+                    />
+                  </Fld>
+                  <Fld label='REFERENCE INDEX' flex={1.6}>
+                    <select style={{...sel,fontSize:'1rem',fontWeight:600}} value={index} onChange={e=>handleIndexChange(e.target.value)}>
+                      {(CCY_INDICES[ccy]||[]).map(idx=><option key={idx} value={idx}>{idx}</option>)}
+                    </select>
+                  </Fld>
+                  <Fld label='DAY COUNT' flex={1.3}>
+                    <select style={sel} value={fraDay} onChange={e=>setFraDay(e.target.value)}>
+                      {DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </Fld>
+                </Row>
+                <div style={{fontSize:'0.75rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)",padding:'4px 0 2px',opacity:0.7}}>
+                  Eff Date = Ts (fixing/settlement) · Mat Date = Te (accrual end) · NPV = N × (fwd − K) × δ × P(0,Te)
+                </div>
+              </>
+            ) : (
+              <>
+                {struct === 'BASIS' ? (
+                  <>
+                    {/* ── BASIS SWAP: FLOAT LEG 1 ─────────────────────────────── */}
+                    <SectionHdr>
+                      FLOAT LEG 1
+                      <Badge label={dir==='PAY'?'→ PAY':'← RECEIVE'} color={dir==='PAY'?'var(--red)':'var(--accent)'}/>
+                    </SectionHdr>
+                    <Row>
+                      <Fld label='INDEX 1' flex={1.8}><select style={{...sel,fontSize:'1rem',fontWeight:600}} value={index} onChange={e=>handleIndexChange(e.target.value)}>{(CCY_INDICES[ccy]||[]).map(idx=><option key={idx} value={idx}>{idx}</option>)}</select></Fld>
+                      <Fld label='RESET FREQ' flex={1.4}><select style={sel} value={floatResetFreq} onChange={e=>setFloatResetFreq(e.target.value)}>{RESET_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
+                      <Fld label='PAY FREQ' flex={1.4}><select style={sel} value={floatPayFreq} onChange={e=>setFloatPayFreq(e.target.value)}>{PAY_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
+                      <Fld label='DAY COUNT' flex={1.3}><select style={sel} value={floatDc} onChange={e=>setFloatDc(e.target.value)}>{DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}</select></Fld>
+                      <Fld label='BDC' flex={1.6}><select style={sel} value={floatBdc} onChange={e=>setFloatBdc(e.target.value)}>{BDCS.map(b=><option key={b} value={b}>{b}</option>)}</select></Fld>
+                    </Row>
+                    {/* ── BASIS SWAP: FLOAT LEG 2 ─────────────────────────────── */}
+                    <SectionHdr>
+                      FLOAT LEG 2
+                      <Badge label={dir==='PAY'?'← RECEIVE':'→ PAY'} color={dir==='PAY'?'var(--accent)':'var(--red)'}/>
+                    </SectionHdr>
+                    <Row>
+                      <Fld label='INDEX 2' flex={1.8}><select style={{...sel,fontSize:'1rem',fontWeight:600}} value={index2} onChange={e=>setIndex2(e.target.value)}>{(CCY_INDICES[ccy]||[]).map(idx=><option key={idx} value={idx}>{idx}</option>)}</select></Fld>
+                      <Fld label='BASIS SPREAD (bp)' flex={1.0}><input ref={spreadRef} style={inp} type='text' defaultValue='0' placeholder='0' autoComplete='off'/></Fld>
+                      <Fld label='RESET FREQ' flex={1.4}><select style={sel} value={floatResetFreq2} onChange={e=>setFloatResetFreq2(e.target.value)}>{RESET_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
+                      <Fld label='PAY FREQ' flex={1.4}><select style={sel} value={floatPayFreq2} onChange={e=>setFloatPayFreq2(e.target.value)}>{PAY_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
+                      <Fld label='DAY COUNT' flex={1.3}><select style={sel} value={floatDc2} onChange={e=>setFloatDc2(e.target.value)}>{DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}</select></Fld>
+                      <Fld label='BDC' flex={1.6}><select style={sel} value={floatBdc} onChange={e=>setFloatBdc(e.target.value)}>{BDCS.map(b=><option key={b} value={b}>{b}</option>)}</select></Fld>
+                    </Row>
+                  </>
+                ) : (
+                  <>
+                    {/* ── FIXED LEG ───────────────────────────────────────────────── */}
+                    <SectionHdr>
+                      FIXED LEG
+                      <Badge label={dir==='PAY'?'→ PAY FIXED':'← RECEIVE FIXED'} color={dir==='PAY'?'var(--red)':'var(--accent)'}/>
+                    </SectionHdr>
+                    <Row>
+                      <Fld label='COUPON (%)' flex={1.4}>
+                        <div style={{display:'flex',gap:'4px',alignItems:'stretch'}}>
+                          <input ref={rateRef}
+                            style={{...inp,fontSize:'1.0625rem',fontWeight:700,flex:1,
+                              color: rateMode==='PAR' ? 'var(--accent)' : 'var(--amber)',
+                              borderColor: rateMode==='PAR' ? 'rgba(13,212,168,0.4)' : 'rgba(240,160,32,0.4)',
+                            }}
+                            type='text' placeholder='—' autoComplete='off'
+                            defaultValue={parRate != null ? String(parRate) : ''}
+                            onChange={e=>{ if(rateRef.current) rateRef.current.dataset.userEdited='1' }}
+                            onBlur={e=>{ const v=parseFloat(e.target.value); if(!isNaN(v)) setParRate(v) }}
+                          />
+                          <button
+                            onClick={()=>{
+                              if (rateMode==='PAR') {
+                                setRateMode('FIXED')
+                                if (rateRef.current) rateRef.current.dataset.userEdited='1'
+                              } else {
+                                setRateMode('PAR')
+                                if (rateRef.current) { rateRef.current.dataset.userEdited=''; rateRef.current.value='' }
+                                const tenorY = (new Date(matDate) - new Date(effDate)) / (365.25 * 24 * 3600 * 1000)
+                                const curveId = CCY_CURVE[ccy] || 'USD_SOFR'
+                                const rate = getParRateFromStore(curves, curveId, tenorY)
+                                if (rate && rateRef.current) { rateRef.current.value = rate; setParRate(parseFloat(rate)) }
+                                setAnalytics(null)
+                              }
+                            }}
+                            style={{
+                              padding:'0 8px', borderRadius:'2px', cursor:'pointer',
+                              fontFamily:"'IBM Plex Sans',var(--sans)", fontSize:'0.8125rem', fontWeight:700,
+                              letterSpacing:'0.06em', whiteSpace:'nowrap',
+                              border: rateMode==='PAR' ? '1px solid rgba(13,212,168,0.5)' : '1px solid rgba(240,160,32,0.5)',
+                              background: rateMode==='PAR' ? 'rgba(13,212,168,0.08)' : 'rgba(240,160,32,0.08)',
+                              color: rateMode==='PAR' ? 'var(--accent)' : 'var(--amber)',
+                            }}
+                          >
+                            {rateMode==='PAR' ? '◉ PAR' : '◎ FIXED'}
+                          </button>
+                        </div>
+                      </Fld>
+                      <Fld label='PAY FREQ' flex={1.5}><select style={sel} value={fixedPayFreq} onChange={e=>setFixedPayFreq(e.target.value)}>{PAY_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
+                      <Fld label='DAY COUNT' flex={1.4}><select style={sel} value={fixedDc} onChange={e=>setFixedDc(e.target.value)}>{DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}</select></Fld>
+                      <Fld label='BDC' flex={1.6}><select style={sel} value={fixedBdc} onChange={e=>setFixedBdc(e.target.value)}>{BDCS.map(b=><option key={b} value={b}>{b}</option>)}</select></Fld>
+                      <Fld label='CALENDAR' flex={1.8}><select style={sel} value={fixedCal} onChange={e=>setFixedCal(e.target.value)}>{CALENDARS.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
+                    </Row>
+                    {/* ── FLOATING LEG ─────────────────────────────────────────────── */}
+                    <SectionHdr>
+                      FLOATING LEG
+                      <Badge label={floatDir==='RECEIVE'?'← RECEIVE FLOAT':'→ PAY FLOAT'} color={floatDir==='RECEIVE'?'var(--accent)':'var(--red)'}/>
+                    </SectionHdr>
+                    <Row>
+                      <Fld label='INDEX' flex={1.8}><select style={{...sel,fontSize:'1rem',fontWeight:600}} value={index} onChange={e=>handleIndexChange(e.target.value)}>{(CCY_INDICES[ccy]||[]).map(idx=><option key={idx} value={idx}>{idx}</option>)}</select></Fld>
+                      <Fld label='SPREAD (bp)' flex={0.9}><input ref={spreadRef} style={inp} type='text' defaultValue='0' placeholder='0' autoComplete='off'/></Fld>
+                      <Fld label='LEVERAGE' flex={0.9}><input ref={leverageRef} style={inp} type='text' defaultValue='1.0' placeholder='1.0' autoComplete='off'/></Fld>
+                      <Fld label='RESET FREQ' flex={1.4}><select style={sel} value={floatResetFreq} onChange={e=>setFloatResetFreq(e.target.value)}>{RESET_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
+                      <Fld label='PAY FREQ' flex={1.4}><select style={sel} value={floatPayFreq} onChange={e=>setFloatPayFreq(e.target.value)}>{PAY_FREQS.map(f=><option key={f} value={f}>{f}</option>)}</select></Fld>
+                      <Fld label='DAY COUNT' flex={1.3}><select style={sel} value={floatDc} onChange={e=>setFloatDc(e.target.value)}>{DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}</select></Fld>
+                      <Fld label='BDC' flex={1.6}><select style={sel} value={floatBdc} onChange={e=>setFloatBdc(e.target.value)}>{BDCS.map(b=><option key={b} value={b}>{b}</option>)}</select></Fld>
+                      <Fld label='CALENDAR' flex={1.8}><select style={sel} value={floatCal} onChange={e=>setFloatCal(e.target.value)}>{CALENDARS.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
+                    </Row>
+                  </>
+                )}
+              </>
+            )}
 
             <div ref={analyticsRef}/>
             <SectionHdr>
@@ -1706,13 +3105,20 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               <div style={{border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden',marginBottom:'12px'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
                   <colgroup>
-                    <col style={{width:'11%'}}/><col style={{width:'8%'}}/><col style={{width:'8%'}}/>
-                    <col style={{width:'6%'}}/><col style={{width:'16%'}}/><col style={{width:'12%'}}/>
-                    <col style={{width:'12%'}}/><col style={{width:'12%'}}/><col style={{width:'15%'}}/>
+                    {inst==='IR_SWAPTION' ? (<>
+                      <col style={{width:'10%'}}/><col style={{width:'7%'}}/><col style={{width:'7%'}}/>
+                      <col style={{width:'5%'}}/><col style={{width:'14%'}}/><col style={{width:'11%'}}/>
+                      <col style={{width:'11%'}}/><col style={{width:'11%'}}/><col style={{width:'12%'}}/>
+                      <col style={{width:'12%'}}/>
+                    </>) : (<>
+                      <col style={{width:'11%'}}/><col style={{width:'8%'}}/><col style={{width:'8%'}}/>
+                      <col style={{width:'6%'}}/><col style={{width:'16%'}}/><col style={{width:'12%'}}/>
+                      <col style={{width:'12%'}}/><col style={{width:'12%'}}/><col style={{width:'15%'}}/>
+                    </>)}
                   </colgroup>
                   <thead>
                     <tr style={{borderBottom:'1px solid var(--border)',background:'var(--bg)'}}>
-                      {['LEG','TYPE','DIR','CCY','PV','IR01','IR01 DISC','GAMMA','THETA'].map(h=>{
+                      {['LEG','TYPE','DIR','CCY','PV','IR01','IR01 DISC','GAMMA','THETA',...(inst==='IR_SWAPTION'?['VEGA']:[])].map(h=>{
                         const hasTip = !!GREEK_TIPS[h]
                         return (
                           <th key={h}
@@ -1722,7 +3128,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                             } : undefined}
                             onMouseLeave={hasTip ? ()=>setTooltip(null) : undefined}
                             style={{fontSize:'0.8125rem',padding:'5px 8px',
-                              textAlign:['PV','IR01','IR01 DISC','GAMMA','THETA'].includes(h)?'right':'left',
+                              textAlign:['PV','IR01','IR01 DISC','GAMMA','THETA','VEGA'].includes(h)?'right':'left',
                               fontWeight:400,letterSpacing:'0.08em',
                               color: hasTip ? 'var(--accent)' : 'var(--text-dim)',
                               borderBottom: hasTip ? '1px dashed rgba(13,212,168,0.4)' : 'none',
@@ -1741,6 +3147,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                       <td style={{fontSize:'0.9375rem',fontWeight:700,padding:'7px 8px',textAlign:'right',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>{fmtPnl(ir01d)}</td>
                       <td style={{fontSize:'0.875rem',fontWeight:700,padding:'7px 8px',textAlign:'right',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)',opacity:0.7}}>{gamma!=null?(gamma>=0?'+':'')+gamma.toFixed(4):'—'}</td>
                       <td style={{fontSize:'0.9375rem',fontWeight:700,padding:'7px 8px',textAlign:'right',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--amber)'}}>{fmtPnl(theta)}</td>
+                      {inst==='IR_SWAPTION' && (
+                        <td style={{fontSize:'0.9375rem',fontWeight:700,padding:'7px 8px',textAlign:'right',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
+                          {swaptionResult?.vega!=null ? fmtPnl(swaptionResult.vega) : '—'}
+                        </td>
+                      )}
                     </tr>
                     {legs.map((leg,i)=>(
                       <tr key={i} style={{borderBottom:'1px solid var(--panel-2)'}}>
@@ -1753,6 +3164,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                         <td style={{fontSize:'0.875rem',padding:'6px 8px',textAlign:'right',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>{fmtPnl(leg.ir01_disc)}</td>
                         <td style={{fontSize:'0.875rem',padding:'6px 8px',textAlign:'right',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--text-dim)'}}>{leg.gamma!=null?(leg.gamma>=0?'+':'')+leg.gamma.toFixed(4):'—'}</td>
                         <td style={{fontSize:'0.875rem',padding:'6px 8px',textAlign:'right',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--text-dim)'}}>—</td>
+                        {inst==='IR_SWAPTION' && <td style={{padding:'6px 8px'}}>—</td>}
                       </tr>
                     ))}
                   </tbody>
@@ -1795,11 +3207,25 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               })()}
 
             </>)}
-          {/* XVA inline section */}
-          {activeTab==='main' && (
+          {/* XVA → see XVA tab for full simulation */}
+          {activeTab==='main' && !xvaResult && (
+            <div style={{margin:'0 16px 12px',borderTop:'1px solid var(--border)',paddingTop:'8px',
+              display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
+                <span style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'#2a2a2a'}}>XVA</span>
+                <span style={{fontSize:'0.8125rem',color:'#333',letterSpacing:'.03em'}}>
+                  CVA · DVA · FVA · FBA · KVA · MVA · All-In rate
+                </span>
+              </div>
+              <span style={{fontSize:'0.8125rem',color:'#444',letterSpacing:'.04em',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                → SIMULATE in XVA tab
+              </span>
+            </div>
+          )}
+          {activeTab==='main' && xvaResult?.xva && (
             <div style={{margin:'0 16px 12px',borderTop:'1px solid rgba(0,212,168,0.15)',paddingTop:'10px'}}>
               <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px'}}>
-                <span style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:xvaResult?'var(--accent)':'#F5C842'}}>XVA</span>
+                <span style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--accent)'}}>XVA</span>
                 {xvaResult?.params && (
                   <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'.03em'}}>
                     HW1F · a={xvaResult.params.a.toFixed(4)} · σ={xvaResult.params.sigma_bp.toFixed(1)}bp · {xvaResult.n_paths.toLocaleString()} paths
@@ -1807,32 +3233,17 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 )}
                 <div style={{marginLeft:'auto',display:'flex',gap:'6px',alignItems:'center'}}>
                   {xvaErr && <span style={{fontSize:'0.8125rem',color:'var(--red)'}}>{xvaErr}</span>}
-                  
                 </div>
               </div>
-              {xvaResult?.xva ? (
-                <XvaInlinePanel
-                  xva={xvaResult.xva}
-                  notionalRef={notionalRef}
-                  rateRef={rateRef}
-                  effDate={effDate}
-                  matDate={matDate}
-                  parRate={parRate}
-                  onApply={handleApplyXvaToRate}
-                />
-              ) : (
-                <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)',borderRadius:'2px',overflow:'hidden'}}>
-                  {['NPV','CVA','DVA','FVA','FBA','KVA','MVA~','ALL-IN'].map(l=>(
-                    <div key={l} style={{background:'var(--bg)',padding:'7px 8px'}}>
-                      <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'3px'}}>{l}</div>
-                      <div style={{fontSize:'0.9375rem',fontWeight:700,color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'2px'}}>—</div>
-                      <div style={{borderTop:'1px solid var(--panel-2)',paddingTop:'2px'}}>
-                        <div style={{fontSize:'0.75rem',color:'var(--text-dim)',opacity:.3}}>—</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <XvaInlinePanel
+                xva={xvaResult.xva}
+                notionalRef={notionalRef}
+                rateRef={rateRef}
+                effDate={effDate}
+                matDate={matDate}
+                parRate={parRate}
+                onApply={handleApplyXvaToRate}
+              />
             </div>
           )}
           </div>
@@ -1871,10 +3282,10 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             {err&&<div className='tbw-error'>{err}</div>}
             {activeTab!=='scenario' && <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid #1E1E1E',background:'#050505',padding:'5px 14px',gap:'0',marginBottom:'6px'}}>
               {[
-                {label:'NET NPV',val:analytics!=null&&analytics.npv!=null?(analytics.npv>=0?'+':'')+String.fromCharCode(36)+Math.abs(Math.round(analytics.npv)).toLocaleString('en-US'):'—',color:analytics!=null&&analytics.npv!=null?(analytics.npv>=0?'#00D4A8':'#FF6B6B'):'#444'},
-                {label:'IR01',val:analytics!=null&&analytics.ir01!=null?(analytics.ir01>=0?'+':'')+String.fromCharCode(36)+Math.abs(Math.round(analytics.ir01)).toLocaleString('en-US'):'—',color:'#4A9EFF'},
-                {label:'IR01 DISC',val:analytics!=null&&analytics.ir01_disc!=null?(analytics.ir01_disc>=0?'+':'')+String.fromCharCode(36)+Math.abs(Math.round(analytics.ir01_disc)).toLocaleString('en-US'):'—',color:'#4A9EFF'},
-                {label:'THETA',val:analytics!=null&&analytics.theta!=null?(analytics.theta>=0?'+':'')+String.fromCharCode(36)+Math.abs(Math.round(analytics.theta)).toLocaleString('en-US'):'—',color:'#FF6B6B'},
+                {label:'NET NPV',val:analytics!=null&&analytics.npv!=null?(analytics.npv>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(analytics.npv)).toLocaleString('en-US'):'—',color:analytics!=null&&analytics.npv!=null?(analytics.npv>=0?'#00D4A8':'#FF6B6B'):'#444'},
+                {label:'IR01',val:analytics!=null&&analytics.ir01!=null?(analytics.ir01>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(analytics.ir01)).toLocaleString('en-US'):'—',color:'#4A9EFF'},
+                {label:'IR01 DISC',val:analytics!=null&&analytics.ir01_disc!=null?(analytics.ir01_disc>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(analytics.ir01_disc)).toLocaleString('en-US'):'—',color:'#4A9EFF'},
+                {label:'THETA',val:analytics!=null&&analytics.theta!=null?(analytics.theta>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(analytics.theta)).toLocaleString('en-US'):'—',color:'#FF6B6B'},
               ].map((m,i)=>(
                 <div key={i} style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid #1E1E1E'}}>
                   <span style={{fontSize:'9px',color:'#444',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
@@ -1892,9 +3303,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 </button>
               ) : (
                 <>
-                <button style={{marginLeft:'auto',background:'rgba(245,200,66,0.08)',border:'1px solid rgba(245,200,66,0.4)',color:'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:pricing?'not-allowed':'pointer',opacity:pricing?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}} onClick={handlePrice} disabled={pricing}>
-                {pricing?'PRICING...':'▶ PRICE'}
-              </button>
+                <button style={{marginLeft:'auto',background:'rgba(245,200,66,0.08)',border:'1px solid rgba(245,200,66,0.4)',color:'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:(pricing||swaptionPricing)?'not-allowed':'pointer',opacity:(pricing||swaptionPricing)?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}}
+                  onClick={inst==='IR_SWAPTION' ? handlePriceSwaption : handlePrice}
+                  disabled={pricing||swaptionPricing}>
+                  {(pricing||swaptionPricing)?'PRICING...':'▶ PRICE'}
+                </button>
               {!xvaResult && <span style={{fontSize:'10px',color:'#444',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em',padding:'0 8px'}}>XVA → SIMULATE to price</span>}
                 </>
               )}

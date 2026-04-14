@@ -8,7 +8,7 @@ POST /api/price/par-rate         Solve for par coupon on our bootstrapped curve
 
 import json as _json
 import math as _math
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import List, Optional
 
@@ -25,6 +25,7 @@ from pricing.curve import Curve
 from pricing.fx_forward import price_fx_forward
 from pricing.greeks import compute_greeks
 from pricing.ir_swap import price_swap, price_leg
+from pricing.swaption import price_swaption, _N
 
 router = APIRouter()
 
@@ -693,6 +694,168 @@ async def price_preview(
     }
 
 
+# ── POST /api/price/swaption ──────────────────────────────────────────────────
+# Stateless European swaption pricer — Black/Bachelier normal vol + HW1F check.
+# No DB writes. Used by the PRICE button when IR_SWAPTION is selected.
+
+class SwaptionRequest(BaseModel):
+    # Trade economics
+    notional:       float         = 10_000_000
+    expiry_y:       float         = 1.0        # option expiry in years
+    tenor_y:        float         = 5.0        # underlying swap tenor in years
+    strike:         Optional[float] = None     # if None → ATM (= forward rate)
+    vol_bp:         float         = 86.5       # normal vol in bp
+    is_payer:       bool          = True       # True = payer swaption
+    pay_freq_y:     float         = 1.0        # coupon frequency (1=annual, 0.5=semi)
+    valuation_date: Optional[date] = None
+    # Underlying swap dates — carry T+2 spot lag from frontend, match Bloomberg
+    effective_date: Optional[date] = None     # underlying swap start (post-expiry + T+2)
+    maturity_date:  Optional[date] = None     # underlying swap end
+    # Curve
+    curve_id:       str           = "USD_SOFR"
+    # Optional: inline shocked curve quotes for scenario repricing
+    # [{"tenor": "5Y", "quote_type": "OIS_SWAP", "rate": 0.041}]
+    shocked_quotes: Optional[list] = None
+    # HW1F cross-check — if None skips cross-check
+    hw1f_a:         Optional[float] = None
+    hw1f_sigma_bp:  Optional[float] = None
+    hw1f_theta:     Optional[float] = None
+
+
+@router.post("/api/price/swaption")
+async def price_swaption_route(
+    req: SwaptionRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """
+    Price a European swaption using Black/Bachelier normal vol.
+    Optionally cross-checks against HW1F model vol from latest calibration.
+    """
+    _require_trader(user)
+    val_date = req.valuation_date or date.today()
+
+    # Build discount curve — use shocked_quotes if provided (scenario repricing)
+    base_quotes = [CurveQuote(**q) for q in req.shocked_quotes] if req.shocked_quotes else []
+    ci = CurveInput(curve_id=req.curve_id, quotes=base_quotes)
+    try:
+        curve = _build_curve(ci, val_date, db)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
+
+    # Resolve strike — ATM if not provided
+    strike = req.strike
+    if strike is None:
+        from pricing.swaption import _annuity_and_forward
+        try:
+            _, fwd, _ = _annuity_and_forward(
+                req.expiry_y, req.tenor_y, curve,
+                req.pay_freq_y, val_date,
+                swap_effective_date=req.effective_date,
+                swap_maturity_date=req.maturity_date,
+            )
+            strike = fwd
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"ATM forward error: {exc}")
+
+    # HW1F params — from request or load latest calibration
+    hw1f_params = None
+    hw1f_a      = req.hw1f_a
+    hw1f_sig    = req.hw1f_sigma_bp
+    hw1f_theta  = req.hw1f_theta
+
+    if hw1f_a is None or hw1f_sig is None:
+        try:
+            row = db.execute(
+                text("""
+                    SELECT a, sigma_bp, theta FROM xva_calibration
+                    WHERE curve_id = 'USD_SWVOL_ATM' AND model = 'HW1F'
+                    ORDER BY valuation_date DESC, created_at DESC
+                    LIMIT 1
+                """)
+            ).fetchone()
+            if row:
+                hw1f_a     = row.a
+                hw1f_sig   = row.sigma_bp
+                hw1f_theta = hw1f_theta or row.theta or 0.0365
+        except Exception:
+            pass
+
+    if hw1f_a and hw1f_sig:
+        hw1f_params = {
+            'a':        hw1f_a,
+            'sigma_bp': hw1f_sig,
+            'theta':    hw1f_theta or 0.0365,
+        }
+
+    # Price
+    try:
+        result = price_swaption(
+            notional             = req.notional,
+            expiry_y             = req.expiry_y,
+            tenor_y              = req.tenor_y,
+            strike               = strike,
+            vol_bp               = req.vol_bp,
+            is_payer             = req.is_payer,
+            discount_curve       = curve,
+            pay_freq_y           = req.pay_freq_y,
+            valuation_date       = val_date,
+            hw1f_params          = hw1f_params,
+            swap_effective_date  = req.effective_date,
+            swap_maturity_date   = req.maturity_date,
+            db                   = db,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+
+    if result.error:
+        raise HTTPException(status_code=422, detail=result.error)
+
+    return {
+        "instrument":     "IR_SWAPTION",
+        "valuation_date": val_date.isoformat(),
+        "curve_id":       req.curve_id,
+        "notional":       req.notional,
+        "expiry_y":       req.expiry_y,
+        "tenor_y":        req.tenor_y,
+        "strike":         round(strike, 8),
+        "strike_pct":     round(strike * 100, 6),
+        "vol_bp":         req.vol_bp,
+        "is_payer":       req.is_payer,
+        "settlement":     "PHYSICAL",
+        # Analytics
+        "npv":               round(result.npv, 2),
+        "vega":              round(result.vega, 2),
+        "ir01":              round(result.ir01, 2),
+        "theta":             round(result.theta, 2),
+        # ── Second-order Greeks ─────────────────────────────────────────────
+        "volga":             round(result.volga, 4),        # $ per (1bp)² vol convexity
+        "vanna":             round(result.vanna, 4),        # $ per 1bp rate × 1bp vol
+        "dollar_gamma":      round(result.dollar_gamma, 4), # $ per (1bp)² rate convexity
+        "break_even_vol_bp": round(result.break_even_vol_bp, 3), # bp/day vol to cover theta
+        "delta_hedge_notl":  round(result.delta_hedge_notl, 0),  # IRS hedge notional
+        "vega_pct_premium":  round(result.vega_pct_premium, 2),  # vega as % of premium
+        # ── Curve analytics ──────────────────────────────────────────────────
+        "forward_rate":   round(result.forward_rate, 8),
+        "forward_pct":    round(result.forward_rate * 100, 6),
+        "annuity":        round(result.annuity, 2),
+        "d":              round(result.d, 6),
+        "n_d":            round(_N(result.d), 6) if result.d is not None else None,
+        "moneyness_bp":   round((result.forward_rate - strike) * 10000, 2),
+        # HW1F cross-check
+        "hw1f_vol_bp":    round(result.hw1f_vol_bp, 3) if result.hw1f_vol_bp else None,
+        "hw1f_npv":       result.hw1f_npv,
+        "hw1f_error_bp":  result.hw1f_error_bp,
+        "hw1f_params":    hw1f_params,
+        # SABR vol surface
+        "sabr_vol_bp":    result.sabr_vol_bp,
+        "is_sabr_vol":    result.is_sabr_vol,
+        "vol_tier":       getattr(result, "vol_tier", "MANUAL"),
+        # Debug intermediates — exact values for model validation / Excel replication
+        "_debug":         getattr(result, "_debug", None),
+    }
+
+
 # ── POST /cashflows/generate ──────────────────────────────────────────────────
 
 @router.post("/cashflows/generate")
@@ -718,6 +881,22 @@ async def generate_cashflows(
         raise HTTPException(status_code=422, detail="Trade has no legs")
 
     legs = [_leg_to_dict(leg) for leg in orm_legs]
+
+    # ── IR_SWAPTION: shift leg dates to forward start ─────────────────────────
+    # A swaption delivers into a forward-starting swap. The cashflow schedule
+    # must start at expiry date, not today. Shift effective/maturity dates by
+    # swaption_expiry_y years so price_swap generates the correct forward schedule.
+    if request.swaption_expiry_y and trade.instrument_type == "IR_SWAPTION":
+        expiry_days = int(request.swaption_expiry_y * 365.25)
+        for leg in legs:
+            try:
+                eff = date.fromisoformat(leg["effective_date"]) if leg.get("effective_date") else val_date
+                mat = date.fromisoformat(leg["maturity_date"])  if leg.get("maturity_date")  else val_date
+                leg["effective_date"] = str(eff + timedelta(days=expiry_days))
+                leg["maturity_date"]  = str(mat + timedelta(days=expiry_days))
+            except Exception:
+                pass
+
     curves: dict = {}
     for ci in request.curves:
         try:
