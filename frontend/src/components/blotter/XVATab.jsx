@@ -296,7 +296,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, getSession, analytics, xvaParamsRef, onSimResult, direction }) {
+export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, getSession, analytics, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult }) {
   const canvasRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
   const [calib, setCalibState] = useState(() => {
@@ -397,6 +397,8 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         const n = parseFloat(v)
         return isNaN(n) ? 85 : n
       }
+      const EXPIRY_Y = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
+      const TENOR_Y  = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'9Y':9,'10Y':10,'15Y':15,'20Y':20,'30Y':30}
       const body = {
         notional: isNaN(notional) ? 10000000 : notional,
         maturity_y: Math.max(0.5, matYears),
@@ -414,6 +416,16 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         capital_model: capModel,
         wwr_multiplier: wwr,
         simm_im_m: parseFloat(simmIm),
+        // Swaption-specific
+        ...(instrumentType === 'IR_SWAPTION' ? {
+          instrument_type:   'IR_SWAPTION',
+          swaption_expiry_y: EXPIRY_Y[swaptionExpiry] || 1.0,
+          swaption_tenor_y:  TENOR_Y[swaptionTenor]  || 5.0,
+          swaption_vol_bp:   parseFloat(swaptionVol)  || 84.0,
+          swaption_is_payer: (direction || 'PAY') === 'PAY',
+          maturity_y: (EXPIRY_Y[swaptionExpiry]||1) + (TENOR_Y[swaptionTenor]||5),
+          fixed_rate: swaptionResult?.forward_rate || (isNaN(fixedRate) ? 0.0365 : fixedRate),
+        } : {}),
       }
       const res = await fetch(API + '/api/xva/simulate', {
         method:'POST', headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
@@ -588,6 +600,66 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
       {/* RIGHT PANEL */}
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
 
+        {/* Swaption 2-phase EE context */}
+        {instrumentType === 'IR_SWAPTION' && (
+          <div style={{flexShrink:0, background:'rgba(74,158,255,0.04)',
+            borderBottom:'1px solid rgba(74,158,255,0.15)', padding:'8px 12px'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'10px',
+              marginBottom:'5px', flexWrap:'wrap'}}>
+              <span style={{fontSize:'0.6875rem', fontWeight:700, letterSpacing:'0.10em',
+                color:'#4A9EFF', fontFamily:"'IBM Plex Mono',monospace"}}>
+                SWAPTION XVA — ANDERSEN-PITERBARG 2-PHASE EE
+              </span>
+              {swaptionExpiry && swaptionTenor && (
+                <span style={{fontSize:'0.6875rem', padding:'1px 6px', borderRadius:'2px',
+                  background:'rgba(74,158,255,0.1)', border:'1px solid rgba(74,158,255,0.25)',
+                  color:'#4A9EFF', fontFamily:"'IBM Plex Mono',monospace"}}>
+                  {swaptionExpiry}×{swaptionTenor} · {(direction||'PAY')==='PAY'?'Payer':'Receiver'}
+                </span>
+              )}
+              {swaptionVol && (
+                <span style={{fontSize:'0.6875rem', color:'#555',
+                  fontFamily:"'IBM Plex Mono',monospace"}}>
+                  σ_N = {swaptionVol}bp
+                  {swaptionResult?.sabr_vol_bp ? ` (SABR at K=${((swaptionResult.forward_rate||0.036)*100).toFixed(3)}%)` : ' (ATM)'}
+                </span>
+              )}
+            </div>
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr',
+              gap:'6px', fontSize:'0.75rem', fontFamily:"'IBM Plex Mono',monospace"}}>
+              <div style={{background:'rgba(0,212,168,0.04)', border:'1px solid rgba(0,212,168,0.12)',
+                borderRadius:'2px', padding:'6px 8px'}}>
+                <div style={{color:'#00D4A8', fontWeight:700, marginBottom:'3px', fontSize:'0.6875rem',
+                  letterSpacing:'0.08em'}}>
+                  PHASE 1 — PRE-EXPIRY (0 → {swaptionExpiry||'T_exp'})
+                </div>
+                <div style={{color:'#888', lineHeight:1.6, fontFamily:"'IBM Plex Sans',sans-serif"}}>
+                  Long option → V(t) ≥ 0 always → <strong style={{color:'#F0F0F0'}}>no negative exposure.</strong>
+                  <br/>
+                  EE(t) = E[N·A(t)·Bachelier(F(t), K, T_exp−t, σ_N)]
+                  <br/>
+                  F(t) from HW1F short rate paths. σ_N from SABR surface at strike K.
+                </div>
+              </div>
+              <div style={{background:'rgba(74,158,255,0.04)', border:'1px solid rgba(74,158,255,0.12)',
+                borderRadius:'2px', padding:'6px 8px'}}>
+                <div style={{color:'#4A9EFF', fontWeight:700, marginBottom:'3px', fontSize:'0.6875rem',
+                  letterSpacing:'0.08em'}}>
+                  PHASE 2 — POST-EXPIRY ({swaptionExpiry||'T_exp'} → {swaptionExpiry||'T_exp'}+{swaptionTenor||'tenor'})
+                </div>
+                <div style={{color:'#888', lineHeight:1.6, fontFamily:"'IBM Plex Sans',sans-serif"}}>
+                  Exercise if F(T_exp) {(direction||'PAY')==='PAY' ? '>' : '<'} K.
+                  <strong style={{color:'#F0F0F0'}}> Unexercised paths → EE = 0.</strong>
+                  <br/>
+                  EE(t) = E[max(IRS NPV(t), 0) · <strong>1</strong>(F(T_exp){(direction||'PAY')==='PAY'?'>':'<'}K)]
+                  <br/>
+                  CVA substantially lower than equivalent IRS — option caps pre-expiry exposure.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Exposure chart */}
         <div style={{flex:1,position:'relative',background:'#0D0F17',borderBottom:'1px solid #1E1E1E',minHeight:'160px'}}>
           <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
@@ -609,6 +681,11 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           {simResult && (
             <div style={{position:'absolute',bottom:'6px',right:'12px',fontSize:'0.6875rem',color:'#222',fontFamily:"'IBM Plex Mono',monospace"}}>
               {simResult.n_paths.toLocaleString()} paths · HW1F · a={simResult.params.a.toFixed(4)} σ={simResult.params.sigma_bp.toFixed(1)}bp
+              {simResult.instrument_type==='IR_SWAPTION' && simResult.swaption && (
+                <span style={{color:'#333', marginLeft:'8px'}}>
+                  · 2-phase EE · expiry={simResult.swaption.expiry_y}Y · σ_N={simResult.swaption.vol_bp?.toFixed(1)}bp
+                </span>
+              )}
             </div>
           )}
         </div>

@@ -206,7 +206,6 @@ async def bloomberg_snap_swvol(
     except RuntimeError as e:
         raise HTTPException(503, str(e))
 
-    # Build vol quotes — MID is already in bp for normal vol
     ticker_map = {t["ticker"]: t for t in req.tickers}
     quotes     = []
     failed     = []
@@ -222,7 +221,6 @@ async def bloomberg_snap_swvol(
                 "ticker":  ticker,
                 "vol_bp":  price,
                 "enabled": True,
-                # PillarQuoteIn-compatible fields for market_data_snapshots
                 "quote_type": "SWVOL",
                 "rate":        price,
                 "swp_tenor":   inst["tenor"],
@@ -233,7 +231,6 @@ async def bloomberg_snap_swvol(
     if not quotes:
         raise HTTPException(422, f"Bloomberg returned no vol prices. Failed: {failed}")
 
-    # Build tenor keys as "expiry x tenor" for PillarQuoteIn compatibility
     db_quotes = [
         {
             "tenor":      q["expiry"] + "x" + q["tenor"],
@@ -248,7 +245,6 @@ async def bloomberg_snap_swvol(
     ]
     db_quotes_json = json.dumps(db_quotes)
 
-    # UPSERT into market_data_snapshots (same table as rate curves)
     existing = db.execute(
         text("SELECT id FROM market_data_snapshots WHERE curve_id = 'USD_SWVOL_ATM' AND valuation_date = :dt"),
         {"dt": snap_date},
@@ -276,3 +272,70 @@ async def bloomberg_snap_swvol(
         "failed":       failed,
     }
 
+
+# ── OTM Vol Snap ──────────────────────────────────────────────────────────────
+
+class OtmSnapRequest(BaseModel):
+    snap_date: str
+    tickers: list[dict]   # [{expiry, tenor, offset_bp, ticker}]
+
+
+@router.post("/bloomberg/snap-otm-vol")
+async def bloomberg_snap_otm_vol(
+    req: OtmSnapRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """
+    Snap absolute OTM normal vol from Bloomberg SMKO tickers.
+    Tickers: USW[G/E/C/B/L/M/O/R]A[expiry][tenor] SMKO Curncy
+    Field: MID — absolute normal vol in bp (NOT spread vs ATM)
+
+    Prefix to strike mapping (confirmed from Bloomberg DES):
+      USWG=-200bp  USWE=-100bp  USWC=-50bp  USWB=-25bp
+      USWL=+25bp   USWM=+50bp   USWO=+100bp  USWR=+200bp
+
+    Frontend converts abs vol to spreads on save: spread = abs_vol - atm_vol
+    """
+    role = user.get("user_metadata", {}).get("role", "viewer")
+    if role not in ("trader", "admin"):
+        raise HTTPException(403, "TRADER or ADMIN role required")
+
+    if not BLOOMBERG_AVAILABLE:
+        raise HTTPException(503, "blpapi not installed")
+
+    if not req.tickers:
+        raise HTTPException(422, "No tickers provided")
+
+    ticker_list = [t["ticker"] for t in req.tickers]
+
+    try:
+        prices = snap_live(ticker_list)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+
+    ticker_map = {t["ticker"]: t for t in req.tickers}
+    quotes = []
+    failed = []
+
+    for ticker, price in prices.items():
+        inst = ticker_map.get(ticker)
+        if inst is None:
+            continue
+        if price is not None:
+            quotes.append({
+                "expiry":     inst["expiry"],
+                "tenor":      inst["tenor"],
+                "offset_bp":  inst["offset_bp"],
+                "ticker":     ticker,
+                "abs_vol_bp": round(price, 4),
+            })
+        else:
+            failed.append(f"{inst['expiry']}x{inst['tenor']}@{inst['offset_bp']}bp")
+
+    return {
+        "quotes":    quotes,
+        "failed":    failed,
+        "snap_date": req.snap_date,
+        "source":    "BLOOMBERG",
+    }
