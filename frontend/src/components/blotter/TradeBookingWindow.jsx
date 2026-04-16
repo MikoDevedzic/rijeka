@@ -1464,6 +1464,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   // ── Cap / Floor / Collar state ──────────────────────────────────────
   const [capRate,    setCapRate]    = useState('4.5')
   const [floorRate,  setFloorRate]  = useState('3.0')
+  const [capResetFreq, setCapResetFreq] = useState('DAILY')
+  const [capVolOverride, setCapVolOverride] = useState('')
+  const [capPayFreq,   setCapPayFreq]   = useState('QUARTERLY')
+  const [capDayCount,  setCapDayCount]  = useState('ACT/360')
+  const [showCaplets,  setShowCaplets]  = useState(false)
   const [capResult,  setCapResult]  = useState(null)
   const [capPricing, setCapPricing] = useState(false)
   const [capErr,     setCapErr]     = useState('')
@@ -1495,20 +1500,26 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       const capRateDec   = parseFloat(capRate)   / 100
       const floorRateDec = parseFloat(floorRate) / 100
       let endpoint, payload
+      const CAP_PAY_FREQ = {'ANNUAL':1,'SEMI-ANNUAL':2,'QUARTERLY':4,'MONTHLY':12}
+      const freqPerYear = CAP_PAY_FREQ[capPayFreq] || 4
+      const capCurveId = CCY_CURVE[ccy] || 'USD_SOFR'
+      const capVolBp = capVolOverride ? parseFloat(capVolOverride) : null
       if (IS_CAP) {
         endpoint = '/api/price/cap'
-        payload  = { notional, tenor_y: tenorY, cap_rate: capRateDec }
+        payload  = { notional, tenor_y: tenorY, cap_rate: capRateDec, freq_per_year: freqPerYear, curve_id: capCurveId, ...(capVolBp ? {vol_override_bp: capVolBp} : {}) }
       } else if (IS_FLOOR) {
         endpoint = '/api/price/floor'
-        payload  = { notional, tenor_y: tenorY, floor_rate: floorRateDec }
+        payload  = { notional, tenor_y: tenorY, floor_rate: floorRateDec, freq_per_year: freqPerYear, curve_id: capCurveId, ...(capVolBp ? {vol_override_bp: capVolBp} : {}) }
       } else {
         endpoint = '/api/price/collar'
-        payload  = { notional, tenor_y: tenorY, cap_rate: capRateDec, floor_rate: floorRateDec }
+        payload  = { notional, tenor_y: tenorY, cap_rate: capRateDec, floor_rate: floorRateDec, freq_per_year: freqPerYear, curve_id: capCurveId, ...(capVolBp ? {vol_override_bp: capVolBp} : {}) }
       }
       const res  = await fetch(API + endpoint, { method: "POST", headers: h, body: JSON.stringify(payload) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Pricing failed')
       setCapResult(data)
+      // Populate vol field with surface vol (like swaption) so user can see and override
+      if (!capVolOverride && data.vol_bp) setCapVolOverride(data.vol_bp.toFixed(1))
     } catch (e) {
       setCapErr(e.message)
     } finally {
@@ -2591,7 +2602,60 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
 
         {activeTab==='cashflows' && (
           <div className='tbw-no-drag' style={{flex:1,overflowY:'auto',padding:'10px 16px',display:'flex',flexDirection:'column',gap:'10px'}}>
-            {!analytics ? (
+            {/* ── CAP / FLOOR / COLLAR: show caplet schedule ── */}
+            {(inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR') ? (
+              !capResult ? (
+                <div style={{fontSize:'0.875rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",padding:'12px 0'}}>Price the {inst==='INTEREST_RATE_CAP'?'cap':inst==='INTEREST_RATE_FLOOR'?'floor':'collar'} first to view caplet schedule.</div>
+              ) : (
+                <>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px'}}>
+                    {[
+                      {label:'OPTION NPV', val:fmtPnl(capResult.npv||capResult.net_npv), color:(capResult.npv||capResult.net_npv||0)>=0?'var(--accent)':'var(--red)'},
+                      {label:'PREMIUM %',  val:(capResult.premium_pct!=null?capResult.premium_pct:capResult.net_pct)?.toFixed(4)+'%', color:'var(--accent)'},
+                      {label:'CAPLETS',    val:(capResult.n_caplets||(capResult.cap?.n_caplets)||0)+' × '+capPayFreq, color:'var(--blue)'},
+                      {label:'VOL (bp)',   val:(capResult.vol_bp||capResult.cap_vol_bp||0).toFixed(1)+'bp ('+( capResult.vol_tier||capResult.cap_vol_tier||'')+')', color:'var(--amber)'},
+                    ].map(s=>(
+                      <div key={s.label} style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',padding:'6px 8px'}}>
+                        <div style={{fontSize:'0.875rem',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'2px'}}>{s.label}</div>
+                        <div style={{fontSize:'0.9375rem',fontWeight:700,fontFamily:"'IBM Plex Mono',var(--mono)",color:s.color}}>{s.val}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{overflowX:'auto'}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                      <thead>
+                        <tr style={{background:'var(--bg)',borderBottom:'1px solid var(--border)'}}>
+                          {['#','PERIOD START','PERIOD END','FWD RATE','DF','τ','VOL (bp)','PV'].map(h=>(
+                            <th key={h} style={{padding:'5px 8px',textAlign:['#','PERIOD START','PERIOD END'].includes(h)?'left':'right',color:'var(--text-dim)',fontWeight:600,letterSpacing:'0.06em',whiteSpace:'nowrap'}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(capResult.caplets||capResult.cap?.caplets||[]).map((cl,i)=>(
+                          <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:i%2===0?'transparent':'rgba(255,255,255,0.015)'}}>
+                            <td style={{padding:'4px 8px',color:'var(--text-dim)'}}>{cl.period}</td>
+                            <td style={{padding:'4px 8px',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{cl.start_date?fmtDate(cl.start_date):(cl.expiry_y||0).toFixed(4)+'Y'}</td>
+                            <td style={{padding:'4px 8px',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{cl.end_date?fmtDate(cl.end_date):'—'}</td>
+                            <td style={{padding:'4px 8px',textAlign:'right',color:'var(--blue)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{(cl.forward||0).toFixed(4)}%</td>
+                            <td style={{padding:'4px 8px',textAlign:'right',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{(cl.df||0).toFixed(5)}</td>
+                            <td style={{padding:'4px 8px',textAlign:'right',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{(cl.tau||0).toFixed(5)}</td>
+                            <td style={{padding:'4px 8px',textAlign:'right',color:'var(--amber)',fontWeight:600,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{(cl.vol_bp||capResult.vol_bp||0).toFixed(1)}</td>
+                            <td style={{padding:'4px 8px',textAlign:'right',color:(cl.pv||0)>=0?'var(--accent)':'var(--red)',fontWeight:600,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{fmtPnl(cl.pv)}</td>
+                          </tr>
+                        ))}
+                        <tr style={{borderTop:'2px solid var(--border)',background:'rgba(255,255,255,0.02)'}}>
+                          <td colSpan={7} style={{padding:'5px 8px',fontWeight:700,color:'var(--text-dim)',letterSpacing:'0.08em'}}>TOTAL</td>
+                          <td style={{padding:'5px 8px',textAlign:'right',fontWeight:700,fontFamily:"'IBM Plex Mono',var(--mono)",color:(capResult.npv||0)>=0?'var(--accent)':'var(--red)'}}>{fmtPnl(capResult.npv||capResult.net_npv)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",padding:'4px 0'}}>
+                    {CCY_CURVE[ccy]||'USD_SOFR'} · Bachelier Normal · {capDayCount} · ATM fwd = {(capResult.atm_forward_pct||0).toFixed(4)}%
+                  </div>
+                </>
+              )
+            ) : !analytics ? (
               <div style={{fontSize:'0.875rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",padding:'12px 0'}}>Price the trade first to view cashflow schedule.</div>
             ) : (
               <>
@@ -2621,8 +2685,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     {label: inst==='IR_SWAPTION' ? 'FWD FIXED LEG PV' : 'FIXED LEG PV',
                      val: fmtPnl(inst==='FRA' ? null : legs.find(l=>l.leg_type==='FIXED')?(legs.find(l=>l.leg_type==='FIXED').pv):null),
                      color:'var(--red)'},
-                    {label: inst==='IR_SWAPTION' ? 'FWD FLOAT LEG PV' : (inst==='FRA' ? 'FRA LEG PV' : 'FLOAT LEG PV'),
-                     val: fmtPnl(inst==='FRA' ? legs.find(l=>l.leg_type==='FRA')?.pv : legs.find(l=>l.leg_type==='FLOAT')?(legs.find(l=>l.leg_type==='FLOAT').pv):null),
+                    {label: inst==='IR_SWAPTION' ? 'FWD FLOAT LEG PV' : 'FLOAT LEG PV',
+                     val: fmtPnl(legs.find(l=>l.leg_type==='FLOAT')?(legs.find(l=>l.leg_type==='FLOAT').pv):null),
                      color:'var(--accent)'},
                     {label:'PERIODS',
                      val:(legs.find(l=>l.leg_type==='FIXED')?((legs.find(l=>l.leg_type==='FIXED').cashflows||[]).length):0)+' + '+(legs.find(l=>l.leg_type==='FLOAT')?((legs.find(l=>l.leg_type==='FLOAT').cashflows||[]).length):0),
@@ -2712,7 +2776,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               {ASSET_CLASSES.map(a=><Chip key={a} label={a} active={ac===a} live={LIVE_AC.includes(a)} onClick={()=>{setAc(a);setInst(INSTRUMENTS[a][0])}}/>)}
             </div>
             <div className='tbw-chip-row' style={{marginTop:'3px'}}>
-              {(INSTRUMENTS[ac]||[]).map(i=><Chip key={i} label={i.replace(/_/g,' ')} active={inst===i} live={(LIVE_INST[ac]||[]).includes(i)} onClick={()=>{ setInst(i); if(i==='FRA'){ setParRate(null); if(rateRef.current){ rateRef.current.value=''; rateRef.current.dataset.userEdited='' } } }}/>)}
+              {(INSTRUMENTS[ac]||[]).map(i=><Chip key={i} label={i.replace(/_/g,' ')} active={inst===i} live={(LIVE_INST[ac]||[]).includes(i)} onClick={()=>setInst(i)}/>)}
             </div>
             {inst==='IR_SWAP'&&(
               <div className='tbw-chip-row' style={{marginTop:'3px'}}>
@@ -2935,19 +2999,42 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                         onChange={e => setFloorRate(e.target.value)} autoComplete='off'/>
                     </Fld>
                   )}
-                  <Fld label='CURVE' flex={1.0}>
-                    <div style={{...inp,display:'flex',alignItems:'center',color:'var(--text-dim)',fontSize:'0.875rem'}}>
-                      USD SOFR · OIS
-                    </div>
+                  <Fld label='INDEX' flex={1.2}>
+                    <select style={{...sel,fontSize:'1rem',fontWeight:600}} value={index} onChange={e=>handleIndexChange(e.target.value)}>
+                      {(CCY_INDICES[ccy]||[]).map(idx=><option key={idx} value={idx}>{idx}</option>)}
+                    </select>
                   </Fld>
-                  <Fld label='RESET / DAY COUNT' flex={1.2}>
-                    <div style={{...inp,display:'flex',alignItems:'center',color:'var(--text-dim)',fontSize:'0.875rem'}}>
-                      Quarterly · ACT/360
+                  <Fld label='RESET FREQ' flex={0.9}>
+                    <select style={sel} value={capResetFreq} onChange={e=>setCapResetFreq(e.target.value)}>
+                      {['DAILY','QUARTERLY','MONTHLY'].map(f=><option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </Fld>
+                  <Fld label='PAY FREQ' flex={0.9}>
+                    <select style={sel} value={capPayFreq} onChange={e=>setCapPayFreq(e.target.value)}>
+                      {['QUARTERLY','SEMI-ANNUAL','ANNUAL','MONTHLY'].map(f=><option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </Fld>
+                  <Fld label='DAY COUNT' flex={0.9}>
+                    <select style={sel} value={capDayCount} onChange={e=>setCapDayCount(e.target.value)}>
+                      {DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </Fld>
+
+                </Row>
+                <Row>
+                  <Fld label='NORMAL VOL (bp)' flex={0.8}>
+                    <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--blue)',borderColor:'rgba(74,158,255,0.4)'}}
+                      type='text' value={capVolOverride} placeholder={capResult ? (capResult.vol_bp||0).toFixed(1)+' (surface)' : '— price to load'}
+                      onChange={e=>setCapVolOverride(e.target.value)} autoComplete='off'/>
+                  </Fld>
+                  <Fld label='' flex={2.5}>
+                    <div style={{height:'34px',display:'flex',alignItems:'center',fontSize:'0.75rem',color:'var(--text-dim)',letterSpacing:'0.04em'}}>
+                      {capVolOverride ? 'edit to override · clear to revert to surface' : 'price first to auto-populate from surface'}
                     </div>
                   </Fld>
                 </Row>
                 <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
-                  Bachelier (Normal) · vol from Bloomberg cap surface · OIS discounting · SOFR in-arrears
+                  Bachelier (Normal) · vol from Bloomberg cap surface · OIS discounting · SOFR in-arrears · {index} · {CCY_CURVE[ccy]||'USD_SOFR'}
                   {capResult && ' · ATM fwd = ' + (capResult.atm_forward_pct||0).toFixed(4) + '% · vol = ' + (capResult.vol_bp||capResult.cap_vol_bp||0).toFixed(1) + 'bp (' + (capResult.vol_tier||capResult.cap_vol_tier||'') + ')'}
                 </div>
                 {capResult && (
@@ -2979,49 +3066,84 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                       display:'flex',gap:'16px',alignItems:'center',flexWrap:'wrap',
                       fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--text-dim)'}}>
                       <span style={{fontWeight:700,letterSpacing:'0.08em'}}>
-                        {(capResult.n_caplets || (capResult.cap && capResult.cap.n_caplets))} caplets · quarterly SOFR · ACT/360
+                        {(capResult.n_caplets || (capResult.cap && capResult.cap.n_caplets))} caplets · {capPayFreq.toLowerCase()} · {capDayCount}
                       </span>
                       <span>Vol: {(capResult.vol_bp||capResult.cap_vol_bp||0).toFixed(1)}bp ({capResult.vol_tier||capResult.cap_vol_tier})</span>
+                      <button onClick={()=>setShowCaplets(v=>!v)} style={{marginLeft:'auto',fontSize:'0.75rem',background:'transparent',border:'1px solid var(--border)',borderRadius:'2px',padding:'1px 8px',cursor:'pointer',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                        {showCaplets ? '▴ HIDE' : '▾ CAPLETS'}
+                      </button>
                     </div>
+                    {showCaplets && (
+                      <div style={{overflowX:'auto'}}>
+                        <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.75rem',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                          <thead>
+                            <tr style={{background:'var(--bg)',borderBottom:'1px solid var(--border)'}}>
+                              {['#','T_START','FWD %','DF','τ','VOL bp','PV'].map(h=>(
+                                <th key={h} style={{padding:'4px 8px',textAlign:h==='#'||h==='T_START'?'left':'right',color:'var(--text-dim)',fontWeight:600,letterSpacing:'0.06em',whiteSpace:'nowrap'}}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(capResult.caplets||[]).map((cl,i)=>(
+                              <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.04)',background:i%2===0?'transparent':'rgba(255,255,255,0.015)'}}>
+                                <td style={{padding:'3px 8px',color:'var(--text-dim)'}}>{cl.period}</td>
+                                <td style={{padding:'3px 8px',color:'var(--text-dim)'}}>{cl.expiry_y.toFixed(2)}Y</td>
+                                <td style={{padding:'3px 8px',textAlign:'right',color:'var(--blue)'}}>{(cl.forward||0).toFixed(4)}%</td>
+                                <td style={{padding:'3px 8px',textAlign:'right',color:'var(--text-dim)'}}>{(cl.df||0).toFixed(5)}</td>
+                                <td style={{padding:'3px 8px',textAlign:'right',color:'var(--text-dim)'}}>{(cl.tau||0).toFixed(4)}</td>
+                                <td style={{padding:'3px 8px',textAlign:'right',color:'var(--amber)'}}>{(cl.vol_bp||0).toFixed(1)}</td>
+                                <td style={{padding:'3px 8px',textAlign:'right',color:cl.pv>=0?'var(--accent)':'var(--red)',fontWeight:600}}>${Math.round(cl.pv||0).toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
+                {/* ── OPTION FEE ─────────────────────────────────────────── */}
+                <SectionHdr>
+                  OPTION FEE
+                  <span style={{fontSize:'0.6875rem',color:'var(--text-dim)',fontWeight:400,letterSpacing:'0.04em',marginLeft:'8px'}}>
+                    {feeAmount ? (feeAmountType==='BP' ? `${feeAmount}bp upfront` : `$${parseFloat(feeAmount).toLocaleString()} upfront`) : 'no premium entered'}
+                  </span>
+                </SectionHdr>
+                <Row>
+                  <Fld label='PREMIUM AMOUNT' flex={1.2}>
+                    <div style={{display:'flex',gap:'4px',height:'34px'}}>
+                      <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--amber)',flex:1}}
+                        type='text' value={feeAmount} placeholder='0.00'
+                        onChange={e=>setFeeAmount(e.target.value)} autoComplete='off'/>
+                      <div style={{display:'flex',gap:'2px'}}>
+                        {['BP','$'].map(t=>(
+                          <DirBtn key={t} label={t} active={feeAmountType===t} color='var(--amber)'
+                            onClick={()=>setFeeAmountType(t)}/>
+                        ))}
+                      </div>
+                    </div>
+                  </Fld>
+                  <Fld label='SETTLE DATE' flex={1.0}>
+                    <input type='date' style={{...inp,fontSize:'0.9375rem'}}
+                      value={feeSettleDate} onChange={e=>setFeeSettleDate(e.target.value)}/>
+                  </Fld>
+                  <Fld label='' flex={1.6}>
+                    <div style={{height:'34px',display:'flex',alignItems:'center',
+                      fontSize:'0.75rem',color:'var(--text-dim)',letterSpacing:'0.06em'}}>
+                      {feeAmount && feeSettleDate ? (
+                        <span style={{color:'var(--amber)'}}>
+                          {feeAmountType==='BP'
+                            ? `Fee = $${Math.round((parseFloat(feeAmount)||0)/10000*(parseFloat((notionalRef?.current?.value||'10000000').replace(/,/g,''))||10000000)).toLocaleString()}`
+                            : `Fee = $${Math.round(parseFloat(feeAmount)||0).toLocaleString()}`}
+                          {' · settle '}{feeSettleDate}
+                        </span>
+                      ) : 'enter premium + settle date'}
+                    </div>
+                  </Fld>
+                </Row>
                 {capErr && <div style={{color:'var(--red)',fontSize:'0.8125rem',padding:'4px 0'}}>{capErr}</div>}
               </>
             )}
 
-            {inst === 'FRA' ? (
-              <>
-                {/* ── FRA TERMS — single settlement cashflow ─────────────────── */}
-                <SectionHdr>
-                  FRA TERMS
-                  <Badge label={dir==='PAY'?'→ PAY FRA RATE (short rate)':'← RECEIVE FRA RATE (long rate)'} color={dir==='PAY'?'var(--red)':'var(--accent)'}/>
-                </SectionHdr>
-                <Row>
-                  <Fld label='CONTRACT RATE (%)' flex={1.6}>
-                    <input ref={rateRef}
-                      style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--amber)',borderColor:'rgba(240,160,32,0.4)'}}
-                      type='text' placeholder='0.000000 — at-market = 0' autoComplete='off'
-                      defaultValue=''
-                      onChange={e=>{ if(rateRef.current) rateRef.current.dataset.userEdited='1' }}
-                    />
-                  </Fld>
-                  <Fld label='REFERENCE INDEX' flex={1.6}>
-                    <select style={{...sel,fontSize:'1rem',fontWeight:600}} value={index} onChange={e=>handleIndexChange(e.target.value)}>
-                      {(CCY_INDICES[ccy]||[]).map(idx=><option key={idx} value={idx}>{idx}</option>)}
-                    </select>
-                  </Fld>
-                  <Fld label='DAY COUNT' flex={1.3}>
-                    <select style={sel} value={fraDay} onChange={e=>setFraDay(e.target.value)}>
-                      {DAY_COUNTS.map(d=><option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </Fld>
-                </Row>
-                <div style={{fontSize:'0.75rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)",padding:'4px 0 2px',opacity:0.7}}>
-                  Eff Date = Ts (fixing/settlement) · Mat Date = Te (accrual end) · NPV = N × (fwd − K) × δ × P(0,Te)
-                </div>
-              </>
-            ) : (
-              <>
                 {struct === 'BASIS' ? (
                   <>
                     {/* ── BASIS SWAP: FLOAT LEG 1 ─────────────────────────────── */}
@@ -3120,8 +3242,6 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     </Row>
                   </div>
                 )}
-              </>
-            )}
 
               <div style={{display:(inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR')?'none':'contents'}}>
             <div ref={analyticsRef}/>
@@ -3318,12 +3438,37 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
         <div className='tbw-footer tbw-no-drag'>
             {err&&<div className='tbw-error'>{err}</div>}
             {activeTab!=='scenario' && <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid #1E1E1E',background:'#050505',padding:'5px 14px',gap:'0',marginBottom:'6px'}}>
-              {[
-                {label:'NET NPV',val:analytics!=null&&analytics.npv!=null?(analytics.npv>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(analytics.npv)).toLocaleString('en-US'):'—',color:analytics!=null&&analytics.npv!=null?(analytics.npv>=0?'#00D4A8':'#FF6B6B'):'#444'},
-                {label:'IR01',val:analytics!=null&&analytics.ir01!=null?(analytics.ir01>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(analytics.ir01)).toLocaleString('en-US'):'—',color:'#4A9EFF'},
-                {label:'IR01 DISC',val:analytics!=null&&analytics.ir01_disc!=null?(analytics.ir01_disc>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(analytics.ir01_disc)).toLocaleString('en-US'):'—',color:'#4A9EFF'},
-                {label:'THETA',val:analytics!=null&&analytics.theta!=null?(analytics.theta>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(analytics.theta)).toLocaleString('en-US'):'—',color:'#FF6B6B'},
-              ].map((m,i)=>(
+              {(()=>{
+                const fmtV = v => v!=null ? (v>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(v)).toLocaleString('en-US') : '—'
+                const fmtBp = v => v!=null ? v.toFixed(1)+'bp' : '—'
+                const an = analytics
+                const sw = swaptionResult
+                const cp = capResult
+                let metrics
+                if (inst==='IR_SWAPTION') {
+                  metrics = [
+                    {label:'OPTION NPV', val:fmtV(sw?.npv),   color:sw?.npv!=null?(sw.npv>=0?'#00D4A8':'#FF6B6B'):'#444'},
+                    {label:'VEGA/1bp',   val:fmtV(sw?.vega),  color:'#4A9EFF'},
+                    {label:'IR01',       val:fmtV(sw?.ir01),  color:'#4A9EFF'},
+                    {label:'THETA/day',  val:fmtV(sw?.theta), color:'#FF6B6B'},
+                  ]
+                } else if (inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR') {
+                  metrics = [
+                    {label:'OPTION NPV', val:fmtV(cp?.npv??cp?.net_npv),   color:(cp?.npv??cp?.net_npv)!=null?((cp?.npv??cp?.net_npv)>=0?'#00D4A8':'#FF6B6B'):'#444'},
+                    {label:'VEGA/1bp',   val:fmtV(cp?.vega??cp?.net_vega), color:'#4A9EFF'},
+                    {label:'IR01',       val:fmtV(cp?.ir01??cp?.net_ir01), color:'#4A9EFF'},
+                    {label:'VOL (bp)',   val:fmtBp(cp?.vol_bp),            color:'#F5C842'},
+                  ]
+                } else {
+                  metrics = [
+                    {label:'NET NPV',   val:fmtV(an?.npv),       color:an?.npv!=null?(an.npv>=0?'#00D4A8':'#FF6B6B'):'#444'},
+                    {label:'IR01',      val:fmtV(an?.ir01),      color:'#4A9EFF'},
+                    {label:'IR01 DISC', val:fmtV(an?.ir01_disc), color:'#4A9EFF'},
+                    {label:'THETA',     val:fmtV(an?.theta),     color:'#FF6B6B'},
+                  ]
+                }
+                return metrics
+              })().map((m,i)=>(
                 <div key={i} style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid #1E1E1E'}}>
                   <span style={{fontSize:'9px',color:'#444',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
                   <span style={{fontSize:'11px',color:m.color,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>{m.val}</span>

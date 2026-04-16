@@ -941,3 +941,241 @@ async def generate_cashflows(
         "curve_mode":        _curve_mode(request.curves),
         "valuation_date":    val_date.isoformat(),
     }
+
+# ============================================================
+# CAP / FLOOR / COLLAR PRICING ROUTES  — append to pricer.py
+# ============================================================
+
+class CapFloorRequest(BaseModel):
+    notional:       float           = 10_000_000
+    tenor_y:        float           = 5.0
+    cap_rate:       Optional[float] = None
+    floor_rate:     Optional[float] = None
+    fallback_vol_bp: float          = 85.0
+    valuation_date: Optional[date]  = None
+    curve_id:       str             = "USD_SOFR"
+    freq_per_year:  int             = 4
+    vol_override_bp: Optional[float] = None
+
+
+def _load_cap_surface(db: Session, val_date: str) -> list[dict]:
+    """Load cap vol surface rows for a given date. Falls back to most recent if not found."""
+    try:
+        rows = db.execute(
+            text("""
+                SELECT cap_tenor_y, strike_spread_bp, flat_vol_bp, is_atm, source
+                FROM   cap_vol_surface
+                WHERE  valuation_date = :vd
+                ORDER  BY cap_tenor_y, strike_spread_bp
+            """),
+            {"vd": val_date}
+        ).mappings().all()
+        if rows:
+            return [dict(r) for r in rows]
+        # Fallback to most recent available date
+        rows = db.execute(
+            text("""
+                SELECT cap_tenor_y, strike_spread_bp, flat_vol_bp, is_atm, source
+                FROM   cap_vol_surface
+                WHERE  valuation_date = (
+                    SELECT MAX(valuation_date) FROM cap_vol_surface
+                )
+                ORDER  BY cap_tenor_y, strike_spread_bp
+            """)
+        ).mappings().all()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+@router.post("/api/price/cap")
+async def price_cap_route(
+    req: CapFloorRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """Price an interest rate cap — sum of Bachelier call caplets."""
+    _require_trader(user)
+
+    if req.cap_rate is None:
+        raise HTTPException(status_code=422, detail="cap_rate required")
+
+    val_date = req.valuation_date or date.today()
+    ci       = CurveInput(curve_id=req.curve_id, quotes=[])
+    try:
+        curve = _build_curve(ci, val_date, db)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
+
+    surface_rows = _load_cap_surface(db, val_date.isoformat())
+
+    from pricing.cap_floor import price_cap as _price_cap
+    try:
+        result = _price_cap(
+            notional        = req.notional,
+            cap_rate        = req.cap_rate,
+            tenor_y         = req.tenor_y,
+            discount_curve  = curve,
+            valuation_date  = val_date,
+            surface_rows    = surface_rows,
+            fallback_vol_bp = req.fallback_vol_bp,
+            freq_per_year   = req.freq_per_year,
+            vol_override_bp = req.vol_override_bp,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+
+    return {
+        "instrument":     "INTEREST_RATE_CAP",
+        "valuation_date": val_date.isoformat(),
+        "notional":       req.notional,
+        "cap_rate":       req.cap_rate,
+        "cap_rate_pct":   round(req.cap_rate * 100, 4),
+        "tenor_y":        req.tenor_y,
+        "npv":            result.npv,
+        "premium_pct":    result.premium_pct,
+        "vega":           result.vega,
+        "ir01":           result.ir01,
+        "delta":          result.delta,
+        "vol_bp":         result.vol_bp,
+        "vol_tier":       result.vol_tier,
+        "atm_forward":    result.atm_forward,
+        "atm_forward_pct": round(result.atm_forward * 100, 6),
+        "n_caplets":      result.n_caplets,
+        "caplets":        result.caplets,
+    }
+
+
+@router.post("/api/price/floor")
+async def price_floor_route(
+    req: CapFloorRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """Price an interest rate floor — sum of Bachelier put floorlets."""
+    _require_trader(user)
+
+    if req.floor_rate is None:
+        raise HTTPException(status_code=422, detail="floor_rate required")
+
+    val_date = req.valuation_date or date.today()
+    ci       = CurveInput(curve_id=req.curve_id, quotes=[])
+    try:
+        curve = _build_curve(ci, val_date, db)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
+
+    surface_rows = _load_cap_surface(db, val_date.isoformat())
+
+    from pricing.cap_floor import price_floor as _price_floor
+    try:
+        result = _price_floor(
+            notional        = req.notional,
+            floor_rate      = req.floor_rate,
+            tenor_y         = req.tenor_y,
+            discount_curve  = curve,
+            valuation_date  = val_date,
+            surface_rows    = surface_rows,
+            fallback_vol_bp = req.fallback_vol_bp,
+            freq_per_year   = req.freq_per_year,
+            vol_override_bp = req.vol_override_bp,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+
+    return {
+        "instrument":      "INTEREST_RATE_FLOOR",
+        "valuation_date":  val_date.isoformat(),
+        "notional":        req.notional,
+        "floor_rate":      req.floor_rate,
+        "floor_rate_pct":  round(req.floor_rate * 100, 4),
+        "tenor_y":         req.tenor_y,
+        "npv":             result.npv,
+        "premium_pct":     result.premium_pct,
+        "vega":            result.vega,
+        "ir01":            result.ir01,
+        "delta":           result.delta,
+        "vol_bp":          result.vol_bp,
+        "vol_tier":        result.vol_tier,
+        "atm_forward":     result.atm_forward,
+        "atm_forward_pct": round(result.atm_forward * 100, 6),
+        "n_caplets":       result.n_caplets,
+        "caplets":         result.caplets,
+    }
+
+
+@router.post("/api/price/collar")
+async def price_collar_route(
+    req: CapFloorRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """
+    Price an interest rate collar = long cap + short floor.
+    Net NPV = cap premium - floor premium.
+    Zero-cost collar when net NPV = 0.
+    """
+    _require_trader(user)
+
+    if req.cap_rate is None or req.floor_rate is None:
+        raise HTTPException(status_code=422, detail="Both cap_rate and floor_rate required for collar")
+    if req.cap_rate <= req.floor_rate:
+        raise HTTPException(status_code=422, detail="cap_rate must be above floor_rate")
+
+    val_date = req.valuation_date or date.today()
+    ci       = CurveInput(curve_id=req.curve_id, quotes=[])
+    try:
+        curve = _build_curve(ci, val_date, db)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
+
+    surface_rows = _load_cap_surface(db, val_date.isoformat())
+
+    from pricing.cap_floor import price_collar as _price_collar
+    try:
+        result = _price_collar(
+            notional        = req.notional,
+            cap_rate        = req.cap_rate,
+            floor_rate      = req.floor_rate,
+            tenor_y         = req.tenor_y,
+            discount_curve  = curve,
+            valuation_date  = val_date,
+            surface_rows    = surface_rows,
+            fallback_vol_bp = req.fallback_vol_bp,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+
+    cap   = result["cap"]
+    floor = result["floor"]
+
+    return {
+        "instrument":          "INTEREST_RATE_COLLAR",
+        "valuation_date":      val_date.isoformat(),
+        "notional":            req.notional,
+        "cap_rate":            req.cap_rate,
+        "cap_rate_pct":        round(req.cap_rate * 100, 4),
+        "floor_rate":          req.floor_rate,
+        "floor_rate_pct":      round(req.floor_rate * 100, 4),
+        "tenor_y":             req.tenor_y,
+        # Collar net
+        "net_npv":             result["net_npv"],
+        "net_pct":             result["net_pct"],
+        "net_vega":            result["net_vega"],
+        "net_ir01":            result["net_ir01"],
+        "zero_cost_spread_bp": result["zero_cost_spread_bp"],
+        # Cap leg
+        "cap_npv":             cap.npv,
+        "cap_premium_pct":     cap.premium_pct,
+        "cap_vol_bp":          cap.vol_bp,
+        "cap_vol_tier":        cap.vol_tier,
+        # Floor leg
+        "floor_npv":           floor.npv,
+        "floor_premium_pct":   floor.premium_pct,
+        "floor_vol_bp":        floor.vol_bp,
+        "floor_vol_tier":      floor.vol_tier,
+        # Shared
+        "atm_forward":         cap.atm_forward,
+        "atm_forward_pct":     round(cap.atm_forward * 100, 6),
+        "n_caplets":           cap.n_caplets,
+    }
