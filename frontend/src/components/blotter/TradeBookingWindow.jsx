@@ -1518,8 +1518,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Pricing failed')
       setCapResult(data)
-      // Populate vol field with surface vol (like swaption) so user can see and override
-      if (!capVolOverride && data.vol_bp) setCapVolOverride(data.vol_bp.toFixed(1))
+      // Always update vol field with what was actually used (surface or override)
+      if (data.vol_bp) setCapVolOverride(data.vol_bp.toFixed(1))
     } catch (e) {
       setCapErr(e.message)
     } finally {
@@ -2776,7 +2776,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               {ASSET_CLASSES.map(a=><Chip key={a} label={a} active={ac===a} live={LIVE_AC.includes(a)} onClick={()=>{setAc(a);setInst(INSTRUMENTS[a][0])}}/>)}
             </div>
             <div className='tbw-chip-row' style={{marginTop:'3px'}}>
-              {(INSTRUMENTS[ac]||[]).map(i=><Chip key={i} label={i.replace(/_/g,' ')} active={inst===i} live={(LIVE_INST[ac]||[]).includes(i)} onClick={()=>setInst(i)}/>)}
+              {(INSTRUMENTS[ac]||[]).map(i=><Chip key={i} label={i.replace(/_/g,' ')} active={inst===i} live={(LIVE_INST[ac]||[]).includes(i)} onClick={()=>{ setInst(i); if(i==='INTEREST_RATE_CAP'||i==='INTEREST_RATE_FLOOR'||i==='INTEREST_RATE_COLLAR'){ setCapResult(null); setCapErr(''); setCapPricing(false); setCapVolOverride('') } }}/>)}
             </div>
             {inst==='IR_SWAP'&&(
               <div className='tbw-chip-row' style={{marginTop:'3px'}}>
