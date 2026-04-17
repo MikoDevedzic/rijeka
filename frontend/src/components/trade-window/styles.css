@@ -1,0 +1,429 @@
+/* trade-window/styles.css
+ * ─────────────────────────────────────────────────────────────────────────
+ * Pure Black theme — Rijeka canonical palette.
+ * All tbw-* classes live under this file so the old TradeBookingWindow.jsx
+ * and the new TradeWindow.jsx can run side-by-side during migration.
+ * ───────────────────────────────────────────────────────────────────────── */
+
+.tbw-window {
+  /* Floating modal positioning — JS-driven after Patch 8 */
+  position: fixed;
+  width: 1170px;
+  max-width: 92vw;
+  max-height: 95vh;
+  min-width: 640px;
+  min-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  resize: both;            /* native browser resize handle bottom-right */
+  z-index: 1000;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+
+  /* Base chrome */
+  background: #000;
+  color: #F0F0F0;
+  font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  border: 1px solid #1E1E1E;
+  border-radius: 6px;
+}
+
+/* Weakened reset — only inherit color/font. Leave border/background/padding
+   to specific classes so they can render properly (Patch 10). */
+.tbw-window button {
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tbw-window input,
+.tbw-window select {
+  background: #0C0C0C;
+  color: #F0F0F0;
+  border: 1px solid #1E1E1E;
+  border-radius: 2px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tbw-window input.tbw-mono,
+.tbw-window .tbw-mono {
+  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+}
+
+/* ── Chips ──────────────────────────────────────────────────────────────── */
+
+.tbw-chip-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.tbw-chip {
+  border: 1px solid #333;
+  padding: 6px 12px;
+  border-radius: 2px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  cursor: pointer;
+  color: #AAA;
+  background: #141414;
+}
+
+.tbw-chip:hover:not(:disabled):not(.is-on) {
+  border-color: #555;
+  color: #F0F0F0;
+  background: #1C1C1C;
+}
+
+.tbw-chip:disabled {
+  color: #444;
+  cursor: not-allowed;
+}
+
+.tbw-chip.is-on {
+  border-color: #00D4A8;
+  background: #00D4A8;
+  color: #000;
+}
+
+.tbw-chip.is-on-amber {
+  border-color: #F5C842;
+  background: #F5C842;
+  color: #000;
+}
+
+.tbw-chip.tbw-chip-dir-pay.is-on {
+  border-color: #FF6B6B;
+  background: #FF6B6B;
+  color: #000;
+}
+
+/* ── Tabs ──────────────────────────────────────────────────────────────── */
+
+.tbw-tabbar {
+  display: flex;
+  padding: 0 16px;
+  border-bottom: 1px solid #1E1E1E;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+
+.tbw-tab {
+  padding: 12px 20px;
+  color: #777;
+  margin-bottom: -1px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+}
+
+.tbw-tab:hover:not(.is-active) {
+  color: #AAA;
+  background: #080808;
+}
+
+.tbw-tab + .tbw-tab {
+  border-left: 1px solid #2A2A2A;
+}
+
+.tbw-tab.is-active {
+  color: #00D4A8;
+  border-bottom: 2px solid #00D4A8;
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────── */
+
+.tbw-sec {
+  padding: 14px 16px;
+  border-bottom: 1px solid #1E1E1E;
+}
+
+.tbw-lbl {
+  font-size: 11px;
+  color: #888;
+  letter-spacing: 0.12em;
+  margin-bottom: 7px;
+  text-transform: uppercase;
+  font-weight: 600;
+  cursor: move;      /* labels are drag zones (Patch 15) */
+  user-select: none;
+}
+
+.tbw-sec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.tbw-terms-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tbw-helper-badge {
+  padding: 4px 8px;
+  border: 1px solid;
+  border-radius: 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+}
+
+.tbw-helper-text,
+.tbw-terms-footer,
+.tbw-mut {
+  font-size: 11px;
+  color: #555;
+  letter-spacing: 0.05em;
+}
+
+.tbw-error {
+  color: #FF6B6B;
+  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  padding: 6px 8px;
+  background: rgba(255, 107, 107, 0.05);
+  border-left: 2px solid #FF6B6B;
+}
+
+/* ── Grids ─────────────────────────────────────────────────────────────── */
+
+.tbw-grid-6 {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+}
+
+/* ── Metric cards ──────────────────────────────────────────────────────── */
+
+.tbw-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tbw-metric-card {
+  background: #0A0A0A;
+  border: 1px solid #262626;
+  border-radius: 3px;
+  padding: 10px 12px;
+}
+
+/* ── Breakdown table ──────────────────────────────────────────────────── */
+
+.tbw-breakdown-wrap {
+  border: 1px solid #1E1E1E;
+  border-radius: 3px;
+}
+
+.tbw-breakdown-toggle {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 10px;
+  color: #666;
+  letter-spacing: 0.1em;
+  border-bottom: 1px solid #1E1E1E;
+  cursor: pointer;
+}
+
+.tbw-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.tbw-breakdown-table th {
+  text-align: left;
+  color: #666;
+  padding: 6px 8px;
+  font-weight: 500;
+  border-bottom: 1px solid #1E1E1E;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.tbw-breakdown-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #141414;
+}
+
+/* ── Colors ────────────────────────────────────────────────────────────── */
+
+.tbw-positive { color: #00D4A8; }
+.tbw-negative { color: #FF6B6B; }
+.tbw-blue     { color: #4A9EFF; }
+.tbw-amber    { color: #F5C842; }
+.tbw-info     { color: #4A9EFF; }
+.tbw-warning  { color: #F5C842; }
+.tbw-accent   { color: #00D4A8; }
+.tbw-default  { color: #F0F0F0; }
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+.tbw-footer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #050505;
+  border-top: 1px solid #1E1E1E;
+  align-items: center;
+}
+
+.tbw-footer-metrics {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.tbw-footer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tbw-struct-label {
+  font-size: 10px;
+  color: #444;
+  letter-spacing: 0.1em;
+  margin-right: 4px;
+}
+
+.tbw-struct-value {
+  color: #888;
+  font-weight: 500;
+}
+
+.tbw-btn {
+  border: 1px solid #1E1E1E;
+  padding: 6px 14px;
+  border-radius: 2px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  font-weight: 500;
+  cursor: pointer;
+  color: #888;
+}
+
+.tbw-btn-cancel {
+  color: #888;
+}
+
+.tbw-btn-price {
+  border-color: #F5C842;
+  color: #F5C842;
+  background: transparent;
+  font-weight: 500;
+}
+
+.tbw-btn-price:hover:not(:disabled) {
+  background: rgba(245, 200, 66, 0.08);
+}
+
+.tbw-btn-price:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tbw-btn-book {
+  border-color: #00D4A8;
+  background: #00D4A8;
+  color: #000;
+  padding: 6px 18px;
+  font-weight: 600;
+}
+
+.tbw-btn-book:hover:not(:disabled) {
+  background: #1AE0B8;
+  border-color: #1AE0B8;
+}
+
+.tbw-btn-book:disabled {
+  opacity: 0.5;
+  background: #222;
+  color: #555;
+  border-color: #333;
+  cursor: not-allowed;
+}
+/* ── Window header (Patch 8) ─────────────────────────────────────────── */
+
+.tbw-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background: #0A0A0A;
+  border-bottom: 1px solid #1E1E1E;
+  cursor: move;
+  user-select: none;
+}
+
+.tbw-traffic-lights {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.tbw-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.tbw-light-r { background: #FF5F57; }
+.tbw-light-y { background: #FEBC2E; }
+.tbw-light-g { background: #28C841; }
+
+.tbw-light-r:hover { background: #FF7A73; }
+
+.tbw-title {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+  color: #F0F0F0;
+  text-transform: uppercase;
+}
+
+.tbw-placeholder {
+  padding: 80px 40px;
+  text-align: center;
+  color: #555;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  font-style: italic;
+}
+/* ── Section header hierarchy (Patch 14) ──────────────────────────────── */
+
+/* First .tbw-lbl inside each .tbw-sec becomes the section header. */
+.tbw-sec > .tbw-lbl:first-child,
+.tbw-sec > .tbw-sec-header > .tbw-lbl,
+.tbw-sec > .tbw-terms-header > .tbw-lbl {
+  font-size: 11px;
+  color: #B0B0B0;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding-left: 10px;
+  border-left: 3px solid #00D4A8;
+  margin-bottom: 12px;
+  line-height: 1.2;
+}
+
+/* Give sections a bit more breathing room between them. */
+.tbw-sec {
+  padding: 16px 18px;
+}

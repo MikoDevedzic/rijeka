@@ -116,6 +116,78 @@ Every descriptor must implement these nine fields — the registry validates on
 
 See `registry.js` JSDoc for full type specs.
 
+## Rendering sequence (never changes)
+
+Every trade window, for every product, renders these nine sections in this
+exact vertical order. Sections that don't apply to a given product (e.g.
+Option Fee for a vanilla swap) are simply not rendered — they do not move
+to a different position.
+
+| #  | Section             | Source                                    |
+|----|---------------------|-------------------------------------------|
+| 1  | TabBar              | Fixed — TRADE / DETAILS / CASHFLOWS / XVA / CURVE SCENARIO / CONFIRM |
+| 2  | InstrumentSelector  | Asset class chips → product chips → structure chips (from descriptor) |
+| 3  | CounterpartyBlock   | Universal — own entity, counterparty, trade date, desk, book |
+| 4  | PrimaryEconomics    | Universal — notional, CCY, direction, tenor, eff/mat date |
+| 5  | ProductTerms        | `descriptor.terms.Component`              |
+| 6  | OptionFeeBlock      | Rendered **only** if `descriptor.optionFee !== null` |
+| 7  | AnalyticsBlock      | Metrics grid (`descriptor.analytics.metrics`) + collapsible breakdown (`descriptor.analytics.breakdown`) |
+| 8  | XVASummary          | Universal — link to XVA tab                |
+| 9  | TradeFooter         | Sticky — metric chips + STRUCTURE label + PRICE + BOOK TRADE |
+
+If a new product requires a tenth section, extend the shell contract once
+for everyone — do not branch the shell per product.
+
+## State ownership
+
+| Concern                      | Owner             | Accessed via               |
+|------------------------------|-------------------|----------------------------|
+| Selected product             | TradeWindow shell | `productKey`               |
+| Selected structure           | TradeWindow shell | `state.structure`          |
+| Direction (PAY/RECEIVE)      | TradeWindow shell | `state.direction`          |
+| Common economics             | TradeWindow shell | `state.{notional, ccy, tenor, …}` |
+| Product-specific fields      | TradeWindow shell | `state.<productField>` (via `update(patch)`) |
+| Pricing flags + result       | TradeWindow shell | `result`, `pricing`, `error` |
+| Local UI state (collapsed)   | Section primitive | useState in primitive      |
+| Market data (curves, vol)    | External stores   | Existing curve system      |
+
+**Descriptors never hold state.** They are pure data + pure functions. Every
+descriptor callback receives `state` (and sometimes `result`) as an argument
+and returns the rendering spec — there is no internal mutation.
+
+## Pricing flow
+
+When the user clicks PRICE, the shell runs this sequence:
+
+1. **Build payload** — call `descriptor.pricing.buildPayload(state)`
+2. **Get auth session** — Supabase session with 5-second deadline. On
+   timeout, falls back to cached session from a previous call (the Sprint
+   9.1 resilience pattern — handles tab-backgrounded auth-refresh hangs).
+3. **POST** to `descriptor.pricing.endpoint` with `AbortController`
+   timeout (`descriptor.pricing.timeoutMs`, default 30s)
+4. **Parse response** — call `descriptor.pricing.parseResponse(data)` → normalized result
+5. **Render** — Analytics + Footer automatically re-render off the result
+6. **Safety net** — a shell useEffect auto-clears a stuck pricing flag
+   after 20 seconds, with a console.warn
+
+Error handling:
+- Timeouts are silent (AbortError); the Analytics section returns to "price to load"
+- Network / validation errors (400/422) display the error detail in a bordered message inside AnalyticsBlock
+- Previous result is preserved across failed retries so users don't lose state
+
+## Feature flag during migration
+
+Per-product rollout is controlled by a localStorage flag:
+
+```js
+// Enable new unified shell for a specific product:
+localStorage.setItem('rijeka.tbw.unified', 'true')
+```
+
+The Blotter reads this flag and mounts either `<TradeWindow />` (new) or
+`<TradeBookingWindow />` (legacy). Flag lives throughout the Sprint 10
+migration phases; it is removed in Phase 5 cutover.
+
 ## Design principles
 
 1. **Sections are fixed, content is dynamic.** The shell never branches on
