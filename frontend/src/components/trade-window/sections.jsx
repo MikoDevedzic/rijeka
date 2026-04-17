@@ -371,3 +371,500 @@ function parseNum(s) {
   const n = Number(String(s).replace(/[^0-9.-]/g, ''))
   return Number.isFinite(n) ? n : 0
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CashflowsPanel (Patch 18)
+// Full-tab content for the CASHFLOWS view. Reads from `result` (priced
+// analytics). No backend calls. Handles swap/swaption (per-leg tables) and
+// cap/floor/collar (caplet table).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CCY_CURVE_MAP = {
+  USD: 'USD_SOFR', EUR: 'EUR_ESTR', GBP: 'GBP_SONIA',
+  JPY: 'JPY_TONA', CHF: 'CHF_SARON', AUD: 'AUD_AONIA', CAD: 'CAD_CORRA',
+}
+
+function fmtDate(d) {
+  if (!d) return '\u2014'
+  // Input is 'YYYY-MM-DD' from backend — render as-is, compact
+  return String(d)
+}
+
+function fmtN(v) {
+  if (v == null) return '\u2014'
+  return Math.round(Number(v)).toLocaleString('en-US')
+}
+
+function fmtPnl(v) {
+  if (v == null) return '\u2014'
+  const n = Number(v)
+  const sign = n >= 0 ? '+' : '\u2212'
+  return sign + '$' + Math.abs(Math.round(n)).toLocaleString('en-US')
+}
+
+function CashflowSummaryCard({ label, value, colorKey }) {
+  return (
+    <div style={{
+      background: '#0C0C0C',
+      border: '1px solid #1E1E1E',
+      borderRadius: 2,
+      padding: '6px 10px',
+    }}>
+      <div style={{
+        fontSize: 10,
+        color: '#666',
+        letterSpacing: '0.08em',
+        fontWeight: 600,
+        marginBottom: 3,
+      }}>{label}</div>
+      <div style={{
+        fontSize: 14,
+        fontWeight: 700,
+        fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+        color: colorKey === 'accent'  ? '#00D4A8'
+             : colorKey === 'negative'? '#FF6B6B'
+             : colorKey === 'blue'    ? '#4A9EFF'
+             : colorKey === 'amber'   ? '#F5C842'
+             : '#F0F0F0',
+      }}>{value}</div>
+    </div>
+  )
+}
+
+function CapletTable({ result, ccy }) {
+  const caplets = result.caplets || result.cap?.caplets || []
+  const npv     = result.npv != null ? result.npv : result.net_npv
+  const premiumPct = result.premium_pct != null ? result.premium_pct : result.net_pct
+  const nCaps   = result.n_caplets || result.cap?.n_caplets || caplets.length
+  const volBp   = result.vol_bp || result.cap_vol_bp || 0
+  const volTier = result.vol_tier || result.cap_vol_tier || ''
+  const atmFwd  = result.atm_forward_pct || 0
+
+  return (
+    <>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 6,
+        marginBottom: 10,
+      }}>
+        <CashflowSummaryCard label="OPTION NPV"
+          value={fmtPnl(npv)}
+          colorKey={(npv || 0) >= 0 ? 'accent' : 'negative'} />
+        <CashflowSummaryCard label="PREMIUM %"
+          value={premiumPct != null ? premiumPct.toFixed(4) + '%' : '\u2014'}
+          colorKey="accent" />
+        <CashflowSummaryCard label="CAPLETS"
+          value={nCaps + (volTier ? '' : '')}
+          colorKey="blue" />
+        <CashflowSummaryCard label="VOL (bp)"
+          value={volBp.toFixed(1) + 'bp' + (volTier ? ' (' + volTier + ')' : '')}
+          colorKey="amber" />
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          fontSize: 12,
+          fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+        }}>
+          <thead>
+            <tr style={{ background: '#050505', borderBottom: '1px solid #1E1E1E' }}>
+              {['#','PERIOD START','PERIOD END','FWD RATE','DF','\u03C4','VOL (bp)','PV'].map((h, i) => (
+                <th key={h} style={{
+                  padding: '5px 8px',
+                  textAlign: i < 3 ? 'left' : 'right',
+                  color: '#666',
+                  fontSize: 10,
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  whiteSpace: 'nowrap',
+                }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {caplets.map((cl, i) => (
+              <tr key={i} style={{
+                borderBottom: '1px solid rgba(255,255,255,0.04)',
+                background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+              }}>
+                <td style={{ padding: '4px 8px', color: '#666' }}>{cl.period != null ? cl.period : i + 1}</td>
+                <td style={{ padding: '4px 8px', color: '#888' }}>
+                  {cl.start_date ? fmtDate(cl.start_date) : (cl.expiry_y || 0).toFixed(4) + 'Y'}
+                </td>
+                <td style={{ padding: '4px 8px', color: '#888' }}>
+                  {cl.end_date ? fmtDate(cl.end_date) : '\u2014'}
+                </td>
+                <td style={{ padding: '4px 8px', textAlign: 'right', color: '#4A9EFF' }}>
+                  {(cl.forward || 0).toFixed(4)}%
+                </td>
+                <td style={{ padding: '4px 8px', textAlign: 'right', color: '#888' }}>
+                  {(cl.df || 0).toFixed(5)}
+                </td>
+                <td style={{ padding: '4px 8px', textAlign: 'right', color: '#888' }}>
+                  {(cl.tau || 0).toFixed(5)}
+                </td>
+                <td style={{ padding: '4px 8px', textAlign: 'right', color: '#F5C842', fontWeight: 600 }}>
+                  {(cl.vol_bp || volBp || 0).toFixed(1)}
+                </td>
+                <td style={{
+                  padding: '4px 8px',
+                  textAlign: 'right',
+                  color: (cl.pv || 0) >= 0 ? '#00D4A8' : '#FF6B6B',
+                  fontWeight: 600,
+                }}>{fmtPnl(cl.pv)}</td>
+              </tr>
+            ))}
+            <tr style={{
+              borderTop: '2px solid #1E1E1E',
+              background: 'rgba(255,255,255,0.02)',
+            }}>
+              <td colSpan={7} style={{
+                padding: '5px 8px',
+                fontWeight: 700,
+                color: '#888',
+                letterSpacing: '0.08em',
+              }}>TOTAL</td>
+              <td style={{
+                padding: '5px 8px',
+                textAlign: 'right',
+                fontWeight: 700,
+                color: (npv || 0) >= 0 ? '#00D4A8' : '#FF6B6B',
+              }}>{fmtPnl(npv)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style={{
+        fontSize: 11,
+        color: '#666',
+        fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+        padding: '4px 0',
+      }}>
+        {CCY_CURVE_MAP[ccy] || 'USD_SOFR'} \u00B7 Bachelier Normal \u00B7 ATM fwd = {atmFwd.toFixed(4)}%
+      </div>
+    </>
+  )
+}
+
+function SwapCashflowTables({ result, productKey, state }) {
+  const legs   = result.legs || []
+  const npv    = result.npv
+  const ccy    = state.ccy || 'USD'
+  const isSwpn = productKey === 'IR_SWAPTION'
+
+  const fixedLeg = legs.find(l => l.leg_type === 'FIXED')
+  const floatLeg = legs.find(l => l.leg_type === 'FLOAT')
+  const fixedPeriods = fixedLeg ? (fixedLeg.cashflows || []).length : 0
+  const floatPeriods = floatLeg ? (floatLeg.cashflows || []).length : 0
+
+  return (
+    <>
+      {isSwpn && (
+        <div style={{
+          background: 'rgba(74,158,255,0.05)',
+          border: '1px solid rgba(74,158,255,0.2)',
+          borderRadius: 2,
+          padding: '8px 12px',
+          marginBottom: 10,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <span style={{
+              fontSize: 10, fontWeight: 700,
+              letterSpacing: '0.12em', color: '#4A9EFF',
+            }}>UNDERLYING FORWARD SWAP CASHFLOWS</span>
+            <span style={{
+              fontSize: 10,
+              padding: '1px 6px',
+              borderRadius: 2,
+              background: 'rgba(74,158,255,0.1)',
+              border: '1px solid rgba(74,158,255,0.3)',
+              color: '#4A9EFF',
+            }}>
+              {(state.swaptionExpiry || '1Y')}{'\u00D7'}{state.tenor || '5Y'}{' \u00B7 Physical Settlement'}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: '#888' }}>
+            {'On exercise, this swaption delivers into the swap schedule below. '}
+            {'Effective date shifts forward by '}{state.swaptionExpiry || '1Y'}{' from today. '}
+            {'Sum of PV column = forward swap NPV (\u2248 $0 at ATM strike).'}
+          </div>
+        </div>
+      )}
+
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: 6,
+        marginBottom: 10,
+      }}>
+        <CashflowSummaryCard label={isSwpn ? 'OPTION NPV' : 'NET NPV'}
+          value={fmtPnl(npv)}
+          colorKey={npv != null && npv >= 0 ? 'accent' : 'negative'} />
+        <CashflowSummaryCard label={isSwpn ? 'FWD FIXED LEG PV' : 'FIXED LEG PV'}
+          value={fixedLeg ? fmtPnl(fixedLeg.pv) : '\u2014'}
+          colorKey="negative" />
+        <CashflowSummaryCard label={isSwpn ? 'FWD FLOAT LEG PV' : 'FLOAT LEG PV'}
+          value={floatLeg ? fmtPnl(floatLeg.pv) : '\u2014'}
+          colorKey="accent" />
+        <CashflowSummaryCard label="PERIODS"
+          value={fixedPeriods + ' + ' + floatPeriods}
+          colorKey="blue" />
+      </div>
+
+      {legs.map((leg, li) => (
+        <div key={li} style={{ marginBottom: 14 }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '6px 0 4px',
+            borderBottom: '1px solid #1E1E1E',
+          }}>
+            <span style={{
+              fontSize: 11, fontWeight: 700,
+              letterSpacing: '0.12em', color: '#888',
+            }}>{leg.leg_type} LEG</span>
+            <span style={{
+              fontSize: 11, fontWeight: 700,
+              padding: '1px 6px',
+              borderRadius: 2,
+              background: leg.direction === 'PAY' ? 'rgba(255,107,107,0.10)' : 'rgba(0,212,168,0.10)',
+              border: '1px solid ' + (leg.direction === 'PAY' ? '#FF6B6B' : '#00D4A8'),
+              color: leg.direction === 'PAY' ? '#FF6B6B' : '#00D4A8',
+            }}>{leg.direction === 'PAY' ? '\u2192 PAY' : '\u2190 RECEIVE'}</span>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              minWidth: 680,
+              fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+            }}>
+              <thead>
+                <tr style={{ background: '#050505', borderBottom: '1px solid #1E1E1E' }}>
+                  {['PERIOD START','PERIOD END','PAY DATE','DCF','NOTIONAL',
+                    leg.leg_type === 'FIXED' ? 'RATE' : 'FWD RATE',
+                    'AMOUNT','DF','PV','ZR%'].map((h, i) => (
+                    <th key={h} style={{
+                      fontSize: 10,
+                      color: '#666',
+                      padding: '4px 6px',
+                      textAlign: i < 3 ? 'left' : 'right',
+                      fontWeight: 600,
+                      letterSpacing: '0.07em',
+                    }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(leg.cashflows || []).map((cf, ci) => {
+                  const pv = cf.pv != null
+                    ? cf.pv
+                    : (cf.amount * (cf.df || 1) * (leg.direction === 'PAY' ? -1 : 1))
+                  const payShifted = cf.payment_date !== cf.period_end
+                  return (
+                    <tr key={ci} style={{ borderBottom: '1px solid #0E0E0E' }}>
+                      <td style={{ fontSize: 11, padding: '5px 6px', color: '#888' }}>{fmtDate(cf.period_start)}</td>
+                      <td style={{ fontSize: 11, padding: '5px 6px', color: '#888' }}>{fmtDate(cf.period_end)}</td>
+                      <td style={{
+                        fontSize: 11, padding: '5px 6px',
+                        color: payShifted ? '#F5C842' : '#888',
+                      }}>{fmtDate(cf.payment_date)}</td>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#4A9EFF' }}>
+                        {cf.dcf != null ? cf.dcf.toFixed(5) : '\u2014'}
+                      </td>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#888' }}>
+                        {fmtN(cf.notional)}
+                      </td>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#4A9EFF' }}>
+                        {cf.rate != null ? (cf.rate * 100).toFixed(4) + '%' : '\u2014'}
+                      </td>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#F0F0F0' }}>
+                        {fmtN(cf.amount)}
+                      </td>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#888' }}>
+                        {cf.df != null ? cf.df.toFixed(5) : '\u2014'}
+                      </td>
+                      <td style={{
+                        fontSize: 12, padding: '5px 6px', textAlign: 'right',
+                        fontWeight: 600,
+                        color: pv >= 0 ? '#00D4A8' : '#FF6B6B',
+                      }}>{fmtPnl(pv)}</td>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#888' }}>
+                        {cf.zero_rate != null ? (cf.zero_rate * 100).toFixed(3) : '\u2014'}
+                      </td>
+                    </tr>
+                  )
+                })}
+                <tr style={{
+                  borderTop: '2px solid #1E1E1E',
+                  background: 'rgba(255,255,255,0.02)',
+                }}>
+                  <td colSpan={6} style={{
+                    fontSize: 11, fontWeight: 700,
+                    color: '#888',
+                    padding: '5px 6px',
+                    letterSpacing: '0.08em',
+                  }}>TOTAL</td>
+                  <td style={{
+                    fontSize: 12, fontWeight: 700,
+                    padding: '5px 6px',
+                    textAlign: 'right',
+                    color: '#F0F0F0',
+                  }}>
+                    {fmtN((leg.cashflows || []).reduce((s, cf) => s + (cf.amount || 0), 0))}
+                  </td>
+                  <td />
+                  <td style={{
+                    fontSize: 12, fontWeight: 700,
+                    padding: '5px 6px',
+                    textAlign: 'right',
+                    color: leg.pv >= 0 ? '#00D4A8' : '#FF6B6B',
+                  }}>{fmtPnl(leg.pv)}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      <div style={{
+        fontSize: 11,
+        color: '#666',
+        fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+        padding: '4px 0',
+      }}>
+        {CCY_CURVE_MAP[ccy] || 'USD_SOFR'}
+        {result.curve_mode ? ' \u00B7 ' + result.curve_mode : ''}
+        {result.valuation_date ? ' \u00B7 ' + result.valuation_date : ''}
+        {' \u00B7 amber = pay date shifted by calendar'}
+      </div>
+    </>
+  )
+}
+
+// Synthesize forward-swap cashflow rows from the /api/price/swaption response
+// (Patch 19d). The backend already returns forward_rate, payment_dates, and
+// coupon_dfs — we build the displayed legs directly from that.
+function synthesizeSwaptionLegs(result, state) {
+  const debug = result._debug || {}
+  const paymentDates = debug.payment_dates || []
+  const couponDfs    = debug.coupon_dfs    || []
+  const pStart       = debug.P_start       || 1
+  const fwdRate      = debug.forward_rate  != null ? debug.forward_rate
+                     : (result.forward_rate || 0)
+  const notional     = debug.notional      || Number(state.notional) || 10000000
+  const isPayer      = debug.is_payer      != null ? debug.is_payer
+                     : (state.direction === 'PAY')
+  const payFreqY     = debug.pay_freq_y    || 1.0
+
+  if (!paymentDates.length || !couponDfs.length) return []
+
+  // Forward effective = day before first coupon's period start; approximate
+  // by shifting first payment back by payFreqY years.
+  const startDate = (() => {
+    if (debug.start_date) return debug.start_date
+    const d = new Date(paymentDates[0])
+    d.setDate(d.getDate() - Math.round(payFreqY * 365.25))
+    return d.toISOString().slice(0, 10)
+  })()
+
+  // Fixed leg: coupon at forward rate for each period. Direction follows
+  // the swaption's is_payer flag (payer pays fixed).
+  const fixedDir = isPayer ? 'PAY' : 'RECEIVE'
+  const floatDir = isPayer ? 'RECEIVE' : 'PAY'
+
+  const fixedCashflows = paymentDates.map((payDate, i) => {
+    const periodStart = i === 0 ? startDate : paymentDates[i - 1]
+    const periodEnd   = payDate
+    const dcf         = payFreqY
+    const amount      = notional * fwdRate * dcf
+    const df          = couponDfs[i] || 1
+    const pv          = amount * df * (fixedDir === 'PAY' ? -1 : 1)
+    return {
+      period_start: periodStart,
+      period_end:   periodEnd,
+      payment_date: payDate,
+      dcf, notional,
+      rate: fwdRate,
+      amount, df, pv,
+      zero_rate: null,
+    }
+  })
+
+  const fixedTotalPv = fixedCashflows.reduce((s, cf) => s + cf.pv, 0)
+
+  // Float leg: PV mirrors fixed leg (at ATM, |FIXED PV| = |FLOAT PV|).
+  // Per-period forward rate is implied by coupon_dfs ratios.
+  const floatCashflows = paymentDates.map((payDate, i) => {
+    const periodStart = i === 0 ? startDate : paymentDates[i - 1]
+    const periodEnd   = payDate
+    const df          = couponDfs[i] || 1
+    const dfPrev      = i === 0 ? pStart : (couponDfs[i - 1] || pStart)
+    const dcf         = payFreqY
+    const rate        = (dfPrev / df - 1) / dcf
+    const amount      = notional * rate * dcf
+    const pv          = amount * df * (floatDir === 'PAY' ? -1 : 1)
+    return {
+      period_start: periodStart,
+      period_end:   periodEnd,
+      payment_date: payDate,
+      dcf, notional,
+      rate,
+      amount, df, pv,
+      zero_rate: null,
+    }
+  })
+
+  const floatTotalPv = floatCashflows.reduce((s, cf) => s + cf.pv, 0)
+
+  return [
+    { leg_ref: 'FIXED-1', leg_seq: 1, leg_type: 'FIXED',
+      direction: fixedDir, currency: state.ccy || 'USD',
+      notional, pv: fixedTotalPv, cashflows: fixedCashflows },
+    { leg_ref: 'FLOAT-1', leg_seq: 2, leg_type: 'FLOAT',
+      direction: floatDir, currency: state.ccy || 'USD',
+      notional, pv: floatTotalPv, cashflows: floatCashflows },
+  ]
+}
+
+export function CashflowsPanel({ result, productKey, state }) {
+  if (!result) {
+    return (
+      <div style={{
+        padding: '80px 40px',
+        textAlign: 'center',
+        color: '#555',
+        fontSize: 12,
+        letterSpacing: '0.08em',
+        fontStyle: 'italic',
+      }}>
+        {'\u2014 price the trade first to view cashflow schedule \u2014'}
+      </div>
+    )
+  }
+
+  const isCapLike = productKey === 'RATES_CAP'
+                 || productKey === 'RATES_FLOOR'
+                 || productKey === 'RATES_COLLAR'
+                 || result.caplets
+                 || result.cap?.caplets
+
+  // Swaption: synthesize legs from the response if backend didn't return any.
+  const effectiveResult =
+    (productKey === 'IR_SWAPTION' && !(result.legs && result.legs.length))
+      ? { ...result, legs: synthesizeSwaptionLegs(result, state) }
+      : result
+
+  return (
+    <div style={{ padding: '12px 16px' }}>
+      {isCapLike
+        ? <CapletTable result={effectiveResult} ccy={state.ccy || 'USD'} />
+        : <SwapCashflowTables result={effectiveResult} productKey={productKey} state={state} />
+      }
+    </div>
+  )
+}

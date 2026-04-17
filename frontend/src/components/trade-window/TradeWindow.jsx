@@ -34,6 +34,7 @@ import {
   AnalyticsBlock,
   XVASummary,
   TradeFooter,
+  CashflowsPanel,
 } from './sections'
 
 // Import all product modules to register them at load time.
@@ -322,7 +323,11 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
         <XVASummary result={result} />
       </div>
 
-      {activeTab !== 'TRADE' && (
+      {activeTab === 'CASHFLOWS' && (
+        <CashflowsPanel result={result} productKey={productKey} state={state} />
+      )}
+
+      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && (
         <div className="tbw-placeholder">
           — {activeTab} tab not yet wired in the unified shell —
         </div>
