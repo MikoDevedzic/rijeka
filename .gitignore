@@ -152,3 +152,10 @@ Thumbs.db
 .env.*.local
 backend/api/routes/*_*.cjs 
 frontend/src/components/**/*.cjs 
+SPRINT_*.js 
+create_docs.js 
+
+# Env files 
+.env 
+.env.* 
+!.env.example
