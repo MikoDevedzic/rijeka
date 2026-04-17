@@ -1,6 +1,6 @@
 # Rijeka
 
-**Institutional-grade derivatives pricing and risk — open source.**
+Institutional-grade derivatives pricing and risk — open source.
 
 Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging market participants, and academic researchers operate blind — without the tools to price, hedge, or understand the true cost of a trade. Rijeka exists to change that.
 
@@ -14,10 +14,10 @@ No login required. Open in any browser.
 
 | Tool | URL | What it does |
 |------|-----|-------------|
-| IRS Pricer | [rijeka.app/irs](https://rijeka.app/irs) | Price a vanilla IRS, drag the yield curve, reprice live |
-| XVA Simulator | [rijeka.app/xva](https://rijeka.app/xva) | HW1F Monte Carlo EE/ENE/PFE profiles and CVA |
-| XVA Waterfall | [rijeka.app/xva_ee](https://rijeka.app/xva_ee) | Paste an EE profile, get full XVA waterfall |
-| Vol Surface Scenario | [rijeka.app/vol_surface](https://rijeka.app/vol_surface) | 3D SABR swaption vol surface — shock it, reprice live |
+| IRS Pricer | rijeka.app/irs | Price a vanilla IRS, drag the yield curve, reprice live |
+| XVA Simulator | rijeka.app/xva | HW1F Monte Carlo EE/ENE/PFE profiles and CVA |
+| XVA Waterfall | rijeka.app/xva_ee | Paste an EE profile, get full XVA waterfall |
+| Vol Surface Scenario | rijeka.app/vol_surface | 3D SABR swaption vol surface — shock it, reprice live |
 
 ---
 
@@ -28,6 +28,7 @@ No login required. Open in any browser.
 - OIS curve bootstrapping (SOFR, €STR, SONIA) — validated to Bloomberg SWPM reference prices
 - Interest rate swap pricing with per-leg Greeks: IR01, IR01_DISC, Theta, Gamma
 - European swaption pricing — Bachelier normal vol model, Bloomberg-validated ($3 NPV delta on $10M 5Y trade)
+- **Interest rate cap / floor / collar** — Bachelier Normal model, T_mid convention, Bloomberg-validated (0.1% gap at matched vol), vol override, per-caplet cashflows
 - Par rate solving, cashflow generation, T+2 spot lag, ACT/360 DCF
 
 ### Vol Surface — β=0 Normal SABR
@@ -37,6 +38,7 @@ No login required. Open in any browser.
 - α (level), ρ (skew), ν (curvature) calibrated per expiry/tenor bucket via L-BFGS-B
 - Interactive 3D surface: rotate, apply preset scenarios, or drag to create custom vol shocks
 - Live Bachelier repricing: ΔNPV, Vega, IR01 update on every scenario change
+- **Cap/floor vol surface** — 3D mesh from Bloomberg snapped `cap_vol_surface` quotes (tenor × strike spread × vol)
 
 ### XVA — Valuation Adjustments
 
@@ -48,10 +50,10 @@ No login required. Open in any browser.
 
 ### Joint Rate + Vol Scenario Engine
 
-The trade window CURVE SCENARIO tab for swaptions shows both axes simultaneously:
+The trade window CURVE SCENARIO tab shows both axes simultaneously:
 
 - **Top panel:** yield curve — drag any tenor point to reshape, Gaussian ripple propagation
-- **Bottom panel:** 3D SABR vol surface — ROTATE or RESHAPE mode, raycast-accurate drag deformation
+- **Bottom panel:** 3D SABR vol surface (swaption) or cap vol surface (cap/floor/collar) — ROTATE mode, rotatable/zoomable mesh
 - **Single repricing button** runs 4 parallel calls and decomposes P&L:
 
 ```
@@ -65,11 +67,12 @@ The trade window CURVE SCENARIO tab for swaptions shows both axes simultaneously
 
 - Market data snapshot layer: Bloomberg, Refinitiv, and manual sources
 - ATM + OTM swaption vol surface snap with unified button (ATM ICPL + SMKO OTM in one pass)
+- Cap/floor vol surface snap from Bloomberg cap surface tickers
 - SABR calibration runs automatically after each surface snap, results stored with fit diagnostics
 
 ### Trade Infrastructure
 
-- Multi-instrument trade blotter: IRS, OIS, FRA, Basis Swap, European Swaption
+- Multi-instrument trade blotter: IRS, OIS, Basis Swap, European Swaption, Cap, Floor, Collar
 - Full org hierarchy: firm → division → desk → book
 - Legal entity and counterparty master data
 - Role-based access: VIEWER / TRADER / ADMIN
@@ -117,10 +120,11 @@ VITE_API_URL
 Every instrument goes through documented validation before it's considered production-ready.
 
 | Version | Instruments | Status |
-|---------|-------------|--------|
+|---------|------------|--------|
 | v0.4.2 | IRS, OIS — OIS bootstrap | ✅ 38/38 tests passed |
 | v0.5.0 | European Swaption — Bachelier + HW1F | ✅ Bloomberg delta $3 on $10M 5Y |
-| v0.6.0 | SABR calibration, joint scenario P&L attribution | 🔲 Planned |
+| v0.6.0 | SABR calibration, joint scenario P&L attribution | ✅ Live |
+| v0.4.3 | Interest Rate Cap / Floor / Collar — Bachelier Normal | ✅ Bloomberg delta 0.1% on $10M 5Y at matched vol |
 
 Validation reports and Python test packages in `model_validation/`.
 
@@ -145,24 +149,26 @@ Validation reports and Python test packages in `model_validation/`.
 | Instrument | Status |
 |-----------|--------|
 | Vanilla IRS / OIS | ✅ Live |
-| FRA | ✅ Live |
 | Basis Swap | ✅ Live |
 | European Swaption | ✅ Live |
-| Interest Rate Cap / Floor | Sprint 9 |
-| Collar | Sprint 9 |
+| Interest Rate Cap / Floor / Collar | ✅ Live |
 | XCCY Swap | Sprint 10 |
 | Bermudan Swaption | Sprint 11 |
 
 ### Phase 2 — FX & Credit
+
 FX spot/forward/options, CDS, credit options, wrong-way risk in CVA.
 
 ### Phase 3 — Equity & Commodity
+
 Equity swaps, equity options (Black-Scholes / Heston), commodity swaps and options.
 
 ### Phase 4 — Risk Infrastructure
+
 Full market risk (VaR, SVaR, FRTB), CCR (PFE, SA-CCR, IMM), collateral management, PnL attribution.
 
 ### PROMETHEUS — AI Layer
+
 Contextual chat over your book, AI-powered PnL explain, hedging recommendations, XVA commentary.
 
 ---
