@@ -36,6 +36,7 @@ import {
   TradeFooter,
   CashflowsPanel,
 } from './sections'
+import DetailsPanel from './details-panel'
 
 // Import all product modules to register them at load time.
 // Adding FX/credit = add one import line here.
@@ -327,7 +328,16 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
         <CashflowsPanel result={result} productKey={productKey} state={state} />
       )}
 
-      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && (
+      {activeTab === 'DETAILS' && (
+        <DetailsPanel
+          productKey={productKey}
+          state={state}
+          direction={direction}
+          setProductState={setProductState}
+        />
+      )}
+
+      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && (
         <div className="tbw-placeholder">
           — {activeTab} tab not yet wired in the unified shell —
         </div>
