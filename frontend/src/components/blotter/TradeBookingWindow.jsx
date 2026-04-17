@@ -180,7 +180,8 @@ const DirBtn = ({label, active, color, onClick}) => (
 // ── ScenarioTab: fully self-contained, all hooks at top level ────────────────
 function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curves, analytics,
   notionalRef, rateRef, fixedPayFreq, fixedDc, fixedBdc, floatResetFreq, floatPayFreq, floatDc, floatBdc, getSession,
-  inst, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, curveId: curveIdProp }) {
+  inst, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, curveId: curveIdProp,
+  capResult, capVolOverride, setCapVolOverride, handleCapFloorPrice }) {
 
   const TENORS  = ['1W','1M','3M','6M','1Y','2Y','3Y','4Y','5Y','7Y','10Y','15Y','20Y','30Y']
   const TENOR_Y = {'1W':0.02,'1M':0.083,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'4Y':4,'5Y':5,'7Y':7,'10Y':10,'15Y':15,'20Y':20,'30Y':30}
@@ -219,6 +220,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
   // ── Vol scenario (swaption only) ─────────────────────────────────────────
   const IS_SWPN = inst === 'IR_SWAPTION'
+  const IS_CAPFLOOR = inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR'
   const EXPIRY_Y_MAP = {'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
   const TENOR_Y_MAP  = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'9Y':9,'10Y':10,'15Y':15,'20Y':20,'30Y':30}
 
@@ -261,6 +263,10 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
   const smileCanvasRef = useRef(null)  // kept for compat but unused
   const volCanvasRef   = useRef(null)
   const volWrapRef     = useRef(null)
+  const capVolCanvasRef = useRef(null)
+  const capVolWrapRef  = useRef(null)
+  const capThreeRef    = useRef(null)
+  const capSphRef      = useRef({th:0.6,ph:0.55,r:14})
   const volThreeRef    = useRef(null)   // { renderer, scene, camera, meshes, sph, alive }
   const volSphRef      = useRef({ r:11, th:0.52, ph:0.50 })
   const volDragRef     = useRef(null)   // { ds, dsph }
@@ -443,6 +449,210 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
       t.alive=false; t.stopLoop?.(); t.ro?.disconnect(); t.renderer?.dispose()
     }
   },[IS_SWPN])
+
+  // Cap vol surface — Three.js 3D mesh from surface_rows
+  useEffect(()=>{
+    if(!IS_CAPFLOOR) return
+    const wrap = capVolWrapRef.current
+    const canvas = capVolCanvasRef.current
+    if(!wrap || !canvas) return
+    let alive = true
+    const sphRef = capSphRef.current
+
+    const camUpdate = () => {
+      const t = capThreeRef.current; if(!t) return
+      const {camera} = t
+      const {th,ph,r} = sphRef
+      camera.position.set(r*Math.cos(ph)*Math.sin(th), r*Math.sin(ph), r*Math.cos(ph)*Math.cos(th))
+      camera.lookAt(0,0,0)
+    }
+
+    const buildSurface = (THREE, scene, meshRef) => {
+      const rows = capResult?.surface_rows || []
+
+      // Extract unique tenors and spreads from surface data
+      const tenorSet = [...new Set(rows.map(r=>parseFloat(r.cap_tenor_y)))].sort((a,b)=>a-b)
+      const spreadSet = [...new Set(rows.map(r=>parseFloat(r.strike_spread_bp)))].sort((a,b)=>a-b)
+
+      // Fall back to synthetic grid if no surface data
+      const TENORS_CAP = tenorSet.length >= 2 ? tenorSet : [1,2,3,5,7,10]
+      const SPREADS    = spreadSet.length >= 2 ? spreadSet : [-200,-150,-100,-50,0,50,100,150,200]
+      const NT = TENORS_CAP.length, NS = SPREADS.length
+      const baseVol = parseFloat(capVolOverride) || capResult?.vol_bp || 85
+
+      // Build vol grid from surface rows or synthetic
+      const grid = []
+      for(let ti=0; ti<NT; ti++){
+        const row = []
+        for(let si=0; si<NS; si++){
+          if(rows.length >= 2){
+            // Find matching row
+            const match = rows.find(r=>
+              Math.abs(parseFloat(r.cap_tenor_y)-TENORS_CAP[ti])<0.01 &&
+              Math.abs(parseFloat(r.strike_spread_bp)-SPREADS[si])<1
+            )
+            row.push(match ? parseFloat(match.flat_vol_bp) : baseVol)
+          } else {
+            // Synthetic: ATM + smile
+            row.push(baseVol + Math.abs(SPREADS[si]) * 0.03)
+          }
+        }
+        grid.push(row)
+      }
+
+      const allV = grid.flat()
+      const minV = Math.min(...allV), maxV = Math.max(...allV), range = maxV - minV || 1
+      const XS=8, ZS=6, YS=3.5
+
+      const verts=[], cols=[], idx=[]
+      for(let ti=0;ti<NT;ti++){
+        for(let si=0;si<NS;si++){
+          const v = grid[ti][si]
+          const x = (si/(NS-1)-0.5)*XS
+          const y = ((v-minV)/range)*YS
+          const z = (ti/(NT-1)-0.5)*ZS
+          verts.push(x,y,z)
+          // Color: teal for ATM, red for high vol, blue for low
+          const t = (v-minV)/range
+          cols.push(t*0.8+0.2, (1-Math.abs(t-0.5)*1.5)*0.8+0.2, (1-t)*0.8+0.2)
+        }
+      }
+      for(let ti=0;ti<NT-1;ti++)
+        for(let si=0;si<NS-1;si++){
+          const a=ti*NS+si,b=a+1,c=a+NS,d=c+1
+          idx.push(a,b,c,b,d,c)
+        }
+
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(verts,3))
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(cols,3))
+      geo.setIndex(idx); geo.computeVertexNormals()
+
+      if(meshRef.current){ scene.remove(meshRef.current); meshRef.current.geometry.dispose() }
+      if(meshRef.wireRef){ scene.remove(meshRef.wireRef); meshRef.wireRef.geometry.dispose() }
+
+      const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({vertexColors:true,transparent:true,opacity:0.88,side:THREE.DoubleSide}))
+      const wire = new THREE.Mesh(geo.clone(), new THREE.MeshBasicMaterial({color:0x00D4A8,wireframe:true,transparent:true,opacity:0.09}))
+      scene.add(mesh); scene.add(wire)
+      meshRef.current = mesh; meshRef.wireRef = wire
+    }
+
+    const meshRef = {current:null}
+
+    const load = () => new Promise(res=>{
+      if(window.THREE){res();return}
+      const s=document.createElement('script')
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+      s.onload=res; document.head.appendChild(s)
+    })
+
+    load().then(()=>{
+      if(!alive) return
+      const THREE = window.THREE
+      const renderer = new THREE.WebGLRenderer({canvas, antialias:true})
+      renderer.setPixelRatio(window.devicePixelRatio)
+      renderer.setClearColor(0x0A0A0E)
+      const scene = new THREE.Scene()
+      const camera = new THREE.PerspectiveCamera(42,1,0.1,200)
+      scene.add(new THREE.AmbientLight(0x203040,1.5))
+      const dl=new THREE.DirectionalLight(0x00D4A8,0.5); dl.position.set(5,10,8); scene.add(dl)
+      const dl2=new THREE.DirectionalLight(0x4A9EFF,0.25); dl2.position.set(-5,4,-4); scene.add(dl2)
+      const gh=new THREE.GridHelper(12,12,0x181B24,0x101318); gh.position.y=-0.05; scene.add(gh)
+      capThreeRef.current = {THREE,renderer,scene,camera,alive:true}
+      camUpdate()
+
+      const resize=()=>{
+        if(!wrap||!capThreeRef.current?.alive) return
+        const W=wrap.clientWidth, H=wrap.clientHeight
+        renderer.setSize(W,H); camera.aspect=W/H; camera.updateProjectionMatrix()
+      }
+      const ro=new ResizeObserver(resize); ro.observe(wrap)
+      capThreeRef.current.ro=ro
+      resize()
+      buildSurface(THREE, scene, meshRef)
+
+      let drag=null
+      const onDown=e=>{drag={ds:{x:e.clientX,y:e.clientY},dsph:{...sphRef}}; canvas.style.cursor='grabbing'}
+      const onMove=e=>{
+        if(!drag) return
+        sphRef.th=drag.dsph.th-(e.clientX-drag.ds.x)*0.005
+        sphRef.ph=Math.max(0.08,Math.min(1.5,drag.dsph.ph-(e.clientY-drag.ds.y)*0.005))
+        camUpdate()
+      }
+      const onUp=()=>{drag=null; canvas.style.cursor='grab'}
+      const onWheel=e=>{sphRef.r=Math.max(5,Math.min(22,sphRef.r+e.deltaY*0.012)); camUpdate(); e.preventDefault()}
+      canvas.addEventListener('mousedown',onDown)
+      canvas.addEventListener('mousemove',onMove)
+      canvas.addEventListener('mouseup',onUp)
+      canvas.addEventListener('mouseleave',onUp)
+      canvas.addEventListener('wheel',onWheel,{passive:false})
+      capThreeRef.current.cleanup=()=>{
+        canvas.removeEventListener('mousedown',onDown)
+        canvas.removeEventListener('mousemove',onMove)
+        canvas.removeEventListener('mouseup',onUp)
+        canvas.removeEventListener('mouseleave',onUp)
+        canvas.removeEventListener('wheel',onWheel)
+      }
+
+      const loop=()=>{if(!alive)return;requestAnimationFrame(loop);renderer.render(scene,camera)}
+      loop()
+    })
+
+    return()=>{
+      alive=false
+      const t=capThreeRef.current; if(!t) return
+      t.alive=false; t.cleanup?.(); t.ro?.disconnect(); t.renderer?.dispose()
+      capThreeRef.current=null
+    }
+  },[IS_CAPFLOOR])
+
+  // Rebuild cap surface when capResult changes
+  useEffect(()=>{
+    if(!IS_CAPFLOOR || !capThreeRef.current?.alive) return
+    const {THREE, scene} = capThreeRef.current
+    const meshRef = capThreeRef.current.meshRef || {}
+    capThreeRef.current.meshRef = meshRef
+    // rebuild geometry inline
+    const rows = capResult?.surface_rows || []
+    const tenorSet = [...new Set(rows.map(r=>parseFloat(r.cap_tenor_y)))].sort((a,b)=>a-b)
+    const spreadSet = [...new Set(rows.map(r=>parseFloat(r.strike_spread_bp)))].sort((a,b)=>a-b)
+    const TENORS_CAP = tenorSet.length >= 2 ? tenorSet : [1,2,3,5,7,10]
+    const SPREADS    = spreadSet.length >= 2 ? spreadSet : [-200,-150,-100,-50,0,50,100,150,200]
+    const NT = TENORS_CAP.length, NS = SPREADS.length
+    const baseVol = parseFloat(capVolOverride) || capResult?.vol_bp || 85
+    const grid = []
+    for(let ti=0;ti<NT;ti++){
+      const row=[]
+      for(let si=0;si<NS;si++){
+        if(rows.length>=2){
+          const match=rows.find(r=>Math.abs(parseFloat(r.cap_tenor_y)-TENORS_CAP[ti])<0.01&&Math.abs(parseFloat(r.strike_spread_bp)-SPREADS[si])<1)
+          row.push(match?parseFloat(match.flat_vol_bp):baseVol)
+        } else { row.push(baseVol+Math.abs(SPREADS[si])*0.03) }
+      }
+      grid.push(row)
+    }
+    const allV=grid.flat(),minV=Math.min(...allV),maxV=Math.max(...allV),range=maxV-minV||1
+    const XS=8,ZS=6,YS=3.5
+    const verts=[],cols=[],idx=[]
+    for(let ti=0;ti<NT;ti++) for(let si=0;si<NS;si++){
+      const v=grid[ti][si]
+      verts.push((si/(NS-1)-0.5)*XS,((v-minV)/range)*YS,(ti/(NT-1)-0.5)*ZS)
+      const t=(v-minV)/range
+      cols.push(0,t*0.83+0.17,(1-t)*0.53+0.47)  // teal gradient
+    }
+    for(let ti=0;ti<NT-1;ti++) for(let si=0;si<NS-1;si++){
+      const a=ti*NS+si,b=a+1,c=a+NS,d=c+1; idx.push(a,b,c,b,d,c)
+    }
+    const geo=new THREE.BufferGeometry()
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3))
+    geo.setAttribute('color',new THREE.Float32BufferAttribute(cols,3))
+    geo.setIndex(idx); geo.computeVertexNormals()
+    if(meshRef.m){scene.remove(meshRef.m);meshRef.m.geometry.dispose()}
+    if(meshRef.w){scene.remove(meshRef.w);meshRef.w.geometry.dispose()}
+    meshRef.m=new THREE.Mesh(geo,new THREE.MeshLambertMaterial({vertexColors:true,transparent:true,opacity:0.88,side:THREE.DoubleSide}))
+    meshRef.w=new THREE.Mesh(geo.clone(),new THREE.MeshBasicMaterial({color:0x00D4A8,wireframe:true,transparent:true,opacity:0.09}))
+    scene.add(meshRef.m); scene.add(meshRef.w)
+  },[capResult, capVolOverride, IS_CAPFLOOR])
 
   // Vol surface mouse controls — re-attaches when mode or ready state changes
   useEffect(()=>{
@@ -916,6 +1126,61 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   )}
                 </div>
               )}
+
+              {/* Cap/Floor/Collar vol scenario */}
+              {IS_CAPFLOOR && (
+                <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid #1E1E1E'}}>
+                  <div style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',
+                    color:'#F5C842',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'8px',
+                    display:'flex',alignItems:'center',gap:'8px'}}>
+                    CAP VOL SCENARIO
+                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'#444'}}>Bachelier Normal · flat vol shift</span>
+                  </div>
+                  {[
+                    {l:'BASE',          d:null,    shift:0},
+                    {l:'PARALLEL +15bp',d:'+15bp', shift:15},
+                    {l:'PARALLEL −15bp',d:'−15bp', shift:-15},
+                    {l:'PARALLEL +30bp',d:'+30bp', shift:30},
+                    {l:'PARALLEL −30bp',d:'−30bp', shift:-30},
+                    {l:'STRESS +50bp',  d:'+50bp', shift:50},
+                  ].map(sc=>{
+                    const baseVol = parseFloat(capVolOverride)||85
+                    const shockedVol = Math.max(1, baseVol + sc.shift)
+                    const isActive = sc.shift===0?(capVolOverride===String(baseVol)||!sc.d):false
+                    return (
+                      <button key={sc.l}
+                        onClick={()=>{
+                          if(sc.shift===0){
+                            // reset to base — reprice without vol override changes
+                          } else {
+                            setCapVolOverride(shockedVol.toFixed(1))
+                          }
+                          if(handleCapFloorPrice) setTimeout(handleCapFloorPrice,50)
+                        }}
+                        style={{display:'flex',alignItems:'center',gap:'7px',padding:'5px 7px',
+                          marginBottom:'2px',width:'100%',
+                          border:'1px solid #1A1A1A',borderRadius:'2px',cursor:'pointer',
+                          background:'transparent',color:'#555',
+                          fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',textAlign:'left'}}>
+                        <span style={{width:5,height:5,borderRadius:'50%',flexShrink:0,
+                          background:sc.shift===0?'#00D4A8':sc.shift>0?'#FF6B6B':'#4A9EFF',
+                          display:'inline-block'}}/>
+                        <span>{sc.l}</span>
+                        {sc.d && <span style={{fontSize:'0.6875rem',color:'#444',marginLeft:'auto'}}>
+                          {baseVol.toFixed(1)} → {shockedVol.toFixed(1)}bp
+                        </span>}
+                      </button>
+                    )
+                  })}
+                  {capResult && (
+                    <div style={{marginTop:'6px',fontSize:'0.75rem',color:'#F5C842',
+                      background:'rgba(245,200,66,0.04)',border:'1px solid rgba(245,200,66,0.15)',
+                      borderRadius:'2px',padding:'4px 8px',fontFamily:"'IBM Plex Mono',monospace"}}>
+                      vol: {parseFloat(capVolOverride||capResult.vol_bp||85).toFixed(1)}bp · NPV: {capResult.npv!=null?'$'+Math.round(capResult.npv).toLocaleString():'—'}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1042,7 +1307,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           </div>
 
           {/* Impact analytics */}
-          {/* 3D Vol surface — swaption only, hover-activated orbit */}
+          {/* 3D Vol surface — swaption SABR or cap vol surface */}
           {IS_SWPN && (
             <div ref={volWrapRef}
               style={{flex:'1 1 0',borderTop:'1px solid #1E1E1E',background:'#0A0A0E',
@@ -1099,6 +1364,38 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                 )}
               </div>
               <canvas ref={volCanvasRef}
+                style={{display:'block',width:'100%',height:'100%',cursor:'grab'}}
+              />
+            </div>
+          )}
+          {IS_CAPFLOOR && (
+            <div ref={capVolWrapRef}
+              style={{flex:'1 1 0',borderTop:'1px solid #1E1E1E',background:'#0A0A0E',
+                position:'relative',minHeight:'180px',overflow:'hidden'}}>
+              <div style={{position:'absolute',top:5,left:8,fontSize:'0.5rem',
+                color:'#F5C842',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
+                CAP VOL SURFACE — BACHELIER NORMAL
+              </div>
+              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.4375rem',
+                color:'#1E2028',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
+                DRAG TO ROTATE · SCROLL TO ZOOM · STRIKE SPREAD (bp) × TENOR (Y)
+              </div>
+              {!capResult && (
+                <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
+                  justifyContent:'center',color:'#2A2A2A',fontSize:'0.75rem',
+                  fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'.08em'}}>
+                  PRICE CAP/FLOOR FIRST TO LOAD SURFACE
+                </div>
+              )}
+              <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',gap:4,pointerEvents:'none',zIndex:2}}>
+                <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <div style={{width:16,height:2,background:'rgba(0,212,168,.6)',borderRadius:1}}/>
+                  <span style={{fontSize:'0.4375rem',color:'rgba(0,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>
+                    {(parseFloat(capVolOverride)||capResult?.vol_bp||85).toFixed(1)}bp · {capResult?.vol_tier||'—'}
+                  </span>
+                </div>
+              </div>
+              <canvas ref={capVolCanvasRef}
                 style={{display:'block',width:'100%',height:'100%',cursor:'grab'}}
               />
             </div>
@@ -2440,6 +2737,10 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             swaptionTenor={tenor}
             swaptionVol={swaptionVol}
             swaptionResult={swaptionResult}
+            capResult={capResult}
+            capVolOverride={capVolOverride}
+            setCapVolOverride={setCapVolOverride}
+            handleCapFloorPrice={handleCapFloorPrice}
           />
         )}
         <div className='tbw-body tbw-no-drag' style={{display:activeTab==='price'?'flex':'none',flexDirection:'column',overflow:'hidden'}}>
