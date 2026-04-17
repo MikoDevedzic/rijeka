@@ -20,7 +20,7 @@ GET /api/market-data/snapshots/date/{valuation_date}
 from datetime import date, datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -788,3 +788,145 @@ async def snap_otm_vol(
         "failed":    failed,
         "snap_date": body.snap_date.isoformat(),
     }
+
+
+# ============================================================
+# CAP VOL MARKET DATA ROUTES
+# ============================================================
+
+from pydantic import BaseModel as _BaseModel
+from typing import Optional as _Optional
+
+class CapVolUpsertRow(_BaseModel):
+    valuation_date:   str
+    cap_tenor_y:      float
+    strike_spread_bp: int
+    is_atm:           bool = False
+    flat_vol_bp:      float
+    ticker:           _Optional[str] = None
+    source:           str = "MANUAL"
+
+class CapVolUpsertRequest(_BaseModel):
+    rows: list[CapVolUpsertRow]
+
+
+@router.post("/cap-vol")
+async def upsert_cap_vol(
+    req: CapVolUpsertRequest,
+    user: dict = Depends(verify_token),
+    db: Session = Depends(get_db),
+):
+    role = user.get("user_metadata", {}).get("role", "viewer").lower()
+    if role not in ("trader", "admin"):
+        raise HTTPException(status_code=403, detail="Trader or Admin role required")
+
+    upserted = 0
+    for r in req.rows:
+        db.execute(
+            text("""
+                INSERT INTO cap_vol_surface
+                    (valuation_date, cap_tenor_y, strike_spread_bp, is_atm,
+                     flat_vol_bp, ticker, source)
+                VALUES
+                    (:valuation_date, :cap_tenor_y, :strike_spread_bp, :is_atm,
+                     :flat_vol_bp, :ticker, :source)
+                ON CONFLICT (valuation_date, cap_tenor_y, strike_spread_bp)
+                DO UPDATE SET
+                    is_atm      = EXCLUDED.is_atm,
+                    flat_vol_bp = EXCLUDED.flat_vol_bp,
+                    ticker      = EXCLUDED.ticker,
+                    source      = EXCLUDED.source
+            """),
+            {
+                "valuation_date":   r.valuation_date,
+                "cap_tenor_y":      r.cap_tenor_y,
+                "strike_spread_bp": r.strike_spread_bp,
+                "is_atm":           r.is_atm,
+                "flat_vol_bp":      r.flat_vol_bp,
+                "ticker":           r.ticker,
+                "source":           r.source,
+            }
+        )
+        upserted += 1
+
+    db.commit()
+    return {"upserted": upserted}
+
+
+@router.get("/cap-vol/{valuation_date}")
+async def get_cap_vol_surface(
+    valuation_date: str,
+    db: Session = Depends(get_db),
+):
+    rows = db.execute(
+        text("""
+            SELECT valuation_date, cap_tenor_y, strike_spread_bp,
+                   is_atm, flat_vol_bp, ticker, source
+            FROM   cap_vol_surface
+            WHERE  valuation_date = :valuation_date
+            ORDER  BY cap_tenor_y, strike_spread_bp
+        """),
+        {"valuation_date": valuation_date}
+    ).mappings().all()
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No cap vol surface found for {valuation_date}"
+        )
+
+    return {
+        "valuation_date": valuation_date,
+        "rows":           [dict(r) for r in rows],
+        "count":          len(rows),
+    }
+
+
+@router.get("/cap-vol/{valuation_date}/tenor/{tenor_y}")
+async def get_cap_vol_smile(
+    valuation_date: str,
+    tenor_y: float,
+    db: Session = Depends(get_db),
+):
+    rows = db.execute(
+        text("""
+            SELECT valuation_date, cap_tenor_y, strike_spread_bp,
+                   is_atm, flat_vol_bp, ticker, source
+            FROM   cap_vol_surface
+            WHERE  valuation_date = :valuation_date
+              AND  cap_tenor_y    = :tenor_y
+            ORDER  BY strike_spread_bp
+        """),
+        {"valuation_date": valuation_date, "tenor_y": tenor_y}
+    ).mappings().all()
+
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No cap vol data for {valuation_date} tenor {tenor_y}Y"
+        )
+
+    return {
+        "valuation_date": valuation_date,
+        "cap_tenor_y":    tenor_y,
+        "smile":          [dict(r) for r in rows],
+    }
+
+# ============================================================
+
+
+# ============================================================
+
+
+# ============================================================
+
+
+# ── Cap vol lookup (no SABR — direct table) ──────────────────────────────────
+
+@router.get("/cap-vol/sabr-params/{valuation_date}")
+async def get_cap_sabr_params(
+    valuation_date: str,
+    db: Session = Depends(get_db),
+):
+    """Returns empty — SABR not used for cap/floor. Pricing uses direct table lookup."""
+    return {"valuation_date": valuation_date, "params": [], "count": 0}

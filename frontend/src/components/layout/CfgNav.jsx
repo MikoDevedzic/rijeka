@@ -3,11 +3,13 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { RATES_CURVES } from '../../data/ratesCurves'
 import useMarketDataStore from '../../store/useMarketDataStore'
-
-// ── Nav structure ─────────────────────────────────────────────────────────────
-// LIVE   = clickable, route exists
-// SOON   = greyed stub, sprint label shown
-// ─────────────────────────────────────────────────────────────────────────────
+import useXVAStore        from '../../store/useXVAStore'
+import {
+  SWAPTION_EXPIRIES, SWAPTION_TENORS,
+  OTM_STRIKE_OFFSETS, OTM_SNAP_TENORS,
+  EXPIRY_YEARS, TENOR_YEARS,
+  otmTicker,
+} from '../../data/swaptionVols'
 
 const NAV = [
   {
@@ -20,10 +22,9 @@ const NAV = [
         id: 'rates',
         label: 'RATES',
         children: [
-          { label: 'OIS / SWAP CURVES', path: '/configurations/market-data/curves',        live: true  },
-          { label: 'BASIS SPREADS',      path: '/configurations/market-data/basis',         live: false, sprint: '6C' },
+          { label: 'RATE CURVES',        path: '/configurations/market-data/curves',        live: true  },
           { label: 'SWAPTION VOL ATM',   path: '/configurations/market-data/swvol',         live: true  },
-          { label: 'CAP/FLOOR VOL',      path: '/configurations/market-data/capfloor',      live: false, sprint: '7'  },
+          { label: 'CAP/FLOOR VOL',      path: '/configurations/market-data/capfloor',      live: true  },
         ],
       },
       {
@@ -158,9 +159,9 @@ const NAV = [
       },
     ],
   },
-];
+]
 
-// ── Snap All button (unchanged from original) ─────────────────────────────────
+// ── Snap All button ───────────────────────────────────────────────────────────
 const SNAPABLE_IDS = RATES_CURVES
   .filter(c =>
     c.curve_class !== 'FUNDING' &&
@@ -172,40 +173,43 @@ const SNAPABLE_IDS = RATES_CURVES
 
 function SnapAllButton({ role }) {
   const [snap, setSnap] = useState(null)
-  const { curves, updateQuote } = useMarketDataStore()
+  const { curves, updateQuote, saveSnapshot } = useMarketDataStore()
+  const { grid, updateVol } = useXVAStore()
   if (!['trader','admin'].includes(role)) return null
   const isRunning = snap?.status === 'running'
 
   const runSnap = async (e) => {
     e.stopPropagation()
     if (isRunning) return
-    setSnap({ status:'running', done:0, total:SNAPABLE_IDS.length, current:SNAPABLE_IDS[0] })
+
+    const STEPS = ['RATE CURVES', 'SWVOL ATM', 'SWVOL OTM', 'CAP/FLOOR']
+    setSnap({ status:'running', step:'RATE CURVES', stepIdx:0, total:STEPS.length })
+
     try {
       const { supabase } = await import('../../lib/supabase.js')
       const { data:{ session:sess } } = await supabase.auth.getSession()
       if (!sess) { setSnap({ status:'error', msg:'Not authenticated' }); return }
-      const today = new Date().toISOString().slice(0,10)
-      const failed = []
-      for (let i=0; i<SNAPABLE_IDS.length; i++) {
-        const curveId = SNAPABLE_IDS[i]
-        setSnap({ status:'running', done:i, total:SNAPABLE_IDS.length, current:curveId })
+      const h = { Authorization:'Bearer '+sess.access_token, 'Content-Type':'application/json' }
+      const today = new Date(new Date().getTime() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10)
+      const errors = []
+
+      // ── Step 1: Rate curves ──────────────────────────────────────────────
+      setSnap({ status:'running', step:'RATE CURVES', stepIdx:0, total:STEPS.length })
+      for (const curveId of SNAPABLE_IDS) {
         try {
-          const tickRes = await fetch('/api/bloomberg/tickers/'+curveId, {
-            headers:{ Authorization:'Bearer '+sess.access_token },
-          })
-          if (!tickRes.ok) throw new Error('tickers failed')
+          const tickRes = await fetch('/api/bloomberg/tickers/'+curveId, { headers:h })
+          if (!tickRes.ok) continue
           const { tickers={} } = await tickRes.json()
           const tickerList = Object.entries(tickers)
             .filter(([,t]) => t?.includes('BGN Curncy') || t?.includes('Index'))
             .map(([tenor,ticker]) => ({ tenor, ticker }))
           if (!tickerList.length) continue
           const snapRes = await fetch('/api/bloomberg/snap', {
-            method:'POST',
-            headers:{ Authorization:'Bearer '+sess.access_token, 'Content-Type':'application/json' },
+            method:'POST', headers:h,
             body:JSON.stringify({ curve_id:curveId, snap_date:today, tickers:tickerList, mode:'live' }),
           })
           const snapData = await snapRes.json()
-          if (!snapRes.ok) throw new Error(snapData.detail||'snap failed')
+          if (!snapRes.ok) { errors.push(curveId); continue }
           const curve = curves.find(c => c.id===curveId)
           if (curve && snapData.quotes?.length) {
             snapData.quotes.forEach(q => {
@@ -213,11 +217,100 @@ function SnapAllButton({ role }) {
               if (idx!==-1) updateQuote(curveId, idx, String(q.rate))
             })
           }
-        } catch(_) { failed.push(curveId) }
-        await new Promise(r => setTimeout(r,300))
+        } catch(_) { errors.push(curveId) }
+        await new Promise(r => setTimeout(r,200))
       }
-      setSnap({ status:'done', done:SNAPABLE_IDS.length, total:SNAPABLE_IDS.length, failed, date:today })
-      setTimeout(() => setSnap(null), 8000)
+
+      // ── Step 2: Swaption ATM ─────────────────────────────────────────────
+      setSnap({ status:'running', step:'SWVOL ATM', stepIdx:1, total:STEPS.length })
+      const atmVols = {}
+      try {
+        const atmTickers = grid.flatMap(row =>
+          row.cells.map(c => ({ expiry:row.expiry, tenor:c.tenor, ticker:c.ticker }))
+        )
+        const atmRes = await fetch('/api/bloomberg/snap-swvol', {
+          method:'POST', headers:h,
+          body:JSON.stringify({ snap_date:today, tickers:atmTickers }),
+        })
+        const atmData = await atmRes.json()
+        if (atmRes.ok) {
+          atmData.quotes?.forEach(q => {
+            updateVol(q.expiry, q.tenor, q.vol_bp)
+            atmVols[`${q.expiry}|${q.tenor}`] = q.vol_bp
+          })
+          await saveSnapshot(today, 'BLOOMBERG')
+        } else {
+          errors.push('swvol-atm')
+        }
+      } catch(_) { errors.push('swvol-atm') }
+
+      // ── Step 3: Swaption OTM + SABR ──────────────────────────────────────
+      setSnap({ status:'running', step:'SWVOL OTM', stepIdx:2, total:STEPS.length })
+      try {
+        const otmTickers = []
+        SWAPTION_EXPIRIES.forEach(exp => {
+          OTM_SNAP_TENORS.forEach(ten => {
+            const atm = atmVols[`${exp}|${ten}`] ||
+              grid.find(r => r.expiry===exp)?.cells?.find(c => c.tenor===ten)?.vol_bp
+            if (!atm) return
+            OTM_STRIKE_OFFSETS.forEach(off => {
+              const ticker = otmTicker(off, exp, ten)
+              if (ticker) otmTickers.push({ expiry:exp, tenor:ten, offset_bp:off, ticker })
+            })
+          })
+        })
+        const otmRes = await fetch('/api/bloomberg/snap-otm-vol', {
+          method:'POST', headers:h,
+          body:JSON.stringify({ snap_date:today, tickers:otmTickers }),
+        })
+        const otmData = await otmRes.json()
+        if (otmRes.ok && otmData.quotes?.length) {
+          const otmByKey = {}
+          otmData.quotes.forEach(q => {
+            if (!otmByKey[q.expiry]) otmByKey[q.expiry] = {}
+            if (!otmByKey[q.expiry][q.tenor]) otmByKey[q.expiry][q.tenor] = {}
+            otmByKey[q.expiry][q.tenor][String(q.offset_bp)] = q.abs_vol_bp
+          })
+          const cells = []
+          SWAPTION_EXPIRIES.forEach(exp => {
+            OTM_SNAP_TENORS.forEach(ten => {
+              const atm = atmVols[`${exp}|${ten}`]
+              if (!atm) return
+              const offs = otmByKey[exp]?.[ten] || {}
+              const toSpread = v => v != null ? v - atm : null
+              cells.push({
+                expiry_label:exp, tenor_label:ten,
+                expiry_y:EXPIRY_YEARS[exp], tenor_y:TENOR_YEARS[ten],
+                atm_vol_bp:atm,
+                spread_m200:toSpread(offs['-200']), spread_m100:toSpread(offs['-100']),
+                spread_m50:toSpread(offs['-50']),   spread_m25:toSpread(offs['-25']),
+                spread_p25:toSpread(offs['25']),    spread_p50:toSpread(offs['50']),
+                spread_p100:toSpread(offs['100']),  spread_p200:toSpread(offs['200']),
+                source:'BLOOMBERG',
+              })
+            })
+          })
+          const skewRes = await fetch('/api/market-data/vol-skew', {
+            method:'POST', headers:h,
+            body:JSON.stringify({ valuation_date:today, cells }),
+          })
+          if (!skewRes.ok) errors.push('swvol-otm-save')
+        }
+      } catch(_) { errors.push('swvol-otm') }
+
+      // ── Step 4: Cap/floor surface ─────────────────────────────────────────
+      setSnap({ status:'running', step:'CAP/FLOOR', stepIdx:3, total:STEPS.length })
+      try {
+        const capRes = await fetch('/api/bloomberg/cap-vol/snap', {
+          method:'POST', headers:h,
+          body:JSON.stringify({ valuation_date:today }),
+        })
+        if (!capRes.ok) errors.push('cap-floor')
+      } catch(_) { errors.push('cap-floor') }
+
+      setSnap({ status:'done', errors, date:today })
+      setTimeout(() => setSnap(null), 10000)
+
     } catch(e) {
       setSnap({ status:'error', msg:e.message })
       setTimeout(() => setSnap(null), 5000)
@@ -240,7 +333,7 @@ function SnapAllButton({ role }) {
           whiteSpace:'nowrap',
         }}
       >
-        {isRunning ? `${snap.done+1}/${snap.total}` : '▶ SNAP'}
+        {isRunning ? snap.step : '\u25B6 SNAP'}
       </button>
       {snap && (
         <div style={{
@@ -250,9 +343,9 @@ function SnapAllButton({ role }) {
                : snap.status==='error' ? 'var(--red)'
                : 'var(--blue)',
         }}>
-          {snap.status==='running' && snap.current?.replace(/_/g,' ')}
-          {snap.status==='done' && `✔ ${snap.total-snap.failed.length}/${snap.total} · ${snap.date}`}
-          {snap.status==='error' && `✘ ${snap.msg}`}
+          {snap.status==='running' && `${snap.stepIdx+1}/${snap.total} ${snap.step}`}
+          {snap.status==='done' && `\u2713 ${snap.date}${snap.errors?.length ? ' \u00B7 '+snap.errors.length+' errors' : ''}`}
+          {snap.status==='error' && `\u2717 ${snap.msg}`}
         </div>
       )}
     </div>
@@ -310,7 +403,7 @@ const S = {
     fontSize:'0.625rem', letterSpacing:'0.06em',
     color:'#1E1E1E', fontWeight:600,
   },
-};
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CfgNav() {
@@ -325,8 +418,6 @@ export default function CfgNav() {
         const isOpen = !collapsed[sec.id]
         return (
           <div key={sec.id} style={S.sectionWrap}>
-
-            {/* ── Section header ── */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 0.75rem 0 0' }}>
               <button
                 onClick={() => toggle(sec.id)}
@@ -336,12 +427,10 @@ export default function CfgNav() {
                   {sec.label}
                   {sec.sprint && <span style={S.sectionSprint}>SPRINT {sec.sprint}</span>}
                 </span>
-                <span style={{ fontSize:'0.5rem', opacity:0.5 }}>{isOpen ? '▾' : '▸'}</span>
+                <span style={{ fontSize:'0.5rem', opacity:0.5 }}>{isOpen ? '\u25DB' : '\u25D9'}</span>
               </button>
               {sec.snapAll && isOpen && <SnapAllButton role={role} />}
             </div>
-
-            {/* ── Section children (grouped) ── */}
             {isOpen && sec.children.map(group => (
               <div key={group.id} style={S.groupWrap}>
                 {group.label && (
@@ -362,7 +451,6 @@ export default function CfgNav() {
                 ))}
               </div>
             ))}
-
           </div>
         )
       })}

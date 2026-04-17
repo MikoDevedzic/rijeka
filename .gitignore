@@ -97,3 +97,58 @@ docs/SPRINT*
 docs/*.html 
 LegDetailsTab_FINAL.js
 show_line_700.js
+
+# --- Rijeka: local dev scaffolding, never to GitHub ---
+
+# Architecture / handoff docs (strategic, unfinished ideas, kept local)
+ARCHITECTURE_v*.md
+ARCHITECTURE.md
+HANDOFF_*.md
+
+# Patch scripts generated during development
+patch_*.cjs
+apply_*.cjs
+deploy_*.cjs
+scrub_*.cjs
+strip_*.cjs
+remove_*.cjs
+add_*.cjs
+wire_*.cjs
+find_*.cjs
+cleanup_*.cjs
+prep_commit_*.cjs
+
+# Ad-hoc test / exploratory scripts
+backend/test_*.py
+cap_bloomberg_addition.py
+cap_floor.py
+cap_floor_routes.py
+cap_market_data_addition.py
+cap_sabr.py
+cap_sabr_routes.py
+cap_sabr_routes_v2.py
+cap_vol_strip.py
+
+# Accidental shell-mistake files
+frontend/src/components/blotter/cd
+frontend/src/components/blotter/powershell
+
+# Migration SQL (run manually in Supabase)
+migration_*.sql
+*_DEPLOY.sql
+
+# Scratch
+model_validation/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local
+.env.*.local
+backend/api/routes/*_*.cjs 
+frontend/src/components/**/*.cjs 

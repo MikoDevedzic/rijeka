@@ -164,6 +164,11 @@ export default function LegDetailsTab({
   spreadSchedule, setSpreadSchedule,
   deriveStructLabel, getSession,
   scheduleRef,
+  index2, floatDc2, floatPayFreq2, floatResetFreq2,
+  inst,
+  feeSchedule, setFeeSchedule,
+  feeAmount, feeAmountType, feeSettleDate,
+  exerciseType,
 }) {
   const [fixedRows,  setFixedRows]  = useState([])
   const [floatRows,  setFloatRows]  = useState([])
@@ -211,15 +216,32 @@ export default function LegDetailsTab({
       const rateRaw    = rateRef?.current?.value || (parRate ? String(parRate) : '0')
       const fixedRate  = parseFloat(rateRaw)/100
       const spread     = parseFloat(spreadRef?.current?.value||'0')/10000
-      const legs = [
+      const legs = struct === 'BASIS' ? [
+        // BASIS SWAP: two float legs with different indices
+        { leg_ref:'FLOAT-1', leg_seq:1, leg_type:'FLOAT', direction:dir, currency:ccy, notional,
+          effective_date:effDate, maturity_date:matDate, day_count:floatDc, payment_frequency:floatPayFreq,
+          reset_frequency:floatResetFreq, bdc:floatBdc, payment_lag:payLag,
+          fixed_rate:0, spread:0, leverage:1.0,
+          discount_curve_id:curveId, forecast_curve_id:curveId, ois_compounding:null },
+        { leg_ref:'FLOAT-2', leg_seq:2, leg_type:'FLOAT', direction:dir==='PAY'?'RECEIVE':'PAY', currency:ccy, notional,
+          effective_date:effDate, maturity_date:matDate,
+          day_count:(floatDc2||floatDc), payment_frequency:(floatPayFreq2||floatPayFreq),
+          reset_frequency:(floatResetFreq2||floatResetFreq), bdc:floatBdc, payment_lag:payLag,
+          fixed_rate:0, spread, leverage:1.0,
+          discount_curve_id:curveId, forecast_curve_id:INDEX_CURVE[index2||'EFFR']||curveId, ois_compounding:null },
+      ] : [
         { leg_ref:'FIXED-1', leg_seq:1, leg_type:zcToggle?'ZERO_COUPON':'FIXED', direction:dir, currency:ccy, notional, effective_date:effDate, maturity_date:matDate, day_count:fixedDc, payment_frequency:zcToggle?'ZERO_COUPON':fixedPayFreq, bdc:fixedBdc, payment_lag:payLag, fixed_rate:fixedRate, discount_curve_id:curveId, forecast_curve_id:null, ois_compounding:null },
         { leg_ref:'FLOAT-1', leg_seq:2, leg_type:'FLOAT', direction:dir==='PAY'?'RECEIVE':'PAY', currency:ccy, notional, effective_date:effDate, maturity_date:matDate, day_count:floatDc, payment_frequency:floatPayFreq, reset_frequency:isOIS?'DAILY':floatResetFreq, bdc:floatBdc, payment_lag:payLag, fixed_rate:0, spread, leverage:1.0, discount_curve_id:curveId, forecast_curve_id:forecastId, ois_compounding:isOIS?'COMPOUNDING':null },
       ]
       const res = await fetch(API+'/price/preview', { method:'POST', headers:h, body:JSON.stringify({legs, valuation_date:valDate||new Date().toISOString().slice(0,10), curves:[{curve_id:curveId,quotes:[]}]}) })
       if (!res.ok) { setLoadErr('Price the trade first to load schedule.'); return }
       const data = await res.json()
-      const fixedLeg = data.legs?.find(l=>l.leg_type==='FIXED'||l.leg_type==='ZERO_COUPON')
-      const floatLeg = data.legs?.find(l=>l.leg_type==='FLOAT')
+      const fixedLeg = struct === 'BASIS'
+        ? data.legs?.find(l=>l.leg_ref==='FLOAT-1')
+        : data.legs?.find(l=>l.leg_type==='FIXED'||l.leg_type==='ZERO_COUPON')
+      const floatLeg = struct === 'BASIS'
+        ? data.legs?.find(l=>l.leg_ref==='FLOAT-2')
+        : data.legs?.find(l=>l.leg_type==='FLOAT')
       if (fixedLeg?.cashflows) {
         setFixedRows(fixedLeg.cashflows.map(cf=>({ period_start:cf.period_start, period_end:cf.period_end, payment_date:cf.payment_date, notional:String(Math.round(cf.notional||notional)), rate:String((cf.rate*100).toFixed(8)), orig_notional:String(Math.round(cf.notional||notional)), orig_rate:String((cf.rate*100).toFixed(8)) })))
       }
@@ -270,8 +292,8 @@ export default function LegDetailsTab({
         {/* FIXED LEG */}
         <div style={S.panel}>
           <div style={S.panelHdr}>
-            FIXED LEG
-            <span style={S.badge(dir==='PAY')}>{dir==='PAY'?'PAY FIXED':'RECEIVE FIXED'}</span>
+            {struct === 'BASIS' ? 'FLOAT LEG 1' : 'FIXED LEG'}
+            <span style={S.badge(dir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'PAY LEG 1':'RECEIVE LEG 1') : (dir==='PAY'?'PAY FIXED':'RECEIVE FIXED')}</span>
             {hasFixedOverrides && (
               <button onClick={resetFixed} style={{marginLeft:'auto', fontSize:'10px', color:C.amber, background:'rgba(245,200,66,0.06)', border:'1px solid rgba(245,200,66,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:"'IBM Plex Sans',sans-serif", letterSpacing:'0.04em'}}>
                 RESET TO PAR
@@ -329,8 +351,8 @@ export default function LegDetailsTab({
         {/* FLOAT LEG */}
         <div style={S.panel}>
           <div style={S.panelHdr}>
-            FLOAT LEG
-            <span style={S.badge(floatDir==='PAY')}>{floatDir==='PAY'?'PAY FLOAT':'RECEIVE FLOAT'}</span>
+            {struct === 'BASIS' ? 'FLOAT LEG 2' : 'FLOAT LEG'}
+            <span style={S.badge(floatDir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'RECEIVE LEG 2':'PAY LEG 2') : (floatDir==='PAY'?'PAY FLOAT':'RECEIVE FLOAT')}</span>
             {hasFloatOverrides && (
               <button onClick={resetFloat} style={{marginLeft:'auto', fontSize:'10px', color:C.amber, background:'rgba(245,200,66,0.06)', border:'1px solid rgba(245,200,66,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:"'IBM Plex Sans',sans-serif", letterSpacing:'0.04em'}}>
                 RESET TO PAR
@@ -381,6 +403,69 @@ export default function LegDetailsTab({
               </>
             )}
           </div>
+          <div style={S.divider}/>
+          {/* ── OPTION FEE SCHEDULE ── shown for IR_SWAPTION ─────────── */}
+          {inst === 'IR_SWAPTION' && (
+            <div style={{padding:'10px 14px'}}>
+              <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.12em',
+                color:'var(--text-dim)',marginBottom:'8px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                OPTION FEE SCHEDULE
+                <span style={{fontSize:'0.6875rem',fontWeight:400,color:'var(--text-dim)',opacity:0.6}}>
+                  {exerciseType} · {feeAmount?(feeAmountType==='BP'?`${feeAmount}bp`:`$${parseFloat(feeAmount||0).toLocaleString()}`):'no upfront premium'}
+                  {feeSettleDate?` · settle ${feeSettleDate}`:''}
+                </span>
+              </div>
+              <div style={{border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden'}}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 80px 32px',gap:'1px',background:'var(--border)'}}>
+                  {['PAY DATE','AMOUNT','UNIT',''].map(h=>(
+                    <div key={h} style={{background:'var(--panel)',padding:'5px 8px',fontSize:'0.6875rem',
+                      fontWeight:700,letterSpacing:'0.08em',color:'var(--text-dim)'}}>{h}</div>
+                  ))}
+                  {feeAmount && feeSettleDate && (
+                    <>
+                      <div style={{background:'rgba(245,200,66,0.04)',padding:'5px 8px',fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',monospace",color:'var(--amber)'}}>{feeSettleDate}</div>
+                      <div style={{background:'rgba(245,200,66,0.04)',padding:'5px 8px',fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',monospace",color:'var(--amber)'}}>{feeAmount}</div>
+                      <div style={{background:'rgba(245,200,66,0.04)',padding:'5px 8px',fontSize:'0.875rem',color:'var(--text-dim)'}}>{feeAmountType}</div>
+                      <div style={{background:'rgba(245,200,66,0.04)',padding:'5px 8px',fontSize:'0.6875rem',color:'var(--text-dim)',display:'flex',alignItems:'center',justifyContent:'center'}}>UPFRT</div>
+                    </>
+                  )}
+                  {(feeSchedule||[]).map((row,i)=>(
+                    <>
+                      <div style={{background:'var(--bg)',padding:'3px 6px'}}>
+                        <input type='date' value={row.date}
+                          onChange={e=>setFeeSchedule(s=>s.map((r,j)=>j===i?{...r,date:e.target.value}:r))}
+                          style={{width:'100%',background:'transparent',border:'1px solid var(--border)',
+                            color:'var(--text)',fontFamily:"'IBM Plex Mono',monospace",fontSize:'0.8125rem',
+                            padding:'2px 4px',borderRadius:'2px',outline:'none'}}/>
+                      </div>
+                      <div style={{background:'var(--bg)',padding:'3px 6px'}}>
+                        <input type='text' value={row.amount} placeholder='amount'
+                          onChange={e=>setFeeSchedule(s=>s.map((r,j)=>j===i?{...r,amount:e.target.value}:r))}
+                          style={{width:'100%',background:'transparent',border:'1px solid var(--border)',
+                            color:'var(--text)',fontFamily:"'IBM Plex Mono',monospace",fontSize:'0.8125rem',
+                            padding:'2px 4px',borderRadius:'2px',outline:'none'}}/>
+                      </div>
+                      <div style={{background:'var(--bg)',padding:'5px 8px',fontSize:'0.875rem',color:'var(--text-dim)'}}>{feeAmountType}</div>
+                      <div style={{background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                        <button onClick={()=>setFeeSchedule(s=>s.filter((_,j)=>j!==i))}
+                          style={{background:'transparent',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'1rem',lineHeight:1}}>×</button>
+                      </div>
+                    </>
+                  ))}
+                  <div style={{gridColumn:'1/-1',background:'var(--panel)',padding:'4px 8px',borderTop:'1px solid var(--border)'}}>
+                    <button onClick={()=>setFeeSchedule(s=>[...(s||[]),{date:'',amount:''}])}
+                      style={{background:'transparent',border:'none',color:'var(--accent)',cursor:'pointer',
+                        fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.08em',fontFamily:"'IBM Plex Mono',monospace",padding:'0'}}>
+                      + ADD PAYMENT DATE
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',marginTop:'4px',opacity:0.6}}>
+                Upfront from TRADE tab · Additional rows for deferred / instalment / Bermudan contingent fees
+              </div>
+            </div>
+          )}
           <div style={S.divider}/>
           <div style={S.coming}>CUSTOM CASHFLOWS - SPRINT 5C</div>
         </div>

@@ -86,7 +86,19 @@ export default function CurvesSidebar() {
             .map((id) => curves.find((c) => c.id === id))
             .filter(Boolean)
             .filter((c) => {
-              if (typeFilter !== 'all' && c.curve_class !== typeFilter) return false;
+              if (typeFilter !== 'all') {
+                // Always show base OIS curve when BASIS filter is active
+                if (typeFilter === 'BASIS' && c.curve_class === 'OIS') {
+                  // Only show if this group has at least one visible basis curve that references it
+                  const hasRelatedBasis = g.ids.some(id => {
+                    const bc = curves.find(x => x.id === id)
+                    return bc && bc.curve_class === 'BASIS' && bc.baseCurveId === c.id
+                  })
+                  if (!hasRelatedBasis) return false
+                } else if (c.curve_class !== typeFilter) {
+                  return false
+                }
+              }
               if (flt && !c.fullName.toUpperCase().includes(flt) &&
                   !c.ccy.toUpperCase().includes(flt) &&
                   !c.name.toUpperCase().includes(flt)) return false;

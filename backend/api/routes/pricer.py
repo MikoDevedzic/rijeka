@@ -1043,6 +1043,7 @@ async def price_cap_route(
         "atm_forward_pct": round(result.atm_forward * 100, 6),
         "n_caplets":      result.n_caplets,
         "caplets":        result.caplets,
+        "surface_rows":   surface_rows,
     }
 
 
@@ -1101,6 +1102,7 @@ async def price_floor_route(
         "atm_forward_pct": round(result.atm_forward * 100, 6),
         "n_caplets":       result.n_caplets,
         "caplets":         result.caplets,
+        "surface_rows":    surface_rows,
     }
 
 
@@ -1178,4 +1180,5 @@ async def price_collar_route(
         "atm_forward":         cap.atm_forward,
         "atm_forward_pct":     round(cap.atm_forward * 100, 6),
         "n_caplets":           cap.n_caplets,
+        "surface_rows":        surface_rows,
     }

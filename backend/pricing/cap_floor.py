@@ -90,6 +90,33 @@ def caplet_schedule(spot_date: date, tenor_y: float, freq_per_year: int = 4) -> 
     return sched
 
 
+# ── ATM forward (weighted caplet forward, i.e. par cap rate) ─────────────────
+
+def compute_atm_forward(discount_curve, valuation_date: date, tenor_y: float,
+                        freq_per_year: int = 4) -> float:
+    """
+    Weighted-average cap forward rate (par cap rate) for a given tenor,
+    computed from the discount curve using the same logic as price_cap().
+    Used at snap time to derive spread-from-ATM labels for absolute-strike
+    cap vol tickers.
+    """
+    spot_date = valuation_date + timedelta(days=2)
+    sched = caplet_schedule(spot_date, tenor_y, freq_per_year)
+    fwd_rates, dfs = [], []
+    for cp in sched:
+        df_s = discount_curve.df(cp['start_date'])
+        df_e = discount_curve.df(cp['end_date'])
+        tau  = cp['tau']
+        fwd  = (df_s / df_e - 1.0) / tau if tau > 0 else 0.0
+        fwd_rates.append(fwd)
+        dfs.append(df_e)
+    total_ann = sum(dfs[i] * sched[i]['tau'] for i in range(len(sched)))
+    if total_ann < 1e-8:
+        return 0.0
+    return sum(fwd_rates[i] * dfs[i] * sched[i]['tau']
+               for i in range(len(sched))) / total_ann
+
+
 # ── Vol lookup from surface ───────────────────────────────────────────────────
 
 def lookup_cap_vol(

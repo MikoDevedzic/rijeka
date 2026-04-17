@@ -19,6 +19,7 @@ import PrometheusPanel  from './components/PrometheusPanel'
 import TradeBookingWindow from './components/blotter/TradeBookingWindow'
 import useBookingStore    from './store/useBookingStore'
 import SwaptionVolDetail from './components/market-data/SwaptionVolDetail'
+import CapVolDetail      from './components/market-data/CapVolDetail'
 import XVAParametersTab  from './components/configurations/XVAParametersTab'
 
 function BlotterLayout() {
@@ -92,6 +93,7 @@ export default function App() {
               <Route path="legal-entities"     element={<LegalEntities />} />
               <Route path="counterparties"              element={<Counterparties />} />
               <Route path="market-data/swvol"            element={<SwaptionVolDetail />} />
+              <Route path="market-data/capfloor"             element={<CapVolDetail />} />
               <Route path="xva-parameters/hw1f"          element={<XVAParametersTab />} />
               <Route path="users"              element={<Users />} />
             </Route>

@@ -339,3 +339,190 @@ async def bloomberg_snap_otm_vol(
         "snap_date": req.snap_date,
         "source":    "BLOOMBERG",
     }
+# ============================================================
+
+
+# ============================================================
+
+
+# ============================================================
+# CAP / FLOOR VOL SNAP  (absolute-strike convention, v2)
+# ============================================================
+#
+# USCNQ* tickers are quoted at ABSOLUTE strikes, not ATM spreads
+# (confirmed via Bloomberg DES — e.g. USCNQB5 = "USD ABSOLUTE OTM CAP
+# NVOL (SOFR) +.25% 5Year", Strike: Absolute +.25 %).
+#
+# At snap time we fetch the SOFR discount curve, compute the ATM forward
+# per tenor (= weighted-average caplet forward = par cap rate), then
+# derive strike_spread_bp = (absolute_strike - atm_forward) * 10000.
+#
+# Ticker conventions (verified 2026-04-17):
+#   ATM   : USCNSQ{N} ICPL Curncy         → PX_MID field
+#   Skew  : USCNQ{letter}{N} ICPL Curncy  → MID field
+#
+# Letter → absolute strike (%):
+#   B=0.25  C=0.50  D=0.75  E=1.00  G=1.50  H=2.00
+#   I=2.50  J=3.00  L=4.00  O=5.00
+# ============================================================
+
+from typing import Optional
+
+# (strike_pct, is_atm, prefix, letter)
+# strike_pct is None for ATM — resolved at snap time from the curve.
+CAP_STRIKES_ABS = [
+    (None, True,  "USCNSQ", ""),
+    (0.25, False, "USCNQ",  "B"),
+    (0.50, False, "USCNQ",  "C"),
+    (0.75, False, "USCNQ",  "D"),
+    (1.00, False, "USCNQ",  "E"),
+    (1.50, False, "USCNQ",  "G"),
+    (2.00, False, "USCNQ",  "H"),
+    (2.50, False, "USCNQ",  "I"),
+    (3.00, False, "USCNQ",  "J"),
+    (4.00, False, "USCNQ",  "L"),
+    (5.00, False, "USCNQ",  "O"),
+]
+
+CAP_TENORS = [1, 2, 3, 5, 7, 10]
+
+
+def _build_cap_ticker(prefix: str, letter: str, tenor_y: int) -> str:
+    if prefix == "USCNSQ":
+        return f"USCNSQ{tenor_y} ICPL Curncy"
+    return f"{prefix}{letter}{tenor_y} ICPL Curncy"
+
+
+class CapVolSnapRequest(BaseModel):
+    valuation_date: Optional[str] = None
+    tenors:         Optional[list] = None
+    atm_only:       bool = False
+    curve_id:       str = "USD_SOFR"
+
+
+@router.post("/bloomberg/cap-vol/snap")
+async def snap_cap_vol_surface(
+    req: CapVolSnapRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Snap cap vol surface from Bloomberg using absolute-strike tickers.
+    Computes ATM forward per tenor from the discount curve and stores
+    both strike_pct (%) and strike_spread_bp (derived).
+    """
+    val_date_s = req.valuation_date or date.today().isoformat()
+    val_date   = date.fromisoformat(val_date_s)
+    tenors     = req.tenors or CAP_TENORS
+    strikes    = [s for s in CAP_STRIKES_ABS if s[1]] if req.atm_only else CAP_STRIKES_ABS
+
+    # 1. Build discount curve (loads from latest DB snapshot via curve_id)
+    from api.routes.pricer import _build_curve, CurveInput
+    from pricing.cap_floor import compute_atm_forward
+
+    try:
+        curve = _build_curve(
+            CurveInput(curve_id=req.curve_id, quotes=[]),
+            val_date, db
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Cannot build {req.curve_id} curve for {val_date_s}: {e}"
+        )
+
+    # 2. Compute ATM forward per tenor
+    atm_fwd = {t: compute_atm_forward(curve, val_date, t) for t in tenors}
+
+    # 3. Build ticker list with resolved strikes and derived spreads
+    ticker_meta = []
+    for tenor in tenors:
+        for strike_pct, is_atm, prefix, letter in strikes:
+            ticker = _build_cap_ticker(prefix, letter, tenor)
+            if is_atm:
+                resolved_pct = atm_fwd[tenor] * 100.0
+                spread_bp    = 0
+            else:
+                resolved_pct = strike_pct
+                spread_bp    = int(round((strike_pct / 100.0 - atm_fwd[tenor]) * 10000))
+            ticker_meta.append((ticker, tenor, resolved_pct, spread_bp, is_atm))
+
+    # 4. Fetch from Bloomberg (ATM uses PX_MID, skew uses MID)
+    try:
+        from pricing.bloomberg_client import snap_live
+        atm_tickers  = [t[0] for t in ticker_meta if t[4]]
+        skew_tickers = [t[0] for t in ticker_meta if not t[4]]
+        blp_data = {}
+        if atm_tickers:
+            blp_data.update(snap_live(atm_tickers, "PX_MID"))
+        if skew_tickers:
+            blp_data.update(snap_live(skew_tickers, "MID"))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Bloomberg fetch failed: {e}")
+
+    # 5. Wipe existing rows for this val_date (idempotent snap)
+    db.execute(
+        text("DELETE FROM cap_vol_surface WHERE valuation_date = :vd"),
+        {"vd": val_date_s}
+    )
+
+    # 6. Insert fresh
+    rows_upserted = 0
+    result_rows   = []
+
+    for ticker, tenor_y, strike_pct, spread_bp, is_atm in ticker_meta:
+        vol = blp_data.get(ticker)
+        if vol is None:
+            continue
+        db.execute(
+            text("""
+                INSERT INTO cap_vol_surface
+                    (valuation_date, cap_tenor_y, strike_spread_bp, is_atm,
+                     flat_vol_bp, strike_pct, ticker, source)
+                VALUES
+                    (:valuation_date, :cap_tenor_y, :strike_spread_bp, :is_atm,
+                     :flat_vol_bp, :strike_pct, :ticker, :source)
+            """),
+            {
+                "valuation_date":   val_date_s,
+                "cap_tenor_y":      tenor_y,
+                "strike_spread_bp": spread_bp,
+                "is_atm":           is_atm,
+                "flat_vol_bp":      round(float(vol), 6),
+                "strike_pct":       round(float(strike_pct), 6),
+                "ticker":           ticker.replace(" Curncy", "").strip(),
+                "source":           "BLOOMBERG",
+            }
+        )
+        rows_upserted += 1
+        result_rows.append({
+            "ticker":     ticker.strip(),
+            "tenor_y":    tenor_y,
+            "strike_pct": round(strike_pct, 4),
+            "spread_bp":  spread_bp,
+            "vol_bp":     round(float(vol), 4),
+        })
+
+    db.commit()
+
+    return {
+        "valuation_date": val_date_s,
+        "rows_upserted":  rows_upserted,
+        "atm_forwards_pct": {str(k): round(v * 100, 6) for k, v in atm_fwd.items()},
+        "data":           result_rows,
+    }
+
+
+@router.get("/bloomberg/cap-vol/tickers")
+async def get_cap_vol_ticker_map():
+    """Return full ticker map for debugging / Bloomberg connectivity check."""
+    out = []
+    for tenor in CAP_TENORS:
+        for strike_pct, is_atm, prefix, letter in CAP_STRIKES_ABS:
+            ticker = _build_cap_ticker(prefix, letter, tenor)
+            out.append({
+                "ticker":     ticker,
+                "tenor_y":    tenor,
+                "strike_pct": strike_pct,
+                "is_atm":     is_atm,
+            })
+    return {"tickers": out, "count": len(out)}

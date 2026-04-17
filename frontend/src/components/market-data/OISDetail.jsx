@@ -319,9 +319,7 @@ function OISInstruments({ curve }) {
                 {inst.tenor}
               </div>,
               <div key={`tk-${i}`} style={{...tdBase, fontSize:'0.8125rem', color:'var(--text-dim)'}}>
-                {isOn
-                  ? 'Federal Reserve Bank of New York'
-                  : (blpTickers[inst.tenor] ? blpTickers[inst.tenor].replace(' BGN Curncy','') : inst.ticker)}
+                {blpTickers[inst.tenor] ? blpTickers[inst.tenor].replace(' BGN Curncy','') : inst.ticker}
               </div>,
               <div key={`src-${i}`} style={tdBase}><SourceBadge src={src} /></div>,
               <div key={`mid-${i}`} style={{...tdR, color:'#0dd4a8'}}>{bs.mid ? parseFloat(bs.mid).toFixed(8) : '—'}</div>,
@@ -381,12 +379,19 @@ function OISInstruments({ curve }) {
         {blpSource === 'BLOOMBERG' && (
           <div style={{border:'1px solid var(--border)',borderRadius:'2px',padding:'8px'}}>
 
-            {/* FRED note */}
-            <div style={{fontSize:'0.875rem',color:'#9060cc',background:'rgba(144,96,204,0.06)',
-              border:'1px solid rgba(144,96,204,0.2)',borderRadius:'2px',
-              padding:'4px 7px',marginBottom:'8px',lineHeight:1.6}}>
-              O/N rate: <strong>SOFRRATE Index</strong> — Federal Reserve Bank of New York fixing, sourced via Bloomberg. All other tenors: Bloomberg BGN composite mid (PX_MID).
-            </div>
+            {/* ON fixing note */}
+            {(() => {
+              const onInst = curve.instruments.find(i => i.type === 'OISDeposit' || i.type === 'BasisDeposit')
+              if (!onInst) return null
+              return (
+                <div style={{fontSize:'0.875rem',color:'#9060cc',background:'rgba(144,96,204,0.06)',
+                  border:'1px solid rgba(144,96,204,0.2)',borderRadius:'2px',
+                  padding:'4px 7px',marginBottom:'8px',lineHeight:1.6}}>
+                  O/N fixing: <strong>{onInst.ticker}</strong>
+                  {curve.description ? ' — ' + curve.description : ' — sourced via Bloomberg.'}
+                </div>
+              )
+            })()}
 
             {/* Connection status */}
             <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'8px'}}>

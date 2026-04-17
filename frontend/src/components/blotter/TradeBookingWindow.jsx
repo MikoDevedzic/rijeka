@@ -469,34 +469,48 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
     const buildSurface = (THREE, scene, meshRef) => {
       const rows = capResult?.surface_rows || []
-
-      // Extract unique tenors and spreads from surface data
-      const tenorSet = [...new Set(rows.map(r=>parseFloat(r.cap_tenor_y)))].sort((a,b)=>a-b)
-      const spreadSet = [...new Set(rows.map(r=>parseFloat(r.strike_spread_bp)))].sort((a,b)=>a-b)
-
-      // Fall back to synthetic grid if no surface data
-      const TENORS_CAP = tenorSet.length >= 2 ? tenorSet : [1,2,3,5,7,10]
-      const SPREADS    = spreadSet.length >= 2 ? spreadSet : [-200,-150,-100,-50,0,50,100,150,200]
-      const NT = TENORS_CAP.length, NS = SPREADS.length
       const baseVol = parseFloat(capVolOverride) || capResult?.vol_bp || 85
 
-      // Build vol grid from surface rows or synthetic
+      // Tenors from data; fallback to standard cap grid
+      const tenorSet = [...new Set(rows.map(r=>parseFloat(r.cap_tenor_y)))].sort((a,b)=>a-b)
+      const TENORS_CAP = tenorSet.length >= 2 ? tenorSet : [1,2,3,5,7,10]
+
+      // Use signed spreads directly. USCNQ tickers are absolute strikes so
+      // surface_rows contains both ITM (negative spread) and OTM (positive
+      // spread) points — no mirroring needed.
+      const spreadSet = [...new Set(rows.map(r=>parseFloat(r.strike_spread_bp)))].sort((a,b)=>a-b)
+      const SPREADS = spreadSet.length >= 2
+        ? spreadSet
+        : [-400,-200,-100,0,100,200,400]
+      const NT = TENORS_CAP.length, NS = SPREADS.length
+
+      // Per-tenor piecewise-linear vol lookup in signed spread, flat extrapolation
+      const volFn = new Map()
+      for(const tY of TENORS_CAP){
+        const pts = rows
+          .filter(r=>Math.abs(parseFloat(r.cap_tenor_y)-tY)<0.01)
+          .map(r=>({k:parseFloat(r.strike_spread_bp),v:parseFloat(r.flat_vol_bp)}))
+          .sort((a,b)=>a.k-b.k)
+        if(pts.length===0){ volFn.set(tY,()=>baseVol); continue }
+        if(pts.length===1){ const v=pts[0].v; volFn.set(tY,()=>v); continue }
+        volFn.set(tY,(x)=>{
+          if(x<=pts[0].k) return pts[0].v
+          if(x>=pts[pts.length-1].k) return pts[pts.length-1].v
+          for(let i=0;i<pts.length-1;i++){
+            if(x>=pts[i].k && x<=pts[i+1].k){
+              const t=(x-pts[i].k)/(pts[i+1].k-pts[i].k)
+              return pts[i].v + t*(pts[i+1].v-pts[i].v)
+            }
+          }
+          return pts[pts.length-1].v
+        })
+      }
+
       const grid = []
       for(let ti=0; ti<NT; ti++){
+        const fn = volFn.get(TENORS_CAP[ti])
         const row = []
-        for(let si=0; si<NS; si++){
-          if(rows.length >= 2){
-            // Find matching row
-            const match = rows.find(r=>
-              Math.abs(parseFloat(r.cap_tenor_y)-TENORS_CAP[ti])<0.01 &&
-              Math.abs(parseFloat(r.strike_spread_bp)-SPREADS[si])<1
-            )
-            row.push(match ? parseFloat(match.flat_vol_bp) : baseVol)
-          } else {
-            // Synthetic: ATM + smile
-            row.push(baseVol + Math.abs(SPREADS[si]) * 0.03)
-          }
-        }
+        for(let si=0; si<NS; si++){ row.push(fn(SPREADS[si])) }
         grid.push(row)
       }
 
@@ -512,9 +526,9 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           const y = ((v-minV)/range)*YS
           const z = (ti/(NT-1)-0.5)*ZS
           verts.push(x,y,z)
-          // Color: teal for ATM, red for high vol, blue for low
+          // Teal gradient — consistent with rebuild path and Rijeka theme
           const t = (v-minV)/range
-          cols.push(t*0.8+0.2, (1-Math.abs(t-0.5)*1.5)*0.8+0.2, (1-t)*0.8+0.2)
+          cols.push(0, t*0.83+0.17, (1-t)*0.53+0.47)
         }
       }
       for(let ti=0;ti<NT-1;ti++)
@@ -614,21 +628,37 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
     capThreeRef.current.meshRef = meshRef
     // rebuild geometry inline
     const rows = capResult?.surface_rows || []
-    const tenorSet = [...new Set(rows.map(r=>parseFloat(r.cap_tenor_y)))].sort((a,b)=>a-b)
-    const spreadSet = [...new Set(rows.map(r=>parseFloat(r.strike_spread_bp)))].sort((a,b)=>a-b)
-    const TENORS_CAP = tenorSet.length >= 2 ? tenorSet : [1,2,3,5,7,10]
-    const SPREADS    = spreadSet.length >= 2 ? spreadSet : [-200,-150,-100,-50,0,50,100,150,200]
-    const NT = TENORS_CAP.length, NS = SPREADS.length
     const baseVol = parseFloat(capVolOverride) || capResult?.vol_bp || 85
+    const tenorSet = [...new Set(rows.map(r=>parseFloat(r.cap_tenor_y)))].sort((a,b)=>a-b)
+    const TENORS_CAP = tenorSet.length >= 2 ? tenorSet : [1,2,3,5,7,10]
+    const spreadSet = [...new Set(rows.map(r=>parseFloat(r.strike_spread_bp)))].sort((a,b)=>a-b)
+    const SPREADS = spreadSet.length >= 2 ? spreadSet : [-400,-200,-100,0,100,200,400]
+    const NT = TENORS_CAP.length, NS = SPREADS.length
+    const volFn = new Map()
+    for(const tY of TENORS_CAP){
+      const pts = rows
+        .filter(r=>Math.abs(parseFloat(r.cap_tenor_y)-tY)<0.01)
+        .map(r=>({k:parseFloat(r.strike_spread_bp),v:parseFloat(r.flat_vol_bp)}))
+        .sort((a,b)=>a.k-b.k)
+      if(pts.length===0){ volFn.set(tY,()=>baseVol); continue }
+      if(pts.length===1){ const v=pts[0].v; volFn.set(tY,()=>v); continue }
+      volFn.set(tY,(x)=>{
+        if(x<=pts[0].k) return pts[0].v
+        if(x>=pts[pts.length-1].k) return pts[pts.length-1].v
+        for(let i=0;i<pts.length-1;i++){
+          if(x>=pts[i].k && x<=pts[i+1].k){
+            const t=(x-pts[i].k)/(pts[i+1].k-pts[i].k)
+            return pts[i].v + t*(pts[i+1].v-pts[i].v)
+          }
+        }
+        return pts[pts.length-1].v
+      })
+    }
     const grid = []
     for(let ti=0;ti<NT;ti++){
-      const row=[]
-      for(let si=0;si<NS;si++){
-        if(rows.length>=2){
-          const match=rows.find(r=>Math.abs(parseFloat(r.cap_tenor_y)-TENORS_CAP[ti])<0.01&&Math.abs(parseFloat(r.strike_spread_bp)-SPREADS[si])<1)
-          row.push(match?parseFloat(match.flat_vol_bp):baseVol)
-        } else { row.push(baseVol+Math.abs(SPREADS[si])*0.03) }
-      }
+      const fn = volFn.get(TENORS_CAP[ti])
+      const row = []
+      for(let si=0;si<NS;si++){ row.push(fn(SPREADS[si])) }
       grid.push(row)
     }
     const allV=grid.flat(),minV=Math.min(...allV),maxV=Math.max(...allV),range=maxV-minV||1
@@ -1767,6 +1797,16 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [capDayCount,  setCapDayCount]  = useState('ACT/360')
   const [showCaplets,  setShowCaplets]  = useState(false)
   const [capResult,  setCapResult]  = useState(null)
+  // Session cache for cap pricing — bypasses Supabase getSession hangs
+  // that occur after tab backgrounding. Populated on mount + after every
+  // successful getSession. Used as fallback when fresh getSession hangs >5s.
+  const capSessionCacheRef = useRef(null)
+  useEffect(() => {
+    getSession().then(s => {
+      if (s?.access_token) capSessionCacheRef.current = { ...s, _cachedAt: Date.now() }
+    }).catch(() => {})
+  }, [])
+
   const [capPricing, setCapPricing] = useState(false)
   const [capErr,     setCapErr]     = useState('')
 
@@ -1787,8 +1827,40 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     const IS_COLLAR = inst === 'INTEREST_RATE_COLLAR'
     if (!IS_CAP && !IS_FLOOR && !IS_COLLAR) return
     setCapPricing(true); setCapErr(''); setCapResult(null)
+    // True deadline: race EVERY await against an abort signal so the handler
+    // cannot get stuck on getSession() (Supabase auth refresh occasionally
+    // hangs after tab backgrounding). 30s ceiling on the whole handler.
+    const ac = new AbortController()
+    const abortTimer = setTimeout(() => ac.abort(), 30000)
+    const deadline = () => new Promise((_, reject) => {
+      if (ac.signal.aborted) return reject(new Error('DEADLINE'))
+      ac.signal.addEventListener('abort', () => reject(new Error('DEADLINE')), { once: true })
+    })
+    const withDeadline = (p) => Promise.race([p, deadline()])
+    const t0 = performance.now()
+    console.log('[cap] handler entered')
     try {
-      const session = await getSession()
+      // Short 5s deadline on getSession — if Supabase hangs from tab
+      // backgrounding, fall back to cached session from a prior successful call.
+      let session
+      const sessionDeadline = new Promise((_, rej) => setTimeout(
+        () => rej(new Error('SESSION_TIMEOUT')), 5000
+      ))
+      try {
+        session = await Promise.race([getSession(), sessionDeadline])
+      } catch (se) {
+        if (se?.message === 'SESSION_TIMEOUT' && capSessionCacheRef.current) {
+          console.warn('[cap] getSession hung, using cached session from ' +
+                       Math.round((Date.now() - capSessionCacheRef.current._cachedAt)/1000) + 's ago')
+          session = capSessionCacheRef.current
+        } else {
+          throw se
+        }
+      }
+      if (session?.access_token) {
+        capSessionCacheRef.current = { ...session, _cachedAt: Date.now() }
+      }
+      console.log('[cap] got session in ' + Math.round(performance.now()-t0) + 'ms')
       if (!session) throw new Error('Not authenticated')
       const h = { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' }
       const raw      = notionalRef.current?.value?.replace(/,/g,'') || '10000000'
@@ -1811,18 +1883,60 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
         endpoint = '/api/price/collar'
         payload  = { notional, tenor_y: tenorY, cap_rate: capRateDec, floor_rate: floorRateDec, freq_per_year: freqPerYear, curve_id: capCurveId, ...(capVolBp ? {vol_override_bp: capVolBp} : {}) }
       }
-      const res  = await fetch(API + endpoint, { method: "POST", headers: h, body: JSON.stringify(payload) })
-      const data = await res.json()
+      const tFetch = performance.now()
+      console.log('[cap] issuing fetch to ' + endpoint)
+      const res  = await withDeadline(fetch(API + endpoint, { method: "POST", headers: h, body: JSON.stringify(payload), signal: ac.signal }))
+      console.log('[cap] fetch responded in ' + Math.round(performance.now()-tFetch) + 'ms, status=' + res.status)
+      const data = await withDeadline(res.json())
+      console.log('[cap] parsed json, npv=' + data?.npv)
       if (!res.ok) throw new Error(data.detail || 'Pricing failed')
       setCapResult(data)
       // Always update vol field with what was actually used (surface or override)
       if (data.vol_bp) setCapVolOverride(data.vol_bp.toFixed(1))
+      console.log('[cap] state updated, total ' + Math.round(performance.now()-t0) + 'ms')
     } catch (e) {
-      setCapErr(e.message)
+      console.log('[cap] caught ' + (e?.message || e?.name) + ' after ' + Math.round(performance.now()-t0) + 'ms')
+      if (e?.message === 'DEADLINE' || e?.name === 'AbortError') {
+        setCapErr('Pricing deadline exceeded (30s) — retry or check backend')
+      } else {
+        setCapErr(e.message)
+      }
     } finally {
+      clearTimeout(abortTimer)
       setCapPricing(false)
+      console.log('[cap] finally ran, capPricing=false')
     }
   }
+
+  // ── Safety net: auto-clear any pricing flag stuck true for more than 20s ──
+  // Covers all three handlers (handlePrice / handlePriceSwaption /
+  // handleCapFloorPrice). If a handler leaks its flag for any reason, the
+  // safety net releases it so the PRICE button becomes clickable again.
+  // Console warning identifies which handler leaked for debugging.
+  useEffect(() => {
+    if (!capPricing) return
+    const t = setTimeout(() => {
+      console.warn('[safety-net] capPricing stuck >20s, forcing to false')
+      setCapPricing(false)
+    }, 20000)
+    return () => clearTimeout(t)
+  }, [capPricing])
+  useEffect(() => {
+    if (!pricing) return
+    const t = setTimeout(() => {
+      console.warn('[safety-net] pricing stuck >20s, forcing to false')
+      setPricing(false)
+    }, 20000)
+    return () => clearTimeout(t)
+  }, [pricing])
+  useEffect(() => {
+    if (!swaptionPricing) return
+    const t = setTimeout(() => {
+      console.warn('[safety-net] swaptionPricing stuck >20s, forcing to false')
+      setSwaptionPricing(false)
+    }, 20000)
+    return () => clearTimeout(t)
+  }, [swaptionPricing])
 
   const applyIndexDefaults = (idx) => {
     const [reset, pay, dc] = INDEX_DEFAULTS[idx] || ['DAILY','ANNUAL','ACT/360']
@@ -3077,7 +3191,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               {ASSET_CLASSES.map(a=><Chip key={a} label={a} active={ac===a} live={LIVE_AC.includes(a)} onClick={()=>{setAc(a);setInst(INSTRUMENTS[a][0])}}/>)}
             </div>
             <div className='tbw-chip-row' style={{marginTop:'3px'}}>
-              {(INSTRUMENTS[ac]||[]).map(i=><Chip key={i} label={i.replace(/_/g,' ')} active={inst===i} live={(LIVE_INST[ac]||[]).includes(i)} onClick={()=>{ setInst(i); if(i==='INTEREST_RATE_CAP'||i==='INTEREST_RATE_FLOOR'||i==='INTEREST_RATE_COLLAR'){ setCapResult(null); setCapErr(''); setCapPricing(false); setCapVolOverride('') } }}/>)}
+              {(INSTRUMENTS[ac]||[]).map(i=><Chip key={i} label={i.replace(/_/g,' ')} active={inst===i} live={(LIVE_INST[ac]||[]).includes(i)} onClick={()=>{ setInst(i); setPricing(false); setSwaptionPricing(false); setCapPricing(false); if(i==='INTEREST_RATE_CAP'||i==='INTEREST_RATE_FLOOR'||i==='INTEREST_RATE_COLLAR'){ setCapResult(null); setCapErr(''); setCapVolOverride('') } }}/>)}
             </div>
             {inst==='IR_SWAP'&&(
               <div className='tbw-chip-row' style={{marginTop:'3px'}}>
