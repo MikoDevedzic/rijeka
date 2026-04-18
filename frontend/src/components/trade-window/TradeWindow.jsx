@@ -37,6 +37,7 @@ import {
   CashflowsPanel,
 } from './sections'
 import DetailsPanel from './details-panel'
+import XvaPanel     from './xva-panel'
 
 // Import all product modules to register them at load time.
 // Adding FX/credit = add one import line here.
@@ -103,6 +104,11 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
 
   // ── Window chrome state (Patch 8): active tab + drag position ──────────
   const [activeTab, setActiveTab] = useState('TRADE')
+
+  // Patch 21: XVA integration — params ref for XVATab to write to,
+  // sim result state for shell-level consumption later.
+  const xvaParamsRef = useRef(null)
+  const [xvaSimResult, setXvaSimResult] = useState(null)
   const [pos, setPos] = useState(() => ({
     x: Math.max(10, (typeof window !== 'undefined' ? window.innerWidth : 1400) - 1170) / 2,
     y: 30,
@@ -337,7 +343,18 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
         />
       )}
 
-      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && (
+      {activeTab === 'XVA' && (
+        <XvaPanel
+          productKey={productKey}
+          state={state}
+          direction={direction}
+          result={result}
+          xvaParamsRef={xvaParamsRef}
+          onSimResult={setXvaSimResult}
+        />
+      )}
+
+      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && activeTab !== 'XVA' && (
         <div className="tbw-placeholder">
           — {activeTab} tab not yet wired in the unified shell —
         </div>
