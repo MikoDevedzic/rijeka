@@ -121,7 +121,8 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
     // Skip drag if the user is interacting with a form control or button.
     // Uses .closest() so we catch clicks on nested spans/icons too.
     if (e.target.closest(
-      'input, select, textarea, button, [contenteditable], [role="button"]'
+      'input, select, textarea, button, [contenteditable], [role="button"],' +
+      'canvas, .tbw-no-drag'
     )) return
     dragStartRef.current = {
       px: pos.x, py: pos.y,
