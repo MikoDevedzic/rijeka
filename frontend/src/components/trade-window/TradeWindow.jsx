@@ -37,7 +37,8 @@ import {
   CashflowsPanel,
 } from './sections'
 import DetailsPanel from './details-panel'
-import XvaPanel     from './xva-panel'
+import XvaPanel      from './xva-panel'
+import ScenarioPanel from './scenario-panel'
 
 // Import all product modules to register them at load time.
 // Adding FX/credit = add one import line here.
@@ -354,7 +355,16 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
         />
       )}
 
-      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && activeTab !== 'XVA' && (
+      {activeTab === 'CURVE SCENARIO' && (
+        <ScenarioPanel
+          productKey={productKey}
+          state={state}
+          direction={direction}
+          result={result}
+        />
+      )}
+
+      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && activeTab !== 'XVA' && activeTab !== 'CURVE SCENARIO' && (
         <div className="tbw-placeholder">
           — {activeTab} tab not yet wired in the unified shell —
         </div>
