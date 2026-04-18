@@ -329,6 +329,9 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
 
     const buildSurface = (THREE, scene, meshRef) => {
       const rows = capResult?.surface_rows || []
+      // Patch 25: skip build when no real data yet. Prevents flash of
+      // synthetic flat surface before pricing completes.
+      if (rows.length === 0) return
       const baseVol = parseFloat(capVolOverride) || capResult?.vol_bp || 85
 
       // Tenors from data; fallback to standard cap grid
@@ -488,6 +491,8 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
     capThreeRef.current.meshRef = meshRef
     // rebuild geometry inline
     const rows = capResult?.surface_rows || []
+    // Patch 25: skip rebuild until real data is available.
+    if (rows.length === 0) return
     const baseVol = parseFloat(capVolOverride) || capResult?.vol_bp || 85
     const tenorSet = [...new Set(rows.map(r=>parseFloat(r.cap_tenor_y)))].sort((a,b)=>a-b)
     const TENORS_CAP = tenorSet.length >= 2 ? tenorSet : [1,2,3,5,7,10]
