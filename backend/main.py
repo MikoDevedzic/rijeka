@@ -15,6 +15,7 @@ from api.routes import (
     legal_entities,
     counterparties,
     trades,
+    booking,
     analyse,
     trade_events,
     trade_legs,
@@ -50,6 +51,7 @@ app.include_router(org.router)
 app.include_router(legal_entities.router, prefix="/api/legal-entities", tags=["legal-entities"])
 app.include_router(counterparties.router, prefix="/api/counterparties", tags=["counterparties"])
 app.include_router(trades.router, prefix="/api/trades", tags=["trades"])
+app.include_router(booking.router)
 app.include_router(analyse.router, prefix="/api/analyse", tags=["analyse"])
 app.include_router(trade_events.router)
 app.include_router(trade_legs.router)
@@ -64,6 +66,8 @@ app.include_router(schedules.router)
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok", "service": "rijeka-api", "version": "0.4.0"}
+
+
 
 
 
