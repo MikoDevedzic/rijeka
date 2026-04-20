@@ -39,6 +39,9 @@ import {
 import DetailsPanel from './details-panel'
 import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
+// Sprint 12 item 3: CONFIRM tab panel + lifecycle client
+import { ConfirmPanel } from './ConfirmPanel'
+import { executeBooking, confirmTrade, cancelTrade } from './booking'
 
 // Import all product modules to register them at load time.
 // Adding FX/credit = add one import line here.
@@ -84,7 +87,7 @@ const SECTION_ORDER = [
   'footer',
 ]
 
-export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP' }) {
+export default function TradeWindow({ onClose, onBook, onViewTrade, initialProduct = 'IR_SWAP' }) {
   const [productKey, setProductKey]   = useState(initialProduct)
   const product                        = getProduct(productKey)
   if (!product) throw new Error(`Unknown product: ${productKey}`)
@@ -102,6 +105,17 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
   const [result, setResult]             = useState(null)
   const [pricing, setPricing]           = useState(false)
   const [error, setError]               = useState('')
+
+  // Sprint 10 Patch 6 — booking state
+  const [bookedTrade, setBookedTrade] = useState(null)
+  const [booking,     setBooking]     = useState(false)
+  const [bookErr,     setBookErr]     = useState('')
+
+  // Sprint 12 item 3 — lifecycle state (PENDING -> CONFIRMED | CANCELLED)
+  const [confirming, setConfirming] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [confirmErr, setConfirmErr] = useState('')
+  const [cancelErr,  setCancelErr]  = useState('')
 
   // ── Window chrome state (Patch 8): active tab + drag position ──────────
   const [activeTab, setActiveTab] = useState('TRADE')
@@ -220,6 +234,71 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
     }
   }, [pricing, product, state])
 
+  // Sprint 10 Patch 6 — booking handlers
+  const handleBook = useCallback(async () => {
+    if (booking || pricing) return
+    setBookErr(''); setBooking(true)
+    try {
+      const r = await executeBooking({ state, direction, extras: {} })
+      setBookedTrade(r.trade)
+      if (r.priceData) setResult(product.pricing.parseResponse(r.priceData))
+      onBook?.({ productKey, trade: r.trade })
+    } catch (e) {
+      setBookErr(e.message || String(e))
+    } finally {
+      setBooking(false)
+    }
+  }, [booking, pricing, state, direction, product, productKey, onBook])
+
+  // Sprint 12 item 3 — CONFIRM handler: PENDING -> CONFIRMED
+  const handleConfirm = useCallback(async () => {
+    if (!bookedTrade?.id) return
+    if (confirming || cancelling) return
+    setConfirmErr(''); setConfirming(true)
+    try {
+      const r = await confirmTrade(bookedTrade.id)
+      // r.trade.status is now 'CONFIRMED' — ConfirmPanel re-renders into
+      // terminal state automatically; blotter refetch via onBook callback.
+      setBookedTrade(r.trade)
+      onBook?.({ productKey, trade: r.trade })
+    } catch (e) {
+      setConfirmErr(e.message || String(e))
+    } finally {
+      setConfirming(false)
+    }
+  }, [bookedTrade, confirming, cancelling, productKey, onBook])
+
+  // Sprint 12 item 3 — CANCEL handler: PENDING -> CANCELLED (terminal)
+  const handleCancelTrade = useCallback(async (reason) => {
+    if (!bookedTrade?.id) return
+    if (confirming || cancelling) return
+    setCancelErr(''); setCancelling(true)
+    try {
+      const r = await cancelTrade(bookedTrade.id, reason)
+      // r.trade.status is now 'CANCELLED' — ConfirmPanel re-renders into
+      // terminal state automatically; blotter refetch via onBook callback.
+      setBookedTrade(r.trade)
+      onBook?.({ productKey, trade: r.trade })
+    } catch (e) {
+      setCancelErr(e.message || String(e))
+    } finally {
+      setCancelling(false)
+    }
+  }, [bookedTrade, confirming, cancelling, productKey, onBook])
+
+  const handleNewTrade = () => {
+    setBookedTrade(null); setResult(null); setError(''); setBookErr('')
+    // Sprint 12 item 3 — also clear lifecycle state
+    setConfirmErr(''); setCancelErr('')
+    setConfirming(false); setCancelling(false)
+  }
+
+  const handleViewTrade = () => {
+    const id = bookedTrade?.id || bookedTrade?.trade_id
+    if (onViewTrade && id) onViewTrade(id)
+    else onClose?.()
+  }
+
   // Safety net — auto-clear stuck pricing flag after 20s (Sprint 9.1 pattern)
   useEffect(() => {
     if (!pricing) return
@@ -229,6 +308,36 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
     }, 20000)
     return () => clearTimeout(t)
   }, [pricing])
+
+  // Booking safety-net — auto-clear stuck booking flag after 20s (Patch 6)
+  useEffect(() => {
+    if (!booking) return
+    const t = setTimeout(() => {
+      console.warn('[safety-net] booking stuck >20s, forcing false')
+      setBooking(false)
+    }, 20000)
+    return () => clearTimeout(t)
+  }, [booking])
+
+  // Sprint 12 item 3 — confirm safety-net
+  useEffect(() => {
+    if (!confirming) return
+    const t = setTimeout(() => {
+      console.warn('[safety-net] confirming stuck >20s, forcing false')
+      setConfirming(false)
+    }, 20000)
+    return () => clearTimeout(t)
+  }, [confirming])
+
+  // Sprint 12 item 3 — cancel safety-net
+  useEffect(() => {
+    if (!cancelling) return
+    const t = setTimeout(() => {
+      console.warn('[safety-net] cancelling stuck >20s, forcing false')
+      setCancelling(false)
+    }, 20000)
+    return () => clearTimeout(t)
+  }, [cancelling])
 
   // Drag-to-move: mousemove updates pos, mouseup ends drag (Patch 8).
   useEffect(() => {
@@ -278,7 +387,31 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
             title="Maximize (n/a)"
           />
         </div>
-        <div className="tbw-title">NEW TRADE</div>
+        <div className="tbw-title" style={bookedTrade ? { color: 'var(--accent)' } : {}}>
+          {booking
+            ? 'BOOKING...'
+            : bookedTrade
+              ? '✓ BOOKED · ' + (bookedTrade.trade_ref || bookedTrade.id)
+              : bookErr
+                ? 'ERROR: ' + bookErr
+                : 'NEW TRADE'}
+        </div>
+        {bookedTrade && (
+          <div className="tbw-no-drag" style={{ display: 'flex', gap: '8px', marginLeft: 'auto', marginRight: '12px' }}>
+            <button
+              type="button"
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); handleViewTrade() }}
+              style={{ fontSize: '0.8125rem', fontWeight: 700, padding: '2px 8px', borderRadius: '2px', cursor: 'pointer', fontFamily: "'IBM Plex Mono',var(--mono)", background: 'rgba(13,212,168,0.08)', border: '1px solid var(--accent)', color: 'var(--accent)' }}
+            >VIEW IN BLOTTER</button>
+            <button
+              type="button"
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); handleNewTrade() }}
+              style={{ fontSize: '0.8125rem', fontWeight: 700, padding: '2px 8px', borderRadius: '2px', cursor: 'pointer', fontFamily: "'IBM Plex Mono',var(--mono)", background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-dim)' }}
+            >NEW TRADE</button>
+          </div>
+        )}
       </div>
 
       <TabBar active={activeTab} onTab={setActiveTab} />
@@ -365,7 +498,20 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
         />
       )}
 
-      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && activeTab !== 'XVA' && activeTab !== 'CURVE SCENARIO' && (
+      {/* Sprint 12 item 3 — CONFIRM tab */}
+      {activeTab === '◆ CONFIRM' && (
+        <ConfirmPanel
+          bookedTrade={bookedTrade}
+          confirming={confirming}
+          cancelling={cancelling}
+          confirmErr={confirmErr}
+          cancelErr={cancelErr}
+          onConfirm={handleConfirm}
+          onCancelTrade={handleCancelTrade}
+        />
+      )}
+
+      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && activeTab !== 'XVA' && activeTab !== 'CURVE SCENARIO' && activeTab !== '◆ CONFIRM' && (
         <div className="tbw-placeholder">
           — {activeTab} tab not yet wired in the unified shell —
         </div>
@@ -377,7 +523,10 @@ export default function TradeWindow({ onClose, onBook, initialProduct = 'IR_SWAP
         state={state}
         pricing={pricing}
         onPrice={handlePrice}
-        onBook={() => onBook({ productKey, state, result })}
+        onBook={handleBook}
+        booking={booking}
+        bookErr={bookErr}
+        booked={!!bookedTrade}
         onCancel={onClose}
       />
     </div>
