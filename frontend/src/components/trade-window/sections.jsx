@@ -310,6 +310,7 @@ export function XVASummary({ result }) {
 
 export function TradeFooter({
   descriptor, result, state, pricing, onPrice, onBook, onCancel,
+  booking, booked, bookErr,
 }) {
   const metrics = result ? (descriptor.footer.metrics(result, state) || []) : []
   const structLabel = descriptor.footer.structureLabel(state)
@@ -336,8 +337,19 @@ export function TradeFooter({
         <button className="tbw-btn tbw-btn-price" disabled={pricing} onClick={onPrice}>
           {pricing ? '⏳ PRICING…' : '▶ PRICE'}
         </button>
-        <button className="tbw-btn tbw-btn-book" disabled={!result} onClick={onBook}>
-          ▶ BOOK TRADE
+        <button
+          className="tbw-btn tbw-btn-book"
+          disabled={pricing || booking || booked || !result}
+          onClick={onBook}
+          style={booked ? { opacity: 0.6, cursor: "default" } : undefined}
+        >
+          {booking
+            ? "⏳ BOOKING..."
+            : booked
+              ? "✓ BOOKED"
+              : bookErr
+                ? "▶ RETRY BOOK"
+                : "▶ BOOK TRADE"}
         </button>
       </div>
     </div>
