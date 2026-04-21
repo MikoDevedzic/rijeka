@@ -49,7 +49,7 @@ def serialize(c: Counterparty) -> dict:
 
 @router.get("/")
 def get_counterparties(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return [serialize(c) for c in db.query(Counterparty).order_by(Counterparty.created_at).all()]
+    return [serialize(c) for c in db.query(Counterparty).filter(Counterparty.user_id == uuid.UUID(user["sub"])).order_by(Counterparty.created_at).all()]
 
 
 @router.post("/")
@@ -69,7 +69,7 @@ def update_counterparty(
     cp_id: str, body: CounterpartyUpdate,
     db: Session = Depends(get_db), user: dict = Depends(verify_token),
 ):
-    cp = db.query(Counterparty).filter(Counterparty.id == uuid.UUID(cp_id)).first()
+    cp = db.query(Counterparty).filter(Counterparty.id == uuid.UUID(cp_id), Counterparty.user_id == uuid.UUID(user["sub"])).first()
     if not cp:
         raise HTTPException(status_code=404, detail="Counterparty not found")
     for k, v in body.dict(exclude_none=True).items():
@@ -80,7 +80,7 @@ def update_counterparty(
 
 @router.delete("/{cp_id}")
 def delete_counterparty(cp_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    cp = db.query(Counterparty).filter(Counterparty.id == uuid.UUID(cp_id)).first()
+    cp = db.query(Counterparty).filter(Counterparty.id == uuid.UUID(cp_id), Counterparty.user_id == uuid.UUID(user["sub"])).first()
     if not cp:
         raise HTTPException(status_code=404, detail="Counterparty not found")
     db.delete(cp)

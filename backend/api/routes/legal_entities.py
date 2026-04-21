@@ -51,7 +51,7 @@ def serialize(e: LegalEntity) -> dict:
 
 @router.get("/")
 def get_legal_entities(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return [serialize(e) for e in db.query(LegalEntity).order_by(LegalEntity.created_at).all()]
+    return [serialize(e) for e in db.query(LegalEntity).filter(LegalEntity.user_id == uuid.UUID(user["sub"])).order_by(LegalEntity.created_at).all()]
 
 
 @router.post("/")
@@ -68,7 +68,7 @@ def update_legal_entity(
     entity_id: str, body: LegalEntityUpdate,
     db: Session = Depends(get_db), user: dict = Depends(verify_token),
 ):
-    entity = db.query(LegalEntity).filter(LegalEntity.id == uuid.UUID(entity_id)).first()
+    entity = db.query(LegalEntity).filter(LegalEntity.id == uuid.UUID(entity_id), LegalEntity.user_id == uuid.UUID(user["sub"])).first()
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     for k, v in body.dict(exclude_none=True).items():
@@ -79,7 +79,7 @@ def update_legal_entity(
 
 @router.delete("/{entity_id}")
 def delete_legal_entity(entity_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    entity = db.query(LegalEntity).filter(LegalEntity.id == uuid.UUID(entity_id)).first()
+    entity = db.query(LegalEntity).filter(LegalEntity.id == uuid.UUID(entity_id), LegalEntity.user_id == uuid.UUID(user["sub"])).first()
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
     db.delete(entity)

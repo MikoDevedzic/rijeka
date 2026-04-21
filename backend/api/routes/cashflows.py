@@ -92,7 +92,7 @@ def list_cashflows_for_trade(
     """All cashflows for a trade ordered by payment date."""
     return (
         db.query(Cashflow)
-        .filter(Cashflow.trade_id == trade_id)
+        .filter(Cashflow.trade_id == trade_id, Cashflow.user_id == uuid.UUID(user["sub"]))
         .order_by(Cashflow.payment_date, Cashflow.leg_id)
         .all()
     )
@@ -107,7 +107,7 @@ def list_cashflows_for_leg(
     """All cashflows for a single leg ordered by payment date."""
     return (
         db.query(Cashflow)
-        .filter(Cashflow.leg_id == leg_id)
+        .filter(Cashflow.leg_id == leg_id, Cashflow.user_id == uuid.UUID(user["sub"]))
         .order_by(Cashflow.payment_date)
         .all()
     )
@@ -177,7 +177,7 @@ def override_cashflow(
     if role not in WRITE_ROLES:
         raise HTTPException(status_code=403, detail="Requires Trader or Admin role.")
 
-    cf = db.query(Cashflow).filter(Cashflow.id == cashflow_id).first()
+    cf = db.query(Cashflow).filter(Cashflow.id == cashflow_id, Cashflow.user_id == uuid.UUID(user["sub"])).first()
     if not cf:
         raise HTTPException(status_code=404, detail="Cashflow not found.")
 
@@ -205,7 +205,7 @@ def update_cashflow_status(
     if body.status not in VALID_STATUS:
         raise HTTPException(status_code=422, detail=f"Invalid status: {body.status}")
 
-    cf = db.query(Cashflow).filter(Cashflow.id == cashflow_id).first()
+    cf = db.query(Cashflow).filter(Cashflow.id == cashflow_id, Cashflow.user_id == uuid.UUID(user["sub"])).first()
     if not cf:
         raise HTTPException(status_code=404, detail="Cashflow not found.")
 
@@ -234,6 +234,7 @@ def wipe_projected_cashflows(
 
     db.query(Cashflow).filter(
         Cashflow.trade_id == trade_id,
+        Cashflow.user_id == uuid.UUID(user["sub"]),
         Cashflow.status == "PROJECTED"
     ).delete(synchronize_session=False)
     db.commit()

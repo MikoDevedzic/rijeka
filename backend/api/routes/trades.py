@@ -83,7 +83,7 @@ def get_trades(
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
 ):
-    q = db.query(Trade)
+    q = db.query(Trade).filter(Trade.user_id == uuid.UUID(user["sub"]))
     if status:          q = q.filter(Trade.status == status)
     if asset_class:     q = q.filter(Trade.asset_class == asset_class)
     if store:           q = q.filter(Trade.store == store)
@@ -94,12 +94,13 @@ def get_trades(
 
 @router.get("/summary")
 def trades_summary(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    uid = uuid.UUID(user["sub"])
     return {
-        "total":     db.query(Trade).count(),
-        "live":      db.query(Trade).filter(Trade.status=="LIVE").count(),
-        "pending":   db.query(Trade).filter(Trade.status=="PENDING").count(),
-        "matured":   db.query(Trade).filter(Trade.status=="MATURED").count(),
-        "cancelled": db.query(Trade).filter(Trade.status=="CANCELLED").count(),
+        "total":     db.query(Trade).filter(Trade.user_id == uid).count(),
+        "live":      db.query(Trade).filter(Trade.user_id == uid, Trade.status=="LIVE").count(),
+        "pending":   db.query(Trade).filter(Trade.user_id == uid, Trade.status=="PENDING").count(),
+        "matured":   db.query(Trade).filter(Trade.user_id == uid, Trade.status=="MATURED").count(),
+        "cancelled": db.query(Trade).filter(Trade.user_id == uid, Trade.status=="CANCELLED").count(),
     }
 
 @router.post("/")
@@ -126,6 +127,7 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
         "desk":                 body.desk,
         "book":                 body.book,
         "strategy":             body.strategy,
+        "user_id":              uuid.UUID(user["sub"]),
         "created_by":           uuid.UUID(user["sub"]),
     }
     if hasattr(Trade, "structure"):
@@ -143,7 +145,7 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
 
 @router.put("/{trade_id}")
 def update_trade(trade_id: str, body: TradeUpdate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    t = db.query(Trade).filter(Trade.id == uuid.UUID(trade_id)).first()
+    t = db.query(Trade).filter(Trade.id == uuid.UUID(trade_id), Trade.user_id == uuid.UUID(user["sub"])).first()
     if not t:
         raise HTTPException(status_code=404, detail="Trade not found")
     for k, v in body.dict(exclude_none=True).items():
@@ -154,7 +156,7 @@ def update_trade(trade_id: str, body: TradeUpdate, db: Session = Depends(get_db)
 
 @router.delete("/{trade_id}")
 def delete_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    t = db.query(Trade).filter(Trade.id == uuid.UUID(trade_id)).first()
+    t = db.query(Trade).filter(Trade.id == uuid.UUID(trade_id), Trade.user_id == uuid.UUID(user["sub"])).first()
     if not t:
         raise HTTPException(status_code=404, detail="Trade not found")
     if t.status not in ("PENDING", "CANCELLED"):

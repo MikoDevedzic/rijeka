@@ -169,7 +169,7 @@ def list_legs_for_trade(
     """All legs for a trade, ordered by leg_seq."""
     return (
         db.query(TradeLeg)
-        .filter(TradeLeg.trade_id == trade_id)
+        .filter(TradeLeg.trade_id == trade_id, TradeLeg.user_id == uuid.UUID(user["sub"]))
         .order_by(TradeLeg.leg_seq)
         .all()
     )
@@ -181,7 +181,7 @@ def get_leg(
     db:     Session = Depends(get_db),
     user:   dict    = Depends(verify_token),
 ):
-    leg = db.query(TradeLeg).filter(TradeLeg.id == leg_id).first()
+    leg = db.query(TradeLeg).filter(TradeLeg.id == leg_id, TradeLeg.user_id == uuid.UUID(user["sub"])).first()
     if not leg:
         raise HTTPException(status_code=404, detail="Leg not found")
     return leg
@@ -205,7 +205,7 @@ def create_leg(
     if existing:
         raise HTTPException(status_code=409, detail=f"Leg {body.id} already exists.")
 
-    leg = TradeLeg(**body.model_dump(), created_by=user.get("sub"))
+    leg = TradeLeg(**body.model_dump(), created_by=user.get("sub"), user_id=uuid.UUID(user["sub"]))
     db.add(leg)
     db.commit()
     db.refresh(leg)
@@ -227,7 +227,7 @@ def update_leg(
     if role not in WRITE_ROLES:
         raise HTTPException(status_code=403, detail="Requires Trader or Admin role.")
 
-    leg = db.query(TradeLeg).filter(TradeLeg.id == leg_id).first()
+    leg = db.query(TradeLeg).filter(TradeLeg.id == leg_id, TradeLeg.user_id == uuid.UUID(user["sub"])).first()
     if not leg:
         raise HTTPException(status_code=404, detail="Leg not found")
 

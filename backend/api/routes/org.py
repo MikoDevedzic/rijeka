@@ -37,7 +37,7 @@ def serialize(n: OrgNode) -> dict:
 
 @router.get("/nodes")
 def get_nodes(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    nodes = db.query(OrgNode).order_by(OrgNode.sort_order).all()
+    nodes = db.query(OrgNode).filter(OrgNode.user_id == uuid.UUID(user["sub"])).order_by(OrgNode.sort_order).all()
     return [serialize(n) for n in nodes]
 
 
@@ -62,7 +62,7 @@ def update_node(
     node_id: str, body: OrgNodeUpdate,
     db: Session = Depends(get_db), user: dict = Depends(verify_token),
 ):
-    node = db.query(OrgNode).filter(OrgNode.id == uuid.UUID(node_id)).first()
+    node = db.query(OrgNode).filter(OrgNode.id == uuid.UUID(node_id), OrgNode.user_id == uuid.UUID(user["sub"])).first()
     if not node:
         raise HTTPException(status_code=404, detail="Node not found")
     for k, v in body.dict(exclude_none=True).items():

@@ -115,7 +115,7 @@ class Trade(Base):
     strategy             = Column(String, nullable=True)
 
     # ── Multi-tenancy (Sprint 12) ──
-    user_id              = Column(UUID(as_uuid=True), nullable=True, index=True)
+    user_id              = Column(UUID(as_uuid=True), nullable=False, index=True)
 
     # ── Event-sourcing link (Sprint 12) ──
     latest_event_id      = Column(UUID(as_uuid=True), ForeignKey("trade_events.id"), nullable=True)
@@ -174,7 +174,7 @@ class TradeLeg(Base):
     booked_at           = Column(DateTime(timezone=True), nullable=True)
 
     # ── Multi-tenancy (Sprint 12) ──
-    user_id             = Column(UUID(as_uuid=True), nullable=True)
+    user_id             = Column(UUID(as_uuid=True), nullable=False)
 
     # ── Event-sourcing link (Sprint 12) ──
     latest_event_id     = Column(UUID(as_uuid=True), ForeignKey("trade_events.id"), nullable=True)
@@ -222,7 +222,7 @@ class Cashflow(Base):
     settlement_hash  = Column(Text, nullable=True)
 
     # ── Multi-tenancy + event provenance (Sprint 12) ──
-    user_id          = Column(UUID(as_uuid=True), nullable=True)
+    user_id          = Column(UUID(as_uuid=True), nullable=False)
     event_id         = Column(UUID(as_uuid=True), ForeignKey("trade_events.id"), nullable=True)
     snapshot_id      = Column(UUID(as_uuid=True), nullable=True)
     computed_as_of   = Column(Date, nullable=True)
@@ -257,7 +257,7 @@ class TradeEvent(Base):
     event_seq              = Column(Integer, nullable=False)  # DB trigger assigns on insert
     tx_time                = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     valid_time             = Column(DateTime(timezone=True), nullable=False)
-    user_id                = Column(UUID(as_uuid=True), nullable=True)
+    user_id                = Column(UUID(as_uuid=True), nullable=False)
     snapshot_id            = Column(UUID(as_uuid=True), nullable=True)
     parent_event_id        = Column(UUID(as_uuid=True), ForeignKey("trade_events.id"), nullable=True)
 
