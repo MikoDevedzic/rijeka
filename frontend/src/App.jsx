@@ -19,8 +19,6 @@ import PrometheusPanel  from './components/PrometheusPanel'
 import TradeBookingWindow from './components/blotter/TradeBookingWindow'
 import TradeWindow        from './components/trade-window/TradeWindow'
 import useBookingStore    from './store/useBookingStore'
-import { useTradesStore }   from './store/useTradesStore'
-import { useNavigate }      from 'react-router-dom'
 import SwaptionVolDetail from './components/market-data/SwaptionVolDetail'
 import CapVolDetail      from './components/market-data/CapVolDetail'
 import XVAParametersTab  from './components/configurations/XVAParametersTab'
@@ -54,7 +52,6 @@ function ConfigLayout() {
 // on the localStorage feature flag 'rijeka.tbw.unified.products' (Sprint 10).
 function PersistentBookingWindow() {
   const { windows, close } = useBookingStore()
-  const navigate = useNavigate()
   if (!windows.length) return null
 
   // Per-product opt-in. Comma-separated list of product keys.
@@ -77,18 +74,15 @@ function PersistentBookingWindow() {
               key={w.id}
               initialProduct={productKey}
               onClose={() => close(w.id)}
-              onBook={async ({ trade }) => {
-                // Sprint 10 Patch 6 — TradeWindow handles the booking call
-                // itself (see booking.js). At this point the trade row + legs
-                // are already persisted. App-level job: refresh the blotter.
-                try { await useTradesStore.getState().fetchTrades() }
-                catch (e) { console.warn('[trade-window] fetchTrades failed:', e) }
-                console.log('[trade-window] BOOKED:', trade.id || trade.trade_id)
-              }}
-              onViewTrade={(tradeId) => {
-                close(w.id)
-                navigate('/blotter')
-                console.log('[trade-window] VIEW IN BLOTTER:', tradeId)
+              onBook={(payload) => {
+                // Patch 6 will implement the booking path (POST /api/trades/,
+                // legs, /price, blotter update). For Phase 2 pricing validation,
+                // book via legacy by removing the feature flag entry.
+                console.log('[trade-window] BOOK clicked (not yet wired):', payload)
+                alert('Booking via the unified shell lands in Patch 6.\n\n' +
+                      'To book this trade: open DevTools, run\n' +
+                      "  localStorage.removeItem('rijeka.tbw.unified.products')\n" +
+                      'refresh, and re-enter via the legacy window.')
               }}
             />
           )

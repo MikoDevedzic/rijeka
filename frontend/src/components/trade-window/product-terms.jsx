@@ -481,7 +481,7 @@ export function CapTermsBody({ state, update }) {
           </select>
         </Field>
         <Field label="NORMAL VOL (bp)">
-          <input className="tbw-mono tbw-blue" placeholder={'\u2014 price to load'}
+          <input className="tbw-mono tbw-blue" placeholder="\u2014 price to load"
                  value={volOverride}
                  onChange={e => update({ volOverride: e.target.value })} />
         </Field>
@@ -531,7 +531,7 @@ export function FloorTermsBody({ state, update }) {
           </select>
         </Field>
         <Field label="NORMAL VOL (bp)">
-          <input className="tbw-mono tbw-blue" placeholder={'\u2014 price to load'}
+          <input className="tbw-mono tbw-blue" placeholder="\u2014 price to load"
                  value={volOverride}
                  onChange={e => update({ volOverride: e.target.value })} />
         </Field>

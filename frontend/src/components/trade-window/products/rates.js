@@ -181,9 +181,6 @@ registerProduct({
       const forecastId     = INDEX_CURVE[index] || curveId
       const payLag         = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
 
-      // Sprint 11: custom cashflows keyed by leg_ref (from unified shell state)
-      const customByLegRef = state.customCashflowsByLegRef || {}
-
       let legs
       if (isBASIS) {
         // BASIS: two float legs, potentially different indices.
@@ -203,7 +200,6 @@ registerProduct({
             fixed_rate: 0, spread: 0, leverage: 1.0,
             discount_curve_id: curveId, forecast_curve_id: forecastId,
             ois_compounding: null,
-            custom_cashflows: customByLegRef['FLOAT-1'] || null,
           },
           {
             leg_ref: 'FLOAT-2', leg_seq: 2, leg_type: 'FLOAT',
@@ -216,7 +212,6 @@ registerProduct({
             fixed_rate: 0, spread, leverage: 1.0,
             discount_curve_id: curveId, forecast_curve_id: forecastId2,
             ois_compounding: null,
-            custom_cashflows: customByLegRef['FLOAT-2'] || null,
           },
         ]
       } else {
@@ -232,7 +227,6 @@ registerProduct({
             fixed_rate_schedule: null,
             discount_curve_id: curveId, forecast_curve_id: null,
             ois_compounding: null,
-            custom_cashflows: customByLegRef['FIXED-1'] || null,
           },
           {
             leg_ref: 'FLOAT-1', leg_seq: 2, leg_type: 'FLOAT',
@@ -245,7 +239,6 @@ registerProduct({
             fixed_rate: 0, spread, leverage,
             discount_curve_id: curveId, forecast_curve_id: forecastId,
             ois_compounding: isOIS ? 'COMPOUNDING' : null,
-            custom_cashflows: customByLegRef['FLOAT-1'] || null,
           },
         ]
       }

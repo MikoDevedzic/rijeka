@@ -195,7 +195,6 @@ def _leg_to_dict(leg: TradeLeg) -> dict:
         "ois_compounding":   leg.ois_compounding,
         "fixed_rate_schedule": leg.fixed_rate_schedule if leg.fixed_rate_schedule else None,
         "notional_schedule":   leg.notional_schedule  if leg.notional_schedule  else None,
-        "custom_cashflows":    (leg.terms or {}).get("custom_cashflows"),  # Sprint 11
     }
 
 
@@ -490,7 +489,6 @@ async def price_trade(
                     "pv":            float(cf.pv)        if hasattr(cf, 'pv') and cf.pv is not None else None,
                     "df":            float(cf.df)        if hasattr(cf, 'df') and cf.df is not None else None,
                     "zero_rate":     float(cf.zero_rate) if hasattr(cf, 'zero_rate') and cf.zero_rate is not None else None,
-                    "cashflow_type": getattr(cf, 'cashflow_type', 'COUPON'),
                 }
                 for cf in (lr.cashflows or [])
             ],
@@ -544,7 +542,6 @@ class LegPreview(BaseModel):
     fixed_rate_schedule: Optional[list]  = None
     notional_schedule:   Optional[list]  = None
     spread_schedule:     Optional[list]  = None
-    custom_cashflows:    Optional[list]  = None  # Sprint 11: user-entered rows
 
 
 class PreviewRequest(BaseModel):
@@ -612,7 +609,6 @@ async def price_preview(
             "fixed_rate_schedule": lp.fixed_rate_schedule if lp.fixed_rate_schedule else None,
             "notional_schedule":   lp.notional_schedule if lp.notional_schedule else None,
             "spread_schedule":     lp.spread_schedule     if lp.spread_schedule     else None,
-            "custom_cashflows":    lp.custom_cashflows    if lp.custom_cashflows    else None,
         })
 
     # Price
@@ -679,7 +675,6 @@ async def price_preview(
                     "pv":            float(cf.pv)        if hasattr(cf, 'pv') and cf.pv is not None else None,
                     "df":            float(cf.df)        if hasattr(cf, 'df') and cf.df is not None else None,
                     "zero_rate":     float(cf.zero_rate) if hasattr(cf, 'zero_rate') and cf.zero_rate is not None else None,
-                    "cashflow_type": getattr(cf, 'cashflow_type', 'COUPON'),
                 }
                 for cf in (lr.cashflows or [])
             ],

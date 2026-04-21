@@ -90,34 +90,6 @@ export default function DetailsPanel({
 
   const floatDir = direction === 'PAY' ? 'RECEIVE' : 'PAY'
 
-  // ──────────────────────────────────────────────────────────────
-  // Sprint 11: slice customCashflowsByLegRef into flat per-leg props.
-  // The unified shell stores the map keyed by leg_ref; LegDetailsTab
-  // takes two flat arrays + setters. BASIS uses FLOAT-1/FLOAT-2,
-  // everything else uses FIXED-1/FLOAT-1.
-  // ──────────────────────────────────────────────────────────────
-  const byLegRef      = state.customCashflowsByLegRef || {}
-  const isBasis       = state.structure === 'BASIS'
-  const leftLegRef    = isBasis ? 'FLOAT-1' : 'FIXED-1'
-  const rightLegRef   = isBasis ? 'FLOAT-2' : 'FLOAT-1'
-
-  const setByLegRef = useMemo(
-    () => makeFieldSetter(setProductState, 'customCashflowsByLegRef', {}),
-    [setProductState],
-  )
-
-  const makeLegSetter = (legRef) => (rowsOrFn) => setByLegRef(prev => {
-    const safePrev = prev || {}
-    const prevRows = safePrev[legRef] || []
-    const nextRows = typeof rowsOrFn === 'function' ? rowsOrFn(prevRows) : rowsOrFn
-    return { ...safePrev, [legRef]: nextRows }
-  })
-
-  const customCashflowsFixed    = byLegRef[leftLegRef]  || []
-  const customCashflowsFloat   = byLegRef[rightLegRef] || []
-  const setCustomCashflowsFixed = useMemo(() => makeLegSetter(leftLegRef),  [leftLegRef,  setByLegRef])
-  const setCustomCashflowsFloat = useMemo(() => makeLegSetter(rightLegRef), [rightLegRef, setByLegRef])
-
   return (
     <LegDetailsTab
       // Structure & direction
@@ -176,12 +148,6 @@ export default function DetailsPanel({
       feeAmountType={state.feeAmountType || 'BP'}
       feeSettleDate={state.feeSettleDate || ''}
       exerciseType={state.exerciseType || 'EUROPEAN'}
-
-      // Sprint 11: custom cashflows per leg
-      customCashflowsFixed={customCashflowsFixed}
-      setCustomCashflowsFixed={setCustomCashflowsFixed}
-      customCashflowsFloat={customCashflowsFloat}
-      setCustomCashflowsFloat={setCustomCashflowsFloat}
 
       // Helpers
       deriveStructLabel={deriveStructLabel}

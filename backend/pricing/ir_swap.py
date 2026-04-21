@@ -30,7 +30,6 @@ class CashflowResult:
     pv:            float
     df:            float = 1.0
     zero_rate:     float = 0.0
-    cashflow_type: str   = "COUPON"  # Sprint 11: COUPON|FEE|REBATE|PRINCIPAL|NOTIONAL_EXCHANGE|AMORTIZATION
 
 
 @dataclass
@@ -202,7 +201,7 @@ def price_leg(
     if leg_type == "ZERO_COUPON":
         # Apply notional schedule if present (e.g. ZC on amortizing structure)
         eff_notional = _resolve_notional_schedule(notional_schedule, eff, notional) if notional_schedule else notional
-        T       = calc_dcf("ACT/365F", eff, mat)
+        T       = calc_dcf(eff, mat, "ACT/365F")
         amount  = eff_notional * ((1.0 + fixed_rate) ** T - 1.0)
         df_mat  = discount_curve.df(mat)
         zero_r  = discount_curve.zero_rate(mat)
@@ -213,34 +212,10 @@ def price_leg(
             rate=fixed_rate, dcf=T, amount=amount,
             pv=pv_cf, df=df_mat, zero_rate=zero_r,
         )
-        # Sprint 11: custom flows apply to ZERO_COUPON legs too
-        cashflows = [cf]
-        leg_pv = pv_cf
-        custom_flows = leg.get("custom_cashflows") or []
-        for c in custom_flows:
-            try:
-                cf_type   = (c.get("type") or "FEE").upper()
-                pay_date  = _parse_date(c.get("payment_date"))
-                amt       = float(c.get("amount") or 0.0)
-            except Exception:
-                continue
-            if not pay_date or pay_date < valuation_date or amt == 0.0:
-                continue
-            df_c   = discount_curve.df(pay_date)
-            zero_c = discount_curve.zero_rate(pay_date)
-            pv_c   = amt * df_c  # no direction multiplier
-            cashflows.append(CashflowResult(
-                period_start=pay_date, period_end=pay_date, payment_date=pay_date,
-                fixing_date=None, currency=c.get("currency") or currency,
-                notional=0.0, rate=0.0, dcf=0.0, amount=amt,
-                pv=pv_c, df=df_c, zero_rate=zero_c,
-                cashflow_type=cf_type,
-            ))
-            leg_pv += pv_c
         return LegResult(
             leg_id=leg_id, leg_ref=leg_ref, leg_type=leg_type,
             direction=direction, currency=currency,
-            pv=leg_pv, cashflows=cashflows,
+            pv=pv_cf, cashflows=[cf],
         )
 
     # ── Standard periodic schedule ────────────────────────────────────────────
@@ -294,33 +269,6 @@ def price_leg(
             pv=pv_cf * sign, df=df, zero_rate=zero_r,
         ))
         leg_pv += pv_cf * sign
-
-    # ── Custom cashflows (Sprint 11) ──────────────────────────────────────────
-    # User-entered rows: FEE, REBATE, PRINCIPAL, NOTIONAL_EXCHANGE, AMORTIZATION.
-    # Sign convention: `amount` is signed from book perspective — user types it,
-    # no direction multiplier applied here. Past-dated rows are skipped from PV.
-    custom_flows = leg.get("custom_cashflows") or []
-    for c in custom_flows:
-        try:
-            cf_type   = (c.get("type") or "FEE").upper()
-            pay_date  = _parse_date(c.get("payment_date"))
-            amt       = float(c.get("amount") or 0.0)
-        except Exception:
-            continue
-        if not pay_date or pay_date < valuation_date or amt == 0.0:
-            continue
-        df_c   = discount_curve.df(pay_date)
-        zero_c = discount_curve.zero_rate(pay_date)
-        pv_c   = amt * df_c  # no sign multiplier
-        cashflows.append(CashflowResult(
-            period_start=pay_date, period_end=pay_date, payment_date=pay_date,
-            fixing_date=None, currency=c.get("currency") or currency,
-            notional=0.0, rate=0.0, dcf=0.0, amount=amt,
-            pv=pv_c, df=df_c, zero_rate=zero_c,
-            cashflow_type=cf_type,
-        ))
-        leg_pv += pv_c
-    # ──────────────────────────────────────────────────────────────────────────
 
     return LegResult(
         leg_id=leg_id, leg_ref=leg_ref, leg_type=leg_type,

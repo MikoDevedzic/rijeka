@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import CustomCashflowsEditor from './CustomCashflowsEditor'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -18,14 +17,13 @@ const INDEX_PAY_LAG = { SOFR:2, ESTR:2, SONIA:0, TONAR:2, SARON:2, AONIA:0, CORR
 const BG_BLACK='000000', BG_PANEL='0C0C0C', BG_PANEL2='141414', BG_HDR='050505'
 const TEAL='00D4A8', RED='FF6B6B', AMBER='F5C842', WHITE='F0F0F0', MUTED='666666', DIM='444444', BORDER_C='1E1E1E'
 
-// Sprint 11: S and C are exported for CustomCashflowsEditor.
-export const C = {
+const C = {
   accent:'#00D4A8', red:'#FF6B6B', blue:'#4A9EFF',
   amber:'#F5C842', panel:'#0C0C0C', panel2:'#141414',
   border:'#1E1E1E', text:'#F0F0F0', muted:'#666', dim:'#444',
 }
 
-export const S = {
+const S = {
   root:{ flex:1, overflowY:'auto', padding:'12px 16px', display:'flex', flexDirection:'column', gap:'10px', fontFamily:"'IBM Plex Sans',sans-serif" },
   banner:{ display:'flex', alignItems:'center', gap:'10px', background:C.panel, border:'1px solid '+C.border, borderRadius:'3px', padding:'7px 14px' },
   structLbl:{ fontSize:'10px', color:C.muted, letterSpacing:'0.08em' },
@@ -75,7 +73,7 @@ async function loadExcelJS() {
   return window.ExcelJS
 }
 
-async function exportToExcel(fixedRows, floatRows, tradeRef='TRADE', dir='PAY', floatDir='RECEIVE', ccy='USD', index='SOFR', customFixedRows=[], customFloatRows=[]) {
+async function exportToExcel(fixedRows, floatRows, tradeRef='TRADE', dir='PAY', floatDir='RECEIVE', ccy='USD', index='SOFR') {
   const ExcelJS = await loadExcelJS()
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Rijeka'; wb.created = new Date()
@@ -123,38 +121,6 @@ async function exportToExcel(fixedRows, floatRows, tradeRef='TRADE', dir='PAY', 
   const floatData=floatRows.map(r=>[{v:r.period_start},{v:r.period_end},{v:r.payment_date},{v:parseFloat(r.notional)||0,fmt:'#,##0',align:'right',color:floatDir==='PAY'?RED:TEAL},{v:index,color:TEAL},{v:parseFloat(r.spread_bps)||0,fmt:'0.00',align:'right',color:String(r.spread_bps)!==String(r.orig_spread_bps)?AMBER:WHITE},{v:floatDir==='PAY'?'PAY':'RECEIVE',color:floatDir==='PAY'?RED:TEAL}])
   buildSheet(wb,'FLOAT LEG',floatCols,floatData,{label:'FLOAT LEG '+ccy+' '+index,direction:(floatDir==='PAY'?'PAY FLOAT':'RECEIVE FLOAT')+' '+ccy+' '+index})
 
-  // Sprint 11 Day 3a: custom cashflow sheets, one per leg side
-  const customCashflowCols=[
-    {label:'TYPE',      width:16},
-    {label:'PAY DATE',  width:14},
-    {label:'ACCR START',width:14},
-    {label:'ACCR END',  width:14},
-    {label:'AMOUNT',    width:18, align:'right'},
-    {label:'CCY',       width:8},
-    {label:'NOTES',     width:24},
-  ]
-  const buildCustomData = (rows) => (rows||[]).map(r=>{
-    const amt = parseFloat(r.amount)
-    const amtColor = isFinite(amt) ? (amt < 0 ? RED : (amt > 0 ? TEAL : WHITE)) : WHITE
-    return [
-      {v:r.type||'FEE'},
-      {v:r.payment_date||''},
-      {v:r.accrual_start||''},
-      {v:r.accrual_end||''},
-      {v:isFinite(amt)?amt:0, fmt:'#,##0.00', align:'right', color:amtColor},
-      {v:r.currency||ccy},
-      {v:r.notes||''},
-    ]
-  })
-  if ((customFixedRows||[]).length > 0) {
-    buildSheet(wb,'FIXED CUSTOM CASHFLOWS',customCashflowCols,buildCustomData(customFixedRows),
-      {label:'FIXED LEG CUSTOM CASHFLOWS · '+ccy, direction:(dir==='PAY'?'PAY FIXED':'RECEIVE FIXED')+' · custom'})
-  }
-  if ((customFloatRows||[]).length > 0) {
-    buildSheet(wb,'FLOAT CUSTOM CASHFLOWS',customCashflowCols,buildCustomData(customFloatRows),
-      {label:'FLOAT LEG CUSTOM CASHFLOWS · '+ccy+' '+index, direction:(floatDir==='PAY'?'PAY FLOAT':'RECEIVE FLOAT')+' · custom'})
-  }
-
   const buf=await wb.xlsx.writeBuffer()
   const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
   const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='rijeka_'+tradeRef+'_schedule.xlsx'; a.click(); URL.revokeObjectURL(url)
@@ -167,27 +133,7 @@ async function parseExcelFile(file) {
   const XLSX=window.XLSX
   return new Promise((resolve,reject)=>{
     const reader=new FileReader()
-    reader.onload=e=>{
-      const wb=XLSX.read(e.target.result,{type:'binary'})
-      // Sprint 11 Day 3a: find sheet by any of several name variants.
-      // Export writes UPPERCASE; old import code looked for title-case.
-      // Check both + any case-insensitive match as last resort.
-      const findSheet = (wb, names) => {
-        for (const n of names) if (wb.Sheets[n]) return wb.Sheets[n]
-        const keys = Object.keys(wb.Sheets)
-        for (const n of names) {
-          const match = keys.find(k => k.toLowerCase() === n.toLowerCase())
-          if (match) return wb.Sheets[match]
-        }
-        return null
-      }
-      const toJson = sh => sh ? XLSX.utils.sheet_to_json(sh) : []
-      const fixed        = toJson(findSheet(wb, ['FIXED LEG','Fixed Leg']))
-      const float        = toJson(findSheet(wb, ['FLOAT LEG','Float Leg']))
-      const customFixed  = toJson(findSheet(wb, ['FIXED CUSTOM CASHFLOWS','Fixed Custom Cashflows']))
-      const customFloat  = toJson(findSheet(wb, ['FLOAT CUSTOM CASHFLOWS','Float Custom Cashflows']))
-      resolve({fixed, float, customFixed, customFloat})
-    }
+    reader.onload=e=>{ const wb=XLSX.read(e.target.result,{type:'binary'}); const fixed=wb.Sheets['Fixed Leg']?XLSX.utils.sheet_to_json(wb.Sheets['Fixed Leg']):[]; const float=wb.Sheets['Float Leg']?XLSX.utils.sheet_to_json(wb.Sheets['Float Leg']):[]; resolve({fixed,float}) }
     reader.onerror=reject; reader.readAsBinaryString(file)
   })
 }
@@ -223,9 +169,6 @@ export default function LegDetailsTab({
   feeSchedule, setFeeSchedule,
   feeAmount, feeAmountType, feeSettleDate,
   exerciseType,
-  // Sprint 11: custom cashflow state per leg_ref (adapter flattens the map)
-  customCashflowsFixed, setCustomCashflowsFixed,
-  customCashflowsFloat, setCustomCashflowsFloat,
 }) {
   const [fixedRows,  setFixedRows]  = useState([])
   const [floatRows,  setFloatRows]  = useState([])
@@ -314,38 +257,13 @@ export default function LegDetailsTab({
 
   const handlePasteFixed = async () => { try { const text=await navigator.clipboard.readText(); const rows=parsePaste(text,false); if(rows.length)setFixedRows(rows) } catch(e){} }
   const handlePasteFloat = async () => { try { const text=await navigator.clipboard.readText(); const rows=parsePaste(text,true); if(rows.length)setFloatRows(rows) } catch(e){} }
-  const handleExport = () => exportToExcel(fixedRows, floatRows, 'TRADE', dir, floatDir, ccy, index, customCashflowsFixed, customCashflowsFloat)
+  const handleExport = () => exportToExcel(fixedRows, floatRows, 'TRADE', dir, floatDir, ccy, index)
   const handleFileImport = async (file) => {
     if (!file) return
     try {
-      const {fixed, float, customFixed, customFloat} = await parseExcelFile(file)
+      const {fixed,float} = await parseExcelFile(file)
       if (fixed.length) setFixedRows(fixed.map(r=>({ period_start:r['ACCRUAL START']||'', period_end:r['ACCRUAL END']||'', payment_date:r['PAY DATE']||'', notional:String(r['NOTIONAL']||''), rate:String(r['COUPON %']||'0'), orig_notional:String(r['NOTIONAL']||''), orig_rate:String(r['COUPON %']||'0') })))
       if (float.length) setFloatRows(float.map(r=>({ period_start:r['ACCRUAL START']||'', period_end:r['ACCRUAL END']||'', payment_date:r['PAY DATE']||'', notional:String(r['NOTIONAL']||''), spread_bps:String(r['SPREAD BP']||'0'), orig_notional:String(r['NOTIONAL']||''), orig_spread_bps:String(r['SPREAD BP']||'0') })))
-      // Sprint 11 Day 3a: import custom cashflows if present in workbook.
-      const VALID_TYPES = ['COUPON','PRINCIPAL','FEE','REBATE','NOTIONAL_EXCHANGE','AMORTIZATION']
-      const newCustomId = () => 'cf_' + (typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID().replace(/-/g,'').slice(0,12)
-        : Math.random().toString(36).slice(2,14))
-      const parseCustom = (rows) => (rows||[]).map(r => {
-        const rawType = String(r['TYPE']||'FEE').toUpperCase().replace(/\s+/g,'_')
-        const type = VALID_TYPES.includes(rawType) ? rawType : 'FEE'
-        return {
-          id:            newCustomId(),
-          type,
-          payment_date:  String(r['PAY DATE']||''),
-          accrual_start: String(r['ACCR START']||''),
-          accrual_end:   String(r['ACCR END']||''),
-          amount:        String(r['AMOUNT']??''),
-          currency:      String(r['CCY']||ccy||'USD').toUpperCase(),
-          notes:         String(r['NOTES']||''),
-        }
-      }).filter(r => r.payment_date || r.amount)
-      if (customFixed && customFixed.length && setCustomCashflowsFixed) {
-        setCustomCashflowsFixed(parseCustom(customFixed))
-      }
-      if (customFloat && customFloat.length && setCustomCashflowsFloat) {
-        setCustomCashflowsFloat(parseCustom(customFloat))
-      }
     } catch(e) { alert('Import failed: '+e.message) }
   }
   const handleDrop = async (e, isFloat) => { e.preventDefault(); isFloat?setDropFloat(false):setDropFixed(false); const file=e.dataTransfer.files[0]; if(file)await handleFileImport(file) }
@@ -427,13 +345,7 @@ export default function LegDetailsTab({
             )}
           </div>
           <div style={S.divider}/>
-          {(inst === 'IR_SWAP' || inst === 'IR_SWAPTION') && (
-            <CustomCashflowsEditor
-              ccy={ccy}
-              rows={customCashflowsFixed}
-              setRows={setCustomCashflowsFixed}
-            />
-          )}
+          <div style={S.coming}>CUSTOM CASHFLOWS - SPRINT 5C</div>
         </div>
 
         {/* FLOAT LEG */}
@@ -555,13 +467,7 @@ export default function LegDetailsTab({
             </div>
           )}
           <div style={S.divider}/>
-          {(inst === 'IR_SWAP' || inst === 'IR_SWAPTION') && (
-            <CustomCashflowsEditor
-              ccy={ccy}
-              rows={customCashflowsFloat}
-              setRows={setCustomCashflowsFloat}
-            />
-          )}
+          <div style={S.coming}>CUSTOM CASHFLOWS - SPRINT 5C</div>
         </div>
 
       </div>
