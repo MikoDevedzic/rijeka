@@ -172,8 +172,8 @@ const DirBtn = ({label, active, color, onClick}) => (
     borderRadius:'2px', cursor:'pointer', whiteSpace:'nowrap',
     lineHeight:1.2, textAlign:'center',
     border: active ? '1px solid '+color : '1px solid var(--border)',
-    background: active ? 'color-mix(in srgb, '+color+' 12%, transparent)' : 'transparent',
-    color: active ? color : 'var(--text-dim)',
+    background: active ? color : 'transparent',
+    color: active ? '#000' : 'var(--text-dim)',
   }}>{label}</button>
 )
 
@@ -2879,9 +2879,9 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     {exerciseType} · {swaptionExpiry}×{tenor}
                   </span>
                   <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
-                    background:dir==='PAY'?'rgba(255,107,107,.1)':'rgba(0,212,168,.1)',
-                    color:dir==='PAY'?'var(--red)':'var(--accent)',
-                    border:`1px solid ${dir==='PAY'?'rgba(255,107,107,.3)':'rgba(0,212,168,.3)'}`}}>
+                    background:'rgba(0,212,168,.1)',
+                    color:'var(--accent)',
+                    border:'1px solid rgba(0,212,168,.3)'}}>
                     {dir==='PAY'?'PAYER':'RECEIVER'}
                   </span>
                   <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
@@ -3212,7 +3212,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               <Fld label='CCY' flex={0.9}><select style={{...sel,fontSize:'1.0625rem',fontWeight:700}} value={ccy} onChange={e=>setCcy(e.target.value)}>{CURRENCIES.map(c=><option key={c} value={c}>{c}</option>)}</select></Fld>
               <Fld label='DIRECTION' flex={1.8}>
                 <div style={{display:'flex',gap:'5px',minHeight:'34px'}}>
-                  <DirBtn label={struct==='BASIS'?'PAY LEG 1':'PAY FIXED'}         active={dir==='PAY'}     color='var(--red)'    onClick={()=>setDir('PAY')}/>
+                  <DirBtn label={struct==='BASIS'?'PAY LEG 1':'PAY FIXED'}         active={dir==='PAY'}     color='var(--accent)' onClick={()=>setDir('PAY')}/>
                   <DirBtn label={struct==='BASIS'?'RECEIVE LEG 1':'RECEIVE FIXED'} active={dir==='RECEIVE'} color='var(--accent)' onClick={()=>setDir('RECEIVE')}/>
                 </div>
               </Fld>
@@ -3227,7 +3227,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                   OPTION TERMS
                   <Badge
                     label={dir==='PAY' ? '→ PAYER (right to pay fixed)' : '← RECEIVER (right to receive fixed)'}
-                    color={dir==='PAY' ? 'var(--red)' : 'var(--accent)'}
+                    color={dir==='PAY' ? 'var(--accent)' : 'var(--accent)'}
                   />
                 </SectionHdr>
                 <Row>
@@ -3396,13 +3396,13 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     label={inst === 'INTEREST_RATE_CAP' ? '↑ BUY CAP · protection vs rising rates'
                          : inst === 'INTEREST_RATE_FLOOR' ? '↓ BUY FLOOR · protection vs falling rates'
                          : '↕ BUY COLLAR · cap + floor spread'}
-                    color={inst === 'INTEREST_RATE_CAP' ? 'var(--red)' : inst === 'INTEREST_RATE_FLOOR' ? 'var(--accent)' : 'var(--amber)'}
+                    color={inst === 'INTEREST_RATE_CAP' ? 'var(--amber)' : inst === 'INTEREST_RATE_FLOOR' ? 'var(--accent)' : 'var(--amber)'}
                   />
                 </SectionHdr>
                 <Row>
                   {(inst === 'INTEREST_RATE_CAP' || inst === 'INTEREST_RATE_COLLAR') && (
                     <Fld label="CAP RATE (%)" flex={1.2}>
-                      <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--red)',borderColor:'rgba(255,107,107,0.4)'}}
+                      <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--amber)',borderColor:'rgba(245,200,66,0.4)'}}
                         type='text' value={capRate} placeholder='4.50'
                         onChange={e => setCapRate(e.target.value)} autoComplete='off'/>
                     </Fld>
@@ -3592,7 +3592,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     {/* ── FIXED LEG ───────────────────────────────────────────────── */}
                     <SectionHdr>
                       FIXED LEG
-                      <Badge label={dir==='PAY'?'→ PAY FIXED':'← RECEIVE FIXED'} color={dir==='PAY'?'var(--red)':'var(--accent)'}/>
+                      <Badge label={dir==='PAY'?'→ PAY FIXED':'← RECEIVE FIXED'} color='var(--accent)'/>
                     </SectionHdr>
                     <Row>
                       <Fld label='COUPON (%)' flex={1.4}>
@@ -3643,7 +3643,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     {/* ── FLOATING LEG ─────────────────────────────────────────────── */}
                     <SectionHdr>
                       FLOATING LEG
-                      <Badge label={floatDir==='RECEIVE'?'← RECEIVE FLOAT':'→ PAY FLOAT'} color={floatDir==='RECEIVE'?'var(--accent)':'var(--red)'}/>
+                      <Badge label={floatDir==='RECEIVE'?'← RECEIVE FLOAT':'→ PAY FLOAT'} color='var(--accent)'/>
                     </SectionHdr>
                     <Row>
                       <Fld label='INDEX' flex={1.8}><select style={{...sel,fontSize:'1rem',fontWeight:600}} value={index} onChange={e=>handleIndexChange(e.target.value)}>{(CCY_INDICES[ccy]||[]).map(idx=><option key={idx} value={idx}>{idx}</option>)}</select></Fld>
@@ -3900,7 +3900,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 </button>
               ) : (
                 <>
-                <button style={{marginLeft:'auto',background:'rgba(245,200,66,0.08)',border:'1px solid rgba(245,200,66,0.4)',color:'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:(pricing||swaptionPricing||capPricing)?'not-allowed':'pointer',opacity:(pricing||swaptionPricing||capPricing)?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}}
+                <button style={{marginLeft:'auto',background:'rgba(0,212,168,0.08)',border:'1px solid rgba(0,212,168,0.4)',color:'var(--accent)',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:(pricing||swaptionPricing||capPricing)?'not-allowed':'pointer',opacity:(pricing||swaptionPricing||capPricing)?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}}
                   onClick={inst==='IR_SWAPTION' ? handlePriceSwaption : (inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR') ? handleCapFloorPrice : handlePrice}
                   disabled={pricing||swaptionPricing||capPricing}>
                   {(pricing||swaptionPricing||capPricing)?'PRICING...':'▶ PRICE'}

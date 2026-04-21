@@ -7,21 +7,21 @@ import './BlotterShell.css'
 const AC = {
   RATES:     { c: 'var(--accent)', a: 'RTS' },
   FX:        { c: 'var(--blue)',   a: 'FX'  },
-  CREDIT:    { c: 'var(--amber)',  a: 'CRD' },
+  CREDIT:    { c: 'var(--coral)',  a: 'CRD' },
   EQUITY:    { c: 'var(--purple)', a: 'EQT' },
-  COMMODITY: { c: 'var(--red)',    a: 'CMD' },
+  COMMODITY: { c: 'var(--amber)',  a: 'CMD' },
 }
 const ST = {
-  PENDING:    { c: 'var(--amber)', l: 'PENDING'    },
-  LIVE:       { c: 'var(--accent)',l: 'LIVE'       },
-  MATURED:    { c: 'var(--text-dim)', l: 'MATURED' },
-  CANCELLED:  { c: 'var(--red)',   l: 'CANCELLED'  },
-  TERMINATED: { c: 'var(--red)',   l: 'TERMINATED' },
+  PENDING:    { c: 'var(--text-dim)', l: 'PENDING'    },
+  LIVE:       { c: 'var(--accent)',   l: 'LIVE'       },
+  MATURED:    { c: 'var(--text-dim)', l: 'MATURED'    },
+  CANCELLED:  { c: 'var(--text-dim)', l: 'CANCELLED'  },
+  TERMINATED: { c: 'var(--red)',      l: 'TERMINATED' },
 }
 const SR = {
-  WORKING:    { c: 'var(--amber)', l: 'WORKING'    },
-  PRODUCTION: { c: 'var(--blue)',  l: 'PRODUCTION' },
-  HISTORY:    { c: 'var(--text-dim)', l: 'HISTORY' },
+  WORKING:    { c: 'var(--text-dim)', l: 'WORKING'    },
+  PRODUCTION: { c: 'var(--accent)',   l: 'PRODUCTION' },
+  HISTORY:    { c: 'var(--text-dim)', l: 'HISTORY'    },
 }
 
 function fmt(n) {
@@ -129,7 +129,7 @@ export default function BlotterShell() {
           </div>
           <div className="bl-sum-row">
             <span className="bl-sum-lbl">PENDING</span>
-            <span className="bl-sum-val" style={{ color: 'var(--amber)' }}>{pending}</span>
+            <span className="bl-sum-val" style={{ color: 'var(--text-dim)' }}>{pending}</span>
           </div>
         </div>
 

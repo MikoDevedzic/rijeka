@@ -7,7 +7,11 @@
    RIJEKA — Global Design Tokens
    ══════════════════════════════════════════════════════════════ */
 :root {
-  /* ── OPTION A: REFINED DARK NAVY ── adopted April 2026 ──────── */
+  /* ══════════════════════════════════════════════════════════════
+   CANONICAL TOKENS — do not edit without updating _docs/DESIGN_TOKENS.md.
+   All colors, fonts, spacing in Rijeka reference these variables.
+   Hardcoded hex codes in components are drift — close on sight.
+   ══════════════════════════════════════════════════════════════ */
 
   /* Backgrounds */
   --bg:           #000000;
@@ -15,39 +19,66 @@
   --panel:        #0C0C0C;
   --panel-2:      #141414;
   --panel-3:      #1A1A1A;
+  --surface:      #0C0C0C;
+  --surface-2:    #141414;
 
   /* Borders */
   --border:       #1E1E1E;
-  --border-hi:    #282828;
+  --border-hi:    #2A2A2A;
+  --border-strong:#2A2A2A;
   --border-glow:  #2A2A2A;
 
   /* Text */
   --text:         #F0F0F0;
   --text-hi:      #F0F0F0;
+  --muted:        #666666;
   --text-dim:     #666666;
   --text-mute:    #666666;
 
-  /* Accent — teal */
-  --accent:       #0dd4a8;
+  /* Accent — teal (primary / NPV / discount / success) */
+  --accent:       #00D4A8;
   --accent-dim:   #097a61;
-  --accent-glow:  rgba(13, 212, 168, 0.10);
+  --accent-glow:  rgba(0, 212, 168, 0.10);
+  --c-teal:       #00D4A8;
 
-  /* Amber */
-  --amber:        #f0a020;
+  /* Amber (vega / convexity / NEW accent) */
+  --amber:        #F5C842;
   --amber-dim:    #8a5010;
-  --amber-glow:   rgba(240, 160, 32, 0.08);
+  --amber-glow:   rgba(245, 200, 66, 0.08);
+  --c-amber:      #F5C842;
 
-  /* Blue */
-  --blue:         #4a9ad4;
+  /* Blue (forecast / IR01 / informational) */
+  --blue:         #4A9EFF;
   --blue-dim:     #1a3a60;
-  --blue-glow:    rgba(74, 154, 212, 0.08);
+  --blue-glow:    rgba(74, 158, 255, 0.08);
+  --c-blue:       #4A9EFF;
 
-  /* Other palette */
-  --green:        #1dc87a;
-  --purple:       #9060cc;
+  /* Red (residual / error / stress) */
+  --red:          #FF6B6B;
+  --c-red:        #FF6B6B;
+
+  /* Purple (theta / time decay) */
+  --purple:       #9B8BB5;
   --purple-dim:   #3a2060;
-  --purple-glow:  rgba(144, 96, 204, 0.08);
-  --red:          #e05040;
+  --purple-glow:  rgba(155, 139, 181, 0.08);
+  --c-purple:     #9B8BB5;
+
+  /* Coral (Basis01 / cross-curve spreads) */
+  --coral:        #FF9968;
+  --c-coral:      #FF9968;
+
+  /* Semantic aliases (Greek → color) */
+  --c-npv:        var(--c-teal);
+  --c-ir01:       var(--c-blue);
+  --c-ir01-disc:  var(--c-teal);
+  --c-basis01:    var(--c-coral);
+  --c-vega:       var(--c-amber);
+  --c-convexity:  var(--c-amber);
+  --c-theta:      var(--c-purple);
+  --c-residual:   var(--c-red);
+
+  /* Other palette (legacy, do not extend) */
+  --green:        #1dc87a;
   --cyan:         #20c0c8;
   --chain:        #f07820;
   --crit:         #ffffff;

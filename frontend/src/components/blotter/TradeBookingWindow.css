@@ -164,8 +164,8 @@
 }
 .tbw-btn-cancel:hover { border-color: var(--text-dim); color: var(--text); }
 .tbw-btn-book {
-  flex: 3; background: var(--amber); border: none;
-  color: var(--bg-deep); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 1.0625rem;
+  flex: 3; background: var(--accent); border: none;
+  color: var(--bg); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 1.0625rem;
   font-weight: 700; letter-spacing: 0.1em; padding: 7px;
   border-radius: 2px; cursor: pointer; transition: opacity 0.12s;
 }
