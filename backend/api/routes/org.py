@@ -49,6 +49,7 @@ def create_node(body: OrgNodeCreate, db: Session = Depends(get_db), user: dict =
         parent_id=uuid.UUID(body.parent_id) if body.parent_id else None,
         sort_order=body.sort_order,
         created_by=uuid.UUID(user["sub"]),
+        user_id=uuid.UUID(user["sub"]),
     )
     db.add(node)
     db.commit()

@@ -235,10 +235,10 @@ async def calibrate(
         text("""
             INSERT INTO xva_calibration
               (curve_id, valuation_date, model, a, sigma_bp, theta,
-               basket_size, fit_rmse_bp, fit_details, created_by)
+               basket_size, fit_rmse_bp, fit_details, created_by, user_id)
             VALUES
               ('USD_SWVOL_ATM', :val_date, 'HW1F', :a, :sigma_bp, :theta,
-               :basket_size, :fit_rmse_bp, cast(:fit_details as jsonb), :created_by)
+               :basket_size, :fit_rmse_bp, cast(:fit_details as jsonb), :created_by, :user_id)
             ON CONFLICT (curve_id, valuation_date, model)
             DO UPDATE SET
               a            = EXCLUDED.a,
@@ -265,6 +265,7 @@ async def calibrate(
                 "snap_date":      result["snap_date"],
             }),
             "created_by":  user_id,
+            "user_id":     user_id,
         }
     )
     db.commit()

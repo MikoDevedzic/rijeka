@@ -129,12 +129,12 @@ async def bloomberg_snap(
 
     if existing:
         db.execute(
-            text("UPDATE market_data_snapshots SET quotes = :q, source = 'BLOOMBERG', created_by = :uid WHERE id = :id"),
+            text("UPDATE market_data_snapshots SET quotes = :q, source = 'BLOOMBERG', created_by = :uid, user_id = :uid WHERE id = :id"),
             {"q": quotes_json, "uid": user["sub"], "id": str(existing.id)},
         )
     else:
         db.execute(
-            text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by) VALUES (:cid, :dt, :q, 'BLOOMBERG', :uid)"),
+            text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by, user_id) VALUES (:cid, :dt, :q, 'BLOOMBERG', :uid, :uid)"),
             {"cid": req.curve_id, "dt": snap_date, "q": quotes_json, "uid": user["sub"]},
         )
 
@@ -252,12 +252,12 @@ async def bloomberg_snap_swvol(
 
     if existing:
         db.execute(
-            text("UPDATE market_data_snapshots SET quotes = cast(:q as jsonb), source = 'BLOOMBERG', created_by = :uid WHERE id = :id"),
+            text("UPDATE market_data_snapshots SET quotes = cast(:q as jsonb), source = 'BLOOMBERG', created_by = :uid, user_id = :uid WHERE id = :id"),
             {"q": db_quotes_json, "uid": user["sub"], "id": str(existing.id)},
         )
     else:
         db.execute(
-            text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by) VALUES ('USD_SWVOL_ATM', :dt, cast(:q as jsonb), 'BLOOMBERG', :uid)"),
+            text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by, user_id) VALUES ('USD_SWVOL_ATM', :dt, cast(:q as jsonb), 'BLOOMBERG', :uid, :uid)"),
             {"dt": snap_date, "q": db_quotes_json, "uid": user["sub"]},
         )
 
@@ -404,6 +404,7 @@ class CapVolSnapRequest(BaseModel):
 async def snap_cap_vol_surface(
     req: CapVolSnapRequest,
     db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
 ):
     """
     Snap cap vol surface from Bloomberg using absolute-strike tickers.
@@ -477,10 +478,10 @@ async def snap_cap_vol_surface(
             text("""
                 INSERT INTO cap_vol_surface
                     (valuation_date, cap_tenor_y, strike_spread_bp, is_atm,
-                     flat_vol_bp, strike_pct, ticker, source)
+                     flat_vol_bp, strike_pct, ticker, source, user_id)
                 VALUES
                     (:valuation_date, :cap_tenor_y, :strike_spread_bp, :is_atm,
-                     :flat_vol_bp, :strike_pct, :ticker, :source)
+                     :flat_vol_bp, :strike_pct, :ticker, :source, :user_id)
             """),
             {
                 "valuation_date":   val_date_s,
@@ -491,6 +492,7 @@ async def snap_cap_vol_surface(
                 "strike_pct":       round(float(strike_pct), 6),
                 "ticker":           ticker.replace(" Curncy", "").strip(),
                 "source":           "BLOOMBERG",
+                "user_id":          user["sub"],
             }
         )
         rows_upserted += 1

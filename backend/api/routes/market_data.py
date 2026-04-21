@@ -84,9 +84,9 @@ async def save_snapshot(
     result = db.execute(
         text("""
             INSERT INTO market_data_snapshots
-              (curve_id, valuation_date, quotes, source, created_by)
+              (curve_id, valuation_date, quotes, source, created_by, user_id)
             VALUES
-              (:curve_id, :valuation_date, cast(:quotes as jsonb), :source, :created_by)
+              (:curve_id, :valuation_date, cast(:quotes as jsonb), :source, :created_by, :user_id)
             ON CONFLICT (curve_id, valuation_date)
             DO UPDATE SET
               quotes     = EXCLUDED.quotes,
@@ -101,6 +101,7 @@ async def save_snapshot(
             "quotes":         _json.dumps(quotes_json),
             "source":         body.source,
             "created_by":     user_id,
+            "user_id":        user_id,
         }
     )
     db.commit()
@@ -271,13 +272,13 @@ async def save_vol_skew(
                    atm_vol_bp,
                    spread_m200, spread_m100, spread_m50, spread_m25,
                    spread_p25,  spread_p50,  spread_p100, spread_p200,
-                   source, created_by)
+                   source, created_by, user_id)
                 VALUES
                   (:val_date, :exp_lbl, :ten_lbl, :exp_y, :ten_y,
                    :atm_vol,
                    :sm200, :sm100, :sm50, :sm25,
                    :sp25,  :sp50,  :sp100, :sp200,
-                   :source, :created_by)
+                   :source, :created_by, :user_id)
                 ON CONFLICT (valuation_date, expiry_label, tenor_label)
                 DO UPDATE SET
                   expiry_y    = EXCLUDED.expiry_y,
@@ -308,6 +309,7 @@ async def save_vol_skew(
                 "sm25":       cell.spread_m25,
                 "sp25":       cell.spread_p25,
                 "sp50":       cell.spread_p50,
+                "user_id":    user_id,
                 "sp100":      cell.spread_p100,
                 "sp200":      cell.spread_p200,
                 "source":     cell.source,
@@ -368,11 +370,11 @@ async def save_vol_skew(
                     INSERT INTO sabr_params
                       (valuation_date, expiry_label, tenor_label,
                        expiry_y, tenor_y, alpha, rho, nu, beta,
-                       atm_vol_bp, fit_rmse_bp, source, created_by)
+                       atm_vol_bp, fit_rmse_bp, source, created_by, user_id)
                     VALUES
                       (:val_date, :exp_lbl, :ten_lbl,
                        :exp_y, :ten_y, :alpha, :rho, :nu, 0.0,
-                       :atm_vol_bp, :rmse_bp, 'AUTO', :created_by)
+                       :atm_vol_bp, :rmse_bp, 'AUTO', :created_by, :user_id)
                     ON CONFLICT (valuation_date, expiry_y, tenor_y)
                     DO UPDATE SET
                       alpha       = EXCLUDED.alpha,
@@ -396,6 +398,7 @@ async def save_vol_skew(
                     "atm_vol_bp": cell.atm_vol_bp,
                     "rmse_bp":    rmse_bp,
                     "created_by": user_id,
+                    "user_id":    user_id,
                 }
             )
             calibrated += 1
@@ -478,11 +481,11 @@ async def save_vol_skew(
                             INSERT INTO sabr_params
                               (valuation_date, expiry_label, tenor_label,
                                expiry_y, tenor_y, alpha, rho, nu, beta,
-                               atm_vol_bp, fit_rmse_bp, source, created_by)
+                               atm_vol_bp, fit_rmse_bp, source, created_by, user_id)
                             VALUES
                               (:val_date, :exp_lbl, :ten_lbl,
                                :exp_y, :ten_y, :alpha, :rho, :nu, 0.0,
-                               :atm_vol_bp, NULL, 'INTERPOLATED', :created_by)
+                               :atm_vol_bp, NULL, 'INTERPOLATED', :created_by, :user_id)
                             ON CONFLICT (valuation_date, expiry_y, tenor_y)
                             DO UPDATE SET
                               alpha       = EXCLUDED.alpha,
@@ -505,6 +508,7 @@ async def save_vol_skew(
                             "nu":         nu,
                             "atm_vol_bp": atm_vol,
                             "created_by": user_id,
+                            "user_id":    user_id,
                         }
                     )
                     interpolated += 1
@@ -641,11 +645,11 @@ async def save_manual_sabr_params(
                 INSERT INTO sabr_params
                   (valuation_date, expiry_label, tenor_label,
                    expiry_y, tenor_y, alpha, rho, nu, beta,
-                   atm_vol_bp, fit_rmse_bp, source, created_by)
+                   atm_vol_bp, fit_rmse_bp, source, created_by, user_id)
                 VALUES
                   (:val_date, :exp_lbl, :ten_lbl,
                    :exp_y, :ten_y, :alpha, :rho, :nu, 0.0,
-                   :atm_vol_bp, NULL, 'MANUAL', :created_by)
+                   :atm_vol_bp, NULL, 'MANUAL', :created_by, :user_id)
                 ON CONFLICT (valuation_date, expiry_y, tenor_y)
                 DO UPDATE SET
                   alpha       = EXCLUDED.alpha,
@@ -668,6 +672,7 @@ async def save_manual_sabr_params(
                 "nu":         p.get("nu"),
                 "atm_vol_bp": p.get("atm_vol_bp"),
                 "created_by": user_id,
+                "user_id":    user_id,
             }
         )
         saved += 1
@@ -820,16 +825,17 @@ async def upsert_cap_vol(
     if role not in ("trader", "admin"):
         raise HTTPException(status_code=403, detail="Trader or Admin role required")
 
+    user_id = user.get("sub")
     upserted = 0
     for r in req.rows:
         db.execute(
             text("""
                 INSERT INTO cap_vol_surface
                     (valuation_date, cap_tenor_y, strike_spread_bp, is_atm,
-                     flat_vol_bp, ticker, source)
+                     flat_vol_bp, ticker, source, user_id)
                 VALUES
                     (:valuation_date, :cap_tenor_y, :strike_spread_bp, :is_atm,
-                     :flat_vol_bp, :ticker, :source)
+                     :flat_vol_bp, :ticker, :source, :user_id)
                 ON CONFLICT (valuation_date, cap_tenor_y, strike_spread_bp)
                 DO UPDATE SET
                     is_atm      = EXCLUDED.is_atm,
@@ -845,6 +851,7 @@ async def upsert_cap_vol(
                 "flat_vol_bp":      r.flat_vol_bp,
                 "ticker":           r.ticker,
                 "source":           r.source,
+                "user_id":          user_id,
             }
         )
         upserted += 1

@@ -57,7 +57,7 @@ def create_counterparty(body: CounterpartyCreate, db: Session = Depends(get_db),
     data = body.dict()
     if data.get("legal_entity_id"):
         data["legal_entity_id"] = uuid.UUID(data["legal_entity_id"])
-    cp = Counterparty(**data, created_by=uuid.UUID(user["sub"]))
+    cp = Counterparty(**data, created_by=uuid.UUID(user["sub"]), user_id=uuid.UUID(user["sub"]))
     db.add(cp)
     db.commit()
     db.refresh(cp)
