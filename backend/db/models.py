@@ -1,6 +1,7 @@
 """
 Rijeka — SQLAlchemy models
 Sprint 12 item 1: Bitemporal event-sourcing foundation.
+Sprint 12 item 4: Multi-tenancy user_id added to OrgNode / LegalEntity / Counterparty.
 
 Trade/TradeLeg rows = projections derived from TradeEvent stream.
 TradeEvent = append-only source of truth.
@@ -31,6 +32,9 @@ class OrgNode(Base):
     created_at  = Column(DateTime(timezone=True), server_default=func.now())
     created_by  = Column(UUID(as_uuid=True), nullable=True)
 
+    # Sprint 12 item 4 — tenant isolation key. NOT NULL enforced at DB level.
+    user_id     = Column(UUID(as_uuid=True), nullable=False, index=True)
+
 
 class LegalEntity(Base):
     __tablename__ = "legal_entities"
@@ -50,6 +54,9 @@ class LegalEntity(Base):
     created_at         = Column(DateTime(timezone=True), server_default=func.now())
     created_by         = Column(UUID(as_uuid=True), nullable=True)
 
+    # Sprint 12 item 4 — tenant isolation key. NOT NULL enforced at DB level.
+    user_id            = Column(UUID(as_uuid=True), nullable=False, index=True)
+
 
 class Counterparty(Base):
     __tablename__ = "counterparties"
@@ -67,6 +74,9 @@ class Counterparty(Base):
     is_active          = Column(Boolean, default=True)
     created_at         = Column(DateTime(timezone=True), server_default=func.now())
     created_by         = Column(UUID(as_uuid=True), nullable=True)
+
+    # Sprint 12 item 4 — tenant isolation key. NOT NULL enforced at DB level.
+    user_id            = Column(UUID(as_uuid=True), nullable=False, index=True)
 
 
 # ─────────────────────────────────────────────────────
