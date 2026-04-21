@@ -123,8 +123,8 @@ async def bloomberg_snap(
     quotes_json = json.dumps(quotes)
 
     existing = db.execute(
-        text("SELECT id FROM market_data_snapshots WHERE curve_id = :cid AND valuation_date = :dt"),
-        {"cid": req.curve_id, "dt": snap_date},
+        text("SELECT id FROM market_data_snapshots WHERE curve_id = :cid AND valuation_date = :dt AND user_id = :uid"),
+        {"cid": req.curve_id, "dt": snap_date, "uid": user["sub"]},
     ).fetchone()
 
     if existing:
@@ -246,8 +246,8 @@ async def bloomberg_snap_swvol(
     db_quotes_json = json.dumps(db_quotes)
 
     existing = db.execute(
-        text("SELECT id FROM market_data_snapshots WHERE curve_id = 'USD_SWVOL_ATM' AND valuation_date = :dt"),
-        {"dt": snap_date},
+        text("SELECT id FROM market_data_snapshots WHERE curve_id = 'USD_SWVOL_ATM' AND valuation_date = :dt AND user_id = :uid"),
+        {"dt": snap_date, "uid": user["sub"]},
     ).fetchone()
 
     if existing:
@@ -423,7 +423,7 @@ async def snap_cap_vol_surface(
     try:
         curve = _build_curve(
             CurveInput(curve_id=req.curve_id, quotes=[]),
-            val_date, db
+            val_date, db, user["sub"]
         )
     except Exception as e:
         raise HTTPException(
@@ -462,8 +462,8 @@ async def snap_cap_vol_surface(
 
     # 5. Wipe existing rows for this val_date (idempotent snap)
     db.execute(
-        text("DELETE FROM cap_vol_surface WHERE valuation_date = :vd"),
-        {"vd": val_date_s}
+        text("DELETE FROM cap_vol_surface WHERE valuation_date = :vd AND user_id = :uid"),
+        {"vd": val_date_s, "uid": user["sub"]}
     )
 
     # 6. Insert fresh

@@ -106,10 +106,11 @@ async def calibrate(
         text("""
             SELECT quotes, valuation_date
             FROM market_data_snapshots
-            WHERE curve_id = 'USD_SWVOL_ATM'
+            WHERE curve_id = 'USD_SWVOL_ATM' AND user_id = :user_id
             ORDER BY valuation_date DESC
             LIMIT 1
-        """)
+        """),
+        {"user_id": user_id}
     ).fetchone()
 
     if not snap:
@@ -187,9 +188,10 @@ async def calibrate(
         sofr_snap = db.execute(
             text("""
                 SELECT quotes FROM market_data_snapshots
-                WHERE curve_id = 'USD_SOFR'
+                WHERE curve_id = 'USD_SOFR' AND user_id = :user_id
                 ORDER BY valuation_date DESC LIMIT 1
-            """)
+            """),
+            {"user_id": user_id}
         ).fetchone()
         if sofr_snap and sofr_snap.quotes:
             q5 = next((q for q in sofr_snap.quotes if q.get("tenor") == "5Y"), None)
@@ -286,10 +288,11 @@ async def get_latest_calibration(
                    a, sigma_bp, theta, basket_size, fit_rmse_bp,
                    fit_details, created_at
             FROM xva_calibration
-            WHERE curve_id = 'USD_SWVOL_ATM' AND model = 'HW1F'
+            WHERE curve_id = 'USD_SWVOL_ATM' AND model = 'HW1F' AND user_id = :user_id
             ORDER BY valuation_date DESC, created_at DESC
             LIMIT 1
-        """)
+        """),
+        {"user_id": user["sub"]}
     ).fetchone()
 
     if not row:
@@ -327,10 +330,11 @@ async def simulate(
         row = db.execute(
             text("""
                 SELECT a, sigma_bp, theta FROM xva_calibration
-                WHERE curve_id = 'USD_SWVOL_ATM' AND model = 'HW1F'
+                WHERE curve_id = 'USD_SWVOL_ATM' AND model = 'HW1F' AND user_id = :user_id
                 ORDER BY valuation_date DESC, created_at DESC
                 LIMIT 1
-            """)
+            """),
+            {"user_id": user["sub"]}
         ).fetchone()
         if not row:
             raise HTTPException(

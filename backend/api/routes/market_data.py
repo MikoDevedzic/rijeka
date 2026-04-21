@@ -134,11 +134,11 @@ async def get_latest_snapshot(
         text("""
             SELECT id, curve_id, valuation_date, quotes, source, created_at, created_by
             FROM market_data_snapshots
-            WHERE curve_id = :curve_id
+            WHERE curve_id = :curve_id AND user_id = :user_id
             ORDER BY valuation_date DESC
             LIMIT 1
         """),
-        {"curve_id": curve_id}
+        {"curve_id": curve_id, "user_id": user["sub"]}
     )
     row = result.fetchone()
     if not row:
@@ -166,11 +166,11 @@ async def get_curve_snapshots(
         text("""
             SELECT id, curve_id, valuation_date, quotes, source, created_at
             FROM market_data_snapshots
-            WHERE curve_id = :curve_id
+            WHERE curve_id = :curve_id AND user_id = :user_id
             ORDER BY valuation_date DESC
             LIMIT 30
         """),
-        {"curve_id": curve_id}
+        {"curve_id": curve_id, "user_id": user["sub"]}
     )
     rows = result.fetchall()
     return [
@@ -200,10 +200,10 @@ async def get_snapshots_by_date(
         text("""
             SELECT id, curve_id, valuation_date, quotes, source, created_at
             FROM market_data_snapshots
-            WHERE valuation_date = :valuation_date
+            WHERE valuation_date = :valuation_date AND user_id = :user_id
             ORDER BY curve_id
         """),
-        {"valuation_date": valuation_date}
+        {"valuation_date": valuation_date, "user_id": user["sub"]}
     )
     rows = result.fetchall()
     return [
@@ -422,10 +422,10 @@ async def save_vol_skew(
             text("""
                 SELECT expiry_y, tenor_y, alpha, rho, nu, atm_vol_bp, expiry_label, tenor_label
                 FROM sabr_params
-                WHERE valuation_date = :val_date
+                WHERE valuation_date = :val_date AND user_id = :user_id
                 ORDER BY expiry_y, tenor_y
             """),
-            {"val_date": body.valuation_date}
+            {"val_date": body.valuation_date, "user_id": user_id}
         ).fetchall()
 
         if len(cal_rows) >= 2:
@@ -451,9 +451,10 @@ async def save_vol_skew(
                     atm_row = db.execute(
                         text("""
                             SELECT quotes FROM market_data_snapshots
-                            WHERE curve_id = 'USD_SWVOL_ATM'
+                            WHERE curve_id = 'USD_SWVOL_ATM' AND user_id = :user_id
                             ORDER BY valuation_date DESC LIMIT 1
-                        """)
+                        """),
+                        {"user_id": user_id}
                     ).fetchone()
                     atm_vol = None
                     if atm_row and atm_row.quotes:
@@ -541,10 +542,12 @@ async def get_latest_vol_skew(
                    source, valuation_date
             FROM swaption_vol_skew
             WHERE valuation_date = (
-                SELECT MAX(valuation_date) FROM swaption_vol_skew
+                SELECT MAX(valuation_date) FROM swaption_vol_skew WHERE user_id = :user_id
             )
+              AND user_id = :user_id
             ORDER BY expiry_y, tenor_y
-        """)
+        """),
+        {"user_id": user["sub"]}
     )
     rows = result.fetchall()
     if not rows:
@@ -588,10 +591,12 @@ async def get_latest_sabr_params(
                    valuation_date
             FROM sabr_params
             WHERE valuation_date = (
-                SELECT MAX(valuation_date) FROM sabr_params
+                SELECT MAX(valuation_date) FROM sabr_params WHERE user_id = :user_id
             )
+              AND user_id = :user_id
             ORDER BY expiry_y, tenor_y
-        """)
+        """),
+        {"user_id": user["sub"]}
     )
     rows = result.fetchall()
     if not rows:
@@ -864,16 +869,17 @@ async def upsert_cap_vol(
 async def get_cap_vol_surface(
     valuation_date: str,
     db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
 ):
     rows = db.execute(
         text("""
             SELECT valuation_date, cap_tenor_y, strike_spread_bp,
                    is_atm, flat_vol_bp, ticker, source
             FROM   cap_vol_surface
-            WHERE  valuation_date = :valuation_date
+            WHERE  valuation_date = :valuation_date AND user_id = :user_id
             ORDER  BY cap_tenor_y, strike_spread_bp
         """),
-        {"valuation_date": valuation_date}
+        {"valuation_date": valuation_date, "user_id": user["sub"]}
     ).mappings().all()
 
     if not rows:
@@ -894,6 +900,7 @@ async def get_cap_vol_smile(
     valuation_date: str,
     tenor_y: float,
     db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
 ):
     rows = db.execute(
         text("""
@@ -902,9 +909,10 @@ async def get_cap_vol_smile(
             FROM   cap_vol_surface
             WHERE  valuation_date = :valuation_date
               AND  cap_tenor_y    = :tenor_y
+              AND  user_id        = :user_id
             ORDER  BY strike_spread_bp
         """),
-        {"valuation_date": valuation_date, "tenor_y": tenor_y}
+        {"valuation_date": valuation_date, "tenor_y": tenor_y, "user_id": user["sub"]}
     ).mappings().all()
 
     if not rows:

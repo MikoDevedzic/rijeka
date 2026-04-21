@@ -8,6 +8,7 @@ POST /api/price/par-rate         Solve for par coupon on our bootstrapped curve
 
 import json as _json
 import math as _math
+import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import List, Optional
@@ -205,12 +206,12 @@ def _require_trader(user: dict) -> None:
         raise HTTPException(status_code=403, detail="Trader or Admin role required")
 
 
-def _build_curve(ci: CurveInput, valuation_date: date, db: Session) -> Curve:
+def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str) -> Curve:
     """
     Build a Curve. Priority:
       1. quotes[] with >= 2 entries -> bootstrap
       2. flat_rate                  -> flat forward
-      3. DB latest snapshot         -> bootstrap from saved market data
+      3. DB latest snapshot         -> bootstrap from saved market data (user-scoped)
     """
     curve_dc       = CURVE_DC.get(ci.curve_id, 'ACT/360')
     curve_cal      = CURVE_CAL.get(ci.curve_id, 'NEW_YORK')
@@ -240,8 +241,8 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session) -> Curve:
     # DB snapshot
     try:
         result = db.execute(
-            text("SELECT quotes FROM market_data_snapshots WHERE curve_id = :cid ORDER BY valuation_date DESC LIMIT 1"),
-            {"cid": ci.curve_id}
+            text("SELECT quotes FROM market_data_snapshots WHERE curve_id = :cid AND user_id = :user_id ORDER BY valuation_date DESC LIMIT 1"),
+            {"cid": ci.curve_id, "user_id": user_id}
         )
         row = result.fetchone()
         if row and row.quotes:
@@ -342,7 +343,7 @@ async def compute_par_rate(
     val_date = req.valuation_date or date.today()
     ci = CurveInput(curve_id=req.curve_id, quotes=[])
     try:
-        curve = _build_curve(ci, val_date, db)
+        curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Cannot build curve: {e}")
 
@@ -403,15 +404,16 @@ async def price_trade(
     user: dict = Depends(verify_token),
 ):
     _require_trader(user)
+    user_id_uuid = uuid.UUID(user["sub"])
     val_date = request.valuation_date or date.today()
 
-    trade = db.query(Trade).filter(Trade.id == request.trade_id).first()
+    trade = db.query(Trade).filter(Trade.id == request.trade_id, Trade.user_id == user_id_uuid).first()
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
 
     orm_legs = (
         db.query(TradeLeg)
-        .filter(TradeLeg.trade_id == request.trade_id)
+        .filter(TradeLeg.trade_id == request.trade_id, TradeLeg.user_id == user_id_uuid)
         .order_by(TradeLeg.leg_seq)
         .all()
     )
@@ -422,7 +424,7 @@ async def price_trade(
     curves: dict = {}
     for ci in request.curves:
         try:
-            curves[ci.curve_id] = _build_curve(ci, val_date, db)
+            curves[ci.curve_id] = _build_curve(ci, val_date, db, user["sub"])
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"Curve '{ci.curve_id}': {exc}")
 
@@ -571,7 +573,7 @@ async def price_preview(
     curves: dict = {}
     for ci in request.curves:
         try:
-            curves[ci.curve_id] = _build_curve(ci, val_date, db)
+            curves[ci.curve_id] = _build_curve(ci, val_date, db, user["sub"])
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"Curve '{ci.curve_id}': {exc}")
 
@@ -744,7 +746,7 @@ async def price_swaption_route(
     base_quotes = [CurveQuote(**q) for q in req.shocked_quotes] if req.shocked_quotes else []
     ci = CurveInput(curve_id=req.curve_id, quotes=base_quotes)
     try:
-        curve = _build_curve(ci, val_date, db)
+        curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
 
@@ -774,10 +776,11 @@ async def price_swaption_route(
             row = db.execute(
                 text("""
                     SELECT a, sigma_bp, theta FROM xva_calibration
-                    WHERE curve_id = 'USD_SWVOL_ATM' AND model = 'HW1F'
+                    WHERE curve_id = 'USD_SWVOL_ATM' AND model = 'HW1F' AND user_id = :user_id
                     ORDER BY valuation_date DESC, created_at DESC
                     LIMIT 1
-                """)
+                """),
+                {"user_id": user["sub"]}
             ).fetchone()
             if row:
                 hw1f_a     = row.a
@@ -870,15 +873,16 @@ async def generate_cashflows(
     user: dict = Depends(verify_token),
 ):
     _require_trader(user)
+    user_id_uuid = uuid.UUID(user["sub"])
     val_date = request.valuation_date or date.today()
 
-    trade = db.query(Trade).filter(Trade.id == request.trade_id).first()
+    trade = db.query(Trade).filter(Trade.id == request.trade_id, Trade.user_id == user_id_uuid).first()
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
 
     orm_legs = (
         db.query(TradeLeg)
-        .filter(TradeLeg.trade_id == request.trade_id)
+        .filter(TradeLeg.trade_id == request.trade_id, TradeLeg.user_id == user_id_uuid)
         .order_by(TradeLeg.leg_seq)
         .all()
     )
@@ -905,7 +909,7 @@ async def generate_cashflows(
     curves: dict = {}
     for ci in request.curves:
         try:
-            curves[ci.curve_id] = _build_curve(ci, val_date, db)
+            curves[ci.curve_id] = _build_curve(ci, val_date, db, user["sub"])
         except Exception as exc:
             raise HTTPException(status_code=422, detail=f"Curve '{ci.curve_id}': {exc}")
 
@@ -918,6 +922,7 @@ async def generate_cashflows(
 
     db.query(Cashflow).filter(
         Cashflow.trade_id == request.trade_id,
+        Cashflow.user_id == user_id_uuid,
         Cashflow.status == "PROJECTED",
     ).delete(synchronize_session=False)
 
@@ -927,6 +932,7 @@ async def generate_cashflows(
             db.add(Cashflow(
                 trade_id=request.trade_id,
                 leg_id=str(lr.leg_id),
+                user_id=user_id_uuid,
                 period_start=cf.period_start,
                 period_end=cf.period_end,
                 payment_date=cf.payment_date,
@@ -963,30 +969,32 @@ class CapFloorRequest(BaseModel):
     vol_override_bp: Optional[float] = None
 
 
-def _load_cap_surface(db: Session, val_date: str) -> list[dict]:
-    """Load cap vol surface rows for a given date. Falls back to most recent if not found."""
+def _load_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
+    """Load cap vol surface rows for a given date, user-scoped. Falls back to most recent user-owned date if not found."""
     try:
         rows = db.execute(
             text("""
                 SELECT cap_tenor_y, strike_spread_bp, flat_vol_bp, is_atm, source
                 FROM   cap_vol_surface
-                WHERE  valuation_date = :vd
+                WHERE  valuation_date = :vd AND user_id = :user_id
                 ORDER  BY cap_tenor_y, strike_spread_bp
             """),
-            {"vd": val_date}
+            {"vd": val_date, "user_id": user_id}
         ).mappings().all()
         if rows:
             return [dict(r) for r in rows]
-        # Fallback to most recent available date
+        # Fallback to most recent available date owned by this user
         rows = db.execute(
             text("""
                 SELECT cap_tenor_y, strike_spread_bp, flat_vol_bp, is_atm, source
                 FROM   cap_vol_surface
                 WHERE  valuation_date = (
-                    SELECT MAX(valuation_date) FROM cap_vol_surface
+                    SELECT MAX(valuation_date) FROM cap_vol_surface WHERE user_id = :user_id
                 )
+                  AND  user_id = :user_id
                 ORDER  BY cap_tenor_y, strike_spread_bp
-            """)
+            """),
+            {"user_id": user_id}
         ).mappings().all()
         return [dict(r) for r in rows]
     except Exception:
@@ -1008,11 +1016,11 @@ async def price_cap_route(
     val_date = req.valuation_date or date.today()
     ci       = CurveInput(curve_id=req.curve_id, quotes=[])
     try:
-        curve = _build_curve(ci, val_date, db)
+        curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
 
-    surface_rows = _load_cap_surface(db, val_date.isoformat())
+    surface_rows = _load_cap_surface(db, val_date.isoformat(), user["sub"])
 
     from pricing.cap_floor import price_cap as _price_cap
     try:
@@ -1067,11 +1075,11 @@ async def price_floor_route(
     val_date = req.valuation_date or date.today()
     ci       = CurveInput(curve_id=req.curve_id, quotes=[])
     try:
-        curve = _build_curve(ci, val_date, db)
+        curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
 
-    surface_rows = _load_cap_surface(db, val_date.isoformat())
+    surface_rows = _load_cap_surface(db, val_date.isoformat(), user["sub"])
 
     from pricing.cap_floor import price_floor as _price_floor
     try:
@@ -1132,11 +1140,11 @@ async def price_collar_route(
     val_date = req.valuation_date or date.today()
     ci       = CurveInput(curve_id=req.curve_id, quotes=[])
     try:
-        curve = _build_curve(ci, val_date, db)
+        curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
 
-    surface_rows = _load_cap_surface(db, val_date.isoformat())
+    surface_rows = _load_cap_surface(db, val_date.isoformat(), user["sub"])
 
     from pricing.cap_floor import price_collar as _price_collar
     try:

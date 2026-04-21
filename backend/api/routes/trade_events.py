@@ -133,9 +133,21 @@ def list_trade_events(
     Return all events for a trade, newest first.
     All authenticated users can read (VIEWERs included).
     """
+    # Phase 2d: verify trade belongs to caller before returning its events.
+    # 404 both for non-existent trades and trades owned by another user --
+    # no existence leak across tenants.
+    user_id_uuid = uuid.UUID(user["sub"])
+    trade = (
+        db.query(Trade)
+        .filter(Trade.id == trade_id, Trade.user_id == user_id_uuid)
+        .first()
+    )
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+
     events = (
         db.query(TradeEvent)
-        .filter(TradeEvent.trade_id == trade_id)
+        .filter(TradeEvent.trade_id == trade_id, TradeEvent.user_id == user_id_uuid)
         .order_by(desc(TradeEvent.created_at))
         .offset(offset)
         .limit(limit)
@@ -165,6 +177,17 @@ def append_trade_event(
             detail="Event creation requires Trader or Admin role."
         )
 
+    # Phase 2d: verify trade belongs to caller before appending.
+    # 404 both for non-existent trades and cross-tenant trades.
+    user_id_uuid = uuid.UUID(user["sub"])
+    trade = (
+        db.query(Trade)
+        .filter(Trade.id == body.trade_id, Trade.user_id == user_id_uuid)
+        .first()
+    )
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+
     event = TradeEvent(
         id=uuid.uuid4(),
         trade_id=body.trade_id,
@@ -176,6 +199,7 @@ def append_trade_event(
         post_state=body.post_state,
         counterparty_confirmed=body.counterparty_confirmed,
         confirmation_hash=body.confirmation_hash,
+        user_id=user_id_uuid,
         created_by=user.get("sub"),
     )
     db.add(event)
@@ -196,7 +220,7 @@ def list_all_events(
     Paginated feed of all events across trades -- useful for
     PNL attribution and risk feeds in Sprint 4.
     """
-    q = db.query(TradeEvent).order_by(desc(TradeEvent.created_at))
+    q = db.query(TradeEvent).filter(TradeEvent.user_id == uuid.UUID(user["sub"])).order_by(desc(TradeEvent.created_at))
     if event_type:
         if event_type not in VALID_EVENT_TYPES:
             raise HTTPException(
