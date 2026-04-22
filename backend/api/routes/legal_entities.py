@@ -56,7 +56,12 @@ def get_legal_entities(db: Session = Depends(get_db), user: dict = Depends(verif
 
 @router.post("/")
 def create_legal_entity(body: LegalEntityCreate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    entity = LegalEntity(**body.dict(), created_by=uuid.UUID(user["sub"]), user_id=uuid.UUID(user["sub"]))
+    entity = LegalEntity(
+        id=uuid.uuid4(),
+        **body.dict(),
+        created_by=uuid.UUID(user["sub"]),
+        user_id=uuid.UUID(user["sub"]),
+    )
     db.add(entity)
     db.commit()
     db.refresh(entity)
