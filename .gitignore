@@ -184,3 +184,6 @@ frontend/src/components/**/*.cjs
 Thumbs.db
 .vscode/
 .idea/
+.env.test
+_scratch/
+verify_test_users.py
