@@ -87,7 +87,7 @@ async def save_snapshot(
               (curve_id, valuation_date, quotes, source, created_by, user_id)
             VALUES
               (:curve_id, :valuation_date, cast(:quotes as jsonb), :source, :created_by, :user_id)
-            ON CONFLICT (curve_id, valuation_date)
+            ON CONFLICT (user_id, curve_id, valuation_date)
             DO UPDATE SET
               quotes     = EXCLUDED.quotes,
               source     = EXCLUDED.source,
@@ -279,7 +279,7 @@ async def save_vol_skew(
                    :sm200, :sm100, :sm50, :sm25,
                    :sp25,  :sp50,  :sp100, :sp200,
                    :source, :created_by, :user_id)
-                ON CONFLICT (valuation_date, expiry_label, tenor_label)
+                ON CONFLICT (user_id, valuation_date, expiry_label, tenor_label)
                 DO UPDATE SET
                   expiry_y    = EXCLUDED.expiry_y,
                   tenor_y     = EXCLUDED.tenor_y,
@@ -375,7 +375,7 @@ async def save_vol_skew(
                       (:val_date, :exp_lbl, :ten_lbl,
                        :exp_y, :ten_y, :alpha, :rho, :nu, 0.0,
                        :atm_vol_bp, :rmse_bp, 'AUTO', :created_by, :user_id)
-                    ON CONFLICT (valuation_date, expiry_y, tenor_y)
+                    ON CONFLICT (user_id, valuation_date, expiry_y, tenor_y)
                     DO UPDATE SET
                       alpha       = EXCLUDED.alpha,
                       rho         = EXCLUDED.rho,
@@ -487,7 +487,7 @@ async def save_vol_skew(
                               (:val_date, :exp_lbl, :ten_lbl,
                                :exp_y, :ten_y, :alpha, :rho, :nu, 0.0,
                                :atm_vol_bp, NULL, 'INTERPOLATED', :created_by, :user_id)
-                            ON CONFLICT (valuation_date, expiry_y, tenor_y)
+                            ON CONFLICT (user_id, valuation_date, expiry_y, tenor_y)
                             DO UPDATE SET
                               alpha       = EXCLUDED.alpha,
                               rho         = EXCLUDED.rho,
@@ -655,7 +655,7 @@ async def save_manual_sabr_params(
                   (:val_date, :exp_lbl, :ten_lbl,
                    :exp_y, :ten_y, :alpha, :rho, :nu, 0.0,
                    :atm_vol_bp, NULL, 'MANUAL', :created_by, :user_id)
-                ON CONFLICT (valuation_date, expiry_y, tenor_y)
+                ON CONFLICT (user_id, valuation_date, expiry_y, tenor_y)
                 DO UPDATE SET
                   alpha       = EXCLUDED.alpha,
                   rho         = EXCLUDED.rho,
@@ -841,7 +841,7 @@ async def upsert_cap_vol(
                 VALUES
                     (:valuation_date, :cap_tenor_y, :strike_spread_bp, :is_atm,
                      :flat_vol_bp, :ticker, :source, :user_id)
-                ON CONFLICT (valuation_date, cap_tenor_y, strike_spread_bp)
+                ON CONFLICT (user_id, valuation_date, cap_tenor_y, strike_spread_bp)
                 DO UPDATE SET
                     is_atm      = EXCLUDED.is_atm,
                     flat_vol_bp = EXCLUDED.flat_vol_bp,
@@ -942,6 +942,7 @@ async def get_cap_vol_smile(
 async def get_cap_sabr_params(
     valuation_date: str,
     db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
 ):
     """Returns empty — SABR not used for cap/floor. Pricing uses direct table lookup."""
     return {"valuation_date": valuation_date, "params": [], "count": 0}
