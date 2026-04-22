@@ -35,6 +35,10 @@ Data hygiene:
     DELETE FROM swaption_vol_skew     WHERE expiry_label LIKE 'TEST-RLS-%';
     DELETE FROM sabr_params           WHERE expiry_label LIKE 'TEST-RLS-%';
     DELETE FROM xva_calibration       WHERE valuation_date = '2099-12-31';
+    DELETE FROM trade_legs            WHERE leg_ref      LIKE 'TEST-RLS-%';
+    DELETE FROM trades                WHERE trade_ref    LIKE 'TEST-RLS-%';
+    DELETE FROM counterparties        WHERE name         LIKE 'TEST-RLS-%';
+    DELETE FROM legal_entities        WHERE name         LIKE 'TEST-RLS-%';
 """
 
 import uuid
@@ -310,3 +314,417 @@ def test_confirm_random_trade_uuid_returns_404(backend_url, user_b_headers):
         f"expected 404 for nonexistent trade, got {r.status_code}: {r.text[:200]}"
     )
     assert "not found" in r.text.lower()
+
+
+# =============================================================================
+# 9. counterparties - coexistence across tenants
+# =============================================================================
+
+def test_counterparties_both_users_coexist_same_name(backend_url, user_a_headers, user_b_headers):
+    """
+    Both users create a counterparty with identical payload. There is no
+    unique constraint on (user_id, name), but per-user scoping means both
+    INSERTs succeed with distinct ids.
+    """
+    suf = _suffix()
+    body = {
+        "name": f"TEST-RLS-CP-{suf}",
+        "csa_type": "NO_CSA",
+        "im_model": "SIMM",
+    }
+
+    r_a = httpx.post(f"{backend_url}/api/counterparties/", json=body, headers=user_a_headers, timeout=TIMEOUT)
+    assert r_a.status_code == 200, f"user A CP create failed: {r_a.status_code} {r_a.text[:300]}"
+
+    r_b = httpx.post(f"{backend_url}/api/counterparties/", json=body, headers=user_b_headers, timeout=TIMEOUT)
+    assert r_b.status_code == 200, f"user B CP create failed: {r_b.status_code} {r_b.text[:300]}"
+
+    assert r_a.json()["id"] != r_b.json()["id"], "counterparty ids collided - user_id not scoping rows"
+
+
+# =============================================================================
+# 10. counterparties - user B cannot see user A's counterparty in list
+# =============================================================================
+
+def test_counterparties_get_list_user_scoped(backend_url, user_a_headers, user_b_headers):
+    """A creates CP with namespaced name; B's list must not include it."""
+    suf = _suffix()
+    name = f"TEST-RLS-CP-ISO-{suf}"
+    r_a = httpx.post(
+        f"{backend_url}/api/counterparties/",
+        json={"name": name, "csa_type": "NO_CSA"},
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    assert r_a.status_code == 200
+
+    r_b = httpx.get(f"{backend_url}/api/counterparties/", headers=user_b_headers, timeout=TIMEOUT)
+    assert r_b.status_code == 200
+    names_b = [cp["name"] for cp in r_b.json()]
+    assert name not in names_b, f"tenant leak: user B sees user A's CP {name} in list"
+
+
+# =============================================================================
+# 11. counterparties - user B cannot update user A's counterparty
+# =============================================================================
+
+def test_counterparties_put_cross_tenant_404(backend_url, user_a_headers, user_b_headers):
+    """A creates CP; B tries PUT with A's id -> 404."""
+    r_a = httpx.post(
+        f"{backend_url}/api/counterparties/",
+        json={"name": f"TEST-RLS-CP-PUT-{_suffix()}", "csa_type": "NO_CSA"},
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    assert r_a.status_code == 200
+    cp_id = r_a.json()["id"]
+
+    r_b = httpx.put(
+        f"{backend_url}/api/counterparties/{cp_id}",
+        json={"name": "HIJACKED"},
+        headers=user_b_headers, timeout=TIMEOUT,
+    )
+    assert r_b.status_code == 404, (
+        f"expected 404, got {r_b.status_code} - user B updated user A's CP!"
+    )
+
+
+# =============================================================================
+# 12. counterparties - user B cannot delete user A's counterparty
+# =============================================================================
+
+def test_counterparties_delete_cross_tenant_404(backend_url, user_a_headers, user_b_headers):
+    """A creates CP; B tries DELETE with A's id -> 404; A's CP survives."""
+    r_a = httpx.post(
+        f"{backend_url}/api/counterparties/",
+        json={"name": f"TEST-RLS-CP-DEL-{_suffix()}", "csa_type": "NO_CSA"},
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    assert r_a.status_code == 200
+    cp_id = r_a.json()["id"]
+
+    r_b = httpx.delete(
+        f"{backend_url}/api/counterparties/{cp_id}",
+        headers=user_b_headers, timeout=TIMEOUT,
+    )
+    assert r_b.status_code == 404, f"expected 404, got {r_b.status_code}"
+
+    # Verify A's CP survived
+    r_a_list = httpx.get(f"{backend_url}/api/counterparties/", headers=user_a_headers, timeout=TIMEOUT)
+    assert r_a_list.status_code == 200
+    ids_a = [cp["id"] for cp in r_a_list.json()]
+    assert cp_id in ids_a, "user A's CP was deleted despite cross-tenant attempt"
+
+
+# =============================================================================
+# 13. legal_entities - user B cannot see user A's entity in list
+# =============================================================================
+
+def test_legal_entities_get_list_user_scoped(backend_url, user_a_headers, user_b_headers):
+    """A creates entity; B's list must not include it."""
+    suf = _suffix()
+    name = f"TEST-RLS-LE-ISO-{suf}"
+    r_a = httpx.post(
+        f"{backend_url}/api/legal-entities/",
+        json={"name": name, "home_currency": "USD", "is_own_entity": False, "lei": f"TEST{_suffix().upper()}RLS", "jurisdiction": "US"},
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    assert r_a.status_code == 200, f"setup failed: {r_a.status_code} {r_a.text[:300]}"
+
+    r_b = httpx.get(f"{backend_url}/api/legal-entities/", headers=user_b_headers, timeout=TIMEOUT)
+    assert r_b.status_code == 200
+    names_b = [e["name"] for e in r_b.json()]
+    assert name not in names_b, f"tenant leak: user B sees user A's entity {name}"
+
+
+# =============================================================================
+# 14. legal_entities - user B cannot update user A's entity
+# =============================================================================
+
+def test_legal_entities_put_cross_tenant_404(backend_url, user_a_headers, user_b_headers):
+    """A creates entity; B tries PUT with A's id -> 404."""
+    r_a = httpx.post(
+        f"{backend_url}/api/legal-entities/",
+        json={"name": f"TEST-RLS-LE-PUT-{_suffix()}", "home_currency": "USD", "lei": f"TEST{_suffix().upper()}PUT", "jurisdiction": "US"},
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    assert r_a.status_code == 200
+    entity_id = r_a.json()["id"]
+
+    r_b = httpx.put(
+        f"{backend_url}/api/legal-entities/{entity_id}",
+        json={"name": "HIJACKED"},
+        headers=user_b_headers, timeout=TIMEOUT,
+    )
+    assert r_b.status_code == 404
+
+
+# =============================================================================
+# 15. legal_entities - user B cannot delete user A's entity
+# =============================================================================
+
+def test_legal_entities_delete_cross_tenant_404(backend_url, user_a_headers, user_b_headers):
+    """A creates entity; B tries DELETE with A's id -> 404; A's entity survives."""
+    r_a = httpx.post(
+        f"{backend_url}/api/legal-entities/",
+        json={"name": f"TEST-RLS-LE-DEL-{_suffix()}", "home_currency": "USD", "lei": f"TEST{_suffix().upper()}DEL", "jurisdiction": "US"},
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    assert r_a.status_code == 200
+    entity_id = r_a.json()["id"]
+
+    r_b = httpx.delete(
+        f"{backend_url}/api/legal-entities/{entity_id}",
+        headers=user_b_headers, timeout=TIMEOUT,
+    )
+    assert r_b.status_code == 404
+
+    r_a_list = httpx.get(f"{backend_url}/api/legal-entities/", headers=user_a_headers, timeout=TIMEOUT)
+    assert r_a_list.status_code == 200
+    ids_a = [e["id"] for e in r_a_list.json()]
+    assert entity_id in ids_a, "user A's entity was deleted despite cross-tenant attempt"
+
+
+# =============================================================================
+# Helper: minimal PENDING IR_SWAP trade for user
+# =============================================================================
+
+def _create_pending_trade(backend_url, headers, ref_suffix=None):
+    """
+    Create a minimal PENDING IR_SWAP trade. Returns the response body.
+    No counterparty, no legs, just the trade shell - sufficient for tenancy
+    and lifecycle tests. Caller responsible for cleanup via TEST-RLS-* prefix.
+    """
+    suf = ref_suffix or _suffix()
+    body = {
+        "trade_ref": f"TEST-RLS-TRD-{suf}",
+        "status": "PENDING",
+        "store": "WORKING",
+        "asset_class": "RATES",
+        "instrument_type": "IR_SWAP",
+        "notional": 10_000_000.0,
+        "notional_ccy": "USD",
+        "trade_date": "2026-04-22",
+        "effective_date": "2026-04-24",
+        "maturity_date": "2031-04-24",
+        "terms": {},
+    }
+    r = httpx.post(f"{backend_url}/api/trades/", json=body, headers=headers, timeout=TIMEOUT)
+    if r.status_code != 200:
+        raise RuntimeError(f"trade create failed: {r.status_code} {r.text[:400]}")
+    return r.json()
+
+
+# =============================================================================
+# 16. trades - user B's list does not include user A's trade
+# =============================================================================
+
+def test_trades_get_list_user_scoped(backend_url, user_a_headers, user_b_headers):
+    trade_a = _create_pending_trade(backend_url, user_a_headers)
+    trade_ref_a = trade_a["trade_ref"]
+
+    r_b = httpx.get(f"{backend_url}/api/trades/", headers=user_b_headers, timeout=TIMEOUT)
+    assert r_b.status_code == 200
+    refs_b = [t["trade_ref"] for t in r_b.json()]
+    assert trade_ref_a not in refs_b, f"tenant leak: user B sees user A's trade {trade_ref_a}"
+
+
+# =============================================================================
+# 17. trades - user B cannot PUT user A's trade
+# =============================================================================
+
+def test_trades_put_cross_tenant_404(backend_url, user_a_headers, user_b_headers):
+    trade_a = _create_pending_trade(backend_url, user_a_headers)
+    trade_id = trade_a["id"]
+
+    r_b = httpx.put(
+        f"{backend_url}/api/trades/{trade_id}",
+        json={"desk": "HIJACKED"},
+        headers=user_b_headers, timeout=TIMEOUT,
+    )
+    assert r_b.status_code == 404
+
+
+# =============================================================================
+# 18. trades - user B cannot DELETE user A's trade
+# =============================================================================
+
+def test_trades_delete_cross_tenant_404(backend_url, user_a_headers, user_b_headers):
+    trade_a = _create_pending_trade(backend_url, user_a_headers)
+    trade_id = trade_a["id"]
+
+    r_b = httpx.delete(f"{backend_url}/api/trades/{trade_id}", headers=user_b_headers, timeout=TIMEOUT)
+    assert r_b.status_code == 404
+
+    r_a_list = httpx.get(f"{backend_url}/api/trades/", headers=user_a_headers, timeout=TIMEOUT)
+    assert r_a_list.status_code == 200
+    ids_a = [t["id"] for t in r_a_list.json()]
+    assert trade_id in ids_a, "user A's trade was deleted despite cross-tenant attempt"
+
+
+# =============================================================================
+# 19. trades - /summary counts are user-scoped
+# =============================================================================
+
+def test_trades_summary_is_user_scoped(backend_url, user_a_headers, user_b_headers):
+    """
+    A creates a PENDING trade. A's summary.pending increases by >=1;
+    B's summary.total is unchanged.
+    """
+    r_a_before = httpx.get(f"{backend_url}/api/trades/summary", headers=user_a_headers, timeout=TIMEOUT)
+    r_b_before = httpx.get(f"{backend_url}/api/trades/summary", headers=user_b_headers, timeout=TIMEOUT)
+    assert r_a_before.status_code == 200 and r_b_before.status_code == 200
+    pending_a_before = r_a_before.json().get("pending", 0)
+    total_b_before = r_b_before.json().get("total", 0)
+
+    _create_pending_trade(backend_url, user_a_headers)
+
+    r_a_after = httpx.get(f"{backend_url}/api/trades/summary", headers=user_a_headers, timeout=TIMEOUT)
+    r_b_after = httpx.get(f"{backend_url}/api/trades/summary", headers=user_b_headers, timeout=TIMEOUT)
+    assert r_a_after.json()["pending"] >= pending_a_before + 1, (
+        f"user A pending didn't increase: {pending_a_before} -> {r_a_after.json()['pending']}"
+    )
+    assert r_b_after.json()["total"] == total_b_before, (
+        f"user B total changed after user A created a trade: "
+        f"{total_b_before} -> {r_b_after.json()['total']}"
+    )
+
+
+# =============================================================================
+# 20. trade-events confirm - positive happy path (owner confirms own trade)
+# =============================================================================
+
+def test_confirm_own_pending_trade_succeeds(backend_url, user_a_headers):
+    """
+    A creates a PENDING trade, A confirms it -> 200 + status=CONFIRMED.
+    Closes the positive-path gap left by the phase 3 first pass (which only
+    tested the cross-tenant 404 case with a random UUID).
+    """
+    trade_a = _create_pending_trade(backend_url, user_a_headers)
+    trade_id = trade_a["id"]
+    assert trade_a["status"] == "PENDING"
+
+    r_confirm = httpx.post(
+        f"{backend_url}/api/trade-events/confirm/{trade_id}",
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    # 201 Created: endpoint appends a row to trade_events (new resource)
+    assert r_confirm.status_code == 201, (
+        f"confirm failed for own PENDING trade: {r_confirm.status_code} {r_confirm.text[:300]}"
+    )
+
+    # Verify status flipped
+    r_list = httpx.get(f"{backend_url}/api/trades/", headers=user_a_headers, timeout=TIMEOUT)
+    assert r_list.status_code == 200
+    trade_after = next((t for t in r_list.json() if t["id"] == trade_id), None)
+    assert trade_after is not None, "confirmed trade missing from own list"
+    assert trade_after["status"] == "CONFIRMED", (
+        f"expected status=CONFIRMED after confirm, got {trade_after['status']}"
+    )
+
+
+# =============================================================================
+# 21. trade-events confirm - cross-tenant attempt on REAL trade returns 404
+# =============================================================================
+
+def test_confirm_cross_tenant_real_trade_404(backend_url, user_a_headers, user_b_headers):
+    """
+    Stricter than test 8: A creates a REAL PENDING trade; B attempts to
+    confirm it. Must return 404 (no existence leak), and A's trade must
+    still be PENDING afterward (no silent state mutation).
+    """
+    trade_a = _create_pending_trade(backend_url, user_a_headers)
+    trade_id = trade_a["id"]
+
+    r_b = httpx.post(
+        f"{backend_url}/api/trade-events/confirm/{trade_id}",
+        headers=user_b_headers, timeout=TIMEOUT,
+    )
+    assert r_b.status_code == 404, (
+        f"expected 404 on cross-tenant confirm, got {r_b.status_code}: {r_b.text[:200]}"
+    )
+
+    # Verify A's trade still PENDING (no silent confirm)
+    r_list = httpx.get(f"{backend_url}/api/trades/", headers=user_a_headers, timeout=TIMEOUT)
+    trade_after = next((t for t in r_list.json() if t["id"] == trade_id), None)
+    assert trade_after is not None
+    assert trade_after["status"] == "PENDING", (
+        f"trade status changed despite cross-tenant confirm attempt: {trade_after['status']}"
+    )
+
+
+# =============================================================================
+# 22. trade_legs - user B sees no legs when querying user A's trade_id
+# =============================================================================
+
+def test_trade_legs_list_by_trade_is_user_scoped(backend_url, user_a_headers, user_b_headers):
+    """
+    A creates a trade + leg. B queries /api/trade-legs/{A-trade-id}.
+    Because the query filters by user_id, B's result must not include A's leg.
+    """
+    trade_a = _create_pending_trade(backend_url, user_a_headers)
+    leg_id = str(uuid.uuid4())
+    leg_body = {
+        "id": leg_id,
+        "trade_id": trade_a["id"],
+        "leg_ref": f"TEST-RLS-LEG-{_suffix()}",
+        "leg_seq": 0,
+        "leg_type": "FIXED",
+        "direction": "PAY",
+        "currency": "USD",
+    }
+    r_leg = httpx.post(f"{backend_url}/api/trade-legs/", json=leg_body, headers=user_a_headers, timeout=TIMEOUT)
+    assert r_leg.status_code == 201, f"leg create failed: {r_leg.status_code} {r_leg.text[:300]}"
+
+    r_b = httpx.get(f"{backend_url}/api/trade-legs/{trade_a['id']}", headers=user_b_headers, timeout=TIMEOUT)
+    assert r_b.status_code == 200, f"user B leg-list by trade_id failed: {r_b.status_code}"
+    legs_b = r_b.json()
+    assert all(l["id"] != leg_id for l in legs_b), (
+        f"tenant leak: user B sees user A's leg {leg_id} in list {legs_b}"
+    )
+
+
+# =============================================================================
+# 23. trade_legs - user B cannot GET user A's leg by leg_id
+# =============================================================================
+
+def test_trade_legs_get_single_cross_tenant_404(backend_url, user_a_headers, user_b_headers):
+    trade_a = _create_pending_trade(backend_url, user_a_headers)
+    leg_id = str(uuid.uuid4())
+    r_leg = httpx.post(
+        f"{backend_url}/api/trade-legs/",
+        json={
+            "id": leg_id, "trade_id": trade_a["id"],
+            "leg_ref": f"TEST-RLS-LEG-{_suffix()}",
+            "leg_type": "FIXED", "direction": "PAY", "currency": "USD",
+        },
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    assert r_leg.status_code == 201
+
+    r_b = httpx.get(f"{backend_url}/api/trade-legs/leg/{leg_id}", headers=user_b_headers, timeout=TIMEOUT)
+    assert r_b.status_code == 404, f"expected 404, got {r_b.status_code}: {r_b.text[:200]}"
+
+
+# =============================================================================
+# 24. trade_legs - user B cannot PUT user A's leg
+# =============================================================================
+
+def test_trade_legs_put_cross_tenant_404(backend_url, user_a_headers, user_b_headers):
+    trade_a = _create_pending_trade(backend_url, user_a_headers)
+    leg_id = str(uuid.uuid4())
+    r_leg = httpx.post(
+        f"{backend_url}/api/trade-legs/",
+        json={
+            "id": leg_id, "trade_id": trade_a["id"],
+            "leg_ref": f"TEST-RLS-LEG-{_suffix()}",
+            "leg_type": "FIXED", "direction": "PAY", "currency": "USD",
+        },
+        headers=user_a_headers, timeout=TIMEOUT,
+    )
+    assert r_leg.status_code == 201
+
+    r_b = httpx.put(
+        f"{backend_url}/api/trade-legs/leg/{leg_id}",
+        json={"terms": {"hijacked": True}},
+        headers=user_b_headers, timeout=TIMEOUT,
+    )
+    assert r_b.status_code == 404
