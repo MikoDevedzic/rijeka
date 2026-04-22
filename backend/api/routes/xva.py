@@ -241,7 +241,7 @@ async def calibrate(
             VALUES
               ('USD_SWVOL_ATM', :val_date, 'HW1F', :a, :sigma_bp, :theta,
                :basket_size, :fit_rmse_bp, cast(:fit_details as jsonb), :created_by, :user_id)
-            ON CONFLICT (curve_id, valuation_date, model)
+            ON CONFLICT (user_id, curve_id, valuation_date, model)
             DO UPDATE SET
               a            = EXCLUDED.a,
               sigma_bp     = EXCLUDED.sigma_bp,
