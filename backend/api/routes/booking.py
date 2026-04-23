@@ -1,6 +1,11 @@
 """
 Rijeka — atomic trade booking
 Sprint 12 item 3.
+Sprint 13 Patch 3: embedded_options dual-write and validator refactor.
+Sprint 13 Patch 5: legacy columns dropped (migration 008b). Dual-write
+                   collapsed to single-write. Structure validator
+                   simplified: CAPPED_FLOATER / FLOORED_FLOATER no longer
+                   valid IR_SWAP structures.
 
 Single endpoint POST /api/book/trade that atomically:
   1. Inserts Trade projection row (latest_event_id=NULL, version_seq=0)
@@ -20,6 +25,26 @@ Charter §1.1 invariants:
 Cashflows stay outside this endpoint: they're a pricing artifact populated
 by /price after booking. Cashflow rows set event_id=BOOKED.id for provenance
 (wired in a follow-up patch to pricer.py).
+
+Sprint 13 Patch 3 changes:
+  - `LegInput` accepts `embedded_options` as a list of entries (new shape per
+    PRODUCT_TAXONOMY §1.11) alongside the legacy `cap_strike_schedule` /
+    `floor_strike_schedule` (kept until Migration 008b).
+  - `_normalize_leg_embedded_options(leg)` dual-writes: whichever shape came
+    in, BOTH get populated on the DB row so (a) the pricer works via either
+    path and (b) the UI round-trips correctly during Patches 3-4.
+  - `validate_structure_leg_consistency` updated to accept either shape.
+  - `_serialize_leg` surfaces `embedded_options` + legacy cols for round-trip.
+
+Sprint 13 Patch 5 changes:
+  - `LegInput` dropped `cap_strike_schedule` / `floor_strike_schedule` fields.
+  - `_normalize_leg_embedded_options` collapsed to an echo-and-default: the
+    DB columns it used to dual-write no longer exist.
+  - `validate_structure_leg_consistency` simplified. CAPPED_FLOATER /
+    FLOORED_FLOATER specific rules removed. An IR_SWAP allowlist check
+    was added so this endpoint can't be used to bypass `TradeCreate`'s
+    structure-valid check.
+  - `_serialize_leg` drops the legacy cols from the response shape.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Header
@@ -42,6 +67,44 @@ router = APIRouter(prefix="/api/book", tags=["booking"])
 log = logging.getLogger(__name__)
 
 WRITE_ROLES = {"trader", "admin"}
+
+# ── Sprint 13 Patch 3 — embedded_options shape constants ──────────────────
+# Keep aligned with the identical constants in api/routes/trade_legs.py.
+# Single-sourcing would require a shared schemas module; for now they're
+# small enough that duplication is cheaper than an import cycle.
+EMBEDDED_OPTION_TYPES = {"CAP", "FLOOR"}
+EMBEDDED_OPTION_DIRECTIONS = {"BUY", "SELL"}
+
+
+def _validate_embedded_options_entry(entry, path):
+    """Shape check for one embedded_options array entry. Raises ValueError."""
+    if not isinstance(entry, dict):
+        raise ValueError(f"{path} must be a dict; got {type(entry).__name__}")
+    t = entry.get("type")
+    if t is None:
+        raise ValueError(f"{path}.type is required")
+    if t not in EMBEDDED_OPTION_TYPES:
+        raise ValueError(
+            f"{path}.type must be one of {sorted(EMBEDDED_OPTION_TYPES)}, got {t!r}"
+        )
+    d = entry.get("direction")
+    if d is None:
+        raise ValueError(f"{path}.direction is required")
+    if d not in EMBEDDED_OPTION_DIRECTIONS:
+        raise ValueError(
+            f"{path}.direction must be one of {sorted(EMBEDDED_OPTION_DIRECTIONS)}, got {d!r}"
+        )
+    strike_schedule = entry.get("strike_schedule")
+    default_strike  = entry.get("default_strike")
+    if strike_schedule is None and default_strike is None:
+        raise ValueError(
+            f"{path} requires at least one of strike_schedule or default_strike"
+        )
+    if strike_schedule is not None and not isinstance(strike_schedule, (list, dict)):
+        raise ValueError(
+            f"{path}.strike_schedule must be a list or dict; "
+            f"got {type(strike_schedule).__name__}"
+        )
 
 
 # ── Schemas ───────────────────────────────────────────────────
@@ -76,6 +139,14 @@ class LegInput(BaseModel):
     forecast_curve_id:   Optional[str] = None
     cap_rate:            Optional[Decimal] = None
     floor_rate:          Optional[Decimal] = None
+    # Sprint 13 Patch 3 — leg-level embedded optionality (PRODUCT_TAXONOMY §1.11).
+    # Shape: [{type, direction, strike_schedule, default_strike}, ...]
+    # Multiple entries compose freely (e.g., collar = CAP + FLOOR).
+    #
+    # Sprint 13 Patch 5: the Sprint 12 `cap_strike_schedule` and
+    # `floor_strike_schedule` fields were REMOVED here along with the
+    # underlying DB columns (migration 008b).
+    embedded_options:    Optional[list] = None
     leverage:            Optional[Decimal] = Decimal("1.0")
     ois_compounding:     Optional[str] = None
     discount_curve_id:   Optional[str] = None
@@ -87,6 +158,22 @@ class LegInput(BaseModel):
         if v not in ("PAY", "RECEIVE"):
             raise ValueError("direction must be PAY or RECEIVE")
         return v
+
+    @model_validator(mode="after")
+    def validate_embedded_options_shape(self):
+        """
+        Sprint 13 Patch 3 — per-entry shape check on embedded_options.
+        Empty list / None is valid (plain-vanilla leg).
+        """
+        if self.embedded_options is None:
+            return self
+        if not isinstance(self.embedded_options, list):
+            raise ValueError(
+                f"embedded_options must be a list; got {type(self.embedded_options).__name__}"
+            )
+        for i, entry in enumerate(self.embedded_options):
+            _validate_embedded_options_entry(entry, f"embedded_options[{i}]")
+        return self
 
 
 class BookingRequest(BaseModel):
@@ -131,6 +218,33 @@ class BookingRequest(BaseModel):
             raise ValueError("effective_date must be on or before maturity_date")
         return self
 
+    @model_validator(mode="after")
+    def validate_structure_leg_consistency(self):
+        """
+        Sprint 13 Patch 5 — PRODUCT_TAXONOMY §1.11.
+
+        After migration 008b, trade-level structure is topology only.
+        Embedded optionality (caps, floors, collars) lives on the leg via
+        `embedded_options` and does NOT participate in the structure enum.
+
+        The Sprint 12 CAPPED_FLOATER / FLOORED_FLOATER structures and their
+        legacy `cap_strike_schedule` / `floor_strike_schedule` columns were
+        removed. A float leg may carry embedded_options regardless of the
+        parent trade's structure.
+
+        Still enforced: for IR_SWAP trades, the structure must be in the
+        canonical allowlist. This prevents clients from bypassing the
+        TradeCreate validator by going through the booking endpoint.
+        """
+        from api.routes.trades import _ALLOWED_IR_SWAP_STRUCTURES
+        if self.instrument_type == "IR_SWAP":
+            if self.structure and self.structure not in _ALLOWED_IR_SWAP_STRUCTURES:
+                raise ValueError(
+                    f"Invalid structure '{self.structure}' for IR_SWAP. "
+                    f"Allowed: {sorted(_ALLOWED_IR_SWAP_STRUCTURES)}"
+                )
+        return self
+
 
 # ── Helpers ───────────────────────────────────────────────────
 
@@ -149,11 +263,35 @@ def _json_safe(v):
     return v
 
 
+def _normalize_leg_embedded_options(leg: LegInput) -> dict:
+    """
+    Sprint 13 Patch 5 — post-migration-008b normalization.
+
+    The legacy columns (`cap_strike_schedule` / `floor_strike_schedule`) were
+    dropped; `embedded_options` is the sole source of truth for leg-level
+    optionality. This function used to dual-write — now it just echoes the
+    caller's validated payload and materializes `embedded_options` as an
+    empty list when absent (the DB column is NOT NULL DEFAULT '[]').
+
+    Kept as a function so that any future per-entry normalization (e.g.,
+    auto-filling `default_strike` from `cap_rate` for vanilla caps) has an
+    obvious insertion point.
+    """
+    payload = leg.model_dump()
+    if payload.get("embedded_options") is None:
+        payload["embedded_options"] = []
+    return payload
+
+
 def build_booked_payload(body: BookingRequest, trade_id: UUID, leg_ids: List[UUID]) -> dict:
     """
     Pure function: assemble the BOOKED event payload from validated input.
     Shape matches trade_projection._h_booked contract:
         {"trade": {...}, "legs": [...], "cashflows": []}
+
+    Sprint 13 Patch 3 — legs include the normalized (dual-shape) payload so
+    event replay reconstructs BOTH shapes identically on both projection
+    paths.
     """
     trade_dict = _json_safe({
         "id": trade_id,
@@ -179,8 +317,9 @@ def build_booked_payload(body: BookingRequest, trade_id: UUID, leg_ids: List[UUI
 
     legs_dicts = []
     for leg_id, leg in zip(leg_ids, body.legs):
+        normalized = _normalize_leg_embedded_options(leg)
         d = _json_safe({
-            **leg.model_dump(),
+            **normalized,
             "id": leg_id,
             "trade_id": trade_id,
         })
@@ -246,6 +385,11 @@ def _serialize_leg(l: TradeLeg) -> dict:
         "discount_curve_id": l.discount_curve_id,
         "ois_compounding": l.ois_compounding,
         "leverage": float(l.leverage) if l.leverage is not None else None,
+        "cap_rate": float(l.cap_rate) if l.cap_rate is not None else None,
+        "floor_rate": float(l.floor_rate) if l.floor_rate is not None else None,
+        # Sprint 13 Patch 5 — legacy cap_strike_schedule / floor_strike_schedule
+        # columns were DROPPED by migration 008b. Only embedded_options remains.
+        "embedded_options":      list(l.embedded_options) if l.embedded_options else [],
         "terms": l.terms or {},
         "version_seq": l.version_seq,
     }
@@ -345,7 +489,10 @@ def book_trade_atomic(
         db.flush()
 
         # Step 3: leg rows, each with latest_event_id=BOOKED.id, version_seq=1
+        # Sprint 13 Patch 3 — normalize each leg so both embedded_options and
+        # the legacy columns land on the DB row together.
         for leg_id, leg_input in zip(leg_ids, body.legs):
+            leg_payload = _normalize_leg_embedded_options(leg_input)
             leg_row = TradeLeg(
                 id=leg_id,
                 trade_id=trade_id,
@@ -354,7 +501,7 @@ def book_trade_atomic(
                 version_seq=1,
                 booked_at=datetime.utcnow(),
                 created_by=user_id,
-                **leg_input.model_dump(),
+                **leg_payload,
             )
             db.add(leg_row)
 

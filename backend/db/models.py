@@ -2,6 +2,11 @@
 Rijeka — SQLAlchemy models
 Sprint 12 item 1: Bitemporal event-sourcing foundation.
 Sprint 12 item 4: Multi-tenancy user_id added to OrgNode / LegalEntity / Counterparty.
+Sprint 13 Patch 2: TradeLeg.embedded_options (leg-level optionality) added per
+                   PRODUCT_TAXONOMY §1.11, migration 008a applied Apr 23 2026.
+Sprint 13 Patch 5: TradeLeg.cap_strike_schedule / floor_strike_schedule columns
+                   DROPPED per migration 008b. Legacy data was backfilled into
+                   embedded_options before the drop.
 
 Trade/TradeLeg rows = projections derived from TradeEvent stream.
 TradeEvent = append-only source of truth.
@@ -166,6 +171,17 @@ class TradeLeg(Base):
     forecast_curve_id   = Column(String, nullable=True)
     cap_rate            = Column(Numeric(12, 8), nullable=True)
     floor_rate          = Column(Numeric(12, 8), nullable=True)
+    # ── Leg-level embedded optionality (Sprint 13 — migration 008a) ──
+    # Array of {type, direction, strike_schedule, default_strike} entries.
+    # Multiple entries compose freely (e.g., two entries = collar).
+    # Pricer reads this as the primary embedded-option source.
+    # See PRODUCT_TAXONOMY.md §1.11.
+    #
+    # Sprint 13 Patch 5 / Migration 008b: the legacy columns
+    # `cap_strike_schedule` and `floor_strike_schedule` (migration 007,
+    # Sprint 12) were DROPPED here. Any data they held was backfilled into
+    # this column by the migration.
+    embedded_options    = Column(JSONB, nullable=False, default=list)
     leverage            = Column(Numeric(8, 4), default=1.0)
     ois_compounding     = Column(String, nullable=True)
     discount_curve_id   = Column(String, nullable=True)

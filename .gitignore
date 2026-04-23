@@ -187,3 +187,7 @@ Thumbs.db
 .env.test
 _scratch/
 verify_test_users.py
+
+# Patch mover backups (Sprint 12/13) 
+*.bak_patch* 
+*.bak_1776* 

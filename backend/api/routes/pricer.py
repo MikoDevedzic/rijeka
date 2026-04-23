@@ -4,6 +4,15 @@ Rijeka — pricer routes (Sprint 4G)
 POST /price                      Price a trade -> NPV + Greeks + per-leg PVs
 POST /cashflows/generate         Generate + persist cashflow schedule
 POST /api/price/par-rate         Solve for par coupon on our bootstrapped curve
+
+Sprint 13 Patch 2: `embedded_options` leg-level optionality wired through
+                   `_leg_to_dict`, `LegPreview`, and the preview loop.
+                   §1.11.1 gate enforced for IR_SWAPTION with embedded
+                   options on underlying (raises NotImplementedError).
+Sprint 13 Patch 5: Legacy `cap_strike_schedule` / `floor_strike_schedule`
+                   fields dropped from `LegPreview`. The preview loop no
+                   longer forwards them to the pricer (they wouldn't exist
+                   on the TradeLeg ORM model anyway post-migration 008b).
 """
 
 import json as _json
@@ -197,6 +206,8 @@ def _leg_to_dict(leg: TradeLeg) -> dict:
         "fixed_rate_schedule": leg.fixed_rate_schedule if leg.fixed_rate_schedule else None,
         "notional_schedule":   leg.notional_schedule  if leg.notional_schedule  else None,
         "custom_cashflows":    (leg.terms or {}).get("custom_cashflows"),  # Sprint 11
+        # Sprint 13 Patch 2 — leg-level embedded optionality (PRODUCT_TAXONOMY §1.11)
+        "embedded_options":    list(leg.embedded_options) if leg.embedded_options else [],
     }
 
 
@@ -288,6 +299,48 @@ def _curve_mode(curves: List[CurveInput]) -> str:
         if ci.quotes and len([q for q in ci.quotes if q.rate is not None]) >= 2:
             return "bootstrapped"
     return "db-snapshot"
+
+
+def _check_ir_swaption_embedded_options_gate(instrument_type: Optional[str], legs: list) -> None:
+    """
+    Sprint 13 — PRODUCT_TAXONOMY §1.11.1 gate.
+
+    Swaptions on capped, floored, or collared underlyings are schema-valid
+    after migration 008a but not yet validated against market. Phase 1 pricer
+    rejects with NotImplementedError rather than silently running the vanilla
+    SABR/Bachelier swaption engine (or the forward-shifted IR_SWAP engine)
+    on non-vanilla underlying data — either would mis-price by 30–200 bp
+    depending on moneyness.
+
+    Gate conditions (ALL must hold to trigger):
+      - instrument_type == 'IR_SWAPTION'
+      - at least one leg has non-empty `embedded_options`
+
+    Phase 2 lifts this gate after:
+      1. Joint HW1F calibration to swaption + cap grids
+      2. Monotonicity-checked Jamshidian with MC fallback
+      3. Bloomberg fixtures (≥3) passing within tolerance
+      4. Methodology note published on rijeka.app
+
+    The gate is intentionally located at the pricer boundary — NOT the
+    booking boundary. Booking such a trade is allowed (the schema is
+    forward-compatible for Phase 2). Only pricing is blocked.
+    """
+    if instrument_type != "IR_SWAPTION":
+        return
+    for leg in legs or []:
+        if isinstance(leg, dict):
+            embedded = leg.get("embedded_options")
+        else:
+            embedded = getattr(leg, "embedded_options", None)
+        if embedded:
+            raise NotImplementedError(
+                "Swaptions on capped, floored, or collared underlyings are "
+                "scoped for Phase 2. The instrument is schema-valid but "
+                "pricing is not yet validated against market. Contact "
+                "hello@rijeka.app for pre-release access. See "
+                "PRODUCT_TAXONOMY.md §1.11.1."
+            )
 
 
 _IR = {"IR_SWAP","OIS_SWAP","BASIS_SWAP","XCCY_SWAP","CAPPED_SWAP","FLOORED_SWAP",
@@ -421,6 +474,13 @@ async def price_trade(
         raise HTTPException(status_code=422, detail="Trade has no legs")
 
     legs = [_leg_to_dict(leg) for leg in orm_legs]
+
+    # Sprint 13 — PRODUCT_TAXONOMY §1.11.1: gate IR_SWAPTION on underlying with embedded options
+    try:
+        _check_ir_swaption_embedded_options_gate(trade.instrument_type, legs)
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
+
     curves: dict = {}
     for ci in request.curves:
         try:
@@ -547,6 +607,15 @@ class LegPreview(BaseModel):
     notional_schedule:   Optional[list]  = None
     spread_schedule:     Optional[list]  = None
     custom_cashflows:    Optional[list]  = None  # Sprint 11: user-entered rows
+    # Sprint 13 Patch 2 — leg-level embedded optionality (PRODUCT_TAXONOMY §1.11).
+    # Shape: [{"type":"CAP"|"FLOOR", "direction":"BUY"|"SELL",
+    #          "strike_schedule":[...], "default_strike":<num>}, ...]
+    # Multiple entries compose freely (e.g., collar = CAP + FLOOR).
+    #
+    # Sprint 13 Patch 5: the Sprint 12 legacy fields
+    # `cap_strike_schedule` and `floor_strike_schedule` were REMOVED here.
+    # Any pre-Patch-5 pricing client must upgrade to embedded_options shape.
+    embedded_options:      Optional[list] = None
 
 
 class PreviewRequest(BaseModel):
@@ -582,8 +651,18 @@ async def price_preview(
 
     # Convert Pydantic models to dicts (same shape as _leg_to_dict)
     import uuid as _uuid
+
+    # Sprint 13 — preload cap vol surface if any leg has embedded optionality.
+    # Surface is user-scoped per _load_cap_surface; one load serves all legs.
+    _any_embedded = any(
+        bool(getattr(lp, "embedded_options", None))
+        for lp in request.legs
+    )
+    _surface_rows = _load_cap_surface(db, val_date.isoformat(), user["sub"]) if _any_embedded else []
+
     legs = []
     for i, lp in enumerate(request.legs):
+        _has_embedded = bool(lp.embedded_options)
         legs.append({
             "id":                str(lp.id) if lp.id else str(_uuid.uuid4()),
             "leg_ref":           lp.leg_ref or f"LEG-{i+1}",
@@ -615,6 +694,11 @@ async def price_preview(
             "notional_schedule":   lp.notional_schedule if lp.notional_schedule else None,
             "spread_schedule":     lp.spread_schedule     if lp.spread_schedule     else None,
             "custom_cashflows":    lp.custom_cashflows    if lp.custom_cashflows    else None,
+            # Sprint 13 Patch 2 — leg-level optionality (PRODUCT_TAXONOMY §1.11).
+            # Sprint 13 Patch 5 — legacy cap_strike_schedule / floor_strike_schedule
+            # passthrough keys removed; they no longer exist on LegPreview.
+            "embedded_options":      lp.embedded_options or [],
+            "_vol_surface_rows":     _surface_rows if _has_embedded else None,
         })
 
     # Price
@@ -890,6 +974,12 @@ async def generate_cashflows(
         raise HTTPException(status_code=422, detail="Trade has no legs")
 
     legs = [_leg_to_dict(leg) for leg in orm_legs]
+
+    # Sprint 13 — PRODUCT_TAXONOMY §1.11.1: gate IR_SWAPTION on underlying with embedded options
+    try:
+        _check_ir_swaption_embedded_options_gate(trade.instrument_type, legs)
+    except NotImplementedError as exc:
+        raise HTTPException(status_code=501, detail=str(exc))
 
     # ── IR_SWAPTION: shift leg dates to forward start ─────────────────────────
     # A swaption delivers into a forward-starting swap. The cashflow schedule

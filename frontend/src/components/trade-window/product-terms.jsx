@@ -11,10 +11,26 @@
 // These stubs are intentionally minimal. They show the pattern. Migration
 // fills them in by lifting the existing per-product JSX out of the legacy
 // TradeBookingWindow.jsx, one product at a time.
+//
+// Sprint 13 Patch 4 changes:
+//   - SwapTermsBody now mounts <LegEmbeddedOptions> per FLOAT leg for ANY
+//     IR_SWAP structure (PRODUCT_TAXONOMY §1.11). Structure-coupled cap/floor
+//     panel is removed.
+//   - capRate / floorRate / capFloorDirection state keys retained only for
+//     BACKWARD compat on CapTermsBody / FloorTermsBody / CollarTermsBody —
+//     those standalone-product bodies are unchanged.
+//   - New state key: `floatLegEmbeddedOptions` — array of entries, owned by
+//     the SwapTermsBody's state and read by rates.js::buildPayload.
+//
+// Sprint 13 Patch 5 changes:
+//   - Removed the structure-sync effect. Per PRODUCT_TAXONOMY §1.11,
+//     trade-level structure is topology only; embedded optionality does
+//     not drive it. Adding a cap/floor no longer switches structure.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
+import LegEmbeddedOptions from './LegEmbeddedOptions'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -240,6 +256,14 @@ export function SwapTermsBody({ state, update }) {
     return () => { cancelled = true }
   }, [effDate, matDate, ccy, structure, direction])
 
+  // ── Sprint 13 Patch 5 ─ structure-sync effect removed ──
+  // Per PRODUCT_TAXONOMY §1.11, embedded optionality is a leg-level feature
+  // and does not drive `structure`. The Patch 4 derivation effect
+  // (which set structure=CAPPED_FLOATER when a single CAP was present, etc.)
+  // was a transitional compromise for the Sprint 12 CHECK constraint.
+  // Migration 008b dropped CAPPED_FLOATER / FLOORED_FLOATER from the
+  // allowlist, so structure now stays at whatever the user picked
+  // (default VANILLA) regardless of embedded_options content.
   // ── Handlers ─────────────────────────────────────────────────────────────
   const onCouponChange = (val) => update({ coupon: val, rateUserEdited: true })
   const onParClick     = () => update({ coupon: '', rateUserEdited: false })
@@ -352,6 +376,17 @@ export function SwapTermsBody({ state, update }) {
           </select>
         </Field>
       </Row>
+
+      {/* Sprint 13 Patch 4 — leg-level embedded optionality (PRODUCT_TAXONOMY §1.11).
+          Replaces the Sprint 12 structure-conditional CAPPED_FLOATER / FLOORED_FLOATER
+          panel. Mount is always visible on the FLOAT leg; zero entries = vanilla. */}
+      {!isBasis && (
+        <LegEmbeddedOptions
+          legLabel="FLOATING LEG"
+          entries={state.floatLegEmbeddedOptions || []}
+          onChange={entries => update({ floatLegEmbeddedOptions: entries })}
+        />
+      )}
 
       {isBasis && (
         <>

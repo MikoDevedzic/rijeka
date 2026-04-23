@@ -169,6 +169,10 @@ export default function LegDetailsTab({
   feeSchedule, setFeeSchedule,
   feeAmount, feeAmountType, feeSettleDate,
   exerciseType,
+  // Sprint 12 — CAPPED_FLOATER / FLOORED_FLOATER
+  capStrikeSchedule = [], setCapStrikeSchedule = () => {},
+  floorStrikeSchedule = [], setFloorStrikeSchedule = () => {},
+  capFloorDirection = 'SELL', setCapFloorDirection = () => {},
 }) {
   const [fixedRows,  setFixedRows]  = useState([])
   const [floatRows,  setFloatRows]  = useState([])
@@ -277,6 +281,27 @@ export default function LegDetailsTab({
   const hasFixedOverrides = fixedRows.some(r=>String(r.notional)!==String(r.orig_notional)||String(r.rate)!==String(r.orig_rate))
   const hasFloatOverrides = floatRows.some(r=>String(r.spread_bps)!==String(r.orig_spread_bps)||String(r.notional)!==String(r.orig_notional))
 
+  // Sprint 12 — CAPPED_FLOATER / FLOORED_FLOATER
+  const isCapped  = struct === 'CAPPED_FLOATER'
+  const isFloored = struct === 'FLOORED_FLOATER'
+  const isEmbedded = isCapped || isFloored
+  // Derive a strike-column value per float row. If a schedule entry exists
+  // for this row's period_start, use it. Otherwise blank (falls back server-side
+  // to the scalar cap_rate / floor_rate).
+  const activeSched = isCapped ? capStrikeSchedule : (isFloored ? floorStrikeSchedule : [])
+  const setActiveSched = isCapped ? setCapStrikeSchedule : setFloorStrikeSchedule
+  const strikeForRow = (rowDate) => {
+    const hit = (activeSched || []).find(e => e.date === rowDate)
+    return hit ? String(hit.strike) : ''
+  }
+  const updateStrikeForRow = (rowDate, strikeStr) => {
+    setActiveSched(prev => {
+      const others = (prev || []).filter(e => e.date !== rowDate)
+      if (strikeStr === '' || isNaN(parseFloat(strikeStr))) return others
+      return [...others, { date: rowDate, strike: strikeStr }].sort((a,b) => a.date.localeCompare(b.date))
+    })
+  }
+
   return (
     <div className='tbw-no-drag' style={S.root}>
       <div style={S.banner}>
@@ -362,6 +387,32 @@ export default function LegDetailsTab({
           <div style={S.divider}/>
           <div style={S.secTitle}>PERIOD SCHEDULE</div>
           <div style={S.secHint}>Edit SPREAD BP per period or NOTIONAL for amortizing. Amber = overridden. Hit PRICE to reprice.</div>
+          {isEmbedded && (
+            <div style={{display:'flex', alignItems:'center', gap:'8px', margin:'4px 0 6px 0', fontSize:'10px', letterSpacing:'0.07em', color:C.muted}}>
+              <span>OPTION DIRECTION:</span>
+              <button
+                onClick={()=>setCapFloorDirection('BUY')}
+                style={{
+                  ...S.toolBtn(capFloorDirection==='BUY' ? C.accent : null),
+                  opacity: capFloorDirection==='BUY' ? 1 : 0.5,
+                  fontWeight: capFloorDirection==='BUY' ? 700 : 400,
+                }}
+              >BUY</button>
+              <button
+                onClick={()=>setCapFloorDirection('SELL')}
+                style={{
+                  ...S.toolBtn(capFloorDirection==='SELL' ? C.red : null),
+                  opacity: capFloorDirection==='SELL' ? 1 : 0.5,
+                  fontWeight: capFloorDirection==='SELL' ? 700 : 400,
+                }}
+              >SELL</button>
+              <span style={{color:C.dim, marginLeft:'4px'}}>
+                {isCapped
+                  ? (capFloorDirection==='SELL' ? '· book is short cap (capped floater, lender/receiver side)' : '· book is long cap')
+                  : (capFloorDirection==='BUY'  ? '· book is long floor (floored floater, lender/receiver side)' : '· book is short floor')}
+              </span>
+            </div>
+          )}
           <div style={S.toolbar}>
             <button style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
             <button style={S.toolBtn()} onClick={handlePasteFloat}>PASTE</button>
@@ -375,16 +426,17 @@ export default function LegDetailsTab({
                 {!loading && (
                   <table style={S.tbl}>
                     <thead><tr>
-                      <th style={{...S.th,width:'19%'}}>ACCR START</th>
-                      <th style={{...S.th,width:'19%'}}>ACCR END</th>
-                      <th style={{...S.th,width:'19%'}}>PAY DATE</th>
-                      <th style={{...S.th,width:'17%'}}>NOTIONAL</th>
-                      <th style={{...S.th,width:'13%'}}>INDEX</th>
-                      <th style={{...S.th,width:'10%'}}>SPRD BP</th>
+                      <th style={{...S.th,width:isEmbedded?'16%':'19%'}}>ACCR START</th>
+                      <th style={{...S.th,width:isEmbedded?'16%':'19%'}}>ACCR END</th>
+                      <th style={{...S.th,width:isEmbedded?'16%':'19%'}}>PAY DATE</th>
+                      <th style={{...S.th,width:isEmbedded?'15%':'17%'}}>NOTIONAL</th>
+                      <th style={{...S.th,width:isEmbedded?'11%':'13%'}}>INDEX</th>
+                      <th style={{...S.th,width:isEmbedded?'9%':'10%'}}>SPRD BP</th>
+                      {isEmbedded && <th style={{...S.th,width:'14%', color:C.amber}}>{isCapped ? 'CAP K %' : 'FLR K %'}</th>}
                       <th style={{...S.th,width:'3%'}}></th>
                     </tr></thead>
                     <tbody>
-                      {floatRows.length===0&&<tr><td colSpan={7} style={S.td}><div style={S.emptyRow}>Price the trade first or drag/paste a schedule.</div></td></tr>}
+                      {floatRows.length===0&&<tr><td colSpan={isEmbedded?8:7} style={S.td}><div style={S.emptyRow}>Price the trade first or drag/paste a schedule.</div></td></tr>}
                       {floatRows.map((row,i)=>(
                         <tr key={i}>
                           <td style={S.td}><div style={S.cellRo}>{row.period_start}</div></td>
@@ -393,6 +445,17 @@ export default function LegDetailsTab({
                           <td style={S.td}><EditCell value={row.notional} original={row.orig_notional} placeholder='10000000' onChange={v=>updateFloat(i,'notional',v)}/></td>
                           <td style={S.td}><div style={S.cellRo}>{index}</div></td>
                           <td style={S.td}><EditCell value={row.spread_bps} original={row.orig_spread_bps} placeholder='0' onChange={v=>updateFloat(i,'spread_bps',v)}/></td>
+                          {isEmbedded && (
+                            <td style={S.td}>
+                              <input
+                                type='number'
+                                placeholder={isCapped ? 'cap K %' : 'flr K %'}
+                                style={{...S.cell, color:C.amber, borderColor:'rgba(245,200,66,0.4)'}}
+                                value={strikeForRow(row.period_start)}
+                                onChange={e=>updateStrikeForRow(row.period_start, e.target.value)}
+                              />
+                            </td>
+                          )}
                           <td style={{...S.td,textAlign:'center'}}><button style={S.del} onClick={()=>setFloatRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
                         </tr>
                       ))}

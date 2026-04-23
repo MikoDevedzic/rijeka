@@ -1,6 +1,10 @@
 """
 Rijeka — /api/trade-legs/ routes
 Sprint 3B: first-class leg store.
+Sprint 13 Patch 3: leg-level embedded_options validator.
+Sprint 13 Patch 5: legacy cap_strike_schedule / floor_strike_schedule columns
+                   DROPPED per migration 008b; their Pydantic fields and the
+                   `validate_strike_schedule_shape` validator are gone.
 
 GET  /api/trade-legs/{trade_id}         all legs for a trade (ordered by leg_seq)
 GET  /api/trade-legs/leg/{leg_id}       single leg
@@ -8,11 +12,26 @@ POST /api/trade-legs/                   create/upsert a leg at booking
 PUT  /api/trade-legs/leg/{leg_id}       update non-economic fields (pre-live only)
 
 No hard DELETE — use trade status transitions + trade_events.
+
+Sprint 13 Patch 3 changes:
+  - Removed `validate_strike_schedules_mutually_exclusive` (Sprint 12). A leg
+    may now carry BOTH a cap and a floor via two entries in embedded_options
+    (the collar composition — PRODUCT_TAXONOMY §1.11). The legacy columns
+    remain mutually exclusive only because each only supports one direction;
+    the new shape supersedes that constraint.
+  - Added `embedded_options` field on both TradeLegCreate input and
+    TradeLegOut output.
+  - Added shape validator for each embedded_options entry.
+
+Sprint 13 Patch 5 changes:
+  - Dropped the Sprint 12 `cap_strike_schedule` / `floor_strike_schedule`
+    fields from TradeLegCreate and TradeLegOut.
+  - Dropped the `validate_strike_schedule_shape` model validator.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, List
 from datetime import date, datetime
 from decimal import Decimal
@@ -48,6 +67,71 @@ VALID_LEG_TYPES = {
     "COMMODITY_ASIAN_OPTION",
 }
 
+# ── Sprint 13 Patch 3 — embedded_options shape constants ──────────────────
+# Known option types. Unknown types are rejected at booking time — the pricer
+# silently skips unknowns (forward-compat), but the write path is the place
+# to catch typos. New types (DIGITAL_CAP, BARRIER, RANGE) added here when they
+# ship their pricing leg in cap_floor.py / barrier.py / etc.
+EMBEDDED_OPTION_TYPES = {"CAP", "FLOOR"}
+EMBEDDED_OPTION_DIRECTIONS = {"BUY", "SELL"}
+
+
+def _validate_embedded_options_shape(embedded_options, field_name="embedded_options"):
+    """
+    Pure function: validate the shape of an embedded_options array.
+
+    Shape (per PRODUCT_TAXONOMY §1.11):
+      [
+        {
+          "type":            "CAP" | "FLOOR",
+          "direction":       "BUY" | "SELL",
+          "strike_schedule": list[{date, strike}] | dict[str, num],
+          "default_strike":  number | None,
+        },
+        ...
+      ]
+
+    Raises ValueError on malformed shape. Empty array (zero entries) is valid —
+    that's a plain-vanilla leg with the column populated but no optionality.
+    """
+    if embedded_options is None:
+        return  # treated as []
+    if not isinstance(embedded_options, list):
+        raise ValueError(
+            f"{field_name} must be a list; got {type(embedded_options).__name__}"
+        )
+    for i, entry in enumerate(embedded_options):
+        path = f"{field_name}[{i}]"
+        if not isinstance(entry, dict):
+            raise ValueError(f"{path} must be a dict; got {type(entry).__name__}")
+        t = entry.get("type")
+        if t is None:
+            raise ValueError(f"{path}.type is required")
+        if t not in EMBEDDED_OPTION_TYPES:
+            raise ValueError(
+                f"{path}.type must be one of {sorted(EMBEDDED_OPTION_TYPES)}, got {t!r}"
+            )
+        d = entry.get("direction")
+        if d is None:
+            raise ValueError(f"{path}.direction is required")
+        if d not in EMBEDDED_OPTION_DIRECTIONS:
+            raise ValueError(
+                f"{path}.direction must be one of {sorted(EMBEDDED_OPTION_DIRECTIONS)}, got {d!r}"
+            )
+        # strike_schedule is optional if default_strike is set, and vice versa,
+        # but at least one source of strikes must be present.
+        strike_schedule = entry.get("strike_schedule")
+        default_strike  = entry.get("default_strike")
+        if strike_schedule is None and default_strike is None:
+            raise ValueError(
+                f"{path} requires at least one of strike_schedule or default_strike"
+            )
+        if strike_schedule is not None and not isinstance(strike_schedule, (list, dict)):
+            raise ValueError(
+                f"{path}.strike_schedule must be a list or dict; "
+                f"got {type(strike_schedule).__name__}"
+            )
+
 
 # ── Schemas ───────────────────────────────────────────────────
 class TradeLegCreate(BaseModel):
@@ -79,9 +163,15 @@ class TradeLegCreate(BaseModel):
     spread_type:         str            = "FLAT"
     spread_schedule:     Optional[dict] = None
     forecast_curve_id:   Optional[str]  = None
-    cap_rate:            Optional[Decimal] = None
-    floor_rate:          Optional[Decimal] = None
-    leverage:            Optional[Decimal] = Decimal("1.0")
+    cap_rate:              Optional[Decimal] = None
+    floor_rate:            Optional[Decimal] = None
+    # Sprint 13 Patch 3 — leg-level embedded optionality (PRODUCT_TAXONOMY §1.11).
+    # Array of option entries; multiple compose freely (e.g., collar = CAP + FLOOR).
+    # Sprint 13 Patch 5: the Sprint 12 legacy columns `cap_strike_schedule`
+    # and `floor_strike_schedule` were DROPPED here (migration 008b). Any
+    # equivalent input now arrives via `embedded_options`.
+    embedded_options:      Optional[list] = None
+    leverage:              Optional[Decimal] = Decimal("1.0")
     ois_compounding:     Optional[str]  = None
     discount_curve_id:   Optional[str]  = None
     terms:               dict           = {}
@@ -101,6 +191,28 @@ class TradeLegCreate(BaseModel):
         if v not in ("PAY", "RECEIVE"):
             raise ValueError("direction must be PAY or RECEIVE")
         return v
+
+    # NOTE (Sprint 13 Patch 3): the Sprint 12 validator
+    # `validate_strike_schedules_mutually_exclusive` has been REMOVED.
+    # A leg may now carry both a CAP and a FLOOR entry in embedded_options
+    # (collar composition per PRODUCT_TAXONOMY §1.11). The legacy columns
+    # remain single-direction-only because they were built that way, but
+    # that's an artifact of the legacy shape, not a product rule. Collars
+    # booked via the new shape (two embedded_options entries) are valid.
+    #
+    # Sprint 13 Patch 5: the legacy shape validator
+    # `validate_strike_schedule_shape` (which enforced the JSONB shape of
+    # `cap_strike_schedule` / `floor_strike_schedule`) was REMOVED here
+    # along with those columns themselves (migration 008b).
+
+    @model_validator(mode="after")
+    def validate_embedded_options_array(self):
+        """
+        Sprint 13 Patch 3 — enforce embedded_options entry shape.
+        Empty list / None is valid; populated arrays must pass per-entry checks.
+        """
+        _validate_embedded_options_shape(self.embedded_options, "embedded_options")
+        return self
 
 
 class TradeLegUpdate(BaseModel):
@@ -144,9 +256,13 @@ class TradeLegOut(BaseModel):
     spread_type:         str
     spread_schedule:     Optional[dict]
     forecast_curve_id:   Optional[str]
-    cap_rate:            Optional[Decimal]
-    floor_rate:          Optional[Decimal]
-    leverage:            Optional[Decimal]
+    cap_rate:              Optional[Decimal]
+    floor_rate:            Optional[Decimal]
+    # Sprint 13 Patch 3 — surface the new column so UI round-trips see it.
+    # Sprint 13 Patch 5 — legacy cap_strike_schedule / floor_strike_schedule
+    # fields were DROPPED here (migration 008b).
+    embedded_options:      Optional[list]
+    leverage:              Optional[Decimal]
     ois_compounding:     Optional[str]
     discount_curve_id:   Optional[str]
     terms:               dict
@@ -205,7 +321,14 @@ def create_leg(
     if existing:
         raise HTTPException(status_code=409, detail=f"Leg {body.id} already exists.")
 
-    leg = TradeLeg(**body.model_dump(), created_by=user.get("sub"), user_id=uuid.UUID(user["sub"]))
+    # Sprint 13 Patch 3 — materialize embedded_options as [] rather than NULL
+    # so the ORM sees a non-None JSONB default. The DB column is NOT NULL
+    # DEFAULT '[]' but passing None would still fight the NOT NULL at ORM level.
+    payload = body.model_dump()
+    if payload.get("embedded_options") is None:
+        payload["embedded_options"] = []
+
+    leg = TradeLeg(**payload, created_by=user.get("sub"), user_id=uuid.UUID(user["sub"]))
     db.add(leg)
     db.commit()
     db.refresh(leg)

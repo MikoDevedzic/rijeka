@@ -90,12 +90,14 @@ registerProduct({
   assetClass: 'RATES',
 
   structures: [
-    { key: 'VANILLA',     label: 'VANILLA'     },
-    { key: 'OIS',         label: 'OIS'         },
-    { key: 'BASIS',       label: 'BASIS'       },
-    { key: 'XCCY',        label: 'XCCY SOON',        live: false },
-    { key: 'ZERO_COUPON', label: 'ZERO COUPON SOON', live: false },
-    { key: 'STEP_UP',     label: 'STEP UP SOON',     live: false },
+    { key: 'VANILLA',          label: 'VANILLA'         },
+    { key: 'OIS',              label: 'OIS'             },
+    { key: 'BASIS',            label: 'BASIS'           },
+    { key: 'AMORTIZING',       label: 'AMORTIZING'      },
+    { key: 'CAPPED_FLOATER',   label: 'CAPPED FLOATER'  },
+    { key: 'FLOORED_FLOATER',  label: 'FLOORED FLOATER' },
+    { key: 'ZERO_COUPON',      label: 'ZERO COUPON SOON', live: false },
+    { key: 'STEP_UP',          label: 'STEP UP SOON',     live: false },
   ],
   defaultStructure: 'VANILLA',
 
@@ -243,10 +245,68 @@ registerProduct({
         ]
       }
 
+      // Sprint 13 Patch 4 — PRODUCT_TAXONOMY §1.11 leg-level embedded optionality.
+      //
+      // The UI now populates `state.floatLegEmbeddedOptions` — an array of
+      // entries `[{type, direction, defaultStrike}, ...]` — via the new
+      // <LegEmbeddedOptions> component. This replaces the Sprint 12 pattern
+      // that derived the cap/floor payload from separate `capRate` + `floorRate`
+      // + `capFloorDirection` scalars gated by `state.structure`.
+      //
+      // For each entry we emit an entry in `float_leg.embedded_options`:
+      //   { type: 'CAP'|'FLOOR', direction: 'BUY'|'SELL',
+      //     strike_schedule: [{ date, strike }], default_strike: <decimal> }
+      //
+      // We also populate `cap_rate` / `floor_rate` scalar columns on the leg,
+      // which the backend's dual-write shim uses to round-trip legacy reads.
+      // The backend validator `validate_structure_leg_consistency` (Patch 3)
+      // already accepts this shape for CAPPED_FLOATER / FLOORED_FLOATER and
+      // any non-scoped structure.
+      //
+      // Convention: UI stores strikes in percent. Backend expects decimals.
+      // Division by 100 happens here, at the seam.
+      const struct = state.structure || 'VANILLA'
+      const rawEntries = Array.isArray(state.floatLegEmbeddedOptions)
+        ? state.floatLegEmbeddedOptions
+        : []
+      if (rawEntries.length > 0) {
+        const floatLeg = legs.find(l => l.leg_type === 'FLOAT' && l.leg_ref !== 'FLOAT-2')
+        if (floatLeg) {
+          const effDate = state.effDate || state.tradeDate || null
+          const validEntries = rawEntries
+            .map(e => {
+              const strikePct = parseFloat(e.defaultStrike)
+              if (!isFinite(strikePct)) return null
+              const strikeDec = strikePct / 100
+              if (!effDate) return null
+              return {
+                type:      e.type,
+                direction: e.direction,
+                strike_schedule: [{ date: effDate, strike: strikeDec }],
+                default_strike:  strikeDec,
+              }
+            })
+            .filter(Boolean)
+
+          floatLeg.embedded_options = validEntries
+
+          // Sprint 12 legacy scalar columns — populate from first matching
+          // entry of each type for UI round-trip during the Patches 3-4
+          // window. Dropped by Migration 008b. The shim in ir_swap.py reads
+          // embedded_options first, so these are for round-trip read, not
+          // for pricing.
+          const firstCap   = validEntries.find(e => e.type === 'CAP')
+          const firstFloor = validEntries.find(e => e.type === 'FLOOR')
+          if (firstCap)   floatLeg.cap_rate   = firstCap.default_strike
+          if (firstFloor) floatLeg.floor_rate = firstFloor.default_strike
+        }
+      }
+
       // curves are injected by the TradeWindow shell (Patch 1). Do not add here.
       return {
         legs,
         valuation_date: state.valDate,
+        structure: struct,   // Sprint 12 — closes L22 (structure now persisted on booking)
       }
     },
     parseResponse: r => r,

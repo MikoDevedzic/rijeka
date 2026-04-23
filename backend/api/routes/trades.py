@@ -3,12 +3,30 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from db.models import Trade, Counterparty
 from middleware.auth import verify_token
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional, Dict, Any
 from datetime import date
 import uuid, time
 
 router = APIRouter()
+
+# ── Sprint 12 — PRODUCT_TAXONOMY v2 §1.1 allowed IR_SWAP structures ──
+# Keep in sync with:
+#   - _docs/PRODUCT_TAXONOMY.md §1.1
+#   - _docs/migrations/migration_007_ir_swap_capped_floored_floater.sql step 3
+#   - _docs/migrations/migration_008b.sql step 4 (CHECK recreation)
+#   - DB constraint chk_trades_ir_swap_structure_valid
+# Adding a new structure requires updating all surfaces together.
+#
+# Sprint 13 Patch 5 / migration 008b: CAPPED_FLOATER and FLOORED_FLOATER
+# were REMOVED. Per PRODUCT_TAXONOMY §1.11, trade-level structure is
+# topology only; embedded optionality (caps, floors, collars) lives on
+# the leg via `embedded_options`. A capped VANILLA swap is just
+# structure=VANILLA + leg.embedded_options=[{type:CAP,...}].
+_ALLOWED_IR_SWAP_STRUCTURES = {
+    "VANILLA", "OIS", "BASIS", "ZERO_COUPON", "STEP_UP",
+    "AMORTIZING", "ACCRETING",
+}
 
 class TradeCreate(BaseModel):
     trade_ref: Optional[str] = None
@@ -32,6 +50,29 @@ class TradeCreate(BaseModel):
     strategy: Optional[str] = None
     class Config:
         extra = "ignore"
+
+    @model_validator(mode="after")
+    def default_and_validate_structure(self):
+        """
+        Sprint 12 — PRODUCT_TAXONOMY v2 + migration 007.
+
+        For IR_SWAP trades:
+          - NULL/empty structure defaults to 'VANILLA' per §7 (closes L22 backend-side).
+          - Structure must be in _ALLOWED_IR_SWAP_STRUCTURES; otherwise raises 422
+            instead of waiting for the DB CHECK to throw 500.
+
+        Non-IR_SWAP instrument types are unvalidated here — their own per-instrument
+        CHECK constraints (migrations 010+) will enforce their structure sets.
+        """
+        if self.instrument_type == "IR_SWAP":
+            if not self.structure:
+                self.structure = "VANILLA"
+            if self.structure not in _ALLOWED_IR_SWAP_STRUCTURES:
+                raise ValueError(
+                    f"Invalid structure '{self.structure}' for IR_SWAP. "
+                    f"Allowed: {sorted(_ALLOWED_IR_SWAP_STRUCTURES)}"
+                )
+        return self
 
 class TradeUpdate(BaseModel):
     status: Optional[str] = None
@@ -130,8 +171,7 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
         "user_id":              uuid.UUID(user["sub"]),
         "created_by":           uuid.UUID(user["sub"]),
     }
-    if hasattr(Trade, "structure"):
-        kwargs["structure"] = body.structure
+    kwargs["structure"] = body.structure
     try:
         trade = Trade(**kwargs)
         db.add(trade)

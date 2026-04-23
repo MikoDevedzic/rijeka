@@ -66,6 +66,10 @@ export default function DetailsPanel({
   const setSpreadSchedule   = useMemo(() => makeFieldSetter(setProductState, 'spreadSchedule',   []),    [setProductState])
   const setFeeSchedule      = useMemo(() => makeFieldSetter(setProductState, 'feeSchedule',      []),    [setProductState])
   const setZcToggle         = useMemo(() => makeFieldSetter(setProductState, 'zcToggle',         false), [setProductState])
+  // Sprint 12 — CAPPED_FLOATER / FLOORED_FLOATER setters
+  const setCapStrikeSchedule   = useMemo(() => makeFieldSetter(setProductState, 'capStrikeSchedule',   []),     [setProductState])
+  const setFloorStrikeSchedule = useMemo(() => makeFieldSetter(setProductState, 'floorStrikeSchedule', []),     [setProductState])
+  const setCapFloorDirection   = useMemo(() => makeFieldSetter(setProductState, 'capFloorDirection',   'SELL'), [setProductState])
 
   // Simple deriveStructLabel fallback. Legacy had a rich derivation
   // across step-up / amortizing / spread / ZC combinations; for Phase 2
@@ -148,6 +152,14 @@ export default function DetailsPanel({
       feeAmountType={state.feeAmountType || 'BP'}
       feeSettleDate={state.feeSettleDate || ''}
       exerciseType={state.exerciseType || 'EUROPEAN'}
+
+      // Sprint 12 — CAPPED_FLOATER / FLOORED_FLOATER
+      capStrikeSchedule={state.capStrikeSchedule || []}
+      setCapStrikeSchedule={setCapStrikeSchedule}
+      floorStrikeSchedule={state.floorStrikeSchedule || []}
+      setFloorStrikeSchedule={setFloorStrikeSchedule}
+      capFloorDirection={state.capFloorDirection || (state.structure === 'FLOORED_FLOATER' ? 'BUY' : 'SELL')}
+      setCapFloorDirection={setCapFloorDirection}
 
       // Helpers
       deriveStructLabel={deriveStructLabel}

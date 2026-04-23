@@ -423,3 +423,302 @@ def price_collar(
         "net_ir01":     round(net_ir01, 2),
         "zero_cost_spread_bp": round((cap_rate - floor_rate) * 10000, 2),
     }
+
+
+# ═════════════════════════════════════════════════════════════════════
+# Sprint 12 — CAPPED_FLOATER / FLOORED_FLOATER strip pricer
+# ═════════════════════════════════════════════════════════════════════
+# Used by pricing/ir_swap.py::price_leg when a float leg carries a
+# populated cap_strike_schedule or floor_strike_schedule JSONB column.
+# Accepts pre-computed CouponPeriod objects (period-aligned to the swap)
+# rather than regenerating its own caplet grid like price_cap() does.
+#
+# JSONB shape of the strike schedule object:
+#   {
+#     "direction": "BUY" | "SELL",
+#     "schedule": [{"date": "YYYY-MM-DD", "strike": 0.05}, ...]
+#               | {"YYYY-MM-DD": 0.05, ...}
+#   }
+# Resolution rule (mirrors ir_swap._resolve_step_up_rate):
+#   last schedule entry where entry.date <= period_start; fall back to
+#   the scalar trade_legs.cap_rate / floor_rate field if no entry qualifies.
+
+from dataclasses import field as _field
+
+
+@dataclass
+class StripResult:
+    npv:          float           # SIGNED: direction BUY -> +strip value, SELL -> -strip value
+    vega:         float           # $ per 1bp vol move (signed same as npv)
+    ir01:         float           # $ per 1bp parallel rate move (signed same as npv)
+    atm_forward:  float           # weighted-avg forward rate over strip periods (metadata)
+    vol_tier:     str             # QUOTED / INTERP / FALLBACK / OVERRIDE (worst tier seen)
+    n_periods:    int
+    direction:    str             # "BUY" or "SELL" (echoed for audit)
+    caplets:      list = _field(default_factory=list)   # per-period {start_date, end_date, strike, forward, df, tau, vol_bp, pv}
+    error:        Optional[str] = None
+
+
+def _parse_date_safe(v):
+    """Local copy — cap_floor.py doesn't import ir_swap._parse_date to avoid a cycle."""
+    from datetime import date as _date
+    if not v:
+        return None
+    if isinstance(v, _date):
+        return v
+    try:
+        return _date.fromisoformat(str(v)[:10])
+    except Exception:
+        return None
+
+
+def _resolve_strike_at(strike_entries, period_start, default_strike):
+    """
+    Resolve per-period strike from a schedule's entries (list or dict form).
+    `strike_entries` is the INNER list/dict from {direction, schedule}.schedule.
+    Rule: last entry where entry.date <= period_start. Fall back to default_strike.
+    """
+    if not strike_entries:
+        return default_strike
+    if isinstance(strike_entries, dict):
+        pairs = [(k, float(v)) for k, v in strike_entries.items()]
+    else:
+        pairs = [
+            (e.get("date") or e.get("effective_date"),
+             float(e.get("strike", default_strike)))
+            for e in strike_entries
+        ]
+    parsed = []
+    for d, s in pairs:
+        pd = _parse_date_safe(d)
+        if pd is not None:
+            parsed.append((pd, s))
+    parsed.sort(key=lambda x: x[0])
+    applicable = default_strike
+    for entry_date, entry_strike in parsed:
+        if entry_date <= period_start:
+            applicable = entry_strike
+    return applicable
+
+
+def _resolve_notional_at(notional_schedule, period_start, default_notional):
+    """Duplicate of ir_swap._resolve_notional_schedule — kept local to avoid import cycle."""
+    if not notional_schedule:
+        return default_notional
+    if isinstance(notional_schedule, dict):
+        pairs = [(k, float(v)) for k, v in notional_schedule.items()]
+    else:
+        pairs = [
+            (e.get("date") or e.get("effective_date"),
+             float(e.get("notional", default_notional)))
+            for e in notional_schedule
+        ]
+    parsed = []
+    for d, n in pairs:
+        pd = _parse_date_safe(d)
+        if pd is not None:
+            parsed.append((pd, n))
+    parsed.sort(key=lambda x: x[0])
+    applicable = default_notional
+    for entry_date, entry_notional in parsed:
+        if entry_date <= period_start:
+            applicable = entry_notional
+    return applicable
+
+
+def _worst_tier(tiers):
+    """QUOTED < INTERP < FALLBACK in order of increasing uncertainty. Return worst seen."""
+    order = {"QUOTED": 0, "OVERRIDE": 0, "INTERP": 1, "FALLBACK": 2}
+    return max(tiers, key=lambda t: order.get(t, 3))
+
+
+def _price_strip_core(
+    periods,
+    strike_schedule_obj,
+    default_strike,
+    notional_schedule,
+    default_notional,
+    forecast_curve,
+    discount_curve,
+    valuation_date,
+    surface_rows,
+    swap_tenor_y,
+    is_floor,
+    fallback_vol_bp,
+    vol_override_bp,
+):
+    """
+    Shared core for caplet and floorlet strip pricing.
+    Returns StripResult with SIGNED npv/vega/ir01 (direction applied).
+    """
+    # Parse direction from the JSONB object
+    if not isinstance(strike_schedule_obj, dict):
+        return StripResult(npv=0.0, vega=0.0, ir01=0.0, atm_forward=0.0,
+                           vol_tier="ERROR", n_periods=0, direction="UNKNOWN",
+                           error="strike_schedule is not a dict")
+    direction = (strike_schedule_obj.get("direction") or "").upper()
+    if direction not in ("BUY", "SELL"):
+        return StripResult(npv=0.0, vega=0.0, ir01=0.0, atm_forward=0.0,
+                           vol_tier="ERROR", n_periods=0, direction=direction or "UNKNOWN",
+                           error=f"direction must be 'BUY' or 'SELL', got {direction!r}")
+    sign = 1.0 if direction == "BUY" else -1.0
+    strike_entries = strike_schedule_obj.get("schedule")
+
+    # Pre-compute forward rates, DFs, and accruals for each future period
+    fwds, dfs_disc, taus, strikes, notionals, periods_live = [], [], [], [], [], []
+    for p in periods:
+        if p.payment_date < valuation_date:
+            continue  # past-dated — skip
+        df_s = forecast_curve.df(p.period_start)
+        df_e = forecast_curve.df(p.period_end)
+        tau  = float(p.dcf)
+        fwd  = (df_s / df_e - 1.0) / tau if tau > 0 and df_e > 1e-10 else 0.0
+        K    = _resolve_strike_at(strike_entries, p.period_start, default_strike)
+        N    = _resolve_notional_at(notional_schedule, p.period_start, default_notional)
+        fwds.append(fwd)
+        dfs_disc.append(discount_curve.df(p.period_end))
+        taus.append(tau)
+        strikes.append(float(K) if K is not None else 0.0)
+        notionals.append(N)
+        periods_live.append(p)
+
+    if not periods_live:
+        return StripResult(npv=0.0, vega=0.0, ir01=0.0, atm_forward=0.0,
+                           vol_tier="EMPTY", n_periods=0, direction=direction)
+
+    # ATM forward — weighted average over periods (same formula as price_cap)
+    total_ann = sum(dfs_disc[i] * taus[i] for i in range(len(periods_live)))
+    atm_forward = (
+        sum(fwds[i] * dfs_disc[i] * taus[i] for i in range(len(periods_live))) / total_ann
+        if total_ann > 1e-8 else 0.0
+    )
+
+    # Per-caplet pricing
+    bump = 0.0001  # 1bp
+    npv_unsigned       = 0.0
+    npv_vega_up        = 0.0
+    npv_ir_up          = 0.0
+    caplets_out        = []
+    tiers_seen         = []
+
+    for i, p in enumerate(periods_live):
+        F   = fwds[i]
+        K   = strikes[i]
+        N   = notionals[i]
+        df  = dfs_disc[i]
+        tau = taus[i]
+        T   = max((p.period_start - valuation_date).days / 360.0 + tau / 2.0, 0.0)
+
+        # Per-caplet vol lookup
+        if vol_override_bp is not None:
+            vol_bp, vol_tier = vol_override_bp, 'OVERRIDE'
+        else:
+            vol_bp, vol_tier = lookup_cap_vol(
+                strike_rate=K,
+                atm_forward=atm_forward,
+                cap_tenor_y=swap_tenor_y,
+                surface_rows=surface_rows,
+                fallback_vol_bp=fallback_vol_bp,
+                is_floor=is_floor,
+            )
+        tiers_seen.append(vol_tier)
+        sigma = vol_bp / 10000.0
+
+        if is_floor:
+            payoff_unit = bachelier_put(F, K, T, sigma)
+            payoff_ir   = bachelier_put(F + bump, K, T, sigma)
+            payoff_vega = bachelier_put(F, K, T, sigma + bump)
+        else:
+            payoff_unit = bachelier_call(F, K, T, sigma)
+            payoff_ir   = bachelier_call(F + bump, K, T, sigma)
+            payoff_vega = bachelier_call(F, K, T, sigma + bump)
+
+        pv_caplet      = N * tau * df * payoff_unit
+        pv_caplet_ir   = N * tau * df * payoff_ir
+        pv_caplet_vega = N * tau * df * payoff_vega
+
+        npv_unsigned += pv_caplet
+        npv_ir_up    += pv_caplet_ir
+        npv_vega_up  += pv_caplet_vega
+
+        caplets_out.append({
+            'period_start': p.period_start.isoformat(),
+            'start_date':   p.period_start.isoformat(),   # alias for ir_swap.py consumer
+            'end_date':     p.period_end.isoformat(),
+            'expiry_y':     round(T, 4),
+            'forward':      round(F, 8),
+            'strike':       round(K, 8),
+            'notional':     round(N, 2),
+            'df':           round(df, 8),
+            'tau':          round(tau, 6),
+            'vol_bp':       round(vol_bp, 2),
+            'vol_tier':     vol_tier,
+            # signed pv so ir_swap.py can treat this as a regular cashflow contribution
+            'pv':           round(sign * pv_caplet, 4),
+        })
+
+    return StripResult(
+        npv          = round(sign * npv_unsigned, 4),
+        vega         = round(sign * (npv_vega_up - npv_unsigned), 4),
+        ir01         = round(sign * (npv_ir_up   - npv_unsigned), 4),
+        atm_forward  = round(atm_forward, 8),
+        vol_tier     = _worst_tier(tiers_seen) if tiers_seen else "EMPTY",
+        n_periods    = len(periods_live),
+        direction    = direction,
+        caplets      = caplets_out,
+    )
+
+
+def price_caplet_strip_over_periods(
+    periods,                  # list[CouponPeriod] from pricing/schedule.py::generate_schedule
+    strike_schedule_obj,      # {"direction": "BUY"|"SELL", "schedule": [...]}
+    default_strike,           # fallback strike (scalar trade_legs.cap_rate)
+    notional_schedule,        # JSONB (list or dict) or None
+    default_notional,         # fallback notional (leg.notional)
+    forecast_curve,           # Curve — for forward rates
+    discount_curve,           # Curve — for discounting
+    valuation_date,           # date
+    surface_rows,             # list[dict] from pricer._load_cap_surface
+    swap_tenor_y,             # float — tenor for vol surface lookup
+    fallback_vol_bp=85.0,
+    vol_override_bp=None,
+):
+    """Price a strip of Bachelier call caplets aligned to swap periods.
+    Returns StripResult with SIGNED npv (direction from strike_schedule_obj)."""
+    return _price_strip_core(
+        periods=periods, strike_schedule_obj=strike_schedule_obj,
+        default_strike=default_strike, notional_schedule=notional_schedule,
+        default_notional=default_notional, forecast_curve=forecast_curve,
+        discount_curve=discount_curve, valuation_date=valuation_date,
+        surface_rows=surface_rows, swap_tenor_y=swap_tenor_y,
+        is_floor=False, fallback_vol_bp=fallback_vol_bp,
+        vol_override_bp=vol_override_bp,
+    )
+
+
+def price_floorlet_strip_over_periods(
+    periods,
+    strike_schedule_obj,
+    default_strike,
+    notional_schedule,
+    default_notional,
+    forecast_curve,
+    discount_curve,
+    valuation_date,
+    surface_rows,
+    swap_tenor_y,
+    fallback_vol_bp=85.0,
+    vol_override_bp=None,
+):
+    """Price a strip of Bachelier put floorlets aligned to swap periods.
+    Vol lookup uses abs(K-ATM) spread for put-call symmetry.
+    Returns StripResult with SIGNED npv (direction from strike_schedule_obj)."""
+    return _price_strip_core(
+        periods=periods, strike_schedule_obj=strike_schedule_obj,
+        default_strike=default_strike, notional_schedule=notional_schedule,
+        default_notional=default_notional, forecast_curve=forecast_curve,
+        discount_curve=discount_curve, valuation_date=valuation_date,
+        surface_rows=surface_rows, swap_tenor_y=swap_tenor_y,
+        is_floor=True, fallback_vol_bp=fallback_vol_bp,
+        vol_override_bp=vol_override_bp,
+    )
