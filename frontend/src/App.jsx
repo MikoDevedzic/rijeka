@@ -75,14 +75,13 @@ function PersistentBookingWindow() {
               initialProduct={productKey}
               onClose={() => close(w.id)}
               onBook={(payload) => {
-                // Patch 6 will implement the booking path (POST /api/trades/,
-                // legs, /price, blotter update). For Phase 2 pricing validation,
-                // book via legacy by removing the feature flag entry.
-                console.log('[trade-window] BOOK clicked (not yet wired):', payload)
-                alert('Booking via the unified shell lands in Patch 6.\n\n' +
-                      'To book this trade: open DevTools, run\n' +
-                      "  localStorage.removeItem('rijeka.tbw.unified.products')\n" +
-                      'refresh, and re-enter via the legacy window.')
+                // L25 fix (Apr 24, 2026): no-op stub.
+                // The real booking path is booking.js::executeBooking which
+                // POSTs to Supabase directly. This callback is retained for
+                // prop-signature compatibility with TradeWindow but intentionally
+                // does no work. Blotter refresh is handled by useTradesStore
+                // and useTabStore in TradeWindow's handleConfirm/handleCancelTrade
+                // (commit 529c232).
               }}
             />
           )
