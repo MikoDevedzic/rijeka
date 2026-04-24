@@ -22,6 +22,10 @@ import uuid
 
 from db.session import get_db
 from db.models import Cashflow
+from api.routes._cashflow_overrides import (  # L4 fix (Sites 1+3)
+    snapshot_overrides,
+    apply_snapshot,
+)
 from middleware.auth import verify_token
 
 router = APIRouter(prefix="/api/cashflows", tags=["cashflows"])
@@ -129,6 +133,17 @@ def write_cashflow_schedule(
     if role not in WRITE_ROLES:
         raise HTTPException(status_code=403, detail="Requires Trader or Admin role.")
 
+    # L4 fix (Sites 1+3): snapshot overridden rows before the wipe.
+    # Route is currently unreached by any frontend caller (verified Apr 24)
+    # but defended here so revival does not reintroduce L4.
+    # body does not carry user_id directly; we read user id via JWT sub
+    # the same way Site 3 does below.
+    import uuid as _uuid_mod  # local alias; uuid already imported above
+    _user_id_for_snapshot = _uuid_mod.UUID(user["sub"])
+    _override_snapshot = snapshot_overrides(
+        db, body.trade_id, _user_id_for_snapshot,
+    )
+
     # Wipe only PROJECTED cashflows — preserve CONFIRMED/SETTLED
     db.query(Cashflow).filter(
         Cashflow.trade_id == body.trade_id,
@@ -152,6 +167,8 @@ def write_cashflow_schedule(
             amount=cf.amount,
             status="PROJECTED",
         )
+        # L4 fix (Sites 1+3): restore any preserved override by period key.
+        apply_snapshot(row, _override_snapshot)
         db.add(row)
         created.append(row)
 
@@ -232,9 +249,12 @@ def wipe_projected_cashflows(
     if role not in WRITE_ROLES:
         raise HTTPException(status_code=403, detail="Requires Trader or Admin role.")
 
+    # L4 fix (Sites 1+3): preserve overridden rows even on explicit wipe.
+    # Callers wanting a true hard-reset should use a different mechanism.
     db.query(Cashflow).filter(
         Cashflow.trade_id == trade_id,
         Cashflow.user_id == uuid.UUID(user["sub"]),
-        Cashflow.status == "PROJECTED"
+        Cashflow.status == "PROJECTED",
+        Cashflow.is_overridden == False,  # noqa: E712
     ).delete(synchronize_session=False)
     db.commit()

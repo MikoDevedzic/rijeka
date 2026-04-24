@@ -28,6 +28,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from db.models import Cashflow, Trade, TradeLeg
+from api.routes._cashflow_overrides import (  # L4 fix (Site 2)
+    snapshot_overrides,
+    apply_snapshot,
+    orphans_from_snapshot,
+)
 from db.session import get_db
 from middleware.auth import verify_token
 from pricing.bootstrap import bootstrap_from_dicts
@@ -1010,6 +1015,13 @@ async def generate_cashflows(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Schedule generation error: {exc}")
 
+    # L4 fix (Site 2): snapshot overridden rows BEFORE the wipe so they
+    # can be restored onto freshly-computed rows by period key.
+    _override_snapshot = snapshot_overrides(
+        db, request.trade_id, user_id_uuid,
+    )
+    _consumed: set = set()
+
     db.query(Cashflow).filter(
         Cashflow.trade_id == request.trade_id,
         Cashflow.user_id == user_id_uuid,
@@ -1019,7 +1031,9 @@ async def generate_cashflows(
     written = 0
     for lr in result.legs:
         for cf in (lr.cashflows or []):
-            db.add(Cashflow(
+            # L4 fix (Site 2): build the row, restore any preserved
+            # override by (leg_id, period_start, period_end), then add.
+            new_row = Cashflow(
                 trade_id=request.trade_id,
                 leg_id=str(lr.leg_id),
                 user_id=user_id_uuid,
@@ -1033,14 +1047,20 @@ async def generate_cashflows(
                 dcf=float(cf.dcf)     if cf.dcf     is not None else None,
                 amount=float(cf.amount) if cf.amount is not None else 0.0,
                 status="PROJECTED",
-            ))
+            )
+            apply_snapshot(new_row, _override_snapshot, _consumed)
+            db.add(new_row)
             written += 1
     db.commit()
+    # L4 fix (Site 2): surface any overrides whose period key no longer
+    # exists in the freshly-computed schedule (schedule-shape change).
+    _orphans = orphans_from_snapshot(_override_snapshot, _consumed)
     return {
-        "trade_id":          str(trade.id),
-        "cashflows_written": written,
-        "curve_mode":        _curve_mode(request.curves),
-        "valuation_date":    val_date.isoformat(),
+        "trade_id":            str(trade.id),
+        "cashflows_written":   written,
+        "curve_mode":          _curve_mode(request.curves),
+        "valuation_date":      val_date.isoformat(),
+        "orphaned_overrides":  _orphans,
     }
 
 # ============================================================
