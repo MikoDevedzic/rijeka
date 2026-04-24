@@ -42,6 +42,9 @@ import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
 import { executeBooking, confirmTrade, cancelTrade } from './booking'
+// Sprint 13 follow-up — lifecycle cache refresh
+import { useTradesStore } from '../../store/useTradesStore'
+import { useTabStore }    from '../../store/useTabStore'
 
 // Import all product modules to register them at load time.
 // Adding FX/credit = add one import line here.
@@ -258,8 +261,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     try {
       const r = await confirmTrade(bookedTrade.id)
       // r.trade.status is now 'CONFIRMED' — ConfirmPanel re-renders into
-      // terminal state automatically; blotter refetch via onBook callback.
+      // terminal state automatically.
       setBookedTrade(r.trade)
+      // Sprint 13 follow-up — lifecycle cache refresh: onBook is a stub
+      // in App.jsx today, so refresh the stores directly.
+      await useTradesStore.getState().fetchTrades()
+      useTabStore.getState().refreshTrade(r.trade.id, r.trade)
       onBook?.({ productKey, trade: r.trade })
     } catch (e) {
       setConfirmErr(e.message || String(e))
@@ -276,8 +283,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     try {
       const r = await cancelTrade(bookedTrade.id, reason)
       // r.trade.status is now 'CANCELLED' — ConfirmPanel re-renders into
-      // terminal state automatically; blotter refetch via onBook callback.
+      // terminal state automatically.
       setBookedTrade(r.trade)
+      // Sprint 13 follow-up — lifecycle cache refresh: onBook is a stub
+      // in App.jsx today, so refresh the stores directly.
+      await useTradesStore.getState().fetchTrades()
+      useTabStore.getState().refreshTrade(r.trade.id, r.trade)
       onBook?.({ productKey, trade: r.trade })
     } catch (e) {
       setCancelErr(e.message || String(e))
