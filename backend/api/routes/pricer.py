@@ -350,8 +350,8 @@ def _check_ir_swaption_embedded_options_gate(instrument_type: Optional[str], leg
 
 _IR = {"IR_SWAP","OIS_SWAP","BASIS_SWAP","XCCY_SWAP","CAPPED_SWAP","FLOORED_SWAP",
        "COLLARED_SWAP","CALLABLE_SWAP","CANCELLABLE_SWAP","IR_SWAPTION",
-       "BERMUDAN_SWAPTION","INTEREST_RATE_CAP","INTEREST_RATE_FLOOR",
-       "INTEREST_RATE_COLLAR","FRA"}
+       "BERMUDAN_SWAPTION","IR_CAP","IR_FLOOR",
+       "IR_COLLAR","FRA"}
 _FX = {"FX_FORWARD","NDF"}
 
 
@@ -1149,7 +1149,7 @@ async def price_cap_route(
         raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
 
     return {
-        "instrument":     "INTEREST_RATE_CAP",
+        "instrument":     "IR_CAP",
         "valuation_date": val_date.isoformat(),
         "notional":       req.notional,
         "cap_rate":       req.cap_rate,
@@ -1208,7 +1208,7 @@ async def price_floor_route(
         raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
 
     return {
-        "instrument":      "INTEREST_RATE_FLOOR",
+        "instrument":      "IR_FLOOR",
         "valuation_date":  val_date.isoformat(),
         "notional":        req.notional,
         "floor_rate":      req.floor_rate,
@@ -1275,7 +1275,7 @@ async def price_collar_route(
     floor = result["floor"]
 
     return {
-        "instrument":          "INTEREST_RATE_COLLAR",
+        "instrument":          "IR_COLLAR",
         "valuation_date":      val_date.isoformat(),
         "notional":            req.notional,
         "cap_rate":            req.cap_rate,

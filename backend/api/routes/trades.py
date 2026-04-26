@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from db.models import Trade, Counterparty
 from middleware.auth import verify_token
-from pydantic import BaseModel, model_validator
+from api.routes._instrument_alias import normalize_instrument_type  # M009 inbound translator
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Dict, Any
 from datetime import date
 import uuid, time
@@ -50,6 +51,23 @@ class TradeCreate(BaseModel):
     strategy: Optional[str] = None
     class Config:
         extra = "ignore"
+
+    @field_validator("instrument_type", mode="before")
+    @classmethod
+    def _normalize_instrument_type(cls, v):
+        """
+        M009 inbound translator: normalize legacy INTEREST_RATE_* strings
+        from frontend UIs (TradeBookingWindow, NewTradeWorkspace,
+        ScenarioTab) to canonical IR_* form before any downstream
+        validation runs. Pass-through for already-canonical values, None,
+        empty, or unknown strings — those get caught by the structure
+        validator or DB CHECK constraint.
+
+        Sunset: when the legacy frontend UIs are retired in the four-UI
+        consolidation (HANDOFF §3), this validator and the
+        _instrument_alias module can be deleted.
+        """
+        return normalize_instrument_type(v)
 
     @model_validator(mode="after")
     def default_and_validate_structure(self):
