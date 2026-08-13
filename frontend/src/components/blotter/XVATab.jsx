@@ -296,7 +296,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult }) {
+export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult }) {
   const canvasRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
   const [calib, setCalibState] = useState(() => {
@@ -434,6 +434,11 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         // standalone number, and IR01 drives the SIMM IM behind MVA.
         npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
         ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
+        // Generate paths from the same curve, on the same date, that the pricer
+        // values against — otherwise the exposure profile belongs to a
+        // different market than the TV it is adjusting.
+        valuation_date: valDate || undefined,
+        curve_id: curveId || 'USD_SOFR',
         // Swaption-specific
         ...(instrumentType === 'IR_SWAPTION' ? {
           instrument_type:   'IR_SWAPTION',
@@ -490,6 +495,11 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         simm_im_m:    (simmIm === '' || isNaN(parseFloat(simmIm))) ? null : parseFloat(simmIm),
         npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
         ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
+        // Generate paths from the same curve, on the same date, that the pricer
+        // values against — otherwise the exposure profile belongs to a
+        // different market than the TV it is adjusting.
+        valuation_date: valDate || undefined,
+        curve_id: curveId || 'USD_SOFR',
         paths,
       }
     }
