@@ -24,7 +24,7 @@ const TTS = {
   cva:   {t:'CVA — CREDIT VALUATION ADJUSTMENT',b:'Cost of counterparty default risk. Driven by CDS spread × expected exposure.',f:'CVA = −(1−R) × Σ EE(t) × ΔPD(t) × P_OIS(0,t)'},
   dva:   {t:'DVA — DEBIT VALUATION ADJUSTMENT',b:'Benefit of own default risk. Required by IFRS 13.',f:'DVA = mirror of CVA on negative exposures (ENE)'},
   fva:   {t:'FVA — FUNDING VALUATION ADJUSTMENT',b:'Cost of funding uncollateralised MtM. When you hedge with CCP but client has no CSA.',f:'FVA = Σ (EE−ENE) × s_fund × P_OIS(0,t)'},
-  colva: {t:'ColVA — COLLATERAL VALUATION ADJUSTMENT',b:'Value of optionality in CSA terms. CTD option in collateral agreement.',f:'ColVA = value of cheapest-to-deliver option'},
+  fba:   {t:'FBA — FUNDING BENEFIT ADJUSTMENT',b:'Funding benefit from posting negative-MtM exposure. Mirror of FVA on the funding-benefit side.',f:'FBA = Σ ENE(t) × s_fund × P_OIS(0,t)'},
   mva:   {t:'MVA — MARGIN VALUATION ADJUSTMENT',b:'Cost of funding initial margin under UMR.',f:'MVA = Σ IM(t) × s_fund × P_OIS(0,t)'},
   kva:   {t:'KVA — CAPITAL VALUATION ADJUSTMENT',b:'Cost of holding SA-CCR capital over trade life.',f:'KVA = Σ K_SA-CCR(t) × hurdle_rate × P_OIS(0,t)'},
   ir01:  {t:'IR01 — INTEREST RATE SENSITIVITY',b:'+1bp parallel shift ALL curves. DV01/PV01 BANNED in Rijeka.',f:'IR01 = NPV(forecast+1bp) − NPV(forecast)'},
@@ -74,7 +74,7 @@ function XvaRow({ label, tip, desc, sub, trad, chain, save, pct, dim, barT=0, ba
         )}
       </div>
       <div className="xr-trad c-red">
-        {stub ? <span className="sprint-stub">SPRINT 5D</span> : (trad!=null?fmtAmt(trad):'—')}
+        {stub ? <span className="sprint-stub">—</span> : (trad!=null?fmtAmt(trad):'—')}
       </div>
       <div className="xr-chain">{chain!=null?fmtAmt(chain):'—'}</div>
       <div className="xr-save c-teal">{save!=null?fmtAmt(save):'—'}</div>
@@ -97,6 +97,7 @@ export default function PricerPage() {
   const [tLd, setTLd]       = useState(true)
   const [selId, setSelId]   = useState(sp.get('trade')||'')
   const [selTrade, setSel]  = useState(null)
+  const [tradeLegs, setTradeLegs] = useState([])
   const [valDate, setValDate] = useState(today())
 
   // Curve state
@@ -118,6 +119,8 @@ export default function PricerPage() {
   const [cfOpen, setCfOpen]     = useState(false)
   const [promOpen, setPromOpen] = useState(true)
   const [ts, setTs]             = useState('')
+  const [xvaLoading, setXvaLoading] = useState(false)
+  const [xvaNote, setXvaNote]       = useState(null)
 
   // Quote mode
   const [quoteCps, setQCps]   = useState([])
@@ -140,7 +143,7 @@ export default function PricerPage() {
 
   // On trade select
   useEffect(()=>{
-    if (!selId) { setCurveIds([]); setSnaps({}); setResult(null); setSel(null); return }
+    if (!selId) { setCurveIds([]); setSnaps({}); setResult(null); setSel(null); setTradeLegs([]); setXvaNote(null); return }
     setSel(trades.find(t=>t.id===selId)||null)
     setResult(null); setError(null)
     ;(async()=>{
@@ -148,6 +151,7 @@ export default function PricerPage() {
         const h=await authHdrs()
         const r=await fetch(`${API}/api/trade-legs/${selId}`,{headers:h})
         const legs=r.ok?await r.json():[]
+        setTradeLegs(Array.isArray(legs)?legs:[])
         const ids=new Set()
         ;(Array.isArray(legs)?legs:[]).forEach(l=>{
           if(l.discount_curve_id) ids.add(l.discount_curve_id)
@@ -210,7 +214,7 @@ export default function PricerPage() {
 
   const handleRun = useCallback(async()=>{
     if(!selId) return
-    setLoading(true); setError(null); setResult(null); setCvPils({})
+    setLoading(true); setError(null); setResult(null); setCvPils({}); setXvaNote(null)
     try {
       const h=await authHdrs()
       const body={trade_id:selId,valuation_date:valDate,curves:buildCurves()}
@@ -219,16 +223,60 @@ export default function PricerPage() {
       const data=await r.json()
       setResult(data); setTs(timestamp())
       if(data.curve_pillars) setCvPils(data.curve_pillars)
+
+      // ── XVA waterfall (non-blocking) ──────────────────────────────────────
+      // /api/xva/simulate prices off notional/maturity_y/fixed_rate (it does
+      // NOT read trade_id), so we pass the SELECTED trade's real economics —
+      // otherwise the waterfall would show XVA for the backend's placeholder
+      // swap. `npv` and `ir01` come from /price: XVA is an adjustment to TV,
+      // and IR01 drives the SIMM IM behind MVA. TV/Greeks are already on
+      // screen; a calibration miss degrades gracefully to a note.
+      ;(async()=>{
+        setXvaLoading(true)
+        try {
+          const fixedLeg=(tradeLegs||[]).find(l=>l.leg_type==='FIXED')||{}
+          const maturityY=selTrade?.maturity_date
+            ? Math.max(0.25,(new Date(selTrade.maturity_date)-new Date(valDate))/(365.25*86400000))
+            : 5
+          const simBody={
+            trade_id:   selId,
+            notional:   selTrade?.notional!=null?Number(selTrade.notional):10_000_000,
+            maturity_y: maturityY,
+            fixed_rate: fixedLeg.fixed_rate!=null?Number(fixedLeg.fixed_rate):0.03643,
+            direction:  fixedLeg.direction||'PAY',
+            cp_cds_bp:  selTrade?.counterparty?.cds_spread_bps!=null?Number(selTrade.counterparty.cds_spread_bps):85.0,
+            npv:        data.npv!=null?Number(data.npv):null,
+            ir01:       data.ir01!=null?Number(data.ir01):null,
+            paths:      2000,
+          }
+          const xr=await fetch(API+'/api/xva/simulate',{method:'POST',headers:h,body:JSON.stringify(simBody)})
+          if(xr.ok){
+            const xd=await xr.json()
+            if(xd.xva){
+              // Never let the XVA payload's npv clobber the pricer's TV.
+              const {npv:_xvaNpv, ...xvaOnly}=xd.xva
+              setResult(prev=>prev?{...prev,...xvaOnly,ee:xd.ee,ene:xd.ene,pfe:xd.pfe,
+                                    xvaParams:xd.params,xvaCapital:xd.capital}:prev)
+            }
+          } else {
+            const xe=await xr.json().catch(()=>({detail:xr.statusText}))
+            setXvaNote(xr.status===404
+              ? 'No HW1F calibration found — run CALIBRATE to populate the XVA waterfall.'
+              : ('XVA unavailable: '+(xe.detail||xr.statusText)))
+          }
+        } catch(e){ setXvaNote('XVA unavailable: '+e.message) }
+        finally{ setXvaLoading(false) }
+      })()
     } catch(e){setError(e.message)}
     finally{setLoading(false)}
-  },[selId,valDate,buildCurves])
+  },[selId,valDate,buildCurves,selTrade,tradeLegs])
 
   const ccy = selTrade?.notional_ccy||'USD'
   const xvaData=[
     {label:'CVA',tip:'cva',desc:'Credit Valuation Adjustment',sub:selTrade?.counterparty?.name?`${selTrade.counterparty.name} CDS spread · Recovery 40%`:undefined,trad:result?.cva,barT:63,barC:19},
     {label:'DVA',tip:'dva',desc:'Debit Valuation Adjustment',sub:'Own default benefit · IFRS 13',trad:result?.dva},
     {label:'FVA',tip:'fva',desc:'Funding Valuation Adjustment',sub:'Funding spread · ⬡ atomic settlement eliminates gap',trad:result?.fva,barT:41,barC:4},
-    {label:'ColVA',tip:'colva',desc:'Collateral Valuation Adjustment',sub:'USD cash CSA · smart contract removes optionality',trad:result?.colva,dim:true},
+    {label:'FBA',tip:'fba',desc:'Funding Benefit Adjustment',sub:'Funding benefit on negative exposure · mirror of FVA',trad:result?.fba},
     {label:'MVA',tip:'mva',desc:'Margin Valuation Adjustment',sub:'SIMM IM profile · tokenised IM earns yield on-chain',trad:result?.mva,dim:true},
     {label:'KVA',tip:'kva',desc:'Capital Valuation Adjustment',sub:'SA-CCR capital · hurdle 10%',trad:result?.kva,dim:true},
   ]
@@ -239,8 +287,11 @@ export default function PricerPage() {
   const firstSnap = snapshots[curveIds[0]]
   const keyRates = firstSnap?.quotes?.filter(q=>['2Y','5Y','10Y','30Y'].includes(q.tenor))||[]
 
+  const xvaSummary = result?.cva!=null
+    ? ` XVA ${fmtAmt(xvaTotal)} all-in (CVA ${fmtAmt(result.cva)} · FVA ${fmtAmt(result.fva)} · KVA ${fmtAmt(result.kva)}).`
+    : xvaLoading ? ' Simulating XVA…' : xvaNote ? ` ${xvaNote}` : ''
   const promText = result
-    ? `${selTrade?.trade_ref} — ${selTrade?.instrument_type}. NPV ${fmtAmt(result.npv)} · IR01 ${fmtAmt(result.ir01)}/bp · Theta ${fmtAmt(result.theta)}/day. XVA stubs — backend Sprint 5D.`
+    ? `${selTrade?.trade_ref} — ${selTrade?.instrument_type}. NPV ${fmtAmt(result.npv)} · IR01 ${fmtAmt(result.ir01)}/bp · Theta ${fmtAmt(result.theta)}/day.${xvaSummary}`
     : selId ? `Trade loaded. Review curve inputs and click ▶ RUN PRICER.` : 'Select a trade to begin pricing.'
 
   return (
@@ -445,7 +496,7 @@ export default function PricerPage() {
               {promOpen && (
                 <div className="prom-body">
                   <span>{promText}</span>
-                  {result && <div className="prom-flag">→ XVA waterfall stubs will populate in Sprint 5D. Blockchain column requires counterparty on Rijeka Confirms network.</div>}
+                  {result && <div className="prom-flag">{result.cva!=null?'→ XVA waterfall live from HW1F Monte Carlo. Blockchain column requires counterparty on Rijeka Confirms network.':'→ Blockchain column requires counterparty on Rijeka Confirms network.'}</div>}
                 </div>
               )}
             </div>
@@ -478,8 +529,8 @@ export default function PricerPage() {
             <div className="npv-row">
               <div className="npv-col">
                 <div className="npv-lbl">NPV · TRADITIONAL</div>
-                <div className="npv-val" style={{color:'#0dd4a8'}}>{fmtAmt(result.npv)}</div>
-                <div className="npv-sub">TV {fmtAmt(result.npv)} · XVA stubs pending Sprint 5D</div>
+                <div className="npv-val" style={{color:'#0dd4a8'}}>{fmtAmt(result.cva!=null?result.npv+xvaTotal:result.npv)}</div>
+                <div className="npv-sub">{result.cva!=null?`TV ${fmtAmt(result.npv)} + XVA ${fmtAmt(xvaTotal)}`:(xvaLoading?`TV ${fmtAmt(result.npv)} · simulating XVA…`:`TV ${fmtAmt(result.npv)} · XVA pending`)}</div>
               </div>
               <div className="npv-col">
                 <div className="npv-lbl">⬡ NPV · BLOCKCHAIN</div>
@@ -529,7 +580,7 @@ export default function PricerPage() {
             <div className="xva-total">
               <div className="xt-lbl">XVA</div>
               <div className="xt-name">Total valuation adjustments</div>
-              <div className="xt-trad">{xvaTotal!==0?fmtAmt(xvaTotal):<span className="sprint-stub">SPRINT 5D</span>}</div>
+              <div className="xt-trad">{xvaTotal!==0?fmtAmt(xvaTotal):<span className="sprint-stub">{xvaLoading?'CALC…':(xvaNote?'N/A':'—')}</span>}</div>
               <div className="xt-chain">—</div>
               <div className="xt-save">—</div>
               <div className="xt-pct">—</div>

@@ -7,3 +7,7 @@ httpx
 anthropic
 pydantic
 python-dateutil
+python-dotenv
+numpy
+scipy
+holidays
