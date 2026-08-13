@@ -1533,9 +1533,15 @@ function xvaCalc(xva, notionalRef, rateRef, effDate, matDate, parRate) {
     const m = (effDate&&matDate)?(new Date(matDate)-new Date(effDate))/(365.25*24*3600*1000):5
     const dv = (isNaN(n)?10000000:n)*m/10000
     const bp = [xva.cva,xva.dva,xva.fva,xva.fba,xva.kva,xva.mva].reduce((s,v)=>s+(v||0),0)/dv
-    const par = parRate||parseFloat(rateRef.current?.value||'3.665')
-    return { allIn:par+bp/100, bp, dv01:dv, par }
-  } catch(_) { return { allIn:3.665, bp:0, dv01:1, par:3.665 } }
+    // No invented par rate. If we do not know it, say so — a plausible-looking
+    // 3.665 here silently produced an all-in RATE off a fabricated par while
+    // the all-in NPV beside it was correct.
+    const fromRef = parseFloat(rateRef.current?.value)
+    const par = (typeof parRate === 'number' && isFinite(parRate) && parRate > 0)
+      ? parRate
+      : (isFinite(fromRef) && fromRef > 0 ? fromRef : NaN)
+    return { allIn: isFinite(par) ? par + bp/100 : NaN, bp, dv01: dv, par }
+  } catch(_) { return { allIn: NaN, bp: 0, dv01: 1, par: NaN } }
 }
 
 function XvaFooterRate({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
@@ -1543,14 +1549,14 @@ function XvaFooterRate({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderLeft:'1px solid rgba(0,212,168,0.3)',marginLeft:'4px'}}>
       <span style={{fontSize:'9px',color:'#00D4A8',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>ALL-IN RATE</span>
-      <span style={{fontSize:'13px',fontWeight:700,color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace"}}>{allIn.toFixed(3)}%</span>
+      <span style={{fontSize:'13px',fontWeight:700,color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace"}}>{isFinite(allIn)?allIn.toFixed(3)+'%':'—'}</span>
     </div>
   )
 }
 
 function XvaBookLabel({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
   const {allIn} = xvaCalc(xva,notionalRef,rateRef,effDate,matDate,parRate)
-  return <>▶ BOOK AT {allIn.toFixed(3)}%</>
+  return <>▶ BOOK AT {isFinite(allIn)?allIn.toFixed(3)+'%':'—'}</>
 }
 
 function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply}) {
@@ -1562,27 +1568,27 @@ function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply
   const fD = v => { if(v==null) return '—'; return (v>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(v)).toLocaleString('en-US') }
   const fB = v => v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'bp'
   const cells = [
-    {k:'npv',   l:'NPV',    v:xva.npv,    col:'var(--text)',   b:cur.toFixed(3)+'%',   s:'par rate'},
+    {k:'npv',   l:'NPV',    v:xva.npv,    col:'var(--text)',   b:isFinite(cur)?cur.toFixed(3)+'%':'—',   s:'par rate'},
     {k:'cva',   l:'CVA',    v:xva.cva,    col:'var(--red)',    b:fB(xva.cva/dv01),     s:'bp on rate'},
     {k:'dva',   l:'DVA',    v:xva.dva,    col:'var(--blue)',   b:fB(xva.dva/dv01),     s:'bp on rate'},
     {k:'fva',   l:'FVA',    v:xva.fva,    col:'var(--red)',    b:fB(xva.fva/dv01),     s:'bp on rate'},
     {k:'fba',   l:'FBA',    v:xva.fba,    col:'var(--blue)',   b:fB(xva.fba/dv01),     s:'bp on rate'},
     {k:'kva',   l:'KVA',    v:xva.kva,    col:'var(--red)',    b:fB(xva.kva/dv01),     s:'bp on rate'},
     {k:'mva',   l:'MVA~',   v:xva.mva,    col:'var(--amber)',  b:fB(xva.mva/dv01),     s:'bp on rate'},
-    {k:'all_in',l:'ALL-IN', v:xva.all_in, col:'var(--accent)', b:allIn.toFixed(3)+'%', s:'all-in rate'},
+    {k:'all_in',l:'ALL-IN', v:xva.all_in, col:'var(--accent)', b:isFinite(allIn)?allIn.toFixed(3)+'%':'—', s:'all-in rate'},
   ]
   return (
     <>
       <div style={{display:'flex',alignItems:'center',gap:'14px',padding:'8px 12px',background:'rgba(0,212,168,0.04)',border:'1px solid rgba(0,212,168,0.2)',borderRadius:'2px',marginBottom:'8px'}}>
         <div style={{display:'flex',flexDirection:'column',gap:'2px',minWidth:'90px'}}>
           <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.10em',color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>ALL-IN RATE</div>
-          <div style={{fontSize:'1.25rem',fontWeight:700,color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{allIn.toFixed(3)}%</div>
+          <div style={{fontSize:'1.25rem',fontWeight:700,color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{isFinite(allIn)?allIn.toFixed(3)+'%':'—'}</div>
         </div>
         <div style={{width:'1px',height:'40px',background:'var(--border)',flexShrink:0}}/>
         <div style={{display:'flex',flexDirection:'column',gap:'3px'}}>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',minWidth:'64px'}}>PAR rate</span>
-            <span style={{fontSize:'0.875rem',fontWeight:600,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{cur.toFixed(4)}%</span>
+            <span style={{fontSize:'0.875rem',fontWeight:600,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{isFinite(cur)?cur.toFixed(4)+'%':'—'}</span>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',minWidth:'64px'}}>XVA cost</span>
@@ -1792,7 +1798,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [rateSchedule,  setRateSchedule]  = useState([])
   const [notionalSchedule,setNotionalSchedule] = useState([])
   const [spreadSchedule,setSpreadSchedule]= useState([])
-  const [rateMode,      setRateMode]      = useState('PAR')
+  // A booked trade carries its contractual coupon, which is only at par on the
+  // day it was struck — so it opens in FIXED, not PAR. Set at initialisation
+  // rather than in the load effect: the coupon input is uncontrolled, and a
+  // state change mid-load remounts it and wipes the value.
+  const [rateMode,      setRateMode]      = useState(initialTrade ? 'FIXED' : 'PAR')
   const [targetNpv,     setTargetNpv]    = useState('')
   const [solvingNpv,    setSolvingNpv]   = useState(false)
 
@@ -2083,8 +2093,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       (INDEX_DEFAULTS[idx]||['DAILY','ANNUAL','ACT/360'])[2], floatBdc, lag)
   }
 
-  // Reset on CCY change
+  // Reset on CCY change — NEW trades only. On an existing trade this reset the
+  // conventions, cleared the userEdited flag protecting the booked coupon, and
+  // re-derived the schedule, none of which may touch a trade already struck.
   useEffect(() => {
+    if (viewTrade) return
     const newIdx = (CCY_INDICES[ccy] || ['SOFR'])[0]
     setIndex(newIdx); applyIndexDefaults(newIdx)
     const cal = CCY_CAL[ccy] || 'NEW_YORK'
@@ -2116,11 +2129,10 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     if (rateRef.current && terms.fixed_rate != null) {
       rateRef.current.value = (terms.fixed_rate * 100).toFixed(8)
       rateRef.current.dataset.userEdited = '1'
-      // A booked trade carries its contractual coupon, which is only at par on
-      // the day it was struck. rateMode defaults to 'PAR', so without this the
-      // chip claims a seasoned trade is at par — this one was struck in April
-      // at 3.643% against a curve that now solves to ~4.09%.
-      setRateMode('FIXED')
+      // NB: do NOT setRateMode here. The coupon input is uncontrolled (written
+      // through rateRef), so a state change at this point remounts it and
+      // discards the value we just wrote. rateMode is initialised from
+      // initialTrade instead — see its useState.
     }
     // Set float params
     if (terms.float_index) setIndex(terms.float_index)
@@ -2140,8 +2152,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     if (t.own_legal_entity_id) setOwnEntityId(t.own_legal_entity_id)
   }, [])
 
-  // Fetch dates on mount
-  useEffect(() => { fetchScheduleDates('5Y','USD',tdate) }, [])
+  // Fetch dates on mount — for NEW trades only. This is async, so on an
+  // existing trade it resolved after the load effect and silently replaced the
+  // booked schedule with a spot-start 5Y USD one: the form then showed dates
+  // the priced legs did not use.
+  useEffect(() => { if (!viewTrade) fetchScheduleDates('5Y','USD',tdate) }, [])
 
   // Populate fixed rate from market data store when dates are set
   // For vanilla OIS: the market quote IS the par rate by definition
@@ -2665,13 +2680,26 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     try {
       const session = await getSession()
       const n = parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))
-      const fr = parseFloat(rateRef.current?.value||'3.665') / 100
+      // rateRef belongs to the TRADE tab and is unmounted while the XVA tab is
+      // showing, so it cannot be the only source for the strike — falling back
+      // to a hardcoded 3.665 mis-struck the simulation. Prefer the solved par.
+      const frRef  = parseFloat(rateRef.current?.value)
+      const frPar  = typeof parRate === 'number' ? parRate : parseFloat(parRate)
+      const frPct  = (isFinite(frRef) && frRef > 0) ? frRef
+                   : ((isFinite(frPar) && frPar > 0) ? frPar : NaN)
+      const fr = frPct / 100
       const matY = (new Date(matDate)-new Date(effDate))/(365.25*24*3600*1000)
       const res = await fetch(API+'/api/xva/simulate', {
         method:'POST',
         headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
         body: JSON.stringify(Object.assign(
-          { notional:isNaN(n)?10000000:n, maturity_y:Math.max(0.5,matY), fixed_rate:isNaN(fr)?0.0365:fr, paths:2000 },
+          { notional:isNaN(n)?10000000:n, maturity_y:Math.max(0.5,matY), fixed_rate:isNaN(fr)?0.0365:fr, paths:2000,
+            // Same curve, same date, same TV the pricer used.
+            valuation_date: valDate || undefined,
+            curve_id:       CCY_CURVE[ccy] || 'USD_SOFR',
+            npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
+            ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
+            direction: dir || 'PAY' },
           // Swaption-specific fields — add expiry/vol/direction for 2-phase EE
           inst === 'IR_SWAPTION' ? (() => {
             const EXPIRY_Y = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
