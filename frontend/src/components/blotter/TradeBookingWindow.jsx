@@ -2116,6 +2116,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     if (rateRef.current && terms.fixed_rate != null) {
       rateRef.current.value = (terms.fixed_rate * 100).toFixed(8)
       rateRef.current.dataset.userEdited = '1'
+      // A booked trade carries its contractual coupon, which is only at par on
+      // the day it was struck. rateMode defaults to 'PAR', so without this the
+      // chip claims a seasoned trade is at par — this one was struck in April
+      // at 3.643% against a curve that now solves to ~4.09%.
+      setRateMode('FIXED')
     }
     // Set float params
     if (terms.float_index) setIndex(terms.float_index)

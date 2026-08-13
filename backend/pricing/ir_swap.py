@@ -14,7 +14,7 @@ Sprint 13 Patch 5: Legacy cap_strike_schedule / floor_strike_schedule
                    `embedded_options`.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
@@ -22,6 +22,78 @@ from typing import List, Optional, Dict, Any
 from pricing.schedule import generate_schedule, CouponPeriod
 from pricing.curve import Curve
 from pricing.day_count import dcf as calc_dcf
+
+
+def _resolve_fixing(fixings: Optional[Dict[Any, Any]], period_start: date) -> Optional[float]:
+    """Realised rate for a period, keyed by period start (date or ISO string)."""
+    if not fixings:
+        return None
+    val = fixings.get(period_start)
+    if val is None and hasattr(period_start, "isoformat"):
+        val = fixings.get(period_start.isoformat())
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _project_float_rate(
+    fc:             Curve,
+    p:              CouponPeriod,
+    tau:            float,
+    valuation_date: date,
+    day_count:      str,
+    fixings:        Optional[Dict[Any, Any]] = None,
+) -> float:
+    """
+    Forward rate for a coupon period, correct for periods already under way.
+
+    Curve.df() returns 1.0 for any date on or before the valuation date. So
+    projecting a seasoned period straight from period_start measures the
+    period's return from TODAY but divides it by the FULL accrual factor —
+    silently discarding the interest that has already accrued. The leg then
+    sheds one day of interest every day, which surfaces as a large negative
+    theta (one day of float accrual) and understates the leg by the accrued
+    amount. On a 5Y $10M SOFR swap four months into its period that was
+    ~$122k, or 1.2% of notional.
+    """
+    if tau <= 0:
+        return 0.0
+
+    realised = _resolve_fixing(fixings, p.period_start)
+
+    # Period wholly elapsed, payment still outstanding. Both DFs are 1.0 here,
+    # which would project a ZERO coupon. Use the fixing if we have one, else
+    # fall back to the shortest forward the curve can give.
+    if p.period_end <= valuation_date:
+        if realised is not None:
+            return realised
+        horizon = valuation_date + timedelta(days=30)
+        df_h    = fc.df(horizon)
+        tau_h   = float(calc_dcf(day_count, valuation_date, horizon))
+        return (1.0 / df_h - 1.0) / tau_h if (df_h > 1e-10 and tau_h > 0) else 0.0
+
+    # Period under way. Project the remaining stub over its own accrual factor.
+    # With a fixing, blend realised (elapsed) and forward (remaining); without
+    # one, assume the elapsed portion accrued at the rate the remaining stub
+    # implies — an approximation, but far better than assuming it accrued zero.
+    if p.period_start < valuation_date:
+        df2     = fc.df(p.period_end)
+        tau_rem = float(calc_dcf(day_count, valuation_date, p.period_end))
+        if tau_rem <= 0 or df2 <= 1e-10:
+            return realised if realised is not None else 0.0
+        fwd_rem = (fc.df(valuation_date) / df2 - 1.0) / tau_rem
+        if realised is None:
+            return fwd_rem
+        tau_elapsed = max(tau - tau_rem, 0.0)
+        return (realised * tau_elapsed + fwd_rem * tau_rem) / tau
+
+    # Ordinary forward-starting period
+    df1 = fc.df(p.period_start)
+    df2 = fc.df(p.period_end)
+    return (df1 / df2 - 1.0) / tau if df2 > 1e-10 else 0.0
 
 
 @dataclass
@@ -210,6 +282,10 @@ def price_leg(
     fixed_rate_schedule  = leg.get("fixed_rate_schedule") or None
     spread_schedule      = leg.get("spread_schedule") or None
     notional_schedule    = leg.get("notional_schedule") or None
+    # Realised fixings keyed by period start. The Cashflow table already
+    # carries status FIXED/SETTLED with a stored rate; wiring that through to
+    # here turns the elapsed-accrual approximation below into an exact figure.
+    fixings              = leg.get("fixings") or None
 
     eff = _parse_date(leg.get("effective_date"))
     mat = _parse_date(leg.get("maturity_date"))
@@ -296,10 +372,8 @@ def price_leg(
 
         if is_float:
             fc   = forecast_curve or discount_curve
-            df1  = fc.df(p.period_start)
-            df2  = fc.df(p.period_end)
             tau  = float(p.dcf)
-            fwd  = (df1 / df2 - 1.0) / tau if tau > 0 and df2 > 1e-10 else 0.0
+            fwd  = _project_float_rate(fc, p, tau, valuation_date, day_count, fixings)
             eff_spread = _resolve_spread_schedule(spread_schedule, p.period_start, spread) if spread_schedule else spread
             rate = fwd + eff_spread
         else:
