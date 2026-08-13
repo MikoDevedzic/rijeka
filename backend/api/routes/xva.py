@@ -84,6 +84,54 @@ _SIMM_IR_RW = [
 ]
 
 
+CALIB_STALE_WARN_DAYS  = 5
+CALIB_STALE_ALERT_DAYS = 14
+
+
+def _staleness_block(calib_date, mkt_curve, val_date) -> dict:
+    """
+    Age of the two inputs an XVA number rests on: the vol calibration and the
+    market snapshot. Both are loaded 'most recent available' with no date
+    filter, so either can be arbitrarily old without the number looking any
+    different. Report the age rather than let it pass unremarked.
+    """
+    def _days(d):
+        try:
+            return (val_date - d).days if d is not None else None
+        except Exception:
+            return None
+
+    calib_days = _days(calib_date)
+    snap_date  = getattr(mkt_curve, "snapshot_date", None) if mkt_curve is not None else None
+    snap_days  = _days(snap_date)
+
+    status, msgs = "ok", []
+    if calib_days is not None:
+        if calib_days >= CALIB_STALE_ALERT_DAYS:
+            status = "alert"
+            msgs.append(f"HW1F calibration is {calib_days} days old.")
+        elif calib_days >= CALIB_STALE_WARN_DAYS:
+            status = "warn" if status == "ok" else status
+            msgs.append(f"HW1F calibration is {calib_days} days old.")
+    if snap_days is not None:
+        if snap_days >= 7:
+            status = "alert"
+            msgs.append(f"Market data is {snap_days} days behind the valuation date.")
+        elif snap_days >= 3:
+            status = "warn" if status == "ok" else status
+            msgs.append(f"Market data is {snap_days} days behind the valuation date.")
+
+    return {
+        "status":            status,
+        "message":           " ".join(msgs) or None,
+        "valuation_date":    str(val_date),
+        "calibration_date":  str(calib_date) if calib_date is not None else None,
+        "calibration_days":  calib_days,
+        "snapshot_date":     str(snap_date) if snap_date is not None else None,
+        "snapshot_days":     snap_days,
+    }
+
+
 def _simm_ir_risk_weight(maturity_y: float) -> float:
     """Linearly interpolated SIMM IR delta risk weight for a tenor in years."""
     pts = _SIMM_IR_RW
@@ -392,10 +440,11 @@ async def simulate(
     sigma_bp = body.sigma_bp
     theta    = body.theta
 
+    calib_date = None
     if a is None or sigma_bp is None:
         row = db.execute(
             text("""
-                SELECT a, sigma_bp, theta FROM xva_calibration
+                SELECT a, sigma_bp, theta, valuation_date FROM xva_calibration
                 WHERE curve_id = 'USD_SWVOL_ATM' AND model = 'HW1F' AND user_id = :user_id
                 ORDER BY valuation_date DESC, created_at DESC
                 LIMIT 1
@@ -410,6 +459,7 @@ async def simulate(
         a        = row.a
         sigma_bp = row.sigma_bp
         theta    = theta or row.theta or 0.0365
+        calib_date = getattr(row, "valuation_date", None)
 
     sigma   = sigma_bp / 10000.0
     T       = int(body.maturity_y * 12)   # monthly steps
@@ -687,6 +737,10 @@ async def simulate(
             "xva_total": round(xva_total, 2),
             "all_in": round(all_in, 2) if all_in is not None else None,
         },
+        # Vol calibration and market data both age silently. A four-week-old
+        # calibration priced against today is a model-validation finding, not a
+        # detail — so it is reported alongside the numbers it produced.
+        "staleness": _staleness_block(calib_date, mkt_curve, val_date),
         "params": {
             "a":        a,
             "sigma_bp": sigma_bp,
