@@ -1990,7 +1990,9 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       const curveId = CCY_CURVE[ccyVal] || 'USD_SOFR'
       const payload = {
         curve_id: curveId,
-        valuation_date: localDate(),
+        // Must match the date the pricer values on, or the solved par rate
+        // belongs to a different curve than the trade is priced against.
+        valuation_date: valDate || localDate(),
         effective_date: effD,
         maturity_date: matD,
         currency: ccyVal,
@@ -2900,7 +2902,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
         )}
         <div className='tbw-body tbw-no-drag' style={{display:activeTab==='price'?'flex':'none',flexDirection:'column',overflow:'hidden'}}>
 
-          <XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} getSession={getSession} analytics={analytics} parRate={parRate} xvaParamsRef={xvaParamsRef} onSimResult={(d)=>{setXvaResult(d);setXvaApplied(false)}} direction={dir} instrumentType={inst} swaptionExpiry={swaptionExpiry} swaptionTenor={tenor} swaptionVol={swaptionVol} swaptionResult={swaptionResult}/>
+          <XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} valDate={valDate} curveId={CCY_CURVE[ccy]||'USD_SOFR'} getSession={getSession} analytics={analytics} parRate={parRate} xvaParamsRef={xvaParamsRef} onSimResult={(d)=>{setXvaResult(d);setXvaApplied(false)}} direction={dir} instrumentType={inst} swaptionExpiry={swaptionExpiry} swaptionTenor={tenor} swaptionVol={swaptionVol} swaptionResult={swaptionResult}/>
         </div>
         {activeTab==='confirm' && <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Cashflow fingerprint · On-chain signing</div><div className='tbw-stub-sprint'>SPRINT 6A</div></div></div>}
 

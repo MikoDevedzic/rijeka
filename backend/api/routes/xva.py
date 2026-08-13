@@ -21,7 +21,7 @@ GET /api/xva/calibration/latest
 import json
 import math
 import numpy as np
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,6 +32,9 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from middleware.auth import verify_token
 from pricing.calibration import calibrate_hw1f, tenor_to_years, hw1f_swaption_vol_normal
+# Same curve builder the pricer uses, so the simulation and the valuation can
+# never end up on different curves. (pricer does not import xva — no cycle.)
+from api.routes.pricer import CurveInput, _build_curve
 
 router = APIRouter(prefix="/api/xva", tags=["xva"])
 
@@ -118,6 +121,12 @@ class SimulateRequest(BaseModel):
     # so the UI cannot display an all-in that ignores the trade's MtM.
     npv: Optional[float] = None
     ir01: Optional[float] = None         # $ per bp, from the pricer — drives SIMM IM
+    # Term structure the paths are generated from. Same shape the pricer takes,
+    # so both can be handed the identical payload. If omitted, the curve is
+    # loaded from the DB snapshot exactly as /price does.
+    curves: Optional[List[CurveInput]] = None
+    curve_id: str = "USD_SOFR"
+    valuation_date: Optional[date] = None
     # HW1F overrides — if None, loads latest calibration from DB
     a: Optional[float] = None
     sigma_bp: Optional[float] = None
@@ -412,19 +421,68 @@ async def simulate(
 
     std_dt = sigma * math.sqrt((1 - math.exp(-2 * a * DT)) / (2 * a))
 
+    # ── Initial term structure ───────────────────────────────────────────────
+    # Generating paths from a single flat rate at theta ignores the shape of the
+    # curve: forward rates drift wrongly, which moves the EE hump in both time
+    # and height and feeds straight into CVA and KVA. Build the SAME curve the
+    # pricer uses and fit the model to it.
+    val_date   = body.valuation_date or date.today()
+    mkt_curve  = None
+    curve_note = None
+    try:
+        ci = (body.curves[0] if body.curves
+              else CurveInput(curve_id=body.curve_id, quotes=[]))
+        mkt_curve = _build_curve(ci, val_date, db, user["sub"])
+    except Exception as _curve_err:
+        curve_note = str(_curve_err)
+
+    def _p0(t: float) -> float:
+        """Market discount factor to year-fraction t (ACT/365F, as Curve uses)."""
+        if t <= 0:
+            return 1.0
+        return mkt_curve.df(val_date + timedelta(days=int(round(t * 365.0))))
+
+    # P(0, t) and the instantaneous forward f(0, t) on the simulation grid.
+    if mkt_curve is not None:
+        p0_grid = [_p0(k * DT) for k in range(T + 2)]
+        f0_grid = []
+        for k in range(T + 1):
+            a_df, b_df = p0_grid[k], p0_grid[k + 1]
+            f0_grid.append(-math.log(b_df / a_df) / DT
+                           if (a_df > 0 and b_df > 0) else theta)
+        curve_source = "bootstrapped" if (body.curves and body.curves[0].quotes) else "db-snapshot"
+    else:
+        # No curve available — fall back to the previous flat-theta behaviour
+        # rather than failing the request, but say so in the response.
+        p0_grid = [math.exp(-theta * k * DT) for k in range(T + 2)]
+        f0_grid = [theta] * (T + 1)
+        curve_source = "flat-theta-fallback"
+
     # ── Monte Carlo ──────────────────────────────────────────────────────────
     # Shape: (n_paths, T)
-    r0 = theta
+    # Hull-White in its exact-fit form: r(t) = x(t) + alpha(t), where x is a
+    # zero-mean Ornstein-Uhlenbeck process and alpha(t) is the deterministic
+    # shift that makes the model reproduce the initial curve exactly:
+    #
+    #     alpha(t) = f(0,t) + (sigma^2 / 2a^2)(1 - e^-at)^2
+    #
+    # Bonds then reconstitute as P(t,T) = A(t,T) e^-B(t,T) r(t) with
+    # A(t,T) = P(0,T)/P(0,t) * exp[ B f(0,t) - (sigma^2/4a)(1-e^-2at) B^2 ].
+    # At t=0 this returns the market DF by construction, so a par swap prices
+    # to ~0 in the simulation — see `anchor` in the response, which should
+    # collapse toward zero now that the model and the pricer share a curve.
     paths = np.zeros((n_paths, T))
     ann_mean = np.zeros(T)      # mean annuity per step — used to decay the TV anchor
-    r = np.full(n_paths, r0)
+    x = np.zeros(n_paths)       # OU deviation; x(0) = 0
 
     for i in range(T):
         z = rng.standard_normal(n_paths)
-        r = (r * math.exp(-a * DT)
-             + theta * (1 - math.exp(-a * DT))
-             + std_dt * z)
-        r = np.maximum(r, -0.005)
+        x = x * math.exp(-a * DT) + std_dt * z
+        # No floor on r: Hull-White is a Gaussian model and negative rates are
+        # admissible. Clamping biases discount factors and breaks the exact fit.
+        t_step = (i + 1) * DT
+        alpha  = f0_grid[i + 1] + (sigma * sigma / (2 * a * a)) * (1 - math.exp(-a * t_step)) ** 2
+        r = x + alpha
 
         # Analytical swaption-style NPV per path at time step i
         t_now = (i + 1) * DT
@@ -433,21 +491,27 @@ async def simulate(
             paths[:, i] = 0.0
             continue
 
-        # Annuity approximation
+        # Reconstitution coefficients at t_now, off the market curve
+        p0_t  = p0_grid[i + 1]
+        f0_t  = f0_grid[i + 1]
+        e2at  = 1.0 - math.exp(-2.0 * a * t_now)
+
+        # Annuity: sum of market-consistent zero-bond prices over remaining steps
         ann = np.zeros(n_paths)
         for j in range(i + 1, T):
-            tau = (j + 1) * DT - t_now
-            B   = (1 - np.exp(-a * tau)) / a
-            log_A = ((B - tau) * (theta - sigma * sigma / (2 * a * a))
-                     - sigma * sigma * B * B / (4 * a))
-            df = np.exp(log_A - B * r)
-            ann += DT * df
+            tau   = (j + 1) * DT - t_now
+            B     = (1 - math.exp(-a * tau)) / a
+            log_A = (math.log(p0_grid[j + 1] / p0_t)
+                     + B * f0_t
+                     - (sigma * sigma / (4 * a)) * e2at * B * B)
+            ann += DT * np.exp(log_A - B * r)
 
         # Discount factor to maturity
-        tau_m = T * DT - t_now
-        B_m   = (1 - np.exp(-a * tau_m)) / a
-        log_Am = ((B_m - tau_m) * (theta - sigma * sigma / (2 * a * a))
-                  - sigma * sigma * B_m * B_m / (4 * a))
+        tau_m  = T * DT - t_now
+        B_m    = (1 - math.exp(-a * tau_m)) / a
+        log_Am = (math.log(p0_grid[T] / p0_t)
+                  + B_m * f0_t
+                  - (sigma * sigma / (4 * a)) * e2at * B_m * B_m)
         df_m = np.exp(log_Am - B_m * r)
 
         ann_mean[i] = float(np.mean(ann))
@@ -470,12 +534,12 @@ async def simulate(
     # the offset implied by the pricer's TV — the shift decays with the
     # annuity and vanishes at maturity, exactly as the real moneyness does.
     # (Deeper fix: run the MC off the bootstrapped curve rather than flat theta.)
+    anchor_v0 = float(np.mean(paths[:, 0])) if T > 0 else 0.0
+    anchor_delta = 0.0
     if body.npv is not None and ann_mean[0] > 0:
-        v0    = float(np.mean(paths[:, 0]))
-        delta = body.npv - v0
+        anchor_delta = body.npv - anchor_v0
         for i in range(T):
-            if ann_mean[0] > 0:
-                paths[:, i] += delta * (ann_mean[i] / ann_mean[0])
+            paths[:, i] += anchor_delta * (ann_mean[i] / ann_mean[0])
 
     ee  = np.mean(np.maximum(paths, 0), axis=0).tolist()
     ene = np.mean(np.minimum(paths, 0), axis=0).tolist()
@@ -530,13 +594,13 @@ async def simulate(
 
     cva=dva=fva=fba_v=kva=mva=0.0
     qcp=qow=1.0
-    disc_rate = theta
     mean_v = np.mean(paths, axis=0)
     ead_0 = cap_0 = 0.0
 
     for i in range(T):
         t    = (i + 1) * DT
-        disc = math.exp(-disc_rate * t)
+        # Discount XVA on the market curve, not a flat exp(-theta*t).
+        disc = p0_grid[i + 1]
         cp_s_t = interp_spread(body.cp_cds_curve, body.cp_cds_bp, t)
         ow_s_t = interp_spread(body.own_cds_curve, body.own_cds_bp, t)
         ftp_t  = interp_spread(body.ftp_curve, body.ftp_bp, t) if body.ftp_curve else ftp_flat
@@ -627,6 +691,20 @@ async def simulate(
             "a":        a,
             "sigma_bp": sigma_bp,
             "theta":    theta,
+            # Which term structure the paths were generated from. Anything other
+            # than a real curve here means the profile is not market-consistent.
+            "curve_source":   curve_source,
+            "curve_id":       body.curve_id,
+            "valuation_date": str(val_date),
+            "curve_error":    curve_note,
+        },
+        # The model is fitted to the initial curve, so a par trade should price
+        # to ~0 at t=0 and `delta` should be small. A large delta means the
+        # simulation and the pricer disagree about the curve.
+        "anchor": {
+            "model_v0": round(anchor_v0, 2),
+            "npv":      round(body.npv, 2) if body.npv is not None else None,
+            "delta":    round(anchor_delta, 2),
         },
         # Capital / margin diagnostics — so a reviewer can tie KVA and MVA
         # back to an EAD and an IM rather than take them on faith.
