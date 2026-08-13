@@ -1555,6 +1555,10 @@ function XvaBookLabel({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
 
 function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply}) {
   const {allIn,bp:xvaBp,dv01,par:cur} = xvaCalc(xva,notionalRef,rateRef,effDate,matDate,parRate)
+  // Sum of the six adjustments. Prefer the backend's own total when present.
+  const xvaTotal = xva.xva_total != null
+    ? xva.xva_total
+    : [xva.cva,xva.dva,xva.fva,xva.fba,xva.kva,xva.mva].reduce((s,v)=>s+(v||0),0)
   const fD = v => { if(v==null) return '—'; return (v>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(v)).toLocaleString('en-US') }
   const fB = v => v==null?'—':(v>=0?'+':'')+v.toFixed(1)+'bp'
   const cells = [
@@ -1582,7 +1586,10 @@ function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply
           </div>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',minWidth:'64px'}}>XVA cost</span>
-            <span style={{fontSize:'0.875rem',fontWeight:600,color:'var(--red)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{fD(xva.all_in)} / {fB(xvaBp)}</span>
+            {/* This showed all_in (= TV + XVA) under an "XVA cost" label, so
+                the dollar figure and the bp figure beside it described two
+                different quantities. XVA cost is the sum of the components. */}
+            <span style={{fontSize:'0.875rem',fontWeight:600,color:'var(--red)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{fD(xvaTotal)} / {fB(xvaBp)}</span>
           </div>
           <div style={{height:'1px',background:'var(--border)'}}/>
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
@@ -1758,6 +1765,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
 
   // SCENARIO tab state moved to <ScenarioTab /> component
   const [parRate,       setParRate]      = useState(null)
+  const [parError,      setParError]     = useState(null)
   const [notionalState, setNotionalState] = useState(10000000)
   const [fraDay,         setFraDay]         = useState('ACT/360')
   const [index2,         setIndex2]         = useState('EFFR')
@@ -2006,14 +2014,34 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
         headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (!res.ok) return
+      if (!res.ok) {
+        // Never fail silently here. A swallowed error leaves the PREVIOUS par
+        // rate sitting in the box looking authoritative, and the trade gets
+        // booked off a rate that was solved against a different curve.
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        console.error('[RIJEKA] Par rate solve FAILED:', err.detail || res.statusText)
+        setParError(err.detail || res.statusText)
+        setParRate(null)
+        return
+      }
       const data = await res.json()
       if (data.par_rate && rateRef.current && !rateRef.current.dataset.userEdited) {
         rateRef.current.value = data.par_rate.toFixed(8)
         setParRate(data.par_rate)
-        console.log('[RIJEKA] Par rate: ' + data.par_rate.toFixed(4) + '% | NPV check: ' + data.npv_check)
+        setParError(null)
+        console.log('[RIJEKA] Par rate: ' + data.par_rate.toFixed(4) + '% | NPV check: ' + data.npv_check
+                    + ' | curve: ' + data.curve_id + ' | val: ' + data.valuation_date
+                    + ' | eff: ' + data.effective_date + ' -> mat: ' + data.maturity_date)
+        // npv_check is the solver repricing the swap at its own solved par.
+        // If it is not ~0 the solve did not converge on its own curve.
+        if (Math.abs(data.npv_check) > 1) {
+          console.warn('[RIJEKA] Par solve did not converge: NPV check = ' + data.npv_check)
+        }
       }
-    } catch(e) { /* silent */ }
+    } catch(e) {
+      console.error('[RIJEKA] Par rate solve error:', e.message)
+      setParError(e.message)
+    }
   }
 
   // Fetch schedule dates from backend + auto-fetch par rate
@@ -2118,16 +2146,29 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     const tenorY = (new Date(matDate) - new Date(effDate)) / (365.25 * 24 * 3600 * 1000)
     if (tenorY <= 0) return
     const curveId = CCY_CURVE[ccy] || 'USD_SOFR'
+    // The nearest market quote is NOT the par rate. It ignores the trade's
+    // actual effective/maturity dates, day count, pay frequency and spot lag,
+    // and it is read from the frontend store, which can hold quotes that
+    // differ from the DB snapshot the pricer bootstraps from. When those two
+    // diverge you get a coupon the pricer disagrees with — a 5Y quoted at
+    // 3.643 against a curve solving to 4.1154 is a 47bp error that still
+    // displays as "PAR" and books at the wrong rate.
+    //
+    // The backend solver bisects until the priced NPV is 0 on the same curve
+    // the pricer uses, so it is the only self-consistent answer. Use the
+    // store quote purely as an instant placeholder in an empty box, and let
+    // the solved rate overwrite it. parRate is set ONLY by the solver.
     const rate = getParRateFromStore(curves, curveId, tenorY)
-    if (rate && rateRef.current && !rateRef.current.dataset.userEdited) {
+    if (rate && rateRef.current && !rateRef.current.dataset.userEdited
+        && !rateRef.current.value) {
       rateRef.current.value = rate
-      setParRate(parseFloat(rate))
-    } else if (!rate) {
-      // Store empty — fall back to backend solver
-      const payLag = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
-      fetchParRate(effDate, matDate, ccy, index, fixedPayFreq, fixedDc, fixedBdc, payLag, floatResetFreq, floatPayFreq, floatDc, floatBdc, payLag)
     }
-  }, [effDate, matDate, ccy, curves])
+    const payLag = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
+    fetchParRate(effDate, matDate, ccy, index, fixedPayFreq, fixedDc, fixedBdc, payLag, floatResetFreq, floatPayFreq, floatDc, floatBdc, payLag)
+    // Every convention the solve depends on must be a dependency, or changing
+    // a day count / pay frequency silently leaves the previous par on screen.
+  }, [effDate, matDate, ccy, curves, index, fixedPayFreq, fixedDc, fixedBdc,
+      floatResetFreq, floatPayFreq, floatDc, floatBdc, inst, isViewMode])
 
   useEffect(() => {
     if (dataLoaded.current) return; dataLoaded.current = true
@@ -3615,10 +3656,16 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                               } else {
                                 setRateMode('PAR')
                                 if (rateRef.current) { rateRef.current.dataset.userEdited=''; rateRef.current.value='' }
-                                const tenorY = (new Date(matDate) - new Date(effDate)) / (365.25 * 24 * 3600 * 1000)
-                                const curveId = CCY_CURVE[ccy] || 'USD_SOFR'
-                                const rate = getParRateFromStore(curves, curveId, tenorY)
-                                if (rate && rateRef.current) { rateRef.current.value = rate; setParRate(parseFloat(rate)) }
+                                // Solve on the backend instead of lifting the
+                                // nearest market quote out of the store — the
+                                // quote ignores this trade's dates and
+                                // conventions and can disagree with the curve
+                                // the pricer actually uses.
+                                setParRate(null)
+                                const payLagPar = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
+                                fetchParRate(effDate, matDate, ccy, index,
+                                             fixedPayFreq, fixedDc, fixedBdc, payLagPar,
+                                             floatResetFreq, floatPayFreq, floatDc, floatBdc, payLagPar)
                                 setAnalytics(null)
                               }
                             }}

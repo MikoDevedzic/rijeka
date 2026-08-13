@@ -11,7 +11,7 @@ const VA_DEFS = {
   fva:    { label:'FVA',    color:'#FF6B6B', desc:'Funding Valuation Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative.', curve:'EE' },
   fba:    { label:'FBA',    color:'#4A9EFF', desc:'Funding Benefit Adjustment = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]. Benefit when counterparty funds your negative MTM. FBA/FTP ratio typically 0.5-0.7.', curve:'ENE' },
   kva:    { label:'KVA',    color:'#FF6B6B', desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
-  mva:    { label:'MVA~',   color:'#F5C842', desc:'Margin Valuation Adjustment (linear proxy) = -IM x (FTP/10000) x T/2. Cost of posting SIMM initial margin on the hedge. Tilde = approximation. Full path-dependent SIMM MVA in Sprint 6B.', curve:'none' },
+  mva:    { label:'MVA',    color:'#F5C842', desc:'Margin Valuation Adjustment = -Sum[ IM(t) x FTP(t) x dt x DF(t) ]. Cost of funding SIMM initial margin. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
   all_in: { label:'ALL-IN', color:'#00D4A8', desc:'NPV + CVA + DVA + FVA + FBA + KVA + MVA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
 }
 
@@ -296,7 +296,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, getSession, analytics, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult }) {
+export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult }) {
   const canvasRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
   const [calib, setCalibState] = useState(() => {
@@ -331,7 +331,9 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const [hurdle, setHurdle] = useState('12')
   const [capModel, setCapModel] = useState('sa_ccr')
   const [wwr, setWwr] = useState(1.0)
-  const [simmIm, setSimmIm] = useState('0.85')
+  // Blank => derive from ISDA SIMM (RW x IR01) server-side. A hardcoded
+  // 0.85 was ~3x this trade's actual IM and flowed straight into MVA.
+  const [simmIm, setSimmIm] = useState('')
   const [highlightCurve, setHighlightCurve] = useState(null)
   const [expandedVa, setExpandedVa] = useState(null)
 
@@ -381,7 +383,18 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     try {
       const session = await getSession()
       const notional = trade ? parseFloat(trade.notional) : parseFloat((notionalRef?.current?.value||'10000000').replace(/,/g,''))
-      const fixedRate = trade ? (trade.terms?.fixed_rate||0.0365) : parseFloat(rateRef?.current?.value||'3.665')/100
+      // The simulated swap must be struck at the trade's actual coupon. rateRef
+      // is unmounted while this tab is showing, so falling back to it (and then
+      // to a hardcoded 3.665) would strike the Monte Carlo ~45bp away from the
+      // real trade. Prefer the solved par rate passed down as a prop.
+      const rateFromRef  = parseFloat(rateRef?.current?.value)
+      const rateFromProp = typeof parRateProp === 'number' ? parRateProp : parseFloat(parRateProp)
+      const uiRate = isFinite(rateFromRef) && rateFromRef > 0
+        ? rateFromRef
+        : (isFinite(rateFromProp) && rateFromProp > 0 ? rateFromProp : NaN)
+      const fixedRate = trade
+        ? (trade.terms?.fixed_rate || 0.0365)
+        : (isFinite(uiRate) ? uiRate / 100 : 0.0365)
       const matYears = (() => {
         const eff = trade ? trade.effective_date : effDate
         const mat = trade ? trade.maturity_date  : matDate
@@ -415,7 +428,12 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         hurdle_rate: parseFloat(hurdle)/100,
         capital_model: capModel,
         wwr_multiplier: wwr,
-        simm_im_m: parseFloat(simmIm),
+        // Blank = derive IM from ISDA SIMM (RW x IR01) rather than a guess.
+        simm_im_m: (simmIm === '' || isNaN(parseFloat(simmIm))) ? null : parseFloat(simmIm),
+        // TV and IR01 from the pricer: XVA is an adjustment to TV, not a
+        // standalone number, and IR01 drives the SIMM IM behind MVA.
+        npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
+        ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
         // Swaption-specific
         ...(instrumentType === 'IR_SWAPTION' ? {
           instrument_type:   'IR_SWAPTION',
@@ -469,7 +487,9 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         hurdle_rate:  parseFloat(hurdle)/100,
         capital_model: capModel,
         wwr_multiplier: wwr,
-        simm_im_m:    parseFloat(simmIm),
+        simm_im_m:    (simmIm === '' || isNaN(parseFloat(simmIm))) ? null : parseFloat(simmIm),
+        npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
+        ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
         paths,
       }
     }
@@ -497,7 +517,17 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const tradeN = (() => { try { const n=trade?parseFloat(trade.notional):parseFloat((notionalRef?.current?.value||'10000000').replace(/,/g,'')); return isNaN(n)?10000000:n } catch(_){return 10000000} })()
   const matY = simResult ? simResult.steps/12 : 5
   const dv01 = tradeN * matY / 10000
-  const parRate = (() => { try { const r=parseFloat(rateRef?.current?.value||'3.665'); return isNaN(r)?3.665:r } catch(_){return 3.665} })()
+  // Prefer the solved par rate passed down as a prop. Reading rateRef here is
+  // unreliable: that input lives in the TRADE tab, which is unmounted while
+  // this tab is showing, so the ref is null and the old code silently fell
+  // back to a hardcoded 3.665 — which is why this panel could disagree with
+  // the footer's all-in rate on the very same screen.
+  const parRate = (() => {
+    const p = typeof parRateProp === 'number' ? parRateProp : parseFloat(parRateProp)
+    if (isFinite(p) && p > 0) return p
+    try { const r = parseFloat(rateRef?.current?.value); return isFinite(r) && r > 0 ? r : NaN } catch (_) { return NaN }
+  })()
+  const parRateKnown = isFinite(parRate)
   const xvaTotalBp = xva ? [xva.cva,xva.dva,xva.fva,xva.fba,xva.kva,xva.mva].reduce((s,v)=>s+(v||0),0)/dv01 : 0
   const allInRate = parRate + xvaTotalBp/100
 
@@ -593,7 +623,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           </select>
         </div>
         <div style={{marginTop:'8px',fontSize:'0.6875rem',color:'#222',lineHeight:1.5,background:'#050505',border:'1px solid #0F0F0F',borderRadius:'2px',padding:'5px 7px'}}>
-          MVA~ = −IM × FTP × T/2 · Linear proxy · Full SIMM path simulation Sprint 6B
+          MVA = −Σ IM(t) × FTP(t) × dt × DF(t) · IM from ISDA SIMM IR delta (RW × IR01), amortising to maturity
         </div>
       </div>
 
@@ -711,9 +741,9 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                      : fmtDollar(val)}
                   </div>
                   <div style={{borderTop:'1px solid #1A1A1A',paddingTop:'3px'}}>
-                    {key==='npv' && <div style={{fontSize:'0.75rem',fontWeight:600,color:'#888',fontFamily:"'IBM Plex Mono',monospace"}}>{parRate.toFixed(3)}%</div>}
+                    {key==='npv' && <div style={{fontSize:'0.75rem',fontWeight:600,color:'#888',fontFamily:"'IBM Plex Mono',monospace"}}>{parRateKnown?parRate.toFixed(3)+'%':'—'}</div>}
                     {key==='npv' && <div style={{fontSize:'0.6rem',color:'#2A2A2A',fontFamily:"'IBM Plex Sans',sans-serif"}}>par rate</div>}
-                    {key==='all_in' && <div style={{fontSize:'0.75rem',fontWeight:700,color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace"}}>{allInRate.toFixed(3)}%</div>}
+                    {key==='all_in' && <div style={{fontSize:'0.75rem',fontWeight:700,color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace"}}>{parRateKnown?allInRate.toFixed(3)+'%':'—'}</div>}
                     {key==='all_in' && <div style={{fontSize:'0.6rem',color:'#00D4A8',fontFamily:"'IBM Plex Sans',sans-serif"}}>all-in rate</div>}
                     {bp!=null && <div style={{fontSize:'0.75rem',fontWeight:600,color:def.color+'AA',fontFamily:"'IBM Plex Mono',monospace"}}>{parseFloat(bp)>=0?'+':''}{bp}bp</div>}
                     {bp!=null && <div style={{fontSize:'0.6rem',color:'#2A2A2A',fontFamily:"'IBM Plex Sans',sans-serif"}}>bp on rate</div>}

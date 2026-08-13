@@ -39,7 +39,9 @@ router = APIRouter(prefix="/api/xva", tags=["xva"])
 # Calibration basket: 5Y-tenor column across expiries.
 # HW1F constant (a,sigma) fits ONE tenor column well.
 # 5Y tenor is standard for XVA — captures mid-curve dynamics.
-# Expected results: sigma ~30-40bp, a ~0.02-0.08, RMSE < 3bp.
+# SECTION 6.1B: wide basket (diagonal + cross-tenor + co-terminal + long-end).
+# Cross-tenor vol decay identifies a; the flat diagonal alone pinned a at its
+# lower bound. Post-6.1 expectation: sigma ~70-90bp, a off the bound, RMSE a few bp.
 CALIBRATION_BASKET_DEF = [
     {"expiry": "1Y",  "tenor": "5Y", "ticker": "USSNA15 ICPL Curncy",  "role": "5Y_diagonal", "weight": 1.0},
     {"expiry": "2Y",  "tenor": "5Y", "ticker": "USSNA25 ICPL Curncy",  "role": "5Y_diagonal", "weight": 1.0},
@@ -47,7 +49,52 @@ CALIBRATION_BASKET_DEF = [
     {"expiry": "5Y",  "tenor": "5Y", "ticker": "USSNA55 ICPL Curncy",  "role": "5Y_diagonal", "weight": 1.0},
     {"expiry": "7Y",  "tenor": "5Y", "ticker": "USSNA75 ICPL Curncy",  "role": "5Y_diagonal", "weight": 0.8},
     {"expiry": "10Y", "tenor": "5Y", "ticker": "USSNA105 ICPL Curncy", "role": "5Y_diagonal", "weight": 0.6},
+    {"expiry": "1Y",  "tenor": "1Y", "ticker": "USSNA11 ICPL Curncy",  "role": "cross_tenor", "weight": 0.8},
+    {"expiry": "1Y",  "tenor": "2Y", "ticker": "USSNA12 ICPL Curncy",  "role": "cross_tenor", "weight": 0.8},
+    {"expiry": "1Y",  "tenor": "3Y", "ticker": "USSNA13 ICPL Curncy",  "role": "cross_tenor", "weight": 0.8},
+    {"expiry": "1Y",  "tenor": "7Y", "ticker": "USSNA17 ICPL Curncy",  "role": "cross_tenor", "weight": 0.8},
+    {"expiry": "1Y",  "tenor": "9Y", "ticker": "USSNA19 ICPL Curncy",  "role": "cross_tenor", "weight": 0.8},
+    {"expiry": "3Y",  "tenor": "7Y", "ticker": "USSNA37 ICPL Curncy",  "role": "co_terminal_10Y", "weight": 0.8},
+    {"expiry": "7Y",  "tenor": "3Y", "ticker": "USSNA73 ICPL Curncy",  "role": "co_terminal_10Y", "weight": 0.8},
+    {"expiry": "5Y",  "tenor": "9Y", "ticker": "USSNA59 ICPL Curncy",  "role": "long_end_anchor", "weight": 0.7},
+    {"expiry": "7Y",  "tenor": "7Y", "ticker": "USSNA77 ICPL Curncy",  "role": "long_end_anchor", "weight": 0.7},
+    {"expiry": "7Y",  "tenor": "9Y", "ticker": "USSNA79 ICPL Curncy",  "role": "long_end_anchor", "weight": 0.7},
 ]
+
+
+# ── ISDA SIMM — IR delta risk weights, regular-volatility currencies ─────────
+# (USD/EUR/GBP). Units are bp, matching a sensitivity expressed as $ per bp,
+# so IM = RW x |IR01| comes out in dollars.
+_SIMM_IR_RW = [
+    (0.0384, 109.0),  # 2w
+    (0.0833, 105.0),  # 1m
+    (0.25,    90.0),  # 3m
+    (0.50,    71.0),  # 6m
+    (1.0,     66.0),
+    (2.0,     66.0),
+    (3.0,     64.0),
+    (5.0,     61.0),
+    (10.0,    61.0),
+    (15.0,    61.0),
+    (20.0,    61.0),
+    (30.0,    64.0),
+]
+
+
+def _simm_ir_risk_weight(maturity_y: float) -> float:
+    """Linearly interpolated SIMM IR delta risk weight for a tenor in years."""
+    pts = _SIMM_IR_RW
+    if maturity_y <= pts[0][0]:
+        return pts[0][1]
+    if maturity_y >= pts[-1][0]:
+        return pts[-1][1]
+    for i in range(len(pts) - 1):
+        t0, w0 = pts[i]
+        t1, w1 = pts[i + 1]
+        if t0 <= maturity_y <= t1:
+            f = (maturity_y - t0) / (t1 - t0)
+            return w0 * (1 - f) + w1 * f
+    return pts[-1][1]
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -65,6 +112,12 @@ class SimulateRequest(BaseModel):
     maturity_y: float = 5.0
     fixed_rate: float = 0.03643
     paths: int = 2000
+    # Trade TV from the pricer. XVA is an ADJUSTMENT to this, not a
+    # standalone value — all_in = npv + Σ XVA. If the caller does not
+    # supply it we return npv=None rather than silently reporting 0.0,
+    # so the UI cannot display an all-in that ignores the trade's MtM.
+    npv: Optional[float] = None
+    ir01: Optional[float] = None         # $ per bp, from the pricer — drives SIMM IM
     # HW1F overrides — if None, loads latest calibration from DB
     a: Optional[float] = None
     sigma_bp: Optional[float] = None
@@ -76,13 +129,17 @@ class SimulateRequest(BaseModel):
     cp_cds_curve: Optional[list] = None   # [{t: float, spread_bp: float}]
     own_cds_curve: Optional[list] = None
     ftp_curve: Optional[list] = None
-    lgd: float = 0.40
+    lgd: float = 0.40                    # counterparty LGD (1 - recovery)
+    own_lgd: float = 0.40                # own LGD for DVA
     ftp_bp: float = 55.0
     fba_ratio: float = 0.55
     hurdle_rate: float = 0.12
     capital_model: str = "sa_ccr"        # sa_ccr | cem | imm
+    counterparty_rw: float = 1.0         # Basel counterparty risk weight (1.0 = 100%)
     wwr_multiplier: float = 1.0
-    simm_im_m: float = 0.85              # IM in $M for MVA proxy
+    # IM in $M for MVA. If None, derived from ISDA SIMM IR delta on `ir01`
+    # (or a notional/tenor proxy) instead of a hardcoded guess.
+    simm_im_m: Optional[float] = None
     direction: str = "PAY"                # PAY or RECEIVE — flips EE/ENE
 
 
@@ -359,6 +416,7 @@ async def simulate(
     # Shape: (n_paths, T)
     r0 = theta
     paths = np.zeros((n_paths, T))
+    ann_mean = np.zeros(T)      # mean annuity per step — used to decay the TV anchor
     r = np.full(n_paths, r0)
 
     for i in range(T):
@@ -392,12 +450,33 @@ async def simulate(
                   - sigma * sigma * B_m * B_m / (4 * a))
         df_m = np.exp(log_Am - B_m * r)
 
+        ann_mean[i] = float(np.mean(ann))
         paths[:, i] = (K * ann - (1 - df_m)) * N
 
     # ── Exposure profiles ────────────────────────────────────────────────────
-    # Flip sign for RECEIVE FIXED — receiver has mirror exposure profile
-    if body.direction.upper() == "RECEIVE":
+    # `paths` above is the RECEIVER value: K·A − (1 − DF), i.e. receive fixed.
+    # The PAY FIXED trade is its mirror, so the payer is what needs flipping.
+    # (This previously flipped on RECEIVE, which gave every pay-fixed swap the
+    # receiver's exposure profile and therefore swapped CVA with DVA.)
+    if body.direction.upper() == "PAY":
         paths = -paths
+
+    # ── Anchor the profile to the pricer's TV ────────────────────────────────
+    # The MC runs off a flat curve at theta, so its t=0 value is the ATM value
+    # of a swap struck at `fixed_rate`. The real trade is generally away from
+    # that (on 2026-08-12: TV +$212k = 46.6bp of moneyness), and an exposure
+    # profile that ignores it under-states EE for an ITM trade. A rate-level
+    # offset is worth Δr × annuity × N, so we re-strike the simulated swap by
+    # the offset implied by the pricer's TV — the shift decays with the
+    # annuity and vanishes at maturity, exactly as the real moneyness does.
+    # (Deeper fix: run the MC off the bootstrapped curve rather than flat theta.)
+    if body.npv is not None and ann_mean[0] > 0:
+        v0    = float(np.mean(paths[:, 0]))
+        delta = body.npv - v0
+        for i in range(T):
+            if ann_mean[0] > 0:
+                paths[:, i] += delta * (ann_mean[i] / ann_mean[0])
+
     ee  = np.mean(np.maximum(paths, 0), axis=0).tolist()
     ene = np.mean(np.minimum(paths, 0), axis=0).tolist()
     pfe = np.percentile(paths, 95, axis=0).tolist()
@@ -423,28 +502,86 @@ async def simulate(
         return flat_bp / 10000.0
 
     ftp_flat = body.ftp_bp / 10000.0
-    hurdle= body.hurdle_rate
-    wwr   = body.wwr_multiplier
-    rwa   = {"sa_ccr": 0.015, "cem": 0.018, "imm": 0.010}.get(body.capital_model, 0.015)
+    hurdle  = body.hurdle_rate
+    wwr     = body.wwr_multiplier
+    own_lgd = body.own_lgd
 
-    cva=dva=fva=fba_v=kva=0.0
+    # ── Initial margin for MVA (ISDA SIMM IR delta) ──────────────────────────
+    # A single vanilla swap sits in one currency / one tenor bucket, so the
+    # SIMM weighted-sensitivity quadratic form collapses to |RW x IR01|.
+    if body.simm_im_m is not None:
+        im_0 = body.simm_im_m * 1e6
+    else:
+        rw_simm = _simm_ir_risk_weight(body.maturity_y)
+        if body.ir01 is not None:
+            im_0 = abs(body.ir01) * rw_simm
+        else:
+            # Fallback when the caller has no IR01: IR01 ~ N x annuity x 1bp
+            ann_0 = ((1.0 - math.exp(-theta * body.maturity_y)) / theta
+                     if theta > 0 else body.maturity_y)
+            im_0  = abs(N * ann_0 * 1e-4) * rw_simm
+
+    # ── SA-CCR constants ─────────────────────────────────────────────────────
+    SF_IR = 0.005     # supervisory factor, interest-rate asset class
+    ALPHA = 1.4       # SA-CCR alpha
+    CAP_R = 0.08      # capital / RWA
+    rw_cp = body.counterparty_rw
+    M0    = body.maturity_y
+
+    cva=dva=fva=fba_v=kva=mva=0.0
     qcp=qow=1.0
     disc_rate = theta
+    mean_v = np.mean(paths, axis=0)
+    ead_0 = cap_0 = 0.0
 
     for i in range(T):
         t    = (i + 1) * DT
         disc = math.exp(-disc_rate * t)
-        cp_h_t = interp_spread(body.cp_cds_curve, body.cp_cds_bp, t)
-        ow_h_t = interp_spread(body.own_cds_curve, body.own_cds_bp, t)
+        cp_s_t = interp_spread(body.cp_cds_curve, body.cp_cds_bp, t)
+        ow_s_t = interp_spread(body.own_cds_curve, body.own_cds_bp, t)
         ftp_t  = interp_spread(body.ftp_curve, body.ftp_bp, t) if body.ftp_curve else ftp_flat
         fba_s_t= ftp_t * body.fba_ratio
-        nqcp = math.exp(-cp_h_t * t)
-        nqow = math.exp(-ow_h_t * t)
-        cva  += lgd * ee[i]          * (qcp - nqcp) * disc * wwr
-        dva  -= lgd * abs(ene[i])    * (qow - nqow) * disc
-        fva  += ftp_t  * ee[i]       * DT           * disc
-        fba_v-= fba_s_t* abs(ene[i]) * DT           * disc
-        kva  += hurdle * N * rwa     * math.exp(-disc_rate * t) * DT * disc
+
+        # Credit triangle: hazard = spread / (1 - R) = spread / LGD.
+        # Using the raw CDS spread as the hazard understates PD by ~1/LGD
+        # (at 91bp / LGD 0.40 that is a 5Y PD of 4.4% instead of 10.7%).
+        nqcp = math.exp(-(cp_s_t / lgd)     * t) if lgd     > 0 else 0.0
+        nqow = math.exp(-(ow_s_t / own_lgd) * t) if own_lgd > 0 else 0.0
+
+        cva  += lgd     * ee[i]       * (qcp - nqcp) * disc * wwr
+        dva  -= own_lgd * abs(ene[i]) * (qow - nqow) * disc
+        fva  += ftp_t   * ee[i]       * DT * disc
+        fba_v-= fba_s_t * abs(ene[i]) * DT * disc
+
+        # ── Capital profile → KVA ────────────────────────────────────────────
+        # Capital amortises as the trade rolls down; it is NOT a flat
+        # percentage of notional held to maturity.
+        m_t = max(M0 - t, 0.0)
+        if m_t > 0:
+            sd_t  = (1.0 - math.exp(-0.05 * m_t)) / 0.05   # supervisory duration
+            mf_t  = math.sqrt(min(m_t, 1.0))               # unmargined maturity factor
+            addon = SF_IR * N * sd_t * mf_t
+            rc_t  = max(float(mean_v[i]), 0.0)             # replacement cost, uncollateralised
+            if addon > 0:
+                # PFE multiplier floors at 5% when the netting set is OTM
+                mult = min(1.0, 0.05 + 0.95 * math.exp(float(mean_v[i]) / (1.9 * addon)))
+            else:
+                mult = 1.0
+            if body.capital_model == "imm":
+                ead_t = ALPHA * ee[i]                      # alpha x effective EPE
+            elif body.capital_model == "cem":
+                ead_t = rc_t + SF_IR * N * mf_t            # RC + notional add-on
+            else:
+                ead_t = ALPHA * (rc_t + mult * addon)      # SA-CCR
+            k_t   = CAP_R * rw_cp * ead_t
+            kva  += hurdle * k_t * DT * disc               # single discount
+            if i == 0:
+                ead_0, cap_0 = ead_t, k_t
+
+            # IM amortises with residual maturity
+            im_t  = im_0 * (m_t / M0) if M0 > 0 else 0.0
+            mva  -= im_t * ftp_t * DT * disc
+
         qcp   = nqcp
         qow   = nqow
 
@@ -453,10 +590,14 @@ async def simulate(
     fva   = -abs(fva)
     fba_v =  abs(fba_v)
     kva   = -abs(kva)
-    mva   = -(body.simm_im_m * 1e6 * ftp_flat * body.maturity_y / 2.0)
+    mva   = -abs(mva)
 
-    # Stub NPV — in production this comes from the pricer
-    npv   = 0.0
+    # Trade TV comes from the pricer. If the caller did not supply it we
+    # return null rather than 0.0 — an all-in that silently ignores the
+    # trade's MtM is worse than no number at all.
+    npv       = body.npv
+    xva_total = cva + dva + fva + fba_v + kva + mva
+    all_in    = (npv + xva_total) if npv is not None else None
 
     # Sample 80 paths for visualisation (evenly spaced)
     n_sample = min(80, n_paths)
@@ -472,18 +613,29 @@ async def simulate(
         "dt":           DT,
         "n_paths":      n_paths,
         "xva": {
-            "npv": round(npv, 2),
+            "npv": round(npv, 2) if npv is not None else None,
             "cva": round(cva, 2),
             "dva": round(dva, 2),
             "fva": round(fva, 2),
             "fba": round(fba_v, 2),
             "kva": round(kva, 2),
             "mva": round(mva, 2),
-            "all_in": round(npv + cva + dva + fva + fba_v + kva + mva, 2),
+            "xva_total": round(xva_total, 2),
+            "all_in": round(all_in, 2) if all_in is not None else None,
         },
         "params": {
             "a":        a,
             "sigma_bp": sigma_bp,
             "theta":    theta,
+        },
+        # Capital / margin diagnostics — so a reviewer can tie KVA and MVA
+        # back to an EAD and an IM rather than take them on faith.
+        "capital": {
+            "model":      body.capital_model,
+            "ead_0":      round(ead_0, 2),
+            "capital_0":  round(cap_0, 2),
+            "rw":         rw_cp,
+            "im_0":       round(im_0, 2),
+            "simm_rw":    _simm_ir_risk_weight(body.maturity_y),
         },
     }

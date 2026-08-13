@@ -245,16 +245,31 @@ export function SwapTermsBody({ state, update }) {
           },
           body: JSON.stringify(payload),
         })
-        if (!res.ok || cancelled) return
+        if (cancelled) return
+        if (!res.ok) {
+          // Do NOT fail silently. A swallowed error here leaves a stale coupon
+          // on screen while the PAR chip still claims the trade is at par —
+          // which is how a 46bp-off-market trade gets booked as "par".
+          const e = await res.json().catch(() => ({ detail: res.statusText }))
+          update({ parError: 'Par solve failed: ' + (e.detail || res.statusText), parRate: null })
+          return
+        }
         const data = await res.json()
         if (cancelled || state.rateUserEdited) return
         if (typeof data.par_rate === 'number') {
-          update({ coupon: data.par_rate.toFixed(8) })
+          update({ coupon: data.par_rate.toFixed(8), parRate: data.par_rate, parError: null })
         }
-      } catch (_) { /* silent */ }
+      } catch (err) {
+        if (!cancelled) update({ parError: 'Par solve failed: ' + err.message, parRate: null })
+      }
     })()
     return () => { cancelled = true }
-  }, [effDate, matDate, ccy, structure, direction])
+    // Every input the payload reads must be a dependency. valDate, the leg
+    // conventions, spread and leverage were previously missing, so changing
+    // the valuation date or a day count left the old par rate on screen.
+  }, [effDate, matDate, ccy, structure, direction, valDate, index,
+      fixedPayFreq, fixedDc, fixedBdc, floatResetFreq, floatPayFreq,
+      floatDc, floatBdc, spread, leverage, state.notional, state.rateUserEdited])
 
   // ── Sprint 13 Patch 5 ─ structure-sync effect removed ──
   // Per PRODUCT_TAXONOMY §1.11, embedded optionality is a leg-level feature
@@ -266,7 +281,13 @@ export function SwapTermsBody({ state, update }) {
   // (default VANILLA) regardless of embedded_options content.
   // ── Handlers ─────────────────────────────────────────────────────────────
   const onCouponChange = (val) => update({ coupon: val, rateUserEdited: true })
-  const onParClick     = () => update({ coupon: '', rateUserEdited: false })
+  const onParClick     = () => update({ coupon: '', rateUserEdited: false, parError: null })
+
+  // Is the coupon actually at par? Compared against the solved par rate,
+  // not assumed. 0.01bp tolerance absorbs display rounding only.
+  const couponNum = parseFloat(String(coupon).replace(/[^0-9.-]/g, ''))
+  const isAtPar   = state.parRate != null && isFinite(couponNum)
+                    && Math.abs(couponNum - Number(state.parRate)) < 1e-4
   const onIndexChange  = (v) => {
     const def = INDEX_DEFAULTS[v] || ['DAILY','ANNUAL','ACT/360']
     update({
@@ -295,7 +316,19 @@ export function SwapTermsBody({ state, update }) {
                      onChange={e => onCouponChange(e.target.value)} />
             </Field>
             <Field label={'\u00A0'}>
-              <button type="button" className="tbw-chip is-on" onClick={onParClick}>{'\u25CF'} PAR</button>
+              {/* The chip must reflect reality: lit only when the coupon
+                  actually matches the solved par rate (within 0.01bp). It was
+                  hardcoded is-on, so it stayed lit on an off-market coupon. */}
+              <button type="button"
+                      className={'tbw-chip' + (isAtPar ? ' is-on' : '')}
+                      title={state.parError
+                        ? state.parError
+                        : (state.parRate != null
+                            ? 'Solved par ' + Number(state.parRate).toFixed(4) + '%'
+                            : 'Par rate not solved yet')}
+                      onClick={onParClick}>
+                {isAtPar ? '\u25CF' : '\u25CB'} PAR
+              </button>
             </Field>
             <Field label="PAY FREQ">
               <select style={selStyle} value={fixedPayFreq}

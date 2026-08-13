@@ -52,6 +52,10 @@ export default function XvaPanel({
       // Current priced result
       analytics={result}
 
+      // Solved par rate. XVATab must not have to read rateRef for this — that
+      // input is unmounted while the XVA tab is showing.
+      parRate={state.parRate != null ? Number(state.parRate) : undefined}
+
       // Params ref (XVATab writes, shell provides)
       xvaParamsRef={xvaParamsRef}
 
