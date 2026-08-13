@@ -41,6 +41,7 @@ from pricing.fx_forward import price_fx_forward
 from pricing.greeks import compute_greeks
 from pricing.ir_swap import price_swap, price_leg
 from pricing.swaption import price_swaption, _N
+from pricing.bermudan_swaption import price_bermudan_swaption_hw1f  # Sprint 13A/B
 
 router = APIRouter()
 
@@ -254,10 +255,15 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str
     if ci.flat_rate is not None:
         return Curve(valuation_date=valuation_date, flat_rate=float(ci.flat_rate))
 
-    # DB snapshot
+    # DB snapshot.
+    # NOTE: this deliberately takes the LATEST snapshot with no date filter —
+    # refusing to price because the snap is a day behind would be worse. But
+    # the caller has to be TOLD: valuing today off a month-old curve without
+    # comment is not acceptable in a valuation product. The snapshot date is
+    # attached to the Curve and surfaced in the pricing response.
     try:
         result = db.execute(
-            text("SELECT quotes FROM market_data_snapshots WHERE curve_id = :cid AND user_id = :user_id ORDER BY valuation_date DESC LIMIT 1"),
+            text("SELECT quotes, valuation_date FROM market_data_snapshots WHERE curve_id = :cid AND user_id = :user_id ORDER BY valuation_date DESC LIMIT 1"),
             {"cid": ci.curve_id, "user_id": user_id}
         )
         row = result.fetchone()
@@ -282,7 +288,13 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str
                   f"dc={curve_dc}, cal={curve_cal}, spot_lag={curve_spot_lag}, "
                   f"first={db_quotes[0] if db_quotes else None}")
             if len(db_quotes) >= 2:
-                return bootstrap_from_dicts(valuation_date, db_quotes)
+                crv = bootstrap_from_dicts(valuation_date, db_quotes)
+                # Stamp provenance so staleness can be reported downstream.
+                try:
+                    crv.snapshot_date = row.valuation_date
+                except Exception:
+                    pass
+                return crv
     except Exception as _db_err:
         print(f"[PRICER] DB curve load failed for '{ci.curve_id}': {_db_err}")
 
@@ -304,6 +316,48 @@ def _curve_mode(curves: List[CurveInput]) -> str:
         if ci.quotes and len([q for q in ci.quotes if q.rate is not None]) >= 2:
             return "bootstrapped"
     return "db-snapshot"
+
+
+# How far behind the valuation date a market snapshot may fall before we say so.
+# One business day of lag is normal; a week is a different market.
+CURVE_STALE_WARN_DAYS = 3
+CURVE_STALE_ALERT_DAYS = 7
+
+
+def curve_staleness(curves_map: dict, valuation_date: date) -> dict:
+    """
+    Report how old the market data behind a valuation is.
+
+    _build_curve takes the most recent snapshot with no date filter, so a
+    valuation will happily run off weeks-old quotes. That is often the right
+    behaviour — but it must never be silent.
+    """
+    out = {"valuation_date": str(valuation_date), "curves": [], "max_stale_days": 0,
+           "status": "ok", "message": None}
+    worst = 0
+    for cid, crv in (curves_map or {}).items():
+        snap = getattr(crv, "snapshot_date", None)
+        days = None
+        if snap is not None:
+            try:
+                days = (valuation_date - snap).days
+            except Exception:
+                days = None
+        out["curves"].append({
+            "curve_id": cid,
+            "snapshot_date": str(snap) if snap is not None else None,
+            "stale_days": days,
+        })
+        if days is not None and days > worst:
+            worst = days
+    out["max_stale_days"] = worst
+    if worst >= CURVE_STALE_ALERT_DAYS:
+        out["status"] = "alert"
+        out["message"] = f"Market data is {worst} days behind the valuation date."
+    elif worst >= CURVE_STALE_WARN_DAYS:
+        out["status"] = "warn"
+        out["message"] = f"Market data is {worst} days behind the valuation date."
+    return out
 
 
 def _check_ir_swaption_embedded_options_gate(instrument_type: Optional[str], legs: list) -> None:
@@ -567,6 +621,7 @@ async def price_trade(
         "trade_id":       str(trade.id),
         "valuation_date": val_date.isoformat(),
         "curve_mode":     _curve_mode(request.curves),
+        "staleness":      curve_staleness(curves, val_date),
         "curve_pillars":  curve_pillars,
         "npv":       float(result.npv)       if result.npv is not None else None,
         "ir01":      float(greeks.ir01)      if greeks and greeks.ir01 is not None else None,
@@ -780,6 +835,7 @@ async def price_preview(
         "trade_id":       "preview",
         "valuation_date": val_date.isoformat(),
         "curve_mode":     _curve_mode(request.curves),
+        "staleness":      curve_staleness(curves, val_date),
         "curve_pillars":  curve_pillars,
         "npv":       float(result.npv)       if result.npv is not None else None,
         "ir01":      float(greeks.ir01)      if greeks and greeks.ir01 is not None else None,
@@ -816,6 +872,21 @@ class SwaptionRequest(BaseModel):
     hw1f_a:         Optional[float] = None
     hw1f_sigma_bp:  Optional[float] = None
     hw1f_theta:     Optional[float] = None
+    # ── Sprint 13B: Bermudan dispatch ──────────────────────────────────────
+    # structure: "EUROPEAN" (default) routes to Bachelier closed-form path.
+    #            "BERMUDAN" routes to HW1F trinomial tree (pricing.bermudan_swaption).
+    # exercise_schedule_y: required for BERMUDAN. List of year-fractions from
+    #   valuation_date at which the option holder may exercise. Must be
+    #   strictly increasing, all positive, and integer multiples of dt=1/12
+    #   (snap-tolerance ±1e-6 enforced by the tree). The largest entry is the
+    #   final expiry; if `expiry_y` differs the largest entry wins.
+    # compute_greeks: when True, vega is computed via sigma-bump (~2 extra
+    #   tree solves, ~14s extra wall time at dt=1/12). IR01 and theta are
+    #   not yet wired for the Bermudan branch (Sprint 13C). When False,
+    #   only NPV + early-exercise premium are returned.
+    structure:           Optional[str]         = "EUROPEAN"
+    exercise_schedule_y: Optional[List[float]] = None
+    compute_greeks:      bool                  = True
 
 
 @router.post("/api/price/swaption")
@@ -885,6 +956,119 @@ async def price_swaption_route(
             'theta':    hw1f_theta or 0.0365,
         }
 
+    # ── Sprint 13B: Bermudan dispatch ─────────────────────────────────────
+    # When structure='BERMUDAN' AND an exercise schedule is supplied, route
+    # to the HW1F trinomial tree pricer (pricing.bermudan_swaption). The
+    # tree is exact-by-construction for HW1F European on the same (a,σ,α(t))
+    # — see Sprint 13A validation gate (Jamshidian closed-form, 34/34 tests
+    # passing). The Bermudan layer is the same backward induction with an
+    # exercise check at each grid time in the schedule.
+    #
+    # Greeks: NPV + Vega (sigma bump, ~2 extra tree solves). IR01 and Theta
+    # are deferred to Sprint 13C — IR01 needs curve-shock infrastructure
+    # that doesn't yet have a clean reuse path on the tree; Theta requires
+    # rolling valuation_date which interacts with the calendar-rounding
+    # artifact documented in SPRINT_13_HW1F_BERMUDAN_SWAPTION.md §6.2.
+    #
+    # The Bachelier HW1F cross-check is N/A here (the tree IS HW1F, so
+    # cross-checking it against itself is meaningless).
+    if (req.structure or "EUROPEAN").upper() == "BERMUDAN":
+        if not req.exercise_schedule_y or len(req.exercise_schedule_y) < 1:
+            raise HTTPException(
+                status_code=422,
+                detail="BERMUDAN structure requires `exercise_schedule_y` "
+                       "(non-empty list of year-fractions from valuation_date)."
+            )
+        # HW1F params are required for Bermudan (no Bachelier fallback).
+        if not (hw1f_a and hw1f_sig):
+            raise HTTPException(
+                status_code=422,
+                detail="BERMUDAN pricing requires HW1F calibration. No "
+                       "(a, σ) found in xva_calibration for this user, and "
+                       "none supplied in the request. Run XVA calibration first."
+            )
+
+        a_dec     = float(hw1f_a)
+        sigma_dec = float(hw1f_sig) / 10000.0   # bp → decimal
+
+        n_periods = int(round(req.tenor_y / req.pay_freq_y))
+        pay_times = [req.expiry_y + (k + 1) * req.pay_freq_y for k in range(n_periods)]
+        period_dcf = [req.pay_freq_y] * n_periods
+
+        def _solve_bermudan(curve_in, sigma_in, val_date_in):
+            return price_bermudan_swaption_hw1f(
+                notional         = req.notional,
+                fixed_rate       = strike,
+                is_payer         = req.is_payer,
+                effective_y      = req.expiry_y,
+                payment_dates_y  = pay_times,
+                period_dcf       = period_dcf,
+                exercise_times_y = list(req.exercise_schedule_y),
+                a                = a_dec,
+                sigma            = sigma_in,
+                discount_curve   = curve_in,
+                valuation_date   = val_date_in,
+                dt               = 1.0 / 12.0,
+            )
+
+        try:
+            base = _solve_bermudan(curve, sigma_dec, val_date)
+        except NotImplementedError as exc:
+            # methodology gates from the pricer (multi-curve, embedded options, BASIS)
+            raise HTTPException(status_code=422, detail=str(exc))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Bermudan pricing error: {exc}")
+
+        # Vega via sigma bump (±1bp). 2 additional tree solves.
+        vega = None
+        if req.compute_greeks:
+            try:
+                up = _solve_bermudan(curve, sigma_dec + 0.0001, val_date).npv
+                dn = _solve_bermudan(curve, sigma_dec - 0.0001, val_date).npv
+                vega = (up - dn) / 2.0   # $ per 1bp σ
+            except Exception:
+                vega = None  # don't fail the whole request if a bump errors
+
+        return {
+            "instrument":     "IR_SWAPTION",
+            "structure":      "BERMUDAN",
+            "valuation_date": val_date.isoformat(),
+            "curve_id":       req.curve_id,
+            "notional":       req.notional,
+            "expiry_y":       req.expiry_y,
+            "tenor_y":        req.tenor_y,
+            "strike":         round(strike, 8),
+            "strike_pct":     round(strike * 100, 6),
+            "is_payer":       req.is_payer,
+            "settlement":     "PHYSICAL",
+            # Analytics
+            "npv":                       round(base.npv, 2),
+            "european_npv":              round(getattr(base, "european_npv",
+                                                       getattr(base, "european_equivalent_npv", 0.0)), 2),
+            "early_exercise_premium":    round(base.early_exercise_premium, 2),
+            "n_exercise_dates":          base.n_exercise_dates,
+            "exercise_schedule_y":       list(req.exercise_schedule_y),
+            "vega":                      round(vega, 2) if vega is not None else None,
+            "ir01":                      None,    # Sprint 13C
+            "theta":                     None,    # Sprint 13C
+            # Tree diagnostics (matches SwaptionTreeResult dataclass)
+            "tree_steps":                getattr(base, "tree_steps", None),
+            "tree_j_max":                getattr(base, "tree_j_max", None),
+            "tree_dt":                   1.0 / 12.0,
+            "discount_check_max_relerr": getattr(base, "discount_check_max_relerr", None),
+            "tenor_calibration_warning": getattr(base, "tenor_calibration_warning", None),
+            # HW1F params used (echoed back for transparency)
+            "hw1f_params":               {"a": a_dec, "sigma_bp": float(hw1f_sig)},
+            "vol_bp":                    float(hw1f_sig),   # echo for UI consistency
+            # Bachelier-style fields not applicable on the tree path
+            "hw1f_vol_bp":               None,
+            "hw1f_npv":                  None,
+            "hw1f_error_bp":             None,
+            "sabr_vol_bp":               None,
+            "is_sabr_vol":               False,
+            "vol_tier":                  "HW1F_TREE",
+        }
+
     # Price
     try:
         result = price_swaption(
@@ -910,6 +1094,7 @@ async def price_swaption_route(
 
     return {
         "instrument":     "IR_SWAPTION",
+        "structure":      "EUROPEAN",
         "valuation_date": val_date.isoformat(),
         "curve_id":       req.curve_id,
         "notional":       req.notional,
@@ -1059,6 +1244,7 @@ async def generate_cashflows(
         "trade_id":            str(trade.id),
         "cashflows_written":   written,
         "curve_mode":          _curve_mode(request.curves),
+        "staleness":           curve_staleness(curves, val_date),
         "valuation_date":      val_date.isoformat(),
         "orphaned_overrides":  _orphans,
     }

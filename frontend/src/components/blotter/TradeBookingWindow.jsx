@@ -1527,6 +1527,29 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 }
 
 
+// Market data and the vol calibration are both loaded "most recent available"
+// with no date filter, so a valuation can silently run on weeks-old inputs and
+// look exactly like a fresh one. Say so, next to the numbers it produced.
+function StalenessBadge({ staleness }) {
+  if (!staleness || staleness.status === 'ok' || !staleness.message) return null
+  const alert = staleness.status === 'alert'
+  const bits = []
+  if (staleness.snapshot_date)    bits.push('curve ' + staleness.snapshot_date + ' (' + staleness.snapshot_days + 'd)')
+  if (staleness.calibration_date) bits.push('calib ' + staleness.calibration_date + ' (' + staleness.calibration_days + 'd)')
+  return (
+    <span title={staleness.message + (bits.length ? '  —  ' + bits.join('  ·  ') : '')}
+      style={{
+        fontSize:'0.8125rem', fontWeight:700, padding:'2px 6px', borderRadius:'2px',
+        letterSpacing:'0.06em', cursor:'help', whiteSpace:'nowrap',
+        background: alert ? 'rgba(224,80,64,0.10)'  : 'rgba(240,160,32,0.08)',
+        border:     alert ? '1px solid rgba(224,80,64,0.45)' : '1px solid rgba(240,160,32,0.35)',
+        color:      alert ? '#e05040' : 'var(--amber)',
+      }}>
+      {alert ? '⚠ STALE DATA' : '⚠ STALE'}
+    </span>
+  )
+}
+
 function xvaCalc(xva, notionalRef, rateRef, effDate, matDate, parRate) {
   try {
     const n = parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))
@@ -3756,6 +3779,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                   {CCY_CURVE[ccy]||'USD_SOFR'} · {analytics.curve_mode} · {analytics.valuation_date}
                 </span>
               )}
+              <StalenessBadge staleness={analytics?.staleness || xvaResult?.staleness} />
               <div style={{display:'flex',alignItems:'center',gap:'5px',marginLeft:'auto'}}>
                 <span style={{fontSize:'0.875rem',color:'var(--text-dim)',letterSpacing:'0.08em',whiteSpace:'nowrap'}}>VAL DATE</span>
                 <input type='date' value={valDate} onChange={e=>setValDate(e.target.value)}
