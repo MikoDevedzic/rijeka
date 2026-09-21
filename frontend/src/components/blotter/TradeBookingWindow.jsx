@@ -4,6 +4,7 @@ import LegDetailsTab from './LegDetailsTab'
 import { useTradesStore } from '../../store/useTradesStore'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { supabase } from '../../lib/supabase'
+import { getSessionSafe } from '../../lib/session'
 import './TradeBookingWindow.css'
 import XVATab from './XVATab'
 
@@ -2002,10 +2003,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     return struct
   }
 
-  const getSession = async () => {
-    const { data:{ session } } = await supabase.auth.getSession()
-    return session
-  }
+  const getSession = getSessionSafe
+
 
   const localDate = () => {
     const n = new Date()
