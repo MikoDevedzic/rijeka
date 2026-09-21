@@ -17,6 +17,7 @@
 import { registerProduct } from '../registry'
 import { SwapTermsBody, SwaptionTermsBody, CapTermsBody,
          FloorTermsBody, CollarTermsBody } from '../product-terms'
+import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from '../schedule_translator'
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -226,7 +227,8 @@ registerProduct({
             day_count: fixedDc, payment_frequency: fixedPayFreq,
             bdc: fixedBdc, payment_lag: payLag,
             fixed_rate: fixedRate,
-            fixed_rate_schedule: null,
+            fixed_rate_schedule: toRateSchedule(state.rateSchedule),
+            notional_schedule:   toNotionalSchedule(state.notionalSchedule),
             discount_curve_id: curveId, forecast_curve_id: null,
             ois_compounding: null,
           },
@@ -238,6 +240,8 @@ registerProduct({
             day_count: floatDc, payment_frequency: floatPayFreq,
             reset_frequency: isOIS ? 'DAILY' : floatResetFreq,
             bdc: floatBdc, payment_lag: payLag,
+            spread_schedule:   toSpreadSchedule(state.spreadSchedule),
+            notional_schedule: toNotionalSchedule(state.notionalSchedule),
             fixed_rate: 0, spread, leverage,
             discount_curve_id: curveId, forecast_curve_id: forecastId,
             ois_compounding: isOIS ? 'COMPOUNDING' : null,

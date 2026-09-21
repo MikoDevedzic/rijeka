@@ -24,6 +24,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase } from '../../lib/supabase'
+import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from './schedule_translator'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -158,7 +159,8 @@ export function buildLegs(state, direction, notional) {
     payment_calendar:  state.fixedCal     || null,
     stub_type: 'SHORT_FRONT', payment_lag: payLag,
     fixed_rate: fixedRate,
-    fixed_rate_schedule: null,
+    fixed_rate_schedule: toRateSchedule(state.rateSchedule),
+    notional_schedule:   toNotionalSchedule(state.notionalSchedule),
     discount_curve_id: curveId, forecast_curve_id: null,
     ois_compounding: null,
     terms: { custom_cashflows: byLegRef['FIXED-1'] || [] },
@@ -175,8 +177,9 @@ export function buildLegs(state, direction, notional) {
     stub_type: 'SHORT_FRONT', payment_lag: payLag,
     fixed_rate: 0,
     spread,
-    spread_schedule: null,
+    spread_schedule: toSpreadSchedule(state.spreadSchedule),
     leverage,
+    notional_schedule: toNotionalSchedule(state.notionalSchedule),
     discount_curve_id: curveId, forecast_curve_id: forecastId,
     ois_compounding: isOIS ? 'COMPOUNDING' : null,
     terms: { custom_cashflows: byLegRef['FLOAT-1'] || [] },
