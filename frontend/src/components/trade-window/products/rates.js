@@ -323,7 +323,7 @@ registerProduct({
 
   structures: [
     { key: 'EUROPEAN', label: 'EUROPEAN' },
-    { key: 'BERMUDAN', label: 'BERMUDAN SOON', live: false },
+    { key: 'BERMUDAN', label: 'BERMUDAN' },
     { key: 'AMERICAN', label: 'AMERICAN SOON', live: false },
   ],
   defaultStructure: 'EUROPEAN',
@@ -343,13 +343,25 @@ registerProduct({
   optionFee: { premiumInBpOrDollar: true, multiPaymentAllowed: true },
 
   analytics: {
-    metrics: r => [
-      metricCurrency('OPTION NPV', r.npv),
-      metricCurrency('VEGA / 1bp', r.vega),
-      metricCurrency('IR01',       r.ir01),
-      metricCurrency('THETA',      r.theta),
-      metricCurrency('HW1F',       r.hw1f_npv),
-    ],
+    metrics: r => {
+      // Sprint 13B: when structure='BERMUDAN', the response carries
+      // `early_exercise_premium` (Bermudan NPV - European-equivalent NPV).
+      // Display it in place of the HW1F cross-check, which doesn't apply
+      // to the tree path (the tree IS HW1F).
+      const isBermudan = r.structure === 'BERMUDAN'
+      const m = [
+        metricCurrency('OPTION NPV', r.npv),
+        metricCurrency('VEGA / 1bp', r.vega),
+        metricCurrency('IR01',       r.ir01),
+        metricCurrency('THETA',      r.theta),
+      ]
+      if (isBermudan) {
+        m.push(metricCurrency('EE PREMIUM', r.early_exercise_premium))
+      } else {
+        m.push(metricCurrency('HW1F', r.hw1f_npv))
+      }
+      return m
+    },
     breakdown: r => r.legs ? {
       kind: 'legs',
       columns: ['LEG','TYPE','DIR','CCY','PV','IR01','IR01 DISC','VEGA','THETA'],
@@ -374,18 +386,51 @@ registerProduct({
 
   pricing: {
     endpoint: '/api/price/swaption',
-    buildPayload: state => ({
-      notional: state.notional,
-      expiry_y: state.expiryY,
-      tenor_y:  state.tenorY,
-      strike:   state.strike,
-      is_payer: state.direction === 'PAY',
-      curve_id: state.curveId,
-      vol_override_bp: state.volOverride,
-      valuation_date: state.valuationDate,
-    }),
+    buildPayload: state => {
+      // ── Sprint 13B: Bermudan dispatch ────────────────────────────────────
+      // When structure === 'BERMUDAN', send a default annual exercise
+      // schedule from year 1 through expiry_y (inclusive). Schedule editor
+      // UI is Sprint 13C; this default produces a sensible "annual European
+      // on every coupon up to expiry" Bermudan that matches the most common
+      // market convention. User can override via state.exerciseScheduleY
+      // when the editor lands.
+      const isBermudan = state.structure === 'BERMUDAN'
+      let exercise_schedule_y = null
+      if (isBermudan) {
+        if (Array.isArray(state.exerciseScheduleY) && state.exerciseScheduleY.length) {
+          exercise_schedule_y = state.exerciseScheduleY
+            .map(Number)
+            .filter(t => Number.isFinite(t) && t > 0)
+            .sort((a, b) => a - b)
+        } else {
+          // Default: [1, 2, ..., floor(expiry_y)] union {expiry_y}.
+          // Snap-aligned to dt=1/12 by integer years; expiry_y itself is
+          // appended to guarantee the Bermudan ≥ European invariant holds
+          // tautologically (the European exercise is in the schedule).
+          const E = Number(state.expiryY) || 1
+          const out = []
+          for (let y = 1; y <= Math.floor(E); y++) out.push(y)
+          if (out.length === 0 || out[out.length - 1] !== E) out.push(E)
+          exercise_schedule_y = out
+        }
+      }
+      return {
+        notional:            state.notional,
+        expiry_y:            state.expiryY,
+        tenor_y:             state.tenorY,
+        strike:              state.strike,
+        is_payer:            state.direction === 'PAY',
+        curve_id:            state.curveId,
+        vol_override_bp:     state.volOverride,
+        valuation_date:      state.valuationDate,
+        // Sprint 13B
+        structure:           state.structure || 'EUROPEAN',
+        exercise_schedule_y,
+      }
+    },
     parseResponse: r => r,
-    timeoutMs: 30000,
+    timeoutMs: 60000,    // Sprint 13B: bumped from 30000 — Bermudan tree
+                         // takes ~7s base + ~14s vega bumps on dt=1/12
   },
 })
 
