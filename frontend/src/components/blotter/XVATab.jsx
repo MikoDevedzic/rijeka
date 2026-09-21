@@ -42,6 +42,18 @@ const TIPS = {
     body: 'Required return on regulatory capital.\n\nKVA = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]\nCapital(t) = SA-CCR EAD(t) x 8% (Basel III RWA)\n\nTypical: 10-15% for investment banks. At 12% hurdle, a 5Y $10M IRS generates ~$70-80K KVA. KVA is often larger than CVA for vanilla rates trades.' },
   simmIm: { title: 'SIMM IM ($M)',
     body: 'ISDA SIMM initial margin for the inter-dealer hedge in $M. Linear MVA proxy:\n\nMVA~ = -(IM x $1M) x (FTP/10000) x T/2\n\nAssumes flat IM for T/2 years on average.\n\nFull Sprint 6B: IM(path, t) computed on each Monte Carlo path using ISDA SIMM delta sensitivities. MVA = -(FTP/10000) x Sum[ IM(t) x dt x DF(t) ].' },
+  settlement: { title: 'Settlement / CSA',
+    body: 'How the trade is margined. Every VA is computed on the RESIDUAL exposure after collateral:\n\nE+(t) = max(V(t) − VM(t) − IM_recv, 0)\n\nUNCOLLATERALISED — no variation margin. Full MtM at risk. IM may still be posted (legacy MVA).\n\nBILATERAL — daily VM under a CSA, thresholds and MTA apply, 10 business-day margin period of risk (BCBS-IOSCO floor for non-cleared). SIMM IM exchanged.\n\nON-CHAIN — atomic settlement: continuous VM, zero threshold and MTA, 5bd MPoR (the cleared floor). SIMM risk weights scale by sqrt(5/10) = 0.707, so IM and MVA fall 29.3%; SA-CCR margined maturity factor 1.5·sqrt(MPoR/250) cuts KVA by the same factor.' },
+  mpor: { title: 'Margin period of risk (bd)',
+    body: 'Business days between the last collateral call that would be honoured and close-out. VM held at t is what was called against V(t − MPoR); the exposure over that window is the residual.\n\nV(t − MPoR) sits between monthly grid points and is sampled from the Brownian bridge, which preserves the variance of the margin-period move.\n\nSIMM IM scales with sqrt(MPoR / 10). Bilateral floor 10bd; cleared / on-chain floor 5bd.' },
+  threshold: { title: 'Threshold ($)',
+    body: 'Exposure below which the counterparty posts no collateral. Uncollateralised up to this amount — adds straight back to EE and CVA. Zero under standard on-chain terms.' },
+  mtaTip: { title: 'Minimum transfer amount ($)',
+    body: 'Collateral calls smaller than this are not made. Modelled as: no VM held while |call| < MTA. Also enters SA-CCR replacement cost as TH + MTA − NICA.' },
+  imYield: { title: 'IM yield pickup (bp)',
+    body: 'Yield earned on posted initial margin, netted against its funding cost: MVA = −Σ IM(t) × (FTP − pickup) × dt × DF(t).\n\nTokenised sovereign collateral (e.g. tokenised T-bills) earns while posted; cash IM at a CCP typically does not. Leave blank for none.' },
+  compare: { title: 'Compare on-chain',
+    body: 'Runs a second simulation on the SAME paths under the ON-CHAIN preset (continuous VM, 5bd MPoR) and shows each VA side by side with the current settlement. Same seed, so the difference is purely the collateral terms.' },
   capModel: { title: 'Capital model',
     body: 'Regulatory CCR capital framework for KVA.\n\nSA-CCR (current standard): EAD = 1.4 x (RC + AddOn). RC = max(NPV,0). AddOn = Notional x SF x MF. SF(IRS)=0.5%. MF=sqrt(min(M,1)).\n\nCEM (legacy): EAD = max(NPV,0) + Notional x addon%. Addon: 0.5% (1-5Y IRS). Simpler, less risk-sensitive.\n\nIMM: full MC EPE with supervisory approval. Sprint 8.' },
 }
@@ -52,7 +64,7 @@ function fmtDollar(v) {
   return sign + '$' + Math.abs(Math.round(v)).toLocaleString('en-US')
 }
 
-function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
+function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths, eeGross) {
   if (!canvas || !ee || !ee.length) return
   const ctx = canvas.getContext('2d')
   const dpr = window.devicePixelRatio || 2
@@ -65,7 +77,7 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
   const CW = W - PAD.l - PAD.r
   const CH = H - PAD.t - PAD.b
   const n = ee.length
-  let maxV = Math.max(...pfe.map(Math.abs), ...ee.map(Math.abs), 1)
+  let maxV = Math.max(...pfe.map(Math.abs), ...ee.map(Math.abs), ...((eeGross||[]).map(Math.abs)), 1)
   let minV = Math.min(...ene, 0)
   if (samplePaths && samplePaths.length) {
     const flat = samplePaths.flat()
@@ -126,6 +138,7 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
   const eeArr=[...ee]; eeArr._name='EE'
   const eneArr=[...ene]; eneArr._name='ENE'
   const pfeArr=[...pfe]; pfeArr._name='PFE'
+  if (eeGross && eeGross.length) { const g=[...eeGross]; g._name='EE_GROSS'; drawCurve(g,'#00D4A8',[2,4],0,1.0,false) }
   drawCurve(eneArr,'#4A9EFF',[5,3],7,1.5,true)
   drawCurve(pfeArr,'#F5C842',[3,2],5,1.2,false)
   drawCurve(eeArr, '#00D4A8',[],   8,2.0,true)
@@ -334,6 +347,35 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   // Blank => derive from ISDA SIMM (RW x IR01) server-side. A hardcoded
   // 0.85 was ~3x this trade's actual IM and flowed straight into MVA.
   const [simmIm, setSimmIm] = useState('')
+  // Settlement / CSA. Default keeps the legacy numbers: no VM, IM posted.
+  const [settlement, setSettlement] = useState('UNCOLLATERALISED')
+  const [thresholdCp, setThresholdCp] = useState('')
+  const [mta, setMta] = useState('')
+  const [mporDays, setMporDays] = useState('')
+  const [imExchanged, setImExchanged] = useState(true)
+  const [imYieldBp, setImYieldBp] = useState('')
+  const [compareOnChain, setCompareOnChain] = useState(false)
+  const [compareResult, setCompareResultState] = useState(() => {
+    try { const s = sessionStorage.getItem('rijeka_xva_cmp'); return s ? JSON.parse(s) : null } catch(_) { return null }
+  })
+  const setCompareResult = (v) => {
+    setCompareResultState(v)
+    try { if (v) sessionStorage.setItem('rijeka_xva_cmp', JSON.stringify(v)); else sessionStorage.removeItem('rijeka_xva_cmp') } catch(_) {}
+  }
+  const num = (v) => { const n = parseFloat(String(v).replace(/,/g,'')); return isNaN(n) ? null : n }
+  const csaBody = (preset) => {
+    const o = { preset, im_exchanged: imExchanged }
+    if (preset === 'BILATERAL') {
+      if (num(thresholdCp) != null) o.threshold_cp = num(thresholdCp)
+      if (num(mta) != null)         o.mta          = num(mta)
+      if (num(mporDays) != null)    o.mpor_days    = num(mporDays)
+    }
+    if (preset === 'ON_CHAIN') {
+      if (num(mporDays) != null && settlement === 'ON_CHAIN') o.mpor_days = num(mporDays)
+      if (num(imYieldBp) != null) o.im_yield_pickup_bp = num(imYieldBp)
+    }
+    return o
+  }
   const [highlightCurve, setHighlightCurve] = useState(null)
   const [expandedVa, setExpandedVa] = useState(null)
 
@@ -360,7 +402,8 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     canvas.width = p.offsetWidth * dpr; canvas.height = p.offsetHeight * dpr
     canvas.style.width = p.offsetWidth + 'px'; canvas.style.height = p.offsetHeight + 'px'
     const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr)
-    drawExposureChart(canvas, simResult.ee, simResult.ene, simResult.pfe, highlightCurve, simResult.sample_paths)
+    drawExposureChart(canvas, simResult.ee, simResult.ene, simResult.pfe, highlightCurve, simResult.sample_paths,
+      simResult.csa?.collateralised ? simResult.ee_gross : null)
   }, [simResult, highlightCurve])
 
   const handleCalibrate = async () => {
@@ -428,6 +471,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         hurdle_rate: parseFloat(hurdle)/100,
         capital_model: capModel,
         wwr_multiplier: wwr,
+        csa: csaBody(settlement),
         // Blank = derive IM from ISDA SIMM (RW x IR01) rather than a guess.
         simm_im_m: (simmIm === '' || isNaN(parseFloat(simmIm))) ? null : parseFloat(simmIm),
         // TV and IR01 from the pricer: XVA is an adjustment to TV, not a
@@ -458,6 +502,17 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
       if (!res.ok) throw new Error(d.detail || 'Simulation failed')
       setSimResult(d)
       if (onSimResult) onSimResult(d)
+      if (compareOnChain && settlement !== 'ON_CHAIN') {
+        const res2 = await fetch(API + '/api/xva/simulate', {
+          method:'POST', headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
+          body: JSON.stringify({ ...body, csa: csaBody('ON_CHAIN') })
+        })
+        const d2 = await res2.json()
+        if (!res2.ok) throw new Error(d2.detail || 'On-chain comparison failed')
+        setCompareResult(d2)
+      } else {
+        setCompareResult(null)
+      }
     } catch(e) { setSimErr(e.message) }
     finally { setSimulating(false) }
   }
@@ -492,6 +547,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         hurdle_rate:  parseFloat(hurdle)/100,
         capital_model: capModel,
         wwr_multiplier: wwr,
+        csa: csaBody(settlement),
         simm_im_m:    (simmIm === '' || isNaN(parseFloat(simmIm))) ? null : parseFloat(simmIm),
         npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
         ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
@@ -612,6 +668,56 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         <SpreadRow label='OWN CDS' stateRef={ownCdsRef} tipKey='ownCds' />
         <SpreadRow label='FTP bp'  stateRef={ftpRef}    tipKey='ftp' />
 
+        <div style={secHdr}>SETTLEMENT</div>
+        <div onMouseEnter={e=>tip('settlement',e)} onMouseLeave={()=>setTooltip(null)}
+          style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'3px',marginBottom:'6px'}}>
+          {[['UNCOLLATERALISED','NO CSA','#FF6B6B'],['BILATERAL','BILATERAL','#4A9EFF'],['ON_CHAIN','ON-CHAIN','#00D4A8']].map(([k,label,c])=>(
+            <button key={k} onClick={()=>setSettlement(k)}
+              style={{padding:'5px 2px',fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',
+                fontFamily:"'IBM Plex Mono',monospace",
+                border:settlement===k?'1px solid '+c:'1px solid #1E1E1E',
+                background:settlement===k?c+'14':'transparent',color:settlement===k?c:'#555'}}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div style={{fontSize:'0.6875rem',color:'#444',lineHeight:1.5,marginBottom:'6px',fontFamily:"'IBM Plex Sans',sans-serif"}}>
+          {settlement==='UNCOLLATERALISED' && 'No variation margin — full MtM at risk.'}
+          {settlement==='BILATERAL' && 'Daily VM under CSA · 10bd MPoR floor · SIMM IM exchanged.'}
+          {settlement==='ON_CHAIN' && 'Atomic settlement · continuous VM · zero TH/MTA · 5bd MPoR · SIMM IM × 0.707.'}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 80px',gap:'4px 8px'}}>
+          {settlement==='BILATERAL' && [
+            {label:'Threshold $',val:thresholdCp,set:setThresholdCp,tk:'threshold',ph:'0'},
+            {label:'MTA $',val:mta,set:setMta,tk:'mtaTip',ph:'0'},
+            {label:'MPoR bd',val:mporDays,set:setMporDays,tk:'mpor',ph:'10'},
+          ].map(({label,val,set,tk,ph})=>(
+            <div key={label} style={{display:'contents'}}>
+              <div onMouseEnter={e=>tip(tk,e)} onMouseLeave={()=>setTooltip(null)} style={{...lbl,alignSelf:'center',marginBottom:0}}>{label}</div>
+              <input type='text' value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...inp,textAlign:'right'}}/>
+            </div>
+          ))}
+          {settlement==='ON_CHAIN' && [
+            {label:'MPoR bd',val:mporDays,set:setMporDays,tk:'mpor',ph:'5'},
+            {label:'IM yield bp',val:imYieldBp,set:setImYieldBp,tk:'imYield',ph:'0'},
+          ].map(({label,val,set,tk,ph})=>(
+            <div key={label} style={{display:'contents'}}>
+              <div onMouseEnter={e=>tip(tk,e)} onMouseLeave={()=>setTooltip(null)} style={{...lbl,alignSelf:'center',marginBottom:0}}>{label}</div>
+              <input type='text' value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...inp,textAlign:'right'}}/>
+            </div>
+          ))}
+          <div style={{...lbl,alignSelf:'center',marginBottom:0,borderBottom:'none',cursor:'default'}}>SIMM IM exchanged</div>
+          <label style={{display:'flex',justifyContent:'flex-end',alignItems:'center',cursor:'pointer'}}>
+            <input type='checkbox' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'#F5C842'}}/>
+          </label>
+          {settlement!=='ON_CHAIN' && (<>
+            <div onMouseEnter={e=>tip('compare',e)} onMouseLeave={()=>setTooltip(null)} style={{...lbl,alignSelf:'center',marginBottom:0}}>Compare on-chain</div>
+            <label style={{display:'flex',justifyContent:'flex-end',alignItems:'center',cursor:'pointer'}}>
+              <input type='checkbox' checked={compareOnChain} onChange={e=>setCompareOnChain(e.target.checked)} style={{accentColor:'#00D4A8'}}/>
+            </label>
+          </>)}
+        </div>
+
         <div style={secHdr}>ASSUMPTIONS</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 80px',gap:'4px 8px'}}>
           {[
@@ -721,6 +827,12 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           {simResult && (
             <div style={{position:'absolute',bottom:'6px',right:'12px',fontSize:'0.6875rem',color:'#222',fontFamily:"'IBM Plex Mono',monospace"}}>
               {simResult.n_paths.toLocaleString()} paths · HW1F · a={simResult.params.a.toFixed(4)} σ={simResult.params.sigma_bp.toFixed(1)}bp
+              {simResult.csa && (
+                <span style={{color:simResult.csa.collateralised?'#00D4A8':'#FF6B6B', marginLeft:'8px'}}>
+                  · {simResult.csa.preset.replace('_','-')}{simResult.csa.collateralised ? ` · ${simResult.csa.mpor_days}bd MPoR` : ''}{simResult.csa.im_exchanged ? ' · IM' : ''}
+                  {simResult.csa.collateralised && <span style={{color:'#2A5A4A'}}> · dotted = gross EE</span>}
+                </span>
+              )}
               {simResult.instrument_type==='IR_SWAPTION' && simResult.swaption && (
                 <span style={{color:'#333', marginLeft:'8px'}}>
                   · 2-phase EE · expiry={simResult.swaption.expiry_y}Y · σ_N={simResult.swaption.vol_bp?.toFixed(1)}bp
@@ -767,6 +879,37 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
               <span style={{color:VA_DEFS[expandedVa].color,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",marginRight:'8px'}}>{VA_DEFS[expandedVa].label}</span>
               {VA_DEFS[expandedVa].desc}
               {VA_DEFS[expandedVa].curve!=='none' && <span style={{marginLeft:'8px',fontSize:'0.75rem',color:'#444'}}>· Driven by {VA_DEFS[expandedVa].curve} curve</span>}
+            </div>
+          )}
+          {compareResult?.xva && xva && (
+            <div style={{background:'#000',borderTop:'1px solid #1E1E1E'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'#1E1E1E'}}>
+                {Object.keys(VA_DEFS).map(key=>{
+                  const cur = xva[key], oc = compareResult.xva[key]
+                  const delta = (cur!=null && oc!=null) ? oc - cur : null
+                  const pct = (delta!=null && key!=='npv' && Math.abs(cur)>1) ? (delta/Math.abs(cur))*100 : null
+                  const better = key==='all_in' ? (delta>0) : (delta!=null && Math.abs(oc) < Math.abs(cur))
+                  return (
+                    <div key={key} style={{background:'#020604',padding:'6px 8px'}}>
+                      <div style={{fontSize:'0.6rem',letterSpacing:'0.10em',color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace",marginBottom:'2px'}}>{key==='npv'?'ON-CHAIN':''}</div>
+                      <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'#00D4A8':'#222',fontFamily:"'IBM Plex Mono',monospace"}}>{fmtDollar(oc)}</div>
+                      {pct!=null && key!=='all_in' && (
+                        <div style={{fontSize:'0.6875rem',color:better?'#00D4A8':'#FF6B6B',fontFamily:"'IBM Plex Mono',monospace"}}>
+                          {delta>=0?'+':''}{fmtDollar(delta)} · {pct>=0?'+':''}{pct.toFixed(0)}%
+                        </div>
+                      )}
+                      {key==='all_in' && delta!=null && (
+                        <div style={{fontSize:'0.6875rem',color:delta>=0?'#00D4A8':'#FF6B6B',fontFamily:"'IBM Plex Mono',monospace"}}>
+                          {delta>=0?'+':''}{fmtDollar(delta)} vs {simResult.csa?.preset?.replace('_','-')}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'#2A5A4A',fontFamily:"'IBM Plex Mono',monospace",background:'#000'}}>
+                Same {compareResult.n_paths?.toLocaleString()} paths, same seed · ON-CHAIN = continuous VM · {compareResult.csa?.mpor_days}bd MPoR · SIMM IM × {compareResult.csa?.simm_mpor_scale?.toFixed(3)} · IM {fmtDollar(compareResult.capital?.im_0)} vs {fmtDollar(simResult.capital?.im_0)}
+              </div>
             </div>
           )}
           <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'#222',fontFamily:"'IBM Plex Mono',monospace",background:'#000',borderTop:'1px solid #0A0A0A'}}>
