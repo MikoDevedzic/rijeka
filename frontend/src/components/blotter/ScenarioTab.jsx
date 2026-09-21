@@ -75,6 +75,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
   const [scenarioBase, setScenarioBase] = useState(null)
   const [scenarioCalc, setScenarioCalc] = useState(null)
   const [scenarioPricing,setScenarioPricing]=useState(false)
+  const [scenarioError,setScenarioError]=useState(null)
   const [thetaApproxVisible,setThetaApproxVisible]=useState(false)
 
 
@@ -674,7 +675,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
     const baseRts=TENORS.map(t=>getBase(t))
     const shockRts=TENORS.map((t,i)=>getBase(t)+Math.max(-CAP,Math.min(CAP,sh[i]))/100)
     const midR=baseRts.reduce((a,b)=>a+b,0)/baseRts.length
-    const visHalf=Math.max(0.65,Math.max(...sh.map(Math.abs))/100+0.25)
+    const visHalf=dragRef.current?.visHalf ?? Math.max(0.65,Math.max(...sh.map(Math.abs))/100+0.25)
     const minR=midR-visHalf, maxR=midR+visHalf
     const xS=t=>PAD.l+Math.sqrt(t/30)*CW
     const yS=r=>PAD.t+CH-(r-minR)/(maxR-minR)*CH
@@ -791,12 +792,19 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       TENORS.forEach((t,i)=>{const d=Math.hypot(mx-xS(TENOR_Y[t]),my-yS(shockRts[i]));if(d<bd){bd=d;bi=i}})
       return bd<30?bi:-1
     }
-    const onDown=e=>{const r=canvas.getBoundingClientRect();const idx=getHit(e.clientX-r.left,e.clientY-r.top);if(idx>=0){e.preventDefault();dragRef.current={idx,startY:e.clientY,origShifts:[...shiftsRef.current]};scheduleDraw()}}
+    const onDown=e=>{const r=canvas.getBoundingClientRect();const idx=getHit(e.clientX-r.left,e.clientY-r.top);if(idx>=0){e.preventDefault();const sh=shiftsRef.current;const vH=Math.max(0.65,Math.max(...sh.map(Math.abs))/100+0.25);dragRef.current={idx,startY:e.clientY,origShifts:[...sh],visHalf:vH};scheduleDraw()}}
     const onMove=e=>{
       const r=canvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top
       if(dragRef.current){
-        const{idx,startY,origShifts}=dragRef.current
-        const dy=startY-e.clientY,bpDelta=dy*BPpx,sig=sigmaRef.current,dty=TENOR_Y[TENORS[idx]]
+        const{idx,startY,origShifts,visHalf:dragVH}=dragRef.current
+        // Live bp-per-pixel from the FROZEN axis captured at drag-start.
+        // Constant BPpx=0.4 was tuned for the legacy window's CH; the unified
+        // shell + 10% size bump shifted CH, and y-axis autoscale during drag
+        // made it drift further. Freezing visHalf for the duration of the
+        // drag keeps cursor:dot 1:1.
+        const PADd={l:14,r:14,t:32,b:36}, CHd=r.height-PADd.t-PADd.b
+        const livePxBP=(CHd>0 && dragVH>0)?(200*dragVH/CHd):BPpx
+        const dy=startY-e.clientY,bpDelta=dy*livePxBP,sig=sigmaRef.current,dty=TENOR_Y[TENORS[idx]]
         shiftsRef.current=origShifts.map((s,i)=>{const dist=TENOR_Y[TENORS[i]]-dty;return Math.max(-CAP,Math.min(CAP,Math.round((s+bpDelta*Math.exp(-(dist*dist)/(2*sig*sig)))*10)/10))})
         const bp=Math.round(shiftsRef.current[idx])
         setDragTip({x:mx+14,y:my-32,bp,tenor:TENORS[idx]});scheduleDraw();setTick(t=>t+1);return
@@ -814,8 +822,10 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
 
   // Run scenario
   const handleRunScenario=async(overrides)=>{
-    if(!effDate||!matDate)return
-    setScenarioPricing(true);setScenarioBase(null);setScenarioCalc(null)
+    if(!effDate||!matDate){setScenarioError('Enter effective & maturity dates on the TRADE tab first');return}
+    setScenarioPricing(true);setScenarioBase(null);setScenarioCalc(null);setScenarioError(null)
+    const ctrl=new AbortController()
+    const _scenTimeout=setTimeout(()=>ctrl.abort(),30000)
     try{
       const session=await getSession(),h={Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'}
       const notional=parseFloat(notionalRef.current?notionalRef.current.value.replace(/,/g,''):'10000000')
@@ -831,8 +841,8 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       const shockedQuotes=[{tenor:'ON',quote_type:'DEPOSIT',rate:onRate}]
       TENORS.forEach((t,i)=>{const base=getBase(t);const fr=overrides&&overrides[t]!=null?parseFloat(overrides[t]):base+shiftsRef.current[i]/100;shockedQuotes.push({tenor:t,quote_type:'OIS_SWAP',rate:fr/100})})
       const [bR,sR]=await Promise.all([
-        fetch(API+'/price/preview',{method:'POST',headers:h,body:JSON.stringify({legs,valuation_date:valDate,curves:[curveObj(curveId)]})}),
-        fetch(API+'/price/preview',{method:'POST',headers:h,body:JSON.stringify({legs,valuation_date:valDate,curves:[curveObj(curveId, shockedQuotes)]})}),
+        fetch(API+'/price/preview',{method:'POST',headers:h,signal:ctrl.signal,body:JSON.stringify({legs,valuation_date:valDate,curves:[curveObj(curveId)]})}),
+        fetch(API+'/price/preview',{method:'POST',headers:h,signal:ctrl.signal,body:JSON.stringify({legs,valuation_date:valDate,curves:[curveObj(curveId, shockedQuotes)]})}),
       ])
       if(bR.ok)setScenarioBase(await bR.json())
       if(sR.ok)setScenarioCalc(await sR.json())
@@ -856,13 +866,13 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
           }
           const [r1,r2,r3,r4] = await Promise.all([
             // 1. base rate + base vol
-            fetch(API+'/api/price/swaption',{method:'POST',headers:h,body:JSON.stringify({...swpBase, vol_bp:baseVol})}),
+            fetch(API+'/api/price/swaption',{method:'POST',headers:h,signal:ctrl.signal,body:JSON.stringify({...swpBase, vol_bp:baseVol})}),
             // 2. shocked rate + base vol
-            fetch(API+'/api/price/swaption',{method:'POST',headers:h,body:JSON.stringify({...swpBase, vol_bp:baseVol, shocked_quotes:shockedQuotes})}),
+            fetch(API+'/api/price/swaption',{method:'POST',headers:h,signal:ctrl.signal,body:JSON.stringify({...swpBase, vol_bp:baseVol, shocked_quotes:shockedQuotes})}),
             // 3. base rate + shocked vol
-            fetch(API+'/api/price/swaption',{method:'POST',headers:h,body:JSON.stringify({...swpBase, vol_bp:shockVol})}),
+            fetch(API+'/api/price/swaption',{method:'POST',headers:h,signal:ctrl.signal,body:JSON.stringify({...swpBase, vol_bp:shockVol})}),
             // 4. shocked rate + shocked vol (JOINT)
-            fetch(API+'/api/price/swaption',{method:'POST',headers:h,body:JSON.stringify({...swpBase, vol_bp:shockVol, shocked_quotes:shockedQuotes})}),
+            fetch(API+'/api/price/swaption',{method:'POST',headers:h,signal:ctrl.signal,body:JSON.stringify({...swpBase, vol_bp:shockVol, shocked_quotes:shockedQuotes})}),
           ])
           const [d1,d2,d3,d4] = await Promise.all([r1.json(),r2.json(),r3.json(),r4.json()])
           if(r1.ok && r2.ok && r3.ok && r4.ok) {
@@ -876,8 +886,12 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
           }
         } catch(eSwpn) { console.error('[JOINT SWPN]', eSwpn) }
       }
-    }catch(e){console.error('[SCENARIO]',e)}
-    finally{setScenarioPricing(false)}
+    }catch(e){
+      if(e&&e.name==='AbortError'){setScenarioError('Repricing timed out after 30s — is the backend running on :8000?')}
+      else{setScenarioError('Reprice failed: '+((e&&e.message)||'unknown error'))}
+      console.error('[SCENARIO]',e)
+    }
+    finally{clearTimeout(_scenTimeout);setScenarioPricing(false)}
   }
 
   const applyPreset=key=>{setPresetKey(key);shiftsRef.current=[...(PRESETS[key]||PRESETS.flat0)];setConfirmed(false);setTick(t=>t+1);scheduleDraw()}
@@ -970,9 +984,9 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   style={{flex:2,padding:'7px',borderRadius:'3px',
                     cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',
                     fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',fontWeight:600,
-                    border:anyShift&&!confirmed?'1px solid rgba(0,212,168,0.6)':'1px solid #1E1E1E',
-                    background:anyShift&&!confirmed?'rgba(0,212,168,0.1)':'transparent',
-                    color:anyShift&&!confirmed?'#00D4A8':'#666666'}}>
+                    border:scenarioPricing?'1px solid rgba(245,200,66,0.55)':(anyShift&&!confirmed)?'1px solid rgba(0,212,168,0.6)':'1px solid #1E1E1E',
+                    background:scenarioPricing?'rgba(245,200,66,0.1)':(anyShift&&!confirmed)?'rgba(0,212,168,0.1)':'transparent',
+                    color:scenarioPricing?'#F5C842':(anyShift&&!confirmed)?'#00D4A8':'#666666'}}>
                   {scenarioPricing?'Repricing...':(anyShift&&!confirmed)?(IS_SWPN?'Confirm & reprice (rate+vol) →':'Confirm & reprice →'):'Confirm shape'}
                 </button>
               </div>
@@ -984,6 +998,18 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                 </div>
               )}
 
+              {confirmed&&!scenarioPricing&&!scenarioError&&(scenarioBase||scenarioCalc)&&(
+                <div style={{fontSize:'0.75rem',color:'#555',fontFamily:"'IBM Plex Sans',var(--sans)",padding:'2px 2px'}}>
+                  Scenario repriced — drag the curve or pick a preset to run again
+                </div>
+              )}
+              {scenarioError&&(
+                <div style={{fontSize:'0.75rem',color:'#FF6B6B',fontFamily:"'IBM Plex Sans',var(--sans)",
+                  background:'rgba(255,107,107,0.06)',border:'1px solid rgba(255,107,107,0.25)',
+                  borderRadius:'3px',padding:'4px 8px'}}>
+                  {scenarioError}
+                </div>
+              )}
               {/* Vol scenario controls — swaption only */}
               {IS_SWPN && (
                 <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid #1E1E1E'}}>
