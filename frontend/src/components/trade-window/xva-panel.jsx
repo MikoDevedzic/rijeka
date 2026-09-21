@@ -6,12 +6,9 @@
 
 import { useMemo } from 'react'
 import XVATab from '../blotter/XVATab'
-import { supabase } from '../../lib/supabase'
+import { getSessionSafe } from '../../lib/session'
 
-const getSession = async () => {
-  const { data: { session } } = await supabase.auth.getSession()
-  return session
-}
+const getSession = getSessionSafe
 
 export default function XvaPanel({
   productKey,
