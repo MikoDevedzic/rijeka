@@ -64,7 +64,7 @@ function fmtDollar(v) {
   return sign + '$' + Math.abs(Math.round(v)).toLocaleString('en-US')
 }
 
-function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths, eeGross) {
+function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
   if (!canvas || !ee || !ee.length) return
   const ctx = canvas.getContext('2d')
   const dpr = window.devicePixelRatio || 2
@@ -77,7 +77,7 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths, ee
   const CW = W - PAD.l - PAD.r
   const CH = H - PAD.t - PAD.b
   const n = ee.length
-  let maxV = Math.max(...pfe.map(Math.abs), ...ee.map(Math.abs), ...((eeGross||[]).map(Math.abs)), 1)
+  let maxV = Math.max(...pfe.map(Math.abs), ...ee.map(Math.abs), 1)
   let minV = Math.min(...ene, 0)
   if (samplePaths && samplePaths.length) {
     const flat = samplePaths.flat()
@@ -138,7 +138,6 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths, ee
   const eeArr=[...ee]; eeArr._name='EE'
   const eneArr=[...ene]; eneArr._name='ENE'
   const pfeArr=[...pfe]; pfeArr._name='PFE'
-  if (eeGross && eeGross.length) { const g=[...eeGross]; g._name='EE_GROSS'; drawCurve(g,'#00D4A8',[2,4],0,1.0,false) }
   drawCurve(eneArr,'#4A9EFF',[5,3],7,1.5,true)
   drawCurve(pfeArr,'#F5C842',[3,2],5,1.2,false)
   drawCurve(eeArr, '#00D4A8',[],   8,2.0,true)
@@ -352,7 +351,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const [thresholdCp, setThresholdCp] = useState('')
   const [mta, setMta] = useState('')
   const [mporDays, setMporDays] = useState('')
-  const [imExchanged, setImExchanged] = useState(true)
+  const [imExchanged, setImExchanged] = useState(false)
   const [imYieldBp, setImYieldBp] = useState('')
   const [compareOnChain, setCompareOnChain] = useState(false)
   const [compareResult, setCompareResultState] = useState(() => {
@@ -402,8 +401,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     canvas.width = p.offsetWidth * dpr; canvas.height = p.offsetHeight * dpr
     canvas.style.width = p.offsetWidth + 'px'; canvas.style.height = p.offsetHeight + 'px'
     const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr)
-    drawExposureChart(canvas, simResult.ee, simResult.ene, simResult.pfe, highlightCurve, simResult.sample_paths,
-      simResult.csa?.collateralised ? simResult.ee_gross : null)
+    drawExposureChart(canvas, simResult.ee, simResult.ene, simResult.pfe, highlightCurve, simResult.sample_paths)
   }, [simResult, highlightCurve])
 
   const handleCalibrate = async () => {
@@ -672,7 +670,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         <div onMouseEnter={e=>tip('settlement',e)} onMouseLeave={()=>setTooltip(null)}
           style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'3px',marginBottom:'6px'}}>
           {[['UNCOLLATERALISED','NO CSA','#FF6B6B'],['BILATERAL','BILATERAL','#4A9EFF'],['ON_CHAIN','ON-CHAIN','#00D4A8']].map(([k,label,c])=>(
-            <button key={k} onClick={()=>setSettlement(k)}
+            <button key={k} onClick={()=>{ setSettlement(k); setImExchanged(k!=='UNCOLLATERALISED') }}
               style={{padding:'5px 2px',fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',
                 fontFamily:"'IBM Plex Mono',monospace",
                 border:settlement===k?'1px solid '+c:'1px solid #1E1E1E',
@@ -830,7 +828,10 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
               {simResult.csa && (
                 <span style={{color:simResult.csa.collateralised?'#00D4A8':'#FF6B6B', marginLeft:'8px'}}>
                   · {simResult.csa.preset.replace('_','-')}{simResult.csa.collateralised ? ` · ${simResult.csa.mpor_days}bd MPoR` : ''}{simResult.csa.im_exchanged ? ' · IM' : ''}
-                  {simResult.csa.collateralised && <span style={{color:'#2A5A4A'}}> · dotted = gross EE</span>}
+                  {simResult.csa.collateralised && simResult.ee_gross && (() => {
+                    const g = Math.max(...simResult.ee_gross), r = Math.max(...simResult.ee)
+                    return <span style={{color:'#2A5A4A'}}> · peak EE gross {fmtDollar(g)} → residual {fmtDollar(r)} ({g>0?(-100*(1-r/g)).toFixed(0):'0'}%)</span>
+                  })()}
                 </span>
               )}
               {simResult.instrument_type==='IR_SWAPTION' && simResult.swaption && (
