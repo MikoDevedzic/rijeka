@@ -56,6 +56,7 @@ export const useAuthStore = create((set, get) => ({
   signOut: async () => {
     await supabase.auth.signOut()
     set({ session: null, profile: null, isNewSignup: false })
+    window.location.href = '/'
   },
 
   clearNewSignup: () => set({ isNewSignup: false }),

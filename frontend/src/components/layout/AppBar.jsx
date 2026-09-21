@@ -10,7 +10,7 @@ const MODULES = [
 export default function AppBar() {
   const navigate  = useNavigate()
   const location  = useLocation()
-  const user      = useAuthStore(s => s.user)
+  const user      = useAuthStore(s => s.session?.user)
   const signOut   = useAuthStore(s => s.signOut)
 
   const displayName = user?.email?.split('@')[0]?.toUpperCase()
