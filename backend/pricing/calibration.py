@@ -105,11 +105,18 @@ def hw1f_swaption_vol_normal(
 
     # Duration-weighted B: w = [Σ dt * P(0,T_i) * B*(T_e,T_i)] / A(0)
     # This is the sensitivity of the swap rate to the short rate at T_e
-    w = sum(dt * P_vals[i] * B_vals[i] for i in range(len(payment_dates))) / A0
+    w_dur = sum(dt * P_vals[i] * B_vals[i] for i in range(len(payment_dates))) / A0
+    # SECTION 6.1 FIX: full forward-swap-rate sensitivity dS/dr, not just the
+    # annuity-weighted duration. (Andersen-Piterbarg Vol II, Eq. 16.11.)
+    #   S = (P_start - P_mat)/A ;  dS/dr = (B_mat*P_mat - B_start*P_start)/A + S*w_dur
+    # Swap starts at T_e, so B*(T_e,T_e)=0 and the start-bond term vanishes.
+    P_start = math.exp(-theta * Te)
+    S_fwd   = (P_start - P_vals[-1]) / A0
+    dSdr    = (B_vals[-1] * P_vals[-1]) / A0 + S_fwd * w_dur
 
     # std(S(T_e)) = sigma * |w| * sqrt(V(T_e))
     # σ_n annualised = std(S(T_e)) / sqrt(T_e)
-    sigma_n = sigma * abs(w) * math.sqrt(V_Te / Te)
+    sigma_n = sigma * abs(dSdr) * math.sqrt(V_Te / Te)
 
     return sigma_n * 10000.0  # convert decimal to bp
 
