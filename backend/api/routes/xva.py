@@ -36,6 +36,8 @@ from pricing.calibration import calibrate_hw1f, tenor_to_years, hw1f_swaption_vo
 # never end up on different curves. (pricer does not import xva — no cycle.)
 from api.routes.pricer import CurveInput, _build_curve
 from pricing.curve import discount_fn_from_curve
+from pricing.csa import CSA
+from pricing.xva_engine import WaterfallParams, run_waterfall, simm_ir_risk_weight
 
 router = APIRouter(prefix="/api/xva", tags=["xva"])
 
@@ -63,25 +65,6 @@ CALIBRATION_BASKET_DEF = [
     {"expiry": "5Y",  "tenor": "9Y", "ticker": "USSNA59 ICPL Curncy",  "role": "long_end_anchor", "weight": 0.7},
     {"expiry": "7Y",  "tenor": "7Y", "ticker": "USSNA77 ICPL Curncy",  "role": "long_end_anchor", "weight": 0.7},
     {"expiry": "7Y",  "tenor": "9Y", "ticker": "USSNA79 ICPL Curncy",  "role": "long_end_anchor", "weight": 0.7},
-]
-
-
-# ── ISDA SIMM — IR delta risk weights, regular-volatility currencies ─────────
-# (USD/EUR/GBP). Units are bp, matching a sensitivity expressed as $ per bp,
-# so IM = RW x |IR01| comes out in dollars.
-_SIMM_IR_RW = [
-    (0.0384, 109.0),  # 2w
-    (0.0833, 105.0),  # 1m
-    (0.25,    90.0),  # 3m
-    (0.50,    71.0),  # 6m
-    (1.0,     66.0),
-    (2.0,     66.0),
-    (3.0,     64.0),
-    (5.0,     61.0),
-    (10.0,    61.0),
-    (15.0,    61.0),
-    (20.0,    61.0),
-    (30.0,    64.0),
 ]
 
 
@@ -133,24 +116,6 @@ def _staleness_block(calib_date, mkt_curve, val_date) -> dict:
     }
 
 
-def _simm_ir_risk_weight(maturity_y: float) -> float:
-    """Linearly interpolated SIMM IR delta risk weight for a tenor in years."""
-    pts = _SIMM_IR_RW
-    if maturity_y <= pts[0][0]:
-        return pts[0][1]
-    if maturity_y >= pts[-1][0]:
-        return pts[-1][1]
-    for i in range(len(pts) - 1):
-        t0, w0 = pts[i]
-        t1, w1 = pts[i + 1]
-        if t0 <= maturity_y <= t1:
-            f = (maturity_y - t0) / (t1 - t0)
-            return w0 * (1 - f) + w1 * f
-    return pts[-1][1]
-
-
-# ── Models ────────────────────────────────────────────────────────────────────
-
 class CalibrateRequest(BaseModel):
     valuation_date: Optional[date] = None
     theta: Optional[float] = None        # long-run rate; if None, uses 5Y SOFR from DB
@@ -201,6 +166,11 @@ class SimulateRequest(BaseModel):
     # (or a notional/tenor proxy) instead of a hardcoded guess.
     simm_im_m: Optional[float] = None
     direction: str = "PAY"                # PAY or RECEIVE — flips EE/ENE
+    # Collateral terms. None → uncollateralised, no IM (MVA = 0).
+    #   {"preset": "BILATERAL", "threshold_cp": 5e5, "mta": 1e5, "mpor_days": 10}
+    #   {"preset": "ON_CHAIN"}                       # 5bd MPoR, continuous VM
+    #   {"preset": "UNCOLLATERALISED", "im_exchanged": true}
+    csa: Optional[dict] = None
 
 
 # ── Calibrate ─────────────────────────────────────────────────────────────────
@@ -617,120 +587,30 @@ async def simulate(
         for i in range(T):
             paths[:, i] += anchor_delta * (ann_mean[i] / ann_mean[0])
 
-    ee  = np.mean(np.maximum(paths, 0), axis=0).tolist()
-    ene = np.mean(np.minimum(paths, 0), axis=0).tolist()
-    pfe = np.percentile(paths, 95, axis=0).tolist()
+    # ── Collateral + XVA waterfall (pricing/xva_engine.py) ───────────────────
+    try:
+        csa = CSA.from_request(body.csa)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"csa: {e}")
 
-    # ── XVA waterfall ────────────────────────────────────────────────────────
-    lgd   = body.lgd
-
-    # ── Spread interpolation helper ──────────────────────────────────────
-    def interp_spread(curve, flat_bp, t):
-        """Linear interpolation of spread at time t from term structure."""
-        if not curve:
-            return flat_bp / 10000.0
-        pts = sorted(curve, key=lambda x: x['t'])
-        if t <= pts[0]['t']:
-            return pts[0]['spread_bp'] / 10000.0
-        if t >= pts[-1]['t']:
-            return pts[-1]['spread_bp'] / 10000.0
-        for i in range(len(pts)-1):
-            t0, t1 = pts[i]['t'], pts[i+1]['t']
-            if t0 <= t <= t1:
-                w = (t - t0) / (t1 - t0)
-                return (pts[i]['spread_bp'] * (1-w) + pts[i+1]['spread_bp'] * w) / 10000.0
-        return flat_bp / 10000.0
-
-    ftp_flat = body.ftp_bp / 10000.0
-    hurdle  = body.hurdle_rate
-    wwr     = body.wwr_multiplier
-    own_lgd = body.own_lgd
-
-    # ── Initial margin for MVA (ISDA SIMM IR delta) ──────────────────────────
-    # A single vanilla swap sits in one currency / one tenor bucket, so the
-    # SIMM weighted-sensitivity quadratic form collapses to |RW x IR01|.
-    if body.simm_im_m is not None:
-        im_0 = body.simm_im_m * 1e6
-    else:
-        rw_simm = _simm_ir_risk_weight(body.maturity_y)
-        if body.ir01 is not None:
-            im_0 = abs(body.ir01) * rw_simm
-        else:
-            # Fallback when the caller has no IR01: IR01 ~ N x annuity x 1bp
-            ann_0 = ((1.0 - math.exp(-theta * body.maturity_y)) / theta
-                     if theta > 0 else body.maturity_y)
-            im_0  = abs(N * ann_0 * 1e-4) * rw_simm
-
-    # ── SA-CCR constants ─────────────────────────────────────────────────────
-    SF_IR = 0.005     # supervisory factor, interest-rate asset class
-    ALPHA = 1.4       # SA-CCR alpha
-    CAP_R = 0.08      # capital / RWA
-    rw_cp = body.counterparty_rw
-    M0    = body.maturity_y
-
-    cva=dva=fva=fba_v=kva=mva=0.0
-    qcp=qow=1.0
-    mean_v = np.mean(paths, axis=0)
-    ead_0 = cap_0 = 0.0
-
-    for i in range(T):
-        t    = (i + 1) * DT
-        # Discount XVA on the market curve, not a flat exp(-theta*t).
-        disc = p0_grid[i + 1]
-        cp_s_t = interp_spread(body.cp_cds_curve, body.cp_cds_bp, t)
-        ow_s_t = interp_spread(body.own_cds_curve, body.own_cds_bp, t)
-        ftp_t  = interp_spread(body.ftp_curve, body.ftp_bp, t) if body.ftp_curve else ftp_flat
-        fba_s_t= ftp_t * body.fba_ratio
-
-        # Credit triangle: hazard = spread / (1 - R) = spread / LGD.
-        # Using the raw CDS spread as the hazard understates PD by ~1/LGD
-        # (at 91bp / LGD 0.40 that is a 5Y PD of 4.4% instead of 10.7%).
-        nqcp = math.exp(-(cp_s_t / lgd)     * t) if lgd     > 0 else 0.0
-        nqow = math.exp(-(ow_s_t / own_lgd) * t) if own_lgd > 0 else 0.0
-
-        cva  += lgd     * ee[i]       * (qcp - nqcp) * disc * wwr
-        dva  -= own_lgd * abs(ene[i]) * (qow - nqow) * disc
-        fva  += ftp_t   * ee[i]       * DT * disc
-        fba_v-= fba_s_t * abs(ene[i]) * DT * disc
-
-        # ── Capital profile → KVA ────────────────────────────────────────────
-        # Capital amortises as the trade rolls down; it is NOT a flat
-        # percentage of notional held to maturity.
-        m_t = max(M0 - t, 0.0)
-        if m_t > 0:
-            sd_t  = (1.0 - math.exp(-0.05 * m_t)) / 0.05   # supervisory duration
-            mf_t  = math.sqrt(min(m_t, 1.0))               # unmargined maturity factor
-            addon = SF_IR * N * sd_t * mf_t
-            rc_t  = max(float(mean_v[i]), 0.0)             # replacement cost, uncollateralised
-            if addon > 0:
-                # PFE multiplier floors at 5% when the netting set is OTM
-                mult = min(1.0, 0.05 + 0.95 * math.exp(float(mean_v[i]) / (1.9 * addon)))
-            else:
-                mult = 1.0
-            if body.capital_model == "imm":
-                ead_t = ALPHA * ee[i]                      # alpha x effective EPE
-            elif body.capital_model == "cem":
-                ead_t = rc_t + SF_IR * N * mf_t            # RC + notional add-on
-            else:
-                ead_t = ALPHA * (rc_t + mult * addon)      # SA-CCR
-            k_t   = CAP_R * rw_cp * ead_t
-            kva  += hurdle * k_t * DT * disc               # single discount
-            if i == 0:
-                ead_0, cap_0 = ead_t, k_t
-
-            # IM amortises with residual maturity
-            im_t  = im_0 * (m_t / M0) if M0 > 0 else 0.0
-            mva  -= im_t * ftp_t * DT * disc
-
-        qcp   = nqcp
-        qow   = nqow
-
-    cva   = -abs(cva)
-    dva   =  abs(dva)
-    fva   = -abs(fva)
-    fba_v =  abs(fba_v)
-    kva   = -abs(kva)
-    mva   = -abs(mva)
+    v0 = body.npv if body.npv is not None else anchor_v0
+    wf = run_waterfall(
+        paths, v0, p0_grid,
+        WaterfallParams(
+            notional=N, maturity_y=body.maturity_y, dt=DT, theta=theta,
+            lgd=body.lgd, own_lgd=body.own_lgd,
+            cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
+            cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve,
+            ftp_bp=body.ftp_bp, ftp_curve=body.ftp_curve, fba_ratio=body.fba_ratio,
+            hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
+            counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
+            ir01=body.ir01, simm_im_m=body.simm_im_m,
+        ),
+        csa,
+    )
+    ee, ene, pfe = wf.ee, wf.ene, wf.pfe
+    cva, dva, fva, fba_v, kva, mva = wf.cva, wf.dva, wf.fva, wf.fba, wf.kva, wf.mva
+    ead_0, cap_0, im_0, rw_cp = wf.ead_0, wf.capital_0, wf.im_0, body.counterparty_rw
 
     # Trade TV comes from the pricer. If the caller did not supply it we
     # return null rather than 0.0 — an all-in that silently ignores the
@@ -742,12 +622,19 @@ async def simulate(
     # Sample 80 paths for visualisation (evenly spaced)
     n_sample = min(80, n_paths)
     step = max(1, n_paths // n_sample)
-    sample_paths = paths[::step, :].tolist()
+    sample_paths = (wf.exposure_paths if csa.collateralised else paths)[::step, :].tolist()
 
     return {
         "ee":           [round(v, 2) for v in ee],
         "ene":          [round(v, 2) for v in ene],
         "pfe":          [round(v, 2) for v in pfe],
+        # Gross (pre-collateral) profiles and what the CSA removed, so the
+        # effect of margining is visible rather than baked in.
+        "ee_gross":     [round(v, 2) for v in wf.ee_gross],
+        "ene_gross":    [round(v, 2) for v in wf.ene_gross],
+        "collateral":   [round(v, 2) for v in wf.collateral_mean],
+        "im_profile":   [round(v, 2) for v in wf.im_profile],
+        "csa":          csa.to_dict(),
         "sample_paths": [[round(v, 0) for v in p] for p in sample_paths],
         "steps":        T,
         "dt":           DT,
@@ -794,6 +681,10 @@ async def simulate(
             "capital_0":  round(cap_0, 2),
             "rw":         rw_cp,
             "im_0":       round(im_0, 2),
-            "simm_rw":    _simm_ir_risk_weight(body.maturity_y),
+            "simm_rw":     round(wf.simm_rw, 2),      # MPoR-scaled weight used
+            "simm_rw_10d": round(wf.simm_rw_10d, 2),  # published 10bd weight
+            "mpor_days":   csa.mpor_days,
+            "sa_ccr_mf_0": round(wf.mf_0, 4),
+            "margined":    csa.sa_ccr_margined,
         },
     }
