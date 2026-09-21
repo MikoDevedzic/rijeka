@@ -95,8 +95,7 @@ registerProduct({
     { key: 'OIS',              label: 'OIS'             },
     { key: 'BASIS',            label: 'BASIS'           },
     { key: 'AMORTIZING',       label: 'AMORTIZING'      },
-    { key: 'CAPPED_FLOATER',   label: 'CAPPED FLOATER'  },
-    { key: 'FLOORED_FLOATER',  label: 'FLOORED FLOATER' },
+    // L32: CAPPED_FLOATER / FLOORED_FLOATER retired (Sprint 13 / migration 008b) - use leg-level embedded_options
     { key: 'ZERO_COUPON',      label: 'ZERO COUPON SOON', live: false },
     { key: 'STEP_UP',          label: 'STEP UP SOON',     live: false },
   ],
@@ -453,7 +452,7 @@ registerProduct({
   terms: {
     title: 'CAP TERMS',
     helper: state => ({ text: '↑ BUY CAP · protection vs rising rates', color: '#FF6B6B' }),
-    footerText: 'Bachelier (Normal) · vol from Bloomberg cap surface · OIS discounting · SOFR in-arrears',
+    footerText: 'Bachelier (Normal) · vol from cap surface · OIS discounting · SOFR in-arrears',
     Component: CapTermsBody,
   },
 
