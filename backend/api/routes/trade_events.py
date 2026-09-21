@@ -327,6 +327,8 @@ def _apply_lifecycle_transition(
     new_status: str,
     payload: dict,
     idempotency_key: Optional[str],
+    confirmation_hash: Optional[str] = None,
+    counterparty_confirmed: bool = False,
 ) -> dict:
     """
     Shared atomic path for CONFIRMED / CANCELLED.
@@ -362,6 +364,8 @@ def _apply_lifecycle_transition(
             post_state=post_state,
             user_id=user_id,
             created_by=user_id,
+            confirmation_hash=confirmation_hash,
+            counterparty_confirmed=counterparty_confirmed,
         )
         db.add(event)
         db.flush()

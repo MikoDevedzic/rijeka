@@ -11,3 +11,4 @@ python-dotenv
 numpy
 scipy
 holidays
+web3>=7,<8
