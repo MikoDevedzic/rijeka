@@ -12,8 +12,8 @@ forward_rate    = (df(d1)/df(d2) - 1) / ACT365F(d1, d2)
 """
 
 import math
-from datetime import date
-from typing import List, Tuple, Optional
+from datetime import date, timedelta
+from typing import Callable, List, Tuple, Optional
 
 from pricing.day_count import act365f
 
@@ -179,3 +179,25 @@ class Curve:
             r_new = r + shift
             new_pillars.append((d, math.exp(-r_new * T)))
         return Curve(self.valuation_date, df_pillars=new_pillars)
+
+
+def discount_fn_from_curve(curve: "Curve") -> Callable[[float], float]:
+    """
+    Wrap a date-based Curve as a year-fraction discount function P(0, t).
+
+    Uses act/365.25 to convert year fractions to calendar dates, rounded to
+    the nearest integer day. This is the coarsest the production Curve can
+    answer; HW1F numerics (calibration, tree, simulation) inherit ~1-day
+    calendar granularity, which is acceptable for production but introduces
+    visible α(t) wobble at sub-monthly Δt. Tests should pass a continuous
+    function instead.
+    """
+    vd = curve.valuation_date
+
+    def _df(t_years: float) -> float:
+        if t_years <= 0:
+            return 1.0
+        d = vd + timedelta(days=int(round(t_years * 365.25)))
+        return curve.df(d)
+
+    return _df

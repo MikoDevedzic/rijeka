@@ -367,12 +367,15 @@ def price_swaption(
     if hw1f_params and hw1f_params.get('a') and hw1f_params.get('sigma_bp'):
         try:
             from pricing.calibration import hw1f_swaption_vol_normal
+            from pricing.curve import discount_fn_from_curve
             hw1f_vol_bp = hw1f_swaption_vol_normal(
                 a=float(hw1f_params['a']),
                 sigma=float(hw1f_params['sigma_bp']) / 10000.0,
                 theta=float(hw1f_params.get('theta', 0.0365)),
                 expiry_y=expiry_y,
                 tenor_y=tenor_y,
+                dt=pay_freq_y,
+                discount_fn=discount_fn_from_curve(discount_curve),
             )
             hw1f_error_bp = round(hw1f_vol_bp - vol_bp, 3)
 

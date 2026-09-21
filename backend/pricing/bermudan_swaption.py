@@ -70,23 +70,9 @@ class CurveLike(Protocol):
     def df(self, d: date) -> float: ...
 
 
-def discount_fn_from_curve(curve: CurveLike) -> "Callable[[float], float]":
-    """
-    Wrap a date-based Curve as a year-fraction discount function.
-
-    Uses the act/365.25 day-count to convert year fractions to calendar dates,
-    rounded to the nearest integer day. This is the coarsest the production
-    Curve can answer; downstream HW1F numerics inherit ~1-day calendar
-    granularity, which is acceptable for production but introduces visible
-    α(t) wobble at sub-monthly Δt. Tests should pass a continuous-time fn.
-    """
-    vd = curve.valuation_date
-    def _df(t_years: float) -> float:
-        if t_years <= 0:
-            return 1.0
-        d = vd + timedelta(days=int(round(t_years * 365.25)))
-        return curve.df(d)
-    return _df
+# discount_fn_from_curve lives in pricing.curve; re-exported here for callers
+# that imported it from this module.
+from pricing.curve import discount_fn_from_curve  # noqa: E402,F401
 
 
 # ─────────────────────────────────────────────────────────────────────────────

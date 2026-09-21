@@ -35,6 +35,7 @@ from pricing.calibration import calibrate_hw1f, tenor_to_years, hw1f_swaption_vo
 # Same curve builder the pricer uses, so the simulation and the valuation can
 # never end up on different curves. (pricer does not import xva — no cycle.)
 from api.routes.pricer import CurveInput, _build_curve
+from pricing.curve import discount_fn_from_curve
 
 router = APIRouter(prefix="/api/xva", tags=["xva"])
 
@@ -155,6 +156,8 @@ class CalibrateRequest(BaseModel):
     theta: Optional[float] = None        # long-run rate; if None, uses 5Y SOFR from DB
     a_init: Optional[float] = 0.03
     sigma_bp_init: Optional[float] = 95.0
+    curve_id: str = "USD_SOFR"           # discount curve the model is fitted on
+    curves: Optional[List[CurveInput]] = None   # explicit quotes; else latest DB snapshot
 
 
 class SimulateRequest(BaseModel):
@@ -313,6 +316,22 @@ async def calibrate(
         else:
             theta = 0.0365  # fallback
 
+    # ── Term structure ───────────────────────────────────────────────────────
+    # Fit the model on the same bootstrapped curve /simulate reconstitutes
+    # bonds from. A flat exp(-theta t) here and a market curve there means the
+    # (a, sigma) that reproduce the swaption vols on one curve are handed to a
+    # simulation on another. Fall back to flat theta only when no curve can
+    # be built, and say so in the response.
+    disc_fn    = None
+    curve_note = None
+    try:
+        ci = (body.curves[0] if body.curves
+              else CurveInput(curve_id=body.curve_id, quotes=[]))
+        mkt_curve = _build_curve(ci, val_date, db, user_id)
+        disc_fn   = discount_fn_from_curve(mkt_curve)
+    except Exception as _curve_err:
+        curve_note = str(_curve_err)
+
     # Run calibration
     try:
         result = calibrate_hw1f(
@@ -320,9 +339,12 @@ async def calibrate(
             theta=theta,
             a_init=body.a_init or 0.03,
             sigma_bp_init=body.sigma_bp_init or 35.0,
+            discount_fn=disc_fn,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Calibration failed: {str(e)}")
+    result["curve_id"]   = body.curve_id
+    result["curve_note"] = curve_note
 
     # Also compute full 6x6 model vol surface for display
     expiries = ["1Y","2Y","3Y","5Y","7Y","10Y"]
@@ -335,6 +357,7 @@ async def calibrate(
             mdl = hw1f_swaption_vol_normal(
                 result["a"], sigma_dec, theta,
                 tenor_to_years(exp), tenor_to_years(ten),
+                discount_fn=disc_fn,
             )
             surface_errors.append({
                 "expiry": exp, "tenor": ten,
@@ -379,6 +402,9 @@ async def calibrate(
                 "converged":      result["converged"],
                 "iterations":     result["iterations"],
                 "snap_date":      result["snap_date"],
+                "curve_source":   result["curve_source"],
+                "curve_id":       body.curve_id,
+                "curve_note":     curve_note,
             }),
             "created_by":  user_id,
             "user_id":     user_id,

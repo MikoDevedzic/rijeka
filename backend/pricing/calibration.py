@@ -10,7 +10,8 @@ where:
     w = Σ_i [α_i * P(0,T_i) * B*(T_e,T_i)] / A(0)     (duration-weighted B sum)
     B*(T_e, T_i) = (1 - exp(-a*(T_i-T_e))) / a          (bond duration from T_e to T_i)
     V(T_e) = (1 - exp(-2a*T_e)) / (2a)                  (variance of r(T_e))
-    P(0, T) = exp(-theta * T)                            (flat curve approx)
+    P(0, T) = market discount factor when a curve is supplied;
+              exp(-theta * T) flat fallback otherwise
     A(0) = Σ_i α_i * P(0, T_i)                          (annuity)
 
 CALIBRATION STRATEGY:
@@ -28,7 +29,7 @@ Reference:
 import math
 import json
 from datetime import date
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 from scipy.optimize import minimize
@@ -41,6 +42,7 @@ def hw1f_swaption_vol_normal(
     expiry_y: float,
     tenor_y: float,
     dt: float = 1.0,
+    discount_fn: Optional[Callable[[float], float]] = None,
 ) -> float:
     """
     ATM normal vol (bp) for a payer swaption under constant-parameter HW1F.
@@ -64,6 +66,11 @@ def hw1f_swaption_vol_normal(
     expiry_y: option expiry in years
     tenor_y : underlying swap tenor in years
     dt      : coupon payment frequency in years (1.0 = annual)
+    discount_fn : P(0, t) as a function of year-fraction t. When supplied the
+              annuity, forward swap rate and dS/dr are taken off this curve,
+              so the vol is consistent with the term structure the XVA
+              simulation and the swaption pricer actually use. When None the
+              flat curve P(0,t) = exp(-theta t) is used (legacy behaviour).
 
     Returns
     -------
@@ -92,8 +99,9 @@ def hw1f_swaption_vol_normal(
     if not payment_dates:
         return 0.0
 
-    # P(0, T_i) = exp(-theta * T_i) — flat rate approximation
-    P_vals = [math.exp(-theta * Ti) for Ti in payment_dates]
+    # P(0, T_i): off the supplied curve, else flat at theta
+    _P = discount_fn if discount_fn is not None else (lambda t: math.exp(-theta * t))
+    P_vals = [_P(Ti) for Ti in payment_dates]
 
     # B*(T_e, T_i) = (1-exp(-a*(T_i-T_e)))/a — bond duration from T_e
     B_vals = [(1.0 - math.exp(-a * (Ti - Te))) / a for Ti in payment_dates]
@@ -110,7 +118,7 @@ def hw1f_swaption_vol_normal(
     # annuity-weighted duration. (Andersen-Piterbarg Vol II, Eq. 16.11.)
     #   S = (P_start - P_mat)/A ;  dS/dr = (B_mat*P_mat - B_start*P_start)/A + S*w_dur
     # Swap starts at T_e, so B*(T_e,T_e)=0 and the start-bond term vanishes.
-    P_start = math.exp(-theta * Te)
+    P_start = _P(Te)
     S_fwd   = (P_start - P_vals[-1]) / A0
     dSdr    = (B_vals[-1] * P_vals[-1]) / A0 + S_fwd * w_dur
 
@@ -125,6 +133,7 @@ def calibration_objective(
     params: np.ndarray,
     basket: list,
     theta: float,
+    discount_fn: Optional[Callable[[float], float]] = None,
 ) -> float:
     """
     Weighted RMSE between market ATM normal vols and HW1F model vols.
@@ -143,6 +152,7 @@ def calibration_objective(
                 a, sigma, theta,
                 inst['expiry_y'],
                 inst['tenor_y'],
+                discount_fn=discount_fn,
             )
             err = (mdl - inst['vol_bp']) * inst.get('weight', 1.0)
             total += err * err
@@ -161,6 +171,7 @@ def calibrate_hw1f(
     sigma_bp_init: float = 35.0,
     a_bounds: tuple = (0.001, 0.50),
     sigma_bounds: tuple = (5.0, 150.0),
+    discount_fn: Optional[Callable[[float], float]] = None,
 ) -> dict:
     """
     Calibrate HW1F (a, sigma) to ATM swaption basket.
@@ -173,7 +184,12 @@ def calibrate_hw1f(
     ----------
     basket : list of dicts with keys:
         expiry_y, tenor_y, vol_bp, ticker, role, weight (optional)
-    theta  : long-run rate from 5Y SOFR swap rate (decimal)
+    theta  : long-run rate from 5Y SOFR swap rate (decimal). Used as the
+             flat-curve fallback when discount_fn is None, and stored with
+             the result either way.
+    discount_fn : P(0, t) off the bootstrapped curve. Pass this in
+             production so the calibrated (a, sigma) belong to the same
+             term structure the simulation reconstitutes bonds from.
     """
     if not basket:
         raise ValueError("Calibration basket is empty")
@@ -184,7 +200,7 @@ def calibrate_hw1f(
     result = minimize(
         calibration_objective,
         x0,
-        args=(basket, theta),
+        args=(basket, theta, discount_fn),
         method='L-BFGS-B',
         bounds=bounds,
         options={'maxiter': 1000, 'ftol': 1e-14, 'gtol': 1e-10},
@@ -202,6 +218,7 @@ def calibrate_hw1f(
             mdl_vol = hw1f_swaption_vol_normal(
                 a_cal, sigma_cal, theta,
                 inst['expiry_y'], inst['tenor_y'],
+                discount_fn=discount_fn,
             )
         except Exception:
             mdl_vol = None
@@ -231,6 +248,7 @@ def calibrate_hw1f(
         'fit_details': fit_details,
         'converged':   bool(result.success),
         'iterations':  int(result.nit),
+        'curve_source': 'curve' if discount_fn is not None else 'flat-theta',
     }
 
 
