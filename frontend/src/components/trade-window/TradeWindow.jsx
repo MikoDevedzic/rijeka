@@ -123,12 +123,24 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // ── Window chrome state (Patch 8): active tab + drag position ──────────
   const [activeTab, setActiveTab] = useState('TRADE')
 
+  // Sprint 12 item 6 follow-up (L29): lazy-init tab mounting.
+  // On first activation, the tab is marked visited; once visited the panel
+  // stays mounted (display:none when inactive) so user edits survive tab
+  // switches. TRADE is always considered visited (it's the default tab
+  // and uses the always-mounted display:none pattern from Patch 8).
+  const [tabsVisited, setTabsVisited] = useState({ TRADE: true })
+  useEffect(() => {
+    if (!tabsVisited[activeTab]) {
+      setTabsVisited(v => ({ ...v, [activeTab]: true }))
+    }
+  }, [activeTab, tabsVisited])
+
   // Patch 21: XVA integration — params ref for XVATab to write to,
   // sim result state for shell-level consumption later.
   const xvaParamsRef = useRef(null)
   const [xvaSimResult, setXvaSimResult] = useState(null)
   const [pos, setPos] = useState(() => ({
-    x: Math.max(10, (typeof window !== 'undefined' ? window.innerWidth : 1400) - 1170) / 2,
+    x: Math.max(10, (typeof window !== 'undefined' ? window.innerWidth : 1400) - 1287) / 2,
     y: 30,
   }))
   const [dragging, setDragging] = useState(false)
@@ -141,6 +153,16 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       'input, select, textarea, button, [contenteditable], [role="button"],' +
       'canvas, .tbw-no-drag'
     )) return
+    // Skip drag if mousedown landed in the bottom-right resize zone.
+    // CSS `resize: both` exposes a ~16px hit area in the corner of the
+    // .tbw-window element itself (no separate child node), so e.target
+    // alone can't distinguish resize-grab from window-body click. 20px
+    // gives a comfortable hit zone without false positives elsewhere.
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (
+      e.clientX >= rect.right - 20 &&
+      e.clientY >= rect.bottom - 20
+    ) return
     dragStartRef.current = {
       px: pos.x, py: pos.y,
       mx: e.clientX, my: e.clientY,
@@ -476,50 +498,60 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         <XVASummary result={result} />
       </div>
 
-      {activeTab === 'CASHFLOWS' && (
-        <CashflowsPanel result={result} productKey={productKey} state={state} />
+      {tabsVisited['CASHFLOWS'] && (
+        <div style={{ display: activeTab === 'CASHFLOWS' ? 'block' : 'none' }}>
+          <CashflowsPanel result={result} productKey={productKey} state={state} />
+        </div>
       )}
 
-      {activeTab === 'DETAILS' && (
-        <DetailsPanel
-          productKey={productKey}
-          state={state}
-          direction={direction}
-          setProductState={setProductState}
-        />
+      {tabsVisited['DETAILS'] && (
+        <div style={{ display: activeTab === 'DETAILS' ? 'block' : 'none' }}>
+          <DetailsPanel
+            productKey={productKey}
+            state={state}
+            direction={direction}
+            setProductState={setProductState}
+          />
+        </div>
       )}
 
-      {activeTab === 'XVA' && (
-        <XvaPanel
-          productKey={productKey}
-          state={state}
-          direction={direction}
-          result={result}
-          xvaParamsRef={xvaParamsRef}
-          onSimResult={setXvaSimResult}
-        />
+      {tabsVisited['XVA'] && (
+        <div style={{ display: activeTab === 'XVA' ? 'block' : 'none' }}>
+          <XvaPanel
+            productKey={productKey}
+            state={state}
+            direction={direction}
+            result={result}
+            xvaParamsRef={xvaParamsRef}
+            onSimResult={setXvaSimResult}
+          />
+        </div>
       )}
 
-      {activeTab === 'CURVE SCENARIO' && (
-        <ScenarioPanel
-          productKey={productKey}
-          state={state}
-          direction={direction}
-          result={result}
-        />
+      {tabsVisited['CURVE SCENARIO'] && (
+        <div style={{ display: activeTab === 'CURVE SCENARIO' ? 'block' : 'none' }}>
+          <ScenarioPanel
+            productKey={productKey}
+            state={state}
+            direction={direction}
+            result={result}
+          />
+        </div>
       )}
 
       {/* Sprint 12 item 3 — CONFIRM tab */}
-      {activeTab === '◆ CONFIRM' && (
-        <ConfirmPanel
-          bookedTrade={bookedTrade}
-          confirming={confirming}
-          cancelling={cancelling}
-          confirmErr={confirmErr}
-          cancelErr={cancelErr}
-          onConfirm={handleConfirm}
-          onCancelTrade={handleCancelTrade}
-        />
+      {tabsVisited['◆ CONFIRM'] && (
+        <div style={{ display: activeTab === '◆ CONFIRM' ? 'block' : 'none' }}>
+          <ConfirmPanel
+            bookedTrade={bookedTrade}
+            confirming={confirming}
+            cancelling={cancelling}
+            confirmErr={confirmErr}
+            cancelErr={cancelErr}
+            onConfirm={handleConfirm}
+            onCancelTrade={handleCancelTrade}
+          />
+        </div>
       )}
 
       {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && activeTab !== 'XVA' && activeTab !== 'CURVE SCENARIO' && activeTab !== '◆ CONFIRM' && (

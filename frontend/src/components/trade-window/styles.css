@@ -8,23 +8,23 @@
 .tbw-window {
   /* Floating modal positioning — JS-driven after Patch 8 */
   position: fixed;
-  width: 1170px;
+  width: 1287px;
   max-width: 92vw;
   max-height: 95vh;
-  min-width: 640px;
-  min-height: 400px;
+  min-width: 704px;
+  min-height: 440px;
   overflow-y: auto;
   overflow-x: hidden;
   resize: both;            /* native browser resize handle bottom-right */
   z-index: 1000;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95);
 
-  /* Base chrome */
-  background: #000;
+  /* Base chrome — lifted surface against blotter (#000) for visual hierarchy */
+  background: #141414;
   color: #F0F0F0;
   font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;
-  border: 1px solid #1E1E1E;
+  border: 1px solid #2F2F2F;
   border-radius: 6px;
 }
 
@@ -363,8 +363,8 @@
   align-items: center;
   gap: 14px;
   padding: 10px 14px;
-  background: #0A0A0A;
-  border-bottom: 1px solid #1E1E1E;
+  background: #181818;
+  border-bottom: 1px solid #222;
   cursor: move;
   user-select: none;
 }
