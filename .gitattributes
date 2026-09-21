@@ -1,0 +1,12 @@
+# Normalise line endings: LF in the repository and in the working tree on
+# every platform. The codebase is LF; CRLF has crept in from Windows patch
+# scripts more than once and shows up as whole-file diffs.
+* text=auto eol=lf
+
+# Binary assets
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.pdf  binary
+*.woff binary
+*.woff2 binary

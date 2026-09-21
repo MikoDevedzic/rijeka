@@ -191,3 +191,13 @@ verify_test_users.py
 # Patch mover backups (Sprint 12/13) 
 *.bak_patch* 
 *.bak_1776* 
+
+# ── Local environments, backups, scratch ─────────────────────────────
+.venv/
+backend/.venv/
+*.bak
+*.bak.*
+.fuse_hidden*
+$null
+*.cjs
+setup_mac.sh
