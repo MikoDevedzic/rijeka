@@ -30,6 +30,74 @@ const STATUS_COLORS = {
   NOVATED:    '#9B8BB5',  // purple
 }
 
+const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace'
+
+const short = (h) => (h && h.length > 18) ? h.slice(0, 10) + '…' + h.slice(-6) : (h || '—')
+
+/** Attestation block: what was signed, by whom, and where it is anchored. */
+function AttestationView({ attestation, onVerify, verifying, verifyResult }) {
+  if (!attestation) return null
+  const att = attestation.attestation
+  const onChain = attestation.on_chain
+  if (!att) return null
+  const anchored = !!att.anchor?.anchored
+  const own = att.parties?.own || {}
+  const cp  = att.parties?.counterparty || {}
+  const row = (k, v, color) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 10, fontSize: 11, lineHeight: 1.7 }}>
+      <span className="tbw-mut" style={{ letterSpacing: '0.06em' }}>{k}</span>
+      <span style={{ fontFamily: MONO, color: color || '#F0F0F0', wordBreak: 'break-all' }}>{v}</span>
+    </div>
+  )
+  const vr = verifyResult
+  const vOk = vr && !vr.error && vr.hash_matches && vr.signatures_valid_for_current_state !== false && (!anchored || vr.on_chain_confirmed)
+  return (
+    <div style={{ marginTop: 18, padding: 14, background: '#0C0C0C', border: '1px solid ' + (anchored ? 'rgba(0,212,168,0.35)' : '#2A2A2A'), borderRadius: 2, maxWidth: 720 }}>
+      <div className="tbw-lbl" style={{ color: anchored ? '#00D4A8' : '#888', marginBottom: 8 }}>
+        {anchored ? '◆ CONFIRMED ON ETHEREUM' : '◇ SIGNED — NOT ANCHORED'}
+        <span className="tbw-mut" style={{ marginLeft: 10, fontWeight: 400, letterSpacing: 0 }}>
+          canonical schema v{att.schema_version} · EIP-712 · {att.eip712?.name} v{att.eip712?.version}
+        </span>
+      </div>
+      {row('TRADE HASH', att.trade_hash)}
+      {row('OWN ENTITY', `${own.lei || '—'} · ${short(own.address)} · sig ${short(own.signature)} (${own.key_source})`)}
+      {row('COUNTERPARTY', `${cp.lei || '—'} · ${short(cp.address)} · sig ${short(cp.signature)} (${cp.key_source})`)}
+      {anchored ? (<>
+        {row('CHAIN', `chainId ${att.anchor.chain_id} · registry ${short(att.anchor.registry)}`)}
+        {row('TRANSACTION', att.anchor.explorer_tx
+          ? <a href={att.anchor.explorer_tx} target="_blank" rel="noreferrer" style={{ color: '#4A9EFF' }}>{att.anchor.tx_hash}</a>
+          : att.anchor.tx_hash)}
+        {row('BLOCK', `${att.anchor.block_number} · ${att.anchor.confirmed_at ? new Date(att.anchor.confirmed_at * 1000).toISOString() : ''}`)}
+        {onChain && row('ON-CHAIN STATUS', onChain.status, onChain.status === 'Confirmed' ? '#00D4A8' : '#F5C842')}
+      </>) : (
+        row('ANCHOR', att.anchor?.note || 'No chain configured', '#888')
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+        <button className="tbw-btn" onClick={onVerify} disabled={verifying} style={{ borderColor: 'rgba(0,212,168,0.4)', color: '#00D4A8' }}>
+          {verifying ? '⏳ VERIFYING…' : '⟳ VERIFY'}
+        </button>
+        <span className="tbw-mut" style={{ fontSize: 10.5 }}>
+          Recomputes the hash from the trade as stored now and checks it against what was signed{anchored ? ' and the chain' : ''}.
+        </span>
+      </div>
+      {vr && (
+        <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 2, fontSize: 11, fontFamily: MONO,
+          background: vr.error ? 'rgba(255,107,107,0.06)' : vOk ? 'rgba(0,212,168,0.06)' : 'rgba(245,200,66,0.06)',
+          border: '1px solid ' + (vr.error ? 'rgba(255,107,107,0.3)' : vOk ? 'rgba(0,212,168,0.3)' : 'rgba(245,200,66,0.3)'),
+          color: vr.error ? '#FF6B6B' : vOk ? '#00D4A8' : '#F5C842', lineHeight: 1.7 }}>
+          {vr.error ? ('Verify failed: ' + vr.error) : (<>
+            <div>{vr.hash_matches ? '✔' : '✘'} hash of current terms {vr.hash_matches ? 'matches' : 'DOES NOT MATCH'} the signed hash</div>
+            <div>{vr.signatures_valid_for_current_state ? '✔' : '✘'} both signatures {vr.signatures_valid_for_current_state ? 'valid' : 'INVALID'} for the current terms</div>
+            {anchored && <div>{vr.on_chain_confirmed ? '✔' : '✘'} registry status: {vr.on_chain?.status || 'not found'}{vr.chain_error ? ' · ' + vr.chain_error : ''}</div>}
+            <div className="tbw-mut" style={{ marginTop: 4 }}>recomputed {short(vr.recomputed_hash)} · stored {short(vr.stored_hash)}</div>
+          </>)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const TERMINAL_COPY = {
   CONFIRMED: 'Trade is confirmed. It will activate automatically on the effective date.',
   CANCELLED: 'Trade has been cancelled. This is terminal.',
@@ -44,6 +112,10 @@ export function ConfirmPanel({
   cancelErr   = null,
   onConfirm   = () => {},
   onCancelTrade = () => {},
+  attestation = null,
+  onVerify    = () => {},
+  verifying   = false,
+  verifyResult = null,
 }) {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
@@ -100,6 +172,10 @@ export function ConfirmPanel({
           }}>
             {TERMINAL_COPY[status] || ('Trade status is ' + status + '. No lifecycle actions available in this tab.')}
           </div>
+
+          {status === 'CONFIRMED' && (
+            <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying} verifyResult={verifyResult} />
+          )}
         </div>
       </div>
     )
@@ -139,23 +215,34 @@ export function ConfirmPanel({
         <div className="tbw-mut" style={{
           fontSize: 11, lineHeight: 1.5, maxWidth: 520,
         }}>
-          Confirming marks the trade as agreed with the counterparty and
-          advances it to CONFIRMED. It will activate automatically on the
-          effective date. Cancelling closes the trade without settlement —
-          this is terminal and cannot be undone.
+          CONFIRM builds the canonical trade record, has both legal entities
+          sign its keccak256 hash (EIP-712), and anchors the pair of
+          signatures in the TradeConfirmationRegistry on Ethereum. From that
+          block both parties hold an identical, immutable record of the
+          terms. Only the hash goes on-chain. Cancelling closes the trade
+          without settlement — terminal and cannot be undone.
         </div>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button
             className="tbw-btn tbw-btn-book"
             disabled={confirming || cancelling}
-            onClick={onConfirm}
+            onClick={() => onConfirm('chain')}
           >
             {confirming
-              ? '⏳ CONFIRMING...'
+              ? '⏳ SIGNING & ANCHORING...'
               : confirmErr
                 ? '▶ RETRY CONFIRM'
-                : '▶ CONFIRM TRADE'}
+                : '◆ CONFIRM ON-CHAIN'}
+          </button>
+
+          <button
+            className="tbw-btn"
+            disabled={confirming || cancelling}
+            onClick={() => onConfirm('offchain')}
+            title="Status flip only — no signatures, nothing anchored"
+          >
+            CONFIRM OFF-CHAIN
           </button>
 
           <button

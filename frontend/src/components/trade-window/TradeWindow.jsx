@@ -41,7 +41,7 @@ import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, confirmTrade, cancelTrade } from './booking'
+import { executeBooking, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain } from './booking'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore } from '../../store/useTradesStore'
 import { useTabStore }    from '../../store/useTabStore'
@@ -116,6 +116,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
   // Sprint 12 item 3 — lifecycle state (PENDING -> CONFIRMED | CANCELLED)
   const [confirming, setConfirming] = useState(false)
+  // On-chain confirmation: attestation returned with the CONFIRMED event,
+  // and the result of an independent VERIFY (recompute hash, query chain).
+  const [attestation, setAttestation] = useState(null)
+  const [verifying, setVerifying] = useState(false)
+  const [verifyResult, setVerifyResult] = useState(null)
   const [cancelling, setCancelling] = useState(false)
   const [confirmErr, setConfirmErr] = useState('')
   const [cancelErr,  setCancelErr]  = useState('')
@@ -276,12 +281,20 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   }, [booking, pricing, state, direction, product, productKey, onBook])
 
   // Sprint 12 item 3 — CONFIRM handler: PENDING -> CONFIRMED
-  const handleConfirm = useCallback(async () => {
+  const handleConfirm = useCallback(async (mode = 'chain') => {
     if (!bookedTrade?.id) return
     if (confirming || cancelling) return
     setConfirmErr(''); setConfirming(true)
     try {
-      const r = await confirmTrade(bookedTrade.id)
+      // Default path signs the canonical trade hash for both parties and
+      // anchors it (TradeConfirmationRegistry). 'offchain' is the plain
+      // status flip for environments with no signing keys configured.
+      const r = mode === 'offchain'
+        ? await confirmTrade(bookedTrade.id)
+        : await confirmTradeOnChain(bookedTrade.id)
+      if (mode !== 'offchain') {
+        try { setAttestation(await getAttestation(r.trade.id)) } catch (e) { console.warn('[chain] attestation fetch failed', e) }
+      }
       // r.trade.status is now 'CONFIRMED' — ConfirmPanel re-renders into
       // terminal state automatically.
       setBookedTrade(r.trade)
@@ -296,6 +309,14 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       setConfirming(false)
     }
   }, [bookedTrade, confirming, cancelling, productKey, onBook])
+
+  const handleVerify = useCallback(async () => {
+    if (!bookedTrade?.id || verifying) return
+    setVerifying(true); setVerifyResult(null)
+    try { setVerifyResult(await verifyTradeOnChain(bookedTrade.id)) }
+    catch (e) { setVerifyResult({ error: e.message || String(e) }) }
+    finally { setVerifying(false) }
+  }, [bookedTrade, verifying])
 
   // Sprint 12 item 3 — CANCEL handler: PENDING -> CANCELLED (terminal)
   const handleCancelTrade = useCallback(async (reason) => {
@@ -549,6 +570,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             confirmErr={confirmErr}
             cancelErr={cancelErr}
             onConfirm={handleConfirm}
+            attestation={attestation}
+            onVerify={handleVerify}
+            verifying={verifying}
+            verifyResult={verifyResult}
             onCancelTrade={handleCancelTrade}
           />
         </div>
