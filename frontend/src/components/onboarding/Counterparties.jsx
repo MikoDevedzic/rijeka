@@ -133,6 +133,7 @@ export default function Counterparties() {
     setSaving(true)
     var hasCSA = form.csa_type !== 'NO_CSA'
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { alert('Not signed in — reload and sign in again.'); setSaving(false); return }
     const { error } = await supabase.from('counterparties').insert({
       legal_entity_id:   form.legal_entity_id || null,
       name:              form.name.trim().toUpperCase(),
@@ -145,7 +146,9 @@ export default function Counterparties() {
         ? parseFloat(form.csa_mta_k) : null,
       discount_curve_id: hasCSA ? (form.discount_curve_id || null) : null,
       im_model:          form.im_model,
-      created_by:        user ? user.id : null
+      created_by:        user ? user.id : null,
+      // Tenancy key — see LegalEntities.save(). RLS WITH CHECK requires it.
+      user_id:           user ? user.id : null
     })
     if (!error) {
       setShowAdd(false)
