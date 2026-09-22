@@ -2354,11 +2354,21 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   }
 
   const executeBooking = async (finalBook=false) => {
-    const raw = notionalRef.current ? notionalRef.current.value.replace(/,/g,'') : ''
-    if (!raw || isNaN(parseFloat(raw))) { setErr('Notional is required.'); return null }
+    // The TRADE tab is conditionally rendered ({activeTab==='main' && ...}),
+    // so its inputs UNMOUNT when the user is on CONFIRM / XVA / CASHFLOWS
+    // while the footer's BOOK TRADE button stays visible. Reading the refs
+    // alone then yields '' for the notional ("Notional is required." on a
+    // trade that has one) and, worse, 0 for the coupon — booking a 0% swap
+    // silently. Fall back to the state that backs each input, as
+    // pricePreview() already does for the notional.
+    const rawN = notionalRef.current ? notionalRef.current.value.replace(/,/g,'') : ''
+    const notional = parseFloat(rawN) || notionalState
+    if (!notional || isNaN(notional)) { setErr('Notional is required.'); return null }
     if (!effDate||!matDate) { setErr('Dates are required.'); return null }
-    const notional = parseFloat(raw)
-    const rateVal  = parseFloat(rateRef.current ? rateRef.current.value : '0')
+    const rawR = rateRef.current ? rateRef.current.value : ''
+    const rateVal = !isNaN(parseFloat(rawR)) ? parseFloat(rawR)
+                  : (parRate != null ? Number(parRate) : NaN)
+    if (isNaN(rateVal)) { setErr('Coupon is required — price the trade first.'); return null }
     const session = await getSession()
     const h = { Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' }
     const tradeRes = await fetch(API+'/api/trades/', { method:'POST', headers:h, body:JSON.stringify({
