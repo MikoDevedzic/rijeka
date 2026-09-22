@@ -54,10 +54,20 @@ function PersistentBookingWindow() {
   const { windows, close } = useBookingStore()
   if (!windows.length) return null
 
-  // Per-product opt-in. Comma-separated list of product keys.
-  // Empty/missing = everyone uses legacy (default, safe rollout).
+  // Per-product rollout of the unified TradeWindow. Comma-separated product
+  // keys in localStorage 'rijeka.tbw.unified.products' override the default.
+  //
+  // Default is IR_SWAP: the unified shell is where Sprint 10-13 landed (leg
+  // schedules, atomic confirm/cancel, on-chain confirmation) and the legacy
+  // window's CONFIRM tab is still a Sprint 6A placeholder. It is IR_SWAP only
+  // because booking.js::executeBooking throws for every other product —
+  // widening this default would break booking for cap / floor / collar /
+  // swaption. Set the key to 'legacy' (or any value without IR_SWAP) to go
+  // back; set it to a wider list once atomic booking covers those products.
+  const UNIFIED_DEFAULT = 'IR_SWAP'
+  const flag = localStorage.getItem('rijeka.tbw.unified.products')
   const unifiedSet = new Set(
-    (localStorage.getItem('rijeka.tbw.unified.products') || '')
+    (flag === null ? UNIFIED_DEFAULT : flag)
       .split(',').map(s => s.trim()).filter(Boolean)
   )
 
