@@ -51,8 +51,20 @@ router = APIRouter(prefix="/api/chain", tags=["chain"])
 def _load_parties(db: Session, trade: Trade, user_id) -> tuple[LegalEntity, Counterparty]:
     own = db.query(LegalEntity).filter(LegalEntity.id == trade.own_legal_entity_id).first()
     cp  = db.query(Counterparty).filter(Counterparty.id == trade.counterparty_id).first()
-    if own is None or cp is None:
-        raise HTTPException(status_code=422, detail="Trade needs an own legal entity and a counterparty to be confirmed on-chain.")
+    missing = []
+    if own is None:
+        missing.append("own legal entity" if trade.own_legal_entity_id is None
+                       else f"own legal entity {trade.own_legal_entity_id} (not found)")
+    if cp is None:
+        missing.append("counterparty" if trade.counterparty_id is None
+                       else f"counterparty {trade.counterparty_id} (not found)")
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=("Cannot confirm on-chain: this trade has no " + " and no ".join(missing) +
+                    ". A confirmation names both signing parties, so set them on the TRADE tab "
+                    "(COUNTERPARTY + BOOK) before booking."),
+        )
     return own, cp
 
 
