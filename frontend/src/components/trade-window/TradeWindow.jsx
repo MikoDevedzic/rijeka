@@ -103,7 +103,45 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     notional: 10_000_000, ccy: 'USD', tenor: '5Y',
     effDate: null, matDate: null, tradeDate: null,
     valDate: null,
+    // Counterparty block. own_legal_entity_id / counterparty_id are what the
+    // booking body carries and what on-chain confirmation resolves signing
+    // keys from, so a trade booked without them cannot be confirmed.
+    ownEntityId: '', counterpartyId: '', desk: '', book: '',
   })
+  // Reference data for the counterparty block.
+  const [refData, setRefData] = useState({ entities: [], counterparties: [], desks: [], books: [], loading: true, error: null })
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const session = await getSession()
+        const h = { Authorization: 'Bearer ' + session.access_token }
+        const [cpR, orgR, leR] = await Promise.all([
+          fetch(API + '/api/counterparties/', { headers: h }),
+          fetch(API + '/nodes', { headers: h }),
+          fetch(API + '/api/legal-entities/', { headers: h }),
+        ])
+        if (cancelled) return
+        const counterparties = cpR.ok ? await cpR.json() : []
+        const nodes          = orgR.ok ? await orgR.json() : []
+        const entities       = leR.ok ? await leR.json() : []
+        const own            = entities.filter(e => e.is_own_entity)
+        setRefData({
+          entities: own.length ? own : entities,
+          counterparties,
+          desks: nodes.filter(n => n.node_type === 'desk' && n.is_active !== false),
+          books: nodes.filter(n => n.node_type === 'book' && n.is_active !== false),
+          loading: false,
+          error: (cpR.ok && leR.ok) ? null : 'reference data unavailable',
+        })
+        // Default to the first own entity, as the legacy window does.
+        if (own.length) setEconomics(e => (e.ownEntityId ? e : { ...e, ownEntityId: own[0].id }))
+      } catch (err) {
+        if (!cancelled) setRefData(r => ({ ...r, loading: false, error: err.message || 'reference data failed' }))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
   const [productState, setProductState] = useState({})
   const [result, setResult]             = useState(null)
   const [pricing, setPricing]           = useState(false)
@@ -269,7 +307,15 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     if (booking || pricing) return
     setBookErr(''); setBooking(true)
     try {
-      const r = await executeBooking({ state, direction, extras: {} })
+      const r = await executeBooking({
+        state, direction,
+        extras: {
+          ownEntityId:     economics.ownEntityId   || null,
+          counterpartyId:  economics.counterpartyId || null,
+          desk:            economics.desk || null,
+          book:            economics.book || null,
+        },
+      })
       setBookedTrade(r.trade)
       if (r.priceData) setResult(product.pricing.parseResponse(r.priceData))
       onBook?.({ productKey, trade: r.trade })
@@ -278,7 +324,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     } finally {
       setBooking(false)
     }
-  }, [booking, pricing, state, direction, product, productKey, onBook])
+  }, [booking, pricing, state, direction, product, productKey, onBook, economics])
 
   // Sprint 12 item 3 — CONFIRM handler: PENDING -> CONFIRMED
   const handleConfirm = useCallback(async (mode = 'chain') => {
@@ -484,7 +530,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           onStructureChange={setStructure}
         />
 
-        <CounterpartyBlock />
+        <CounterpartyBlock
+          state={economics}
+          onChange={patch => setEconomics(e => ({ ...e, ...patch }))}
+          refData={refData}
+        />
 
         <PrimaryEconomics
           state={economics}
