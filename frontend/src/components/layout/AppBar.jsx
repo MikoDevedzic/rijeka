@@ -1,5 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
+import { openAppWindow } from '../../lib/windows'
+import './AppBar.css'
 
 const MODULES = [
   { label: 'HOME',           path: '/command-center', exact: true  },
@@ -35,8 +37,14 @@ export default function AppBar() {
       <div style={{width:'1px',height:'20px',background:'var(--border)',flexShrink:0}}/>
 
       <nav style={{display:'flex',alignItems:'stretch',height:'100%'}}>
-        {MODULES.map(mod=>(
-          <button key={mod.path} onClick={()=>navigate(mod.path)} style={{
+        {MODULES.map(mod=>{
+          // The active tab pops out exactly the page you're on; others open at their start.
+          const target = isActive(mod) ? location.pathname + location.search : mod.path
+          const popOut = () => openAppWindow(target, 'rijeka' + mod.path.replace(/\//g, '-'))
+          return (
+          <span key={mod.path} className="ab-nav">
+          <button onClick={e => (e.metaKey || e.ctrlKey || e.shiftKey) ? popOut() : navigate(mod.path)}
+                  title={mod.label + ' — ⌘/Ctrl-click to open in its own window'} style={{
             background:'none', border:'none',
             borderBottom: isActive(mod)?'2px solid var(--accent)':'2px solid transparent',
             color: isActive(mod)?'var(--accent)':'var(--text-dim)',
@@ -45,7 +53,9 @@ export default function AppBar() {
             transition:'all 0.12s', height:'100%',
             display:'flex', alignItems:'center',
           }}>{mod.label}</button>
-        ))}
+          <button className="ab-pop" onClick={popOut} title={'Open ' + mod.label + ' in its own window'}>⧉</button>
+          </span>
+        )})}
       </nav>
 
       <div style={{flex:1}}/>

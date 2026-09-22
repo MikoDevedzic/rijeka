@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useChatStore, PROMETHEUS, selectUnreadTotal, audience } from '../../store/useChatStore'
 import Markdown from '../common/Markdown'
+import { broadcast, onBroadcast, popOutMessenger, focusMessengerWindow, MESSENGER_PATH } from '../../lib/windows'
 import './Messenger.css'
 
 // One messenger for the whole app: the private Prometheus conversation, your
@@ -11,7 +12,9 @@ import './Messenger.css'
 
 const GEOM_KEY = 'rijeka.messenger.geom'
 const MIN_W = 340, MIN_H = 360, TWO_PANE = 640
-const HIDDEN_ON = ['/login', '/signup', '/confirm']
+const HIDDEN_ON = ['/login', '/signup', '/confirm', MESSENGER_PATH]
+// The popped-out window says it's alive this often; silence for STALE_MS means it closed.
+const HEARTBEAT_MS = 4000, STALE_MS = 11000
 
 const STARTERS = [
   'Summarise my book by status and counterparty',
@@ -49,19 +52,44 @@ function fmtTime(iso) {
 export default function Messenger() {
   const session = useAuthStore(s => s.session)
   const location = useLocation()
-  const { open, expanded, toggle, init } = useChatStore()
+  const { open, expanded, toggle, init, poppedOut, setPoppedOut } = useChatStore()
   const unread = useChatStore(selectUnreadTotal)
 
   useEffect(() => { if (session) init() }, [session, init])
 
+  // Track the popped-out messenger window, if there is one.
+  useEffect(() => {
+    let lastSeen = 0
+    const off = onBroadcast(msg => {
+      if (msg.type === 'messenger:here') { lastSeen = Date.now(); setPoppedOut(true); useChatStore.setState({ open: false }) }
+      if (msg.type === 'messenger:gone') { lastSeen = 0; setPoppedOut(false) }
+    })
+    // "Put back" in the popped-out window reopens the box only in the window that opened it.
+    const onDock = (e) => {
+      if (e.origin === window.location.origin && e.data?.type === 'messenger:dock') {
+        lastSeen = 0; setPoppedOut(false); useChatStore.setState({ open: true })
+      }
+    }
+    window.addEventListener('message', onDock)
+    broadcast({ type: 'messenger:ping' })
+    const t = setInterval(() => { if (lastSeen && Date.now() - lastSeen > STALE_MS) { lastSeen = 0; setPoppedOut(false) } }, HEARTBEAT_MS)
+    return () => { off(); clearInterval(t); window.removeEventListener('message', onDock) }
+  }, [setPoppedOut])
+
   if (!session || HIDDEN_ON.includes(location.pathname)) return null
+  const launch = () => {
+    if (poppedOut && focusMessengerWindow()) return
+    setPoppedOut(false)
+    toggle()
+  }
   // A full-screen window has its own close button; the launcher would sit on SEND.
   const covered = open && (expanded || window.innerWidth < 600)
   return (
     <>
-      {open && <MessengerWindow />}
+      {open && !poppedOut && <MessengerWindow />}
       {!covered && (
-        <button className="ms-launcher" onClick={toggle} title="Messages and Prometheus">
+        <button className={`ms-launcher${poppedOut ? ' out' : ''}`} onClick={launch}
+                title={poppedOut ? 'Messenger is open in its own window — bring it forward' : 'Messages and Prometheus'}>
           ✦{unread > 0 && <span className="ms-launcher-badge">{unread}</span>}
         </button>
       )}
@@ -69,8 +97,56 @@ export default function Messenger() {
   )
 }
 
+// The messenger as its own browser window (route /messenger): drag it to any
+// screen. It announces itself so the other windows hide their floating copy.
+export function MessengerPage() {
+  const session = useAuthStore(s => s.session)
+  const init = useChatStore(s => s.init)
+  const unread = useChatStore(selectUnreadTotal)
+  const [width, setWidth] = useState(window.innerWidth)
+
+  useEffect(() => { if (session) init() }, [session, init])
+  useEffect(() => { document.title = (unread ? `(${unread}) ` : '') + 'Rijeka · Messages' }, [unread])
+  useEffect(() => {
+    const here = () => broadcast({ type: 'messenger:here' })
+    here()
+    const t = setInterval(here, HEARTBEAT_MS)
+    const off = onBroadcast(msg => { if (msg.type === 'messenger:ping') here() })
+    const gone = () => broadcast({ type: 'messenger:gone' })
+    const onResize = () => setWidth(window.innerWidth)
+    // Closing a window doesn't always deliver one of these; the heartbeat is the backstop.
+    window.addEventListener('pagehide', gone)
+    window.addEventListener('beforeunload', gone)
+    window.addEventListener('resize', onResize)
+    return () => {
+      clearInterval(t); off(); gone()
+      window.removeEventListener('pagehide', gone)
+      window.removeEventListener('beforeunload', gone)
+      window.removeEventListener('resize', onResize)
+    }
+  }, [])
+
+  const dock = () => {
+    try { window.opener?.postMessage({ type: 'messenger:dock' }, window.location.origin) } catch { /* opener gone */ }
+    broadcast({ type: 'messenger:gone' })
+    window.close()
+  }
+  return (
+    <div className="ms-page">
+      <header className="ms-titlebar">
+        <span className="ms-brand">✦ RIJEKA</span>
+        <span className="ms-sub">messages · Prometheus</span>
+        <div className="ms-title-actions">
+          {window.opener && <button className="ms-icon" onClick={dock} title="Put back into the main window">⇲</button>}
+        </div>
+      </header>
+      <MessengerPanes width={width} />
+    </div>
+  )
+}
+
 function MessengerWindow() {
-  const { activeId, close, status, compose, setCompose, expanded, setExpanded } = useChatStore()
+  const { close, compose, expanded, setExpanded } = useChatStore()
   const [geom, setGeom] = useState(() => clamp(loadGeom() || defaultGeom()))
   const [phone, setPhone] = useState(window.innerWidth < 600)
   const drag = useRef(null)
@@ -101,10 +177,7 @@ function MessengerWindow() {
 
   const style = phone ? {} : expanded ? {} : { left: geom.x, top: geom.y, width: geom.w, height: geom.h }
   const width = phone ? window.innerWidth : expanded ? window.innerWidth - 32 : geom.w
-  const twoPane = width >= TWO_PANE
-
-  const showList = twoPane || (!activeId && !compose)
-  const showMain = twoPane || !!activeId || !!compose
+  const popOut = () => { if (popOutMessenger()) useChatStore.setState({ open: false, expanded: false }) }
 
   return (
     <div className={`ms-window${expanded ? ' ms-expanded' : ''}${phone ? ' ms-phone' : ''}`} style={style}
@@ -114,10 +187,24 @@ function MessengerWindow() {
         <span className="ms-brand">✦ RIJEKA</span>
         <span className="ms-sub">messages · Prometheus</span>
         <div className="ms-title-actions">
+          {!phone && <button className="ms-icon" onClick={popOut} title="Open in its own window — drag it to another screen">⧉</button>}
           {!phone && <button className="ms-icon" onClick={() => setExpanded(!expanded)} title={expanded ? 'Restore' : 'Expand'}>{expanded ? '⤡' : '⤢'}</button>}
           <button className="ms-icon" onClick={close} title="Close">✕</button>
         </div>
       </header>
+      <MessengerPanes width={width} />
+    </div>
+  )
+}
+
+// Conversation list + the open conversation; shared by the floating window
+// and the popped-out window.
+function MessengerPanes({ width }) {
+  const { activeId, status, compose, setCompose } = useChatStore()
+  const twoPane = width >= TWO_PANE
+  const showList = twoPane || (!activeId && !compose)
+  const showMain = twoPane || !!activeId || !!compose
+  return (
       <div className={`ms-body${twoPane ? ' two' : ''}`}>
         {showList && <ConversationList onCompose={setCompose} />}
         {showMain && (
@@ -131,7 +218,6 @@ function MessengerWindow() {
           </main>
         )}
       </div>
-    </div>
   )
 }
 

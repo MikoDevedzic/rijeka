@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { broadcast, onBroadcast } from '../lib/windows'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -37,6 +38,7 @@ export const useChatStore = create((set, get) => ({
   expanded: false,       // window fills the screen (demos, long threads)
   activeId: null,        // PROMETHEUS | roomId | null (the list)
   compose:  null,        // null | { mode: 'direct'|'group'|'invite', q? }: the new-chat/invite screen
+  poppedOut: false,      // the messenger is open in its own window (see lib/windows.js)
 
   // ── Network ──
   status:   'idle',      // idle | loading | ready | no-firm | error
@@ -54,6 +56,7 @@ export const useChatStore = create((set, get) => ({
   init: async () => {
     if (get().status !== 'idle') return
     set({ status: 'loading' })
+    get().listen()
     try {
       const me = await chatApi('/me')
       if (!me.firm) { set({ status: 'no-firm', me: null }); return }
@@ -65,6 +68,24 @@ export const useChatStore = create((set, get) => ({
       set({ status: 'error', error: e.message })
     }
   },
+
+  // Keep this window in step with Rijeka's other windows: read state, and
+  // the private Prometheus conversation (in memory only, never stored).
+  listen: () => {
+    if (get().unlisten) return
+    const unlisten = onBroadcast(msg => {
+      if (msg.type === 'chat:read') {
+        set(s => ({ rooms: s.rooms.map(r => r.id === msg.roomId ? { ...r, unread: 0 } : r) }))
+      } else if (msg.type === 'prom:state' && !get().promLoading) {
+        set({ prom: msg.prom })
+      } else if (msg.type === 'prom:request' && get().prom.length) {
+        broadcast({ type: 'prom:state', prom: get().prom })
+      }
+    })
+    set({ unlisten })
+    broadcast({ type: 'prom:request' })
+  },
+  unlisten: null,
 
   refreshRooms: async () => {
     const rooms = await chatApi('/rooms')
@@ -138,6 +159,7 @@ export const useChatStore = create((set, get) => ({
 
   markRead: async (roomId) => {
     set(s => ({ rooms: s.rooms.map(r => r.id === roomId ? { ...r, unread: 0 } : r) }))
+    broadcast({ type: 'chat:read', roomId })
     try { await post(`/rooms/${roomId}/read`) } catch { /* best effort */ }
   },
 
@@ -194,9 +216,11 @@ export const useChatStore = create((set, get) => ({
       set({ prom: [...next, { role: 'assistant', content: e.message, error: true }] })
     } finally {
       set({ promLoading: false })
+      broadcast({ type: 'prom:state', prom: get().prom })
     }
   },
-  clearPrometheus: () => set({ prom: [] }),
+  clearPrometheus: () => { set({ prom: [] }); broadcast({ type: 'prom:state', prom: [] }) },
+  setPoppedOut: (poppedOut) => set({ poppedOut }),
 }))
 
 // Plain-English names for data lookups, shown under a private answer.
