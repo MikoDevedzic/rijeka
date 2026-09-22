@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import anthropic
 
 from prometheus.persona import PERSONA
-from prometheus.tools import TOOL_DEFS, Toolbox, _rel, _resolve_source
+from prometheus.tools import SourceToolbox, _rel, _resolve_source
 
 log = logging.getLogger("rijeka.prometheus")
 
@@ -75,7 +75,7 @@ def _source_path(name: str, args: dict) -> str | None:
         return None
 
 
-def answer(messages: list[dict], toolbox: Toolbox, context: str | None = None) -> Answer:
+def answer(messages: list[dict], toolbox: SourceToolbox, context: str | None = None) -> Answer:
     system = [{"type": "text", "text": PERSONA, "cache_control": {"type": "ephemeral"}}]
     if context:
         # Server-built context (e.g. the trades open in Compare). After the
@@ -92,7 +92,7 @@ def answer(messages: list[dict], toolbox: Toolbox, context: str | None = None) -
             max_tokens=16000,
             thinking={"type": "adaptive"},
             system=system,
-            tools=TOOL_DEFS,
+            tools=toolbox.tool_defs,
             messages=convo,
             betas=_BETAS,
             extra_body={"fallbacks": "default"},

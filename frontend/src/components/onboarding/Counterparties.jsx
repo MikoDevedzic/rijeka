@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useChatStore } from '../../store/useChatStore'
 
 const CSA_DISCOUNT_MAP = {
   USD: 'USD_SOFR',
@@ -79,9 +81,11 @@ function Cell({ children, dim }) {
   )
 }
 
-const COLS = '1fr 140px 80px 52px 120px 65px 108px'
+const COLS = '1fr 140px 80px 52px 120px 65px 160px'
 
 export default function Counterparties() {
+  const navigate = useNavigate()
+  const [chatErr,      setChatErr]      = useState(null)
   const [cps,          setCps]          = useState([])
   const [les,          setLes]          = useState([])
   const [loading,      setLoading]      = useState(true)
@@ -184,6 +188,21 @@ export default function Counterparties() {
   var visible  = showInactive ? cps : active
 
   var hasCSA = form.csa_type !== 'NO_CSA'
+
+
+  // Open (or create) the chat room with the firm that claims this LEI.
+  async function openChat(cp) {
+    setChatErr(null)
+    try {
+      const chat = useChatStore.getState()
+      await chat.init()
+      if (useChatStore.getState().status === 'no-firm') throw new Error("Your account isn't part of a firm yet.")
+      const roomId = await chat.openWith({ lei: cp.legal_entity.lei })
+      navigate('/chat/' + roomId)
+    } catch (e) {
+      setChatErr(cp.name + ': ' + e.message)
+    }
+  }
 
   return (
     <div style={{ padding:'24px', maxWidth:'1400px' }}>
@@ -399,6 +418,9 @@ export default function Counterparties() {
                 <Cell dim>{cp.im_model}</Cell>
 
                 <div style={{ display:'flex', gap:'4px' }}>
+                  {cp.is_active && cp.legal_entity?.lei && (
+                    <Btn color='var(--accent)' onClick={function() { openChat(cp) }}>CHAT</Btn>
+                  )}
                   {cp.is_active
                     ? <Btn color='var(--red)'
                         onClick={function() { toggle(cp.id, false) }}>
@@ -422,6 +444,10 @@ export default function Counterparties() {
         </div>
       )}
 
+      {chatErr && (
+        <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--amber)',
+            fontFamily:"'IBM Plex Mono',var(--mono)" }}>{chatErr}</div>
+      )}
       <div style={{ marginTop:'8px', fontSize:'10px', color:'var(--text-dim)',
           fontFamily:"'IBM Plex Mono',var(--mono)" }}>
         {active.length} ACTIVE

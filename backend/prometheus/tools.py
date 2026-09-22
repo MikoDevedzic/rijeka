@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -76,6 +77,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Directories and files Prometheus may read to explain how Rijeka is built.
 # Deliberately excludes middleware/ (auth), .env*, tests, build output.
+# Within these, a file must also be tracked in git (see _tracked_files):
+# Prometheus reads what is public on GitHub, never local-only notes.
 _SOURCE_ROOTS = [
     "backend/pricing",
     "backend/chain",
@@ -87,14 +90,32 @@ _SOURCE_ROOTS = [
     "chain/script",
     "chain/README.md",
     "docs",
-    "_docs",
-    "model_validation",
     "README.md",
-    "ARCHITECTURE_v36.md",
 ]
 _SOURCE_EXTS = {".py", ".sol", ".md", ".tex", ".sql", ".txt"}
 _MAX_READ_LINES = 400
 _MAX_SEARCH_HITS = 60
+
+
+_tracked_cache: set[Path] | None | bool = False
+
+
+def _tracked_files() -> set[Path] | None:
+    """
+    Files tracked in git, or None when there is no git checkout (a deploy
+    built from GitHub already contains only public files).
+    """
+    global _tracked_cache
+    if _tracked_cache is False:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "ls-files", "-z"],
+                capture_output=True, check=True, timeout=10,
+            ).stdout.decode()
+            _tracked_cache = {(REPO_ROOT / p).resolve() for p in out.split("\0") if p}
+        except (OSError, subprocess.SubprocessError):
+            _tracked_cache = None
+    return _tracked_cache
 
 
 def _allowed_roots() -> list[Path]:
@@ -113,7 +134,10 @@ def _is_allowed(p: Path) -> bool:
         return False
     for root in _allowed_roots():
         if p == root or p.is_relative_to(root):
-            return p.is_dir() or p.suffix.lower() in _SOURCE_EXTS
+            if p.is_dir():
+                return True
+            tracked = _tracked_files()
+            return p.suffix.lower() in _SOURCE_EXTS and (tracked is None or p in tracked)
     return False
 
 
@@ -227,17 +251,22 @@ TOOL_DEFS: list[dict] = [
 
 # ── Handlers ─────────────────────────────────────────────────────────────────
 
-class Toolbox:
-    """All lookups for one request, bound to one user's tenant."""
+_SOURCE_TOOLS = ("list_source", "search_source", "read_source")
 
-    def __init__(self, db: Session, user_id: str):
-        self.db = db
-        self.user_id = uuid.UUID(user_id)
+
+class SourceToolbox:
+    """
+    Rijeka's code and docs only — no database, no user, no book.
+
+    This is what Prometheus gets in chat rooms: everything it says there is
+    seen by every firm in the room, so it must not be able to reach anyone's
+    trades. The restriction is structural: these handlers are all it has.
+    """
+
+    tool_defs = [t for t in TOOL_DEFS if t["name"] in _SOURCE_TOOLS]
+
+    def __init__(self):
         self.handlers: dict[str, Callable[..., Any]] = {
-            "list_trades": self.list_trades,
-            "get_trade": self.get_trade,
-            "get_confirmation": self.get_confirmation,
-            "list_parties": self.list_parties,
             "list_source": self.list_source,
             "search_source": self.search_source,
             "read_source": self.read_source,
@@ -255,6 +284,71 @@ class Toolbox:
         except (ValueError, LookupError, TypeError) as e:
             return str(e), True
         return out if isinstance(out, str) else json.dumps(out, default=_jsonable), False
+
+    # source
+
+    def list_source(self, path=None):
+        if not path:
+            return {"readable_roots": [_rel(r) for r in _allowed_roots()]}
+        p = _resolve_source(path)
+        if p.is_file():
+            return {"file": _rel(p), "lines": sum(1 for _ in p.open(errors="replace"))}
+        entries = []
+        for c in sorted(p.iterdir()):
+            if _is_allowed(c):
+                entries.append(_rel(c) + ("/" if c.is_dir() else ""))
+        return {"path": _rel(p), "entries": entries}
+
+    def search_source(self, pattern: str, path=None):
+        try:
+            rx = re.compile(pattern, re.IGNORECASE)
+        except re.error as e:
+            raise ValueError(f"Bad regex: {e}")
+        bases = [_resolve_source(path)] if path else _allowed_roots()
+        hits: list[str] = []
+        for base in bases:
+            files = [base] if base.is_file() else sorted(base.rglob("*"))
+            for f in files:
+                if not f.is_file() or not _is_allowed(f):
+                    continue
+                try:
+                    for i, line in enumerate(f.open(errors="replace"), 1):
+                        if rx.search(line):
+                            hits.append(f"{_rel(f)}:{i}: {line.strip()[:200]}")
+                            if len(hits) >= _MAX_SEARCH_HITS:
+                                return "\n".join(hits) + f"\n… stopped at {_MAX_SEARCH_HITS} matches; narrow the pattern or path."
+                except OSError:
+                    continue
+        return "\n".join(hits) if hits else "No matches."
+
+    def read_source(self, path: str, start_line=1, end_line=None):
+        p = _resolve_source(path)
+        if not p.is_file():
+            raise ValueError(f"'{path}' is a directory; use list_source.")
+        lines = p.read_text(errors="replace").splitlines()
+        start = max(1, int(start_line or 1))
+        end = min(len(lines), int(end_line) if end_line else start + _MAX_READ_LINES - 1,
+                  start + _MAX_READ_LINES - 1)
+        body = "\n".join(f"{n:>5}  {lines[n - 1]}" for n in range(start, end + 1))
+        more = f"\n… file has {len(lines)} lines; continue with start_line={end + 1}." if end < len(lines) else ""
+        return f"{_rel(p)} (lines {start}-{end} of {len(lines)})\n{body}{more}"
+
+
+class Toolbox(SourceToolbox):
+    """Source tools plus the user's own book, bound to one user's tenant."""
+
+    tool_defs = TOOL_DEFS
+
+    def __init__(self, db: Session, user_id: str):
+        super().__init__()
+        self.db = db
+        self.user_id = uuid.UUID(user_id)
+        self.handlers.update({
+            "list_trades": self.list_trades,
+            "get_trade": self.get_trade,
+            "get_confirmation": self.get_confirmation,
+            "list_parties": self.list_parties,
+        })
 
     # trades
 
@@ -369,51 +463,3 @@ class Toolbox:
             "other_legal_entities": [_row(e) for e in ents if not e.is_own_entity],
             "counterparties": [_row(c) for c in cps],
         }
-
-    # source
-
-    def list_source(self, path=None):
-        if not path:
-            return {"readable_roots": [_rel(r) for r in _allowed_roots()]}
-        p = _resolve_source(path)
-        if p.is_file():
-            return {"file": _rel(p), "lines": sum(1 for _ in p.open(errors="replace"))}
-        entries = []
-        for c in sorted(p.iterdir()):
-            if _is_allowed(c):
-                entries.append(_rel(c) + ("/" if c.is_dir() else ""))
-        return {"path": _rel(p), "entries": entries}
-
-    def search_source(self, pattern: str, path=None):
-        try:
-            rx = re.compile(pattern, re.IGNORECASE)
-        except re.error as e:
-            raise ValueError(f"Bad regex: {e}")
-        bases = [_resolve_source(path)] if path else _allowed_roots()
-        hits: list[str] = []
-        for base in bases:
-            files = [base] if base.is_file() else sorted(base.rglob("*"))
-            for f in files:
-                if not f.is_file() or not _is_allowed(f):
-                    continue
-                try:
-                    for i, line in enumerate(f.open(errors="replace"), 1):
-                        if rx.search(line):
-                            hits.append(f"{_rel(f)}:{i}: {line.strip()[:200]}")
-                            if len(hits) >= _MAX_SEARCH_HITS:
-                                return "\n".join(hits) + f"\n… stopped at {_MAX_SEARCH_HITS} matches; narrow the pattern or path."
-                except OSError:
-                    continue
-        return "\n".join(hits) if hits else "No matches."
-
-    def read_source(self, path: str, start_line=1, end_line=None):
-        p = _resolve_source(path)
-        if not p.is_file():
-            raise ValueError(f"'{path}' is a directory; use list_source.")
-        lines = p.read_text(errors="replace").splitlines()
-        start = max(1, int(start_line or 1))
-        end = min(len(lines), int(end_line) if end_line else start + _MAX_READ_LINES - 1,
-                  start + _MAX_READ_LINES - 1)
-        body = "\n".join(f"{n:>5}  {lines[n - 1]}" for n in range(start, end + 1))
-        more = f"\n… file has {len(lines)} lines; continue with start_line={end + 1}." if end < len(lines) else ""
-        return f"{_rel(p)} (lines {start}-{end} of {len(lines)})\n{body}{more}"

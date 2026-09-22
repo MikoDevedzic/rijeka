@@ -22,12 +22,23 @@ import useBookingStore    from './store/useBookingStore'
 import SwaptionVolDetail from './components/market-data/SwaptionVolDetail'
 import CapVolDetail      from './components/market-data/CapVolDetail'
 import XVAParametersTab  from './components/configurations/XVAParametersTab'
+import ChatPage          from './components/chat/ChatPage'
 
 function BlotterLayout() {
   return (
     <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
       <div style={{flex:1,overflow:'hidden'}}><AuthGuard /></div>
+      <PrometheusPanel />
+    </div>
+  )
+}
+
+function ChatLayout() {
+  return (
+    <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
+      <AppBar />
+      <div style={{flex:1,overflow:'hidden'}}><ChatPage /></div>
       <PrometheusPanel />
     </div>
   )
@@ -131,6 +142,8 @@ export default function App() {
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pricer"  element={<PricerPage />} />
           </Route>
+          <Route path="/chat"         element={<ChatLayout />} />
+          <Route path="/chat/:roomId" element={<ChatLayout />} />
           <Route element={<ConfigLayout />}>
             <Route path="/configurations">
               <Route index element={<Navigate to="market-data/curves" replace />} />

@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import Markdown from './common/Markdown'
 import { supabase } from '../lib/supabase'
 import './PrometheusPanel.css'
 
@@ -28,19 +27,6 @@ const CHECKED = {
 
 const ENGINEERING_ASK =
   'Show me the engineering behind that: how it is implemented, with file and line references.'
-
-marked.setOptions({ gfm: true, breaks: true })
-DOMPurify.addHook('afterSanitizeAttributes', node => {
-  if (node.tagName === 'A') {
-    node.setAttribute('target', '_blank')
-    node.setAttribute('rel', 'noopener noreferrer')
-  }
-})
-
-function Markdown({ text }) {
-  const html = DOMPurify.sanitize(marked.parse(text || ''))
-  return <div className="pm-md" dangerouslySetInnerHTML={{ __html: html }} />
-}
 
 export default function PrometheusPanel() {
   const [open, setOpen]         = useState(false)

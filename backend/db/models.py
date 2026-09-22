@@ -303,3 +303,79 @@ class IdempotencyKey(Base):
     user_id    = Column(UUID(as_uuid=True),      primary_key=True)
     result     = Column(JSONB,                   nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+# ─────────────────────────────────────────────────────
+# Firms + chat — migration 010.
+#
+# A firm groups users and claims LEIs; a counterparty in a
+# user's book resolves to a firm through firm_leis. Rooms are
+# between firms. Clients read these tables under RLS (realtime);
+# every write goes through api/routes/chat.py.
+# ─────────────────────────────────────────────────────
+class Firm(Base):
+    __tablename__ = "firms"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    name          = Column(Text, nullable=False, unique=True)
+    kind          = Column(Text, nullable=False, default="OTHER")   # PLATFORM | DEALER | BUY_SIDE | CORPORATE | OTHER
+    coverage_tier = Column(Text, nullable=False, default="FREE")    # FREE | DEDICATED
+    created_at    = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class FirmLei(Base):
+    __tablename__ = "firm_leis"
+
+    lei        = Column(Text, primary_key=True)
+    firm_id    = Column(UUID(as_uuid=True), ForeignKey("firms.id"), nullable=False)
+    verified   = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class FirmMember(Base):
+    __tablename__ = "firm_members"
+
+    user_id    = Column(UUID(as_uuid=True), primary_key=True)   # one firm per user
+    firm_id    = Column(UUID(as_uuid=True), ForeignKey("firms.id"), nullable=False)
+    role       = Column(Text, nullable=False, default="MEMBER")  # MEMBER | ADMIN
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChatRoom(Base):
+    __tablename__ = "chat_rooms"
+
+    id              = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    kind            = Column(Text, nullable=False)                # BILATERAL | SUPPORT
+    created_by      = Column(UUID(as_uuid=True), nullable=True)
+    created_at      = Column(DateTime(timezone=True), server_default=func.now())
+    last_message_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class ChatRoomFirm(Base):
+    __tablename__ = "chat_room_firms"
+
+    room_id = Column(UUID(as_uuid=True), ForeignKey("chat_rooms.id"), primary_key=True)
+    firm_id = Column(UUID(as_uuid=True), ForeignKey("firms.id"), primary_key=True)
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
+    room_id        = Column(UUID(as_uuid=True), ForeignKey("chat_rooms.id"), nullable=False)
+    sender_kind    = Column(Text, nullable=False)                 # USER | PROMETHEUS | SYSTEM
+    sender_user_id = Column(UUID(as_uuid=True), nullable=True)
+    sender_firm_id = Column(UUID(as_uuid=True), ForeignKey("firms.id"), nullable=True)
+    sender_name    = Column(Text, nullable=False)
+    sender_firm    = Column(Text, nullable=True)
+    body           = Column(Text, nullable=False)
+    card           = Column(JSONB, nullable=True)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChatRead(Base):
+    __tablename__ = "chat_reads"
+
+    room_id      = Column(UUID(as_uuid=True), ForeignKey("chat_rooms.id"), primary_key=True)
+    user_id      = Column(UUID(as_uuid=True), primary_key=True)
+    last_read_at = Column(DateTime(timezone=True), server_default=func.now())
