@@ -5,7 +5,6 @@ import './ChatStrip.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
-const SYSTEM = 'You are PROMETHEUS, the AI intelligence layer of Rijeka — an institutional derivatives risk platform. You are a concise, expert risk analyst. Answer questions about trades, Greeks (IR01, IR01_DISC, THETA), XVA (CVA, DVA, FVA, ColVA, MVA, KVA), market data, and risk management. Be direct and precise. Use professional derivatives terminology.'
 
 const NEWS = [
   { tag: 'RATES', tagClass: 'rates', headline: 'Fed holds rates steady at 5.25–5.50%; dot plot signals one cut in 2025', meta: 'Reuters · 2h ago' },
@@ -61,10 +60,7 @@ export default function ChatStrip() {
           'Authorization': 'Bearer ' + session.access_token,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          system: SYSTEM,
-          messages: apiMessages,
-        }),
+        body: JSON.stringify({ messages: apiMessages }),
       })
 
       if (!res.ok) throw new Error('API error ' + res.status)

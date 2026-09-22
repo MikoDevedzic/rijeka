@@ -5,7 +5,6 @@ import './PrometheusPanel.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
-const SYSTEM = 'You are PROMETHEUS, the AI intelligence layer of Rijeka — an institutional derivatives risk platform. You are a concise, expert risk analyst. Answer questions about trades, Greeks (IR01, IR01_DISC, THETA), XVA (CVA, DVA, FVA, ColVA, MVA, KVA), market data, and risk management. Be direct and precise. Use professional derivatives terminology.'
 
 const NEWS = [
   { tag: 'RATES', tagClass: 'rates', headline: 'Fed holds rates steady at 5.25–5.50%; dot plot signals one cut in 2025', meta: 'Reuters · 2h ago' },
@@ -52,12 +51,16 @@ export default function PrometheusPanel() {
       const res = await fetch(API + '/api/analyse/', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ system: SYSTEM, messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages }),
       })
-      if (!res.ok) throw new Error('API error ' + res.status)
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(typeof err.detail === 'string' ? err.detail : 'API error ' + res.status)
+      }
       const data = await res.json()
       const reply = data.content?.[0]?.text || 'No response.'
-      setMessages([...next, { role: 'assistant', content: reply }])
+      const looked = (data.tools_used || []).map(t => t.summary)
+      setMessages([...next, { role: 'assistant', content: reply, looked }])
     } catch (e) {
       setMessages([...next, { role: 'assistant', content: '✗ ' + e.message }])
     } finally {
@@ -87,6 +90,9 @@ export default function PrometheusPanel() {
                   <div key={i} className={`pm-msg pm-msg-${m.role}`}>
                     <div className="pm-msg-who">{m.role === 'user' ? 'YOU' : '✦ PROMETHEUS'}</div>
                     <div className="pm-msg-body">{m.content}</div>
+                    {m.looked?.length > 0 && (
+                      <div className="pm-msg-looked">looked at: {m.looked.join(' · ')}</div>
+                    )}
                   </div>
                 ))}
                 {loading && (

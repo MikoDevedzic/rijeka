@@ -88,6 +88,7 @@
 .pm-msg-user .pm-msg-body      { background: rgba(13,212,168,0.08); border: 1px solid rgba(13,212,168,0.2); color: var(--text); }
 .pm-msg-assistant .pm-msg-body { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
 .pm-thinking { color: var(--text-dim); font-style: italic; }
+.pm-msg-looked { margin-top: 4px; font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.02em; word-break: break-word; }
 
 .pm-input-row {
   display: flex; gap: 6px; padding: 8px 10px;
