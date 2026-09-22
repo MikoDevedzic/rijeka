@@ -288,3 +288,149 @@ class TestLiveChain:
         with pytest.raises(Exception):
             be.confirm(h2, A.address, B.address, sign(td_x, X.key), sign(td_b, B.key))
         assert be.get(h2) is None
+
+
+# ── Bilateral flow: request -> counterparty signs -> countersign ─────────────
+
+class TestBilateralExchange:
+    """
+    The real flow: we hold only the counterparty's ADDRESS, never their key.
+    Their signature is produced by them, over their own booking, and we verify
+    it before anything is submitted.
+    """
+
+    CP = Account.from_key("0x" + "5c" * 32)
+
+    def _setup(self, monkeypatch):
+        monkeypatch.setenv("RIJEKA_CHAIN_DEV_SEED", "bilateral-test")
+        monkeypatch.setenv("RIJEKA_CHAIN_KEY_" + CP["lei"], "")      # no key for them
+        monkeypatch.delenv("RIJEKA_CHAIN_KEY_" + CP["lei"], raising=False)
+        monkeypatch.setenv("RIJEKA_CHAIN_KEY_" + CP["lei"] + "_ADDRESS", self.CP.address)
+        return keymod.resolve(OWN), keymod.resolve(CP)
+
+    def test_we_do_not_hold_the_counterparty_key(self, monkeypatch):
+        k_own, k_cp = self._setup(monkeypatch)
+        assert k_own.private_key is not None and k_own.source == "dev"
+        assert k_cp.private_key is None and k_cp.source == "address-only"
+        assert k_cp.address == self.CP.address
+
+    def test_full_exchange(self, monkeypatch):
+        k_own, k_cp = self._setup(monkeypatch)
+        payload = canonical_payload(_trade(), _legs(), OWN, CP)
+        h = trade_hash(payload)
+
+        # our half
+        td_own = confirmation_typed_data(31337, REG, h, k_cp.address)
+        sig_own = sign(td_own, k_own.private_key)
+
+        # their half — signed with a key we never see, bound to OUR address
+        td_cp = confirmation_typed_data(31337, REG, h, k_own.address)
+        sig_cp = sign(td_cp, self.CP.key)
+
+        # our verification before submitting
+        assert recover(td_cp, sig_cp) == k_cp.address
+        assert recover(td_own, sig_own) == k_own.address
+        assert len(sig_cp) == 65
+
+    def test_rejects_signature_from_an_unregistered_key(self, monkeypatch):
+        k_own, k_cp = self._setup(monkeypatch)
+        h = trade_hash(canonical_payload(_trade(), _legs(), OWN, CP))
+        impostor = Account.from_key("0x" + "99" * 32)
+        td_cp = confirmation_typed_data(31337, REG, h, k_own.address)
+        assert recover(td_cp, sign(td_cp, impostor.key)) != k_cp.address
+
+    def test_rejects_signature_over_different_terms(self, monkeypatch):
+        k_own, k_cp = self._setup(monkeypatch)
+        h1 = trade_hash(canonical_payload(_trade(), _legs(), OWN, CP))
+        legs = _legs(); legs[1]["fixed_rate"] = Decimal("0.0366")
+        h2 = trade_hash(canonical_payload(_trade(), legs, OWN, CP))
+        assert h1 != h2
+        # they sign the amended terms; we check against the original
+        sig = sign(confirmation_typed_data(31337, REG, h2, k_own.address), self.CP.key)
+        assert recover(confirmation_typed_data(31337, REG, h1, k_own.address), sig) != k_cp.address
+
+    def test_countersignature_is_not_reusable_for_another_counterparty(self, monkeypatch):
+        k_own, k_cp = self._setup(monkeypatch)
+        h = trade_hash(canonical_payload(_trade(), _legs(), OWN, CP))
+        other = Account.from_key("0x" + "77" * 32)
+        # signed against OUR address; must not validate as if bound to someone else
+        sig = sign(confirmation_typed_data(31337, REG, h, k_own.address), self.CP.key)
+        assert recover(confirmation_typed_data(31337, REG, h, other.address), sig) != k_cp.address
+
+
+class TestCountersignCLI:
+    """The counterparty-side reference tool: chain/tools/countersign.py."""
+
+    TOOL = os.path.join(os.path.dirname(__file__), "..", "..", "chain", "tools", "countersign.py")
+
+    def _request(self, tmp_path, cp_addr, h, payload, own_addr, own_sig_hex):
+        req = {
+            "format": "rijeka-confirmation-request", "format_version": 1,
+            "trade_ref": "TRD-CLI-TEST", "trade_id": "00000000-0000-0000-0000-000000000001",
+            "canonical": payload, "trade_hash": "0x" + h.hex(),
+            "eip712": {"name": "Rijeka Trade Confirmation", "version": "1",
+                       "chain_id": 31337, "verifying_contract": REG},
+            "from": {"lei": OWN["lei"], "name": OWN["name"], "address": own_addr, "signature": own_sig_hex},
+            "to": {"lei": CP["lei"], "name": CP["name"], "address": cp_addr,
+                   "digest_to_sign": "0x" + eip712_digest(
+                       confirmation_typed_data(31337, REG, h, own_addr)).hex(),
+                   "can_sign_locally": False},
+        }
+        p = tmp_path / "request.json"; p.write_text(json.dumps(req)); return p
+
+    def _run(self, args):
+        import sys as _s
+        return subprocess.run([_s.executable, self.TOOL] + args, capture_output=True, text=True)
+
+    def test_signs_and_output_verifies(self, tmp_path):
+        payload = canonical_payload(_trade(), _legs(), OWN, CP)
+        h = trade_hash(payload)
+        cp = Account.from_key("0x" + "3a" * 32)
+        own_sig = sign(confirmation_typed_data(31337, REG, h, cp.address), A.key)
+        req = self._request(tmp_path, cp.address, h, payload, A.address, "0x" + own_sig.hex())
+        kf = tmp_path / "k"; kf.write_text("0x" + cp.key.hex())
+        out = tmp_path / "sig.json"
+        r = self._run([str(req), "--key-file", str(kf), "--out", str(out), "--yes"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "internally consistent" in r.stdout
+        sig = json.loads(out.read_text())
+        assert sig["address"] == cp.address
+        assert recover(confirmation_typed_data(31337, REG, h, A.address),
+                       bytes.fromhex(sig["signature"][2:])) == cp.address
+
+    def test_refuses_when_own_booking_disagrees(self, tmp_path):
+        payload = canonical_payload(_trade(), _legs(), OWN, CP)
+        h = trade_hash(payload)
+        cp = Account.from_key("0x" + "3a" * 32)
+        own_sig = sign(confirmation_typed_data(31337, REG, h, cp.address), A.key)
+        req = self._request(tmp_path, cp.address, h, payload, A.address, "0x" + own_sig.hex())
+        kf = tmp_path / "k"; kf.write_text("0x" + cp.key.hex())
+        r = self._run([str(req), "--key-file", str(kf), "--yes",
+                       "--expect-hash", "0x" + ("11" * 32)])
+        assert r.returncode == 2
+        assert "disagree" in (r.stdout + r.stderr)
+
+    def test_refuses_a_tampered_request(self, tmp_path):
+        payload = canonical_payload(_trade(), _legs(), OWN, CP)
+        h = trade_hash(payload)
+        cp = Account.from_key("0x" + "3a" * 32)
+        own_sig = sign(confirmation_typed_data(31337, REG, h, cp.address), A.key)
+        req = self._request(tmp_path, cp.address, h, payload, A.address, "0x" + own_sig.hex())
+        d = json.loads(req.read_text())
+        d["canonical"]["legs"][0]["fixed_rate"] = "0.0999"      # terms changed, hash not
+        req.write_text(json.dumps(d))
+        kf = tmp_path / "k"; kf.write_text("0x" + cp.key.hex())
+        r = self._run([str(req), "--key-file", str(kf), "--yes"])
+        assert r.returncode == 2
+        assert "does not match" in (r.stdout + r.stderr)
+
+    def test_refuses_the_wrong_key(self, tmp_path):
+        payload = canonical_payload(_trade(), _legs(), OWN, CP)
+        h = trade_hash(payload)
+        cp = Account.from_key("0x" + "3a" * 32)
+        own_sig = sign(confirmation_typed_data(31337, REG, h, cp.address), A.key)
+        req = self._request(tmp_path, cp.address, h, payload, A.address, "0x" + own_sig.hex())
+        kf = tmp_path / "k"; kf.write_text("0x" + ("4b" * 32))   # someone else's key
+        r = self._run([str(req), "--key-file", str(kf), "--yes"])
+        assert r.returncode == 2
+        assert "addressed to" in (r.stdout + r.stderr)

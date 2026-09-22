@@ -28,6 +28,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Header
+from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
@@ -39,7 +40,7 @@ from api.routes.trade_events import (
     _parse_trade_uuid, _load_pending_trade, _apply_lifecycle_transition,
 )
 from chain.canonical import canonical_payload, canonical_bytes, trade_hash, CANONICAL_SCHEMA_VERSION
-from chain.signing import confirmation_typed_data, sign, recover
+from chain.signing import confirmation_typed_data, sign, recover, eip712_digest
 from chain.keys import resolve as resolve_key
 from chain.attestation import get_backend
 
@@ -96,6 +97,30 @@ def _hexb(b: bytes) -> str:
     return "0x" + b.hex()
 
 
+
+def _resolve_parties(db: Session, trade: Trade):
+    """(own_key, cp_key, own_identity, cp_identity). Raises 422 with a usable message."""
+    own, cp = _load_parties(db, trade, trade.user_id)
+    own_id = {"lei": own.lei, "name": own.name}
+    cp_id  = _cp_identity(db, cp)
+    try:
+        k_own = resolve_key(own_id)
+        k_cp  = resolve_key(cp_id)
+    except LookupError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    if k_own.private_key is None:
+        raise HTTPException(status_code=422,
+            detail=f"No signing key for our own entity {k_own.lei}. This side must be able to sign.")
+    if k_own.address == k_cp.address:
+        raise HTTPException(status_code=422, detail="Own entity and counterparty resolve to the same signing key.")
+    return k_own, k_cp, own_id, cp_id
+
+
+def _eip712_ctx():
+    be = get_backend()
+    return be, (be.chain_id or 31337), (be.registry or "0x" + "0" * 40)
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @router.get("/status")
@@ -108,6 +133,156 @@ def chain_status(user: dict = Depends(verify_token)):
         "schema_version": CANONICAL_SCHEMA_VERSION,
         "backend":        type(be).__name__,
     }
+
+
+@router.get("/request/{trade_id}")
+def confirmation_request(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """
+    Our half of a bilateral confirmation, for the counterparty to countersign.
+
+    Contains the canonical trade record, its hash, our signature, and the exact
+    digest the counterparty must sign. They rebuild the hash from THEIR OWN
+    booking and compare: a mismatch is a confirmation break, caught here rather
+    than in a reconciliation days later. Only if it matches do they sign.
+
+    Deterministic — EIP-712 signing is RFC-6979, so calling this twice yields
+    the same signature. Nothing is stored and nothing is anchored.
+
+    The counterparty returns {address, signature} to POST /countersign, or
+    relays confirm() to the registry themselves; the contract accepts a
+    validly-signed pair from anyone.
+    """
+    user_id = user.get("sub")
+    trade_uuid = _parse_trade_uuid(trade_id)
+    trade = db.query(Trade).filter(Trade.id == trade_uuid, Trade.user_id == user_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+
+    k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    payload, h = _canonical_for(db, trade)
+    be, chain_id, registry = _eip712_ctx()
+
+    td_own = confirmation_typed_data(chain_id, registry, h, k_cp.address)
+    td_cp  = confirmation_typed_data(chain_id, registry, h, k_own.address)
+
+    return {
+        "format":         "rijeka-confirmation-request",
+        "format_version": 1,
+        "generated_at":   datetime.now(timezone.utc).isoformat(),
+        "trade_ref":      trade.trade_ref,
+        "trade_id":       str(trade.id),
+        "canonical":      payload,
+        "trade_hash":     _hexb(h),
+        "eip712": {"name": "Rijeka Trade Confirmation", "version": "1",
+                   "chain_id": chain_id, "verifying_contract": registry},
+        "from": {"lei": k_own.lei, "name": own_id.get("name"),
+                 "address": k_own.address, "signature": _hexb(sign(td_own, k_own.private_key))},
+        "to":   {"lei": k_cp.lei, "name": cp_id.get("name"),
+                 "address": k_cp.address,
+                 "digest_to_sign": _hexb(eip712_digest(td_cp)),
+                 "can_sign_locally": k_cp.private_key is not None},
+        "how_to_countersign": [
+            "1. Rebuild the canonical record from YOUR booking of this trade and "
+            "keccak256 it. It must equal trade_hash. If it does not, the two "
+            "bookings disagree — resolve that before signing anything.",
+            "2. Sign EIP-712 TradeConfirmation(bytes32 tradeHash,address counterparty) "
+            "over {tradeHash: trade_hash, counterparty: from.address} using the domain "
+            "in `eip712`. The digest is given as to.digest_to_sign so you can check it.",
+            "3. Return {address, signature} to POST /api/chain/countersign/" + str(trade.id) +
+            " — or call confirm(trade_hash, from.address, your address, from.signature, "
+            "your signature) on the registry yourself. Either party may relay.",
+        ],
+    }
+
+
+class CountersignBody(BaseModel):
+    address:   str
+    signature: str
+
+
+@router.post("/countersign/{trade_id}", status_code=201)
+def countersign(
+    trade_id: str,
+    body: CountersignBody,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """
+    Accept the counterparty's signature and anchor the confirmation.
+
+    This is the genuinely bilateral path: their signature is produced by their
+    system, over their own booking of the trade. We verify it recovers to the
+    address registered for their legal entity before anything is submitted.
+    """
+    user_id = _check_write_role(user)
+    _validate_idempotency_header(idempotency_key)
+    cached = _lookup_idempotent(db, user_id, idempotency_key)
+    if cached:
+        return cached
+
+    trade_uuid = _parse_trade_uuid(trade_id)
+    trade = _load_pending_trade(db, trade_uuid, user_id)
+    k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    payload, h = _canonical_for(db, trade)
+    be, chain_id, registry = _eip712_ctx()
+
+    try:
+        sig_cp = bytes.fromhex(body.signature[2:] if body.signature.startswith("0x") else body.signature)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="signature is not hex")
+    if len(sig_cp) != 65:
+        raise HTTPException(status_code=422, detail=f"signature must be 65 bytes, got {len(sig_cp)}")
+
+    # The signature must be over OUR hash, bound to US, and recover to the
+    # address registered for their entity. Anything else is rejected before
+    # a transaction is built.
+    td_cp = confirmation_typed_data(chain_id, registry, h, k_own.address)
+    try:
+        recovered = recover(td_cp, sig_cp)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"signature could not be recovered: {e}")
+    if recovered.lower() != body.address.lower():
+        raise HTTPException(status_code=422,
+            detail=f"signature recovers to {recovered}, not the address supplied ({body.address}).")
+    if recovered.lower() != k_cp.address.lower():
+        raise HTTPException(status_code=422,
+            detail=(f"signature is from {recovered}, but {k_cp.lei} is registered as "
+                    f"{k_cp.address}. Register their address "
+                    f"(RIJEKA_CHAIN_KEY_<LEI>_ADDRESS) or check who signed."))
+
+    td_own  = confirmation_typed_data(chain_id, registry, h, k_cp.address)
+    sig_own = sign(td_own, k_own.private_key)
+
+    try:
+        receipt = be.confirm(h, k_own.address, k_cp.address, sig_own, sig_cp)
+    except Exception as e:
+        log.exception("countersign anchoring failed")
+        raise HTTPException(status_code=502, detail=f"Chain anchoring failed: {e}")
+
+    attestation = {
+        "schema_version": CANONICAL_SCHEMA_VERSION,
+        "trade_hash":     _hexb(h),
+        "canonical_bytes_len": len(canonical_bytes(payload)),
+        "bilateral":      True,
+        "parties": {
+            "own":          {"lei": k_own.lei, "address": k_own.address,
+                             "signature": _hexb(sig_own), "key_source": k_own.source},
+            "counterparty": {"lei": k_cp.lei, "address": k_cp.address,
+                             "signature": _hexb(sig_cp), "key_source": "countersigned"},
+        },
+        "eip712": {"name": "Rijeka Trade Confirmation", "version": "1",
+                   "chain_id": chain_id, "verifying_contract": registry},
+        "anchor": receipt.to_dict(),
+    }
+    return _apply_lifecycle_transition(
+        db=db, user_id=user_id, trade=trade,
+        event_type="CONFIRMED", new_status="CONFIRMED",
+        payload={"attestation": attestation},
+        idempotency_key=idempotency_key,
+        confirmation_hash=_hexb(h),
+        counterparty_confirmed=True,
+    )
 
 
 @router.post("/confirm/{trade_id}", status_code=201)
@@ -125,27 +300,23 @@ def confirm_on_chain(
 
     trade_uuid = _parse_trade_uuid(trade_id)
     trade = _load_pending_trade(db, trade_uuid, user_id)
-    own, cp = _load_parties(db, trade, user_id)
 
     # 1. Canonical record and hash
     payload, h = _canonical_for(db, trade)
 
-    # 2. Party keys. Own entity must be able to sign here; the counterparty's
-    #    signature would normally arrive from their system — in this build we
-    #    resolve it the same way (dev seed / env key) so the flow is complete.
-    try:
-        key_own = resolve_key({"lei": own.lei, "name": own.name})
-        key_cp  = resolve_key(_cp_identity(db, cp))
-    except LookupError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-    if key_own.address == key_cp.address:
-        raise HTTPException(status_code=422, detail="Own entity and counterparty resolve to the same signing key.")
-    if key_own.private_key is None or key_cp.private_key is None:
-        raise HTTPException(status_code=422, detail="Both parties must be able to sign in this build (address-only keys not yet supported).")
+    # 2. Party keys. This route signs for BOTH sides, which is only possible
+    #    when we hold the counterparty's key too — i.e. a demo or a test.
+    #    A real bilateral confirmation goes /request -> counterparty signs ->
+    #    /countersign, where their signature comes from their own system.
+    key_own, key_cp, own_id, cp_id = _resolve_parties(db, trade)
+    if key_cp.private_key is None:
+        raise HTTPException(status_code=422, detail=(
+            f"No signing key held for {key_cp.lei}, which is correct for a real "
+            f"counterparty. Use GET /api/chain/request/{trade_id} to produce a "
+            f"confirmation request for them to sign, then POST /api/chain/countersign/"
+            f"{trade_id} with their signature."))
 
-    be = get_backend()
-    chain_id = be.chain_id or 31337
-    registry = be.registry or "0x0000000000000000000000000000000000000000"
+    be, chain_id, registry = _eip712_ctx()
 
     # 3. Signatures — each party signs the hash bound to the OTHER party
     td_own = confirmation_typed_data(chain_id, registry, h, key_cp.address)
@@ -172,6 +343,8 @@ def confirm_on_chain(
         },
         "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": chain_id, "verifying_contract": registry},
         "anchor": receipt.to_dict(),
+        # Both signatures were produced here. Not a bilateral confirmation.
+        "bilateral": False,
     }
 
     # 5. Atomic status flip with the attestation in the event
