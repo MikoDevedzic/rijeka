@@ -79,22 +79,42 @@ export function InstrumentSelector({
 
 // ── CounterpartyBlock (identical across every product) ─────────────────────
 
-export function CounterpartyBlock({ state = {}, onChange = () => {} }) {
+export function CounterpartyBlock({ state = {}, onChange = () => {}, refData = {} }) {
+  const { entities = [], counterparties = [], desks = [], books = [], loading, error } = refData
   return (
     <div className="tbw-sec">
-      <div className="tbw-lbl">COUNTERPARTY + BOOK</div>
+      <div className="tbw-lbl">
+        COUNTERPARTY + BOOK
+        {error && <span style={{ color: '#FF6B6B', marginLeft: 10, fontWeight: 400, letterSpacing: 0 }}>{error}</span>}
+      </div>
       <div className="tbw-grid-6">
         <Field label="OWN ENTITY">
-          <select defaultValue="RIJEKA"><option>RIJEKA</option></select>
+          <select value={state.ownEntityId || ''} onChange={e => onChange({ ownEntityId: e.target.value })}>
+            <option value="">{loading ? '— loading —' : '— select —'}</option>
+            {entities.map(e => <option key={e.id} value={e.id}>{e.short_name || e.name}</option>)}
+          </select>
         </Field>
         <Field label="COUNTERPARTY">
-          <select defaultValue=""><option value="">— select —</option></select>
+          <select value={state.counterpartyId || ''} onChange={e => onChange({ counterpartyId: e.target.value })}>
+            <option value="">{loading ? '— loading —' : '— select —'}</option>
+            {counterparties.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
         </Field>
         <Field label="TRADE DATE">
-          <input type="date" defaultValue={new Date().toISOString().slice(0,10)} />
+          <input type="date" value={state.tradeDate || ''} onChange={e => onChange({ tradeDate: e.target.value })} />
         </Field>
-        <Field label="DESK"><select><option>—</option></select></Field>
-        <Field label="BOOK"><select><option>—</option></select></Field>
+        <Field label="DESK">
+          <select value={state.desk || ''} onChange={e => onChange({ desk: e.target.value })}>
+            <option value="">—</option>
+            {desks.map(d => <option key={d.id} value={d.name}>{d.name}</option>)}
+          </select>
+        </Field>
+        <Field label="BOOK">
+          <select value={state.book || ''} onChange={e => onChange({ book: e.target.value })}>
+            <option value="">—</option>
+            {books.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
+          </select>
+        </Field>
       </div>
     </div>
   )
