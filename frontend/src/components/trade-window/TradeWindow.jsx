@@ -307,6 +307,15 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     if (booking || pricing) return
     setBookErr(''); setBooking(true)
     try {
+      // A trade with no counterparty cannot be confirmed (on-chain or
+      // otherwise) — a confirmation names both signing parties. Catch it
+      // here rather than after the trade is already booked.
+      if (!economics.counterpartyId) {
+        throw new Error('Select a COUNTERPARTY on the TRADE tab before booking.')
+      }
+      if (!economics.ownEntityId) {
+        throw new Error('Select an OWN ENTITY on the TRADE tab before booking.')
+      }
       const r = await executeBooking({
         state, direction,
         extras: {
