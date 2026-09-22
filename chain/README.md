@@ -37,3 +37,24 @@ The relayer key on mainnet is production infrastructure — HSM / signer service
 ```bash
 python -c "import json;a=json.load(open('out/TradeConfirmationRegistry.sol/TradeConfirmationRegistry.json'));json.dump({'abi':a['abi'],'bytecode':a['bytecode']['object']},open('../backend/chain/TradeConfirmationRegistry.json','w'))"
 ```
+
+## Independent verification
+
+`verify/index.html` is a self-contained page that checks a confirmation without
+contacting Rijeka. It recomputes the canonical hash in the browser, recovers both
+EIP-712 signatures locally, and reads the registry from a public Ethereum node.
+Save the file and it keeps working offline apart from the one RPC call.
+
+Feed it the proof pack from `GET /api/chain/proof/{trade_id}` (the CONFIRM tab has
+a `↓ PROOF PACK` button). The pack contains the canonical record, the hash, both
+signatures and the registry address — nothing else is needed.
+
+The JavaScript canonicalisation is byte-identical to the Python one; the pinned
+vector in `backend/tests/test_chain_confirmation.py::test_known_vector` and a
+2,303-byte live trade both round-trip exactly.
+
+### Deployments
+
+| Network | Registry | Source |
+|---|---|---|
+| Sepolia | `0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e` | verified on Sourcify (exact match) |
