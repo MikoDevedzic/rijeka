@@ -1,9 +1,12 @@
+import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useChatStore, selectUnreadTotal } from '../../store/useChatStore'
 
 const MODULES = [
   { label: 'HOME',           path: '/command-center', exact: true  },
   { label: 'BLOTTER',        path: '/blotter',        exact: false },
+  { label: 'CHAT',           path: '/chat',           exact: false },
   { label: 'CONFIGURATIONS', path: '/configurations', exact: false },
 ]
 
@@ -12,6 +15,11 @@ export default function AppBar() {
   const location  = useLocation()
   const user      = useAuthStore(s => s.session?.user)
   const signOut   = useAuthStore(s => s.signOut)
+  const unread    = useChatStore(selectUnreadTotal)
+  const initChat  = useChatStore(s => s.init)
+
+  // Start chat once signed in, so the CHAT badge counts from any screen.
+  useEffect(() => { if (user) initChat() }, [user, initChat])
 
   const displayName = user?.email?.split('@')[0]?.toUpperCase()
     || user?.user_metadata?.full_name?.toUpperCase()
@@ -44,7 +52,16 @@ export default function AppBar() {
             letterSpacing:'0.1em', padding:'0 0.85rem', cursor:'pointer',
             transition:'all 0.12s', height:'100%',
             display:'flex', alignItems:'center',
-          }}>{mod.label}</button>
+          }}>
+            {mod.label}
+            {mod.path === '/chat' && unread > 0 && (
+              <span style={{
+                marginLeft:'6px', background:'var(--accent)', color:'#000', borderRadius:'9px',
+                fontSize:'0.7rem', minWidth:'18px', height:'18px', padding:'0 5px',
+                display:'inline-flex', alignItems:'center', justifyContent:'center', letterSpacing:0,
+              }}>{unread}</span>
+            )}
+          </button>
         ))}
       </nav>
 

@@ -18,7 +18,7 @@ from api.routes.analyse import AnalyseRequest
 from db.models import LegalEntity
 from prometheus import agent
 from prometheus.persona import PERSONA
-from prometheus.tools import TOOL_DEFS, ReadOnlyViolation, Toolbox, make_readonly
+from prometheus.tools import TOOL_DEFS, ReadOnlyViolation, SourceToolbox, Toolbox, make_readonly
 
 USER = "00000000-0000-0000-0000-000000000001"
 
@@ -47,10 +47,29 @@ def test_readonly_session_refuses_to_flush():
     ".env", "backend/.env", "../.env.test", "backend/pricing/../../.env.test",
     "backend/middleware/auth.py", "/etc/passwd", "chain/src/../foundry.toml",
     "backend/pricing/__pycache__", "backend/chain/TradeConfirmationRegistry.json",
+    "_docs/migrations/README.md", "ARCHITECTURE_v36.md",
 ])
 def test_source_outside_allowlist_is_refused(path):
     out, is_error = Toolbox(None, USER).run("read_source", {"path": path})
     assert is_error and "outside what Prometheus can read" in out
+
+
+def test_untracked_file_inside_a_root_is_refused(tmp_path, monkeypatch):
+    from prometheus import tools
+    private = tools.REPO_ROOT / "docs" / "_prometheus_test_private_note.md"
+    private.write_text("internal")
+    try:
+        out, is_error = Toolbox(None, USER).run("read_source", {"path": "docs/_prometheus_test_private_note.md"})
+        assert is_error, "a file not tracked in git must not be readable"
+    finally:
+        private.unlink()
+
+
+def test_source_toolbox_has_no_book_access():
+    assert set(SourceToolbox().handlers) == {"list_source", "search_source", "read_source"}
+    assert {t["name"] for t in SourceToolbox.tool_defs} == {"list_source", "search_source", "read_source"}
+    out, is_error = SourceToolbox().run("list_trades", {})
+    assert is_error
 
 
 def test_source_inside_allowlist_is_readable():
