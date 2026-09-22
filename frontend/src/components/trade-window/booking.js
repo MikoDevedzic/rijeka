@@ -442,3 +442,7 @@ export async function confirmTradeOnChain(tradeId, extras = {}) {
 export function getAttestation(tradeId) { return _authed('/api/chain/attestation/' + tradeId) }
 export function verifyTradeOnChain(tradeId) { return _authed('/api/chain/verify/' + tradeId, 'POST') }
 export function chainStatus() { return _authed('/api/chain/status') }
+
+/** Self-contained proof pack: canonical record + hash + both signatures +
+ *  where it is anchored. Everything a third party needs to verify without us. */
+export function getProofPack(tradeId) { return _authed('/api/chain/proof/' + tradeId) }

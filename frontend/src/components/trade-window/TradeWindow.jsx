@@ -41,7 +41,7 @@ import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain } from './booking'
+import { executeBooking, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain, getProofPack } from './booking'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore } from '../../store/useTradesStore'
 import { useTabStore }    from '../../store/useTabStore'
@@ -373,6 +373,21 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     finally { setVerifying(false) }
   }, [bookedTrade, verifying])
 
+  const handleDownloadProof = useCallback(async () => {
+    if (!bookedTrade?.id) return
+    try {
+      const proof = await getProofPack(bookedTrade.id)
+      const blob = new Blob([JSON.stringify(proof, null, 2)], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `${proof.trade_ref || bookedTrade.id}-confirmation-proof.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e) {
+      setVerifyResult({ error: e.message || String(e) })
+    }
+  }, [bookedTrade])
+
   // Sprint 12 item 3 — CANCEL handler: PENDING -> CANCELLED (terminal)
   const handleCancelTrade = useCallback(async (reason) => {
     if (!bookedTrade?.id) return
@@ -631,6 +646,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             onConfirm={handleConfirm}
             attestation={attestation}
             onVerify={handleVerify}
+            onDownloadProof={handleDownloadProof}
             verifying={verifying}
             verifyResult={verifyResult}
             onCancelTrade={handleCancelTrade}

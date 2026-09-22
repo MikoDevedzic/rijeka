@@ -23,6 +23,7 @@ GET  /api/chain/status
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -208,6 +209,53 @@ def get_attestation(trade_id: str, db: Session = Depends(get_db), user: dict = D
         "event_seq":   ev.event_seq,
         "attestation": att,
         "on_chain":    rec.__dict__ if rec else None,
+    }
+
+
+@router.get("/proof/{trade_id}")
+def proof_pack(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """
+    Everything needed to verify this trade independently of Rijeka:
+    the canonical record, the hash, both signatures, and where it is anchored.
+
+    Hand this file to a counterparty, an auditor or a regulator. They
+    recompute keccak256 over the canonical record, check both EIP-712
+    signatures, and read the registry directly from a public node. Nothing
+    in the check touches Rijeka.
+    """
+    user_id = user.get("sub")
+    trade_uuid = _parse_trade_uuid(trade_id)
+    trade = db.query(Trade).filter(Trade.id == trade_uuid, Trade.user_id == user_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    ev = _latest_confirmed_event(db, trade.id)
+    att = (ev.payload or {}).get("attestation") if ev else None
+    if not att:
+        raise HTTPException(status_code=404, detail="This trade has no on-chain confirmation to prove.")
+
+    payload, h = _canonical_for(db, trade)
+    return {
+        "format":         "rijeka-confirmation-proof",
+        "format_version": 1,
+        "generated_at":   datetime.now(timezone.utc).isoformat(),
+        "trade_ref":      trade.trade_ref,
+        "canonical":      payload,
+        "trade_hash":     _hexb(h),
+        "attestation":    att,
+        "how_to_verify": [
+            "1. Serialise `canonical` as JSON with keys sorted at every level, "
+            "separators ',' and ':', no whitespace, UTF-8.",
+            "2. keccak256 those bytes. It must equal `trade_hash` and "
+            "`attestation.trade_hash`.",
+            "3. Rebuild the EIP-712 digests from `attestation.eip712` "
+            "(TradeConfirmation(bytes32 tradeHash,address counterparty); each party "
+            "signs with the OTHER party's address) and recover both signatures. They "
+            "must equal the two party addresses.",
+            "4. Call getConfirmation(trade_hash) on the registry at "
+            "`attestation.eip712.verifying_contract` on chain "
+            f"{att.get('eip712', {}).get('chain_id')}. Status must be Confirmed and the "
+            "parties must match.",
+        ],
     }
 
 

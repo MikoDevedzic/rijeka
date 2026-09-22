@@ -35,7 +35,7 @@ const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace'
 const short = (h) => (h && h.length > 18) ? h.slice(0, 10) + '…' + h.slice(-6) : (h || '—')
 
 /** Attestation block: what was signed, by whom, and where it is anchored. */
-function AttestationView({ attestation, onVerify, verifying, verifyResult }) {
+function AttestationView({ attestation, onVerify, verifying, verifyResult, onDownloadProof }) {
   if (!attestation) return null
   const att = attestation.attestation
   const onChain = attestation.on_chain
@@ -77,8 +77,12 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult }) {
         <button className="tbw-btn" onClick={onVerify} disabled={verifying} style={{ borderColor: 'rgba(0,212,168,0.4)', color: '#00D4A8' }}>
           {verifying ? '⏳ VERIFYING…' : '⟳ VERIFY'}
         </button>
+        <button className="tbw-btn" onClick={onDownloadProof} style={{ borderColor: '#2A2A2A' }}>
+          ↓ PROOF PACK
+        </button>
         <span className="tbw-mut" style={{ fontSize: 10.5 }}>
-          Recomputes the hash from the trade as stored now and checks it against what was signed{anchored ? ' and the chain' : ''}.
+          VERIFY recomputes the hash from the trade as stored now. PROOF PACK downloads
+          everything a counterparty or auditor needs to check it themselves, without Rijeka.
         </span>
       </div>
       {vr && (
@@ -114,6 +118,7 @@ export function ConfirmPanel({
   onCancelTrade = () => {},
   attestation = null,
   onVerify    = () => {},
+  onDownloadProof = () => {},
   verifying   = false,
   verifyResult = null,
 }) {
@@ -174,7 +179,8 @@ export function ConfirmPanel({
           </div>
 
           {status === 'CONFIRMED' && (
-            <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying} verifyResult={verifyResult} />
+            <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying}
+              verifyResult={verifyResult} onDownloadProof={onDownloadProof} />
           )}
         </div>
       </div>
