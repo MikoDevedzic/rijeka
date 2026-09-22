@@ -1,24 +1,35 @@
 """
-chat.py — firms and firm-to-firm chat rooms.
+chat.py — people-to-people chat across firms (migration 011).
 
-Clients READ firms/rooms/messages straight from Supabase under RLS (that is
-how realtime delivers new messages). Every WRITE comes through here, so the
-membership rules live in one place:
+Rooms have PEOPLE as members:
+  DIRECT   one-to-one, same firm or across firms
+  GROUP    named, invite-only, optionally tagged with one of the creator's
+           firm's desks/books
+  SUPPORT  one per person, with Rijeka; Prometheus answers first
+Inviting someone from your own firm adds them; inviting across firms sends
+an invite they accept or decline. A firm's COMPLIANCE members can read, never
+post in, every room their firm's people are or were in.
 
-GET  /api/chat/me                     your firm (or none yet)
-GET  /api/chat/firms                  the directory of firms on Rijeka
-GET  /api/chat/rooms                  your firm's rooms, newest activity first;
-                                      creates your Rijeka support room on first call
-POST /api/chat/rooms                  open (get-or-create) a room with another firm,
-                                      by firm_id or by a counterparty's LEI
-GET  /api/chat/rooms/{id}/messages    history, oldest first
-POST /api/chat/rooms/{id}/messages    post; Prometheus answers in the background
-                                      when @mentioned, and always in support rooms
-POST /api/chat/rooms/{id}/read        mark read
+Clients READ rooms/members/messages from Supabase under RLS (that is how
+realtime delivers them). Every WRITE comes through here, so the membership
+rules live in one place.
 
-Prometheus in a room uses only what every firm in the room already has (see
-prometheus/rooms.py): Rijeka's public code and docs, and in a bilateral room
-the records of trades confirmed on-chain between the two firms.
+GET  /api/chat/me                        you and your firm
+GET  /api/chat/firms                     firms on Rijeka
+GET  /api/chat/people?q=&firm_id=&lei=   people you can chat with
+GET  /api/chat/books                     your firm's desks/books, for tagging rooms
+GET  /api/chat/rooms                     your rooms (and invites; for compliance, your firm's)
+POST /api/chat/rooms/direct              {user_id}: open or reuse a one-to-one
+POST /api/chat/rooms/group               {name, member_ids, book_node_id?}
+POST /api/chat/rooms/{id}/invite         {user_ids}
+POST /api/chat/rooms/{id}/accept|decline|leave
+GET  /api/chat/rooms/{id}/messages
+POST /api/chat/rooms/{id}/messages       Prometheus answers in the background when
+                                         @mentioned, and always in support rooms
+POST /api/chat/rooms/{id}/read
+
+Prometheus in a room uses only what everyone in it already has (see
+prometheus/rooms.py).
 """
 
 from __future__ import annotations
@@ -30,11 +41,11 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
-from db.models import ChatMessage, ChatRead, ChatRoom, ChatRoomFirm, Firm, FirmLei, FirmMember
+from db.models import ChatMessage, ChatRead, ChatRoom, ChatRoomMember, Firm, FirmLei, FirmMember
 from db.session import SessionLocal, get_db
 from middleware.auth import verify_token
 from prometheus.rooms import answer_in_room, mentions_prometheus, shared_confirmations
@@ -48,9 +59,10 @@ SUPPORT_WELCOME = (
     "on-chain confirmation or how to model a risk in Rijeka. Prometheus answers first; "
     "a Rijeka specialist can join here too. Product ideas and bugs are welcome."
 )
+MAX_GROUP = 50
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Identity ─────────────────────────────────────────────────────────────────
 
 def _uid(user: dict) -> uuid.UUID:
     return uuid.UUID(user["sub"])
@@ -59,9 +71,20 @@ def _uid(user: dict) -> uuid.UUID:
 def _my_firm(db: Session, user: dict) -> tuple[FirmMember, Firm]:
     m = db.query(FirmMember).filter(FirmMember.user_id == _uid(user)).first()
     if m is None:
-        raise HTTPException(status_code=403,
-                            detail="Your account isn't part of a firm on Rijeka yet.")
+        raise HTTPException(status_code=403, detail="Your account isn't part of a firm on Rijeka yet.")
     return m, db.get(Firm, m.firm_id)
+
+
+def _names(db: Session, user_ids) -> dict[uuid.UUID, str]:
+    """Display names. Not every auth user has a profiles row, so fall back to email."""
+    ids = list({u for u in user_ids if u})
+    if not ids:
+        return {}
+    rows = db.execute(text("""
+        SELECT u.id, p.full_name, p.trader_id, coalesce(p.email, u.email) AS email
+        FROM auth.users u LEFT JOIN profiles p ON p.id = u.id
+        WHERE u.id = ANY(:ids)"""), {"ids": ids}).all()
+    return {r.id: (r.full_name or r.trader_id or (r.email or "").split("@")[0] or "Unknown") for r in rows}
 
 
 def _platform(db: Session) -> Firm:
@@ -71,32 +94,43 @@ def _platform(db: Session) -> Firm:
     return f
 
 
-def _display_name(db: Session, user_id: uuid.UUID) -> str:
-    # Not every auth user has a profiles row (e.g. accounts made in the
-    # dashboard), so fall back to the auth email.
-    row = db.execute(text("""
-        SELECT p.full_name, p.trader_id, coalesce(p.email, u.email) AS email
-        FROM auth.users u LEFT JOIN profiles p ON p.id = u.id
-        WHERE u.id = :id"""), {"id": user_id}).first()
-    if row is None:
-        return "Unknown"
-    return row.full_name or row.trader_id or (row.email or "").split("@")[0] or "Unknown"
+# ── Rooms and membership ─────────────────────────────────────────────────────
+
+def _members(db: Session, room_id: uuid.UUID) -> list[ChatRoomMember]:
+    return db.query(ChatRoomMember).filter(ChatRoomMember.room_id == room_id).all()
 
 
-def _room_firm_ids(db: Session, room_id: uuid.UUID) -> list[uuid.UUID]:
-    return [r.firm_id for r in db.query(ChatRoomFirm).filter(ChatRoomFirm.room_id == room_id).all()]
+def _member(db: Session, room_id: uuid.UUID, user_id: uuid.UUID) -> Optional[ChatRoomMember]:
+    return db.get(ChatRoomMember, (room_id, user_id))
 
 
-def _room_for(db: Session, room_id: str, firm: Firm) -> ChatRoom:
+def _access(db: Session, room_id: uuid.UUID, me: FirmMember) -> str:
+    """JOINED | INVITED | OBSERVER (compliance) | '' (none). Mirrors chat_can_see/chat_can_read."""
+    m = _member(db, room_id, me.user_id)
+    if m is not None and m.status in ("JOINED", "INVITED"):
+        return m.status
+    if me.role == "COMPLIANCE" and db.query(ChatRoomMember).filter(
+            ChatRoomMember.room_id == room_id, ChatRoomMember.firm_id == me.firm_id,
+            ChatRoomMember.status.in_(("JOINED", "LEFT"))).first():
+        return "OBSERVER"
+    return ""
+
+
+def _room_for(db: Session, room_id: str, me: FirmMember, need: tuple[str, ...]) -> tuple[ChatRoom, str]:
     try:
         rid = uuid.UUID(room_id)
     except ValueError:
         raise HTTPException(status_code=404, detail="Room not found")
     room = db.get(ChatRoom, rid)
-    # 404 for rooms you're not in too: no existence leak across firms.
-    if room is None or firm.id not in _room_firm_ids(db, rid):
+    access = _access(db, rid, me) if room else ""
+    # 404 whenever you have no access at all: no existence leak.
+    if not access:
         raise HTTPException(status_code=404, detail="Room not found")
-    return room
+    if access not in need:
+        detail = {"INVITED": "Accept the invite first.",
+                  "OBSERVER": "Compliance can read this room but not post in it."}.get(access, "Not allowed.")
+        raise HTTPException(status_code=403, detail=detail)
+    return room, access
 
 
 def _serialize_msg(m: ChatMessage) -> dict:
@@ -123,47 +157,74 @@ def _post(db: Session, room: ChatRoom, *, kind: str, name: str, body: str,
     return msg
 
 
-def _new_room(db: Session, kind: str, firms: list[Firm], created_by) -> ChatRoom:
-    room = ChatRoom(id=uuid.uuid4(), kind=kind, created_by=created_by)
+def _system(db: Session, room: ChatRoom, body: str) -> None:
+    _post(db, room, kind="SYSTEM", name="Rijeka", body=body)
+
+
+def _lock(db: Session, *keys) -> None:
+    """Serialise get-or-create so two clicks can't make two rooms."""
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": ":".join(sorted(map(str, keys)))})
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _add(db: Session, room: ChatRoom, target: FirmMember, inviter: Optional[FirmMember],
+         role: str = "MEMBER") -> Optional[str]:
+    """
+    Add or re-invite someone. Your own firm: joined straight away. Another
+    firm: an invite they accept. Returns the new status, or None when they
+    were already in (or already invited to) the room.
+    """
+    m = _member(db, room.id, target.user_id)
+    if m is not None and m.status in ("JOINED", "INVITED"):
+        return None
+    status = "JOINED" if inviter is None or target.firm_id == inviter.firm_id else "INVITED"
+    if m is None:
+        m = ChatRoomMember(room_id=room.id, user_id=target.user_id, firm_id=target.firm_id, role=role)
+        db.add(m)
+    m.status, m.firm_id = status, target.firm_id
+    m.invited_by = inviter.user_id if inviter else None
+    m.joined_at = _now() if status == "JOINED" else None
+    m.left_at = None
+    return status
+
+
+def _invitable(db: Session, user_ids: list[str], me: FirmMember) -> list[FirmMember]:
+    out = []
+    for raw in user_ids:
+        try:
+            uid = uuid.UUID(raw)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Person not found")
+        fm = db.query(FirmMember).filter(FirmMember.user_id == uid).first()
+        if fm is None:
+            raise HTTPException(status_code=404, detail="That person isn't on Rijeka.")
+        if fm.role == "COMPLIANCE":
+            raise HTTPException(status_code=422, detail="Compliance officers observe rooms; they aren't invited into them.")
+        if uid != me.user_id:
+            out.append(fm)
+    return out
+
+
+def _ensure_support_room(db: Session, me: FirmMember) -> None:
+    if me.role == "COMPLIANCE":
+        return
+    _lock(db, "support", me.user_id)
+    exists = (db.query(ChatRoom).join(ChatRoomMember, ChatRoomMember.room_id == ChatRoom.id)
+                .filter(ChatRoom.kind == "SUPPORT", ChatRoomMember.user_id == me.user_id).first())
+    if exists is not None:
+        return
+    room = ChatRoom(id=uuid.uuid4(), kind="SUPPORT", created_by=me.user_id)
     db.add(room)
     db.flush()
-    for f in firms:
-        db.add(ChatRoomFirm(room_id=room.id, firm_id=f.id))
-    db.flush()
-    return room
-
-
-def _lock_pair(db: Session, a: uuid.UUID, b: uuid.UUID) -> None:
-    """Serialise get-or-create for one firm pair so two clicks can't make two rooms."""
-    key = ":".join(sorted([str(a), str(b)]))
-    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": key})
-
-
-def _find_room(db: Session, kind: str, firm_ids: list[uuid.UUID]) -> Optional[ChatRoom]:
-    """A room of this kind whose firms are exactly firm_ids."""
-    rid = (db.query(ChatRoomFirm.room_id)
-             .join(ChatRoom, ChatRoom.id == ChatRoomFirm.room_id)
-             .filter(ChatRoom.kind == kind)
-             .group_by(ChatRoomFirm.room_id)
-             .having(func.count() == len(firm_ids))
-             .having(func.count().filter(ChatRoomFirm.firm_id.in_(firm_ids)) == len(firm_ids))
-             .first())
-    return db.get(ChatRoom, rid[0]) if rid else None
-
-
-def _ensure_support_room(db: Session, firm: Firm) -> None:
-    if firm.kind == "PLATFORM":
-        return
-    platform = _platform(db)
-    _lock_pair(db, firm.id, platform.id)
-    if _find_room(db, "SUPPORT", [firm.id, platform.id]) is not None:
-        return
-    room = _new_room(db, "SUPPORT", [firm, platform], None)
-    _post(db, room, kind="SYSTEM", name="Rijeka", firm=platform, body=SUPPORT_WELCOME)
+    _add(db, room, me, None)
+    _post(db, room, kind="SYSTEM", name="Rijeka", firm=_platform(db), body=SUPPORT_WELCOME)
     db.commit()
 
 
-# ── Routes ───────────────────────────────────────────────────────────────────
+# ── Routes: identity and directory ───────────────────────────────────────────
 
 @router.get("/me")
 def me(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
@@ -171,9 +232,8 @@ def me(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     if m is None:
         return {"firm": None}
     f = db.get(Firm, m.firm_id)
-    return {"firm": {"id": str(f.id), "name": f.name, "kind": f.kind,
-                     "coverage_tier": f.coverage_tier}, "role": m.role,
-            "display_name": _display_name(db, _uid(user))}
+    return {"user_id": str(m.user_id), "role": m.role, "display_name": _names(db, [m.user_id]).get(m.user_id),
+            "firm": {"id": str(f.id), "name": f.name, "kind": f.kind, "coverage_tier": f.coverage_tier}}
 
 
 @router.get("/firms")
@@ -181,99 +241,277 @@ def firms(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     leis: dict[uuid.UUID, list[str]] = {}
     for l in db.query(FirmLei).all():
         leis.setdefault(l.firm_id, []).append(l.lei)
-    members = dict(db.query(FirmMember.firm_id, func.count()).group_by(FirmMember.firm_id).all())
-    return [
-        {"id": str(f.id), "name": f.name, "kind": f.kind, "leis": leis.get(f.id, []),
-         "on_network": members.get(f.id, 0) > 0}
-        for f in db.query(Firm).order_by(Firm.name).all()
-    ]
+    people = dict(db.query(FirmMember.firm_id, func.count())
+                    .filter(FirmMember.role != "COMPLIANCE").group_by(FirmMember.firm_id).all())
+    return [{"id": str(f.id), "name": f.name, "kind": f.kind, "leis": leis.get(f.id, []),
+             "on_network": people.get(f.id, 0) > 0}
+            for f in db.query(Firm).order_by(Firm.name).all()]
+
+
+@router.get("/people")
+def people(q: Optional[str] = None, firm_id: Optional[str] = None, lei: Optional[str] = None,
+           db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """People you can start a chat with or invite. Compliance officers aren't listed."""
+    me_m, _ = _my_firm(db, user)
+    qry = (db.query(FirmMember, Firm).join(Firm, Firm.id == FirmMember.firm_id)
+             .filter(FirmMember.role != "COMPLIANCE", FirmMember.user_id != me_m.user_id, Firm.kind != "PLATFORM"))
+    if lei:
+        claim = db.get(FirmLei, lei.strip().upper())
+        if claim is None:
+            raise HTTPException(status_code=404, detail="That counterparty isn't on Rijeka yet — no firm has claimed its LEI.")
+        qry = qry.filter(FirmMember.firm_id == claim.firm_id)
+    if firm_id:
+        try:
+            qry = qry.filter(FirmMember.firm_id == uuid.UUID(firm_id))
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Firm not found")
+    rows = qry.all()
+    names = _names(db, [m.user_id for m, _ in rows])
+    out = [{"user_id": str(m.user_id), "name": names.get(m.user_id, "Unknown"),
+            "firm_id": str(f.id), "firm_name": f.name, "same_firm": f.id == me_m.firm_id}
+           for m, f in rows]
+    if q:
+        ql = q.lower()
+        out = [p for p in out if ql in p["name"].lower() or ql in p["firm_name"].lower()]
+    return sorted(out, key=lambda p: (not p["same_firm"], p["firm_name"], p["name"]))
+
+
+@router.get("/books")
+def books(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Your firm's desks and books (org hierarchy), for tagging a group room."""
+    me_m, _ = _my_firm(db, user)
+    rows = db.execute(text("""
+        SELECT n.id, n.node_type, n.name, p.name AS parent
+        FROM org_nodes n LEFT JOIN org_nodes p ON p.id = n.parent_id
+        JOIN firm_members fm ON fm.user_id = n.user_id
+        WHERE fm.firm_id = :firm AND n.is_active AND lower(n.node_type) IN ('desk', 'book')
+        ORDER BY p.name NULLS FIRST, n.name"""), {"firm": me_m.firm_id}).all()
+    return [{"id": r.id, "type": r.node_type.lower(),
+             "label": f"{r.parent} / {r.name}" if r.node_type.lower() == "book" and r.parent else r.name}
+            for r in rows]
+
+
+# ── Routes: rooms ────────────────────────────────────────────────────────────
+
+def _room_summary(db: Session, room: ChatRoom, me: FirmMember, access: str,
+                  firms_by_id: dict, names: dict) -> dict:
+    members = _members(db, room.id)
+    active = [m for m in members if m.status in ("JOINED", "INVITED")]
+
+    def who(m):
+        return f"{names.get(m.user_id, 'Unknown')} · {firms_by_id[m.firm_id].name}"
+
+    if room.kind == "SUPPORT":
+        owner = next((m for m in members if m.status == "JOINED"), None)
+        title = f"Rijeka Support · {names.get(owner.user_id)}" if access == "OBSERVER" and owner else "Rijeka Support"
+    elif room.kind == "DIRECT":
+        if access == "OBSERVER":
+            title = " ↔ ".join(who(m) for m in members)
+        else:
+            other = next((m for m in members if m.user_id != me.user_id), None)
+            title = who(other) if other else "Direct chat"
+    else:
+        title = room.name or "Group"
+
+    last = (db.query(ChatMessage).filter(ChatMessage.room_id == room.id)
+              .order_by(ChatMessage.created_at.desc()).first())
+    unread = 0
+    if access in ("JOINED", "OBSERVER"):
+        read = db.get(ChatRead, (room.id, me.user_id))
+        uq = db.query(func.count()).select_from(ChatMessage).filter(
+            ChatMessage.room_id == room.id,
+            ChatMessage.sender_user_id.is_(None) | (ChatMessage.sender_user_id != me.user_id))
+        if read is not None:
+            uq = uq.filter(ChatMessage.created_at > read.last_read_at)
+        unread = uq.scalar() or 0
+    mine = next((m for m in members if m.user_id == me.user_id), None)
+    return {
+        "id": str(room.id), "kind": room.kind, "title": title, "name": room.name,
+        "book_label": room.book_label, "my_access": access,
+        # Firms whose people have joined: who can read this room.
+        "firms": sorted({firms_by_id[m.firm_id].name for m in members if m.status == "JOINED"}),
+        "members": [{"user_id": str(m.user_id), "name": names.get(m.user_id, "Unknown"),
+                     "firm_name": firms_by_id[m.firm_id].name, "status": m.status, "role": m.role}
+                    for m in active],
+        "invited_by": names.get(mine.invited_by) if access == "INVITED" and mine and mine.invited_by else None,
+        "last_message": _serialize_msg(last) if last and access != "INVITED" else None,
+        "last_message_at": room.last_message_at.isoformat() if room.last_message_at else None,
+        "unread": unread,
+    }
 
 
 @router.get("/rooms")
 def rooms(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    me_uid = _uid(user)
-    _, firm = _my_firm(db, user)
-    _ensure_support_room(db, firm)
+    me_m, _ = _my_firm(db, user)
+    _ensure_support_room(db, me_m)
 
-    room_ids = [r.room_id for r in db.query(ChatRoomFirm).filter(ChatRoomFirm.firm_id == firm.id).all()]
-    out = []
-    for room in db.query(ChatRoom).filter(ChatRoom.id.in_(room_ids)).all() if room_ids else []:
-        others = (db.query(Firm).join(ChatRoomFirm, ChatRoomFirm.firm_id == Firm.id)
-                    .filter(ChatRoomFirm.room_id == room.id, Firm.id != firm.id).all())
-        last = (db.query(ChatMessage).filter(ChatMessage.room_id == room.id)
-                  .order_by(ChatMessage.created_at.desc()).first())
-        read = db.get(ChatRead, (room.id, me_uid))
-        unread_q = db.query(func.count()).select_from(ChatMessage).filter(
-            ChatMessage.room_id == room.id,
-            (ChatMessage.sender_user_id.is_(None)) | (ChatMessage.sender_user_id != me_uid))
-        if read is not None:
-            unread_q = unread_q.filter(ChatMessage.created_at > read.last_read_at)
-        out.append({
-            "id": str(room.id), "kind": room.kind,
-            "title": "Rijeka Support" if room.kind == "SUPPORT" else ", ".join(o.name for o in others),
-            "firms": [{"id": str(o.id), "name": o.name} for o in others],
-            "last_message": _serialize_msg(last) if last else None,
-            "last_message_at": room.last_message_at.isoformat() if room.last_message_at else None,
-            "unread": unread_q.scalar() or 0,
-        })
-    # Support room pinned first, then most recent activity.
-    out.sort(key=lambda r: (r["kind"] != "SUPPORT", -(datetime.fromisoformat(r["last_message_at"]).timestamp()
-                                                       if r["last_message_at"] else 0)))
-    return out
+    access: dict[uuid.UUID, str] = {
+        m.room_id: m.status for m in db.query(ChatRoomMember).filter(
+            ChatRoomMember.user_id == me_m.user_id, ChatRoomMember.status.in_(("JOINED", "INVITED")))}
+    if me_m.role == "COMPLIANCE":
+        for (rid,) in db.query(ChatRoomMember.room_id).filter(
+                ChatRoomMember.firm_id == me_m.firm_id,
+                ChatRoomMember.status.in_(("JOINED", "LEFT"))).distinct():
+            access.setdefault(rid, "OBSERVER")
+    if not access:
+        return []
+
+    room_rows = db.query(ChatRoom).filter(ChatRoom.id.in_(access)).all()
+    all_members = db.query(ChatRoomMember).filter(ChatRoomMember.room_id.in_(access)).all()
+    names = _names(db, [m.user_id for m in all_members] + [m.invited_by for m in all_members])
+    firms_by_id = {f.id: f for f in db.query(Firm).all()}
+    out = [_room_summary(db, r, me_m, access[r.id], firms_by_id, names) for r in room_rows]
+
+    def order(r):
+        ts = datetime.fromisoformat(r["last_message_at"]).timestamp() if r["last_message_at"] else 0
+        own_support = r["kind"] == "SUPPORT" and r["my_access"] != "OBSERVER"
+        # Invites first, then your support room, then most recent activity.
+        return (r["my_access"] != "INVITED", not own_support, -ts)
+    return sorted(out, key=order)
 
 
-class OpenRoom(BaseModel):
-    firm_id: Optional[str] = None
-    lei: Optional[str] = None
-
-    @model_validator(mode="after")
-    def _one(self):
-        if bool(self.firm_id) == bool(self.lei):
-            raise ValueError("give exactly one of firm_id or lei")
-        return self
+class OpenDirect(BaseModel):
+    user_id: str
 
 
-@router.post("/rooms", status_code=201)
-def open_room(body: OpenRoom, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    _, firm = _my_firm(db, user)
-    if body.lei:
-        claim = db.get(FirmLei, body.lei.strip().upper())
-        if claim is None:
-            raise HTTPException(status_code=404,
-                                detail="That counterparty isn't on Rijeka yet — no firm has claimed its LEI.")
-        target = db.get(Firm, claim.firm_id)
-    else:
-        try:
-            target = db.get(Firm, uuid.UUID(body.firm_id))
-        except ValueError:
-            target = None
-        if target is None:
-            raise HTTPException(status_code=404, detail="Firm not found")
-    if target.id == firm.id:
-        raise HTTPException(status_code=422, detail="That's your own firm.")
-    if target.kind == "PLATFORM":
-        _ensure_support_room(db, firm)
-        room = _find_room(db, "SUPPORT", [firm.id, target.id])
-        return {"id": str(room.id), "kind": room.kind, "created": False}
-
-    _lock_pair(db, firm.id, target.id)
-    room = _find_room(db, "BILATERAL", [firm.id, target.id])
-    created = room is None
-    if created:
-        room = _new_room(db, "BILATERAL", [firm, target], _uid(user))
-        _post(db, room, kind="SYSTEM", name="Rijeka", firm=None,
-              body=f"{firm.name} opened a chat with {target.name}. "
-                   "Mention @prometheus to ask about Rijeka's methodology.")
-        _mark_read(db, room.id, _uid(user))
+@router.post("/rooms/direct", status_code=201)
+def open_direct(body: OpenDirect, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    me_m, me_firm = _my_firm(db, user)
+    if me_m.role == "COMPLIANCE":
+        raise HTTPException(status_code=403, detail="Compliance observes chats; it doesn't start them.")
+    targets = _invitable(db, [body.user_id], me_m)
+    if not targets:
+        raise HTTPException(status_code=422, detail="That's you.")
+    other = targets[0]
+    _lock(db, "direct", me_m.user_id, other.user_id)
+    existing = db.execute(text("""
+        SELECT r.id FROM chat_rooms r
+        WHERE r.kind = 'DIRECT'
+          AND EXISTS (SELECT 1 FROM chat_room_members WHERE room_id = r.id AND user_id = :a)
+          AND EXISTS (SELECT 1 FROM chat_room_members WHERE room_id = r.id AND user_id = :b)
+        LIMIT 1"""), {"a": me_m.user_id, "b": other.user_id}).scalar()
+    if existing:
+        room = db.get(ChatRoom, existing)
+        _add(db, room, me_m, None)          # rejoin if you had left
+        _add(db, room, other, me_m)         # re-invite if they had left or declined
         db.commit()
-    return {"id": str(room.id), "kind": room.kind, "created": created}
+        return {"id": str(room.id), "created": False}
+
+    room = ChatRoom(id=uuid.uuid4(), kind="DIRECT", created_by=me_m.user_id)
+    db.add(room)
+    db.flush()
+    _add(db, room, me_m, None, role="OWNER")
+    status = _add(db, room, other, me_m)
+    names = _names(db, [me_m.user_id, other.user_id])
+    other_firm = db.get(Firm, other.firm_id)
+    _system(db, room, f"{names[me_m.user_id]} · {me_firm.name} started a chat with "
+                      f"{names[other.user_id]} · {other_firm.name}"
+                      + (" (invite pending)." if status == "INVITED" else "."))
+    _mark_read(db, room.id, me_m.user_id)
+    db.commit()
+    return {"id": str(room.id), "created": True}
+
+
+class OpenGroup(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    member_ids: list[str] = Field(default_factory=list, max_length=MAX_GROUP)
+    book_node_id: Optional[str] = None
+
+
+@router.post("/rooms/group", status_code=201)
+def open_group(body: OpenGroup, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    me_m, me_firm = _my_firm(db, user)
+    if me_m.role == "COMPLIANCE":
+        raise HTTPException(status_code=403, detail="Compliance observes chats; it doesn't start them.")
+    targets = _invitable(db, body.member_ids, me_m)
+    room = ChatRoom(id=uuid.uuid4(), kind="GROUP", name=body.name.strip(), created_by=me_m.user_id)
+    if body.book_node_id:
+        tag = next((b for b in books(db=db, user=user) if b["id"] == body.book_node_id), None)
+        if tag is None:
+            raise HTTPException(status_code=404, detail="That desk/book isn't in your firm's hierarchy.")
+        room.book_node_id, room.book_label, room.book_firm_id = tag["id"], tag["label"], me_firm.id
+    db.add(room)
+    db.flush()
+    _add(db, room, me_m, None, role="OWNER")
+    names = _names(db, [me_m.user_id] + [t.user_id for t in targets])
+    _system(db, room, f"{names[me_m.user_id]} · {me_firm.name} created {room.name}"
+                      + (f" for {room.book_label}" if room.book_label else "") + ".")
+    added = [t for t in targets if _add(db, room, t, me_m)]
+    if added:
+        _system(db, room, f"{names[me_m.user_id]} invited " + ", ".join(names[t.user_id] for t in added) + ".")
+    _mark_read(db, room.id, me_m.user_id)
+    db.commit()
+    return {"id": str(room.id), "created": True}
+
+
+class Invite(BaseModel):
+    user_ids: list[str] = Field(min_length=1, max_length=MAX_GROUP)
+
+
+@router.post("/rooms/{room_id}/invite")
+def invite(room_id: str, body: Invite, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    me_m, _ = _my_firm(db, user)
+    room, _ = _room_for(db, room_id, me_m, ("JOINED",))
+    if room.kind != "GROUP":
+        raise HTTPException(status_code=422, detail="Only group rooms take more people. Start a group instead.")
+    targets = _invitable(db, body.user_ids, me_m)
+    active = sum(1 for m in _members(db, room.id) if m.status in ("JOINED", "INVITED"))
+    if active + len(targets) > MAX_GROUP:
+        raise HTTPException(status_code=422, detail=f"Rooms hold at most {MAX_GROUP} people.")
+    added = [t for t in targets if _add(db, room, t, me_m)]
+    if added:
+        names = _names(db, [me_m.user_id] + [t.user_id for t in added])
+        _system(db, room, f"{names[me_m.user_id]} invited " + ", ".join(names[t.user_id] for t in added) + ".")
+    db.commit()
+    return {"invited": [str(t.user_id) for t in added]}
+
+
+def _set_status(db: Session, room: ChatRoom, me_m: FirmMember, status: str, note: str) -> None:
+    m = _member(db, room.id, me_m.user_id)
+    m.status = status
+    if status == "JOINED":
+        m.joined_at = _now()
+    if status == "LEFT":
+        m.left_at = _now()
+    name = _names(db, [me_m.user_id])[me_m.user_id]
+    _system(db, room, f"{name} · {db.get(Firm, me_m.firm_id).name} {note}.")
+
+
+@router.post("/rooms/{room_id}/accept")
+def accept(room_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    me_m, _ = _my_firm(db, user)
+    room, _ = _room_for(db, room_id, me_m, ("INVITED",))
+    _set_status(db, room, me_m, "JOINED", "joined")
+    _mark_read(db, room.id, me_m.user_id)
+    db.commit()
+    return {"id": str(room.id), "status": "JOINED"}
+
+
+@router.post("/rooms/{room_id}/decline")
+def decline(room_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    me_m, _ = _my_firm(db, user)
+    room, _ = _room_for(db, room_id, me_m, ("INVITED",))
+    _set_status(db, room, me_m, "DECLINED", "declined the invite")
+    db.commit()
+    return {"id": str(room.id), "status": "DECLINED"}
+
+
+@router.post("/rooms/{room_id}/leave")
+def leave(room_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    me_m, _ = _my_firm(db, user)
+    room, _ = _room_for(db, room_id, me_m, ("JOINED",))
+    if room.kind == "SUPPORT":
+        raise HTTPException(status_code=422, detail="Your support room stays with you.")
+    _set_status(db, room, me_m, "LEFT", "left")
+    db.commit()
+    return {"id": str(room.id), "status": "LEFT"}
 
 
 @router.get("/rooms/{room_id}/messages")
 def messages(room_id: str, limit: int = Query(default=200, ge=1, le=500),
              db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    _, firm = _my_firm(db, user)
-    room = _room_for(db, room_id, firm)
+    me_m, _ = _my_firm(db, user)
+    room, _ = _room_for(db, room_id, me_m, ("JOINED", "OBSERVER"))
     rows = (db.query(ChatMessage).filter(ChatMessage.room_id == room.id)
               .order_by(ChatMessage.created_at.desc()).limit(limit).all())
     return [_serialize_msg(m) for m in reversed(rows)]
@@ -286,54 +524,63 @@ class PostMessage(BaseModel):
 @router.post("/rooms/{room_id}/messages", status_code=201)
 def post_message(room_id: str, body: PostMessage, background: BackgroundTasks,
                  db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    member, firm = _my_firm(db, user)
-    room = _room_for(db, room_id, firm)
+    me_m, me_firm = _my_firm(db, user)
+    room, _ = _room_for(db, room_id, me_m, ("JOINED",))
     text_ = body.body.strip()
     if not text_:
         raise HTTPException(status_code=422, detail="Empty message")
-    msg = _post(db, room, kind="USER", name=_display_name(db, member.user_id), firm=firm,
-                user_id=member.user_id, body=text_)
-    _mark_read(db, room.id, member.user_id)
+    msg = _post(db, room, kind="USER", name=_names(db, [me_m.user_id])[me_m.user_id], firm=me_firm,
+                user_id=me_m.user_id, body=text_)
+    _mark_read(db, room.id, me_m.user_id)
     db.commit()
 
-    # Support rooms: Prometheus is the first responder for client firms.
+    # Support rooms: Prometheus is the first responder for clients.
     # Anywhere: an explicit @prometheus.
-    wants_prometheus = mentions_prometheus(text_) or (room.kind == "SUPPORT" and firm.kind != "PLATFORM")
-    if wants_prometheus:
+    wants = mentions_prometheus(text_) or (room.kind == "SUPPORT" and me_firm.kind != "PLATFORM")
+    if wants:
         background.add_task(_prometheus_reply, room.id)
-    return {"message": _serialize_msg(msg), "prometheus_pending": wants_prometheus}
+    return {"message": _serialize_msg(msg), "prometheus_pending": wants}
 
 
 def _mark_read(db: Session, room_id: uuid.UUID, user_id: uuid.UUID) -> None:
-    now = datetime.now(timezone.utc)
     r = db.get(ChatRead, (room_id, user_id))
     if r is None:
-        db.add(ChatRead(room_id=room_id, user_id=user_id, last_read_at=now))
+        db.add(ChatRead(room_id=room_id, user_id=user_id, last_read_at=_now()))
     else:
-        r.last_read_at = now
+        r.last_read_at = _now()
 
 
 @router.post("/rooms/{room_id}/read", status_code=204)
 def mark_read(room_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    member, firm = _my_firm(db, user)
-    room = _room_for(db, room_id, firm)
-    _mark_read(db, room.id, member.user_id)
+    me_m, _ = _my_firm(db, user)
+    room, _ = _room_for(db, room_id, me_m, ("JOINED", "OBSERVER"))
+    _mark_read(db, room.id, me_m.user_id)
     db.commit()
 
 
 # ── Prometheus reply (background) ────────────────────────────────────────────
 
+def _book_tag(db: Session, room: ChatRoom) -> Optional[dict]:
+    if not room.book_node_id or not room.book_firm_id:
+        return None
+    row = db.execute(text("SELECT node_type, name FROM org_nodes WHERE id = :id"),
+                     {"id": room.book_node_id}).first()
+    if row is None:
+        return None
+    return {"firm_id": room.book_firm_id, "node_type": row.node_type.lower(), "name": row.name}
+
+
 def _prometheus_reply(room_id: uuid.UUID) -> None:
     """
-    Runs after the poster's request returns; the reply reaches everyone in
-    the room through realtime. The DB connection is not held during the model
-    call (which takes tens of seconds).
+    Runs after the poster's request returns; the reply reaches the room via
+    realtime. No DB connection is held during the model call.
     """
     db = SessionLocal()
     try:
         room = db.get(ChatRoom, room_id)
-        firms = (db.query(Firm).join(ChatRoomFirm, ChatRoomFirm.firm_id == Firm.id)
-                   .filter(ChatRoomFirm.room_id == room_id).all())
+        joined = [m for m in _members(db, room_id) if m.status == "JOINED"]
+        firms = {f.id: f for f in db.query(Firm).filter(Firm.id.in_({m.firm_id for m in joined}))}
+        client_firms = [f for f in firms.values() if f.kind != "PLATFORM"]
         history = [
             {"sender_kind": m.sender_kind, "sender_name": m.sender_name,
              "sender_firm": m.sender_firm, "body": m.body}
@@ -341,17 +588,18 @@ def _prometheus_reply(room_id: uuid.UUID) -> None:
                                 .order_by(ChatMessage.created_at.desc()).limit(40).all())
             if m.sender_kind != "SYSTEM"
         ]
-        kind = room.kind
-        firm_names = [f.name for f in firms if f.kind != "PLATFORM"]
-        platform_id = next((f.id for f in firms if f.kind == "PLATFORM"), None)
-        firm_ids = [f.id for f in firms]
-        db.rollback()
-        shared = []
-        if kind == "BILATERAL":
-            # The records both firms signed; computed on a read-only transaction.
-            make_readonly(db)
-            shared = shared_confirmations(db, firm_ids)
+        kind, book_label = room.kind, room.book_label
+        firm_names = sorted(f.name for f in client_firms)
+        # Trade records only when the room's people are from exactly the two
+        # parties — no third firm, and no Rijeka staff, in the room.
+        shared = None
+        if kind != "SUPPORT" and len(client_firms) == 2 and len(firms) == 2:
+            book = _book_tag(db, room)
+            pair = [f.id for f in client_firms]
             db.rollback()
+            make_readonly(db)
+            shared = shared_confirmations(db, pair, book)
+        db.rollback()
     finally:
         db.close()
 
@@ -360,7 +608,7 @@ def _prometheus_reply(room_id: uuid.UUID) -> None:
         body, kind_out = "Prometheus isn't configured on this server.", "SYSTEM"
     else:
         try:
-            ans = answer_in_room(kind, firm_names, history, shared)
+            ans = answer_in_room(kind, firm_names, history, shared, book_label)
             body, kind_out = ans.text, "PROMETHEUS"
             if not body:
                 return
@@ -373,9 +621,8 @@ def _prometheus_reply(room_id: uuid.UUID) -> None:
     db = SessionLocal()
     try:
         room = db.get(ChatRoom, room_id)
-        platform = db.get(Firm, platform_id) if platform_id else _platform(db)
         _post(db, room, kind=kind_out, name="Prometheus" if kind_out == "PROMETHEUS" else "Rijeka",
-              firm=platform, body=body, card=card)
+              firm=_platform(db), body=body, card=card)
         db.commit()
     finally:
         db.close()

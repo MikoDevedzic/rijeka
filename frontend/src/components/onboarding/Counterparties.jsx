@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useChatStore } from '../../store/useChatStore'
 
@@ -84,7 +83,6 @@ function Cell({ children, dim }) {
 const COLS = '1fr 140px 80px 52px 120px 65px 160px'
 
 export default function Counterparties() {
-  const navigate = useNavigate()
   const [chatErr,      setChatErr]      = useState(null)
   const [cps,          setCps]          = useState([])
   const [les,          setLes]          = useState([])
@@ -190,15 +188,12 @@ export default function Counterparties() {
   var hasCSA = form.csa_type !== 'NO_CSA'
 
 
-  // Open (or create) the chat room with the firm that claims this LEI.
+  // Open the messenger on a chat with the person at the firm that claims
+  // this LEI (or a picker, when that firm has several people on Rijeka).
   async function openChat(cp) {
     setChatErr(null)
     try {
-      const chat = useChatStore.getState()
-      await chat.init()
-      if (useChatStore.getState().status === 'no-firm') throw new Error("Your account isn't part of a firm yet.")
-      const roomId = await chat.openWith({ lei: cp.legal_entity.lei })
-      navigate('/chat/' + roomId)
+      await useChatStore.getState().chatWithLei(cp.legal_entity.lei)
     } catch (e) {
       setChatErr(cp.name + ': ' + e.message)
     }

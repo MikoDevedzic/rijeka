@@ -67,15 +67,28 @@ def test_support_room_gets_source_tools_only(monkeypatch):
     assert "cannot see any firm's trades" in seen["context"]
 
 
-def test_bilateral_room_adds_only_shared_confirmations(monkeypatch):
+def test_two_party_room_adds_only_shared_confirmations(monkeypatch):
     seen = _capture(monkeypatch)
     shared = [{"trade_hash": "0xabc", "block_number": 1}]
-    rooms.answer_in_room("BILATERAL", ["RIJEKA CAPITAL", "CONFLUENCE BANK AG"],
-                         [_m("USER", "@prometheus how many confirmed?")], shared)
+    rooms.answer_in_room("GROUP", ["CONFLUENCE BANK AG", "RIJEKA CAPITAL"],
+                         [_m("USER", "@prometheus how many confirmed?")], shared, "RATES TRADING / G10 RATES")
     tb = seen["toolbox"]
     assert set(tb.handlers) == {"list_source", "search_source", "read_source", "list_shared_confirmations"}
     assert {t["name"] for t in tb.tool_defs} == set(tb.handlers)
     out, is_error = tb.run("list_shared_confirmations", {})
     assert not is_error and '"count": 1' in out and "0xabc" in out
-    assert "RIJEKA CAPITAL, CONFLUENCE BANK AG" in seen["context"]
+    assert "CONFLUENCE BANK AG, RIJEKA CAPITAL" in seen["context"]
     assert "only trade data you can see" in seen["context"]
+    assert "RATES TRADING / G10 RATES" in seen["context"]
+
+
+@pytest.mark.parametrize("firms,shared", [
+    (["RIJEKA CAPITAL"], None),                                                  # colleagues only
+    (["CONFLUENCE BANK AG", "GOLDMAN SACHS INTERNATIONAL", "RIJEKA CAPITAL"], None),  # a third firm
+    (["CONFLUENCE BANK AG", "RIJEKA CAPITAL"], None),                            # caller computed no pair
+])
+def test_rooms_that_are_not_exactly_two_parties_get_no_trade_data(monkeypatch, firms, shared):
+    seen = _capture(monkeypatch)
+    rooms.answer_in_room("GROUP", firms, [_m("USER", "@prometheus hi")], shared)
+    assert type(seen["toolbox"]) is SourceToolbox
+    assert "cannot see any firm's trades" in seen["context"]

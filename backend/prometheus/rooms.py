@@ -1,12 +1,15 @@
 """
 PROMETHEUS in chat rooms.
 
-Everything it says in a room is seen by every firm in the room, so in a room
-it may only use what every firm there already has:
-  - Rijeka's public code and docs (SourceToolbox), and
-  - in a bilateral room, the trades confirmed on-chain BETWEEN those firms:
-    the exact record both parties signed (economics + LEIs; no book, desk or
-    strategy), with where it is anchored.
+Everything it says in a room is seen by everyone in the room, so in a room it
+may only use what everyone there already has:
+  - Rijeka's public code and docs (SourceToolbox), always; and
+  - when the room's people come from EXACTLY two firms, the trades confirmed
+    on-chain between those two firms: the record both signed (economics +
+    LEIs; no book, desk or strategy). A third firm in the room would not be a
+    party to those trades, so then there is no trade data at all.
+  - A room tagged with a desk/book narrows that to trades the tagging firm
+    booked in that desk/book (an information barrier inside the firm).
 Never anyone's wider book. Messages from room members are untrusted input
 (they may come from another firm).
 """
@@ -32,13 +35,17 @@ def mentions_prometheus(body: str) -> bool:
     return bool(MENTION.search(body or ""))
 
 
-def shared_confirmations(db: Session, firm_ids: list[uuid.UUID]) -> list[dict]:
+def shared_confirmations(db: Session, firm_ids: list[uuid.UUID], book: dict | None = None) -> list[dict]:
     """
     Trades confirmed on-chain between exactly these two firms: one party's LEI
     claimed by each. Only the signed record is returned, and only while the
     booking still hashes to what was signed; otherwise the terms are withheld.
+
+    book: {"firm_id", "node_type" ("desk" | "book"), "name"} for a tagged
+    room. Then only trades booked by that firm in that desk/book count; the
+    other firm's bookings are left out, since their book can't be checked.
     """
-    if len(firm_ids) != 2:
+    if len(set(firm_ids)) != 2:
         return []
     from api.routes.chain import _canonical_for  # web3 import; only on this path
     from fastapi import HTTPException
@@ -47,6 +54,8 @@ def shared_confirmations(db: Session, firm_ids: list[uuid.UUID]) -> list[dict]:
     names = {f.id: f.name for f in db.query(Firm).filter(Firm.id.in_(firm_ids))}
     a, b = firm_ids
     bookers = {m.user_id: m.firm_id for m in db.query(FirmMember).filter(FirmMember.firm_id.in_(firm_ids))}
+    if book:
+        bookers = {u: f for u, f in bookers.items() if f == book["firm_id"]}
     if not bookers:
         return []
 
@@ -64,6 +73,8 @@ def shared_confirmations(db: Session, firm_ids: list[uuid.UUID]) -> list[dict]:
         if not ((own in leis[a] and cp in leis[b]) or (own in leis[b] and cp in leis[a])):
             continue
         trade = db.get(Trade, ev.trade_id)
+        if book and not _in_book(trade, book):
+            continue
         anchor = att.get("anchor") or {}
         row = {
             "booked_by": names.get(bookers.get(ev.user_id)),
@@ -85,13 +96,19 @@ def shared_confirmations(db: Session, firm_ids: list[uuid.UUID]) -> list[dict]:
     return out
 
 
+def _in_book(trade: Trade, book: dict) -> bool:
+    field = trade.book if book["node_type"] == "book" else trade.desk
+    return (field or "").strip().upper() == book["name"].strip().upper()
+
+
 class RoomToolbox(SourceToolbox):
     """Source tools plus the confirmations shared by the two firms in the room."""
 
     tool_defs = SourceToolbox.tool_defs + [{
         "name": "list_shared_confirmations",
         "description": (
-            "Trades confirmed on-chain between the two firms in this room: for each, the exact "
+            "Trades confirmed on-chain between the two firms in this room (narrowed to the room's "
+            "desk/book when it has one): for each, the exact "
             "record both parties signed (economics, legs, both LEIs), its keccak256 hash, whether "
             "the booking still matches what was signed, and where it is anchored (chain, block, "
             "tx). This is the only trade data you can see in a room."
@@ -106,29 +123,33 @@ class RoomToolbox(SourceToolbox):
             {"count": len(self._shared), "confirmations": self._shared}, default=_jsonable)
 
 
-def _brief(kind: str, firm_names: list[str]) -> str:
+def _brief(kind: str, firm_names: list[str], pair: bool, book_label: str | None) -> str:
     firms = ", ".join(firm_names)
     if kind == "SUPPORT":
-        where = (f"You are answering in the Rijeka support room for {firms}. You are the first "
+        where = (f"You are answering in a Rijeka support room for {firms}. You are the first "
                  "responder; a Rijeka specialist can join the room. If a question needs a human "
                  "(commercial terms, account changes, a bug), say a Rijeka specialist will pick it "
                  "up, and if it's a product request, draft a short ticket (title, problem, why it "
                  "matters) the user can confirm.")
     else:
-        where = (f"You are answering in a shared chat room between {firms}. Everyone in the room "
-                 "reads your reply.")
-    if kind == "BILATERAL":
-        data = ("In this room you have Rijeka's public code and methodology docs, and "
-                "list_shared_confirmations: the trades confirmed on-chain between these two firms, "
+        where = (f"You are answering in a shared chat room with people from {firms}. Everyone in "
+                 "the room reads your reply.")
+    if pair:
+        scope = f" in the {book_label} desk/book" if book_label else ""
+        data = ("You have Rijeka's public code and methodology docs, and "
+                f"list_shared_confirmations: the trades confirmed on-chain between these two firms{scope}, "
                 "i.e. the records both signed. That is the only trade data you can see. You cannot "
                 "see either firm's wider book, pending or unconfirmed trades, positions or other "
                 "counterparties, and you must not guess at them. If a question needs that, say they "
-                "can ask you privately in the Prometheus panel, where you see their own data.")
+                "can ask you privately in their Prometheus conversation, where you see their own data.")
     else:
-        data = ("In rooms you only have Rijeka's public code and methodology docs. You cannot see "
-                "any firm's trades, positions, counterparties or confirmations, and you must not "
-                "guess at them. If a question needs someone's book, say they can ask you privately "
-                "in the Prometheus panel, where you can see their own data.")
+        why = ("" if kind == "SUPPORT" else
+               " (trade records are only visible in a room whose people come from exactly the two "
+               "parties to the trades)")
+        data = ("In this room you only have Rijeka's public code and methodology docs" + why + ". "
+                "You cannot see any firm's trades, positions, counterparties or confirmations, and "
+                "you must not guess at them. If a question needs someone's book, say they can ask "
+                "you privately in their Prometheus conversation, where you can see their own data.")
     return (
         where + "\n\n" + data + "\n\n"
         "The transcript shows each speaker as [Name · Firm]. Reply to the latest message that "
@@ -163,11 +184,15 @@ def transcript_to_messages(history: list[dict]) -> list[dict]:
 
 
 def answer_in_room(kind: str, firm_names: list[str], history: list[dict],
-                   shared: list[dict] | None = None) -> agent.Answer:
-    """shared: precomputed shared_confirmations for a bilateral room, so no DB
-    connection is held during the model call."""
+                   shared: list[dict] | None = None, book_label: str | None = None) -> agent.Answer:
+    """
+    firm_names: the client firms of the room's joined people (not Rijeka).
+    shared: precomputed shared_confirmations when those are exactly two firms,
+    else None, so no DB connection is held during the model call.
+    """
     messages = transcript_to_messages(history)
     if not messages:
         return agent.Answer("", [], "empty")
-    toolbox = RoomToolbox(shared or []) if kind == "BILATERAL" else SourceToolbox()
-    return agent.answer(messages, toolbox, context=_brief(kind, firm_names))
+    pair = kind != "SUPPORT" and shared is not None and len(set(firm_names)) == 2
+    toolbox = RoomToolbox(shared) if pair else SourceToolbox()
+    return agent.answer(messages, toolbox, context=_brief(kind, firm_names, pair, book_label))

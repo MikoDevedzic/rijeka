@@ -15,31 +15,19 @@ import OrgHierarchy     from './components/org/OrgHierarchy'
 import LegalEntities    from './components/onboarding/LegalEntities'
 import Counterparties   from './components/onboarding/Counterparties'
 import Users            from './components/admin/Users'
-import PrometheusPanel  from './components/PrometheusPanel'
 import TradeBookingWindow from './components/blotter/TradeBookingWindow'
 import TradeWindow        from './components/trade-window/TradeWindow'
 import useBookingStore    from './store/useBookingStore'
 import SwaptionVolDetail from './components/market-data/SwaptionVolDetail'
 import CapVolDetail      from './components/market-data/CapVolDetail'
 import XVAParametersTab  from './components/configurations/XVAParametersTab'
-import ChatPage          from './components/chat/ChatPage'
+import Messenger         from './components/messenger/Messenger'
 
 function BlotterLayout() {
   return (
     <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
       <div style={{flex:1,overflow:'hidden'}}><AuthGuard /></div>
-      <PrometheusPanel />
-    </div>
-  )
-}
-
-function ChatLayout() {
-  return (
-    <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
-      <AppBar />
-      <div style={{flex:1,overflow:'hidden'}}><ChatPage /></div>
-      <PrometheusPanel />
     </div>
   )
 }
@@ -52,7 +40,6 @@ function ConfigLayout() {
         <CfgNav />
         <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><AuthGuard /></main>
       </div>
-      <PrometheusPanel />
     </div>
   )
 }
@@ -137,13 +124,11 @@ export default function App() {
         <Route path="/signup"  element={<SignupPage />} />
         <Route path="/confirm" element={<ConfirmPage />} />
         <Route element={<AuthGuard />}>
-          <Route path="/command-center" element={<><CommandCenter /><PrometheusPanel /></>} />
+          <Route path="/command-center" element={<CommandCenter />} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pricer"  element={<PricerPage />} />
           </Route>
-          <Route path="/chat"         element={<ChatLayout />} />
-          <Route path="/chat/:roomId" element={<ChatLayout />} />
           <Route element={<ConfigLayout />}>
             <Route path="/configurations">
               <Route index element={<Navigate to="market-data/curves" replace />} />
@@ -161,6 +146,8 @@ export default function App() {
         <Route path="*" element={<Navigate to="/command-center" replace />} />
       </Routes>
       <PersistentBookingWindow />
+      {/* One messenger for every tab: private Prometheus, support, and rooms. */}
+      <Messenger />
     </BrowserRouter>
   )
 }
