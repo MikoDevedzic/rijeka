@@ -95,6 +95,7 @@ def analyse(body: AnalyseRequest, db: Session = Depends(get_db), user: dict = De
     return {
         # Same shape the UI already reads: content[0].text
         "content": [{"type": "text", "text": result.text}],
-        "tools_used": result.tools_used,
+        "tools_used": [{k: u[k] for k in ("tool", "summary", "error")} for u in result.tools_used],
+        "sources": result.sources,
         "stop_reason": result.stop_reason,
     }

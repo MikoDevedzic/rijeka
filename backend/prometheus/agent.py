@@ -11,12 +11,18 @@ from dataclasses import dataclass, field
 import anthropic
 
 from prometheus.persona import PERSONA
-from prometheus.tools import TOOL_DEFS, Toolbox
+from prometheus.tools import TOOL_DEFS, Toolbox, _rel, _resolve_source
 
 log = logging.getLogger("rijeka.prometheus")
 
 MODEL = os.getenv("PROMETHEUS_MODEL", "claude-opus-5")
 MAX_TOOL_ROUNDS = 12
+
+# Source links point at the public repo, pinned to the deployed commit so a
+# link shows exactly the code that produced the answer. Render sets
+# RENDER_GIT_COMMIT; elsewhere links fall back to main.
+SOURCE_REPO_URL = os.getenv("RIJEKA_SOURCE_URL", "https://github.com/MikoDevedzic/rijeka").rstrip("/")
+SOURCE_REF = os.getenv("RENDER_GIT_COMMIT") or "main"
 
 # Server-side refusal fallback: a declined request is re-run on Anthropic's
 # recommended fallback model inside the same call.
@@ -38,6 +44,15 @@ class Answer:
     tools_used: list[dict] = field(default_factory=list)
     stop_reason: str | None = None
 
+    @property
+    def sources(self) -> list[dict]:
+        """Files Prometheus actually read, once each, as links to the public repo."""
+        seen: list[str] = []
+        for u in self.tools_used:
+            if u["tool"] == "read_source" and not u["error"] and u.get("path") and u["path"] not in seen:
+                seen.append(u["path"])
+        return [{"path": p, "url": f"{SOURCE_REPO_URL}/blob/{SOURCE_REF}/{p}"} for p in seen]
+
 
 def _describe(name: str, args: dict) -> str:
     """One-line, user-facing trace of what Prometheus looked at."""
@@ -48,6 +63,16 @@ def _describe(name: str, args: dict) -> str:
     if name in ("get_trade", "get_confirmation"):
         return f"{name} {args.get('trade')}"
     return name
+
+
+def _source_path(name: str, args: dict) -> str | None:
+    """Canonical repo-relative path for a read_source call, else None."""
+    if name != "read_source" or not args.get("path"):
+        return None
+    try:
+        return _rel(_resolve_source(args["path"]))
+    except ValueError:
+        return None
 
 
 def answer(messages: list[dict], toolbox: Toolbox, context: str | None = None) -> Answer:
@@ -93,7 +118,7 @@ def answer(messages: list[dict], toolbox: Toolbox, context: str | None = None) -
                 continue
             content, is_error = toolbox.run(block.name, block.input)
             used.append({"tool": block.name, "summary": _describe(block.name, block.input or {}),
-                         "error": is_error})
+                         "error": is_error, "path": _source_path(block.name, block.input or {})})
             results.append({
                 "type": "tool_result", "tool_use_id": block.id,
                 "content": content[:100_000], "is_error": is_error,
