@@ -109,6 +109,7 @@ export default function LegalEntities() {
     }
     setSaving(true)
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { alert('Not signed in — reload and sign in again.'); setSaving(false); return }
     const { error } = await supabase.from('legal_entities').insert({
       lei:               form.lei.trim().toUpperCase(),
       name:              form.name.trim().toUpperCase(),
@@ -124,7 +125,11 @@ export default function LegalEntities() {
       im_threshold_m:    form.im_threshold_m ? parseFloat(form.im_threshold_m) : null,
       ois_curve_id:      form.ois_curve_id   || null,
       is_own_entity:     form.is_own_entity,
-      created_by:        user ? user.id : null
+      created_by:        user ? user.id : null,
+      // Tenancy key. Sprint 12 made user_id NOT NULL and added the RLS
+      // policy WITH CHECK (user_id = auth.uid()); this form writes straight
+      // to Supabase, so omitting it fails the check on every insert.
+      user_id:           user ? user.id : null
     })
     if (!error) {
       setShowAdd(false)

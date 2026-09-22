@@ -218,7 +218,9 @@ function TreeLevel({ nodes, depth, collapsed, toggleCollapse, editing, setEditin
 }
 
 export default function OrgHierarchy() {
-  const { profile } = useAuthStore()
+  const { profile, session } = useAuthStore()
+  // Tenancy key for the RLS WITH CHECK on org_nodes (user_id = auth.uid()).
+  const userId = session?.user?.id ?? null
   const [nodes,        setNodes]        = useState([])
   const [collapsed,    setCollapsed]    = useState(new Set())
   const [editing,      setEditing]      = useState(null)
@@ -252,16 +254,18 @@ export default function OrgHierarchy() {
   }
   async function confirmAdd(parentId, nodeType, name) {
     setSaving(true); setError(null)
+    if (!userId) { setError('Not signed in — reload and sign in again.'); setSaving(false); return }
     const { data, error: err } = await supabase.from('org_nodes')
-      .insert({ parent_id: parentId, name, node_type: nodeType, sort_order: nodes.filter(n => n.parent_id === parentId).length, created_by: profile?.trader_id ?? null, is_active: true })
+      .insert({ parent_id: parentId, name, node_type: nodeType, sort_order: nodes.filter(n => n.parent_id === parentId).length, created_by: profile?.trader_id ?? null, user_id: userId, is_active: true })
       .select().single()
     if (err) { setError(err.message); setSaving(false); return }
     setNodes(prev => [...prev, data]); setAdding(null); setSaving(false)
   }
   async function initFirm() {
     setSaving(true); setError(null)
+    if (!userId) { setError('Not signed in — reload and sign in again.'); setSaving(false); return }
     const { data, error: err } = await supabase.from('org_nodes')
-      .insert({ parent_id: null, name: 'My Firm', node_type: 'firm', sort_order: 0, created_by: profile?.trader_id ?? null, is_active: true })
+      .insert({ parent_id: null, name: 'My Firm', node_type: 'firm', sort_order: 0, created_by: profile?.trader_id ?? null, user_id: userId, is_active: true })
       .select().single()
     if (err) { setError(err.message); setSaving(false); return }
     setNodes([data]); setSaving(false)
