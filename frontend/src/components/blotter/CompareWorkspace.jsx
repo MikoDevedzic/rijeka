@@ -3,6 +3,8 @@ import { supabase } from '../../lib/supabase'
 import { useTabStore } from '../../store/useTabStore'
 import './CompareWorkspace.css'
 
+const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
+
 const AC_COLOR = { RATES:'var(--accent)', FX:'var(--blue)', CREDIT:'var(--amber)', EQUITY:'var(--purple)', COMMODITY:'var(--red)' }
 const ST_COLOR = { PENDING:'var(--amber)', LIVE:'var(--accent)', MATURED:'#4a5568', CANCELLED:'var(--red)', TERMINATED:'var(--red)' }
 
@@ -91,28 +93,7 @@ function AiAnalysisPanel({ trades, onClose }) {
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState([])
 
-  const buildTradeContext = () => trades.map((t, i) => {
-    const legs = t.terms?.legs || []
-    return `Trade ${i+1}: ${t.trade_ref}
-  Asset Class: ${t.asset_class} | Instrument: ${t.instrument_type}
-  Status: ${t.status} | Store: ${t.store}
-  Counterparty: ${t.counterparty?.name||'—'} | Own Entity: ${t.own_entity?.short_name||'—'}
-  Notional: ${fmt(t.notional, t.notional_ccy)}
-  Tenor: ${tenor(t)} | Trade Date: ${fmtD(t.trade_date)} | Maturity: ${fmtD(t.maturity_date)}
-  Desk: ${t.desk||'—'} | Book: ${t.book||'—'}
-  Legs: ${legs.map(l => `${l.direction} ${l.leg_type} ${l.currency} ${l.fixed_rate?fmtR(l.fixed_rate):l.index||''} ${l.spread?l.spread+'bps spread':''}`).join(' | ')}`
-  }).join('\n\n')
-
   const analyse = async (userMsg) => {
-    const ctx = buildTradeContext()
-    const systemPrompt = `You are a senior derivatives analyst at a trading desk reviewing trade economics.
-You have been given ${trades.length} trades to compare. Be concise, precise, and use proper market terminology.
-Focus on: key economic differences, risk implications, structural differences, anything that would matter to a trader or risk manager.
-Format your response clearly. Use bullet points for differences. Be direct — no fluff.
-
-TRADE DATA:
-${ctx}`
-
     const newMessages = [...messages, { role: 'user', content: userMsg }]
     setMessages(newMessages)
     setLoading(true)
@@ -123,14 +104,17 @@ ${ctx}`
       const token = session?.access_token
       if (!token) throw new Error('Not authenticated')
 
-      const response = await fetch('http://localhost:8000/api/analyse/', {
+      const response = await fetch(API + '/api/analyse/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        // The server loads these trades from the user's own book and briefs
+        // Prometheus itself; the client never supplies instructions.
         body: JSON.stringify({
-          system: systemPrompt,
+          mode: 'compare',
+          trade_ids: trades.map(t => t.id),
           messages: newMessages,
         })
       })
