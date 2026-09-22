@@ -309,9 +309,10 @@ class IdempotencyKey(Base):
 # Firms + chat — migration 010.
 #
 # A firm groups users and claims LEIs; a counterparty in a
-# user's book resolves to a firm through firm_leis. Rooms are
-# between firms. Clients read these tables under RLS (realtime);
-# every write goes through api/routes/chat.py.
+# user's book resolves to a firm through firm_leis. Rooms have
+# people as members (migration 011). Clients read these tables
+# under RLS (realtime); every write goes through
+# api/routes/chat.py.
 # ─────────────────────────────────────────────────────
 class Firm(Base):
     __tablename__ = "firms"
@@ -337,7 +338,7 @@ class FirmMember(Base):
 
     user_id    = Column(UUID(as_uuid=True), primary_key=True)   # one firm per user
     firm_id    = Column(UUID(as_uuid=True), ForeignKey("firms.id"), nullable=False)
-    role       = Column(Text, nullable=False, default="MEMBER")  # MEMBER | ADMIN
+    role       = Column(Text, nullable=False, default="MEMBER")  # MEMBER | ADMIN | COMPLIANCE
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -345,17 +346,28 @@ class ChatRoom(Base):
     __tablename__ = "chat_rooms"
 
     id              = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
-    kind            = Column(Text, nullable=False)                # BILATERAL | SUPPORT
+    kind            = Column(Text, nullable=False)                # DIRECT | GROUP | SUPPORT
+    name            = Column(Text, nullable=True)                 # GROUP rooms
+    book_node_id    = Column(Text, ForeignKey("org_nodes.id"), nullable=True)
+    book_label      = Column(Text, nullable=True)                 # 'RATES TRADING / G10 RATES'
+    book_firm_id    = Column(UUID(as_uuid=True), ForeignKey("firms.id"), nullable=True)
     created_by      = Column(UUID(as_uuid=True), nullable=True)
     created_at      = Column(DateTime(timezone=True), server_default=func.now())
     last_message_at = Column(DateTime(timezone=True), nullable=True)
 
 
-class ChatRoomFirm(Base):
-    __tablename__ = "chat_room_firms"
+class ChatRoomMember(Base):
+    __tablename__ = "chat_room_members"
 
-    room_id = Column(UUID(as_uuid=True), ForeignKey("chat_rooms.id"), primary_key=True)
-    firm_id = Column(UUID(as_uuid=True), ForeignKey("firms.id"), primary_key=True)
+    room_id    = Column(UUID(as_uuid=True), ForeignKey("chat_rooms.id"), primary_key=True)
+    user_id    = Column(UUID(as_uuid=True), primary_key=True)
+    firm_id    = Column(UUID(as_uuid=True), ForeignKey("firms.id"), nullable=False)  # firm when joined
+    role       = Column(Text, nullable=False, default="MEMBER")   # OWNER | MEMBER
+    status     = Column(Text, nullable=False, default="JOINED")   # INVITED | JOINED | DECLINED | LEFT
+    invited_by = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    joined_at  = Column(DateTime(timezone=True), nullable=True)
+    left_at    = Column(DateTime(timezone=True), nullable=True)
 
 
 class ChatMessage(Base):
