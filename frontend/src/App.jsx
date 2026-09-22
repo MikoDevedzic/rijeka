@@ -21,7 +21,7 @@ import useBookingStore    from './store/useBookingStore'
 import SwaptionVolDetail from './components/market-data/SwaptionVolDetail'
 import CapVolDetail      from './components/market-data/CapVolDetail'
 import XVAParametersTab  from './components/configurations/XVAParametersTab'
-import Messenger         from './components/messenger/Messenger'
+import Messenger, { MessengerPage } from './components/messenger/Messenger'
 
 function BlotterLayout() {
   return (
@@ -125,6 +125,8 @@ export default function App() {
         <Route path="/confirm" element={<ConfirmPage />} />
         <Route element={<AuthGuard />}>
           <Route path="/command-center" element={<CommandCenter />} />
+          {/* The messenger in its own window, to put on another screen. */}
+          <Route path="/messenger" element={<MessengerPage />} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pricer"  element={<PricerPage />} />

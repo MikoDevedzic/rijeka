@@ -15,6 +15,12 @@
   display: inline-flex; align-items: center; justify-content: center;
 }
 
+.ms-launcher.out { border-style: dashed; box-shadow: none; }
+
+/* Popped out: the messenger is the whole browser window */
+.ms-page { height: 100vh; display: flex; flex-direction: column; background: var(--panel); color: var(--text); font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+.ms-page .ms-titlebar { cursor: default; }
+
 /* Window */
 .ms-window {
   position: fixed; z-index: 1000; display: flex; flex-direction: column;

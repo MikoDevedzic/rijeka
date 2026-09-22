@@ -1,0 +1,10 @@
+/* Nav tab + its "open in its own window" button, shown on hover/focus. */
+.ab-nav { display: flex; align-items: stretch; height: 100%; position: relative; }
+.ab-pop {
+  background: none; border: none; cursor: pointer; color: var(--text-dim);
+  font-size: 0.8rem; padding: 0 0.35rem 0 0; margin-left: -0.55rem;
+  opacity: 0; transition: opacity 0.12s, color 0.12s;
+}
+.ab-nav:hover .ab-pop, .ab-pop:focus-visible { opacity: 1; }
+.ab-pop:hover { color: var(--accent); }
+@media (hover: none) { .ab-pop { display: none; } }
