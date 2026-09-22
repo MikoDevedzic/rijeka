@@ -58,3 +58,33 @@ vector in `backend/tests/test_chain_confirmation.py::test_known_vector` and a
 | Network | Registry | Source |
 |---|---|---|
 | Sepolia | `0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e` | verified on Sourcify (exact match) |
+
+## Bilateral confirmation
+
+A real confirmation needs the counterparty's signature to come from *their*
+system. Rijeka holds only their address:
+
+```
+RIJEKA_CHAIN_KEY_<THEIR_LEI>_ADDRESS=0x...     # we know who they are
+                                               # we hold no key for them
+```
+
+With that set, `POST /api/chain/confirm` refuses (correctly — we cannot sign for
+them) and points at the two-step flow:
+
+1. `GET /api/chain/request/{trade_id}` — our half: the canonical record, the
+   hash, our signature, and the exact digest they must sign. Deterministic;
+   nothing stored, nothing anchored.
+2. They run `tools/countersign.py request.json --expect-hash <hash from THEIR
+   booking>`. It recomputes the hash from the terms, refuses if their own
+   booking disagrees, prints the economics, and signs. No Rijeka dependency —
+   `eth-account` and `eth-utils` only.
+3. `POST /api/chain/countersign/{trade_id}` with `{address, signature}`. We
+   verify it recovers to the address registered for their legal entity before
+   a transaction is built, then anchor.
+
+Either party may relay: the contract accepts a validly-signed pair from anyone,
+so step 3 can equally be them calling `confirm()` themselves.
+
+`--expect-hash` is where the value is. A mismatch there is a confirmation break
+found at the point of confirmation, not in a reconciliation days later.
