@@ -1,42 +1,65 @@
 import { useState, useRef, useEffect } from 'react'
-import { useAuthStore } from '../store/useAuthStore'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { supabase } from '../lib/supabase'
 import './PrometheusPanel.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
+const GREETING =
+  "I'm Prometheus, Rijeka's assistant. I can look up your trades and confirmations, " +
+  'and read how Rijeka prices, margins and confirms them — then explain it. ' +
+  "I'm read-only: I never book, amend or confirm anything."
 
-const NEWS = [
-  { tag: 'RATES', tagClass: 'rates', headline: 'Fed holds rates steady at 5.25–5.50%; dot plot signals one cut in 2025', meta: 'Reuters · 2h ago' },
-  { tag: 'MACRO', tagClass: 'macro', headline: 'US CPI prints 2.8% YoY, below consensus 2.9%; core unchanged at 3.1%', meta: 'Bloomberg · 4h ago' },
-  { tag: 'RATES', tagClass: 'rates', headline: 'SOFR fixing 5.310% · €STR 3.400% · SONIA 4.950%', meta: 'DTCC / ECB · today' },
-  { tag: 'CREDIT', tagClass: 'credit', headline: 'IG spreads tighten 3bp on positive earnings; HY flat; CDS indices rally', meta: 'Markit · 5h ago' },
-  { tag: 'REG', tagClass: 'reg', headline: 'ISDA publishes updated SIMM 2.8 methodology; effective December 2025', meta: 'ISDA · 1d ago' },
-  { tag: 'FX', tagClass: 'fx', headline: 'EUR/USD 1.0842 · GBP/USD 1.2634 · USD/JPY 149.82', meta: 'WM/Reuters · today' },
-  { tag: 'MACRO', tagClass: 'macro', headline: 'ECB minutes: governing council split on timing of next cut; July meeting live', meta: 'ECB · 1d ago' },
-  { tag: 'RATES', tagClass: 'rates', headline: '10Y UST 4.24% (-3bp) · 10Y Bund 2.38% (-2bp) · 2s10s UST -18bp', meta: 'Bloomberg · 3h ago' },
-  { tag: 'REG', tagClass: 'reg', headline: 'CFTC proposes amendments to swap dealer capital requirements under CFTC 25-39', meta: 'CFTC · 2d ago' },
-  { tag: 'CREDIT', tagClass: 'credit', headline: 'GSI 5Y CDS 45bp · JPMCB 5Y CDS 38bp · Barclays 5Y CDS 62bp', meta: 'Markit · today' },
+const STARTERS = [
+  'Summarise my book by status and counterparty',
+  'Which of my trades are confirmed on-chain, and do they still match what was signed?',
+  'How does on-chain confirmation change MPoR and initial margin in the XVA?',
+  'Walk me through how a vanilla SOFR swap is priced in Rijeka',
 ]
+
+// Plain-English names for data lookups, shown under an answer.
+const CHECKED = {
+  list_trades: 'your trades',
+  get_trade: 'trade detail',
+  get_confirmation: 'on-chain confirmation',
+  list_parties: 'your counterparties',
+}
+
+const ENGINEERING_ASK =
+  'Show me the engineering behind that: how it is implemented, with file and line references.'
+
+marked.setOptions({ gfm: true, breaks: true })
+DOMPurify.addHook('afterSanitizeAttributes', node => {
+  if (node.tagName === 'A') {
+    node.setAttribute('target', '_blank')
+    node.setAttribute('rel', 'noopener noreferrer')
+  }
+})
+
+function Markdown({ text }) {
+  const html = DOMPurify.sanitize(marked.parse(text || ''))
+  return <div className="pm-md" dangerouslySetInnerHTML={{ __html: html }} />
+}
 
 export default function PrometheusPanel() {
   const [open, setOpen]         = useState(false)
-  const [tab, setTab]           = useState('chat')
-  const [messages, setMessages] = useState([
-    { role: 'assistant', content: '✦ PROMETHEUS online. Ask me about your trades, Greeks, or market data.' }
-  ])
+  const [wide, setWide]         = useState(false)
+  const [messages, setMessages] = useState([])
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
   const messagesEndRef          = useRef(null)
+  const inputRef                = useRef(null)
 
   useEffect(() => {
     if (open) {
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+      inputRef.current?.focus()
     }
   }, [open, messages])
 
-  const send = async () => {
-    const text = input.trim()
+  const ask = async (raw) => {
+    const text = raw.trim()
     if (!text || loading) return
     setInput('')
     const next = [...messages, { role: 'user', content: text }]
@@ -45,8 +68,9 @@ export default function PrometheusPanel() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) throw new Error('Not authenticated')
+      // Error bubbles are UI only; never send them back as assistant turns.
       const apiMessages = next
-        .filter((m, i) => !(i === 0 && m.role === 'assistant'))
+        .filter(m => !m.error)
         .map(m => ({ role: m.role, content: m.content }))
       const res = await fetch(API + '/api/analyse/', {
         method: 'POST',
@@ -59,82 +83,103 @@ export default function PrometheusPanel() {
       }
       const data = await res.json()
       const reply = data.content?.[0]?.text || 'No response.'
-      const looked = (data.tools_used || []).map(t => t.summary)
-      setMessages([...next, { role: 'assistant', content: reply, looked }])
+      const checked = [...new Set((data.tools_used || []).map(t => CHECKED[t.tool]).filter(Boolean))]
+      setMessages([...next, { role: 'assistant', content: reply, checked, sources: data.sources || [] }])
     } catch (e) {
-      setMessages([...next, { role: 'assistant', content: '✗ ' + e.message }])
+      setMessages([...next, { role: 'assistant', content: e.message, error: true }])
     } finally {
       setLoading(false)
     }
   }
 
   const onKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input) }
+    if (e.key === 'Escape') setOpen(false)
   }
 
   return (
     <>
-      {/* Panel */}
       {open && (
-        <div className="pm-panel">
+        <div className={`pm-panel${wide ? ' pm-wide' : ''}`}>
           <div className="pm-panel-header">
-            <button className={`pm-tab ${tab === 'chat' ? 'active' : ''}`} onClick={() => setTab('chat')}>✦ CHAT</button>
-            <button className={`pm-tab ${tab === 'news' ? 'active' : ''}`} onClick={() => setTab('news')}>NEWS</button>
-            <button className="pm-close" onClick={() => setOpen(false)}>✕</button>
+            <span className="pm-title">✦ PROMETHEUS</span>
+            <span className="pm-badge">READ-ONLY</span>
+            <div className="pm-actions">
+              {messages.length > 0 && (
+                <button className="pm-icon" onClick={() => setMessages([])} disabled={loading} title="New conversation">NEW</button>
+              )}
+              <button className="pm-icon pm-icon-glyph" onClick={() => setWide(w => !w)} title={wide ? 'Shrink' : 'Expand'}>
+                {wide ? '⤡' : '⤢'}
+              </button>
+              <button className="pm-icon pm-icon-glyph" onClick={() => setOpen(false)} title="Close">✕</button>
+            </div>
           </div>
 
-          {tab === 'chat' && (
-            <div className="pm-chat">
-              <div className="pm-messages">
-                {messages.map((m, i) => (
-                  <div key={i} className={`pm-msg pm-msg-${m.role}`}>
-                    <div className="pm-msg-who">{m.role === 'user' ? 'YOU' : '✦ PROMETHEUS'}</div>
-                    <div className="pm-msg-body">{m.content}</div>
-                    {m.looked?.length > 0 && (
-                      <div className="pm-msg-looked">looked at: {m.looked.join(' · ')}</div>
-                    )}
-                  </div>
+          <div className="pm-messages">
+            <div className="pm-msg pm-msg-assistant">
+              <div className="pm-msg-who">✦ PROMETHEUS</div>
+              <div className="pm-msg-body">{GREETING}</div>
+            </div>
+
+            {messages.length === 0 && (
+              <div className="pm-starters">
+                {STARTERS.map(s => (
+                  <button key={s} className="pm-starter" onClick={() => ask(s)}>{s}</button>
                 ))}
-                {loading && (
-                  <div className="pm-msg pm-msg-assistant">
-                    <div className="pm-msg-who">✦ PROMETHEUS</div>
-                    <div className="pm-msg-body pm-thinking">thinking...</div>
+              </div>
+            )}
+
+            {messages.map((m, i) => (
+              <div key={i} className={`pm-msg pm-msg-${m.role}${m.error ? ' pm-msg-error' : ''}`}>
+                <div className="pm-msg-who">{m.role === 'user' ? 'YOU' : '✦ PROMETHEUS'}</div>
+                <div className="pm-msg-body">
+                  {m.role === 'assistant' && !m.error ? <Markdown text={m.content} /> : m.content}
+                </div>
+                {m.checked?.length > 0 && (
+                  <div className="pm-meta">Checked {m.checked.join(' · ')}</div>
+                )}
+                {m.sources?.length > 0 && (
+                  <div className="pm-meta pm-sources">
+                    <span>Source</span>
+                    {m.sources.map(src => (
+                      <a key={src.path} href={src.url} target="_blank" rel="noopener noreferrer" title={src.path}>
+                        {src.path.split('/').slice(-2).join('/')}
+                      </a>
+                    ))}
                   </div>
                 )}
-                <div ref={messagesEndRef} />
+                {i === messages.length - 1 && !loading && m.sources?.length > 0 &&
+                  messages[i - 1]?.content !== ENGINEERING_ASK && (
+                  <button className="pm-deeper" onClick={() => ask(ENGINEERING_ASK)}>Show the engineering →</button>
+                )}
               </div>
-              <div className="pm-input-row">
-                <textarea
-                  className="pm-input"
-                  placeholder="Ask PROMETHEUS..."
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={onKey}
-                  rows={1}
-                />
-                <button className="pm-send" onClick={send} disabled={loading || !input.trim()}>SEND</button>
-              </div>
-            </div>
-          )}
+            ))}
 
-          {tab === 'news' && (
-            <div className="pm-news">
-              {NEWS.map((n, i) => (
-                <div key={i} className="pm-news-item">
-                  <div className={`pm-news-tag pm-tag-${n.tagClass}`}>{n.tag}</div>
-                  <div className="pm-news-headline">{n.headline}</div>
-                  <div className="pm-news-meta">{n.meta}</div>
-                </div>
-              ))}
-            </div>
-          )}
+            {loading && (
+              <div className="pm-msg pm-msg-assistant">
+                <div className="pm-msg-who">✦ PROMETHEUS</div>
+                <div className="pm-msg-body pm-thinking">looking into it…</div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="pm-input-row">
+            <textarea
+              ref={inputRef}
+              className="pm-input"
+              placeholder="Ask about a trade, a confirmation, or how Rijeka models something…"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={onKey}
+              rows={1}
+            />
+            <button className="pm-send" onClick={() => ask(input)} disabled={loading || !input.trim()}>SEND</button>
+          </div>
         </div>
       )}
 
-      {/* FAB */}
-      <button className="pm-fab" onClick={() => setOpen(o => !o)} title="ASK PROMETHEUS">
-        ✦
-      </button>
+      <button className="pm-fab" onClick={() => setOpen(o => !o)} title="Ask Prometheus">✦</button>
     </>
   )
 }

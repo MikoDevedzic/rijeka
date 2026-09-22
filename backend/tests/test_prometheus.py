@@ -95,7 +95,9 @@ def test_answer_loop_uses_server_persona_and_runs_tools(monkeypatch):
     out = agent.answer([{"role": "user", "content": "how is MPoR set?"}], Toolbox(None, USER))
 
     assert out.text == "MPoR is 10 days."
-    assert out.tools_used == [{"tool": "read_source", "summary": "read_source backend/pricing/csa.py", "error": False}]
+    assert [u["summary"] for u in out.tools_used] == ["read_source backend/pricing/csa.py"]
+    assert out.sources == [{"path": "backend/pricing/csa.py",
+                            "url": f"{agent.SOURCE_REPO_URL}/blob/{agent.SOURCE_REF}/backend/pricing/csa.py"}]
     first = fake.calls[0]
     assert first["system"][0]["text"] == PERSONA
     assert {t["name"] for t in first["tools"]} == READ_ONLY_TOOLS
@@ -109,3 +111,14 @@ def test_refusal_returns_a_polite_answer(monkeypatch):
     monkeypatch.setattr(agent, "_get_client", lambda: fake)
     out = agent.answer([{"role": "user", "content": "x"}], Toolbox(None, USER))
     assert out.stop_reason == "refusal" and "can't help" in out.text
+
+
+def test_sources_are_deduped_normalised_and_skip_failed_reads():
+    used = [
+        {"tool": "read_source", "error": False, "path": agent._source_path("read_source", {"path": "./backend/pricing/sabr.py"})},
+        {"tool": "read_source", "error": False, "path": agent._source_path("read_source", {"path": "backend/pricing/sabr.py"})},
+        {"tool": "read_source", "error": True,  "path": agent._source_path("read_source", {"path": ".env"})},
+        {"tool": "search_source", "error": False, "path": None},
+    ]
+    out = agent.Answer("x", used)
+    assert [s["path"] for s in out.sources] == ["backend/pricing/sabr.py"]
