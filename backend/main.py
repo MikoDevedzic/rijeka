@@ -26,6 +26,7 @@ from api.routes import (
     xva,
     chain,
     chat,
+    trade_cards,
 )
 
 app = FastAPI(
@@ -65,6 +66,7 @@ app.include_router(bloomberg.router, prefix="/api")
 app.include_router(schedules.router)
 app.include_router(chain.router)
 app.include_router(chat.router)
+app.include_router(trade_cards.router)
 
 
 @app.get("/health", tags=["meta"])

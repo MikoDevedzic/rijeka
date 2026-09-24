@@ -455,6 +455,13 @@ def invite(room_id: str, body: Invite, db: Session = Depends(get_db), user: dict
     if room.kind != "GROUP":
         raise HTTPException(status_code=422, detail="Only group rooms take more people. Start a group instead.")
     targets = _invitable(db, body.user_ids, me_m)
+    # Shared trade terms are for the two parties only: no third firm joins later.
+    present = {m.firm_id for m in _members(db, room.id) if m.status in ("JOINED", "INVITED")}
+    if any(t.firm_id not in present for t in targets):
+        from api.routes.trade_cards import room_has_trade_cards
+        if room_has_trade_cards(db, room.id):
+            raise HTTPException(status_code=422, detail="This room has shared trades, so it stays between its "
+                                                        "current firms. Start a new room to include another firm.")
     active = sum(1 for m in _members(db, room.id) if m.status in ("JOINED", "INVITED"))
     if active + len(targets) > MAX_GROUP:
         raise HTTPException(status_code=422, detail=f"Rooms hold at most {MAX_GROUP} people.")
@@ -570,6 +577,21 @@ def _book_tag(db: Session, room: ChatRoom) -> Optional[dict]:
     return {"firm_id": room.book_firm_id, "node_type": row.node_type.lower(), "name": row.name}
 
 
+def _room_cards(db: Session, room_id: uuid.UUID) -> list[dict]:
+    """Trade cards shared in this room, with each trade's current status."""
+    from db.models import Trade
+    out = []
+    for m in db.query(ChatMessage).filter(ChatMessage.room_id == room_id,
+                                          ChatMessage.card["type"].astext == "trade").all():
+        c = m.card
+        t = db.get(Trade, uuid.UUID(c["trade_id"]))
+        out.append({"trade_ref": c.get("trade_ref"), "booked_by": c.get("booker_firm"),
+                    "counterparty": c.get("cp_firm"), "terms_booker_side": c.get("summary"),
+                    "trade_hash": c.get("trade_hash"), "status_now": t.status if t else "DELETED",
+                    "shared_at": m.created_at})
+    return out
+
+
 def _prometheus_reply(room_id: uuid.UUID) -> None:
     """
     Runs after the poster's request returns; the reply reaches the room via
@@ -590,6 +612,7 @@ def _prometheus_reply(room_id: uuid.UUID) -> None:
         ]
         kind, book_label = room.kind, room.book_label
         firm_names = sorted(f.name for f in client_firms)
+        cards = _room_cards(db, room_id)
         # Trade records only when the room's people are from exactly the two
         # parties — no third firm, and no Rijeka staff, in the room.
         shared = None
@@ -608,7 +631,7 @@ def _prometheus_reply(room_id: uuid.UUID) -> None:
         body, kind_out = "Prometheus isn't configured on this server.", "SYSTEM"
     else:
         try:
-            ans = answer_in_room(kind, firm_names, history, shared, book_label)
+            ans = answer_in_room(kind, firm_names, history, shared, book_label, cards)
             body, kind_out = ans.text, "PROMETHEUS"
             if not body:
                 return

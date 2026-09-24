@@ -331,6 +331,11 @@ class FirmLei(Base):
     firm_id    = Column(UUID(as_uuid=True), ForeignKey("firms.id"), nullable=False)
     verified   = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Migration 012: the address this firm countersigns with for this LEI.
+    # Public; the key stays with the firm.
+    signing_address = Column(Text, nullable=True)
+    signer_set_at   = Column(DateTime(timezone=True), nullable=True)
+    signer_set_by   = Column(UUID(as_uuid=True), nullable=True)
 
 
 class FirmMember(Base):
