@@ -33,7 +33,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from db.session import get_db
-from db.models import Trade, TradeLeg, TradeEvent, LegalEntity, Counterparty
+from db.models import Trade, TradeLeg, TradeEvent, LegalEntity, Counterparty, FirmLei
 from middleware.auth import verify_token
 from api.routes.trade_events import (
     _check_write_role, _validate_idempotency_header, _lookup_idempotent,
@@ -41,7 +41,7 @@ from api.routes.trade_events import (
 )
 from chain.canonical import canonical_payload, canonical_bytes, trade_hash, CANONICAL_SCHEMA_VERSION
 from chain.signing import confirmation_typed_data, sign, recover, eip712_digest
-from chain.keys import resolve as resolve_key
+from chain.keys import PartyKey, resolve as resolve_key
 from chain.attestation import get_backend
 
 log = logging.getLogger("rijeka.chain")
@@ -98,6 +98,21 @@ def _hexb(b: bytes) -> str:
 
 
 
+def registered_signer(db: Session, lei: Optional[str]) -> Optional[PartyKey]:
+    """
+    The address a firm on Rijeka registered for this LEI (migration 012).
+    Address only: the key stays with that firm, so we can verify their
+    signature but never produce it.
+    """
+    if not lei:
+        return None
+    claim = db.get(FirmLei, lei)
+    if claim is None or not claim.signing_address:
+        return None
+    from eth_utils import to_checksum_address
+    return PartyKey(lei, to_checksum_address(claim.signing_address), None, "registered")
+
+
 def _resolve_parties(db: Session, trade: Trade):
     """(own_key, cp_key, own_identity, cp_identity). Raises 422 with a usable message."""
     own, cp = _load_parties(db, trade, trade.user_id)
@@ -105,7 +120,9 @@ def _resolve_parties(db: Session, trade: Trade):
     cp_id  = _cp_identity(db, cp)
     try:
         k_own = resolve_key(own_id)
-        k_cp  = resolve_key(cp_id)
+        # A counterparty that registered a signing wallet on Rijeka signs with
+        # it; that overrides any env/dev key, so we can no longer sign for them.
+        k_cp  = registered_signer(db, cp_id.get("lei")) or resolve_key(cp_id)
     except LookupError as e:
         raise HTTPException(status_code=422, detail=str(e))
     if k_own.private_key is None:
@@ -223,12 +240,29 @@ def countersign(
 
     trade_uuid = _parse_trade_uuid(trade_id)
     trade = _load_pending_trade(db, trade_uuid, user_id)
+    return countersign_trade(db, trade, body.address, body.signature, idempotency_key=idempotency_key)
+
+
+def countersign_trade(db: Session, trade: Trade, address: str, signature: str, *,
+                      expected_hash: Optional[str] = None, idempotency_key: Optional[str] = None,
+                      note: Optional[dict] = None) -> dict:
+    """
+    Verify the counterparty's signature over the trade's CURRENT canonical
+    hash and anchor the confirmation. Shared by POST /countersign (the booker
+    relays it) and the chat trade card (the counterparty submits it).
+
+    expected_hash: the hash the signer reviewed; if the booking has changed
+    since, refuse rather than anchor terms they didn't see.
+    """
     k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
     payload, h = _canonical_for(db, trade)
     be, chain_id, registry = _eip712_ctx()
+    if expected_hash and expected_hash.lower() != _hexb(h).lower():
+        raise HTTPException(status_code=409,
+            detail="The booking changed after you reviewed it. Review the current terms and sign again.")
 
     try:
-        sig_cp = bytes.fromhex(body.signature[2:] if body.signature.startswith("0x") else body.signature)
+        sig_cp = bytes.fromhex(signature[2:] if signature.startswith("0x") else signature)
     except ValueError:
         raise HTTPException(status_code=422, detail="signature is not hex")
     if len(sig_cp) != 65:
@@ -242,14 +276,13 @@ def countersign(
         recovered = recover(td_cp, sig_cp)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"signature could not be recovered: {e}")
-    if recovered.lower() != body.address.lower():
+    if recovered.lower() != address.lower():
         raise HTTPException(status_code=422,
-            detail=f"signature recovers to {recovered}, not the address supplied ({body.address}).")
+            detail=f"signature recovers to {recovered}, not the address supplied ({address}).")
     if recovered.lower() != k_cp.address.lower():
         raise HTTPException(status_code=422,
             detail=(f"signature is from {recovered}, but {k_cp.lei} is registered as "
-                    f"{k_cp.address}. Register their address "
-                    f"(RIJEKA_CHAIN_KEY_<LEI>_ADDRESS) or check who signed."))
+                    f"{k_cp.address}. Register the signing wallet for that LEI, or check who signed."))
 
     td_own  = confirmation_typed_data(chain_id, registry, h, k_cp.address)
     sig_own = sign(td_own, k_own.private_key)
@@ -275,8 +308,10 @@ def countersign(
                    "chain_id": chain_id, "verifying_contract": registry},
         "anchor": receipt.to_dict(),
     }
+    if note:
+        attestation["via"] = note
     return _apply_lifecycle_transition(
-        db=db, user_id=user_id, trade=trade,
+        db=db, user_id=trade.user_id, trade=trade,
         event_type="CONFIRMED", new_status="CONFIRMED",
         payload={"attestation": attestation},
         idempotency_key=idempotency_key,

@@ -10,6 +10,8 @@ may only use what everyone there already has:
     party to those trades, so then there is no trade data at all.
   - A room tagged with a desk/book narrows that to trades the tagging firm
     booked in that desk/book (an information barrier inside the firm).
+  - Trade cards shared in the room (api/routes/trade_cards.py): someone put
+    those terms there deliberately, so everyone in the room already has them.
 Never anyone's wider book. Messages from room members are untrusted input
 (they may come from another firm).
 """
@@ -116,11 +118,30 @@ class RoomToolbox(SourceToolbox):
         "input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     }]
 
-    def __init__(self, shared: list[dict]):
+    def __init__(self, shared: list[dict] | None, cards: list[dict] | None = None):
         super().__init__()
-        self._shared = shared
-        self.handlers["list_shared_confirmations"] = lambda: json.dumps(
-            {"count": len(self._shared), "confirmations": self._shared}, default=_jsonable)
+        self._shared, self._cards = shared, cards or []
+        self.tool_defs = list(SourceToolbox.tool_defs)
+        if shared is not None:
+            self.tool_defs.append(RoomToolbox.tool_defs[-1])
+            self.handlers["list_shared_confirmations"] = lambda: json.dumps(
+                {"count": len(self._shared), "confirmations": self._shared}, default=_jsonable)
+        if self._cards:
+            self.tool_defs.append(_CARDS_TOOL)
+            self.handlers["list_trade_cards"] = lambda: json.dumps(
+                {"count": len(self._cards), "cards": self._cards}, default=_jsonable)
+
+
+_CARDS_TOOL = {
+    "name": "list_trade_cards",
+    "description": (
+        "Trades someone shared into this room for confirmation: each card's trade ref, who booked "
+        "it, the counterparty, the agreed terms from the booker's side, the hash to be signed, and "
+        "its current status (PENDING = awaiting the counterparty's signature, CONFIRMED = signed "
+        "and anchored)."
+    ),
+    "input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+}
 
 
 def _brief(kind: str, firm_names: list[str], pair: bool, book_label: str | None) -> str:
@@ -184,15 +205,21 @@ def transcript_to_messages(history: list[dict]) -> list[dict]:
 
 
 def answer_in_room(kind: str, firm_names: list[str], history: list[dict],
-                   shared: list[dict] | None = None, book_label: str | None = None) -> agent.Answer:
+                   shared: list[dict] | None = None, book_label: str | None = None,
+                   cards: list[dict] | None = None) -> agent.Answer:
     """
     firm_names: the client firms of the room's joined people (not Rijeka).
     shared: precomputed shared_confirmations when those are exactly two firms,
-    else None, so no DB connection is held during the model call.
+    else None. cards: trade cards shared in this room. Both precomputed so no
+    DB connection is held during the model call.
     """
     messages = transcript_to_messages(history)
     if not messages:
         return agent.Answer("", [], "empty")
     pair = kind != "SUPPORT" and shared is not None and len(set(firm_names)) == 2
-    toolbox = RoomToolbox(shared) if pair else SourceToolbox()
-    return agent.answer(messages, toolbox, context=_brief(kind, firm_names, pair, book_label))
+    toolbox = RoomToolbox(shared if pair else None, cards) if (pair or cards) else SourceToolbox()
+    context = _brief(kind, firm_names, pair, book_label)
+    if cards:
+        context += ("\n\nTrades have been shared into this room for confirmation; list_trade_cards "
+                    "shows them. Those terms were put here deliberately, so you may discuss them.")
+    return agent.answer(messages, toolbox, context=context)

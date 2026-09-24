@@ -47,6 +47,7 @@ export const useChatStore = create((set, get) => ({
   rooms:    [],
   messages: {},          // roomId -> [message]
   pending:  {},          // roomId -> true while Prometheus is answering in a room
+  cardVersion: {},       // tradeId -> n, bumped when that trade changes (cards refetch)
   channel:  null,
 
   // ── Private Prometheus ──
@@ -123,6 +124,7 @@ export const useChatStore = create((set, get) => ({
       pending: (m.sender_kind === 'PROMETHEUS' || m.sender_kind === 'SYSTEM') && pending[m.room_id]
         ? { ...pending, [m.room_id]: false } : pending,
     })
+    if (m.card?.type === 'trade_event') get().bumpCard(m.card.trade_id)
     if (watching && !mine) get().markRead(m.room_id)
   },
 
@@ -186,6 +188,33 @@ export const useChatStore = create((set, get) => ({
   },
   decline: async (roomId) => { await post(`/rooms/${roomId}/decline`); await get().refreshRooms(); set({ activeId: null }) },
   leave:   async (roomId) => { await post(`/rooms/${roomId}/leave`);   await get().refreshRooms(); set({ activeId: null }) },
+
+  // ── Trade cards ──
+  shareableTrades: (roomId) => chatApi(`/rooms/${roomId}/shareable-trades`),
+  shareTrade: async (roomId, tradeId) => {
+    const r = await post(`/rooms/${roomId}/trades`, { trade_id: tradeId })
+    get().receive(r.message)
+    return r   // already_shared: the card was in this room already; nothing new was posted
+  },
+  cardState: (messageId) => chatApi(`/cards/${messageId}`),
+  // From the trade window: where a trade can go for countersignature, and send it there.
+  tradeSendStatus: (tradeId) => chatApi(`/trades/${tradeId}/send-status`),
+  sendTrade: async (tradeId) => {
+    const r = await post(`/trades/${tradeId}/send`)
+    await get().refreshRooms()
+    await get().show(r.room_id)
+    return r
+  },
+  countersign: async (messageId, body) => {
+    const r = await post(`/cards/${messageId}/countersign`, body)
+    return r
+  },
+  bumpCard: (tradeId) => set(s => ({ cardVersion: { ...s.cardVersion, [tradeId]: (s.cardVersion[tradeId] || 0) + 1 } })),
+
+  // ── Your firm's signing wallet ──
+  signer: () => chatApi('/signer'),
+  signerChallenge: (address) => post('/signer/challenge', { address }),
+  registerSigner: (body) => post('/signer', body),
 
   people: (params = {}) => chatApi('/people?' + new URLSearchParams(Object.entries(params).filter(([, v]) => v))),
   books:  () => chatApi('/books'),

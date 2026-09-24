@@ -18,6 +18,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
+import { SendForConfirmation } from './SendForConfirmation'
+import { useSendStatus } from './useSendStatus'
 
 const STATUS_COLORS = {
   PENDING:    '#F5C842',  // amber
@@ -121,9 +123,15 @@ export function ConfirmPanel({
   onDownloadProof = () => {},
   verifying   = false,
   verifyResult = null,
+  onRemoteConfirmed = () => {},
 }) {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  // Counterparty on Rijeka: sending it to them for countersignature is the main action,
+  // and the status follows their signature live (onRemoteConfirmed refreshes the window).
+  const pendingId = bookedTrade?.status === 'PENDING' ? bookedTrade.id : null
+  const send = useSendStatus(pendingId, onRemoteConfirmed)
+  const cpOnNetwork = !!send.status?.counterparty?.on_network
 
   // State 1: no booked trade
   if (!bookedTrade || !bookedTrade.id) {
@@ -218,29 +226,34 @@ export function ConfirmPanel({
           )}
         </div>
 
+        <SendForConfirmation s={send} />
+
         <div className="tbw-mut" style={{
           fontSize: 11, lineHeight: 1.5, maxWidth: 520,
         }}>
-          CONFIRM builds the canonical trade record, has both legal entities
-          sign its keccak256 hash (EIP-712), and anchors the pair of
-          signatures in the TradeConfirmationRegistry on Ethereum. From that
-          block both parties hold an identical, immutable record of the
-          terms. Only the hash goes on-chain. Cancelling closes the trade
-          without settlement — terminal and cannot be undone.
+          {cpOnNetwork
+            ? 'Cancelling closes the trade without settlement — terminal and cannot be undone.'
+            : 'CONFIRM builds the canonical trade record, has both legal entities sign its keccak256 hash (EIP-712), '
+              + 'and anchors the pair of signatures in the TradeConfirmationRegistry on Ethereum. From that block both '
+              + 'parties hold an identical, immutable record of the terms. Only the hash goes on-chain. Cancelling closes '
+              + 'the trade without settlement — terminal and cannot be undone.'}
         </div>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button
-            className="tbw-btn tbw-btn-book"
-            disabled={confirming || cancelling}
-            onClick={() => onConfirm('chain')}
-          >
-            {confirming
-              ? '⏳ SIGNING & ANCHORING...'
-              : confirmErr
-                ? '▶ RETRY CONFIRM'
-                : '◆ CONFIRM ON-CHAIN'}
-          </button>
+          {/* Rijeka signing for both sides is only for a counterparty that can't sign for itself here. */}
+          {!cpOnNetwork && (
+            <button
+              className="tbw-btn tbw-btn-book"
+              disabled={confirming || cancelling}
+              onClick={() => onConfirm('chain')}
+            >
+              {confirming
+                ? '⏳ SIGNING & ANCHORING...'
+                : confirmErr
+                  ? '▶ RETRY CONFIRM'
+                  : '◆ CONFIRM ON-CHAIN'}
+            </button>
+          )}
 
           <button
             className="tbw-btn"

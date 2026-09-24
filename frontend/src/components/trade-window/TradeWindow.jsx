@@ -365,6 +365,15 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   }, [bookedTrade, confirming, cancelling, productKey, onBook])
 
+  // The counterparty countersigned from chat: the trade is CONFIRMED server-side. Reflect it here
+  // and load the attestation, without re-running any confirm call.
+  const handleRemoteConfirmed = useCallback(async () => {
+    if (!bookedTrade?.id || bookedTrade.status === 'CONFIRMED') return
+    setBookedTrade(t => ({ ...t, status: 'CONFIRMED' }))
+    try { setAttestation(await getAttestation(bookedTrade.id)) } catch (e) { console.warn('[chain] attestation fetch failed', e) }
+    try { useTradesStore.getState().fetchTrades?.() } catch { /* blotter refresh is best effort */ }
+  }, [bookedTrade])
+
   const handleVerify = useCallback(async () => {
     if (!bookedTrade?.id || verifying) return
     setVerifying(true); setVerifyResult(null)
@@ -650,6 +659,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             verifying={verifying}
             verifyResult={verifyResult}
             onCancelTrade={handleCancelTrade}
+            onRemoteConfirmed={handleRemoteConfirmed}
           />
         </div>
       )}

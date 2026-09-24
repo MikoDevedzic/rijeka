@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useChatStore, PROMETHEUS, selectUnreadTotal, audience } from '../../store/useChatStore'
 import Markdown from '../common/Markdown'
+import TradeCard, { TradePicker, WalletPanel } from './TradeCard'
 import { broadcast, onBroadcast, popOutMessenger, focusMessengerWindow, MESSENGER_PATH } from '../../lib/windows'
 import './Messenger.css'
 
@@ -235,7 +236,11 @@ function ConversationList({ onCompose }) {
           <div className="ms-sub">{me ? me.display_name + (compliance ? ' · COMPLIANCE' : '') : ''}</div>
         </div>
         {status === 'ready' && !compliance && (
-          <button className="ms-btn" onClick={() => onCompose({ mode: 'direct' })}>+ NEW</button>
+          <div className="ms-list-actions">
+            {me?.role === 'ADMIN' && <button className="ms-link" onClick={() => onCompose({ mode: 'wallet' })}
+                                             title="Your firm's signing wallet for trade confirmations">WALLET</button>}
+            <button className="ms-btn" onClick={() => onCompose({ mode: 'direct' })}>+ NEW</button>
+          </div>
         )}
       </div>
       <div className="ms-list-scroll">
@@ -318,11 +323,12 @@ function RoomThread({ roomId, back, onInvite }) {
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const [people, setPeople] = useState(false)
+  const [picking, setPicking] = useState(false)
   const endRef = useRef(null)
   const isPending = !!pending[roomId]
   const count = list?.length
 
-  useEffect(() => { setErr(null); setPeople(false); if (room && room.my_access !== 'INVITED') loadRoom(roomId).catch(e => setErr(e.message)) }, [roomId, room?.my_access]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setErr(null); setPeople(false); setPicking(false); if (room && room.my_access !== 'INVITED') loadRoom(roomId).catch(e => setErr(e.message)) }, [roomId, room?.my_access]) // eslint-disable-line react-hooks/exhaustive-deps
   useLayoutEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }) }, [count, isPending])
 
   if (!room) return <div className="ms-empty">This conversation is no longer available.</div>
@@ -371,8 +377,10 @@ function RoomThread({ roomId, back, onInvite }) {
             {isPending && <Thinking />}
             <div ref={endRef} />
           </div>
+          {picking && <TradePicker roomId={roomId} onClose={() => setPicking(false)} />}
           {joined ? (
             <RoomComposer room={room} value={draft} onChange={setDraft} err={err} busy={busy}
+                          onTrade={room.kind !== 'SUPPORT' && room.firms.length === 2 ? () => setPicking(p => !p) : null}
                           onSend={() => run(async () => { const b = draft.trim(); if (!b) return; await send(roomId, b); setDraft('') })} />
           ) : (
             <div className="ms-readonly">Compliance view — you can read this room but not post in it.</div>
@@ -384,7 +392,19 @@ function RoomThread({ roomId, back, onInvite }) {
 }
 
 function RoomMessage({ m, mine }) {
-  if (m.sender_kind === 'SYSTEM') return <div className="ms-system">{m.body}<span> · {fmtTime(m.created_at)}</span></div>
+  if (m.sender_kind === 'SYSTEM') return (
+    <div className={`ms-system${m.card?.type === 'trade_event' ? ' event' : ''}`}>
+      {m.body}
+      {m.card?.explorer_tx && <> <a href={m.card.explorer_tx} target="_blank" rel="noopener noreferrer">transaction ↗</a></>}
+      <span> · {fmtTime(m.created_at)}</span>
+    </div>
+  )
+  if (m.card?.type === 'trade') return (
+    <div className={`ms-msg${mine ? ' mine' : ''}`}>
+      <div className="ms-who">{mine ? 'YOU' : `${m.sender_name} · ${m.sender_firm || ''}`}<span className="ms-time">{fmtTime(m.created_at)}</span></div>
+      <TradeCard m={m} />
+    </div>
+  )
   const prom = m.sender_kind === 'PROMETHEUS'
   return (
     <div className={`ms-msg${mine ? ' mine' : ''}${prom ? ' prometheus' : ''}`}>
@@ -395,7 +415,7 @@ function RoomMessage({ m, mine }) {
   )
 }
 
-function RoomComposer({ room, value, onChange, onSend, err, busy }) {
+function RoomComposer({ room, value, onChange, onSend, err, busy, onTrade }) {
   const { me } = useChatStore()
   const ref = useRef(null)
   const [mention, setMention] = useState(null)       // { start } while "@pro…" is typed
@@ -439,6 +459,7 @@ function RoomComposer({ room, value, onChange, onSend, err, busy }) {
       <div className="ms-compose-row">
         <textarea ref={ref} rows={1} value={value} onChange={change} onKeyDown={key} onBlur={() => setMention(null)}
                   placeholder={composerHint(room, me)} />
+        {onTrade && <button className="ms-trade" onClick={onTrade} title="Share one of your trades with them for confirmation">＋ TRADE</button>}
         {offerMention && <button className="ms-ask" onClick={insert} title="Ask Prometheus in this room">✦</button>}
         <button className="ms-send" onClick={onSend} disabled={busy || !value.trim()}>SEND</button>
       </div>
@@ -467,8 +488,9 @@ function Compose({ compose, onDone }) {
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const room = mode === 'invite' ? rooms.find(r => r.id === activeId) : null
+  const isWallet = mode === 'wallet'
 
-  useEffect(() => { fetchPeople().then(setPeople).catch(e => setErr(e.message)) }, [fetchPeople])
+  useEffect(() => { if (!isWallet) fetchPeople().then(setPeople).catch(e => setErr(e.message)) }, [fetchPeople, isWallet])
   useEffect(() => { if (mode === 'group') fetchBooks().then(setBooks).catch(() => {}) }, [mode, fetchBooks])
 
   const inRoom = new Set((room?.members || []).map(m => m.user_id))
@@ -479,6 +501,17 @@ function Compose({ compose, onDone }) {
   const firmsPicked = [...new Set((people || []).filter(p => picked.includes(p.user_id)).map(p => p.firm_name))]
 
   const run = async (fn) => { setBusy(true); setErr(null); try { await fn(); onDone() } catch (e) { setErr(e.message) } finally { setBusy(false) } }
+
+  if (isWallet) return (
+    <div className="ms-compose-panel">
+      <div className="ms-thread-head">
+        <div className="ms-head-main"><div className="ms-head-title">Signing wallet</div>
+          <div className="ms-sub">Used to countersign trades shared with your firm</div></div>
+        <button className="ms-icon" onClick={onDone} title="Close">✕</button>
+      </div>
+      <WalletPanel />
+    </div>
+  )
 
   return (
     <div className="ms-compose-panel" key={compose.q || compose.mode}>

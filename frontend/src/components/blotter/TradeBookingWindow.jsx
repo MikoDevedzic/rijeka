@@ -7,6 +7,8 @@ import { supabase } from '../../lib/supabase'
 import { getSessionSafe } from '../../lib/session'
 import './TradeBookingWindow.css'
 import XVATab from './XVATab'
+import { SendForConfirmation } from '../trade-window/SendForConfirmation'
+import { useSendStatus } from '../trade-window/useSendStatus'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -1792,6 +1794,13 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   // VIEW MODE — set when opening existing trade from blotter
   const [viewTrade,     setViewTrade]    = useState(initialTrade || null)
   const isViewMode = !!viewTrade
+  // Counterparty on Rijeka: a pending trade goes to them for countersignature from the CONFIRM tab,
+  // and the window follows their signature live.
+  const sendConf = useSendStatus(viewTrade?.status === 'PENDING' ? viewTrade.id : null, () => {
+    setViewTrade(v => v && ({ ...v, status: 'CONFIRMED' }))
+    fetchTrades()
+  })
+  const cpSigns = !!sendConf.status?.counterparty?.on_network
 
   // SCENARIO tab state moved to <ScenarioTab /> component
   const [parRate,       setParRate]      = useState(null)
@@ -2969,7 +2978,12 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
 
           <XVATab trade={null} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} valDate={valDate} curveId={CCY_CURVE[ccy]||'USD_SOFR'} getSession={getSession} analytics={analytics} parRate={parRate} xvaParamsRef={xvaParamsRef} onSimResult={(d)=>{setXvaResult(d);setXvaApplied(false)}} direction={dir} instrumentType={inst} swaptionExpiry={swaptionExpiry} swaptionTenor={tenor} swaptionVol={swaptionVol} swaptionResult={swaptionResult}/>
         </div>
-        {activeTab==='confirm' && <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Cashflow fingerprint · On-chain signing</div><div className='tbw-stub-sprint'>SPRINT 6A</div></div></div>}
+        {activeTab==='confirm' && (viewTrade && viewTrade.status==='PENDING'
+          ? <div className='tbw-body tbw-no-drag'><div className='tbw-sec'><div className='tbw-lbl'>SEND FOR CONFIRMATION</div>
+              <div style={{padding:'16px 0',display:'flex',flexDirection:'column',gap:14}}>
+                <SendForConfirmation s={sendConf} />
+              </div></div></div>
+          : <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Cashflow fingerprint · On-chain signing</div><div className='tbw-stub-sprint'>SPRINT 6A</div></div></div>)}
 
         {/* ── OPTIONS ANALYTICS TAB ─────────────────────────────────── */}
         {activeTab==='options' && (
@@ -4036,6 +4050,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     disabled={viewTrade.status !== 'PENDING' || booking}
                     onClick={async () => {
                       if (viewTrade.status !== 'PENDING') return
+                      // Their firm is on Rijeka: confirmation is their countersignature, not a status flip.
+                      if (cpSigns) { setActiveTab('confirm'); return }
                       setBooking(true)
                       try {
                         const session = await getSession()
@@ -4050,7 +4066,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                       finally { setBooking(false) }
                     }}
                   >
-                    {booking ? 'CONFIRMING...' : viewTrade.status==='PENDING' ? '▶ CONFIRM TRADE' : viewTrade.status.toUpperCase()}
+                    {booking ? 'CONFIRMING...' : viewTrade.status==='PENDING' ? (cpSigns ? '◆ SEND FOR COUNTERSIGNATURE →' : '▶ CONFIRM TRADE') : viewTrade.status.toUpperCase()}
                   </button>
                 </>
               ) : (
