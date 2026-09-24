@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { supabase } from '../lib/supabase';
 import { RATES_CURVES, CCY_GROUPS, getCurve } from '../data/ratesCurves';
+import { getSessionMaybe } from '../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000';
 
@@ -118,7 +118,7 @@ const useMarketDataStore = create((set, get) => ({
       snapshotError:  { ...s.snapshotError,  [curveId]: null },
     }));
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       if (!session) throw new Error('Not authenticated');
 
       const curve = get().curves.find((c) => c.id === curveId);
@@ -170,7 +170,7 @@ const useMarketDataStore = create((set, get) => ({
    */
   loadLatestSnapshot: async (curveId) => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       if (!session) return;
 
       const res = await fetch(API + '/api/market-data/snapshots/' + curveId + '/latest', {

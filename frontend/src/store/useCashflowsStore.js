@@ -14,12 +14,12 @@
  */
 
 import { create } from 'zustand'
-import { supabase } from '../lib/supabase'
+import { getSessionMaybe } from '../lib/session'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 async function getAuthHeader() {
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = await getSessionMaybe()
   if (!session?.access_token) throw new Error('No session — please log in.')
   return { Authorization: `Bearer ${session.access_token}` }
 }

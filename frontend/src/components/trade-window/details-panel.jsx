@@ -12,10 +12,10 @@
 
 import { useRef, useMemo } from 'react'
 import LegDetailsTab from '../blotter/LegDetailsTab'
-import { supabase } from '../../lib/supabase'
+import { getSessionMaybe } from '../../lib/session'
 
 const getSession = async () => {
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = await getSessionMaybe()
   return session
 }
 

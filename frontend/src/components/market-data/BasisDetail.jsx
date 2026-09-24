@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { INTERP_METHODS } from '../../data/ratesCurves';
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel, DescBox } from './_DetailShared';
+import { getSessionMaybe } from '../../lib/session'
 
 const TENOR_TO_Y = {
   'ON':0.003,'1W':0.02,'2W':0.04,'3W':0.06,
@@ -190,8 +191,7 @@ function BasisInstruments({ curve }) {
 
   const fetchBlpTickers = async () => {
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data:{ session:sess } } = await supabase.auth.getSession();
+      const sess = await getSessionMaybe();
       const data = await (await fetch('/api/bloomberg/tickers/' + curve.id, {
         headers:{ Authorization:'Bearer '+sess.access_token },
       })).json();
@@ -206,8 +206,7 @@ function BasisInstruments({ curve }) {
 
   const saveTickerOverrides = async () => {
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data:{ session:sess } } = await supabase.auth.getSession();
+      const sess = await getSessionMaybe();
       await fetch('/api/bloomberg/tickers/override', {
         method:'POST',
         headers:{ Authorization:'Bearer '+sess.access_token, 'Content-Type':'application/json' },
@@ -220,8 +219,7 @@ function BasisInstruments({ curve }) {
   const snapBloomberg = async (mode) => {
     setBlpSnapping(true); setBlpSnapResult(null); setBlpSnapError(null);
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data:{ session:sess } } = await supabase.auth.getSession();
+      const sess = await getSessionMaybe();
       const tickerList = Object.entries(blpTickers).map(([tenor,ticker]) => ({ tenor, ticker }));
       if (!tickerList.length) { setBlpSnapError('Tickers not loaded — wait and retry.'); return; }
       const res = await fetch('/api/bloomberg/snap', {

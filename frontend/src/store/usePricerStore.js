@@ -2,7 +2,7 @@
 // Manages: pricing results, curve mode (flat|market), pillar quote state.
 
 import { create } from 'zustand';
-import { supabase } from '../lib/supabase';
+import { getSessionMaybe } from '../lib/session'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
@@ -194,7 +194,7 @@ const usePricerStore = create((set, get) => ({
       errorByTrade:   { ...s.errorByTrade,   [tradeId]: null },
     }));
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       if (!session) throw new Error('Not authenticated');
 
       const res = await fetch(`${API}/api/pricer/price`, {
@@ -238,7 +238,7 @@ const usePricerStore = create((set, get) => ({
       errorByTrade:   { ...s.errorByTrade,   [tradeId]: null },
     }));
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       if (!session) throw new Error('Not authenticated');
 
       const res = await fetch(`${API}/api/pricer/cashflows/generate`, {

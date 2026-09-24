@@ -50,7 +50,7 @@ import { useTabStore }    from '../../store/useTabStore'
 // Adding FX/credit = add one import line here.
 import './products/rates'
 import useMarketDataStore from '../../store/useMarketDataStore'
-import { supabase } from '../../lib/supabase'
+import { getSessionMaybe } from '../../lib/session'
 // import './products/fx'
 // import './products/credit'
 // import './products/equity'
@@ -74,7 +74,7 @@ function localDate() {
 
 // Supabase session fetch — used by getSessionWithCache below.
 async function getSession() {
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = await getSessionMaybe()
   return session
 }
 

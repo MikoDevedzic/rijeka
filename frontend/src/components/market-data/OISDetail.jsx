@@ -161,8 +161,7 @@ function OISInstruments({ curve }) {
 
   const fetchBlpTickers = async (curveId) => {
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session: sess } } = await supabase.auth.getSession();
+      const sess = await getSessionMaybe();
       const data = await (await fetch('/api/bloomberg/tickers/' + curveId, {
         headers: { Authorization: 'Bearer ' + sess.access_token },
       })).json();
@@ -179,8 +178,7 @@ function OISInstruments({ curve }) {
 
   const saveTickerOverrides = async () => {
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session: sess } } = await supabase.auth.getSession();
+      const sess = await getSessionMaybe();
       await fetch('/api/bloomberg/tickers/override', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + sess.access_token, 'Content-Type': 'application/json' },
@@ -195,8 +193,7 @@ function OISInstruments({ curve }) {
     setBlpSnapResult(null);
     setBlpSnapError(null);
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session: sess } } = await supabase.auth.getSession();
+      const sess = await getSessionMaybe();
 
       const newSources = { ...quoteSources };
 
@@ -251,8 +248,7 @@ function OISInstruments({ curve }) {
   const saveCsvImport = async () => {
     if (!csvParsed.length) return;
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session: sess } } = await supabase.auth.getSession();
+      const sess = await getSessionMaybe();
       const quotes = csvParsed.map(r => ({ tenor: r.tenor, quote_type: 'SWAP', rate: r.rate, ticker: 'CSV_IMPORT', enabled: true }));
       const res = await fetch('/api/market-data/snapshots', {
         method: 'POST',
@@ -654,3 +650,5 @@ export default function OISDetail({ curve }) {
     </div>
   );
 }
+
+import { getSessionMaybe } from '../../lib/session'

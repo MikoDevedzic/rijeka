@@ -29,8 +29,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useRef } from 'react'
-import { supabase } from '../../lib/supabase'
 import LegEmbeddedOptions from './LegEmbeddedOptions'
+import { getSessionMaybe } from '../../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -102,7 +102,7 @@ const BDCS           = ['MOD_FOLLOWING','FOLLOWING','PRECEDING','UNADJUSTED']
 const CALENDARS      = ['NEW_YORK','LONDON','TARGET','TOKYO','ZURICH','SYDNEY','TORONTO']
 
 async function getSession() {
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = await getSessionMaybe()
   return session
 }
 

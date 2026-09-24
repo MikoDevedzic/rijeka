@@ -10,6 +10,7 @@ import {
   EXPIRY_YEARS, TENOR_YEARS,
   otmTicker,
 } from '../../data/swaptionVols'
+import { getSessionMaybe } from '../../lib/session'
 
 const NAV = [
   {
@@ -186,8 +187,7 @@ function SnapAllButton({ role }) {
     setSnap({ status:'running', step:'RATE CURVES', stepIdx:0, total:STEPS.length })
 
     try {
-      const { supabase } = await import('../../lib/supabase.js')
-      const { data:{ session:sess } } = await supabase.auth.getSession()
+      const sess = await getSessionMaybe()
       if (!sess) { setSnap({ status:'error', msg:'Not authenticated' }); return }
       const h = { Authorization:'Bearer '+sess.access_token, 'Content-Type':'application/json' }
       const today = new Date(new Date().getTime() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,10)

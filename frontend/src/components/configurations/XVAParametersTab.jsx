@@ -4,6 +4,7 @@ import useXVAStore from '../../store/useXVAStore';
 import { SWAPTION_EXPIRIES, SWAPTION_TENORS, HW1F_CALIBRATION_BASKET } from '../../data/swaptionVols';
 import './XVAParametersTab.css';
 import { supabase as _supa } from '../../lib/supabase';
+import { getSessionMaybe } from '../../lib/session'
 const _API  = import.meta.env?.VITE_API_URL || 'http://localhost:8000';
 
 const INNER_TABS = ['RATES · HW1F','FX','CREDIT','EQUITY'];
@@ -43,7 +44,7 @@ function RatesHW1FTab(){
   const handleCalibrate = async () => {
     setCalibrating(true); setCalibErr(null);
     try {
-      const { data:{ session } } = await _supa.auth.getSession();
+      const session = await getSessionMaybe();
       const res = await fetch(_API + '/api/xva/calibrate', {
         method:'POST',
         headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },

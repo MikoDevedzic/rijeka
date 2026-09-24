@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { supabase } from '../../lib/supabase'
 import { useTabStore } from '../../store/useTabStore'
 import './CompareWorkspace.css'
+import { getSessionMaybe } from '../../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -100,7 +100,7 @@ function AiAnalysisPanel({ trades, onClose }) {
     setError(null)
 
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const session = await getSessionMaybe()
       const token = session?.access_token
       if (!token) throw new Error('Not authenticated')
 
