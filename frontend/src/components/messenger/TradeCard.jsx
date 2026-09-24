@@ -16,6 +16,13 @@ function num(n) {
 }
 const freq = (f) => (f || '').toLowerCase().replace('_', '-')
 
+// The booker's-side summary saved on the card, phrased for the other party.
+function flipSummary(sm) {
+  if (!sm) return null
+  const flip = { PAY: 'RECEIVE', RECEIVE: 'PAY' }
+  return { ...sm, you: sm.them, them: sm.you, legs: (sm.legs || []).map(l => ({ ...l, you: flip[l.you] || l.you })) }
+}
+
 function LegLine({ l }) {
   const verb = l.you === 'PAY' ? 'You pay' : 'You receive'
   const what = l.leg_type === 'FIXED'
@@ -38,10 +45,11 @@ export default function TradeCard({ m }) {
   useEffect(() => { load() }, [load, version])
 
   const snap = m.card
-  // The saved summary is written from the booker's side; anyone else waits for
-  // the live state, which phrases the terms from their side.
+  // Terms show at once from the saved card; the live state then confirms them and
+  // adds status, match and signing. The saved summary is the booker's side, so the
+  // other party sees it flipped (two parties: my pay is their receive).
   const iBooked = me?.firm?.id === snap.booker_firm_id
-  const s = state?.summary || (iBooked ? snap.summary : null)
+  const s = state?.summary || (iBooked ? snap.summary : flipSummary(snap.summary))
   const status = state?.status || snap.status_at_share
 
   return (
@@ -59,12 +67,14 @@ export default function TradeCard({ m }) {
           </div>
           {s.legs?.map((l, i) => <LegLine key={i} l={l} />)}
           <div className="tc-dates">Trade {s.trade_date} · Effective {s.effective_date} · Maturity {s.maturity_date}</div>
-        </> : !err && <div className="tc-sub">Loading terms…</div>}
+        </> : null}
+        {s?.uti && <div className="tc-hash" title={`Unique trade identifier, shared by both parties: ${s.uti}`}>UTI {s.uti.slice(0, 8)}…{s.uti.slice(-8)}</div>}
         <div className="tc-hash" title="keccak256 of the agreed record — what both parties sign">
           hash {(state?.current_hash || snap.trade_hash).slice(0, 10)}…{(state?.current_hash || snap.trade_hash).slice(-6)}
+          {state?.schema_version ? ` · record v${state.schema_version}` : ''}
         </div>
-        {!state && snap.booker_firm && <div className="tc-sub">Terms as {snap.booker_firm} booked them.</div>}
-        {err && <div className="tc-err">{err}</div>}
+        {!state && !err && <div className="tc-sub">Checking the latest status…</div>}
+        {err && <div className="tc-err">{err} <button className="tc-btn ghost" onClick={load}>RETRY</button></div>}
 
         {state?.changed_since_shared && (
           <div className="tc-warn">The booking changed after it was shared. The terms above are the current ones; check them again.</div>

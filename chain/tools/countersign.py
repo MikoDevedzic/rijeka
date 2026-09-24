@@ -83,24 +83,33 @@ def typed_data(eip712: dict, hash_hex: str, counterparty: str) -> dict:
 # ── Presentation ────────────────────────────────────────────────────────────
 
 def summarise(req: dict) -> None:
+    """Print the terms being signed. v2 names each leg's payer by LEI; v1 gives the requester's directions."""
     c = req["canonical"]
     t = c["trade"]
-    p = c.get("parties", {})
+    me = (req.get("to") or {}).get("lei")
     w = 22
-    print("\n  ── TRADE ─────────────────────────────────────────────")
+    print(f"\n  ── TRADE (schema v{c.get('schema_version', 1)}) ────────────────────────────")
+    if c.get("uti"):
+        print(f"  {'uti':<{w}} {c['uti']}")
     for k in ("trade_ref", "instrument_type", "structure", "notional", "notional_ccy",
               "trade_date", "effective_date", "maturity_date"):
         if t.get(k) is not None:
             print(f"  {k:<{w}} {t[k]}")
     for leg in c.get("legs", []):
-        print(f"\n  ── LEG {leg.get('leg_ref')} ({leg.get('leg_type')}) ─────────────────────")
-        for k in ("direction", "currency", "notional", "fixed_rate", "spread",
+        print(f"\n  ── LEG {leg.get('leg_ref') or ''} ({leg.get('leg_type')}) ─────────────────────")
+        if "payer" in leg:
+            you = "you pay" if leg["payer"] == me else "you receive" if leg["receiver"] == me else "you are not a party"
+            print(f"  {'payer -> receiver':<{w}} {leg['payer']} -> {leg['receiver']}   ({you})")
+        for k in ("direction", "currency", "notional", "fixed_rate", "spread", "index",
                   "day_count", "payment_frequency", "reset_frequency", "bdc"):
             if leg.get(k) not in (None, ""):
                 print(f"  {k:<{w}} {leg[k]}")
     print("\n  ── PARTIES ───────────────────────────────────────────")
-    print(f"  {'requesting':<{w}} {p.get('own',{}).get('name')}  [{p.get('own',{}).get('lei')}]")
-    print(f"  {'you':<{w}} {p.get('counterparty',{}).get('name')}  [{p.get('counterparty',{}).get('lei')}]")
+    frm, to = req.get("from") or {}, req.get("to") or {}
+    print(f"  {'requesting':<{w}} {frm.get('name')}  [{frm.get('lei')}]")
+    print(f"  {'you':<{w}} {to.get('name')}  [{to.get('lei')}]")
+    if isinstance(c.get("parties"), list) and me not in c["parties"]:
+        print("  ! your LEI is not one of the record's two parties")
     print()
 
 

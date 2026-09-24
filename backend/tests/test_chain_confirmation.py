@@ -16,10 +16,16 @@ from uuid import uuid4
 import pytest
 from eth_account import Account
 
+from functools import partial
+
 from chain.canonical import (
-    canonical_payload, canonical_bytes, trade_hash, trade_hash_hex, normalise, _num_str,
+    canonical_payload as _canonical_payload, canonical_bytes, trade_hash, trade_hash_hex, normalise, _num_str,
     CANONICAL_SCHEMA_VERSION,
 )
+
+# The v1 tests below pin the frozen v1 serialisation (and its known hash).
+# Schema v2 has its own class further down.
+canonical_payload = partial(_canonical_payload, version=1)
 from chain.signing import (
     confirmation_typed_data, amendment_typed_data, termination_typed_data,
     sign, recover, eip712_digest,
@@ -96,7 +102,7 @@ class TestCanonical:
         for leg in p["legs"]:
             assert "id" not in leg and "user_id" not in leg
         assert "status" not in p["trade"] and "desk" not in p["trade"] and "created_at" not in p["trade"]
-        assert p["schema_version"] == CANONICAL_SCHEMA_VERSION
+        assert p["schema_version"] == 1
 
     def test_legs_ordered_by_seq_not_input(self):
         p = canonical_payload(_trade(), _legs(), OWN, CP)
@@ -142,6 +148,98 @@ class TestCanonical:
 
 # Pinned 2026-09-21 for schema v1. Regenerate ONLY with a schema version bump.
 KNOWN_V1_HASH = "0x8b0f5519707bc86cb18fb62e60d119b9ee7eab2b1198e350fb5c2247302868d2"
+
+
+# ── Canonical form, schema v2: one record for both parties ──────────────────
+
+def _mirror(legs):
+    """The same trade as the counterparty books it: every direction flipped."""
+    flip = {"PAY": "RECEIVE", "RECEIVE": "PAY", "BUY": "SELL", "SELL": "BUY"}
+    out = []
+    for i, l in enumerate(legs):
+        l = dict(l, direction=flip[l["direction"]], leg_ref=f"THEIR-{i}", leg_seq=10 + i,
+                 discount_curve_id="EUR_ESTR",   # their valuation choice, not a term
+                 embedded_options=[dict(o, direction=flip[o["direction"]]) for o in (l.get("embedded_options") or [])])
+        cfs = (l.get("terms") or {}).get("custom_cashflows")
+        if cfs:
+            l["terms"] = {"custom_cashflows": [dict(c, amount=-c["amount"], id="their-row", notes="theirs") for c in cfs]}
+        out.append(l)
+    return out
+
+
+class TestCanonicalV2:
+    v2 = staticmethod(partial(_canonical_payload, version=2))
+    UTI = "5493001KJTIIGC8Y1R12" + "A" * 32
+
+    def _pair(self, legs=None):
+        legs = legs or _legs()
+        ours = self.v2(_trade(uti=self.UTI), legs, OWN, CP)
+        theirs = self.v2(_trade(uti=self.UTI, trade_ref="CB-SWP-0042", terms={"direction": "RECEIVE"},
+                                discount_curve_id="EUR_ESTR"), list(reversed(_mirror(legs))), CP, OWN)
+        return ours, theirs
+
+    def test_current_version_is_2(self):
+        assert CANONICAL_SCHEMA_VERSION == 2
+        assert _canonical_payload(_trade(), _legs(), OWN, CP)["schema_version"] == 2
+
+    def test_both_sides_bookings_hash_identically(self):
+        ours, theirs = self._pair()
+        assert ours == theirs and trade_hash(ours) == trade_hash(theirs)
+
+    def test_legs_name_payer_and_receiver_by_lei(self):
+        p, _ = self._pair()
+        fixed = next(l for l in p["legs"] if l["leg_type"] == "FIXED")
+        flt = next(l for l in p["legs"] if l["leg_type"] == "FLOAT")
+        assert (fixed["payer"], fixed["receiver"]) == (OWN["lei"], CP["lei"])
+        assert (flt["payer"], flt["receiver"]) == (CP["lei"], OWN["lei"])
+        assert "direction" not in fixed and flt["index"] == "USD_SOFR"
+
+    def test_only_shared_terms(self):
+        p, _ = self._pair()
+        assert set(p) == {"schema", "schema_version", "uti", "parties", "trade", "legs"}
+        assert set(p["trade"]) == {"asset_class", "instrument_type", "structure", "notional", "notional_ccy",
+                                   "trade_date", "effective_date", "maturity_date"}
+        assert p["parties"] == sorted([OWN["lei"], CP["lei"]])
+        for leg in p["legs"]:
+            assert not {"leg_ref", "leg_seq", "discount_curve_id", "direction", "terms", "id", "user_id"} & set(leg)
+
+    def test_options_and_custom_cashflows_are_party_neutral(self):
+        legs = _legs()
+        legs[0]["embedded_options"] = [{"type": "CAP", "direction": "SELL", "default_strike": Decimal("0.05"), "strike_schedule": []},
+                                       {"type": "FLOOR", "direction": "BUY", "default_strike": Decimal("0.01"), "strike_schedule": []}]
+        legs[0]["terms"] = {"custom_cashflows": [{"id": "x", "type": "FEE", "payment_date": "2026-09-25", "accrual_start": None,
+                                                   "accrual_end": None, "amount": -25000, "currency": "USD", "notes": "ours"}]}
+        ours, theirs = self._pair(legs)
+        assert ours == theirs
+        flt = next(l for l in ours["legs"] if l["leg_type"] == "FLOAT")
+        cap = next(o for o in flt["embedded_options"] if o["type"] == "CAP")
+        assert (cap["buyer"], cap["seller"]) == (CP["lei"], OWN["lei"])     # we SELL the cap
+        fee = flt["custom_cashflows"][0]
+        assert (fee["payer"], fee["receiver"], fee["amount"]) == (OWN["lei"], CP["lei"], "25000")
+        assert "id" not in fee and "notes" not in fee
+
+    def test_any_term_change_or_different_uti_breaks_equality(self):
+        ours, _ = self._pair()
+        legs = _mirror(_legs()); legs[1]["fixed_rate"] = Decimal("0.0366")
+        assert trade_hash(self.v2(_trade(uti=self.UTI), list(reversed(legs)), CP, OWN)) != trade_hash(ours)
+        assert trade_hash(self.v2(_trade(uti="OTHER"), _legs(), OWN, CP)) != trade_hash(ours)
+        same_dir = self.v2(_trade(uti=self.UTI), _legs(), CP, OWN)          # both think they pay fixed
+        assert trade_hash(same_dir) != trade_hash(ours)
+
+    def test_needs_both_leis_and_known_directions(self):
+        with pytest.raises(ValueError):
+            self.v2(_trade(), _legs(), {"lei": None, "name": "x"}, CP)
+        legs = _legs(); legs[0]["direction"] = "SIDEWAYS"
+        with pytest.raises(ValueError):
+            self.v2(_trade(), legs, OWN, CP)
+
+    def test_known_vector_v2(self):
+        p = self.v2(_trade(uti=self.UTI, id=None, user_id=None, created_at=None), _legs(), OWN, CP)
+        assert trade_hash_hex(p) == KNOWN_V2_HASH
+
+
+# Pinned 2026-09-24 for schema v2. Regenerate ONLY with a schema version bump.
+KNOWN_V2_HASH = "0x8f2cf6868674a75e0c1fa56e2c449fe97e4c0d466e0d64e1043b308a9a289d76"
 
 
 # ── EIP-712 ──────────────────────────────────────────────────────────────────

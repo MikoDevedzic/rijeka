@@ -39,8 +39,9 @@ from sqlalchemy.orm import Session
 from api.routes import chat
 from api.routes.chain import (
     _canonical_for, _eip712_ctx, _hexb, _latest_confirmed_event, _resolve_parties,
-    countersign_trade, registered_signer,
+    attested_version, countersign_trade, ensure_uti, registered_signer, trade_parts,
 )
+from chain.canonical import trade_hash as trade_hash_of
 from chain.signing import confirmation_typed_data, eip712_digest, sign
 from db.models import (
     ChatMessage, ChatRoom, ChatRoomMember, Counterparty, Firm, FirmLei, FirmMember,
@@ -100,70 +101,89 @@ def _flip(direction: Optional[str]) -> Optional[str]:
     return {"PAY": "RECEIVE", "RECEIVE": "PAY"}.get((direction or "").upper(), direction)
 
 
-def summarise(payload: dict, *, for_counterparty: bool) -> dict:
-    """The signed terms, phrased from one side. Directions are the booker's in
-    the record; the counterparty's are the opposite."""
-    t, parties = payload["trade"], payload["parties"]
+def _party_names(parts: tuple) -> dict:
+    """LEI -> display name for the two parties (schema v2 carries LEIs only), from trade_parts()."""
+    own, _, cp_id, _ = parts
+    return {own.lei: own.name, cp_id.get("lei"): cp_id.get("name")}
+
+
+def summarise(payload: dict, viewer_lei: str, names: Optional[dict] = None) -> dict:
+    """
+    The signed terms, phrased for one party ("you pay / you receive").
+    v2 names each leg's payer and receiver, so this is a lookup. v1 carries
+    the booker's directions, flipped for the counterparty.
+    """
+    names = names or {}
+    t = payload["trade"]
+    if payload.get("schema_version", 1) >= 2:
+        other = next((p for p in payload["parties"] if p != viewer_lei), None)
+        you, them = {"lei": viewer_lei, "name": names.get(viewer_lei)}, {"lei": other, "name": names.get(other)}
+        side = lambda l: "PAY" if l.get("payer") == viewer_lei else "RECEIVE"
+        index = lambda l: l.get("index")
+    else:
+        p = payload["parties"]
+        booker = p["own"].get("lei") == viewer_lei
+        you, them = (p["own"], p["counterparty"]) if booker else (p["counterparty"], p["own"])
+        side = lambda l: l.get("direction") if booker else _flip(l.get("direction"))
+        index = lambda l: l.get("forecast_curve_id") or (t.get("terms") or {}).get("float_index")
     legs = []
     for l in payload["legs"]:
-        d = _flip(l.get("direction")) if for_counterparty else l.get("direction")
         fixed = (l.get("leg_type") or "").upper() == "FIXED"
-        spread_bp = None
         try:
             spread_bp = round(float(l.get("spread") or 0) * 10000, 4)
         except (TypeError, ValueError):
-            pass
+            spread_bp = None
         legs.append({
-            "leg_type": l.get("leg_type"), "you": d, "currency": l.get("currency"),
+            "leg_type": l.get("leg_type"), "you": side(l), "currency": l.get("currency"),
             "notional": l.get("notional"),
             "rate": _pct(l.get("fixed_rate")) if fixed else None,
-            "index": None if fixed else (l.get("forecast_curve_id") or (t.get("terms") or {}).get("float_index")),
+            "index": None if fixed else index(l),
             "spread_bp": None if fixed else spread_bp,
             "day_count": l.get("day_count"), "frequency": l.get("payment_frequency"),
             "reset": l.get("reset_frequency"),
         })
-    you, them = (parties["counterparty"], parties["own"]) if for_counterparty else (parties["own"], parties["counterparty"])
+    legs.sort(key=lambda l: (str(l["leg_type"]).upper() != "FIXED"))   # fixed first, for reading; the record orders by content
     return {
         "instrument": t.get("instrument_type"), "structure": t.get("structure"),
         "notional": t.get("notional"), "ccy": t.get("notional_ccy"),
         "trade_date": t.get("trade_date"), "effective_date": t.get("effective_date"),
         "maturity_date": t.get("maturity_date"), "legs": legs,
-        "you": you, "them": them,
+        "you": you, "them": them, "uti": payload.get("uti"),
     }
 
 
-# Economic fields compared between the two sides' bookings. Refs are each
-# side's own, so they are left out; directions are compared flipped.
-_TRADE_MATCH = ("instrument_type", "structure", "notional", "notional_ccy",
-                "trade_date", "effective_date", "maturity_date")
-_LEG_MATCH = ("notional", "fixed_rate", "spread", "day_count", "payment_frequency",
-              "reset_frequency", "bdc", "forecast_curve_id")
-
-
 def compare(shared: dict, theirs: dict) -> list[dict]:
-    """Breaks between the shared record and the counterparty's own booking of it."""
+    """
+    Breaks between the shared v2 record and the counterparty's own booking,
+    also as v2. Both are the same object when the bookings agree, so this is
+    a field diff. The UTI is left out: a booking made before the trade was
+    shared carries its own; the economics are what must agree.
+    """
     breaks = []
-    for f in _TRADE_MATCH:
-        a, b = shared["trade"].get(f), theirs["trade"].get(f)
-        if a != b:
-            breaks.append({"field": f, "shared": a, "yours": b})
-    sp, tp = shared["parties"], theirs["parties"]
-    if (tp["own"].get("lei"), tp["counterparty"].get("lei")) != (sp["counterparty"].get("lei"), sp["own"].get("lei")):
-        breaks.append({"field": "parties", "shared": f"{sp['own'].get('lei')} vs {sp['counterparty'].get('lei')}",
-                       "yours": f"{tp['counterparty'].get('lei')} vs {tp['own'].get('lei')}"})
-    by_key = {((l.get("leg_type") or "").upper(), l.get("currency")): l for l in theirs["legs"]}
+    for f in sorted(set(shared["trade"]) | set(theirs["trade"])):
+        if shared["trade"].get(f) != theirs["trade"].get(f):
+            breaks.append({"field": f, "shared": shared["trade"].get(f), "yours": theirs["trade"].get(f)})
+    if shared["parties"] != theirs["parties"]:
+        breaks.append({"field": "parties", "shared": " / ".join(shared["parties"]), "yours": " / ".join(theirs["parties"])})
+    key = lambda l: ((l.get("leg_type") or "").upper(), l.get("currency"), l.get("index"))
+    mine = {}
+    for l in theirs["legs"]:
+        mine.setdefault(key(l), []).append(l)
     for l in shared["legs"]:
-        key = ((l.get("leg_type") or "").upper(), l.get("currency"))
-        mine = by_key.get(key)
-        name = f"{key[0]} leg"
-        if mine is None:
-            breaks.append({"field": name, "shared": "present", "yours": "missing"})
-            continue
-        if _flip(l.get("direction")) != (mine.get("direction") or "").upper():
-            breaks.append({"field": f"{name} direction", "shared": _flip(l.get("direction")), "yours": mine.get("direction")})
-        for f in _LEG_MATCH:
-            if (l.get(f) or None) != (mine.get(f) or None):
-                breaks.append({"field": f"{name} {f}", "shared": l.get(f), "yours": mine.get(f)})
+        name = f"{key(l)[0]} leg"
+        cands = mine.get(key(l)) or []
+        if not cands:
+            breaks.append({"field": name, "shared": "present", "yours": "missing"}); continue
+        # the candidate with the fewest differences (a basis swap has two FLOAT legs)
+        diff = lambda c: [f for f in sorted(set(l) | set(c)) if l.get(f) != c.get(f)]
+        best = min(cands, key=lambda c: len(diff(c)))
+        cands.remove(best)
+        for f in diff(best):
+            label = {"payer": "who pays", "receiver": "who receives"}.get(f, f)
+            breaks.append({"field": f"{name} {label}", "shared": l.get(f), "yours": best.get(f)})
+    for rest in mine.values():
+        for l in rest:
+            breaks.append({"field": f"{key(l)[0]} leg", "shared": "missing", "yours": "present"})
     return breaks
 
 
@@ -181,16 +201,18 @@ def _match_in_book(db: Session, shared: dict, cp_firm: Firm, booker_firm: Firm) 
         if _cp_lei(db, t) not in booker_leis:
             continue
         try:
-            theirs, _ = _canonical_for(db, t)
+            theirs, h = _canonical_for(db, t)
         except HTTPException:
             continue
         b = compare(shared, theirs)
         if best is None or len(b) < len(best[1]):
-            best = (t, b)
+            best = (t, b, _hexb(h))
     if best is None:
         return {"status": "NO_BOOKING"}
-    t, b = best
-    return {"status": "MATCH" if not b else "BREAKS", "trade_ref": t.trade_ref, "breaks": b}
+    t, b, their_hash = best
+    # Same UTI and same terms: their own booking hashes to exactly what is being signed.
+    return {"status": "MATCH" if not b else "BREAKS", "trade_ref": t.trade_ref, "breaks": b,
+            "same_hash": their_hash == _hexb(trade_hash_of(shared))}
 
 
 # ── Signing wallet registration ──────────────────────────────────────────────
@@ -314,16 +336,19 @@ def _post_card(db: Session, room: ChatRoom, me: FirmMember, my_firm: Firm, other
     existing = _existing_card(db, room.id, trade.id)
     if existing is not None:
         return existing, True
-    try:
-        payload, h = _canonical_for(db, trade)
-    except HTTPException as e:
-        raise HTTPException(status_code=422, detail=e.detail)
+    # The v2 record is keyed by the UTI: assign it now, before anyone sees a
+    # hash, so the hash they review is the one they will sign.
+    ensure_uti(db, trade)
+    parts = trade_parts(db, trade)
+    payload, h = _canonical_for(db, trade, parts=parts)
     card = {
         "type": "trade", "trade_id": str(trade.id), "trade_ref": trade.trade_ref,
         "booker_firm_id": str(my_firm.id), "booker_firm": my_firm.name,
         "cp_firm_id": str(other.id), "cp_firm": other.name,
-        "trade_hash": _hexb(h), "status_at_share": trade.status,
-        "summary": summarise(payload, for_counterparty=False),   # booker's side; viewers get their own via GET
+        "trade_hash": _hexb(h), "schema_version": payload["schema_version"], "uti": trade.uti,
+        "status_at_share": trade.status,
+        "summary": summarise(payload, parts[0].lei, _party_names(parts)),
+        # ^ booker's side; each viewer gets their own via GET /cards/{id}
     }
     names = chat._names(db, [me.user_id])
     msg = chat._post(db, room, kind="USER", name=names[me.user_id], firm=my_firm, user_id=me.user_id,
@@ -461,14 +486,34 @@ def _card_context(db: Session, message_id: str, user: dict):
 @router.get("/cards/{message_id}")
 def card_state(message_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     me, my_firm, room, access, msg, card, side, trade = _card_context(db, message_id, user)
-    payload, h = _canonical_for(db, trade)
+    if trade.status == "PENDING" and not trade.uti:
+        # A card shared before schema v2: give the trade its UTI now, once, so the
+        # hash shown here is the one countersigning will check.
+        ensure_uti(db, trade)
+        db.commit()
+    parts = trade_parts(db, trade)          # parties + legs, once for this whole request
+    payload, h = _canonical_for(db, trade, parts=parts)
     current = _hexb(h)
+    card_version = card.get("schema_version", 1)
+    if card_version == payload["schema_version"]:
+        then = current
+    else:
+        # v1 cards predate UTIs: the record was hashed with uti = null, so compare that way.
+        saved, trade.uti = trade.uti, None
+        try:
+            then = _hexb(_canonical_for(db, trade, card_version, parts=parts)[1])
+        finally:
+            trade.uti = saved
+    names = _party_names(parts)
+    cp_lei = parts[2].get("lei")
+    viewer_lei = parts[0].lei if side == "BOOKER" else cp_lei
     out = {
         "trade_ref": trade.trade_ref, "side": side, "status": trade.status,
         "booker_firm": card["booker_firm"], "cp_firm": card["cp_firm"],
-        "shared_hash": card["trade_hash"], "current_hash": current,
-        "changed_since_shared": current != card["trade_hash"],
-        "summary": summarise(payload, for_counterparty=side == "COUNTERPARTY"),
+        "shared_hash": card["trade_hash"], "current_hash": current, "schema_version": payload["schema_version"],
+        # compared under the schema the card was shared with, so a schema upgrade alone isn't a "change"
+        "changed_since_shared": then != card["trade_hash"],
+        "summary": summarise(payload, viewer_lei, names),
         "can_act": access == "JOINED",
     }
     ev = _latest_confirmed_event(db, trade.id)
@@ -483,12 +528,11 @@ def card_state(message_id: str, db: Session = Depends(get_db), user: dict = Depe
         cp_firm = db.get(Firm, uuid.UUID(card["cp_firm_id"]))
         booker_firm = db.get(Firm, uuid.UUID(card["booker_firm_id"]))
         out["match"] = _match_in_book(db, payload, cp_firm, booker_firm)
-        cp_lei = _cp_lei(db, trade)
         reg = registered_signer(db, cp_lei)
         out["signing"] = {"lei": cp_lei, "registered_address": reg.address if reg else None,
                           "can_register": me.role == "ADMIN"}
         if reg:
-            k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+            k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade, parts)
             be, chain_id, registry = _eip712_ctx()
             td_cp = confirmation_typed_data(chain_id, registry, h, k_own.address)
             td_own = confirmation_typed_data(chain_id, registry, h, k_cp.address)
