@@ -88,3 +88,25 @@ so step 3 can equally be them calling `confirm()` themselves.
 
 `--expect-hash` is where the value is. A mismatch there is a confirmation break
 found at the point of confirmation, not in a reconciliation days later.
+
+## The canonical record: schema v2
+
+`--expect-hash` only works if both parties' bookings of the same trade produce
+the same bytes. Schema v1 (2026-09-21) could not: it carried the booker's trade
+reference and was written from the booker's side (PAY/RECEIVE). Schema v2
+(2026-09-24, `backend/chain/canonical.py`) is one record for both parties:
+
+- keyed by the **UTI** (the booking entity's LEI + 32 characters, issued when
+  the trade is first sent or confirmed), not either firm's reference;
+- `parties` is the two **LEIs, sorted**; names are left out, the LEI identifies;
+- each leg names its **payer and receiver** LEI; embedded options their **buyer
+  and seller**; custom cashflows their payer and receiver with an unsigned amount;
+- legs are ordered by content, so neither side's leg numbering enters;
+- left out as not contract terms: leg refs, the booker's discount curve, and the
+  trade-level `terms` blob (the booker's-view copy of the legs).
+
+So each party can rebuild the hash from **its own** booking. New confirmations
+are signed under v2. A confirmation is always re-derived under the
+`schema_version` in its attestation, so v1 confirmations stay verifiable
+unchanged. Both versions have a pinned test vector in
+`backend/tests/test_chain_confirmation.py`.

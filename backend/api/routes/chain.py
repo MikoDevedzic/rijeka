@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from typing import Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Header
 from pydantic import BaseModel
@@ -79,11 +79,45 @@ def _cp_identity(db: Session, cp: Counterparty) -> dict:
     return {"lei": None, "name": cp.name}
 
 
-def _canonical_for(db: Session, trade: Trade) -> tuple[dict, bytes]:
+def trade_parts(db: Session, trade: Trade) -> tuple:
+    """(own entity, counterparty entity, counterparty {lei, name}, legs): load once per request, pass as `parts`."""
     own, cp = _load_parties(db, trade, trade.user_id)
-    legs = db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
-    payload = canonical_payload(trade, legs, {"lei": own.lei, "name": own.name}, _cp_identity(db, cp))
+    return own, cp, _cp_identity(db, cp), db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
+
+
+def _canonical_for(db: Session, trade: Trade, version: int = CANONICAL_SCHEMA_VERSION,
+                   parts: Optional[tuple] = None) -> tuple[dict, bytes]:
+    """
+    The canonical record and its hash under `version`. New confirmations use
+    the current version; re-deriving an existing one must use the version in
+    its attestation (attested_version), or the hash will not match.
+    parts: trade_parts(), when the caller already has them (saves 4 queries).
+    """
+    own, cp, cp_id, legs = parts or trade_parts(db, trade)
+    try:
+        payload = canonical_payload(trade, legs, {"lei": own.lei, "name": own.name}, cp_id, version=version)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"Cannot build the confirmation record: {e}")
     return payload, trade_hash(payload)
+
+
+def attested_version(att: Optional[dict]) -> int:
+    """The schema a stored attestation was signed under (v1 predates the field's use)."""
+    return int((att or {}).get("schema_version") or 1)
+
+
+def ensure_uti(db: Session, trade: Trade) -> str:
+    """
+    Schema v2 is keyed by the UTI, so a trade needs one before it is signed.
+    Generated once, CFTC-style: the booking entity's LEI (20) + 32 characters,
+    and shared with the counterparty in the record itself. Caller commits.
+    """
+    if not trade.uti:
+        own = db.query(LegalEntity).filter(LegalEntity.id == trade.own_legal_entity_id).first()
+        if own is None or not own.lei:
+            raise HTTPException(status_code=422, detail="The own legal entity needs an LEI to issue a UTI.")
+        trade.uti = own.lei.upper() + uuid4().hex.upper()
+    return trade.uti
 
 
 def _latest_confirmed_event(db: Session, trade_id: UUID) -> Optional[TradeEvent]:
@@ -113,11 +147,10 @@ def registered_signer(db: Session, lei: Optional[str]) -> Optional[PartyKey]:
     return PartyKey(lei, to_checksum_address(claim.signing_address), None, "registered")
 
 
-def _resolve_parties(db: Session, trade: Trade):
+def _resolve_parties(db: Session, trade: Trade, parts: Optional[tuple] = None):
     """(own_key, cp_key, own_identity, cp_identity). Raises 422 with a usable message."""
-    own, cp = _load_parties(db, trade, trade.user_id)
+    own, cp, cp_id, _ = parts or trade_parts(db, trade)
     own_id = {"lei": own.lei, "name": own.name}
-    cp_id  = _cp_identity(db, cp)
     try:
         k_own = resolve_key(own_id)
         # A counterparty that registered a signing wallet on Rijeka signs with
@@ -176,6 +209,9 @@ def confirmation_request(trade_id: str, db: Session = Depends(get_db), user: dic
         raise HTTPException(status_code=404, detail="Trade not found")
 
     k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    if not trade.uti:
+        ensure_uti(db, trade)
+        db.commit()
     payload, h = _canonical_for(db, trade)
     be, chain_id, registry = _eip712_ctx()
 
@@ -255,6 +291,7 @@ def countersign_trade(db: Session, trade: Trade, address: str, signature: str, *
     since, refuse rather than anchor terms they didn't see.
     """
     k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    ensure_uti(db, trade)   # committed with the CONFIRMED event
     payload, h = _canonical_for(db, trade)
     be, chain_id, registry = _eip712_ctx()
     if expected_hash and expected_hash.lower() != _hexb(h).lower():
@@ -336,7 +373,8 @@ def confirm_on_chain(
     trade_uuid = _parse_trade_uuid(trade_id)
     trade = _load_pending_trade(db, trade_uuid, user_id)
 
-    # 1. Canonical record and hash
+    # 1. Canonical record and hash (current schema; v2 needs the UTI first)
+    ensure_uti(db, trade)
     payload, h = _canonical_for(db, trade)
 
     # 2. Party keys. This route signs for BOTH sides, which is only possible
@@ -441,7 +479,7 @@ def proof_pack(trade_id: str, db: Session = Depends(get_db), user: dict = Depend
     if not att:
         raise HTTPException(status_code=404, detail="This trade has no on-chain confirmation to prove.")
 
-    payload, h = _canonical_for(db, trade)
+    payload, h = _canonical_for(db, trade, attested_version(att))
     return {
         "format":         "rijeka-confirmation-proof",
         "format_version": 1,
@@ -476,12 +514,13 @@ def verify_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depe
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
 
-    payload, h = _canonical_for(db, trade)
-    recomputed = _hexb(h)
-
     ev = _latest_confirmed_event(db, trade.id)
     stored = (ev.confirmation_hash if ev else None) or ((ev.payload or {}).get("attestation", {}) or {}).get("trade_hash") if ev else None
     att = ((ev.payload or {}).get("attestation") if ev else None)
+
+    # Re-derive under the schema the confirmation was signed with.
+    payload, h = _canonical_for(db, trade, attested_version(att) if att else CANONICAL_SCHEMA_VERSION)
+    recomputed = _hexb(h)
 
     be = get_backend()
     rec = None

@@ -419,14 +419,17 @@ class Toolbox(SourceToolbox):
 
     def get_confirmation(self, trade: str):
         # Imported here: chain routes pull in web3, which we only need on this path.
-        from api.routes.chain import _canonical_for, _latest_confirmed_event
+        from api.routes.chain import _canonical_for, _latest_confirmed_event, attested_version
         from chain.attestation import get_backend
         from fastapi import HTTPException
 
         t = self._trade(trade)
         out: dict[str, Any] = {"trade_id": str(t.id), "trade_ref": t.trade_ref, "status": t.status}
+        # Re-derive under the schema the confirmation was signed with (current if none yet).
+        ev = _latest_confirmed_event(self.db, t.id)
+        att = (ev.payload or {}).get("attestation") if ev else None
         try:
-            payload, h = _canonical_for(self.db, t)
+            payload, h = _canonical_for(self.db, t, attested_version(att)) if att else _canonical_for(self.db, t)
             out["canonical_record"] = payload
             out["current_hash"] = "0x" + h.hex()
         except HTTPException as e:
@@ -434,8 +437,6 @@ class Toolbox(SourceToolbox):
             out["canonical_error"] = e.detail
             h = None
 
-        ev = _latest_confirmed_event(self.db, t.id)
-        att = (ev.payload or {}).get("attestation") if ev else None
         out["attestation"] = att
         if not att:
             out["summary"] = "Not confirmed on-chain."

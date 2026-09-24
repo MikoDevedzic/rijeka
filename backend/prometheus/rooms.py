@@ -49,7 +49,7 @@ def shared_confirmations(db: Session, firm_ids: list[uuid.UUID], book: dict | No
     """
     if len(set(firm_ids)) != 2:
         return []
-    from api.routes.chain import _canonical_for  # web3 import; only on this path
+    from api.routes.chain import _canonical_for, attested_version  # web3 import; only on this path
     from fastapi import HTTPException
 
     leis = {fid: {l.lei for l in db.query(FirmLei).filter(FirmLei.firm_id == fid)} for fid in firm_ids}
@@ -88,7 +88,7 @@ def shared_confirmations(db: Session, firm_ids: list[uuid.UUID], book: dict | No
             "explorer_tx": anchor.get("explorer_tx"),
         }
         try:
-            payload, h = _canonical_for(db, trade)
+            payload, h = _canonical_for(db, trade, attested_version(att))   # re-derive as it was signed
             row["still_matches_signed_record"] = ("0x" + h.hex()) == att.get("trade_hash")
             if row["still_matches_signed_record"]:
                 row["signed_record"] = payload
