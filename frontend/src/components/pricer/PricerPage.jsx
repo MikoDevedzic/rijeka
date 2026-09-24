@@ -1,12 +1,12 @@
 // PricerPage.jsx — Sprint 5D+6D — matched to approved rijeka_pricer_v2.html
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
 import './PricerPage.css'
+import { getSessionMaybe } from '../../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 async function authHdrs() {
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = await getSessionMaybe()
   return { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }
 }
 const QT_MAP = { OISDeposit:'DEPOSIT',Deposit:'DEPOSIT',OIS:'OIS_SWAP',BASIS:'IRS',FRA:'FRA',FUTURES:'FUTURES',IRS:'IRS' }

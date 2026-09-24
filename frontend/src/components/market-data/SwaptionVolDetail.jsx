@@ -130,8 +130,7 @@ function SwvInstruments() {
     setBlpSnapResult(null);
     setBlpSnapError(null);
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session: sess } } = await supabase.auth.getSession();
+      const sess = await getSessionMaybe();
 
       // Build ticker list from grid
       const tickers = grid.flatMap((row) =>
@@ -604,8 +603,7 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
   const saveManual = async () => {
     setSaving(true); setErr(null); setSaved(false);
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
 
       const params = Object.entries(edits)
         .filter(([ten]) => isDirty(ten))
@@ -1134,8 +1132,7 @@ function SwvOTMSkew({ atmGrid }) {
 
   const loadLatestSkew = async () => {
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       const res = await fetch('/api/market-data/vol-skew/latest', {
         headers: { Authorization: 'Bearer ' + session.access_token },
       });
@@ -1160,8 +1157,7 @@ function SwvOTMSkew({ atmGrid }) {
 
   const loadSabrParams = async () => {
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       const res = await fetch('/api/market-data/sabr-params/latest', {
         headers: { Authorization: 'Bearer ' + session.access_token },
       });
@@ -1175,8 +1171,7 @@ function SwvOTMSkew({ atmGrid }) {
   const snapSmko = async () => {
     setBlpSnapping(true); setBlpSnapResult(null); setBlpSnapErr(null);
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
 
       // Build ticker list for all 8 OTM strikes — full surface snap
       const tickers = [];
@@ -1236,8 +1231,7 @@ function SwvOTMSkew({ atmGrid }) {
   const saveSkew = async () => {
     setSaving(true); setSaved(null); setSaveErr(null);
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
 
       // Get ATM vols from atmGrid
       const getAtm = (exp, ten) => {
@@ -1737,8 +1731,7 @@ export default function SwaptionVolDetail() {
     setMasterResult(null);
     setMasterErr(null);
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       const h = { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' };
 
       // ── Step 1: Snap ATM surface ────────────────────────────────────────
@@ -1926,3 +1919,4 @@ export default function SwaptionVolDetail() {
     </div>
   );
 }
+import { getSessionMaybe } from '../../lib/session'

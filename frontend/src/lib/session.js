@@ -34,3 +34,9 @@ export async function getSessionSafe() {
   if (stored?.access_token) return stored
   throw new Error('Not signed in — no session available. Reload and sign in again.')
 }
+
+// Drop-in for `(await supabase.auth.getSession()).data.session`: same result
+// (the session, or null when signed out) but never hangs on the auth lock.
+export async function getSessionMaybe() {
+  try { return await getSessionSafe() } catch { return null }
+}

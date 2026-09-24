@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { getSessionSafe } from '../lib/session'
 import { broadcast, onBroadcast } from '../lib/windows'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -10,17 +11,31 @@ export const PROMETHEUS = 'prometheus'
 
 // Writes go through the API (membership rules live there); new messages,
 // invites and joins arrive through Supabase realtime under the same RLS.
+// Never hang: supabase.auth.getSession() can wait forever on a browser lock
+// (a token refresh, or another Rijeka window mid-refresh), so use the tool's
+// safe getter; and give up on the request after REQUEST_TIMEOUT_MS so a
+// card or panel can offer a retry instead of loading forever.
+const REQUEST_TIMEOUT_MS = 20_000
 async function api(path, opts = {}) {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) throw new Error('Not authenticated')
-  const res = await fetch(API + path, {
-    ...opts,
-    headers: {
-      'Authorization': 'Bearer ' + session.access_token,
-      'Content-Type': 'application/json',
-      ...(opts.headers || {}),
-    },
-  })
+  const session = await getSessionSafe()
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS)
+  let res
+  try {
+    res = await fetch(API + path, {
+      ...opts,
+      signal: ctrl.signal,
+      headers: {
+        'Authorization': 'Bearer ' + session.access_token,
+        'Content-Type': 'application/json',
+        ...(opts.headers || {}),
+      },
+    })
+  } catch (e) {
+    throw new Error(e.name === 'AbortError' ? "Rijeka didn't answer in time. Try again." : "Couldn't reach Rijeka. Check your connection and try again.")
+  } finally {
+    clearTimeout(timer)
+  }
   if (res.status === 204) return null
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Request failed (' + res.status + ')')

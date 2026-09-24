@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuthStore } from '../store/useAuthStore'
-import { supabase } from '../lib/supabase'
 import './ChatStrip.css'
+import { getSessionMaybe } from '../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -47,7 +47,7 @@ export default function ChatStrip() {
 
     try {
       // Always get fresh token from Supabase
-      const { data: { session } } = await supabase.auth.getSession()
+      const session = await getSessionMaybe()
       if (!session) throw new Error('Not authenticated')
 
       const apiMessages = next

@@ -4,8 +4,8 @@
 // so market_data.py PillarQuoteIn validation passes without backend changes.
 
 import { create } from 'zustand';
-import { supabase } from '../lib/supabase';
 import { SWAPTION_VOL_GRID, SWVOL_CURVE_ID } from '../data/swaptionVols';
+import { getSessionMaybe } from '../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000';
 const cloneGrid = (g) => g.map((row) => ({ ...row, cells: row.cells.map((c) => ({ ...c })) }));
@@ -44,7 +44,7 @@ const useXVAStore = create((set, get) => ({
   saveSnapshot: async (valuationDate, source) => {
     set({ snapshotSaving: true, snapshotError: null });
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       if (!session) throw new Error('Not authenticated');
       const grid = get().grid;
       const quotes = grid.flatMap((row) =>
@@ -84,7 +84,7 @@ const useXVAStore = create((set, get) => ({
 
   loadLatestSnapshot: async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       if (!session) return;
       const res = await fetch(
         API + '/api/market-data/snapshots/' + SWVOL_CURVE_ID + '/latest',

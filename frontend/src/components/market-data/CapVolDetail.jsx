@@ -174,8 +174,7 @@ function CapInstruments() {
     setSnapMsg(null);
     setError(null);
     try {
-      const { supabase } = await import('../../lib/supabase.js');
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await getSessionMaybe();
       if (!session) throw new Error('Not authenticated');
       const res = await fetch('/api/bloomberg/cap-vol/snap', {
         method:  'POST',
@@ -456,3 +455,5 @@ export default function CapVolDetail() {
     </div>
   );
 }
+
+import { getSessionMaybe } from '../../lib/session'

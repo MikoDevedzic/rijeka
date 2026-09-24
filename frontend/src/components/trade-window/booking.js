@@ -23,8 +23,8 @@
 // operation can pass the same key via extras.idempotencyKey.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { supabase } from '../../lib/supabase'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from './schedule_translator'
+import { getSessionMaybe } from '../../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -77,7 +77,7 @@ function curveObj(curveId) {
 }
 
 async function getSession() {
-  const { data: { session } } = await supabase.auth.getSession()
+  const session = await getSessionMaybe()
   if (!session?.access_token) throw new Error('No session — please log in.')
   return session
 }
