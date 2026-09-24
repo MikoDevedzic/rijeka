@@ -3,10 +3,15 @@
 // monitor, but a window can, so every module can open in its own window and
 // the messenger can pop out of the page.
 //
-// Same-origin windows share the Supabase session (localStorage) and talk
-// over one BroadcastChannel.
+// Same-origin windows talk over one BroadcastChannel. Windows in one browser
+// can be signed in as DIFFERENT users (e.g. a demo with two accounts), so
+// every message carries the sender's user id and is ignored by any window
+// signed in as someone else. Private data must never cross that line.
+
+import { useAuthStore } from '../store/useAuthStore'
 
 const CHANNEL = 'rijeka-windows'
+const currentUser = () => useAuthStore.getState().session?.user?.id || null
 let bc = null
 
 export function channel() {
@@ -17,13 +22,20 @@ export function channel() {
 }
 
 export function broadcast(msg) {
-  try { channel()?.postMessage(msg) } catch { /* another window may be closing */ }
+  const uid = currentUser()
+  if (!uid) return
+  try { channel()?.postMessage({ ...msg, uid }) } catch { /* another window may be closing */ }
 }
 
 export function onBroadcast(handler) {
   const c = channel()
   if (!c) return () => {}
-  const fn = (e) => handler(e.data || {})
+  const fn = (e) => {
+    const msg = e.data || {}
+    const uid = currentUser()
+    if (!uid || msg.uid !== uid) return   // another user's window
+    handler(msg)
+  }
   c.addEventListener('message', fn)
   return () => c.removeEventListener('message', fn)
 }
