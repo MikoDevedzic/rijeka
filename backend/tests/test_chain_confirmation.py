@@ -748,3 +748,109 @@ class TestCountersignCLILifecycle:
         assert "TERMINATE" in r.stdout
         sig = json.loads(out.read_text())
         assert recover(termination_typed_data(31337, REG, h, A.address), bytes.fromhex(sig["signature"][2:])) == cp.address
+
+
+# ── Digital-asset products in schema v2 (ISDA Digital Asset Derivatives vocabulary) ──
+
+def _ndo(**over):
+    terms = dict(direction="BUY", digital_asset="BTC", notional_amount="10", option_type="CALL",
+                 exercise_style="EUROPEAN", strike_price="75000", strike_currency="USD",
+                 expiration_date="2026-12-26", expiration_time="08:00 UTC",
+                 valuation_date="2026-12-26", valuation_time="16:00 London", settlement_date="2026-12-28",
+                 settlement_currency="USD", settlement_price_source="CME CF BRR",
+                 premium_amount="42000", premium_currency="USD", premium_payment_date="2026-10-01",
+                 automatic_exercise=True, calculation_agent=None, disruption_fallback=None)
+    terms.update(over.pop("terms", {}))
+    t = dict(uti="254900OPPU84GM83MG36" + "B" * 32, asset_class="CRYPTO", instrument_type="CRYPTO_OPTION",
+             structure="EUROPEAN", notional=Decimal("10"), notional_ccy="BTC",
+             trade_date=date(2026, 9, 29), effective_date=date(2026, 9, 29), maturity_date=date(2026, 12, 28),
+             terms=terms, trade_ref="TRD-NDO-1", id=uuid4(), user_id=uuid4(), desk="DIGITAL")
+    t.update(over); return t
+
+
+def _ndf(**over):
+    terms = dict(direction="BUY", digital_asset="ETH", notional_amount="250", forward_price="4100.50",
+                 price_currency="USD", valuation_date="2026-11-27", valuation_time="16:00 London",
+                 settlement_date="2026-11-30", settlement_currency="USD", settlement_price_source="CME CF ETHUSD_RR",
+                 calculation_agent=None, disruption_fallback=None)
+    terms.update(over.pop("terms", {}))
+    t = dict(uti="254900OPPU84GM83MG36" + "C" * 32, asset_class="CRYPTO", instrument_type="CRYPTO_FORWARD",
+             structure="NDF", notional=Decimal("250"), notional_ccy="ETH",
+             trade_date=date(2026, 9, 29), effective_date=date(2026, 9, 29), maturity_date=date(2026, 11, 30),
+             terms=terms, trade_ref="TRD-NDF-1", id=uuid4(), user_id=uuid4())
+    t.update(over); return t
+
+
+def _their_side(t):
+    """The counterparty's booking of the same trade: their ref, opposite direction, same terms."""
+    flip = {"BUY": "SELL", "SELL": "BUY", "LONG": "SHORT", "SHORT": "LONG"}
+    return dict(t, trade_ref="CB-DA-77", id=uuid4(), user_id=uuid4(), desk="OTC",
+                terms=dict(t["terms"], direction=flip[t["terms"]["direction"]]))
+
+
+class TestCanonicalCrypto:
+    v2 = staticmethod(partial(_canonical_payload, version=2))
+
+    def test_option_shape_and_parties(self):
+        p = self.v2(_ndo(), [], OWN, CP)
+        assert set(p) == {"schema", "schema_version", "uti", "parties", "trade", "product"}
+        assert p["schema_version"] == 2 and p["parties"] == sorted([OWN["lei"], CP["lei"]])
+        pr = p["product"]
+        assert pr["product"] == "NDO" and (pr["buyer"], pr["seller"]) == (OWN["lei"], CP["lei"])
+        assert pr["option_type"] == "CALL" and pr["strike_price"] == "75000" and pr["notional_amount"] == "10"
+        assert pr["settlement_price_source"] == "CME CF BRR" and pr["settlement_currency"] == "USD"
+        assert "direction" not in pr and "legs" not in p
+
+    def test_forward_shape(self):
+        p = self.v2(_ndf(), [], OWN, CP)
+        pr = p["product"]
+        assert pr["product"] == "NDF" and pr["forward_price"] == "4100.5" and pr["digital_asset"] == "ETH"
+        assert (pr["buyer"], pr["seller"]) == (OWN["lei"], CP["lei"])
+        assert "option_type" not in pr and "strike_price" not in pr
+
+    @pytest.mark.parametrize("mk", [_ndo, _ndf])
+    def test_both_sides_hash_identically(self, mk):
+        ours = self.v2(mk(), [], OWN, CP)
+        theirs = self.v2(_their_side(mk()), [], CP, OWN)
+        assert ours == theirs and trade_hash(ours) == trade_hash(theirs)
+
+    def test_case_and_number_normalisation(self):
+        a = self.v2(_ndo(terms={"digital_asset": "btc", "option_type": "call", "settlement_currency": "usd",
+                                "strike_price": "75000.00", "premium_amount": Decimal("42000.0")}), [], OWN, CP)
+        b = self.v2(_ndo(), [], OWN, CP)
+        assert a == b
+
+    def test_any_economic_change_breaks_equality(self):
+        base = trade_hash(self.v2(_ndo(), [], OWN, CP))
+        for k, v in [("strike_price", "75001"), ("option_type", "PUT"), ("settlement_price_source", "Coinbase BTC-USD"),
+                     ("valuation_time", "08:00 UTC"), ("premium_amount", "42001"), ("settlement_currency", "USDC")]:
+            assert trade_hash(self.v2(_ndo(terms={k: v}), [], OWN, CP)) != base, k
+        # same direction on both sides = both think they bought
+        assert trade_hash(self.v2(_ndo(), [], CP, OWN)) != base
+
+    def test_missing_required_terms_refused(self):
+        with pytest.raises(ValueError, match="settlement_price_source"):
+            self.v2(_ndo(terms={"settlement_price_source": None}), [], OWN, CP)
+        with pytest.raises(ValueError, match="forward_price"):
+            self.v2(_ndf(terms={"forward_price": ""}), [], OWN, CP)
+        with pytest.raises(ValueError, match="option_type"):
+            self.v2(_ndo(terms={"option_type": "STRADDLE"}), [], OWN, CP)
+        with pytest.raises(ValueError, match="positive"):
+            self.v2(_ndo(terms={"notional_amount": "0"}), [], OWN, CP)
+        with pytest.raises(ValueError):
+            self.v2(_ndo(terms={"direction": "PAY"}), [], OWN, CP)   # options are bought/sold
+
+    def test_irs_v2_pin_unchanged(self):
+        """Adding the product branch must not move a single IRS byte."""
+        p = _canonical_payload(_trade(uti=TestCanonicalV2.UTI, id=None, user_id=None, created_at=None),
+                               _legs(), OWN, CP, version=2)
+        assert trade_hash_hex(p) == KNOWN_V2_HASH
+
+    def test_known_vectors(self):
+        assert trade_hash_hex(self.v2(_ndo(id=None, user_id=None), [], OWN, CP)) == KNOWN_NDO_HASH
+        assert trade_hash_hex(self.v2(_ndf(id=None, user_id=None), [], OWN, CP)) == KNOWN_NDF_HASH
+
+
+# Pinned 2026-09-29 for the v2 digital-asset products. Regenerate ONLY with a schema version bump.
+KNOWN_NDO_HASH = "0x20cfaa4ab98d72dc4facc57f922e31bbd38bd608816f39adf3b9e5a6b69ad4e8"
+KNOWN_NDF_HASH = "0xec102df431dbae43982432e4226db72544126d0c586264832686677de5fb766a"

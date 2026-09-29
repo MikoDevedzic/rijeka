@@ -396,3 +396,31 @@ class ChatRead(Base):
     room_id      = Column(UUID(as_uuid=True), ForeignKey("chat_rooms.id"), primary_key=True)
     user_id      = Column(UUID(as_uuid=True), primary_key=True)
     last_read_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# ─────────────────────────────────────────────────────
+# Telegram channel adapter (migration 014)
+#
+# A Rijeka room can mirror its trade cards and confirmation events into ONE
+# Telegram group the two firms already use. Telegram is transport only: the
+# record, hash and signatures live here and on-chain; nothing depends on it.
+# ─────────────────────────────────────────────────────
+class TelegramLink(Base):
+    __tablename__ = "telegram_links"
+
+    room_id     = Column(UUID(as_uuid=True), ForeignKey("chat_rooms.id"), primary_key=True)
+    chat_id     = Column(String, nullable=False, unique=True)   # Telegram chat id (negative for groups)
+    chat_title  = Column(String, nullable=True)
+    linked_by   = Column(UUID(as_uuid=True), nullable=False)    # Rijeka user who issued the code
+    linked_at   = Column(DateTime(timezone=True), server_default=func.now())
+    last_sent_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class TelegramLinkCode(Base):
+    __tablename__ = "telegram_link_codes"
+
+    code        = Column(String, primary_key=True)              # one-time, 10 minutes
+    room_id     = Column(UUID(as_uuid=True), ForeignKey("chat_rooms.id"), nullable=False)
+    user_id     = Column(UUID(as_uuid=True), nullable=False)
+    expires_at  = Column(DateTime(timezone=True), nullable=False)
+    used_at     = Column(DateTime(timezone=True), nullable=True)
