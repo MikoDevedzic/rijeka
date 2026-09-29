@@ -103,10 +103,21 @@ export default function Messenger() {
 export function MessengerPage() {
   const session = useAuthStore(s => s.session)
   const init = useChatStore(s => s.init)
+  const show = useChatStore(s => s.show)
+  const rooms = useChatStore(s => s.rooms)
   const unread = useChatStore(selectUnreadTotal)
   const [width, setWidth] = useState(window.innerWidth)
 
   useEffect(() => { if (session) init() }, [session, init])
+  // Deep link from a mirrored Telegram card: /messenger?room=<id>[&card=<msgId>]
+  // opens that room once the room list has loaded. Card highlighting is left
+  // to the thread's own scroll-to-latest; the room is what matters.
+  const wanted = new URLSearchParams(window.location.search).get('room')
+  const opened = useRef(false)
+  useEffect(() => {
+    if (opened.current || !wanted || !rooms?.length) return
+    if (rooms.some(r => r.id === wanted)) { opened.current = true; show(wanted) }
+  }, [wanted, rooms, show])
   useEffect(() => { document.title = (unread ? `(${unread}) ` : '') + 'Rijeka · Messages' }, [unread])
   useEffect(() => {
     const here = () => broadcast({ type: 'messenger:here' })

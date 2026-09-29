@@ -139,3 +139,65 @@ including the new event. Its attestation carries `prev_hash`; `/verify` and the
 standalone verifier report the lineage. `tools/countersign.py` signs all three
 request formats. Migration 013 makes `(user_id, uti)` unique so a mirror booking
 can never attach to the wrong record.
+
+## Digital-asset products: NDO / NDF (schema v2)
+
+`CRYPTO_OPTION` (a non-deliverable option) and `CRYPTO_FORWARD` (a non-deliverable
+forward) on BTC/ETH are carried in schema v2 as one `product` block instead of
+legs. Field names follow the vocabulary of the ISDA Digital Asset Derivatives
+Definitions (2023): the trade is cash-settled in `settlement_currency` against
+the `settlement_price_source` on `valuation_date` at `valuation_time`; the
+notional is an amount of the digital asset; `buyer` and `seller` are LEIs, so
+the seller's booking (direction flipped) hashes identically to the buyer's.
+
+Terms live in `trade.terms` (JSON) and arrive as strings, so numbers are
+normalised (`"4100.50"` ≡ `"4100.5"`) and enumerations upper-cased before
+hashing. Required terms are refused when missing — both parties must state
+the price source, valuation and settlement dates, and settlement currency, or
+there is nothing unambiguous to sign. The IR_SWAP path and its pinned vector
+are unchanged; NDO and NDF have their own pins in
+`backend/tests/test_chain_confirmation.py::TestCanonicalCrypto`.
+
+```
+CRYPTO_OPTION  digital_asset, notional_amount, option_type (CALL|PUT), exercise_style,
+               strike_price, strike_currency, expiration_date, expiration_time,
+               valuation_date, valuation_time, settlement_date, settlement_currency,
+               settlement_price_source, premium_amount, premium_currency,
+               premium_payment_date, automatic_exercise, calculation_agent, disruption_fallback
+CRYPTO_FORWARD digital_asset, notional_amount, forward_price, price_currency,
+               valuation_date, valuation_time, settlement_date, settlement_currency,
+               settlement_price_source, calculation_agent, disruption_fallback
+```
+
+## Telegram channel adapter
+
+Crypto OTC desks agree and confirm bilateral trades in Telegram groups. A Rijeka
+room can mirror its trade cards and confirmation events into the one group the
+two firms already use, each with a link back to review the terms from your own
+side and countersign with your firm's wallet. **Telegram is transport only**:
+the record, hash, signatures and registry entry live in Rijeka and on-chain; if
+the bot is down or the group is deleted, every confirmation still stands.
+
+Only trade cards and lifecycle events are mirrored. The bot never reads the
+group's conversation into Rijeka and never posts free-text chat outward.
+
+Setup, once:
+1. Create a bot with @BotFather; put its token in `backend/.env` as
+   `TELEGRAM_BOT_TOKEN`, choose a long random `TELEGRAM_WEBHOOK_SECRET`, set
+   `RIJEKA_PUBLIC_URL`.
+2. Register the webhook (public HTTPS is required — Render, or a tunnel for dev):
+   ```bash
+   curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+     -d "url=$RIJEKA_PUBLIC_API/api/telegram/webhook/$TELEGRAM_WEBHOOK_SECRET" \
+     -d "secret_token=$TELEGRAM_WEBHOOK_SECRET" -d 'allowed_updates=["message"]'
+   ```
+   The webhook checks both the path secret and Telegram's
+   `X-Telegram-Bot-Api-Secret-Token` header.
+
+Per room: a JOINED member calls `POST /api/telegram/rooms/{room_id}/link-code`,
+adds the bot to the Telegram group, and posts `/link CODE` there (codes are
+one-time, 10 minutes). From then on `chat._post` enqueues each trade card /
+event and `chain/telegram.py` delivers it **after the transaction commits**, in a
+background thread, best effort. `/unlink` in the group, or `DELETE
+/api/telegram/rooms/{room_id}`, stops it. Migration 014 holds the bindings;
+clients cannot read those tables.

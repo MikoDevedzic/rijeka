@@ -17,6 +17,13 @@ version it was signed under.
       Left out as not terms of the contract: firm-internal references and
       leg refs, the booker's discount curve, the trade-level `terms` blob
       (the booker's-view copy of the legs), party names (the LEI identifies).
+      v2 also carries the digital-asset products (2026-09-29): CRYPTO_OPTION
+      (a non-deliverable option) and CRYPTO_FORWARD (a non-deliverable
+      forward) on BTC/ETH, as one `product` block instead of legs, with field
+      names following the ISDA Digital Asset Derivatives Definitions
+      vocabulary (settlement price source, valuation date/time, settlement
+      currency, cash settlement; buyer and seller by LEI). The IR_SWAP path is
+      unchanged and its pinned vector still holds.
 
 Rules (a verifier in any language must reproduce these exactly):
   * JSON, UTF-8, keys sorted, separators ',' and ':' (no whitespace)
@@ -202,10 +209,88 @@ def _json(v: Any) -> str:
     return json.dumps(v, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+# ── Digital-asset products (ISDA Digital Asset Derivatives Definitions) ────
+#
+# Non-deliverable: cash-settled in `settlement_currency` against the
+# `settlement_price_source` on `valuation_date` at `valuation_time`. The
+# notional is an amount of the digital asset (e.g. 10 BTC). The booker states
+# its side in trade.terms.direction (BUY / SELL of the option, or of the asset
+# for a forward); the record names buyer and seller by LEI so either side's
+# booking hashes identically.
+
+CRYPTO_INSTRUMENTS = ("CRYPTO_OPTION", "CRYPTO_FORWARD")
+
+_CRYPTO_COMMON = (
+    "digital_asset",            # BTC | ETH
+    "notional_amount",          # in units of the digital asset
+    "valuation_date", "valuation_time", "settlement_date",
+    "settlement_currency",      # USD, USDC, ...
+    "settlement_price_source",  # per ISDA Settlement Price Source Matrix, e.g. "CME CF BRR"
+    "calculation_agent",        # LEI, or null (both parties)
+    "disruption_fallback",      # optional free text / reference to the Definitions' fallbacks
+)
+_CRYPTO_OPTION_FIELDS = _CRYPTO_COMMON + (
+    "option_type",              # CALL | PUT
+    "exercise_style",           # EUROPEAN (the Definitions' default)
+    "strike_price", "strike_currency",
+    "expiration_date", "expiration_time",
+    "premium_amount", "premium_currency", "premium_payment_date",
+    "automatic_exercise",       # bool
+)
+_CRYPTO_FORWARD_FIELDS = _CRYPTO_COMMON + (
+    "forward_price", "price_currency",
+)
+_CRYPTO_REQUIRED = {
+    "CRYPTO_OPTION":  ("digital_asset", "notional_amount", "option_type", "exercise_style", "strike_price",
+                       "strike_currency", "expiration_date", "valuation_date", "settlement_date",
+                       "settlement_currency", "settlement_price_source",
+                       "premium_amount", "premium_currency", "premium_payment_date"),
+    "CRYPTO_FORWARD": ("digital_asset", "notional_amount", "forward_price", "price_currency",
+                       "valuation_date", "settlement_date", "settlement_currency", "settlement_price_source"),
+}
+_UPPER = ("digital_asset", "option_type", "exercise_style", "settlement_currency", "strike_currency",
+          "premium_currency", "price_currency")
+# Stored in trade.terms as JSON, so these arrive as strings; "4100.50" and
+# "4100.5" must hash the same.
+_NUMERIC = ("notional_amount", "strike_price", "premium_amount", "forward_price")
+
+
+def _crypto_product_v2(trade: Any, own: str, cp: str) -> dict:
+    itype = str(_get(trade, "instrument_type") or "").upper()
+    terms = dict(_get(trade, "terms") or {})
+    fields = _CRYPTO_OPTION_FIELDS if itype == "CRYPTO_OPTION" else _CRYPTO_FORWARD_FIELDS
+    missing = [f for f in _CRYPTO_REQUIRED[itype] if terms.get(f) in (None, "")]
+    if missing:
+        raise ValueError(f"{itype} record needs {', '.join(missing)} in trade.terms — both parties must state them")
+    buyer, seller = _sides(terms.get("direction"), own, cp, pays=("BUY", "LONG"), gets=("SELL", "SHORT"))
+    out = {"product": "NDO" if itype == "CRYPTO_OPTION" else "NDF", "buyer": buyer, "seller": seller}
+    for f in fields:
+        v = terms.get(f)
+        if isinstance(v, str) and f in _UPPER:
+            v = v.upper()
+        if f in _NUMERIC and v not in (None, ""):
+            v = _num_str(v)
+        out[f] = normalise(v)
+    if Decimal(str(terms.get("notional_amount"))) <= 0:
+        raise ValueError("notional_amount must be positive")
+    if out["product"] == "NDO" and out["option_type"] not in ("CALL", "PUT"):
+        raise ValueError("option_type must be CALL or PUT")
+    return out
+
+
 def _canonical_v2(trade: Any, legs: Iterable[Any], own_entity: Any, counterparty: Any) -> dict:
     own, cp = _lei(own_entity, "own entity"), _lei(counterparty, "counterparty")
     if own == cp:
         raise ValueError("both parties have the same LEI")
+    if str(_get(trade, "instrument_type") or "").upper() in CRYPTO_INSTRUMENTS:
+        return {
+            "schema": "rijeka-trade",
+            "schema_version": 2,
+            "uti": normalise(_get(trade, "uti")),
+            "parties": sorted([own, cp]),
+            "trade": _pick(trade, TRADE_FIELDS_V2),
+            "product": _crypto_product_v2(trade, own, cp),
+        }
     out_legs = []
     for l in legs:
         payer, receiver = _sides(_get(l, "direction"), own, cp)

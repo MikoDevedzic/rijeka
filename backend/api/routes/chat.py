@@ -48,6 +48,7 @@ from sqlalchemy.orm import Session
 from db.models import ChatMessage, ChatRead, ChatRoom, ChatRoomMember, Firm, FirmLei, FirmMember
 from db.session import SessionLocal, get_db
 from middleware.auth import verify_token
+from chain import telegram as _telegram
 from prometheus.rooms import answer_in_room, mentions_prometheus, shared_confirmations
 from prometheus.tools import make_readonly
 
@@ -154,6 +155,10 @@ def _post(db: Session, room: ChatRoom, *, kind: str, name: str, body: str,
     )
     db.add(msg)
     room.last_message_at = datetime.now(timezone.utc)
+    # Mirror trade cards / lifecycle events to a linked Telegram group, but
+    # only after this transaction commits (chain/telegram.py outbox). No-op
+    # when Telegram isn't configured or the room isn't linked.
+    _telegram.enqueue(db, msg.id)
     return msg
 
 
