@@ -40,7 +40,15 @@ from api.routes.trade_events import (
     _parse_trade_uuid, _load_pending_trade, _apply_lifecycle_transition,
 )
 from chain.canonical import canonical_payload, canonical_bytes, trade_hash, CANONICAL_SCHEMA_VERSION
-from chain.signing import confirmation_typed_data, sign, recover, eip712_digest
+from chain.signing import (confirmation_typed_data, amendment_typed_data, termination_typed_data,
+                           sign, recover, eip712_digest)
+from chain.lifecycle import latest_attested_event, anchored_attestation, is_terminated
+from chain.canonical import TRADE_FIELDS_V2, LEG_FIELDS_V2
+from projections.trade_projection import project, project_from_db, EventLike
+from db.models import IdempotencyKey
+from copy import deepcopy
+from datetime import date as _date
+from decimal import Decimal
 from chain.keys import PartyKey, resolve as resolve_key
 from chain.attestation import get_backend
 
@@ -121,10 +129,8 @@ def ensure_uti(db: Session, trade: Trade) -> str:
 
 
 def _latest_confirmed_event(db: Session, trade_id: UUID) -> Optional[TradeEvent]:
-    return (db.query(TradeEvent)
-              .filter(TradeEvent.trade_id == trade_id, TradeEvent.event_type == "CONFIRMED")
-              .order_by(desc(TradeEvent.event_seq))
-              .first())
+    """The event holding the CURRENT signed record: CONFIRMED, or the latest AMENDED."""
+    return latest_attested_event(db, trade_id)
 
 
 def _hexb(b: bytes) -> str:
@@ -431,6 +437,360 @@ def confirm_on_chain(
     )
 
 
+
+
+# ── Amend / terminate — the signed record follows the trade ─────────────────
+#
+# Once a confirmation is anchored, the terms are what BOTH parties signed.
+# Changing the booking off-chain leaves the registry pointing at a record the
+# booking no longer hashes to. So an amendment is itself a bilateral act:
+# both sign TradeAmendment(prevHash, newHash), the registry marks prevHash
+# Superseded and records newHash with prevHash as its parent. Termination is
+# TradeTermination(hash), both signed, status Terminated.
+#
+# The counterparty flow mirrors confirmation: a stateless *-request that
+# returns our signature and the digest they must sign, then the apply route
+# with their signature. When we hold both keys (demo / test) the apply route
+# signs both and marks the attestation bilateral: false.
+
+_TRADE_DATE_FIELDS = ("trade_date", "effective_date", "maturity_date")
+_LEG_DATE_FIELDS   = ("effective_date", "maturity_date", "first_period_start", "last_period_end")
+_LEG_NUM_FIELDS    = ("notional", "fixed_rate", "spread", "leverage")
+_LEG_AMENDABLE     = set(LEG_FIELDS_V2) | {"direction", "forecast_curve_id", "terms", "embedded_options"}
+
+
+def _coerce(field: str, v, date_fields, num_fields):
+    if v is None:
+        return None
+    if field in date_fields and isinstance(v, str):
+        return _date.fromisoformat(v)
+    if field in num_fields and not isinstance(v, Decimal):
+        return Decimal(str(v))
+    if field == "payment_lag":
+        return int(v)
+    return v
+
+
+def _apply_changes(db: Session, trade: Trade, legs: list, changes: dict) -> None:
+    """
+    Apply an AMENDED `changes` contract to the ORM rows, in-session, no commit.
+    Only economic fields — the ones in the canonical record — may change here.
+    Anything else (status, store, book, desk) is not an amendment.
+    """
+    if not isinstance(changes, dict) or not (changes.get("trade") or changes.get("legs")):
+        raise HTTPException(status_code=422, detail="`changes` must contain `trade` and/or `legs` updates.")
+    for k, v in (changes.get("trade") or {}).items():
+        if k not in TRADE_FIELDS_V2:
+            raise HTTPException(status_code=422, detail=f"`{k}` is not an economic trade term; it cannot be amended here.")
+        setattr(trade, k, _coerce(k, v, _TRADE_DATE_FIELDS, ("notional",)))
+    by_id = {str(l.id): l for l in legs}
+    for upd in (changes.get("legs") or []):
+        lid = str(upd.get("id") or "")
+        leg = by_id.get(lid)
+        if leg is None:
+            raise HTTPException(status_code=422, detail=f"leg {lid or '?'} is not on this trade.")
+        for k, v in upd.items():
+            if k == "id":
+                continue
+            if k not in _LEG_AMENDABLE:
+                raise HTTPException(status_code=422, detail=f"`{k}` is not an economic leg term; it cannot be amended here.")
+            setattr(leg, k, _coerce(k, v, _LEG_DATE_FIELDS, _LEG_NUM_FIELDS))
+    db.flush()
+    db.expire(trade); [db.expire(l) for l in legs]
+
+
+def _current_record(db: Session, trade: Trade):
+    """(attestation, prev_hash bytes) for an anchored, non-terminated trade, else 409."""
+    att = anchored_attestation(db, trade.id)
+    if att is None:
+        raise HTTPException(status_code=409, detail=f"{trade.trade_ref} has no on-chain confirmation to act on.")
+    if is_terminated(att):
+        raise HTTPException(status_code=409, detail=f"{trade.trade_ref} is terminated on-chain; nothing further can change.")
+    return att, bytes.fromhex(att["trade_hash"][2:])
+
+
+def _preview_amendment(db: Session, trade: Trade, changes: dict):
+    """
+    Apply `changes` in a savepoint, compute the new record, roll back.
+    Returns (att, prev_hash, new_payload, new_hash). Deterministic.
+    """
+    att, prev = _current_record(db, trade)
+    sp = db.begin_nested()
+    try:
+        legs = db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
+        _apply_changes(db, trade, legs, changes)
+        payload, new = _canonical_for(db, trade, attested_version(att))
+    finally:
+        sp.rollback()
+        db.expire_all()
+    if new == prev:
+        raise HTTPException(status_code=422, detail="These changes do not alter any signed term; nothing to amend.")
+    return att, prev, payload, new
+
+
+def _apply_attested_event(db: Session, trade: Trade, *, event_type: str, new_status: str,
+                          payload: dict, confirmation_hash: str, idempotency_key: Optional[str],
+                          mutate=None) -> dict:
+    """
+    Like trade_events._apply_lifecycle_transition, but the audit post_state is
+    the real projection AFTER this event (so an AMENDED snapshot shows the
+    amended terms, not just a status flip), and `mutate()` runs inside the
+    same transaction so rows and event commit — or roll back — together.
+    """
+    import uuid as _uuid
+    from datetime import date as _d
+    cached = _lookup_idempotent(db, trade.user_id, idempotency_key)
+    if cached:
+        return cached
+    event_id = _uuid.uuid4()
+    pre_rows = (db.query(TradeEvent).filter(TradeEvent.trade_id == trade.id)
+                  .order_by(TradeEvent.event_seq.asc()).all())
+    pre_events = [EventLike.from_row(r) for r in pre_rows]
+    pre_state = project(pre_events) if pre_events else {}
+    next_seq = (pre_events[-1].event_seq + 1) if pre_events else 1
+    post_state = project(pre_events + [EventLike(event_seq=next_seq, event_type=event_type, payload=payload)]) \
+                 if pre_events else deepcopy(pre_state)
+    if post_state.get("trade") is not None:
+        post_state["trade"]["status"] = new_status
+    try:
+        if mutate:
+            mutate()
+        db.add(TradeEvent(
+            id=event_id, trade_id=trade.id, event_type=event_type,
+            event_date=_d.today(), effective_date=_d.today(),
+            payload=payload, pre_state=pre_state, post_state=post_state,
+            user_id=trade.user_id, created_by=trade.user_id,
+            confirmation_hash=confirmation_hash, counterparty_confirmed=True,
+        ))
+        db.flush()
+        trade.status = new_status
+        trade.latest_event_id = event_id
+        trade.version_seq = (trade.version_seq or 0) + 1
+        db.flush(); db.refresh(trade)
+        from api.routes.trade_events import _build_lifecycle_response
+        result = _build_lifecycle_response(db, trade, event_id)
+        if idempotency_key:
+            db.add(IdempotencyKey(key=idempotency_key, user_id=trade.user_id, result=result))
+        db.commit()
+        return result
+    except HTTPException:
+        db.rollback(); raise
+    except Exception as e:
+        db.rollback()
+        log.exception("%s failed", event_type)
+        raise HTTPException(status_code=500, detail=f"{event_type} failed: {e}")
+
+
+def _cp_signature_or_ours(db, trade, k_own, k_cp, td_cp, td_own, address, signature, what: str):
+    """
+    Resolve the counterparty's signature for a lifecycle action.
+    Given one, verify it recovers to their registered/known address. Given
+    none, sign for them only if we hold their key (demo/test) and say so.
+    Returns (sig_own, sig_cp, bilateral).
+    """
+    sig_own = sign(td_own, k_own.private_key)
+    if signature:
+        try:
+            sig_cp = bytes.fromhex(signature[2:] if signature.startswith("0x") else signature)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="signature is not hex")
+        if len(sig_cp) != 65:
+            raise HTTPException(status_code=422, detail=f"signature must be 65 bytes, got {len(sig_cp)}")
+        try:
+            rec = recover(td_cp, sig_cp)
+        except Exception as e:
+            raise HTTPException(status_code=422, detail=f"signature could not be recovered: {e}")
+        if address and rec.lower() != address.lower():
+            raise HTTPException(status_code=422, detail=f"signature recovers to {rec}, not the address supplied ({address}).")
+        if rec.lower() != k_cp.address.lower():
+            raise HTTPException(status_code=422, detail=(
+                f"signature is from {rec}, but {k_cp.lei} is registered as {k_cp.address}."))
+        return sig_own, sig_cp, True
+    if k_cp.private_key is None:
+        raise HTTPException(status_code=422, detail=(
+            f"No signing key held for {k_cp.lei}, which is correct for a real counterparty. "
+            f"Get their signature over the {what} request and resubmit with {{address, signature}}."))
+    return sig_own, sign(td_cp, k_cp.private_key), False
+
+
+class AmendRequestBody(BaseModel):
+    changes: dict
+
+
+class AmendBody(BaseModel):
+    changes: dict
+    address:   Optional[str] = None
+    signature: Optional[str] = None
+
+
+@router.post("/amend-request/{trade_id}")
+def amendment_request(trade_id: str, body: AmendRequestBody, db: Session = Depends(get_db),
+                      user: dict = Depends(verify_token)):
+    """
+    Our half of an amendment, for the counterparty to countersign. Nothing is
+    stored or anchored: the changes are applied in a savepoint to compute the
+    new record and hash, then rolled back. Deterministic, so /amend with the
+    same `changes` re-derives the identical new hash.
+    """
+    user_id = user.get("sub")
+    trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    att, prev, payload, new = _preview_amendment(db, trade, body.changes)
+    k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    be, chain_id, registry = _eip712_ctx()
+    td_own = amendment_typed_data(chain_id, registry, prev, new, k_cp.address)
+    td_cp  = amendment_typed_data(chain_id, registry, prev, new, k_own.address)
+    return {
+        "format": "rijeka-amendment-request", "format_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "trade_ref": trade.trade_ref, "trade_id": str(trade.id),
+        "changes": body.changes,
+        "prev_hash": _hexb(prev), "new_hash": _hexb(new),
+        "canonical": payload,
+        "eip712": {"name": "Rijeka Trade Confirmation", "version": "1",
+                   "chain_id": chain_id, "verifying_contract": registry},
+        "from": {"lei": k_own.lei, "name": own_id.get("name"), "address": k_own.address,
+                 "signature": _hexb(sign(td_own, k_own.private_key))},
+        "to":   {"lei": k_cp.lei, "name": cp_id.get("name"), "address": k_cp.address,
+                 "digest_to_sign": _hexb(eip712_digest(td_cp)),
+                 "can_sign_locally": k_cp.private_key is not None},
+        "how_to_countersign": [
+            "1. Apply `changes` to YOUR booking of this trade and re-hash it. It must equal new_hash. "
+            "Check prev_hash is the record you signed.",
+            "2. Sign EIP-712 TradeAmendment(bytes32 prevHash,bytes32 newHash,address counterparty) with "
+            "counterparty = from.address. The digest is to.digest_to_sign.",
+            f"3. Return {{address, signature}} with the same `changes` to POST /api/chain/amend/{trade.id}, "
+            "or call amend(prev_hash, new_hash, from.signature, your signature) on the registry yourself.",
+        ],
+    }
+
+
+@router.post("/amend/{trade_id}", status_code=201)
+def amend_on_chain(trade_id: str, body: AmendBody,
+                   idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+                   db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """
+    Apply `changes`, supersede the signed record on-chain with both
+    signatures, and append an AMENDED event carrying the new attestation.
+    Rows and event commit together; any failure leaves the booking untouched.
+    """
+    user_id = _check_write_role(user)
+    _validate_idempotency_header(idempotency_key)
+    trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if trade.status != "CONFIRMED":
+        raise HTTPException(status_code=409, detail=f"{trade.trade_ref} is {trade.status}; only a CONFIRMED trade can be amended.")
+
+    att, prev, payload, new = _preview_amendment(db, trade, body.changes)
+    k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    be, chain_id, registry = _eip712_ctx()
+    td_own = amendment_typed_data(chain_id, registry, prev, new, k_cp.address)
+    td_cp  = amendment_typed_data(chain_id, registry, prev, new, k_own.address)
+    sig_own, sig_cp, bilateral = _cp_signature_or_ours(db, trade, k_own, k_cp, td_cp, td_own,
+                                                       body.address, body.signature, "amendment")
+    try:
+        receipt = be.amend(prev, new, sig_own, sig_cp)
+    except Exception as e:
+        log.exception("on-chain amend failed")
+        raise HTTPException(status_code=502, detail=f"Chain anchoring failed: {e}")
+
+    attestation = {
+        "schema_version": attested_version(att),
+        "trade_hash":     _hexb(new),
+        "prev_hash":      _hexb(prev),
+        "canonical_bytes_len": len(canonical_bytes(payload)),
+        "bilateral":      bilateral,
+        "parties": {
+            "own":          {"lei": k_own.lei, "address": k_own.address, "signature": _hexb(sig_own), "key_source": k_own.source},
+            "counterparty": {"lei": k_cp.lei,  "address": k_cp.address,  "signature": _hexb(sig_cp),
+                             "key_source": "countersigned" if bilateral else k_cp.source},
+        },
+        "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": chain_id, "verifying_contract": registry},
+        "anchor": receipt.to_dict(),
+    }
+
+    def _mutate():
+        legs = db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
+        _apply_changes(db, trade, legs, body.changes)
+        _, h2 = _canonical_for(db, trade, attested_version(att))
+        if h2 != new:   # cannot happen unless the booking changed between preview and apply
+            raise HTTPException(status_code=409, detail="The booking changed while the amendment was being anchored; re-run the request.")
+
+    return _apply_attested_event(db, trade, event_type="AMENDED", new_status="CONFIRMED",
+                                 payload={"changes": body.changes, "attestation": attestation},
+                                 confirmation_hash=_hexb(new), idempotency_key=idempotency_key, mutate=_mutate)
+
+
+class TerminateBody(BaseModel):
+    address:   Optional[str] = None
+    signature: Optional[str] = None
+    reason:    Optional[str] = None
+
+
+@router.get("/terminate-request/{trade_id}")
+def termination_request(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Our half of a termination: our signature and the digest the counterparty must sign."""
+    user_id = user.get("sub")
+    trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    att, h = _current_record(db, trade)
+    k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    be, chain_id, registry = _eip712_ctx()
+    td_own = termination_typed_data(chain_id, registry, h, k_cp.address)
+    td_cp  = termination_typed_data(chain_id, registry, h, k_own.address)
+    return {
+        "format": "rijeka-termination-request", "format_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "trade_ref": trade.trade_ref, "trade_id": str(trade.id),
+        "trade_hash": _hexb(h),
+        "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": chain_id, "verifying_contract": registry},
+        "from": {"lei": k_own.lei, "name": own_id.get("name"), "address": k_own.address,
+                 "signature": _hexb(sign(td_own, k_own.private_key))},
+        "to":   {"lei": k_cp.lei, "name": cp_id.get("name"), "address": k_cp.address,
+                 "digest_to_sign": _hexb(eip712_digest(td_cp)), "can_sign_locally": k_cp.private_key is not None},
+        "how_to_countersign": [
+            "1. Confirm trade_hash is the record you signed (compare with your own booking).",
+            "2. Sign EIP-712 TradeTermination(bytes32 tradeHash,address counterparty) with counterparty = from.address.",
+            f"3. Return {{address, signature}} to POST /api/chain/terminate/{trade.id}, or call "
+            "terminate(trade_hash, from.signature, your signature) on the registry yourself.",
+        ],
+    }
+
+
+@router.post("/terminate/{trade_id}", status_code=201)
+def terminate_on_chain(trade_id: str, body: TerminateBody,
+                       idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+                       db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Close the signed record on-chain with both signatures; TERMINATED event and status."""
+    user_id = _check_write_role(user)
+    _validate_idempotency_header(idempotency_key)
+    trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if trade.status != "CONFIRMED":
+        raise HTTPException(status_code=409, detail=f"{trade.trade_ref} is {trade.status}; only a CONFIRMED trade can be terminated.")
+    att, h = _current_record(db, trade)
+    k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    be, chain_id, registry = _eip712_ctx()
+    td_own = termination_typed_data(chain_id, registry, h, k_cp.address)
+    td_cp  = termination_typed_data(chain_id, registry, h, k_own.address)
+    sig_own, sig_cp, bilateral = _cp_signature_or_ours(db, trade, k_own, k_cp, td_cp, td_own,
+                                                       body.address, body.signature, "termination")
+    try:
+        receipt = be.terminate(h, sig_own, sig_cp)
+    except Exception as e:
+        log.exception("on-chain terminate failed")
+        raise HTTPException(status_code=502, detail=f"Chain anchoring failed: {e}")
+    attestation = {**att, "terminated": True, "bilateral": bilateral,
+                   "termination": {"anchor": receipt.to_dict(), "reason": body.reason,
+                                   "signatures": {"own": _hexb(sig_own), "counterparty": _hexb(sig_cp)}}}
+    return _apply_attested_event(db, trade, event_type="TERMINATED", new_status="TERMINATED",
+                                 payload={"reason": body.reason, "attestation": attestation},
+                                 confirmation_hash=_hexb(h), idempotency_key=idempotency_key)
+
 @router.get("/attestation/{trade_id}")
 def get_attestation(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     user_id = user.get("sub")
@@ -544,6 +904,10 @@ def verify_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depe
 
     return {
         "trade_id":         str(trade.id),
+        "lifecycle":        {"event": ev.event_type if ev else None,
+                             "prev_hash": (att or {}).get("prev_hash"),
+                             "terminated": is_terminated(att),
+                             "on_chain_prev": (rec.prev_hash if rec and rec.prev_hash and int(rec.prev_hash, 16) else None)},
         "recomputed_hash":  recomputed,
         "stored_hash":      stored,
         "hash_matches":     (stored is not None and stored.lower() == recomputed.lower()),

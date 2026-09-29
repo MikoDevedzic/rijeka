@@ -52,31 +52,47 @@ def trade_hash(payload: dict) -> bytes:
 
 # ── EIP-712 ─────────────────────────────────────────────────────────────────
 
-def typed_data(eip712: dict, hash_hex: str, counterparty: str) -> dict:
+_DOMAIN_TYPE = [
+    {"name": "name", "type": "string"},
+    {"name": "version", "type": "string"},
+    {"name": "chainId", "type": "uint256"},
+    {"name": "verifyingContract", "type": "address"},
+]
+
+# The three lifecycle acts a counterparty may be asked to sign. Field order
+# and names must match TradeConfirmationRegistry.sol byte for byte.
+_PRIMARY = {
+    "rijeka-confirmation-request": ("TradeConfirmation", [
+        {"name": "tradeHash", "type": "bytes32"}, {"name": "counterparty", "type": "address"}]),
+    "rijeka-amendment-request": ("TradeAmendment", [
+        {"name": "prevHash", "type": "bytes32"}, {"name": "newHash", "type": "bytes32"},
+        {"name": "counterparty", "type": "address"}]),
+    "rijeka-termination-request": ("TradeTermination", [
+        {"name": "tradeHash", "type": "bytes32"}, {"name": "counterparty", "type": "address"}]),
+}
+
+
+def _b32(h: str) -> bytes:
+    return bytes.fromhex(h[2:] if h.startswith("0x") else h)
+
+
+def typed_data(eip712: dict, fmt: str, req: dict, counterparty: str) -> dict:
+    primary, fields = _PRIMARY[fmt]
+    if primary == "TradeAmendment":
+        message = {"prevHash": _b32(req["prev_hash"]), "newHash": _b32(req["new_hash"])}
+    else:
+        message = {"tradeHash": _b32(req["trade_hash"])}
+    message["counterparty"] = to_checksum_address(counterparty)
     return {
-        "types": {
-            "EIP712Domain": [
-                {"name": "name", "type": "string"},
-                {"name": "version", "type": "string"},
-                {"name": "chainId", "type": "uint256"},
-                {"name": "verifyingContract", "type": "address"},
-            ],
-            "TradeConfirmation": [
-                {"name": "tradeHash", "type": "bytes32"},
-                {"name": "counterparty", "type": "address"},
-            ],
-        },
-        "primaryType": "TradeConfirmation",
+        "types": {"EIP712Domain": _DOMAIN_TYPE, primary: fields},
+        "primaryType": primary,
         "domain": {
             "name": eip712["name"],
             "version": eip712["version"],
             "chainId": int(eip712["chain_id"]),
             "verifyingContract": to_checksum_address(eip712["verifying_contract"]),
         },
-        "message": {
-            "tradeHash": bytes.fromhex(hash_hex[2:]),
-            "counterparty": to_checksum_address(counterparty),
-        },
+        "message": message,
     }
 
 
@@ -123,17 +139,31 @@ def main() -> int:
     a = ap.parse_args()
 
     req = json.load(open(a.request))
-    if req.get("format") != "rijeka-confirmation-request":
-        return _fail(f"not a confirmation request (format={req.get('format')!r})")
+    fmt = req.get("format")
+    if fmt not in _PRIMARY:
+        return _fail(f"not a Rijeka lifecycle request (format={fmt!r})")
+    act = {"rijeka-confirmation-request": "CONFIRM", "rijeka-amendment-request": "AMEND",
+           "rijeka-termination-request": "TERMINATE"}[fmt]
+    print(f"\n  ── {act} ─────────────────────────────────────────────")
 
-    # 1 — recompute the hash from the terms in the request
-    computed = "0x" + trade_hash(req["canonical"]).hex()
-    claimed = req["trade_hash"]
-    print(f"\n  recomputed hash  {computed}")
-    print(f"  request says     {claimed}")
-    if computed.lower() != claimed.lower():
-        return _fail("the request's own hash does not match its canonical record. Do not sign.")
-    print("  ✔ the request is internally consistent")
+    # 1 — recompute the hash from the terms in the request (termination carries
+    #     no record: it names the hash you already signed)
+    if fmt == "rijeka-termination-request":
+        computed = req["trade_hash"]
+        print(f"  record to close  {computed}")
+        print("  ! confirm this is the hash of the trade you signed before agreeing to close it")
+    else:
+        claimed = req["trade_hash"] if fmt == "rijeka-confirmation-request" else req["new_hash"]
+        computed = "0x" + trade_hash(req["canonical"]).hex()
+        print(f"  recomputed hash  {computed}")
+        print(f"  request says     {claimed}")
+        if computed.lower() != claimed.lower():
+            return _fail("the request's own hash does not match its canonical record. Do not sign.")
+        print("  ✔ the request is internally consistent")
+        if fmt == "rijeka-amendment-request":
+            print(f"  supersedes       {req['prev_hash']}")
+            print("  ! check prev_hash is the record you signed, and `changes` is what you agreed:")
+            print("    " + json.dumps(req.get("changes"), sort_keys=True))
 
     # 2 — compare against the counterparty's own booking, when given
     if a.expect_hash:
@@ -144,11 +174,12 @@ def main() -> int:
     else:
         print("  ! no --expect-hash given: you are trusting the terms printed below")
 
-    summarise(req)
+    if fmt != "rijeka-termination-request":
+        summarise(req)
 
     # 3 — the digest, checked against the one supplied
     eip = req["eip712"]
-    td = typed_data(eip, computed, req["from"]["address"])
+    td = typed_data(eip, fmt, req, req["from"]["address"])
     digest = "0x" + _hash_eip191_message(encode_typed_data(full_message=td)).hex()
     supplied = req.get("to", {}).get("digest_to_sign")
     if supplied and supplied.lower() != digest.lower():
@@ -173,10 +204,11 @@ def main() -> int:
 
     sig = Account.sign_message(encode_typed_data(full_message=td), private_key=acct.key).signature
     out = {
-        "format": "rijeka-confirmation-countersignature",
+        "format": fmt.replace("-request", "-countersignature"),
         "format_version": 1,
         "trade_id": req.get("trade_id"),
         "trade_hash": computed,
+        **({"prev_hash": req["prev_hash"], "changes": req.get("changes")} if fmt == "rijeka-amendment-request" else {}),
         "address": acct.address,
         "signature": "0x" + sig.hex(),
     }
@@ -187,9 +219,16 @@ def main() -> int:
     else:
         print("\n  ✔ signed\n")
         print(text)
-    print("\n  Return this to the requesting party, or call confirm() on the registry yourself:")
-    print(f"    confirm({computed},\n            {req['from']['address']},\n            {acct.address},\n"
-          f"            {req['from']['signature']},\n            0x{sig.hex()})\n")
+    if fmt == "rijeka-amendment-request":
+        print("\n  Return this (with the same `changes`) to the requesting party, or call amend() yourself:")
+        print(f"    amend({req['prev_hash']},\n          {computed},\n          {req['from']['signature']},\n          0x{sig.hex()})\n")
+    elif fmt == "rijeka-termination-request":
+        print("\n  Return this to the requesting party, or call terminate() yourself:")
+        print(f"    terminate({computed},\n              {req['from']['signature']},\n              0x{sig.hex()})\n")
+    else:
+        print("\n  Return this to the requesting party, or call confirm() on the registry yourself:")
+        print(f"    confirm({computed},\n            {req['from']['address']},\n            {acct.address},\n"
+              f"            {req['from']['signature']},\n            0x{sig.hex()})\n")
     return 0
 
 

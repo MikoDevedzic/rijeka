@@ -188,6 +188,13 @@ def append_trade_event(
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
 
+    if body.event_type in ("AMENDED", "TERMINATED", "PARTIAL_TERMINATION", "NOVATED", "CONFIRMED"):
+        # These change or close the signed terms. On an anchored trade they
+        # must carry both signatures and supersede/close the registry record,
+        # which only the /api/chain routes do.
+        from chain.lifecycle import refuse_offchain_mutation
+        refuse_offchain_mutation(db, trade, f"Appending a {body.event_type} event directly")
+
     event = TradeEvent(
         id=uuid.uuid4(),
         trade_id=body.trade_id,
