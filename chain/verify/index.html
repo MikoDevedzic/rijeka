@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Independent Confirmation Verifier</title>
+<meta name="description" content="Verify a Rijeka on-chain trade confirmation independently: recompute the canonical hash, check both EIP-712 signatures, read the registry from a public Ethereum node.">
+<!-- Pinned by content hash: the page verifies that the script it runs is exactly this build of
+     ethers, so a compromised or swapped CDN file cannot silently alter what gets verified. -->
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"
+        integrity="sha384-6Zl0Pc8zjSz8KvmNeXRvUQgY4ryFb+BwDvKCmLYcBME0joAaru491tQgi9B7zsMM"
+        crossorigin="anonymous"></script>
+<style>
+  :root{
+    --bg:#000; --panel:#0C0C0C; --line:#1E1E1E; --line2:#2A2A2A;
+    --fg:#F0F0F0; --mut:#666; --dim:#333;
+    --ok:#00D4A8; --bad:#FF6B6B; --warn:#F5C842; --link:#4A9EFF;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'IBM Plex Sans',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.6}
+  .wrap{max-width:980px;margin:0 auto;padding:40px 16px 80px}
+  h1{font-family:var(--mono);font-size:1.25rem;letter-spacing:.06em;margin:0 0 6px;font-weight:700}
+  .sub{color:var(--mut);font-size:.8125rem;margin-bottom:28px;max-width:660px}
+  .sub strong{color:#999;font-weight:600}
+  label{display:block;font-family:var(--mono);font-size:.75rem;letter-spacing:.09em;color:var(--ok);margin-bottom:6px}
+  textarea{width:100%;min-height:180px;background:#060606;border:1px solid var(--line);border-radius:3px;
+    color:var(--fg);font-family:var(--mono);font-size:12px;padding:10px;outline:none;resize:vertical}
+  textarea:focus{border-color:rgba(0,212,168,.45)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0 0}
+  select,button{font-family:var(--mono);font-size:.8125rem;border-radius:3px;padding:8px 14px;
+    background:transparent;border:1px solid var(--line2);color:var(--fg);cursor:pointer}
+  button.primary{border-color:rgba(0,212,168,.5);background:rgba(0,212,168,.08);color:var(--ok);font-weight:700;letter-spacing:.05em}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .hint{color:var(--dim);font-size:.75rem}
+  .checks{margin-top:26px}
+  .chk{display:flex;gap:12px;padding:11px 14px;border:1px solid var(--line);border-top:none;background:var(--panel);align-items:flex-start}
+  .chk:first-child{border-top:1px solid var(--line);border-radius:3px 3px 0 0}
+  .chk:last-child{border-radius:0 0 3px 3px}
+  .chk .mark{font-family:var(--mono);font-weight:700;width:14px;flex:none}
+  .chk .body{flex:1;min-width:0}
+  .chk .t{font-family:var(--mono);font-size:.8125rem}
+  .chk .d{color:var(--mut);font-size:.75rem;font-family:var(--mono);word-break:break-all;margin-top:3px}
+  .pass .mark,.pass .t{color:var(--ok)}
+  .fail .mark,.fail .t{color:var(--bad)}
+  .skip .mark,.skip .t{color:var(--dim)}
+  .verdict{margin-top:22px;padding:14px 16px;border-radius:3px;font-family:var(--mono);font-size:.9375rem;font-weight:700;letter-spacing:.04em}
+  .verdict.ok{background:rgba(0,212,168,.07);border:1px solid rgba(0,212,168,.35);color:var(--ok)}
+  .verdict.bad{background:rgba(255,107,107,.07);border:1px solid rgba(255,107,107,.35);color:var(--bad)}
+  .verdict .note{display:block;font-weight:400;font-size:.75rem;color:var(--mut);margin-top:6px;letter-spacing:0}
+  a{color:var(--link)}
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-size:.75rem}
+  code{font-family:var(--mono);color:#888}
+  @media (max-width:640px){ .wrap{padding:24px 16px 60px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>INDEPENDENT CONFIRMATION VERIFIER</h1>
+  <p class="sub">
+    Checks a bilateral trade confirmation without trusting the system that produced it.
+    Everything runs <strong>in your browser</strong>: the hash is recomputed from the trade terms,
+    both signatures are recovered locally, and the registry is read straight from a
+    <strong>public Ethereum node</strong>. No Rijeka server is contacted at any point.
+  </p>
+
+  <label for="proof">PROOF PACK (JSON)</label>
+  <textarea id="proof" spellcheck="false" placeholder='Paste the JSON from /api/chain/proof/{trade_id} — it contains "canonical", "trade_hash" and "attestation".'></textarea>
+
+  <div class="row">
+    <select id="rpc">
+      <option value="https://ethereum-sepolia-rpc.publicnode.com|11155111">Sepolia · publicnode</option>
+      <option value="https://1rpc.io/sepolia|11155111">Sepolia · 1rpc</option>
+      <option value="https://ethereum-rpc.publicnode.com|1">Ethereum mainnet · publicnode</option>
+      <option value="custom|0">Custom RPC…</option>
+    </select>
+    <input id="rpcCustom" placeholder="https://your-node" style="display:none;flex:1;min-width:220px;background:#060606;border:1px solid var(--line);border-radius:3px;color:var(--fg);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none">
+    <button class="primary" id="run">▶ VERIFY</button>
+    <span class="hint" id="status"></span>
+  </div>
+
+  <div class="checks" id="checks"></div>
+  <div id="verdict"></div>
+
+  <footer>
+    Open source, MIT. The registry contract source is verified on
+    <a href="https://sourcify.dev" target="_blank" rel="noreferrer">Sourcify</a> — read it before you trust this page.
+    This file is self-contained: save it and it keeps working.
+    <br>Canonical form: JSON, keys sorted at every level, separators <code>,</code> and <code>:</code>, no whitespace, UTF-8, then <code>keccak256</code>.
+  </footer>
+</div>
+
+<script>
+const ABI = [
+  "function getConfirmation(bytes32) view returns (tuple(address partyA,address partyB,uint64 confirmedAt,uint64 blockNumber,bytes32 prevHash,uint8 status))",
+  "function DOMAIN_SEPARATOR() view returns (bytes32)"
+];
+const STATUS = ["None","Confirmed","Superseded","Terminated"];
+
+/** Canonical JSON: sort keys at every level, compact separators. Must match
+ *  Python's json.dumps(sort_keys=True, separators=(",",":"), ensure_ascii=False). */
+function canonicalise(v){
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(canonicalise).join(",") + "]";
+  const keys = Object.keys(v).sort();
+  return "{" + keys.map(k => JSON.stringify(k) + ":" + canonicalise(v[k])).join(",") + "}";
+}
+
+const el = id => document.getElementById(id);
+const rows = [];
+function reset(){ rows.length = 0; el("checks").innerHTML = ""; el("verdict").innerHTML = ""; }
+function add(state, title, detail){
+  rows.push(state);
+  const mark = state === "pass" ? "✔" : state === "fail" ? "✘" : "–";
+  const d = document.createElement("div");
+  d.className = "chk " + state;
+  d.innerHTML = `<div class="mark">${mark}</div><div class="body"><div class="t"></div><div class="d"></div></div>`;
+  d.querySelector(".t").textContent = title;
+  d.querySelector(".d").textContent = detail || "";
+  el("checks").appendChild(d);
+}
+
+el("rpc").addEventListener("change", e => {
+  el("rpcCustom").style.display = e.target.value.startsWith("custom") ? "block" : "none";
+});
+
+el("run").addEventListener("click", async () => {
+  reset();
+  el("status").textContent = "";
+  let proof;
+  try {
+    proof = JSON.parse(el("proof").value);
+  } catch (e) {
+    add("fail", "proof pack is not valid JSON", e.message);
+    return;
+  }
+
+  const att = proof.attestation || {};
+  const eip = att.eip712 || {};
+  const canonical = proof.canonical;
+  if (!canonical || !att.trade_hash) {
+    add("fail", "proof pack is missing `canonical` or `attestation`", "");
+    return;
+  }
+
+  // 1 — recompute the hash from the terms
+  let computed = null, hashOk = false;
+  try {
+    const bytes = new TextEncoder().encode(canonicalise(canonical));
+    computed = ethers.keccak256(bytes);
+    const claimed = (proof.trade_hash || att.trade_hash).toLowerCase();
+    hashOk = computed.toLowerCase() === claimed;
+    add(hashOk ? "pass" : "fail",
+        hashOk ? "hash recomputed from the trade terms matches the signed hash"
+               : "HASH MISMATCH — these terms are not what was signed",
+        "recomputed " + computed + (hashOk ? "" : "  ·  claimed " + claimed));
+  } catch (e) {
+    add("fail", "could not hash the canonical record", e.message);
+  }
+
+  // 2 — recover both signatures
+  const parties = att.parties || {};
+  const A = parties.own || {}, B = parties.counterparty || {};
+  let sigsOk = false;
+  if (computed && hashOk && A.address && B.address && A.signature && B.signature) {
+    try {
+      const domain = { name: eip.name, version: eip.version, chainId: Number(eip.chain_id), verifyingContract: eip.verifying_contract };
+      const types  = { TradeConfirmation: [ { name: "tradeHash", type: "bytes32" }, { name: "counterparty", type: "address" } ] };
+      const rA = ethers.verifyTypedData(domain, types, { tradeHash: computed, counterparty: B.address }, A.signature);
+      const rB = ethers.verifyTypedData(domain, types, { tradeHash: computed, counterparty: A.address }, B.signature);
+      const okA = rA.toLowerCase() === A.address.toLowerCase();
+      const okB = rB.toLowerCase() === B.address.toLowerCase();
+      sigsOk = okA && okB;
+      add(okA ? "pass" : "fail", (okA ? "signature valid — " : "SIGNATURE INVALID — ") + (A.lei || "party A"), A.address);
+      add(okB ? "pass" : "fail", (okB ? "signature valid — " : "SIGNATURE INVALID — ") + (B.lei || "party B"), B.address);
+    } catch (e) {
+      add("fail", "signature recovery failed", e.message);
+    }
+  } else {
+    add(hashOk ? "skip" : "fail",
+        hashOk ? "signatures not checked — none supplied"
+               : "signatures do not cover these terms",
+        "a signature over the signed hash cannot validate altered terms");
+  }
+
+  // 3 — read the registry from a public node
+  let chainOk = false, rec = null;
+  const sel = el("rpc").value.split("|");
+  const url = sel[0] === "custom" ? el("rpcCustom").value.trim() : sel[0];
+  if (computed && eip.verifying_contract && url) {
+    el("status").textContent = "reading the chain…";
+    try {
+      const provider = new ethers.JsonRpcProvider(url);
+      const net = await provider.getNetwork();
+      if (eip.chain_id && Number(net.chainId) !== Number(eip.chain_id)) {
+        add("fail", "wrong network", `proof says chainId ${eip.chain_id}, this node is ${net.chainId}`);
+      } else {
+        const c = new ethers.Contract(eip.verifying_contract, ABI, provider);
+        rec = await c.getConfirmation(computed);
+        const st = STATUS[Number(rec.status)] || "Unknown";
+        const partiesMatch = rec.partyA.toLowerCase() === (A.address || "").toLowerCase()
+                          && rec.partyB.toLowerCase() === (B.address || "").toLowerCase();
+        chainOk = st === "Confirmed" && partiesMatch;
+        add(st === "Confirmed" ? "pass" : "fail",
+            "registry status: " + st + (st === "Superseded" ? " — this record was amended; verify the current one" : st === "Terminated" ? " — closed by both parties" : ""),
+            st === "None"
+              ? "no confirmation exists on this chain for this hash"
+              : `block ${rec.blockNumber} · ${new Date(Number(rec.confirmedAt) * 1000).toISOString()} · registry ${eip.verifying_contract}`);
+        if (st !== "None" && rec.prevHash && !/^0x0+$/.test(rec.prevHash)) {
+          add("pass", "amends an earlier signed record", "supersedes " + rec.prevHash);
+        }
+        if (st !== "None") {
+          add(partiesMatch ? "pass" : "fail",
+              partiesMatch ? "on-chain parties match the proof pack" : "ON-CHAIN PARTIES DIFFER from the proof pack",
+              rec.partyA + "  /  " + rec.partyB);
+        }
+      }
+    } catch (e) {
+      add("fail", "could not read the chain", e.message);
+    }
+    el("status").textContent = "";
+  } else if (!url) {
+    add("skip", "chain not checked", "no RPC endpoint given");
+  }
+
+  // Verdict
+  const anyFail = rows.includes("fail");
+  const v = document.createElement("div");
+  v.className = "verdict " + (anyFail ? "bad" : "ok");
+  if (anyFail) {
+    v.innerHTML = "NOT VERIFIED<span class='note'>At least one check failed. These trade terms are not the ones both parties signed and anchored, or the confirmation does not exist on this chain.</span>";
+  } else {
+    v.innerHTML = "VERIFIED<span class='note'>These exact terms were signed by both named parties and recorded on chain "
+      + (rec ? "at block " + rec.blockNumber : "") + ". Neither party can alter them without breaking this proof.</span>";
+  }
+  el("verdict").appendChild(v);
+});
+</script>
+</body>
+</html>

@@ -61,8 +61,12 @@ class AttestationBackend(Protocol):
     registry: Optional[str]
     anchored: bool
     def confirm(self, trade_hash: bytes, party_a: str, party_b: str, sig_a: bytes, sig_b: bytes) -> AnchorReceipt: ...
+    def amend(self, prev_hash: bytes, new_hash: bytes, sig_a: bytes, sig_b: bytes) -> AnchorReceipt: ...
+    def terminate(self, trade_hash: bytes, sig_a: bytes, sig_b: bytes) -> AnchorReceipt: ...
     def get(self, trade_hash: bytes) -> Optional[OnChainRecord]: ...
     def confirmation_digest(self, trade_hash: bytes, counterparty: str) -> bytes: ...
+    def amendment_digest(self, prev_hash: bytes, new_hash: bytes, counterparty: str) -> bytes: ...
+    def termination_digest(self, trade_hash: bytes, counterparty: str) -> bytes: ...
 
 
 # ── Null ─────────────────────────────────────────────────────────────────────
@@ -72,14 +76,27 @@ class NullBackend:
     registry = None
     anchored = False
 
+    _NOTE = "No chain configured (RIJEKA_CHAIN_RPC unset): attestation stored off-chain only."
+
     def confirm(self, trade_hash, party_a, party_b, sig_a, sig_b) -> AnchorReceipt:
-        return AnchorReceipt(False, 0, None, None, None, None, None,
-                             note="No chain configured (RIJEKA_CHAIN_RPC unset): attestation stored off-chain only.")
+        return AnchorReceipt(False, 0, None, None, None, None, None, note=self._NOTE)
+
+    def amend(self, prev_hash, new_hash, sig_a, sig_b) -> AnchorReceipt:
+        return AnchorReceipt(False, 0, None, None, None, None, None, note=self._NOTE)
+
+    def terminate(self, trade_hash, sig_a, sig_b) -> AnchorReceipt:
+        return AnchorReceipt(False, 0, None, None, None, None, None, note=self._NOTE)
 
     def get(self, trade_hash) -> Optional[OnChainRecord]:
         return None
 
     def confirmation_digest(self, trade_hash, counterparty) -> bytes:
+        raise RuntimeError("No chain configured")
+
+    def amendment_digest(self, prev_hash, new_hash, counterparty) -> bytes:
+        raise RuntimeError("No chain configured")
+
+    def termination_digest(self, trade_hash, counterparty) -> bytes:
         raise RuntimeError("No chain configured")
 
 
@@ -111,9 +128,14 @@ class EvmBackend:
     def confirmation_digest(self, trade_hash: bytes, counterparty: str) -> bytes:
         return self.contract.functions.confirmationDigest(trade_hash, to_checksum_address(counterparty)).call()
 
-    def confirm(self, trade_hash, party_a, party_b, sig_a, sig_b) -> AnchorReceipt:
-        fn = self.contract.functions.confirm(trade_hash, to_checksum_address(party_a),
-                                             to_checksum_address(party_b), sig_a, sig_b)
+    def amendment_digest(self, prev_hash: bytes, new_hash: bytes, counterparty: str) -> bytes:
+        return self.contract.functions.amendmentDigest(prev_hash, new_hash, to_checksum_address(counterparty)).call()
+
+    def termination_digest(self, trade_hash: bytes, counterparty: str) -> bytes:
+        return self.contract.functions.terminationDigest(trade_hash, to_checksum_address(counterparty)).call()
+
+    def _send(self, fn, label: str) -> AnchorReceipt:
+        """Sign with the relayer, submit, wait for the receipt. Reverts raise."""
         tx = fn.build_transaction({
             "from":  self.relayer.address,
             "nonce": self.w3.eth.get_transaction_count(self.relayer.address),
@@ -123,11 +145,22 @@ class EvmBackend:
         h = self.w3.eth.send_raw_transaction(signed.raw_transaction)
         rcpt = self.w3.eth.wait_for_transaction_receipt(h, timeout=180)
         if rcpt.status != 1:
-            raise RuntimeError(f"confirm() reverted in tx {h.hex()}")
+            raise RuntimeError(f"{label}() reverted in tx {h.hex()}")
         blk = self.w3.eth.get_block(rcpt.blockNumber)
         tx_hex = "0x" + h.hex() if not h.hex().startswith("0x") else h.hex()
         return AnchorReceipt(True, self.chain_id, self.registry, tx_hex,
                              int(rcpt.blockNumber), int(blk.timestamp), self._explorer_tx(tx_hex))
+
+    def confirm(self, trade_hash, party_a, party_b, sig_a, sig_b) -> AnchorReceipt:
+        return self._send(self.contract.functions.confirm(
+            trade_hash, to_checksum_address(party_a), to_checksum_address(party_b), sig_a, sig_b), "confirm")
+
+    def amend(self, prev_hash, new_hash, sig_a, sig_b) -> AnchorReceipt:
+        """Supersede prev_hash with new_hash. Parties are the pair recorded for prev_hash."""
+        return self._send(self.contract.functions.amend(prev_hash, new_hash, sig_a, sig_b), "amend")
+
+    def terminate(self, trade_hash, sig_a, sig_b) -> AnchorReceipt:
+        return self._send(self.contract.functions.terminate(trade_hash, sig_a, sig_b), "terminate")
 
     def get(self, trade_hash) -> Optional[OnChainRecord]:
         a, b, ts, blk, prev, status = self.contract.functions.getConfirmation(trade_hash).call()

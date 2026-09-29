@@ -41,7 +41,7 @@ import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain, getProofPack } from './booking'
+import { executeBooking, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain } from './booking'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore } from '../../store/useTradesStore'
 import { useTabStore }    from '../../store/useTabStore'
@@ -382,6 +382,23 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     finally { setVerifying(false) }
   }, [bookedTrade, verifying])
 
+  const [terminating, setTerminating] = useState(false)
+  const handleTerminate = useCallback(async (reason) => {
+    if (!bookedTrade?.id || terminating) return
+    setTerminating(true); setConfirmErr('')
+    try {
+      const r = await terminateOnChain(bookedTrade.id, {}, reason)
+      setBookedTrade(r.trade)
+      try { setAttestation(await getAttestation(r.trade.id)) } catch (e) { console.warn('[chain] attestation fetch failed', e) }
+      await useTradesStore.getState().fetchTrades()
+      useTabStore.getState().refreshTrade(r.trade.id, r.trade)
+    } catch (e) {
+      setConfirmErr(e.message || String(e))
+    } finally {
+      setTerminating(false)
+    }
+  }, [bookedTrade, terminating])
+
   const handleDownloadProof = useCallback(async () => {
     if (!bookedTrade?.id) return
     try {
@@ -656,6 +673,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             attestation={attestation}
             onVerify={handleVerify}
             onDownloadProof={handleDownloadProof}
+            onTerminate={handleTerminate}
+            terminating={terminating}
             verifying={verifying}
             verifyResult={verifyResult}
             onCancelTrade={handleCancelTrade}

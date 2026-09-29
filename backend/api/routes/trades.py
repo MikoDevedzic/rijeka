@@ -4,6 +4,7 @@ from db.session import get_db
 from db.models import Trade, Counterparty
 from middleware.auth import verify_token
 from api.routes._instrument_alias import normalize_instrument_type  # M009 inbound translator
+from api.routes.trade_cards import their_refs
 from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Dict, Any
 from datetime import date
@@ -162,6 +163,11 @@ def trades_summary(db: Session = Depends(get_db), user: dict = Depends(verify_to
         "cancelled": db.query(Trade).filter(Trade.user_id == uid, Trade.status=="CANCELLED").count(),
     }
 
+@router.get("/their-refs")
+def trades_their_refs(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """{trade id: {trade_ref, firm}}: the counterparty's own booking of each of your trades, matched by UTI."""
+    return their_refs(db, uuid.UUID(user["sub"]))
+
 @router.post("/")
 def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     new_id    = uuid.uuid4()
@@ -206,7 +212,14 @@ def update_trade(trade_id: str, body: TradeUpdate, db: Session = Depends(get_db)
     t = db.query(Trade).filter(Trade.id == uuid.UUID(trade_id), Trade.user_id == uuid.UUID(user["sub"])).first()
     if not t:
         raise HTTPException(status_code=404, detail="Trade not found")
-    for k, v in body.dict(exclude_none=True).items():
+    updates = body.dict(exclude_none=True)
+    if "status" in updates and updates["status"] != t.status:
+        # Status is a lifecycle fact, not a field: PENDING->CONFIRMED etc. go
+        # through /api/trade-events and /api/chain so an event and, where
+        # anchored, both signatures exist for the change.
+        from chain.lifecycle import refuse_offchain_mutation
+        refuse_offchain_mutation(db, t, f"Setting status to {updates['status']} via PUT")
+    for k, v in updates.items():
         setattr(t, k, v)
     t.last_modified_by = uuid.UUID(user["sub"])
     db.commit()

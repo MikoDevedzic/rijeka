@@ -355,6 +355,14 @@ def update_leg(
         raise HTTPException(status_code=404, detail="Leg not found")
 
     updates = body.model_dump(exclude_none=True)
+    if updates:
+        # forecast_curve_id (the index), payment_calendar and terms.custom_cashflows
+        # are all part of the record both parties signed.
+        from chain.lifecycle import refuse_offchain_mutation
+        from db.models import Trade as _Trade
+        parent = db.get(_Trade, leg.trade_id)
+        if parent is not None:
+            refuse_offchain_mutation(db, parent, f"Editing leg {leg.leg_ref} ({', '.join(updates)})")
     for field, value in updates.items():
         setattr(leg, field, value)
 

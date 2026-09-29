@@ -110,3 +110,32 @@ are signed under v2. A confirmation is always re-derived under the
 `schema_version` in its attestation, so v1 confirmations stay verifiable
 unchanged. Both versions have a pinned test vector in
 `backend/tests/test_chain_confirmation.py`.
+
+## Amend and terminate — the signed record follows the trade
+
+Once a confirmation is anchored, the terms are what both parties signed.
+Changing the booking off-chain would leave the registry pointing at a record
+the booking no longer hashes to, so the row-mutating routes (`PUT /api/trades`,
+`PUT /api/trade-legs/leg`, and the generic `POST /api/trade-events` for
+AMENDED / TERMINATED / NOVATED / CONFIRMED) refuse with 409 on an anchored
+trade (`backend/chain/lifecycle.py`). Economics then change only through:
+
+| | Request (stateless, our half) | Apply (needs both signatures) |
+|---|---|---|
+| Amend | `POST /api/chain/amend-request/{id}` `{changes}` | `POST /api/chain/amend/{id}` `{changes, address?, signature?}` |
+| Terminate | `GET /api/chain/terminate-request/{id}` | `POST /api/chain/terminate/{id}` `{address?, signature?}` |
+
+`changes` is the AMENDED event contract (`{"trade": {...}, "legs": [{"id": ..., ...}]}`),
+restricted to the economic terms in the canonical record. The request applies it
+in a savepoint, computes the new hash, and rolls back — deterministic, so the
+apply re-derives the identical hash. Both parties sign
+`TradeAmendment(prevHash, newHash, counterparty)`; the registry marks the old
+record **Superseded** and the new one **Confirmed** with `prevHash` as its
+parent. Termination signs `TradeTermination(hash, counterparty)` → **Terminated**.
+
+The apply route mutates the rows and appends the AMENDED / TERMINATED event in
+one transaction, with the audit `post_state` projected from the event stream
+including the new event. Its attestation carries `prev_hash`; `/verify` and the
+standalone verifier report the lineage. `tools/countersign.py` signs all three
+request formats. Migration 013 makes `(user_id, uti)` unique so a mirror booking
+can never attach to the wrong record.

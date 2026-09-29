@@ -446,3 +446,30 @@ export function chainStatus() { return _authed('/api/chain/status') }
 /** Self-contained proof pack: canonical record + hash + both signatures +
  *  where it is anchored. Everything a third party needs to verify without us. */
 export function getProofPack(tradeId) { return _authed('/api/chain/proof/' + tradeId) }
+
+async function _authedJson(path, method, body, extraHeaders = {}) {
+  const session = await getSession()
+  const res = await fetch(API + path, {
+    method,
+    headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json', ...extraHeaders },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}))
+    const err = new Error(e.detail || (method + ' ' + path + ' failed (HTTP ' + res.status + ')'))
+    err.status = res.status
+    throw err
+  }
+  return res.json()
+}
+
+/** Lifecycle on an anchored trade. Both need the counterparty's signature
+ *  unless Rijeka holds their key (demo). See chain/README.md. */
+export function amendRequest(tradeId, changes) { return _authedJson('/api/chain/amend-request/' + tradeId, 'POST', { changes }) }
+export function amendOnChain(tradeId, changes, sig = {}) {
+  return _authedJson('/api/chain/amend/' + tradeId, 'POST', { changes, ...sig }, { 'Idempotency-Key': crypto.randomUUID() })
+}
+export function terminateRequest(tradeId) { return _authed('/api/chain/terminate-request/' + tradeId) }
+export function terminateOnChain(tradeId, sig = {}, reason = null) {
+  return _authedJson('/api/chain/terminate/' + tradeId, 'POST', { ...sig, reason }, { 'Idempotency-Key': crypto.randomUUID() })
+}

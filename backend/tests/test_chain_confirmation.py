@@ -532,3 +532,219 @@ class TestCountersignCLI:
         r = self._run([str(req), "--key-file", str(kf), "--yes"])
         assert r.returncode == 2
         assert "addressed to" in (r.stdout + r.stderr)
+
+
+# ── Lifecycle: amend / terminate ─────────────────────────────────────────────
+
+from unittest.mock import MagicMock
+from fastapi import HTTPException as _HTTPExc
+from chain import lifecycle
+from chain.signing import amendment_typed_data, termination_typed_data
+
+
+class TestLifecycleHelpers:
+
+    def test_is_terminated(self):
+        assert not lifecycle.is_terminated(None)
+        assert not lifecycle.is_terminated({"trade_hash": "0x01"})
+        assert lifecycle.is_terminated({"trade_hash": "0x01", "terminated": True})
+
+    def test_refuse_offchain_mutation_passes_when_not_anchored(self):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+        t = MagicMock(); t.id = uuid4(); t.trade_ref = "TRD-X"
+        lifecycle.refuse_offchain_mutation(db, t, "Editing")   # no raise
+
+    def test_refuse_offchain_mutation_409_when_anchored(self):
+        db = MagicMock()
+        ev = MagicMock(); ev.payload = {"attestation": {"trade_hash": "0x" + "ab" * 32,
+                                                        "anchor": {"anchored": True, "block_number": 7}}}
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = ev
+        t = MagicMock(); t.id = uuid4(); t.trade_ref = "TRD-X"
+        with pytest.raises(_HTTPExc) as ei:
+            lifecycle.refuse_offchain_mutation(db, t, "Editing leg FIXED-1")
+        assert ei.value.status_code == 409
+        assert "confirmed on-chain" in ei.value.detail and "/api/chain/amend/" in ei.value.detail
+
+    def test_off_chain_attestation_does_not_block(self):
+        db = MagicMock()
+        ev = MagicMock(); ev.payload = {"attestation": {"trade_hash": "0x01", "anchor": {"anchored": False}}}
+        db.query.return_value.filter.return_value.order_by.return_value.first.return_value = ev
+        t = MagicMock(); t.id = uuid4(); t.trade_ref = "TRD-X"
+        lifecycle.refuse_offchain_mutation(db, t, "Editing")   # signed-but-unanchored is not frozen
+
+
+class TestApplyChanges:
+    """_apply_changes: only signed economic terms may change, with type coercion."""
+
+    def _rows(self):
+        from api.routes.chain import _apply_changes
+        t = MagicMock(); t.id = uuid4()
+        l1 = MagicMock(); l1.id = uuid4(); l1.leg_ref = "FIXED-1"
+        l2 = MagicMock(); l2.id = uuid4(); l2.leg_ref = "FLOAT-1"
+        return _apply_changes, MagicMock(), t, [l1, l2]
+
+    def test_coerces_dates_and_decimals(self):
+        apply, db, t, legs = self._rows()
+        apply(db, t, legs, {"trade": {"maturity_date": "2032-09-24", "notional": 12000000},
+                            "legs": [{"id": str(legs[0].id), "fixed_rate": "0.041", "payment_lag": "3"}]})
+        assert t.maturity_date == date(2032, 9, 24) and t.notional == Decimal("12000000")
+        assert legs[0].fixed_rate == Decimal("0.041") and legs[0].payment_lag == 3
+        db.flush.assert_called_once()
+
+    def test_refuses_non_economic_trade_field(self):
+        apply, db, t, legs = self._rows()
+        with pytest.raises(_HTTPExc) as ei:
+            apply(db, t, legs, {"trade": {"status": "CANCELLED"}})
+        assert ei.value.status_code == 422 and "not an economic" in ei.value.detail
+
+    def test_refuses_non_economic_leg_field_and_unknown_leg(self):
+        apply, db, t, legs = self._rows()
+        with pytest.raises(_HTTPExc):
+            apply(db, t, legs, {"legs": [{"id": str(legs[0].id), "leg_ref": "X"}]})
+        with pytest.raises(_HTTPExc) as ei:
+            apply(db, t, legs, {"legs": [{"id": str(uuid4()), "fixed_rate": "0.04"}]})
+        assert "not on this trade" in ei.value.detail
+
+    def test_refuses_empty_changes(self):
+        apply, db, t, legs = self._rows()
+        with pytest.raises(_HTTPExc):
+            apply(db, t, legs, {})
+
+
+class TestLifecycleSignatures:
+    """Amend/terminate signatures are bound to the pair of hashes and the counterparty."""
+
+    def test_amendment_bound_to_both_hashes_and_counterparty(self):
+        h1, h2 = b"\x01" * 32, b"\x02" * 32
+        sig = sign(amendment_typed_data(31337, REG, h1, h2, B.address), A.key)
+        assert recover(amendment_typed_data(31337, REG, h1, h2, B.address), sig) == A.address
+        assert recover(amendment_typed_data(31337, REG, h2, h1, B.address), sig) != A.address   # swapped
+        assert recover(amendment_typed_data(31337, REG, h1, b"\x03" * 32, B.address), sig) != A.address
+        assert recover(amendment_typed_data(31337, REG, h1, h2, A.address), sig) != A.address
+        # a confirmation signature can never be replayed as an amendment
+        conf = sign(confirmation_typed_data(31337, REG, h1, B.address), A.key)
+        assert recover(amendment_typed_data(31337, REG, h1, h2, B.address), conf) != A.address
+
+    def test_termination_bound_to_hash_and_counterparty(self):
+        h = b"\x05" * 32
+        sig = sign(termination_typed_data(31337, REG, h, B.address), A.key)
+        assert recover(termination_typed_data(31337, REG, h, B.address), sig) == A.address
+        assert recover(termination_typed_data(31337, REG, b"\x06" * 32, B.address), sig) != A.address
+        assert recover(confirmation_typed_data(31337, REG, h, B.address), sig) != A.address
+
+
+class TestLiveLifecycle:
+    """amend / terminate through the EVM backend against a deployed registry."""
+
+    def _be(self, anvil, monkeypatch):
+        monkeypatch.setenv("RIJEKA_CHAIN_RPC", anvil["url"])
+        monkeypatch.setenv("RIJEKA_CHAIN_REGISTRY", anvil["registry"])
+        monkeypatch.setenv("RIJEKA_CHAIN_RELAYER_KEY", anvil["relayer"])
+        from chain.attestation import get_backend
+        return get_backend(refresh=True)
+
+    def _confirm(self, be, h):
+        sa = sign(confirmation_typed_data(be.chain_id, be.registry, h, B.address), A.key)
+        sb = sign(confirmation_typed_data(be.chain_id, be.registry, h, A.address), B.key)
+        return be.confirm(h, A.address, B.address, sa, sb)
+
+    def test_amend_supersedes_and_links(self, anvil, monkeypatch):
+        be = self._be(anvil, monkeypatch)
+        h1, h2 = b"\x41" * 32, b"\x42" * 32
+        self._confirm(be, h1)
+        # digests match the contract
+        assert be.amendment_digest(h1, h2, B.address) == eip712_digest(amendment_typed_data(be.chain_id, be.registry, h1, h2, B.address))
+        sa = sign(amendment_typed_data(be.chain_id, be.registry, h1, h2, B.address), A.key)
+        sb = sign(amendment_typed_data(be.chain_id, be.registry, h1, h2, A.address), B.key)
+        r = be.amend(h1, h2, sa, sb)
+        assert r.anchored and r.block_number > 0
+        old, new = be.get(h1), be.get(h2)
+        assert old.status == "Superseded"
+        assert new.status == "Confirmed" and new.prev_hash == "0x" + h1.hex()
+        assert new.party_a == A.address and new.party_b == B.address
+
+    def test_amend_rejects_wrong_signer_and_unconfirmed_prev(self, anvil, monkeypatch):
+        be = self._be(anvil, monkeypatch)
+        h1, h2 = b"\x51" * 32, b"\x52" * 32
+        self._confirm(be, h1)
+        X = Account.from_key("0x" + "44" * 32)
+        sa = sign(amendment_typed_data(be.chain_id, be.registry, h1, h2, B.address), A.key)
+        sx = sign(amendment_typed_data(be.chain_id, be.registry, h1, h2, A.address), X.key)
+        with pytest.raises(Exception):
+            be.amend(h1, h2, sa, sx)
+        assert be.get(h2) is None and be.get(h1).status == "Confirmed"
+        # amending a hash that was never confirmed
+        sb = sign(amendment_typed_data(be.chain_id, be.registry, b"\x53" * 32, h2, A.address), B.key)
+        sa2 = sign(amendment_typed_data(be.chain_id, be.registry, b"\x53" * 32, h2, B.address), A.key)
+        with pytest.raises(Exception):
+            be.amend(b"\x53" * 32, h2, sa2, sb)
+
+    def test_terminate(self, anvil, monkeypatch):
+        be = self._be(anvil, monkeypatch)
+        h = b"\x61" * 32
+        self._confirm(be, h)
+        assert be.termination_digest(h, B.address) == eip712_digest(termination_typed_data(be.chain_id, be.registry, h, B.address))
+        sa = sign(termination_typed_data(be.chain_id, be.registry, h, B.address), A.key)
+        sb = sign(termination_typed_data(be.chain_id, be.registry, h, A.address), B.key)
+        r = be.terminate(h, sa, sb)
+        assert r.anchored
+        assert be.get(h).status == "Terminated"
+        # cannot amend or terminate a terminated record
+        h2 = b"\x62" * 32
+        sa2 = sign(amendment_typed_data(be.chain_id, be.registry, h, h2, B.address), A.key)
+        sb2 = sign(amendment_typed_data(be.chain_id, be.registry, h, h2, A.address), B.key)
+        with pytest.raises(Exception):
+            be.amend(h, h2, sa2, sb2)
+
+
+class TestCountersignCLILifecycle:
+    """The counterparty tool signs amendment and termination requests too."""
+
+    TOOL = os.path.join(os.path.dirname(__file__), "..", "..", "chain", "tools", "countersign.py")
+
+    def _run(self, args):
+        import sys as _s
+        return subprocess.run([_s.executable, self.TOOL] + args, capture_output=True, text=True)
+
+    def test_amendment_request(self, tmp_path):
+        cp = Account.from_key("0x" + "3a" * 32)
+        p_old = canonical_payload(_trade(), _legs(), OWN, CP); h1 = trade_hash(p_old)
+        legs = _legs(); legs[1]["fixed_rate"] = Decimal("0.0370")
+        p_new = canonical_payload(_trade(), legs, OWN, CP); h2 = trade_hash(p_new)
+        req = {"format": "rijeka-amendment-request", "format_version": 1, "trade_id": "t", "trade_ref": "TRD-A",
+               "changes": {"legs": [{"id": "x", "fixed_rate": "0.0370"}]},
+               "prev_hash": "0x" + h1.hex(), "new_hash": "0x" + h2.hex(), "canonical": p_new,
+               "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": 31337, "verifying_contract": REG},
+               "from": {"lei": OWN["lei"], "name": OWN["name"], "address": A.address,
+                        "signature": "0x" + sign(amendment_typed_data(31337, REG, h1, h2, cp.address), A.key).hex()},
+               "to": {"lei": CP["lei"], "name": CP["name"], "address": cp.address,
+                      "digest_to_sign": "0x" + eip712_digest(amendment_typed_data(31337, REG, h1, h2, A.address)).hex()}}
+        rp = tmp_path / "amend.json"; rp.write_text(json.dumps(req))
+        kf = tmp_path / "k"; kf.write_text("0x" + cp.key.hex())
+        out = tmp_path / "sig.json"
+        r = self._run([str(rp), "--key-file", str(kf), "--out", str(out), "--yes"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "AMEND" in r.stdout and "supersedes" in r.stdout
+        sig = json.loads(out.read_text())
+        assert sig["format"] == "rijeka-amendment-countersignature" and sig["prev_hash"] == "0x" + h1.hex()
+        assert recover(amendment_typed_data(31337, REG, h1, h2, A.address), bytes.fromhex(sig["signature"][2:])) == cp.address
+
+    def test_termination_request(self, tmp_path):
+        cp = Account.from_key("0x" + "3a" * 32)
+        h = trade_hash(canonical_payload(_trade(), _legs(), OWN, CP))
+        req = {"format": "rijeka-termination-request", "format_version": 1, "trade_id": "t", "trade_ref": "TRD-T",
+               "trade_hash": "0x" + h.hex(),
+               "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": 31337, "verifying_contract": REG},
+               "from": {"lei": OWN["lei"], "name": OWN["name"], "address": A.address,
+                        "signature": "0x" + sign(termination_typed_data(31337, REG, h, cp.address), A.key).hex()},
+               "to": {"lei": CP["lei"], "name": CP["name"], "address": cp.address,
+                      "digest_to_sign": "0x" + eip712_digest(termination_typed_data(31337, REG, h, A.address)).hex()}}
+        rp = tmp_path / "term.json"; rp.write_text(json.dumps(req))
+        kf = tmp_path / "k"; kf.write_text("0x" + cp.key.hex())
+        out = tmp_path / "sig.json"
+        r = self._run([str(rp), "--key-file", str(kf), "--out", str(out), "--yes"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "TERMINATE" in r.stdout
+        sig = json.loads(out.read_text())
+        assert recover(termination_typed_data(31337, REG, h, A.address), bytes.fromhex(sig["signature"][2:])) == cp.address
