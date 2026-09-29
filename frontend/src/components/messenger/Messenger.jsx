@@ -5,7 +5,63 @@ import { useChatStore, PROMETHEUS, selectUnreadTotal, audience } from '../../sto
 import Markdown from '../common/Markdown'
 import TradeCard, { TradePicker, WalletPanel } from './TradeCard'
 import { broadcast, onBroadcast, popOutMessenger, focusMessengerWindow, MESSENGER_PATH } from '../../lib/windows'
+import { getSessionSafe } from '../../lib/session'
 import './Messenger.css'
+
+const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
+async function tgApi(path, method = 'GET') {
+  const session = await getSessionSafe()
+  const r = await fetch(API + '/api/telegram' + path, { method, headers: { Authorization: 'Bearer ' + session.access_token } })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.detail || `${method} ${path} failed (HTTP ${r.status})`)
+  return j
+}
+
+// ── Telegram: mirror this room's trade cards into the group the two firms already use ──
+function TelegramPanel({ roomId, onClose }) {
+  const [state, setState] = useState(null)   // GET /rooms/{id}
+  const [code, setCode] = useState(null)      // POST link-code
+  const [err, setErr] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const load = () => tgApi(`/rooms/${roomId}`).then(setState).catch(e => setErr(e.message))
+  useEffect(() => { load() }, [roomId]) // eslint-disable-line react-hooks/exhaustive-deps
+  const run = async (fn) => { setBusy(true); setErr(null); try { await fn() } catch (e) { setErr(e.message) } finally { setBusy(false) } }
+  return (
+    <div className="ms-people">
+      <div className="ms-people-head">
+        <span>TELEGRAM</span>
+        <button className="ms-link" onClick={onClose}>CLOSE</button>
+      </div>
+      {!state && !err && <div className="ms-sub">Checking…</div>}
+      {state && !state.enabled && (
+        <div className="ms-sub">Telegram isn't configured on this Rijeka yet (TELEGRAM_BOT_TOKEN). See chain/README.md.</div>
+      )}
+      {state && state.enabled && state.linked && (
+        <>
+          <div className="ms-sub">Linked to <b>{state.chat_title || state.chat_id}</b>. Trade cards and on-chain confirmations from this room are mirrored there with a link back here. The bot never reads that group's conversation.</div>
+          {state.last_sent_at && <div className="ms-sub">Last mirrored {new Date(state.last_sent_at).toLocaleString()}.</div>}
+          <button className="ms-link danger" disabled={busy} onClick={() => run(async () => { await tgApi(`/rooms/${roomId}`, 'DELETE'); setCode(null); await load() })}>UNLINK</button>
+        </>
+      )}
+      {state && state.enabled && !state.linked && !code && (
+        <>
+          <div className="ms-sub">Mirror this room's trade confirmations into the Telegram group you already share with this counterparty. Only trade cards and confirmation events are posted, each with a link back here to review and sign; nothing depends on Telegram.</div>
+          <button className="ms-link" disabled={busy} onClick={() => run(async () => setCode(await tgApi(`/rooms/${roomId}/link-code`, 'POST')))}>GET LINK CODE</button>
+        </>
+      )}
+      {code && !state?.linked && (
+        <>
+          <div className="ms-sub">1. Add <b>{code.bot_username ? '@' + code.bot_username : 'the Rijeka bot'}</b> to the Telegram group.</div>
+          <div className="ms-sub">2. Post this in the group (valid {Math.round(code.expires_in_s / 60)} minutes):</div>
+          <div className="ms-code" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15, padding: '6px 10px', background: '#000', border: '1px solid #1E1E1E', borderRadius: 3, display: 'inline-block', margin: '4px 0' }}>/link {code.code}</div>
+          <div className="ms-sub">3. The bot replies “Linked” and this panel updates.</div>
+          <button className="ms-link" disabled={busy} onClick={() => run(load)}>CHECK</button>
+        </>
+      )}
+      {err && <div className="ms-error">{err}</div>}
+    </div>
+  )
+}
 
 // One messenger for the whole app: the private Prometheus conversation, your
 // Rijeka support room, and rooms with people at your firm and others. It is
@@ -328,6 +384,7 @@ function PrometheusThread({ back }) {
 
 function RoomThread({ roomId, back, onInvite }) {
   const { rooms, messages, pending, me, show, send, accept, decline, leave, loadRoom } = useChatStore()
+  const [telegram, setTelegram] = useState(false)
   const room = rooms.find(r => r.id === roomId)
   const list = messages[roomId]
   const [draft, setDraft] = useState('')
@@ -357,8 +414,10 @@ function RoomThread({ roomId, back, onInvite }) {
                   actions={<>
                     {room.kind !== 'SUPPORT' && <button className="ms-link" onClick={() => setPeople(p => !p)}>{room.members.length} PEOPLE</button>}
                     {joined && room.kind === 'GROUP' && <button className="ms-link" onClick={onInvite}>INVITE</button>}
+                    {joined && room.kind !== 'SUPPORT' && <button className="ms-link" onClick={() => { setTelegram(t => !t); setPeople(false) }}>TELEGRAM</button>}
                     {joined && room.kind !== 'SUPPORT' && <button className="ms-link danger" disabled={busy} onClick={() => run(() => leave(roomId))}>LEAVE</button>}
                   </>} />
+      {telegram && <TelegramPanel roomId={roomId} onClose={() => setTelegram(false)} />}
       {people && (
         <div className="ms-people">
           {room.members.map(p => (
