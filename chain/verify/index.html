@@ -77,6 +77,7 @@
     </select>
     <input id="rpcCustom" placeholder="https://your-node" style="display:none;flex:1;min-width:220px;background:#060606;border:1px solid var(--line);border-radius:3px;color:var(--fg);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none">
     <button class="primary" id="run">▶ VERIFY</button>
+    <button id="example" title="A real confirmation on Sepolia: an IRS between two demo entities, countersigned with a wallet key Rijeka never held">LOAD EXAMPLE</button>
     <span class="hint" id="status"></span>
   </div>
 
@@ -121,6 +122,18 @@ function add(state, title, detail){
   el("checks").appendChild(d);
 }
 
+// A real confirmation, embedded so the page can be checked with one click:
+// TRD-90271749, IRS between RIJEKA CAPITAL and CONFLUENCE BANK AG (a demo
+// entity, LEI DEMO…CB), countersigned from the counterparty's own wallet,
+// anchored on Sepolia at block 11,773,600.
+const EXAMPLE = `{"format":"rijeka-confirmation-proof","format_version":1,"generated_at":"2026-10-13T20:44:41+00:00","trade_ref":"TRD-90271749","canonical":{"schema":"rijeka-trade","schema_version":1,"trade":{"trade_ref":"TRD-90271749","uti":null,"asset_class":"RATES","instrument_type":"IR_SWAP","structure":"VANILLA","notional":"10000000","notional_ccy":"USD","trade_date":"2026-09-24","effective_date":"2026-09-28","maturity_date":"2031-09-28","terms":{"spread":"0","leverage":"1","direction":"PAY","fixed_bdc":"MOD_FOLLOWING","float_bdc":"MOD_FOLLOWING","fixed_rate":"0.04115425","float_index":"SOFR","fixed_calendar":null,"fixed_pay_freq":"ANNUAL","float_calendar":null,"float_pay_freq":"ANNUAL","fixed_day_count":"ACT/360","float_day_count":"ACT/360","float_direction":"RECEIVE","float_reset_freq":"DAILY"},"discount_curve_id":null,"forecast_curve_id":null},"legs":[{"leg_ref":"FIXED-1","leg_seq":"1","leg_type":"FIXED","direction":"PAY","currency":"USD","notional":"10000000","notional_type":"BULLET","notional_schedule":null,"effective_date":"2026-09-28","maturity_date":"2031-09-28","first_period_start":null,"last_period_end":null,"day_count":"ACT/360","payment_frequency":"ANNUAL","reset_frequency":null,"bdc":"MOD_FOLLOWING","stub_type":"SHORT_FRONT","payment_calendar":null,"payment_lag":"2","fixed_rate":"0.04115425","fixed_rate_type":"FLAT","fixed_rate_schedule":null,"spread":null,"spread_type":"FLAT","spread_schedule":null,"forecast_curve_id":null,"discount_curve_id":"USD_SOFR","embedded_options":[],"leverage":"1","ois_compounding":null,"terms":{"custom_cashflows":[]}},{"leg_ref":"FLOAT-1","leg_seq":"2","leg_type":"FLOAT","direction":"RECEIVE","currency":"USD","notional":"10000000","notional_type":"BULLET","notional_schedule":null,"effective_date":"2026-09-28","maturity_date":"2031-09-28","first_period_start":null,"last_period_end":null,"day_count":"ACT/360","payment_frequency":"ANNUAL","reset_frequency":"DAILY","bdc":"MOD_FOLLOWING","stub_type":"SHORT_FRONT","payment_calendar":null,"payment_lag":"2","fixed_rate":"0","fixed_rate_type":"FLAT","fixed_rate_schedule":null,"spread":"0","spread_type":"FLAT","spread_schedule":null,"forecast_curve_id":"USD_SOFR","discount_curve_id":"USD_SOFR","embedded_options":[],"leverage":"1","ois_compounding":null,"terms":{"custom_cashflows":[]}}],"parties":{"own":{"lei":"254900OPPU84GM83MG36","name":"RIJEKA CAPITAL"},"counterparty":{"lei":"DEMO00000000000000CB","name":"CONFLUENCE BANK AG"}}},"trade_hash":"0x6375ab76a9a7ad1183eed6f98acde784fb9226ae4246191bb76b5088241d3858","attestation":{"via":{"channel":"chat","room_id":"c3ba2fb2-47f8-4a7b-946d-c45d15821eae","user_id":"9d1301c3-a6d1-4865-890d-0b6ec8f90544"},"anchor":{"note":null,"tx_hash":"0xde92a3cec7c2be603a326c3b14a75924448db64a9b184e4050483ec6b65733f5","anchored":true,"chain_id":11155111,"registry":"0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e","explorer_tx":"https://sepolia.etherscan.io/tx/0xde92a3cec7c2be603a326c3b14a75924448db64a9b184e4050483ec6b65733f5","block_number":11773600,"confirmed_at":1790271804},"eip712":{"name":"Rijeka Trade Confirmation","version":"1","chain_id":11155111,"verifying_contract":"0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e"},"parties":{"own":{"lei":"254900OPPU84GM83MG36","address":"0xa0D56a0e30692A26Cb2842eC4595b2034099d95F","signature":"0x308584548850cfcc81f5a4bfbd2c6c50e0e719ec60aa1eadbc4e51d0a39001982f7dcebbe921500122fbe7cb0ddee0109df3b2d5af53aafa77f771ddf1f0b89c1c","key_source":"dev"},"counterparty":{"lei":"DEMO00000000000000CB","address":"0xaB21b083B2045f89EB036Cd0352c5730e8fAf09b","signature":"0xc7fbcdc5b2872db45dfdb89fd0560fdbca5637f7ca5672324fc00d1f4340e3061076297c9c7c9f83dcbd05ea169c961d307a06d253a5f29fb8d5562dab25d9851b","key_source":"countersigned"}},"bilateral":true,"trade_hash":"0x6375ab76a9a7ad1183eed6f98acde784fb9226ae4246191bb76b5088241d3858","schema_version":1,"canonical_bytes_len":2303}}`;
+el("example").addEventListener("click", () => {
+  el("proof").value = JSON.stringify(JSON.parse(EXAMPLE), null, 2);
+  el("rpc").value = "https://ethereum-sepolia-rpc.publicnode.com|11155111";
+  el("rpcCustom").style.display = "none";
+  el("run").click();
+});
+
 el("rpc").addEventListener("change", e => {
   el("rpcCustom").style.display = e.target.value.startsWith("custom") ? "block" : "none";
 });
@@ -129,8 +142,13 @@ el("run").addEventListener("click", async () => {
   reset();
   el("status").textContent = "";
   let proof;
+  const raw = el("proof").value.trim();
+  if (!raw) {
+    add("skip", "nothing to verify yet", "paste a proof pack above, or click LOAD EXAMPLE to check a real confirmation on Sepolia");
+    return;
+  }
   try {
-    proof = JSON.parse(el("proof").value);
+    proof = JSON.parse(raw);
   } catch (e) {
     add("fail", "proof pack is not valid JSON", e.message);
     return;
