@@ -4,6 +4,23 @@
 OTC derivative trades on Ethereum. Only a `keccak256` of the canonical off-chain
 trade record goes on-chain, plus who signed and when. See the contract header.
 
+## Try it
+
+Everything below is public and needs no account:
+
+| | |
+|---|---|
+| **Verify a confirmation** | https://rijeka.app/verify/ — paste a proof pack; the hash is recomputed in your browser, both signatures recovered locally, the registry read from a public Ethereum node. No Rijeka server is contacted. |
+| **Registry source** | https://sourcify.dev/server/v2/contract/11155111/0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e — `TradeConfirmationRegistry` on Sepolia, verified exact-match. No owner, no admin key, no upgrade path. |
+| **Code** | https://github.com/MikoDevedzic/rijeka/tree/main/chain — the contract and its tests, this verifier, and `tools/countersign.py`, the counterparty-side signer (`pip install eth-account eth-utils`, nothing else). |
+
+A proof pack is the JSON from `GET /api/chain/proof/{trade_id}` (the CONFIRM tab's
+**↓ PROOF PACK** button): the canonical record, its keccak256, both EIP-712
+signatures and the registry address. Hand it to anyone; it verifies without you.
+
+Current network: **Sepolia** (Ethereum's public testnet). Same bytecode deploys
+unchanged to mainnet.
+
 ## Toolchain
 [Foundry](https://book.getfoundry.sh): `forge`, `anvil`, `cast`.
 
