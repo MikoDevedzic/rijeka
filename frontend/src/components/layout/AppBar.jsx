@@ -14,6 +14,8 @@ export default function AppBar() {
   const location  = useLocation()
   const user      = useAuthStore(s => s.session?.user)
   const signOut   = useAuthStore(s => s.signOut)
+  const demo      = useAuthStore(s => s.demo)
+  const role      = (user?.user_metadata?.role || 'viewer').toUpperCase()
 
   const displayName = user?.email?.split('@')[0]?.toUpperCase()
     || user?.user_metadata?.full_name?.toUpperCase()
@@ -61,7 +63,12 @@ export default function AppBar() {
       <div style={{flex:1}}/>
 
       <div style={{display:'flex',alignItems:'center',gap:'0.75rem',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',letterSpacing:'0.08em',flexShrink:0}}>
-        <span style={{color:'var(--amber)',fontWeight:700}}>READ ONLY</span>
+        {demo?.enabled && (
+          <span title="Hosted demo on the Sepolia testnet. Your workspace was set up automatically: an own entity, RIJEKA DEMO BANK AG as counterparty (Rijeka holds its key, so solo confirmations are marked not bilateral) and a copy of the demo market data. Data may be reset."
+                style={{color:'var(--bg)',background:'var(--amber)',fontWeight:700,padding:'0.1rem 0.45rem',borderRadius:'2px',cursor:'help'}}>DEMO · SEPOLIA</span>
+        )}
+        {demo?.enabled && <span style={{color:'var(--border)'}}>·</span>}
+        <span style={{color: role === 'VIEWER' ? 'var(--amber)' : 'var(--text-dim)',fontWeight:700}}>{role === 'VIEWER' ? 'READ ONLY' : role}</span>
         <span style={{color:'var(--border)'}}>·</span>
         <span style={{color:'var(--accent)',fontWeight:700}}>{displayName}</span>
         <button onClick={signOut} style={{

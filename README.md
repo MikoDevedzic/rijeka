@@ -113,6 +113,19 @@ VITE_SUPABASE_ANON_KEY
 VITE_API_URL
 ```
 
+**Hosted demo.** [app.rijeka.app](https://app.rijeka.app) runs this code on the
+Sepolia testnet. Sign up and a sandbox workspace is created for you: your own
+entity, RIJEKA DEMO BANK AG as counterparty, the demo market data, trader role.
+Book a swap, confirm it on-chain, and check the proof pack at
+[rijeka.app/verify](https://rijeka.app/verify) — nothing in that check trusts
+Rijeka's servers. Demo signatures for the demo bank are held by Rijeka and the
+attestation says so (`bilateral: false`); a real counterparty countersigns with
+its own wallet.
+
+**Self-hosting.** Your curves, your trades, your keys, your Bloomberg seat:
+see [SELF-HOSTING.md](SELF-HOSTING.md). The full schema is in
+[docs/schema.sql](docs/schema.sql).
+
 ---
 
 ## Model Validation
