@@ -28,6 +28,7 @@ from api.routes import (
     chat,
     trade_cards,
     telegram,
+    demo,
 )
 
 app = FastAPI(
@@ -38,13 +39,15 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
+    allow_origins=sorted({
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:5175",
         "https://app.rijeka.app",
         "https://rijeka.app",
-    ],
+        "https://rijeka-landing.netlify.app",
+        *(o.strip() for o in (os.getenv("FRONTEND_URL", "") + "," + os.getenv("CORS_ORIGINS", "")).split(",") if o.strip()),
+    }),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -69,6 +72,7 @@ app.include_router(chain.router)
 app.include_router(chat.router)
 app.include_router(trade_cards.router)
 app.include_router(telegram.router)
+app.include_router(demo.router)
 
 # Telegram outbox: deliver mirrored cards only after their transaction commits.
 from chain.telegram import register_listeners as _tg_listeners

@@ -30,6 +30,8 @@ export default function CommandCenter() {
   const location  = useLocation()
   const session   = useAuthStore(s => s.session)
   const profile   = useAuthStore(s => s.profile)
+  const demo      = useAuthStore(s => s.demo)
+  const role      = (session?.user?.user_metadata?.role || 'viewer').toUpperCase()
 
   const displayName = profile?.handle
     || session?.user?.user_metadata?.handle
@@ -82,7 +84,11 @@ export default function CommandCenter() {
           ))}
         </nav>
         <div className="cc-bar-right">
-          <span className="cc-read-only">READ ONLY</span>
+          {demo?.enabled && (
+            <span className="cc-read-only" title="Hosted demo on the Sepolia testnet. Your workspace was set up automatically: an own entity, RIJEKA DEMO BANK AG as counterparty (Rijeka holds its key, so solo confirmations are marked not bilateral) and a copy of the demo market data. Data may be reset."
+                  style={{color:'var(--bg)',background:'var(--amber)',padding:'0.1rem 0.45rem',borderRadius:'2px',cursor:'help'}}>DEMO · SEPOLIA</span>
+          )}
+          <span className="cc-read-only" style={role !== 'VIEWER' ? {color:'var(--text-dim)'} : undefined}>{role === 'VIEWER' ? 'READ ONLY' : role}</span>
           <span className="cc-dot">·</span>
           <span className="cc-user">{displayName}</span>
           <button className="cc-exit" onClick={() => useAuthStore.getState().signOut()}>EXIT</button>
@@ -114,7 +120,7 @@ export default function CommandCenter() {
           <div className="cc-tile cc-tile-empty" />
         </div>
 
-        <div className="cc-footer">EARLY ACCESS · READ ONLY · hello@rijeka.app</div>
+        <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS · READ ONLY'} · hello@rijeka.app</div>
       </div>
     </div>
   )

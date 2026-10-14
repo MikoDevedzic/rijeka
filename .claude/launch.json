@@ -1,0 +1,43 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": [
+        "main:app",
+        "--port",
+        "8000"
+      ],
+      "cwd": "backend",
+      "port": 8000
+    },
+    {
+      "name": "backend-demo",
+      "runtimeExecutable": "env",
+      "runtimeArgs": [
+        "RIJEKA_CHAIN_DEV_LEI_PREFIX=DEMO",
+        "RIJEKA_CHAIN_DAILY_LIMIT=20",
+        ".venv/bin/uvicorn",
+        "main:app",
+        "--port",
+        "8000"
+      ],
+      "cwd": "backend",
+      "port": 8000
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5173"
+      ],
+      "cwd": "frontend",
+      "port": 5173
+    }
+  ]
+}

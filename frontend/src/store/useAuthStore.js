@@ -6,11 +6,12 @@ export const useAuthStore = create((set, get) => ({
   profile:     null,
   loading:     true,
   isNewSignup: false,
+  demo:        null,   // result of POST /api/demo/provision (hosted demo), see lib/demo.js
 
   initAuth: () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       set({ session, loading: false })
-      if (session) get().fetchProfile(session.user.id)
+      if (session) { get().fetchProfile(session.user.id); get().provision(session) }
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -19,9 +20,10 @@ export const useAuthStore = create((set, get) => ({
         if (event === 'SIGNED_IN' && session) {
           const isNew = await get().fetchProfile(session.user.id)
           if (isNew) set({ isNewSignup: true })
+          get().provision(session)
         }
         if (event === 'SIGNED_OUT') {
-          set({ profile: null, isNewSignup: false })
+          set({ profile: null, isNewSignup: false, demo: null })
         }
       }
     )
@@ -40,10 +42,23 @@ export const useAuthStore = create((set, get) => ({
     return isNew
   },
 
+  // Deferred out of the auth callback: see lib/demo.js for why.
+  provision: (session) => {
+    setTimeout(async () => {
+      try {
+        const m   = await import('../lib/demo')
+        const out = await m.provisionDemo(session)
+        if (out) set({ demo: out })
+      } catch (e) { console.warn('[demo] provisioning failed', e?.message) }
+    }, 0)
+  },
+
   signUp: async (email, password) => {
     const { data, error } = await supabase.auth.signUp({
       email, password,
-      options: { emailRedirectTo: window.location.origin + '/confirm' }
+      // Every sign-up on the hosted demo is a trader in its own sandbox
+      // workspace; the backend only ever upgrades viewer → trader.
+      options: { emailRedirectTo: window.location.origin + '/confirm', data: { role: 'trader' } }
     })
     return { data, error }
   },

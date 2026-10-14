@@ -7,10 +7,43 @@ services:
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     plan: free
     autoDeploy: true
+    healthCheckPath: /docs
     envVars:
+      # ── required ──────────────────────────────────────────────────────
       - key: DATABASE_URL
-        sync: false          # set manually in Render dashboard
+        sync: false          # Supabase connection string (Settings > Database)
       - key: SUPABASE_JWT_SECRET
-        sync: false          # set manually in Render dashboard
+        sync: false          # Supabase > Settings > API > JWT Secret
       - key: FRONTEND_URL
+        value: https://app.rijeka.app
+      - key: CORS_ORIGINS
+        value: https://rijeka-landing.netlify.app
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      # ── hosted demo ───────────────────────────────────────────────────
+      - key: RIJEKA_DEMO_PROVISION
+        value: "1"           # every sign-in gets a sandbox workspace (api/routes/demo.py)
+      - key: RIJEKA_DEMO_TEMPLATE_EMAIL
+        sync: false          # whose market data new visitors get a copy of
+      - key: RIJEKA_CHAIN_DEV_SEED
+        generateValue: true  # keys for DEMO* entities only (see next line); never reuse a local seed
+      - key: RIJEKA_CHAIN_DEV_LEI_PREFIX
+        value: DEMO          # Rijeka signs for demo entities only; real LEIs need a countersignature
+      - key: RIJEKA_CHAIN_DAILY_LIMIT
+        value: "20"          # anchoring actions per user per 24h, protects the relayer
+      # ── Sepolia anchoring ─────────────────────────────────────────────
+      - key: RIJEKA_CHAIN_RPC
+        value: https://ethereum-sepolia-rpc.publicnode.com
+      - key: RIJEKA_CHAIN_REGISTRY
+        value: "0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e"
+      - key: RIJEKA_CHAIN_EXPLORER
+        value: https://sepolia.etherscan.io
+      - key: RIJEKA_CHAIN_RELAYER_KEY
+        sync: false          # funded Sepolia burner; rotate if it ever appears in a log
+      # ── optional: Telegram mirror (chain/README.md) ───────────────────
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: RIJEKA_PUBLIC_URL
         value: https://app.rijeka.app
