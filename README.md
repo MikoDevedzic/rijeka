@@ -198,6 +198,6 @@ Contextual chat over your book, AI-powered PnL explain, hedging recommendations,
 
 ## License
 
-**Apache-2.0** for the engine and the standard (`backend/pricing`, `backend/chain`, `chain/`, the methodology, the schema, the tests, the validation reports) and **Business Source License 1.1** for the platform (API, database layer, frontend): free to run for your own organisation, free to teach and study, not to be offered to others as a hosted service without a commercial licence; each version becomes Apache-2.0 after four years. Path table in [LICENSE](LICENSE). © 2026 Miko Devedzic / Rijeka
+**Apache-2.0** for the engine and the standard (`backend/pricing`, `backend/chain`, `chain/`, the methodology, the schema, the tests, the validation reports) and **Business Source License 1.1** for the platform (API, database layer, frontend): free to run for your own organisation, free to teach and study, not to be offered to others as a hosted service without a commercial licence; each version becomes Apache-2.0 after four years. Path table in [LICENSE](LICENSE). © 2026 Rijeka LLC
 
 Built by someone who spent a career inside trading floor infrastructure — pricing systems, risk frameworks, and margin engines — and believed the tools deserved to be free.

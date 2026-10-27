@@ -2,7 +2,7 @@ Business Source License 1.1
 
 Parameters
 
-Licensor:             Miko Devedzic (Rijeka)
+Licensor:             Rijeka LLC
 
 Licensed Work:        The Rijeka Platform, version 1.0 and later: every file in
                       this repository that is NOT listed under the Apache-2.0
@@ -10,7 +10,7 @@ Licensed Work:        The Rijeka Platform, version 1.0 and later: every file in
                       backend/db, backend/middleware, backend/news,
                       backend/chain/telegram.py, backend/main.py, frontend/,
                       render.yaml and backend/scripts).
-                      The Licensed Work is (c) 2026 Miko Devedzic.
+                      The Licensed Work is (c) 2026 Rijeka LLC.
 
 Additional Use Grant: You may make production use of the Licensed Work, and
                       modify it, to run pricing, risk, collateral, confirmation
