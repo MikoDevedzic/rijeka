@@ -5,7 +5,7 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    plan: free
+    plan: starter        # the free plan sleeps; first visitor would wait ~1 min
     autoDeploy: true
     healthCheckPath: /docs
     envVars:
@@ -40,6 +40,8 @@ services:
         value: https://sepolia.etherscan.io
       - key: RIJEKA_CHAIN_RELAYER_KEY
         sync: false          # funded Sepolia burner; rotate if it ever appears in a log
+      - key: RIJEKA_CHAIN_KEY_254900OPPU84GM83MG36
+        sync: false          # signing key for RIJEKA CAPITAL (real LEI): the DEMO-only seed does not cover it
       # ── optional: Telegram mirror (chain/README.md) ───────────────────
       - key: TELEGRAM_BOT_TOKEN
         sync: false
