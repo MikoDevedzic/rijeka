@@ -99,23 +99,36 @@ function useCountUp(target, ms = 700) {
   return v
 }
 
+const BOOT_KEY = 'rijeka.booted'
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
 function DeskHome({ demo, navigate }) {
+  const session = useAuthStore(s => s.session)
+  const uid = session?.user?.id
   const [d, setD] = useState({ loading: true })
+  const [steps, setSteps] = useState({})            // key -> { ok, detail }
+  const [booting, setBooting] = useState(() => {
+    if (reducedMotion()) return false
+    try { return sessionStorage.getItem(BOOT_KEY) !== uid } catch { return true }
+  })
   useEffect(() => {
     let alive = true
-    Promise.allSettled([
-      get('/api/market-data/snapshots/USD_SOFR/latest'),
-      get('/api/market-data/snapshots/USD_SWVOL_ATM/latest'),
-      get('/api/trades/'),
-      get('/api/chain/status'),
-      get('/api/news/items?limit=12'),
+    const mark = (k, ok, detail) => alive && setSteps(st => ({ ...st, [k]: { ok, detail } }))
+    const step = (k, p, detail) => p.then(v => { mark(k, true, detail(v)); return v }).catch(e => { mark(k, false, e.message); return null })
+    Promise.all([
+      step('sofr',   get('/api/market-data/snapshots/USD_SOFR/latest'),      v => v?.exists ? `${fmtD(v.valuation_date)} · ${v.quotes?.length || 0} points` : 'no snapshot'),
+      step('vol',    get('/api/market-data/snapshots/USD_SWVOL_ATM/latest'), v => v?.exists ? `${v.quotes?.length || 0} points` : 'no snapshot'),
+      step('trades', get('/api/trades/'),                                     v => `${v?.length || 0} trades · ${(v || []).filter(t => t.status === 'CONFIRMED').length} confirmed`),
+      step('chain',  get('/api/chain/status'),                                v => v?.anchored ? `${v.chain_id === 11155111 ? 'Sepolia' : 'chain ' + v.chain_id} · ${v.registry?.slice(0, 8)}…${v.registry?.slice(-4)}` : 'off-chain'),
+      step('news',   get('/api/news/items?limit=12'),                         v => `${v?.length || 0} headlines`),
     ]).then(([sofr, vol, trades, chain, news]) => {
       if (!alive) return
-      const v = r => r.status === 'fulfilled' ? r.value : null
-      setD({ loading: false, sofr: v(sofr), vol: v(vol), trades: v(trades) || [], chain: v(chain), news: v(news) || [] })
+      setD({ loading: false, sofr, vol, trades: trades || [], chain, news: news || [] })
     })
     return () => { alive = false }
   }, [])
+  const endBoot = () => { try { sessionStorage.setItem(BOOT_KEY, uid) } catch {}; setBooting(false) }
+  if (booting) return <BootScreen steps={steps} ready={!d.loading} sofr={d.sofr} name={traderName(session)} role={(session?.user?.user_metadata?.role || 'viewer').toUpperCase()} onDone={endBoot} />
 
   const trades = d.trades || []
   const by = s => trades.filter(t => t.status === s).length
@@ -358,6 +371,87 @@ function ChainDiagram() {
           </g>
         ))}
       </svg>
+    </div>
+  )
+}
+
+
+// ── Boot sequence ────────────────────────────────────────────────────────────
+// Plays once per sign-in. Every line is a real fetch ticking as it returns —
+// the loading screen *is* the data load — then the desk fades in and the
+// curve draws itself. Click, Enter or Esc skips. Not shown under
+// prefers-reduced-motion.
+
+const traderName = (session) => (session?.user?.email?.split('@')[0] || 'trader').toUpperCase()
+const BOOT_STEPS = [
+  ['identity', 'IDENTITY'],
+  ['chain',    'REGISTRY'],
+  ['sofr',     'USD SOFR CURVE'],
+  ['vol',      'SWAPTION SURFACE'],
+  ['trades',   'YOUR BOOK'],
+  ['news',     'MARKET NEWS'],
+]
+const MIN_MS = 2600
+
+function BootScreen({ steps, ready, sofr, name, role, onDone }) {
+  const [t0] = useState(() => performance.now())
+  const [leaving, setLeaving] = useState(false)
+  const [shown, setShown] = useState(0)                  // lines revealed so far (paced)
+  const all = { identity: { ok: true, detail: `${name} · ${role}` }, ...steps }
+  const h = new Date().getHours()
+  const greet = h < 5 ? 'GOOD NIGHT' : h < 12 ? 'GOOD MORNING' : h < 18 ? 'GOOD AFTERNOON' : 'GOOD EVENING'
+
+  // pace the reveal so lines appear one after another even when fetches are instant
+  useEffect(() => {
+    if (shown >= BOOT_STEPS.length) return
+    const k = BOOT_STEPS[shown][0]
+    if (!all[k]) return                                    // wait for that fetch
+    const id = setTimeout(() => setShown(n => n + 1), shown === 0 ? 250 : 220)
+    return () => clearTimeout(id)
+  }, [shown, steps])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const finish = () => { if (leaving) return; setLeaving(true); setTimeout(onDone, 650) }
+  useEffect(() => {
+    if (!(ready && shown >= BOOT_STEPS.length)) return
+    const wait = Math.max(0, MIN_MS - (performance.now() - t0))
+    const id = setTimeout(finish, wait + 500)
+    return () => clearTimeout(id)
+  }, [ready, shown])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const key = e => { if (e.key === 'Enter' || e.key === 'Escape' || e.key === ' ') finish() }
+    window.addEventListener('keydown', key); return () => window.removeEventListener('keydown', key)
+  })   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pts = (sofr?.quotes || []).filter(q => q.enabled !== false && years(q.tenor) != null && q.rate != null)
+    .map(q => ({ y: years(q.tenor), r: Number(q.rate) })).sort((a, b) => a.y - b.y)
+  let curve = null
+  if (pts.length > 2) {
+    const W = 900, H = 260, x0 = Math.log(1 / 365), x1 = Math.log(30)
+    const lo = Math.min(...pts.map(p => p.r)) - 0.2, hi = Math.max(...pts.map(p => p.r)) + 0.2
+    const X = y => (Math.log(Math.max(y, 1 / 365)) - x0) / (x1 - x0) * W, Y = r => (hi - r) / (hi - lo) * H
+    curve = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.y).toFixed(1)},${Y(p.r).toFixed(1)}`).join(' ')
+  }
+  const done = Object.values(all).filter(x => x?.ok).length
+
+  return (
+    <div className={`boot${leaving ? ' leaving' : ''}`} onClick={finish} role="status" aria-live="polite">
+      <svg className="boot-curve" viewBox="0 0 900 260" preserveAspectRatio="none">
+        {curve && <path d={curve} />}
+      </svg>
+      <div className="boot-box">
+        <div className="boot-greet">{greet}, {name.split('.')[0]}</div>
+        <div className="boot-mark">R I J E K A</div>
+        <div className="boot-sub">DERIVATIVES DESK · RATES · PHASE 1</div>
+        <ol className="boot-steps">
+          {BOOT_STEPS.slice(0, shown).map(([k, label]) => {
+            const st = all[k]
+            return <li key={k} className={st?.ok ? 'ok' : 'fail'}><span className="boot-tick">{st?.ok ? '✓' : '×'}</span><span className="boot-label">{label}</span><span className="boot-detail">{st?.detail}</span></li>
+          })}
+          {shown < BOOT_STEPS.length && <li className="pending"><span className="boot-tick boot-spin" /><span className="boot-label">{BOOT_STEPS[shown][1]}</span><span className="boot-detail">connecting…</span></li>}
+        </ol>
+        <div className="boot-bar"><i style={{ width: `${Math.round(100 * Math.min(shown, done) / BOOT_STEPS.length)}%` }} /></div>
+        <div className="boot-hint">{ready && shown >= BOOT_STEPS.length ? 'ENTERING THE DESK' : 'PRESS ENTER TO SKIP'}</div>
+      </div>
     </div>
   )
 }

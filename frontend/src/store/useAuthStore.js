@@ -14,12 +14,18 @@ export const useAuthStore = create((set, get) => ({
       if (session) { get().fetchProfile(session.user.id); get().provision(session) }
     })
 
+    // Never await a supabase call inside this callback: signInWithPassword()
+    // resolves only after every subscriber returns, and a query in here waits
+    // on the auth lock that sign-in still holds. That deadlock is why the
+    // login button sat on AUTHENTICATING for 10s+. Defer the work instead.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         set({ session, loading: false })
         if (event === 'SIGNED_IN' && session) {
-          const isNew = await get().fetchProfile(session.user.id)
-          if (isNew) set({ isNewSignup: true })
+          setTimeout(async () => {
+            const isNew = await get().fetchProfile(session.user.id)
+            if (isNew) set({ isNewSignup: true })
+          }, 0)
           get().provision(session)
         }
         if (event === 'SIGNED_OUT') {
