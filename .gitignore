@@ -165,7 +165,6 @@ migration_*.sql
 # ============================================================
 # SCRATCH / DEPLOYMENT
 # ============================================================
-model_validation/
 netlify_drop/
 backend/api/routes/*_*.cjs
 frontend/src/components/**/*.cjs
