@@ -1,0 +1,14 @@
+# Pull requests touching these paths require a review from the owner listed,
+# on top of the ordinary approval. The engine, the standard, the methodology
+# and the licences are the parts that must not change without Rijeka LLC.
+*                       @MikoDevedzic
+backend/pricing/        @MikoDevedzic
+backend/chain/          @MikoDevedzic
+backend/methodology/    @MikoDevedzic
+chain/                  @MikoDevedzic
+docs/methodology/       @MikoDevedzic
+docs/VALIDATION.md      @MikoDevedzic
+model_validation/       @MikoDevedzic
+LICENSE*                @MikoDevedzic
+CONTRIBUTING.md         @MikoDevedzic
+.github/                @MikoDevedzic
