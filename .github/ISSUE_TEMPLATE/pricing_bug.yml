@@ -1,0 +1,13 @@
+name: Pricing or risk bug
+description: A number is wrong, a trade will not price, or a sensitivity does not make sense.
+title: "[pricing] <short description>"
+labels: ["bug", "pricing"]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: "Trade terms, curve/snapshot date, what you saw and what you expected." }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes: { label: How to reproduce, description: "Steps in the app or an API call." }
+    validations: { required: true }

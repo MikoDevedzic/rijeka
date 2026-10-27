@@ -2,6 +2,7 @@
 // rebuilds the default trade from the user's own market data next to Rijeka's number.
 import { useEffect, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
+import ValidationLog from './ValidationLog'
 import './Docs.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -77,6 +78,7 @@ export default function Methodology() {
           </div>
         </section>
       ))}
+      <ValidationLog />
       <footer className="doc-foot">Model validation reports live in <code>model_validation/</code> and <code>docs/</code> in the repository. Apache-2.0.</footer>
     </div>
   )

@@ -45,3 +45,26 @@
 .doc-btn.primary:hover { opacity: .9; }
 .doc-link:first-of-type { margin-left: auto; }
 @media (max-width: 900px) { .doc-hero { grid-template-columns: 1fr; } .doc-hero-actions { justify-content: flex-start; } }
+
+.vl { margin-top: 2.2rem; border-top: 1px solid var(--border); padding-top: 1.4rem; }
+.vl header { display: grid; grid-template-columns: 1.6fr 1fr; gap: 1rem; align-items: start; }
+.vl h2, .wwu h2 { font-family: var(--mono); font-size: .7rem; letter-spacing: .22em; color: var(--accent); margin: 0 0 .5rem; }
+.vl header p, .wwu > p { margin: 0; color: var(--text-dim); font-size: .9rem; line-height: 1.6; }
+.vl-actions { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
+.vl-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
+.vl h3 { font-family: var(--mono); font-size: .62rem; letter-spacing: .18em; color: var(--text-dim); margin: 0 0 .4rem; }
+.vl ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.vl li { padding: .5rem 0; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: .15rem; }
+.vl li a { color: var(--text); text-decoration: none; font-size: .9rem; }
+.vl li a:hover { color: var(--accent); }
+.vl-meta { font-family: var(--mono); font-size: .62rem; letter-spacing: .08em; color: var(--text-dim); }
+.vl-sev { margin-right: .5rem; padding: 0 .35rem; border: 1px solid var(--border-hi); border-radius: 2px; color: var(--text); }
+.vl-sev.s1 { color: var(--red); border-color: var(--red); } .vl-sev.s2 { color: var(--amber); border-color: var(--amber-dim); }
+.vl-empty { color: var(--text-dim); font-size: .86rem; }
+.wwu { margin-top: 2.2rem; border-top: 1px solid var(--border); padding-top: 1.4rem; }
+.wwu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .9rem; margin-top: 1rem; }
+.wwu-card { background: var(--panel); border: 1px solid var(--border); border-radius: 3px; padding: .9rem 1rem 1rem; display: flex; flex-direction: column; gap: .5rem; }
+.wwu-card h3 { margin: 0; font-family: var(--mono); font-size: .72rem; letter-spacing: .2em; color: var(--text); }
+.wwu-card p { margin: 0; color: var(--text-dim); font-size: .86rem; line-height: 1.55; flex: 1; }
+.wwu-card .doc-btn { align-self: flex-start; }
+@media (max-width: 900px) { .vl header, .vl-cols { grid-template-columns: 1fr; } .vl-actions { justify-content: flex-start; } }

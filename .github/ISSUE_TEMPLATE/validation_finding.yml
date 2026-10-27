@@ -1,0 +1,45 @@
+name: Validation finding
+description: You rebuilt a Rijeka number independently and it does not match, or the methodology does not say what the code does.
+title: "[validation] <product>: <one-line finding>"
+labels: ["validation"]
+body:
+  - type: dropdown
+    id: product
+    attributes:
+      label: Product
+      options: [IRS / OIS, Basis swap, European swaption, Cap / floor / collar, SABR surface, Bermudan swaption (HW1F tree), HW1F calibration, XVA under CSA, SIMM IM / SA-CCR, Crypto NDF / NDO, Curve bootstrap, Registry contract / verifier, Other]
+    validations: { required: true }
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: S1 wrong sign/order/formula · S2 material (>1bp or >0.5% premium) with a cause · S3 convention-level · S4 documentation gap
+      options: [S1, S2, S3, S4]
+    validations: { required: true }
+  - type: textarea
+    id: trade
+    attributes:
+      label: Trade and market data
+      description: The trade terms and the snapshot date (or attach the Excel export from the Methodology tab).
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected value and how you obtained it
+      description: Your independent calculation — tool, formula, convention choices.
+    validations: { required: true }
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed value in Rijeka
+    validations: { required: true }
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+  - type: checkboxes
+    id: credit
+    attributes:
+      label: Credit
+      options:
+        - label: Name me in the validation report and the methodology acknowledgements if this is confirmed.
