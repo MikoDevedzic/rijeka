@@ -7,6 +7,8 @@ const MODULES = [
   { label: 'HOME',           path: '/command-center', exact: true  },
   { label: 'BLOTTER',        path: '/blotter',        exact: false },
   { label: 'CONFIGURATIONS', path: '/configurations', exact: false },
+  { label: 'METHODOLOGY',    path: '/methodology',    exact: true  },
+  { label: 'ROADMAP',        path: '/roadmap',        exact: true  },
 ]
 
 export default function AppBar() {

@@ -8,7 +8,7 @@
 
 /* ── AppBar ── */
 .cc-bar { position:relative; z-index:2; display:flex; align-items:center; gap:0; height:44px; padding:0 1.25rem; border-bottom:1px solid var(--border); background:rgba(0,0,0,0.55); backdrop-filter:blur(6px); }
-.cc-logo { font-size:0.85rem; font-weight:900; letter-spacing:0.2em; color:var(--accent); padding-right:1rem; border-right:1px solid var(--border); margin-right:0.5rem; white-space:nowrap; }
+.cc-logo { font-family:'IBM Plex Sans', var(--sans); font-size:1.0625rem; font-weight:700; letter-spacing:0.2em; color:var(--accent); padding-right:1rem; border-right:1px solid var(--border); margin-right:0.5rem; white-space:nowrap; }
 
 /* ── Nav ── */
 .cc-nav { display:flex; align-items:center; gap:0; flex:1; }

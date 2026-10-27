@@ -12,3 +12,4 @@ numpy
 scipy
 holidays
 web3>=7,<8
+openpyxl>=3.1

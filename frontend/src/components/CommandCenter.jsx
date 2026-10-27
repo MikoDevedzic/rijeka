@@ -8,6 +8,8 @@ const NAV = [
   { label: 'HOME',           path: '/command-center' },
   { label: 'BLOTTER',        path: '/blotter' },
   { label: 'CONFIGURATIONS', path: '/configurations/market-data/curves' },
+  { label: 'METHODOLOGY',    path: '/methodology' },
+  { label: 'ROADMAP',        path: '/roadmap' },
 ]
 
 export default function CommandCenter() {
@@ -231,12 +233,7 @@ function DeskHome({ demo, navigate }) {
         </section>
       </div>
 
-      <div className="dh-modules">
-        {[['BLOTTER', '/blotter'], ['PRICER', '/pricer'], ['CURVES', '/configurations/market-data/curves'], ['SWAPTION VOL', '/configurations/market-data/swvol'], ['ENTITIES', '/configurations/legal-entities'], ['COUNTERPARTIES', '/configurations/counterparties'], ['XVA PARAMETERS', '/configurations/xva-parameters/hw1f'], ['MESSENGER', '/messenger']]
-          .map(([l, p]) => <button key={p} onClick={() => navigate(p)}>{l}</button>)}
-        <span className="dh-modules-note">Rates only in Phase 1 · FX, credit and equity follow</span>
-      </div>
-      <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · hello@rijeka.app</div>
+      <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · RATES ONLY IN PHASE 1 · hello@rijeka.app</div>
     </div>
   )
 }

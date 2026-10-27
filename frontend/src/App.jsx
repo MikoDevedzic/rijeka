@@ -14,6 +14,8 @@ import CurvesWorkspace  from './components/market-data/CurvesWorkspace'
 import OrgHierarchy     from './components/org/OrgHierarchy'
 import LegalEntities    from './components/onboarding/LegalEntities'
 import Counterparties   from './components/onboarding/Counterparties'
+import Methodology      from './components/docs/Methodology'
+import Roadmap          from './components/docs/Roadmap'
 import Users            from './components/admin/Users'
 import TradeBookingWindow from './components/blotter/TradeBookingWindow'
 import TradeWindow        from './components/trade-window/TradeWindow'
@@ -28,6 +30,15 @@ function BlotterLayout() {
     <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
       <div style={{flex:1,overflow:'hidden'}}><AuthGuard /></div>
+    </div>
+  )
+}
+
+function DocLayout() {
+  return (
+    <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
+      <AppBar />
+      <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><AuthGuard /></main>
     </div>
   )
 }
@@ -130,6 +141,10 @@ export default function App() {
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pricer"  element={<PricerPage />} />
+          </Route>
+          <Route element={<DocLayout />}>
+            <Route path="/methodology" element={<Methodology />} />
+            <Route path="/roadmap"     element={<Roadmap />} />
           </Route>
           <Route element={<ConfigLayout />}>
             <Route path="/configurations">
