@@ -4,7 +4,6 @@ from typing import Optional
 from jose import jwt, JWTError
 
 SUPABASE_URL = "https://upuewetohnocfshkhafg.supabase.co"
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 _jwks_cache = None
 
 async def _get_jwks():
@@ -42,12 +41,11 @@ async def verify_token(authorization: Optional[str] = Header(None)) -> dict:
                     return payload
             except Exception as e:
                 print(f"[AUTH] ES256 fail: {e}")
-    if SUPABASE_JWT_SECRET:
-        try:
-            payload = jwt.decode(token, SUPABASE_JWT_SECRET, algorithms=["HS256"], options={"verify_aud":False})
-            print("[AUTH] HS256 OK")
-            return payload
-        except Exception as e:
-            print(f"[AUTH] HS256 fail: {e}")
+    # No shared-secret (HS256) fallback. Supabase signs every token for this
+    # project with the asymmetric ES256 key published at /.well-known/jwks.json,
+    # and a shared HS256 secret is a single value that, once leaked, lets anyone
+    # mint a token for any user. The legacy secret for this project was committed
+    # to the public repository in March 2026 (commit 3025de4), so that path is
+    # closed here regardless of rotation. SUPABASE_JWT_SECRET is no longer read.
     raise HTTPException(status_code=401, detail="Invalid token")
 

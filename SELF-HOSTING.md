@@ -22,10 +22,11 @@ honest list of what that takes today.
 ## Steps
 
 1. **Create a Supabase project.** In the SQL editor run [`docs/schema.sql`](docs/schema.sql)
-   (26 tables, RLS policies, the sign-up trigger). Copy the connection string and
-   the JWT secret from *Settings → Database / API*.
+   (26 tables, RLS policies, the sign-up trigger). Copy the connection string from
+   *Settings → Database* and the project URL from *Settings → API*. No JWT secret is needed: tokens are
+   verified against the project's published ES256 keys.
 2. **Backend.** `cp backend/.env.example backend/.env`, fill in `DATABASE_URL`,
-   `SUPABASE_JWT_SECRET`, `FRONTEND_URL`. Then
+   `SUPABASE_URL`, `FRONTEND_URL`. Then
    ```bash
    cd backend && pip install -r requirements.txt && uvicorn main:app --port 8000
    ```

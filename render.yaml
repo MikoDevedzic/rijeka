@@ -12,8 +12,6 @@ services:
       # ── required ──────────────────────────────────────────────────────
       - key: DATABASE_URL
         sync: false          # Supabase connection string (Settings > Database)
-      - key: SUPABASE_JWT_SECRET
-        sync: false          # Supabase > Settings > API > JWT Secret
       - key: FRONTEND_URL
         value: https://app.rijeka.app
       - key: CORS_ORIGINS
