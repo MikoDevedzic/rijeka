@@ -1,6 +1,6 @@
 # Contributing to Rijeka
 
-Rijeka is built in public under MIT. There are four ways in, and each has
+Rijeka is built in public. The engine and the standard are Apache-2.0; the platform is Business Source License 1.1 (see the path table in [LICENSE](LICENSE)). There are four ways in, and each has
 its own door so nobody has to guess.
 
 | You want to… | Go to |
@@ -13,8 +13,10 @@ its own door so nobody has to guess.
 ## Ground rules for code
 
 - **Sign your commits (DCO).** Add `Signed-off-by: Your Name <you@example.com>` to every commit
-  (`git commit -s`). It certifies you have the right to contribute the change under MIT.
-  No contributor licence agreement, no assignment of copyright.
+  (`git commit -s`). It certifies you have the right to contribute the change and that you license it
+  inbound under Apache-2.0, whichever part of the tree it lands in. Platform contributions are then
+  distributed under the BSL and relicensed to Apache-2.0 on the Change Date, like the rest of the
+  platform. No assignment of copyright.
 - **Pricing changes come with a test and a number.** A change to anything under `backend/pricing/`
   or `backend/chain/` needs a test that pins the new behaviour and, in the pull request, the before
   and after value on the default trade of the affected product (the Methodology tab's Excel export

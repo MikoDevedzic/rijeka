@@ -1,33 +1,33 @@
-MIT License
+Rijeka is licensed in two parts. The boundary is by path.
 
-Copyright (c) 2026 Miko Devedzic / Rijeka
+APACHE LICENSE 2.0  (see LICENSE-APACHE)  — the engine and the standard,
+meant to be adopted, embedded and forked freely, with an explicit patent grant:
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+    backend/pricing/        curve bootstrap, pricing, risk, XVA, SIMM, SA-CCR
+    backend/chain/          canonical trade record, EIP-712 signing, attestation,
+                            key resolution, lifecycle guard
+                            (except backend/chain/telegram.py, which is platform)
+    backend/methodology/    Excel replications of the methodology
+    backend/tests/          the test suite
+    chain/                  TradeConfirmationRegistry.sol, Foundry tests, deploy
+                            scripts, the standalone verifier, the countersign tool
+    docs/methodology/       the methodology document (LaTeX and PDF)
+    docs/schema.sql         the database schema
+    model_validation/       validation reports and their sources
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+BUSINESS SOURCE LICENSE 1.1  (see LICENSE-BSL)  — the platform: everything
+else, principally backend/api, backend/db, backend/middleware, backend/news,
+backend/chain/telegram.py, backend/main.py, frontend/, render.yaml and
+backend/scripts. You may run it for your own organisation, modify it, teach
+with it and study it; you may not offer it to others as a hosted service or a
+competing product without a commercial licence. Each version becomes
+Apache-2.0 four years after it is published.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Versions published before 27 October 2026 were released under the MIT License
+and remain available under it.
 
----
+Contributions: see CONTRIBUTING.md (inbound under Apache-2.0 with a DCO
+sign-off, so the Licensor can distribute platform contributions under the BSL
+and relicense them on the Change Date).
 
-Rijeka is an open-source derivatives pricing and risk platform.
-Original work, methodology, and implementation by Miko Devedzic.
-
-All XVA waterfall logic, OIS bootstrap engine, curve scenario engine,
-ISDA SIMM implementation, and interactive tools are original works
-created by Miko Devedzic.
-
-Attribution required in all derivative works and distributions.
-Canonical source: https://rijeka.app
+(c) 2026 Miko Devedzic / Rijeka · miko@rijeka.app

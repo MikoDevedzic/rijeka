@@ -57,6 +57,13 @@ honest list of what that takes today.
 - Market data is whatever you load. Nothing ships with a live feed.
 - The registry contract has not had an external audit.
 
+## Licence
+
+The engine, the standard and the methodology are Apache-2.0. The platform you deploy by following
+this page is Business Source License 1.1: run it for your own organisation, modify it, teach with it;
+do not offer it to third parties as a hosted service or a competing product without a commercial
+licence (miko@rijeka.app). Each version becomes Apache-2.0 four years after publication.
+
 If you want help standing this up for a desk, or dedicated coverage on the
 models, write to miko@rijeka.app. The hosted demo is free; the work above is
 what we charge for.

@@ -124,7 +124,7 @@ def _readme(wb, title, lines, mkt: Market):
         "period end, so where a date rolls over a weekend the two differ by one or two days of discounting — a few dollars per "
         "million. The engine is the one being corrected.",
         "", *lines, "",
-        "Source: github.com/MikoDevedzic/rijeka · backend/methodology/replicate.py. MIT.",
+        "Source: github.com/MikoDevedzic/rijeka · backend/methodology/replicate.py. Apache-2.0.",
     ]
     for i, t in enumerate(rows, 3):
         ws.cell(row=i, column=1, value=t).alignment = Alignment(wrap_text=True, vertical="top")
