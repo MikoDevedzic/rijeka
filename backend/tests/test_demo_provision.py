@@ -78,21 +78,25 @@ def test_copy_sql_regenerates_ids_and_reassigns_owner():
     from api.routes.demo import _copy_market_data
     db = _FakeDB({
         "market_data_snapshots": ["id", "curve_id", "valuation_date", "quotes", "source", "created_at", "created_by", "user_id"],
-        "swaption_vol_skew":     ["id", "valuation_date", "expiry_label", "atm_vol_bp", "user_id"],
+        "swaption_vol_skew":     ["id", "valuation_date", "expiry_label", "atm_vol_bp", "source", "user_id"],
         "cap_vol_surface":       [],   # absent table → skipped
-        "sabr_params":           ["id", "valuation_date", "alpha", "user_id"],
         "xva_calibration":       ["id", "curve_id", "valuation_date", "model", "a", "user_id"],
     })
     src, dst = uuid.uuid4(), uuid.uuid4()
     out = _copy_market_data(db, src, dst)
-    assert set(out) == {"market_data_snapshots", "swaption_vol_skew", "sabr_params", "xva_calibration"}
+    assert set(out) == {"market_data_snapshots", "swaption_vol_skew", "xva_calibration"}
+    # Bloomberg-sourced rows are never copied to a visitor (terminal licence)
+    for name in ("market_data_snapshots", "swaption_vol_skew"):
+        sql = next(s for s, _ in db.sql if f"INSERT INTO {name}" in s)
+        assert "NOT LIKE 'BLOOMBERG%'" in sql and "NOT LIKE 'BBG%'" in sql
+    xva = next(s for s, _ in db.sql if "INSERT INTO xva_calibration" in s)
+    assert "BLOOMBERG" not in xva                      # no source column there
     snap = next(s for s, _ in db.sql if "INSERT INTO market_data_snapshots" in s)
     assert "gen_random_uuid()" not in snap and "INSERT INTO market_data_snapshots (curve_id," in snap and "ON CONFLICT DO NOTHING" in snap
     assert "PARTITION BY curve_id" in snap and "NOT LIKE 'TEST-%'" in snap
     assert "SELECT curve_id, valuation_date, quotes, source, now(), :dst, :dst" in snap
     vol = next(s for s, _ in db.sql if "INSERT INTO swaption_vol_skew" in s)
     assert "OVER ()" in vol and "TEST-" not in vol
-    xva = next(s for s, _ in db.sql if "INSERT INTO xva_calibration" in s)
     assert "PARTITION BY curve_id, model" in xva
     assert all(p == {"src": src, "dst": dst} for _, p in db.sql)
 

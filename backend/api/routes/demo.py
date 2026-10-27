@@ -12,8 +12,9 @@ each visitor, idempotently:
     signing key this Rijeka holds, so the visitor can take a trade all the
     way to the Sepolia registry alone. The attestation says bilateral:false
     and key_source "dev"; the UI says "demo, not bilateral";
-  * a copy of the template user's latest market data, so the pricer, the
-    curves workspace and XVA work immediately;
+  * a copy of the template user's latest market data that is NOT from a
+    Bloomberg feed (terminal data cannot be redistributed), so the pricer,
+    the curves workspace and XVA work immediately;
   * the trader role, so booking and confirming are allowed. Supabase keeps
     the role in the JWT, so the browser refreshes its session afterwards.
 
@@ -49,15 +50,22 @@ DEMO_BANK_LEI     = "DEMO0000RIJEKABANK01"      # 20 chars; not a real LEI
 DEMO_BANK_FIRM    = "RIJEKA DEMO BANK AG"
 WRITE_ROLE        = "trader"
 
-# Per-user market data, copied from the template user. cap_sabr_params is
-# left out: its unique key has no user_id, so it is effectively global.
+# Per-user market data, copied from the template user.
+#
+# Only rows whose `source` is NOT a Bloomberg feed are copied. Terminal data is
+# licensed to the seat and may not be redistributed to third parties, and every
+# visitor is a third party. The demo therefore runs on manually entered or
+# publicly sourced snapshots only, and says so. sabr_params and cap_sabr_params
+# are left out too: they are fitted from whatever surface the template user
+# loaded (and cap_sabr_params has no user_id in its unique key); a visitor can
+# re-fit SABR from the copied manual skew with one click.
 _COPY_LATEST_PER = {
     "market_data_snapshots": ("curve_id",),
     "swaption_vol_skew":     (),
     "cap_vol_surface":       (),
-    "sabr_params":           (),
     "xva_calibration":       ("curve_id", "model"),
 }
+_LICENSED_SOURCE_SQL = "upper(coalesce(source, '')) NOT LIKE 'BLOOMBERG%' AND upper(coalesce(source, '')) NOT LIKE 'BBG%'"
 
 
 def enabled() -> bool:
@@ -114,8 +122,9 @@ def _copy_market_data(db: Session, src: uuid.UUID, dst: uuid.UUID) -> dict[str, 
                 sel.append(c)
         over = f"OVER (PARTITION BY {', '.join(keys)})" if keys else "OVER ()"
         no_test = "AND curve_id NOT LIKE 'TEST-%'" if "curve_id" in cols else ""
+        licensed = f"AND {_LICENSED_SOURCE_SQL}" if "source" in cols else ""
         latest = (f"SELECT * FROM (SELECT *, max(valuation_date) {over} AS _mx "
-                  f"FROM {table} WHERE user_id = :src AND valuation_date <= current_date {no_test}) s "
+                  f"FROM {table} WHERE user_id = :src AND valuation_date <= current_date {no_test} {licensed}) s "
                   f"WHERE valuation_date = _mx")
         sql = (f"INSERT INTO {table} ({', '.join(cols)}) SELECT {', '.join(sel)} FROM ({latest}) t "
                f"ON CONFLICT DO NOTHING")

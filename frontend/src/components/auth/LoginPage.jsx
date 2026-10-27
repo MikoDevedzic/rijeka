@@ -1,3 +1,4 @@
+import '../docs/Docs.css'
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -101,6 +102,7 @@ export default function LoginPage() {
 
             <SubmitBtn state={btnState} labels={{ idle: 'ENTER SYSTEM', loading: 'AUTHENTICATING...', success: 'ACCESS GRANTED ✓' }} />
           </form>
+          <p className="auth-consent"><a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy</a> · Hosted demo on the Sepolia testnet · not investment advice</p>
 
           <p style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: '10px', color: 'rgba(90,112,128,0.7)', textAlign: 'center', margin: 0 }}>
             No account? <Link to="/signup" style={{ color: '#0ec9a0', textDecoration: 'none' }}>Request early access</Link>

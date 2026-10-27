@@ -16,6 +16,7 @@ import LegalEntities    from './components/onboarding/LegalEntities'
 import Counterparties   from './components/onboarding/Counterparties'
 import Methodology      from './components/docs/Methodology'
 import Roadmap          from './components/docs/Roadmap'
+import { Terms, Privacy } from './components/docs/Legal'
 import Users            from './components/admin/Users'
 import TradeBookingWindow from './components/blotter/TradeBookingWindow'
 import TradeWindow        from './components/trade-window/TradeWindow'
@@ -134,6 +135,8 @@ export default function App() {
         <Route path="/login"   element={<LoginPage />} />
         <Route path="/signup"  element={<SignupPage />} />
         <Route path="/confirm" element={<ConfirmPage />} />
+        <Route path="/terms"   element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
         <Route element={<AuthGuard />}>
           <Route path="/command-center" element={<CommandCenter />} />
           {/* The messenger in its own window, to put on another screen. */}

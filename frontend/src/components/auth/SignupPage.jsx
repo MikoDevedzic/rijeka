@@ -1,3 +1,4 @@
+import '../docs/Docs.css'
 import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore, previewTraderId } from '../../store/useAuthStore'
@@ -162,6 +163,7 @@ export default function SignupPage() {
               {btnState === 'idle' ? 'REQUEST ACCESS' : btnState === 'loading' ? 'CREATING ACCOUNT...' : 'CONFIRMED ✓'}
             </button>
           </form>
+          <p className="auth-consent">By creating an account you agree to the <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and the <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Notice</a>.<br/>Hosted demo · Sepolia testnet · not investment advice.</p>
 
           <p style={{ fontSize: '10px', color: 'rgba(90,112,128,0.7)', textAlign: 'center', margin: 0 }}>
             Already have an account? <Link to="/login" style={{ color: '#0ec9a0', textDecoration: 'none' }}>Sign in</Link>
