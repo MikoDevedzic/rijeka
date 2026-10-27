@@ -30,12 +30,12 @@ export const TERMS = [
   { h: 'Warranty disclaimer', p: [
     'The service is provided "as is" and "as available", without warranties of any kind, express or implied, including merchantability, fitness for a particular purpose, accuracy and non-infringement. Numbers can be wrong; the methodology document lists known limitations.' ]},
   { h: 'Limitation of liability', p: [
-    'To the fullest extent permitted by law, Rijeka LLC and its members, officers and contributors are not liable for any indirect, incidental, special, consequential or punitive damages, or for lost profits, lost data or trading losses, arising from the service. Our total liability for any claim relating to the service is limited to USD 100. Some jurisdictions do not allow these limits; where they do not, the limits apply to the extent permitted.' ]},
+    'To the fullest extent permitted by law, Rijeka LLC and its members, officers and contributors are not liable for any indirect, incidental, special, consequential or punitive damages, or for lost profits, lost data or trading losses, arising from the service. Our total liability for all claims relating to the service, taken together, is limited to the greater of the amounts you paid Rijeka LLC for the service in the twelve months before the claim arose and USD 100. Some jurisdictions do not allow these limits; where they do not, the limits apply to the extent permitted.' ]},
   { h: 'Termination', p: [
     'You can stop using the service at any time and ask us to delete your account (see the Privacy Notice). We may suspend or end the demo, or your access to it, at any time. Records already written to a public blockchain cannot be removed by anyone.' ]},
   { h: 'Changes', p: [
     'We may update these terms. The date and version at the top will change, and material changes will be announced in the application. Continued use after a change is acceptance.' ]},
   { h: 'Governing law', p: [
-    'These terms are governed by the laws of [State of formation of Rijeka LLC], United States, without regard to conflict-of-law rules, and disputes are subject to the courts there.' ]},
+    'These terms are governed by the laws of the State of Delaware, United States, without regard to conflict-of-law rules. Any dispute arising from the service is subject to the exclusive jurisdiction of the state and federal courts located in Delaware, and you consent to that jurisdiction.' ]},
   { h: 'Contact', p: [ 'Rijeka LLC · miko@rijeka.app' ]},
 ]
