@@ -36,3 +36,12 @@
 .rm-phase li.done .rm-st { color: var(--accent); }
 .rm-phase li.now .rm-st { color: var(--amber); }
 .rm-phase li.next { color: var(--text-dim); }
+
+.doc-hero { margin-top: 1.4rem; display: grid; grid-template-columns: 1.6fr 1fr; gap: 1.2rem; align-items: center; background: linear-gradient(135deg, rgba(13,212,168,0.08), rgba(74,154,212,0.05)); border: 1px solid var(--accent-dim); border-radius: 3px; padding: 1.1rem 1.2rem; }
+.doc-hero h2 { font-family: var(--mono); font-size: .7rem; letter-spacing: .22em; color: var(--accent); margin: 0 0 .5rem; }
+.doc-hero p { margin: 0; color: var(--text); font-size: .9rem; line-height: 1.6; }
+.doc-hero-actions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
+.doc-btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 700; }
+.doc-btn.primary:hover { opacity: .9; }
+.doc-link:first-of-type { margin-left: auto; }
+@media (max-width: 900px) { .doc-hero { grid-template-columns: 1fr; } .doc-hero-actions { justify-content: flex-start; } }

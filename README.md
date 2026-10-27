@@ -122,6 +122,8 @@ Rijeka's servers. Demo signatures for the demo bank are held by Rijeka and the
 attestation says so (`bilateral: false`); a real counterparty countersigns with
 its own wallet.
 
+**Methodology.** The full model document, LaTeX and PDF, is in [docs/methodology](docs/methodology); the app's METHODOLOGY tab serves it and exports Excel replications per product from your own market data.
+
 **Self-hosting.** Your curves, your trades, your keys, your Bloomberg seat:
 see [SELF-HOSTING.md](SELF-HOSTING.md). The full schema is in
 [docs/schema.sql](docs/schema.sql).

@@ -1,0 +1,314 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[a4paper, top=2.4cm, bottom=2.4cm, left=2.6cm, right=2.6cm]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+
+\definecolor{accent}{RGB}{9,122,97}
+\definecolor{ink}{RGB}{30,30,30}
+\definecolor{dim}{RGB}{110,110,110}
+\hypersetup{colorlinks=true, linkcolor=ink, urlcolor=accent,
+  pdftitle={Rijeka Methodology}, pdfauthor={Rijeka}, pdfsubject={Pricing, risk, XVA and on-chain confirmation methodology}}
+\titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.0 · October 2026}
+\fancyfoot[C]{\small\color{dim}\thepage}
+\renewcommand{\headrulewidth}{0.2pt}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\newcommand{\dd}{\,\mathrm{d}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\N}{\mathcal{N}}
+\setlist{nosep}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries Rijeka Methodology}\\[4pt]
+{\large Curve construction, pricing, risk, XVA, digital-asset derivatives and on-chain confirmation}\\[6pt]
+{\color{dim} Version 1.0 · October 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+\end{center}
+
+\vspace{4pt}
+\noindent\textbf{How to read this document.} Every formula below is the one implemented in the open-source code, with the module named in the margin of each section. Where the code departs from textbook practice, or where a simplification is in force, it is stated as a \emph{known limitation} rather than hidden. The Methodology tab of the application exports, for each product, an Excel workbook that rebuilds the default trade with live formulas from the user's own market data next to the engine's value; those workbooks are the executable companion to this text.
+
+\tableofcontents
+
+%--------------------------------------------------------------------
+\section{Scope and principles}
+Rijeka is a front-to-back desk for over-the-counter derivatives: booking, pricing, cashflows, risk, XVA under a credit support annex, ISDA SIMM initial margin, and bilateral confirmation anchored to Ethereum. Phase~1 covers interest-rate products on overnight-index curves (USD SOFR, EUR €STR, GBP SONIA and others) and non-deliverable digital-asset forwards and options.
+
+Three principles govern the implementation.
+\begin{enumerate}[leftmargin=1.4em]
+\item \textbf{No black boxes.} Each number is traceable to a formula in this document and a function in the repository; the Excel replications reproduce it outside the system.
+\item \textbf{Risk taxonomy follows ISDA SIMM.} Sensitivities are \code{IR01} (all curves bumped), \code{IR01\_DISC} (discount curves only), \code{THETA}, \code{GAMMA}, \code{VEGA}; the terms PV01 and DV01 are not used.
+\item \textbf{Market data is dated and sourced.} Every snapshot carries a valuation date and a source. Pricing off a stale snapshot is permitted but is always flagged with the snapshot date; it is never silent.
+\end{enumerate}
+
+\subsection{Notation and conventions}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+$t_0$ & valuation date \\
+$P(t,T)$ & discount factor from $T$ to $t$ on the OIS curve; $P(t_0,T)$ written $P(T)$ \\
+$\tau(d_1,d_2)$ & year fraction under a day-count convention: ACT/360, ACT/365F, 30/360 bond basis (ISDA 2006 \S4.16(f)), ACT/ACT ISDA \\
+$N$, $K$, $F$ & notional, strike, forward \\
+$\sigma_N$ & normal (Bachelier) volatility, quoted in basis points per annum \\
+$\Phi$, $\varphi$ & standard normal distribution and density \\
+\bottomrule
+\end{tabularx}
+
+Business-day adjustment is Modified Following on the currency's calendar unless the trade says otherwise. Spot lag is two business days for USD, EUR, JPY and CHF, one for CAD, zero for GBP, AUD and NZD (\code{pricing/bootstrap.py}, \code{CCY\_SPOT\_LAG}).
+
+%--------------------------------------------------------------------
+\section{Discount curve construction}
+\emph{Module: \code{pricing/bootstrap.py}, \code{pricing/curve.py}.}
+
+\subsection{Instruments}
+A curve is built from an overnight deposit and a strip of OIS par swap rates (tenors in weeks, months and years). Futures, FRAs and IRS quote types are accepted by the engine but Phase~1 curves use deposit and OIS swaps only.
+
+\subsection{Algorithm}
+\begin{enumerate}[leftmargin=1.4em]
+\item The overnight deposit gives $P(t_0+1\mathrm{d}) = 1/(1 + r_{ON}\,\tau_{ACT/360})$.
+\item The spot discount factor $P(t_s)$ is obtained by extrapolating the overnight zero rate to the spot date and is \emph{frozen} as an explicit pillar. This is the step that makes the bootstrap and the pricer agree to the last cent: both read the same $P(t_s)$.
+\item Annual OIS swaps are bootstrapped on a dense integer-year grid ($1$Y to the longest quote), with missing years filled by linear interpolation of par rates, so that every annual period end is a pillar.
+\item Week- and month-tenor swaps are then bootstrapped in maturity order against the pillars already present.
+\end{enumerate}
+For an OIS swap of par rate $R$ with annual periods $(T_{i-1},T_i]$, $i=1\dots n$, accrual factors $\tau_i$ (ACT/360 for USD), the terminal discount factor solves the par condition with the floating leg replaced by its telescoping value $P(t_s)-P(T_n)$:
+\begin{equation}
+P(T_n) \;=\; \frac{P(t_s) - R\sum_{i=1}^{n-1}\tau_i\,P(T_i)}{1 + R\,\tau_n}.
+\label{eq:ois-boot}
+\end{equation}
+Because every period end is a pillar, a swap struck at its own par rate reprices to exactly zero.
+
+\subsection{Interpolation and extrapolation}
+Between pillar dates $d_0<d<d_1$ the discount factor is log-linear in the calendar-day fraction $w=(d-d_0)/(d_1-d_0)$:
+\begin{equation}
+P(d) = \exp\big[(1-w)\ln P(d_0) + w\ln P(d_1)\big],
+\end{equation}
+equivalent to a piecewise-constant forward rate. Beyond the last pillar the continuously-compounded zero rate is held flat. Before the first pillar $P=1$. The Excel replications implement exactly this rule with \code{MATCH}/\code{INDEX}, so a reader can check any discount factor the engine produces.
+
+\subsection{Risk bumps}
+A parallel shift of $b$ basis points is applied to zero rates: $P_b(T) = P(T)\,e^{-b\cdot 10^{-4}\,T}$ with $T$ in ACT/365F years (\code{Curve.shifted}).
+
+%--------------------------------------------------------------------
+\section{Schedules and cashflows}
+\emph{Module: \code{pricing/schedule.py}, \code{pricing/day\_count.py}, \code{pricing/ir\_swap.py}.}
+
+Coupon periods are rolled backward from the maturity date at the payment frequency (monthly, quarterly, semi-annual, annual, or zero-coupon), producing a short front stub by default; explicit first-period-start and last-period-end dates override this. Period end dates are unadjusted; payment dates apply the business-day convention and any payment lag. Floating fixings are two business days before the period start.
+
+A fixed coupon over $(d_{s},d_{e}]$ is $N\,r\,\tau(d_s,d_e)$. A floating coupon on a compounded overnight index is projected from the forecast curve as
+\begin{equation}
+r_{float} = \frac{1}{\tau(d_s,d_e)}\left(\frac{P_f(d_s)}{P_f(d_e)} - 1\right) + s,
+\label{eq:float}
+\end{equation}
+which equals the daily-compounded in-arrears rate implied by the curve; $s$ is the spread. For a period already in progress, a realised fixing (when supplied) covers the elapsed part and the curve the remainder, weighted by accrual. Notional, fixed-rate and spread schedules (step-ups, amortisation) are resolved per period from their effective dates.
+
+\textbf{Known limitation (engine v0.4).} A coupon is discounted at its \emph{unadjusted period end}, not at the adjusted payment date. Where the payment date rolls over a weekend the two differ by one or two days of discounting, a few dollars per million. The Excel replications discount at the payment date and state the difference; the engine is the one being corrected.
+
+%--------------------------------------------------------------------
+\section{Linear interest-rate products}
+\emph{Module: \code{pricing/ir\_swap.py}, \code{pricing/greeks.py}.}
+
+The value of a leg is the signed sum of discounted coupons, $PV = \pm\sum_k C_k\,P(T_k)$, with pay legs negative. A swap's NPV is the sum of its legs; a basis swap is two floating legs on different forecast curves; an OIS swap is the single-curve case where forecast and discount curves coincide. The par rate is $R^\ast = PV_{float}\,/\,(N\sum_i \tau_i P(T_i))$.
+
+Sensitivities are computed by bump-and-reprice:
+\begin{itemize}[leftmargin=1.4em]
+\item \code{IR01}: all curves shifted $+1$bp;
+\item \code{IR01\_DISC}: discount curves shifted $+1$bp with forecasting held fixed (in single-curve mode this requires a separate bumped copy for discounting, so that \code{IR01\_DISC} $<$ \code{IR01}; the difference is the forecasting sensitivity);
+\item \code{THETA}: $NPV(t_0+1\mathrm{d}) - NPV(t_0)$ with curves held;
+\item \code{GAMMA}: second difference of $\pm 1$bp shifts.
+\end{itemize}
+
+%--------------------------------------------------------------------
+\section{European swaptions and the volatility surface}
+\emph{Module: \code{pricing/swaption.py}, \code{pricing/sabr.py}.}
+
+\subsection{Annuity, forward and the Bachelier price}
+For an option expiring at $T_e$ into a swap paying annually at $T_1<\dots<T_n$ (dates rolled backward from the swap's maturity, with the trade's spot lag and business-day adjustment when the trade dates are supplied),
+\begin{equation}
+A = \sum_{i=1}^{n}\tau_i\,P(T_i), \qquad F = \frac{P(T_0)-P(T_n)}{A}.
+\end{equation}
+Rates on overnight curves can be negative and are quoted in normal volatility, so the option is priced in the Bachelier model. With $v=\sigma_N\sqrt{T_e}$ and $d=(F-K)/v$,
+\begin{equation}
+V_{payer} = N\,A\,v\,\big[d\,\Phi(d)+\varphi(d)\big], \qquad
+V_{receiver} = N\,A\,v\,\big[-d\,\Phi(-d)+\varphi(d)\big].
+\label{eq:bachelier}
+\end{equation}
+Greeks are produced by bump-and-reprice: vega per 1bp of $\sigma_N$, \code{IR01}, theta per calendar day, volga, vanna, dollar gamma, and a delta-hedge notional. A Hull--White cross-check price is reported alongside when the model is calibrated (\S\ref{sec:hw}).
+
+\subsection{Volatility tiers}
+The volatility used is tagged \code{QUOTED} (an at-the-money surface point at the trade's expiry and tenor), \code{SABR} (an off-the-money strike read from the calibrated smile), \code{INTERPOLATED} (between grid points), or \code{MANUAL} (user supplied). The tier travels with the price so that a valuation can be challenged.
+
+\subsection{$\beta=0$ normal SABR}
+The smile at each expiry--tenor point is the normal SABR of Hagan et al.\ (2002) with backbone $\beta=0$:
+\begin{equation}
+\sigma_N(K) = \alpha\,C(F,K)\left\{1+\left[\frac{2-3\rho^2}{24}\nu^2+\frac{\rho\,\nu\,\alpha}{4}\right]T\right\},\quad
+C=\frac{z}{\chi(z)},\; z=\frac{\nu}{\alpha}(F-K),\;
+\chi(z)=\ln\frac{\sqrt{1-2\rho z+z^2}+z-\rho}{1-\rho},
+\end{equation}
+with $C=1$ at the money. Parameters $(\alpha,\rho,\nu)$ are fitted to quoted volatilities at strike offsets $\{-200,-100,-50,-25,0,+25,+50,+100,+200\}$bp by weighted least squares, with $\alpha$ constrained so the at-the-money volatility is matched exactly. The fit RMSE is stored with the parameters.
+
+%--------------------------------------------------------------------
+\section{Caps, floors and collars}
+\emph{Module: \code{pricing/cap\_floor.py}, \code{pricing/cap\_vol\_strip.py}, \code{pricing/cap\_sabr.py}.}
+
+A cap on a compounded overnight index is a strip of quarterly caplets, ACT/360, settled $T+2$, Modified Following, with each caplet expiring at the \emph{end} of its accrual period (fixing in arrears). For caplet $(d_s,d_e]$ with forward $F$ from \eqref{eq:float}, time to fixing $T$ and normal volatility $\sigma_N$,
+\begin{equation}
+\text{caplet} = N\,\tau\,P(d_e)\,\Big[(F-K)\,\Phi(d) + \sigma_N\sqrt{T}\,\varphi(d)\Big],\qquad d=\frac{F-K}{\sigma_N\sqrt{T}},
+\end{equation}
+and a floorlet is the corresponding put. The at-the-money strike of a cap is the annuity-weighted average of its caplet forwards. A collar is a long cap and a short floor.
+
+Caplet volatilities are stripped from flat cap volatilities one strike column at a time: the 1Y bucket is solved so that four Bachelier caplets reproduce the 1Y cap price; each later bucket (2Y, 3Y, 3--5Y, 5--7Y, 7--10Y) is solved after subtracting the value of the buckets already priced, piecewise flat within a bucket. A $\beta=0$ SABR smile is then fitted per expiry bucket across strikes.
+
+%--------------------------------------------------------------------
+\section{Bermudan swaptions: Hull--White trinomial tree}
+\label{sec:hw}
+\emph{Module: \code{pricing/bermudan\_swaption.py}.}
+
+The short rate follows $\dd r_t = [\theta(t) - a\,r_t]\dd t + \sigma\dd W_t$. Zero-coupon bonds are affine, $P(t,T)=A(t,T)e^{-B(t,T)r_t}$ with $B(t,T)=(1-e^{-a(T-t)})/a$ (Brigo--Mercurio 2006, eq.~3.39). The tree is the Hull--White (1994) trinomial tree: a symmetric tree in $x_t=r_t-\alpha(t)$ with the standard branching rules, and a deterministic shift $\alpha(t)$ fitted at every grid time by Arrow--Debreu forward induction so that the tree reprices the market discount curve exactly. Backward induction values the underlying swap at each node by the single-curve telescoping identity $PV_{float}(t)=\sum_k N_k[P(t,T_{k-1})-P(t,T_k)]$, and applies the early-exercise test at each exercise date.
+
+\textbf{Validation gate.} Before any Bermudan value is trusted, the same tree must price European swaptions within 0.5\% (at the money) and 1\% ($\pm100$bp) of the closed-form Bachelier price on a grid of expiries and tenors. \textbf{Scope.} The model is single-curve and single-tenor: multi-curve underlyings, capped or floored underlyings and basis underlyings are refused rather than approximated, and a Bermudan whose underlying tenor is far from the 5Y calibration column carries a warning.
+
+%--------------------------------------------------------------------
+\section{Hull--White calibration for exposure simulation}
+\emph{Module: \code{pricing/calibration.py}.}
+
+With constant $(a,\sigma)$, the model's at-the-money normal volatility for a swaption with expiry $T_e$ on a swap with payment dates $T_i$, accruals $\alpha_i$ and annuity $A(0)=\sum_i\alpha_iP(0,T_i)$ is (Andersen--Piterbarg 2010, vol.~1 \S4.4)
+\begin{equation}
+\sigma_N(T_e) = \sigma\,\frac{|w|\sqrt{V(T_e)}}{\sqrt{T_e}},\qquad
+w=\sum_i\frac{\alpha_i P(0,T_i)}{A(0)}\,B(T_e,T_i),\qquad
+V(T_e)=\frac{1-e^{-2aT_e}}{2a},
+\end{equation}
+where $P(0,T)$ is the \emph{market} discount factor from the bootstrapped curve (a flat-rate approximation is the fallback only when no curve is supplied). A constant-parameter model cannot fit a whole surface; following standard XVA practice it is calibrated to the 5Y-tenor column ($1$Y$\times5$Y, $2$Y$\times5$Y, $3$Y$\times5$Y, $5$Y$\times5$Y) by least squares, and the fit diagnostics are stored with the parameters. The calibration was verified against Jamshidian's decomposition to within $0.01\%$.
+
+%--------------------------------------------------------------------
+\section{Exposure, collateral and the credit support annex}
+\emph{Module: \code{pricing/csa.py}, \code{pricing/xva\_engine.py}, \code{api/routes/xva.py}.}
+
+\subsection{Simulation}
+Short-rate paths are simulated under the calibrated Hull--White model on a monthly grid with the exact fit to the initial curve, and the trade is revalued on every path and date, giving mark-to-market paths $V(t)$ from our side.
+
+\subsection{Variation margin and the margin period of risk}
+Variation margin held at $t$ was called against the exposure one margin period of risk $\delta$ earlier:
+\begin{equation}
+C(t) = \max\big(V(t-\delta)-TH_{cp},0\big) - \max\big(-V(t-\delta)-TH_{own},0\big),
+\end{equation}
+zeroed when $|C|$ is below the minimum transfer amount. The margin period $\delta$ is shorter than a grid step, so $V(t-\delta)$ is sampled from the Brownian bridge between grid points,
+\begin{equation}
+V(t-\delta)\,\big|\,V(t-\Delta t),V(t)\;\sim\;\N\!\big(V(t-\Delta t)+w\,\Delta V,\;w(1-w)\,s^2\big),\qquad w=\frac{\Delta t-\delta}{\Delta t},
+\end{equation}
+with $s^2$ the cross-path variance of $\Delta V$. This preserves the variance of the move over the margin period; linear interpolation would understate it by a factor $\delta/\Delta t$.
+
+\subsection{Initial margin}
+Initial margin follows ISDA SIMM interest-rate delta: $IM = RW(\text{tenor})\times|\code{IR01}|$ with the published risk weights for regular-volatility currencies (109bp at two weeks falling to 61bp at 5--20 years and 64bp at 30 years). The weights are calibrated to a 10-business-day margin period; for another period they scale by $\sqrt{\delta/10\mathrm{bd}}$. Margin is assumed exchanged symmetrically and amortises with residual maturity. Received IM reduces exposure; posted IM is funded and drives MVA.
+
+\subsection{Residual exposure}
+\begin{equation}
+E^+(t) = \max\big(V(t)-C(t)-IM_{recv}(t),\,0\big),\qquad
+E^-(t) = \min\big(V(t)-C(t)+IM_{post}(t),\,0\big).
+\end{equation}
+Expected exposure $EE(t)=\E[E^+(t)]$, expected negative exposure $ENE(t)=\E[E^-(t)]$ and the 97.5\% potential future exposure are reported per date.
+
+\subsection{Presets}
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\textbf{Uncollateralised} & no variation or initial margin. \\
+\textbf{Bilateral} & daily VM, 10-business-day margin period (the BCBS--IOSCO floor for non-cleared trades), SIMM IM, thresholds and MTA from the CSA. \\
+\textbf{On-chain} & atomic settlement: continuous VM, zero threshold and MTA, 5-business-day margin period (the cleared floor), SIMM IM scaled by $\sqrt{5/10}$. \\
+\bottomrule
+\end{tabularx}
+
+The on-chain preset is the quantitative claim behind the confirmation layer: with continuous settlement the margin period halves, SIMM initial margin falls by $1-\sqrt{1/2}\approx29\%$, and the SA-CCR maturity factor falls in the same proportion.
+
+\subsection{SA-CCR}
+For margined netting sets the maturity factor is $MF=1.5\sqrt{\max(\delta,\text{floor})/250}$ and replacement cost $RC=\max(V-C,\;TH+MTA-NICA,\;0)$ with $NICA$ the IM received; unmargined sets use $MF=\sqrt{\min(M,1)}$ and $RC=\max(V,0)$. The interest-rate supervisory factor is 0.5\% and $\alpha=1.4$. Capital is 8\% of risk-weighted exposure and feeds KVA.
+
+%--------------------------------------------------------------------
+\section{The XVA waterfall}
+\emph{Module: \code{pricing/xva\_engine.py}, function \code{run\_waterfall}.}
+
+Default probabilities come from the credit triangle: hazard rate $h = s/LGD$ for a flat or term-structured spread $s$, survival $Q(t)=e^{-ht}$. With $D_i=P(t_i)$, $\Delta t$ the grid step and $\Delta Q_i = Q(t_{i-1})-Q(t_i)$,
+\begin{align}
+CVA &= LGD_{cp}\sum_i EE_i\,\Delta Q^{cp}_i\,D_i\;\omega_i, &
+DVA &= -LGD_{own}\sum_i |ENE_i|\,\Delta Q^{own}_i\,D_i,\\
+FVA &= \sum_i s^{ftp}_i\,EE_i\,\Delta t\,D_i, &
+FBA &= -\sum_i s^{fba}\,|ENE_i|\,\Delta t\,D_i,\\
+KVA &= \sum_i \kappa\,K_i\,\Delta t\,D_i, &
+MVA &= -\sum_i IM_i\,\max(s^{ftp}_i-\pi,0)\,\Delta t\,D_i,
+\end{align}
+where $\omega_i$ is an optional wrong-way-risk multiplier, $\kappa$ the capital hurdle rate, $K_i$ the SA-CCR capital on the exposure path, and $\pi$ a yield pick-up on posted collateral (tokenised collateral that earns a return reduces MVA). Signs follow the convention that costs are positive. The waterfall is reported gross and under the CSA, so the benefit of collateral is visible term by term.
+
+%--------------------------------------------------------------------
+\section{P\&L attribution}
+\emph{Module: \code{pricing/pnl.py}, the scenario engine in the trade window.}
+
+Daily P\&L is explained by a Taylor expansion in the taxonomy above: theta, \code{IR01}$\times\Delta r$, \code{IR01\_DISC}$\times\Delta r_{disc}$, $\tfrac12$\code{GAMMA}$\times\Delta r^2$, vega$\times\Delta\sigma$, carry and roll-down, with the residual reported as \emph{unexplained}, never absorbed. The joint rate-and-volatility scenario engine attributes a shock the same way per trade. A desk-level daily P\&L with new-trade and amendment effects, and independent price verification against an external snapshot, are on the roadmap and depend on a market-data feed that moves day to day.
+
+%--------------------------------------------------------------------
+\section{Digital-asset derivatives}
+\emph{Module: \code{pricing/fx\_forward.py}, \code{chain/canonical.py} (\code{CRYPTO\_FORWARD}, \code{CRYPTO\_OPTION}).}
+
+A non-deliverable forward on BTC or ETH against USD is priced as an FX NDF with the digital asset as the foreign currency. With spot $S$, a USD discount factor from the SOFR curve and a digital-asset funding rate $r_c$ (lending or staking yield, continuously compounded),
+\begin{equation}
+F = S\,\frac{P_{USD}(T)}{e^{-r_cT}},\qquad NPV = (F-K)\,N\,P_{USD}(T).
+\end{equation}
+A non-deliverable European option is priced with Black-76 on that forward with lognormal volatility $\sigma$:
+\begin{equation}
+C = P_{USD}(T)\big[F\Phi(d_1)-K\Phi(d_2)\big],\qquad d_{1,2}=\frac{\ln(F/K)\pm\tfrac12\sigma^2T}{\sigma\sqrt T},
+\end{equation}
+with the put from parity. Settlement is in cash against a named settlement price source on a valuation date and time, and the canonical record carries exactly the fields the ISDA Digital Asset Derivatives Definitions name: digital asset, notional amount, strike or forward price and its currency, option type and exercise style, valuation and settlement dates, settlement currency and price source, premium amount, currency and payment date. \textbf{Status.} The pricing formulas are implemented in the Excel replications and the NDF engine; option pricing in the trade window is on the roadmap.
+
+%--------------------------------------------------------------------
+\section{On-chain bilateral confirmation}
+\emph{Module: \code{chain/canonical.py}, \code{chain/signing.py}, \code{chain/attestation.py}, \code{chain/src/TradeConfirmationRegistry.sol}, \code{chain/verify/index.html}.}
+
+\subsection{The canonical record (schema v2)}
+Both parties sign one record that either can derive alone from its own booking. The record is keyed by the unique transaction identifier, names the two parties by LEI in sorted order, names the payer and receiver LEI of every leg, the buyer and seller of every embedded option and the payer and receiver of every custom cashflow, and orders legs by content. It contains only the economic terms: no internal references, no book or desk, no status, no timestamps, no party names. Serialisation rules, which a verifier in any language must reproduce exactly: JSON, UTF-8, keys sorted at every level, separators \code{,} and \code{:} with no whitespace; numbers as decimal strings without exponent, trailing zeros or negative zero; dates ISO-8601; nulls and booleans preserved; strings unchanged. The trade hash is $h=\mathrm{keccak256}(\text{bytes})$. The schema version is inside the payload so a confirmation is always re-derived under the version it was signed with.
+
+\subsection{Signatures}
+Each party signs an EIP-712 typed message in the domain \code{Rijeka Trade Confirmation}, version 1, bound to the chain and the registry address:
+\begin{center}
+\code{TradeConfirmation(bytes32 tradeHash, address counterparty)}\\
+\code{TradeAmendment(bytes32 prevHash, bytes32 newHash, address counterparty)}\\
+\code{TradeTermination(bytes32 tradeHash, address counterparty)}
+\end{center}
+Each party's message names the \emph{other} party's address, so a signature cannot be replayed against a different counterparty, chain or registry. A firm's signing address is registered in Rijeka through a wallet challenge; once registered, Rijeka can verify that firm's signatures but can never produce them. On the hosted demo Rijeka holds keys for demo entities only, and any confirmation it signs for both sides is marked \code{bilateral: false}.
+
+\subsection{The registry}
+The registry contract has no owner and no administrative function. \code{confirm} verifies both signatures over the confirmation digest and records $(h, \text{partyA}, \text{partyB}, \text{timestamp})$ with status \emph{Confirmed}; \code{amend} verifies both signatures over the amendment digest, marks the previous hash \emph{Superseded} and records the new hash with the previous one as its parent; \code{terminate} verifies both signatures and sets \emph{Terminated}. Signatures with high $s$ values are rejected. Once a trade is anchored, Rijeka refuses off-chain edits to its terms: an amendment is itself a bilateral act.
+
+\subsection{Verification without Rijeka}
+A proof pack contains the canonical record, the hash, both signatures and the anchor. The public verifier, a single self-contained page, (i) re-serialises the record and recomputes the keccak256 hash, (ii) rebuilds both EIP-712 digests and recovers both signers, (iii) reads the registry on a public node and checks status and parties. No Rijeka server is contacted. The contract source is verified on Sourcify so the reader can audit what the registry does before trusting it. \textbf{What it proves:} that these exact terms were signed by these two keys and recorded at that block. \textbf{What it does not prove:} that a key belongs to a legal entity; that binding is a matter of the firms' own key management and registration.
+
+%--------------------------------------------------------------------
+\section{Model governance and known limitations}
+\begin{itemize}[leftmargin=1.4em]
+\item \textbf{Validation.} Versioned validation reports live in \code{model\_validation/}; v0.4.2 covers IRS and OIS (38 tests against Bloomberg), later versions swaptions (delta of \$3 on a \$10m 5Y), caps (0.1\% at matched volatility), SABR and the scenario engine.
+\item \textbf{Replications.} The Excel workbooks in the Methodology tab are regenerated on request from the user's own snapshot; the engine's value is written beside the formula result with a difference cell.
+\item \textbf{Open items, stated plainly.} Coupons discounted at period end rather than payment date (\S3). Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. SIMM covers interest-rate delta; vega and other risk classes are on the roadmap.
+\item \textbf{Change control.} Every change to a pricing module is a commit in a public repository with its tests; this document is versioned with the code.
+\end{itemize}
+
+\section*{References}
+\begin{itemize}[leftmargin=1.4em]
+\item Andersen, L.\ and Piterbarg, V.\ (2010). \emph{Interest Rate Modeling}, vols.\ I--III. Atlantic Financial Press.
+\item Brigo, D.\ and Mercurio, F.\ (2006). \emph{Interest Rate Models: Theory and Practice}, 2nd ed. Springer.
+\item Hagan, P., Kumar, D., Lesniewski, A.\ and Woodward, D.\ (2002). Managing smile risk. \emph{Wilmott}, September, 84--108.
+\item Hull, J.\ and White, A.\ (1994). Numerical procedures for implementing term structure models I. \emph{Journal of Derivatives} 2(1), 7--16.
+\item Gregory, J.\ (2020). \emph{The xVA Challenge}, 4th ed. Wiley.
+\item Green, A.\ (2015). \emph{XVA: Credit, Funding and Capital Valuation Adjustments}. Wiley.
+\item BCBS (2014). \emph{The standardised approach for measuring counterparty credit risk exposures} (SA-CCR).
+\item BCBS--IOSCO (2015). \emph{Margin requirements for non-centrally cleared derivatives}.
+\item ISDA (2024). \emph{ISDA SIMM Methodology}, version 2.6; ISDA (2023). \emph{Digital Asset Derivatives Definitions}.
+\item Ethereum Improvement Proposal 712: Typed structured data hashing and signing.
+\end{itemize}
+
+\end{document}

@@ -38,6 +38,21 @@ export default function Methodology() {
            formulas from <b>your</b> latest market data, beside the value Rijeka's engine produced. Change a yellow cell and it reprices.
            The curve's discount factors come from Rijeka's bootstrap as values; everything after that is a formula you can read.</p>
       </header>
+      <section className="doc-hero">
+        <div>
+          <h2>THE METHODOLOGY DOCUMENT</h2>
+          <p>Curve construction, schedules, linear products, swaptions and SABR, caps, Hull–White (trees and calibration), exposure under a CSA
+             with margin period of risk, the XVA waterfall, SIMM and SA-CCR, P&amp;L attribution, digital-asset NDF/NDO, and on-chain confirmation.
+             Every formula is the one in the code, with the module named, and the known limitations are listed rather than hidden.
+             Written in LaTeX, versioned with the code.</p>
+        </div>
+        <div className="doc-hero-actions">
+          <a className="doc-btn primary" href="/methodology/rijeka_methodology.pdf" target="_blank" rel="noopener noreferrer">OPEN PDF ↗</a>
+          <a className="doc-btn" href="/methodology/rijeka_methodology.pdf" download="rijeka_methodology.pdf">⬇ DOWNLOAD PDF</a>
+          <a className="doc-btn" href="https://github.com/MikoDevedzic/rijeka/blob/main/docs/methodology/rijeka_methodology.tex" target="_blank" rel="noopener noreferrer">LATEX SOURCE ↗</a>
+          <a className="doc-btn" href="https://github.com/MikoDevedzic/rijeka/tree/main/model_validation" target="_blank" rel="noopener noreferrer">VALIDATION REPORTS ↗</a>
+        </div>
+      </section>
       {err && <div className="doc-err">{err}</div>}
       {!products && !err && <div className="doc-note">Loading…</div>}
       {groups.map(g => (
@@ -54,7 +69,8 @@ export default function Methodology() {
                   {p.replication === 'xlsx-static' && <a className="doc-btn" href={p.doc} target="_blank" rel="noopener noreferrer">⬇ TRACE WORKBOOK</a>}
                   {p.replication === 'doc' && <a className="doc-btn" href={`https://github.com/MikoDevedzic/rijeka/blob/main${p.doc}`} target="_blank" rel="noopener noreferrer">VALIDATION REPORT ↗</a>}
                   {p.replication === 'verifier' && <a className="doc-btn" href={p.doc} target="_blank" rel="noopener noreferrer">OPEN THE VERIFIER ↗</a>}
-                  <a className="doc-link" href="https://github.com/MikoDevedzic/rijeka/tree/main/backend/pricing" target="_blank" rel="noopener noreferrer">SOURCE ↗</a>
+                  {p.section && <a className="doc-link" href="/methodology/rijeka_methodology.pdf" target="_blank" rel="noopener noreferrer">§{p.section} OF THE DOCUMENT ↗</a>}
+                  <a className="doc-link" style={{marginLeft: p.section ? '0.6rem' : 'auto'}} href="https://github.com/MikoDevedzic/rijeka/tree/main/backend/pricing" target="_blank" rel="noopener noreferrer">SOURCE ↗</a>
                 </div>
               </article>
             ))}
