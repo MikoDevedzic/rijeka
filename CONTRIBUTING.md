@@ -1,6 +1,6 @@
 # Contributing to Rijeka
 
-Rijeka is built in public under Apache-2.0. There are four ways in, and each has
+Rijeka is built in public under MIT. There are four ways in, and each has
 its own door so nobody has to guess.
 
 | You want to… | Go to |
@@ -13,7 +13,7 @@ its own door so nobody has to guess.
 ## Ground rules for code
 
 - **Sign your commits (DCO).** Add `Signed-off-by: Your Name <you@example.com>` to every commit
-  (`git commit -s`). It certifies you have the right to contribute the change under Apache-2.0.
+  (`git commit -s`). It certifies you have the right to contribute the change under MIT.
   No contributor licence agreement, no assignment of copyright.
 - **Pricing changes come with a test and a number.** A change to anything under `backend/pricing/`
   or `backend/chain/` needs a test that pins the new behaviour and, in the pull request, the before

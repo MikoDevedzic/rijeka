@@ -79,7 +79,7 @@ export default function Methodology() {
         </section>
       ))}
       <ValidationLog />
-      <footer className="doc-foot">Model validation reports live in <code>model_validation/</code> and <code>docs/</code> in the repository. Apache-2.0.</footer>
+      <footer className="doc-foot">Model validation reports live in <code>model_validation/</code> and <code>docs/</code> in the repository. MIT.</footer>
     </div>
   )
 }
