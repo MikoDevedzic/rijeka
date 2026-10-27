@@ -23,6 +23,7 @@ from sqlalchemy import text  # noqa: E402
 from db.session import SessionLocal  # noqa: E402
 
 EVENT_STEPS = [
+    ("latest_event pointers", "update trades set latest_event_id = null where trade_ref like 'TEST-RLS%' and latest_event_id is not null"),
     ("trade_events",  "delete from trade_events where trade_id in (select id from trades where trade_ref like 'TEST-RLS%')"),
     ("trades",        "delete from trades where trade_ref like 'TEST-RLS%'"),
 ]
@@ -54,7 +55,8 @@ def main(apply: bool, include_events: bool) -> None:
             if apply:
                 n = db.execute(text(sql)).rowcount
             else:
-                n = db.execute(text("select count(*) from (" + sql.replace("delete from", "select 1 from", 1) + ") s")).scalar()
+                probe = sql.replace("delete from", "select 1 from", 1) if sql.startswith("delete") else "select 1 from trades where trade_ref like 'TEST-RLS%' and latest_event_id is not null"
+                n = db.execute(text("select count(*) from (" + probe + ") s")).scalar()
             print(f"{'deleted' if apply else 'would delete':12} {n:6}  {name}")
         for t in triggers:
             db.execute(text(f'alter table trade_events enable trigger "{t}"'))
