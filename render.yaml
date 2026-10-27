@@ -31,6 +31,8 @@ services:
         value: DEMO          # Rijeka signs for demo entities only; real LEIs need a countersignature
       - key: RIJEKA_CHAIN_DAILY_LIMIT
         value: "20"          # anchoring actions per user per 24h, protects the relayer
+      - key: RIJEKA_CRON_SECRET
+        generateValue: true  # POST /api/news/tick (X-Rijeka-Cron header); copy into the GitHub secret
       # ── Sepolia anchoring ─────────────────────────────────────────────
       - key: RIJEKA_CHAIN_RPC
         value: https://ethereum-sepolia-rpc.publicnode.com

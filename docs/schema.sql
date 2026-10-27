@@ -514,7 +514,7 @@ CREATE TABLE public.chat_rooms (
     book_node_id text,
     book_label text,
     book_firm_id uuid,
-    CONSTRAINT chat_rooms_kind_check CHECK ((kind = ANY (ARRAY['DIRECT'::text, 'GROUP'::text, 'SUPPORT'::text])))
+    CONSTRAINT chat_rooms_kind_check CHECK ((kind = ANY (ARRAY['DIRECT'::text, 'GROUP'::text, 'SUPPORT'::text, 'NEWS'::text])))
 );
 
 
@@ -2413,6 +2413,23 @@ CREATE POLICY xva_calibration_rls ON public.xva_calibration USING ((user_id = au
 --
 
 
+
+--
+-- news_items — headlines the NEWS room posts (migration 016)
+--
+CREATE TABLE public.news_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL PRIMARY KEY,
+    url text NOT NULL UNIQUE,
+    title text NOT NULL,
+    source text NOT NULL,
+    published_at timestamp with time zone,
+    tags text[] DEFAULT '{}'::text[] NOT NULL,
+    message_id uuid REFERENCES public.chat_messages(id),
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+CREATE INDEX ix_news_items_published ON public.news_items USING btree (published_at DESC);
+ALTER TABLE public.news_items ENABLE ROW LEVEL SECURITY;
+CREATE POLICY news_items_read ON public.news_items FOR SELECT TO authenticated USING (true);
 
 --
 -- Profile on sign-up (trigger lives on auth.users, so it is outside the

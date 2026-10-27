@@ -1,0 +1,20 @@
+# Drives the NEWS room: POST /api/news/tick every 30 minutes.
+# Secrets: RIJEKA_API_URL (e.g. https://rijeka-api.onrender.com),
+#          RIJEKA_CRON_SECRET (same value as the backend's env var).
+# A hosted backend on a sleeping free tier is woken by this call too.
+name: news-tick
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    steps:
+      - name: tick
+        run: |
+          code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/news/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 120)
+          cat /tmp/out; echo; test "$code" = "200"
+        env:
+          RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL }}
+          RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}

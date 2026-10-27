@@ -229,6 +229,17 @@ def _ensure_support_room(db: Session, me: FirmMember) -> None:
     db.commit()
 
 
+def _ensure_news_member(db: Session, me: FirmMember) -> None:
+    """The platform NEWS room (api/routes/news.py): everyone reads it, nobody posts."""
+    from api.routes import news as _news
+    try:
+        _news.ensure_member(db, me)
+        db.commit()
+    except Exception:
+        db.rollback()
+        log.exception("could not join %s to the news room", me.user_id)
+
+
 # ── Routes: identity and directory ───────────────────────────────────────────
 
 @router.get("/me")
@@ -306,7 +317,9 @@ def _room_summary(db: Session, room: ChatRoom, me: FirmMember, access: str,
     def who(m):
         return f"{names.get(m.user_id, 'Unknown')} · {firms_by_id[m.firm_id].name}"
 
-    if room.kind == "SUPPORT":
+    if room.kind == "NEWS":
+        title = room.name or "Market News"
+    elif room.kind == "SUPPORT":
         owner = next((m for m in members if m.status == "JOINED"), None)
         title = f"Rijeka Support · {names.get(owner.user_id)}" if access == "OBSERVER" and owner else "Rijeka Support"
     elif room.kind == "DIRECT":
@@ -335,9 +348,11 @@ def _room_summary(db: Session, room: ChatRoom, me: FirmMember, access: str,
         "book_label": room.book_label, "my_access": access,
         # Firms whose people have joined: who can read this room.
         "firms": sorted({firms_by_id[m.firm_id].name for m in members if m.status == "JOINED"}),
-        "members": [{"user_id": str(m.user_id), "name": names.get(m.user_id, "Unknown"),
+        "members": [] if room.kind == "NEWS" else
+                   [{"user_id": str(m.user_id), "name": names.get(m.user_id, "Unknown"),
                      "firm_name": firms_by_id[m.firm_id].name, "status": m.status, "role": m.role}
                     for m in active],
+        "member_count": len([m for m in members if m.status == "JOINED"]),
         "invited_by": names.get(mine.invited_by) if access == "INVITED" and mine and mine.invited_by else None,
         "last_message": _serialize_msg(last) if last and access != "INVITED" else None,
         "last_message_at": room.last_message_at.isoformat() if room.last_message_at else None,
@@ -349,6 +364,7 @@ def _room_summary(db: Session, room: ChatRoom, me: FirmMember, access: str,
 def rooms(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     me_m, _ = _my_firm(db, user)
     _ensure_support_room(db, me_m)
+    _ensure_news_member(db, me_m)
 
     access: dict[uuid.UUID, str] = {
         m.room_id: m.status for m in db.query(ChatRoomMember).filter(
@@ -538,6 +554,8 @@ def post_message(room_id: str, body: PostMessage, background: BackgroundTasks,
                  db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     me_m, me_firm = _my_firm(db, user)
     room, _ = _room_for(db, room_id, me_m, ("JOINED",))
+    if room.kind == "NEWS" and me_firm.kind != "PLATFORM":
+        raise HTTPException(status_code=403, detail="Market News is read-only. Discuss it in a room of your own, or ask @prometheus there.")
     text_ = body.body.strip()
     if not text_:
         raise HTTPException(status_code=422, detail="Empty message")

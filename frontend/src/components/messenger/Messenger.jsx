@@ -4,6 +4,7 @@ import { useAuthStore } from '../../store/useAuthStore'
 import { useChatStore, PROMETHEUS, selectUnreadTotal, audience } from '../../store/useChatStore'
 import Markdown from '../common/Markdown'
 import TradeCard, { TradePicker, WalletPanel } from './TradeCard'
+import NewsCard from './NewsCard'
 import { broadcast, onBroadcast, popOutMessenger, focusMessengerWindow, MESSENGER_PATH } from '../../lib/windows'
 import { getSessionSafe } from '../../lib/session'
 import './Messenger.css'
@@ -321,7 +322,7 @@ function ConversationList({ onCompose }) {
           <button key={r.id} className={`ms-conv${r.id === activeId ? ' active' : ''}${r.my_access === 'INVITED' ? ' invite' : ''}`}
                   onClick={() => { onCompose(null); show(r.id) }}>
             <div className="ms-conv-top">
-              <span className={`ms-conv-title${r.kind === 'SUPPORT' ? ' support' : ''}`}>{r.kind === 'SUPPORT' ? '✦ ' : ''}{r.title}</span>
+              <span className={`ms-conv-title${r.kind === 'SUPPORT' ? ' support' : ''}`}>{r.kind === 'SUPPORT' ? '✦ ' : r.kind === 'NEWS' ? '▣ ' : ''}{r.title}</span>
               <span className="ms-conv-time">{r.my_access === 'INVITED' ? '' : fmtTime(r.last_message_at)}</span>
             </div>
             <div className="ms-conv-bottom">
@@ -403,19 +404,21 @@ function RoomThread({ roomId, back, onInvite }) {
 
   const run = async (fn) => { setBusy(true); setErr(null); try { await fn() } catch (e) { setErr(e.message) } finally { setBusy(false) } }
   const joined = room.my_access === 'JOINED'
-  const tag = room.kind === 'SUPPORT' ? <span className="ms-tag rijeka">RIJEKA</span>
+  const tag = room.kind === 'NEWS' ? <span className="ms-tag rijeka">LIVE FEED</span>
+    : room.kind === 'SUPPORT' ? <span className="ms-tag rijeka">RIJEKA</span>
     : room.my_access === 'OBSERVER' ? <span className="ms-tag compliance">COMPLIANCE</span>
     : <span className="ms-tag shared">SHARED</span>
 
   return (
     <>
-      <ThreadHead back={back} onBack={() => show(null)} title={room.kind === 'SUPPORT' ? '✦ ' + room.title : room.title} tag={tag}
-                  line={audience(room, me)} book={room.book_label}
+      <ThreadHead back={back} onBack={() => show(null)} title={room.kind === 'SUPPORT' ? '✦ ' + room.title : room.kind === 'NEWS' ? '▣ ' + room.title : room.title} tag={tag}
+                  line={room.kind === 'NEWS' ? 'Everyone on Rijeka. Headlines and links to the source only.' : audience(room, me)} book={room.book_label}
                   actions={<>
-                    {room.kind !== 'SUPPORT' && <button className="ms-link" onClick={() => setPeople(p => !p)}>{room.members.length} PEOPLE</button>}
+                    {room.kind === 'NEWS' && <span className="ms-link" style={{cursor:'default'}}>{room.member_count || ''} READERS</span>}
+                    {room.kind !== 'SUPPORT' && room.kind !== 'NEWS' && <button className="ms-link" onClick={() => setPeople(p => !p)}>{room.members.length} PEOPLE</button>}
                     {joined && room.kind === 'GROUP' && <button className="ms-link" onClick={onInvite}>INVITE</button>}
-                    {joined && room.kind !== 'SUPPORT' && <button className="ms-link" onClick={() => { setTelegram(t => !t); setPeople(false) }}>TELEGRAM</button>}
-                    {joined && room.kind !== 'SUPPORT' && <button className="ms-link danger" disabled={busy} onClick={() => run(() => leave(roomId))}>LEAVE</button>}
+                    {joined && room.kind !== 'SUPPORT' && room.kind !== 'NEWS' && <button className="ms-link" onClick={() => { setTelegram(t => !t); setPeople(false) }}>TELEGRAM</button>}
+                    {joined && room.kind !== 'SUPPORT' && room.kind !== 'NEWS' && <button className="ms-link danger" disabled={busy} onClick={() => run(() => leave(roomId))}>LEAVE</button>}
                   </>} />
       {telegram && <TelegramPanel roomId={roomId} onClose={() => setTelegram(false)} />}
       {people && (
@@ -448,7 +451,9 @@ function RoomThread({ roomId, back, onInvite }) {
             <div ref={endRef} />
           </div>
           {picking && <TradePicker roomId={roomId} onClose={() => setPicking(false)} />}
-          {joined ? (
+          {room.kind === 'NEWS' ? (
+            <div className="ms-readonly">Headlines with links to the source, posted as they appear. Read-only — discuss in your own rooms, or ask @prometheus there what it means for a position.</div>
+          ) : joined ? (
             <RoomComposer room={room} value={draft} onChange={setDraft} err={err} busy={busy}
                           onTrade={room.kind !== 'SUPPORT' && room.firms.length === 2 ? () => setPicking(p => !p) : null}
                           onSend={() => run(async () => { const b = draft.trim(); if (!b) return; await send(roomId, b); setDraft('') })} />
@@ -462,6 +467,7 @@ function RoomThread({ roomId, back, onInvite }) {
 }
 
 function RoomMessage({ m, mine }) {
+  if (m.card?.type === 'news') return <NewsCard card={m.card} />
   if (m.sender_kind === 'SYSTEM') return (
     <div className={`ms-system${m.card?.type === 'trade_event' ? ' event' : ''}`}>
       {m.body}
