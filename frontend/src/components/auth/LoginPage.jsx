@@ -106,7 +106,7 @@ export default function LoginPage() {
             No account? <Link to="/signup" style={{ color: '#0ec9a0', textDecoration: 'none' }}>Request early access</Link>
           </p>
           <p style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: '10px', color: 'rgba(90,112,128,0.35)', textAlign: 'center', margin: '0.4rem 0 0' }}>
-            <a href="mailto:hello@rijeka.app" style={{ color: 'inherit', textDecoration: 'none' }}>hello@rijeka.app</a>
+            <a href="mailto:miko@rijeka.app" style={{ color: 'inherit', textDecoration: 'none' }}>miko@rijeka.app</a>
           </p>
         </div>
       </div>

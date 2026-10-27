@@ -397,7 +397,7 @@ def _check_ir_swaption_embedded_options_gate(instrument_type: Optional[str], leg
                 "Swaptions on capped, floored, or collared underlyings are "
                 "scoped for Phase 2. The instrument is schema-valid but "
                 "pricing is not yet validated against market. Contact "
-                "hello@rijeka.app for pre-release access. See "
+                "miko@rijeka.app for pre-release access. See "
                 "PRODUCT_TAXONOMY.md §1.11.1."
             )
 

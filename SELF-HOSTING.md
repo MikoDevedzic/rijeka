@@ -57,5 +57,5 @@ honest list of what that takes today.
 - The registry contract has not had an external audit.
 
 If you want help standing this up for a desk, or dedicated coverage on the
-models, write to hello@rijeka.app. The hosted demo is free; the work above is
+models, write to miko@rijeka.app. The hosted demo is free; the work above is
 what we charge for.

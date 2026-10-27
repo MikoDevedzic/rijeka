@@ -75,14 +75,14 @@ export default function Roadmap() {
       </div>
       <section className="wwu">
         <h2>WORK WITH US</h2>
-        <p>Specific asks get answers. Write to <a href="mailto:hello@rijeka.app">hello@rijeka.app</a> with the word in the subject, or start from the link. Nothing here is an offer of employment or equity.</p>
+        <p>Specific asks get answers. Write to <a href="mailto:miko@rijeka.app">miko@rijeka.app</a> with the word in the subject, or start from the link. Nothing here is an offer of employment or equity.</p>
         <div className="wwu-grid">
           {[
             ['VALIDATE', 'Rebuild a product independently and be named on its report. SABR, the Hull–White tree, XVA, SIMM and the crypto products are waiting for a first validator. USD 250 for a confirmed S1/S2 pricing finding.', 'https://github.com/MikoDevedzic/rijeka/blob/main/docs/VALIDATION.md', 'THE CHARTER ↗'],
             ['AUDIT', 'A Solidity reviewer for the registry contract before anyone says the word mainnet. 16 Foundry tests and Sourcify verification are the starting point, not the finish.', 'https://github.com/MikoDevedzic/rijeka/tree/main/chain', 'THE CONTRACT ↗'],
             ['CONTRIBUTE', 'Code or docs under MIT with a DCO sign-off. Pricing changes come with a test, a before/after number and the methodology updated in the same pull request.', 'https://github.com/MikoDevedzic/rijeka/blob/main/CONTRIBUTING.md', 'CONTRIBUTING ↗'],
-            ['PILOT', 'A bank, asset manager or corporate treasury willing to run the confirmation flow with a real counterparty on Sepolia, then mainnet.', 'mailto:hello@rijeka.app?subject=PILOT', 'WRITE TO US'],
-            ['TEACH', 'A university or graduate programme that wants the cohort labs. We set up the firms and the market data; students book, price, confirm and verify.', 'mailto:hello@rijeka.app?subject=TEACH', 'WRITE TO US'],
+            ['PILOT', 'A bank, asset manager or corporate treasury willing to run the confirmation flow with a real counterparty on Sepolia, then mainnet.', 'mailto:miko@rijeka.app?subject=PILOT', 'WRITE TO US'],
+            ['TEACH', 'A university or graduate programme that wants the cohort labs. We set up the firms and the market data; students book, price, confirm and verify.', 'mailto:miko@rijeka.app?subject=TEACH', 'WRITE TO US'],
             ['SPONSOR', 'Two concrete items: the external audit of the registry contract, and a year of hosting for university cohorts. Sponsors are named on the project page and have no say over validation.', 'https://github.com/sponsors/MikoDevedzic', 'GITHUB SPONSORS ↗'],
           ].map(([t, body, href, cta]) => (
             <article key={t} className="wwu-card">

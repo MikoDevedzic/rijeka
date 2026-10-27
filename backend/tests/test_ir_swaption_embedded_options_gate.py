@@ -70,7 +70,7 @@ class TestIRSwaptionEmbeddedOptionsGate:
         # so operators know why the trade was rejected.
         assert "Phase 2" in msg
         assert "§1.11.1" in msg
-        assert "hello@rijeka.app" in msg
+        assert "miko@rijeka.app" in msg
 
     def test_swaption_with_floored_underlying_raises(self):
         """IR_SWAPTION + embedded FLOOR on underlying → NotImplementedError."""

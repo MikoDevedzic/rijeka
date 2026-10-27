@@ -167,7 +167,7 @@ export default function SignupPage() {
             Already have an account? <Link to="/login" style={{ color: '#0ec9a0', textDecoration: 'none' }}>Sign in</Link>
           </p>
           <p style={{ fontSize: '10px', color: 'rgba(90,112,128,0.35)', textAlign: 'center', margin: '0.4rem 0 0' }}>
-            <a href="mailto:hello@rijeka.app" style={{ color: 'inherit', textDecoration: 'none' }}>hello@rijeka.app</a>
+            <a href="mailto:miko@rijeka.app" style={{ color: 'inherit', textDecoration: 'none' }}>miko@rijeka.app</a>
           </p>
         </div>
       </div>

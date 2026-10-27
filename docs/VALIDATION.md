@@ -64,7 +64,7 @@ purpose.
 ## Work with us
 
 Specific asks get answers, so here are the specific asks. Write to
-**hello@rijeka.app** with the word in the subject.
+**miko@rijeka.app** with the word in the subject.
 
 - **VALIDATE** — any row above marked *validator wanted*. Start with the issue
   for that product.

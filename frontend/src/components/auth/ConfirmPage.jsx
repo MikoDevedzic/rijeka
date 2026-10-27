@@ -128,7 +128,7 @@ export default function ConfirmPage() {
               </button>
             )}
             <p style={{ fontSize: '9px', color: 'rgba(90,112,128,0.3)', marginTop: '1.5rem', textAlign: 'center', letterSpacing: '0.08em' }}>
-              Early access · read-only · <a href="mailto:hello@rijeka.app" style={{ color: 'inherit' }}>hello@rijeka.app</a>
+              Early access · read-only · <a href="mailto:miko@rijeka.app" style={{ color: 'inherit' }}>miko@rijeka.app</a>
             </p>
           </>
         )}

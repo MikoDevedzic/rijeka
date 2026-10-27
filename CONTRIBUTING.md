@@ -8,7 +8,7 @@ its own door so nobody has to guess.
 | **Validate a model** independently and be named on the report | [docs/VALIDATION.md](docs/VALIDATION.md) and the [validation issues](https://github.com/MikoDevedzic/rijeka/issues?q=label%3Avalidation) |
 | **Report a pricing or risk bug** | [New pricing-bug issue](https://github.com/MikoDevedzic/rijeka/issues/new?template=pricing_bug.yml) |
 | **Contribute code or docs** | this page, then a pull request |
-| **Sponsor, pilot, or teach with it** | [docs/VALIDATION.md#work-with-us](docs/VALIDATION.md#work-with-us) or hello@rijeka.app |
+| **Sponsor, pilot, or teach with it** | [docs/VALIDATION.md#work-with-us](docs/VALIDATION.md#work-with-us) or miko@rijeka.app |
 
 ## Ground rules for code
 

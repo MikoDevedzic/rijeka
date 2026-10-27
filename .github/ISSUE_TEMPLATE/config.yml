@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/MikoDevedzic/rijeka/blob/main/docs/VALIDATION.md#work-with-us
     about: The specific asks and who to write to.
   - name: Security issue
-    url: mailto:hello@rijeka.app?subject=SECURITY
+    url: mailto:miko@rijeka.app?subject=SECURITY
     about: Please do not open a public issue for a security problem in the registry or the app.

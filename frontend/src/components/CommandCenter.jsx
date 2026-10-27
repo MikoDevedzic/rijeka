@@ -233,7 +233,7 @@ function DeskHome({ demo, navigate }) {
         </section>
       </div>
 
-      <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · RATES ONLY IN PHASE 1 · hello@rijeka.app</div>
+      <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · RATES ONLY IN PHASE 1 · miko@rijeka.app</div>
     </div>
   )
 }

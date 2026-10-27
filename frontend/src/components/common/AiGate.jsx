@@ -35,7 +35,7 @@ export default function AiGate({ children, fallback }) {
         PROMETHEUS derivatives intelligence is available on the Trader plan.
         Contact us to upgrade your account and unlock knowledge for everyone.
       </div>
-      <a href="mailto:hello@rijeka.app?subject=Trader Access Request" style={{
+      <a href="mailto:miko@rijeka.app?subject=Trader Access Request" style={{
         display:'inline-block', marginTop:'0.5rem',
         background:'linear-gradient(135deg, #7a2800, #c45200)', color:'#fff', textDecoration:'none',
         fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1.0625rem', fontWeight:700,
@@ -45,7 +45,7 @@ export default function AiGate({ children, fallback }) {
       onMouseEnter={e=>e.target.style.opacity='0.85'}
       onMouseLeave={e=>e.target.style.opacity='1'}
       >
-        REQUEST ACCESS → hello@rijeka.app
+        REQUEST ACCESS → miko@rijeka.app
       </a>
       <div style={{ fontSize:'0.6rem', color:'var(--text-dim)', letterSpacing:'0.08em', marginTop:'0.25rem' }}>
         Current plan: VIEWER
