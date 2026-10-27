@@ -1,1 +1,2 @@
 pytest>=8
+psycopg[binary]>=3.1   # tests open direct connections for RLS checks (skipped without .env.test, but imported at module level)
