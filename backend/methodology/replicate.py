@@ -120,9 +120,7 @@ def _readme(wb, title, lines, mkt: Market):
         "Colour key: yellow = input you may change · green = Rijeka engine value for comparison · white = formula.",
         "Day counts: ACT/360 = YEARFRAC(…, 2); 30/360 bond basis ≈ YEARFRAC(…, 0) (differs only on end-of-February dates).",
         "Business-day adjustment and payment dates are taken from Rijeka's schedule generator as values.",
-        "Known difference: this sheet discounts each coupon at its payment date. Rijeka's engine (v0.4) discounts at the unadjusted "
-        "period end, so where a date rolls over a weekend the two differ by one or two days of discounting — a few dollars per "
-        "million. The engine is the one being corrected.",
+        "Each coupon is discounted at its business-day-adjusted payment date, in the sheet and in the engine alike.",
         "", *lines, "",
         "Source: github.com/MikoDevedzic/rijeka · backend/methodology/replicate.py. Apache-2.0.",
     ]

@@ -108,11 +108,11 @@ def test_sheet_arithmetic_reproduces_engine_legs():
             rate = (mkt.curve.df(p.period_start) / mkt.curve.df(p.period_end) - 1) / tau if is_float else r
             tot += N * rate * tau * mkt.curve.df(getattr(p, df_at))
         return tot
-    # Rijeka's engine (v0.4) discounts a coupon at the unadjusted period end. The
-    # same arithmetic reproduces it to machine precision:
-    assert leg("SEMI_ANNUAL", "30/360", False, "period_end") == pytest.approx(eng["FIXED"], rel=1e-9)
-    assert leg("QUARTERLY", "ACT/360", True, "period_end") == pytest.approx(eng["FLOAT"], rel=1e-9)
-    # The sheet discounts at the business-day-adjusted payment date (what actually
-    # settles). Where a date rolls over a weekend that is a day or two of discounting:
-    assert leg("SEMI_ANNUAL", "30/360", False, "payment_date") == pytest.approx(eng["FIXED"], rel=2e-4)
-    assert leg("QUARTERLY", "ACT/360", True, "payment_date") == pytest.approx(eng["FLOAT"], rel=2e-4)
+    # Engine and sheet both discount at the business-day-adjusted payment date
+    # (the date the cash moves). Same arithmetic, machine precision:
+    assert leg("SEMI_ANNUAL", "30/360", False, "payment_date") == pytest.approx(eng["FIXED"], rel=1e-9)
+    assert leg("QUARTERLY", "ACT/360", True, "payment_date") == pytest.approx(eng["FLOAT"], rel=1e-9)
+    # Discounting at the unadjusted period end (the pre-v0.5 behaviour) differs
+    # only where a date rolled over a weekend: a day or two, a few $ per million.
+    assert leg("SEMI_ANNUAL", "30/360", False, "period_end") == pytest.approx(eng["FIXED"], rel=2e-4)
+    assert leg("SEMI_ANNUAL", "30/360", False, "period_end") != pytest.approx(eng["FIXED"], rel=1e-9)

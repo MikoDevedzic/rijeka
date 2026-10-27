@@ -111,7 +111,7 @@ r_{float} = \frac{1}{\tau(d_s,d_e)}\left(\frac{P_f(d_s)}{P_f(d_e)} - 1\right) + 
 \end{equation}
 which equals the daily-compounded in-arrears rate implied by the curve; $s$ is the spread. For a period already in progress, a realised fixing (when supplied) covers the elapsed part and the curve the remainder, weighted by accrual. Notional, fixed-rate and spread schedules (step-ups, amortisation) are resolved per period from their effective dates.
 
-\textbf{Known limitation (engine v0.4).} A coupon is discounted at its \emph{unadjusted period end}, not at the adjusted payment date. Where the payment date rolls over a weekend the two differ by one or two days of discounting, a few dollars per million. The Excel replications discount at the payment date and state the difference; the engine is the one being corrected.
+Each coupon is discounted at its business-day-adjusted payment date, the date the cash moves. (Engine versions before October 2026 discounted at the unadjusted period end; where a date rolled over a weekend the two differ by a day or two of discounting. Corrected in v0.5, with the Excel replications as the independent check.)
 
 %--------------------------------------------------------------------
 \section{Linear interest-rate products}
@@ -293,7 +293,7 @@ A proof pack contains the canonical record, the hash, both signatures and the an
 \begin{itemize}[leftmargin=1.4em]
 \item \textbf{Validation.} Versioned validation reports live in \code{model\_validation/}; v0.4.2 covers IRS and OIS (38 tests against Bloomberg), later versions swaptions (delta of \$3 on a \$10m 5Y), caps (0.1\% at matched volatility), SABR and the scenario engine.
 \item \textbf{Replications.} The Excel workbooks in the Methodology tab are regenerated on request from the user's own snapshot; the engine's value is written beside the formula result with a difference cell.
-\item \textbf{Open items, stated plainly.} Coupons discounted at period end rather than payment date (\S3). Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. SIMM covers interest-rate delta; vega and other risk classes are on the roadmap.
+\item \textbf{Open items, stated plainly.} Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. SIMM covers interest-rate delta; vega and other risk classes are on the roadmap.
 \item \textbf{Change control.} Every change to a pricing module is a commit in a public repository with its tests; this document is versioned with the code.
 \end{itemize}
 

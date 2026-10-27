@@ -367,7 +367,9 @@ def price_leg(
         period_notional = _resolve_notional_schedule(notional_schedule, p.period_start, float(p.notional)) if notional_schedule else float(p.notional)
 
         # Discount to period_end — consistent with bootstrap annuity -> NPV=$0 at par
-        df     = discount_curve.df(p.period_end)
+        # Discount at the date the cash actually moves: the business-day-adjusted
+        # payment date (plus any payment lag), not the unadjusted period end.
+        df     = discount_curve.df(p.payment_date)
         zero_r = discount_curve.zero_rate(p.payment_date)
 
         if is_float:
