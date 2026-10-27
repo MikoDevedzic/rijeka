@@ -590,3 +590,27 @@ def card_countersign(message_id: str, body: CountersignBody, db: Session = Depen
                      "card_message_id": str(msg.id), "explorer_tx": a.get("explorer_tx")})
     db.commit()
     return {"status": "CONFIRMED", "block_number": a.get("block_number"), "explorer_tx": a.get("explorer_tx")}
+
+
+def their_refs(db: Session, user_id) -> dict:
+    """
+    {trade id: the counterparty's own booking of it}, for this user's trades.
+    Both bookings carry the same UTI; theirs is the one owned by someone in the
+    firm that holds the trade's counterparty LEI (never a colleague's copy).
+    """
+    mine = {t.uti: t for t in db.query(Trade).filter(
+        Trade.user_id == user_id, Trade.uti.isnot(None), Trade.status != "CANCELLED")}
+    if not mine:
+        return {}
+    my_firm = _firm_of_user(db, user_id)
+    out = {}
+    for o in db.query(Trade).filter(Trade.uti.in_(mine), Trade.user_id != user_id, Trade.status != "CANCELLED"):
+        t = mine[o.uti]
+        cp_firm = _firm_of_lei(db, _cp_lei(db, t))
+        if cp_firm is None or (my_firm is not None and cp_firm.id == my_firm.id):
+            continue
+        if db.query(FirmMember).filter(FirmMember.firm_id == cp_firm.id, FirmMember.user_id == o.user_id).first():
+            out[str(t.id)] = {"trade_ref": o.trade_ref, "firm": cp_firm.name}
+    return out
+
+
