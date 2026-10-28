@@ -29,6 +29,9 @@ export default function CryptoDesk() {
   const [msg, setMsg] = useState(null)
   const [funding, setFunding] = useState({})
   const [flat, setFlat] = useState({})
+  const [fwdPair, setFwdPair] = useState('EURUSD')
+  const [fwdPts, setFwdPts] = useState({})
+  const [bbg, setBbg] = useState(null)   // {available, error}
 
   const flash = (kind, text) => { setMsg({ kind, text }); setTimeout(() => setMsg(null), 7000) }
   const pairs = md?.pairs || []
@@ -36,8 +39,11 @@ export default function CryptoDesk() {
   const load = useCallback(async () => {
     const m = await call('/api/currency/pairs')
     setMd(m)
+    const sel = (m?.pairs || []).find(p => p.pair === fwdPair)
+    setFwdPts(sel?.forward_points ? { ...sel.forward_points } : {})
+    if (bbg === null) { try { const st = await call('/bloomberg/status'); setBbg({ available: !!(st?.connected ?? st?.available ?? st?.ok), detail: st?.error || '' }) } catch { setBbg({ available: false }) } }
     const f = {}; (m?.pairs || []).filter(p => p.crypto).forEach(p => { f[p.base] = p.funding_pct ?? '' }); setFunding(f)
-  }, [])
+  }, [fwdPair])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load().catch(e => flash('err', e.message)) }, [load])
 
   const snap = async () => {
@@ -50,6 +56,32 @@ export default function CryptoDesk() {
     setBusy('fund' + asset)
     try { await call('/api/crypto/funding', { method: 'POST', body: JSON.stringify({ digital_asset: asset, rate_pct: v }) }); flash('ok', `${asset} funding set to ${v}% p.a.`); await load() }
     catch (e) { flash('err', e.message) } finally { setBusy('') }
+  }
+  const setMode = async (mode) => {
+    setBusy('mode')
+    try { await call('/api/currency/forward-mode', { method: 'POST', body: JSON.stringify({ mode }) }); flash('ok', mode === 'MARKET' ? 'Forwards priced off quoted points (market)' : 'Forwards implied from the two OIS curves (parity)'); await load() }
+    catch (e) { flash('err', e.message) } finally { setBusy('') }
+  }
+  const saveFwd = async (source = 'MANUAL', spot) => {
+    const points = {}; Object.entries(fwdPts).forEach(([t, v]) => { const n = parseFloat(v); if (!isNaN(n)) points[t] = n })
+    if (Object.keys(points).length < 2) return flash('err', 'Enter points for at least two tenors')
+    setBusy('fwd')
+    try { await call('/api/currency/forward-curve', { method: 'POST', body: JSON.stringify({ pair: fwdPair, points, source, ...(spot ? { spot } : {}) }) }); flash('ok', `${fwdPair} forward curve saved (${source})`); await load() }
+    catch (e) { flash('err', e.message) } finally { setBusy('') }
+  }
+  const snapFwdBloomberg = async () => {
+    setBusy('bbg')
+    try {
+      const tk = await call(`/bloomberg/tickers/${fwdPair}_FWD`)
+      const tickers = Object.entries(tk.tickers || {}).map(([tenor, ticker]) => ({ tenor, ticker }))
+      const r = await call('/bloomberg/snap', { method: 'POST', body: JSON.stringify({ curve_id: `${fwdPair}_FWD`, snap_date: new Date().toISOString().slice(0, 10), tickers, mode: 'live' }) })
+      const got = {}; let spot
+      ;(r.quotes || r.prices || []).forEach(q => { const t = q.tenor ?? q.t; const v = q.rate ?? q.price ?? q.value; if (t === 'SPOT') spot = v; else if (v != null) got[t] = v })
+      if (Object.keys(got).length < 2) throw new Error('Bloomberg returned fewer than two tenors')
+      setFwdPts(got)
+      await call('/api/currency/forward-curve', { method: 'POST', body: JSON.stringify({ pair: fwdPair, points: got, source: 'BLOOMBERG', ...(spot ? { spot } : {}) }) })
+      flash('ok', `${fwdPair} forward curve snapped from Bloomberg`); await load()
+    } catch (e) { flash('err', e.message) } finally { setBusy('') }
   }
   const saveFlat = async (ccy) => {
     const v = parseFloat(flat[ccy]); if (isNaN(v)) return flash('err', 'Enter a flat rate in % p.a.')
@@ -87,6 +119,26 @@ export default function CryptoDesk() {
             </tbody>
           </table>
           <div className="cd-note">FX: {md?.feeds?.fx || 'ECB reference rates (public)'} · Crypto: {md?.feeds?.crypto || 'Coinbase spot (public)'} · funding is a desk input (% p.a., continuous). <span style={{ color: 'var(--amber)' }}>Amber</span> = no OIS curve loaded for that currency, so it discounts flat at a policy rate until you load one under Rate curves.</div>
+        </section>
+
+        <section className="cd-card">
+          <h2>FX FORWARD CURVES</h2>
+          <div className="cd-form" style={{ gridTemplateColumns: '1fr 1fr 1fr', marginBottom: 10 }}>
+            <label>PAIR<select className="cd-inp" value={fwdPair} onChange={e => setFwdPair(e.target.value)}>{pairs.filter(p => !p.crypto).map(p => <option key={p.pair}>{p.pair}</option>)}</select></label>
+            <label>FORWARD SOURCE (ALL PAIRS)<div style={{ display: 'flex', gap: 6 }}>
+              {['MARKET', 'IMPLIED'].map(m => <button key={m} className={`cd-btn sm ${md?.forward_mode === m ? 'primary' : ''}`} onClick={() => setMode(m)} disabled={!!busy} title={m === 'MARKET' ? 'Outright = spot + quoted points; basis reported against parity' : 'Parity on the two OIS curves; basis zero'}>{m === 'MARKET' ? 'QUOTED POINTS' : 'IMPLIED FROM YIELDS'}</button>)}
+            </div></label>
+            <label>LOADED CURVE<div className="cd-dim" style={{ paddingTop: 8 }}>{(() => { const p = pairs.find(x => x.pair === fwdPair); return p?.forward_curve ? `${p.forward_curve.source} · ${p.forward_curve.valuation_date} · ${p.forward_curve.tenors.length} tenors` : 'none · forwards implied from yields for this pair' })()}</div></label>
+          </div>
+          <table className="cd-table">
+            <thead><tr><th>TENOR</th>{(md?.forward_tenors || []).map(t => <th key={t}>{t}</th>)}</tr></thead>
+            <tbody><tr><td className="cd-dim">POINTS (PIPS)</td>{(md?.forward_tenors || []).map(t => <td key={t}><input className="cd-inp sm" style={{ width: 70 }} value={fwdPts[t] ?? ''} placeholder="—" onChange={e => setFwdPts({ ...fwdPts, [t]: e.target.value })} /></td>)}</tr></tbody>
+          </table>
+          <div className="cd-actions" style={{ marginTop: 10, gap: 8, display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="cd-btn" onClick={snapFwdBloomberg} disabled={!!busy || !bbg?.available} title={bbg?.available ? 'Spot and forward points from the Bloomberg Desktop API (self-hosted desks)' : 'Bloomberg Desktop API not connected on this server (self-host only)'}>{busy === 'bbg' ? 'SNAPPING…' : '● SNAP FROM BLOOMBERG'}</button>
+            <button className="cd-btn primary" onClick={() => saveFwd('MANUAL')} disabled={!!busy}>{busy === 'fwd' ? 'SAVING…' : 'SAVE POINTS (MANUAL)'}</button>
+          </div>
+          <div className="cd-note">Forward points in pips, Bloomberg convention (EUR1M Curncy etc.). The outright at a date is spot plus the points interpolated in time; the gap to parity is the cross-currency basis and is shown on every quote. Demo accounts carry illustrative MANUAL curves.</div>
         </section>
 
         <section className="cd-card">

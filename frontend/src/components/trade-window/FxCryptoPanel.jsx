@@ -153,6 +153,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             [`ZEROS ${quote.quote_currency} / ${quote.base_currency}`, `${fmt(quote.quote_rate * 100)}% / ${fmt(quote.base_rate * 100)}%`, 'continuous to T'],
             ['DELTA / +1% SPOT', fmt(quote.delta_quote_per_pct), `≈ ${fmt(quote.delta_base_units, crypto ? 4 : 0)} ${quote.base_currency}`],
             [`RHO ${quote.base_currency} / ${quote.quote_currency} (+1BP)`, `${fmt(quote.rho_base_per_bp)} / ${fmt(quote.rho_quote_per_bp)}`, ''],
+            ...(!crypto ? [['FORWARD SOURCE', quote.forward_mode === 'MARKET' && quote.market_points != null ? 'QUOTED POINTS' : 'IMPLIED FROM YIELDS', quote.forward_source],
+                           ['PARITY FORWARD · BASIS', fmt(quote.implied_forward, rateDp(pair)), quote.basis_points != null ? `basis ${fmt(quote.basis_points, 1)} pts vs quoted` : 'no forward curve loaded for this pair']] : []),
           ].map(([k, v, s, c], i) => (
             <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '7px 9px', background: 'var(--bg-deep)' }}>
               <div style={{ ...lbl, fontSize: '0.62rem', marginBottom: 2 }}>{k}</div>
