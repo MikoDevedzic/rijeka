@@ -51,6 +51,7 @@ import { useTabStore }    from '../../store/useTabStore'
 import './products/rates'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { getSessionMaybe } from '../../lib/session'
+import FxCryptoPanel, { SHAPE_OF } from './FxCryptoPanel'
 // import './products/fx'
 // import './products/credit'
 // import './products/equity'
@@ -93,6 +94,28 @@ const SECTION_ORDER = [
 export default function TradeWindow({ onClose, onBook, onViewTrade, initialProduct = 'IR_SWAP' }) {
   const [productKey, setProductKey]   = useState(initialProduct)
   const product                        = getProduct(productKey)
+  // FX and digital assets share one panel (interest-rate parity) and are not
+  // registry products: the window keeps parties, dates, tabs and footer.
+  const [assetClass, setAssetClass]    = useState(product?.assetClass || 'RATES')
+  const [curInst, setCurInst]          = useState('FX_FORWARD')
+  const isCurrency                     = assetClass === 'FX' || assetClass === 'CRYPTO'
+  const fxRef                          = useRef(null)
+  const [fxQuote, setFxQuote]          = useState(null)
+  const CURRENCY_PRODUCTS = {
+    FX:     [{ key: 'FX_SPOT', label: 'FX spot' }, { key: 'FX_FORWARD', label: 'FX forward' }, { key: 'NDF', label: 'NDF' }, { key: 'FX_SWAP', label: 'FX swap', live: false }, { key: 'FX_OPTION', label: 'FX option', live: false }],
+    CRYPTO: [{ key: 'CRYPTO_FORWARD', label: 'Crypto forward' }, { key: 'CRYPTO_OPTION', label: 'Crypto option', live: false }],
+  }
+  const currencyFooter = {
+    footer: {
+      structureLabel: () => (SHAPE_OF[curInst] || 'FORWARD'),
+      metrics: (r) => r ? [
+        { label: 'FAIR ' + (SHAPE_OF[curInst] === 'SPOT' ? 'SPOT' : 'FORWARD'), value: Number(r.forward).toLocaleString(undefined, { maximumFractionDigits: 5 }) },
+        { label: 'NPV ' + r.quote_currency, value: Number(r.npv).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
+        { label: 'DELTA / 1%', value: Number(r.delta_quote_per_pct).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+        { label: 'CARRY', value: (r.implied_carry * 100).toFixed(2) + '%' },
+      ] : [],
+    },
+  }
   if (!product) throw new Error(`Unknown product: ${productKey}`)
 
   const { curves, curveInterp }        = useMarketDataStore()
@@ -335,6 +358,33 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   }, [booking, pricing, state, direction, product, productKey, onBook, economics])
 
+  const handleBookCurrency = useCallback(async () => {
+    if (booking || pricing) return
+    setBookErr(''); setBooking(true)
+    try {
+      if (!economics.counterpartyId) throw new Error('Select a COUNTERPARTY on the TRADE tab before booking.')
+      if (!economics.ownEntityId) throw new Error('Select an OWN ENTITY on the TRADE tab before booking.')
+      if (!fxRef.current?.quote()) { const q = await fxRef.current?.price(); if (!q) throw new Error('Price it first') }
+      const body = fxRef.current.payload()
+      const today = new Date().toISOString().slice(0, 10)
+      const session = await getSessionWithCache(sessionCacheRef)
+      const res = await fetch(API + '/api/trades/', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, own_legal_entity_id: economics.ownEntityId, counterparty_id: economics.counterpartyId,
+                               desk: economics.desk || null, book: economics.book || null, trade_date: today, effective_date: today }),
+      })
+      const t = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof t.detail === 'string' ? t.detail : (t.detail ? JSON.stringify(t.detail) : 'Booking failed'))
+      setBookedTrade(t)
+      try { useTradesStore.getState().fetchTrades?.() } catch {}
+      onBook?.({ productKey: body.instrument_type, trade: t })
+    } catch (e) {
+      setBookErr(e.message || String(e))
+    } finally {
+      setBooking(false)
+    }
+  }, [booking, pricing, economics, onBook])
+
   // Sprint 12 item 3 — CONFIRM handler: PENDING -> CONFIRMED
   const handleConfirm = useCallback(async (mode = 'chain') => {
     if (!bookedTrade?.id) return
@@ -570,12 +620,13 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           effects in SwapTermsBody don't re-fire every tab switch. */}
       <div style={{ display: activeTab === 'TRADE' ? 'block' : 'none' }}>
         <InstrumentSelector
-          assetClasses={listAssetClasses()}
-          activeAssetClass={product.assetClass}
-          products={listProductsByAssetClass(product.assetClass)}
-          activeProductKey={productKey}
-          onProductChange={setProductKey}
-          structures={product.structures}
+          assetClasses={[...new Set([...listAssetClasses(), 'FX', 'CRYPTO'])]}
+          activeAssetClass={assetClass}
+          onAssetClassChange={(c) => { if (!['RATES', 'FX', 'CRYPTO'].includes(c)) return; setAssetClass(c); setFxQuote(null); if (c === 'FX') setCurInst('FX_FORWARD'); if (c === 'CRYPTO') setCurInst('CRYPTO_FORWARD') }}
+          products={isCurrency ? CURRENCY_PRODUCTS[assetClass] : listProductsByAssetClass(product.assetClass)}
+          activeProductKey={isCurrency ? curInst : productKey}
+          onProductChange={isCurrency ? (k) => { setCurInst(k); setFxQuote(null) } : setProductKey}
+          structures={isCurrency ? [] : product.structures}
           activeStructure={structure}
           onStructureChange={setStructure}
         />
@@ -586,6 +637,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           refData={refData}
         />
 
+        {isCurrency && (
+          <div className="tbw-sec">
+            <FxCryptoPanel ref={fxRef} ac={assetClass} inst={curInst} onPriced={setFxQuote} onError={(m) => setBookErr(m)} />
+          </div>
+        )}
+        {!isCurrency && (<>
         <PrimaryEconomics
           state={economics}
           direction={direction}
@@ -617,15 +674,16 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         />
 
         <XVASummary result={result} />
+        </>)}
       </div>
 
-      {tabsVisited['CASHFLOWS'] && (
+      {tabsVisited['CASHFLOWS'] && !isCurrency && (
         <div style={{ display: activeTab === 'CASHFLOWS' ? 'block' : 'none' }}>
           <CashflowsPanel result={result} productKey={productKey} state={state} />
         </div>
       )}
 
-      {tabsVisited['DETAILS'] && (
+      {tabsVisited['DETAILS'] && !isCurrency && (
         <div style={{ display: activeTab === 'DETAILS' ? 'block' : 'none' }}>
           <DetailsPanel
             productKey={productKey}
@@ -636,7 +694,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         </div>
       )}
 
-      {tabsVisited['XVA'] && (
+      {tabsVisited['XVA'] && !isCurrency && (
         <div style={{ display: activeTab === 'XVA' ? 'block' : 'none' }}>
           <XvaPanel
             productKey={productKey}
@@ -649,7 +707,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         </div>
       )}
 
-      {tabsVisited['CURVE SCENARIO'] && (
+      {tabsVisited['CURVE SCENARIO'] && !isCurrency && (
         <div style={{ display: activeTab === 'CURVE SCENARIO' ? 'block' : 'none' }}>
           <ScenarioPanel
             productKey={productKey}
@@ -690,12 +748,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       )}
 
       <TradeFooter
-        descriptor={product}
-        result={result}
+        descriptor={isCurrency ? currencyFooter : product}
+        result={isCurrency ? fxQuote : result}
         state={state}
         pricing={pricing}
-        onPrice={handlePrice}
-        onBook={handleBook}
+        onPrice={isCurrency ? () => fxRef.current?.price() : handlePrice}
+        onBook={isCurrency ? handleBookCurrency : handleBook}
         booking={booking}
         bookErr={bookErr}
         booked={!!bookedTrade}
