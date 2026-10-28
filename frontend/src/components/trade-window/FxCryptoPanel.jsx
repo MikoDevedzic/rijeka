@@ -10,6 +10,10 @@ const CRYPTO_BASES = ['BTC', 'ETH', 'SOL']
 const fmt = (n, d = 2) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
 const rateDp = (pair) => !pair ? 2 : CRYPTO_BASES.includes(pair.slice(0, 3)) ? 2 : pair === 'USDJPY' ? 3 : 5
 const iso = (d) => d.toISOString().slice(0, 10)
+const TENORS = ['1W', '2W', '1M', '2M', '3M', '6M', '9M', '1Y', '18M', '2Y']
+const tenorDate = (t) => { const d = new Date(); const n = parseInt(t); if (t.endsWith('W')) d.setDate(d.getDate() + 7 * n); else if (t.endsWith('M')) d.setMonth(d.getMonth() + n); else d.setFullYear(d.getFullYear() + n); return iso(d) }
+const fmtAmt = (v, crypto) => { const n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? '' : n.toLocaleString('en-US', { maximumFractionDigits: crypto ? 8 : 0 }) }
+const parseAmt = (v) => { const n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? '' : n }
 const plusMonths = (m) => { const d = new Date(); d.setMonth(d.getMonth() + m); return iso(d) }
 export const SHAPE_OF = { FX_SPOT: 'SPOT', FX_FORWARD: 'FORWARD', NDF: 'NDF', CRYPTO_FORWARD: 'NDF' }
 
@@ -33,6 +37,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const [feeds, setFeeds] = useState(null)
   const [pair, setPair] = useState(crypto ? 'BTCUSD' : 'EURUSD')
   const [notional, setNotional] = useState(crypto ? 10 : 10_000_000)
+  const [tenor, setTenor] = useState('3M')
   const [settlement, setSettlement] = useState(plusMonths(3))
   const [direction, setDirection] = useState('BUY')
   const [strike, setStrike] = useState('')
@@ -42,7 +47,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const [busy, setBusy] = useState('')
 
   useEffect(() => { setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? 10 : 10_000_000); setQuote(null) }, [crypto])
-  useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, strike, spotOv, fundOv])
+  useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, tenor, strike, spotOv, fundOv])
 
   const load = async () => {
     try { const m = await call('/api/currency/pairs'); setPairs(m.pairs || []); setFeeds(m.feeds || null) } catch (e) { onError?.(e.message) }
@@ -111,27 +116,36 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             {list.map(p => <option key={p.pair} value={p.pair}>{p.pair}</option>)}
           </select>
         </Fld>
-        <Fld label={`NOTIONAL (${cur?.base || 'BASE'})`} flex={1.6}>
-          <input style={{ ...inp, fontSize: '1.05rem', fontWeight: 700 }} type='number' min='0' step='any' value={notional} onChange={e => setNotional(e.target.value)} />
+        <Fld label='NOTIONAL' flex={1.6}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input style={{ ...inp, fontSize: '1.0625rem', fontWeight: 700 }} type='text' inputMode='decimal' value={fmtAmt(notional, crypto)} placeholder={crypto ? '10' : '10,000,000'}
+                   onChange={e => { const v = parseAmt(e.target.value); if (v !== '') setNotional(v); else if (e.target.value === '') setNotional('') }} />
+            <div style={{ ...inp, width: 64, textAlign: 'center', fontWeight: 700, fontSize: '1.0625rem', color: 'var(--accent)', border: '1px solid var(--border)' }}>{cur?.base || '—'}</div>
+          </div>
         </Fld>
         <Fld label={`DIRECTION (${cur?.base || 'BASE'})`} flex={1.4}>
           <div style={{ display: 'flex', gap: 5 }}>
             {['BUY', 'SELL'].map(d => <button key={d} onClick={() => setDirection(d)} style={{ flex: 1, padding: '7px 0', borderRadius: 3, cursor: 'pointer', fontFamily: 'var(--mono)', fontSize: '0.8rem', letterSpacing: '0.08em', border: '1px solid ' + (direction === d ? (d === 'BUY' ? 'var(--accent)' : 'var(--red)') : 'var(--border-hi)'), background: direction === d ? (d === 'BUY' ? 'rgba(13,212,168,.15)' : 'rgba(224,80,64,.15)') : 'transparent', color: direction === d ? (d === 'BUY' ? 'var(--accent)' : 'var(--red)') : 'var(--text-dim)' }}>{d} {cur?.base || ''}</button>)}
           </div>
         </Fld>
-        <Fld label={shape === 'SPOT' ? 'VALUE DATE' : 'SETTLEMENT'} flex={1.3}>
-          <input style={{ ...inp, opacity: shape === 'SPOT' ? .6 : 1 }} type='date' value={shape === 'SPOT' ? (quote?.settlement_date || '') : settlement} disabled={shape === 'SPOT'} onChange={e => setSettlement(e.target.value)} placeholder='T+2' />
+        <Fld label='TENOR' flex={0.8}>
+          <select style={{ ...inp, fontSize: '1.0625rem', fontWeight: 700, opacity: shape === 'SPOT' ? .6 : 1 }} value={shape === 'SPOT' ? 'SPOT' : tenor} disabled={shape === 'SPOT'} onChange={e => { setTenor(e.target.value); setSettlement(tenorDate(e.target.value)) }}>
+            {shape === 'SPOT' && <option value='SPOT'>SPOT</option>}{TENORS.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </Fld>
+        <Fld label={shape === 'SPOT' ? 'VALUE DATE (T+2)' : 'SETTLEMENT'} flex={1.3}>
+          <input style={{ ...inp, opacity: shape === 'SPOT' ? .6 : 1 }} type='date' value={shape === 'SPOT' ? (quote?.settlement_date || '') : settlement} disabled={shape === 'SPOT'} onChange={e => { setSettlement(e.target.value); setTenor('') }} />
         </Fld>
       </Row>
       <Row>
         <Fld label={`RATE K (${cur?.quote || 'QUOTE'} PER ${cur?.base || 'BASE'})`} flex={1.3}>
-          <input style={inp} type='number' step='any' placeholder='at the fair forward' value={strike} onChange={e => setStrike(e.target.value)} />
+          <input style={inp} type='text' inputMode='decimal' placeholder='at the fair forward' value={strike} onChange={e => setStrike(e.target.value.replace(/[^0-9.]/g, ''))} />
         </Fld>
         <Fld label={`SPOT ${cur?.spot_as_of ? '· ' + cur.spot_as_of : ''}`} flex={1.3}>
-          <input style={inp} type='number' step='any' placeholder={cur?.spot ? fmt(cur.spot, rateDp(pair)) : 'snap first'} value={spotOv} onChange={e => setSpotOv(e.target.value)} />
+          <input style={inp} type='text' inputMode='decimal' placeholder={cur?.spot ? fmt(cur.spot, rateDp(pair)) : 'snap first'} value={spotOv} onChange={e => setSpotOv(e.target.value.replace(/[^0-9.]/g, ''))} />
         </Fld>
         {crypto
-          ? <Fld label={`${cur?.base || 'ASSET'} FUNDING % ${cur?.funding_pct != null ? '· ' + cur.funding_pct + '% saved' : '· 0% default'}`} flex={1.3}><input style={inp} type='number' step='any' placeholder='saved rate' value={fundOv} onChange={e => setFundOv(e.target.value)} /></Fld>
+          ? <Fld label={`${cur?.base || 'ASSET'} FUNDING % ${cur?.funding_pct != null ? '· ' + cur.funding_pct + '% saved' : '· 0% default'}`} flex={1.3}><input style={inp} type='text' inputMode='decimal' placeholder='saved rate' value={fundOv} onChange={e => setFundOv(e.target.value.replace(/[^0-9.\-]/g, ''))} /></Fld>
           : <Fld label='DISCOUNTING' flex={1.3}><div style={{ ...inp, border: '1px solid var(--border)', color: cur?.base_curve_available ? 'var(--text)' : 'var(--amber)', fontSize: '0.78rem' }} title={cur?.base_fallback || ''}>{cur ? (cur.base_curve_available ? `${cur.base_curve} / ${cur.quote_curve}` : `${cur.base_fallback} / ${cur.quote_curve}`) : '—'}</div></Fld>}
         <Fld label='MARKET DATA' flex={1}>
           <button onClick={snap} disabled={!!busy} style={{ ...inp, cursor: 'pointer', color: 'var(--accent)', borderColor: 'var(--accent-dim)', textAlign: 'center', letterSpacing: '0.1em', fontSize: '0.78rem' }}>{busy === 'snap' ? 'SNAPPING…' : '● SNAP SPOT'}</button>
