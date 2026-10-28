@@ -120,7 +120,9 @@
 .bl-status-dot     { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
 .bl-status-txt     { font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.08em; vertical-align: middle; }
 .bl-store-txt      { font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.1em; }
-.bl-empty          { text-align: center; padding: 4rem !important; color: var(--text-dim); font-size: 1rem; letter-spacing: 0.1em; }
+.bl-empty          { text-align: center; padding: 4rem 2rem !important; color: var(--text-dim); font-size: 12px; letter-spacing: 0.08em; }
+.bl-empty::before  { content: 'Your blotter is empty'; display: block; font-family: var(--sans); font-size: 16px; font-weight: 600; letter-spacing: 0; color: var(--text-hi); margin-bottom: 8px; }
+.bl-empty::after   { content: 'Everything you book here is private to your account until you share it in a chat.'; display: block; font-family: var(--sans); font-size: 12px; letter-spacing: 0; color: var(--text-dim); margin-top: 8px; }
 .bl-state          { padding: 3rem; text-align: center; color: var(--text-dim); font-size: 1rem; letter-spacing: 0.12em; }
 .bl-state-err      { color: var(--red); }
 

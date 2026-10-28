@@ -281,9 +281,13 @@ function MessengerPanes({ width }) {
             {compose ? <Compose compose={compose} onDone={() => setCompose(null)} />
               : activeId === PROMETHEUS ? <PrometheusThread back={!twoPane} />
               : activeId ? <RoomThread roomId={activeId} back={!twoPane} onInvite={() => setCompose({ mode: 'invite' })} />
-              : <div className="ms-empty">{status === 'no-firm'
-                  ? 'Ask Prometheus anything. Chat with other people needs your account to be part of a firm on Rijeka.'
-                  : 'Pick a conversation, or start one with + NEW.'}</div>}
+              : <div className="ms-empty"><div className="rj-empty-card">
+                  <div className="t">{status === 'no-firm' ? 'Ask Prometheus anything' : 'No conversation open'}</div>
+                  <div className="s">{status === 'no-firm'
+                    ? 'Chat with other people needs your account to be part of a firm on Rijeka.'
+                    : 'Pick one on the left, or start a new one. Trades you share in a room arrive as cards the other side can countersign.'}</div>
+                  {status !== 'no-firm' && <div className="k">+ NEW · START A CONVERSATION</div>}
+                </div></div>}
           </main>
         )}
       </div>
