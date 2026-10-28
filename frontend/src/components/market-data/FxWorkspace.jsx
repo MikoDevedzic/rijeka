@@ -82,8 +82,8 @@ export default function FxWorkspace() {
                 <div className="ccy-items">
                   {items.map(p => (
                     <div key={p.pair} className={`crv-item${sel === p.pair ? ' sel' : ''}`} style={{ borderLeftColor: sel === p.pair ? (p.crypto ? 'var(--chain)' : 'var(--accent)') : 'transparent' }} onClick={() => setSel(p.pair)}>
-                      <span className={`type-badge ${p.crypto ? 'tb-funding' : p.forward_curve ? 'tb-ois' : 'tb-basis'}`}>{p.crypto ? 'NDF' : p.forward_curve ? 'FWD' : 'SPOT'}</span>
-                      <div className="ci-body"><div className="ci-name">{p.pair}</div><div className="ci-sub">{p.crypto ? `funding ${p.funding_pct ?? 0}%` : p.forward_curve ? `${p.forward_curve.source} · ${p.forward_curve.tenors.length} tenors` : 'no forward curve'}</div></div>
+                      <span className={`type-badge ${p.forward_curve ? (p.crypto ? 'tb-funding' : 'tb-ois') : 'tb-basis'}`}>{p.forward_curve ? 'FWD' : 'SPOT'}</span>
+                      <div className="ci-body"><div className="ci-name">{p.pair}</div><div className="ci-sub">{p.forward_curve ? `${p.forward_curve.source} · ${p.forward_curve.tenors.length} tenors` : p.crypto ? `funding ${p.funding_pct ?? 0}% · no forward curve` : 'no forward curve'}</div></div>
                       <div className={`ci-val ${p.crypto ? 'am' : 'ac'}`}>{fmt(p.spot, dp(p.pair))}</div>
                     </div>))}
                 </div>
@@ -115,7 +115,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   // parity points per tenor from the pricer (one call per tenor, in parallel)
   useEffect(() => {
     let dead = false
-    if (!p.spot || p.crypto) { setParity({}); return }
+    if (!p.spot) { setParity({}); return }
     const today = new Date()
     Promise.all(tenors.map(async t => {
       const d = new Date(today); d.setDate(d.getDate() + TENOR_DAYS[t])
@@ -169,9 +169,8 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
     await save(p.forward_curve?.source || 'MANUAL', clean, v)
   }
 
-  const tabs = p.crypto
-    ? [{ id: 'points', label: 'Spot & funding' }, { id: 'conv', label: 'Conventions' }]
-    : [{ id: 'points', label: 'Forward points', badge: p.forward_curve?.tenors?.length }, { id: 'spot', label: 'Spot' }, { id: 'conv', label: 'Conventions' }]
+  const tabs = [{ id: 'points', label: p.crypto ? 'Forward points (USD)' : 'Forward points', badge: p.forward_curve?.tenors?.length },
+                { id: 'spot', label: p.crypto ? 'Spot & funding' : 'Spot' }, { id: 'conv', label: 'Conventions' }]
   const mode = md?.forward_mode || 'MARKET'
   const thL = { fontSize: '0.78rem', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 6px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
   const thR = { ...thL, textAlign: 'right' }
@@ -181,8 +180,8 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const pointsPanel = (
     <div>
       <DescBox>
-        Forward points in pips, Bloomberg convention: the outright at a tenor is spot + points × {p.pip}. The parity column is what the two OIS curves imply
-        ({p.base_curve_available ? p.base_curve : p.base_fallback} / {p.quote_curve}); the basis is quoted minus parity. Forwards are priced
+        {p.crypto ? 'Forward points in USD per unit (pip 1): the outright at a tenor is spot + points, i.e. the futures or forward price for that expiry.' : `Forward points in pips, Bloomberg convention: the outright at a tenor is spot + points × ${p.pip}.`} The parity column is what {p.crypto ? 'USD SOFR and the funding rate imply' : 'the two OIS curves imply'}
+        ({p.crypto ? `${p.base} funding ${p.funding_pct ?? 0}%` : p.base_curve_available ? p.base_curve : p.base_fallback} / {p.quote_curve}); the basis is quoted minus parity{p.crypto ? ', the futures basis' : ', the cross-currency basis'}. Forwards are priced
         <b> {mode === 'MARKET' ? 'off these quoted points' : 'from yields (parity)'}</b> for every pair in this account.
         {' '}<button className="btn" style={{ marginLeft: 8 }} disabled={!!busy} onClick={() => setMode(mode === 'MARKET' ? 'IMPLIED' : 'MARKET')}>{mode === 'MARKET' ? 'SWITCH TO IMPLIED FROM YIELDS' : 'SWITCH TO QUOTED POINTS'}</button>
       </DescBox>
@@ -235,7 +234,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
     <div>
       <ParamGrid cols={2} items={p.crypto ? [
         { label: 'PRODUCT', value: 'Non-deliverable forward (ISDA Digital Asset Derivatives Definitions)' }, { label: 'SETTLEMENT', value: 'USD cash, against the settlement price source' },
-        { label: 'SETTLEMENT PRICE SOURCE', value: p.fixing_default }, { label: 'MODEL', value: 'F = S·e^(−r_funding·T) / DF_USD(T); NPV = ±N·(F − K)·DF_USD(T)' },
+        { label: 'SETTLEMENT PRICE SOURCE', value: p.fixing_default }, { label: 'MODEL', value: 'quoted: F = S + points; parity: F = S·e^(−r_funding·T) / DF_USD(T); NPV = ±N·(F − K)·DF_USD(T)' },
         { label: 'USD DISCOUNTING', value: p.quote_curve, cls: 'ac' }, { label: 'BASE DISCOUNTING', value: `${p.base} funding ${p.funding_pct ?? 0}% (continuous)`, cls: 'am' },
       ] : [
         { label: 'PRODUCTS', value: 'FX spot (T+2), deliverable forward, NDF' }, { label: 'NDF FIXING (DEFAULT)', value: p.fixing_default },
@@ -268,13 +267,13 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
           <span className={`pill ${p.crypto ? 'p-amber' : 'p-green'}`}>{p.crypto ? 'NDF' : 'FX SPOT · FWD · NDF'}</span>
           <span className="pill p-blue">{p.quote_curve}</span>
           <span className={`pill ${p.crypto ? 'p-amber' : p.base_curve_available ? 'p-blue' : 'p-amber'}`}>{p.crypto ? `${p.base} funding ${p.funding_pct ?? 0}%` : p.base_curve_available ? p.base_curve : `${p.base} flat (no curve)`}</span>
-          {!p.crypto && <span className={`pill ${p.forward_curve ? 'p-purple' : 'p-dim'}`}>{p.forward_curve ? `${p.forward_curve.source} points · ${p.forward_curve.valuation_date}` : 'no forward curve'}</span>}
-          {!p.crypto && <span className="pill p-dim">{mode === 'MARKET' ? 'quoted points' : 'implied from yields'}</span>}
+          <span className={`pill ${p.forward_curve ? 'p-purple' : 'p-dim'}`}>{p.forward_curve ? `${p.forward_curve.source} points · ${p.forward_curve.valuation_date}` : 'no forward curve'}</span>
+          <span className="pill p-dim">{mode === 'MARKET' ? 'quoted points' : 'implied from yields'}</span>
           <span className="pill p-dim">pip {p.pip}</span>
         </div>
       </div>
       <InnerTabs tabs={tabs} />
-      <InnerBody tabs={tabs} panels={{ points: p.crypto ? spotPanel : pointsPanel, spot: spotPanel, conv: convPanel }} />
+      <InnerBody tabs={tabs} panels={{ points: pointsPanel, spot: spotPanel, conv: convPanel }} />
     </div>
   )
 }

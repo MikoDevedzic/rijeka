@@ -341,7 +341,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                                          quote_curve=q_curve, direction=direction, pip=st["pip"], **kw)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    mode = forward_mode(db, user_id) if not crypto else "IMPLIED"
+    mode = forward_mode(db, user_id)          # digital assets too: futures / forward prices by expiry are a quoted curve
     fc = st.get("forward_points")
     r, f_src, basis_pts = implied, "implied from the two OIS curves (interest-rate parity)", None
     mkt_pts = None
