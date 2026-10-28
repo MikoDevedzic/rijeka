@@ -143,3 +143,62 @@ def pulse(db: Session = Depends(get_db)):
 def warm() -> None:
     """Called at startup so the first visitor never waits either."""
     _refresh_in_background()
+
+
+# ── the public register of confirmations ───────────────────────────────────
+#
+# Every confirmation anchored through this instance, newest first: the hash,
+# the block and transaction, the two LEIs, whether both parties signed with
+# their own keys, and the product. Nothing a counterparty could not read off
+# the chain already, plus the product and asset class so the list means
+# something. No refs, no notionals, no names.
+
+_REG_SQL = """
+SELECT e.payload, e.created_at, e.trade_id, t.asset_class, t.instrument_type, t.structure
+FROM trade_events e JOIN trades t ON t.id = e.trade_id
+WHERE e.event_type = 'CONFIRMED' AND e.confirmation_hash IS NOT NULL
+ORDER BY e.created_at DESC LIMIT :n
+"""
+_reg_cache: dict[str, Any] = {"at": 0.0, "body": None, "n": 0}
+
+
+def _register(db: Session, n: int) -> dict:
+    rows = []
+    try:
+        for r in db.execute(text(_REG_SQL), {"n": n}):
+            att = (r.payload or {}).get("attestation") or {}
+            anchor = att.get("anchor") or {}
+            if not anchor.get("anchored"):
+                continue
+            parties = att.get("parties") or {}
+            own, cp = parties.get("own") or {}, parties.get("counterparty") or {}
+            rows.append({
+                "trade_hash": att.get("trade_hash"),
+                "block_number": anchor.get("block_number"), "tx_hash": anchor.get("tx_hash"),
+                "explorer_tx": anchor.get("explorer_tx"), "chain_id": anchor.get("chain_id"), "registry": anchor.get("registry"),
+                "confirmed_at": anchor.get("confirmed_at"),
+                "parties": sorted([x for x in (own.get("lei"), cp.get("lei")) if x]),
+                "addresses": [own.get("address"), cp.get("address")],
+                "bilateral": bool(att.get("bilateral")),
+                "key_sources": [own.get("key_source"), cp.get("key_source")],
+                "asset_class": r.asset_class, "instrument_type": r.instrument_type, "structure": r.structure,
+                "schema_version": att.get("schema_version"),
+            })
+    except Exception as e:
+        log.debug("register failed: %s", e)
+        db.rollback()
+    total = _scalar(db, "SELECT count(*) FROM trade_events WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL")
+    bilateral = _scalar(db, "SELECT count(*) FROM trade_events WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL "
+                            "AND (payload->'attestation'->>'bilateral') = 'true'")
+    return {"total": total, "bilateral": bilateral, "confirmations": rows}
+
+
+@router.get("/confirmations")
+def confirmations(limit: int = 50, db: Session = Depends(get_db)):
+    n = max(1, min(int(limit), 200))
+    now = time.monotonic()
+    if _reg_cache["body"] is not None and _reg_cache["n"] == n and now - _reg_cache["at"] < TTL_SECONDS:
+        return _reg_cache["body"]
+    body = _register(db, n)
+    _reg_cache.update(at=now, body=body, n=n)
+    return body
