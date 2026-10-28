@@ -132,7 +132,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
           {confirmErr && <div className="tbw-error" style={{ maxWidth: 520, marginTop: 8 }}>{confirmErr}</div>}
         </div>
       )}
-      {vr && (
+      {vr && !vr.info && (
         <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 2, fontSize: 11, fontFamily: MONO,
           background: vr.error ? 'rgba(255,107,107,0.06)' : vOk ? 'rgba(13,212,168,0.06)' : 'rgba(245,200,66,0.06)',
           border: '1px solid ' + (vr.error ? 'rgba(255,107,107,0.3)' : vOk ? 'rgba(13,212,168,0.3)' : 'rgba(245,200,66,0.3)'),
