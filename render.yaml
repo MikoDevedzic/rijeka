@@ -4,14 +4,18 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    plan: starter        # the free plan sleeps; first visitor would wait ~1 min
-    autoDeploy: true
-    healthCheckPath: /docs
+    # --proxy-headers: trust Render's X-Forwarded-* so client IPs / https are right
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'
+    region: virginia     # same AWS region as the Supabase project (aws-1-us-east-1): ~1 ms to the DB
+    plan: 1c-2g          # 1 CPU / 2 GB. Pricing is numpy/scipy on the request path; the 0.5c-512mb
+                         # plan is viable for a quiet instance, `free` sleeps and is not for a launch.
+    autoDeployTrigger: checksPass   # deploy main only after the GitHub CI checks pass
+    healthCheckPath: /health
     envVars:
       # ── required ──────────────────────────────────────────────────────
       - key: DATABASE_URL
-        sync: false          # Supabase connection string (Settings > Database)
+        sync: false          # Supabase > Connect > "Transaction pooler" URI (port 6543, IPv4);
+                             # the direct host is IPv6-only and Render has no IPv6 egress
       - key: FRONTEND_URL
         value: https://app.rijeka.app
       - key: CORS_ORIGINS
@@ -42,6 +46,9 @@ services:
         sync: false          # funded Sepolia burner; rotate if it ever appears in a log
       - key: RIJEKA_CHAIN_KEY_254900OPPU84GM83MG36
         sync: false          # signing key for RIJEKA CAPITAL (real LEI): the DEMO-only seed does not cover it
+      # ── optional: Prometheus (read-only desk assistant) ───────────────
+      - key: ANTHROPIC_API_KEY
+        sync: false          # leave blank to run without it; the chat then says it is not configured
       # ── optional: Telegram mirror (chain/README.md) ───────────────────
       - key: TELEGRAM_BOT_TOKEN
         sync: false

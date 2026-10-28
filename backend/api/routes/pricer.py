@@ -446,7 +446,7 @@ def _solve_par_rate(
 # ── POST /api/price/par-rate ──────────────────────────────────────────────────
 
 @router.post("/api/price/par-rate")
-async def compute_par_rate(
+def compute_par_rate(
     req: ParRateRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
@@ -510,7 +510,7 @@ async def compute_par_rate(
 # ── POST /price ───────────────────────────────────────────────────────────────
 
 @router.post("/price")
-async def price_trade(
+def price_trade(
     request: PriceRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
@@ -685,7 +685,7 @@ class PreviewRequest(BaseModel):
 
 
 @router.post("/price/preview")
-async def price_preview(
+def price_preview(
     request: PreviewRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
@@ -890,7 +890,7 @@ class SwaptionRequest(BaseModel):
 
 
 @router.post("/api/price/swaption")
-async def price_swaption_route(
+def price_swaption_route(
     req: SwaptionRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
@@ -1141,7 +1141,7 @@ async def price_swaption_route(
 # ── POST /cashflows/generate ──────────────────────────────────────────────────
 
 @router.post("/cashflows/generate")
-async def generate_cashflows(
+def generate_cashflows(
     request: CashflowGenRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
@@ -1298,7 +1298,7 @@ def _load_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
 
 
 @router.post("/api/price/cap")
-async def price_cap_route(
+def price_cap_route(
     req: CapFloorRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
@@ -1357,7 +1357,7 @@ async def price_cap_route(
 
 
 @router.post("/api/price/floor")
-async def price_floor_route(
+def price_floor_route(
     req: CapFloorRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
@@ -1416,7 +1416,7 @@ async def price_floor_route(
 
 
 @router.post("/api/price/collar")
-async def price_collar_route(
+def price_collar_route(
     req: CapFloorRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),

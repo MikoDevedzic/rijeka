@@ -1,15 +1,17 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg2-binary
-python-jose[cryptography]
-httpx
-anthropic
-pydantic
-python-dateutil
-python-dotenv
-numpy
-scipy
-holidays
-web3>=7,<8
-openpyxl>=3.1
+# Pinned to the versions the engine was validated against (backend/tests, CI).
+# Bump deliberately, run the suite, then redeploy.
+fastapi==0.141.1
+uvicorn[standard]==0.52.1
+sqlalchemy==2.0.52
+psycopg2-binary==2.9.12
+python-jose[cryptography]==3.5.0
+httpx==0.28.1
+anthropic==0.121.0
+pydantic==2.13.4
+python-dateutil==2.9.0.post0
+python-dotenv==1.2.2
+numpy==2.4.6
+scipy==1.17.1
+holidays==0.102
+web3==7.16.0
+openpyxl==3.1.5

@@ -176,7 +176,7 @@ class SimulateRequest(BaseModel):
 # ── Calibrate ─────────────────────────────────────────────────────────────────
 
 @router.post("/calibrate")
-async def calibrate(
+def calibrate(
     body: CalibrateRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
@@ -388,7 +388,7 @@ async def calibrate(
 # ── Get latest calibration ────────────────────────────────────────────────────
 
 @router.get("/calibration/latest")
-async def get_latest_calibration(
+def get_latest_calibration(
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
 ):
@@ -426,7 +426,7 @@ async def get_latest_calibration(
 # ── Simulate ──────────────────────────────────────────────────────────────────
 
 @router.post("/simulate")
-async def simulate(
+def simulate(
     body: SimulateRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
