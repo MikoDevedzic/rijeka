@@ -36,7 +36,7 @@ export default function AuthScene({ children, eyebrow }) {
         <div className="au-scene-top">
           <div className="au-mark">RIJEKA</div>
           <div className="au-sub">WHERE THE TRADING DESK MEETS THE CHAIN</div>
-          <div className="au-phase"><i />PHASE 1 · RATES + CRYPTO NDF LIVE · FX, CREDIT, EQUITY, COMMODITY NEXT</div>
+          <div className="au-phase"><i />PHASE 1 · RATES, FX & CRYPTO FORWARDS LIVE · CREDIT, EQUITY, COMMODITY NEXT</div>
         </div>
 
         <div className="au-headline">

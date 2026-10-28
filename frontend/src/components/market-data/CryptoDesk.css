@@ -44,4 +44,5 @@
 .cd-status.confirmed { color: var(--accent); border-color: var(--accent-dim); }
 .cd-status.pending { color: var(--amber); border-color: rgba(240,160,32,.4); }
 .cd-row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.cd-fund { display: inline-flex; gap: 6px; align-items: center; }
 @media (max-width: 900px) { .cd-form, .cd-quote { grid-template-columns: 1fr 1fr; } .cd-book { grid-template-columns: 1fr; } }

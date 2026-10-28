@@ -40,8 +40,9 @@ const PHASES = [
     ['DONE', 'Crypto non-deliverable forwards on BTC, ETH and SOL: public spot feed, funding rate, cash-and-carry pricer, booking, on-chain confirmation (Configurations → Digital assets)'],
     ['NEXT', 'Crypto options in the engine and the page; venue adapters for crypto OTC desks'],
   ]},
-  { title: 'PHASE 2 · FX & CREDIT', status: 'PLANNED', items: [
-    ['NEXT', 'FX forwards, NDFs and options; cross-currency swaps'],
+  { title: 'PHASE 2 · FX & CREDIT', status: 'PARTIAL', items: [
+    ['DONE', 'FX spot, forwards and NDFs on G10 pairs, priced on the same interest-rate-parity model as crypto, booked and confirmed on chain (FX · CRYPTO page)'],
+    ['NEXT', 'FX options; cross-currency swaps; FX vol surface'],
     ['NEXT', 'CDS and credit options; wrong-way risk in CVA'],
   ]},
   { title: 'PHASE 3 · EQUITY & COMMODITY', status: 'PLANNED', items: [['NEXT', 'Equity and commodity derivatives on the same pricing and confirmation rails']] },

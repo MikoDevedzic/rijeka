@@ -8,7 +8,7 @@ const NAV = [
   { label: 'HOME',           path: '/command-center' },
   { label: 'BLOTTER',        path: '/blotter' },
   { label: 'CONFIGURATIONS', path: '/configurations/market-data/curves' },
-  { label: 'CRYPTO',         path: '/crypto' },
+  { label: 'FX · CRYPTO',    path: '/crypto' },
   { label: 'METHODOLOGY',    path: '/methodology' },
   { label: 'ROADMAP',        path: '/roadmap' },
 ]
@@ -159,7 +159,7 @@ function DeskHome({ demo, navigate }) {
       {showPath && (
         <div className="dh-path">
           <span className="dh-path-k">START HERE</span>
-          <Step n="1" done={trades.length > 0} text={`Book a swap${demo?.counterparty ? ` against ${demo.counterparty.name}` : ''}, or a BTC forward`} onClick={() => navigate('/blotter')} />
+          <Step n="1" done={trades.length > 0} text={`Book a swap${demo?.counterparty ? ` against ${demo.counterparty.name}` : ''}, an FX forward or a BTC forward`} onClick={() => navigate('/blotter')} />
           <Step n="2" done={confirmed > 0} text="Confirm it on Sepolia from the trade's CONFIRM tab" onClick={() => navigate('/blotter')} />
           <Step n="3" done={false} text="Verify the proof pack, trusting nothing of ours" href="https://rijeka.app/verify" />
         </div>
@@ -185,7 +185,7 @@ function DeskHome({ demo, navigate }) {
 
       <div className="dh-grid">
         <section className="dh-card">
-          <header><span>YOUR BOOK</span><span><button className="dh-link" onClick={() => navigate('/crypto')}>CRYPTO →</button> <button className="dh-link" onClick={() => navigate('/blotter')}>OPEN BLOTTER →</button></span></header>
+          <header><span>YOUR BOOK</span><span><button className="dh-link" onClick={() => navigate('/crypto')}>FX · CRYPTO →</button> <button className="dh-link" onClick={() => navigate('/blotter')}>OPEN BLOTTER →</button></span></header>
           <div className="dh-kpis">
             <Kpi label="TRADES" value={trades.length} loading={d.loading} />
             <Kpi label="PENDING" value={pending} tone={pending ? 'amber' : ''} loading={d.loading} />
@@ -439,7 +439,7 @@ function BootScreen({ steps, ready, sofr, name, role, onDone }) {
       <div className="boot-box">
         <div className="boot-greet">{greet}, {name.split('.')[0]}</div>
         <div className="boot-mark">R I J E K A</div>
-        <div className="boot-sub">WHERE THE TRADING DESK MEETS THE CHAIN · PHASE 1 · RATES + CRYPTO NDF LIVE</div>
+        <div className="boot-sub">WHERE THE TRADING DESK MEETS THE CHAIN · PHASE 1 · RATES, FX & CRYPTO FORWARDS LIVE</div>
         <ol className="boot-steps">
           {BOOT_STEPS.slice(0, shown).map(([k, label]) => {
             const st = all[k]
