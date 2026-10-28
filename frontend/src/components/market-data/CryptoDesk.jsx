@@ -90,16 +90,16 @@ export default function CryptoDesk() {
         </section>
 
         <section className="cd-card">
-          <h2>DISCOUNTING WITHOUT A CURVE</h2>
-          <p className="cd-note" style={{ marginTop: 0 }}>A currency with no OIS curve loaded under Rate curves is discounted flat at the rate below (continuous, % p.a.); every quote that uses it says so. Load a curve to replace it.</p>
+          <h2>FX DISCOUNTING CURVES</h2>
+          <p className="cd-note" style={{ marginTop: 0 }}>An FX forward discounts each side on its own OIS curve from Rate curves: USD on SOFR, EUR on €STR, and so on. A currency whose curve is not loaded in this account (demo accounts receive public-source data only) is discounted flat at the rate below until one is; every quote that falls back says so.</p>
           <table className="cd-table">
-            <thead><tr><th>CURRENCY</th><th>CURVE</th><th>LOADED</th><th>FLAT % P.A.</th><th></th></tr></thead>
+            <thead><tr><th>CURRENCY</th><th>OIS CURVE</th><th>LOADED IN THIS ACCOUNT</th><th>FALLBACK % P.A.</th><th></th></tr></thead>
             <tbody>
               {[...new Map(pairs.filter(p => !p.crypto).map(p => [p.base, p])).values()].map(p => (
                 <tr key={p.base}>
                   <td className="cd-asset">{p.base}</td>
                   <td className="cd-dim">{p.base_curve}</td>
-                  <td className="cd-dim">{p.base_curve_available ? 'yes' : <span style={{ color: 'var(--amber)' }}>no · {p.base_fallback}</span>}</td>
+                  <td className="cd-dim">{p.base_curve_available ? <span style={{ color: 'var(--accent)' }}>yes · discounts on {p.base_curve}</span> : <span style={{ color: 'var(--amber)' }}>no · {p.base_fallback}</span>}</td>
                   <td><input className="cd-inp sm" value={flat[p.base] ?? ''} placeholder={p.base_flat_pct ?? ''} onChange={e => setFlat({ ...flat, [p.base]: e.target.value })} /></td>
                   <td><button className="cd-btn sm" onClick={() => saveFlat(p.base)} disabled={!!busy}>{busy === 'flat' + p.base ? '…' : 'SET'}</button></td>
                 </tr>))}
