@@ -1348,7 +1348,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           {/* 3D Vol surface — swaption SABR or cap vol surface */}
           {IS_SWPN && (
             <div ref={volWrapRef}
-              style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'#0A0A0E',
+              style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'var(--bg-deep)',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}
 >
               <div style={{position:'absolute',top:5,left:8,fontSize:'0.5rem',
@@ -1361,7 +1361,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   onClick={()=>setVolMode('rotate')}
                   style={{padding:'3px 8px',fontSize:'0.5rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:"'IBM Plex Mono',monospace",
-                    border: volMode==='rotate'?'1px solid rgba(74,154,212,.5)':'1px solid #1a1c26',
+                    border: volMode==='rotate'?'1px solid rgba(74,154,212,.5)':'1px solid var(--panel-3)',
                     color: volMode==='rotate'?'var(--blue)':'var(--text-mute)',
                     background: volMode==='rotate'?'rgba(74,154,212,.07)':'transparent'}}>
                   ⟳ ROTATE
@@ -1370,7 +1370,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   onClick={()=>setVolMode(m=>m==='reshape'?'rotate':'reshape')}
                   style={{padding:'3px 8px',fontSize:'0.5rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:"'IBM Plex Mono',monospace",
-                    border: volMode==='reshape'?'1px solid rgba(240,160,32,.5)':'1px solid #1a1c26',
+                    border: volMode==='reshape'?'1px solid rgba(240,160,32,.5)':'1px solid var(--panel-3)',
                     color: volMode==='reshape'?'var(--amber)':'var(--text-mute)',
                     background: volMode==='reshape'?'rgba(240,160,32,.07)':'transparent'}}>
                   ✦ {volMode==='reshape'?'RESHAPING...':'RESHAPE'}
@@ -1408,7 +1408,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           )}
           {IS_CAPFLOOR && (
             <div ref={capVolWrapRef}
-              style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'#0A0A0E',
+              style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'var(--bg-deep)',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}>
               <div style={{position:'absolute',top:5,left:8,fontSize:'0.5rem',
                 color:'var(--amber)',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
@@ -1442,7 +1442,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
           {/* Joint P&L attribution — swaption only */}
           {IS_SWPN && jointResult && (
-            <div style={{flexShrink:0,borderTop:'1px solid var(--border)',background:'#000'}}>
+            <div style={{flexShrink:0,borderTop:'1px solid var(--border)',background:'var(--bg-deep)'}}>
               <div style={{padding:'6px 14px 4px',display:'flex',alignItems:'center',gap:'10px'}}>
                 <span style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'.08em',
                   color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>
@@ -1466,7 +1466,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                    c:Math.abs(jointResult.dCross)<500?'var(--text-dim)':'var(--red)',
                    s:'joint − sum (non-linear)'},
                 ].map(({l,v,c,s}) => (
-                  <div key={l} style={{background:'#050505',padding:'8px 10px'}}>
+                  <div key={l} style={{background:'var(--bg-deep)',padding:'8px 10px'}}>
                     <div style={{fontSize:'0.6875rem',fontWeight:600,letterSpacing:'.08em',
                       color:'var(--text-mute)',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:3}}>{l}</div>
                     <div style={{fontSize:'1rem',fontWeight:700,color:v!=null?c:'var(--text-mute)',
@@ -1679,7 +1679,7 @@ function SwaptionDecayChart({ result, expiry }) {
     const CW = W - PAD.l - PAD.r
     const CH = H - PAD.t - PAD.b
 
-    ctx.fillStyle = '#0D0F17'; ctx.fillRect(0,0,W,H)
+    ctx.fillStyle = 'var(--panel-2)'; ctx.fillRect(0,0,W,H)
 
     // Generate decay curve using Bachelier time value approximation
     // V(t) ≈ NPV × sqrt((T-t)/T) — approximate convex decay
@@ -3204,7 +3204,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                   <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--text-dim)',marginBottom:'6px'}}>
                     THETA DECAY PROFILE — time value remaining
                   </div>
-                  <div style={{border:'1px solid var(--border)',borderRadius:'2px',background:'#0D0F17',overflow:'hidden',height:'90px'}}>
+                  <div style={{border:'1px solid var(--border)',borderRadius:'2px',background:'var(--panel-2)',overflow:'hidden',height:'90px'}}>
                     <SwaptionDecayChart result={swaptionResult} expiry={swaptionExpiry}/>
                   </div>
                 </div>
@@ -4060,7 +4060,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
         )}
         <div className='tbw-footer tbw-no-drag'>
             {err&&<div className='tbw-error'>{err}</div>}
-            {activeTab!=='scenario' && <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid var(--border)',background:'#050505',padding:'5px 14px',gap:'0',marginBottom:'6px'}}>
+            {activeTab!=='scenario' && <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid var(--border)',background:'var(--bg-deep)',padding:'5px 14px',gap:'0',marginBottom:'6px'}}>
               {(()=>{
                 const fmtV = v => v!=null ? (v>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(v)).toLocaleString('en-US') : '—'
                 const fmtBp = v => v!=null ? v.toFixed(1)+'bp' : '—'
@@ -4151,7 +4151,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               ) : (
                 <>
                   <button className='tbw-btn-cancel' onClick={onClose}>CANCEL</button>
-                  <button className='tbw-btn-book' onClick={isCurrency ? handleBookCurrency : handleBook} disabled={booking||pricing} style={xvaResult?.xva?{background:'var(--accent)',color:'#000'}:{}}>
+                  <button className='tbw-btn-book' onClick={isCurrency ? handleBookCurrency : handleBook} disabled={booking||pricing} style={xvaResult?.xva?{background:'var(--accent)',color:'var(--bg-deep)'}:{}}>
                     {booking?(bookingStep||'BOOKING...'):xvaResult?.xva?<XvaBookLabel xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>:'▶ BOOK TRADE'}
                   </button>
                 </>
