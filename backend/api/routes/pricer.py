@@ -523,10 +523,11 @@ def price_trade(
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
 
-    # Digital-asset forwards have no legs: priced from trade.terms (api/routes/crypto.py)
-    if str(trade.instrument_type or "").upper() == "CRYPTO_FORWARD":
-        from api.routes.crypto import price_booked
-        return price_booked(trade, db, user, val_date)
+    # Currency trades (FX spot / forward / NDF, crypto forwards) have no legs:
+    # priced from trade.terms on one model (api/routes/currencies.py)
+    from api.routes.currencies import CURRENCY_INSTRUMENTS, price_booked as _price_currency
+    if str(trade.instrument_type or "").upper() in CURRENCY_INSTRUMENTS:
+        return _price_currency(trade, db, user, val_date)
 
     orm_legs = (
         db.query(TradeLeg)

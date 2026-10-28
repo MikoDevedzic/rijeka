@@ -255,6 +255,71 @@ _UPPER = ("digital_asset", "option_type", "exercise_style", "settlement_currency
 _NUMERIC = ("notional_amount", "strike_price", "premium_amount", "forward_price")
 
 
+# ── Currency products: FX spot, forward, NDF ─────────────────────────────
+#
+# One record shape for a deliverable or non-deliverable forward on a
+# currency pair, quoted as the market quotes it (EURUSD: USD per EUR; USDJPY:
+# JPY per USD). The booker states BUY or SELL of the base currency in
+# trade.terms.direction; the record names buyer and seller of the base by
+# LEI so both bookings hash identically. Spot is a forward with a near value
+# date. An NDF names the settlement currency, the fixing source and the
+# fixing date; a deliverable forward does not.
+
+FX_INSTRUMENTS = ("FX_SPOT", "FX_FORWARD", "NDF")
+
+_FX_FIELDS = (
+    "currency_pair",            # EURUSD
+    "base_currency", "quote_currency",
+    "base_notional",            # amount of the base currency
+    "quote_notional",           # base_notional * forward_rate, stated so both sides agree the cash
+    "forward_rate",             # contract rate, quote per base (for spot: the dealt rate)
+    "value_date",               # settlement date
+    "settlement_type",          # DELIVERABLE | NON_DELIVERABLE
+    "settlement_currency",      # NDF only
+    "fixing_source",            # NDF only, e.g. "WM/Reuters 4pm London", "BCB PTAX"
+    "fixing_date",              # NDF only
+    "calculation_agent",        # LEI, or null (both parties)
+)
+_FX_REQUIRED = ("currency_pair", "base_currency", "quote_currency", "base_notional", "forward_rate",
+                "value_date", "settlement_type")
+_FX_NDF_REQUIRED = ("settlement_currency", "fixing_source", "fixing_date")
+_FX_UPPER = ("currency_pair", "base_currency", "quote_currency", "settlement_type", "settlement_currency")
+_FX_NUMERIC = ("base_notional", "quote_notional", "forward_rate")
+
+
+def _fx_product_v2(trade: Any, own: str, cp: str) -> dict:
+    itype = str(_get(trade, "instrument_type") or "").upper()
+    terms = dict(_get(trade, "terms") or {})
+    missing = [f for f in _FX_REQUIRED if terms.get(f) in (None, "")]
+    st = str(terms.get("settlement_type") or "").upper()
+    if st == "NON_DELIVERABLE" or itype == "NDF":
+        missing += [f for f in _FX_NDF_REQUIRED if terms.get(f) in (None, "")]
+    if missing:
+        raise ValueError(f"{itype} record needs {', '.join(missing)} in trade.terms — both parties must state them")
+    if st not in ("DELIVERABLE", "NON_DELIVERABLE"):
+        raise ValueError("settlement_type must be DELIVERABLE or NON_DELIVERABLE")
+    if itype == "NDF" and st != "NON_DELIVERABLE":
+        raise ValueError("an NDF is NON_DELIVERABLE")
+    base, quote = str(terms["base_currency"]).upper(), str(terms["quote_currency"]).upper()
+    if str(terms["currency_pair"]).upper() != base + quote:
+        raise ValueError("currency_pair must be base_currency followed by quote_currency")
+    if Decimal(str(terms["base_notional"])) <= 0 or Decimal(str(terms["forward_rate"])) <= 0:
+        raise ValueError("base_notional and forward_rate must be positive")
+    buyer, seller = _sides(terms.get("direction"), own, cp, pays=("BUY", "LONG"), gets=("SELL", "SHORT"))
+    out = {"product": "FX_SPOT" if itype == "FX_SPOT" else "FX_NDF" if st == "NON_DELIVERABLE" else "FX_FORWARD",
+           "buyer": buyer, "seller": seller}
+    if terms.get("quote_notional") in (None, ""):
+        terms["quote_notional"] = str(Decimal(str(terms["base_notional"])) * Decimal(str(terms["forward_rate"])))
+    for f in _FX_FIELDS:
+        v = terms.get(f)
+        if isinstance(v, str) and f in _FX_UPPER:
+            v = v.upper()
+        if f in _FX_NUMERIC and v not in (None, ""):
+            v = _num_str(v)
+        out[f] = normalise(v)
+    return out
+
+
 def _crypto_product_v2(trade: Any, own: str, cp: str) -> dict:
     itype = str(_get(trade, "instrument_type") or "").upper()
     terms = dict(_get(trade, "terms") or {})
@@ -282,14 +347,15 @@ def _canonical_v2(trade: Any, legs: Iterable[Any], own_entity: Any, counterparty
     own, cp = _lei(own_entity, "own entity"), _lei(counterparty, "counterparty")
     if own == cp:
         raise ValueError("both parties have the same LEI")
-    if str(_get(trade, "instrument_type") or "").upper() in CRYPTO_INSTRUMENTS:
+    itype = str(_get(trade, "instrument_type") or "").upper()
+    if itype in CRYPTO_INSTRUMENTS or itype in FX_INSTRUMENTS:
         return {
             "schema": "rijeka-trade",
             "schema_version": 2,
             "uti": normalise(_get(trade, "uti")),
             "parties": sorted([own, cp]),
             "trade": _pick(trade, TRADE_FIELDS_V2),
-            "product": _crypto_product_v2(trade, own, cp),
+            "product": _crypto_product_v2(trade, own, cp) if itype in CRYPTO_INSTRUMENTS else _fx_product_v2(trade, own, cp),
         }
     out_legs = []
     for l in legs:

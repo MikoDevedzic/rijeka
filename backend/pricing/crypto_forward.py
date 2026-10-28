@@ -83,23 +83,16 @@ def price_crypto_forward(
     if settlement_date <= valuation_date:
         raise ValueError("settlement_date must be after the valuation date")
 
-    sign = 1.0 if d == "BUY" else -1.0
-    t = year_fraction(valuation_date, settlement_date)
-    df_usd = float(usd_curve.df(settlement_date))
-    df_asset = math.exp(-asset_rate * t)
-    F = fair_forward(spot, df_usd, asset_rate, t)
-    K = float(forward_price) if forward_price is not None else F
-    npv = sign * notional_amount * (F - K) * df_usd
-
-    usd_zero = -math.log(df_usd) / t if df_usd > 0 else 0.0
-    implied_basis = (F / spot - 1.0) / t
-    # dNPV/dS = sign * N * DF_USD * dF/dS = sign * N * DF_USD * (F/S)
-    delta_usd_per_pct = sign * notional_amount * df_usd * F / spot * spot * 0.01
-    delta_asset_units = sign * notional_amount * df_usd * F / spot
-    # +1bp on USD rates: DF_USD -> DF_USD*exp(-1e-4 t), so F -> F/exp(-1e-4 t)
-    bump = math.exp(-1e-4 * t)
-    npv_up = sign * notional_amount * (F / bump - K) * df_usd * bump
-    rho = npv_up - npv
+    # The digital asset is the base currency of a BASE/USD pair; everything
+    # else is the currency forward (pricing/currency_forward.py).
+    from pricing.currency_forward import price_currency_forward
+    r = price_currency_forward(base_currency=digital_asset, quote_currency="USD", base_notional=notional_amount,
+                               forward_rate=forward_price, spot=spot, valuation_date=valuation_date,
+                               settlement_date=settlement_date, quote_curve=usd_curve, base_rate=asset_rate,
+                               direction=d, pip=1.0)
+    t, df_usd, df_asset, F, K, npv = r.t, r.df_quote, r.df_base, r.forward, r.forward_rate, r.npv
+    usd_zero, implied_basis = r.quote_rate, r.implied_carry
+    delta_usd_per_pct, delta_asset_units, rho = r.delta_quote_per_pct, r.delta_base_units, r.rho_quote_per_bp
 
     return CryptoForwardResult(
         digital_asset=str(digital_asset).upper(), direction=d, notional_amount=float(notional_amount),
