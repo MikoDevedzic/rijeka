@@ -59,6 +59,20 @@ def _snapshot(db: Session, uid, curve_id: str) -> Optional[dict]:
     return {"curve_id": row.curve_id, "valuation_date": row.valuation_date.isoformat(), "quotes": quotes}
 
 
+def _headlines(db: Session, n: int = 8) -> list[dict]:
+    """The newest public headlines (title, source, link): what the NEWS room shows."""
+    try:
+        rows = db.execute(text(
+            "SELECT title, source, url, published_at FROM news_items "
+            "ORDER BY coalesce(published_at, created_at) DESC LIMIT :n"), {"n": n}).all()
+        return [{"title": r.title, "source": r.source, "url": r.url,
+                 "published_at": r.published_at.isoformat() if r.published_at else None} for r in rows]
+    except Exception as e:
+        log.debug("pulse headlines failed: %s", e)
+        db.rollback()
+        return []
+
+
 def _chain() -> dict:
     out: dict[str, Any] = {"anchored": False}
     try:
@@ -84,6 +98,7 @@ def build(db: Session) -> dict:
         "confirmations": _scalar(db, "SELECT count(*) FROM trade_events "
                                      "WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL"),
         "news_24h": _scalar(db, "SELECT count(*) FROM news_items WHERE created_at > now() - interval '24 hours'"),
+        "headlines": _headlines(db),
         "chain": _chain(),
         "demo": bool(os.getenv("RIJEKA_DEMO_PROVISION")),
     }
