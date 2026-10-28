@@ -170,9 +170,9 @@ Validation reports and Python test packages in `model_validation/`.
 | XCCY Swap | Sprint 10 |
 | Bermudan Swaption | Sprint 11 |
 
-### Phase 2 — FX & Credit
+### Phase 2 — FX & Credit (in progress)
 
-FX spot/forward/options, CDS, credit options, wrong-way risk in CVA.
+FX spot, forwards and NDFs are live on the same interest-rate-parity model as the crypto forwards (FX · CRYPTO page; `pricing/currency_forward.py`). Next: FX options and cross-currency swaps; CDS, credit options, wrong-way risk in CVA.
 
 ### Phase 3 — Equity & Commodity
 

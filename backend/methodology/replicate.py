@@ -53,11 +53,15 @@ PRODUCTS = [
      "default": "USD 10m · 5y quarterly cap on SOFR · strike at the ATM forward · 85bp normal vol",
      "formula": "Cap = Σ caplets; caplet = N·τ·DF(end)·Bachelier_call(F, K, T_fix, σ)",
      "replication": "xlsx"},
-    {"id": "crypto_ndf", "name": "Crypto NDF", "group": "Digital assets", "section": "12",
-     "default": "BTC/USD · 10 BTC · 3-month non-deliverable forward · strike at the forward",
-     "formula": "F = S·DF_USD(T)/DF_BTC(T) (covered interest parity with a BTC funding rate); NPV = (F − K)·N·DF_USD(T)",
+    {"id": "fx_forward", "name": "FX forward (EURUSD)", "group": "FX & digital assets", "section": "12",
+     "default": "EUR/USD · EUR 10m · 3-month deliverable forward · rate at the fair forward",
+     "formula": "F = S·DF_EUR(T)/DF_USD(T) (covered interest parity, each currency on its own curve); NPV_USD = ±N_EUR·(F − K)·DF_USD(T)",
      "replication": "xlsx"},
-    {"id": "crypto_ndo", "name": "Crypto NDO (European option)", "group": "Digital assets", "section": "12",
+    {"id": "crypto_ndf", "name": "Crypto NDF", "group": "FX & digital assets", "section": "12",
+     "default": "BTC/USD · 10 BTC · 3-month non-deliverable forward · strike at the forward",
+     "formula": "F = S·DF_BTC(T)/DF_USD(T) (cash-and-carry with a BTC funding rate, the same model as an FX forward); NPV = (F − K)·N·DF_USD(T)",
+     "replication": "xlsx"},
+    {"id": "crypto_ndo", "name": "Crypto NDO (European option)", "group": "FX & digital assets", "section": "12",
      "default": "BTC/USD · 10 BTC · 3-month call · strike at the forward · 60% lognormal vol",
      "formula": "Black-76: C = DF·[F·N(d₁) − K·N(d₂)], d₁ = [ln(F/K) + ½σ²T]/(σ√T), d₂ = d₁ − σ√T",
      "replication": "xlsx"},
@@ -382,6 +386,41 @@ def crypto_ndf_workbook(mkt: Market):
     return wb, 0.0
 
 
+def fx_forward_workbook(mkt: Market):
+    spot, r_eur = 1.1133, 0.025
+    wb = Workbook()
+    _readme(wb, "FX forward", [
+        "Default trade: buy EUR 10m three months forward against USD, dealt at the fair forward (so the NPV is zero on day one). "
+        "Change the rate K or the spot on the Inputs sheet to see the mark.",
+        "Covered interest parity, each currency on its own curve: F = S·DF_EUR(T)/DF_USD(T), NPV_USD = N_EUR·(F − K)·DF_USD(T). "
+        "USD discounts off the SOFR curve on the Curve sheet; EUR is discounted flat here at 2.50% (the ECB deposit rate, illustrative) "
+        "because the hosted demo carries no EUR OIS curve; on a desk, DF_EUR comes from the €STR curve the same way.",
+        "This is the same formula as the crypto NDF with EUR in place of the digital asset (pricing/currency_forward.py). "
+        "The canonical on-chain record for this trade is the FX product in chain/canonical.py.",
+    ], mkt)
+    _curve_sheet(wb, mkt)
+    val = mkt.valuation_date
+    T = date(val.year + (val.month + 2) // 12, (val.month + 2) % 12 + 1, min(val.day, 28))
+    ws = wb.create_sheet("Inputs", 1)
+    ws["A1"] = "EUR/USD spot (USD per EUR)"; ws["B1"] = spot; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
+    ws["A2"] = "Notional (EUR)"; ws["B2"] = 10_000_000; ws["B2"].fill = IN; ws["B2"].number_format = "#,##0"
+    ws["A3"] = "Settlement date"; ws["B3"] = T; ws["B3"].number_format = "yyyy-mm-dd"; ws["B3"].fill = IN
+    ws["A4"] = "T (ACT/365)"; ws["B4"] = "=(B3-ValDate)/365"
+    ws["A5"] = "USD DF(T) from the SOFR curve"; ws["B5"] = f"={DF('B3')}"; ws["B5"].number_format = "0.000000"
+    ws["A6"] = "EUR rate (cont., p.a., flat)"; ws["B6"] = r_eur; ws["B6"].fill = IN; ws["B6"].number_format = "0.00%"
+    ws["A7"] = "EUR DF(T) = exp(−r_EUR·T)"; ws["B7"] = "=EXP(-B6*B4)"; ws["B7"].number_format = "0.000000"
+    ws["A8"] = "Forward F = S·DF_EUR/DF_USD"; ws["B8"] = "=B1*B7/B5"; ws["B8"].number_format = "0.00000"
+    ws["A9"] = "Forward points (F − S)·10⁴"; ws["B9"] = "=(B8-B1)*10000"; ws["B9"].number_format = "0.0"
+    ws["A11"] = "Rate K (USD per EUR)"; ws["B11"] = "=B8"; ws["B11"].fill = IN; ws["B11"].number_format = "0.00000"
+    ws["A12"] = "NPV_USD (formulas) = N·(F − K)·DF_USD"; ws["B12"] = "=B2*(B8-B11)*B5"; ws["B12"].number_format = "#,##0.00"
+    t = (T - val).days / 365
+    F = spot * math.exp(-r_eur * t) / mkt.curve.df(T)
+    ws["A13"] = "Reference forward (Rijeka)"; ws["B13"] = F; ws["B13"].fill = RJ; ws["B13"].number_format = "0.00000"
+    ws["A15"] = "Positive USD rates above EUR rates put the forward above spot: borrow USD, buy EUR today, lend EUR; the forward repays the USD interest."
+    _widths(ws, [40, 18])
+    return wb, 0.0
+
+
 def crypto_ndo_workbook(mkt: Market):
     spot_px, r_btc, sigma = 65_000.0, 0.03, 0.60
     wb = Workbook()
@@ -411,7 +450,7 @@ def crypto_ndo_workbook(mkt: Market):
 
 
 BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook,
-            "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook}
+            "fx_forward": fx_forward_workbook, "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook}
 
 
 def build(product: str, mkt: Market) -> tuple[bytes, float]:
