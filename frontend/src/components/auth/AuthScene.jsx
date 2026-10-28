@@ -35,12 +35,13 @@ export default function AuthScene({ children, eyebrow }) {
       <section className="au-scene" aria-hidden="true">
         <div className="au-scene-top">
           <div className="au-mark">RIJEKA</div>
-          <div className="au-sub">OPEN-SOURCE DERIVATIVES DESK · PHASE 1 · RATES</div>
+          <div className="au-sub">WHERE THE TRADING DESK MEETS THE CHAIN</div>
+          <div className="au-phase"><i />PHASE 1 · RATES LIVE · CREDIT, FX, EQUITY, COMMODITY, CRYPTO NEXT</div>
         </div>
 
         <div className="au-headline">
           <h1>Price it.<br />Confirm it on-chain.<br /><span>Verify it without us.</span></h1>
-          <p>A trading desk you can read all the way down: pricing and XVA in Python, bilateral confirmation signed by both parties and anchored on Ethereum, and a verifier that trusts nothing of ours.</p>
+          <p>An open-source derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects. Rates, credit, FX, equities, commodities and crypto, free for everyone.</p>
         </div>
 
         <Scenes pulse={pulse} failed={failed} />

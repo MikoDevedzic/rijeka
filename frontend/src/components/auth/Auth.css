@@ -14,6 +14,8 @@
 .au-scene-top { display:flex; flex-direction:column; gap:6px; animation:auIn .6s ease both; }
 .au-mark { font-size:clamp(1.3rem, 2.2vw, 1.7rem); font-weight:800; letter-spacing:0.42em; color:var(--accent); text-shadow:0 0 36px rgba(13,212,168,0.35); }
 .au-sub { font-family:var(--mono); font-size:0.62rem; letter-spacing:0.3em; color:var(--text-dim); }
+.au-phase { display:inline-flex; align-items:center; gap:8px; margin-top:6px; padding:4px 10px; border:1px solid var(--border-hi); border-radius:999px; font-family:var(--mono); font-size:0.56rem; letter-spacing:0.18em; color:var(--text-dim); width:max-content; max-width:100%; }
+.au-phase i { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); flex-shrink:0; }
 
 .au-headline { margin:clamp(14px, 3vh, 36px) 0; max-width:620px; animation:auIn .7s ease .1s both; }
 .au-headline h1 { font-size:clamp(1.7rem, 3.3vw, 2.8rem); line-height:1.08; font-weight:600; letter-spacing:-0.01em; color:var(--text-hi); margin:0 0 14px; }

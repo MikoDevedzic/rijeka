@@ -1,6 +1,6 @@
 # Rijeka
 
-Institutional-grade derivatives pricing and risk — open source.
+**Where the trading desk meets the chain.** An open-source derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects. Rates, credit, FX, equities, commodities and crypto, free for everyone.
 
 Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging market participants, and academic researchers operate blind — without the tools to price, hedge, or understand the true cost of a trade. Rijeka exists to change that.
 
