@@ -128,8 +128,11 @@ def test_pair_route_prices_eurusd_from_snapshots():
     import main
     spot_row = MagicMock(valuation_date=VAL, quotes=[{"tenor": "SPOT", "rate": 1.1133}], source="IMPORT")
     db = MagicMock()
+    curve_row = MagicMock(valuation_date=VAL, quotes=[{"tenor": "1Y", "rate": 2.0}], source="MANUAL")
     def execute(sql, params=None):
-        r = MagicMock(); r.first.return_value = spot_row if (params or {}).get("c", "").endswith("_SPOT") else None; return r
+        r = MagicMock(); c = (params or {}).get("c", "")
+        r.first.return_value = spot_row if c.endswith("_SPOT") else curve_row if c == "EUR_ESTR" else None
+        return r
     db.execute.side_effect = execute
     main.app.dependency_overrides[currencies.get_db] = lambda: db
     main.app.dependency_overrides[currencies.verify_token] = lambda: {"sub": str(uuid4()), "user_metadata": {"role": "trader"}}
@@ -158,3 +161,26 @@ def test_fx_feed_parsing_inverts_usd_based_rates():
     with patch.object(currencies.httpx, "Client", return_value=client):
         out = currencies.fetch_fx_spot()
     assert out["EURUSD"] == pytest.approx(1 / 0.89823) and out["USDJPY"] == 157.96 and out["AUDUSD"] == pytest.approx(1 / 1.4219)
+
+
+def test_pair_route_falls_back_to_a_flat_rate_when_the_base_curve_is_missing():
+    from api.routes import currencies
+    import main
+    spot_row = MagicMock(valuation_date=VAL, quotes=[{"tenor": "SPOT", "rate": 1.1133}], source="IMPORT")
+    db = MagicMock()
+    def execute(sql, params=None):
+        r = MagicMock(); c = (params or {}).get("c", "")
+        r.first.return_value = spot_row if c.endswith("_SPOT") else None      # no EUR_ESTR, no EUR_FLAT
+        return r
+    db.execute.side_effect = execute
+    main.app.dependency_overrides[currencies.get_db] = lambda: db
+    main.app.dependency_overrides[currencies.verify_token] = lambda: {"sub": str(uuid4()), "user_metadata": {"role": "trader"}}
+    from fastapi.testclient import TestClient
+    with patch.object(currencies, "_curve", side_effect=lambda db, uid, cid, vd: _c(0.04)):
+        r = TestClient(main.app).post("/api/currency/forward/price", json={
+            "pair": "EURUSD", "base_notional": 1_000_000, "settlement_date": SET.isoformat(), "valuation_date": VAL.isoformat()})
+    main.app.dependency_overrides.clear()
+    assert r.status_code == 200, r.text
+    b = r.json()
+    assert b["base_discounting"].startswith("flat 2.5% (central-bank policy rate")
+    assert b["df_base"] == pytest.approx(math.exp(-0.025 * b["t"]))

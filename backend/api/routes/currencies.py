@@ -46,6 +46,12 @@ CURVE_FOR = {"USD": "USD_SOFR", "EUR": "EUR_ESTR", "GBP": "GBP_SONIA", "JPY": "J
 PIP = {"USDJPY": 0.01}
 FX_FEED_URL = "https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP,JPY,CHF,AUD,CAD"
 FX_FEED_NAME = "ECB reference rates (frankfurter.dev, public)"
+# When an account has no OIS curve for a currency (the hosted demo copies only
+# public-source snapshots), discount it flat at a rate the desk can set
+# ({CCY}_FLAT, MANUAL) or, failing that, at the central bank's policy rate.
+# Every response says which one it used; a flat curve is illustrative.
+POLICY_RATE_PCT = {"EUR": 2.50, "GBP": 3.75, "JPY": 1.25, "CHF": 0.00, "AUD": 4.60, "CAD": 2.25, "USD": 4.00}
+POLICY_RATE_NOTE = "central-bank policy rate, late October 2026, illustrative"
 FIXING_DEFAULT = {"USDJPY": "WM/Reuters 4pm London", "BTCUSD": "CME CF BRR", "ETHUSD": "CME CF ETHUSD_RR", "SOLUSD": "Coinbase SOL-USD"}
 
 
@@ -125,7 +131,12 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
         f = latest_snapshot(db, user_id, f"{base}_FUNDING")
         out.update(base_curve=None, funding_pct=_quote(f, "FLAT"), funding_as_of=f.valuation_date.isoformat() if f else None)
     else:
-        out.update(base_curve=CURVE_FOR.get(base))
+        bc = CURVE_FOR.get(base)
+        has = latest_snapshot(db, user_id, bc) is not None if bc else False
+        flat = latest_snapshot(db, user_id, f"{base}_FLAT")
+        out.update(base_curve=bc, base_curve_available=has,
+                   base_flat_pct=_quote(flat, "FLAT") if flat else None,
+                   base_fallback=None if has else (f"flat {_quote(flat, 'FLAT')}% ({base}_FLAT)" if flat else f"flat {POLICY_RATE_PCT.get(base)}% ({POLICY_RATE_NOTE})"))
     return out
 
 
@@ -221,8 +232,14 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
             kw["base_rate"], b_src = st["funding_pct"] / 100, f"snapshot {st['funding_as_of']}"
         else:
             kw["base_rate"], b_src = 0.0, "default 0%"
-    else:
+    elif st.get("base_curve_available"):
         kw["base_curve"], b_src = _curve(db, user_id, st["base_curve"], val_date), st["base_curve"]
+    else:
+        flat = st.get("base_flat_pct")
+        rate = flat if flat is not None else POLICY_RATE_PCT.get(base)
+        if rate is None:
+            raise HTTPException(status_code=422, detail=f"No {st['base_curve']} snapshot and no flat rate for {base}.")
+        kw["base_rate"], b_src = float(rate) / 100, st["base_fallback"]
     try:
         r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
                                    forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
@@ -245,6 +262,28 @@ def price_forward(req: CurrencyPriceRequest, db: Session = Depends(get_db), user
     return _price(db, user["sub"], pair, shape=req.shape, base_notional=req.base_notional, settlement=req.settlement_date,
                   val_date=val_date, K=req.forward_rate, direction=req.direction, spot_override=req.spot,
                   base_rate_pct=req.base_rate_pct)
+
+
+class FlatRateRequest(BaseModel):
+    currency: str
+    rate_pct: float = Field(..., description="flat continuous zero used when the currency has no OIS curve, % p.a.")
+
+
+@router.post("/flat")
+def set_flat(req: FlatRateRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    _require_trader(user)
+    ccy = req.currency.upper()
+    if ccy not in CURVE_FOR:
+        raise HTTPException(status_code=422, detail=f"currency must be one of {', '.join(CURVE_FOR)}")
+    from sqlalchemy import text
+    uid, cid, today = uuid.UUID(user["sub"]), f"{ccy}_FLAT", date.today()
+    quotes = [{"tenor": "FLAT", "quote_type": "FLAT", "rate": float(req.rate_pct), "enabled": True}]
+    db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u AND curve_id = :c AND valuation_date = :d"),
+               {"u": uid, "c": cid, "d": today})
+    db.execute(text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
+                    "VALUES (:c, :d, CAST(:q AS jsonb), 'MANUAL', :u, :u)"), {"c": cid, "d": today, "q": json.dumps(quotes), "u": uid})
+    db.commit()
+    return {"currency": ccy, "flat_pct": float(req.rate_pct)}
 
 
 CURRENCY_INSTRUMENTS = ("FX_SPOT", "FX_FORWARD", "NDF", "CRYPTO_FORWARD")
