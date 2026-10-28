@@ -128,7 +128,7 @@ def test_pair_route_prices_eurusd_from_snapshots():
     import main
     spot_row = MagicMock(valuation_date=VAL, quotes=[{"tenor": "SPOT", "rate": 1.1133}], source="IMPORT")
     db = MagicMock()
-    curve_row = MagicMock(valuation_date=VAL, quotes=[{"tenor": "1Y", "rate": 2.0}], source="MANUAL")
+    curve_row = MagicMock(valuation_date=VAL, quotes=[{"tenor": "1Y", "rate": 2.0}, {"tenor": "5Y", "rate": 2.2}], source="MANUAL")
     def execute(sql, params=None):
         r = MagicMock(); c = (params or {}).get("c", "")
         r.first.return_value = spot_row if c.endswith("_SPOT") else curve_row if c == "EUR_ESTR" else None
