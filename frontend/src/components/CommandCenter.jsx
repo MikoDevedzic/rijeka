@@ -184,7 +184,7 @@ function DeskHome({ demo, navigate }) {
 
       <div className="dh-grid">
         <section className="dh-card">
-          <header><span>YOUR BOOK</span><span><button className="dh-link" onClick={() => navigate('/configurations/market-data/crypto')}>FX · CRYPTO DATA →</button> <button className="dh-link" onClick={() => navigate('/blotter')}>OPEN BLOTTER →</button></span></header>
+          <header><span>YOUR BOOK</span><span><button className="dh-link" onClick={() => navigate('/configurations/market-data/crypto')}>FX · CRYPTO CURVES →</button> <button className="dh-link" onClick={() => navigate('/blotter')}>OPEN BLOTTER →</button></span></header>
           <div className="dh-kpis">
             <Kpi label="TRADES" value={trades.length} loading={d.loading} />
             <Kpi label="PENDING" value={pending} tone={pending ? 'amber' : ''} loading={d.loading} />
