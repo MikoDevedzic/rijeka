@@ -34,10 +34,11 @@ const PHASES = [
     ['NEXT', 'End-of-day batch: official close, P&L sign-off, archived snapshots and reports'],
     ['NEXT', 'Public API and Python SDK with the same contracts the UI uses'],
   ]},
-  { title: 'DIGITAL ASSETS', status: 'PARTIAL', items: [
+  { title: 'DIGITAL ASSETS', status: 'LIVE', items: [
     ['DONE', 'Crypto NDF / NDO in the canonical record (ISDA Digital Asset Derivatives Definitions vocabulary)'],
     ['DONE', 'Excel replications for crypto NDF and NDO (parity forward, Black-76)'],
-    ['NEXT', 'Crypto option pricing in the engine and the trade window; venue adapters for crypto OTC desks'],
+    ['DONE', 'Crypto non-deliverable forwards on BTC, ETH and SOL: public spot feed, funding rate, cash-and-carry pricer, booking, on-chain confirmation (Configurations → Digital assets)'],
+    ['NEXT', 'Crypto options in the engine and the page; venue adapters for crypto OTC desks'],
   ]},
   { title: 'PHASE 2 · FX & CREDIT', status: 'PLANNED', items: [
     ['NEXT', 'FX forwards, NDFs and options; cross-currency swaps'],

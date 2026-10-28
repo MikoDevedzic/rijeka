@@ -438,7 +438,7 @@ function BootScreen({ steps, ready, sofr, name, role, onDone }) {
       <div className="boot-box">
         <div className="boot-greet">{greet}, {name.split('.')[0]}</div>
         <div className="boot-mark">R I J E K A</div>
-        <div className="boot-sub">WHERE THE TRADING DESK MEETS THE CHAIN · PHASE 1 · RATES LIVE</div>
+        <div className="boot-sub">WHERE THE TRADING DESK MEETS THE CHAIN · PHASE 1 · RATES + CRYPTO NDF LIVE</div>
         <ol className="boot-steps">
           {BOOT_STEPS.slice(0, shown).map(([k, label]) => {
             const st = all[k]
