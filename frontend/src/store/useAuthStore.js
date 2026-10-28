@@ -29,6 +29,7 @@ export const useAuthStore = create((set, get) => ({
           get().provision(session)
         }
         if (event === 'SIGNED_OUT') {
+          try { sessionStorage.removeItem('rijeka.booted') } catch {}   // next sign-in boots again
           set({ profile: null, isNewSignup: false, demo: null })
         }
       }
@@ -75,6 +76,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   signOut: async () => {
+    try { sessionStorage.removeItem('rijeka.booted') } catch {}
     await supabase.auth.signOut()
     set({ session: null, profile: null, isNewSignup: false })
     window.location.href = '/'
