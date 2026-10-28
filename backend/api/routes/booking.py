@@ -411,9 +411,19 @@ def book_trade_atomic(
     role = (user.get("user_metadata") or {}).get("role", "viewer").lower()
     if role not in WRITE_ROLES:
         raise HTTPException(status_code=403, detail="Booking requires Trader or Admin role.")
+    return book_trade(db, uuid.UUID(user["sub"]), body, idempotency_key)
 
-    user_id = uuid.UUID(user["sub"])
 
+def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key: Optional[str] = None,
+               *, commit: bool = True, uti: Optional[str] = None) -> dict:
+    """
+    The atomic booking itself (trade + BOOKED event + legs), shared by
+    POST /api/book/trade and by booking the counterparty's side of a trade
+    they have just countersigned (api/routes/trade_cards.py). commit=False
+    leaves the transaction open so the caller can add to it (e.g. the
+    CONFIRMED event) and commit once; the caller must then roll back on error.
+    uti: set when the trade already has one (the other party's booking of it).
+    """
     # ── Idempotency short-circuit ─────────────────────────────
     if idempotency_key:
         try:
@@ -463,6 +473,7 @@ def book_trade_atomic(
             desk=body.desk,
             book=body.book,
             strategy=body.strategy,
+            uti=uti,
             user_id=user_id,
             latest_event_id=None,
             version_seq=0,
@@ -534,7 +545,8 @@ def book_trade_atomic(
                 result=result,
             ))
 
-        db.commit()
+        if commit:
+            db.commit()
         return result
 
     except IntegrityError as e:

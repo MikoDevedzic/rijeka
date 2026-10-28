@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useChatStore } from '../../store/useChatStore'
-import { hasWallet, connect, ensureChain, signTypedData, personalSign, sameAddress, shortAddress } from '../../lib/wallet'
+import { hasWallet, connect, ensureChain, signTypedData, personalSign, sameAddress, shortAddress, chainName } from '../../lib/wallet'
 import './TradeCard.css'
 
 // A trade shared into a room for confirmation. Everyone in the room sees the
 // agreed terms; the counterparty checks them against their own book and
 // countersigns with their own wallet. Rijeka never holds that key.
-
-const CHAINS = { 1: 'Ethereum', 11155111: 'Sepolia', 31337: 'local test chain' }
-const chainName = (id) => CHAINS[id] || `chain ${id}`
 
 function num(n) {
   const x = Number(n)
@@ -86,6 +83,7 @@ export default function TradeCard({ m }) {
             {state.confirmation.explorer_tx && <> · <a href={state.confirmation.explorer_tx} target="_blank" rel="noopener noreferrer">transaction ↗</a></>}
           </div>
         )}
+        {state?.side === 'COUNTERPARTY' && <YourBooking messageId={m.id} state={state} reload={load} />}
         {state?.side === 'COUNTERPARTY' && status === 'PENDING' && state.can_act && (
           signing
             ? <Countersign messageId={m.id} state={state} onDone={() => { setSigning(false); load() }} onCancel={() => setSigning(false)} reload={load} />
@@ -95,6 +93,36 @@ export default function TradeCard({ m }) {
           <div className="tc-sub">Waiting for {state.cp_firm} to countersign.</div>
         )}
       </div>
+    </div>
+  )
+}
+
+// The counterparty's own booking of this trade: where it is, or a button to create it.
+function YourBooking({ messageId, state, reload }) {
+  const { bookMirror } = useChatStore()
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState(null)
+  const [note, setNote] = useState(null)
+  if (state.your_booking) return (<>
+    <div className="tc-sub">In your blotter as <b style={{ color: 'var(--text)' }}>{state.your_booking.trade_ref}</b> · {state.your_booking.status}</div>
+    {note && <div className="tc-warn">{note}</div>}
+  </>)
+  if (state.book_note) return <div className="tc-sub">{state.book_note}</div>
+  if (!state.can_book) return null
+  const link = state.will_link
+  const go = async () => {
+    setBusy(true); setErr(null)
+    try { setNote((await bookMirror(messageId)).your_booking?.note); reload() } catch (e) { setErr(e.message) } finally { setBusy(false) }
+  }
+  return (
+    <div className="tc-register">
+      <button className="tc-btn primary" disabled={busy} onClick={go}>
+        {busy ? (link ? 'LINKING…' : 'BOOKING…') : link ? `LINK MY BOOKING ${link}` : 'BOOK IN MY BLOTTER'}
+      </button>
+      <span className="tc-sub">{link
+        ? `${link} matches this trade on every term: it takes the shared UTI and is confirmed, instead of a second booking.`
+        : 'Adds your side of this confirmed trade to your blotter: same UTI and terms, already confirmed.'}</span>
+      {err && <div className="tc-err">{err}</div>}
     </div>
   )
 }
@@ -139,9 +167,10 @@ function Countersign({ messageId, state, onDone, onCancel, reload }) {
   const [err, setErr] = useState(null)
   const [pasted, setPasted] = useState('')
   const [done, setDone] = useState(null)
+  const [bookIt, setBookIt] = useState(true)
 
   const submit = async (address, signature) => {
-    setDone(await countersign(messageId, { address, signature, trade_hash: state.current_hash }))
+    setDone(await countersign(messageId, { address, signature, trade_hash: state.current_hash, book_mirror: bookIt }))
     onDone()
   }
   const run = async (fn) => { setBusy(true); setErr(null); try { await fn() } catch (e) { setErr(e.message) } finally { setBusy(false) } }
@@ -186,7 +215,16 @@ function Countersign({ messageId, state, onDone, onCancel, reload }) {
     URL.revokeObjectURL(a.href)
   }
 
-  if (done) return <div className="tc-confirmed">✓ Countersigned and anchored.</div>
+  if (done) return (
+    <div className="tc-confirmed">
+      ✓ Countersigned and anchored.
+      {done.your_booking && (done.your_booking.how === 'LINKED'
+        ? <> Linked your booking <b>{done.your_booking.trade_ref}</b>: it now carries the shared UTI and is confirmed.</>
+        : <> Booked in your blotter as <b>{done.your_booking.trade_ref}</b>.</>)}
+      {done.your_booking?.note && <div className="tc-warn" style={{ marginTop: 6 }}>{done.your_booking.note}</div>}
+      {done.booking_error && <div className="tc-warn" style={{ marginTop: 6 }}>Not booked in your blotter: {done.booking_error}</div>}
+    </div>
+  )
   return (
     <div className="tc-sign">
       <div>
@@ -194,6 +232,12 @@ function Countersign({ messageId, state, onDone, onCancel, reload }) {
         on {chainName(sg.chain_id)}. Your signature and {state.booker_firm}'s together confirm the trade on-chain.
       </div>
       <div className="tc-digest">digest {sg.digest}</div>
+      <label className="tc-check">
+        <input type="checkbox" checked={bookIt} onChange={e => setBookIt(e.target.checked)} />
+        {state.match?.status === 'MATCH'
+          ? <>Link my booking {state.match.trade_ref} to it <span className="tc-sub">(it takes the shared UTI and is confirmed)</span></>
+          : <>Also book this trade in my blotter <span className="tc-sub">(your side: same UTI and terms, confirmed)</span></>}
+      </label>
       {err && <div className="tc-err">{err}</div>}
       <div className="tc-actions">
         <button className="tc-btn primary" disabled={busy || !hasWallet()} onClick={withWallet}

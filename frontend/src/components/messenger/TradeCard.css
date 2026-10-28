@@ -60,3 +60,5 @@
 }
 .tc-pick:hover { background: var(--panel-2); }
 .tc-pick .tc-chip { margin-left: auto; }
+.tc-check { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--text); cursor: pointer; }
+.tc-check input { accent-color: var(--accent); }

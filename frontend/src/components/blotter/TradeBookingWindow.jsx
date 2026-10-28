@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import CurveDesignerWindow from './CurveDesignerWindow'
 import LegDetailsTab from './LegDetailsTab'
-import { useTradesStore } from '../../store/useTradesStore'
+import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { supabase } from '../../lib/supabase'
 import { getSessionSafe } from '../../lib/session'
@@ -9,19 +9,24 @@ import './TradeBookingWindow.css'
 import XVATab from './XVATab'
 import { SendForConfirmation } from '../trade-window/SendForConfirmation'
 import { useSendStatus } from '../trade-window/useSendStatus'
+import { ConfirmPanel } from '../trade-window/ConfirmPanel'
+import FxCryptoPanel from '../trade-window/FxCryptoPanel'
+import { getAttestation, verifyTradeOnChain, getProofPack } from '../trade-window/booking'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
-const ASSET_CLASSES = ['RATES','FX','CREDIT','EQUITY','COMMODITY']
-const LIVE_AC       = ['RATES']
+const ASSET_CLASSES = ['RATES','FX','CRYPTO','CREDIT','EQUITY','COMMODITY']
+const LIVE_AC       = ['RATES','FX','CRYPTO']
 const INSTRUMENTS   = {
   RATES:     ['IR_SWAP','IR_SWAPTION','INTEREST_RATE_CAP','INTEREST_RATE_FLOOR','INTEREST_RATE_COLLAR'],
-  FX:        ['FX_FORWARD','FX_SWAP','NDF'],
+  FX:        ['FX_SPOT','FX_FORWARD','NDF','FX_SWAP'],
+  CRYPTO:    ['CRYPTO_FORWARD','CRYPTO_OPTION'],
   CREDIT:    ['CDS','CDS_INDEX','TOTAL_RETURN_SWAP','ASSET_SWAP'],
   EQUITY:    ['EQUITY_SWAP','VARIANCE_SWAP','DIVIDEND_SWAP','EQUITY_FORWARD'],
   COMMODITY: ['COMMODITY_SWAP','COMMODITY_BASIS_SWAP','ASIAN_COMMODITY_SWAP'],
 }
-const LIVE_INST   = { RATES: ['IR_SWAP', 'IR_SWAPTION', 'INTEREST_RATE_CAP', 'INTEREST_RATE_FLOOR', 'INTEREST_RATE_COLLAR'] }
+const LIVE_INST   = { RATES: ['IR_SWAP', 'IR_SWAPTION', 'INTEREST_RATE_CAP', 'INTEREST_RATE_FLOOR', 'INTEREST_RATE_COLLAR'],
+                      FX: ['FX_SPOT', 'FX_FORWARD', 'NDF'], CRYPTO: ['CRYPTO_FORWARD'] }
 const IR_STRUCTS  = ['VANILLA','OIS','BASIS','XCCY','ZERO_COUPON','STEP_UP','INFLATION_ZC','CMS','CMS_SPREAD']
 const LIVE_STRUCT = ['VANILLA','OIS','BASIS']
 const DAY_COUNTS  = ['ACT/360','ACT/365F','30/360','ACT/ACT ISDA']
@@ -1754,6 +1759,9 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [ac,     setAc]     = useState('RATES')
   const [inst,   setInst]   = useState('IR_SWAP')
   const [struct, setStruct] = useState('VANILLA')
+  // FX and digital assets: the panel prices and builds the trade body; the window owns parties, dates and buttons
+  const isCurrency = ac === 'FX' || ac === 'CRYPTO'
+  const fxRef = useRef(null)
   const [store,  setStore]  = useState('WORKING')
   const [ownEntityId, setOwnEntityId] = useState('')
   const [cpId,   setCpId]   = useState('')
@@ -1793,6 +1801,12 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [valDate,       setValDate]      = useState('')
   // VIEW MODE — set when opening existing trade from blotter
   const [viewTrade,     setViewTrade]    = useState(initialTrade || null)
+  // The trade's shared identifiers: its UTI, and the counterparty's own ref for it.
+  const theirRef = useTradesStore(s => viewTrade?.id ? s.theirRefs[viewTrade.id] : null)
+  const [utiCopied, setUtiCopied] = useState(false)
+  const copyUti = () => {
+    navigator.clipboard?.writeText(viewTrade.uti).then(() => { setUtiCopied(true); setTimeout(() => setUtiCopied(false), 1500) }).catch(() => {})
+  }
   const isViewMode = !!viewTrade
   // Counterparty on Rijeka: a pending trade goes to them for countersignature from the CONFIRM tab,
   // and the window follows their signature live.
@@ -1801,6 +1815,35 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     fetchTrades()
   })
   const cpSigns = !!sendConf.status?.counterparty?.on_network
+
+  // A trade past PENDING: its on-chain record (hash, both signatures, block), loaded when CONFIRM opens.
+  const [chainRec, setChainRec] = useState(null)       // {attestation, on_chain} | {error}
+  const [verifying, setVerifying] = useState(false)
+  const [verifyResult, setVerifyResult] = useState(null)
+  const showRecord = activeTab === 'confirm' && viewTrade?.id && viewTrade.status !== 'PENDING'
+  useEffect(() => {
+    if (!showRecord || chainRec) return
+    let live = true
+    getAttestation(viewTrade.id).then(r => live && setChainRec(r)).catch(e => live && setChainRec({ error: e.message || String(e) }))
+    return () => { live = false }
+  }, [showRecord, viewTrade?.id, chainRec])
+  const verifyRecord = async () => {
+    if (!viewTrade?.id || verifying) return
+    setVerifying(true); setVerifyResult(null)
+    try { setVerifyResult(await verifyTradeOnChain(viewTrade.id)) }
+    catch (e) { setVerifyResult({ error: e.message || String(e) }) }
+    finally { setVerifying(false) }
+  }
+  const downloadProof = async () => {
+    try {
+      const proof = await getProofPack(viewTrade.id)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(proof, null, 2)], { type: 'application/json' }))
+      a.download = `${proof.trade_ref || viewTrade.id}-confirmation-proof.json`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (e) { setVerifyResult({ error: e.message || String(e) }) }
+  }
 
   // SCENARIO tab state moved to <ScenarioTab /> component
   const [parRate,       setParRate]      = useState(null)
@@ -2791,6 +2834,25 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     } catch(e) { setErr(e.message) }
     finally { setBooking(false); setBookingStep('') }
   }
+  const handleBookCurrency = async () => {
+    setErr(''); setBooking(true)
+    try {
+      setBookingStep('Pricing...')
+      if (!fxRef.current?.quote()) { const q = await fxRef.current?.price(); if (!q) throw new Error('Price it first') }
+      const body = fxRef.current.payload()
+      if (!ownEntityId || !cpId) throw new Error('Pick your entity and a counterparty')
+      setBookingStep('Creating trade...')
+      const session = await getSession()
+      const h = { Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' }
+      const r = await fetch(API+'/api/trades/', { method:'POST', headers:h, body: JSON.stringify({
+        ...body, own_legal_entity_id: ownEntityId, counterparty_id: cpId, trade_date: tdate, effective_date: tdate,
+        desk: desk || null, book: book || null, store }) })
+      const t = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(t?.detail ? (typeof t.detail === 'string' ? t.detail : JSON.stringify(t.detail)) : 'Booking failed')
+      await fetchTrades(); setBookedTrade(t)
+    } catch(e) { setErr(e.message) }
+    finally { setBooking(false); setBookingStep('') }
+  }
   const handleNewTrade = () => {
     setBookedTrade(null); setAnalytics(null); setAnalyticsErr(null); setErr('')
     if(rateRef.current){rateRef.current.value='';rateRef.current.dataset.userEdited=''}
@@ -2888,6 +2950,12 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
           </div>
           <span className='tbw-title'>
             {bookedTrade ? 'BOOKED · '+(bookedTrade.trade_ref||bookedTrade.id) : viewTrade ? (viewTrade.trade_ref||viewTrade.id) : 'NEW TRADE'}
+            {!bookedTrade && viewTrade && (<>
+              {theirRef && <span className='tbw-ids' title={`${theirRef.firm}'s own ref for this trade`}>THEIR REF <b>{theirRef.trade_ref}</b></span>}
+              {viewTrade.uti && <span className='tbw-ids tbw-no-drag' onClick={copyUti} style={{cursor:'pointer'}}
+                title={`${viewTrade.uti}\nThe same on both parties' bookings. Click to copy.`}>
+                UTI <b>{utiCopied ? 'COPIED' : shortUti(viewTrade.uti)}</b></span>}
+            </>)}
           </span>
           <span className='tbw-store-badge tbw-no-drag' style={{display:'flex',gap:'6px',alignItems:'center'}}>
             {bookedTrade ? (
@@ -2915,7 +2983,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
           </span>
         </div>
         <div className='tbw-tabs tbw-no-drag'>
-          {[{id:'main',label:bookedTrade?'✓ TRADE':'TRADE'},...(inst==='IR_SWAPTION'?[{id:'options',label:'OPTIONS ANALYTICS'}]:[]),{id:'details',label:'DETAILS'},{id:'cashflows',label:'CASHFLOWS'},{id:'price',label:'XVA'},{id:'scenario',label:'CURVE SCENARIO'},{id:'confirm',label:'⯁ CONFIRM'}].map(t=>(
+          {(isCurrency ? [{id:'main',label:bookedTrade?'✓ TRADE':'TRADE'},{id:'confirm',label:'⯁ CONFIRM'}] : [{id:'main',label:bookedTrade?'✓ TRADE':'TRADE'},...(inst==='IR_SWAPTION'?[{id:'options',label:'OPTIONS ANALYTICS'}]:[]),{id:'details',label:'DETAILS'},{id:'cashflows',label:'CASHFLOWS'},{id:'price',label:'XVA'},{id:'scenario',label:'CURVE SCENARIO'},{id:'confirm',label:'⯁ CONFIRM'}]).map(t=>(
             <button key={t.id} className={'tbw-tab '+(activeTab===t.id?'active':'')}
               onClick={()=>setActiveTab(t.id)}
               style={t.id==='main'&&bookedTrade?{color:'var(--accent)'}:t.id==='options'?{color:'var(--blue)',borderBottomColor:activeTab==='options'?'var(--blue)':'transparent'}:{}}
@@ -2983,7 +3051,15 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               <div style={{padding:'16px 0',display:'flex',flexDirection:'column',gap:14}}>
                 <SendForConfirmation s={sendConf} />
               </div></div></div>
-          : <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Cashflow fingerprint · On-chain signing</div><div className='tbw-stub-sprint'>SPRINT 6A</div></div></div>)}
+          : viewTrade
+          ? <div className='tbw-body tbw-no-drag tbw-confirm' style={{overflowY:'auto'}}>
+              <ConfirmPanel bookedTrade={viewTrade} attestation={chainRec?.attestation ? chainRec : null}
+                onVerify={verifyRecord} verifying={verifying} verifyResult={verifyResult} onDownloadProof={downloadProof} />
+              {viewTrade.status === 'CONFIRMED' && chainRec && !chainRec.attestation && (
+                <div className='tbw-sec tbw-mut'>{chainRec.error ? 'Could not load the confirmation record: ' + chainRec.error
+                  : 'Confirmed off-chain: no signatures and nothing anchored, so there is no on-chain record for this trade.'}</div>)}
+            </div>
+          : <div className='tbw-body tbw-no-drag'><div className='tbw-stub'><div className='tbw-stub-title'>⯁ CONFIRM</div><div className='tbw-stub-sub'>Book the trade first, then send it for confirmation from here.</div></div></div>)}
 
         {/* ── OPTIONS ANALYTICS TAB ─────────────────────────────────── */}
         {activeTab==='options' && (
@@ -3328,6 +3404,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               <Fld label='DESK' flex={1}><select style={sel} value={desk} onChange={e=>{setDesk(e.target.value);setBook('')}}><option value=''>—</option>{desks.map(d=><option key={d.id} value={d.name}>{d.name}</option>)}</select></Fld>
               <Fld label='BOOK' flex={1}><select style={sel} value={book} onChange={e=>setBook(e.target.value)}><option value=''>—</option>{books.map(b=><option key={b.id} value={b.name}>{b.name}</option>)}</select></Fld>
             </Row>
+            {isCurrency && <FxCryptoPanel ref={fxRef} ac={ac} inst={inst} onError={m => setErr(m)} />}
+            {!isCurrency && (<>
             <SectionHdr>PRIMARY ECONOMICS</SectionHdr>
             <Row>
               <Fld label='NOTIONAL' flex={2.5}><input ref={notionalRef} style={{...inp,fontSize:'1.0625rem',fontWeight:700}} type='text' value={notionalState.toLocaleString('en-US')} placeholder='10,000,000' autoComplete='off' onChange={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))setNotionalState(r)}} onBlur={e=>{const r=parseFloat(e.target.value.replace(/,/g,''));if(!isNaN(r))setNotionalState(r)}}/></Fld>
@@ -3909,7 +3987,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             </>)}
             </div>
           {/* XVA → see XVA tab for full simulation */}
-          {activeTab==='main' && !xvaResult && (
+          {activeTab==='main' && !xvaResult && !isCurrency && (
             <div style={{margin:'0 16px 12px',borderTop:'1px solid var(--border)',paddingTop:'8px',
               display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
@@ -3947,6 +4025,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               />
             </div>
           )}
+            </>)}
           </div>
           )}
         {/* Floating tooltip portal */}
@@ -4030,11 +4109,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               ) : (
                 <>
                 <button style={{marginLeft:'auto',background:'rgba(245,200,66,0.08)',border:'1px solid rgba(245,200,66,0.4)',color:'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:(pricing||swaptionPricing||capPricing)?'not-allowed':'pointer',opacity:(pricing||swaptionPricing||capPricing)?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}}
-                  onClick={inst==='IR_SWAPTION' ? handlePriceSwaption : (inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR') ? handleCapFloorPrice : handlePrice}
+                  onClick={isCurrency ? () => fxRef.current?.price() : inst==='IR_SWAPTION' ? handlePriceSwaption : (inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR') ? handleCapFloorPrice : handlePrice}
                   disabled={pricing||swaptionPricing||capPricing}>
                   {(pricing||swaptionPricing||capPricing)?'PRICING...':'▶ PRICE'}
                 </button>
-              {!xvaResult && <span style={{fontSize:'10px',color:'#444',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em',padding:'0 8px'}}>XVA → SIMULATE to price</span>}
+              {!xvaResult && !isCurrency && <span style={{fontSize:'10px',color:'#444',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em',padding:'0 8px'}}>XVA → SIMULATE to price</span>}
                 </>
               )}
             </div>}
@@ -4072,7 +4151,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               ) : (
                 <>
                   <button className='tbw-btn-cancel' onClick={onClose}>CANCEL</button>
-                  <button className='tbw-btn-book' onClick={handleBook} disabled={booking||pricing} style={xvaResult?.xva?{background:'#00D4A8',color:'#000'}:{}}>
+                  <button className='tbw-btn-book' onClick={isCurrency ? handleBookCurrency : handleBook} disabled={booking||pricing} style={xvaResult?.xva?{background:'#00D4A8',color:'#000'}:{}}>
                     {booking?(bookingStep||'BOOKING...'):xvaResult?.xva?<XvaBookLabel xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>:'▶ BOOK TRADE'}
                   </button>
                 </>

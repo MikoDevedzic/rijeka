@@ -88,3 +88,35 @@ def test_date_break_and_missing_leg():
     assert {"field": "maturity_date", "shared": "2031-09-24", "yours": "2031-09-25"} in compare(_ours(), theirs)
     one_leg = canonical_payload(_trade(trade_ref="X"), _legs("RECEIVE")[:1], CP, BOOKER)
     assert {"field": "FLOAT leg", "shared": "present", "yours": "missing"} in compare(_ours(), one_leg)
+
+
+# ── Booking the counterparty's side ──────────────────────────────────────────
+
+from types import SimpleNamespace
+
+from api.routes.trade_cards import _mirror_leg, _mirror_terms
+
+
+def test_mirror_terms_flips_every_direction_and_nothing_else():
+    terms = {"direction": "PAY", "float_direction": "RECEIVE", "fixed_rate": "0.04",
+             "nested": {"cap_direction": "BUY"}, "notes": "PAY attention"}
+    assert _mirror_terms(terms) == {"direction": "RECEIVE", "float_direction": "PAY", "fixed_rate": "0.04",
+                                    "nested": {"cap_direction": "SELL"}, "notes": "PAY attention"}
+
+
+def test_mirror_booking_hashes_to_the_same_v2_record():
+    """The counterparty's side, built the way book_mirror builds it, is the same record."""
+    legs = _legs()
+    legs[1]["embedded_options"] = [{"type": "CAP", "direction": "SELL", "default_strike": Decimal("0.05"), "strike_schedule": []}]
+    legs[1]["terms"] = {"custom_cashflows": [{"type": "FEE", "payment_date": "2026-09-25", "accrual_start": None,
+                                               "accrual_end": None, "amount": -25000, "currency": "USD"}]}
+    rows = [SimpleNamespace(**{**l, "leg_seq": i + 1, "notional_type": "BULLET", "payment_lag": 0,
+                               "fixed_rate_type": "FLAT", "spread_type": "FLAT", "leverage": Decimal("1")})
+            for i, l in enumerate(legs)]
+    mirrored = [_mirror_leg(r).model_dump() for r in rows]
+    ours = canonical_payload(_trade(), [vars(r) for r in rows], BOOKER, CP)
+    theirs = canonical_payload(_trade(trade_ref="THEIRS"), mirrored, CP, BOOKER)
+    assert ours == theirs
+    assert [m["direction"] for m in mirrored] == ["RECEIVE", "PAY"]
+    assert mirrored[1]["embedded_options"][0]["direction"] == "BUY"
+    assert mirrored[1]["terms"]["custom_cashflows"][0]["amount"] == 25000

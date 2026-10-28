@@ -19,7 +19,9 @@ POST /api/chat/rooms/{id}/trades          {trade_id}: share a trade card (idempo
 GET  /api/chat/trades/{id}/send-status    from the trade window: can it go to the counterparty, and where it already went
 POST /api/chat/trades/{id}/send           send it: reuse your room with that firm (or open one) and post the card once
 GET  /api/chat/cards/{message_id}         live card state, from the viewer's side
-POST /api/chat/cards/{message_id}/countersign  {address, signature, trade_hash}
+POST /api/chat/cards/{message_id}/countersign  {address, signature, trade_hash, book_mirror}
+POST /api/chat/cards/{message_id}/book-mirror  book a confirmed trade into the counterparty's own blotter,
+                                               or link their own matching booking to it (it takes the UTI)
 """
 
 from __future__ import annotations
@@ -43,6 +45,8 @@ from api.routes.chain import (
 )
 from chain.canonical import trade_hash as trade_hash_of
 from chain.signing import confirmation_typed_data, eip712_digest, sign
+from api.routes.booking import BookingRequest, LegInput, book_trade
+from api.routes.trade_events import _apply_lifecycle_transition
 from db.models import (
     ChatMessage, ChatRoom, ChatRoomMember, Counterparty, Firm, FirmLei, FirmMember,
     LegalEntity, Trade, TradeLeg,
@@ -187,18 +191,26 @@ def compare(shared: dict, theirs: dict) -> list[dict]:
     return breaks
 
 
-def _match_in_book(db: Session, shared: dict, cp_firm: Firm, booker_firm: Firm) -> dict:
+def _best_own_booking(db: Session, shared: dict, cp_firm: Firm, booker_firm: Firm):
     """
     Look for the counterparty's own booking of this trade: trades booked by
-    their people against the booker's LEIs. Best candidate's breaks, if any.
+    their people against the booker's LEIs. (trade, breaks, hash) of the best
+    candidate, or None.
     """
     members = [m.user_id for m in db.query(FirmMember).filter(FirmMember.firm_id == cp_firm.id)]
     booker_leis = {l.lei for l in db.query(FirmLei).filter(FirmLei.firm_id == booker_firm.id)}
     if not members:
-        return {"status": "NO_BOOKING"}
+        return None
+    candidates = db.query(Trade).filter(Trade.user_id.in_(members), Trade.status != "CANCELLED").all()
+    # A booking that carries the UTI of another of the booker's trades is already
+    # their side of that trade (e.g. booked from its countersignature): not a candidate.
+    booker_members = [m.user_id for m in db.query(FirmMember).filter(FirmMember.firm_id == booker_firm.id)]
+    other_utis = {t.uti for t in candidates if t.uti} - {shared.get("uti")}
+    paired = {u for (u,) in db.query(Trade.uti).filter(Trade.uti.in_(other_utis), Trade.user_id.in_(booker_members))} \
+        if other_utis and booker_members else set()
     best = None
-    for t in db.query(Trade).filter(Trade.user_id.in_(members), Trade.status != "CANCELLED").all():
-        if _cp_lei(db, t) not in booker_leis:
+    for t in candidates:
+        if t.uti in paired or _cp_lei(db, t) not in booker_leis:
             continue
         try:
             theirs, h = _canonical_for(db, t)
@@ -207,6 +219,11 @@ def _match_in_book(db: Session, shared: dict, cp_firm: Firm, booker_firm: Firm) 
         b = compare(shared, theirs)
         if best is None or len(b) < len(best[1]):
             best = (t, b, _hexb(h))
+    return best
+
+
+def _match_in_book(db: Session, shared: dict, cp_firm: Firm, booker_firm: Firm) -> dict:
+    best = _best_own_booking(db, shared, cp_firm, booker_firm)
     if best is None:
         return {"status": "NO_BOOKING"}
     t, b, their_hash = best
@@ -460,6 +477,192 @@ def send_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depend
             "already_sent": already, "created_room": created}
 
 
+# ── The counterparty's own booking ───────────────────────────────────────────
+#
+# When the counterparty countersigns, the trade is theirs too. Their side is
+# booked into the signer's own book: the same UTI and terms, every direction
+# mirrored, and CONFIRMED with the same attestation. Under canonical v2 their
+# booking is the same record, so it must hash to exactly what was anchored;
+# if it does not, nothing is saved.
+
+_FLIP = {"PAY": "RECEIVE", "RECEIVE": "PAY", "BUY": "SELL", "SELL": "BUY", "LONG": "SHORT", "SHORT": "LONG"}
+
+
+def _mirror_terms(v):
+    """The booker's-view terms blob, from the other side: flip every *direction value."""
+    if isinstance(v, dict):
+        return {k: (_FLIP.get(str(x).upper(), x) if "direction" in k.lower() and isinstance(x, str) else _mirror_terms(x))
+                for k, x in v.items()}
+    if isinstance(v, list):
+        return [_mirror_terms(x) for x in v]
+    return v
+
+
+def _mirror_leg(l: TradeLeg) -> LegInput:
+    data = {f: getattr(l, f) for f in LegInput.model_fields if hasattr(l, f)}
+    data["direction"] = _FLIP[str(l.direction).upper()]
+    data["embedded_options"] = [dict(o, direction=_FLIP.get(str(o.get("direction")).upper(), o.get("direction")))
+                                for o in (l.embedded_options or [])]
+    terms = dict(l.terms or {})
+    if terms.get("custom_cashflows"):   # signed from the booker's side: negative = the booker pays
+        terms["custom_cashflows"] = [dict(c, amount=-(c.get("amount") or 0)) for c in terms["custom_cashflows"]]
+    data["terms"] = terms
+    return LegInput(**{k: v for k, v in data.items() if v is not None or k in ("embedded_options",)})
+
+
+def _entity(db: Session, user_id, template: LegalEntity, own: bool) -> LegalEntity:
+    """The signer's record of an entity, by LEI; created from the booker's record of it when missing."""
+    le = db.query(LegalEntity).filter(LegalEntity.user_id == user_id, LegalEntity.lei == template.lei).first()
+    if le is None:
+        # Every column is set explicitly: the ORM sends NULL for unset ones, which
+        # would override the DB defaults (simm_version) and trip NOT NULL.
+        le = LegalEntity(id=uuid.uuid4(), lei=template.lei, name=template.name,
+                         short_name=template.short_name or template.name,
+                         home_currency=template.home_currency or "USD", jurisdiction=template.jurisdiction or "",
+                         regulatory_regime=template.regulatory_regime, simm_version=template.simm_version or "v2.6",
+                         im_threshold_m=template.im_threshold_m, ois_curve_id=template.ois_curve_id,
+                         is_own_entity=own, is_active=True, user_id=user_id, created_by=user_id)
+        db.add(le); db.flush()
+    return le
+
+
+def _counterparty(db: Session, user_id, le: LegalEntity, template: Counterparty) -> Counterparty:
+    cp = db.query(Counterparty).filter(Counterparty.user_id == user_id, Counterparty.legal_entity_id == le.id).first()
+    if cp is None:
+        # CSA terms are bilateral: the booker's record of them is the signer's too.
+        cp = Counterparty(id=uuid.uuid4(), legal_entity_id=le.id, name=le.name, is_active=True,
+                          isda_agreement=template.isda_agreement, csa_type=template.csa_type,
+                          csa_currency=template.csa_currency, csa_threshold_m=template.csa_threshold_m,
+                          csa_mta_k=template.csa_mta_k, discount_curve_id=template.discount_curve_id,
+                          im_model=template.im_model or "SIMM", user_id=user_id, created_by=user_id)
+        db.add(cp); db.flush()
+    return cp
+
+
+def own_booking(db: Session, uti: Optional[str], user_id) -> Optional[Trade]:
+    """The signer's own booking of this trade, if any (same UTI, their book)."""
+    if not uti:
+        return None
+    return db.query(Trade).filter(Trade.user_id == user_id, Trade.uti == uti, Trade.status != "CANCELLED").first()
+
+
+def their_refs(db: Session, user_id) -> dict:
+    """
+    {trade id: the counterparty's own booking of it}, for this user's trades.
+    Both bookings carry the same UTI; theirs is the one owned by someone in the
+    firm that holds the trade's counterparty LEI (never a colleague's copy).
+    """
+    mine = {t.uti: t for t in db.query(Trade).filter(
+        Trade.user_id == user_id, Trade.uti.isnot(None), Trade.status != "CANCELLED")}
+    if not mine:
+        return {}
+    my_firm = _firm_of_user(db, user_id)
+    out = {}
+    for o in db.query(Trade).filter(Trade.uti.in_(mine), Trade.user_id != user_id, Trade.status != "CANCELLED"):
+        t = mine[o.uti]
+        cp_firm = _firm_of_lei(db, _cp_lei(db, t))
+        if cp_firm is None or (my_firm is not None and cp_firm.id == my_firm.id):
+            continue
+        if db.query(FirmMember).filter(FirmMember.firm_id == cp_firm.id, FirmMember.user_id == o.user_id).first():
+            out[str(t.id)] = {"trade_ref": o.trade_ref, "firm": cp_firm.name}
+    return out
+
+
+def _booking_out(t: Trade, how: str, note: Optional[str] = None) -> dict:
+    """how: BOOKED (new), LINKED (their earlier booking took the UTI), EXISTING (already there)."""
+    return {"trade_id": str(t.id), "trade_ref": t.trade_ref, "status": t.status, "how": how, "note": note}
+
+
+def _link_candidate(db: Session, source: Trade, signer: FirmMember):
+    """The signer's own earlier booking of this trade, (trade, breaks), matched on terms; or None."""
+    shared, _ = _canonical_for(db, source)
+    best = _best_own_booking(db, shared, db.get(Firm, signer.firm_id), _firm_of_user(db, source.user_id))
+    # Only the signer's own: a colleague's booking stays theirs to link.
+    return (best[0], best[1]) if best and best[0].user_id == signer.user_id else None
+
+
+def _link_booking(db: Session, t: Trade, source: Trade, att: dict) -> Trade:
+    """Their own booking takes the shared UTI and is CONFIRMED, if it then hashes to the confirmed record."""
+    if t.status != "PENDING":
+        raise HTTPException(status_code=409, detail=(f"Your booking {t.trade_ref} matches this trade but is already "
+                            f"{t.status}, so it wasn't linked automatically."))
+    try:
+        t.uti = source.uti
+        db.flush()
+        _, h = _canonical_for(db, t)
+        if _hexb(h) != att.get("trade_hash"):
+            raise HTTPException(status_code=409, detail=(f"Your booking {t.trade_ref} would not hash to the confirmed "
+                                "record, so it was not linked."))
+        _apply_lifecycle_transition(
+            db=db, user_id=t.user_id, trade=t, event_type="CONFIRMED", new_status="CONFIRMED",
+            payload={"attestation": att, "booked_from": {"channel": "countersignature", "linked": True,
+                                                         "counterparty_trade_ref": source.trade_ref}},
+            idempotency_key=None, confirmation_hash=att.get("trade_hash"), counterparty_confirmed=True,
+        )   # commits the UTI and the CONFIRMED event together
+        return t
+    except Exception:
+        db.rollback()
+        raise
+
+
+def book_mirror(db: Session, source: Trade, signer: FirmMember) -> dict:
+    """
+    The counterparty's side of a confirmed v2 trade, CONFIRMED in the signer's book.
+    If they had already booked it themselves and it agrees on every term, that
+    booking takes the shared UTI; otherwise a new one is booked.
+    """
+    ev = _latest_confirmed_event(db, source.id)
+    att = (ev.payload or {}).get("attestation") if ev else None
+    if not att:
+        raise HTTPException(status_code=409, detail=f"{source.trade_ref} isn't confirmed on-chain yet.")
+    if attested_version(att) < 2:
+        raise HTTPException(status_code=409, detail=(f"{source.trade_ref} was confirmed under record v1, which your own "
+                            "booking can't reproduce. Book it manually; later trades book automatically."))
+    existing = own_booking(db, source.uti, signer.user_id)
+    if existing is not None:
+        return _booking_out(existing, "EXISTING")
+
+    note = None
+    found = _link_candidate(db, source, signer)
+    if found and not found[1]:
+        return _booking_out(_link_booking(db, found[0], source, att), "LINKED")
+    if found:
+        note = (f"You also have {found[0].trade_ref}, which looks like this trade but differs in "
+                f"{len(found[1])} field(s): check it isn't a duplicate.")
+
+    own, cp, cp_id, legs = trade_parts(db, source)
+    try:
+        cp_le = db.get(LegalEntity, cp.legal_entity_id) if cp.legal_entity_id else None
+        if cp_le is None or not cp_le.lei:
+            raise HTTPException(status_code=422, detail="The trade's counterparty has no legal entity with an LEI.")
+        mine = _entity(db, signer.user_id, cp_le, own=True)       # the signer's firm, from the booker's record of it
+        theirs = _entity(db, signer.user_id, own, own=False)      # the booker's firm
+        their_cp = _counterparty(db, signer.user_id, theirs, cp)
+        body = BookingRequest(
+            asset_class=source.asset_class, instrument_type=source.instrument_type, structure=source.structure,
+            store=source.store or "WORKING", own_legal_entity_id=str(mine.id), counterparty_id=str(their_cp.id),
+            notional=source.notional, notional_ccy=source.notional_ccy, trade_date=source.trade_date,
+            effective_date=source.effective_date, maturity_date=source.maturity_date,
+            terms=_mirror_terms(source.terms or {}), discount_curve_id=source.discount_curve_id,
+            forecast_curve_id=source.forecast_curve_id,
+            legs=[_mirror_leg(l) for l in sorted(legs, key=lambda l: l.leg_seq or 0)],
+        )
+        res = book_trade(db, signer.user_id, body, commit=False, uti=source.uti)
+        mirror = db.get(Trade, uuid.UUID(res["trade"]["id"]))
+        _, h = _canonical_for(db, mirror)
+        if _hexb(h) != att.get("trade_hash"):
+            raise HTTPException(status_code=409, detail="Your booking would not hash to the confirmed record, so it was not saved.")
+        _apply_lifecycle_transition(
+            db=db, user_id=signer.user_id, trade=mirror, event_type="CONFIRMED", new_status="CONFIRMED",
+            payload={"attestation": att, "booked_from": {"channel": "countersignature", "counterparty_trade_ref": source.trade_ref}},
+            idempotency_key=None, confirmation_hash=att.get("trade_hash"), counterparty_confirmed=True,
+        )   # commits the booking and its CONFIRMED event together
+        return _booking_out(mirror, "BOOKED", note)
+    except Exception:
+        db.rollback()
+        raise
+
+
 # ── Card state and countersign ───────────────────────────────────────────────
 
 def _card_context(db: Session, message_id: str, user: dict):
@@ -518,6 +721,15 @@ def card_state(message_id: str, db: Session = Depends(get_db), user: dict = Depe
     }
     ev = _latest_confirmed_event(db, trade.id)
     att = (ev.payload or {}).get("attestation") if ev else None
+    if side == "COUNTERPARTY":
+        mine = own_booking(db, trade.uti, me.user_id)
+        out["your_booking"] = {"trade_id": str(mine.id), "trade_ref": mine.trade_ref, "status": mine.status} if mine else None
+        out["can_book"] = bool(att) and attested_version(att) >= 2 and mine is None and access == "JOINED"
+        if out["can_book"]:
+            found = _link_candidate(db, trade, me)
+            out["will_link"] = found[0].trade_ref if found and not found[1] and found[0].status == "PENDING" else None
+        if att and attested_version(att) < 2 and mine is None:
+            out["book_note"] = "Confirmed under record v1, before bookings could be created from a confirmation; book it manually."
     if att:
         a = att.get("anchor") or {}
         out["confirmation"] = {"trade_hash": att.get("trade_hash"), "chain_id": a.get("chain_id"),
@@ -561,6 +773,7 @@ class CountersignBody(BaseModel):
     address: str
     signature: str
     trade_hash: str
+    book_mirror: bool = True   # also book the trade into the signer's own blotter
 
 
 @router.post("/cards/{message_id}/countersign", status_code=201)
@@ -589,28 +802,26 @@ def card_countersign(message_id: str, body: CountersignBody, db: Session = Depen
                card={"type": "trade_event", "trade_id": str(trade.id), "status": "CONFIRMED",
                      "card_message_id": str(msg.id), "explorer_tx": a.get("explorer_tx")})
     db.commit()
-    return {"status": "CONFIRMED", "block_number": a.get("block_number"), "explorer_tx": a.get("explorer_tx")}
+    out = {"status": "CONFIRMED", "block_number": a.get("block_number"), "explorer_tx": a.get("explorer_tx")}
 
-
-def their_refs(db: Session, user_id) -> dict:
-    """
-    {trade id: the counterparty's own booking of it}, for this user's trades.
-    Both bookings carry the same UTI; theirs is the one owned by someone in the
-    firm that holds the trade's counterparty LEI (never a colleague's copy).
-    """
-    mine = {t.uti: t for t in db.query(Trade).filter(
-        Trade.user_id == user_id, Trade.uti.isnot(None), Trade.status != "CANCELLED")}
-    if not mine:
-        return {}
-    my_firm = _firm_of_user(db, user_id)
-    out = {}
-    for o in db.query(Trade).filter(Trade.uti.in_(mine), Trade.user_id != user_id, Trade.status != "CANCELLED"):
-        t = mine[o.uti]
-        cp_firm = _firm_of_lei(db, _cp_lei(db, t))
-        if cp_firm is None or (my_firm is not None and cp_firm.id == my_firm.id):
-            continue
-        if db.query(FirmMember).filter(FirmMember.firm_id == cp_firm.id, FirmMember.user_id == o.user_id).first():
-            out[str(t.id)] = {"trade_ref": o.trade_ref, "firm": cp_firm.name}
+    # Their own booking is private to them: it is not announced in the room. The
+    # confirmation is already anchored, so a failure here does not undo it; they
+    # can book it from the card afterwards.
+    if body.book_mirror:
+        try:
+            out["your_booking"] = book_mirror(db, db.get(Trade, trade.id), me)
+        except HTTPException as e:
+            out["booking_error"] = e.detail
+        except Exception as e:
+            log.exception("booking the counterparty's side failed")
+            out["booking_error"] = f"Couldn't book it in your blotter: {e}"
     return out
 
 
+@router.post("/cards/{message_id}/book-mirror", status_code=201)
+def card_book_mirror(message_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Book an already-confirmed trade into the counterparty's own blotter (e.g. signed without the option)."""
+    me, my_firm, room, access, msg, card, side, trade = _card_context(db, message_id, user)
+    if side != "COUNTERPARTY" or access != "JOINED":
+        raise HTTPException(status_code=403, detail="Only the counterparty's people in this room can book their side.")
+    return {"your_booking": book_mirror(db, trade, me)}

@@ -1,10 +1,26 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { getSessionMaybe } from '../lib/session'
+
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
+// A UTI is up to 52 characters; its tail is what people quote ("UTI ending C7754E").
+export const shortUti = (u) => u ? '…' + u.slice(-10) : '—'
+
+// {trade id: {trade_ref, firm}}: the counterparty's own booking of each trade,
+// matched by UTI. Their rows are not readable here, so the backend looks them up.
+async function fetchTheirRefs() {
+  const session = await getSessionMaybe()
+  if (!session?.access_token) return {}
+  const r = await fetch(`${API}/api/trades/their-refs`, { headers: { Authorization: `Bearer ${session.access_token}` } })
+  return r.ok ? r.json() : {}
+}
 
 const INIT_FILTERS = { status: 'ALL', assetClass: 'ALL', store: 'ALL', search: '' }
 
 export const useTradesStore = create((set, get) => ({
   trades:  [],
+  theirRefs: {},
   loading: false,
   error:   null,
   filters: { ...INIT_FILTERS },
@@ -25,6 +41,7 @@ export const useTradesStore = create((set, get) => ({
     error
       ? set({ error: error.message, loading: false })
       : set({ trades: data || [],   loading: false })
+    if (!error) fetchTheirRefs().then(theirRefs => set({ theirRefs })).catch(() => {})
   },
 
   addTrade: async (trade) => {
@@ -71,7 +88,10 @@ export const useTradesStore = create((set, get) => ({
       if (filters.store     !== 'ALL' && t.store      !== filters.store)     return false
       if (filters.search) {
         const q = filters.search.toLowerCase()
+        const theirs = get().theirRefs[t.id]
         if (!( (t.trade_ref || '').toLowerCase().includes(q)
+            || (t.uti || '').toLowerCase().includes(q)
+            || (theirs?.trade_ref || '').toLowerCase().includes(q)
             || (t.counterparty?.name || '').toLowerCase().includes(q)
             || (t.desk || '').toLowerCase().includes(q)
             || (t.instrument_type || '').toLowerCase().includes(q) ))

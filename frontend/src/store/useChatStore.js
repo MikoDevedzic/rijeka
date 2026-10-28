@@ -222,6 +222,13 @@ export const useChatStore = create((set, get) => ({
   },
   countersign: async (messageId, body) => {
     const r = await post(`/cards/${messageId}/countersign`, body)
+    if (r.your_booking) refreshBlotter()
+    return r
+  },
+  // Book a confirmed trade into your own blotter (your side of it).
+  bookMirror: async (messageId) => {
+    const r = await post(`/cards/${messageId}/book-mirror`)
+    refreshBlotter()
     return r
   },
   bumpCard: (tradeId) => set(s => ({ cardVersion: { ...s.cardVersion, [tradeId]: (s.cardVersion[tradeId] || 0) + 1 } })),
@@ -266,6 +273,11 @@ export const useChatStore = create((set, get) => ({
   clearPrometheus: () => { set({ prom: [] }); broadcast({ type: 'prom:state', prom: [] }) },
   setPoppedOut: (poppedOut) => set({ poppedOut }),
 }))
+
+// A booking from a confirmation lands in the blotter: reload it if it is loaded.
+function refreshBlotter() {
+  import('./useTradesStore').then(m => m.useTradesStore.getState().fetchTrades?.()).catch(() => {})
+}
 
 // Plain-English names for data lookups, shown under a private answer.
 const CHECKED = {

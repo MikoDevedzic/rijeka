@@ -40,6 +40,9 @@
   flex: 1;
 }
 .tbw-store-badge { display: flex; gap: 3px; }
+.tbw-ids { margin-left: 14px; font-family: 'IBM Plex Mono', var(--mono); font-size: 0.75rem; font-weight: 400;
+  letter-spacing: 0.06em; color: var(--text-dim); }
+.tbw-ids b { font-weight: 600; color: var(--text); letter-spacing: 0.02em; }
 .tbw-store-btn {
   background: none; border: 1px solid var(--border); color: var(--text-dim);
   font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 0.9375rem; font-weight: 700;
@@ -171,3 +174,11 @@
 }
 .tbw-btn-book:hover:not(:disabled) { opacity: 0.85; }
 .tbw-btn-book:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* CONFIRM tab on a confirmed trade: the shared ConfirmPanel, which is styled for the trade window */
+.tbw-confirm .tbw-sec { padding: 14px 16px; }
+.tbw-confirm .tbw-lbl { font-size: 11px; color: #888; letter-spacing: 0.12em; margin-bottom: 7px; font-weight: 600; }
+.tbw-confirm .tbw-mut { font-size: 11px; color: #777; letter-spacing: 0.03em; }
+.tbw-confirm .tbw-btn { background: transparent; border: 1px solid #1E1E1E; padding: 6px 14px; border-radius: 2px;
+  font-size: 11px; letter-spacing: 0.08em; font-weight: 500; cursor: pointer; color: #888; font-family: inherit; }
+.tbw-confirm .tbw-btn:disabled { opacity: 0.5; cursor: not-allowed; }

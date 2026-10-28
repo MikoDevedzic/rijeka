@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useTradesStore } from '../../store/useTradesStore'
+import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import { useTabStore } from '../../store/useTabStore'
 import useBookingStore from '../../store/useBookingStore'
 import './BlotterShell.css'
@@ -10,6 +10,7 @@ const AC = {
   CREDIT:    { c: 'var(--amber)',  a: 'CRD' },
   EQUITY:    { c: 'var(--purple)', a: 'EQT' },
   COMMODITY: { c: 'var(--red)',    a: 'CMD' },
+  CRYPTO:    { c: 'var(--chain)',  a: 'CRY' },
 }
 const ST = {
   PENDING:    { c: 'var(--amber)', l: 'PENDING'    },
@@ -35,12 +36,12 @@ function tenor(t) {
   return y >= 1 ? `${y.toFixed(1)}Y` : `${Math.round(y * 12)}M`
 }
 
-const ASSET_CLASSES = ['RATES', 'FX', 'CREDIT', 'EQUITY', 'COMMODITY']
+const ASSET_CLASSES = ['RATES', 'FX', 'CRYPTO', 'CREDIT', 'EQUITY', 'COMMODITY']
 const STATUSES      = ['PENDING', 'LIVE', 'MATURED', 'CANCELLED']
 const STORES        = ['WORKING', 'PRODUCTION', 'HISTORY']
 
 export default function BlotterShell() {
-  const { trades, loading, error, fetchTrades, filters, setFilter, filteredTrades } = useTradesStore()
+  const { trades, theirRefs, loading, error, fetchTrades, filters, setFilter, filteredTrades } = useTradesStore()
   const [sortCol, setSortCol]        = useState('trade_date')
   const [sortDir, setSortDir]        = useState('desc')
   const [selectedIds, setSelectedIds] = useState(new Set())
@@ -156,7 +157,7 @@ export default function BlotterShell() {
         <div className="bl-centre-header">
           <input
             className="bl-search"
-            placeholder="Search — ref, counterparty, instrument..."
+            placeholder="Search — ref, their ref, UTI, counterparty, instrument..."
             value={filters.search || ''}
             onChange={e => setFilter('search', e.target.value)}
           />
@@ -185,16 +186,18 @@ export default function BlotterShell() {
                   <TH col="instrument_type" label="INSTRUMENT" />
                   <th>STRUCTURE</th>
                   <th>COUNTERPARTY</th>
+                  <th title="The counterparty's own trade ref for this trade">THEIR REF</th>
                   <TH col="notional" label="NOTIONAL" />
                   <th>TENOR</th>
                   <TH col="trade_date"   label="DATE" />
                   <TH col="status"       label="STATUS" />
                   <th>STORE</th>
+                  <th title="Unique Transaction Identifier: the same on both parties' bookings">UTI</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={10} className="bl-empty">
+                  <tr><td colSpan={12} className="bl-empty">
                     {trades.length === 0 ? 'NO TRADES — CLICK + NEW TRADE TO BEGIN' : 'NO TRADES MATCH FILTERS'}
                   </td></tr>
                 ) : rows.map(t => {
@@ -237,6 +240,9 @@ export default function BlotterShell() {
                       <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {t.counterparty?.name || '—'}
                       </td>
+                      <td className={theirRefs[t.id] ? '' : 'bl-td-dim'} title={theirRefs[t.id] ? `${theirRefs[t.id].firm}'s ref` : ''}>
+                        {theirRefs[t.id]?.trade_ref || '—'}
+                      </td>
                       <td className="bl-td-num">
                         {fmt(t.notional)} <span className="bl-ccy">{t.notional_ccy}</span>
                       </td>
@@ -249,6 +255,7 @@ export default function BlotterShell() {
                       <td>
                         <span className="bl-store-txt" style={{ color: sr.c }}>{sr.l}</span>
                       </td>
+                      <td className="bl-td-dim bl-td-sm" title={t.uti || ''}>{shortUti(t.uti)}</td>
                     </tr>
                   )
                 })}
