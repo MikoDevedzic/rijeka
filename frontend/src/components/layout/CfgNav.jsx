@@ -46,7 +46,7 @@ const NAV = [
         id: 'crypto-md',
         label: 'FX & DIGITAL ASSETS',
         children: [
-          { label: 'SPOT · FORWARD · NDF', path: '/configurations/market-data/crypto',  live: true  },
+          { label: 'SPOT · FUNDING · FLAT RATES', path: '/configurations/market-data/crypto',  live: true  },
         ],
       },
       {

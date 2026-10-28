@@ -145,7 +145,6 @@ export default function App() {
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pricer"  element={<PricerPage />} />
-            <Route path="/crypto"  element={<CryptoDesk />} />
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />
