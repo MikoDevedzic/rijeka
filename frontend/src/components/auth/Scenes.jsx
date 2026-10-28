@@ -129,18 +129,18 @@ function AnchorScene({ chain, confirmations }) {
 // ── Scene 4: the maths underneath ─────────────────────────────────────────
 function MathScene() {
   const rows = [
-    ['BACHELIER', <>V = N·τ·[ (F − K)·Φ(d) + σ<sub>N</sub>√T·φ(d) ],&nbsp; d = (F − K) / (σ<sub>N</sub>√T)</>],
+    ['BACHELIER', <>V = N·τ·[ (F − K)·Φ(d) + <em>σ<sub>N</sub>√T</em>·φ(d) ],&nbsp; d = (F − K) / (σ<sub>N</sub>√T)</>],
     ['SABR', <>σ<sub>N</sub>(K) ≈ α·(FK)<sup>β/2</sup>·z/x(z)·[ 1 + (…)·T ],&nbsp; z = (ν/α)·(FK)<sup>(1−β)/2</sup>·ln(F/K)</>],
-    ['HULL–WHITE', <>dr<sub>t</sub> = ( θ(t) − a·r<sub>t</sub> ) dt + σ dW<sub>t</sub></>],
+    ['HULL–WHITE', <>dr<sub>t</sub> = ( θ(t) − a·r<sub>t</sub> ) dt + <em>σ dW<sub>t</sub></em></>],
     ['XVA', <>CVA = (1 − R) ∫<sub>0</sub><sup>T</sup> EE(t) dPD(t),&nbsp; FVA = ∫ (EPE − ENE)·s<sub>F</sub>·DF dt</>],
-    ['ANCHOR', <>h = keccak256(canonical(trade)),&nbsp; sig<sub>A</sub>, sig<sub>B</sub> = EIP-712(h)</>],
+    ['ANCHOR', <>h = <em>keccak256</em>(canonical(trade)),&nbsp; sig<sub>A</sub>, sig<sub>B</sub> = EIP-712(h)</>],
   ]
   return (
     <div className="au-math">
       {rows.map(([k, eq], i) => (
         <div className="au-math-row" key={k} style={{ animationDelay: `${0.25 + i * 0.75}s` }}>
           <span className="au-math-k">{k}</span>
-          <span className="au-math-eq">{eq}</span>
+          <span className="au-math-eq" style={{ animationDelay: `${0.25 + i * 0.75}s` }}>{eq}</span>
         </div>
       ))}
     </div>

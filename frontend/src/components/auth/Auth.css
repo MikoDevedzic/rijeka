@@ -59,6 +59,8 @@
 .au-math-k { font-family:var(--mono); font-size:0.58rem; letter-spacing:0.22em; color:var(--accent); }
 .au-math-eq { font-family:'Times New Roman', 'Georgia', serif; font-style:italic; font-size:clamp(0.95rem, 1.25vw, 1.2rem); color:var(--text-hi); letter-spacing:0.01em; line-height:1.4; }
 .au-math-eq sub, .au-math-eq sup { font-size:0.62em; font-style:normal; color:var(--text-dim); }
+.au-math-eq { clip-path:inset(0 100% 0 0); animation:auWipe 1.6s cubic-bezier(.2,.7,.2,1) both; }
+.au-math-eq em { font-style:italic; color:var(--accent); text-shadow:0 0 14px rgba(13,212,168,.5); animation:auGlow 2.4s ease-in-out infinite; }
 
 @keyframes auProgress { to { transform:scaleX(1) } }
 @keyframes auTravel { from { right:calc(100% - 4px) } to { right:-2px } }
@@ -123,6 +125,8 @@
 @keyframes auPulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
 @keyframes auBlink { 50% { opacity:0 } }
 @keyframes auShake { 0%,100% { transform:translateX(0) } 25% { transform:translateX(-4px) } 75% { transform:translateX(4px) } }
+@keyframes auWipe { to { clip-path:inset(0 0 0 0) } }
+@keyframes auGlow { 0%,100% { opacity:.75 } 50% { opacity:1 } }
 @keyframes auPop { 0% { transform:scale(.6); opacity:0 } 60% { transform:scale(1.15) } 100% { transform:scale(1); opacity:1 } }
 
 @media (max-width: 960px) {
