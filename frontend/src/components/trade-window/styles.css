@@ -40,7 +40,7 @@
 
 .tbw-window input,
 .tbw-window select {
-  background: #0C0C0C;
+  background: var(--panel);
   color: var(--text-hi);
   border: 1px solid var(--border);
   border-radius: 2px;
@@ -80,7 +80,7 @@
 .tbw-chip:hover:not(:disabled):not(.is-on) {
   border-color: var(--text-mute);
   color: var(--text-hi);
-  background: #1C1C1C;
+  background: var(--border);
 }
 
 .tbw-chip:disabled {
@@ -128,11 +128,11 @@
 
 .tbw-tab:hover:not(.is-active) {
   color: var(--text-dim);
-  background: #080808;
+  background: var(--bg-deep);
 }
 
 .tbw-tab + .tbw-tab {
-  border-left: 1px solid #2A2A2A;
+  border-left: 1px solid var(--border-hi);
 }
 
 .tbw-tab.is-active {
@@ -216,8 +216,8 @@
 }
 
 .tbw-metric-card {
-  background: #0A0A0A;
-  border: 1px solid #262626;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-hi);
   border-radius: 3px;
   padding: 10px 12px;
 }
@@ -368,7 +368,7 @@
   align-items: center;
   gap: 14px;
   padding: 10px 14px;
-  background: #181818;
+  background: var(--panel-3);
   border-bottom: 1px solid var(--border);
   cursor: move;
   user-select: none;
