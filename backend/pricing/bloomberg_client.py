@@ -21,6 +21,11 @@ except ImportError:
 
 CURVE_TICKERS: dict = {
 
+    # ── FX forward curves: spot and forward points (pips; Bloomberg convention) ──
+    # Saved as {PAIR}_FWD snapshots: tenor SPOT = outright, other tenors = points.
+    **{f"{pair}_FWD": {"SPOT": f"{pair} Curncy", **{t: f"{code}{t} Curncy" for t in ("1W","2W","1M","2M","3M","6M","9M","1Y","2Y")}}
+       for pair, code in (("EURUSD","EUR"),("GBPUSD","GBP"),("AUDUSD","AUD"),("USDJPY","JPY"),("USDCHF","CHF"),("USDCAD","CAD"))},
+
     # ── OIS / RFR curves ──────────────────────────────────────────────────────
 
     "USD_SOFR": {

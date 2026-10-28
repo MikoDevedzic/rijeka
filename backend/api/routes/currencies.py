@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import uuid
 from datetime import date, timedelta
@@ -52,6 +53,9 @@ FX_FEED_NAME = "ECB reference rates (frankfurter.dev, public)"
 # Every response says which one it used; a flat curve is illustrative.
 POLICY_RATE_PCT = {"EUR": 2.50, "GBP": 3.75, "JPY": 1.25, "CHF": 0.00, "AUD": 4.60, "CAD": 2.25, "USD": 4.00}
 POLICY_RATE_NOTE = "central-bank policy rate, late October 2026, illustrative"
+FWD_TENORS = ("1W", "2W", "1M", "2M", "3M", "6M", "9M", "1Y", "2Y")
+TENOR_DAYS = {"ON": 1, "1W": 7, "2W": 14, "1M": 30, "2M": 61, "3M": 91, "6M": 182, "9M": 273, "1Y": 365, "2Y": 730}
+MODES = ("MARKET", "IMPLIED")     # MARKET: outright = spot + quoted points; IMPLIED: parity on the two OIS curves
 FIXING_DEFAULT = {"USDJPY": "WM/Reuters 4pm London", "BTCUSD": "CME CF BRR", "ETHUSD": "CME CF ETHUSD_RR", "SOLUSD": "Coinbase SOL-USD"}
 
 
@@ -120,6 +124,36 @@ def _save_pairs(db: Session, user_id, prices: dict[str, float]) -> int:
     return n
 
 
+def forward_curve(db: Session, user_id, pair: str) -> Optional[dict]:
+    """Latest {PAIR}_FWD snapshot: {valuation_date, source, points: {tenor: pips}}."""
+    row = latest_snapshot(db, user_id, f"{pair}_FWD")
+    if not row or not row.quotes:
+        return None
+    pts = {q["tenor"]: float(q["rate"]) for q in row.quotes
+           if q.get("enabled", True) and q.get("rate") is not None and q.get("tenor") in TENOR_DAYS}
+    if len(pts) < 2:
+        return None
+    return {"valuation_date": row.valuation_date.isoformat(), "source": row.source, "points": pts}
+
+
+def interp_points(points: dict[str, float], days: int) -> float:
+    """Forward points at `days`, linear in time between quoted tenors; 0 at spot, flat beyond the last."""
+    xs = sorted((TENOR_DAYS[t], v) for t, v in points.items())
+    xs = [(0, 0.0)] + xs
+    if days <= 0:
+        return 0.0
+    for (d0, p0), (d1, p1) in zip(xs, xs[1:]):
+        if d0 <= days <= d1:
+            return p0 + (p1 - p0) * (days - d0) / (d1 - d0) if d1 > d0 else p1
+    return xs[-1][1]
+
+
+def forward_mode(db: Session, user_id) -> str:
+    row = latest_snapshot(db, user_id, "FX_FORWARD_MODE")
+    v = _quote(row, "MODE")
+    return "IMPLIED" if v is not None and int(v) == 0 else "MARKET"
+
+
 def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
     base, quote = split_pair(pair)
     s = latest_snapshot(db, user_id, f"{pair}_SPOT")
@@ -127,6 +161,9 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
            "spot": _quote(s, "SPOT"), "spot_as_of": s.valuation_date.isoformat() if s else None,
            "quote_curve": CURVE_FOR.get(quote), "pip": PIP.get(pair, 1.0 if is_crypto(base) else 1e-4),
            "fixing_default": FIXING_DEFAULT.get(pair, "WM/Reuters 4pm London")}
+    fc = forward_curve(db, user_id, pair)
+    out.update(forward_curve=fc and {"valuation_date": fc["valuation_date"], "source": fc["source"], "tenors": sorted(fc["points"], key=TENOR_DAYS.get)},
+               forward_points=fc["points"] if fc else None)
     if is_crypto(base):
         f = latest_snapshot(db, user_id, f"{base}_FUNDING")
         out.update(base_curve=None, funding_pct=_quote(f, "FLAT"), funding_as_of=f.valuation_date.isoformat() if f else None)
@@ -143,8 +180,60 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
 
 @router.get("/pairs")
 def pairs(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return {"pairs": [pair_state(db, user["sub"], p) for p in PAIRS],
+    return {"pairs": [pair_state(db, user["sub"], p) for p in PAIRS], "forward_mode": forward_mode(db, user["sub"]),
+            "forward_tenors": list(FWD_TENORS),
             "feeds": {"fx": FX_FEED_NAME, "crypto": "Coinbase spot (public)"}}
+
+
+class ForwardCurveIn(BaseModel):
+    pair: str
+    valuation_date: Optional[date] = None
+    points: dict[str, float] = Field(..., description="tenor -> forward points in pips (Bloomberg convention)")
+    spot: Optional[float] = Field(None, description="outright spot to save alongside, if the snap carried one")
+    source: str = "MANUAL"
+
+
+@router.post("/forward-curve")
+def save_forward_curve(req: ForwardCurveIn, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Save a pair's forward points by tenor as a {PAIR}_FWD snapshot (and the spot, if given)."""
+    _require_trader(user)
+    pair = req.pair.upper(); split_pair(pair)
+    if req.source.upper() not in ("MANUAL", "BLOOMBERG", "IMPORT"):
+        raise HTTPException(status_code=422, detail="source must be MANUAL, BLOOMBERG or IMPORT")
+    pts = {t.upper(): float(v) for t, v in req.points.items() if t.upper() in TENOR_DAYS and v is not None}
+    if len(pts) < 2:
+        raise HTTPException(status_code=422, detail="give at least two tenors")
+    from sqlalchemy import text
+    uid, today = uuid.UUID(user["sub"]), req.valuation_date or date.today()
+    quotes = [{"tenor": t, "quote_type": "FWD_POINTS", "rate": v, "enabled": True} for t, v in sorted(pts.items(), key=lambda kv: TENOR_DAYS[kv[0]])]
+    for cid, q in ((f"{pair}_FWD", quotes), (f"{pair}_SPOT", [{"tenor": "SPOT", "quote_type": "SPOT", "rate": float(req.spot), "enabled": True}] if req.spot else None)):
+        if q is None:
+            continue
+        db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u AND curve_id = :c AND valuation_date = :d"), {"u": uid, "c": cid, "d": today})
+        db.execute(text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
+                        "VALUES (:c, :d, CAST(:q AS jsonb), :s, :u, :u)"), {"c": cid, "d": today, "q": json.dumps(q), "s": req.source.upper(), "u": uid})
+    db.commit()
+    return pair_state(db, uid, pair)
+
+
+class ForwardModeIn(BaseModel):
+    mode: str = Field(..., description="MARKET (spot + quoted points) or IMPLIED (parity on the two OIS curves)")
+
+
+@router.post("/forward-mode")
+def set_forward_mode(req: ForwardModeIn, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    _require_trader(user)
+    mode = req.mode.upper()
+    if mode not in MODES:
+        raise HTTPException(status_code=422, detail="mode must be MARKET or IMPLIED")
+    from sqlalchemy import text
+    uid, today = uuid.UUID(user["sub"]), date.today()
+    quotes = [{"tenor": "MODE", "quote_type": "SETTING", "rate": 1 if mode == "MARKET" else 0, "enabled": True}]
+    db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u AND curve_id = 'FX_FORWARD_MODE' AND valuation_date = :d"), {"u": uid, "d": today})
+    db.execute(text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
+                    "VALUES ('FX_FORWARD_MODE', :d, CAST(:q AS jsonb), 'MANUAL', :u, :u)"), {"d": today, "q": json.dumps(quotes), "u": uid})
+    db.commit()
+    return {"forward_mode": mode}
 
 
 @router.post("/spot/snap")
@@ -247,16 +336,36 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
         kw["base_rate"], b_src = float(rate) / 100, (st.get("base_fallback") or
                                                      (f"flat {flat}% ({base}_FLAT)" if flat is not None else f"flat {rate}% ({POLICY_RATE_NOTE})"))
     try:
-        r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
-                                   forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
-                                   quote_curve=q_curve, direction=direction, pip=st["pip"], **kw)
+        implied = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
+                                         forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
+                                         quote_curve=q_curve, direction=direction, pip=st["pip"], **kw)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    mode = forward_mode(db, user_id) if not crypto else "IMPLIED"
+    fc = st.get("forward_points")
+    r, f_src, basis_pts = implied, "implied from the two OIS curves (interest-rate parity)", None
+    mkt_pts = None
+    if fc:
+        days = (settle - val_date).days
+        mkt_pts = interp_points(fc, days)
+        f_mkt = S + mkt_pts * st["pip"]
+        basis_pts = mkt_pts - implied.forward_points
+        if mode == "MARKET" and shape != "SPOT" and f_mkt > 0:
+            # the market forward implies the base-currency discount factor: DF_b = F·DF_q/S
+            df_b = f_mkt * implied.df_quote / S
+            t = implied.t
+            r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
+                                       forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
+                                       quote_curve=q_curve, direction=direction, pip=st["pip"],
+                                       base_rate=-math.log(df_b) / t if t > 0 else 0.0)
+            f_src = f"market points ({pair}_FWD {st['forward_curve']['valuation_date']}, {st['forward_curve']['source']}), basis {basis_pts:+.1f} pts vs parity"
     out = r.__dict__.copy()
     out.update(pair=pair, shape=shape, valuation_date=val_date.isoformat(), settlement_date=settle.isoformat(),
                spot_source=s_src, base_discounting=b_src, quote_curve=st["quote_curve"],
                quote_curve_snapshot=str(getattr(q_curve, "snapshot_date", "") or ""),
-               model="covered interest parity: F = S·DF_base/DF_quote; NPV_quote = ±N_base·(F−K)·DF_quote; ACT/365")
+               forward_mode=mode, forward_source=f_src, implied_forward=implied.forward, implied_points=implied.forward_points,
+               market_points=mkt_pts, basis_points=basis_pts,
+               model="F = S·DF_base/DF_quote (parity) or S + quoted points (market); NPV_quote = ±N_base·(F−K)·DF_quote; ACT/365")
     return out
 
 

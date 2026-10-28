@@ -184,3 +184,40 @@ def test_pair_route_falls_back_to_a_flat_rate_when_the_base_curve_is_missing():
     b = r.json()
     assert b["base_discounting"].startswith("flat 2.5% (central-bank policy rate")
     assert b["df_base"] == pytest.approx(math.exp(-0.025 * b["t"]))
+
+
+def test_forward_points_interpolation_and_market_mode():
+    from api.routes import currencies
+    pts = {"1M": 10.0, "3M": 30.0, "1Y": 120.0}
+    assert currencies.interp_points(pts, 0) == 0.0
+    assert currencies.interp_points(pts, 15) == pytest.approx(5.0)          # between spot (0) and 1M
+    assert currencies.interp_points(pts, 61) == pytest.approx(10 + 20 * (61 - 30) / (91 - 30))   # linear in days 1M→3M
+    assert currencies.interp_points(pts, 900) == 120.0                      # flat beyond the last tenor
+    # market mode: the outright is spot + points and the basis is reported against parity
+    import main
+    spot_row = MagicMock(valuation_date=VAL, quotes=[{"tenor": "SPOT", "rate": 1.1133}], source="IMPORT")
+    fwd_row  = MagicMock(valuation_date=VAL, quotes=[{"tenor": "1M", "rate": 10.0}, {"tenor": "3M", "rate": 50.0}, {"tenor": "6M", "rate": 90.0}], source="MANUAL")
+    curve_row = MagicMock(valuation_date=VAL, quotes=[{"tenor": "1Y", "rate": 2.0}, {"tenor": "5Y", "rate": 2.2}], source="MANUAL")
+    db = MagicMock()
+    def execute(sql, params=None):
+        r = MagicMock(); c = (params or {}).get("c", "")
+        r.first.return_value = (spot_row if c.endswith("_SPOT") else fwd_row if c.endswith("_FWD") else
+                                curve_row if c == "EUR_ESTR" else None)   # no FX_FORWARD_MODE row → MARKET
+        return r
+    db.execute.side_effect = execute
+    main.app.dependency_overrides[currencies.get_db] = lambda: db
+    main.app.dependency_overrides[currencies.verify_token] = lambda: {"sub": str(uuid4()), "user_metadata": {"role": "trader"}}
+    from fastapi.testclient import TestClient
+    curves = {"USD_SOFR": _c(0.04), "EUR_ESTR": _c(0.02)}
+    with patch.object(currencies, "_curve", side_effect=lambda db, uid, cid, vd: curves[cid]):
+        r = TestClient(main.app).post("/api/currency/forward/price", json={
+            "pair": "EURUSD", "base_notional": 1_000_000, "settlement_date": SET.isoformat(), "valuation_date": VAL.isoformat()})
+    main.app.dependency_overrides.clear()
+    assert r.status_code == 200, r.text
+    b = r.json()
+    days = (SET - VAL).days
+    expect_pts = currencies.interp_points({"1M": 10.0, "3M": 50.0, "6M": 90.0}, days)
+    assert b["forward_mode"] == "MARKET" and b["market_points"] == pytest.approx(expect_pts)
+    assert b["forward"] == pytest.approx(1.1133 + expect_pts * 1e-4)
+    assert b["basis_points"] == pytest.approx(expect_pts - b["implied_points"])
+    assert b["forward_source"].startswith("market points (EURUSD_FWD")
