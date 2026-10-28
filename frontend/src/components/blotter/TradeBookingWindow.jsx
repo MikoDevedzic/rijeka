@@ -822,7 +822,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
     const xS=t=>PAD.l+Math.sqrt(t/30)*CW
     const yS=r=>PAD.t+CH-(r-minR)/(maxR-minR)*CH
 
-    ctx.fillStyle='#0C0C0C'; ctx.fillRect(0,0,W,H)
+    ctx.fillStyle='var(--panel)'; ctx.fillRect(0,0,W,H)
 
     // Grid
     const gStep=visHalf>0.5?0.25:0.1
@@ -835,7 +835,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
     // X axis + labels
     ctx.strokeStyle='rgba(40,40,40,0.6)'; ctx.lineWidth=0.5
     ctx.beginPath(); ctx.moveTo(PAD.l,H-PAD.b); ctx.lineTo(W-PAD.r,H-PAD.b); ctx.stroke()
-    ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='#666666'
+    ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='var(--text-dim)'
     ;['1M','6M','1Y','2Y','5Y','10Y','20Y','30Y'].forEach(t=>{
       const x=xS(TENOR_Y[t]); ctx.fillText(t,x,H-PAD.b+6)
       ctx.strokeStyle='rgba(40,40,40,0.4)'; ctx.lineWidth=0.4
@@ -843,7 +843,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
     })
 
     const avgSh=sh.reduce((a,b)=>a+b,0)/sh.length
-    const shClr=avgSh<=0?'#4A9EFF':'#FF6B6B'
+    const shClr=avgSh<=0?'var(--blue)':'var(--red)'
     const shClrRgb=avgSh<=0?'74,158,255':'255,107,107'
     const anyShift=sh.some(s=>Math.abs(s)>0.05)
 
@@ -852,19 +852,19 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
     TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
     ctx.lineTo(xS(TENOR_Y[TENORS[TENORS.length-1]]),H-PAD.b); ctx.lineTo(xS(TENOR_Y[TENORS[0]]),H-PAD.b); ctx.closePath()
     const gBase=ctx.createLinearGradient(0,PAD.t,0,H-PAD.b)
-    gBase.addColorStop(0,'rgba(0,212,168,0.12)'); gBase.addColorStop(1,'rgba(0,212,168,0)')
+    gBase.addColorStop(0,'rgba(13,212,168,0.12)'); gBase.addColorStop(1,'rgba(13,212,168,0)')
     ctx.fillStyle=gBase; ctx.fill()
     ctx.setLineDash([]); ctx.lineJoin='round'; ctx.lineCap='round'
     ctx.beginPath()
     TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
-    ctx.strokeStyle='rgba(0,212,168,0.15)'; ctx.lineWidth=7; ctx.stroke()
+    ctx.strokeStyle='rgba(13,212,168,0.15)'; ctx.lineWidth=7; ctx.stroke()
     ctx.beginPath()
     TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
-    ctx.strokeStyle='#00D4A8'; ctx.lineWidth=2; ctx.stroke()
+    ctx.strokeStyle='var(--accent)'; ctx.lineWidth=2; ctx.stroke()
     TENORS.forEach((t,i)=>{
       const cx=xS(TENOR_Y[t]),cy=yS(baseRts[i])
-      ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2); ctx.strokeStyle='rgba(0,212,168,0.25)'; ctx.lineWidth=3; ctx.stroke()
-      ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2); ctx.fillStyle='#00D4A8'; ctx.fill()
+      ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2); ctx.strokeStyle='rgba(13,212,168,0.25)'; ctx.lineWidth=3; ctx.stroke()
+      ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2); ctx.fillStyle='var(--accent)'; ctx.fill()
     })
 
     // Shocked curve
@@ -872,7 +872,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
       ctx.beginPath()
       TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
       ;[...TENORS].reverse().forEach(t=>{const i=TENORS.indexOf(t);ctx.lineTo(xS(TENOR_Y[t]),yS(shockRts[i]))})
-      ctx.closePath(); ctx.fillStyle=avgSh>0?'rgba(255,107,107,0.06)':'rgba(74,158,255,0.06)'; ctx.fill()
+      ctx.closePath(); ctx.fillStyle=avgSh>0?'rgba(224,80,64,0.06)':'rgba(74,154,212,0.06)'; ctx.fill()
       ctx.setLineDash([5,3])
       ctx.beginPath()
       TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(shockRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
@@ -891,15 +891,15 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
     // Legend
     ctx.font='9px DM Mono,JetBrains Mono,monospace'; ctx.textBaseline='middle'; ctx.setLineDash([])
-    ctx.strokeStyle='#00D4A8'; ctx.lineWidth=2
+    ctx.strokeStyle='var(--accent)'; ctx.lineWidth=2
     ctx.beginPath(); ctx.moveTo(PAD.l,PAD.t-14); ctx.lineTo(PAD.l+20,PAD.t-14); ctx.stroke()
-    ctx.fillStyle='#00D4A8'; ctx.textAlign='left'; ctx.fillText('BASE',PAD.l+24,PAD.t-14)
+    ctx.fillStyle='var(--accent)'; ctx.textAlign='left'; ctx.fillText('BASE',PAD.l+24,PAD.t-14)
     if(anyShift){
       ctx.setLineDash([4,2]); ctx.strokeStyle=shClr
       ctx.beginPath(); ctx.moveTo(PAD.l+66,PAD.t-14); ctx.lineTo(PAD.l+86,PAD.t-14); ctx.stroke(); ctx.setLineDash([])
       ctx.fillStyle=shClr; ctx.fillText('SHOCKED',PAD.l+90,PAD.t-14)
       const avgBp=Math.round(avgSh)
-      ctx.fillStyle=avgBp>0?'#FF6B6B':'#4A9EFF'; ctx.textAlign='right'
+      ctx.fillStyle=avgBp>0?'var(--red)':'var(--blue)'; ctx.textAlign='right'
       ctx.fillText((avgBp>0?'+':'')+avgBp+'bp AVG',W-PAD.r,PAD.t-14)
     }
   }
@@ -1051,14 +1051,14 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
   const df10 = Math.exp(-getBase('10Y')/100*10)
   const fwd5y5y = df5>0&&df10>0 ? (-Math.log(df10/df5)/5)*100 : 0
 
-  const inp = {background:'#0C0C0C',border:'1px solid #1E1E1E',borderRadius:'3px',color:'#F0F0F0',fontFamily:'DM Mono,monospace',fontSize:'0.875rem',padding:'4px 8px',outline:'none',width:'100%'}
+  const inp = {background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'3px',color:'var(--text-hi)',fontFamily:'DM Mono,monospace',fontSize:'0.875rem',padding:'4px 8px',outline:'none',width:'100%'}
 
   return (
-    <div className='tbw-no-drag' style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:'#000000'}}>
+    <div className='tbw-no-drag' style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:'var(--bg-deep)'}}>
 
       {/* Notice bar */}
       <div style={{background:'rgba(240,160,32,0.06)',borderBottom:'1px solid rgba(240,160,32,0.15)',
-        padding:'5px 16px',fontSize:'0.8125rem',color:'#F5C842',letterSpacing:'0.02em',flexShrink:0,
+        padding:'5px 16px',fontSize:'0.8125rem',color:'var(--amber)',letterSpacing:'0.02em',flexShrink:0,
         fontFamily:"'IBM Plex Sans',var(--sans)"}}>
         {IS_SWPN
           ? '⚠ Curve + Vol Scenario — joint rate & vol shock. Changes are for analysis only.'
@@ -1069,11 +1069,11 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
       <div style={{flex:1,display:'grid',gridTemplateColumns:'340px 1fr',minHeight:0,overflow:'hidden'}}>
 
         {/* LEFT PANEL */}
-        <div style={{borderRight:'1px solid #1E1E1E',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div style={{borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
 
           {/* Controls */}
-          <div style={{padding:'14px 16px',borderBottom:'1px solid #1E1E1E',flexShrink:0}}>
-            <div style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'#666666',
+          <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+            <div style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'var(--text-dim)',
               fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'10px'}}>
               SCENARIO CONTROLS
             </div>
@@ -1098,30 +1098,30 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                 </optgroup>
               </select>
               <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
-                <span style={{fontSize:'0.8125rem',color:'#666666',fontFamily:"'IBM Plex Sans',var(--sans)",whiteSpace:'nowrap'}}>Ripple width</span>
-                <input type='range' min='1' max='10' value={sigma} step='1' style={{flex:1,accentColor:'#00D4A8'}}
+                <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)",whiteSpace:'nowrap'}}>Ripple width</span>
+                <input type='range' min='1' max='10' value={sigma} step='1' style={{flex:1,accentColor:'var(--accent)'}}
                   onChange={e=>{const v=parseFloat(e.target.value);setSigma(v);sigmaRef.current=v}}/>
-                <span style={{fontSize:'0.875rem',fontWeight:600,color:'#4A9EFF',fontFamily:'DM Mono,monospace',minWidth:'28px'}}>{sigma}Y</span>
+                <span style={{fontSize:'0.875rem',fontWeight:600,color:'var(--blue)',fontFamily:'DM Mono,monospace',minWidth:'28px'}}>{sigma}Y</span>
               </div>
               <div style={{display:'flex',gap:'8px'}}>
                 <button onClick={handleReset}
                   style={{flex:1,padding:'7px',borderRadius:'3px',cursor:'pointer',fontFamily:"'IBM Plex Sans',var(--sans)",
-                    fontSize:'0.8125rem',fontWeight:500,border:'1px solid #1E1E1E',background:'transparent',color:'#666666'}}>
+                    fontSize:'0.8125rem',fontWeight:500,border:'1px solid var(--border)',background:'transparent',color:'var(--text-dim)'}}>
                   Reset
                 </button>
                 <button onClick={handleConfirm} disabled={(!anyShift&&!unsavedVol)||confirmed||scenarioPricing}
                   style={{flex:2,padding:'7px',borderRadius:'3px',
                     cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',
                     fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',fontWeight:600,
-                    border:anyShift&&!confirmed?'1px solid rgba(0,212,168,0.6)':'1px solid #1E1E1E',
-                    background:anyShift&&!confirmed?'rgba(0,212,168,0.1)':'transparent',
-                    color:anyShift&&!confirmed?'#00D4A8':'#666666'}}>
+                    border:anyShift&&!confirmed?'1px solid rgba(13,212,168,0.6)':'1px solid var(--border)',
+                    background:anyShift&&!confirmed?'rgba(13,212,168,0.1)':'transparent',
+                    color:anyShift&&!confirmed?'var(--accent)':'var(--text-dim)'}}>
                   {scenarioPricing?'Repricing...':(anyShift&&!confirmed)?(IS_SWPN?'Confirm & reprice (rate+vol) →':'Confirm & reprice →'):'Confirm shape'}
                 </button>
               </div>
               {anyShift&&!confirmed&&(
-                <div style={{fontSize:'0.75rem',color:'#F5C842',fontFamily:"'IBM Plex Sans',var(--sans)",
-                  background:'rgba(245,200,66,0.06)',border:'1px solid rgba(245,200,66,0.2)',
+                <div style={{fontSize:'0.75rem',color:'var(--amber)',fontFamily:"'IBM Plex Sans',var(--sans)",
+                  background:'rgba(240,160,32,0.06)',border:'1px solid rgba(240,160,32,0.2)',
                   borderRadius:'3px',padding:'4px 8px'}}>
                   Shape unsaved — confirm to reprice · avg {avgBp>0?'+':''}{avgBp}bp
                 </div>
@@ -1129,35 +1129,35 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
               {/* Vol scenario controls — swaption only */}
               {IS_SWPN && (
-                <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid #1E1E1E'}}>
+                <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid var(--border)'}}>
                   <div style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',
-                    color:'#F5C842',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'8px',
+                    color:'var(--amber)',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'8px',
                     display:'flex',alignItems:'center',gap:'8px'}}>
                     VOL SCENARIO
-                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'#444'}}>&#946;=0 Normal SABR</span>
+                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'var(--text-mute)'}}>&#946;=0 Normal SABR</span>
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
                     {Object.entries(VOL_SCEN).map(([key,sc]) => (
                       <button key={key} onClick={()=>applyVolScen(key)}
                         style={{display:'flex',alignItems:'center',gap:'7px',padding:'5px 7px',
-                          border:'1px solid '+(volScenKey===key?(key==='base'?'rgba(0,212,168,.5)':'rgba(245,200,66,.5)'):'#1A1A1A'),
-                          borderRadius:'2px',cursor:'pointer',background:volScenKey===key?(key==='base'?'rgba(0,212,168,.07)':'rgba(245,200,66,.06)'):'transparent',
-                          color:volScenKey===key?(key==='base'?'#00D4A8':'#F5C842'):'#555',
+                          border:'1px solid '+(volScenKey===key?(key==='base'?'rgba(13,212,168,.5)':'rgba(240,160,32,.5)'):'var(--panel-3)'),
+                          borderRadius:'2px',cursor:'pointer',background:volScenKey===key?(key==='base'?'rgba(13,212,168,.07)':'rgba(240,160,32,.06)'):'transparent',
+                          color:volScenKey===key?(key==='base'?'var(--accent)':'var(--amber)'):'var(--text-dim)',
                           fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',
                           transition:'all .12s',textAlign:'left'}}>
                         <span style={{width:5,height:5,borderRadius:'50%',flexShrink:0,
-                          background:key==='base'?'#00D4A8':key==='dn15'?'#4A9EFF':key==='stress'?'#FF6B6B':'#F5C842',
+                          background:key==='base'?'var(--accent)':key==='dn15'?'var(--blue)':key==='stress'?'var(--red)':'var(--amber)',
                           display:'inline-block'}}/>
                         <span>{sc.l}</span>
                         {volScenKey===key&&key!=='base'&&(
-                          <span style={{fontSize:'0.6875rem',color:'#555',marginLeft:'auto'}}>{sc.d.slice(0,24)}</span>
+                          <span style={{fontSize:'0.6875rem',color:'var(--text-dim)',marginLeft:'auto'}}>{sc.d.slice(0,24)}</span>
                         )}
                       </button>
                     ))}
                   </div>
                   {volScenKey!=='base'&&(
-                    <div style={{marginTop:'6px',fontSize:'0.75rem',color:'#F5C842',
-                      background:'rgba(245,200,66,0.04)',border:'1px solid rgba(245,200,66,0.15)',
+                    <div style={{marginTop:'6px',fontSize:'0.75rem',color:'var(--amber)',
+                      background:'rgba(240,160,32,0.04)',border:'1px solid rgba(240,160,32,0.15)',
                       borderRadius:'2px',padding:'4px 8px',fontFamily:"'IBM Plex Mono',monospace"}}>
                       σ base: {(parseFloat(swaptionVol)||85).toFixed(1)}bp → shocked: {getShockedVolBp(activeVolP).toFixed(1)}bp
                     </div>
@@ -1167,12 +1167,12 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
               {/* Cap/Floor/Collar vol scenario */}
               {IS_CAPFLOOR && (
-                <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid #1E1E1E'}}>
+                <div style={{marginTop:'12px',paddingTop:'12px',borderTop:'1px solid var(--border)'}}>
                   <div style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',
-                    color:'#F5C842',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'8px',
+                    color:'var(--amber)',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'8px',
                     display:'flex',alignItems:'center',gap:'8px'}}>
                     CAP VOL SCENARIO
-                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'#444'}}>Bachelier Normal · flat vol shift</span>
+                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'var(--text-mute)'}}>Bachelier Normal · flat vol shift</span>
                   </div>
                   {[
                     {l:'BASE',          d:null,    shift:0},
@@ -1197,22 +1197,22 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                         }}
                         style={{display:'flex',alignItems:'center',gap:'7px',padding:'5px 7px',
                           marginBottom:'2px',width:'100%',
-                          border:'1px solid #1A1A1A',borderRadius:'2px',cursor:'pointer',
-                          background:'transparent',color:'#555',
+                          border:'1px solid var(--panel-3)',borderRadius:'2px',cursor:'pointer',
+                          background:'transparent',color:'var(--text-dim)',
                           fontFamily:"'IBM Plex Sans',var(--sans)",fontSize:'0.8125rem',textAlign:'left'}}>
                         <span style={{width:5,height:5,borderRadius:'50%',flexShrink:0,
-                          background:sc.shift===0?'#00D4A8':sc.shift>0?'#FF6B6B':'#4A9EFF',
+                          background:sc.shift===0?'var(--accent)':sc.shift>0?'var(--red)':'var(--blue)',
                           display:'inline-block'}}/>
                         <span>{sc.l}</span>
-                        {sc.d && <span style={{fontSize:'0.6875rem',color:'#444',marginLeft:'auto'}}>
+                        {sc.d && <span style={{fontSize:'0.6875rem',color:'var(--text-mute)',marginLeft:'auto'}}>
                           {baseVol.toFixed(1)} → {shockedVol.toFixed(1)}bp
                         </span>}
                       </button>
                     )
                   })}
                   {capResult && (
-                    <div style={{marginTop:'6px',fontSize:'0.75rem',color:'#F5C842',
-                      background:'rgba(245,200,66,0.04)',border:'1px solid rgba(245,200,66,0.15)',
+                    <div style={{marginTop:'6px',fontSize:'0.75rem',color:'var(--amber)',
+                      background:'rgba(240,160,32,0.04)',border:'1px solid rgba(240,160,32,0.15)',
                       borderRadius:'2px',padding:'4px 8px',fontFamily:"'IBM Plex Mono',monospace"}}>
                       vol: {parseFloat(capVolOverride||capResult.vol_bp||85).toFixed(1)}bp · NPV: {capResult.npv!=null?'$'+Math.round(capResult.npv).toLocaleString():'—'}
                     </div>
@@ -1223,17 +1223,17 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           </div>
 
           {/* PAR RATES table */}
-          <div style={{padding:'10px 16px 6px',borderBottom:'1px solid #1E1E1E',flexShrink:0}}>
+          <div style={{padding:'10px 16px 6px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
-              <span style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'#666666',fontFamily:"'IBM Plex Sans',var(--sans)"}}>
+              <span style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>
                 PAR RATES — {curveId.replace('_',' ')} &nbsp;
-                <span style={{fontWeight:400,color:'#2A2A2A'}}>% p.a.</span>
+                <span style={{fontWeight:400,color:'var(--border-hi)'}}>% p.a.</span>
               </span>
               {Object.keys(baseOverrides).length>0&&(
                 <button onClick={()=>setBaseOverrides({})}
                   style={{fontSize:'0.75rem',padding:'2px 8px',borderRadius:'2px',cursor:'pointer',
-                    fontFamily:"'IBM Plex Sans',var(--sans)",border:'1px solid rgba(245,200,66,0.3)',
-                    background:'rgba(245,200,66,0.06)',color:'#F5C842'}}>
+                    fontFamily:"'IBM Plex Sans',var(--sans)",border:'1px solid rgba(240,160,32,0.3)',
+                    background:'rgba(240,160,32,0.06)',color:'var(--amber)'}}>
                   clear overrides
                 </button>
               )}
@@ -1250,15 +1250,15 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
               const shocked=base+shBp/100
               const yr=TENOR_Y[t]
               const df=Math.exp(-shocked/100*yr)
-              const shiftClr=shBp>0?'#FF6B6B':shBp<0?'#4A9EFF':'#666666'
+              const shiftClr=shBp>0?'var(--red)':shBp<0?'var(--blue)':'var(--text-dim)'
               return(
                 <div key={t} style={{padding:'6px 0',borderBottom:'1px solid rgba(30,34,53,0.5)'}}>
                   <div style={{display:'grid',gridTemplateColumns:'36px 1fr 70px',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
-                    <span style={{fontSize:'0.875rem',fontWeight:700,color:'#00D4A8',fontFamily:'DM Mono,monospace'}}>{t}</span>
+                    <span style={{fontSize:'0.875rem',fontWeight:700,color:'var(--accent)',fontFamily:'DM Mono,monospace'}}>{t}</span>
                     <input type='text' defaultValue={base.toFixed(8)}
                       key={t+'-'+(isOverride?baseOverrides[t]:marketBase.toFixed(8))}
                       onBlur={e=>{const v=parseFloat(e.target.value);if(!isNaN(v)&&v>0&&v<20){setBaseOverrides(o=>({...o,[t]:v.toFixed(4)}));setTick(x=>x+1);scheduleDraw()}else e.target.value=base.toFixed(8)}}
-                      style={{background:'transparent',border:'1px solid '+(isOverride?'rgba(245,200,66,0.5)':'rgba(40,40,40,0.6)'),borderRadius:'2px',color:isOverride?'#F5C842':'#E8EAF0',fontFamily:'DM Mono,monospace',fontSize:'0.875rem',padding:'3px 8px',outline:'none',textAlign:'right'}}/>
+                      style={{background:'transparent',border:'1px solid '+(isOverride?'rgba(240,160,32,0.5)':'rgba(40,40,40,0.6)'),borderRadius:'2px',color:isOverride?'var(--amber)':'#E8EAF0',fontFamily:'DM Mono,monospace',fontSize:'0.875rem',padding:'3px 8px',outline:'none',textAlign:'right'}}/>
                     <span style={{fontSize:'0.8125rem',fontWeight:shBp!==0?700:400,color:shiftClr,fontFamily:'DM Mono,monospace',textAlign:'right'}}>
                       {shBp===0?'—':(shBp>0?'+':'')+shBp.toFixed(1)+'bp'}
                     </span>
@@ -1266,16 +1266,16 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   <div style={{display:'grid',gridTemplateColumns:'36px 1fr 1fr 1fr',gap:'4px'}}>
                     <span/>
                     <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:'0.72rem',color:'#2A2A2A',fontFamily:"'IBM Plex Sans',var(--sans)"}}>SHOCKED</div>
-                      <div style={{fontSize:'0.8125rem',fontWeight:600,color:shBp===0?'#666666':shiftClr,fontFamily:'DM Mono,monospace'}}>{shocked.toFixed(4)}%</div>
+                      <div style={{fontSize:'0.72rem',color:'var(--border-hi)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>SHOCKED</div>
+                      <div style={{fontSize:'0.8125rem',fontWeight:600,color:shBp===0?'var(--text-dim)':shiftClr,fontFamily:'DM Mono,monospace'}}>{shocked.toFixed(4)}%</div>
                     </div>
                     <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:'0.72rem',color:'#2A2A2A',fontFamily:"'IBM Plex Sans',var(--sans)"}}>ZERO</div>
-                      <div style={{fontSize:'0.8125rem',color:'#666666',fontFamily:'DM Mono,monospace'}}>{shocked.toFixed(4)}%</div>
+                      <div style={{fontSize:'0.72rem',color:'var(--border-hi)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>ZERO</div>
+                      <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',fontFamily:'DM Mono,monospace'}}>{shocked.toFixed(4)}%</div>
                     </div>
                     <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:'0.72rem',color:'#2A2A2A',fontFamily:"'IBM Plex Sans',var(--sans)"}}>DF</div>
-                      <div style={{fontSize:'0.8125rem',color:'#666666',fontFamily:'DM Mono,monospace'}}>{df.toFixed(5)}</div>
+                      <div style={{fontSize:'0.72rem',color:'var(--border-hi)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>DF</div>
+                      <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',fontFamily:'DM Mono,monospace'}}>{df.toFixed(5)}</div>
                     </div>
                   </div>
                 </div>
@@ -1288,14 +1288,14 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
         <div style={{display:'flex',flexDirection:'column',overflow:'hidden',flex:1,minHeight:0}}>
 
           {/* Stats cards */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'#1E1E1E',borderBottom:'1px solid #1E1E1E',flexShrink:0}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'var(--border)',borderBottom:'1px solid var(--border)',flexShrink:0}}>
             {[
-              {label:'30Y DISCOUNT FACTOR', value:df30.toFixed(4), color:'#4A9EFF'},
-              {label:'5Y ZERO RATE',         value:zero5.toFixed(3)+'%', color:'#00D4A8'},
-              {label:'10Y FWD RATE (5Y×5Y)',  value:fwd5y5y.toFixed(3)+'%', color:'#F5C842'},
+              {label:'30Y DISCOUNT FACTOR', value:df30.toFixed(4), color:'var(--blue)'},
+              {label:'5Y ZERO RATE',         value:zero5.toFixed(3)+'%', color:'var(--accent)'},
+              {label:'10Y FWD RATE (5Y×5Y)',  value:fwd5y5y.toFixed(3)+'%', color:'var(--amber)'},
             ].map(s=>(
-              <div key={s.label} style={{background:'#000000',padding:'12px 16px'}}>
-                <div style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'#666666',
+              <div key={s.label} style={{background:'var(--bg-deep)',padding:'12px 16px'}}>
+                <div style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'var(--text-dim)',
                   fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'4px'}}>{s.label}</div>
                 <div style={{fontSize:'1.25rem',fontWeight:700,color:s.color,fontFamily:'DM Mono,monospace'}}>{s.value}</div>
               </div>
@@ -1305,35 +1305,35 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           {/* Charts container — rate + vol stacked */}
           <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
           {/* Chart — rate curve */}
-          <div style={{flex:IS_SWPN?'0 0 52%':'1',position:'relative',background:'#0C0C0C',overflow:'hidden',minHeight:'160px'}}>
+          <div style={{flex:IS_SWPN?'0 0 52%':'1',position:'relative',background:'var(--panel)',overflow:'hidden',minHeight:'160px'}}>
             <canvas ref={canvasRef} style={{display:'block',cursor:'crosshair'}}/>
             {dragTip&&(
               <div style={{position:'absolute',left:dragTip.x,top:dragTip.y,pointerEvents:'none',zIndex:10,
-                background:'#0C0C0C',border:'1px solid '+(dragTip.bp>=0?'rgba(255,107,107,0.7)':'rgba(74,158,255,0.7)'),
+                background:'var(--panel)',border:'1px solid '+(dragTip.bp>=0?'rgba(224,80,64,0.7)':'rgba(74,154,212,0.7)'),
                 borderRadius:'3px',padding:'5px 12px',fontSize:'0.875rem',fontFamily:'DM Mono,monospace',
-                fontWeight:700,color:dragTip.bp>=0?'#FF6B6B':'#4A9EFF',whiteSpace:'nowrap',
+                fontWeight:700,color:dragTip.bp>=0?'var(--red)':'var(--blue)',whiteSpace:'nowrap',
                 boxShadow:'0 4px 16px rgba(0,0,0,0.9)'}}>
                 {dragTip.bp>=0?'+':''}{dragTip.bp}bp @ {dragTip.tenor}
               </div>
             )}
             {hoverInfo&&!dragTip&&(
               <div style={{position:'absolute',left:Math.min(hoverInfo.x+14,600),top:Math.max(hoverInfo.y-80,4),
-                pointerEvents:'none',zIndex:10,background:'#0C0C0C',border:'1px solid #1E1E1E',
+                pointerEvents:'none',zIndex:10,background:'var(--panel)',border:'1px solid var(--border)',
                 borderRadius:'3px',padding:'10px 14px',minWidth:'160px',boxShadow:'0 4px 20px rgba(0,0,0,0.9)'}}>
-                <div style={{fontSize:'0.9375rem',fontWeight:700,letterSpacing:'0.08em',color:'#F0F0F0',
+                <div style={{fontSize:'0.9375rem',fontWeight:700,letterSpacing:'0.08em',color:'var(--text-hi)',
                   fontFamily:'DM Mono,monospace',marginBottom:'7px'}}>{hoverInfo.tenor}</div>
                 <div style={{display:'flex',justifyContent:'space-between',gap:'16px',marginBottom:'4px'}}>
-                  <span style={{fontSize:'0.8125rem',color:'#666666',fontFamily:"'IBM Plex Sans',var(--sans)"}}>Base</span>
-                  <span style={{fontSize:'0.875rem',fontWeight:600,color:'#00D4A8',fontFamily:'DM Mono,monospace'}}>{hoverInfo.base.toFixed(4)}%</span>
+                  <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>Base</span>
+                  <span style={{fontSize:'0.875rem',fontWeight:600,color:'var(--accent)',fontFamily:'DM Mono,monospace'}}>{hoverInfo.base.toFixed(4)}%</span>
                 </div>
                 {hoverInfo.bp!==0&&<>
                   <div style={{display:'flex',justifyContent:'space-between',gap:'16px',marginBottom:'4px'}}>
-                    <span style={{fontSize:'0.8125rem',color:'#666666',fontFamily:"'IBM Plex Sans',var(--sans)"}}>Shocked</span>
-                    <span style={{fontSize:'0.875rem',fontWeight:600,color:hoverInfo.bp>0?'#FF6B6B':'#4A9EFF',fontFamily:'DM Mono,monospace'}}>{hoverInfo.shocked.toFixed(4)}%</span>
+                    <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>Shocked</span>
+                    <span style={{fontSize:'0.875rem',fontWeight:600,color:hoverInfo.bp>0?'var(--red)':'var(--blue)',fontFamily:'DM Mono,monospace'}}>{hoverInfo.shocked.toFixed(4)}%</span>
                   </div>
-                  <div style={{display:'flex',justifyContent:'space-between',gap:'16px',borderTop:'1px solid #1E1E1E',paddingTop:'5px',marginTop:'4px'}}>
-                    <span style={{fontSize:'0.8125rem',color:'#666666',fontFamily:"'IBM Plex Sans',var(--sans)"}}>Shift</span>
-                    <span style={{fontSize:'0.875rem',fontWeight:700,color:hoverInfo.bp>0?'#FF6B6B':'#4A9EFF',fontFamily:'DM Mono,monospace'}}>{hoverInfo.bp>0?'+':''}{hoverInfo.bp}bp</span>
+                  <div style={{display:'flex',justifyContent:'space-between',gap:'16px',borderTop:'1px solid var(--border)',paddingTop:'5px',marginTop:'4px'}}>
+                    <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>Shift</span>
+                    <span style={{fontSize:'0.875rem',fontWeight:700,color:hoverInfo.bp>0?'var(--red)':'var(--blue)',fontFamily:'DM Mono,monospace'}}>{hoverInfo.bp>0?'+':''}{hoverInfo.bp}bp</span>
                   </div>
                 </>}
               </div>
@@ -1348,12 +1348,12 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           {/* 3D Vol surface — swaption SABR or cap vol surface */}
           {IS_SWPN && (
             <div ref={volWrapRef}
-              style={{flex:'1 1 0',borderTop:'1px solid #1E1E1E',background:'#0A0A0E',
+              style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'#0A0A0E',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}
 >
               <div style={{position:'absolute',top:5,left:8,fontSize:'0.5rem',
-                color:'#F5C842',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
-                VOL SURFACE — β​=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'#555',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
+                color:'var(--amber)',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
+                VOL SURFACE — β​=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'var(--text-dim)',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
               </div>
               {/* Mode button — top right of vol pane */}
               <div style={{position:'absolute',top:5,right:8,zIndex:3,display:'flex',gap:3}}>
@@ -1361,28 +1361,28 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   onClick={()=>setVolMode('rotate')}
                   style={{padding:'3px 8px',fontSize:'0.5rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:"'IBM Plex Mono',monospace",
-                    border: volMode==='rotate'?'1px solid rgba(74,158,255,.5)':'1px solid #1a1c26',
-                    color: volMode==='rotate'?'#4A9EFF':'#444',
-                    background: volMode==='rotate'?'rgba(74,158,255,.07)':'transparent'}}>
+                    border: volMode==='rotate'?'1px solid rgba(74,154,212,.5)':'1px solid #1a1c26',
+                    color: volMode==='rotate'?'var(--blue)':'var(--text-mute)',
+                    background: volMode==='rotate'?'rgba(74,154,212,.07)':'transparent'}}>
                   ⟳ ROTATE
                 </button>
                 <button
                   onClick={()=>setVolMode(m=>m==='reshape'?'rotate':'reshape')}
                   style={{padding:'3px 8px',fontSize:'0.5rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:"'IBM Plex Mono',monospace",
-                    border: volMode==='reshape'?'1px solid rgba(245,200,66,.5)':'1px solid #1a1c26',
-                    color: volMode==='reshape'?'#F5C842':'#444',
-                    background: volMode==='reshape'?'rgba(245,200,66,.07)':'transparent'}}>
+                    border: volMode==='reshape'?'1px solid rgba(240,160,32,.5)':'1px solid #1a1c26',
+                    color: volMode==='reshape'?'var(--amber)':'var(--text-mute)',
+                    background: volMode==='reshape'?'rgba(240,160,32,.07)':'transparent'}}>
                   ✦ {volMode==='reshape'?'RESHAPING...':'RESHAPE'}
                 </button>
               </div>
               <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.4375rem',
-                color:'#1E2028',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
+                color:'var(--panel-3)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 {volMode==='rotate'?'DRAG TO ROTATE · SCROLL TO ZOOM':'DRAG UP/DOWN TO DEFORM VOL · REPRICE FOR ΔP&L'}
               </div>
               {!isVolThreeReady && (
                 <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
-                  justifyContent:'center',color:'#2A2A2A',fontSize:'0.75rem',
+                  justifyContent:'center',color:'var(--border-hi)',fontSize:'0.75rem',
                   fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'.08em'}}>
                   PRICE SWAPTION FIRST TO LOAD SURFACE
                 </div>
@@ -1391,13 +1391,13 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
               <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',
                 gap:4,pointerEvents:'none',zIndex:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <div style={{width:16,height:2,background:'rgba(0,212,168,.6)',borderRadius:1}}/>
-                  <span style={{fontSize:'0.4375rem',color:'rgba(0,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>BASE</span>
+                  <div style={{width:16,height:2,background:'rgba(13,212,168,.6)',borderRadius:1}}/>
+                  <span style={{fontSize:'0.4375rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>BASE</span>
                 </div>
                 {volScenKey!=='base'&&(
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    <div style={{width:16,height:2,background:'#F5C842',borderRadius:1}}/>
-                    <span style={{fontSize:'0.4375rem',color:'#F5C842',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>SHOCKED</span>
+                    <div style={{width:16,height:2,background:'var(--amber)',borderRadius:1}}/>
+                    <span style={{fontSize:'0.4375rem',color:'var(--amber)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>SHOCKED</span>
                   </div>
                 )}
               </div>
@@ -1408,27 +1408,27 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           )}
           {IS_CAPFLOOR && (
             <div ref={capVolWrapRef}
-              style={{flex:'1 1 0',borderTop:'1px solid #1E1E1E',background:'#0A0A0E',
+              style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'#0A0A0E',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}>
               <div style={{position:'absolute',top:5,left:8,fontSize:'0.5rem',
-                color:'#F5C842',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
+                color:'var(--amber)',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 CAP VOL SURFACE — BACHELIER NORMAL
               </div>
               <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.4375rem',
-                color:'#1E2028',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
+                color:'var(--panel-3)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 DRAG TO ROTATE · SCROLL TO ZOOM · STRIKE SPREAD (bp) × TENOR (Y)
               </div>
               {!capResult && (
                 <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
-                  justifyContent:'center',color:'#2A2A2A',fontSize:'0.75rem',
+                  justifyContent:'center',color:'var(--border-hi)',fontSize:'0.75rem',
                   fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'.08em'}}>
                   PRICE CAP/FLOOR FIRST TO LOAD SURFACE
                 </div>
               )}
               <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',gap:4,pointerEvents:'none',zIndex:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <div style={{width:16,height:2,background:'rgba(0,212,168,.6)',borderRadius:1}}/>
-                  <span style={{fontSize:'0.4375rem',color:'rgba(0,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>
+                  <div style={{width:16,height:2,background:'rgba(13,212,168,.6)',borderRadius:1}}/>
+                  <span style={{fontSize:'0.4375rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>
                     {(parseFloat(capVolOverride)||capResult?.vol_bp||85).toFixed(1)}bp · {capResult?.vol_tier||'—'}
                   </span>
                 </div>
@@ -1442,42 +1442,42 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
           {/* Joint P&L attribution — swaption only */}
           {IS_SWPN && jointResult && (
-            <div style={{flexShrink:0,borderTop:'1px solid #1E1E1E',background:'#000'}}>
+            <div style={{flexShrink:0,borderTop:'1px solid var(--border)',background:'#000'}}>
               <div style={{padding:'6px 14px 4px',display:'flex',alignItems:'center',gap:'10px'}}>
                 <span style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'.08em',
-                  color:'#666',fontFamily:"'IBM Plex Sans',var(--sans)"}}>
+                  color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>
                   JOINT RATE + VOL P&L ATTRIBUTION
                 </span>
-                <span style={{fontSize:'0.6875rem',color:'#F5C842',
+                <span style={{fontSize:'0.6875rem',color:'var(--amber)',
                   fontFamily:"'IBM Plex Mono',monospace"}}>
                   Vol: {jointResult.volScenLabel}
                 </span>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1px',
-                background:'#1E1E1E',margin:'0 0 0 0'}}>
+                background:'var(--border)',margin:'0 0 0 0'}}>
                 {[
-                  {l:'ΔNPV RATE ONLY',   v:jointResult.dRate,  c:'#4A9EFF',
+                  {l:'ΔNPV RATE ONLY',   v:jointResult.dRate,  c:'var(--blue)',
                    s:'rate shock · vol held'},
-                  {l:'ΔNPV VOL ONLY',    v:jointResult.dVol,   c:'#F5C842',
+                  {l:'ΔNPV VOL ONLY',    v:jointResult.dVol,   c:'var(--amber)',
                    s:`${jointResult.baseVol?.toFixed(1)}→${jointResult.shockVol?.toFixed(1)}bp`},
-                  {l:'ΔNPV JOINT',       v:jointResult.dJoint, c:'#00D4A8',
+                  {l:'ΔNPV JOINT',       v:jointResult.dJoint, c:'var(--accent)',
                    s:'rate + vol combined'},
                   {l:'ΔNPV CROSS-GAMMA', v:jointResult.dCross,
-                   c:Math.abs(jointResult.dCross)<500?'#666':'#FF6B6B',
+                   c:Math.abs(jointResult.dCross)<500?'var(--text-dim)':'var(--red)',
                    s:'joint − sum (non-linear)'},
                 ].map(({l,v,c,s}) => (
                   <div key={l} style={{background:'#050505',padding:'8px 10px'}}>
                     <div style={{fontSize:'0.6875rem',fontWeight:600,letterSpacing:'.08em',
-                      color:'#444',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:3}}>{l}</div>
-                    <div style={{fontSize:'1rem',fontWeight:700,color:v!=null?c:'#333',
+                      color:'var(--text-mute)',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:3}}>{l}</div>
+                    <div style={{fontSize:'1rem',fontWeight:700,color:v!=null?c:'var(--text-mute)',
                       fontFamily:"'IBM Plex Mono',monospace",marginBottom:2}}>
                       {v!=null ? (v>=0?'+':'-')+'$'+Math.abs(Math.round(v)).toLocaleString() : '—'}
                     </div>
-                    <div style={{fontSize:'0.6875rem',color:'#333'}}>{s}</div>
+                    <div style={{fontSize:'0.6875rem',color:'var(--text-mute)'}}>{s}</div>
                   </div>
                 ))}
               </div>
-              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'#1A1A1A',
+              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'var(--panel-3)',
                 fontFamily:"'IBM Plex Mono',monospace"}}>
                 Cross-gamma = joint P&L − (rate P&L + vol P&L) · Non-zero = rate and vol move are correlated
               </div>
@@ -1485,8 +1485,8 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
           )}
 
           {(scenarioBase||scenarioCalc)&&(
-            <div style={{flexShrink:0,borderTop:'1px solid #1E1E1E',
-              display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1px',background:'#1E1E1E'}}>
+            <div style={{flexShrink:0,borderTop:'1px solid var(--border)',
+              display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'1px',background:'var(--border)'}}>
               {[
                 {label:'NET NPV',base:scenarioBase?.npv,shocked:scenarioCalc?.npv,fmt:fmtPnl,approx:false},
                 {label:'IR01',base:scenarioBase?.ir01,shocked:scenarioCalc?.ir01,fmt:fmtPnl,approx:false},
@@ -1496,29 +1496,29 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   const delta=item.shocked!=null&&item.base!=null?item.shocked-item.base:null
                   const fmt=n=>n==null?'—':item.dp?(n>=0?'+':'')+n.toFixed(item.dp):item.fmt(n)
                   return(
-                    <div key={item.label} style={{background:'#000000',padding:'10px 14px'}}>
+                    <div key={item.label} style={{background:'var(--bg-deep)',padding:'10px 14px'}}>
                       <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:3}}>
-                        <span style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'#666666',
+                        <span style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'var(--text-dim)',
                           fontFamily:"'IBM Plex Sans',var(--sans)"}}>{item.label}</span>
                         {item.approx&&item.shocked!=null&&(
                           <button onClick={()=>setThetaApproxVisible(v=>!v)}
                             style={{fontSize:'0.75rem',padding:'1px 5px',borderRadius:'2px',cursor:'pointer',
-                              fontFamily:"'IBM Plex Sans',var(--sans)",border:'1px solid rgba(245,200,66,0.3)',
-                              background:'rgba(245,200,66,0.06)',color:'#F5C842'}}>
+                              fontFamily:"'IBM Plex Sans',var(--sans)",border:'1px solid rgba(240,160,32,0.3)',
+                              background:'rgba(240,160,32,0.06)',color:'var(--amber)'}}>
                             {thetaApproxVisible?'▴':'▾'} ~
                           </button>
                         )}
                       </div>
-                      <div style={{fontSize:'1rem',fontWeight:700,fontFamily:'DM Mono,monospace',color:'#4A9EFF'}}>{fmt(item.base)}</div>
+                      <div style={{fontSize:'1rem',fontWeight:700,fontFamily:'DM Mono,monospace',color:'var(--blue)'}}>{fmt(item.base)}</div>
                       {item.shocked!=null&&<>
                         <div style={{fontSize:'1rem',fontWeight:700,fontFamily:'DM Mono,monospace',
-                          color:item.shocked>=0?'#00D4A8':'#FF6B6B'}}>
-                          {fmt(item.shocked)}{item.approx&&<span style={{fontSize:'0.75rem',color:'#F5C842',marginLeft:2}}>~</span>}
+                          color:item.shocked>=0?'var(--accent)':'var(--red)'}}>
+                          {fmt(item.shocked)}{item.approx&&<span style={{fontSize:'0.75rem',color:'var(--amber)',marginLeft:2}}>~</span>}
                         </div>
                         {delta!=null&&<div style={{fontSize:'0.8125rem',marginTop:2,fontFamily:'DM Mono,monospace',
-                          color:delta>=0?'#00D4A8':'#FF6B6B'}}>{delta>=0?'+':''}{fmt(delta)}</div>}
-                        {item.approx&&thetaApproxVisible&&<div style={{fontSize:'0.75rem',color:'#F5C842',marginTop:3,
-                          borderTop:'1px solid rgba(245,200,66,0.2)',paddingTop:3,fontFamily:"'IBM Plex Sans',var(--sans)"}}>
+                          color:delta>=0?'var(--accent)':'var(--red)'}}>{delta>=0?'+':''}{fmt(delta)}</div>}
+                        {item.approx&&thetaApproxVisible&&<div style={{fontSize:'0.75rem',color:'var(--amber)',marginTop:3,
+                          borderTop:'1px solid rgba(240,160,32,0.2)',paddingTop:3,fontFamily:"'IBM Plex Sans',var(--sans)"}}>
                           ΔTheta ∝ ΔIR01/IR01 — directional only
                         </div>}
                       </>}
@@ -1578,9 +1578,9 @@ function xvaCalc(xva, notionalRef, rateRef, effDate, matDate, parRate) {
 function XvaFooterRate({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
   const {allIn} = xvaCalc(xva,notionalRef,rateRef,effDate,matDate,parRate)
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderLeft:'1px solid rgba(0,212,168,0.3)',marginLeft:'4px'}}>
-      <span style={{fontSize:'9px',color:'#00D4A8',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>ALL-IN RATE</span>
-      <span style={{fontSize:'13px',fontWeight:700,color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace"}}>{isFinite(allIn)?allIn.toFixed(3)+'%':'—'}</span>
+    <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderLeft:'1px solid rgba(13,212,168,0.3)',marginLeft:'4px'}}>
+      <span style={{fontSize:'9px',color:'var(--accent)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>ALL-IN RATE</span>
+      <span style={{fontSize:'13px',fontWeight:700,color:'var(--accent)',fontFamily:"'IBM Plex Mono',monospace"}}>{isFinite(allIn)?allIn.toFixed(3)+'%':'—'}</span>
     </div>
   )
 }
@@ -1610,7 +1610,7 @@ function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply
   ]
   return (
     <>
-      <div style={{display:'flex',alignItems:'center',gap:'14px',padding:'8px 12px',background:'rgba(0,212,168,0.04)',border:'1px solid rgba(0,212,168,0.2)',borderRadius:'2px',marginBottom:'8px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:'14px',padding:'8px 12px',background:'rgba(13,212,168,0.04)',border:'1px solid rgba(13,212,168,0.2)',borderRadius:'2px',marginBottom:'8px'}}>
         <div style={{display:'flex',flexDirection:'column',gap:'2px',minWidth:'90px'}}>
           <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.10em',color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>ALL-IN RATE</div>
           <div style={{fontSize:'1.25rem',fontWeight:700,color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>{isFinite(allIn)?allIn.toFixed(3)+'%':'—'}</div>
@@ -1635,13 +1635,13 @@ function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply
           </div>
         </div>
         <div style={{marginLeft:'auto',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'4px'}}>
-          <button onClick={onApply} style={{padding:'4px 12px',borderRadius:'2px',fontSize:'0.8125rem',fontWeight:700,cursor:'pointer',fontFamily:"'IBM Plex Mono',var(--mono)",border:'1px solid rgba(0,212,168,0.4)',background:'rgba(0,212,168,0.07)',color:'var(--accent)'}}>APPLY TO RATE</button>
+          <button onClick={onApply} style={{padding:'4px 12px',borderRadius:'2px',fontSize:'0.8125rem',fontWeight:700,cursor:'pointer',fontFamily:"'IBM Plex Mono',var(--mono)",border:'1px solid rgba(13,212,168,0.4)',background:'rgba(13,212,168,0.07)',color:'var(--accent)'}}>APPLY TO RATE</button>
           <div style={{fontSize:'0.75rem',color:'var(--text-dim)'}}>embed {fB(xvaBp)} into fixed rate</div>
         </div>
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)',borderRadius:'2px',overflow:'hidden'}}>
         {cells.map(({k,l,v,col,b,s}) => (
-          <div key={k} style={{background:k==='all_in'?'rgba(0,212,168,0.04)':'var(--bg)',padding:'7px 8px',borderLeft:k==='all_in'?'1px solid rgba(0,212,168,0.15)':'none'}}>
+          <div key={k} style={{background:k==='all_in'?'rgba(13,212,168,0.04)':'var(--bg)',padding:'7px 8px',borderLeft:k==='all_in'?'1px solid rgba(13,212,168,0.15)':'none'}}>
             <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'3px'}}>{l}</div>
             <div style={{fontSize:'0.9375rem',fontWeight:700,color:col,fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'2px'}}>{fD(v)}</div>
             <div style={{borderTop:'1px solid var(--panel-2)',paddingTop:'2px'}}>
@@ -1694,8 +1694,8 @@ function SwaptionDecayChart({ result, expiry }) {
 
     // Gradient fill
     const grad = ctx.createLinearGradient(0, PAD.t, 0, H - PAD.b)
-    grad.addColorStop(0, 'rgba(74,158,255,0.15)')
-    grad.addColorStop(1, 'rgba(74,158,255,0)')
+    grad.addColorStop(0, 'rgba(74,154,212,0.15)')
+    grad.addColorStop(1, 'rgba(74,154,212,0)')
     ctx.beginPath()
     pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
     ctx.lineTo(pts[pts.length-1].x, H-PAD.b)
@@ -1706,28 +1706,28 @@ function SwaptionDecayChart({ result, expiry }) {
     // Glow
     ctx.beginPath()
     pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
-    ctx.strokeStyle = 'rgba(74,158,255,0.2)'; ctx.lineWidth = 6; ctx.lineJoin='round'; ctx.stroke()
+    ctx.strokeStyle = 'rgba(74,154,212,0.2)'; ctx.lineWidth = 6; ctx.lineJoin='round'; ctx.stroke()
 
     // Line
     ctx.beginPath()
     pts.forEach((p,i) => i===0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
-    ctx.strokeStyle = '#4A9EFF'; ctx.lineWidth = 1.5; ctx.stroke()
+    ctx.strokeStyle = 'var(--blue)'; ctx.lineWidth = 1.5; ctx.stroke()
 
     // Today dot
     ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 3, 0, Math.PI*2)
-    ctx.strokeStyle='rgba(74,158,255,.3)'; ctx.lineWidth=3; ctx.stroke()
+    ctx.strokeStyle='rgba(74,154,212,.3)'; ctx.lineWidth=3; ctx.stroke()
     ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 2, 0, Math.PI*2)
-    ctx.fillStyle='#4A9EFF'; ctx.fill()
+    ctx.fillStyle='var(--blue)'; ctx.fill()
 
     // X labels
-    ctx.fillStyle='#555'; ctx.font='9px DM Mono,monospace'; ctx.textBaseline='top'
+    ctx.fillStyle='var(--text-dim)'; ctx.font='9px DM Mono,monospace'; ctx.textBaseline='top'
     ctx.textAlign='left'; ctx.fillText('Today', PAD.l, H-PAD.b+3)
     ctx.textAlign='right'; ctx.fillText('Expiry', W-PAD.r+4, H-PAD.b+3)
 
     // Y label
-    ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillStyle='#4A9EFF'
+    ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillStyle='var(--blue)'
     ctx.fillText('$'+Math.round(Math.abs(NPV)).toLocaleString(), W-4, pts[0].y)
-    ctx.fillStyle='#555'
+    ctx.fillStyle='var(--text-dim)'
     ctx.fillText('$0', W-4, H-PAD.b)
 
   }, [result?.npv, expiry])
@@ -3073,17 +3073,17 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 {/* Identity strip */}
                 <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
                   <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.08em',padding:'2px 7px',borderRadius:'2px',
-                    background:'rgba(74,158,255,.1)',color:'var(--blue)',border:'1px solid rgba(74,158,255,.3)'}}>
+                    background:'rgba(74,154,212,.1)',color:'var(--blue)',border:'1px solid rgba(74,154,212,.3)'}}>
                     {exerciseType} · {swaptionExpiry}×{tenor}
                   </span>
                   <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
-                    background:dir==='PAY'?'rgba(255,107,107,.1)':'rgba(0,212,168,.1)',
+                    background:dir==='PAY'?'rgba(224,80,64,.1)':'rgba(13,212,168,.1)',
                     color:dir==='PAY'?'var(--red)':'var(--accent)',
-                    border:`1px solid ${dir==='PAY'?'rgba(255,107,107,.3)':'rgba(0,212,168,.3)'}`}}>
+                    border:`1px solid ${dir==='PAY'?'rgba(224,80,64,.3)':'rgba(13,212,168,.3)'}`}}>
                     {dir==='PAY'?'PAYER':'RECEIVER'}
                   </span>
                   <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
-                    background:'rgba(0,212,168,.06)',color:'var(--accent)',border:'1px solid rgba(0,212,168,.2)'}}>
+                    background:'rgba(13,212,168,.06)',color:'var(--accent)',border:'1px solid rgba(13,212,168,.2)'}}>
                     PHYSICAL SETTLEMENT
                   </span>
                   <span style={{fontSize:'0.6875rem',padding:'2px 7px',borderRadius:'2px',color:'var(--text-dim)',
@@ -3122,7 +3122,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     SECOND-ORDER SENSITIVITIES
                     <span style={{fontSize:'0.6875rem',color:'var(--blue)',fontWeight:400,letterSpacing:'.04em'}}>hover each for definition</span>
                   </div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'1px',background:'rgba(74,158,255,.15)',border:'1px solid rgba(74,158,255,.2)',borderRadius:'2px',overflow:'hidden'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'1px',background:'rgba(74,154,212,.15)',border:'1px solid rgba(74,154,212,.2)',borderRadius:'2px',overflow:'hidden'}}>
                     {[
                       {l:'VOLGA / (1bp)²',   v:swaptionResult.volga,             color:'var(--blue)',    fmt:v=>(v>=0?'+':'')+' $'+Math.abs(v).toFixed(2), sub:'vol convexity',    tip:'∂²V/∂σ². ATM=0, grows with moneyness. Long on every long option.'},
                       {l:'VANNA / (bp×bp)',   v:swaptionResult.vanna,             color:'var(--blue)',    fmt:v=>(v>=0?'+':'')+' $'+Math.abs(v).toFixed(2), sub:'rate-vol cross',   tip:'∂²V/∂F∂σ. P&L when rates and vol move together. Dominant risk in stress regimes.'},
@@ -3152,7 +3152,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     </span>
                     {[{tier:'QUOTED',  color:'var(--accent)', bg:'rgba(13,212,168,0.08)',  bd:'rgba(13,212,168,0.3)',  desc:'Market quote — Bloomberg SMKO snap'},
                       {tier:'AUTO',    color:'var(--accent)', bg:'rgba(13,212,168,0.08)',  bd:'rgba(13,212,168,0.3)',  desc:'SABR calibrated from market quotes'},
-                      {tier:'INTERPOLATED', color:'var(--amber)', bg:'rgba(245,200,66,0.08)', bd:'rgba(245,200,66,0.3)', desc:'SABR bilinear interpolation — no market data for this bucket'},
+                      {tier:'INTERPOLATED', color:'var(--amber)', bg:'rgba(240,160,32,0.08)', bd:'rgba(240,160,32,0.3)', desc:'SABR bilinear interpolation — no market data for this bucket'},
                       {tier:'MANUAL',  color:'var(--text-dim)', bg:'transparent', bd:'var(--border)', desc:'User-entered vol — no surface loaded'},
                     ].filter(t => t.tier === (swaptionResult.vol_tier==='AUTO'?'AUTO':swaptionResult.vol_tier)).map(t => (
                       <span key={t.tier} title={t.desc} style={{
@@ -3174,7 +3174,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                   </div>
                 )}
                 {swaptionResult.hw1f_vol_bp && (
-                  <div style={{border:'1px solid rgba(74,158,255,.15)',borderRadius:'2px',background:'rgba(74,158,255,.02)',
+                  <div style={{border:'1px solid rgba(74,154,212,.15)',borderRadius:'2px',background:'rgba(74,154,212,.02)',
                     padding:'8px 12px',display:'flex',gap:'16px',alignItems:'center',flexWrap:'wrap'}}>
                     <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)'}}>HW1F CROSS-CHECK</span>
                     <span style={{fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
@@ -3274,10 +3274,10 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               <>
                 {/* ── Swaption context banner ─────────────────────────── */}
                 {inst==='IR_SWAPTION' && (
-                  <div style={{background:'rgba(74,158,255,0.05)',border:'1px solid rgba(74,158,255,0.2)',borderRadius:'2px',padding:'8px 12px',display:'flex',flexDirection:'column',gap:'3px'}}>
+                  <div style={{background:'rgba(74,154,212,0.05)',border:'1px solid rgba(74,154,212,0.2)',borderRadius:'2px',padding:'8px 12px',display:'flex',flexDirection:'column',gap:'3px'}}>
                     <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                       <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.12em',color:'var(--blue)'}}>UNDERLYING FORWARD SWAP CASHFLOWS</span>
-                      <span style={{fontSize:'0.6875rem',padding:'1px 6px',borderRadius:'2px',background:'rgba(74,158,255,0.1)',border:'1px solid rgba(74,158,255,0.3)',color:'var(--blue)'}}>
+                      <span style={{fontSize:'0.6875rem',padding:'1px 6px',borderRadius:'2px',background:'rgba(74,154,212,0.1)',border:'1px solid rgba(74,154,212,0.3)',color:'var(--blue)'}}>
                         {swaptionExpiry}×{tenor} · Physical Settlement
                       </span>
                     </div>
@@ -3476,7 +3476,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                   </>)}
                   {/* Normal vol — always shown */}
                   <Fld label='NORMAL VOL (bp)' flex={0.9}>
-                    <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--blue)',borderColor:'rgba(74,158,255,0.4)'}}
+                    <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--blue)',borderColor:'rgba(74,154,212,0.4)'}}
                       type='text' value={swaptionVol} placeholder='86.5'
                       onChange={e=>setSwaptionVol(e.target.value)} autoComplete='off'/>
                   </Fld>
@@ -3559,7 +3559,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
 
                     {/* ── HW1F cross-check ──────────────────────────────── */}
                     {swaptionResult.hw1f_vol_bp && (
-                      <div style={{background:'rgba(74,158,255,0.03)',padding:'5px 10px',borderTop:'1px solid var(--border)',
+                      <div style={{background:'rgba(74,154,212,0.03)',padding:'5px 10px',borderTop:'1px solid var(--border)',
                         display:'flex',gap:'16px',alignItems:'center',flexWrap:'wrap'}}>
                         <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.10em',color:'var(--text-dim)'}}>HW1F CROSS-CHECK</span>
                         <span style={{fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
@@ -3602,7 +3602,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 <Row>
                   {(inst === 'INTEREST_RATE_CAP' || inst === 'INTEREST_RATE_COLLAR') && (
                     <Fld label="CAP RATE (%)" flex={1.2}>
-                      <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--red)',borderColor:'rgba(255,107,107,0.4)'}}
+                      <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--red)',borderColor:'rgba(224,80,64,0.4)'}}
                         type='text' value={capRate} placeholder='4.50'
                         onChange={e => setCapRate(e.target.value)} autoComplete='off'/>
                     </Fld>
@@ -3638,7 +3638,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 </Row>
                 <Row>
                   <Fld label='NORMAL VOL (bp)' flex={0.8}>
-                    <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--blue)',borderColor:'rgba(74,158,255,0.4)'}}
+                    <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--blue)',borderColor:'rgba(74,154,212,0.4)'}}
                       type='text' value={capVolOverride} placeholder={capResult ? (capResult.vol_bp||0).toFixed(1)+' (surface)' : '— price to load'}
                       onChange={e=>setCapVolOverride(e.target.value)} autoComplete='off'/>
                   </Fld>
@@ -3677,7 +3677,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                         </div>
                       ))}
                     </div>
-                    <div style={{background:'rgba(74,158,255,0.03)',padding:'5px 10px',borderTop:'1px solid var(--border)',
+                    <div style={{background:'rgba(74,154,212,0.03)',padding:'5px 10px',borderTop:'1px solid var(--border)',
                       display:'flex',gap:'16px',alignItems:'center',flexWrap:'wrap',
                       fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--text-dim)'}}>
                       <span style={{fontWeight:700,letterSpacing:'0.08em'}}>
@@ -3991,18 +3991,18 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
             <div style={{margin:'0 16px 12px',borderTop:'1px solid var(--border)',paddingTop:'8px',
               display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
-                <span style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'#2a2a2a'}}>XVA</span>
-                <span style={{fontSize:'0.8125rem',color:'#333',letterSpacing:'.03em'}}>
+                <span style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--border-hi)'}}>XVA</span>
+                <span style={{fontSize:'0.8125rem',color:'var(--text-mute)',letterSpacing:'.03em'}}>
                   CVA · DVA · FVA · FBA · KVA · MVA · All-In rate
                 </span>
               </div>
-              <span style={{fontSize:'0.8125rem',color:'#444',letterSpacing:'.04em',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+              <span style={{fontSize:'0.8125rem',color:'var(--text-mute)',letterSpacing:'.04em',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
                 → SIMULATE in XVA tab
               </span>
             </div>
           )}
           {activeTab==='main' && xvaResult?.xva && (
-            <div style={{margin:'0 16px 12px',borderTop:'1px solid rgba(0,212,168,0.15)',paddingTop:'10px'}}>
+            <div style={{margin:'0 16px 12px',borderTop:'1px solid rgba(13,212,168,0.15)',paddingTop:'10px'}}>
               <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'8px'}}>
                 <span style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--accent)'}}>XVA</span>
                 {xvaResult?.params && (
@@ -4060,7 +4060,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
         )}
         <div className='tbw-footer tbw-no-drag'>
             {err&&<div className='tbw-error'>{err}</div>}
-            {activeTab!=='scenario' && <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid #1E1E1E',background:'#050505',padding:'5px 14px',gap:'0',marginBottom:'6px'}}>
+            {activeTab!=='scenario' && <div style={{display:'flex',alignItems:'center',borderBottom:'1px solid var(--border)',background:'#050505',padding:'5px 14px',gap:'0',marginBottom:'6px'}}>
               {(()=>{
                 const fmtV = v => v!=null ? (v>=0?'+':'-')+String.fromCharCode(36)+Math.abs(Math.round(v)).toLocaleString('en-US') : '—'
                 const fmtBp = v => v!=null ? v.toFixed(1)+'bp' : '—'
@@ -4070,50 +4070,50 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 let metrics
                 if (inst==='IR_SWAPTION') {
                   metrics = [
-                    {label:'OPTION NPV', val:fmtV(sw?.npv),   color:sw?.npv!=null?(sw.npv>=0?'#00D4A8':'#FF6B6B'):'#444'},
-                    {label:'VEGA/1bp',   val:fmtV(sw?.vega),  color:'#4A9EFF'},
-                    {label:'IR01',       val:fmtV(sw?.ir01),  color:'#4A9EFF'},
-                    {label:'THETA/day',  val:fmtV(sw?.theta), color:'#FF6B6B'},
+                    {label:'OPTION NPV', val:fmtV(sw?.npv),   color:sw?.npv!=null?(sw.npv>=0?'var(--accent)':'var(--red)'):'var(--text-mute)'},
+                    {label:'VEGA/1bp',   val:fmtV(sw?.vega),  color:'var(--blue)'},
+                    {label:'IR01',       val:fmtV(sw?.ir01),  color:'var(--blue)'},
+                    {label:'THETA/day',  val:fmtV(sw?.theta), color:'var(--red)'},
                   ]
                 } else if (inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR') {
                   metrics = [
-                    {label:'OPTION NPV', val:fmtV(cp?.npv??cp?.net_npv),   color:(cp?.npv??cp?.net_npv)!=null?((cp?.npv??cp?.net_npv)>=0?'#00D4A8':'#FF6B6B'):'#444'},
-                    {label:'VEGA/1bp',   val:fmtV(cp?.vega??cp?.net_vega), color:'#4A9EFF'},
-                    {label:'IR01',       val:fmtV(cp?.ir01??cp?.net_ir01), color:'#4A9EFF'},
-                    {label:'VOL (bp)',   val:fmtBp(cp?.vol_bp),            color:'#F5C842'},
+                    {label:'OPTION NPV', val:fmtV(cp?.npv??cp?.net_npv),   color:(cp?.npv??cp?.net_npv)!=null?((cp?.npv??cp?.net_npv)>=0?'var(--accent)':'var(--red)'):'var(--text-mute)'},
+                    {label:'VEGA/1bp',   val:fmtV(cp?.vega??cp?.net_vega), color:'var(--blue)'},
+                    {label:'IR01',       val:fmtV(cp?.ir01??cp?.net_ir01), color:'var(--blue)'},
+                    {label:'VOL (bp)',   val:fmtBp(cp?.vol_bp),            color:'var(--amber)'},
                   ]
                 } else {
                   metrics = [
-                    {label:'NET NPV',   val:fmtV(an?.npv),       color:an?.npv!=null?(an.npv>=0?'#00D4A8':'#FF6B6B'):'#444'},
-                    {label:'IR01',      val:fmtV(an?.ir01),      color:'#4A9EFF'},
-                    {label:'IR01 DISC', val:fmtV(an?.ir01_disc), color:'#4A9EFF'},
-                    {label:'THETA',     val:fmtV(an?.theta),     color:'#FF6B6B'},
+                    {label:'NET NPV',   val:fmtV(an?.npv),       color:an?.npv!=null?(an.npv>=0?'var(--accent)':'var(--red)'):'var(--text-mute)'},
+                    {label:'IR01',      val:fmtV(an?.ir01),      color:'var(--blue)'},
+                    {label:'IR01 DISC', val:fmtV(an?.ir01_disc), color:'var(--blue)'},
+                    {label:'THETA',     val:fmtV(an?.theta),     color:'var(--red)'},
                   ]
                 }
                 return metrics
               })().map((m,i)=>(
-                <div key={i} style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid #1E1E1E'}}>
-                  <span style={{fontSize:'9px',color:'#444',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
+                <div key={i} style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid var(--border)'}}>
+                  <span style={{fontSize:'9px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
                   <span style={{fontSize:'11px',color:m.color,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>{m.val}</span>
                 </div>
               ))}
-              <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid #1E1E1E'}}>
-                <span style={{fontSize:'9px',color:'#444',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>STRUCTURE</span>
-                <span style={{fontSize:'9px',color:'#F5C842',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
+              <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid var(--border)'}}>
+                <span style={{fontSize:'9px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>STRUCTURE</span>
+                <span style={{fontSize:'9px',color:'var(--amber)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
               </div>
               {xvaResult?.xva && <XvaFooterRate xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>}
               {activeTab==='scenario' ? (
-                <button style={{marginLeft:'auto',background:anyShift&&!confirmed?'rgba(0,212,168,0.1)':'rgba(255,255,255,0.04)',border:anyShift&&!confirmed?'1px solid rgba(0,212,168,0.3)':'1px solid #1E1E1E',color:anyShift&&!confirmed?'#00D4A8':'#666',borderRadius:'2px',padding:'3px 14px',fontSize:'11px',letterSpacing:'0.07em',cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',fontFamily:"'IBM Plex Sans',sans-serif"}} onClick={handleConfirm} disabled={!anyShift||confirmed||scenarioPricing}>
+                <button style={{marginLeft:'auto',background:anyShift&&!confirmed?'rgba(13,212,168,0.1)':'rgba(255,255,255,0.04)',border:anyShift&&!confirmed?'1px solid rgba(13,212,168,0.3)':'1px solid var(--border)',color:anyShift&&!confirmed?'var(--accent)':'var(--text-dim)',borderRadius:'2px',padding:'3px 14px',fontSize:'11px',letterSpacing:'0.07em',cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',fontFamily:"'IBM Plex Sans',sans-serif"}} onClick={handleConfirm} disabled={!anyShift||confirmed||scenarioPricing}>
                   {scenarioPricing?'REPRICING...':(anyShift&&!confirmed)?'CONFIRM SHAPE →':'SHAPE CONFIRMED'}
                 </button>
               ) : (
                 <>
-                <button style={{marginLeft:'auto',background:'rgba(245,200,66,0.08)',border:'1px solid rgba(245,200,66,0.4)',color:'#F5C842',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:(pricing||swaptionPricing||capPricing)?'not-allowed':'pointer',opacity:(pricing||swaptionPricing||capPricing)?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}}
+                <button style={{marginLeft:'auto',background:'rgba(240,160,32,0.08)',border:'1px solid rgba(240,160,32,0.4)',color:'var(--amber)',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:(pricing||swaptionPricing||capPricing)?'not-allowed':'pointer',opacity:(pricing||swaptionPricing||capPricing)?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}}
                   onClick={isCurrency ? () => fxRef.current?.price() : inst==='IR_SWAPTION' ? handlePriceSwaption : (inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR') ? handleCapFloorPrice : handlePrice}
                   disabled={pricing||swaptionPricing||capPricing}>
                   {(pricing||swaptionPricing||capPricing)?'PRICING...':'▶ PRICE'}
                 </button>
-              {!xvaResult && !isCurrency && <span style={{fontSize:'10px',color:'#444',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em',padding:'0 8px'}}>XVA → SIMULATE to price</span>}
+              {!xvaResult && !isCurrency && <span style={{fontSize:'10px',color:'var(--text-mute)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em',padding:'0 8px'}}>XVA → SIMULATE to price</span>}
                 </>
               )}
             </div>}
@@ -4151,7 +4151,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               ) : (
                 <>
                   <button className='tbw-btn-cancel' onClick={onClose}>CANCEL</button>
-                  <button className='tbw-btn-book' onClick={isCurrency ? handleBookCurrency : handleBook} disabled={booking||pricing} style={xvaResult?.xva?{background:'#00D4A8',color:'#000'}:{}}>
+                  <button className='tbw-btn-book' onClick={isCurrency ? handleBookCurrency : handleBook} disabled={booking||pricing} style={xvaResult?.xva?{background:'var(--accent)',color:'#000'}:{}}>
                     {booking?(bookingStep||'BOOKING...'):xvaResult?.xva?<XvaBookLabel xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>:'▶ BOOK TRADE'}
                   </button>
                 </>

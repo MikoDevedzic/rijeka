@@ -177,8 +177,8 @@
 
 /* CONFIRM tab on a confirmed trade: the shared ConfirmPanel, which is styled for the trade window */
 .tbw-confirm .tbw-sec { padding: 14px 16px; }
-.tbw-confirm .tbw-lbl { font-size: 11px; color: #888; letter-spacing: 0.12em; margin-bottom: 7px; font-weight: 600; }
-.tbw-confirm .tbw-mut { font-size: 11px; color: #777; letter-spacing: 0.03em; }
-.tbw-confirm .tbw-btn { background: transparent; border: 1px solid #1E1E1E; padding: 6px 14px; border-radius: 2px;
-  font-size: 11px; letter-spacing: 0.08em; font-weight: 500; cursor: pointer; color: #888; font-family: inherit; }
+.tbw-confirm .tbw-lbl { font-size: 11px; color: var(--text-dim); letter-spacing: 0.12em; margin-bottom: 7px; font-weight: 600; }
+.tbw-confirm .tbw-mut { font-size: 11px; color: var(--text-dim); letter-spacing: 0.03em; }
+.tbw-confirm .tbw-btn { background: transparent; border: 1px solid var(--border); padding: 6px 14px; border-radius: 2px;
+  font-size: 11px; letter-spacing: 0.08em; font-weight: 500; cursor: pointer; color: var(--text-dim); font-family: inherit; }
 .tbw-confirm .tbw-btn:disabled { opacity: 0.5; cursor: not-allowed; }
