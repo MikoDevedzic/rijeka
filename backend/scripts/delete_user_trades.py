@@ -53,13 +53,18 @@ def main(email: str, apply: bool, include_events: bool) -> None:
                 db.execute(text(f'alter table trade_events disable trigger "{t}"'))
             n = db.execute(text("update trades set latest_event_id = null where user_id = :u and latest_event_id is not null"), p).rowcount
             print(f"cleared   {n:6}  latest_event pointers")
+            # legs and cashflows would cascade from trades, but they also point at events,
+            # so they go first
+            for tbl in ("cashflows", "trade_legs"):
+                n = db.execute(text(f"delete from {tbl} where trade_id in (select id from trades where user_id = :u)"), p).rowcount
+                print(f"deleted   {n:6}  {tbl}")
             n = db.execute(text("delete from trade_events where trade_id in (select id from trades where user_id = :u)"), p).rowcount
             print(f"deleted   {n:6}  trade_events")
             n = db.execute(text("delete from trades where user_id = :u"), p).rowcount
         else:
             n = db.execute(text(
                 "delete from trades t where t.user_id = :u and not exists (select 1 from trade_events e where e.trade_id = t.id)"), p).rowcount
-        print(f"deleted   {n:6}  trades (legs, cashflows, pnl snapshots cascaded)")
+        print(f"deleted   {n:6}  trades (pnl snapshots cascaded)")
 
         for t in triggers:
             db.execute(text(f'alter table trade_events enable trigger "{t}"'))
