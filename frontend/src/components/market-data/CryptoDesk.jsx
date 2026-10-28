@@ -168,12 +168,12 @@ export default function CryptoDesk() {
                   <td className="cd-asset">{p.pair}</td>
                   <td className="cd-num">{fmt(p.spot, rateDp(p.pair))}</td>
                   <td className="cd-dim">{p.spot_as_of || 'no snapshot'}</td>
-                  <td className="cd-dim">{p.crypto ? `${p.base} funding ${p.funding_pct ?? 0}% · ${p.quote_curve}` : `${p.base_curve} / ${p.quote_curve}`}</td>
+                  <td className="cd-dim">{p.crypto ? `${p.base} funding ${p.funding_pct ?? 0}% · ${p.quote_curve}` : p.base_curve_available ? `${p.base_curve} / ${p.quote_curve}` : <span title="No OIS curve for this currency in your account; a flat rate is used and every quote says so."><span style={{ color: 'var(--amber)' }}>{p.base_fallback}</span> / {p.quote_curve}</span>}</td>
                   <td>{p.crypto && <span className="cd-fund"><input className="cd-inp sm" value={funding[p.base] ?? ''} placeholder="0.00" onChange={e => setFunding({ ...funding, [p.base]: e.target.value })} /><button className="cd-btn sm" onClick={() => saveFunding(p.base)} disabled={!!busy}>{busy === 'fund' + p.base ? '…' : 'SET'}</button></span>}</td>
                 </tr>))}
             </tbody>
           </table>
-          <div className="cd-note">FX: {md?.feeds?.fx || 'ECB reference rates (public)'} · Crypto: {md?.feeds?.crypto || 'Coinbase spot (public)'} · funding is a desk input (% p.a., continuous).</div>
+          <div className="cd-note">FX: {md?.feeds?.fx || 'ECB reference rates (public)'} · Crypto: {md?.feeds?.crypto || 'Coinbase spot (public)'} · funding is a desk input (% p.a., continuous). <span style={{ color: 'var(--amber)' }}>Amber</span> = no OIS curve loaded for that currency, so it discounts flat at a policy rate until you load one under Rate curves.</div>
         </section>
 
         <section className="cd-card">
