@@ -13,6 +13,7 @@ optional so a slow RPC or an empty table never breaks the page.
 """
 import logging
 import os
+import threading
 import time
 from typing import Any, Optional
 
@@ -104,11 +105,41 @@ def build(db: Session) -> dict:
     }
 
 
+_refreshing = threading.Lock()
+
+
+def _refresh_in_background() -> None:
+    """Rebuild the pulse on a worker thread with its own session; never on a request."""
+    if not _refreshing.acquire(blocking=False):
+        return
+    def run():
+        from db.session import SessionLocal
+        db = SessionLocal()
+        try:
+            body = build(db)
+            _cache.update(at=time.monotonic(), body=body)
+        except Exception as e:
+            log.warning("pulse refresh failed: %s", e)
+        finally:
+            db.close()
+            _refreshing.release()
+    threading.Thread(target=run, name="pulse-refresh", daemon=True).start()
+
+
 @router.get("/pulse")
 def pulse(db: Session = Depends(get_db)):
+    """Stale-while-revalidate: a visitor always gets the last numbers at once;
+    the Sepolia block lookup and the queries run behind them."""
     now = time.monotonic()
-    if _cache["body"] is not None and now - _cache["at"] < TTL_SECONDS:
-        return _cache["body"]
-    body = build(db)
-    _cache.update(at=now, body=body)
-    return body
+    if _cache["body"] is None:
+        body = build(db)                     # very first call after boot
+        _cache.update(at=now, body=body)
+        return body
+    if now - _cache["at"] >= TTL_SECONDS:
+        _refresh_in_background()
+    return _cache["body"]
+
+
+def warm() -> None:
+    """Called at startup so the first visitor never waits either."""
+    _refresh_in_background()
