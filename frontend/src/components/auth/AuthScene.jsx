@@ -6,35 +6,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './Auth.css'
+import VolSurface3D, { toGrid } from './VolSurface3D'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
-
-const years = (t) => {
-  const m = /^(\d+)(D|W|M|Y)$/.exec(t || '')
-  if (!m) return t === 'ON' ? 1 / 365 : null
-  const n = +m[1]
-  return { D: n / 365, W: n / 52, M: n / 12, Y: n }[m[2]]
-}
-
-// A plausible USD OIS shape, used only until the real snapshot arrives or when
-// the API is unreachable; the page must never look broken on first paint.
-const FALLBACK = [['ON', 3.65], ['3M', 3.72], ['1Y', 3.76], ['2Y', 4.06], ['3Y', 4.10], ['5Y', 4.12],
-  ['7Y', 4.21], ['10Y', 4.28], ['20Y', 4.52], ['30Y', 4.48]].map(([tenor, rate]) => ({ tenor, rate }))
-
-const W = 900, H = 240, X0 = Math.log(1 / 365), X1 = Math.log(30)
-const xOf = (y) => (Math.log(Math.max(y, 1 / 365)) - X0) / (X1 - X0) * W
-
-function pathOf(quotes) {
-  const pts = quotes.map(q => ({ y: years(q.tenor), r: Number(q.rate), t: q.tenor }))
-    .filter(p => p.y != null && !isNaN(p.r)).sort((a, b) => a.y - b.y)
-  if (pts.length < 3) return null
-  const lo = Math.min(...pts.map(p => p.r)) - 0.25, hi = Math.max(...pts.map(p => p.r)) + 0.25
-  const yOf = (r) => (hi - r) / (hi - lo) * H
-  const d = pts.map((p, i) => `${i ? 'L' : 'M'}${xOf(p.y).toFixed(1)},${yOf(p.r).toFixed(1)}`).join(' ')
-  const area = `${d} L${xOf(pts[pts.length - 1].y).toFixed(1)},${H} L${xOf(pts[0].y).toFixed(1)},${H} Z`
-  const placed = pts.map(p => ({ ...p, x: xOf(p.y), yy: yOf(p.r) }))
-  return { d, area, pts: placed, last: placed[placed.length - 1] }
-}
 
 const fmtN = (n) => n == null ? '—' : Number(n).toLocaleString()
 
@@ -54,11 +28,11 @@ export default function AuthScene({ children, eyebrow }) {
     return () => { dead = true; ctl.abort() }
   }, [])
 
-  const quotes = pulse?.curve?.quotes?.length >= 3 ? pulse.curve.quotes : FALLBACK
-  const live = pulse?.curve?.quotes?.length >= 3
-  const curve = pathOf(quotes)
-  const ticks = ['ON', '1Y', '5Y', '10Y', '30Y']
+  const grid = toGrid(pulse?.vol?.quotes)
+  const live = !!grid
   const chain = pulse?.chain || {}
+  const sofr = pulse?.curve?.quotes?.find(q => q.tenor === 'ON')?.rate
+  const s10 = pulse?.curve?.quotes?.find(q => q.tenor === '10Y')?.rate
 
   return (
     <div className="au-shell">
@@ -75,26 +49,17 @@ export default function AuthScene({ children, eyebrow }) {
 
         <div className="au-chart">
           <div className="au-chart-hdr">
-            <span>USD SOFR OIS · PAR CURVE</span>
+            <span>USD SWAPTION · ATM NORMAL VOL · EXPIRY × TENOR</span>
             <span className={`au-live${live ? ' on' : ''}`}>
-              <i />{live ? `SNAPSHOT ${pulse.curve.valuation_date}` : failed ? 'OFFLINE · ILLUSTRATIVE' : 'CONNECTING'}
+              <i />{live ? `SNAPSHOT ${pulse.vol.valuation_date}` : failed ? 'OFFLINE · ILLUSTRATIVE' : 'CONNECTING'}
             </span>
           </div>
-          <svg viewBox={`0 0 ${W} ${H + 28}`} preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="auFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="var(--accent)" stopOpacity="0.22" />
-                <stop offset="1" stopColor="var(--accent)" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {curve && <>
-              <path className="au-area" d={curve.area} fill="url(#auFill)" />
-              <path className="au-line" d={curve.d} />
-              {curve.pts.map(p => <circle key={p.t} className="au-dot" cx={p.x} cy={p.yy} r="3" />)}
-              <text className="au-last" x={Math.min(curve.last.x, W - 70)} y={Math.max(14, curve.last.yy - 12)}>{curve.last.r.toFixed(3)}%</text>
-            </>}
-            {ticks.map(t => <text key={t} className="au-tick" x={xOf(years(t))} y={H + 22} textAnchor="middle">{t}</text>)}
-          </svg>
+          <VolSurface3D grid={grid} />
+          {sofr != null && <div className="au-strip">
+            <span>SOFR <b>{Number(sofr).toFixed(3)}%</b></span>
+            {s10 != null && <span>10Y OIS <b>{Number(s10).toFixed(3)}%</b></span>}
+            <span>SOURCE <b>PUBLIC SNAPSHOT</b></span>
+          </div>}
         </div>
 
         <div className="au-pulse">

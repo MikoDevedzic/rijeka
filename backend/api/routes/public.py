@@ -4,7 +4,8 @@ now, with nothing that belongs to a user.
 
     GET /api/public/pulse
 
-Returns the demo template's latest USD SOFR par curve (public sources only,
+Returns the demo template's latest USD SOFR par curve and ATM swaption vol
+grid (public sources only,
 the same filter demo provisioning applies), how many confirmations carry an
 on-chain hash, the registry and the latest Sepolia block, and the last 24
 hours of Market News. Cached in-process for a minute; every field is
@@ -38,14 +39,15 @@ def _scalar(db: Session, sql: str, **p) -> Optional[int]:
         return None
 
 
-def _curve(db: Session, uid) -> Optional[dict]:
+def _snapshot(db: Session, uid, curve_id: str) -> Optional[dict]:
+    """Latest public snapshot of one curve: tenor and rate only."""
     if uid is None:
         return None
     try:
         row = db.execute(text(
             "SELECT curve_id, valuation_date, quotes FROM market_data_snapshots "
-            "WHERE user_id = :u AND curve_id = 'USD_SOFR' AND valuation_date <= current_date "
-            f"AND {_LICENSED_SOURCE_SQL} ORDER BY valuation_date DESC LIMIT 1"), {"u": uid}).first()
+            "WHERE user_id = :u AND curve_id = :c AND valuation_date <= current_date "
+            f"AND {_LICENSED_SOURCE_SQL} ORDER BY valuation_date DESC LIMIT 1"), {"u": uid, "c": curve_id}).first()
     except Exception as e:
         log.debug("pulse curve failed: %s", e)
         db.rollback()
@@ -75,7 +77,8 @@ def _chain() -> dict:
 def build(db: Session) -> dict:
     uid = _template_user_id(db)
     return {
-        "curve": _curve(db, uid),
+        "curve": _snapshot(db, uid, "USD_SOFR"),
+        "vol": _snapshot(db, uid, "USD_SWVOL_ATM"),      # expiry x tenor ATM normal vols, "1Yx5Y" tenors
         "curves": _scalar(db, "SELECT count(DISTINCT curve_id) FROM market_data_snapshots "
                               "WHERE user_id = :u AND curve_id NOT LIKE 'TEST-%'", u=uid) if uid else None,
         "confirmations": _scalar(db, "SELECT count(*) FROM trade_events "

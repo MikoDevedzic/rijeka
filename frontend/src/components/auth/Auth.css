@@ -26,13 +26,9 @@
 .au-live i { width:6px; height:6px; border-radius:50%; background:var(--border-glow); }
 .au-live.on { color:var(--accent); }
 .au-live.on i { background:var(--accent); box-shadow:0 0 10px var(--accent); animation:auPulse 2s ease-in-out infinite; }
-.au-chart svg { width:100%; height:clamp(150px, 26vh, 260px); display:block; overflow:visible; }
-.au-line { fill:none; stroke:var(--accent); stroke-width:2.2; vector-effect:non-scaling-stroke; stroke-linejoin:round; stroke-linecap:round;
-  stroke-dasharray:4000; stroke-dashoffset:4000; animation:auDraw 2.2s cubic-bezier(.3,.7,.2,1) .35s forwards; filter:drop-shadow(0 0 10px rgba(13,212,168,0.55)); }
-.au-area { opacity:0; animation:auFade 1.2s ease 1.6s forwards; }
-.au-dot { fill:var(--bg); stroke:var(--accent); stroke-width:1.5; vector-effect:non-scaling-stroke; opacity:0; animation:auFade .4s ease 2.2s forwards; }
-.au-last { font-family:var(--mono); font-size:13px; fill:var(--accent); opacity:0; animation:auFade .5s ease 2.4s forwards; }
-.au-tick { font-family:var(--mono); font-size:11px; fill:var(--text-mute); letter-spacing:0.08em; }
+.au-vol { width:100%; height:clamp(200px, 32vh, 300px); display:block; animation:auFade 1.2s ease .2s both; }
+.au-strip { display:flex; gap:22px; margin-top:4px; font-family:var(--mono); font-size:0.62rem; letter-spacing:0.18em; color:var(--text-dim); }
+.au-strip b { color:var(--text-hi); font-weight:500; margin-left:6px; }
 
 .au-pulse { display:grid; grid-template-columns:repeat(4, auto); gap:10px clamp(16px, 3vw, 40px); justify-content:start; margin-top:clamp(10px, 2vh, 22px); animation:auIn .8s ease .35s both; }
 .au-pulse div { display:flex; flex-direction:column; gap:3px; }
@@ -101,10 +97,11 @@
   .au-scene { border-right:none; border-bottom:1px solid var(--border); min-height:0; }
   .au-headline h1 { font-size:1.6rem; }
   .au-headline p { display:none; }
-  .au-chart svg { height:140px; }
+  .au-vol { height:180px; }
+  .au-strip { display:none; }
   .au-pulse { grid-template-columns:repeat(2, auto); }
   .au-foot { display:none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .au-line, .au-area, .au-dot, .au-last { animation:none; stroke-dashoffset:0; opacity:1; }
+  .au-vol { animation:none; }
 }

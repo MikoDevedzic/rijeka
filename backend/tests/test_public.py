@@ -34,6 +34,7 @@ def test_pulse_is_public_and_filters_disabled_quotes(monkeypatch):
     b = r.json()
     assert [q["tenor"] for q in b["curve"]["quotes"]] == ["1Y", "30Y"]
     assert b["confirmations"] == 7 and b["chain"]["latest_block"] == 123
+    assert b["vol"]["curve_id"] == "USD_SOFR"    # the mock returns the same row for every snapshot query
 
 
 def test_pulse_survives_missing_tables_and_chain():
