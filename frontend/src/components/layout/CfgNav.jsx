@@ -43,6 +43,13 @@ const NAV = [
         ],
       },
       {
+        id: 'crypto-md',
+        label: 'DIGITAL ASSETS',
+        children: [
+          { label: 'SPOT · FUNDING · NDF', path: '/configurations/market-data/crypto',  live: true  },
+        ],
+      },
+      {
         id: 'commodity-md',
         label: 'COMMODITY',
         children: [

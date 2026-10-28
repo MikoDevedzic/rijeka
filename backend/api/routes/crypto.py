@@ -152,6 +152,28 @@ def tick_spot(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Head
     return {"saved": save_spot(db, uid, prices), "prices": prices}
 
 
+class FundingRequest(BaseModel):
+    digital_asset: str
+    rate_pct: float = Field(..., description="asset funding / staking rate, % p.a. continuous (can be negative)")
+
+
+@router.post("/funding")
+def set_funding(req: FundingRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Desk input: today's funding rate for one asset, saved as a MANUAL snapshot."""
+    _require_trader(user)
+    asset = req.digital_asset.upper()
+    if asset not in ASSETS:
+        raise HTTPException(status_code=422, detail=f"digital_asset must be one of {', '.join(ASSETS)}")
+    uid, cid, today = uuid.UUID(user["sub"]), f"{asset}_FUNDING", date.today()
+    quotes = [{"tenor": "FLAT", "quote_type": "FUNDING", "rate": float(req.rate_pct), "enabled": True}]
+    db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u AND curve_id = :c AND valuation_date = :d"),
+               {"u": uid, "c": cid, "d": today})
+    db.execute(text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
+                    "VALUES (:c, :d, CAST(:q AS jsonb), 'MANUAL', :u, :u)"), {"c": cid, "d": today, "q": _dumps(quotes), "u": uid})
+    db.commit()
+    return spot_and_funding(db, uid, asset)
+
+
 # ── pricing ────────────────────────────────────────────────────────────────
 
 class ForwardPriceRequest(BaseModel):

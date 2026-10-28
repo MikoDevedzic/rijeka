@@ -23,6 +23,7 @@ import TradeWindow        from './components/trade-window/TradeWindow'
 import useBookingStore    from './store/useBookingStore'
 import SwaptionVolDetail from './components/market-data/SwaptionVolDetail'
 import CapVolDetail      from './components/market-data/CapVolDetail'
+import CryptoDesk        from './components/market-data/CryptoDesk'
 import XVAParametersTab  from './components/configurations/XVAParametersTab'
 import Messenger, { MessengerPage } from './components/messenger/Messenger'
 
@@ -158,6 +159,7 @@ export default function App() {
               <Route path="counterparties"              element={<Counterparties />} />
               <Route path="market-data/swvol"            element={<SwaptionVolDetail />} />
               <Route path="market-data/capfloor"             element={<CapVolDetail />} />
+              <Route path="market-data/crypto"               element={<CryptoDesk />} />
               <Route path="xva-parameters/hw1f"          element={<XVAParametersTab />} />
               <Route path="users"              element={<Users />} />
             </Route>
