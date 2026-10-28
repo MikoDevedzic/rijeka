@@ -57,6 +57,7 @@ purpose.
 | Bermudan (HW1F tree) | `pricing/bermudan_swaption.py` | gate vs Bachelier; **validator wanted** |
 | HW1F calibration | `pricing/calibration.py` | Jamshidian check 0.01%; **validator wanted** |
 | XVA under CSA | `pricing/xva_engine.py`, `pricing/csa.py` | parity with legacy loop; **validator wanted** |
+| Crypto NDF (BTC/ETH/SOL) | `pricing/crypto_forward.py` | S1 finding 2026-10-28: the first Excel replication had the discount-factor ratio inverted (forward below spot at positive USD rates); the engine's parity test caught it, workbook, engine and methodology corrected the same day. Open for independent re-validation; **validator wanted** |
 | SIMM IM / SA-CCR | `pricing/xva_engine.py` | trace workbook; **validator wanted** |
 | Crypto NDF / NDO | `methodology/replicate.py` | formulas only; **validator wanted** |
 | Registry contract | `chain/src/TradeConfirmationRegistry.sol` | 16 Foundry tests, Sourcify-verified; **external audit wanted before mainnet** |

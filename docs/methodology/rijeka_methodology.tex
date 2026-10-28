@@ -256,15 +256,15 @@ Daily P\&L is explained by a Taylor expansion in the taxonomy above: theta, \cod
 \section{Digital-asset derivatives}
 \emph{Module: \code{pricing/fx\_forward.py}, \code{chain/canonical.py} (\code{CRYPTO\_FORWARD}, \code{CRYPTO\_OPTION}).}
 
-A non-deliverable forward on BTC or ETH against USD is priced as an FX NDF with the digital asset as the foreign currency. With spot $S$, a USD discount factor from the SOFR curve and a digital-asset funding rate $r_c$ (lending or staking yield, continuously compounded),
+A non-deliverable forward on BTC, ETH or SOL against USD is priced by cash-and-carry, as an FX NDF with the digital asset as the foreign currency: borrow USD at SOFR to buy the asset today and lend the asset at its funding rate, so the forward must repay the USD interest. With spot $S$, a USD discount factor $P_{USD}(T)$ from the SOFR curve and a digital-asset funding rate $r_c$ (lending or staking yield, continuously compounded),
 \begin{equation}
-F = S\,\frac{P_{USD}(T)}{e^{-r_cT}},\qquad NPV = (F-K)\,N\,P_{USD}(T).
+F = S\,\frac{e^{-r_cT}}{P_{USD}(T)} = S\,e^{(r_{USD}-r_c)T},\qquad NPV = (F-K)\,N\,P_{USD}(T).
 \end{equation}
 A non-deliverable European option is priced with Black-76 on that forward with lognormal volatility $\sigma$:
 \begin{equation}
 C = P_{USD}(T)\big[F\Phi(d_1)-K\Phi(d_2)\big],\qquad d_{1,2}=\frac{\ln(F/K)\pm\tfrac12\sigma^2T}{\sigma\sqrt T},
 \end{equation}
-with the put from parity. Settlement is in cash against a named settlement price source on a valuation date and time, and the canonical record carries exactly the fields the ISDA Digital Asset Derivatives Definitions name: digital asset, notional amount, strike or forward price and its currency, option type and exercise style, valuation and settlement dates, settlement currency and price source, premium amount, currency and payment date. \textbf{Status.} The pricing formulas are implemented in the Excel replications and the NDF engine; option pricing in the trade window is on the roadmap.
+with the put from parity. Settlement is in cash against a named settlement price source on a valuation date and time, and the canonical record carries exactly the fields the ISDA Digital Asset Derivatives Definitions name: digital asset, notional amount, strike or forward price and its currency, option type and exercise style, valuation and settlement dates, settlement currency and price source, premium amount, currency and payment date. \textbf{Status.} The forward is implemented in the engine (\texttt{pricing/crypto\_forward.py}), priced from parameters and from booked trades, with spot from a public exchange feed and the funding rate as a desk input; the Excel replication rebuilds it cell by cell. Option pricing in the trade window is on the roadmap. A validation note: the first workbook had the discount-factor ratio inverted (forward below spot at positive USD rates); the engine's parity test caught it and both were corrected on 28 October 2026.
 
 %--------------------------------------------------------------------
 \section{On-chain bilateral confirmation}

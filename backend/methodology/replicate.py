@@ -353,15 +353,15 @@ def _crypto_common(wb, mkt: Market, spot_px: float, btc_rate: float, months: int
     ws["A5"] = "USD DF(T) from the SOFR curve"; ws["B5"] = f"={DF('B3')}"; ws["B5"].number_format = "0.000000"
     ws["A6"] = "BTC funding rate (cont., p.a.)"; ws["B6"] = btc_rate; ws["B6"].fill = IN; ws["B6"].number_format = "0.00%"
     ws["A7"] = "BTC DF(T) = exp(−r_BTC·T)"; ws["B7"] = "=EXP(-B6*B4)"; ws["B7"].number_format = "0.000000"
-    ws["A8"] = "Forward F = S·DF_USD/DF_BTC"; ws["B8"] = "=B1*B5/B7"; ws["B8"].number_format = "#,##0.00"
-    ws["A10"] = "The forward is covered interest parity: holding BTC earns (or costs) the BTC funding rate, holding USD earns SOFR. Set the BTC rate to the lending rate you can actually get."
+    ws["A8"] = "Forward F = S·DF_BTC/DF_USD"; ws["B8"] = "=B1*B7/B5"; ws["B8"].number_format = "#,##0.00"
+    ws["A10"] = "The forward is cash-and-carry: F = S·exp((r_USD − r_BTC)·T). Borrow USD at SOFR to buy BTC today, lend the BTC at its funding rate; the forward must repay the USD interest, so positive USD rates put the forward above spot. Set the BTC rate to the lending rate you can actually get."
     _widths(ws, [34, 18])
     return ws, T
 
 
 def _ref_forward(mkt, spot_px, btc_rate, T):
     t = (T - mkt.valuation_date).days / 365
-    return spot_px * mkt.curve.df(T) / math.exp(-btc_rate * t), mkt.curve.df(T), t
+    return spot_px * math.exp(-btc_rate * t) / mkt.curve.df(T), mkt.curve.df(T), t
 
 
 def crypto_ndf_workbook(mkt: Market):

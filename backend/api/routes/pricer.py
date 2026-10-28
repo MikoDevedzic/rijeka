@@ -523,6 +523,11 @@ def price_trade(
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
 
+    # Digital-asset forwards have no legs: priced from trade.terms (api/routes/crypto.py)
+    if str(trade.instrument_type or "").upper() == "CRYPTO_FORWARD":
+        from api.routes.crypto import price_booked
+        return price_booked(trade, db, user, val_date)
+
     orm_legs = (
         db.query(TradeLeg)
         .filter(TradeLeg.trade_id == request.trade_id, TradeLeg.user_id == user_id_uuid)
