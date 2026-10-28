@@ -132,7 +132,8 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
         out.update(base_curve=None, funding_pct=_quote(f, "FLAT"), funding_as_of=f.valuation_date.isoformat() if f else None)
     else:
         bc = CURVE_FOR.get(base)
-        has = latest_snapshot(db, user_id, bc) is not None if bc else False
+        row = latest_snapshot(db, user_id, bc) if bc else None
+        has = bool(row) and sum(1 for q in (row.quotes or []) if q.get("enabled", True) and q.get("rate") is not None) >= 2
         flat = latest_snapshot(db, user_id, f"{base}_FLAT")
         out.update(base_curve=bc, base_curve_available=has,
                    base_flat_pct=_quote(flat, "FLAT") if flat else None,
@@ -233,13 +234,18 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
         else:
             kw["base_rate"], b_src = 0.0, "default 0%"
     elif st.get("base_curve_available"):
-        kw["base_curve"], b_src = _curve(db, user_id, st["base_curve"], val_date), st["base_curve"]
-    else:
+        try:
+            kw["base_curve"], b_src = _curve(db, user_id, st["base_curve"], val_date), st["base_curve"]
+        except HTTPException as e:          # a row exists but does not bootstrap: fall back, and say so
+            log.warning("%s did not build (%s); flat fallback", st["base_curve"], e.detail)
+            st["base_curve_available"] = False
+    if not crypto and not st.get("base_curve_available"):
         flat = st.get("base_flat_pct")
         rate = flat if flat is not None else POLICY_RATE_PCT.get(base)
         if rate is None:
             raise HTTPException(status_code=422, detail=f"No {st['base_curve']} snapshot and no flat rate for {base}.")
-        kw["base_rate"], b_src = float(rate) / 100, st["base_fallback"]
+        kw["base_rate"], b_src = float(rate) / 100, (st.get("base_fallback") or
+                                                     (f"flat {flat}% ({base}_FLAT)" if flat is not None else f"flat {rate}% ({POLICY_RATE_NOTE})"))
     try:
         r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
                                    forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
