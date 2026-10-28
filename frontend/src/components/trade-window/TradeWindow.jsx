@@ -472,6 +472,29 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   }, [bookedTrade])
 
+  // A shareable proof link: the proof pack, deflated and base64url-encoded in
+  // the URL fragment of the public verifier. Nothing is stored server-side;
+  // whoever holds the link holds the proof, which is the owner's choice.
+  const handleCopyProofLink = useCallback(async () => {
+    if (!bookedTrade?.id) return
+    try {
+      const proof = await getProofPack(bookedTrade.id)
+      const json = new TextEncoder().encode(JSON.stringify(proof))
+      let bytes = json
+      try {
+        const cs = new CompressionStream('deflate-raw'); const w = cs.writable.getWriter(); w.write(json); w.close()
+        bytes = new Uint8Array(await new Response(cs.readable).arrayBuffer())
+      } catch { /* no CompressionStream: plain base64 JSON, the verifier accepts both */ }
+      let bin = ''; bytes.forEach(b => { bin += String.fromCharCode(b) })
+      const b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+      const url = `https://rijeka.app/verify/#p=${b64}`
+      await navigator.clipboard.writeText(url)
+      setVerifyResult({ info: `Proof link copied (${url.length.toLocaleString()} characters). Anyone who opens it sees the terms, both signatures and the chain record verified in their browser.` })
+    } catch (e) {
+      setVerifyResult({ error: e.message || String(e) })
+    }
+  }, [bookedTrade])
+
   // Sprint 12 item 3 — CANCEL handler: PENDING -> CANCELLED (terminal)
   const handleCancelTrade = useCallback(async (reason) => {
     if (!bookedTrade?.id) return
@@ -740,6 +763,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             attestation={attestation}
             onVerify={handleVerify}
             onDownloadProof={handleDownloadProof}
+            onCopyProofLink={handleCopyProofLink}
             onTerminate={handleTerminate}
             terminating={terminating}
             verifying={verifying}

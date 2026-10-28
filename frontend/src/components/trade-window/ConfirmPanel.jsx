@@ -23,13 +23,13 @@ import { useSendStatus } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
 
 const STATUS_COLORS = {
-  PENDING:    '#F5C842',  // amber
-  CONFIRMED:  '#00D4A8',  // teal
-  CANCELLED:  '#FF6B6B',  // red
-  LIVE:       '#4A9EFF',  // blue
+  PENDING:    'var(--amber)',  // amber
+  CONFIRMED:  'var(--accent)',  // teal
+  CANCELLED:  'var(--red)',  // red
+  LIVE:       'var(--blue)',  // blue
   TERMINATED: '#666666',
   MATURED:    '#666666',
-  DEFAULTED:  '#FF6B6B',
+  DEFAULTED:  'var(--red)',
   NOVATED:    '#9B8BB5',  // purple
 }
 
@@ -38,7 +38,7 @@ const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace'
 const short = (h) => (h && h.length > 18) ? h.slice(0, 10) + '…' + h.slice(-6) : (h || '—')
 
 /** Attestation block: what was signed, by whom, and where it is anchored. */
-function AttestationView({ attestation, onVerify, verifying, verifyResult, onDownloadProof, onTerminate, terminating, confirmErr }) {
+function AttestationView({ attestation, onVerify, verifying, verifyResult, onDownloadProof, onCopyProofLink, onTerminate, terminating, confirmErr }) {
   const [showTerminate, setShowTerminate] = useState(false)
   const [reason, setReason] = useState('')
   if (!attestation) return null
@@ -59,62 +59,68 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   const vr = verifyResult
   const vOk = vr && !vr.error && vr.hash_matches && vr.signatures_valid_for_current_state !== false && (!anchored || vr.on_chain_confirmed)
   return (
-    <div style={{ marginTop: 18, padding: 14, background: '#0C0C0C', border: '1px solid ' + (anchored ? 'rgba(0,212,168,0.35)' : '#2A2A2A'), borderRadius: 2, maxWidth: 720 }}>
-      <div className="tbw-lbl" style={{ color: terminated ? '#888' : anchored ? '#00D4A8' : '#888', marginBottom: 8 }}>
+    <div style={{ marginTop: 18, padding: 14, background: 'var(--panel)', border: '1px solid ' + (anchored ? 'rgba(13,212,168,0.35)' : 'var(--border-hi)'), borderRadius: 2, maxWidth: 720 }}>
+      <div className="tbw-lbl" style={{ color: terminated ? 'var(--text-dim)' : anchored ? 'var(--accent)' : 'var(--text-dim)', marginBottom: 8 }}>
         {terminated ? `◆ TERMINATED ON ${chainName(att.anchor.chain_id).toUpperCase()}`
           : anchored ? `◆ CONFIRMED ON ${chainName(att.anchor.chain_id).toUpperCase()}` : '◇ SIGNED — NOT ANCHORED'}
-        {att.bilateral === false && <span className="tbw-mut" style={{ marginLeft: 10, fontWeight: 400, letterSpacing: 0, color: '#F5C842' }}>both signatures produced here — demo, not bilateral</span>}
+        {att.bilateral === false && <span className="tbw-mut" style={{ marginLeft: 10, fontWeight: 400, letterSpacing: 0, color: 'var(--amber)' }}>both signatures produced here — demo, not bilateral</span>}
         <span className="tbw-mut" style={{ marginLeft: 10, fontWeight: 400, letterSpacing: 0 }}>
           canonical schema v{att.schema_version} · EIP-712 · {att.eip712?.name} v{att.eip712?.version}
         </span>
       </div>
       {row('TRADE HASH', att.trade_hash)}
-      {att.prev_hash && row('SUPERSEDES', att.prev_hash + '  (amended — earlier signed record)', '#F5C842')}
+      {att.prev_hash && row('SUPERSEDES', att.prev_hash + '  (amended — earlier signed record)', 'var(--amber)')}
       {row('BOOKED BY', `${own.lei || '—'} · ${short(own.address)} · sig ${short(own.signature)} (${own.key_source})`)}
       {row(att.bilateral === false ? 'COUNTERPARTY' : 'COUNTERSIGNED BY', `${cp.lei || '—'} · ${short(cp.address)} · sig ${short(cp.signature)} (${cp.key_source})`)}
       {anchored ? (<>
         {row('CHAIN', `${chainName(att.anchor.chain_id)} (chainId ${att.anchor.chain_id}) · registry ${short(att.anchor.registry)}`)}
         {row('TRANSACTION', att.anchor.explorer_tx
-          ? <a href={att.anchor.explorer_tx} target="_blank" rel="noreferrer" style={{ color: '#4A9EFF' }}>{att.anchor.tx_hash}</a>
+          ? <a href={att.anchor.explorer_tx} target="_blank" rel="noreferrer" style={{ color: 'var(--blue)' }}>{att.anchor.tx_hash}</a>
           : att.anchor.tx_hash)}
         {row('BLOCK', `${att.anchor.block_number} · ${att.anchor.confirmed_at ? new Date(att.anchor.confirmed_at * 1000).toISOString() : ''}`)}
-        {onChain && row('ON-CHAIN STATUS', onChain.status, onChain.status === 'Confirmed' ? '#00D4A8' : '#F5C842')}
+        {onChain && row('ON-CHAIN STATUS', onChain.status, onChain.status === 'Confirmed' ? 'var(--accent)' : 'var(--amber)')}
         {terminated && tAnchor.tx_hash && row('TERMINATION TX', tAnchor.explorer_tx
-          ? <a href={tAnchor.explorer_tx} target="_blank" rel="noreferrer" style={{ color: '#4A9EFF' }}>{tAnchor.tx_hash}</a>
+          ? <a href={tAnchor.explorer_tx} target="_blank" rel="noreferrer" style={{ color: 'var(--blue)' }}>{tAnchor.tx_hash}</a>
           : tAnchor.tx_hash)}
         {terminated && tAnchor.block_number && row('TERMINATED AT', `block ${tAnchor.block_number}` + (att.termination?.reason ? ` · ${att.termination.reason}` : ''))}
       </>) : (
-        row('ANCHOR', att.anchor?.note || 'No chain configured', '#888')
+        row('ANCHOR', att.anchor?.note || 'No chain configured', 'var(--text-dim)')
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-        <button className="tbw-btn" onClick={onVerify} disabled={verifying} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'rgba(0,212,168,0.4)', color: '#00D4A8' }}>
+        <button className="tbw-btn" onClick={onVerify} disabled={verifying} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'rgba(13,212,168,0.4)', color: 'var(--accent)' }}>
           {verifying ? '⏳ VERIFYING…' : '⟳ VERIFY'}
         </button>
-        <button className="tbw-btn" onClick={onDownloadProof} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: '#2A2A2A' }}>
+        <button className="tbw-btn" onClick={onDownloadProof} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'var(--border-hi)' }}>
           ↓ PROOF PACK
         </button>
+        {onCopyProofLink && (
+          <button className="tbw-btn" onClick={onCopyProofLink} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'var(--accent-dim)', color: 'var(--accent)' }}>
+            ⛓ COPY PROOF LINK
+          </button>
+        )}
         <span className="tbw-mut" style={{ fontSize: 10.5 }}>
           VERIFY recomputes the hash from the trade as stored now. PROOF PACK downloads
           everything a counterparty or auditor needs to check it themselves, without Rijeka.
         </span>
       </div>
+      {vr && vr.info && <div className="tbw-mut" style={{ marginTop: 8, color: 'var(--accent)' }}>{vr.info}</div>}
       {anchored && !terminated && onTerminate && (
         <div style={{ marginTop: 12 }}>
           {!showTerminate ? (
-            <button className="tbw-btn" onClick={() => setShowTerminate(true)} style={{ borderColor: 'rgba(255,107,107,0.4)', color: '#FF6B6B' }}>
+            <button className="tbw-btn" onClick={() => setShowTerminate(true)} style={{ borderColor: 'rgba(255,107,107,0.4)', color: 'var(--red)' }}>
               ◆ TERMINATE ON-CHAIN
             </button>
           ) : (
             <div style={{ padding: 12, background: '#000', border: '1px solid rgba(255,107,107,0.35)', borderRadius: 2, maxWidth: 520 }}>
-              <div className="tbw-lbl" style={{ color: '#FF6B6B' }}>TERMINATE — BOTH PARTIES SIGN, REGISTRY MARKS THE RECORD CLOSED</div>
+              <div className="tbw-lbl" style={{ color: 'var(--red)' }}>TERMINATE — BOTH PARTIES SIGN, REGISTRY MARKS THE RECORD CLOSED</div>
               <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5, margin: '6px 0 10px' }}>
                 Closes the signed record on-chain with a TradeTermination signature from each party. When the
                 counterparty signs for themselves this needs their signature via the termination request; Rijeka
                 signs both only if it holds their key.
               </div>
               <input type="text" placeholder="Reason (optional, stored in the event)" value={reason} onChange={e => setReason(e.target.value)} disabled={terminating}
-                style={{ width: '100%', padding: '8px 10px', background: '#0C0C0C', border: '1px solid #1E1E1E', color: '#F0F0F0', fontFamily: MONO, fontSize: 12, borderRadius: 2, outline: 'none', marginBottom: 10 }} />
+                style={{ width: '100%', padding: '8px 10px', background: 'var(--panel)', border: '1px solid var(--border)', color: '#F0F0F0', fontFamily: MONO, fontSize: 12, borderRadius: 2, outline: 'none', marginBottom: 10 }} />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button className="tbw-btn" onClick={() => { setShowTerminate(false); setReason('') }} disabled={terminating}>Dismiss</button>
                 <button className="tbw-btn tbw-btn-cancel" onClick={() => onTerminate(reason.trim() || null)} disabled={terminating}>
@@ -128,9 +134,9 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
       )}
       {vr && (
         <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 2, fontSize: 11, fontFamily: MONO,
-          background: vr.error ? 'rgba(255,107,107,0.06)' : vOk ? 'rgba(0,212,168,0.06)' : 'rgba(245,200,66,0.06)',
-          border: '1px solid ' + (vr.error ? 'rgba(255,107,107,0.3)' : vOk ? 'rgba(0,212,168,0.3)' : 'rgba(245,200,66,0.3)'),
-          color: vr.error ? '#FF6B6B' : vOk ? '#00D4A8' : '#F5C842', lineHeight: 1.7 }}>
+          background: vr.error ? 'rgba(255,107,107,0.06)' : vOk ? 'rgba(13,212,168,0.06)' : 'rgba(245,200,66,0.06)',
+          border: '1px solid ' + (vr.error ? 'rgba(255,107,107,0.3)' : vOk ? 'rgba(13,212,168,0.3)' : 'rgba(245,200,66,0.3)'),
+          color: vr.error ? 'var(--red)' : vOk ? 'var(--accent)' : 'var(--amber)', lineHeight: 1.7 }}>
           {vr.error ? ('Verify failed: ' + vr.error) : (<>
             <div>{vr.hash_matches ? '✔' : '✘'} hash of current terms {vr.hash_matches ? 'matches' : 'DOES NOT MATCH'} the signed hash</div>
             <div>{vr.signatures_valid_for_current_state ? '✔' : '✘'} both signatures {vr.signatures_valid_for_current_state ? 'valid' : 'INVALID'} for the current terms</div>
@@ -157,6 +163,7 @@ export function ConfirmPanel({
   confirmErr  = null,
   cancelErr   = null,
   onConfirm   = () => {},
+  onCopyProofLink = null,
   onCancelTrade = () => {},
   attestation = null,
   onVerify    = () => {},
@@ -230,7 +237,7 @@ export function ConfirmPanel({
 
           {(status === 'CONFIRMED' || status === 'TERMINATED') && (
             <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying}
-              verifyResult={verifyResult} onDownloadProof={onDownloadProof}
+              verifyResult={verifyResult} onDownloadProof={onDownloadProof} onCopyProofLink={onCopyProofLink}
               onTerminate={status === 'CONFIRMED' ? onTerminate : null} terminating={terminating} confirmErr={confirmErr} />
           )}
         </div>
@@ -326,15 +333,15 @@ export function ConfirmPanel({
           <div style={{
             marginTop: 4,
             padding: 16,
-            background: '#0C0C0C',
-            border: '1px solid #FF6B6B',
+            background: 'var(--panel)',
+            border: '1px solid var(--red)',
             borderRadius: 2,
             display: 'flex',
             flexDirection: 'column',
             gap: 12,
             maxWidth: 520,
           }}>
-            <div className="tbw-lbl" style={{ color: '#FF6B6B' }}>
+            <div className="tbw-lbl" style={{ color: 'var(--red)' }}>
               CANCEL TRADE — TERMINAL ACTION
             </div>
             <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5 }}>
@@ -351,7 +358,7 @@ export function ConfirmPanel({
               style={{
                 padding: '8px 10px',
                 background: '#000',
-                border: '1px solid #1E1E1E',
+                border: '1px solid var(--border)',
                 color: '#F0F0F0',
                 fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
                 fontSize: 12,
