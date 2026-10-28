@@ -31,6 +31,7 @@ from api.routes import (
     demo,
     news,
     methodology,
+    public,
 )
 
 app = FastAPI(
@@ -77,6 +78,7 @@ app.include_router(telegram.router)
 app.include_router(demo.router)
 app.include_router(news.router)
 app.include_router(methodology.router)
+app.include_router(public.router)
 
 # Telegram outbox: deliver mirrored cards only after their transaction commits.
 from chain.telegram import register_listeners as _tg_listeners
