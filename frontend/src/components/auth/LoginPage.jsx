@@ -105,7 +105,7 @@ export default function LoginPage() {
           <p className="auth-consent"><a href="/terms" target="_blank" rel="noopener noreferrer">Terms</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy</a> · Hosted demo on the Sepolia testnet · not investment advice</p>
 
           <p style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: '10px', color: 'rgba(90,112,128,0.7)', textAlign: 'center', margin: 0 }}>
-            No account? <Link to="/signup" style={{ color: '#0ec9a0', textDecoration: 'none' }}>Request early access</Link>
+            No account? <Link to="/signup" style={{ color: '#0ec9a0', textDecoration: 'none' }}>Create a demo account</Link>
           </p>
           <p style={{ fontFamily: '"JetBrains Mono",monospace', fontSize: '10px', color: 'rgba(90,112,128,0.35)', textAlign: 'center', margin: '0.4rem 0 0' }}>
             <a href="mailto:miko@rijeka.app" style={{ color: 'inherit', textDecoration: 'none' }}>miko@rijeka.app</a>
