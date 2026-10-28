@@ -100,6 +100,14 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const [curInst, setCurInst]          = useState('FX_FORWARD')
   const isCurrency                     = assetClass === 'FX' || assetClass === 'CRYPTO'
   const fxRef                          = useRef(null)
+  const winRef                         = useRef(null)
+  // A manual drag of the resize handle leaves an inline width/height on the
+  // window; clear it when the instrument changes so the window fits the new
+  // content again (up to max-height, after which it scrolls).
+  useEffect(() => {
+    const el = winRef.current
+    if (el) { el.style.height = ''; el.style.width = '' }
+  }, [assetClass, curInst, productKey])
   const [fxQuote, setFxQuote]          = useState(null)
   const CURRENCY_PRODUCTS = {
     FX:     [{ key: 'FX_SPOT', label: 'FX spot' }, { key: 'FX_FORWARD', label: 'FX forward' }, { key: 'NDF', label: 'NDF' }, { key: 'FX_SWAP', label: 'FX swap', live: false }, { key: 'FX_OPTION', label: 'FX option', live: false }],
@@ -563,6 +571,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
   return (
     <div
+      ref={winRef}
       className="tbw-window"
       style={{ left: pos.x + 'px', top: pos.y + 'px' }}
       onMouseDown={handleWindowMouseDown}
