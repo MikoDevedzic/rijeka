@@ -1,6 +1,8 @@
 name: risk-backfill
-# One-off: fetch public risk-factor history (Treasury, NY Fed, ECB, BoE, ECB FX via frankfurter,
-# Coinbase) into the template account so historical VaR has a window. Dispatch by hand.
+# One-off: fetch public risk-factor history into the template account so historical VaR has
+# a window. Treasury, NY Fed, ECB, frankfurter and Coinbase are fetched by the API itself;
+# the Bank of England refuses a cloud provider's address, so its series is fetched on this
+# runner and posted. Dispatch by hand.
 on:
   workflow_dispatch:
     inputs:
@@ -19,14 +21,26 @@ jobs:
       RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL || 'https://rijeka-api.onrender.com' }}
       RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
     steps:
-      - name: backfill
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: start the server-side backfill (everything but the BoE)
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/risk/history/backfill?years=${{ github.event.inputs.years }}&overwrite=${{ github.event.inputs.overwrite }}" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 60)
           echo "backfill: $code"; cat /tmp/out; echo; test "$code" = "200"
-          # the server runs it in the background; poll its progress for up to ten minutes
+      - name: fetch the Bank of England series here and post it
+        working-directory: backend
+        run: |
+          pip install -q httpx
+          python -m risk.history --curves GBP_SONIA --years ${{ github.event.inputs.years }} --post "$RIJEKA_API_URL" --secret "$RIJEKA_CRON_SECRET" $([ "${{ github.event.inputs.overwrite }}" = "true" ] && echo --overwrite)
+      - name: wait for the server-side backfill
+        run: |
+          body=""
           for i in $(seq 1 40); do
             sleep 15
             body=$(curl -s "$RIJEKA_API_URL/api/risk/history" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 30 || true)
             echo "$body" | head -c 600; echo
-            echo "$body" | grep -q '"running": *false' && echo "$body" | grep -q '"finished": *"' && break
+            if echo "$body" | grep -q '"running": *false' && echo "$body" | grep -q '"finished": *"'; then break; fi
           done
+          echo "$body" | grep -q '"error": *null' || { echo "server-side backfill reported an error"; exit 1; }

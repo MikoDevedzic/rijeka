@@ -224,6 +224,31 @@ def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=
     return {"started": True, "years": years, "note": "running in the background; GET /api/risk/history reports progress and the result"}
 
 
+@router.post("/history/ingest")
+def ingest_history(payload: dict, overwrite: bool = Query(default=False), db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None)):
+    """History built elsewhere (a runner, a desk) for sites that refuse this server's address:
+    {curve_id: {YYYY-MM-DD: quotes}}, stored as the template account's snapshots."""
+    from risk import history as H
+    if not _secret_ok(x_rijeka_cron):
+        raise HTTPException(status_code=403, detail="bad cron secret")
+    tpl = R.template_uid(db)
+    if tpl is None:
+        raise HTTPException(status_code=409, detail="No template account.")
+    days: dict = {}
+    for cid, by_date in (payload or {}).items():
+        if not isinstance(by_date, dict):
+            continue
+        for ds, quotes in by_date.items():
+            try:
+                d = date.fromisoformat(ds)
+            except ValueError:
+                continue
+            if isinstance(quotes, list) and quotes:
+                days.setdefault(str(cid)[:40], {})[d] = quotes
+    written = H.store(db, tpl, days, overwrite=overwrite)
+    return {"received": {c: len(v) for c, v in days.items()}, "written": written}
+
+
 @router.post("/daily/tick")
 def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None)):
     if not _secret_ok(x_rijeka_cron):

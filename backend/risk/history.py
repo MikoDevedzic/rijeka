@@ -236,3 +236,50 @@ def status(db: Session, user_id) -> dict[str, Any]:
                            "WHERE user_id = :u AND (curve_id = ANY(:ids) OR curve_id LIKE '%\\_SPOT') GROUP BY curve_id ORDER BY curve_id"),
                       {"u": str(user_id), "ids": list(RATE_CURVES)}).all()
     return {r.curve_id: {"observations": int(r.n), "from": r.a.isoformat(), "to": r.b.isoformat()} for r in rows}
+
+
+# ── fetch here, store there ──────────────────────────────────────────────────
+# Some public sites refuse a cloud provider's address (the Bank of England does), so the
+# history can be built on another machine (a GitHub runner, a desk) and posted to the API:
+#   python -m risk.history --curves GBP_SONIA --years 2 --post https://api --secret ...
+
+def main(argv: Optional[list[str]] = None) -> int:
+    import argparse
+    import httpx
+    ap = argparse.ArgumentParser(description="Build risk-factor history from public sources and post it to a Rijeka API.")
+    ap.add_argument("--curves", default="GBP_SONIA", help="comma-separated curve ids to build (rates: USD_SOFR, EUR_ESTR, GBP_SONIA; SPOTS for FX and crypto)")
+    ap.add_argument("--years", type=float, default=2.0)
+    ap.add_argument("--post", help="API base URL; without it the counts are printed only")
+    ap.add_argument("--secret", help="cron secret for X-Rijeka-Cron")
+    ap.add_argument("--overwrite", action="store_true")
+    a = ap.parse_args(argv)
+    end = date.today(); start = end - timedelta(days=int(365 * a.years))
+    want = {c.strip().upper() for c in a.curves.split(",") if c.strip()}
+    days: dict[str, dict[date, list[dict]]] = {}
+    if "USD_SOFR" in want:
+        ust, sofr = ust_history(start, end), sofr_history(start, end)
+        days["USD_SOFR"] = {d: feed.build_usd_sofr(s_, par) for d, par in ust.items()
+                            if (s_ := sofr.get(d) or sofr.get(d - timedelta(days=1)) or sofr.get(d - timedelta(days=3))) is not None}
+    if "EUR_ESTR" in want:
+        aaa, estr = ecb_aaa_history(start, end), estr_history(start, end)
+        days["EUR_ESTR"] = {d: feed.build_eur_estr(e, par) for d, par in aaa.items()
+                            if (e := estr.get(d) or estr.get(d - timedelta(days=1)) or estr.get(d - timedelta(days=3))) is not None}
+    if "GBP_SONIA" in want:
+        days["GBP_SONIA"] = {d: feed.build_gbp_sonia(row) for d, row in boe_history(start, end).items()}
+    if "SPOTS" in want:
+        for src in (fx_history, crypto_history):
+            for d, pairs in src(start, end).items():
+                for pair, px in pairs.items():
+                    days.setdefault(f"{pair}_SPOT", {})[d] = [{"tenor": "SPOT", "quote_type": "SPOT", "rate": px, "enabled": True}]
+    print({c: len(v) for c, v in days.items()})
+    if not a.post:
+        return 0
+    payload = {c: {d.isoformat(): q for d, q in v.items()} for c, v in days.items()}
+    r = httpx.post(f"{a.post.rstrip('/')}/api/risk/history/ingest", params={"overwrite": str(a.overwrite).lower()},
+                   headers={"X-Rijeka-Cron": a.secret or ""}, json=payload, timeout=300)
+    print(r.status_code, r.text[:400])
+    return 0 if r.status_code == 200 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
