@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
+import RiskNav from './RiskNav'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
 
@@ -44,6 +45,7 @@ export default function RiskPage() {
 
   return (
     <div className="pnl rk-page">
+      <RiskNav />
       <div className="pnl-bar">
         <div className="pnl-title">MARKET RISK <span className="pnl-sub">{rep?.reporting_ccy || 'USD'} · ladder by bump-and-reprice · VaR by historical simulation · stress by full revaluation</span></div>
         <div className="pnl-ctl">
@@ -51,7 +53,6 @@ export default function RiskPage() {
             <select value={date || ''} onChange={e => load(e.target.value)} disabled={busy}>{(rep?.dates || []).slice().reverse().map(d => <option key={d} value={d}>{fmtD(d)}</option>)}</select>
           </label>
           {rep && <span className={`pnl-chip ${breaches ? 'red' : warnings ? 'amber' : 'ok'}`}>{breaches ? `${breaches} BREACH${breaches > 1 ? 'ES' : ''}` : warnings ? `${warnings} WARNING${warnings > 1 ? 'S' : ''}` : 'WITHIN LIMITS'}</span>}
-          <button className="pnl-btn ghost" onClick={() => navigate('/risk/ccr')}>COUNTERPARTY CREDIT →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/limits')}>LIMITS →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/var')}>VAR SETTINGS →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/pnl')}>P&amp;L →</button>

@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import RateCurveCanvas from '../market-data/RateCurveCanvas'
 import { Limits } from './RiskPage'
+import RiskNav from './RiskNav'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
 
@@ -61,6 +62,7 @@ export default function CcrPage() {
 
   return (
     <div className="pnl rk-page">
+      <RiskNav />
       <div className="pnl-bar">
         <div className="pnl-title">COUNTERPARTY CREDIT <span className="pnl-sub">USD · netting set on shared paths · exposure real-world · CVA risk-neutral</span></div>
         <div className="pnl-ctl">
@@ -68,7 +70,6 @@ export default function CcrPage() {
           {rep?.from_store && <span className="pnl-note">stored run · {fmtD(rep.date)} · {fmtT(rep.stored_at)}</span>}
           <button className="pnl-btn" onClick={run} disabled={busy || job?.running}>{job?.running ? `RUNNING… ${job.done}/${job.total} ${job.current || ''}` : 'RUN NOW'}</button>
           <button className="pnl-btn ghost" onClick={() => load(true)} disabled={busy}>COMPUTE LIVE</button>
-          <button className="pnl-btn ghost" onClick={() => navigate('/risk')}>MARKET RISK →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/limits')}>LIMITS →</button>
         </div>
       </div>
