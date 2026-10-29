@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import WorldClock from './home/WorldClock'
+import PolicyPath from './home/PolicyPath'
 import { getSessionMaybe } from '../lib/session'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
@@ -155,6 +157,8 @@ function DeskHome({ demo, navigate }) {
         </span>
       </div>
 
+      <WorldClock />
+
       {showPath && (
         <div className="dh-path">
           <span className="dh-path-k">START HERE</span>
@@ -165,17 +169,7 @@ function DeskHome({ demo, navigate }) {
       )}
 
       <div className="dh-hero">
-        <section className="dh-card dh-curve">
-          <header>
-            <span>USD SOFR OIS · PAR CURVE</span>
-            <span className="dh-sub">
-              {r2 != null && r10 != null && <>2s10s <b>{fmtN((r10 - r2) * 100, 0)}bp</b></>}
-              {r5 != null && r30 != null && <> · 5s30s <b>{fmtN((r30 - r5) * 100, 0)}bp</b></>}
-              <button className="dh-link" onClick={() => navigate('/configurations/market-data/curves')}>CURVES →</button>
-            </span>
-          </header>
-          <CurveChart snap={d.sofr} loading={d.loading} />
-        </section>
+        <PolicyPath onCurves={() => navigate('/configurations/market-data/curves')} />
         <section className="dh-card dh-vol">
           <header><span>USD SWAPTION · ATM NORMAL VOL (bp)</span><button className="dh-link" onClick={() => navigate('/configurations/market-data/swvol')}>SURFACE →</button></header>
           <VolSurface snap={d.vol} loading={d.loading} />

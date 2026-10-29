@@ -165,3 +165,29 @@
 .dh-news-sum p { margin: 0 0 0.25rem; font-size: 0.82rem; line-height: 1.45; color: var(--text); }
 .dh-news-sum p.why { color: var(--text-dim); }
 .dh-news-basis { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em; color: var(--text-mute); }
+
+/* desk sessions */
+.dh-clocks { display:grid; grid-template-columns:repeat(5,1fr); gap:0; border-bottom:1px solid var(--border); }
+.dh-clock { display:flex; flex-direction:column; gap:0.1rem; padding:0.55rem 0.9rem 0.6rem 0; border-right:1px solid var(--border); font-family:var(--mono); }
+.dh-clock:last-child { border-right:none; }
+.dh-clock + .dh-clock { padding-left:0.9rem; }
+.dh-clock-city { font-size:0.6rem; letter-spacing:0.18em; color:var(--text-dim); }
+.dh-clock-time { font-size:1.05rem; font-weight:500; color:var(--text-hi); font-variant-numeric:tabular-nums; letter-spacing:0.04em; }
+.dh-clock-state { font-size:0.58rem; letter-spacing:0.12em; color:var(--text-mute); display:flex; align-items:center; gap:0.35rem; }
+.dh-clock-state i { width:6px; height:6px; border-radius:50%; background:var(--text-mute); display:inline-block; }
+.dh-clock.open .dh-clock-state { color:var(--accent); }
+.dh-clock.open .dh-clock-state i { background:var(--accent); box-shadow:0 0 8px var(--accent); }
+.dh-clock.soon .dh-clock-state { color:var(--amber); }
+.dh-clock.soon .dh-clock-state i { background:var(--amber); }
+@media (max-width:900px) { .dh-clocks { grid-template-columns:repeat(3,1fr); } .dh-clock:nth-child(3) { border-right:none; } }
+
+/* policy path */
+.dh-ccys { display:flex; gap:0.3rem; }
+.dh-ccy { background:transparent; border:1px solid var(--border); color:var(--text-dim); font-family:var(--mono); font-size:0.66rem; letter-spacing:0.12em; padding:0.22rem 0.6rem; border-radius:2px; cursor:pointer; }
+.dh-ccy:hover { border-color:var(--border-glow); color:var(--text); }
+.dh-ccy.on { border-color:var(--accent); color:var(--accent); background:var(--accent-glow); }
+.dh-caption { font-family:var(--mono); font-size:0.6rem; letter-spacing:0.08em; color:var(--text-mute); }
+.pp-dot { fill:var(--amber); stroke:#07090C; stroke-width:1.5; }
+.pp-dot-t { fill:var(--amber); }
+.pp-lr { stroke:var(--amber); stroke-dasharray:3 4; stroke-width:1; opacity:0.7; }
+.pp-lr-t { fill:var(--amber); opacity:0.8; }

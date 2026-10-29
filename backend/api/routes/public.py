@@ -17,7 +17,7 @@ import threading
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import HTTPException, APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -205,6 +205,46 @@ def _register(db: Session, n: int) -> dict:
     bilateral = _scalar(db, "SELECT count(*) FROM trade_events WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL "
                             "AND (payload->'attestation'->>'bilateral') = 'true'")
     return {"total": total, "bilateral": bilateral, "confirmations": rows}
+
+
+_pp_cache: dict[str, dict] = {}
+
+
+@router.get("/policy-path")
+def policy_path(ccy: str = "USD", db: Session = Depends(get_db)):
+    """Public: the market-implied overnight-rate path for one currency from the demo curve,
+    with the Fed's SEP medians for USD. Cached for TTL_SECONDS per currency."""
+    from market_data import policy_path as pp
+    ccy = (ccy or "USD").upper()
+    if ccy not in pp.CCY:
+        raise HTTPException(status_code=404, detail=f"unknown currency {ccy}; one of {', '.join(pp.CCY)}")
+    now = time.time()
+    hit = _pp_cache.get(ccy)
+    if hit and now - hit["at"] < TTL_SECONDS:
+        return hit["body"]
+    meta = pp.CCY[ccy]
+    uid = _template_user_id(db)
+    row = None
+    if uid is not None:
+        try:
+            row = db.execute(text(
+                "SELECT valuation_date, quotes, source FROM market_data_snapshots "
+                "WHERE user_id = :u AND curve_id = :c AND valuation_date <= current_date "
+                f"AND {_LICENSED_SOURCE_SQL} ORDER BY valuation_date DESC LIMIT 1"), {"u": uid, "c": meta["curve"]}).first()
+        except Exception as e:      # noqa: BLE001
+            log.debug("policy path query failed: %s", e); db.rollback()
+    body: dict[str, Any] = {"ccy": ccy, "bank": meta["bank"], "fixing_name": meta["fixing"], "curve_id": meta["curve"],
+                            "as_of": None, "source": None, "fixing": None, "term_structure": False, "path": [], "cumulative_bp": {}}
+    if row is not None:
+        try:
+            body.update(pp.implied_path(list(row.quotes or []), row.valuation_date, meta["basis"]))
+        except Exception as e:      # noqa: BLE001 — a curve that will not bootstrap shows the fixing only
+            log.warning("policy path %s failed: %s", ccy, e)
+        body.update(as_of=row.valuation_date.isoformat(), source=row.source)
+    if ccy == "USD":
+        body["dots"] = pp.fed_dots()
+    _pp_cache[ccy] = {"at": now, "body": body}
+    return body
 
 
 @router.get("/confirmations")
