@@ -77,6 +77,10 @@ PRODUCTS = [
      "default": "Canonical trade record v2 → keccak256 → EIP-712 signatures by both LEIs → registry on Ethereum",
      "formula": "Verify without us: recompute the hash, recover both signers, read the registry",
      "replication": "verifier", "doc": "https://rijeka.app/verify"},
+    {"id": "pnl", "name": "P&L attribution", "group": "Post-trade", "section": None,
+     "default": "Yesterday's mark on yesterday's market → roll the date → cash → each curve by tenor bucket → spot → forward points → residual",
+     "formula": "Sequential full revaluation: every step is a repricing, rows sum to the total by construction; new trades at their close mark, unwinds remove the prior mark",
+     "replication": "doc", "doc": "/docs/pnl_attribution.md"},
 ]
 
 # ── Styling helpers ─────────────────────────────────────────────────────────

@@ -34,6 +34,8 @@
 .rm-phase li.now .rm-dot { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
 .rm-st { font-family: var(--mono); font-size: .6rem; letter-spacing: .14em; color: var(--text-dim); }
 .rm-phase li.done .rm-st { color: var(--accent); }
+.rm-phase li.partial .rm-dot { background: var(--amber); }
+.rm-phase li.partial .rm-st { color: var(--amber); }
 .rm-phase li.now .rm-st { color: var(--amber); }
 .rm-phase li.next { color: var(--text-dim); }
 

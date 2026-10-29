@@ -16,7 +16,8 @@ const PHASES = [
   ]},
   { title: 'DESK MODULES', status: 'PARTIAL', items: [
     ['DONE', 'Scenario P&L attribution per trade: theta, IR01, IR01_DISC, gamma, vega, carry, roll-down, unexplained (never absorbed)'],
-    ['NEXT', 'PNL tab: daily desk P&L with new-trade, amendment and termination effects, by desk, book and trader; a published attribution report'],
+    ['DONE', 'P&L tab: day, MTD and YTD split market vs trading; attribution by sequential full revaluation (carry, cash, curves by tenor bucket, spot, points, residual); roll-up desk → book → trade; trader and controller sign-off; management view'],
+    ['NEXT', 'P&L: vol surfaces as a step, amendment effects separated, IPV tolerances, a published PDF report per signed day'],
     ['NEXT', 'IPV: independent price verification of the book against an external snapshot, with tolerances and a sign-off trail'],
     ['DONE', 'Greeks and bump-and-reprice ladders; exposure profiles (EE, ENE, PFE) and SA-CCR EAD inside the XVA module'],
     ['NEXT', 'MARKET RISK tab: historical and parametric VaR, stress scenarios, Greek ladders by bucket, FRTB sensitivities-based capital'],
@@ -31,7 +32,7 @@ const PHASES = [
     ['NEXT', 'Limits and pre-trade checks: notional, tenor, counterparty and product limits enforced at booking'],
     ['NEXT', 'Model governance: model inventory, validation status per product, change log, approval workflow'],
     ['NEXT', 'Entitlements and audit: roles per firm, four-eyes on sensitive actions, immutable audit trail'],
-    ['NEXT', 'End-of-day batch: official close, P&L sign-off, archived snapshots and reports'],
+    ['PARTIAL', 'End-of-day batch: daily marks and attributed P&L rows stored per account; P&L sign-off. Next: official close, archived snapshots and reports'],
     ['NEXT', 'Public API and Python SDK with the same contracts the UI uses'],
   ]},
   { title: 'FX & DIGITAL ASSETS', status: 'LIVE', items: [
