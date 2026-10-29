@@ -125,7 +125,11 @@ function DeskHome({ demo, navigate }) {
       step('vol',    get('/api/market-data/snapshots/USD_SWVOL_ATM/latest'), v => v?.exists ? `${v.quotes?.length || 0} points` : 'no snapshot'),
       step('trades', get('/api/trades/'),                                     v => `${v?.length || 0} trades · ${(v || []).filter(t => t.status === 'CONFIRMED').length} confirmed`),
       step('chain',  get('/api/chain/status'),                                v => v?.anchored ? `${v.chain_id === 11155111 ? 'Sepolia' : 'chain ' + v.chain_id} · ${v.registry?.slice(0, 8)}…${v.registry?.slice(-4)}` : 'off-chain'),
-      step('news',   get('/api/news/items?limit=12'),                         v => `${v?.length || 0} headlines`),
+      step('news',   get('/api/news/items?limit=40').then(v => {
+        // The room carries every headline; the desk home shows the ones tagged to a market.
+        const tagged = (v || []).filter(n => (n.tags || []).length)
+        return (tagged.length >= 3 ? tagged : (v || [])).slice(0, 12)
+      }),                                                                      v => `${v?.length || 0} headlines`),
     ]).then(([sofr, vol, trades, chain, news]) => {
       if (!alive) return
       setD({ loading: false, sofr, vol, trades: trades || [], chain, news: news || [] })
