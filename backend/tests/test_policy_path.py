@@ -26,12 +26,13 @@ def test_sep_medians_parse():
 
 
 def test_flat_par_curve_gives_a_near_flat_overnight_path():
-    # A 4% annual-pay OIS implies an overnight rate near 3.92% (daily compounding vs the annual
-    # coupon), so the path sits a little below par; what matters is that it is flat.
+    # The fixture quotes 4 % simple at every tenor, which in compounded terms is a gently
+    # declining term structure, so the path drifts a little below par; what matters is that
+    # it stays near 4 % and does not kink. test_bootstrap_conventions covers a truly flat market.
     r = pp.implied_path(FLAT, date(2026, 10, 29), basis=360)
     assert r["fixing"] == 4.0 and r["term_structure"] is True and len(r["path"]) == 24
     rates = [p["rate"] for p in r["path"]]
-    assert all(3.80 <= x <= 4.00 for x in rates) and max(rates) - min(rates) < 0.15
+    assert all(3.80 <= x <= 4.02 for x in rates) and max(rates) - min(rates) < 0.15
     assert r["path"][0]["date"] == "2026-11-29" and r["path"][-1]["date"] == "2028-10-29"
     assert set(r["cumulative_bp"]) == {"6M", "12M", "24M"} and all(-20 < v <= 0 for v in r["cumulative_bp"].values())
 

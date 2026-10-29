@@ -235,4 +235,4 @@ def test_assemble_builds_jpy_when_both_feeds_answer():
     d, jgb = f.fetch_jgb(JGB_CSV)
     collected = {"ok": {"tona": (date(2026, 9, 1), 1.226), "jgb": (d, jgb)}, "failed": {}}
     built = f.assemble(collected, date(2026, 10, 29))
-    assert "JPY_TONA" in built["curves"] and "TONA 2026-09" in built["curves"]["JPY_TONA"]["source"]
+    assert "JPY_TONAR" in built["curves"] and "TONA 2026-09" in built["curves"]["JPY_TONAR"]["source"]

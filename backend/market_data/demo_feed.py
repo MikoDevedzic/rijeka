@@ -14,7 +14,7 @@ freely, with every assumption written down here and stamped into `source`:
   CHF_SARON    SNB SARON (monthly average), overnight pillar; flat beyond it until a
                current public Swiss Confederation yield curve is found (the SNB's bond
                cubes stopped in mid-2025)
-  JPY_TONA     Bank of Japan TONA via the SNB's money-market cube (monthly, end of
+  JPY_TONAR     Bank of Japan TONA via the SNB's money-market cube (monthly, end of
                month) + Japan MoF daily JGB yields, less an indicative TONA-OIS / JGB
                spread schedule
   USD_SWVOL_ATM, swaption skew, cap vols
@@ -63,7 +63,7 @@ SOURCES = [
     {"curve": "EUR_ESTR",      "provider": "ECB",                        "kind": "public",    "url": "https://data.ecb.europa.eu/"},
     {"curve": "GBP_SONIA",     "provider": "Bank of England",            "kind": "public",    "url": "https://www.bankofengland.co.uk/boeapps/database/"},
     {"curve": "CHF_SARON",     "provider": "SNB",                        "kind": "public",    "url": "https://data.snb.ch/"},
-    {"curve": "JPY_TONA",      "provider": "SNB (TONA) · Japan MoF (JGB)", "kind": "public",    "url": "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/"},
+    {"curve": "JPY_TONAR",      "provider": "SNB (TONA) · Japan MoF (JGB)", "kind": "public",    "url": "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/"},
     {"curve": "USD_SWVOL_ATM", "provider": "synthetic parametric surface", "kind": "synthetic", "url": None},
     {"curve": "USD_CAPVOL",    "provider": "synthetic parametric surface", "kind": "synthetic", "url": None},
 ]
@@ -434,7 +434,7 @@ def assemble(collected: dict, valuation_date: date) -> dict:
         curves["CHF_SARON"] = {"quotes": build_chf_saron(saron), "source": src(f"SNB SARON monthly avg {d1:%Y-%m}, flat: no public CHF curve")}
     if "tona" in ok and "jgb" in ok:
         (d1, tona), (d2, jgb) = ok["tona"], ok["jgb"]
-        curves["JPY_TONA"] = {"quotes": build_jpy_tona(tona, jgb), "source": src(f"TONA {d1:%Y-%m} (SNB) + MoF JGB, indicative spread", d2)}
+        curves["JPY_TONAR"] = {"quotes": build_jpy_tona(tona, jgb), "source": src(f"TONA {d1:%Y-%m} (SNB) + MoF JGB, indicative spread", d2)}
 
     synthetic = "DEMO · synthetic surface"
     curves["USD_SWVOL_ATM"] = {"quotes": build_swvol_atm(), "source": synthetic}

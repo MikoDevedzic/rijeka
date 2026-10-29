@@ -54,6 +54,7 @@ CURVE_DC = {
     'EUR_ESTR':   'ACT/360',
     'GBP_SONIA':  'ACT/365F',
     'JPY_TONAR':  'ACT/365F',
+    'JPY_TONA':   'ACT/365F',   # the demo feed and the ticket book JPY on this id
     'CHF_SARON':  'ACT/360',
     'AUD_AONIA':  'ACT/365F',
     'CAD_CORRA':  'ACT/365F',
@@ -72,6 +73,7 @@ CURVE_CAL = {
     'EUR_ESTR':   'TARGET',
     'GBP_SONIA':  'LONDON',
     'JPY_TONAR':  'TOKYO',
+    'JPY_TONA':   'TOKYO',   # the demo feed and the ticket book JPY on this id
     'CHF_SARON':  'ZURICH',
     'AUD_AONIA':  'SYDNEY',
     'CAD_CORRA':  'TORONTO',
@@ -90,6 +92,7 @@ CURVE_SPOT_LAG = {
     'EUR_ESTR':   2,
     'GBP_SONIA':  0,
     'JPY_TONAR':  2,
+    'JPY_TONA':   2,   # the demo feed and the ticket book JPY on this id
     'CHF_SARON':  2,
     'AUD_AONIA':  0,
     'CAD_CORRA':  1,
@@ -108,6 +111,7 @@ CURVE_CCY = {
     'EUR_ESTR':   'EUR',
     'GBP_SONIA':  'GBP',
     'JPY_TONAR':  'JPY',
+    'JPY_TONA':   'JPY',   # the demo feed and the ticket book JPY on this id
     'CHF_SARON':  'CHF',
     'AUD_AONIA':  'AUD',
     'CAD_CORRA':  'CAD',

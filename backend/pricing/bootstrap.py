@@ -50,6 +50,16 @@ _SWAP_DC  = "ACT/365F"
 _SPOT_LAG = 2
 _SPOT_CAL = "NEW_YORK"
 
+# Market quoting conventions for OIS swaps and the overnight deposit, by currency.
+# SOFR, €STR and SARON swaps are ACT/360; SONIA, TONA, AONIA and CORRA are ACT/365F.
+# Used when a quote carries no day count of its own.
+CCY_OIS_DC = {
+    "USD": "ACT/360", "EUR": "ACT/360", "CHF": "ACT/360", "SEK": "ACT/360", "NOK": "ACT/360", "DKK": "ACT/360",
+    "GBP": "ACT/365F", "JPY": "ACT/365F", "AUD": "ACT/365F", "CAD": "ACT/365F", "NZD": "ACT/365F",
+    "SGD": "ACT/365F", "HKD": "ACT/365", "MXN": "ACT/360",
+}
+CCY_DEPO_DC = {"GBP": "ACT/365F", "JPY": "ACT/365F", "AUD": "ACT/365F", "CAD": "ACT/365F", "NZD": "ACT/365F", "SGD": "ACT/365F", "HKD": "ACT/365"}
+
 CCY_SPOT_LAG = {
     "USD": 2, "EUR": 2, "GBP": 0, "JPY": 2,
     "CHF": 2, "AUD": 0, "CAD": 1, "NZD": 0,
@@ -254,7 +264,9 @@ def bootstrap_curve(
     ref_q    = swap_qs[0] if swap_qs else quotes[0]
     spot_lag = ref_q.spot_lag
     calendar = ref_q.calendar
-    swap_dc  = ref_q.day_count or _SWAP_DC
+    ccy      = (ref_q.currency or "USD").upper()
+    swap_dc  = ref_q.day_count or CCY_OIS_DC.get(ccy, _SWAP_DC)
+    depo_dc  = CCY_DEPO_DC.get(ccy, _DEPO_DC)
     spot     = _add_bd(valuation_date, spot_lag, calendar)
 
     # Step 1: ON deposit -> df_on
@@ -265,14 +277,14 @@ def bootstrap_curve(
 
     if on_quote:
         on_mat  = _mat(valuation_date, on_quote)
-        on_dc   = on_quote.day_count or _DEPO_DC
+        on_dc   = on_quote.day_count or depo_dc
         df_on   = _df_deposit(valuation_date, on_mat, on_quote.rate, on_dc)
         df_pillars.append((on_mat, df_on))
 
         # Other deposits (TN, SN etc if present)
         for q in dep_quotes[1:]:
             mat = _mat(valuation_date, q)
-            dc  = q.day_count or _DEPO_DC
+            dc  = q.day_count or depo_dc
             df  = _df_deposit(valuation_date, mat, q.rate, dc)
             if df > 0:
                 df_pillars.append((mat, df))
@@ -294,7 +306,7 @@ def bootstrap_curve(
     for q in sorted([q for q in quotes if q.quote_type in (FRA, FUTURES)], key=lambda q: _mat(valuation_date, q)):
         fra_start  = parse_tenor(valuation_date, q.fra_start_tenor, q.spot_lag, q.calendar)  # type: ignore
         fra_end    = _mat(valuation_date, q)
-        dc         = q.day_count or _DEPO_DC
+        dc         = q.day_count or depo_dc
         sorted_pil = _sorted_dedup(df_pillars)
         df_start   = _interp_df(fra_start, sorted_pil)
         df_end     = _df_fra(fra_start, fra_end, q.rate, df_start, dc)

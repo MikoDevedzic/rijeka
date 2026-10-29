@@ -413,7 +413,7 @@ function parseNum(s) {
 
 const CCY_CURVE_MAP = {
   USD: 'USD_SOFR', EUR: 'EUR_ESTR', GBP: 'GBP_SONIA',
-  JPY: 'JPY_TONA', CHF: 'CHF_SARON', AUD: 'AUD_AONIA', CAD: 'CAD_CORRA',
+  JPY: 'JPY_TONAR', CHF: 'CHF_SARON', AUD: 'AUD_AONIA', CAD: 'CAD_CORRA',
 }
 
 function fmtDate(d) {

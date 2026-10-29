@@ -30,7 +30,7 @@ CCY = {
     "EUR": {"curve": "EUR_ESTR",  "bank": "ECB",               "fixing": "€STR",  "basis": 360},
     "GBP": {"curve": "GBP_SONIA", "bank": "Bank of England",   "fixing": "SONIA", "basis": 365},
     "CHF": {"curve": "CHF_SARON", "bank": "SNB",               "fixing": "SARON", "basis": 360},
-    "JPY": {"curve": "JPY_TONA",  "bank": "Bank of Japan",     "fixing": "TONA",  "basis": 365},
+    "JPY": {"curve": "JPY_TONAR",  "bank": "Bank of Japan",     "fixing": "TONA",  "basis": 365},
 }
 MONTHS = 24
 
@@ -57,7 +57,9 @@ def implied_path(quotes: list[dict], valuation_date: date, basis: int = 360, mon
     # The curves page stores the editor's names; the bootstrap wants its own.
     kinds = {"OISDeposit": "DEPOSIT", "DEPOSIT": "DEPOSIT", "OIS": "OIS_SWAP", "OIS_SWAP": "OIS_SWAP",
              "SWAP": "OIS_SWAP", "IRS": "IRS", "FRA": "FRA", "FUTURES": "FUTURES"}
-    norm = [{**q, "quote_type": kinds.get(q.get("quote_type", "OIS"), "OIS_SWAP"), "rate": float(q["rate"]) / 100.0} for q in live]
+    # The currency sets the quoting conventions (day count, calendar, spot lag) in the bootstrap.
+    norm = [{**q, "quote_type": kinds.get(q.get("quote_type", "OIS"), "OIS_SWAP"), "rate": float(q["rate"]) / 100.0,
+             "currency": (ccy or q.get("currency") or "USD").upper()} for q in live]
     curve = bootstrap_from_dicts(valuation_date, norm)
     grid = [add_months(valuation_date, i) for i in range(0, months + 1)]
     path = []
