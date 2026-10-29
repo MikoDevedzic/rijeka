@@ -51,3 +51,6 @@ ALTER TABLE risk_daily    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 ALTER TABLE profiles ADD CONSTRAINT profiles_role_check
   CHECK (role = ANY (ARRAY['viewer'::text, 'trader'::text, 'controller'::text, 'management'::text, 'risk'::text, 'admin'::text]));
+
+-- sign-off policy per firm: TWO_PERSON (trader then a different controller) or SINGLE (one signature finalises)
+ALTER TABLE risk_settings ADD COLUMN IF NOT EXISTS signoff_policy text NOT NULL DEFAULT 'TWO_PERSON';

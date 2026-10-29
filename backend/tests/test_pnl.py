@@ -93,3 +93,16 @@ def test_batch_context_carries_marking_rights(monkeypatch):
     monkeypatch.setattr(M, "db_role", lambda db, uid: "viewer")
     own = P._marking_ctx(None, {"sub": "abc", "user_metadata": {"role": "viewer"}})
     assert own["user_metadata"]["role"] == "trader" and own["user_metadata"]["actual_role"] == "viewer"
+
+
+def test_single_signature_policy_finalises_on_one_signature():
+    assert R.status_of([{"role": "TRADER"}], "SINGLE") == "FINAL" and R.status_of([], "SINGLE") == "OPEN"
+    assert R.status_of([{"role": "TRADER"}], "TWO_PERSON") == "TRADER_SIGNED"
+
+
+def test_role_routes_need_auth():
+    import main
+    from fastapi.testclient import TestClient
+    c = TestClient(main.app)
+    assert c.get("/api/me/role").status_code == 401 and c.put("/api/me/role", json={"role": "risk"}).status_code == 401
+    assert c.get("/api/pnl/policy").status_code == 401

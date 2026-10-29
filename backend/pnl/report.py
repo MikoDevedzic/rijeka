@@ -183,8 +183,10 @@ def signoffs(db: Session, uid: str, d1: date) -> list[dict]:
         log.debug("signoffs: %s", e); db.rollback(); return []
 
 
-def status_of(signs: list[dict]) -> str:
+def status_of(signs: list[dict], policy: str = "TWO_PERSON") -> str:
     roles = {s["role"] for s in signs}
+    if policy == "SINGLE":
+        return "FINAL" if roles else "OPEN"
     return "FINAL" if {"TRADER", "CONTROLLER"} <= roles else "TRADER_SIGNED" if "TRADER" in roles else "CONTROLLER_SIGNED" if "CONTROLLER" in roles else "OPEN"
 
 

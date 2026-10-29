@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import './PnlPage.css'
+import '../risk/RiskPage.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 async function api(path, opts = {}) {
@@ -55,11 +56,16 @@ export function BookingDefaults() {
   )
 }
 
+const Row = ({ k, v }) => <div className="pnl-xr" style={{ gridTemplateColumns: '14rem 1fr' }}><span className="pnl-kl">{k}</span><span>{Array.isArray(v) ? v.join(' → ') : String(v)}</span></div>
+
 export function PnlConventions() {
   const [c, setC] = useState(null)
   const [err, setErr] = useState(null)
-  useEffect(() => { api('/api/pnl/conventions').then(setC).catch(e => setErr(e.message)) }, [])
-  const Row = ({ k, v }) => <div className="pnl-xr" style={{ gridTemplateColumns: '14rem 1fr' }}><span className="pnl-kl">{k}</span><span>{Array.isArray(v) ? v.join(' → ') : String(v)}</span></div>
+  const [pol, setPol] = useState(null)
+  const [msg, setMsg] = useState(null)
+  const load = () => Promise.all([api('/api/pnl/conventions'), api('/api/pnl/policy')]).then(([a, b]) => { setC(a); setPol(b) }).catch(e => setErr(e.message))
+  useEffect(() => { load() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  const setPolicy = async (p) => { try { await api('/api/pnl/policy', { method: 'PUT', body: JSON.stringify({ signoff_policy: p }) }); setMsg(`Sign-off policy set to ${p.replace('_', '-')} for the firm.`); await load() } catch (e) { setMsg(e.message) } }
   return (
     <div className="pnl">
       <div className="pnl-bar"><div className="pnl-title">P&amp;L CONVENTIONS <span className="pnl-sub">the policy as the engine applies it · read-only</span></div></div>
@@ -96,7 +102,17 @@ export function PnlConventions() {
           <Row k="MANAGEMENT ROLES" v={c.sign_off.management_roles.map(x => x.toUpperCase())} />
           <Row k="FIRM ROLES THAT QUALIFY" v={c.sign_off.firm_roles_that_qualify} />
           <Row k="FINAL" v={c.sign_off.final} />
-          <div className="pnl-foot">Roles are set by an admin on Configurations › Admin › Users. Controller and management roles cannot book trades: the person who signs the day is not the person who traded it.
+          {pol && (
+            <div className="pnl-cards" style={{ gridTemplateColumns: '1fr 1fr', maxWidth: 720 }}>
+              {[['TWO_PERSON', 'TWO-PERSON', 'The trader signs, then a different person with the controller, CFO or admin role. The desk has a control function.'],
+                ['SINGLE', 'SINGLE', 'One signature finalises the day. A one-person desk, or a shop where the CFO is also risk and control.']].map(([k, l, d]) => (
+                <button key={k} className="pnl-card" disabled={!pol.can_write} onClick={() => setPolicy(k)} style={{ textAlign: 'left', cursor: pol.can_write ? 'pointer' : 'default', borderColor: pol.signoff_policy === k ? 'var(--accent)' : 'var(--border)' }}>
+                  <span className="pnl-kl">{l}{pol.signoff_policy === k ? ' · IN FORCE' : ''}</span><span className="rk-sub" style={{ color: 'var(--text)' }}>{d}</span>
+                </button>))}
+            </div>
+          )}
+          {msg && <div className="pnl-toast">{msg}</div>}
+          <div className="pnl-foot">{c.policy_note} Roles are set by an admin on Configurations › Admin › Users; on the demo, from the role chip in the top bar. Controller, risk and management roles cannot book trades: the person who signs the day is not the person who traded it, unless the firm's policy says one person does both.
             {!c.history_tables && <> <em>History tables are not applied on this server ({c.migration}); sign-off is disabled until they are.</em></>}</div>
         </section>
       </>)}

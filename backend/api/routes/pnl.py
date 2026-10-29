@@ -76,6 +76,52 @@ def _is_management(db: Session, user: dict) -> bool:
     return bool(fm and fm.role in ("ADMIN", "COMPLIANCE"))
 
 
+POLICIES = ("TWO_PERSON", "SINGLE")
+
+
+def signoff_policy(db: Session, uid: str) -> str:
+    """The firm's sign-off policy: TWO_PERSON (trader, then a different controller) or SINGLE
+    (one signature finalises; a one-person desk, or a shop where the CFO is the risk and
+    control function). Default TWO_PERSON."""
+    fm = _firm(db, uid)
+    if fm is None:
+        return "TWO_PERSON"
+    try:
+        v = db.execute(text("SELECT signoff_policy FROM risk_settings WHERE firm_id = :f"), {"f": str(fm.firm_id)}).scalar()
+    except Exception:
+        db.rollback(); return "TWO_PERSON"
+    return v if v in POLICIES else "TWO_PERSON"
+
+
+class PolicyBody(BaseModel):
+    signoff_policy: str
+
+
+@router.get("/policy")
+def get_policy(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    return {"signoff_policy": signoff_policy(db, user["sub"]), "policies": list(POLICIES), "can_write": _is_controller(db, user) or _role(db, user) in ("risk",)}
+
+
+@router.put("/policy")
+def put_policy(body: PolicyBody, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    fm = _firm(db, user["sub"])
+    if fm is None:
+        raise HTTPException(status_code=404, detail="Your account is not in a firm.")
+    if not (_is_controller(db, user) or _role(db, user) == "risk"):
+        raise HTTPException(status_code=403, detail="The sign-off policy is set by the controller, CFO, risk or admin role, or a firm admin.")
+    pol = body.signoff_policy.upper()
+    if pol not in POLICIES:
+        raise HTTPException(status_code=422, detail=f"signoff_policy must be one of {', '.join(POLICIES)}")
+    try:
+        db.execute(text("INSERT INTO risk_settings (firm_id, signoff_policy, updated_by, updated_by_name) VALUES (:f, :p, :b, :bn) "
+                        "ON CONFLICT (firm_id) DO UPDATE SET signoff_policy = EXCLUDED.signoff_policy, updated_by = EXCLUDED.updated_by, updated_by_name = EXCLUDED.updated_by_name, updated_at = now()"),
+                   {"f": str(fm.firm_id), "p": pol, "b": user["sub"], "bn": _name(user)})
+        db.commit()
+    except Exception as e:
+        db.rollback(); raise HTTPException(status_code=409, detail=f"policy needs the market risk tables: {str(e)[:80]}")
+    return {"signoff_policy": pol}
+
+
 @router.get("/conventions")
 def conventions(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """The firm's P&L policy as the engine applies it. Read-only for now; these are the constants."""
@@ -94,6 +140,9 @@ def conventions(db: Session = Depends(get_db), user: dict = Depends(verify_token
                      "management_roles": sorted(MANAGEMENT_ROLES), "firm_roles_that_qualify": ["ADMIN", "COMPLIANCE"],
                      "final": "both signatures; visible to management with the comments"},
         "your_role": _role(db, user), "you_may_sign_as_controller": _is_controller(db, user), "you_may_see_the_firm": _is_management(db, user),
+        "signoff_policy": signoff_policy(db, user["sub"]),
+        "policy_note": "Roles and the sign-off policy are the firm's. On the hosted demo each workspace is its own firm and the person at the desk picks the hat; "
+                       "TWO_PERSON needs a trader and a different controller, SINGLE lets one signature finalise the day (a one-person desk, or a shop where the CFO is also the control function).",
         "history_tables": R.tables_present(db), "migration": "docs/migrations/2026-10-30_pnl.sql", "roles_migration": "docs/migrations/2026-10-30_pnl_roles.sql",
     }
 
@@ -106,7 +155,12 @@ def _marking_ctx(db: Session, user: dict) -> dict:
 
 @router.get("/report")
 def pnl_report(date_: Optional[str] = Query(default=None, alias="date"), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return R.report(db, _marking_ctx(db, user), _parse(date_))
+    rep = R.report(db, _marking_ctx(db, user), _parse(date_))
+    rep["signoff_policy"] = signoff_policy(db, user["sub"])
+    rep["status"] = R.status_of(rep.get("signoffs", []), rep["signoff_policy"])
+    rep["can_control"] = _is_controller(db, user)
+    rep["role"] = _role(db, user)
+    return rep
 
 
 @router.get("/summary")
@@ -165,8 +219,13 @@ def signoff(body: SignBody, db: Session = Depends(get_db), user: dict = Depends(
     if role not in ("TRADER", "CONTROLLER"):
         raise HTTPException(status_code=422, detail="role must be TRADER or CONTROLLER")
     owner = body.owner or user["sub"]
+    policy = signoff_policy(db, owner)
     if role == "CONTROLLER" and not _is_controller(db, user):
         raise HTTPException(status_code=403, detail="Controller sign-off needs the controller, CFO or admin role, or firm admin.")
+    if role == "CONTROLLER" and policy == "TWO_PERSON":
+        prior = R.signoffs(db, owner, _parse(body.date))
+        if any(s["role"] == "TRADER" and s["signer_user_id"] == user["sub"] for s in prior):
+            raise HTTPException(status_code=403, detail="Two-person policy: the controller must be a different person from the trader who signed. Switch the firm to SINGLE if one person runs the desk.")
     if role == "TRADER" and owner != user["sub"]:
         raise HTTPException(status_code=403, detail="A trader signs their own book.")
     if owner != user["sub"]:
@@ -181,9 +240,11 @@ def signoff(body: SignBody, db: Session = Depends(get_db), user: dict = Depends(
     if not rep.get("persisted"):
         R.persist(db, ctx, rep)          # what is signed is what is stored
     try:
-        return R.sign(db, user, owner, d1, role, body.comment, rep["totals"]["dod"], _name(user))
+        out = R.sign(db, user, owner, d1, role, body.comment, rep["totals"]["dod"], _name(user))
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    out["status"] = R.status_of(out["signoffs"], policy)
+    return out
 
 
 @router.get("/firm")

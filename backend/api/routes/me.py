@@ -66,3 +66,37 @@ def put_defaults(body: DefaultsBody, db: Session = Depends(get_db), user: dict =
                {"d": body.default_desk or None, "b": body.default_book or None, "id": uid})
     db.commit()
     return get_defaults(db, user)
+
+
+SELF_ROLES = ("trader", "controller", "risk", "management", "admin")
+
+
+class RoleBody(BaseModel):
+    role: str
+
+
+@router.get("/role")
+def get_role(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    from api.routes.demo import enabled as demo_enabled
+    return {"role": db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "viewer",
+            "self_service": bool(demo_enabled()), "roles": list(SELF_ROLES)}
+
+
+@router.put("/role")
+def put_role(body: RoleBody, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Switch your own role. On the hosted demo every workspace is its own firm, so the
+    person wearing the hat is whoever is at the desk; in a firm deployment the admin
+    assigns roles on the Users page and this is off."""
+    from api.routes.demo import enabled as demo_enabled
+    role = body.role.strip().lower()
+    if role not in SELF_ROLES:
+        raise HTTPException(status_code=422, detail=f"role must be one of {', '.join(SELF_ROLES)}")
+    current = db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "viewer"
+    if not demo_enabled() and current != "admin":
+        raise HTTPException(status_code=403, detail="Roles are assigned by your firm's admin.")
+    uid = user["sub"]
+    db.execute(text("UPDATE profiles SET role = :r WHERE id = :id"), {"r": role, "id": uid})
+    db.execute(text("UPDATE auth.users SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', :r) WHERE id = :id"),
+               {"r": role, "id": uid})
+    db.commit()
+    return {"role": role, "changed": role != current, "note": "refresh the session so the token carries the new role"}

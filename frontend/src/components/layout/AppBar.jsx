@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
+import RoleSwitch from './RoleSwitch'
 import { openAppWindow } from '../../lib/windows'
 import './AppBar.css'
 
@@ -19,7 +20,6 @@ export default function AppBar() {
   const user      = useAuthStore(s => s.session?.user)
   const signOut   = useAuthStore(s => s.signOut)
   const demo      = useAuthStore(s => s.demo)
-  const role      = (user?.user_metadata?.role || 'viewer').toUpperCase()
 
   const displayName = user?.email?.split('@')[0]?.toUpperCase()
     || user?.user_metadata?.full_name?.toUpperCase()
@@ -72,7 +72,7 @@ export default function AppBar() {
                 style={{color:'var(--bg)',background:'var(--amber)',fontWeight:700,padding:'0.1rem 0.45rem',borderRadius:'2px',cursor:'help'}}>DEMO · SEPOLIA</span>
         )}
         {demo?.enabled && <span style={{color:'var(--border)'}}>·</span>}
-        <span style={{color: role === 'VIEWER' ? 'var(--amber)' : 'var(--text-dim)',fontWeight:700}}>{role === 'VIEWER' ? 'READ ONLY' : role}</span>
+        <RoleSwitch />
         <span style={{color:'var(--border)'}}>·</span>
         <span style={{color:'var(--accent)',fontWeight:700}}>{displayName}</span>
         <button onClick={signOut} style={{

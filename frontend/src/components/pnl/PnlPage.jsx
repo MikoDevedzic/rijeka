@@ -63,7 +63,7 @@ export default function PnlPage() {
 
   const t = rep?.totals || {}
   const [stLabel, stTone] = STATUS[rep?.status] || STATUS.OPEN
-  const canControl = ['controller', 'cfo', 'admin', 'management', 'risk'].includes(role)
+  const canControl = rep?.can_control ?? ['controller', 'cfo', 'admin'].includes(role)
 
   return (
     <div className="pnl">
@@ -111,7 +111,7 @@ export default function PnlPage() {
 
           <section className="pnl-panel">
             <header><span>SIGN-OFF · {fmtD(rep.date)}</span><span className={`pnl-chip ${stTone}`}>{stLabel}</span></header>
-            <SignOff rep={rep} role={role} canControl={canControl} onSign={sign} busy={busy} />
+            <SignOff rep={rep} role={rep.role || role} canControl={canControl} onSign={sign} busy={busy} />
           </section>
         </div>
 
@@ -253,9 +253,10 @@ function SignOff({ rep, role, canControl, onSign, busy }) {
     <div className="pnl-sign">
       <ol className="pnl-steps">
         <li className={traderDone ? 'done' : ''}><i>{traderDone ? '✓' : '1'}</i><span>Trader reviews the attribution and signs</span></li>
-        <li className={ctlDone ? 'done' : ''}><i>{ctlDone ? '✓' : '2'}</i><span>P&amp;L controller or desk CFO signs</span></li>
-        <li className={rep.status === 'FINAL' ? 'done' : ''}><i>{rep.status === 'FINAL' ? '✓' : '3'}</i><span>FINAL: visible to management with the comments</span></li>
+        {rep.signoff_policy !== 'SINGLE' && <li className={ctlDone ? 'done' : ''}><i>{ctlDone ? '✓' : '2'}</i><span>P&amp;L controller or desk CFO signs (a different person)</span></li>}
+        <li className={rep.status === 'FINAL' ? 'done' : ''}><i>{rep.status === 'FINAL' ? '✓' : rep.signoff_policy === 'SINGLE' ? '2' : '3'}</i><span>FINAL: visible to management with the comments</span></li>
       </ol>
+      <div className="pnl-note">Sign-off policy: {rep.signoff_policy === 'SINGLE' ? 'SINGLE · one signature finalises the day' : 'TWO-PERSON · trader, then a different controller'} · set under Configurations › P&amp;L &amp; Control › Conventions</div>
       {signs.length > 0 && <ul className="pnl-comments">
         {signs.map((s, i) => <li key={i}><span className="pnl-grp mk">{s.role}</span><b>{s.by}</b><em>{s.at ? new Date(s.at).toLocaleString() : ''}</em>{s.usd_signed != null && <small>signed {sgn(s.usd_signed)} USD</small>}{s.comment && <p>{s.comment}</p>}</li>)}
       </ul>}
