@@ -81,6 +81,10 @@ PRODUCTS = [
      "default": "Yesterday's mark on yesterday's market → roll the date → cash → each curve by tenor bucket → spot → forward points → residual",
      "formula": "Sequential full revaluation: every step is a repricing, rows sum to the total by construction; new trades at their close mark, unwinds remove the prior mark",
      "replication": "doc", "doc": "/docs/pnl_attribution.md"},
+    {"id": "market_risk", "name": "Market risk: ladder, VaR, stress, limits", "group": "Risk", "section": None,
+     "default": "Key-rate IR01 by bump-and-reprice → historical simulation VaR on the ladder (2y public history) → named stress by full revaluation → limits on any number",
+     "formula": "P&L_i = Σ KR01[c,b]·Δ_i[c,b] + Σ spot01[a]·r_i[a]; VaR_q = empirical loss quantile; ES = mean loss beyond; √h horizon",
+     "replication": "doc", "doc": "/docs/market_risk.md"},
 ]
 
 # ── Styling helpers ─────────────────────────────────────────────────────────
