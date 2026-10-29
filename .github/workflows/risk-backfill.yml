@@ -16,10 +16,17 @@ jobs:
   backfill:
     runs-on: ubuntu-latest
     env:
-      RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL }}
+      RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL || 'https://rijeka-api.onrender.com' }}
       RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
     steps:
       - name: backfill
         run: |
-          code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/risk/history/backfill?years=${{ github.event.inputs.years }}&overwrite=${{ github.event.inputs.overwrite }}" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 600)
+          code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/risk/history/backfill?years=${{ github.event.inputs.years }}&overwrite=${{ github.event.inputs.overwrite }}" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 60)
           echo "backfill: $code"; cat /tmp/out; echo; test "$code" = "200"
+          # the server runs it in the background; poll its progress for up to ten minutes
+          for i in $(seq 1 40); do
+            sleep 15
+            body=$(curl -s "$RIJEKA_API_URL/api/risk/history" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 30 || true)
+            echo "$body" | head -c 600; echo
+            echo "$body" | grep -q '"running": *false' && echo "$body" | grep -q '"finished": *"' && break
+          done

@@ -5,7 +5,7 @@ GET  /api/risk/limits · POST · DELETE   the firm's limits (risk manager or adm
 GET  /api/risk/metrics                  metric keys a limit can be set on, from the caller's book
 GET  /api/risk/settings · PUT           the firm's VaR settings (risk manager or admin writes)
 GET  /api/risk/history                  how much risk-factor history exists
-POST /api/risk/history/backfill         cron or admin: fetch and store public history (years=)
+POST /api/risk/history/backfill         cron or admin: start fetching and storing public history (years=) in the background
 POST /api/risk/daily/tick               cron: compute and store today's report for every account
 """
 from __future__ import annotations
@@ -172,11 +172,35 @@ def put_settings(body: SettingsBody, db: Session = Depends(get_db), user: dict =
     return R.save_settings(db, f, b, user["sub"], _name(user))
 
 
-@router.get("/history")
-def history_status(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+_backfill: dict = {"running": False, "started": None, "finished": None, "result": None, "error": None}
+
+
+def _run_backfill(tpl, years: float, overwrite: bool) -> None:
+    from db.session import SessionLocal
     from risk import history as H
+    import datetime as _dt
+    _backfill.update(running=True, started=_dt.datetime.now(_dt.timezone.utc).isoformat(), finished=None, result=None, error=None)
+    db = SessionLocal()
+    try:
+        _backfill["result"] = H.backfill(db, tpl, years=years, overwrite=overwrite)
+    except Exception as e:              # noqa: BLE001
+        db.rollback(); _backfill["error"] = str(e)[:300]
+        log.warning("backfill failed: %s", e)
+    finally:
+        db.close()
+        _backfill.update(running=False, finished=_dt.datetime.now(_dt.timezone.utc).isoformat())
+
+
+@router.get("/history")
+def history_status(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
+    from risk import history as H
+    if not _secret_ok(x_rijeka_cron):
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing auth")
+        import asyncio
+        asyncio.run(verify_token(authorization))
     tpl = R.template_uid(db)
-    return {"template": str(tpl) if tpl else None, "series": H.status(db, tpl) if tpl else {}}
+    return {"template": str(tpl) if tpl else None, "series": H.status(db, tpl) if tpl else {}, "backfill": _backfill}
 
 
 @router.post("/history/backfill")
@@ -193,7 +217,11 @@ def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=
     tpl = R.template_uid(db)
     if tpl is None:
         raise HTTPException(status_code=409, detail="No template account.")
-    return H.backfill(db, tpl, years=max(0.1, min(years, 10.0)), overwrite=overwrite)
+    if _backfill["running"]:
+        return {"started": False, "reason": "a backfill is already running", "backfill": _backfill}
+    import threading
+    threading.Thread(target=_run_backfill, args=(tpl, max(0.1, min(years, 10.0)), overwrite), daemon=True).start()
+    return {"started": True, "years": years, "note": "running in the background; GET /api/risk/history reports progress and the result"}
 
 
 @router.post("/daily/tick")
