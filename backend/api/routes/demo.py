@@ -226,7 +226,9 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
         firm_node = OrgNode(id=uuid.uuid4(), parent_id=None, name=f"{trader} (DEMO)", node_type="firm", is_active=True, sort_order=0, created_by=uid, user_id=uid)
         desk_node = OrgNode(id=uuid.uuid4(), parent_id=firm_node.id, name="RATES", node_type="desk", is_active=True, sort_order=0, created_by=uid, user_id=uid)
         book_node = OrgNode(id=uuid.uuid4(), parent_id=desk_node.id, name="G10 RATES", node_type="book", is_active=True, sort_order=0, created_by=uid, user_id=uid)
-        db.add_all([firm_node, desk_node, book_node])
+        # one at a time: a batched insert trips the UUID sentinel check on this driver
+        for n in (firm_node, desk_node, book_node):
+            db.add(n); db.flush()
         db.execute(text("UPDATE auth.users SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || "
                         "jsonb_build_object('default_desk', 'RATES', 'default_book', 'G10 RATES') WHERE id = :id AND "
                         "coalesce(raw_user_meta_data->>'default_desk', '') = ''"), {"id": uid})
