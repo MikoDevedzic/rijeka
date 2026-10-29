@@ -24,7 +24,8 @@ const PHASES = [
     ['NEXT', 'VaR family: full-revaluation historical simulation, parametric (variance-covariance), Monte Carlo on the XVA models, filtered historical (EWMA/GARCH), stressed VaR, FRTB expected shortfall with liquidity horizons, backtesting with exception zones, vol surfaces as factors'],
     ['NEXT', 'FRTB sensitivities-based capital from the same ladder'],
     ['NEXT', 'COLLATERAL tab: CSA terms per counterparty, daily VM and IM calls, disputes, settlement status, collateral inventory'],
-    ['NEXT', 'COUNTERPARTY CREDIT tab: limits against PFE, utilisation, netting sets, CVA desk view, wrong-way-risk flags'],
+    ['DONE', 'COUNTERPARTY CREDIT tab: netting sets on shared paths, real-world calibration from public history (two measures), CSA on the netted value, EE/EPE/PFE 95/97.5/99, CVA, credit limits with utilisation, stored daily run'],
+    ['NEXT', 'Counterparty credit next: historical Monte Carlo (bootstrapped paths, full revaluation), options on the paths, per-counterparty CDS and LGD, wrong-way risk, stressed EEPE'],
   ]},
   { title: 'OPERATIONS AND CONTROL', status: 'PARTIAL', items: [
     ['DONE', 'Trade lifecycle events with pre/post state; cashflow generation; confirmation, amendment and termination on chain'],

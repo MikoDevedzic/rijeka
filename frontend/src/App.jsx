@@ -14,6 +14,7 @@ import PricerPage       from './components/pricer/PricerPage'
 import PnlPage          from './components/pnl/PnlPage'
 import { BookingDefaults, PnlConventions } from './components/pnl/PnlSettings'
 import RiskPage         from './components/risk/RiskPage'
+import CcrPage          from './components/risk/CcrPage'
 import { LimitsPage, VarSettingsPage, StressCatalogue } from './components/risk/RiskSettings'
 import CurvesWorkspace  from './components/market-data/CurvesWorkspace'
 import OrgHierarchy     from './components/org/OrgHierarchy'
@@ -161,6 +162,7 @@ export default function App() {
             <Route path="/pricer"  element={<PricerPage />} />
             <Route path="/pnl"     element={<PnlPage />} />
             <Route path="/risk"    element={<RiskPage />} />
+            <Route path="/risk/ccr" element={<CcrPage />} />
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />

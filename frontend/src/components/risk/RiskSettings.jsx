@@ -90,6 +90,11 @@ function metricHelp(m, meta) {
   if (m.startsWith('KR01:')) return h['KR01:<curve>:<bucket>']
   if (m.startsWith('SPOT01:')) return h['SPOT01:<asset>']
   if (m.startsWith('STRESS:')) return `${h['STRESS:<scenario>']}: ${(meta.scenarios || []).find(s => s.id === m.slice(7))?.name || ''}`
+  if (m.startsWith('PFE_PEAK:')) return h['PFE_PEAK:<counterparty>']
+  if (m.startsWith('PFE:')) return h['PFE:<counterparty>:<bucket>']
+  if (m.startsWith('EPE:')) return h['EPE:<counterparty>']
+  if (m.startsWith('CVA:')) return h['CVA:<counterparty>']
+  if (m.startsWith('CE:')) return h['CE:<counterparty>']
   return h[m] || ''
 }
 

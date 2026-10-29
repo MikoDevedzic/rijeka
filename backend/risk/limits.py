@@ -22,6 +22,8 @@ METRIC_HELP = {
     "VAR_H": "VaR over the configured horizon", "IR01": "book IR01, all curves, absolute", "IR01:<curve>": "IR01 of one curve, absolute",
     "KR01:<curve>:<bucket>": "one tenor bucket of one curve, absolute", "SPOT01:<asset>": "PV for +1% spot in one asset, absolute",
     "NPV": "book mark, absolute", "STRESS:<scenario>": "loss under a named scenario",
+    "PFE_PEAK:<counterparty>": "peak 95% PFE of the netting set (real-world)", "PFE:<counterparty>:<bucket>": "largest 95% PFE inside the tenor bucket",
+    "EPE:<counterparty>": "expected positive exposure, first year", "CVA:<counterparty>": "CVA of the netting set (risk-neutral), absolute", "CE:<counterparty>": "current exposure after collateral",
 }
 
 
@@ -81,6 +83,20 @@ def metric_value(metric: str, rep: dict, scope_rows: list[dict]) -> Optional[flo
         sid = m.split(":", 1)[1]
         s = next((x for x in rep.get("stress", []) if x["id"] == sid), None)
         return max(0.0, -s["pnl_usd"]) if s else None
+    # counterparty credit: PFE_PEAK:<cp>, PFE:<cp>:<bucket>, EPE:<cp>, CVA:<cp>, CE:<cp> (names upper-cased)
+    ccr = {k.upper(): v for k, v in (rep.get("ccr") or {}).items()}
+    if m.startswith(("PFE_PEAK:", "EPE:", "CVA:", "CE:")):
+        kind, name = m.split(":", 1)
+        c = ccr.get(name)
+        if not c:
+            return None
+        return {"PFE_PEAK": c["exposure"]["peak_pfe95_usd"], "EPE": c["exposure"]["epe_1y_usd"], "CVA": abs(c["cva"]["cva_usd"]),
+                "CE": c["exposure"]["current_exposure_usd"]}[kind]
+    if m.startswith("PFE:"):
+        parts = m.split(":")
+        if len(parts) == 3:
+            c = ccr.get(parts[1])
+            return c["exposure"]["pfe95_by_bucket"].get(parts[2]) if c else None
     return None
 
 
@@ -90,7 +106,7 @@ def evaluate(limits: list[dict], rep: dict) -> list[dict]:
     for lim in limits:
         scope = lim["scope"].upper()
         in_scope = rows if scope == "ALL" else [r for r in rows if (r["desk"] if scope == "DESK" else r["book"]) == lim["scope_name"]]
-        if scope != "ALL" and lim["metric"].upper().startswith(("VAR", "ES", "STRESS")):
+        if scope != "ALL" and lim["metric"].upper().startswith(("VAR", "ES", "STRESS", "PFE", "EPE", "CVA", "CE")):
             val = None                                  # VaR and stress are book-level numbers in this foundation
             note = "book-level metric; set the limit on scope ALL"
         else:

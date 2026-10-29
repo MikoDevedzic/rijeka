@@ -214,6 +214,10 @@ A `RISK` tab next to P&L, and `Configurations › Market Risk` for the risk mana
 
 Tables: `docs/migrations/2026-10-30_market_risk.sql`.
 
+## Counterparty credit
+
+`RISK › COUNTERPARTY CREDIT`. Every trade of a counterparty is valued on the same simulated paths (a Hull-White factor per currency, a lognormal factor per spot, correlated from two years of public history), so netting is exact; the counterparty's CSA is applied to the netted value with the margin period of risk. Two measures, labelled: **real-world** for exposure (vols from history, mean reversion by policy, zero drift, historical correlations) giving EE, EPE, PFE at 95 / 97.5 / 99, peak and tenor buckets; **risk-neutral** for CVA through the XVA waterfall. Credit limits on peak PFE, PFE by bucket, EPE, CVA and current exposure. RUN NOW computes in the background and stores per counterparty; the daily cron does every account. Method: `docs/ccr.md`; tables: `docs/migrations/2026-10-31_ccr.sql`.
+
 ## Risk taxonomy
 
 One set of names on every ticket, SIMM-aligned. Rate factors are per basis point; spot factors are per 1 % (the SIMM delta convention for FX and equity).

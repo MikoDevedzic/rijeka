@@ -105,6 +105,10 @@ PRODUCTS = [
      "default": "Key-rate IR01 by bump-and-reprice → historical simulation VaR on the ladder (2y public history) → named stress by full revaluation → limits on any number",
      "formula": "P&L_i = Σ KR01[c,b]·Δ_i[c,b] + Σ spot01[a]·r_i[a]; VaR_q = empirical loss quantile; ES = mean loss beyond; √h horizon",
      "replication": "doc", "doc": "/docs/market_risk.md"},
+    {"id": "ccr", "name": "Counterparty credit: netting, PFE, two measures", "group": "Counterparty risk", "section": None,
+     "default": "Netting set on shared paths (HW1F per currency, lognormal per spot, correlated from public history) → CSA on the netted value → EE, EPE, PFE 95/97.5/99 real-world; CVA risk-neutral",
+     "formula": "E⁺(t) = max(V − C(t−δ) − IM, 0); PFE_q = quantile_q(E⁺); EPE = mean_{t≤1y} EE; real-world: σ from history, a by policy, zero drift, historical correlations",
+     "replication": "doc", "doc": "/docs/ccr.md"},
 ]
 
 # ── Styling helpers ─────────────────────────────────────────────────────────

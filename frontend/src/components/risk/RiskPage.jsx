@@ -51,6 +51,7 @@ export default function RiskPage() {
             <select value={date || ''} onChange={e => load(e.target.value)} disabled={busy}>{(rep?.dates || []).slice().reverse().map(d => <option key={d} value={d}>{fmtD(d)}</option>)}</select>
           </label>
           {rep && <span className={`pnl-chip ${breaches ? 'red' : warnings ? 'amber' : 'ok'}`}>{breaches ? `${breaches} BREACH${breaches > 1 ? 'ES' : ''}` : warnings ? `${warnings} WARNING${warnings > 1 ? 'S' : ''}` : 'WITHIN LIMITS'}</span>}
+          <button className="pnl-btn ghost" onClick={() => navigate('/risk/ccr')}>COUNTERPARTY CREDIT →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/limits')}>LIMITS →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/var')}>VAR SETTINGS →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/pnl')}>P&amp;L →</button>
