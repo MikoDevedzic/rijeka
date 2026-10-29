@@ -34,10 +34,25 @@ def test_extract_text_keeps_the_article_and_drops_chrome():
     assert "Home | About" not in t and "var a=1" not in t and "Last update" not in t
 
 
-def _client(reply="Rates unchanged.\nWhy it matters: front-end stays anchored."):
+def _client(reply="Rates unchanged.\nWhy it matters: front-end stays anchored.", stop="end_turn"):
     c = MagicMock()
-    c.messages.create.return_value = SimpleNamespace(content=[SimpleNamespace(text=reply)])
+    c.messages.create.return_value = SimpleNamespace(
+        stop_reason=stop,
+        content=[SimpleNamespace(type="thinking", thinking=""), SimpleNamespace(type="text", text=reply)])
     return c
+
+
+def test_summarize_ignores_thinking_blocks_and_refuses_a_cut_off_answer():
+    assert sm.summarize("t", "ECB", "x" * 100, "feed", client=_client()).startswith("Rates unchanged.")
+    kw = _client().messages.create
+    sm.summarize("t", "ECB", "x" * 100, "feed", client=(c := _client()))
+    kw = c.messages.create.call_args.kwargs
+    assert kw["max_tokens"] >= 2000 and kw["output_config"] == {"effort": "low"}
+    import pytest
+    with pytest.raises(RuntimeError):
+        sm.summarize("t", "ECB", "x" * 100, "feed", client=_client(stop="max_tokens"))
+    with pytest.raises(RuntimeError):
+        sm.summarize("t", "ECB", "x" * 100, "feed", client=_client(reply=""))
 
 
 def test_summarize_pending_uses_the_article_for_public_bodies_and_the_blurb_for_the_press(monkeypatch):

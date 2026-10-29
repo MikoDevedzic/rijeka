@@ -93,18 +93,26 @@ def summarize(title: str, source: str, basis_text: str, basis: str, client=None)
         client = anthropic.Anthropic()
     what = "Full article text" if basis == "article" else "Headline and the publisher's feed blurb only"
     user = f"Source: {source}\nTitle: {title}\n{what}:\n\n{basis_text.strip()}"
-    resp = client.messages.create(model=MODEL, max_tokens=320, system=SYSTEM,
+    # Haiku 5.5 thinks before it answers and the thinking shares max_tokens with the
+    # text, so the budget must hold both; low effort keeps the thinking short.
+    resp = client.messages.create(model=MODEL, max_tokens=4000, system=SYSTEM,
+                                  output_config={"effort": "low"},
                                   messages=[{"role": "user", "content": user}])
-    out = "".join(getattr(b, "text", "") for b in resp.content).strip()
+    out = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+    if getattr(resp, "stop_reason", None) == "max_tokens" or not out:
+        raise RuntimeError(f"no complete summary (stop_reason={getattr(resp, 'stop_reason', None)!r})")
     return out[:1200]
 
 
 # ── the pass over pending items ────────────────────────────────────────────────
 
 def pending(db: Session, limit: int, days: int = 7) -> list:
+    """Unsummarised recent items, plus summaries that were cut off (no closing punctuation,
+    or under 80 characters), which the pass rewrites."""
     return db.execute(text("""
         SELECT id, url, title, source, description, message_id FROM news_items
-        WHERE summary IS NULL AND summarized_at IS NULL
+        WHERE ((summary IS NULL AND summarized_at IS NULL)
+               OR (summary IS NOT NULL AND (length(summary) < 80 OR right(summary, 1) NOT IN ('.', '!', '?', ')'))))
           AND coalesce(published_at, created_at) > now() - make_interval(days => :d)
         ORDER BY coalesce(published_at, created_at) DESC LIMIT :n"""), {"d": days, "n": limit}).all()
 
