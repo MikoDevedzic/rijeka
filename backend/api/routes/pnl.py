@@ -51,6 +51,13 @@ def _role(db: Session, user: dict) -> str:
     return str(db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "trader").lower()
 
 
+def _as_user(db: Session, uid: str) -> dict:
+    """A server-side user context for marking someone's book: the pricers check the role claim,
+    and a batch has no token. Marking is read-only pricing, so the trader role is granted."""
+    from api.routes.me import db_role
+    return {"sub": uid, "user_metadata": {"role": db_role(db, uid) or "trader", "batch": True}}
+
+
 def _firm(db: Session, uid: str) -> Optional[FirmMember]:
     return db.query(FirmMember).filter(FirmMember.user_id == uid).first()
 
@@ -91,14 +98,20 @@ def conventions(db: Session = Depends(get_db), user: dict = Depends(verify_token
     }
 
 
+def _marking_ctx(db: Session, user: dict) -> dict:
+    """The caller's own book, priced with marking rights whatever their role: a controller or
+    manager reading their own (empty) book, or a viewer, must not get a 403 from the pricer."""
+    return {**user, "user_metadata": {**(user.get("user_metadata") or {}), "role": "trader", "actual_role": _role(db, user)}}
+
+
 @router.get("/report")
 def pnl_report(date_: Optional[str] = Query(default=None, alias="date"), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return R.report(db, user, _parse(date_))
+    return R.report(db, _marking_ctx(db, user), _parse(date_))
 
 
 @router.get("/summary")
 def pnl_summary(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return R.summary(db, user)
+    return R.summary(db, _marking_ctx(db, user))
 
 
 @router.get("/dates")
@@ -109,7 +122,7 @@ def pnl_dates(db: Session = Depends(get_db), user: dict = Depends(verify_token))
 
 @router.post("/eod")
 def run_eod(date_: Optional[str] = Query(default=None, alias="date"), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    rep = R.report(db, user, _parse(date_))
+    rep = R.report(db, _marking_ctx(db, user), _parse(date_))
     out = R.persist(db, user, rep)
     return {**out, "totals": rep.get("totals"), "status": rep.get("status")}
 
@@ -129,8 +142,9 @@ def eod_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Heade
     done, failed = [], []
     for uid in users:
         try:
-            rep = R.report(db, {"sub": uid})
-            out = R.persist(db, {"sub": uid}, rep)
+            ctx = _as_user(db, uid)
+            rep = R.report(db, ctx)
+            out = R.persist(db, ctx, rep)
             done.append({"user": uid[:8], "date": out.get("date"), "rows": out.get("rows")})
         except Exception as e:          # noqa: BLE001
             db.rollback(); failed.append({"user": uid[:8], "error": str(e)[:160]})
@@ -160,11 +174,12 @@ def signoff(body: SignBody, db: Session = Depends(get_db), user: dict = Depends(
         if not (mine and theirs and mine.firm_id == theirs.firm_id):
             raise HTTPException(status_code=403, detail="That book is not in your firm.")
     d1 = _parse(body.date)
-    rep = R.report(db, {"sub": owner}, d1)
+    ctx = user if owner == user["sub"] else _as_user(db, owner)
+    rep = R.report(db, ctx, d1)
     if rep.get("date") != body.date:
         raise HTTPException(status_code=422, detail=f"No report for {body.date}; latest market date is {rep.get('date')}.")
     if not rep.get("persisted"):
-        R.persist(db, {"sub": owner}, rep)          # what is signed is what is stored
+        R.persist(db, ctx, rep)          # what is signed is what is stored
     try:
         return R.sign(db, user, owner, d1, role, body.comment, rep["totals"]["dod"], _name(user))
     except RuntimeError as e:
@@ -184,7 +199,7 @@ def firm_view(date_: Optional[str] = Query(default=None, alias="date"), db: Sess
     for m in members:
         uid = str(m.user_id)
         try:
-            rep = R.report(db, {"sub": uid}, d1)
+            rep = R.report(db, _as_user(db, uid), d1)
         except Exception as e:          # noqa: BLE001
             db.rollback(); out.append({"user_id": uid, "error": str(e)[:120]}); continue
         if not rep.get("rows") and not rep.get("date"):

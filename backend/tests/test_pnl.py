@@ -82,3 +82,14 @@ def test_me_and_conventions_need_auth():
     c = TestClient(main.app)
     assert c.get("/api/me/booking-defaults").status_code == 401 and c.put("/api/me/booking-defaults", json={}).status_code == 401
     assert c.get("/api/pnl/conventions").status_code == 401
+
+
+def test_batch_context_carries_marking_rights(monkeypatch):
+    from api.routes import pnl as P
+    from api.routes import me as M
+    monkeypatch.setattr(M, "db_role", lambda db, uid: None)
+    ctx = P._as_user(None, "abc")
+    assert ctx["sub"] == "abc" and ctx["user_metadata"]["role"] == "trader" and ctx["user_metadata"]["batch"]
+    monkeypatch.setattr(M, "db_role", lambda db, uid: "viewer")
+    own = P._marking_ctx(None, {"sub": "abc", "user_metadata": {"role": "viewer"}})
+    assert own["user_metadata"]["role"] == "trader" and own["user_metadata"]["actual_role"] == "viewer"
