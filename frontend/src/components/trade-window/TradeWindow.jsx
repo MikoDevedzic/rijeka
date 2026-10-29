@@ -53,6 +53,7 @@ import useMarketDataStore from '../../store/useMarketDataStore'
 import { getSessionMaybe } from '../../lib/session'
 import FxCryptoPanel, { SHAPE_OF } from './FxCryptoPanel'
 import FxXvaPanel from './FxXvaPanel'
+import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
 // import './products/fx'
 // import './products/credit'
 // import './products/equity'
@@ -114,6 +115,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     FX:     [{ key: 'FX_SPOT', label: 'FX spot' }, { key: 'FX_FORWARD', label: 'FX forward' }, { key: 'NDF', label: 'NDF' }, { key: 'FX_SWAP', label: 'FX swap', live: false }, { key: 'FX_OPTION', label: 'FX option', live: false }],
     CRYPTO: [{ key: 'CRYPTO_FORWARD', label: 'Crypto forward' }, { key: 'CRYPTO_OPTION', label: 'Crypto option', live: false }],
   }
+  const fxTerms = useMemo(() => {
+    if (!fxQuote) return null
+    try { return fxRef.current?.payload?.()?.terms || null } catch { return null }
+  }, [fxQuote])
   const currencyFooter = {
     footer: {
       structureLabel: () => (SHAPE_OF[curInst] || 'FORWARD'),
@@ -728,6 +733,21 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         </div>
       )}
 
+      {tabsVisited['DETAILS'] && isCurrency && (
+        <div style={{ display: activeTab === 'DETAILS' ? 'block' : 'none' }}>
+          <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} />
+        </div>
+      )}
+      {tabsVisited['CASHFLOWS'] && isCurrency && (
+        <div style={{ display: activeTab === 'CASHFLOWS' ? 'block' : 'none' }}>
+          <FxCashflowsPanel quote={fxQuote} crypto={assetClass === 'CRYPTO'} />
+        </div>
+      )}
+      {tabsVisited['CURVE SCENARIO'] && isCurrency && (
+        <div style={{ display: activeTab === 'CURVE SCENARIO' ? 'block' : 'none' }}>
+          <FxScenarioPanel quote={fxQuote} crypto={assetClass === 'CRYPTO'} />
+        </div>
+      )}
       {tabsVisited['XVA'] && isCurrency && (
         <div style={{ display: activeTab === 'XVA' ? 'block' : 'none' }}>
           <FxXvaPanel quote={fxQuote} />
