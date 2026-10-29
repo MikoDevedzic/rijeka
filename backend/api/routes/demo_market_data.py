@@ -24,6 +24,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db.session import get_db
@@ -132,11 +133,20 @@ def refresh(db: Session, valuation_date: Optional[date] = None, dry_run: bool = 
         summary["preview"] = {cid: cv["quotes"][:6] for cid, cv in built["curves"].items()}
         return summary
 
-    for cid, cv in built["curves"].items():
-        _upsert_snapshot(db, template, cid, valuation_date, cv["quotes"], cv["source"])
-    saved, fitted = _upsert_skew(db, template, valuation_date, built["skew"])
-    caps = _upsert_caps(db, template, built["caps"])
-    db.commit()
+    try:
+        for cid, cv in built["curves"].items():
+            _upsert_snapshot(db, template, cid, valuation_date, cv["quotes"], cv["source"])
+        saved, fitted = _upsert_skew(db, template, valuation_date, built["skew"])
+        caps = _upsert_caps(db, template, built["caps"])
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        if "source_check" in str(e.orig):
+            # The source whitelist predates demo data: say so instead of a bare 500.
+            raise HTTPException(status_code=409, detail=(
+                "market data source whitelist rejects 'DEMO …' sources; apply "
+                "docs/migrations/2026-10-29_demo_market_data_source.sql once and run the tick again"))
+        raise
 
     copied_to = 0
     for uid in _demo_user_ids(db, template):

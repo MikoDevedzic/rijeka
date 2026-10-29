@@ -186,3 +186,23 @@ def test_sources_is_public_and_lists_assumptions():
     assert b["latest"]["USD_SOFR"]["valuation_date"] == "2026-10-29"
     assert {s["curve"] for s in b["sources"]} >= {"USD_SOFR", "EUR_ESTR", "USD_SWVOL_ATM"}
     assert b["assumptions"]["USD_OIS_MINUS_UST_bp"][-1] == [30, -70]
+
+
+def test_tick_explains_a_source_whitelist_that_predates_demo_data(monkeypatch):
+    import main
+    from sqlalchemy.exc import IntegrityError
+    from api.routes import demo_market_data as r
+    monkeypatch.setenv("RIJEKA_CRON_SECRET", "s3cret")
+    db = MagicMock()
+    class Orig(Exception):
+        pass
+    db.execute.side_effect = IntegrityError("INSERT …", {}, Orig('violates check constraint "market_data_snapshots_source_check"'))
+    main.app.dependency_overrides[r.get_db] = lambda: db
+    collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)}, "failed": {}}
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), \
+         patch.object(r.demo_feed, "collect", return_value=collected):
+        resp = TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"})
+    main.app.dependency_overrides.clear()
+    assert resp.status_code == 409
+    assert "2026-10-29_demo_market_data_source.sql" in resp.json()["detail"]
+    assert db.rollback.called and not db.commit.called
