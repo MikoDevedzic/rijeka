@@ -154,10 +154,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       try {
         const session = await getSession()
         const h = { Authorization: 'Bearer ' + session.access_token }
-        const [cpR, orgR, leR] = await Promise.all([
+        const [cpR, orgR, leR, dfR] = await Promise.all([
           fetch(API + '/api/counterparties/', { headers: h }),
           fetch(API + '/nodes', { headers: h }),
           fetch(API + '/api/legal-entities/', { headers: h }),
+          fetch(API + '/api/me/booking-defaults', { headers: h }).catch(() => null),
         ])
         if (cancelled) return
         const counterparties = cpR.ok ? await cpR.json() : []
@@ -174,6 +175,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         })
         // Default to the first own entity, as the legacy window does.
         if (own.length) setEconomics(e => (e.ownEntityId ? e : { ...e, ownEntityId: own[0].id }))
+        // The trader's default desk and book (Configurations › P&L & Control), when the ticket has none yet.
+        const df = dfR && dfR.ok ? await dfR.json() : null
+        if (df) setEconomics(e => ({ ...e, desk: e.desk || df.default_desk || '', book: e.book || df.default_book || '' }))
       } catch (err) {
         if (!cancelled) setRefData(r => ({ ...r, loading: false, error: err.message || 'reference data failed' }))
       }

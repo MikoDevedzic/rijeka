@@ -38,7 +38,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from db.session import get_db
-from db.models import Counterparty, Firm, FirmLei, FirmMember, LegalEntity
+from db.models import Counterparty, Firm, FirmLei, FirmMember, LegalEntity, OrgNode
 from middleware.auth import verify_token
 
 log = logging.getLogger("rijeka.demo")
@@ -220,6 +220,17 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
         if db.get(FirmLei, my_lei) is None:
             db.add(FirmLei(lei=my_lei, firm_id=firm.id, verified=False))
         created["firm"] = True
+
+    # 3b. A desk and a book, so P&L rolls up somewhere other than UNASSIGNED; the ticket starts on them
+    if db.query(OrgNode).filter(OrgNode.user_id == uid).first() is None:
+        firm_node = OrgNode(id=uuid.uuid4(), parent_id=None, name=f"{trader} (DEMO)", node_type="firm", is_active=True, sort_order=0, created_by=uid, user_id=uid)
+        desk_node = OrgNode(id=uuid.uuid4(), parent_id=firm_node.id, name="RATES", node_type="desk", is_active=True, sort_order=0, created_by=uid, user_id=uid)
+        book_node = OrgNode(id=uuid.uuid4(), parent_id=desk_node.id, name="G10 RATES", node_type="book", is_active=True, sort_order=0, created_by=uid, user_id=uid)
+        db.add_all([firm_node, desk_node, book_node])
+        db.execute(text("UPDATE auth.users SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || "
+                        "jsonb_build_object('default_desk', 'RATES', 'default_book', 'G10 RATES') WHERE id = :id AND "
+                        "coalesce(raw_user_meta_data->>'default_desk', '') = ''"), {"id": uid})
+        created["hierarchy"] = True
 
     # 4. Market data
     copied = {}

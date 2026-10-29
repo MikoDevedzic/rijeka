@@ -12,6 +12,7 @@ import CfgNav           from './components/layout/CfgNav'
 import BlotterShell     from './components/blotter/BlotterShell'
 import PricerPage       from './components/pricer/PricerPage'
 import PnlPage          from './components/pnl/PnlPage'
+import { BookingDefaults, PnlConventions } from './components/pnl/PnlSettings'
 import CurvesWorkspace  from './components/market-data/CurvesWorkspace'
 import OrgHierarchy     from './components/org/OrgHierarchy'
 import LegalEntities    from './components/onboarding/LegalEntities'
@@ -167,6 +168,8 @@ export default function App() {
               <Route index element={<Navigate to="market-data/curves" replace />} />
               <Route path="market-data/curves" element={<CurvesWorkspace />} />
               <Route path="org-hierarchy"      element={<OrgHierarchy />} />
+              <Route path="pnl/defaults"       element={<BookingDefaults />} />
+              <Route path="pnl/conventions"    element={<PnlConventions />} />
               <Route path="legal-entities"     element={<LegalEntities />} />
               <Route path="counterparties"              element={<Counterparties />} />
               <Route path="market-data/swvol"            element={<SwaptionVolDetail />} />

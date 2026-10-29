@@ -154,6 +154,21 @@ const NAV = [
     ],
   },
   {
+    id: 'pnl-control',
+    label: 'P&L & CONTROL',
+    roles: ['viewer','trader','controller','management','admin'],
+    children: [
+      {
+        id: 'pnl-items',
+        label: null,
+        children: [
+          { label: 'BOOKING DEFAULTS',   path: '/configurations/pnl/defaults',              live: true  },
+          { label: 'P&L CONVENTIONS',    path: '/configurations/pnl/conventions',           live: true  },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     label: 'ADMIN',
     roles: ['admin'],

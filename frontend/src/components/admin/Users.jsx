@@ -5,6 +5,8 @@ import { useAuthStore } from '../../store/useAuthStore'
 const ROLE_META = {
   viewer: { color: 'var(--text-dim)', label: 'VIEWER',  desc: 'Read only — no AI access' },
   trader: { color: 'var(--accent)',   label: 'TRADER',  desc: 'Full access — AI enabled' },
+  controller: { color: 'var(--blue)', label: 'CONTROLLER', desc: 'Signs the day after the trader; cannot book' },
+  management: { color: 'var(--blue)', label: 'MANAGEMENT', desc: 'Sees every book in the firm; cannot book' },
   admin:  { color: 'var(--amber)',    label: 'ADMIN',   desc: 'Admin — manage users' },
 }
 
@@ -267,7 +269,7 @@ export default function Users() {
       {/* Footer note */}
       <div style={{ padding:'0.6rem 2rem', borderTop:'1px solid var(--border)', background:'var(--bg-deep)', flexShrink:0 }}>
         <span style={{ fontSize:'0.6rem', color:'var(--text-dim)', letterSpacing:'0.08em' }}>
-          Role changes take effect immediately · Deactivated users cannot log in · AI access requires TRADER or ADMIN role
+          Role changes take effect immediately · Deactivated users cannot log in · AI access requires TRADER or ADMIN role · CONTROLLER and MANAGEMENT need docs/migrations/2026-10-30_pnl_roles.sql
         </span>
       </div>
     </div>

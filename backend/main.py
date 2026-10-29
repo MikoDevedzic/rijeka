@@ -38,6 +38,7 @@ from api.routes import (
     book_brief,
     desk,
     pnl,
+    me,
 )
 
 app = FastAPI(
@@ -89,6 +90,7 @@ app.include_router(demo_market_data.router)
 app.include_router(book_brief.router)
 app.include_router(desk.router)
 app.include_router(pnl.router)
+app.include_router(me.router)
 
 @app.on_event("startup")
 def _warm_public_pulse():

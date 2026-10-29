@@ -57,3 +57,28 @@ def test_routes_need_auth_or_cron_secret():
     assert c.get("/api/pnl/report").status_code == 401 and c.get("/api/pnl/summary").status_code == 401
     assert c.post("/api/pnl/eod/tick").status_code == 403
     assert c.post("/api/pnl/signoff", json={"date": "2026-10-29", "role": "TRADER"}).status_code == 401
+
+
+def test_roles_come_from_the_database_first(monkeypatch):
+    from types import SimpleNamespace
+    from api.routes import pnl as P
+    from api.routes import me as M
+    monkeypatch.setattr(M, "db_role", lambda db, uid: "controller")
+    monkeypatch.setattr(P, "_firm", lambda db, uid: None)
+    user = {"sub": "u1", "user_metadata": {"role": "trader"}}
+    assert P._role(None, user) == "controller" and P._is_controller(None, user) and P._is_management(None, user)
+    monkeypatch.setattr(M, "db_role", lambda db, uid: None)
+    assert P._role(None, user) == "trader" and not P._is_controller(None, user)
+    monkeypatch.setattr(M, "db_role", lambda db, uid: "management")
+    assert not P._is_controller(None, user) and P._is_management(None, user)
+    monkeypatch.setattr(P, "_firm", lambda db, uid: SimpleNamespace(role="ADMIN", firm_id="f"))
+    monkeypatch.setattr(M, "db_role", lambda db, uid: "trader")
+    assert P._is_controller(None, user)                        # a firm admin may sign as controller
+
+
+def test_me_and_conventions_need_auth():
+    import main
+    from fastapi.testclient import TestClient
+    c = TestClient(main.app)
+    assert c.get("/api/me/booking-defaults").status_code == 401 and c.put("/api/me/booking-defaults", json={}).status_code == 401
+    assert c.get("/api/pnl/conventions").status_code == 401

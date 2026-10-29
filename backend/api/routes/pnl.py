@@ -6,6 +6,7 @@ POST /api/pnl/eod?date=                run end of day for the caller: compute an
 POST /api/pnl/eod/tick                 cron (X-Rijeka-Cron): end of day for every account with trades
 POST /api/pnl/signoff                  {date, role: TRADER|CONTROLLER, comment, owner?}: sign the day
 GET  /api/pnl/firm?date=               management: every member of my firm's day, with sign-off state
+GET  /api/pnl/conventions             the firm's P&L policy as applied: order, buckets, roles, end of day
 
 Engine: backend/pnl. The attribution convention is stated in the report itself.
 """
@@ -28,7 +29,8 @@ from pnl import report as R
 
 log = logging.getLogger("rijeka.pnl")
 router = APIRouter(prefix="/api/pnl", tags=["pnl"])
-CONTROLLER_ROLES = {"controller", "cfo", "admin", "management", "risk"}
+CONTROLLER_ROLES = {"controller", "cfo", "admin"}            # may sign as controller
+MANAGEMENT_ROLES = CONTROLLER_ROLES | {"management", "risk"}   # may see every book in the firm
 
 
 def _parse(d: Optional[str]) -> Optional[date]:
@@ -43,8 +45,10 @@ def _name(user: dict) -> str:
     return md.get("display_name") or md.get("full_name") or (user.get("email") or "").split("@")[0] or "trader"
 
 
-def _role(user: dict) -> str:
-    return str((user.get("user_metadata") or {}).get("role") or "trader").lower()
+def _role(db: Session, user: dict) -> str:
+    """profiles.role (what the admin page sets, immediate) over the JWT claim (may lag)."""
+    from api.routes.me import db_role
+    return str(db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "trader").lower()
 
 
 def _firm(db: Session, uid: str) -> Optional[FirmMember]:
@@ -52,10 +56,39 @@ def _firm(db: Session, uid: str) -> Optional[FirmMember]:
 
 
 def _is_controller(db: Session, user: dict) -> bool:
-    if _role(user) in CONTROLLER_ROLES:
+    if _role(db, user) in CONTROLLER_ROLES:
         return True
     fm = _firm(db, user["sub"])
     return bool(fm and fm.role in ("ADMIN", "COMPLIANCE"))
+
+
+def _is_management(db: Session, user: dict) -> bool:
+    if _role(db, user) in MANAGEMENT_ROLES:
+        return True
+    fm = _firm(db, user["sub"])
+    return bool(fm and fm.role in ("ADMIN", "COMPLIANCE"))
+
+
+@router.get("/conventions")
+def conventions(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """The firm's P&L policy as the engine applies it. Read-only for now; these are the constants."""
+    from pnl.explain import BUCKETS, ORDER, GROUP
+    return {
+        "reporting_ccy": R.REPORTING_CCY,
+        "attribution": {"method": "sequential full revaluation", "order": ORDER, "groups": GROUP,
+                        "tenor_buckets": [b[0] for b in BUCKETS], "curve_order": ["discount", "forecast", "base currency"],
+                        "fx_steps": ["spot", "quoted forward points"], "residual": "shown, never spread"},
+        "marks": {"source": "production pricers on the saved market at or before the date", "market_dates": "dates with a saved USD_SOFR snapshot",
+                  "fx_conversion": "reporting currency at the close of the report date"},
+        "trading": {"new_trade": "close mark on the first market date after booking", "unwind": "prior mark removed, plus any termination fee in the terms"},
+        "end_of_day": {"when": "daily by cron after the market data rebuild, and on demand (RUN END OF DAY)", "stores": ["eod_marks", "pnl_daily"],
+                       "rerun": "replaces the day"},
+        "sign_off": {"order": ["TRADER", "CONTROLLER"], "trader": "the book's owner", "controller_roles": sorted(CONTROLLER_ROLES),
+                     "management_roles": sorted(MANAGEMENT_ROLES), "firm_roles_that_qualify": ["ADMIN", "COMPLIANCE"],
+                     "final": "both signatures; visible to management with the comments"},
+        "your_role": _role(db, user), "you_may_sign_as_controller": _is_controller(db, user), "you_may_see_the_firm": _is_management(db, user),
+        "history_tables": R.tables_present(db), "migration": "docs/migrations/2026-10-30_pnl.sql", "roles_migration": "docs/migrations/2026-10-30_pnl_roles.sql",
+    }
 
 
 @router.get("/report")
@@ -143,8 +176,8 @@ def firm_view(date_: Optional[str] = Query(default=None, alias="date"), db: Sess
     fm = _firm(db, user["sub"])
     if fm is None:
         raise HTTPException(status_code=404, detail="Your account is not in a firm.")
-    if not _is_controller(db, user):
-        raise HTTPException(status_code=403, detail="Management view needs the controller, CFO or admin role, or firm admin.")
+    if not _is_management(db, user):
+        raise HTTPException(status_code=403, detail="Management view needs the management, controller, CFO or admin role, or firm admin.")
     members = db.query(FirmMember).filter(FirmMember.firm_id == fm.firm_id).all()
     d1 = _parse(date_)
     out = []
