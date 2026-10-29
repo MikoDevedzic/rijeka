@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import BookBrief from './home/BookBrief'
 import WorldClock from './home/WorldClock'
 import PolicyPath from './home/PolicyPath'
 import { getSessionMaybe } from '../lib/session'
@@ -196,6 +197,7 @@ function DeskHome({ demo, navigate }) {
             ))}
             {!d.loading && !trades.length && <li className="dh-empty">No trades yet. Book one from the blotter; pricing, cashflows, XVA and confirmation all follow from it.</li>}
           </ul>
+          {trades.length > 0 && <BookBrief />}
         </section>
 
         <section className="dh-card">

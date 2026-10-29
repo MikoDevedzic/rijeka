@@ -186,7 +186,7 @@ Full market risk (VaR, SVaR, FRTB), CCR (PFE, SA-CCR, IMM), collateral managemen
 
 ### PROMETHEUS — AI Layer
 
-Contextual chat over your book, AI-powered PnL explain, hedging recommendations, XVA commentary.
+The desk's quant, risk and margin analyst. Reads everything, changes nothing. Live today: read-only chat over your trades and the engine, in-app news summaries, and the **book brief** on the home page: the pricers compute a fact sheet (NPV and IR01 per trade, curve moves, pending confirmations, maturities, CSA terms, news tagged to the positions), Prometheus narrates it citing fact ids, and every number in the prose is checked against the sheet before it is shown; forecasting and advice are rejected. Next: scenario risk across the whole book, counterparty exposure and CVA commentary, SIMM margin against thresholds, a Telegram digest.
 
 ---
 
