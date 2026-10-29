@@ -10,6 +10,9 @@ on:
 jobs:
   tick:
     runs-on: ubuntu-latest
+    env:
+      RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL || 'https://rijeka-api.onrender.com' }}
+      RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
     steps:
       - name: tick
         run: |
@@ -19,9 +22,3 @@ jobs:
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/currency/spot/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 60)
           cat /tmp/out; echo; test "$code" = "200"
-        env:
-          RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL || 'https://rijeka-api.onrender.com' }}
-          RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
-        env:
-          RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL || 'https://rijeka-api.onrender.com' }}
-          RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
