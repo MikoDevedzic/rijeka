@@ -3649,7 +3649,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                   </Fld>
                 </Row>
                 <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
-                  Bachelier (Normal) · vol from Bloomberg cap surface · OIS discounting · SOFR in-arrears · {index} · {CCY_CURVE[ccy]||'USD_SOFR'}
+                  Bachelier (Normal) · vol from the saved cap surface · OIS discounting · SOFR in-arrears · {index} · {CCY_CURVE[ccy]||'USD_SOFR'}
                   {capResult && ' · ATM fwd = ' + (capResult.atm_forward_pct||0).toFixed(4) + '% · vol = ' + (capResult.vol_bp||capResult.cap_vol_bp||0).toFixed(1) + 'bp (' + (capResult.vol_tier||capResult.cap_vol_tier||'') + ')'}
                 </div>
                 {capResult && (

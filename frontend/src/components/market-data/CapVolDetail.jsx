@@ -127,7 +127,7 @@ session.sendRequest(request2)`;
         { label: 'Price',          value: 'MID' },
         { label: 'Pricing Model',  value: 'Direct table lookup · linear interp' },
       ]} />
-      <SectionLabel>Bloomberg Python (blpapi)</SectionLabel>
+      <SectionLabel>Self-host snap · Bloomberg Python (blpapi)</SectionLabel>
       <div className="cb">
         <button className="cb-copy" onClick={() => navigator.clipboard.writeText(code)}>copy</button>
         <pre style={{ margin: 0, fontSize:'11px', lineHeight: 1.8 }}>{code}</pre>
@@ -408,7 +408,7 @@ function CapVolConfig() {
         background: 'rgba(74,154,212,0.04)', border: '1px solid rgba(74,154,212,0.15)',
         borderRadius: '2px', fontSize: '0.8125rem', color: 'var(--text-dim)',
         fontFamily: "'IBM Plex Mono',var(--mono)", lineHeight: 1.7 }}>
-        Cap/floor pricing uses direct table lookup from snapped Bloomberg flat vols.
+        Cap/floor pricing uses direct table lookup from the saved flat-vol surface.
         For standard strikes the quoted vol is used directly — no SABR required.
         Interpolation applies for strikes between quoted nodes only.
       </div>

@@ -211,7 +211,7 @@ function RatesHW1FTab(){
       <div className='xva-header-strip'>
         <div className='xva-header-left'>
           <span className='xva-header-title'>USD ATM NORMAL VOL SURFACE</span>
-          <span className='xva-header-sub'>bp · SOFR · ATM straddle · Bloomberg USSNA[expiry][tenor] Curncy · leave source blank</span>
+          <span className='xva-header-sub'>bp · SOFR · ATM straddle · USSNA[expiry][tenor] tickers when self-hosting</span>
         </div>
         <div className='xva-header-right'>
           {snapshotSaved&&<span className='xva-saved-badge'>SAVED {snapshotSaved.date} · {snapshotSaved.source}</span>}
@@ -244,7 +244,7 @@ function RatesHW1FTab(){
         <div className='xva-save-left'>
           <label className='xva-date-label'>VALUATION DATE</label>
           <input className='xva-date-input' type='date' value={saveDate} onChange={(e)=>setSaveDate(e.target.value)}/>
-          <span className='xva-source-badge'>SOURCE · BLOOMBERG</span>
+          <span className='xva-source-badge'>SOURCE · {String(snapshotSaved?.source || 'MANUAL').split(' ·')[0]}</span>
         </div>
         <div className='xva-save-right'>
           {snapshotError&&<span className='xva-error-msg'>{snapshotError}</span>}

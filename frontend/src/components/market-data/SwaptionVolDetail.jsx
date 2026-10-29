@@ -473,7 +473,7 @@ session.sendRequest(request)`;
         { label:'Source',          value:'BVOL / FMCA / GIRO / TRPU' },
         { label:'BGN Note',        value:'BGN not available — leave blank' },
       ]} />
-      <SectionLabel>Bloomberg Python (blpapi)</SectionLabel>
+      <SectionLabel>Self-host snap · Bloomberg Python (blpapi)</SectionLabel>
       <div className="cb">
         <button className="cb-copy" onClick={() => navigator.clipboard.writeText(code)}>copy</button>
         <pre style={{ margin:0, fontSize:'11px', lineHeight:1.8 }}>{code}</pre>
@@ -1334,7 +1334,7 @@ function SwvOTMSkew({ atmGrid }) {
         <span style={{ fontSize:'0.6875rem', fontWeight:700, letterSpacing:'0.12em',
           color:'var(--accent)', ...mono, whiteSpace:'nowrap' }}>RIJEKA β=0 NORMAL SABR</span>
         <span style={{ fontSize:'0.8125rem', color:'var(--text-dim)', ...mono }}>
-          Market vol quotes snapped from Bloomberg SMKO tickers as
+          Market vol quotes (snapped from SMKO tickers when self-hosting, or entered by hand) as
           <strong style={{color:'var(--text)'}}> input data.</strong>
           &nbsp;Rijeka calibrates α, ρ, ν independently.
           Spread = abs_vol − ATM computed automatically on save.
@@ -1559,7 +1559,7 @@ function SwvOTMSkew({ atmGrid }) {
                 background:'rgba(74,154,212,0.03)' }}>
                 <span style={{ fontSize:'0.6875rem', color:'var(--blue)',
                   fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.08em' }}>
-                  SABR INTERPOLATED — no Bloomberg SMKO tickers for these tenors
+                  SABR INTERPOLATED — no market tickers for these tenors
                 </span>
                 <span style={{ fontSize:'0.6875rem', color:'var(--text-dim)',
                   fontFamily:"'IBM Plex Mono',var(--mono)", marginLeft:'8px' }}>
@@ -1646,7 +1646,7 @@ function SwvOTMSkew({ atmGrid }) {
           <div style={{ fontSize:'0.75rem', color:'var(--text-dim)', ...mono, marginBottom:'6px', lineHeight:1.6 }}>
             Snaps absolute vol quotes (bp) for all 8 OTM strikes (±25/±50/±100/±200bp).
             These are <strong style={{color:'var(--text)'}}>market input quotes</strong> — Rijeka's SABR calibration runs on save.<br/>
-            Data source: Bloomberg SMKO · Field: MID · Normal vol bp absolute
+            Self-host snap: SMKO tickers · field MID · normal vol bp absolute
             <span style={{color:'var(--text-dim)',marginLeft:'8px'}}>
               Prefixes: USWB(-25) · USWC(-50) · USWE(-100) · USWG(-200) · USWL(+25) · USWM(+50) · USWO(+100) · USWR(+200)
             </span>

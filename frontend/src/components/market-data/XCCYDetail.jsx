@@ -40,7 +40,7 @@ function XCCYInstruments({ curve }) {
               <th>Active</th>
               <th>Type</th>
               <th>Tenor</th>
-              <th>BBG Ticker</th>
+              <th>Ticker</th>
               <th style={{ textAlign: 'right' }}>Basis (bp)</th>
             </tr>
           </thead>

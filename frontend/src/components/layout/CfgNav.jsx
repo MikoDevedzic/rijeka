@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { RATES_CURVES } from '../../data/ratesCurves'
@@ -181,9 +181,15 @@ const SNAPABLE_IDS = RATES_CURVES
 
 function SnapAllButton({ role }) {
   const [snap, setSnap] = useState(null)
+  const [terminal, setTerminal] = useState(false)   // a Bloomberg Desktop API on this server (self-host only)
   const { curves, updateQuote, saveSnapshot } = useMarketDataStore()
   const { grid, updateVol } = useXVAStore()
-  if (!['trader','admin'].includes(role)) return null
+  useEffect(() => {
+    let on = true
+    fetch('/api/bloomberg/status').then(r => r.json()).then(st => { if (on) setTerminal(!!st?.connected) }).catch(() => {})
+    return () => { on = false }
+  }, [])
+  if (!['trader','admin'].includes(role) || !terminal) return null
   const isRunning = snap?.status === 'running'
 
   const runSnap = async (e) => {

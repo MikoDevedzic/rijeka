@@ -349,7 +349,7 @@ export default function PricerPage() {
                   <span className="cr-lbl">{q.tenor} {curveIds[0]?.replace('USD_','')?.replace('_OIS','')}</span>
                   <input className="cr-val" type="text" value={typeof q.rate==='number'?q.rate.toFixed(4):(q.rate||'')}
                     onChange={e=>onEditQ(curveIds[0],firstSnap?.quotes?.indexOf(q),e.target.value)}/>
-                  <span className="cr-src">BGN</span>
+                  <span className="cr-src">{String(firstSnap?.source || 'DB').split(' ·')[0]}</span>
                 </div>
               ))}
               {(curveSource==='MANUAL'||(!firstSnap&&curveIds.length>0)) && curveIds.map(cid=>{

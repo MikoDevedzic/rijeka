@@ -61,7 +61,10 @@ const useXVAStore = create((set, get) => ({
           }))
       );
       if (!quotes.length) throw new Error('No vol data to save');
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 45000);
       const res = await fetch(API + '/api/market-data/snapshots', {
+        signal: ctl.signal,
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -71,13 +74,15 @@ const useXVAStore = create((set, get) => ({
           source: source || 'MANUAL',
         }),
       });
+      clearTimeout(timer);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
         throw new Error(err.detail || 'Save failed');
       }
       const saved = await res.json();
       set({ snapshotSaving: false, snapshotSaved: { date: saved.valuation_date, source: saved.source } });
-    } catch (e) {
+    } catch (e0) {
+      const e = e0?.name === 'AbortError' ? new Error('Save timed out after 45 s. The API may be redeploying; try again in a minute.') : e0;
       set({ snapshotSaving: false, snapshotError: e.message });
     }
   },

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel, DescBox } from './_DetailShared'
+import RateCurveCanvas from './RateCurveCanvas'
 import { getSessionMaybe } from '../../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -101,6 +102,25 @@ export default function FxWorkspace() {
   )
 }
 
+// Outright forward by tenor: the quoted curve (spot + points) against parity.
+function FxForwardChart({ p, tenors, pts, parity }) {
+  const yrs = t => (TENOR_DAYS[t] || 0) / 365
+  const quoted = tenors.map(t => { const n = parseFloat(pts[t]); return p.spot != null && !isNaN(n) ? { t: yrs(t), v: p.spot + n * p.pip } : null }).filter(Boolean)
+  const par = tenors.map(t => parity[t]?.implied_forward != null ? { t: yrs(t), v: parity[t].implied_forward } : null).filter(Boolean)
+  if (p.spot == null || quoted.length + par.length < 2) return null
+  const series = []
+  if (quoted.length >= 1) series.push({ label: 'QUOTED', color: '#0dd4a8', points: [{ t: 0, v: p.spot }, ...quoted] })
+  if (par.length >= 1) series.push({ label: 'PARITY', color: '#4a9ad4', dash: [5, 3], points: [{ t: 0, v: p.spot }, ...par] })
+  return (
+    <div style={{ margin: '8px 0 12px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, padding: 8 }}>
+      <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 5 }}>
+        {p.pair} · OUTRIGHT FORWARD BY TENOR{p.crypto ? ' (USD)' : ''}
+      </div>
+      <RateCurveCanvas series={series} unit="" decimals={dp(p.pair)} height={170} />
+    </div>
+  )
+}
+
 function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const pair = p.pair
   const [pts, setPts] = useState({})
@@ -185,6 +205,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
         <b> {mode === 'MARKET' ? 'off these quoted points' : 'from yields (parity)'}</b> for every pair in this account.
         {' '}<button className="btn" style={{ marginLeft: 8 }} disabled={!!busy} onClick={() => setMode(mode === 'MARKET' ? 'IMPLIED' : 'MARKET')}>{mode === 'MARKET' ? 'SWITCH TO IMPLIED FROM YIELDS' : 'SWITCH TO QUOTED POINTS'}</button>
       </DescBox>
+      <FxForwardChart p={p} tenors={tenors} pts={pts} parity={parity} />
       <div style={{ display: 'grid', gridTemplateColumns: '70px 60px 1fr 1fr 1fr 1fr 1fr 90px', minWidth: 620 }}>
         <div style={thL}>TENOR</div><div style={thR}>DAYS</div><div style={thR}>POINTS (PIPS)</div><div style={thR}>OUTRIGHT</div><div style={thR}>PARITY PTS</div><div style={thR}>PARITY FWD</div><div style={thR}>BASIS</div><div style={thL}>SRC</div>
         {tenors.map(t => {
@@ -204,7 +225,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
       </div>
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
         <button className="btn" onClick={() => { const q = {}; tenors.forEach(t => { if (parity[t]) q[t] = parity[t].implied_points.toFixed(2) }); setPts(q) }} disabled={!Object.keys(parity).length}>FILL FROM PARITY</button>
-        <button className="btn" onClick={snapBbg} disabled={!!busy || !bbg?.available} title={bbg?.available ? 'Spot and points from the Bloomberg Desktop API' : 'Bloomberg Desktop API not connected on this server (self-host only)'}>{busy === 'bbg' ? 'SNAPPING…' : '▶ SNAP BLOOMBERG'}</button>
+        <button className="btn" onClick={snapBbg} disabled={!!busy || !bbg?.available} title={bbg?.available ? 'Spot and points from the Bloomberg Desktop API (self-host)' : 'Self-host only: no Bloomberg Desktop API on this server (self-host only)'}>{busy === 'bbg' ? 'SNAPPING…' : '▶ SNAP BLOOMBERG'}</button>
         <button className="btn primary" onClick={() => save('MANUAL')} disabled={!!busy}>{busy === 'save' ? 'SAVING…' : '▶ SAVE TO DB (MANUAL)'}</button>
       </div>
     </div>

@@ -290,7 +290,7 @@ function OISInstruments({ curve }) {
               cursor:'pointer',fontFamily:"'IBM Plex Mono',var(--mono)",background:'transparent',borderRadius:'2px',
               border:blpSource===src?'1px solid var(--accent)':'1px solid var(--border)',
               color:blpSource===src?'var(--accent)':'var(--text-dim)',
-            }}>{src}</button>
+            }}>{src === 'BLOOMBERG' ? 'BLOOMBERG · SELF-HOST' : src}</button>
           ))}
         </div>
 
@@ -333,7 +333,7 @@ function OISInstruments({ curve }) {
                   border:'1px solid rgba(144,96,204,0.2)',borderRadius:'2px',
                   padding:'4px 7px',marginBottom:'8px',lineHeight:1.6}}>
                   O/N fixing: <strong>{onInst.ticker}</strong>
-                  {curve.description ? ' — ' + curve.description : ' — sourced via Bloomberg.'}
+                  {curve.description ? ' — ' + curve.description : ' — demo data from public sources on the hosted desk; self-host to snap your own terminal.'}
                 </div>
               )
             })()}

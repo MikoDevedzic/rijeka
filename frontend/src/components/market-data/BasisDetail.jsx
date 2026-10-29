@@ -82,7 +82,7 @@ basis_curve = ql.PiecewiseLogLinearDiscount(
       <DescBox>{curve.description}</DescBox>
       {curve.blpConventions && (
         <>
-          <SectionLabel>Bloomberg Instrument Conventions</SectionLabel>
+          <SectionLabel>Instrument conventions · tickers for self-host snaps</SectionLabel>
           <ParamGrid items={[
             { label: 'Base Leg Index',   value: curve.blpConventions.baseLeg?.index,   cls: 'ac' },
             { label: 'Spread Leg Index', value: curve.blpConventions.spreadLeg?.index, cls: 'bl' },
@@ -205,7 +205,7 @@ function BasisInstruments({ curve }) {
         <div style={{display:'grid', gridTemplateColumns:gridTemplate, minWidth:'460px'}}>
           <div style={thS}></div>
           <div style={thS}>TENOR</div>
-          <div style={thS}>BBG TICKER</div>
+          <div style={thS}>TICKER</div>
           <div style={thS}>SRC</div>
           <div style={thR}>SPREAD</div>
           {liveInstruments.map((inst, i) => {
@@ -251,7 +251,7 @@ function BasisInstruments({ curve }) {
               cursor:'pointer', fontFamily:"'IBM Plex Mono',var(--mono)", background:'transparent', borderRadius:'2px',
               border:blpSource===src?'1px solid var(--accent)':'1px solid var(--border)',
               color:blpSource===src?'var(--accent)':'var(--text-dim)',
-            }}>{src}</button>
+            }}>{src === 'BLOOMBERG' ? 'BLOOMBERG · SELF-HOST' : src}</button>
           ))}
         </div>
 

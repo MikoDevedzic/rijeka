@@ -132,7 +132,10 @@ const useMarketDataStore = create((set, get) => ({
         enabled:    inst.en !== false,
       }));
 
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 45000);
       const res = await fetch(API + '/api/market-data/snapshots', {
+        signal: ctl.signal,
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + session.access_token,
@@ -145,6 +148,7 @@ const useMarketDataStore = create((set, get) => ({
           source: 'MANUAL',
         }),
       });
+      clearTimeout(timer);
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -156,7 +160,8 @@ const useMarketDataStore = create((set, get) => ({
         snapshotSaving: { ...s.snapshotSaving, [curveId]: false },
         snapshotSaved:  { ...s.snapshotSaved,  [curveId]: { date: saved.valuation_date, source: saved.source } },
       }));
-    } catch (e) {
+    } catch (e0) {
+      const e = e0?.name === 'AbortError' ? new Error('Save timed out after 45 s. The API may be redeploying; try again in a minute.') : e0;
       set((s) => ({
         snapshotSaving: { ...s.snapshotSaving, [curveId]: false },
         snapshotError:  { ...s.snapshotError,  [curveId]: e.message },

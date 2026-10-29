@@ -10,6 +10,12 @@ services:
     plan: 1c-2g          # 1 CPU / 2 GB. Pricing is numpy/scipy on the request path; the 0.5c-512mb
                          # plan is viable for a quiet instance, `free` sleeps and is not for a launch.
     autoDeployTrigger: checksPass   # deploy main only after the GitHub CI checks pass
+    buildFilter:                    # a push that touches only the web app or the landing site is not an API deploy
+      ignoredPaths:
+        - frontend/**
+        - netlify_drop/**
+        - docs/**
+        - "**/*.md"
     healthCheckPath: /health
     envVars:
       # ── required ──────────────────────────────────────────────────────
