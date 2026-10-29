@@ -3494,7 +3494,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                   </Fld>
                 </Row>
                 <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
-                  {exerciseType==='EUROPEAN'?'Black/Bachelier normal vol · HW1F cross-check':exerciseType==='BERMUDAN'?'HW1F trinomial tree — Sprint 8':'American approximation — Sprint 8'}
+                  {exerciseType==='EUROPEAN'?'Black/Bachelier normal vol · HW1F cross-check':exerciseType==='BERMUDAN'?'HW1F trinomial tree — on the roadmap':'American approximation — Sprint 8'}
                   {' · Physical settlement · Strike blank = ATM forward (computed from OIS curve)'}
                   {swaptionResult && !swaptionStrike && ` · ATM = ${swaptionResult.forward_pct?.toFixed(4)}%`}
                 </div>

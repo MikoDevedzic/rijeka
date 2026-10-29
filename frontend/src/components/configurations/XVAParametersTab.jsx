@@ -308,7 +308,7 @@ function RatesHW1FTab(){
 }
 
 function StubTab({label}){
-  return(<div className='xva-stub-tab'><span className='xva-stub-label'>{label}</span><span className='xva-stub-sub'>Coming in Sprint 7</span></div>);
+  return(<div className='xva-stub-tab'><span className='xva-stub-label'>{label}</span><span className='xva-stub-sub'>On the roadmap</span></div>);
 }
 
 export default function XVAParametersTab(){

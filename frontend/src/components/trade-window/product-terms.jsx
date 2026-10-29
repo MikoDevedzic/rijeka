@@ -299,9 +299,9 @@ export function SwapTermsBody({ state, update }) {
 
   // Direction labels for the inner leg badges (structure-aware)
   const fixedDirLabel = direction === 'PAY' ? '\u2192 PAY FIXED' : '\u2190 RECEIVE FIXED'
-  const fixedDirColor = direction === 'PAY' ? '#FF6B6B' : '#00D4A8'
+  const fixedDirColor = direction === 'PAY' ? 'var(--red)' : 'var(--accent)'
   const floatDirLabel = direction === 'PAY' ? '\u2190 RECEIVE FLOAT' : '\u2192 PAY FLOAT'
-  const floatDirColor = direction === 'PAY' ? '#00D4A8' : '#FF6B6B'
+  const floatDirColor = direction === 'PAY' ? 'var(--accent)' : 'var(--red)'
 
   const selStyle = { width: '100%' }
 
@@ -674,5 +674,5 @@ export function FxForwardTermsBody({ state, update }) {
 
 export function FxOptionTermsBody({ state, update }) {
   // Placeholder — expand in Sprint 11+ when FX options come online
-  return <div className="tbw-mut">FX Option terms — Sprint 11+</div>
+  return <div className="tbw-mut">FX option terms — on the roadmap</div>
 }

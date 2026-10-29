@@ -111,7 +111,7 @@ registerProduct({
       text: state.structure === 'BASIS'
         ? '↔ floating-for-floating basis swap'
         : '→ fixed-for-float · OIS discounting',
-      color: state.structure === 'BASIS' ? '#F5C842' : '#4A9EFF',
+      color: state.structure === 'BASIS' ? 'var(--amber)' : 'var(--blue)',
     }),
     footerText: 'Full revaluation · log-linear DF interp · OIS discounting',
     Component: SwapTermsBody,
@@ -336,8 +336,8 @@ registerProduct({
   terms: {
     title: 'OPTION TERMS',
     helper: state => state.direction === 'PAY'
-      ? { text: '→ PAYER (right to pay fixed)',     color: '#FF6B6B' }
-      : { text: '← RECEIVER (right to receive fixed)', color: '#00D4A8' },
+      ? { text: '→ PAYER (right to pay fixed)',     color: 'var(--red)' }
+      : { text: '← RECEIVER (right to receive fixed)', color: 'var(--accent)' },
     footerText: 'Black/Bachelier normal vol · HW1F cross-check · Physical settlement · ' +
                 'Strike blank = ATM forward (computed from OIS curve)',
     Component: SwaptionTermsBody,
@@ -451,7 +451,7 @@ registerProduct({
 
   terms: {
     title: 'CAP TERMS',
-    helper: state => ({ text: '↑ BUY CAP · protection vs rising rates', color: '#FF6B6B' }),
+    helper: state => ({ text: '↑ BUY CAP · protection vs rising rates', color: 'var(--red)' }),
     footerText: 'Bachelier (Normal) · vol from cap surface · OIS discounting · SOFR in-arrears',
     Component: CapTermsBody,
   },
@@ -523,7 +523,7 @@ registerProduct({
 
   terms: {
     title: 'FLOOR TERMS',
-    helper: state => ({ text: '↓ BUY FLOOR · protection vs falling rates', color: '#00D4A8' }),
+    helper: state => ({ text: '↓ BUY FLOOR · protection vs falling rates', color: 'var(--accent)' }),
     footerText: 'Bachelier (Normal) · put-call vol symmetry via |K−ATM| · OIS discounting · SOFR in-arrears',
     Component: FloorTermsBody,
   },
@@ -595,7 +595,7 @@ registerProduct({
 
   terms: {
     title: 'COLLAR TERMS',
-    helper: state => ({ text: '↕ BUY COLLAR · cap + floor spread', color: '#F5C842' }),
+    helper: state => ({ text: '↕ BUY COLLAR · cap + floor spread', color: 'var(--amber)' }),
     footerText: 'Long Cap − Short Floor · Bachelier (Normal) · zero-cost spread = cap − floor',
     Component: CollarTermsBody,
   },

@@ -513,7 +513,7 @@ function SwvConfig() {
       <SectionLabel>Parameters</SectionLabel>
       <div className="bp-row">
         <div className="bp-lbl">Moneyness</div>
-        <select className="bp-sel"><option>ATM only</option><option>Full smile (Sprint 7)</option></select>
+        <select className="bp-sel"><option>ATM only</option><option>Full smile (roadmap)</option></select>
       </div>
       <div className="bp-row">
         <div className="bp-lbl">Expiry extrapolation</div>

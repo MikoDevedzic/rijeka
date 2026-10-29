@@ -35,7 +35,7 @@ function niceStep(range, target = 5) {
 
 const clean = (points) => (points || []).filter(p => Number.isFinite(p.t) && Number.isFinite(p.v)).sort((a, b) => a.t - b.t)
 
-export function draw(canvas, { series, unit = '%', decimals }) {
+function draw(canvas, { series, unit = '%', decimals }) {
   const dpr = window.devicePixelRatio || 1
   const W = canvas.clientWidth, H = canvas.clientHeight
   if (!W || !H) return

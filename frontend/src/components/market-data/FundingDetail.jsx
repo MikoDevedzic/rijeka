@@ -34,8 +34,8 @@ function FundingDef({ curve }) {
       ]} />
       <SectionLabel>Future Connectivity</SectionLabel>
       <ParamGrid cols={3} items={[
-        { label: 'CDS-Implied',      value: 'Sprint 8' },
-        { label: 'Bond-Implied',     value: 'Sprint 8' },
+        { label: 'CDS-Implied',      value: 'Roadmap' },
+        { label: 'Bond-Implied',     value: 'Roadmap' },
         { label: 'Internal Treasury',value: 'Custom API' },
       ]} />
     </div>
@@ -76,8 +76,8 @@ function FundingSpreads({ curve }) {
       <div className="spread-source-row">
         <span style={{ fontSize: '8.5px', color: 'var(--text-dim)' }}>Source:</span>
         <button className="source-btn active">Manual</button>
-        <button className="source-btn disabled" title="Sprint 8">CDS-Implied</button>
-        <button className="source-btn disabled" title="Sprint 8">Bond Market</button>
+        <button className="source-btn disabled" title="On the roadmap">CDS-Implied</button>
+        <button className="source-btn disabled" title="On the roadmap">Bond Market</button>
         <button className="source-btn disabled" title="Custom API">Treasury System</button>
         <span style={{ fontSize: '8px', color: 'var(--text-mute)', marginLeft: 'auto' }}>
           Last updated: 2025-01-15 17:00 EOD
@@ -204,7 +204,7 @@ function FundingPreview({ curve }) {
       <div style={{ fontSize: '8.5px', color: 'var(--text-mute)', marginTop: 6 }}>
         Funding rate = OIS rate + firm credit spread.
         Used directly in FVA = −Σₜ D(t)·(EE−ENE)·(funding−OIS).
-        Sprint 15 wires this to the XVA engine.
+        Wiring this into the XVA engine is on the roadmap.
       </div>
     </div>
   );

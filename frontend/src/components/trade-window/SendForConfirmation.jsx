@@ -32,16 +32,16 @@ export function SendForConfirmation({ s, compact = false }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 560 }}>
       {sent ? (
         <>
-          <div style={{ fontFamily: MONO, fontSize: 12, color: '#F5C842', letterSpacing: '0.04em' }}>
+          <div style={{ fontFamily: MONO, fontSize: 12, color: 'var(--amber)', letterSpacing: '0.04em' }}>
             ◆ SENT TO {cp.toUpperCase()} · AWAITING COUNTERSIGNATURE
           </div>
           <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5 }}>
-            In <b style={{ color: '#F0F0F0' }}>{status.sent[0].room_title}</b>. They review the terms from their side, check them
+            In <b style={{ color: 'var(--text-hi)' }}>{status.sent[0].room_title}</b>. They review the terms from their side, check them
             against their own booking, and sign with their firm's wallet. This tab updates when they do.
             {!status.counterparty.has_signer && ` ${cp} hasn't registered a signing wallet yet; they'll be asked to when they open the card.`}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="tbw-btn" onClick={openInChat} style={{ borderColor: 'rgba(0,212,168,0.4)', color: '#00D4A8' }}>OPEN IN CHAT →</button>
+            <button className="tbw-btn" onClick={openInChat} style={{ borderColor: 'rgba(13,212,168,0.4)', color: 'var(--accent)' }}>OPEN IN CHAT →</button>
           </div>
         </>
       ) : (

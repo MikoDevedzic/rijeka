@@ -396,7 +396,7 @@ const S = {
     display:'block',
     fontFamily:"'IBM Plex Mono',var(--mono)",
     fontSize:'0.75rem', fontWeight:600, letterSpacing:'0.10em',
-    color:'#2A2A2A',
+    color:'var(--text-mute)',
     padding:'0.3rem 1rem 0.2rem 1.5rem',
   },
   navLink: (isActive, live) => ({
@@ -404,7 +404,7 @@ const S = {
     padding:'0.3rem 0.75rem 0.3rem 2rem',
     fontFamily:"'IBM Plex Mono',var(--mono)",
     fontSize:'0.875rem', letterSpacing:'0.05em',
-    color: !live ? '#333' : isActive ? 'var(--accent)' : 'var(--text)',
+    color: !live ? 'var(--border-hi)' : isActive ? 'var(--accent)' : 'var(--text)',
     textDecoration:'none',
     borderLeft: isActive && live ? '2px solid var(--accent)' : '2px solid transparent',
     background: isActive && live ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'transparent',
@@ -414,7 +414,7 @@ const S = {
   }),
   sprintBadge: {
     fontSize:'0.625rem', letterSpacing:'0.06em',
-    color:'#1E1E1E', fontWeight:600,
+    color:'var(--border)', fontWeight:600,
   },
 }
 
@@ -440,7 +440,7 @@ export default function CfgNav() {
                   {sec.label}
                   {sec.sprint && <span style={S.sectionSprint}>SPRINT {sec.sprint}</span>}
                 </span>
-                <span style={{ fontSize:'0.5rem', opacity:0.5 }}>{isOpen ? '\u25DB' : '\u25D9'}</span>
+                <span style={{ fontSize:'0.6875rem', opacity:0.5 }}>{isOpen ? '\u25DB' : '\u25D9'}</span>
               </button>
               {sec.snapAll && isOpen && <SnapAllButton role={role} />}
             </div>

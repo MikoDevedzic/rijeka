@@ -27,7 +27,7 @@ registerProduct({
     title: 'FX FORWARD TERMS',
     helper: state => ({
       text: `→ ${state.baseCcy || 'USD'}/${state.quoteCcy || 'EUR'} @ forward`,
-      color: '#4A9EFF',
+      color: 'var(--blue)',
     }),
     footerText: 'Spot + points · settlement T+2 · OIS discounting on both legs',
     Component: FxForwardTermsBody,   // implement in sections/product-terms

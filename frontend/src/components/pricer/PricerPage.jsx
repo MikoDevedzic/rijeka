@@ -15,7 +15,7 @@ const today  = () => new Date().toISOString().slice(0,10)
 const fmtAmt = v => v==null?'—':(v>=0?'+':'-')+'$'+Math.abs(v).toLocaleString('en-US',{maximumFractionDigits:0})
 const fmtPct = v => v==null?'—':(v*100).toFixed(4)+'%'
 const fmtDf  = v => v==null?'—':v.toFixed(6)
-const npvClr = v => v==null?'#666666':v>=0?'#0dd4a8':'#e05040'
+const npvClr = v => v==null?'var(--text-dim)':v>=0?'#0dd4a8':'#e05040'
 const timestamp = () => { const n=new Date(); return n.toISOString().slice(11,19)+' UTC' }
 
 // ── Tooltip ──────────────────────────────────────────────────────────────────
@@ -326,7 +326,7 @@ export default function PricerPage() {
                   <div className="tc-row"><span className="tc-lbl">Maturity</span><span className="tc-val">{selTrade.maturity_date?.slice(0,10)||'—'}</span></div>
                   <div className="tc-row"><span className="tc-lbl">Counterparty</span><span className="tc-val" style={{color:'#0dd4a8'}}>{selTrade.counterparty?.name||'—'}</span></div>
                   <div className="tc-row"><span className="tc-lbl">CSA</span><span className="tc-val">{selTrade.counterparty?.csa_type||'—'}</span></div>
-                  <div className="tc-row"><span className="tc-lbl">⬡ Status</span><span className="tc-val" style={{color:'#666666'}}>NOT ON NETWORK</span></div>
+                  <div className="tc-row"><span className="tc-lbl">⬡ Status</span><span className="tc-val" style={{color:'var(--text-dim)'}}>NOT ON NETWORK</span></div>
                 </div>
               )}
             </div>
@@ -481,7 +481,7 @@ export default function PricerPage() {
               </div>
             </div>
             <div className="lp-sect">
-              <button className="btn-run quote" disabled>▶ PRICE INSTANTLY — SPRINT 6D</button>
+              <button className="btn-run quote" disabled>▶ PRICE INSTANTLY · ROADMAP</button>
             </div>
           </>)}
 
@@ -539,7 +539,7 @@ export default function PricerPage() {
               </div>
               <div className="npv-col">
                 <div className="npv-lbl">BLOCKCHAIN PREMIUM</div>
-                <div className="npv-val" style={{color:'#ffffff'}}>—</div>
+                <div className="npv-val" style={{color:'var(--text-hi)'}}>—</div>
                 <div className="npv-sub">same trade · same counterparty</div>
               </div>
             </div>
@@ -549,7 +549,7 @@ export default function PricerPage() {
           <div className="waterfall">
             <div className="wf-hdr">
               <span className="wf-title">PRICING WATERFALL — TV → XVA → NPV ALL-IN</span>
-              <span style={{fontSize:'.44rem',color:'#666666',marginLeft:4}}>traditional vs ⬡ blockchain · auto-detected from counterparty CSA</span>
+              <span style={{fontSize:'.44rem',color:'var(--text-dim)',marginLeft:4}}>traditional vs ⬡ blockchain · auto-detected from counterparty CSA</span>
               <div style={{marginLeft:'auto',display:'flex',gap:6}}>
                 <span className="badge b-ok">{selTrade?.counterparty?.csa_type||'NO CSA'}</span>
                 <span className="badge b-dim">⬡ NOT CONFIRMED</span>
@@ -557,11 +557,11 @@ export default function PricerPage() {
             </div>
             {/* Column headers */}
             <div className="wf-col-hdrs">
-              <div/><div style={{fontSize:'.40rem',fontWeight:700,letterSpacing:'.08em',color:'#666666'}}>COMPONENT</div>
-              <div className="col-hdr" style={{color:'#666666'}}>TRADITIONAL</div>
+              <div/><div style={{fontSize:'.40rem',fontWeight:700,letterSpacing:'.08em',color:'var(--text-dim)'}}>COMPONENT</div>
+              <div className="col-hdr" style={{color:'var(--text-dim)'}}>TRADITIONAL</div>
               <div className="col-hdr" style={{color:'#f07820'}}>⬡ BLOCKCHAIN</div>
               <div className="col-hdr" style={{color:'#0dd4a8'}}>SAVING</div>
-              <div className="col-hdr" style={{color:'#666666'}}>REDUC.</div>
+              <div className="col-hdr" style={{color:'var(--text-dim)'}}>REDUC.</div>
             </div>
             {/* TV row */}
             <div className="tv-row">
@@ -569,8 +569,8 @@ export default function PricerPage() {
               <div className="tv-desc">Theoretical value · risk-neutral · multi-curve bootstrap</div>
               <div className="tv-val">{fmtAmt(result.npv)}</div>
               <div className="tv-val">{fmtAmt(result.npv)}</div>
-              <div style={{textAlign:'right',fontSize:'.44rem',color:'#666666',alignSelf:'center'}}>same</div>
-              <div style={{textAlign:'right',fontSize:'.42rem',color:'#666666',alignSelf:'center'}}>—</div>
+              <div style={{textAlign:'right',fontSize:'.44rem',color:'var(--text-dim)',alignSelf:'center'}}>same</div>
+              <div style={{textAlign:'right',fontSize:'.42rem',color:'var(--text-dim)',alignSelf:'center'}}>—</div>
             </div>
             <div className="xva-sec-lbl">XVA ADJUSTMENTS — 6 COMPONENTS</div>
             {xvaData.map(r=>(
@@ -589,7 +589,7 @@ export default function PricerPage() {
             <div className="npv-allin">
               <div className="na-lbl">NPV</div>
               <div><div style={{fontSize:'.50rem',fontWeight:700,color:'#8ab0c8'}}>ALL-IN · TV + XVA</div><div className="na-desc">{selTrade?.counterparty?.name||'—'} · {valDate}</div></div>
-              <div><div className="na-trad">{fmtAmt(result.npv+xvaTotal)}</div><div style={{fontSize:'.40rem',color:'#666666',textAlign:'right',marginTop:1}}>traditional</div></div>
+              <div><div className="na-trad">{fmtAmt(result.npv+xvaTotal)}</div><div style={{fontSize:'.40rem',color:'var(--text-dim)',textAlign:'right',marginTop:1}}>traditional</div></div>
               <div><div className="na-chain">—</div><div style={{fontSize:'.40rem',color:'#f07820',textAlign:'right',marginTop:1}}>⬡ blockchain</div></div>
               <div><div className="na-save">—</div><div style={{fontSize:'.40rem',color:'#0dd4a8',textAlign:'right',marginTop:1}}>premium</div></div>
               <div className="na-note">Blockchain XVA available once counterparty joins Rijeka Confirms network.</div>
@@ -610,7 +610,7 @@ export default function PricerPage() {
                 <div className="gk-lbl">
                   {g.id?<Tooltip id={g.id}>{g.lbl} <span className="gk-tt">?</span></Tooltip>:g.lbl}
                 </div>
-                <div className="gk-val" style={{color:g.stub?'#666666':npvClr(g.val)}}>
+                <div className="gk-val" style={{color:g.stub?'var(--text-dim)':npvClr(g.val)}}>
                   {g.stub?'—':fmtAmt(g.val)}
                 </div>
                 <div className="gk-sub">{g.sub}</div>
@@ -624,23 +624,23 @@ export default function PricerPage() {
               <div className="p-hdr"><span className="p-title">LEG PV BREAKDOWN</span></div>
               <div style={{overflowX:'auto'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',fontSize:'.54rem',fontFamily:'JetBrains Mono,monospace',tableLayout:'fixed'}}>
-                  <thead><tr style={{borderBottom:'1px solid #1E1E1E'}}>
-                    <th style={{padding:'4px 9px',textAlign:'left',color:'#666666',fontWeight:400,fontSize:'.44rem'}}>LEG</th>
-                    <th style={{padding:'4px 9px',color:'#666666',fontWeight:400,fontSize:'.44rem'}}>TYPE</th>
-                    <th style={{padding:'4px 9px',color:'#666666',fontWeight:400,fontSize:'.44rem'}}>DIR</th>
-                    <th style={{padding:'4px 9px',color:'#666666',fontWeight:400,fontSize:'.44rem',textAlign:'right'}}>PV</th>
-                    <th style={{padding:'4px 9px',color:'#666666',fontWeight:400,fontSize:'.44rem',textAlign:'right'}}>IR01</th>
-                    <th style={{padding:'4px 9px',color:'#666666',fontWeight:400,fontSize:'.44rem',textAlign:'right'}}>IR01_DISC</th>
+                  <thead><tr style={{borderBottom:'1px solid var(--border)'}}>
+                    <th style={{padding:'4px 9px',textAlign:'left',color:'var(--text-dim)',fontWeight:400,fontSize:'.44rem'}}>LEG</th>
+                    <th style={{padding:'4px 9px',color:'var(--text-dim)',fontWeight:400,fontSize:'.44rem'}}>TYPE</th>
+                    <th style={{padding:'4px 9px',color:'var(--text-dim)',fontWeight:400,fontSize:'.44rem'}}>DIR</th>
+                    <th style={{padding:'4px 9px',color:'var(--text-dim)',fontWeight:400,fontSize:'.44rem',textAlign:'right'}}>PV</th>
+                    <th style={{padding:'4px 9px',color:'var(--text-dim)',fontWeight:400,fontSize:'.44rem',textAlign:'right'}}>IR01</th>
+                    <th style={{padding:'4px 9px',color:'var(--text-dim)',fontWeight:400,fontSize:'.44rem',textAlign:'right'}}>IR01_DISC</th>
                   </tr></thead>
                   <tbody>
                     {result.legs.map((leg,i)=>(
                       <tr key={i} style={{borderBottom:'1px solid rgba(30,48,69,.4)'}}>
                         <td style={{padding:'5px 9px'}}>{leg.leg_ref}</td>
-                        <td style={{padding:'5px 9px',color:'#666666'}}>{leg.leg_type}</td>
+                        <td style={{padding:'5px 9px',color:'var(--text-dim)'}}>{leg.leg_type}</td>
                         <td style={{padding:'5px 9px'}}><span style={{color:leg.direction==='PAY'?'#e05040':'#0dd4a8',fontWeight:700,fontSize:'.50rem'}}>{leg.direction}</span></td>
                         <td style={{padding:'5px 9px',textAlign:'right',color:npvClr(leg.pv),fontWeight:700}}>{fmtAmt(leg.pv)}</td>
                         <td style={{padding:'5px 9px',textAlign:'right',color:'#4a9ad4',fontSize:'.50rem'}}>{leg.ir01!=null?fmtAmt(leg.ir01):'—'}</td>
-                        <td style={{padding:'5px 9px',textAlign:'right',color:'#666666',fontSize:'.50rem'}}>{leg.ir01_disc!=null?fmtAmt(leg.ir01_disc):'—'}</td>
+                        <td style={{padding:'5px 9px',textAlign:'right',color:'var(--text-dim)',fontSize:'.50rem'}}>{leg.ir01_disc!=null?fmtAmt(leg.ir01_disc):'—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -650,27 +650,27 @@ export default function PricerPage() {
               {result.legs.some(l=>l.cashflows?.length>0) && (<>
                 <div className="pp-cf-toggle" onClick={()=>setCfOpen(o=>!o)}>
                   <span>{cfOpen?'▾':'▸'} CASHFLOW SCHEDULE</span>
-                  <span style={{fontSize:'.44rem',color:'#666666'}}>{cfOpen?'COLLAPSE':'EXPAND'}</span>
+                  <span style={{fontSize:'.44rem',color:'var(--text-dim)'}}>{cfOpen?'COLLAPSE':'EXPAND'}</span>
                 </div>
                 {cfOpen && (
                   <div style={{overflowX:'auto'}}>
                     <table style={{width:'100%',borderCollapse:'collapse',fontSize:'.52rem',fontFamily:'JetBrains Mono,monospace',tableLayout:'fixed'}}>
-                      <thead><tr style={{background:'#0C0C0C',borderBottom:'1px solid #1E1E1E'}}>
+                      <thead><tr style={{background:'var(--panel)',borderBottom:'1px solid var(--border)'}}>
                         {['LEG','PAY DATE','START','END','RATE','FWD RATE','DCF','DF','AMOUNT'].map((h,i)=>(
-                          <th key={i} style={{padding:'3px 7px',color:'#666666',fontWeight:400,fontSize:'.44rem',textAlign:i>3?'right':'left'}}>{h}</th>
+                          <th key={i} style={{padding:'3px 7px',color:'var(--text-dim)',fontWeight:400,fontSize:'.44rem',textAlign:i>3?'right':'left'}}>{h}</th>
                         ))}
                       </tr></thead>
                       <tbody>
                         {result.legs.flatMap(leg=>(leg.cashflows||[]).map((cf,i)=>(
                           <tr key={`${leg.leg_ref}-${i}`} style={{borderBottom:'1px solid rgba(30,48,69,.3)',borderLeft:`2px solid ${leg.direction==='PAY'?'#e05040':'#0dd4a8'}`}}>
-                            <td style={{padding:'3px 7px',color:'#666666'}}>{leg.leg_ref}</td>
-                            <td style={{padding:'3px 7px',color:'#666666'}}>{cf.payment_date}</td>
-                            <td style={{padding:'3px 7px',color:'#666666'}}>{cf.period_start}</td>
-                            <td style={{padding:'3px 7px',color:'#666666'}}>{cf.period_end}</td>
+                            <td style={{padding:'3px 7px',color:'var(--text-dim)'}}>{leg.leg_ref}</td>
+                            <td style={{padding:'3px 7px',color:'var(--text-dim)'}}>{cf.payment_date}</td>
+                            <td style={{padding:'3px 7px',color:'var(--text-dim)'}}>{cf.period_start}</td>
+                            <td style={{padding:'3px 7px',color:'var(--text-dim)'}}>{cf.period_end}</td>
                             <td style={{padding:'3px 7px',textAlign:'right',color:'#4a9ad4'}}>{fmtPct(cf.rate)}</td>
                             <td style={{padding:'3px 7px',textAlign:'right',color:'#8ab0c8'}}>{cf.forward_rate!=null?fmtPct(cf.forward_rate):'—'}</td>
-                            <td style={{padding:'3px 7px',textAlign:'right',color:'#666666'}}>{cf.dcf?.toFixed(4)||'—'}</td>
-                            <td style={{padding:'3px 7px',textAlign:'right',color:'#666666'}}>{fmtDf(cf.df)}</td>
+                            <td style={{padding:'3px 7px',textAlign:'right',color:'var(--text-dim)'}}>{cf.dcf?.toFixed(4)||'—'}</td>
+                            <td style={{padding:'3px 7px',textAlign:'right',color:'var(--text-dim)'}}>{fmtDf(cf.df)}</td>
                             <td style={{padding:'3px 7px',textAlign:'right',color:npvClr(cf.pv||cf.amount),fontWeight:600}}>{fmtAmt(cf.pv||cf.amount)}</td>
                           </tr>
                         )))}
@@ -687,10 +687,10 @@ export default function PricerPage() {
             <div className="book-summary">
               Selected: <strong>{selTrade?.counterparty?.name||'—'} · TRADITIONAL</strong> ·
               <span> NPV {fmtAmt(result.npv)}</span> ·
-              <span style={{color:'#666666'}}> limit check pending Sprint 5D</span>
+              <span style={{color:'var(--text-dim)'}}> limit check on the roadmap</span>
             </div>
             <button className="btn btn-exec" onClick={()=>window.location.href='/blotter'}>↗ OPEN BOOKING WINDOW</button>
-            <button className="btn btn-book" onClick={()=>alert('BOOK TRADE — wiring in Sprint 5D+6D\nXVA auto-transfer will fire at booking.')}>▶ BOOK TRADE</button>
+            <button className="btn btn-book" onClick={()=>alert('Book from the blotter: NEW TRADE prices, books and confirms the ticket.')}>▶ BOOK TRADE</button>
             <button className="btn btn-chain-book" onClick={()=>alert('⬡ BOOK + CONFIRM — requires counterparty on Rijeka Confirms network.')}>⬡ BOOK + CONFIRM</button>
           </div>
 

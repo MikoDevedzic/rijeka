@@ -54,7 +54,7 @@ function TelegramPanel({ roomId, onClose }) {
         <>
           <div className="ms-sub">1. Add <b>{code.bot_username ? '@' + code.bot_username : 'the Rijeka bot'}</b> to the Telegram group.</div>
           <div className="ms-sub">2. Post this in the group (valid {Math.round(code.expires_in_s / 60)} minutes):</div>
-          <div className="ms-code" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15, padding: '6px 10px', background: '#000', border: '1px solid #1E1E1E', borderRadius: 3, display: 'inline-block', margin: '4px 0' }}>/link {code.code}</div>
+          <div className="ms-code" style={{ fontFamily: 'ui-monospace, monospace', fontSize: 15, padding: '6px 10px', background: '#000', border: '1px solid var(--border)', borderRadius: 3, display: 'inline-block', margin: '4px 0' }}>/link {code.code}</div>
           <div className="ms-sub">3. The bot replies “Linked” and this panel updates.</div>
           <button className="ms-link" disabled={busy} onClick={() => run(load)}>CHECK</button>
         </>

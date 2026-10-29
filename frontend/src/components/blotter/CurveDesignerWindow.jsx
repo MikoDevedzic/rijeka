@@ -66,22 +66,22 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
     for (let r = Math.ceil(minR/gridStep)*gridStep; r <= maxR + 0.001; r = Math.round((r+gridStep)*10000)/10000) {
       const y = yS(r)
       if (y < PAD.t - 2 || y > H - PAD.b + 2) continue
-      ctx.strokeStyle = '#1A1A1A'; ctx.lineWidth = 0.5
+      ctx.strokeStyle = '#1A222C'; ctx.lineWidth = 0.5
       ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(W - PAD.r, y); ctx.stroke()
-      ctx.fillStyle = '#666666'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
+      ctx.fillStyle = '#8B98A8'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'
       ctx.fillText(r.toFixed(2)+'%', PAD.l - 4, y)
     }
 
     // X axis line
-    ctx.strokeStyle = '#1E1E1E'; ctx.lineWidth = 0.5
+    ctx.strokeStyle = '#1A222C'; ctx.lineWidth = 0.5
     ctx.beginPath(); ctx.moveTo(PAD.l, H-PAD.b); ctx.lineTo(W-PAD.r, H-PAD.b); ctx.stroke()
 
     // X labels
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = '#666666'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = '#8B98A8'
     ;['1M','6M','1Y','2Y','5Y','10Y','20Y','30Y'].forEach(t => {
       const x = xS(TENOR_Y[t])
       ctx.fillText(t, x, H - PAD.b + 6)
-      ctx.strokeStyle='#1E1E1E'; ctx.lineWidth=0.3
+      ctx.strokeStyle='#1A222C'; ctx.lineWidth=0.3
       ctx.beginPath(); ctx.moveTo(x, H-PAD.b); ctx.lineTo(x, H-PAD.b+4); ctx.stroke()
     })
 
@@ -125,10 +125,10 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
       // Dot
       const isActive = dragRef.current?.idx===i
       ctx.beginPath(); ctx.arc(cx,cy,isActive?7:5,0,Math.PI*2); ctx.fillStyle=shClr; ctx.fill()
-      if(isActive){ ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2); ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.5; ctx.stroke() }
+      if(isActive){ ctx.beginPath(); ctx.arc(cx,cy,7,0,Math.PI*2); ctx.strokeStyle='#F4F7FA'; ctx.lineWidth=1.5; ctx.stroke() }
       // Bp label (only when not dragging to avoid flicker)
       if(Math.abs(bp)>0.5 && !dragRef.current){
-        ctx.font='9px JetBrains Mono'; ctx.fillStyle=bp>0?'#e05040':'#0dd4a8'; ctx.textAlign='center'; ctx.textBaseline='bottom'
+        ctx.font='10px JetBrains Mono'; ctx.fillStyle=bp>0?'#e05040':'#0dd4a8'; ctx.textAlign='center'; ctx.textBaseline='bottom'
         ctx.fillText((bp>0?'+':'')+bp+'bp', cx, cy-9)
       }
     })
@@ -267,7 +267,7 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
   const sh=shiftsRef.current
   const anyShift=sh.some(s=>Math.abs(s)>0.05)
   const avgBp=Math.round(sh.reduce((a,b)=>a+b,0)/TENORS.length)
-  const inp={background:'#000000',border:'1px solid #1E1E1E',borderRadius:'2px',
+  const inp={background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'2px',
     color:'#e8f0f8',fontFamily:'JetBrains Mono,monospace',fontSize:'0.8125rem',padding:'4px 7px',outline:'none'}
 
   const startWinDrag=e=>{
@@ -304,13 +304,13 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
         onMouseDown={e=>{e.preventDefault();startResize(e)}}/>
 
       <div style={{position:'absolute',left:pos.x,top:pos.y,width:size.w,height:size.h,
-        background:'#0C0C0C',border:'1px solid #1E1E1E',borderRadius:'2px',
+        background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',
         display:'flex',flexDirection:'column',overflow:'hidden',pointerEvents:'all',
         fontFamily:'JetBrains Mono,monospace',boxShadow:'0 8px 40px rgba(0,0,0,0.8)'}}>
 
         {/* Titlebar */}
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 14px',
-          background:'#000000',borderBottom:'1px solid #1E1E1E',flexShrink:0,
+          background:'var(--bg)',borderBottom:'1px solid var(--border)',flexShrink:0,
           cursor:'move',userSelect:'none'}} onMouseDown={startWinDrag}>
           <div style={{display:'flex',gap:5}}>
             <span style={{width:11,height:11,borderRadius:'50%',background:'#e05040',display:'inline-block',cursor:'pointer'}} onClick={onClose}/>
@@ -320,8 +320,8 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
           <span style={{fontSize:'1rem',fontWeight:700,letterSpacing:'0.12em',color:'#e8f0f8',flex:1}}>
             CURVE DESIGNER — {curveId||'USD_SOFR'}
           </span>
-          {tradeRef&&<span style={{fontSize:'0.8125rem',color:'#666666'}}>{tradeRef}</span>}
-          <span style={{fontSize:'0.875rem',color:'#666666',padding:'2px 6px',border:'1px solid #1E1E1E',borderRadius:'2px'}}>
+          {tradeRef&&<span style={{fontSize:'0.8125rem',color:'var(--text-dim)'}}>{tradeRef}</span>}
+          <span style={{fontSize:'0.875rem',color:'var(--text-dim)',padding:'2px 6px',border:'1px solid var(--border)',borderRadius:'2px'}}>
             SENSITIVITY {BP_PER_PX}bp/px
           </span>
         </div>
@@ -334,8 +334,8 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
 
         {/* Toolbar */}
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'7px 14px',
-          borderBottom:'1px solid #1E1E1E',flexShrink:0,flexWrap:'wrap'}} data-nodrag='1'>
-          <span style={{fontSize:'0.875rem',color:'#666666',letterSpacing:'0.08em'}}>PRESET</span>
+          borderBottom:'1px solid var(--border)',flexShrink:0,flexWrap:'wrap'}} data-nodrag='1'>
+          <span style={{fontSize:'0.875rem',color:'var(--text-dim)',letterSpacing:'0.08em'}}>PRESET</span>
           <select value={presetKey} onChange={e=>applyPreset(e.target.value)} style={{...inp,width:'160px'}}>
             <optgroup label='── PARALLEL SHIFTS ──'>
               <option value='flat0'>Base (no shift)</option>
@@ -351,11 +351,11 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
               <option value='hike_cycle'>Fed Hike Cycle</option>
             </optgroup>
           </select>
-          <span style={{fontSize:'0.875rem',color:'#666666',letterSpacing:'0.08em'}}>RIPPLE</span>
+          <span style={{fontSize:'0.875rem',color:'var(--text-dim)',letterSpacing:'0.08em'}}>RIPPLE</span>
           <input type='range' min='1' max='10' value={sigma} step='1' style={{width:80,accentColor:'#0dd4a8'}}
             onChange={e=>{const v=parseFloat(e.target.value);setSigma(v);sigmaRef.current=v}} data-nodrag='1'/>
           <span style={{fontSize:'0.8125rem',color:'#4a9ad4',minWidth:'28px'}}>{sigma}Y</span>
-          <span style={{fontSize:'0.875rem',color:'#666666',letterSpacing:'0.08em'}}>INTERP</span>
+          <span style={{fontSize:'0.875rem',color:'var(--text-dim)',letterSpacing:'0.08em'}}>INTERP</span>
           <select value={interpMode} onChange={e=>setInterpMode(e.target.value)} style={{...inp,width:'136px'}} data-nodrag='1'>
             <option value='LOG_LINEAR'>Log-Linear (default)</option>
             <option value='LINEAR_ZERO'>Linear Zero Rates</option>
@@ -371,17 +371,17 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
           <button onClick={handleReset} data-nodrag='1'
             style={{padding:'3px 10px',borderRadius:'2px',cursor:'pointer',fontFamily:'JetBrains Mono,monospace',
               fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.06em',marginLeft:'auto',
-              border:'1px solid rgba(82,104,120,0.4)',background:'rgba(82,104,120,0.06)',color:'#666666'}}>
+              border:'1px solid rgba(82,104,120,0.4)',background:'rgba(82,104,120,0.06)',color:'var(--text-dim)'}}>
             RESET
           </button>
         </div>
 
         {/* Chart */}
-        <div style={{flex:1,position:'relative',background:'#000000',overflow:'hidden'}}>
+        <div style={{flex:1,position:'relative',background:'var(--bg)',overflow:'hidden'}}>
           <canvas ref={canvasRef} style={{display:'block',cursor:'crosshair'}}/>
           {dragTip&&(
             <div style={{position:'absolute',left:dragTip.x,top:dragTip.y,pointerEvents:'none',zIndex:10,
-              background:'#0C0C0C',
+              background:'var(--panel)',
               border:`1px solid ${dragTip.bp>=0?'rgba(224,80,64,0.7)':'rgba(13,212,168,0.7)'}`,
               borderRadius:'2px',padding:'4px 10px',
               fontSize:'0.875rem',fontFamily:'JetBrains Mono,monospace',fontWeight:700,
@@ -398,13 +398,13 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
         </div>
 
         {/* Shifts summary bar */}
-        <div style={{display:'flex',gap:'1px',borderTop:'1px solid #1E1E1E',flexShrink:0,background:'#1E1E1E',overflowX:'auto'}}>
+        <div style={{display:'flex',gap:'1px',borderTop:'1px solid var(--border)',flexShrink:0,background:'var(--border)',overflowX:'auto'}}>
           {TENORS.map((t,i)=>{
             const bp=Math.round(sh[i])
-            const clr=bp>0?'#e05040':bp<0?'#0dd4a8':'#666666'
+            const clr=bp>0?'#e05040':bp<0?'#0dd4a8':'var(--text-dim)'
             return(
-              <div key={t} style={{background:'#0C0C0C',padding:'5px 8px',minWidth:'52px',textAlign:'center'}}>
-                <div style={{fontSize:'0.875rem',color:'#666666',marginBottom:'2px',fontFamily:'JetBrains Mono,monospace'}}>{t}</div>
+              <div key={t} style={{background:'var(--panel)',padding:'5px 8px',minWidth:'52px',textAlign:'center'}}>
+                <div style={{fontSize:'0.875rem',color:'var(--text-dim)',marginBottom:'2px',fontFamily:'JetBrains Mono,monospace'}}>{t}</div>
                 <div style={{fontSize:'0.8125rem',fontWeight:700,fontFamily:'JetBrains Mono,monospace',color:clr}}>
                   {bp===0?'—':(bp>0?'+':'')+bp+'bp'}
                 </div>
@@ -415,8 +415,8 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
 
         {/* Confirm bar */}
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 14px',
-          borderTop:'1px solid #1E1E1E',background:'#000000',flexShrink:0}} data-nodrag='1'>
-          <span style={{fontSize:'0.875rem',color:'#666666',fontFamily:'JetBrains Mono,monospace',letterSpacing:'0.05em'}}>
+          borderTop:'1px solid var(--border)',background:'var(--bg)',flexShrink:0}} data-nodrag='1'>
+          <span style={{fontSize:'0.875rem',color:'var(--text-dim)',fontFamily:'JetBrains Mono,monospace',letterSpacing:'0.05em'}}>
             SHAPE THE CURVE ABOVE · EACH POINT IS INDEPENDENTLY DRAGGABLE · CONFIRM ONCE TO REPRICE
           </span>
           {anyShift&&!confirmed&&(
@@ -433,7 +433,7 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
               letterSpacing:'0.08em',whiteSpace:'nowrap',marginLeft:'auto',transition:'all 0.2s',
               border:anyShift&&!confirmed?'1px solid rgba(240,160,32,0.6)':'1px solid rgba(82,104,120,0.4)',
               background:anyShift&&!confirmed?'rgba(240,160,32,0.1)':'rgba(82,104,120,0.06)',
-              color:anyShift&&!confirmed?'#f0a020':'#666666'}}>
+              color:anyShift&&!confirmed?'#f0a020':'var(--text-dim)'}}>
             {anyShift&&!confirmed
               ? `CONFIRM SHAPE (${avgBp>0?'+':''}${avgBp}bp avg) →`
               : 'CONFIRM SHAPE'}

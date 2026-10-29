@@ -6,7 +6,7 @@ function XCCYDef({ curve }) {
 # Bootstrapped simultaneously — CIP arbitrage constraint
 # ql.CrossCurrencyBasisSwapRateHelper
 # Spread is added to the domestic (non-USD) leg
-# Full implementation: Sprint 6`;
+# Full implementation: on the roadmap`;
 
   return (
     <div>
@@ -18,7 +18,7 @@ function XCCYDef({ curve }) {
         { label: 'FX Spot',       value: 'Provided externally' },
       ]} />
       <DescBox>{curve.description}</DescBox>
-      <SectionLabel>Bootstrap Logic (Sprint 6)</SectionLabel>
+      <SectionLabel>Bootstrap logic (roadmap)</SectionLabel>
       <div className="cb">
         <pre style={{ margin: 0, fontSize: '9px', lineHeight: 1.8, color: 'var(--text-dim)' }}>
           {stub}
@@ -60,7 +60,7 @@ function XCCYInstruments({ curve }) {
         </table>
       </div>
       <div style={{ marginTop: 10, fontSize: '8.5px', color: 'var(--text-mute)', padding: '6px 0' }}>
-        Sprint 6 · ql.CrossCurrencyBasisSwapRateHelper · CIP arbitrage constraint
+        Roadmap · ql.CrossCurrencyBasisSwapRateHelper · CIP arbitrage constraint
       </div>
     </div>
   );
@@ -86,7 +86,7 @@ export default function XCCYDetail({ curve }) {
               <span style={{ color: 'var(--accent)' }}>{curve.parentCurves[0]}</span>
               {' ↔ '}
               <span style={{ color: 'var(--blue)' }}>{curve.parentCurves[1]}</span>
-              {' · Sprint 6'}
+              {' · roadmap'}
             </div>
           </div>
           <div className="crv-rate-block">
@@ -101,7 +101,7 @@ export default function XCCYDetail({ curve }) {
           <span className="pill p-purple">RiskClass.FX</span>
           <span className="pill p-green">{curve.parentCurves[0]}</span>
           <span className="pill p-blue">{curve.parentCurves[1]}</span>
-          <span className="pill p-dim">Sprint 6</span>
+          <span className="pill p-dim">Roadmap</span>
         </div>
       </div>
 
