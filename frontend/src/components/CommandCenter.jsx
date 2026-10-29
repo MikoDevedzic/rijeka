@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import BookBrief from './home/BookBrief'
 import WorldClock from './home/WorldClock'
 import PolicyPath from './home/PolicyPath'
+import Lifecycle from './home/Lifecycle'
 import { getSessionMaybe } from '../lib/session'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
@@ -204,20 +205,7 @@ function DeskHome({ demo, navigate }) {
           {trades.length > 0 && <BookBrief />}
         </section>
 
-        <section className="dh-card">
-          <header><span>ON-CHAIN CONFIRMATIONS</span><a className="dh-link" href="https://rijeka.app/verify" target="_blank" rel="noopener noreferrer">VERIFIER ↗</a></header>
-          <div className="dh-kpis">
-            <Kpi label="NETWORK" text={d.chain?.anchored ? (d.chain.chain_id === 11155111 ? 'SEPOLIA' : d.chain.chain_id === 1 ? 'ETHEREUM' : `CHAIN ${d.chain.chain_id}`) : d.loading ? '…' : 'OFF-CHAIN'} tone={d.chain?.anchored ? 'accent' : ''} />
-            <Kpi label="CONFIRMED" value={confirmed} loading={d.loading} />
-            <Kpi label="RECORD" text={`v${d.chain?.schema_version || 2}`} />
-          </div>
-          <ChainDiagram />
-          <div className="dh-text">
-            Both parties sign the canonical record; the registry keeps the hash and both addresses. Anyone can recompute and recover them without asking Rijeka.
-            {d.chain?.registry && <> Registry <a href={`https://sepolia.etherscan.io/address/${d.chain.registry}`} target="_blank" rel="noopener noreferrer">{d.chain.registry.slice(0, 8)}…{d.chain.registry.slice(-4)} ↗</a>.</>}
-            {demo?.enabled && <> Demo: Rijeka holds {demo.counterparty?.name || 'the demo bank'}'s key, so solo confirmations are marked <em>not bilateral</em>.</>}
-          </div>
-        </section>
+        <Lifecycle demo={demo} empty={<ChainDiagram />} reducedMotion={reducedMotion()} />
 
         <section className="dh-card">
           <header><span>MARKET NEWS</span><button className="dh-link" onClick={() => navigate('/messenger')}>OPEN ROOM →</button></header>
