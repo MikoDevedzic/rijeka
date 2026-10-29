@@ -8,6 +8,7 @@ AttestationBackend — where a signed confirmation is anchored.
 
 The backend is chosen from the environment:
   RIJEKA_CHAIN_RPC            e.g. http://127.0.0.1:8545
+  RIJEKA_CHAIN_RPC_FALLBACK   optional second node, used after the primary fails twice in a call
   RIJEKA_CHAIN_REGISTRY       deployed TradeConfirmationRegistry address
   RIJEKA_CHAIN_RELAYER_KEY    key that pays gas (anvil account 0 in dev)
   RIJEKA_CHAIN_EXPLORER       optional, e.g. https://sepolia.etherscan.io
@@ -16,12 +17,25 @@ The backend is chosen from the environment:
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional, Protocol
 
+import requests
 from eth_utils import to_checksum_address
+
+log = logging.getLogger("rijeka.chain")
+
+# A public RPC node drops a connection now and then. Each chain call is retried
+# with backoff; after two strikes on the primary node the fallback node (if
+# configured) takes over for the rest of the process. A broadcast the node
+# already acknowledged is never resent.
+RPC_ATTEMPTS = 4
+_TRANSIENT = (requests.exceptions.ConnectionError, requests.exceptions.Timeout, ConnectionError, TimeoutError)
+_ALREADY_SENT = ("already known", "already imported", "nonce too low", "known transaction", "replacement transaction underpriced")
 
 _ABI_PATH = Path(__file__).with_name("TradeConfirmationRegistry.json")
 
@@ -110,17 +124,46 @@ def load_artifact() -> dict:
 class EvmBackend:
     anchored = True
 
-    def __init__(self, rpc_url: str, registry: str, relayer_key: str, explorer: Optional[str] = None):
-        from web3 import Web3
-        self.w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 30}))
+    def __init__(self, rpc_url: str, registry: str, relayer_key: str, explorer: Optional[str] = None,
+                 fallback_rpc: Optional[str] = None):
+        self.w3 = self._connect(rpc_url)
         if not self.w3.is_connected():
             raise ConnectionError(f"Cannot reach chain RPC at {rpc_url}")
+        self.fallback_rpc = fallback_rpc
+        self._switched = False
         self.chain_id = self.w3.eth.chain_id
         self.registry = to_checksum_address(registry)
         self.relayer  = self.w3.eth.account.from_key(relayer_key)
         art = load_artifact()
         self.contract = self.w3.eth.contract(address=self.registry, abi=art["abi"])
         self.explorer = explorer or EXPLORERS.get(self.chain_id)
+
+    @staticmethod
+    def _connect(rpc_url: str):
+        from web3 import Web3
+        return Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 30}))
+
+    def _use_fallback(self) -> None:
+        if not self.fallback_rpc or self._switched:
+            return
+        log.warning("chain: primary RPC failing, switching to the fallback node")
+        self.w3 = self._connect(self.fallback_rpc)
+        self.contract = self.w3.eth.contract(address=self.registry, abi=self.contract.abi)
+        self._switched = True
+
+    def _retry(self, what: str, call):
+        delay = 1.0
+        for attempt in range(1, RPC_ATTEMPTS + 1):
+            try:
+                return call()
+            except _TRANSIENT as e:
+                if attempt == RPC_ATTEMPTS:
+                    raise
+                log.warning("chain: %s failed (%s), attempt %d/%d", what, str(e)[:120], attempt, RPC_ATTEMPTS)
+                if attempt >= 2:
+                    self._use_fallback()
+                time.sleep(delay)
+                delay = min(delay * 2, 8.0)
 
     def _explorer_tx(self, tx_hash: str) -> Optional[str]:
         return f"{self.explorer}/tx/{tx_hash}" if self.explorer else None
@@ -136,17 +179,28 @@ class EvmBackend:
 
     def _send(self, fn, label: str) -> AnchorReceipt:
         """Sign with the relayer, submit, wait for the receipt. Reverts raise."""
-        tx = fn.build_transaction({
+        nonce = self._retry("nonce", lambda: self.w3.eth.get_transaction_count(self.relayer.address))
+        tx = self._retry("build", lambda: fn.build_transaction({
             "from":  self.relayer.address,
-            "nonce": self.w3.eth.get_transaction_count(self.relayer.address),
+            "nonce": nonce,
             "chainId": self.chain_id,
-        })
+        }))
         signed = self.relayer.sign_transaction(tx)
-        h = self.w3.eth.send_raw_transaction(signed.raw_transaction)
-        rcpt = self.w3.eth.wait_for_transaction_receipt(h, timeout=180)
+
+        def broadcast():
+            try:
+                return self.w3.eth.send_raw_transaction(signed.raw_transaction)
+            except ValueError as e:        # the node answered: either it already has this tx, or it rejected it
+                msg = str(e).lower()
+                if any(k in msg for k in _ALREADY_SENT):
+                    log.info("chain: node already holds the %s transaction; waiting for its receipt", label)
+                    return signed.hash
+                raise
+        h = self._retry("send", broadcast)
+        rcpt = self._retry("receipt", lambda: self.w3.eth.wait_for_transaction_receipt(h, timeout=180))
         if rcpt.status != 1:
             raise RuntimeError(f"{label}() reverted in tx {h.hex()}")
-        blk = self.w3.eth.get_block(rcpt.blockNumber)
+        blk = self._retry("block", lambda: self.w3.eth.get_block(rcpt.blockNumber))
         tx_hex = "0x" + h.hex() if not h.hex().startswith("0x") else h.hex()
         return AnchorReceipt(True, self.chain_id, self.registry, tx_hex,
                              int(rcpt.blockNumber), int(blk.timestamp), self._explorer_tx(tx_hex))
@@ -183,7 +237,8 @@ def get_backend(refresh: bool = False) -> AttestationBackend:
     reg = os.getenv("RIJEKA_CHAIN_REGISTRY")
     key = os.getenv("RIJEKA_CHAIN_RELAYER_KEY")
     if rpc and reg and key:
-        _backend = EvmBackend(rpc, reg, key, os.getenv("RIJEKA_CHAIN_EXPLORER"))
+        _backend = EvmBackend(rpc, reg, key, os.getenv("RIJEKA_CHAIN_EXPLORER"),
+                              fallback_rpc=os.getenv("RIJEKA_CHAIN_RPC_FALLBACK") or None)
     else:
         _backend = NullBackend()
     return _backend

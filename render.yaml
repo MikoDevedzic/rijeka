@@ -44,6 +44,8 @@ services:
       # ── Sepolia anchoring ─────────────────────────────────────────────
       - key: RIJEKA_CHAIN_RPC
         value: https://ethereum-sepolia-rpc.publicnode.com
+      - key: RIJEKA_CHAIN_RPC_FALLBACK
+        value: https://sepolia.gateway.tenderly.co    # second public node; the relayer switches to it after two failed calls
       - key: RIJEKA_CHAIN_REGISTRY
         value: "0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e"
       - key: RIJEKA_CHAIN_EXPLORER
