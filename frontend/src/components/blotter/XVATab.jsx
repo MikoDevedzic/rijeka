@@ -138,9 +138,9 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
   const eeArr=[...ee]; eeArr._name='EE'
   const eneArr=[...ene]; eneArr._name='ENE'
   const pfeArr=[...pfe]; pfeArr._name='PFE'
-  drawCurve(eneArr,'var(--blue)',[5,3],7,1.5,true)
-  drawCurve(pfeArr,'var(--amber)',[3,2],5,1.2,false)
-  drawCurve(eeArr, 'var(--accent)',[],   8,2.0,true)
+  drawCurve(eneArr,'#4a9ad4',[5,3],7,1.5,true)
+  drawCurve(pfeArr,'#f0a020',[3,2],5,1.2,false)
+  drawCurve(eeArr, '#0dd4a8',[],   8,2.0,true)
   ctx.fillStyle='#5F6C7B'; ctx.textAlign='center'; ctx.font='10px JetBrains Mono,monospace'
   ;[0,0.25,0.5,0.75,1].forEach(frac => {
     const i=Math.round(frac*(n-1)); ctx.fillText((i/12).toFixed(0)+'Y', xS(i), H-PAD.b+10)
