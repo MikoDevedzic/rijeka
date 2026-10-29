@@ -32,7 +32,7 @@ jobs:
       - name: fetch the Bank of England series here and post it
         working-directory: backend
         run: |
-          pip install -q httpx
+          pip install -q httpx sqlalchemy python-dateutil
           python -m risk.history --curves GBP_SONIA --years ${{ github.event.inputs.years }} --post "$RIJEKA_API_URL" --secret "$RIJEKA_CRON_SECRET" $([ "${{ github.event.inputs.overwrite }}" = "true" ] && echo --overwrite)
       - name: wait for the server-side backfill
         run: |
