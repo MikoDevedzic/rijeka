@@ -18,6 +18,10 @@ jobs:
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/news/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 120)
           cat /tmp/out; echo; test "$code" = "200"
+      - name: news summaries (in-app, own words, original linked)
+        run: |
+          code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/news/summarize?limit=12" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 280)
+          cat /tmp/out; echo; test "$code" = "200"
       - name: fx and crypto spot
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/currency/spot/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 60)

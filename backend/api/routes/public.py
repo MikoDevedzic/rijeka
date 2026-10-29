@@ -64,11 +64,14 @@ def _snapshot(db: Session, uid, curve_id: str) -> Optional[dict]:
 def _headlines(db: Session, n: int = 8) -> list[dict]:
     """The newest public headlines (title, source, link): what the NEWS room shows."""
     try:
+        from api.routes.news import summary_columns
+        cols = "summary, summary_basis" if summary_columns(db) else "NULL AS summary, NULL AS summary_basis"
         rows = db.execute(text(
-            "SELECT title, source, url, published_at FROM news_items "
+            f"SELECT title, source, url, published_at, {cols} FROM news_items "
             "ORDER BY coalesce(published_at, created_at) DESC LIMIT :n"), {"n": n}).all()
         return [{"title": r.title, "source": r.source, "url": r.url,
-                 "published_at": r.published_at.isoformat() if r.published_at else None} for r in rows]
+                 "published_at": r.published_at.isoformat() if r.published_at else None,
+                 "summary": r.summary, "summary_basis": r.summary_basis} for r in rows]
     except Exception as e:
         log.debug("pulse headlines failed: %s", e)
         db.rollback()

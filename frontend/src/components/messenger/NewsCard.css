@@ -12,3 +12,10 @@
 .nc-tag.crypto{border-color:rgba(192,132,252,.4);color:#c084fc}
 .nc-tag.deriv{border-color:rgba(45,212,191,.4);color:#2dd4bf}
 .nc-host{margin-left:auto;color:var(--text-dim);opacity:.7}
+
+.nc-summary{margin:.1rem 0 .45rem;padding:.45rem .6rem;border-left:2px solid var(--border-hi);background:rgba(13,212,168,.03);border-radius:0 3px 3px 0}
+.nc-summary p{margin:0 0 .3rem;font-size:.84rem;line-height:1.45;color:var(--text)}
+.nc-summary p:last-of-type{margin-bottom:.2rem}
+.nc-summary-meta{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;color:var(--text-mute)}
+.nc-summary-meta a{color:var(--accent);text-decoration:none}
+.nc-summary-meta a:hover{text-decoration:underline}

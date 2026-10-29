@@ -223,8 +223,10 @@ function DeskHome({ demo, navigate }) {
           <header><span>MARKET NEWS</span><button className="dh-link" onClick={() => navigate('/messenger')}>OPEN ROOM →</button></header>
           <ul className="dh-news">
             {(d.news || []).map(n => (
-              <li key={n.url}>
+              <li key={n.url} className={n.summary ? 'has-summary' : ''}>
                 <a href={n.url} target="_blank" rel="noopener noreferrer">{n.title}</a>
+                {n.summary && <details className="dh-news-sum"><summary>AI summary · {n.summary_basis === 'article' ? 'from the article' : 'from the feed blurb'}</summary>
+                  {String(n.summary).split(/\n+/).map((p, i) => <p key={i}>{p}</p>)}</details>}
                 <span className="dh-news-meta">{n.source} · {ago(n.published_at)}{n.tags?.[0] ? ` · ${n.tags[0]}` : ''}</span>
               </li>
             ))}

@@ -10,6 +10,9 @@ feed on day one and existing users pick it up on their next visit.
 
 GET /api/news/items?tag=RATES&limit=100   the same items as a list, for a
                                           dedicated page or a filter
+POST /api/news/summarize                  cron: write in-app summaries for recent
+                                          items (news/summarize.py); own step so
+                                          the headline tick stays fast
 
 RIJEKA_CRON_SECRET must be set for the tick to be callable at all.
 """
@@ -32,6 +35,7 @@ from db.models import ChatRoom, ChatRoomMember, FirmMember
 from middleware.auth import verify_token
 from api.routes import chat
 from news import feeds as _feeds
+from news import summarize as _summarize
 
 log = logging.getLogger("rijeka.news")
 router = APIRouter(prefix="/api/news", tags=["news"])
@@ -69,9 +73,20 @@ def ensure_member(db: Session, me: FirmMember) -> None:
                               role="MEMBER", status="JOINED", joined_at=chat._now()))
 
 
+def summary_columns(db: Session) -> bool:
+    """True once docs/migrations/2026-10-29_news_summaries.sql has been applied. Until then the tick
+    stores headlines as before, the cards carry no summary, and the summariser is a no-op."""
+    try:
+        return db.execute(text("SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' "
+                               "AND table_name = 'news_items' AND column_name = 'summary'")).first() is not None
+    except Exception:       # noqa: BLE001
+        return False
+
+
 def ingest(db: Session, items: list[_feeds.Item]) -> int:
     """Store and post what is new. Returns how many were posted."""
     room = news_room(db)
+    with_desc = summary_columns(db)
     cutoff = chat._now() - timedelta(days=MAX_AGE_DAYS)
     seen: set[str] = set()
     fresh = []
@@ -89,9 +104,14 @@ def ingest(db: Session, items: list[_feeds.Item]) -> int:
                 "tags": list(it.tags)}
         msg = chat._post(db, room, kind="SYSTEM", name=it.source, body=f"{it.source}: {it.title}", card=card)
         db.flush()
-        db.execute(text("""INSERT INTO news_items (url, title, source, published_at, tags, message_id)
-                           VALUES (:u, :t, :s, :p, :g, :m) ON CONFLICT (url) DO NOTHING"""),
-                   {"u": it.url, "t": it.title, "s": it.source, "p": it.published_at, "g": list(it.tags), "m": msg.id})
+        params = {"u": it.url, "t": it.title, "s": it.source, "p": it.published_at, "g": list(it.tags), "m": msg.id}
+        if with_desc:
+            db.execute(text("""INSERT INTO news_items (url, title, source, published_at, tags, message_id, description)
+                               VALUES (:u, :t, :s, :p, :g, :m, :d) ON CONFLICT (url) DO NOTHING"""),
+                       {**params, "d": (it.description or None)})
+        else:
+            db.execute(text("""INSERT INTO news_items (url, title, source, published_at, tags, message_id)
+                               VALUES (:u, :t, :s, :p, :g, :m) ON CONFLICT (url) DO NOTHING"""), params)
         posted += 1
     return posted
 
@@ -106,14 +126,27 @@ def tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(No
     return {"fetched": len(items), "posted": posted}
 
 
+@router.post("/summarize")
+def summarize(limit: int = Query(default=12, ge=1, le=60), db: Session = Depends(get_db),
+              x_rijeka_cron: Optional[str] = Header(None)):
+    if not _secret_ok(x_rijeka_cron):
+        raise HTTPException(status_code=403, detail="bad cron secret")
+    if not summary_columns(db):
+        return {"done": 0, "skipped": 0, "failed": 0, "disabled": True,
+                "reason": "apply docs/migrations/2026-10-29_news_summaries.sql"}
+    return _summarize.summarize_pending(db, limit=limit)
+
+
 @router.get("/items")
 def items(tag: Optional[str] = None, limit: int = Query(default=100, ge=1, le=500),
           db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    sql = "SELECT url, title, source, published_at, tags FROM news_items"
+    cols = "summary, summary_basis" if summary_columns(db) else "NULL AS summary, NULL AS summary_basis"
+    sql = f"SELECT url, title, source, published_at, tags, {cols} FROM news_items"
     params: dict = {"n": limit}
     if tag:
         sql += " WHERE :tag = ANY(tags)"; params["tag"] = tag.upper()
     sql += " ORDER BY published_at DESC NULLS LAST, created_at DESC LIMIT :n"
     return [{"url": r.url, "title": r.title, "source": r.source,
-             "published_at": r.published_at.isoformat() if r.published_at else None, "tags": list(r.tags or [])}
+             "published_at": r.published_at.isoformat() if r.published_at else None, "tags": list(r.tags or []),
+             "summary": r.summary, "summary_basis": r.summary_basis}
             for r in db.execute(text(sql), params)]

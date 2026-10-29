@@ -1,8 +1,9 @@
 """
 Public headline feeds for the NEWS room.
 
-Headlines and links only. Article text is never fetched or stored: that is
-where publishers' licences bite, and a link back is what they want anyway.
+Headlines, links and the blurb each feed publishes. Article text is fetched
+only for public bodies, by news/summarize.py; commercial publishers' licences
+bite there, and a link back is what they want anyway.
 Parsing is stdlib (RSS 2.0 and Atom); fetching is httpx with a short timeout
 per feed, so one slow publisher cannot stall the tick.
 """
@@ -52,6 +53,17 @@ class Item:
     url: str
     published_at: Optional[datetime]
     tags: tuple[str, ...]
+    description: str = ""          # the feed's own blurb, HTML stripped, capped
+
+
+_HTML_TAG = re.compile(r"<[^>]+>")
+
+
+def blurb(raw: str, cap: int = 1500) -> str:
+    """A feed description/summary/content as plain text."""
+    import html as _html
+    t = _html.unescape(_HTML_TAG.sub(" ", raw or ""))
+    return re.sub(r"\s+", " ", t).strip()[:cap]
 
 
 def tag(title: str) -> tuple[str, ...]:
@@ -97,14 +109,16 @@ def parse(xml_bytes: bytes, source: str) -> list[Item]:
         if kind == "item":
             url = _text(fields.get("link")) or _text(fields.get("guid"))
             when = _parse_date(_text(fields.get("pubDate")) or _text(fields.get("date")))
+            desc = blurb(_text(fields.get("description")) or _text(fields.get("encoded")))
         else:
             link = next((c for c in node if _strip(c.tag) == "link" and c.get("rel") in (None, "alternate")), None)
             url = (link.get("href") if link is not None else "") or _text(fields.get("id"))
             when = _parse_date(_text(fields.get("published")) or _text(fields.get("updated")))
+            desc = blurb(_text(fields.get("summary")) or _text(fields.get("content")))
         url = (url or "").strip()
         if not title or not url.startswith("http"):
             continue
-        out.append(Item(source, title[:300], url[:2000], when, tag(title)))
+        out.append(Item(source, title[:300], url[:2000], when, tag(title + " " + desc), desc))
     return out
 
 
