@@ -206,3 +206,33 @@ def test_tick_explains_a_source_whitelist_that_predates_demo_data(monkeypatch):
     assert resp.status_code == 409
     assert "2026-10-29_demo_market_data_source.sql" in resp.json()["detail"]
     assert db.rollback.called and not db.commit.called
+
+
+JGB_CSV = """Interest Rate (October 2026),,,,,,,,,,,,,,,(Unit : %)
+Date,1Y,2Y,3Y,4Y,5Y,6Y,7Y,8Y,9Y,10Y,15Y,20Y,25Y,30Y,40Y
+2026/10/27,1.66,1.90,2.00,2.15,2.27,2.35,2.46,2.60,2.72,2.85,3.37,3.67,3.96,3.93,3.96
+2026/10/28,1.674,1.915,2.015,2.166,2.281,2.365,2.473,2.614,2.739,2.867,3.385,3.685,3.973,3.941,3.974
+"  (If you cannot download the latest csv data, please clear the browser's cache and download again.)",,,,,,,,,,,,,,,
+"""
+TONA_CSV = '"Date";"D0";"Value"\n"2026-08";"TONA";"0.977"\n"2026-09";"TONA";"1.226"\n'
+
+
+def test_jpy_curve_from_tona_and_jgb_with_the_spread_applied():
+    d, jgb = f.fetch_jgb(JGB_CSV)
+    assert d == date(2026, 10, 28) and jgb[10.0] == 2.867 and jgb[40.0] == 3.974 and len(jgb) == 15
+    assert f.fetch_tona(TONA_CSV) == (date(2026, 9, 1), 1.226)
+    by = {q["tenor"]: q["rate"] for q in f.build_jpy_tona(1.226, jgb)}
+    assert by["ON"] == 1.226 and by["10Y"] == pytest.approx(2.867 - 0.25, abs=1e-6) and by["30Y"] == pytest.approx(3.941 - 0.45, abs=1e-6)
+    assert by["50Y"] == by["40Y"] and 1.226 <= by["1W"] <= by["1M"]
+
+
+def test_chf_is_a_flat_term_structure_at_the_fixing():
+    qs = f.build_chf_saron(-0.068)
+    assert [q["tenor"] for q in qs] == f.OIS_TENORS and all(q["rate"] == -0.068 for q in qs)
+
+
+def test_assemble_builds_jpy_when_both_feeds_answer():
+    d, jgb = f.fetch_jgb(JGB_CSV)
+    collected = {"ok": {"tona": (date(2026, 9, 1), 1.226), "jgb": (d, jgb)}, "failed": {}}
+    built = f.assemble(collected, date(2026, 10, 29))
+    assert "JPY_TONA" in built["curves"] and "TONA 2026-09" in built["curves"]["JPY_TONA"]["source"]

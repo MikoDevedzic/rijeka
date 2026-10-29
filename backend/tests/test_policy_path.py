@@ -87,3 +87,10 @@ def test_policy_path_route_without_a_snapshot_degrades():
     main.app.dependency_overrides.clear()
     b = r.json()
     assert r.status_code == 200 and b["bank"] == "ECB" and b["path"] == [] and b["as_of"] is None and "dots" not in b
+
+
+def test_flat_negative_curve_still_bootstraps():
+    from market_data import demo_feed as f
+    r = pp.implied_path(f.build_chf_saron(-0.068), date(2026, 10, 29))
+    assert r["term_structure"] is True and len(r["path"]) == 24
+    assert all(-0.25 < p["rate"] < 0.1 for p in r["path"])

@@ -11,7 +11,12 @@ freely, with every assumption written down here and stamped into `source`:
                plus an indicative swap-over-AAA spread schedule
   GBP_SONIA    Bank of England SONIA fixing + gilt par yields (5Y, 10Y, 20Y),
                less an indicative SONIA-OIS / gilt spread schedule
-  CHF_SARON    SNB SARON (monthly average), overnight pillar only
+  CHF_SARON    SNB SARON (monthly average), overnight pillar; flat beyond it until a
+               current public Swiss Confederation yield curve is found (the SNB's bond
+               cubes stopped in mid-2025)
+  JPY_TONA     Bank of Japan TONA via the SNB's money-market cube (monthly, end of
+               month) + Japan MoF daily JGB yields, less an indicative TONA-OIS / JGB
+               spread schedule
   USD_SWVOL_ATM, swaption skew, cap vols
                SYNTHETIC: a smooth parametric normal-vol surface. Not market.
 
@@ -50,12 +55,15 @@ BOE_IADB_URL   = ("https://www.bankofengland.co.uk/boeapps/database/_iadb-fromsh
                   "?csv.x=yes&Datefrom={dfrom}&Dateto=now&SeriesCodes=IUDSOIA,IUDSNPY,IUDMNPY,IUDLNPY"
                   "&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N")
 SNB_SARON_URL  = "https://data.snb.ch/api/cube/zimoma/data/csv/en?dimSel=D0(SARON)"
+SNB_TONA_URL   = "https://data.snb.ch/api/cube/zimoma/data/csv/en?dimSel=D0(TONA)"
+MOF_JGB_URL    = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/jgbcme.csv"
 
 SOURCES = [
     {"curve": "USD_SOFR",      "provider": "NY Fed · US Treasury",      "kind": "public",    "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"},
     {"curve": "EUR_ESTR",      "provider": "ECB",                        "kind": "public",    "url": "https://data.ecb.europa.eu/"},
     {"curve": "GBP_SONIA",     "provider": "Bank of England",            "kind": "public",    "url": "https://www.bankofengland.co.uk/boeapps/database/"},
     {"curve": "CHF_SARON",     "provider": "SNB",                        "kind": "public",    "url": "https://data.snb.ch/"},
+    {"curve": "JPY_TONA",      "provider": "SNB (TONA) · Japan MoF (JGB)", "kind": "public",    "url": "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/"},
     {"curve": "USD_SWVOL_ATM", "provider": "synthetic parametric surface", "kind": "synthetic", "url": None},
     {"curve": "USD_CAPVOL",    "provider": "synthetic parametric surface", "kind": "synthetic", "url": None},
 ]
@@ -79,6 +87,8 @@ CAP_SPREADS    = [-200, -150, -100, -50, 0, 50, 100, 150, 200]
 USD_OIS_MINUS_UST = [(1 / 12, -12), (0.25, -15), (1, -20), (2, -25), (5, -30), (10, -40), (20, -60), (30, -70)]
 EUR_OIS_MINUS_AAA = [(0.25, 10), (1, 15), (2, 20), (5, 25), (10, 30), (20, 35), (30, 35)]
 GBP_OIS_MINUS_GILT = [(1, -15), (5, -25), (10, -40), (20, -70), (30, -75)]
+JPY_OIS_MINUS_JGB  = [(1, -5), (2, -10), (5, -15), (10, -25), (20, -40), (30, -45)]
+CHF_FLAT_SPREAD    = [(0.0, 0.0)]                         # SARON flat: no current public CHF curve
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -218,20 +228,58 @@ def fetch_boe(today: Optional[date] = None, text: Optional[str] = None) -> tuple
     return d, {"SONIA": vals[0], "5Y": vals[1], "10Y": vals[2], "20Y": vals[3]}
 
 
-def fetch_saron(text: Optional[str] = None) -> tuple[date, float]:
-    """SNB publishes the monthly average; the latest month is the overnight pillar."""
-    body = text if text is not None else _get(SNB_SARON_URL)
+def _snb_monthly(body: str, series: str) -> tuple[date, float]:
     last = None
     for r in csv.reader(io.StringIO(body), delimiter=";"):
-        if len(r) >= 3 and re.fullmatch(r"\d{4}-\d{2}", r[0]) and r[1] == "SARON":
+        if len(r) >= 3 and re.fullmatch(r"\d{4}-\d{2}", r[0]) and r[1] == series:
             try:
                 last = (r[0], float(r[2]))
             except ValueError:
                 continue
     if last is None:
-        raise ValueError("no SARON observation")
+        raise ValueError(f"no {series} observation")
     y, m = (int(x) for x in last[0].split("-"))
     return date(y, m, 1), last[1]
+
+
+def fetch_saron(text: Optional[str] = None) -> tuple[date, float]:
+    """SNB publishes the monthly average; the latest month is the overnight pillar."""
+    return _snb_monthly(text if text is not None else _get(SNB_SARON_URL), "SARON")
+
+
+def fetch_tona(text: Optional[str] = None) -> tuple[date, float]:
+    """TONA, end of month, from the SNB's money-market cube (the BoJ publishes it as HTML)."""
+    return _snb_monthly(text if text is not None else _get(SNB_TONA_URL), "TONA")
+
+
+_JGB_COLS = {"1Y": 1, "2Y": 2, "3Y": 3, "4Y": 4, "5Y": 5, "6Y": 6, "7Y": 7, "8Y": 8, "9Y": 9, "10Y": 10,
+             "15Y": 15, "20Y": 20, "25Y": 25, "30Y": 30, "40Y": 40}
+
+
+def fetch_jgb(text: Optional[str] = None) -> tuple[date, dict[float, float]]:
+    """Japan MoF daily JGB yields: the last dated row → {years: yield %}."""
+    if text is None:
+        r = httpx.get(MOF_JGB_URL, headers=UA, timeout=TIMEOUT, follow_redirects=True)
+        r.raise_for_status()
+        text = r.content.decode("cp932", errors="ignore")
+    header, last = None, None
+    for row in csv.reader(io.StringIO(text)):
+        if row and row[0].strip() == "Date":
+            header = [c.strip() for c in row]
+        elif row and re.fullmatch(r"\d{4}/\d{1,2}/\d{1,2}", row[0].strip()) and header:
+            last = row
+    if not header or not last:
+        raise ValueError("no JGB rows")
+    y, m, d = (int(x) for x in last[0].strip().split("/"))
+    pts = {}
+    for name, yrs in _JGB_COLS.items():
+        if name in header:
+            v = last[header.index(name)].strip()
+            if re.fullmatch(r"-?\d+(\.\d+)?", v):
+                pts[float(yrs)] = float(v)
+    if len(pts) < 6:
+        raise ValueError("JGB row too short")
+    return date(y, m, d), pts
 
 
 # ── Builders ───────────────────────────────────────────────────────────────────
@@ -277,7 +325,13 @@ def build_gbp_sonia(boe: dict[str, float]) -> list[dict]:
 
 
 def build_chf_saron(saron: float) -> list[dict]:
-    return [_q("ON", saron, "SWAP")]
+    """SARON at every pillar: the SNB's Confederation-bond cubes stopped in mid-2025 and no
+    other free source carries a CHF curve, so the term structure is flat and says so."""
+    return build_ois_quotes(saron, {1 / 12: saron, 30.0: saron}, CHF_FLAT_SPREAD)
+
+
+def build_jpy_tona(tona: float, jgb: dict[float, float]) -> list[dict]:
+    return build_ois_quotes(tona, jgb, JPY_OIS_MINUS_JGB)
 
 
 # Synthetic normal-vol surface. Level falls with expiry (short-dated rate vol
@@ -352,6 +406,8 @@ def collect(today: Optional[date] = None) -> dict:
     step("aaa",  fetch_ecb_aaa_par)
     step("boe",  lambda: fetch_boe(today))
     step("saron", fetch_saron)
+    step("tona", fetch_tona)
+    step("jgb", fetch_jgb)
     return out
 
 
@@ -375,7 +431,10 @@ def assemble(collected: dict, valuation_date: date) -> dict:
         curves["GBP_SONIA"] = {"quotes": build_gbp_sonia(boe), "source": src("BoE SONIA + gilt par, indicative spread", d1)}
     if "saron" in ok:
         d1, saron = ok["saron"]
-        curves["CHF_SARON"] = {"quotes": build_chf_saron(saron), "source": src(f"SNB SARON monthly avg {d1:%Y-%m}")}
+        curves["CHF_SARON"] = {"quotes": build_chf_saron(saron), "source": src(f"SNB SARON monthly avg {d1:%Y-%m}, flat: no public CHF curve")}
+    if "tona" in ok and "jgb" in ok:
+        (d1, tona), (d2, jgb) = ok["tona"], ok["jgb"]
+        curves["JPY_TONA"] = {"quotes": build_jpy_tona(tona, jgb), "source": src(f"TONA {d1:%Y-%m} (SNB) + MoF JGB, indicative spread", d2)}
 
     synthetic = "DEMO · synthetic surface"
     curves["USD_SWVOL_ATM"] = {"quotes": build_swvol_atm(), "source": synthetic}

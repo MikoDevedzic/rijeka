@@ -199,7 +199,8 @@ The hosted demo prices on **demo market data rebuilt daily from public sources**
 | USD SOFR OIS | NY Fed SOFR fixing + US Treasury daily par yield curve | SOFR-OIS below Treasuries: −12 bp at 1M to −70 bp at 30Y |
 | EUR €STR OIS | ECB €STR fixing + ECB euro-area AAA government par curve | swaps above AAA: +10 bp at 3M to +35 bp at 20Y+ |
 | GBP SONIA OIS | Bank of England SONIA fixing + gilt par yields (5Y, 10Y, 20Y) | SONIA-OIS below gilts: −15 bp at 1Y to −75 bp at 30Y |
-| CHF SARON | SNB SARON monthly average, overnight pillar | flat beyond overnight |
+| CHF SARON | SNB SARON monthly average | flat at the fixing: the SNB's Confederation-bond cubes stopped in mid-2025 and no other free CHF curve exists |
+| JPY TONA OIS | TONA (end of month, via the SNB money-market cube) + Japan MoF daily JGB yields | TONA-OIS below JGBs: −5 bp at 1Y to −45 bp at 30Y |
 | Swaption ATM vols, skew, cap vols | **synthetic** parametric normal-vol surface | not market; shaped like one so SABR, XVA and scenarios work |
 
 The spread schedules live in one place, `backend/market_data/demo_feed.py`, and the tick that rebuilds the set (`POST /api/market-data/demo/tick`) runs from the scheduled workflow. `GET /api/market-data/demo/sources` is public and lists the providers, the assumptions and the latest date per curve. A self-hosted instance turns the tick off with `RIJEKA_DEMO_MARKET_DATA=0` and runs on its own marks or its own Bloomberg seat (`pricing/bloomberg_client.py`, tickers already mapped).
