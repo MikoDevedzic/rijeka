@@ -95,22 +95,16 @@ const NAV = [
   },
   {
     id: 'market-risk-parameters',
-    label: 'MARKET RISK PARAMS',
-    roles: ['viewer','trader','admin'],
-    sprint: '5',
+    label: 'MARKET RISK',
+    roles: ['viewer','trader','controller','management','risk','admin'],
     children: [
       {
-        id: 'mr-rates',
-        label: 'RATES',
+        id: 'mr-items',
+        label: null,
         children: [
-          { label: 'SHOCK SIZES',        path: '/configurations/market-risk/rates',         live: false, sprint: '5'  },
-        ],
-      },
-      {
-        id: 'mr-settings',
-        label: 'SETTINGS',
-        children: [
-          { label: 'VAR SETTINGS',       path: '/configurations/market-risk/var',           live: false, sprint: '5'  },
+          { label: 'LIMITS',             path: '/configurations/market-risk/limits',        live: true  },
+          { label: 'VAR SETTINGS',       path: '/configurations/market-risk/var',           live: true  },
+          { label: 'STRESS SCENARIOS',   path: '/configurations/market-risk/stress',        live: true  },
         ],
       },
     ],
@@ -156,7 +150,7 @@ const NAV = [
   {
     id: 'pnl-control',
     label: 'P&L & CONTROL',
-    roles: ['viewer','trader','controller','management','admin'],
+    roles: ['viewer','trader','controller','management','risk','admin'],
     children: [
       {
         id: 'pnl-items',

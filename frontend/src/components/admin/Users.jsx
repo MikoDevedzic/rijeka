@@ -7,6 +7,7 @@ const ROLE_META = {
   trader: { color: 'var(--accent)',   label: 'TRADER',  desc: 'Full access — AI enabled' },
   controller: { color: 'var(--blue)', label: 'CONTROLLER', desc: 'Signs the day after the trader; cannot book' },
   management: { color: 'var(--blue)', label: 'MANAGEMENT', desc: 'Sees every book in the firm; cannot book' },
+  risk:       { color: 'var(--blue)', label: 'RISK',       desc: 'Market risk manager: sets limits and VaR settings; cannot book' },
   admin:  { color: 'var(--amber)',    label: 'ADMIN',   desc: 'Admin — manage users' },
 }
 

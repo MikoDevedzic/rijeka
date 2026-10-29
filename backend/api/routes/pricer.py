@@ -543,6 +543,17 @@ def price_trade(
         raise HTTPException(status_code=422, detail="Trade has no legs")
 
     legs = [_leg_to_dict(leg) for leg in orm_legs]
+    # A leg booked without its own dates or curves takes the trade's: the ticket books legs
+    # that way, and a schedule or a discount curve must never be missing in silence.
+    for lg in legs:
+        if not lg.get("effective_date") and trade.effective_date:
+            lg["effective_date"] = str(trade.effective_date)
+        if not lg.get("maturity_date") and trade.maturity_date:
+            lg["maturity_date"] = str(trade.maturity_date)
+        if not lg.get("discount_curve_id"):
+            lg["discount_curve_id"] = trade.discount_curve_id or next(iter(c.curve_id for c in request.curves), None)
+        if not lg.get("forecast_curve_id") and str(lg.get("leg_type", "")).upper() == "FLOAT":
+            lg["forecast_curve_id"] = trade.forecast_curve_id or lg["discount_curve_id"]
 
     # Sprint 13 — PRODUCT_TAXONOMY §1.11.1: gate IR_SWAPTION on underlying with embedded options
     try:
@@ -588,6 +599,8 @@ def price_trade(
             )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+    if getattr(result, "error", None):
+        raise HTTPException(status_code=422, detail=f"Pricing error: {result.error}")
 
     greeks = None
     try:

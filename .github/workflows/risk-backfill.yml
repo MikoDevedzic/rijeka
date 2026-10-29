@@ -1,0 +1,25 @@
+name: risk-backfill
+# One-off: fetch public risk-factor history (Treasury, NY Fed, ECB, BoE, ECB FX via frankfurter,
+# Coinbase) into the template account so historical VaR has a window. Dispatch by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "Years of history to fetch"
+        required: false
+        default: "2"
+      overwrite:
+        description: "Overwrite rows the daily rebuild already wrote (true/false)"
+        required: false
+        default: "false"
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    env:
+      RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL }}
+      RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
+    steps:
+      - name: backfill
+        run: |
+          code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/risk/history/backfill?years=${{ github.event.inputs.years }}&overwrite=${{ github.event.inputs.overwrite }}" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 600)
+          echo "backfill: $code"; cat /tmp/out; echo; test "$code" = "200"

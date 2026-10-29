@@ -13,6 +13,8 @@ import BlotterShell     from './components/blotter/BlotterShell'
 import PricerPage       from './components/pricer/PricerPage'
 import PnlPage          from './components/pnl/PnlPage'
 import { BookingDefaults, PnlConventions } from './components/pnl/PnlSettings'
+import RiskPage         from './components/risk/RiskPage'
+import { LimitsPage, VarSettingsPage, StressCatalogue } from './components/risk/RiskSettings'
 import CurvesWorkspace  from './components/market-data/CurvesWorkspace'
 import OrgHierarchy     from './components/org/OrgHierarchy'
 import LegalEntities    from './components/onboarding/LegalEntities'
@@ -158,6 +160,7 @@ export default function App() {
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pricer"  element={<PricerPage />} />
             <Route path="/pnl"     element={<PnlPage />} />
+            <Route path="/risk"    element={<RiskPage />} />
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />
@@ -170,6 +173,9 @@ export default function App() {
               <Route path="org-hierarchy"      element={<OrgHierarchy />} />
               <Route path="pnl/defaults"       element={<BookingDefaults />} />
               <Route path="pnl/conventions"    element={<PnlConventions />} />
+              <Route path="market-risk/limits" element={<LimitsPage />} />
+              <Route path="market-risk/var"    element={<VarSettingsPage />} />
+              <Route path="market-risk/stress" element={<StressCatalogue />} />
               <Route path="legal-entities"     element={<LegalEntities />} />
               <Route path="counterparties"              element={<Counterparties />} />
               <Route path="market-data/swvol"            element={<SwaptionVolDetail />} />

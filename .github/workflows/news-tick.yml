@@ -34,3 +34,7 @@ jobs:
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/pnl/eod/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 280)
           echo "eod: $code $(head -c 400 /tmp/out)"
+      - name: market risk (ladder, VaR, stress, limits; stored per account)
+        run: |
+          code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/risk/daily/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 280)
+          echo "risk: $code $(head -c 400 /tmp/out)"

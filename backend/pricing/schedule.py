@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import List, Optional
 
+import re
 from dateutil.relativedelta import relativedelta
 from pricing.day_count import dcf as calc_dcf
 from pricing.calendars import apply_bdc as _cal_apply_bdc, add_business_days as _cal_add_bd
@@ -120,6 +121,11 @@ def generate_schedule(
         )]
 
     delta = _FREQ.get(freq_upper)
+    if delta is None:                       # tenor spellings from the ticket: 1M, 3M, 6M, 12M, 1Y
+        m = re.fullmatch(r"(\d+)([MY])", freq_upper)
+        if m:
+            n, unit = int(m.group(1)), m.group(2)
+            delta = relativedelta(months=n) if unit == "M" else relativedelta(years=n)
     if delta is None:
         raise ValueError(f"Unknown payment_frequency: {frequency!r}")
 

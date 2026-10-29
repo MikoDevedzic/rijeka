@@ -13,6 +13,7 @@ const NAV = [
   { label: 'HOME',           path: '/command-center' },
   { label: 'BLOTTER',        path: '/blotter' },
   { label: 'P&L',            path: '/pnl' },
+  { label: 'RISK',           path: '/risk' },
   { label: 'CONFIGURATIONS', path: '/configurations/market-data/curves' },
   { label: 'METHODOLOGY',    path: '/methodology' },
   { label: 'ROADMAP',        path: '/roadmap' },

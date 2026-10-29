@@ -250,6 +250,17 @@ def lifecycle(db: Session, user: dict) -> dict:
         arcs.append({"trade_ref": t.trade_ref, "status": t.status, "counterparty": cp.name if cp else None,
                      "product": _product(t.instrument_type, t.asset_class), "to": to,
                      "notional": float(t.notional) if t.notional else None, "ccy": t.notional_ccy})
+    # 5. Limit breaches and warnings from the last stored risk report (the daily run, or RUN NOW on the risk page).
+    try:
+        from risk.report import latest_stored
+        last = latest_stored(db, str(uid))
+        for lim in (last or {}).get("limits", []):
+            kind = "LIMIT" if lim.get("status") == "BREACH" else "LIMIT_WARN"
+            where = "book" if lim.get("scope") == "ALL" else f"{lim.get('scope', '').lower()} {lim.get('scope_name')}"
+            actions.append({"kind": kind, "title": f"{lim.get('metric')} {'breached' if kind == 'LIMIT' else 'near limit'} on {where}",
+                            "detail": f"{lim.get('utilisation_pct', 0):.0f}% of {lim.get('limit'):,.0f} · as of {last.get('date')}", "href": "/risk"})
+    except Exception as e:              # noqa: BLE001
+        log.debug("desk: limits failed: %s", e)
     chain = _chain_health()
     if chain.get("relayer", {}).get("low"):
         actions.append({"kind": "WALLET", "title": "Relayer wallet is low",
