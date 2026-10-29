@@ -37,6 +37,13 @@ def test_audit_keeps_grounded_prose_and_drops_the_rest():
     assert sum("no valid fact citation" in r for r in reasons) == 2
 
 
+def test_audit_ignores_identifier_digits_and_dates():
+    kept, dropped = bb.audit([{"text": "TRD-1 matures on 2031-11-02 and faces RIJEKA DEMO BANK AG.", "facts": ["T1"]},
+                              {"text": "Reference TRD-93205226 is not on the sheet, but the sentence has no figure.", "facts": ["T1"]}], SHEET)
+    assert len(kept) == 2 and not dropped
+    assert bb.NUMBER.findall("TRD-93205226 shows NPV -1,848,668 USD on 2031-11-02, +37.4 bp") == ["-1,848,668", "2031", "37.4"]
+
+
 def test_audit_accepts_million_rounding_but_not_a_different_figure():
     kept, dropped = bb.audit([{"text": "NPV is about -1,849,000 USD.", "facts": ["T1"]},
                               {"text": "NPV is about -1,900,000 USD.", "facts": ["T1"]}], SHEET)

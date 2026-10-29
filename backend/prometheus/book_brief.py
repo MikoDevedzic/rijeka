@@ -41,7 +41,8 @@ CLASS_TAG = {"RATES": "RATES", "FX": "FX", "CRYPTO": "CRYPTO", "CREDIT": "CREDIT
 FORBIDDEN = re.compile(
     r"\b(will|would|expect(?:s|ed|ation)?|forecast(?:s|ed)?|predict(?:s|ed|ion)?|should|recommend(?:s|ed|ation)?|"
     r"likely|unlikely|going to|outlook|bullish|bearish|buy|sell|hedge now|opportunit(?:y|ies))\b", re.I)
-NUMBER = re.compile(r"(?<![\w.])-?\d+(?:,\d{3})*(?:\.\d+)?(?!\d)")
+# A figure in prose. Not the digits of an identifier such as TRD-93205226 or a date's month and day.
+NUMBER = re.compile(r"(?<![\w.-])-?\d+(?:,\d{3})*(?:\.\d+)?(?!\d)")
 
 SYSTEM = (
     "You are Prometheus, the read-only analyst on an OTC derivatives desk. You are given a fact sheet: "
