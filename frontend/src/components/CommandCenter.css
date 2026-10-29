@@ -246,3 +246,14 @@
 .rk b { font-family:var(--mono); font-size:0.82rem; font-weight:600; color:var(--text); line-height:1.25; overflow-wrap:anywhere; }
 .rk b.pos { color:var(--accent); } .rk b.neg { color:var(--red); }
 .rk small { font-family:var(--mono); font-size:0.56rem; letter-spacing:0.08em; color:var(--text-mute); }
+
+/* meeting-dated pricing under the policy path */
+.pm { display:flex; flex-direction:column; gap:0.3rem; }
+.pm-h { display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.58rem; letter-spacing:0.14em; color:var(--text-dim); }
+.pm-row { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); }
+.pm-cell { background:var(--bg); padding:0.4rem 0.6rem; display:flex; flex-direction:column; gap:0.1rem; min-width:0; cursor:default; }
+.pm-date { font-family:var(--mono); font-size:0.6rem; letter-spacing:0.12em; color:var(--text-dim); }
+.pm-bp { font-family:var(--mono); font-size:1.05rem; font-weight:600; color:var(--text); line-height:1.1; }
+.pm-bp::after { content:'bp'; font-size:0.6rem; font-weight:500; color:var(--text-mute); margin-left:0.15rem; letter-spacing:0.08em; }
+.pm-cell.hike .pm-bp { color:var(--red); } .pm-cell.cut .pm-bp { color:var(--blue); }
+.pm-sub { font-family:var(--mono); font-size:0.6rem; letter-spacing:0.06em; color:var(--text-mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

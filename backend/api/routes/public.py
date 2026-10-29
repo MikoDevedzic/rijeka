@@ -234,10 +234,10 @@ def policy_path(ccy: str = "USD", db: Session = Depends(get_db)):
         except Exception as e:      # noqa: BLE001
             log.debug("policy path query failed: %s", e); db.rollback()
     body: dict[str, Any] = {"ccy": ccy, "bank": meta["bank"], "fixing_name": meta["fixing"], "curve_id": meta["curve"],
-                            "as_of": None, "source": None, "fixing": None, "term_structure": False, "path": [], "cumulative_bp": {}}
+                            "as_of": None, "source": None, "fixing": None, "term_structure": False, "path": [], "cumulative_bp": {}, "meetings": []}
     if row is not None:
         try:
-            body.update(pp.implied_path(list(row.quotes or []), row.valuation_date, meta["basis"]))
+            body.update(pp.implied_path(list(row.quotes or []), row.valuation_date, meta["basis"], ccy=ccy))
         except Exception as e:      # noqa: BLE001 — a curve that will not bootstrap shows the fixing only
             log.warning("policy path %s failed: %s", ccy, e)
         body.update(as_of=row.valuation_date.isoformat(), source=row.source)

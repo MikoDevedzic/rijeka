@@ -50,11 +50,36 @@ export default function PolicyPath({ onCurves }) {
         {CCYS.map(c => <button key={c} role="tab" aria-selected={c === ccy} className={`dh-ccy${c === ccy ? ' on' : ''}`} onClick={() => setCcy(c)}>{c}</button>)}
       </div>
       <PathChart d={d} loading={loading && !d} />
+      <Meetings d={d} />
       <div className="dh-caption">
         {d?.as_of ? <>From the public-source demo curve of {fmtD(d.as_of)} · indicative, not a forecast</> : 'Indicative, from public-source demo curves'}
         {d?.dots?.as_of && <> · Fed dots: SEP medians of {fmtD(d.dots.as_of)}</>}
       </div>
     </section>
+  )
+}
+
+// What the curve prices for the next decisions: the forward overnight rate between
+// consecutive meetings, the step against the window before, and the running total.
+const fmtMeet = iso => new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { day: '2-digit', month: 'short' }).toUpperCase()
+const bp = v => v == null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(0)}`
+const tone = v => v > 4 ? 'hike' : v < -4 ? 'cut' : ''
+function Meetings({ d }) {
+  const m = d?.meetings || []
+  if (!m.length) return null
+  return (
+    <div className="pm" aria-label="Meeting-dated pricing">
+      <div className="pm-h"><span>NEXT DECISIONS · BP PRICED</span><span>{d.bank?.toUpperCase()} · STEP 25BP</span></div>
+      <div className="pm-row">
+        {m.map(x => (
+          <div key={x.date} className={`pm-cell ${tone(x.move_bp)}`} title={`${x.date}: ${x.implied_rate.toFixed(3)}% implied after the decision · ${x.steps > 0 ? '+' : ''}${x.steps} of a 25bp step · ${bp(x.cumulative_bp)}bp cumulative`}>
+            <span className="pm-date">{fmtMeet(x.date)}</span>
+            <b className="pm-bp">{bp(x.move_bp)}</b>
+            <span className="pm-sub">{x.implied_rate.toFixed(2)}% · Σ {bp(x.cumulative_bp)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
