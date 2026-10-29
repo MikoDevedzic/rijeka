@@ -38,6 +38,31 @@
       ],
       "cwd": "frontend",
       "port": 5173
+    },
+    {
+      "name": "landing",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8787",
+        "--directory",
+        "netlify_drop"
+      ],
+      "port": 8787
+    },
+    {
+      "name": "frontend-dist",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "cwd": "frontend",
+      "port": 4173
     }
   ]
 }
