@@ -33,8 +33,20 @@ RATE_CURVES = ("USD_SOFR", "EUR_ESTR", "GBP_SONIA")
 SOURCE = "DEMO · history backfill (public sources)"
 
 
-def _get(url: str) -> str:
-    return feed._get(url)
+def _get(url: str, attempts: int = 3) -> str:
+    """The public sites are flaky from a cloud address (the BoE in particular): retry with a pause."""
+    import time
+    last: Optional[Exception] = None
+    for i in range(attempts):
+        try:
+            body = feed._get(url)
+            if body and body.strip():
+                return body
+            last = ValueError("empty body")
+        except Exception as e:          # noqa: BLE001
+            last = e
+        time.sleep(2.0 * (i + 1))
+    raise RuntimeError(f"{url[:80]}: {last}")
 
 
 # ── fetchers over a date range ───────────────────────────────────────────────
@@ -85,7 +97,7 @@ def ecb_aaa_history(start: date, end: date) -> dict[date, dict[float, float]]:
 
 
 def boe_history(start: date, end: date) -> dict[date, dict[str, float]]:
-    text_ = _get(feed.BOE_IADB_URL.format(dfrom=start.strftime("%d/%b/%Y")))
+    text_ = _get(feed.BOE_IADB_URL.format(dfrom=start.strftime("%d/%b/%Y")), attempts=5)
     out: dict[date, dict[str, float]] = {}
     for r in csv.reader(io.StringIO(text_)):
         if len(r) >= 5 and re.match(r"\d{2} \w{3} \d{4}", r[0]):
