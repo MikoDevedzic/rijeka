@@ -165,8 +165,11 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             ['IMPLIED CARRY', `${fmt(quote.implied_carry * 100)}%`, 'annualised'],
             [`DF ${quote.quote_currency} / ${quote.base_currency}`, `${fmt(quote.df_quote, 5)} / ${fmt(quote.df_base, 5)}`, `T = ${fmt(quote.t, 4)}y · ${quote.base_discounting}`],
             [`ZEROS ${quote.quote_currency} / ${quote.base_currency}`, `${fmt(quote.quote_rate * 100)}% / ${fmt(quote.base_rate * 100)}%`, 'continuous to T'],
-            ['DELTA / +1% SPOT', fmt(quote.delta_quote_per_pct), `≈ ${fmt(quote.delta_base_units, crypto ? 4 : 0)} ${quote.base_currency}`],
-            [`RHO ${quote.base_currency} / ${quote.quote_currency} (+1BP)`, `${fmt(quote.rho_base_per_bp)} / ${fmt(quote.rho_quote_per_bp)}`, ''],
+            [`${crypto ? quote.base_currency : 'FX'}01 · +1% SPOT`, fmt(quote.spot01 ?? quote.delta_quote_per_pct), `≈ ${fmt(quote.delta_base_units, crypto ? 4 : 0)} ${quote.base_currency} spot`, (quote.spot01 ?? quote.delta_quote_per_pct) >= 0 ? 'var(--green)' : 'var(--red)'],
+            ['IR01 · +1BP ALL CURVES', fmt(quote.ir01 ?? (quote.rho_base_per_bp + quote.rho_quote_per_bp)), `${quote.quote_currency} per bp`],
+            ['IR01 DISC · +1BP ' + quote.quote_currency, fmt(quote.ir01_disc ?? quote.rho_quote_per_bp), 'settlement curve'],
+            [crypto ? 'FUND01 · +1BP FUNDING' : `IR01 BASE · +1BP ${quote.base_currency}`, fmt(quote.ir01_base ?? quote.rho_base_per_bp), crypto ? `${quote.base_currency} funding` : `${quote.base_currency} curve`],
+            ['THETA · 1 DAY', fmt(quote.theta), `${quote.quote_currency} carry`, quote.theta >= 0 ? 'var(--green)' : 'var(--red)'],
             ['FORWARD SOURCE', quote.forward_mode === 'MARKET' && quote.market_points != null ? 'QUOTED POINTS' : crypto ? 'IMPLIED FROM FUNDING' : 'IMPLIED FROM YIELDS', quote.forward_source],
             ['PARITY FORWARD · BASIS', fmt(quote.implied_forward, rateDp(pair)), quote.basis_points != null ? `basis ${fmt(quote.basis_points, crypto ? 2 : 1)} ${crypto ? 'USD' : 'pts'} vs quoted` : 'no forward curve loaded for this pair'],
           ].map(([k, v, s, c], i) => (

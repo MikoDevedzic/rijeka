@@ -190,6 +190,21 @@ The desk's quant, risk and margin analyst. Reads everything, changes nothing. Li
 
 ---
 
+## Risk taxonomy
+
+One set of names on every ticket, SIMM-aligned. Rate factors are per basis point; spot factors are per 1 % (the SIMM delta convention for FX and equity).
+
+| Factor | Rates (IRS, swaption, cap/floor) | FX forward / NDF | Crypto forward |
+|--------|-----------------------------------|------------------|----------------|
+| NPV | settlement currency | quote currency | USD |
+| IR01 | +1 bp on every rate curve | = IR01 DISC + IR01 BASE | = IR01 DISC + FUND01 |
+| IR01 DISC | +1 bp on the discount curve only | +1 bp on the quote (settlement) curve | +1 bp on the USD curve |
+| IR01 BASE / FUND01 | — | +1 bp on the base-currency curve | +1 bp on the asset funding rate |
+| FX01 / BTC01 | — | PV for +1 % spot | PV for +1 % spot |
+| THETA | one day's carry | one day's carry | one day's carry |
+| GAMMA | dollar convexity to ±1 bp | — (a forward is linear in spot) | — |
+| XVA | HW1F Monte Carlo exposure → waterfall | lognormal forward exposure → the same waterfall | the same, with an assumed IM weight (outside SIMM) |
+
 ## Market data
 
 The hosted demo prices on **demo market data rebuilt daily from public sources**, never on terminal data (Bloomberg data is licensed to a seat and cannot be redistributed). Every snapshot is stamped with its provenance and the app says so on the home page.

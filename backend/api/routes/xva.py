@@ -688,3 +688,68 @@ def simulate(
             "margined":    csa.sa_ccr_margined,
         },
     }
+
+
+# ── FX / crypto forwards: same waterfall, lognormal forward exposure ─────────────
+
+class CurrencyXvaRequest(BaseModel):
+    pair: str
+    base_notional: float = 1_000_000.0
+    settlement_date: Optional[date] = None
+    forward_rate: Optional[float] = None       # contract K; None = struck at the fair forward
+    direction: str = "BUY"                     # of the base currency
+    valuation_date: Optional[date] = None
+    vol_pct: Optional[float] = None            # flat annualised; None = demo default for the pair
+    paths: int = 2000
+    cp_cds_bp: float = 85.0
+    own_cds_bp: float = 42.0
+    ftp_bp: float = 55.0
+    fba_ratio: float = 0.55
+    lgd: float = 0.40
+    own_lgd: float = 0.40
+    hurdle_rate: float = 0.12
+    capital_model: str = "sa_ccr"
+    counterparty_rw: float = 1.0
+    wwr_multiplier: float = 1.0
+    cp_cds_curve: Optional[list] = None
+    own_cds_curve: Optional[list] = None
+    ftp_curve: Optional[list] = None
+    csa: Optional[dict] = None
+
+
+@router.post("/currency")
+def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """XVA for an FX or crypto forward through the rates waterfall (pricing/fx_xva.py)."""
+    from api.routes.currencies import _price, split_pair
+    from pricing import fx_xva
+    pair = body.pair.upper()
+    split_pair(pair)
+    val_date = body.valuation_date or date.today()
+    q = _price(db, user["sub"], pair, shape="FORWARD", base_notional=body.base_notional, settlement=body.settlement_date,
+               val_date=val_date, K=body.forward_rate, direction=body.direction, spot_override=None, base_rate_pct=None)
+    try:
+        csa = CSA.from_request(body.csa)
+    except Exception as e:      # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"csa: {e}")
+    inp = fx_xva.ForwardXvaInput(pair=pair, base_notional=body.base_notional, forward=float(q["forward"]),
+                                 strike=float(q["forward_rate"]), t_years=float(q["t"]), df_quote_t=float(q["df_quote"]),
+                                 quote_zero=float(q["quote_rate"]), direction=body.direction, vol_pct=body.vol_pct,
+                                 spot01=float(q.get("spot01", q.get("delta_quote_per_pct", 0.0))))
+    wf, meta = fx_xva.forward_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
+                                  ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd,
+                                  hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
+                                  counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
+                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve)
+    npv = float(q["npv"])
+    return {
+        "ee": [round(v, 2) for v in wf.ee], "ene": [round(v, 2) for v in wf.ene], "pfe": [round(v, 2) for v in wf.pfe],
+        "ee_gross": [round(v, 2) for v in wf.ee_gross], "ene_gross": [round(v, 2) for v in wf.ene_gross],
+        "collateral": [round(v, 2) for v in wf.collateral_mean], "im_profile": [round(v, 2) for v in wf.im_profile],
+        "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
+        "quote_currency": q["quote_currency"], "pair": pair,
+        "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fva": round(wf.fva, 2),
+                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2),
+                "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
+                "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model")},
+    }

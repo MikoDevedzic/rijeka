@@ -52,6 +52,7 @@ import './products/rates'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { getSessionMaybe } from '../../lib/session'
 import FxCryptoPanel, { SHAPE_OF } from './FxCryptoPanel'
+import FxXvaPanel from './FxXvaPanel'
 // import './products/fx'
 // import './products/credit'
 // import './products/equity'
@@ -117,10 +118,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     footer: {
       structureLabel: () => (SHAPE_OF[curInst] || 'FORWARD'),
       metrics: (r) => r ? [
-        { label: 'FAIR ' + (SHAPE_OF[curInst] === 'SPOT' ? 'SPOT' : 'FORWARD'), value: Number(r.forward).toLocaleString(undefined, { maximumFractionDigits: 5 }) },
-        { label: 'NPV ' + r.quote_currency, value: Number(r.npv).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
-        { label: 'DELTA / 1%', value: Number(r.delta_quote_per_pct).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
-        { label: 'CARRY', value: (r.implied_carry * 100).toFixed(2) + '%' },
+        { label: 'NET NPV ' + r.quote_currency, value: Number(r.npv).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
+        { label: (assetClass === 'CRYPTO' ? r.base_currency : 'FX') + '01', value: Number(r.spot01 ?? r.delta_quote_per_pct).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: (r.spot01 ?? r.delta_quote_per_pct) >= 0 ? 'pos' : 'neg' },
+        { label: 'IR01', value: Number(r.ir01 ?? (r.rho_base_per_bp + r.rho_quote_per_bp)).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+        { label: 'IR01 DISC', value: Number(r.ir01_disc ?? r.rho_quote_per_bp).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+        { label: 'THETA', value: Number(r.theta ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: (r.theta ?? 0) >= 0 ? 'pos' : 'neg' },
       ] : [],
     },
   }
@@ -723,6 +725,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             direction={direction}
             setProductState={setProductState}
           />
+        </div>
+      )}
+
+      {tabsVisited['XVA'] && isCurrency && (
+        <div style={{ display: activeTab === 'XVA' ? 'block' : 'none' }}>
+          <FxXvaPanel quote={fxQuote} />
         </div>
       )}
 

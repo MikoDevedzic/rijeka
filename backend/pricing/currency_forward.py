@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from pricing.curve import Curve
@@ -56,6 +56,12 @@ class CurrencyForwardResult:
     rho_base_per_bp: float          # dNPV for +1 bp on the base curve
     rho_quote_per_bp: float         # dNPV for +1 bp on the quote curve
     error: Optional[str] = None
+    # One risk taxonomy across products (the swap carries NPV, IR01, IR01_DISC, THETA):
+    ir01: float = 0.0               # +1 bp on every rate curve = ir01_disc + ir01_base
+    ir01_disc: float = 0.0          # +1 bp on the discount (quote / settlement) curve only
+    ir01_base: float = 0.0          # +1 bp on the base-currency curve (crypto: the funding rate, FUND01)
+    spot01: float = 0.0             # dNPV for +1 % spot: FX01 for a pair, BTC01 etc. for an asset (SIMM delta convention)
+    theta: float = 0.0              # one day's carry: NPV one day later, same spot and curves
 
 
 def year_fraction(valuation_date: date, settlement_date: date) -> float:
@@ -109,7 +115,19 @@ def price_currency_forward(
     npv_b = sign * base_notional * (F * bump - K) * df_q          # base curve up: DF_b down, F down
     npv_q = sign * base_notional * (F / bump - K) * df_q * bump   # quote curve up: DF_q down, F up
 
+    # One day later, same spot and the same curves: discount factors unwind by one day.
+    d1 = valuation_date + timedelta(days=1)
+    if settlement_date > d1:
+        t1 = year_fraction(d1, settlement_date)
+        df_q1 = df_q / max(float(quote_curve.df(d1)), 1e-12)
+        df_b1 = (df_b / max(float(base_curve.df(d1)), 1e-12)) if base_curve is not None else math.exp(-float(base_rate) * t1)
+        theta = sign * base_notional * (spot * df_b1 / df_q1 - K) * df_q1 - npv
+    else:
+        theta = -npv
+
     return CurrencyForwardResult(
+        ir01=(npv_b - npv) + (npv_q - npv), ir01_disc=npv_q - npv, ir01_base=npv_b - npv,
+        spot01=sign * base_notional * df_q * F * 0.01, theta=theta,
         base_currency=str(base_currency).upper(), quote_currency=str(quote_currency).upper(), direction=d,
         base_notional=float(base_notional), quote_notional=float(base_notional) * K,
         spot=float(spot), forward=F, forward_rate=K, forward_points=(F - spot) / pip if pip else F - spot,
