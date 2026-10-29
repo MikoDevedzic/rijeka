@@ -190,6 +190,22 @@ Contextual chat over your book, AI-powered PnL explain, hedging recommendations,
 
 ---
 
+## Market data
+
+The hosted demo prices on **demo market data rebuilt daily from public sources**, never on terminal data (Bloomberg data is licensed to a seat and cannot be redistributed). Every snapshot is stamped with its provenance and the app says so on the home page.
+
+| Curve | Built from | Indicative assumption |
+|-------|-----------|------------------------|
+| USD SOFR OIS | NY Fed SOFR fixing + US Treasury daily par yield curve | SOFR-OIS below Treasuries: −12 bp at 1M to −70 bp at 30Y |
+| EUR €STR OIS | ECB €STR fixing + ECB euro-area AAA government par curve | swaps above AAA: +10 bp at 3M to +35 bp at 20Y+ |
+| GBP SONIA OIS | Bank of England SONIA fixing + gilt par yields (5Y, 10Y, 20Y) | SONIA-OIS below gilts: −15 bp at 1Y to −75 bp at 30Y |
+| CHF SARON | SNB SARON monthly average, overnight pillar | flat beyond overnight |
+| Swaption ATM vols, skew, cap vols | **synthetic** parametric normal-vol surface | not market; shaped like one so SABR, XVA and scenarios work |
+
+The spread schedules live in one place, `backend/market_data/demo_feed.py`, and the tick that rebuilds the set (`POST /api/market-data/demo/tick`) runs from the scheduled workflow. `GET /api/market-data/demo/sources` is public and lists the providers, the assumptions and the latest date per curve. A self-hosted instance turns the tick off with `RIJEKA_DEMO_MARKET_DATA=0` and runs on its own marks or its own Bloomberg seat (`pricing/bloomberg_client.py`, tickers already mapped).
+
+---
+
 ## Documentation
 
 - `docs/Rijeka_Methodology_v1.1.pdf` — curve construction, swap pricing, XVA waterfall

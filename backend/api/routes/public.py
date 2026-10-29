@@ -46,7 +46,7 @@ def _snapshot(db: Session, uid, curve_id: str) -> Optional[dict]:
         return None
     try:
         row = db.execute(text(
-            "SELECT curve_id, valuation_date, quotes FROM market_data_snapshots "
+            "SELECT curve_id, valuation_date, quotes, source FROM market_data_snapshots "
             "WHERE user_id = :u AND curve_id = :c AND valuation_date <= current_date "
             f"AND {_LICENSED_SOURCE_SQL} ORDER BY valuation_date DESC LIMIT 1"), {"u": uid, "c": curve_id}).first()
     except Exception as e:
@@ -57,7 +57,8 @@ def _snapshot(db: Session, uid, curve_id: str) -> Optional[dict]:
         return None
     quotes = [{"tenor": q.get("tenor"), "rate": q.get("rate")}
               for q in (row.quotes or []) if q.get("enabled", True) and q.get("rate") is not None]
-    return {"curve_id": row.curve_id, "valuation_date": row.valuation_date.isoformat(), "quotes": quotes}
+    return {"curve_id": row.curve_id, "valuation_date": row.valuation_date.isoformat(), "quotes": quotes,
+            "source": row.source}
 
 
 def _headlines(db: Session, n: int = 8) -> list[dict]:
@@ -102,7 +103,17 @@ def build(db: Session) -> dict:
         "headlines": _headlines(db),
         "chain": _chain(),
         "demo": bool(os.getenv("RIJEKA_DEMO_PROVISION")),
+        # Where the demo's numbers come from (public sources, synthetic vols): see market_data/demo_feed.py.
+        "market_data": {"kind": "demo", "providers": [x["provider"] for x in _demo_sources()]},
     }
+
+
+def _demo_sources() -> list[dict]:
+    try:
+        from market_data.demo_feed import SOURCES
+        return SOURCES
+    except Exception:       # noqa: BLE001
+        return []
 
 
 _refreshing = threading.Lock()
