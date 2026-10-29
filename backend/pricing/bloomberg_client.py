@@ -103,7 +103,7 @@ CURVE_TICKERS: dict = {
         "50Y": "BPSWSC50 BGN Curncy",
     },
 
-    "JPY_TONA": {
+    "JPY_TONAR": {
         "ON":  "TONAR Index",
         "1M":  "JYSOC1 BGN Curncy",
         "3M":  "JYSOC3 BGN Curncy",
