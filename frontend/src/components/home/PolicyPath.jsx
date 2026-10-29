@@ -23,18 +23,17 @@ const monthsBetween = (a, b) => (b.getFullYear() - a.getFullYear()) * 12 + (b.ge
 
 export default function PolicyPath({ onCurves }) {
   const [ccy, setCcy] = useState('USD')
-  const [data, setData] = useState({})          // ccy -> body
-  const [loading, setLoading] = useState(false)
+  const [data, setData] = useState({})          // ccy -> body; absent while loading
   useEffect(() => {
     if (data[ccy]) return
-    let alive = true; setLoading(true)
+    let alive = true
     fetch(`${API}/api/public/policy-path?ccy=${ccy}`).then(r => r.json())
       .then(b => alive && setData(d => ({ ...d, [ccy]: b })))
       .catch(() => alive && setData(d => ({ ...d, [ccy]: { ccy, path: [], error: true } })))
-      .finally(() => alive && setLoading(false))
     return () => { alive = false }
   }, [ccy])   // eslint-disable-line react-hooks/exhaustive-deps
   const d = data[ccy]
+  const loading = !d
   const cum = d?.cumulative_bp || {}
   const c12 = cum['12M']
   return (
