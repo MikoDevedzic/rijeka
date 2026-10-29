@@ -30,3 +30,7 @@ jobs:
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/market-data/demo/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 240)
           cat /tmp/out; echo; test "$code" = "200"
+      - name: end of day P&L (marks and attributed rows, every account)
+        run: |
+          code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/pnl/eod/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 280)
+          echo "eod: $code $(head -c 400 /tmp/out)"

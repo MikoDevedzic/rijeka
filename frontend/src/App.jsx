@@ -11,6 +11,7 @@ import AppBar           from './components/layout/AppBar'
 import CfgNav           from './components/layout/CfgNav'
 import BlotterShell     from './components/blotter/BlotterShell'
 import PricerPage       from './components/pricer/PricerPage'
+import PnlPage          from './components/pnl/PnlPage'
 import CurvesWorkspace  from './components/market-data/CurvesWorkspace'
 import OrgHierarchy     from './components/org/OrgHierarchy'
 import LegalEntities    from './components/onboarding/LegalEntities'
@@ -155,6 +156,7 @@ export default function App() {
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pricer"  element={<PricerPage />} />
+            <Route path="/pnl"     element={<PnlPage />} />
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />

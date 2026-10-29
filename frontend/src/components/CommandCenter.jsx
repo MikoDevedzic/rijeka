@@ -3,6 +3,7 @@ import BookBrief from './home/BookBrief'
 import WorldClock from './home/WorldClock'
 import PolicyPath from './home/PolicyPath'
 import Lifecycle from './home/Lifecycle'
+import PnlTile from './home/PnlTile'
 import { getSessionMaybe } from '../lib/session'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
@@ -11,6 +12,7 @@ import './CommandCenter.css'
 const NAV = [
   { label: 'HOME',           path: '/command-center' },
   { label: 'BLOTTER',        path: '/blotter' },
+  { label: 'P&L',            path: '/pnl' },
   { label: 'CONFIGURATIONS', path: '/configurations/market-data/curves' },
   { label: 'METHODOLOGY',    path: '/methodology' },
   { label: 'ROADMAP',        path: '/roadmap' },
@@ -193,6 +195,7 @@ function DeskHome({ demo, navigate }) {
             <div className="dh-kpi"><span className="dh-kpi-l">GROSS NOTIONAL</span><span className="dh-kpi-v small">{d.loading ? '…' : Object.entries(notional).map(([c, n]) => `${c} ${fmtM(n)}`).join(' · ') || '—'}</span></div>
           </div>
           {trades.length > 0 && <RiskStrip sheet={sheet} />}
+          {trades.length > 0 && <PnlTile />}
           <Ladder trades={trades} />
           <ul className="dh-list">
             {trades.slice(0, 4).map(t => (

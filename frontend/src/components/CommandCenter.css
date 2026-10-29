@@ -257,3 +257,16 @@
 .pm-bp::after { content:'bp'; font-size:0.6rem; font-weight:500; color:var(--text-mute); margin-left:0.15rem; letter-spacing:0.08em; }
 .pm-cell.hike .pm-bp { color:var(--red); } .pm-cell.cut .pm-bp { color:var(--blue); }
 .pm-sub { font-family:var(--mono); font-size:0.6rem; letter-spacing:0.06em; color:var(--text-mute); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* P&L tile on the book card */
+.pt { border:1px solid var(--border); background:var(--bg); padding:0.5rem 0.7rem 0.55rem; display:flex; flex-direction:column; gap:0.4rem; cursor:pointer; }
+.pt:hover { border-color:var(--border-hi); }
+.pt-h { display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:0.6rem; letter-spacing:0.14em; color:var(--text-dim); }
+.pt-h i { margin-right:0.5rem; font-style:normal; }
+.pt-cols { display:grid; grid-template-columns:repeat(3,1fr); gap:0.6rem; }
+.pt-col { display:flex; flex-direction:column; gap:0.1rem; min-width:0; }
+.pt-big { font-family:var(--mono); font-size:1.05rem; font-weight:600; color:var(--text); line-height:1.15; }
+.pt-col small { display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.58rem; letter-spacing:0.08em; color:var(--text-mute); }
+.pt-col small em { font-style:normal; color:var(--text-dim); }
+.pt-col .pos, .pt-col em.pos { color:var(--accent); } .pt-col .neg, .pt-col em.neg { color:var(--red); }
+.pt-note { font-family:var(--mono); font-size:0.58rem; letter-spacing:0.08em; color:var(--text-mute); }

@@ -194,6 +194,14 @@ The desk's quant, risk and margin analyst. Reads everything, changes nothing. Li
 
 ---
 
+## P&L and attribution
+
+A `P&L` tab next to the blotter, and a tile on the desk home: day, month to date and year to date, each split into **market** and **trading** P&L, the attribution waterfall, the roll-up desk → book → trade with every trade's explain rows, and sign-off.
+
+Attribution is **sequential full revaluation**, never a sensitivity estimate. Starting from yesterday's mark on yesterday's market, the valuation is moved one thing at a time in a fixed, stated order and each step is one row: carry (the date roll on the prior market), cash settled, each curve by tenor bucket (0-1Y, 1-5Y, 5-10Y, 10Y+; discount, forecast, then base), spot, quoted forward points, residual. Rows sum to the total by construction. New trades carry their close mark; unwinds remove the prior mark plus any fee. Marks are the production pricers on the saved market of each date, so the P&L page and the ticket agree to the cent.
+
+End of day (`POST /api/pnl/eod`, and daily by cron for every account) stores one mark per trade and one attributed row per trade per date, so MTD and YTD are sums of what was signed. Sign-off is trader first, then P&L controller or desk CFO (the `controller`, `cfo`, `admin` role, or a firm admin); a FINAL day is visible to management with the comments (`GET /api/pnl/firm`, the MANAGEMENT view). The history tables are `docs/migrations/2026-10-30_pnl.sql`; until applied, the report is computed live and says so.
+
 ## Risk taxonomy
 
 One set of names on every ticket, SIMM-aligned. Rate factors are per basis point; spot factors are per 1 % (the SIMM delta convention for FX and equity).
