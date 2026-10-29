@@ -46,6 +46,7 @@
 .dh-step-n.done { border-color:var(--accent); color:var(--accent); }
 
 .dh-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:1rem; padding:1rem 0 0.25rem; flex:1; min-height:0; }
+.dh-newscard { min-height:0; }
 .dh-card { background:rgba(12,12,12,0.82); border:1px solid var(--border); border-radius:3px; padding:0.9rem 1rem 1rem; display:flex; flex-direction:column; gap:0.8rem; min-height:0; backdrop-filter:blur(4px); }
 .dh-card header { display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:0.68rem; letter-spacing:0.16em; color:var(--text-dim); }
 .dh-link { background:none; border:none; padding:0; color:var(--accent); font-family:var(--mono); font-size:0.66rem; letter-spacing:0.12em; cursor:pointer; text-decoration:none; }
@@ -74,7 +75,7 @@
 .dh-text a:hover { text-decoration:underline; }
 .dh-text em { color:var(--amber); font-style:normal; }
 
-.dh-news { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; overflow:hidden; }
+.dh-news { list-style:none; margin:0; padding:0 0.4rem 0 0; display:flex; flex-direction:column; overflow:auto; flex:1 1 0; height:0; min-height:0; scrollbar-width:thin; scrollbar-color:var(--border-hi) transparent; }
 .dh-news li { display:flex; flex-direction:column; gap:0.15rem; padding:0.45rem 0; border-bottom:1px solid var(--border); }
 .dh-news a { color:var(--text); font-size:0.86rem; line-height:1.35; text-decoration:none; }
 .dh-news a:hover { color:var(--accent); }
@@ -85,7 +86,7 @@
 .dh-modules button:hover { color:var(--text); border-color:var(--border-hi); }
 .dh-modules-note { margin-left:auto; font-family:var(--mono); font-size:0.64rem; letter-spacing:0.1em; color:var(--text-dim); }
 
-@media (max-width:1100px) { .dh-grid { grid-template-columns:1fr 1fr; } }
+@media (max-width:1100px) { .dh-grid { grid-template-columns:1fr 1fr; } .dh-news { height:auto; flex:none; max-height:70vh; } }
 @media (max-width:720px)  { .dh-grid { grid-template-columns:1fr; } .dh-modules-note { display:none; } }
 
 /* ── hero: curve + surface ── */
@@ -96,7 +97,7 @@
 .dh-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:currentColor; margin-right:0.45rem; animation:dhPulse 2.4s ease-in-out infinite; }
 @keyframes dhPulse { 0%,100% { opacity:0.35 } 50% { opacity:1 } }
 
-.dh-plot { position:relative; width:100%; height:300px; }
+.dh-plot { position:relative; width:100%; flex:1 1 auto; min-height:262px; }
 .dh-plot-empty { display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:0.86rem; text-align:center; padding:0 2rem; }
 .dh-grid-line { stroke:var(--border); stroke-width:1; }
 .dh-ax { fill:var(--text-dim); font-family:var(--mono); font-size:10px; letter-spacing:0.06em; }
@@ -212,7 +213,7 @@
 
 /* lifecycle: the desk globe and what needs doing */
 .dh-life { gap:0.6rem; }
-.dg-wrap { position:relative; width:100%; margin:-0.2rem 0 0; cursor:grab; }
+.dg-wrap { position:relative; width:100%; margin:-0.2rem 0 0; cursor:grab; flex:1 1 auto; min-height:320px; }
 .dg-wrap:active { cursor:grabbing; }
 .dg-canvas { display:block; width:100%; }
 .lf-beat { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); display:inline-block; margin-right:0.4rem; animation:lf-beat 1.8s ease-in-out infinite; }
@@ -238,3 +239,10 @@
 .lf-chip.ok { color:var(--accent); border-color:var(--accent-dim); } .lf-chip.amber { color:var(--amber); border-color:var(--amber-dim); }
 .lf-chip.blue { color:var(--blue); border-color:var(--blue); } .lf-chip.red { color:var(--red); border-color:var(--red); }
 .lf-empty { font-size:0.82rem; color:var(--text-dim); line-height:1.5; } .lf-empty.ok { color:var(--text-dim); }
+
+/* risk strip on the book, from the brief's fact sheet */
+.rk { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); }
+.rk > div { background:var(--bg); padding:0.45rem 0.6rem; display:flex; flex-direction:column; gap:0.15rem; min-width:0; }
+.rk b { font-family:var(--mono); font-size:0.82rem; font-weight:600; color:var(--text); line-height:1.25; overflow-wrap:anywhere; }
+.rk b.pos { color:var(--accent); } .rk b.neg { color:var(--red); }
+.rk small { font-family:var(--mono); font-size:0.56rem; letter-spacing:0.08em; color:var(--text-mute); }

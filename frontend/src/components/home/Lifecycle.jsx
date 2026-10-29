@@ -56,7 +56,7 @@ export default function Lifecycle({ demo, empty, reducedMotion }) {
         </span>
       </header>
 
-      <DeskGlobe arcs={d?.arcs || []} home={d?.home} anchors={anchors} chain={chain} reducedMotion={reducedMotion} />
+      <DeskGlobe arcs={d?.arcs || []} home={d?.home} anchors={anchors} chain={chain} network={d?.network} reducedMotion={reducedMotion} />
 
       <div className="lf-health">
         <div><span className="dh-kpi-l">BLOCK</span><b className={chain?.reachable === false ? 'bad' : ''}>{chain?.latest_block ? `#${Number(chain.latest_block).toLocaleString()}` : chain?.anchored ? 'NO NODE' : '—'}</b></div>

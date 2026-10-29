@@ -113,6 +113,7 @@ function DeskHome({ demo, navigate }) {
   const uid = session?.user?.id
   const [d, setD] = useState({ loading: true })
   const [steps, setSteps] = useState({})            // key -> { ok, detail }
+  const [sheet, setSheet] = useState(null)           // the brief's fact sheet: book risk on today's curve
   const [booting, setBooting] = useState(() => {
     if (reducedMotion()) return false
     try { return sessionStorage.getItem(BOOT_KEY) !== uid } catch { return true }
@@ -191,6 +192,7 @@ function DeskHome({ demo, navigate }) {
             <Kpi label="CONFIRMED" value={confirmed} tone={confirmed ? 'accent' : ''} loading={d.loading} />
             <div className="dh-kpi"><span className="dh-kpi-l">GROSS NOTIONAL</span><span className="dh-kpi-v small">{d.loading ? '…' : Object.entries(notional).map(([c, n]) => `${c} ${fmtM(n)}`).join(' · ') || '—'}</span></div>
           </div>
+          {trades.length > 0 && <RiskStrip sheet={sheet} />}
           <Ladder trades={trades} />
           <ul className="dh-list">
             {trades.slice(0, 4).map(t => (
@@ -202,12 +204,12 @@ function DeskHome({ demo, navigate }) {
             ))}
             {!d.loading && !trades.length && <li className="dh-empty">No trades yet. Book one from the blotter; pricing, cashflows, XVA and confirmation all follow from it.</li>}
           </ul>
-          {trades.length > 0 && <BookBrief />}
+          {trades.length > 0 && <BookBrief onSheet={setSheet} />}
         </section>
 
         <Lifecycle demo={demo} empty={<ChainDiagram />} reducedMotion={reducedMotion()} />
 
-        <section className="dh-card">
+        <section className="dh-card dh-newscard">
           <header><span>MARKET NEWS</span><button className="dh-link" onClick={() => navigate('/messenger')}>OPEN ROOM →</button></header>
           <ul className="dh-news">
             {(d.news || []).map(n => (
@@ -226,6 +228,23 @@ function DeskHome({ demo, navigate }) {
       </div>
 
       <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · RATES ONLY IN PHASE 1 · <a href="/terms" target="_blank" rel="noopener noreferrer">TERMS</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">PRIVACY</a> · miko@rijeka.app</div>
+    </div>
+  )
+}
+
+// The desk's numbers: book NPV, IR01, FX01/BTC01 and theta, summed by the pricers on the
+// brief's fact sheet (backend/prometheus/book_brief.py). Nothing is computed here.
+function RiskStrip({ sheet }) {
+  const t = sheet?.totals
+  const money = (o) => { const e = Object.entries(o || {}); return e.length ? e.map(([c, v]) => `${c} ${fmtN(v)}`).join(' · ') : '—' }
+  const sign = (o) => { const vs = Object.values(o || {}); return !vs.length ? '' : vs.every(v => v >= 0) ? 'pos' : vs.every(v => v <= 0) ? 'neg' : '' }
+  const asOf = sheet?.valuation_date ? fmtD(sheet.valuation_date) : null
+  return (
+    <div className="rk" aria-label="Book risk">
+      <div><span className="dh-kpi-l">BOOK NPV</span><b className={sign(t?.npv)}>{t ? money(t.npv) : '…'}</b><small>{asOf ? `ON ${asOf.toUpperCase()}` : 'PRICING'}</small></div>
+      <div><span className="dh-kpi-l">IR01</span><b>{t ? (t.ir01 != null ? fmtN(t.ir01) : '—') : '…'}</b><small>PER BP · ALL CURVES</small></div>
+      <div><span className="dh-kpi-l">FX01 · BTC01</span><b>{t ? money(t.spot01) : '…'}</b><small>PV FOR +1% SPOT</small></div>
+      <div><span className="dh-kpi-l">THETA</span><b className={sign(t?.theta)}>{t ? money(t.theta) : '…'}</b><small>ONE DAY'S CARRY</small></div>
     </div>
   )
 }

@@ -8,13 +8,13 @@ const CCYS = ['USD', 'EUR', 'GBP', 'CHF', 'JPY']
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
 function useSize(ref) {
-  const [w, setW] = useState(0)
+  const [s, setS] = useState({ w: 0, h: 0 })
   useEffect(() => {
     if (!ref.current) return
-    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width))
+    const ro = new ResizeObserver(([e]) => setS({ w: e.contentRect.width, h: e.contentRect.height }))
     ro.observe(ref.current); return () => ro.disconnect()
   }, [ref])
-  return w
+  return s
 }
 
 const fmtMon = iso => new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
@@ -59,7 +59,7 @@ export default function PolicyPath({ onCurves }) {
 }
 
 function PathChart({ d, loading }) {
-  const ref = useRef(null); const W = useSize(ref); const H = 262
+  const ref = useRef(null); const { w: W, h } = useSize(ref); const H = Math.max(262, Math.floor(h) || 0)
   const [hov, setHov] = useState(null)
   const model = useMemo(() => {
     if (!d?.path?.length) return null

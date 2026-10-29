@@ -143,6 +143,11 @@ def _curve_moves(db: Session, ccys: set[str]) -> list[Fact]:
     return out
 
 
+def _r0(v: float) -> float:
+    """Round to the unit without a negative zero (-0.3 -> 0, not -0)."""
+    return round(v, 0) or 0.0
+
+
 def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
     """Every number the brief may use, computed by the engine; nothing here comes from a model."""
     from db.models import Counterparty, Trade
@@ -161,6 +166,8 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
     cps = {str(c.id): c for c in db.query(Counterparty).filter(Counterparty.user_id == uid).all()} if trades else {}
     totals: dict[str, float] = {}
     ir01_total = 0.0
+    spot01: dict[str, float] = {}          # FX01 / BTC01 by base asset, PV for +1 % spot
+    theta: dict[str, float] = {}           # one-day carry by currency
     ccys: set[str] = set()
     priced = 0
     for i, t in enumerate(trades, 1):
@@ -183,6 +190,12 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
                 if npv is not None:
                     npv = round(float(npv), 0)
                     totals[npv_ccy] = totals.get(npv_ccy, 0.0) + npv
+                if p.get("spot01") is not None:
+                    base = str(p.get("base_currency") or ccy).upper()
+                    spot01[base] = spot01.get(base, 0.0) + float(p["spot01"])
+                    extra["spot01"] = round(float(p["spot01"]), 0)
+                if p.get("theta") is not None:
+                    theta[npv_ccy] = theta.get(npv_ccy, 0.0) + float(p["theta"])
                 priced += 1
             except Exception as e:      # noqa: BLE001 — a trade that will not price is still listed
                 detail = getattr(e, "detail", None) or str(e)
@@ -243,7 +256,10 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
                 if n >= 6:
                     break
     return {"valuation_date": today.isoformat(), "generated_at": int(time.time()), "trades": len(trades),
-            "priced": priced, "facts": [f.as_dict() for f in facts]}
+            "priced": priced, "facts": [f.as_dict() for f in facts],
+            # the desk's numbers, straight from the pricers: what the home page shows above the trade list
+            "totals": {"npv": {k: _r0(v) for k, v in sorted(totals.items())}, "ir01": _r0(ir01_total) if ir01_total else None,
+                       "spot01": {k: _r0(v) for k, v in sorted(spot01.items())}, "theta": {k: _r0(v) for k, v in sorted(theta.items())}}}
 
 
 # ── narration + audit ───────────────────────────────────────────────────────────

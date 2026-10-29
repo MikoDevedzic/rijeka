@@ -46,7 +46,11 @@ class _Q:
 def _db(by_model, exec_rows):
     db = MagicMock()
     db.query = lambda m: _Q(by_model.get(m, []))
-    db.execute = lambda sql, params=None: iter(exec_rows.get(str(sql).strip().split("\n")[0][:20], []))
+    class _Res:
+        def __init__(self, rows): self.rows = rows
+        def __iter__(self): return iter(self.rows)
+        def scalar(self): return self.rows[0] if self.rows else 0
+    db.execute = lambda sql, params=None: _Res(exec_rows.get(str(sql).strip().split("\n")[0][:20], []))
     return db
 
 
@@ -68,9 +72,11 @@ def test_lifecycle_builds_inbox_arcs_and_anchors(monkeypatch):
     rows = {
         "SELECT m.id AS messa": [SimpleNamespace(message_id=uuid.uuid4(), room_id=uuid.uuid4(), created_at=now,
                                                   card={"trade_ref": "IRS-9", "booker_firm": "ACME CAPITAL"}, status="PENDING")],
-        "SELECT e.created_at,": [SimpleNamespace(created_at=now, payload=anchored, trade_ref="IRS-1", instrument_type="IR_SWAP", asset_class="RATES", counterparty_id=cp.id),
-                                 SimpleNamespace(created_at=now - timedelta(days=1), payload=off, trade_ref="IRS-7", instrument_type="IR_SWAP", asset_class="RATES", counterparty_id=cp.id)],
+        "SELECT e.created_at,": [SimpleNamespace(created_at=now, payload=anchored, trade_ref="IRS-1", instrument_type="IR_SWAP", asset_class="RATES", counterparty_id=cp.id, mine=True),
+                                 SimpleNamespace(created_at=now - timedelta(days=1), payload=off, trade_ref="IRS-7", instrument_type="IR_SWAP", asset_class="RATES", counterparty_id=cp.id, mine=True)],
     }
+    rows["SELECT t.status, (t."] = [SimpleNamespace(status="CONFIRMED", mine=False, own_j="GB", own_c="GBP", cp_j="JP", cp_c="JPY")] * 2
+    rows["SELECT count(*) FROM"] = [7]
     db = _db({desk.Trade: [t_conf, t_pend, t_old], desk.Counterparty: [cp], desk.LegalEntity: [own, bank_ent],
               desk.FirmMember: [SimpleNamespace(user_id=uid, firm_id=firm_id)]}, rows)
     monkeypatch.setattr(desk, "_chain_health", lambda: {"anchored": True, "network": "SEPOLIA", "latest_block": 1, "reachable": True,
@@ -84,6 +90,11 @@ def test_lifecycle_builds_inbox_arcs_and_anchors(monkeypatch):
     assert [a["trade_ref"] for a in out["arcs"]] == ["IRS-1", "FXF-2"] and out["arcs"][0]["to"]["city"] == "ZURICH"
     assert out["anchors"][0]["anchored"] and out["anchors"][0]["explorer_tx"] == "https://x/tx" and out["anchors"][0]["counterparty"] == "RIJEKA DEMO BANK"
     assert out["counts"] == {"confirmed": 1, "pending": 1, "anchored": 1, "actions": 5}
+    net = out["network"]
+    assert net["total_anchored"] == 7 and net["arcs"] == [{"from": desk.city_for(SimpleNamespace(jurisdiction="GB", home_currency="GBP")),
+                                                           "to": desk.city_for(SimpleNamespace(jurisdiction="JP", home_currency="JPY")),
+                                                           "status": "CONFIRMED", "mine": False, "count": 2}]
+    assert [a["mine"] for a in net["anchors"]] == [True] and net["anchors"][0]["block_number"] == 123   # the off-chain one is not in orbit
 
 
 def test_lifecycle_route_needs_auth():

@@ -14,14 +14,15 @@ async function load(refresh) {
 
 const fmtV = (f) => f.value == null ? '' : (Math.abs(f.value) >= 1000 ? Number(f.value).toLocaleString(undefined, { maximumFractionDigits: 0 }) : String(f.value)) + (f.unit ? ` ${f.unit}` : '')
 
-export default function BookBrief() {
+export default function BookBrief({ onSheet }) {
   const [b, setB] = useState(null)
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const [facts, setFacts] = useState(false)
   const [hi, setHi] = useState(null)              // fact id to highlight
-  const run = (refresh) => { setBusy(true); setErr(null); load(refresh).then(setB).catch(e => setErr(e.message)).finally(() => setBusy(false)) }
-  useEffect(() => { let alive = true; load(false).then(x => alive && setB(x)).catch(e => alive && setErr(e.message)); return () => { alive = false } }, [])
+  const take = (x) => { setB(x); onSheet?.(x) }
+  const run = (refresh) => { setBusy(true); setErr(null); load(refresh).then(take).catch(e => setErr(e.message)).finally(() => setBusy(false)) }
+  useEffect(() => { let alive = true; load(false).then(x => alive && take(x)).catch(e => alive && setErr(e.message)); return () => { alive = false } }, [])  // eslint-disable-line react-hooks/exhaustive-deps
   const byId = Object.fromEntries((b?.facts || []).map(f => [f.id, f]))
   return (
     <div className="bb">

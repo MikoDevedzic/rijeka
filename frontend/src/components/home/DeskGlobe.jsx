@@ -52,11 +52,11 @@ function sunVector(now) {
 
 const toVec = (lat, lon) => { const p = lat * RAD, l = lon * RAD; return [Math.cos(p) * Math.cos(l), Math.cos(p) * Math.sin(l), Math.sin(p)] }
 
-export default function DeskGlobe({ arcs = [], home, anchors = [], chain, reducedMotion = false, height = 300 }) {
+export default function DeskGlobe({ arcs = [], home, anchors = [], chain, network, reducedMotion = false }) {
   const ref = useRef(null)
-  const data = useRef({ arcs, home, anchors, chain })
+  const data = useRef({ arcs, home, anchors, chain, network })
   const born = useRef(new Map())                        // tx/trade key -> time the satellite launched
-  useEffect(() => { data.current = { arcs, home, anchors, chain } }, [arcs, home, anchors, chain])
+  useEffect(() => { data.current = { arcs, home, anchors, chain, network } }, [arcs, home, anchors, chain, network])
 
   useEffect(() => {
     const canvas = ref.current; if (!canvas) return
@@ -68,7 +68,7 @@ export default function DeskGlobe({ arcs = [], home, anchors = [], chain, reduce
 
     const resize = () => {
       const r = canvas.parentElement.getBoundingClientRect()
-      W = Math.max(200, r.width); H = height; dpr = Math.min(2, window.devicePixelRatio || 1)
+      W = Math.max(200, r.width); H = Math.max(240, r.height || 300); dpr = Math.min(2, window.devicePixelRatio || 1)
       canvas.width = W * dpr; canvas.height = H * dpr; canvas.style.width = `${W}px`; canvas.style.height = `${H}px`
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     }
@@ -93,7 +93,7 @@ export default function DeskGlobe({ arcs = [], home, anchors = [], chain, reduce
     }
 
     const draw = (now) => {
-      const { arcs, home, anchors, chain } = data.current
+      const { arcs, home, anchors, chain, network } = data.current
       const date = new Date()
       const sun = sunVector(date)
       const cx = W / 2, cy = H / 2 + 6
@@ -173,6 +173,21 @@ export default function DeskGlobe({ arcs = [], home, anchors = [], chain, reduce
         }
         return pts
       }
+      // the rest of the network: every other desk's live trades as faint arcs between cities
+      ;(network?.arcs || []).filter(a => !a.mine && a.from && a.to).forEach(a => {
+        let to = a.to
+        if (Math.abs(to.lat - a.from.lat) < 0.5 && Math.abs(to.lon - a.from.lon) < 0.5) to = { lat: a.from.lat + 7, lon: a.from.lon + 12 }
+        const pts = arcPath(toVec(a.from.lat, a.from.lon), toVec(to.lat, to.lon))
+        ctx.setLineDash(a.status === 'PENDING' ? [2, 5] : []); ctx.lineWidth = 0.8
+        for (let i = 1; i < pts.length; i++) {
+          const p0 = pts[i - 1], p1 = pts[i]; if (!visible(p0) || !visible(p1)) continue
+          ctx.beginPath(); ctx.moveTo(p0.sx, p0.sy); ctx.lineTo(p1.sx, p1.sy)
+          ctx.strokeStyle = hexA(a.status === 'PENDING' ? AMBER : ACCENT, 0.05 + 0.14 * Math.max(0, Math.min(1, p1.z + 0.3))); ctx.stroke()
+        }
+        ctx.setLineDash([])
+        const end = pts[pts.length - 1], st = pts[0]
+        ;[st, end].forEach(p => { if (visible(p)) { ctx.beginPath(); ctx.arc(p.sx, p.sy, 1.4, 0, Math.PI * 2); ctx.fillStyle = hexA(ACCENT, 0.35); ctx.fill() } })
+      })
       if (home) {
         const hv = toVec(home.lat, home.lon)
         arcs.forEach((arc, idx) => {
@@ -209,6 +224,12 @@ export default function DeskGlobe({ arcs = [], home, anchors = [], chain, reduce
 
       // ── orbit ring, front half, with one satellite per anchor ─────────
       ringArc(true)
+      const others = (network?.anchors || []).filter(a => !a.mine)
+      others.forEach((a, i) => {
+        const th = 0.4 + (i / Math.max(others.length, 1)) * Math.PI * 2 + (reducedMotion ? 0 : now / 70000)
+        const rp = ringPt(th)
+        ctx.fillStyle = hexA(ACCENT, rp.front ? 0.38 : 0.16); ctx.fillRect(rp.sx - 1.2, rp.sy - 1.2, 2.4, 2.4)
+      })
       const n = Math.max(anchors.length, 1)
       anchors.forEach((a, i) => {
         const key = a.tx_hash || a.trade_ref || String(i)
@@ -234,7 +255,7 @@ export default function DeskGlobe({ arcs = [], home, anchors = [], chain, reduce
         const p = ringPt(-Math.PI / 2 + 0.001)
         ctx.beginPath(); ctx.arc(p.sx, p.sy, 2 + beat, 0, Math.PI * 2); ctx.fillStyle = hexA(chain.reachable === false ? AMBER : ACCENT, 0.5 + 0.5 * beat); ctx.fill()
         ctx.font = `500 9px ${mono}`; ctx.textAlign = 'center'; ctx.fillStyle = hexA(DIM, 0.95)
-        ctx.fillText(`${chain.network || 'CHAIN'}${chain.latest_block ? ` · #${Number(chain.latest_block).toLocaleString()}` : ''}${anchors.length ? ` · ${anchors.length} IN ORBIT` : ''}`, cx, H - 7)
+        ctx.fillText(`${chain.network || 'CHAIN'}${chain.latest_block ? ` · #${Number(chain.latest_block).toLocaleString()}` : ''}${anchors.length ? ` · ${anchors.length} OF YOURS IN ORBIT` : ''}${network?.total_anchored ? ` · ${network.total_anchored} ON THE NETWORK` : ''}`, cx, H - 7)
       }
     }
 
@@ -246,7 +267,7 @@ export default function DeskGlobe({ arcs = [], home, anchors = [], chain, reduce
       canvas.removeEventListener('pointerdown', down); canvas.removeEventListener('pointermove', move)
       canvas.removeEventListener('pointerup', up); canvas.removeEventListener('pointercancel', up)
     }
-  }, [height, reducedMotion])
+  }, [reducedMotion])
 
-  return <div className="dg-wrap" style={{ height }}><canvas ref={ref} className="dg-canvas" aria-label="Desk globe: sessions, book and confirmations" /></div>
+  return <div className="dg-wrap"><canvas ref={ref} className="dg-canvas" aria-label="Desk globe: sessions, book and confirmations" /></div>
 }

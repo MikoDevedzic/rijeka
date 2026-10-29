@@ -14,6 +14,7 @@ import logging
 import time
 import uuid
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends
@@ -120,6 +121,56 @@ ORDER BY e.created_at DESC LIMIT :n
 """
 
 
+_NET_ARCS_SQL = """
+SELECT t.status, (t.user_id = :uid) AS mine,
+       coalesce(oe.jurisdiction, (SELECT e.jurisdiction FROM legal_entities e WHERE e.user_id = t.user_id AND e.is_own_entity ORDER BY e.created_at LIMIT 1)) AS own_j,
+       coalesce(oe.home_currency, (SELECT e.home_currency FROM legal_entities e WHERE e.user_id = t.user_id AND e.is_own_entity ORDER BY e.created_at LIMIT 1)) AS own_c,
+       ce.jurisdiction AS cp_j, ce.home_currency AS cp_c
+FROM trades t
+LEFT JOIN legal_entities oe ON oe.id = t.own_legal_entity_id
+LEFT JOIN counterparties c ON c.id = t.counterparty_id
+LEFT JOIN legal_entities ce ON ce.id = c.legal_entity_id
+WHERE t.status IN ('PENDING', 'CONFIRMED', 'LIVE')
+ORDER BY t.created_at DESC LIMIT 300
+"""
+
+_NET_ANCHORS_SQL = """
+SELECT e.created_at, e.payload, (t.user_id = :uid) AS mine
+FROM trade_events e JOIN trades t ON t.id = e.trade_id
+WHERE e.event_type = 'CONFIRMED' AND e.confirmation_hash IS NOT NULL
+ORDER BY e.created_at DESC LIMIT 60
+"""
+
+
+def network(db: Session, uid) -> dict:
+    """Every desk on the instance, reduced to cities, statuses and block numbers: enough to
+    light the globe for a visitor whose own book is empty, nothing that names anyone."""
+    arcs: dict[tuple, dict] = {}
+    anchors: list[dict] = []
+    try:
+        for r in db.execute(text(_NET_ARCS_SQL), {"uid": str(uid)}):
+            a = city_for(SimpleNamespace(jurisdiction=r.own_j, home_currency=r.own_c))
+            b = city_for(SimpleNamespace(jurisdiction=r.cp_j, home_currency=r.cp_c), default=a["code"])
+            key = (a["city"], b["city"], r.status, bool(r.mine))
+            if key not in arcs:
+                arcs[key] = {"from": a, "to": b, "status": r.status, "mine": bool(r.mine), "count": 0}
+            arcs[key]["count"] += 1
+        for r in db.execute(text(_NET_ANCHORS_SQL), {"uid": str(uid)}):
+            anchor = ((r.payload or {}).get("attestation") or {}).get("anchor") or {}
+            if anchor.get("anchored"):
+                anchors.append({"block_number": anchor.get("block_number"), "confirmed_at": _iso(r.created_at), "mine": bool(r.mine)})
+    except Exception as e:
+        log.debug("desk: network failed: %s", e)
+        db.rollback()
+    total = 0
+    try:
+        total = int(db.execute(text("SELECT count(*) FROM trade_events WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL "
+                                    "AND (payload->'attestation'->'anchor'->>'anchored') = 'true'")).scalar() or 0)
+    except Exception:
+        db.rollback()
+    return {"arcs": list(arcs.values()), "anchors": anchors[:40], "total_anchored": total}
+
+
 def _iso(dt) -> Optional[str]:
     if dt is None:
         return None
@@ -209,7 +260,7 @@ def lifecycle(db: Session, user: dict) -> dict:
     counts = {"confirmed": sum(1 for t in trades if t.status == "CONFIRMED"), "pending": sum(1 for t in trades if t.status == "PENDING"),
               "anchored": sum(1 for a in anchors if a["anchored"]), "actions": len(actions)}
     return {"as_of": datetime.now(timezone.utc).isoformat(), "home": home, "chain": chain, "actions": actions,
-            "anchors": anchors[:8], "arcs": arcs, "counts": counts}
+            "anchors": anchors[:8], "arcs": arcs, "counts": counts, "network": network(db, uid)}
 
 
 @router.get("/lifecycle")
