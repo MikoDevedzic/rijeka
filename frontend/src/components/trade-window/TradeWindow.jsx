@@ -676,11 +676,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           refData={refData}
         />
 
-        {isCurrency && (
-          <div className="tbw-sec">
+        {isCurrency && (<>
             <FxCryptoPanel ref={fxRef} ac={assetClass} inst={curInst} onPriced={setFxQuote} onError={(m) => setBookErr(m)} />
-          </div>
-        )}
+            <XVASummary result={fxQuote} />
+          </>)}
         {!isCurrency && (<>
         <PrimaryEconomics
           state={economics}
