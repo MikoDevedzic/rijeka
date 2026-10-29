@@ -202,6 +202,18 @@ Attribution is **sequential full revaluation**, never a sensitivity estimate. St
 
 End of day (`POST /api/pnl/eod`, and daily by cron for every account) stores one mark per trade and one attributed row per trade per date, so MTD and YTD are sums of what was signed. Sign-off is trader first, then P&L controller or desk CFO (the `controller`, `cfo`, `admin` role, or a firm admin); a FINAL day is visible to management with the comments (`GET /api/pnl/firm`, the MANAGEMENT view). The history tables are `docs/migrations/2026-10-30_pnl.sql`; until applied, the report is computed live and says so.
 
+## Market risk
+
+A `RISK` tab next to P&L, and `Configurations › Market Risk` for the risk manager.
+
+- **Ladder.** Key-rate IR01 by curve and tenor bucket (0-1Y, 1-5Y, 5-10Y, 10Y+, the same buckets as the P&L explain), by bumping each bucket 1bp and repricing every trade through the production pricers; FX01 and BTC01 per asset from the pricers. Totals in the reporting currency.
+- **VaR.** Historical simulation on the ladder: each day's observed changes in the window (basis points per bucket, log returns for spots) applied to today's sensitivities; VaR is the empirical loss quantile, expected shortfall the mean beyond it, the horizon scales by √t. Linear in the factors, and the page says so. Confidence, horizon, window and minimum observations are the firm's settings.
+- **History.** Risk factors come from the public sources the demo already uses (Treasury par yields, NY Fed SOFR, ECB €STR and AAA curve, BoE SONIA and gilts, ECB reference FX, Coinbase daily closes), fetched over a date range and stored as the template account's snapshots, which the daily rebuild extends. `risk-backfill.yml` fetches two years on dispatch.
+- **Stress.** Named scenarios by full revaluation: parallel ±25/±100bp, steepener, flattener, USD ±10%, digital assets ±30%, a combined risk-off.
+- **Limits.** The risk manager (`risk` or `admin` role, or a firm admin) sets limits on any reported number: VaR and ES, IR01 total or per curve or bucket, FX01/BTC01 per asset, NPV, any scenario's loss; scope book total, desk or book; a warning level. Utilisation and breaches show on the risk page and in the home inbox after the daily run.
+
+Tables: `docs/migrations/2026-10-30_market_risk.sql`.
+
 ## Risk taxonomy
 
 One set of names on every ticket, SIMM-aligned. Rate factors are per basis point; spot factors are per 1 % (the SIMM delta convention for FX and equity).
