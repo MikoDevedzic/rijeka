@@ -85,7 +85,7 @@ export function CounterpartyBlock({ state = {}, onChange = () => {}, refData = {
     <div className="tbw-sec">
       <div className="tbw-lbl">
         COUNTERPARTY + BOOK
-        {error && <span style={{ color: '#FF6B6B', marginLeft: 10, fontWeight: 400, letterSpacing: 0 }}>{error}</span>}
+        {error && <span style={{ color: 'var(--red)', marginLeft: 10, fontWeight: 400, letterSpacing: 0 }}>{error}</span>}
       </div>
       <div className="tbw-grid-6">
         <Field label="OWN ENTITY">
@@ -437,14 +437,14 @@ function fmtPnl(v) {
 function CashflowSummaryCard({ label, value, colorKey }) {
   return (
     <div style={{
-      background: '#0C0C0C',
-      border: '1px solid #1E1E1E',
+      background: 'var(--panel)',
+      border: '1px solid var(--border)',
       borderRadius: 2,
       padding: '6px 10px',
     }}>
       <div style={{
         fontSize: 10,
-        color: '#666',
+        color: 'var(--text-dim)',
         letterSpacing: '0.08em',
         fontWeight: 600,
         marginBottom: 3,
@@ -453,11 +453,11 @@ function CashflowSummaryCard({ label, value, colorKey }) {
         fontSize: 14,
         fontWeight: 700,
         fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
-        color: colorKey === 'accent'  ? '#00D4A8'
-             : colorKey === 'negative'? '#FF6B6B'
-             : colorKey === 'blue'    ? '#4A9EFF'
-             : colorKey === 'amber'   ? '#F5C842'
-             : '#F0F0F0',
+        color: colorKey === 'accent'  ? 'var(--accent)'
+             : colorKey === 'negative'? 'var(--red)'
+             : colorKey === 'blue'    ? 'var(--blue)'
+             : colorKey === 'amber'   ? 'var(--amber)'
+             : 'var(--text-hi)',
       }}>{value}</div>
     </div>
   )
@@ -501,12 +501,12 @@ function CapletTable({ result, ccy }) {
           fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
         }}>
           <thead>
-            <tr style={{ background: '#050505', borderBottom: '1px solid #1E1E1E' }}>
+            <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
               {['#','PERIOD START','PERIOD END','FWD RATE','DF','\u03C4','VOL (bp)','PV'].map((h, i) => (
                 <th key={h} style={{
                   padding: '5px 8px',
                   textAlign: i < 3 ? 'left' : 'right',
-                  color: '#666',
+                  color: 'var(--text-dim)',
                   fontSize: 10,
                   fontWeight: 600,
                   letterSpacing: '0.06em',
@@ -521,48 +521,48 @@ function CapletTable({ result, ccy }) {
                 borderBottom: '1px solid rgba(255,255,255,0.04)',
                 background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
               }}>
-                <td style={{ padding: '4px 8px', color: '#666' }}>{cl.period != null ? cl.period : i + 1}</td>
-                <td style={{ padding: '4px 8px', color: '#888' }}>
+                <td style={{ padding: '4px 8px', color: 'var(--text-dim)' }}>{cl.period != null ? cl.period : i + 1}</td>
+                <td style={{ padding: '4px 8px', color: 'var(--text-dim)' }}>
                   {cl.start_date ? fmtDate(cl.start_date) : (cl.expiry_y || 0).toFixed(4) + 'Y'}
                 </td>
-                <td style={{ padding: '4px 8px', color: '#888' }}>
+                <td style={{ padding: '4px 8px', color: 'var(--text-dim)' }}>
                   {cl.end_date ? fmtDate(cl.end_date) : '\u2014'}
                 </td>
-                <td style={{ padding: '4px 8px', textAlign: 'right', color: '#4A9EFF' }}>
+                <td style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--blue)' }}>
                   {(cl.forward || 0).toFixed(4)}%
                 </td>
-                <td style={{ padding: '4px 8px', textAlign: 'right', color: '#888' }}>
+                <td style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--text-dim)' }}>
                   {(cl.df || 0).toFixed(5)}
                 </td>
-                <td style={{ padding: '4px 8px', textAlign: 'right', color: '#888' }}>
+                <td style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--text-dim)' }}>
                   {(cl.tau || 0).toFixed(5)}
                 </td>
-                <td style={{ padding: '4px 8px', textAlign: 'right', color: '#F5C842', fontWeight: 600 }}>
+                <td style={{ padding: '4px 8px', textAlign: 'right', color: 'var(--amber)', fontWeight: 600 }}>
                   {(cl.vol_bp || volBp || 0).toFixed(1)}
                 </td>
                 <td style={{
                   padding: '4px 8px',
                   textAlign: 'right',
-                  color: (cl.pv || 0) >= 0 ? '#00D4A8' : '#FF6B6B',
+                  color: (cl.pv || 0) >= 0 ? 'var(--accent)' : 'var(--red)',
                   fontWeight: 600,
                 }}>{fmtPnl(cl.pv)}</td>
               </tr>
             ))}
             <tr style={{
-              borderTop: '2px solid #1E1E1E',
+              borderTop: '2px solid var(--border)',
               background: 'rgba(255,255,255,0.02)',
             }}>
               <td colSpan={7} style={{
                 padding: '5px 8px',
                 fontWeight: 700,
-                color: '#888',
+                color: 'var(--text-dim)',
                 letterSpacing: '0.08em',
               }}>TOTAL</td>
               <td style={{
                 padding: '5px 8px',
                 textAlign: 'right',
                 fontWeight: 700,
-                color: (npv || 0) >= 0 ? '#00D4A8' : '#FF6B6B',
+                color: (npv || 0) >= 0 ? 'var(--accent)' : 'var(--red)',
               }}>{fmtPnl(npv)}</td>
             </tr>
           </tbody>
@@ -570,7 +570,7 @@ function CapletTable({ result, ccy }) {
       </div>
       <div style={{
         fontSize: 11,
-        color: '#666',
+        color: 'var(--text-dim)',
         fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
         padding: '4px 0',
       }}>
@@ -595,8 +595,8 @@ function SwapCashflowTables({ result, productKey, state }) {
     <>
       {isSwpn && (
         <div style={{
-          background: 'rgba(74,158,255,0.05)',
-          border: '1px solid rgba(74,158,255,0.2)',
+          background: 'rgba(74,154,212,0.05)',
+          border: '1px solid rgba(74,154,212,0.2)',
           borderRadius: 2,
           padding: '8px 12px',
           marginBottom: 10,
@@ -604,20 +604,20 @@ function SwapCashflowTables({ result, productKey, state }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
             <span style={{
               fontSize: 10, fontWeight: 700,
-              letterSpacing: '0.12em', color: '#4A9EFF',
+              letterSpacing: '0.12em', color: 'var(--blue)',
             }}>UNDERLYING FORWARD SWAP CASHFLOWS</span>
             <span style={{
               fontSize: 10,
               padding: '1px 6px',
               borderRadius: 2,
-              background: 'rgba(74,158,255,0.1)',
-              border: '1px solid rgba(74,158,255,0.3)',
-              color: '#4A9EFF',
+              background: 'rgba(74,154,212,0.1)',
+              border: '1px solid rgba(74,154,212,0.3)',
+              color: 'var(--blue)',
             }}>
               {(state.swaptionExpiry || '1Y')}{'\u00D7'}{state.tenor || '5Y'}{' \u00B7 Physical Settlement'}
             </span>
           </div>
-          <div style={{ fontSize: 11, color: '#888' }}>
+          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
             {'On exercise, this swaption delivers into the swap schedule below. '}
             {'Effective date shifts forward by '}{state.swaptionExpiry || '1Y'}{' from today. '}
             {'Sum of PV column = forward swap NPV (\u2248 $0 at ATM strike).'}
@@ -652,19 +652,19 @@ function SwapCashflowTables({ result, productKey, state }) {
             alignItems: 'center',
             gap: 8,
             padding: '6px 0 4px',
-            borderBottom: '1px solid #1E1E1E',
+            borderBottom: '1px solid var(--border)',
           }}>
             <span style={{
               fontSize: 11, fontWeight: 700,
-              letterSpacing: '0.12em', color: '#888',
+              letterSpacing: '0.12em', color: 'var(--text-dim)',
             }}>{leg.leg_type} LEG</span>
             <span style={{
               fontSize: 11, fontWeight: 700,
               padding: '1px 6px',
               borderRadius: 2,
-              background: leg.direction === 'PAY' ? 'rgba(255,107,107,0.10)' : 'rgba(0,212,168,0.10)',
-              border: '1px solid ' + (leg.direction === 'PAY' ? '#FF6B6B' : '#00D4A8'),
-              color: leg.direction === 'PAY' ? '#FF6B6B' : '#00D4A8',
+              background: leg.direction === 'PAY' ? 'rgba(224,80,64,0.10)' : 'rgba(13,212,168,0.10)',
+              border: '1px solid ' + (leg.direction === 'PAY' ? 'var(--red)' : 'var(--accent)'),
+              color: leg.direction === 'PAY' ? 'var(--red)' : 'var(--accent)',
             }}>{leg.direction === 'PAY' ? '\u2192 PAY' : '\u2190 RECEIVE'}</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
@@ -675,13 +675,13 @@ function SwapCashflowTables({ result, productKey, state }) {
               fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
             }}>
               <thead>
-                <tr style={{ background: '#050505', borderBottom: '1px solid #1E1E1E' }}>
+                <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
                   {['PERIOD START','PERIOD END','PAY DATE','DCF','NOTIONAL',
                     leg.leg_type === 'FIXED' ? 'RATE' : 'FWD RATE',
                     'AMOUNT','DF','PV','ZR%'].map((h, i) => (
                     <th key={h} style={{
                       fontSize: 10,
-                      color: '#666',
+                      color: 'var(--text-dim)',
                       padding: '4px 6px',
                       textAlign: i < 3 ? 'left' : 'right',
                       fontWeight: 600,
@@ -697,46 +697,46 @@ function SwapCashflowTables({ result, productKey, state }) {
                     : (cf.amount * (cf.df || 1) * (leg.direction === 'PAY' ? -1 : 1))
                   const payShifted = cf.payment_date !== cf.period_end
                   return (
-                    <tr key={ci} style={{ borderBottom: '1px solid #0E0E0E' }}>
-                      <td style={{ fontSize: 11, padding: '5px 6px', color: '#888' }}>{fmtDate(cf.period_start)}</td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', color: '#888' }}>{fmtDate(cf.period_end)}</td>
+                    <tr key={ci} style={{ borderBottom: '1px solid var(--panel)' }}>
+                      <td style={{ fontSize: 11, padding: '5px 6px', color: 'var(--text-dim)' }}>{fmtDate(cf.period_start)}</td>
+                      <td style={{ fontSize: 11, padding: '5px 6px', color: 'var(--text-dim)' }}>{fmtDate(cf.period_end)}</td>
                       <td style={{
                         fontSize: 11, padding: '5px 6px',
-                        color: payShifted ? '#F5C842' : '#888',
+                        color: payShifted ? 'var(--amber)' : 'var(--text-dim)',
                       }}>{fmtDate(cf.payment_date)}</td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#4A9EFF' }}>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--blue)' }}>
                         {cf.dcf != null ? cf.dcf.toFixed(5) : '\u2014'}
                       </td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#888' }}>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
                         {fmtN(cf.notional)}
                       </td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#4A9EFF' }}>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--blue)' }}>
                         {cf.rate != null ? (cf.rate * 100).toFixed(4) + '%' : '\u2014'}
                       </td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#F0F0F0' }}>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--text-hi)' }}>
                         {fmtN(cf.amount)}
                       </td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#888' }}>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
                         {cf.df != null ? cf.df.toFixed(5) : '\u2014'}
                       </td>
                       <td style={{
                         fontSize: 12, padding: '5px 6px', textAlign: 'right',
                         fontWeight: 600,
-                        color: pv >= 0 ? '#00D4A8' : '#FF6B6B',
+                        color: pv >= 0 ? 'var(--accent)' : 'var(--red)',
                       }}>{fmtPnl(pv)}</td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: '#888' }}>
+                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
                         {cf.zero_rate != null ? (cf.zero_rate * 100).toFixed(3) : '\u2014'}
                       </td>
                     </tr>
                   )
                 })}
                 <tr style={{
-                  borderTop: '2px solid #1E1E1E',
+                  borderTop: '2px solid var(--border)',
                   background: 'rgba(255,255,255,0.02)',
                 }}>
                   <td colSpan={6} style={{
                     fontSize: 11, fontWeight: 700,
-                    color: '#888',
+                    color: 'var(--text-dim)',
                     padding: '5px 6px',
                     letterSpacing: '0.08em',
                   }}>TOTAL</td>
@@ -744,7 +744,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                     fontSize: 12, fontWeight: 700,
                     padding: '5px 6px',
                     textAlign: 'right',
-                    color: '#F0F0F0',
+                    color: 'var(--text-hi)',
                   }}>
                     {fmtN((leg.cashflows || []).reduce((s, cf) => s + (cf.amount || 0), 0))}
                   </td>
@@ -753,7 +753,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                     fontSize: 12, fontWeight: 700,
                     padding: '5px 6px',
                     textAlign: 'right',
-                    color: leg.pv >= 0 ? '#00D4A8' : '#FF6B6B',
+                    color: leg.pv >= 0 ? 'var(--accent)' : 'var(--red)',
                   }}>{fmtPnl(leg.pv)}</td>
                   <td />
                 </tr>
@@ -765,7 +765,7 @@ function SwapCashflowTables({ result, productKey, state }) {
 
       <div style={{
         fontSize: 11,
-        color: '#666',
+        color: 'var(--text-dim)',
         fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
         padding: '4px 0',
       }}>
@@ -869,7 +869,7 @@ export function CashflowsPanel({ result, productKey, state }) {
       <div style={{
         padding: '80px 40px',
         textAlign: 'center',
-        color: '#555',
+        color: 'var(--text-mute)',
         fontSize: 12,
         letterSpacing: '0.08em',
         fontStyle: 'italic',

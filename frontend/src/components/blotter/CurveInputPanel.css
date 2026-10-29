@@ -18,7 +18,7 @@
 }
 
 .cip-panel-title {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -26,9 +26,9 @@
 }
 
 .cip-panel-sub {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
-  color: #3a5a6a;
+  color: var(--text-mute);
 }
 
 /* Curve block */
@@ -52,20 +52,20 @@
 
 .cip-chevron {
   font-size: 11px;
-  color: #3a5a6a;
+  color: var(--text-mute);
   width: 12px;
 }
 
 .cip-curve-id {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 600;
-  color: #c8d8e2;
+  color: var(--text);
   flex: 1;
 }
 
 .cip-curve-badge {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 2px;
@@ -95,13 +95,13 @@
 
 .cip-mode-btn {
   padding: 2px 8px;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
   border: 1px solid rgba(255,255,255,0.08);
   background: transparent;
-  color: #3a5a6a;
+  color: var(--text-mute);
   border-radius: 2px;
   cursor: pointer;
   transition: all 0.12s;
@@ -115,7 +115,7 @@
 
 .cip-mode-btn:hover:not(.active) {
   border-color: rgba(255,255,255,0.2);
-  color: #8aa8bc;
+  color: var(--text-dim);
 }
 
 /* Flat body */
@@ -127,10 +127,10 @@
 }
 
 .cip-label {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 9px;
   letter-spacing: 0.08em;
-  color: #3a5a6a;
+  color: var(--text-mute);
   white-space: nowrap;
 }
 
@@ -145,9 +145,9 @@
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 3px;
   padding: 4px 8px;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 14px;
-  color: #cdd6e0;
+  color: var(--text);
   width: 90px;
   text-align: right;
 }
@@ -158,9 +158,9 @@
 }
 
 .cip-unit {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
-  color: #5a7a8a;
+  color: var(--text-mute);
 }
 
 /* Market body */
@@ -174,11 +174,11 @@
 }
 
 .cip-table th {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #3a5a6a;
+  color: var(--text-mute);
   text-align: left;
   padding: 4px 6px;
   border-bottom: 1px solid rgba(255,255,255,0.05);
@@ -195,9 +195,9 @@
 }
 
 .cip-tenor {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 11px;
-  color: #7a9aac;
+  color: var(--text-dim);
   width: 42px;
 }
 
@@ -206,9 +206,9 @@
   border: 1px solid transparent;
   border-radius: 2px;
   padding: 2px 4px;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 9px;
-  color: #7a9aac;
+  color: var(--text-dim);
   cursor: pointer;
   width: 90px;
   transition: border-color 0.1s;
@@ -224,9 +224,9 @@
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 2px;
   padding: 2px 6px;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
-  color: #cdd6e0;
+  color: var(--text);
   width: 76px;
   text-align: right;
   transition: border-color 0.1s, background 0.1s;
@@ -239,7 +239,7 @@
 }
 
 .cip-warn {
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 9px;
   color: var(--amber);
   margin: 6px 0 0;
@@ -260,7 +260,7 @@
   background: rgba(14,201,160,0.08);
   border: 1px solid var(--accent);
   border-radius: 3px;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -280,7 +280,7 @@
 
 .cip-error-bar {
   padding: 6px 14px;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
   color: var(--red);
   background: rgba(217,80,64,0.07);
@@ -289,8 +289,8 @@
 
 .cip-empty {
   padding: 16px 14px;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 10px;
-  color: #3a5a6a;
+  color: var(--text-mute);
   text-align: center;
 }

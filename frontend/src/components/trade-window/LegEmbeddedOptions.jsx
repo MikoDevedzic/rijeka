@@ -53,14 +53,14 @@ function dirChipStyle(on, isSell) {
     fontSize: 11,
     letterSpacing: '0.06em',
     fontWeight: on ? 700 : 400,
-    fontFamily: "'IBM Plex Mono', monospace",
+    fontFamily:'var(--mono)',
     borderRadius: 2,
     cursor: 'pointer',
-    border: '1px solid ' + (on ? (isSell ? '#FF6B6B' : '#00D4A8') : '#222'),
+    border: '1px solid ' + (on ? (isSell ? 'var(--red)' : 'var(--accent)') : 'var(--text-mute)'),
     background: on
-      ? (isSell ? 'rgba(255,107,107,0.12)' : 'rgba(0,212,168,0.12)')
+      ? (isSell ? 'rgba(224,80,64,0.12)' : 'rgba(13,212,168,0.12)')
       : 'transparent',
-    color: on ? (isSell ? '#FF6B6B' : '#00D4A8') : '#666',
+    color: on ? (isSell ? 'var(--red)' : 'var(--accent)') : 'var(--text-dim)',
     transition: 'all 0.1s',
   }
 }
@@ -71,19 +71,19 @@ function typeChipStyle(on, typeColor) {
     fontSize: 11,
     letterSpacing: '0.06em',
     fontWeight: on ? 700 : 400,
-    fontFamily: "'IBM Plex Mono', monospace",
+    fontFamily:'var(--mono)',
     borderRadius: 2,
     cursor: 'pointer',
-    border: '1px solid ' + (on ? typeColor : '#222'),
+    border: '1px solid ' + (on ? typeColor : 'var(--text-mute)'),
     background: on ? `${typeColor}1f` : 'transparent',
-    color: on ? typeColor : '#666',
+    color: on ? typeColor : 'var(--text-dim)',
     transition: 'all 0.1s',
   }
 }
 
-// Type palette — CAP amber (#F5C842), FLOOR teal (#00D4A8). Matches
+// Type palette — CAP amber (var(--amber)), FLOOR teal (var(--accent)). Matches
 // DESIGN_TOKENS colour set; caps "upside" → warm, floors "support" → cool.
-const TYPE_COLOR = { CAP: '#F5C842', FLOOR: '#00D4A8' }
+const TYPE_COLOR = { CAP: 'var(--amber)', FLOOR: 'var(--accent)' }
 
 
 export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = '' }) {
@@ -108,7 +108,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
   const rootStyle = {
     marginTop: 8,
     padding: '12px 14px',
-    border: '1px solid #1a1a1a',
+    border: '1px solid var(--border)',
     borderRadius: 3,
     background: 'rgba(255,255,255,0.015)',
   }
@@ -123,18 +123,18 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
   const headerLabelStyle = {
     fontSize: 10,
     letterSpacing: '0.12em',
-    color: '#999',
-    fontFamily: "'IBM Plex Mono', monospace",
+    color: 'var(--text-dim)',
+    fontFamily:'var(--mono)',
   }
 
   const addBtnStyle = {
     padding: '4px 12px',
     fontSize: 10,
     letterSpacing: '0.08em',
-    fontFamily: "'IBM Plex Mono', monospace",
-    border: '1px dashed #3a3a3a',
+    fontFamily:'var(--mono)',
+    border: '1px dashed var(--border-hi)',
     background: 'transparent',
-    color: '#999',
+    color: 'var(--text-dim)',
     borderRadius: 2,
     cursor: 'pointer',
   }
@@ -153,17 +153,17 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
     padding: '8px 12px',
     marginTop: 6,
     background: 'rgba(255,255,255,0.02)',
-    border: '1px solid #1f1f1f',
+    border: '1px solid var(--border)',
     borderRadius: 2,
   }
 
   const strikeInputStyle = {
     width: 80,
-    fontFamily: "'IBM Plex Mono', monospace",
+    fontFamily:'var(--mono)',
     fontSize: 12,
-    color: '#F5C842',
+    color: 'var(--amber)',
     background: 'transparent',
-    border: '1px solid #2a2a2a',
+    border: '1px solid var(--text-mute)',
     borderRadius: 2,
     padding: '4px 6px',
     textAlign: 'right',
@@ -171,17 +171,17 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
 
   const labelStyle = {
     fontSize: 9,
-    color: '#666',
+    color: 'var(--text-dim)',
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
-    fontFamily: "'IBM Plex Mono', monospace",
+    fontFamily:'var(--mono)',
     marginRight: 4,
   }
 
   const removeBtnStyle = {
     background: 'transparent',
-    border: '1px solid #2a2a2a',
-    color: '#888',
+    border: '1px solid var(--text-mute)',
+    color: 'var(--text-dim)',
     width: 20, height: 20,
     fontSize: 11,
     borderRadius: 2,
@@ -197,7 +197,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
           {legLabel ? `${legLabel} — EMBEDDED OPTIONALITY` : 'EMBEDDED OPTIONALITY'}
         </span>
         {entries.length === 0 && (
-          <span style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>
             none — plain float leg
           </span>
         )}
@@ -220,7 +220,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
         const t       = entry.type
         const dir     = entry.direction
         const strike  = entry.defaultStrike ?? ''
-        const color   = TYPE_COLOR[t] || '#999'
+        const color   = TYPE_COLOR[t] || 'var(--text-dim)'
         const hint    = getHint(t, dir)
         return (
           <div key={idx} style={entryCardStyle}>
@@ -255,7 +255,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
             </div>
 
             {/* Hint */}
-            <div style={{ fontSize: 10, color: '#666', minWidth: 160 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-dim)', minWidth: 160 }}>
               {hint}
             </div>
 
@@ -275,7 +275,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
       {entries.length > 0 && (
         <div style={{
           fontSize: 10,
-          color: '#555',
+          color: 'var(--text-mute)',
           marginTop: 10,
           lineHeight: 1.5,
           fontStyle: 'italic',

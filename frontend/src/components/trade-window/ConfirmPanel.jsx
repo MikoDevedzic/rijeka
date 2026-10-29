@@ -27,10 +27,10 @@ const STATUS_COLORS = {
   CONFIRMED:  'var(--accent)',  // teal
   CANCELLED:  'var(--red)',  // red
   LIVE:       'var(--blue)',  // blue
-  TERMINATED: '#666666',
-  MATURED:    '#666666',
+  TERMINATED: 'var(--text-dim)',
+  MATURED:    'var(--text-dim)',
   DEFAULTED:  'var(--red)',
-  NOVATED:    '#9B8BB5',  // purple
+  NOVATED:    'var(--purple)',  // purple
 }
 
 const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace'
@@ -53,7 +53,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   const row = (k, v, color) => (
     <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 10, fontSize: 11, lineHeight: 1.7 }}>
       <span className="tbw-mut" style={{ letterSpacing: '0.06em' }}>{k}</span>
-      <span style={{ fontFamily: MONO, color: color || '#F0F0F0', wordBreak: 'break-all' }}>{v}</span>
+      <span style={{ fontFamily: MONO, color: color || 'var(--text-hi)', wordBreak: 'break-all' }}>{v}</span>
     </div>
   )
   const vr = verifyResult
@@ -108,11 +108,11 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
       {anchored && !terminated && onTerminate && (
         <div style={{ marginTop: 12 }}>
           {!showTerminate ? (
-            <button className="tbw-btn" onClick={() => setShowTerminate(true)} style={{ borderColor: 'rgba(255,107,107,0.4)', color: 'var(--red)' }}>
+            <button className="tbw-btn" onClick={() => setShowTerminate(true)} style={{ borderColor: 'rgba(224,80,64,0.4)', color: 'var(--red)' }}>
               ◆ TERMINATE ON-CHAIN
             </button>
           ) : (
-            <div style={{ padding: 12, background: '#000', border: '1px solid rgba(255,107,107,0.35)', borderRadius: 2, maxWidth: 520 }}>
+            <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid rgba(224,80,64,0.35)', borderRadius: 2, maxWidth: 520 }}>
               <div className="tbw-lbl" style={{ color: 'var(--red)' }}>TERMINATE — BOTH PARTIES SIGN, REGISTRY MARKS THE RECORD CLOSED</div>
               <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5, margin: '6px 0 10px' }}>
                 Closes the signed record on-chain with a TradeTermination signature from each party. When the
@@ -120,7 +120,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
                 signs both only if it holds their key.
               </div>
               <input type="text" placeholder="Reason (optional, stored in the event)" value={reason} onChange={e => setReason(e.target.value)} disabled={terminating}
-                style={{ width: '100%', padding: '8px 10px', background: 'var(--panel)', border: '1px solid var(--border)', color: '#F0F0F0', fontFamily: MONO, fontSize: 12, borderRadius: 2, outline: 'none', marginBottom: 10 }} />
+                style={{ width: '100%', padding: '8px 10px', background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--text-hi)', fontFamily: MONO, fontSize: 12, borderRadius: 2, outline: 'none', marginBottom: 10 }} />
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button className="tbw-btn" onClick={() => { setShowTerminate(false); setReason('') }} disabled={terminating}>Dismiss</button>
                 <button className="tbw-btn tbw-btn-cancel" onClick={() => onTerminate(reason.trim() || null)} disabled={terminating}>
@@ -134,8 +134,8 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
       )}
       {vr && !vr.info && (
         <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 2, fontSize: 11, fontFamily: MONO,
-          background: vr.error ? 'rgba(255,107,107,0.06)' : vOk ? 'rgba(13,212,168,0.06)' : 'rgba(245,200,66,0.06)',
-          border: '1px solid ' + (vr.error ? 'rgba(255,107,107,0.3)' : vOk ? 'rgba(13,212,168,0.3)' : 'rgba(245,200,66,0.3)'),
+          background: vr.error ? 'rgba(224,80,64,0.06)' : vOk ? 'rgba(13,212,168,0.06)' : 'rgba(240,160,32,0.06)',
+          border: '1px solid ' + (vr.error ? 'rgba(224,80,64,0.3)' : vOk ? 'rgba(13,212,168,0.3)' : 'rgba(240,160,32,0.3)'),
           color: vr.error ? 'var(--red)' : vOk ? 'var(--accent)' : 'var(--amber)', lineHeight: 1.7 }}>
           {vr.error ? ('Verify failed: ' + vr.error) : (<>
             <div>{vr.hash_matches ? '✔' : '✘'} hash of current terms {vr.hash_matches ? 'matches' : 'DOES NOT MATCH'} the signed hash</div>
@@ -187,22 +187,30 @@ export function ConfirmPanel({
     return (
       <div className="tbw-sec">
         <div className="tbw-lbl">TRADE LIFECYCLE</div>
-        <div style={{
-          padding: '60px 40px',
-          textAlign: 'center',
-          color: '#555',
-          fontSize: 12,
-          fontStyle: 'italic',
-          letterSpacing: '0.04em',
-        }}>
-          — book a trade first to confirm or cancel —
+        <div className="empty-state" style={{ padding: '36px 24px 28px' }}>
+          <div className="empty-icon">◆</div>
+          <div className="empty-title">Nothing to confirm yet</div>
+          <div className="empty-sub">
+            Price the ticket and press BOOK TRADE. The booked trade appears here with its canonical
+            record, keccak256 hash and EIP-712 signatures, and this tab walks it to the Sepolia registry.
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 10 }}>
+            {['BOOK', 'SIGN', 'COUNTERSIGN', 'ANCHOR', 'PROOF LINK'].map((step, i, arr) => (
+              <span key={step} style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontSize: 10, letterSpacing: '0.12em', fontFamily: 'var(--mono)', color: 'var(--text-dim)' }}>
+                <span style={{ padding: '3px 8px', border: '1px solid var(--border-hi)', borderRadius: 2,
+                  background: 'var(--panel-2)', color: i === 0 ? 'var(--accent)' : 'var(--text-dim)' }}>{step}</span>
+                {i < arr.length - 1 && <span style={{ color: 'var(--text-mute)' }}>›</span>}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
     )
   }
 
   const status = bookedTrade.status
-  const color  = STATUS_COLORS[status] || '#F0F0F0'
+  const color  = STATUS_COLORS[status] || 'var(--text-hi)'
 
   // State 3: terminal — read-only status badge
   if (status !== 'PENDING') {
@@ -357,9 +365,9 @@ export function ConfirmPanel({
               disabled={cancelling}
               style={{
                 padding: '8px 10px',
-                background: '#000',
+                background: 'var(--bg)',
                 border: '1px solid var(--border)',
-                color: '#F0F0F0',
+                color: 'var(--text-hi)',
                 fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
                 fontSize: 12,
                 borderRadius: 2,

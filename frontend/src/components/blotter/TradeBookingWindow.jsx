@@ -844,7 +844,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
     const avgSh=sh.reduce((a,b)=>a+b,0)/sh.length
     const shClr=avgSh<=0?'var(--blue)':'var(--red)'
-    const shClrRgb=avgSh<=0?'74,158,255':'255,107,107'
+    const shClrRgb=avgSh<=0?'74,154,212':'224,80,64'
     const anyShift=sh.some(s=>Math.abs(s)>0.05)
 
     // Base fill + glow + line

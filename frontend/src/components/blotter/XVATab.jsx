@@ -5,14 +5,14 @@ const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const TENORS_6 = ['1Y','2Y','3Y','5Y','7Y','10Y']
 
 const VA_DEFS = {
-  npv:    { label:'NPV',    color:'#F0F0F0', desc:'Present value at mid-market. Positive = asset to you. This is the base price before any XVA adjustments.', curve:'none' },
-  cva:    { label:'CVA',    color:'#FF6B6B', desc:'Credit Valuation Adjustment = -LGD x Sum[ EE(t) x (PD_cp(t) - PD_cp(t-dt)) x DF(t) ]. Cost of counterparty default risk over the EE profile. Always negative.', curve:'EE' },
-  dva:    { label:'DVA',    color:'#4A9EFF', desc:'Debt Valuation Adjustment = +LGD x Sum[ |ENE(t)| x (PD_own(t) - PD_own(t-dt)) x DF(t) ]. Benefit from your own default risk. Always positive. Excluded from regulatory capital.', curve:'ENE' },
-  fva:    { label:'FVA',    color:'#FF6B6B', desc:'Funding Valuation Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative.', curve:'EE' },
-  fba:    { label:'FBA',    color:'#4A9EFF', desc:'Funding Benefit Adjustment = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]. Benefit when counterparty funds your negative MTM. FBA/FTP ratio typically 0.5-0.7.', curve:'ENE' },
-  kva:    { label:'KVA',    color:'#FF6B6B', desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
-  mva:    { label:'MVA',    color:'#F5C842', desc:'Margin Valuation Adjustment = -Sum[ IM(t) x FTP(t) x dt x DF(t) ]. Cost of funding SIMM initial margin. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
-  all_in: { label:'ALL-IN', color:'#00D4A8', desc:'NPV + CVA + DVA + FVA + FBA + KVA + MVA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
+  npv:    { label:'NPV',    color:'#F4F7FA', desc:'Present value at mid-market. Positive = asset to you. This is the base price before any XVA adjustments.', curve:'none' },
+  cva:    { label:'CVA',    color:'#e05040', desc:'Credit Valuation Adjustment = -LGD x Sum[ EE(t) x (PD_cp(t) - PD_cp(t-dt)) x DF(t) ]. Cost of counterparty default risk over the EE profile. Always negative.', curve:'EE' },
+  dva:    { label:'DVA',    color:'#4a9ad4', desc:'Debt Valuation Adjustment = +LGD x Sum[ |ENE(t)| x (PD_own(t) - PD_own(t-dt)) x DF(t) ]. Benefit from your own default risk. Always positive. Excluded from regulatory capital.', curve:'ENE' },
+  fva:    { label:'FVA',    color:'#e05040', desc:'Funding Valuation Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative.', curve:'EE' },
+  fba:    { label:'FBA',    color:'#4a9ad4', desc:'Funding Benefit Adjustment = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]. Benefit when counterparty funds your negative MTM. FBA/FTP ratio typically 0.5-0.7.', curve:'ENE' },
+  kva:    { label:'KVA',    color:'#e05040', desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
+  mva:    { label:'MVA',    color:'#f0a020', desc:'Margin Valuation Adjustment = -Sum[ IM(t) x FTP(t) x dt x DF(t) ]. Cost of funding SIMM initial margin. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
+  all_in: { label:'ALL-IN', color:'#0dd4a8', desc:'NPV + CVA + DVA + FVA + FBA + KVA + MVA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
 }
 
 const TIPS = {
@@ -71,7 +71,7 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
   const W = canvas.width / dpr
   const H = canvas.height / dpr
   ctx.clearRect(0, 0, W, H)
-  ctx.fillStyle = '#0D0F17'
+  ctx.fillStyle = '#0C1015'
   ctx.fillRect(0, 0, W, H)
   const PAD = { l:52, r:16, t:20, b:28 }
   const CW = W - PAD.l - PAD.r
@@ -87,14 +87,14 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
   const range = maxV - minV || 1
   const xS = i => PAD.l + (i / (n-1)) * CW
   const yS = v => PAD.t + CH - ((v - minV) / range) * CH
-  ctx.font = '8px DM Mono,monospace'
-  ctx.fillStyle = '#333'; ctx.textAlign = 'right'
+  ctx.font='10px JetBrains Mono,monospace'
+  ctx.fillStyle = '#26303C'; ctx.textAlign = 'right'
   for (let i = 0; i <= 4; i++) {
     const v = minV + (range/4)*i; const y = yS(v)
     if (y < PAD.t-2 || y > H-PAD.b+2) continue
     ctx.strokeStyle = 'rgba(30,30,30,0.9)'; ctx.lineWidth = 0.5
     ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(W-PAD.r, y); ctx.stroke()
-    ctx.fillStyle = '#333'; ctx.fillText((v/1000).toFixed(0)+'K', PAD.l-3, y+3)
+    ctx.fillStyle = '#26303C'; ctx.fillText((v/1000).toFixed(0)+'K', PAD.l-3, y+3)
   }
   const y0 = yS(0)
   ctx.strokeStyle = 'rgba(80,80,80,0.6)'; ctx.lineWidth = 0.8; ctx.setLineDash([3,3])
@@ -103,7 +103,7 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
     samplePaths.forEach(path => {
       ctx.beginPath()
       path.forEach((v,i) => i===0 ? ctx.moveTo(xS(i),yS(v)) : ctx.lineTo(xS(i),yS(v)))
-      ctx.strokeStyle = path[path.length-1] >= 0 ? 'rgba(0,212,168,0.06)' : 'rgba(74,158,255,0.06)'
+      ctx.strokeStyle = path[path.length-1] >= 0 ? 'rgba(13,212,168,0.06)' : 'rgba(74,154,212,0.06)'
       ctx.lineWidth = 0.5; ctx.lineJoin = 'round'; ctx.stroke()
     })
   }
@@ -124,7 +124,7 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
     ctx.strokeStyle = color+(isHL?'60':'25'); ctx.lineWidth = isHL?glowW*1.5:glowW; ctx.stroke()
     ctx.beginPath()
     data.forEach((v,i) => i===0?ctx.moveTo(xS(i),yS(v)):ctx.lineTo(xS(i),yS(v)))
-    ctx.strokeStyle = isHL?'#FFFFFF':color; ctx.lineWidth = isHL?lineW*1.5:lineW; ctx.stroke()
+    ctx.strokeStyle = isHL?'#F4F7FA':color; ctx.lineWidth = isHL?lineW*1.5:lineW; ctx.stroke()
     if (isHL || data._name==='EE') {
       const step = Math.max(1, Math.floor(n/5))
       for (let i=0; i<n; i+=step) {
@@ -138,10 +138,10 @@ function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
   const eeArr=[...ee]; eeArr._name='EE'
   const eneArr=[...ene]; eneArr._name='ENE'
   const pfeArr=[...pfe]; pfeArr._name='PFE'
-  drawCurve(eneArr,'#4A9EFF',[5,3],7,1.5,true)
-  drawCurve(pfeArr,'#F5C842',[3,2],5,1.2,false)
-  drawCurve(eeArr, '#00D4A8',[],   8,2.0,true)
-  ctx.fillStyle='#444'; ctx.textAlign='center'; ctx.font='8px DM Mono,monospace'
+  drawCurve(eneArr,'var(--blue)',[5,3],7,1.5,true)
+  drawCurve(pfeArr,'var(--amber)',[3,2],5,1.2,false)
+  drawCurve(eeArr, 'var(--accent)',[],   8,2.0,true)
+  ctx.fillStyle='#5F6C7B'; ctx.textAlign='center'; ctx.font='10px JetBrains Mono,monospace'
   ;[0,0.25,0.5,0.75,1].forEach(frac => {
     const i=Math.round(frac*(n-1)); ctx.fillText((i/12).toFixed(0)+'Y', xS(i), H-PAD.b+10)
   })
@@ -174,7 +174,7 @@ const CalibProofPanel = ({ calib }) => {
     const scaleY = v => pad.t + (H - pad.t - pad.b) * (1 - v / maxV)
 
     // background
-    ctx.fillStyle = '#0D0F17'
+    ctx.fillStyle = '#0C1015'
     ctx.fillRect(0, 0, W, H)
 
     // gridlines
@@ -185,8 +185,8 @@ const CalibProofPanel = ({ calib }) => {
       const y = pad.t + (H - pad.t - pad.b) * (i / ticks)
       ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke()
       const val = maxV * (1 - i / ticks)
-      ctx.fillStyle = '#444'
-      ctx.font = '9px IBM Plex Mono, monospace'
+      ctx.fillStyle = '#5F6C7B'
+      ctx.font='10px JetBrains Mono,monospace'
       ctx.textAlign = 'right'
       ctx.fillText(val.toFixed(0), pad.l - 3, y + 3)
     }
@@ -201,23 +201,23 @@ const CalibProofPanel = ({ calib }) => {
       const x1 = cx - barW - gap / 2
       const y1 = scaleY(mkt)
       const bh1 = H - pad.b - y1
-      ctx.shadowColor = '#00D4A8'; ctx.shadowBlur = 6
-      ctx.fillStyle = '#00D4A8'
+      ctx.shadowColor = '#0dd4a8'; ctx.shadowBlur = 6
+      ctx.fillStyle = '#0dd4a8'
       ctx.fillRect(x1, y1, barW, bh1)
 
       // model bar (amber glow)
       const x2 = cx + gap / 2
       const y2 = scaleY(mdl)
       const bh2 = H - pad.b - y2
-      ctx.shadowColor = '#F5C842'; ctx.shadowBlur = 6
-      ctx.fillStyle = '#F5C842'
+      ctx.shadowColor = '#f0a020'; ctx.shadowBlur = 6
+      ctx.fillStyle = '#f0a020'
       ctx.fillRect(x2, y2, barW, bh2)
 
       ctx.shadowBlur = 0
 
       // x label
-      ctx.fillStyle = '#555'
-      ctx.font = '8px IBM Plex Mono, monospace'
+      ctx.fillStyle = '#5F6C7B'
+      ctx.font='10px JetBrains Mono,monospace'
       ctx.textAlign = 'center'
       const label = row.ticker ? row.ticker.replace('USD', '').replace(' ICPL Curncy','') : (row.expiry_y + 'Y×' + row.tenor_y + 'Y')
       ctx.fillText(label, cx, H - pad.b + 10)
@@ -225,21 +225,21 @@ const CalibProofPanel = ({ calib }) => {
 
     // legend
     ctx.shadowBlur = 0
-    ctx.fillStyle = '#00D4A8'; ctx.fillRect(W - 90, 4, 8, 8)
-    ctx.fillStyle = '#888'; ctx.font = '9px IBM Plex Mono, monospace'; ctx.textAlign = 'left'
+    ctx.fillStyle = '#0dd4a8'; ctx.fillRect(W - 90, 4, 8, 8)
+    ctx.fillStyle = '#8B98A8'; ctx.font='10px JetBrains Mono,monospace'; ctx.textAlign = 'left'
     ctx.fillText('Market', W - 79, 12)
-    ctx.fillStyle = '#F5C842'; ctx.fillRect(W - 35, 4, 8, 8)
-    ctx.fillStyle = '#888'; ctx.fillText('Model', W - 24, 12)
+    ctx.fillStyle = '#f0a020'; ctx.fillRect(W - 35, 4, 8, 8)
+    ctx.fillStyle = '#8B98A8'; ctx.fillText('Model', W - 24, 12)
   }, [open, calib])
 
   if (!calib?.fit_details) return null
 
   const errColor = e => {
-    if (e == null) return '#555'
+    if (e == null) return 'var(--text-mute)'
     const abs = Math.abs(e)
-    if (abs < 0.5) return '#00D4A8'
-    if (abs < 2.0) return '#F5C842'
-    return '#FF6B6B'
+    if (abs < 0.5) return 'var(--accent)'
+    if (abs < 2.0) return 'var(--amber)'
+    return 'var(--red)'
   }
 
   return (
@@ -248,42 +248,42 @@ const CalibProofPanel = ({ calib }) => {
         onClick={() => setOpen(o => !o)}
         style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',
           padding:'4px 7px',borderRadius:'2px',
-          background:'rgba(255,255,255,0.02)',border:'1px solid #1E1E1E',
+          background:'rgba(255,255,255,0.02)',border:'1px solid var(--border)',
           marginBottom: open ? '8px' : '0'}}
       >
         <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',
-          color:'#555',fontFamily:"'IBM Plex Mono',monospace"}}>
+          color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
           {open ? '▼' : '►'} CALIBRATION PROOF
         </span>
-        <span style={{marginLeft:'auto',fontSize:'0.6875rem',color: calib.fit_rmse_bp < 1 ? '#00D4A8' : calib.fit_rmse_bp < 3 ? '#F5C842' : '#FF6B6B',
-          fontFamily:"'IBM Plex Mono',monospace",fontWeight:700}}>
+        <span style={{marginLeft:'auto',fontSize:'0.6875rem',color: calib.fit_rmse_bp < 1 ? 'var(--accent)' : calib.fit_rmse_bp < 3 ? 'var(--amber)' : 'var(--red)',
+          fontFamily:'var(--mono)',fontWeight:700}}>
           RMSE {calib.fit_rmse_bp?.toFixed(2)}bp
         </span>
       </div>
       {open && (
-        <div style={{background:'#0C0C0C',border:'1px solid #1E1E1E',borderRadius:'2px',padding:'8px',marginBottom:'4px'}}>
+        <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',padding:'8px',marginBottom:'4px'}}>
           {/* Chart */}
           <canvas ref={canvasRef} style={{width:'100%',display:'block',marginBottom:'8px'}}/>
           {/* Table */}
-          <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed',fontFamily:"'IBM Plex Mono',monospace",fontSize:'0.6875rem'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed',fontFamily:'var(--mono)',fontSize:'0.6875rem'}}>
             <thead>
-              <tr style={{borderBottom:'1px solid #1E1E1E'}}>
+              <tr style={{borderBottom:'1px solid var(--border)'}}>
                 {['INSTRUMENT','EXPIRY','TENOR','MKT VOL','MDL VOL','ERROR'].map(h => (
                   <th key={h} style={{padding:'3px 5px',textAlign: h==='INSTRUMENT'?'left':'right',
-                    color:'#444',fontWeight:700,letterSpacing:'.08em'}}>{h}</th>
+                    color:'var(--text-mute)',fontWeight:700,letterSpacing:'.08em'}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {calib.fit_details.map((row, i) => (
                 <tr key={i} style={{borderBottom:'1px solid rgba(255,255,255,0.03)'}}>
-                  <td style={{padding:'3px 5px',color:'#888',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                  <td style={{padding:'3px 5px',color:'var(--text-dim)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                     {row.ticker || (row.expiry_y + 'Y×' + row.tenor_y + 'Y')}
                   </td>
-                  <td style={{padding:'3px 5px',textAlign:'right',color:'#666'}}>{row.expiry_y}Y</td>
-                  <td style={{padding:'3px 5px',textAlign:'right',color:'#666'}}>{row.tenor_y}Y</td>
-                  <td style={{padding:'3px 5px',textAlign:'right',color:'#00D4A8',fontWeight:600}}>{row.mkt_vol_bp?.toFixed(1)}</td>
-                  <td style={{padding:'3px 5px',textAlign:'right',color:'#F5C842',fontWeight:600}}>{row.mdl_vol_bp?.toFixed(1)}</td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color:'var(--text-dim)'}}>{row.expiry_y}Y</td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color:'var(--text-dim)'}}>{row.tenor_y}Y</td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color:'var(--accent)',fontWeight:600}}>{row.mkt_vol_bp?.toFixed(1)}</td>
+                  <td style={{padding:'3px 5px',textAlign:'right',color:'var(--amber)',fontWeight:600}}>{row.mdl_vol_bp?.toFixed(1)}</td>
                   <td style={{padding:'3px 5px',textAlign:'right',color: errColor(row.error_bp),fontWeight:700}}>
                     {row.error_bp != null ? (row.error_bp >= 0 ? '+' : '') + row.error_bp.toFixed(2) : '—'}
                   </td>
@@ -292,12 +292,12 @@ const CalibProofPanel = ({ calib }) => {
             </tbody>
           </table>
           {/* Footer */}
-          <div style={{display:'flex',gap:'12px',marginTop:'6px',paddingTop:'6px',borderTop:'1px solid #1E1E1E'}}>
-            <span style={{fontSize:'0.6875rem',color:'#444',fontFamily:"'IBM Plex Mono',monospace"}}>
+          <div style={{display:'flex',gap:'12px',marginTop:'6px',paddingTop:'6px',borderTop:'1px solid var(--border)'}}>
+            <span style={{fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
               Basket: {calib.basket_size} instruments · 5Y-tenor column
             </span>
-            <span style={{marginLeft:'auto',fontSize:'0.6875rem',fontFamily:"'IBM Plex Mono',monospace",
-              color: calib.converged ? '#00D4A8' : '#FF6B6B'}}>
+            <span style={{marginLeft:'auto',fontSize:'0.6875rem',fontFamily:'var(--mono)',
+              color: calib.converged ? 'var(--accent)' : 'var(--red)'}}>
               {calib.converged ? '✔ CONVERGED' : '⚠ NOT CONVERGED'} · {calib.iterations} iter
             </span>
           </div>
@@ -515,14 +515,15 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     finally { setSimulating(false) }
   }
 
-  const inp = { background:'#0C0C0C', border:'1px solid #1E1E1E', borderRadius:'2px',
-    color:'#F0F0F0', fontFamily:"'IBM Plex Mono',monospace", fontSize:'0.8125rem',
+  const inp = { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:'2px',
+    color:'var(--text-hi)', fontFamily:'var(--mono)', fontSize:'0.8125rem',
     padding:'3px 6px', outline:'none', width:'100%' }
-  const lbl = { fontSize:'0.75rem', color:'#00D4A8', letterSpacing:'0.07em',
-    fontFamily:"'IBM Plex Sans',sans-serif", marginBottom:'2px',
-    borderBottom:'1px dashed rgba(0,212,168,0.4)', cursor:'help', paddingBottom:'1px' }
-  const secHdr = { fontSize:'0.75rem', fontWeight:700, letterSpacing:'0.10em',
-    color:'#333', fontFamily:"'IBM Plex Mono',monospace", marginTop:'10px', marginBottom:'6px' }
+  const lbl = { fontSize:'0.75rem', color:'var(--accent)', letterSpacing:'0.07em',
+    fontFamily:'var(--sans)', marginBottom:'2px',
+    borderBottom:'1px dashed rgba(13,212,168,0.4)', cursor:'help', paddingBottom:'1px' }
+  const secHdr = { fontSize:'11px', fontWeight:700, letterSpacing:'0.18em', color:'var(--text)',
+    fontFamily:'var(--sans)', paddingLeft:'10px', borderLeft:'3px solid var(--accent)', lineHeight:1.2,
+    marginTop:'14px', marginBottom:'8px' }
 
   // Called by TradeBookingWindow at simulate time to get current XVA params
   if (xvaParamsRef) {
@@ -562,15 +563,15 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     <div style={{ marginBottom:'4px' }}>
       <div style={{ display:'grid', gridTemplateColumns:'56px repeat(6,1fr)', gap:'3px', alignItems:'center' }}>
         <div onMouseEnter={e=>tip(tipKey,e)} onMouseLeave={()=>setTooltip(null)}
-          style={{ fontSize:'0.75rem', color:'#00D4A8', fontFamily:"'IBM Plex Mono',monospace",
-            letterSpacing:'0.03em', borderBottom:'1px dashed rgba(0,212,168,0.4)',
+          style={{ fontSize:'0.75rem', color:'var(--accent)', fontFamily:'var(--mono)',
+            letterSpacing:'0.03em', borderBottom:'1px dashed rgba(13,212,168,0.4)',
             cursor:'help', paddingBottom:'1px' }}>{label}</div>
         {TENORS_6.map(t => (
           <input key={t} type='text' inputMode='decimal'
             placeholder='—' defaultValue={stateRef.current[t]||''}
             onBlur={e => { stateRef.current[t] = e.target.value }}
             style={{ ...inp, textAlign:'right', padding:'4px 6px', fontSize:'0.875rem',
-              color: stateRef.current[t] ? '#00D4A8' : '#444',
+              color: stateRef.current[t] ? 'var(--accent)' : 'var(--text-mute)',
               fontWeight: stateRef.current[t] ? 600 : 400 }} />
         ))}
       </div>
@@ -596,10 +597,10 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const allInRate = parRate + xvaTotalBp/100
 
   return (
-    <div style={{ flex:1, display:'flex', overflow:'hidden', background:'#000' }}>
+    <div style={{ flex:1, display:'flex', overflow:'hidden', background:'var(--bg)' }}>
 
       {/* LEFT PANEL */}
-      <div style={{ width:'320px', minWidth:'320px', borderRight:'1px solid #1E1E1E',
+      <div style={{ width:'320px', minWidth:'320px', borderRight:'1px solid var(--border)',
         overflowY:'auto', padding:'12px', display:'flex', flexDirection:'column' }}>
 
         <div style={secHdr}>HW1F MODEL</div>
@@ -614,11 +615,11 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
               <div style={{ display:'flex', alignItems:'center', gap:'3px' }}>
                 {set ? (
                   <input type='text' value={val} onChange={e=>set(e.target.value)}
-                    style={{ ...inp, textAlign:'right', color: val&&val!=='—'?'#00D4A8':'#666', borderColor: val?'rgba(0,212,168,0.3)':'#1E1E1E' }} />
+                    style={{ ...inp, textAlign:'right', color: val&&val!=='—'?'var(--accent)':'var(--text-dim)', borderColor: val?'rgba(13,212,168,0.3)':'var(--border)' }} />
                 ) : (
-                  <div style={{ ...inp, textAlign:'right', color:'#666' }}>{val}</div>
+                  <div style={{ ...inp, textAlign:'right', color:'var(--text-dim)' }}>{val}</div>
                 )}
-                {calib && set && <span style={{ fontSize:'0.6rem', color:'#00D4A8', whiteSpace:'nowrap', background:'rgba(0,212,168,0.08)', border:'1px solid rgba(0,212,168,0.2)', padding:'1px 3px', borderRadius:'2px' }}>CALIB</span>}
+                {calib && set && <span style={{ fontSize:'0.6875rem', color:'var(--accent)', whiteSpace:'nowrap', background:'rgba(13,212,168,0.08)', border:'1px solid rgba(13,212,168,0.2)', padding:'1px 3px', borderRadius:'2px' }}>CALIB</span>}
               </div>
             </div>
           ))}
@@ -626,41 +627,41 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
 
         <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
           <div onMouseEnter={e=>tip('paths',e)} onMouseLeave={()=>setTooltip(null)} style={{...lbl,whiteSpace:'nowrap',marginBottom:0}}>PATHS</div>
-          <input type='range' min='500' max='5000' step='500' value={paths} onChange={e=>setPaths(parseInt(e.target.value))} style={{flex:1,accentColor:'#00D4A8'}}/>
-          <span style={{fontSize:'0.8125rem',color:'#4A9EFF',fontFamily:"'IBM Plex Mono',monospace",minWidth:'40px',textAlign:'right'}}>{paths.toLocaleString()}</span>
+          <input type='range' min='500' max='5000' step='500' value={paths} onChange={e=>setPaths(parseInt(e.target.value))} style={{flex:1,accentColor:'var(--accent)'}}/>
+          <span style={{fontSize:'0.8125rem',color:'var(--blue)',fontFamily:'var(--mono)',minWidth:'40px',textAlign:'right'}}>{paths.toLocaleString()}</span>
         </div>
 
         <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
           <div onMouseEnter={e=>tip('wwr',e)} onMouseLeave={()=>setTooltip(null)} style={{...lbl,whiteSpace:'nowrap',marginBottom:0}}>WWR ×</div>
-          <input type='range' min='1.0' max='2.0' step='0.1' value={wwr} onChange={e=>setWwr(parseFloat(e.target.value))} style={{flex:1,accentColor:'#F5C842'}}/>
-          <span style={{fontSize:'0.8125rem',color:'#F5C842',fontFamily:"'IBM Plex Mono',monospace",minWidth:'30px',textAlign:'right'}}>{wwr.toFixed(1)}</span>
+          <input type='range' min='1.0' max='2.0' step='0.1' value={wwr} onChange={e=>setWwr(parseFloat(e.target.value))} style={{flex:1,accentColor:'var(--amber)'}}/>
+          <span style={{fontSize:'0.8125rem',color:'var(--amber)',fontFamily:'var(--mono)',minWidth:'30px',textAlign:'right'}}>{wwr.toFixed(1)}</span>
         </div>
 
         {calib ? (
           <div onMouseEnter={e=>tip('rmse',e)} onMouseLeave={()=>setTooltip(null)}
-            style={{fontSize:'0.75rem',color:'#00D4A8',background:'rgba(0,212,168,0.05)',
-            border:'1px solid rgba(0,212,168,0.15)',borderRadius:'2px',padding:'4px 7px',
-            marginBottom:'8px',lineHeight:1.5,cursor:'help',borderBottom:'1px dashed rgba(0,212,168,0.3)'}}>
+            style={{fontSize:'0.75rem',color:'var(--accent)',background:'rgba(13,212,168,0.05)',
+            border:'1px solid rgba(13,212,168,0.15)',borderRadius:'2px',padding:'4px 7px',
+            marginBottom:'8px',lineHeight:1.5,cursor:'help',borderBottom:'1px dashed rgba(13,212,168,0.3)'}}>
             ✔ CALIBRATED {calib.valuation_date} · RMSE {calib.fit_rmse_bp?.toFixed(2)}bp · {calib.basket_size} instruments
           </div>
         ) : (
-          <div style={{fontSize:'0.75rem',color:'#333',marginBottom:'8px'}}>No master calibration — go to Configurations → XVA Parameters to calibrate.</div>
+          <div style={{fontSize:'0.75rem',color:'var(--text-mute)',marginBottom:'8px'}}>No master calibration — go to Configurations → XVA Parameters to calibrate.</div>
         )}
-        {calibErr && <div style={{fontSize:'0.75rem',color:'#FF6B6B',marginBottom:'6px'}}>✘ {calibErr}</div>}
+        {calibErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {calibErr}</div>}
 
         <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
           <button onClick={handleSimulate} disabled={simulating}
-            style={{flex:1,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:"'IBM Plex Mono',monospace",border:'1px solid rgba(0,212,168,0.4)',background:'rgba(0,212,168,0.06)',color:'#00D4A8',opacity:simulating?0.5:1}}>
+            style={{flex:1,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:'var(--mono)',border:'1px solid rgba(13,212,168,0.4)',background:'rgba(13,212,168,0.06)',color:'var(--accent)',opacity:simulating?0.5:1}}>
             {simulating?'SIMULATING...':'▶ SIMULATE'}
           </button>
         </div>
         <CalibProofPanel calib={calib}/>
-        {simErr && <div style={{fontSize:'0.75rem',color:'#FF6B6B',marginBottom:'6px'}}>✘ {simErr}</div>}
+        {simErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {simErr}</div>}
 
         <div style={secHdr}>SPREAD CURVES (bp)</div>
         <div style={{display:'grid',gridTemplateColumns:'56px repeat(6,1fr)',gap:'3px',marginBottom:'4px'}}>
           <div/>
-          {TENORS_6.map(t=>(<div key={t} style={{fontSize:'0.75rem',color:'#444',textAlign:'center',fontFamily:"'IBM Plex Mono',monospace"}}>{t}</div>))}
+          {TENORS_6.map(t=>(<div key={t} style={{fontSize:'0.75rem',color:'var(--text-mute)',textAlign:'center',fontFamily:'var(--mono)'}}>{t}</div>))}
         </div>
         <SpreadRow label='CP CDS'  stateRef={cpCdsRef}  tipKey='cpCds' />
         <SpreadRow label='OWN CDS' stateRef={ownCdsRef} tipKey='ownCds' />
@@ -669,17 +670,17 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         <div style={secHdr}>SETTLEMENT</div>
         <div onMouseEnter={e=>tip('settlement',e)} onMouseLeave={()=>setTooltip(null)}
           style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'3px',marginBottom:'6px'}}>
-          {[['UNCOLLATERALISED','NO CSA','#FF6B6B'],['BILATERAL','BILATERAL','#4A9EFF'],['ON_CHAIN','ON-CHAIN','#00D4A8']].map(([k,label,c])=>(
+          {[['UNCOLLATERALISED','NO CSA','var(--red)'],['BILATERAL','BILATERAL','var(--blue)'],['ON_CHAIN','ON-CHAIN','var(--accent)']].map(([k,label,c])=>(
             <button key={k} onClick={()=>{ setSettlement(k); setImExchanged(k!=='UNCOLLATERALISED') }}
               style={{padding:'5px 2px',fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',
-                fontFamily:"'IBM Plex Mono',monospace",
-                border:settlement===k?'1px solid '+c:'1px solid #1E1E1E',
-                background:settlement===k?c+'14':'transparent',color:settlement===k?c:'#555'}}>
+                fontFamily:'var(--mono)',
+                border:settlement===k?'1px solid '+c:'1px solid var(--border)',
+                background:settlement===k?c+'14':'transparent',color:settlement===k?c:'var(--text-mute)'}}>
               {label}
             </button>
           ))}
         </div>
-        <div style={{fontSize:'0.6875rem',color:'#444',lineHeight:1.5,marginBottom:'6px',fontFamily:"'IBM Plex Sans',sans-serif"}}>
+        <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',lineHeight:1.5,marginBottom:'6px',fontFamily:'var(--sans)'}}>
           {settlement==='UNCOLLATERALISED' && 'No variation margin — full MtM at risk.'}
           {settlement==='BILATERAL' && 'Daily VM under CSA · 10bd MPoR floor · SIMM IM exchanged.'}
           {settlement==='ON_CHAIN' && 'Atomic settlement · continuous VM · zero TH/MTA · 5bd MPoR · SIMM IM × 0.707.'}
@@ -706,12 +707,12 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           ))}
           <div style={{...lbl,alignSelf:'center',marginBottom:0,borderBottom:'none',cursor:'default'}}>SIMM IM exchanged</div>
           <label style={{display:'flex',justifyContent:'flex-end',alignItems:'center',cursor:'pointer'}}>
-            <input type='checkbox' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'#F5C842'}}/>
+            <input type='checkbox' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'var(--amber)'}}/>
           </label>
           {settlement!=='ON_CHAIN' && (<>
             <div onMouseEnter={e=>tip('compare',e)} onMouseLeave={()=>setTooltip(null)} style={{...lbl,alignSelf:'center',marginBottom:0}}>Compare on-chain</div>
             <label style={{display:'flex',justifyContent:'flex-end',alignItems:'center',cursor:'pointer'}}>
-              <input type='checkbox' checked={compareOnChain} onChange={e=>setCompareOnChain(e.target.checked)} style={{accentColor:'#00D4A8'}}/>
+              <input type='checkbox' checked={compareOnChain} onChange={e=>setCompareOnChain(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
             </label>
           </>)}
         </div>
@@ -736,7 +737,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
             <option value='imm'>IMM</option>
           </select>
         </div>
-        <div style={{marginTop:'8px',fontSize:'0.6875rem',color:'#222',lineHeight:1.5,background:'#050505',border:'1px solid #0F0F0F',borderRadius:'2px',padding:'5px 7px'}}>
+        <div style={{marginTop:'8px',fontSize:'0.6875rem',color:'var(--text-mute)',lineHeight:1.5,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'2px',padding:'5px 7px'}}>
           MVA = −Σ IM(t) × FTP(t) × dt × DF(t) · IM from ISDA SIMM IR delta (RW × IR01), amortising to maturity
         </div>
       </div>
@@ -746,54 +747,54 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
 
         {/* Swaption 2-phase EE context */}
         {instrumentType === 'IR_SWAPTION' && (
-          <div style={{flexShrink:0, background:'rgba(74,158,255,0.04)',
-            borderBottom:'1px solid rgba(74,158,255,0.15)', padding:'8px 12px'}}>
+          <div style={{flexShrink:0, background:'rgba(74,154,212,0.04)',
+            borderBottom:'1px solid rgba(74,154,212,0.15)', padding:'8px 12px'}}>
             <div style={{display:'flex', alignItems:'center', gap:'10px',
               marginBottom:'5px', flexWrap:'wrap'}}>
               <span style={{fontSize:'0.6875rem', fontWeight:700, letterSpacing:'0.10em',
-                color:'#4A9EFF', fontFamily:"'IBM Plex Mono',monospace"}}>
+                color:'var(--blue)', fontFamily:'var(--mono)'}}>
                 SWAPTION XVA — ANDERSEN-PITERBARG 2-PHASE EE
               </span>
               {swaptionExpiry && swaptionTenor && (
                 <span style={{fontSize:'0.6875rem', padding:'1px 6px', borderRadius:'2px',
-                  background:'rgba(74,158,255,0.1)', border:'1px solid rgba(74,158,255,0.25)',
-                  color:'#4A9EFF', fontFamily:"'IBM Plex Mono',monospace"}}>
+                  background:'rgba(74,154,212,0.1)', border:'1px solid rgba(74,154,212,0.25)',
+                  color:'var(--blue)', fontFamily:'var(--mono)'}}>
                   {swaptionExpiry}×{swaptionTenor} · {(direction||'PAY')==='PAY'?'Payer':'Receiver'}
                 </span>
               )}
               {swaptionVol && (
-                <span style={{fontSize:'0.6875rem', color:'#555',
-                  fontFamily:"'IBM Plex Mono',monospace"}}>
+                <span style={{fontSize:'0.6875rem', color:'var(--text-mute)',
+                  fontFamily:'var(--mono)'}}>
                   σ_N = {swaptionVol}bp
                   {swaptionResult?.sabr_vol_bp ? ` (SABR at K=${((swaptionResult.forward_rate||0.036)*100).toFixed(3)}%)` : ' (ATM)'}
                 </span>
               )}
             </div>
             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr',
-              gap:'6px', fontSize:'0.75rem', fontFamily:"'IBM Plex Mono',monospace"}}>
-              <div style={{background:'rgba(0,212,168,0.04)', border:'1px solid rgba(0,212,168,0.12)',
+              gap:'6px', fontSize:'0.75rem', fontFamily:'var(--mono)'}}>
+              <div style={{background:'rgba(13,212,168,0.04)', border:'1px solid rgba(13,212,168,0.12)',
                 borderRadius:'2px', padding:'6px 8px'}}>
-                <div style={{color:'#00D4A8', fontWeight:700, marginBottom:'3px', fontSize:'0.6875rem',
+                <div style={{color:'var(--accent)', fontWeight:700, marginBottom:'3px', fontSize:'0.6875rem',
                   letterSpacing:'0.08em'}}>
                   PHASE 1 — PRE-EXPIRY (0 → {swaptionExpiry||'T_exp'})
                 </div>
-                <div style={{color:'#888', lineHeight:1.6, fontFamily:"'IBM Plex Sans',sans-serif"}}>
-                  Long option → V(t) ≥ 0 always → <strong style={{color:'#F0F0F0'}}>no negative exposure.</strong>
+                <div style={{color:'var(--text-dim)', lineHeight:1.6, fontFamily:'var(--sans)'}}>
+                  Long option → V(t) ≥ 0 always → <strong style={{color:'var(--text-hi)'}}>no negative exposure.</strong>
                   <br/>
                   EE(t) = E[N·A(t)·Bachelier(F(t), K, T_exp−t, σ_N)]
                   <br/>
                   F(t) from HW1F short rate paths. σ_N from SABR surface at strike K.
                 </div>
               </div>
-              <div style={{background:'rgba(74,158,255,0.04)', border:'1px solid rgba(74,158,255,0.12)',
+              <div style={{background:'rgba(74,154,212,0.04)', border:'1px solid rgba(74,154,212,0.12)',
                 borderRadius:'2px', padding:'6px 8px'}}>
-                <div style={{color:'#4A9EFF', fontWeight:700, marginBottom:'3px', fontSize:'0.6875rem',
+                <div style={{color:'var(--blue)', fontWeight:700, marginBottom:'3px', fontSize:'0.6875rem',
                   letterSpacing:'0.08em'}}>
                   PHASE 2 — POST-EXPIRY ({swaptionExpiry||'T_exp'} → {swaptionExpiry||'T_exp'}+{swaptionTenor||'tenor'})
                 </div>
-                <div style={{color:'#888', lineHeight:1.6, fontFamily:"'IBM Plex Sans',sans-serif"}}>
+                <div style={{color:'var(--text-dim)', lineHeight:1.6, fontFamily:'var(--sans)'}}>
                   Exercise if F(T_exp) {(direction||'PAY')==='PAY' ? '>' : '<'} K.
-                  <strong style={{color:'#F0F0F0'}}> Unexercised paths → EE = 0.</strong>
+                  <strong style={{color:'var(--text-hi)'}}> Unexercised paths → EE = 0.</strong>
                   <br/>
                   EE(t) = E[max(IRS NPV(t), 0) · <strong>1</strong>(F(T_exp){(direction||'PAY')==='PAY'?'>':'<'}K)]
                   <br/>
@@ -805,37 +806,37 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         )}
 
         {/* Exposure chart */}
-        <div style={{flex:1,position:'relative',background:'#0D0F17',borderBottom:'1px solid #1E1E1E',minHeight:'160px'}}>
+        <div style={{flex:1,position:'relative',background:'var(--panel)',borderBottom:'1px solid var(--border)',minHeight:'160px'}}>
           <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
           {!simResult && (
             <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
-              <div style={{fontSize:'0.8125rem',color:'#2A2A2A',letterSpacing:'0.08em',fontFamily:"'IBM Plex Mono',monospace"}}>EE / ENE / PFE — press SIMULATE</div>
+              <div style={{fontSize:'0.8125rem',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:'var(--mono)'}}>EE / ENE / PFE — press SIMULATE</div>
             </div>
           )}
           {simResult && (
             <div style={{position:'absolute',top:'8px',right:'12px',display:'flex',gap:'12px'}}>
-              {[{l:'EE',c:'#00D4A8',n:'EE'},{l:'ENE',c:'#4A9EFF',n:'ENE'},{l:'PFE 95%',c:'#F5C842',n:'PFE'}].map(({l,c,n})=>(
+              {[{l:'EE',c:'var(--accent)',n:'EE'},{l:'ENE',c:'var(--blue)',n:'ENE'},{l:'PFE 95%',c:'var(--amber)',n:'PFE'}].map(({l,c,n})=>(
                 <div key={n} onMouseEnter={()=>setHighlightCurve(n)} onMouseLeave={()=>setHighlightCurve(null)}
-                  style={{display:'flex',alignItems:'center',gap:'5px',cursor:'pointer',fontSize:'0.75rem',color:highlightCurve===n?'#F0F0F0':'#555',fontFamily:"'IBM Plex Mono',monospace"}}>
+                  style={{display:'flex',alignItems:'center',gap:'5px',cursor:'pointer',fontSize:'0.75rem',color:highlightCurve===n?'var(--text-hi)':'var(--text-mute)',fontFamily:'var(--mono)'}}>
                   <div style={{width:'16px',height:'2px',background:c,opacity:highlightCurve===n?1:0.6}}/>{l}
                 </div>
               ))}
             </div>
           )}
           {simResult && (
-            <div style={{position:'absolute',bottom:'6px',right:'12px',fontSize:'0.6875rem',color:'#222',fontFamily:"'IBM Plex Mono',monospace"}}>
+            <div style={{position:'absolute',bottom:'6px',right:'12px',fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
               {simResult.n_paths.toLocaleString()} paths · HW1F · a={simResult.params.a.toFixed(4)} σ={simResult.params.sigma_bp.toFixed(1)}bp
               {simResult.csa && (
-                <span style={{color:simResult.csa.collateralised?'#00D4A8':'#FF6B6B', marginLeft:'8px'}}>
+                <span style={{color:simResult.csa.collateralised?'var(--accent)':'var(--red)', marginLeft:'8px'}}>
                   · {simResult.csa.preset.replace('_','-')}{simResult.csa.collateralised ? ` · ${simResult.csa.mpor_days}bd MPoR` : ''}{simResult.csa.im_exchanged ? ' · IM' : ''}
                   {simResult.csa.collateralised && simResult.ee_gross && (() => {
                     const g = Math.max(...simResult.ee_gross), r = Math.max(...simResult.ee)
-                    return <span style={{color:'#2A5A4A'}}> · peak EE gross {fmtDollar(g)} → residual {fmtDollar(r)} ({g>0?(-100*(1-r/g)).toFixed(0):'0'}%)</span>
+                    return <span style={{color:'var(--accent-dim)'}}> · peak EE gross {fmtDollar(g)} → residual {fmtDollar(r)} ({g>0?(-100*(1-r/g)).toFixed(0):'0'}%)</span>
                   })()}
                 </span>
               )}
               {simResult.instrument_type==='IR_SWAPTION' && simResult.swaption && (
-                <span style={{color:'#333', marginLeft:'8px'}}>
+                <span style={{color:'var(--text-mute)', marginLeft:'8px'}}>
                   · 2-phase EE · expiry={simResult.swaption.expiry_y}Y · σ_N={simResult.swaption.vol_bp?.toFixed(1)}bp
                 </span>
               )}
@@ -845,7 +846,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
 
         {/* Unified XVA waterfall - $ and bp in same cell */}
         <div style={{flexShrink:0,overflowY:'auto',maxHeight:'280px'}}>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'#1E1E1E'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)'}}>
             {Object.entries(VA_DEFS).map(([key,def])=>{
               const val = xva?.[key]
               const isExp = expandedVa===key
@@ -855,52 +856,52 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                   onClick={()=>setExpandedVa(isExp?null:key)}
                   onMouseEnter={()=>def.curve!=='none'&&setHighlightCurve(def.curve)}
                   onMouseLeave={()=>setHighlightCurve(null)}
-                  style={{background:'#000',padding:'8px 8px 6px',cursor:'pointer',
+                  style={{background:'var(--bg)',padding:'8px 8px 6px',cursor:'pointer',
                     borderTop:isExp?'2px solid '+def.color:'2px solid transparent'}}>
-                  <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.10em',color:'#444',fontFamily:"'IBM Plex Mono',monospace",marginBottom:'4px'}}>{def.label}</div>
-                  <div style={{fontSize:'0.9375rem',fontWeight:700,color:val!=null?def.color:'#222',fontFamily:"'IBM Plex Mono',monospace",marginBottom:'3px'}}>
+                  <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.10em',color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px'}}>{def.label}</div>
+                  <div style={{fontSize:'0.9375rem',fontWeight:700,color:val!=null?def.color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'3px'}}>
                     {key==='npv' ? fmtDollar(val)
                      : key==='all_in' && xva ? fmtDollar(xva.all_in)
                      : fmtDollar(val)}
                   </div>
-                  <div style={{borderTop:'1px solid #1A1A1A',paddingTop:'3px'}}>
-                    {key==='npv' && <div style={{fontSize:'0.75rem',fontWeight:600,color:'#888',fontFamily:"'IBM Plex Mono',monospace"}}>{parRateKnown?parRate.toFixed(3)+'%':'—'}</div>}
-                    {key==='npv' && <div style={{fontSize:'0.6rem',color:'#2A2A2A',fontFamily:"'IBM Plex Sans',sans-serif"}}>par rate</div>}
-                    {key==='all_in' && <div style={{fontSize:'0.75rem',fontWeight:700,color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace"}}>{parRateKnown?allInRate.toFixed(3)+'%':'—'}</div>}
-                    {key==='all_in' && <div style={{fontSize:'0.6rem',color:'#00D4A8',fontFamily:"'IBM Plex Sans',sans-serif"}}>all-in rate</div>}
-                    {bp!=null && <div style={{fontSize:'0.75rem',fontWeight:600,color:def.color+'AA',fontFamily:"'IBM Plex Mono',monospace"}}>{parseFloat(bp)>=0?'+':''}{bp}bp</div>}
-                    {bp!=null && <div style={{fontSize:'0.6rem',color:'#2A2A2A',fontFamily:"'IBM Plex Sans',sans-serif"}}>bp on rate</div>}
+                  <div style={{borderTop:'1px solid var(--border)',paddingTop:'3px'}}>
+                    {key==='npv' && <div style={{fontSize:'0.75rem',fontWeight:600,color:'var(--text-dim)',fontFamily:'var(--mono)'}}>{parRateKnown?parRate.toFixed(3)+'%':'—'}</div>}
+                    {key==='npv' && <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>par rate</div>}
+                    {key==='all_in' && <div style={{fontSize:'0.75rem',fontWeight:700,color:'var(--accent)',fontFamily:'var(--mono)'}}>{parRateKnown?allInRate.toFixed(3)+'%':'—'}</div>}
+                    {key==='all_in' && <div style={{fontSize:'0.6875rem',color:'var(--accent)',fontFamily:'var(--sans)'}}>all-in rate</div>}
+                    {bp!=null && <div style={{fontSize:'0.75rem',fontWeight:600,color:def.color+'AA',fontFamily:'var(--mono)'}}>{parseFloat(bp)>=0?'+':''}{bp}bp</div>}
+                    {bp!=null && <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>bp on rate</div>}
                   </div>
                 </div>
               )
             })}
           </div>
           {expandedVa && VA_DEFS[expandedVa] && (
-            <div style={{background:'#050505',border:'1px solid #1E1E1E',borderTop:'none',padding:'10px 14px',fontSize:'0.8125rem',color:'#888',lineHeight:1.7,fontFamily:"'IBM Plex Sans',sans-serif"}}>
-              <span style={{color:VA_DEFS[expandedVa].color,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",marginRight:'8px'}}>{VA_DEFS[expandedVa].label}</span>
+            <div style={{background:'var(--bg)',border:'1px solid var(--border)',borderTop:'none',padding:'10px 14px',fontSize:'0.8125rem',color:'var(--text-dim)',lineHeight:1.7,fontFamily:'var(--sans)'}}>
+              <span style={{color:VA_DEFS[expandedVa].color,fontWeight:700,fontFamily:'var(--mono)',marginRight:'8px'}}>{VA_DEFS[expandedVa].label}</span>
               {VA_DEFS[expandedVa].desc}
-              {VA_DEFS[expandedVa].curve!=='none' && <span style={{marginLeft:'8px',fontSize:'0.75rem',color:'#444'}}>· Driven by {VA_DEFS[expandedVa].curve} curve</span>}
+              {VA_DEFS[expandedVa].curve!=='none' && <span style={{marginLeft:'8px',fontSize:'0.75rem',color:'var(--text-mute)'}}>· Driven by {VA_DEFS[expandedVa].curve} curve</span>}
             </div>
           )}
           {compareResult?.xva && xva && (
-            <div style={{background:'#000',borderTop:'1px solid #1E1E1E'}}>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'#1E1E1E'}}>
+            <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)'}}>
                 {Object.keys(VA_DEFS).map(key=>{
                   const cur = xva[key], oc = compareResult.xva[key]
                   const delta = (cur!=null && oc!=null) ? oc - cur : null
                   const pct = (delta!=null && key!=='npv' && Math.abs(cur)>1) ? (delta/Math.abs(cur))*100 : null
                   const better = key==='all_in' ? (delta>0) : (delta!=null && Math.abs(oc) < Math.abs(cur))
                   return (
-                    <div key={key} style={{background:'#020604',padding:'6px 8px'}}>
-                      <div style={{fontSize:'0.6rem',letterSpacing:'0.10em',color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace",marginBottom:'2px'}}>{key==='npv'?'ON-CHAIN':''}</div>
-                      <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'#00D4A8':'#222',fontFamily:"'IBM Plex Mono',monospace"}}>{fmtDollar(oc)}</div>
+                    <div key={key} style={{background:'var(--bg-deep)',padding:'6px 8px'}}>
+                      <div style={{fontSize:'0.6875rem',letterSpacing:'0.10em',color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'2px'}}>{key==='npv'?'ON-CHAIN':''}</div>
+                      <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'var(--accent)':'var(--text-mute)',fontFamily:'var(--mono)'}}>{fmtDollar(oc)}</div>
                       {pct!=null && key!=='all_in' && (
-                        <div style={{fontSize:'0.6875rem',color:better?'#00D4A8':'#FF6B6B',fontFamily:"'IBM Plex Mono',monospace"}}>
+                        <div style={{fontSize:'0.6875rem',color:better?'var(--accent)':'var(--red)',fontFamily:'var(--mono)'}}>
                           {delta>=0?'+':''}{fmtDollar(delta)} · {pct>=0?'+':''}{pct.toFixed(0)}%
                         </div>
                       )}
                       {key==='all_in' && delta!=null && (
-                        <div style={{fontSize:'0.6875rem',color:delta>=0?'#00D4A8':'#FF6B6B',fontFamily:"'IBM Plex Mono',monospace"}}>
+                        <div style={{fontSize:'0.6875rem',color:delta>=0?'var(--accent)':'var(--red)',fontFamily:'var(--mono)'}}>
                           {delta>=0?'+':''}{fmtDollar(delta)} vs {simResult.csa?.preset?.replace('_','-')}
                         </div>
                       )}
@@ -908,12 +909,12 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                   )
                 })}
               </div>
-              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'#2A5A4A',fontFamily:"'IBM Plex Mono',monospace",background:'#000'}}>
+              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'var(--accent-dim)',fontFamily:'var(--mono)',background:'var(--bg)'}}>
                 Same {compareResult.n_paths?.toLocaleString()} paths, same seed · ON-CHAIN = continuous VM · {compareResult.csa?.mpor_days}bd MPoR · SIMM IM × {compareResult.csa?.simm_mpor_scale?.toFixed(3)} · IM {fmtDollar(compareResult.capital?.im_0)} vs {fmtDollar(simResult.capital?.im_0)}
               </div>
             </div>
           )}
-          <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'#222',fontFamily:"'IBM Plex Mono',monospace",background:'#000',borderTop:'1px solid #0A0A0A'}}>
+          <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--mono)',background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
             ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA~ · Click any VA to expand · bp = VA / DV01
           </div>
         </div>
@@ -922,9 +923,9 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
       {/* Floating tooltip */}
       {tooltip && TIPS[tooltip.key] && (
         <div onMouseLeave={()=>setTooltip(null)}
-          style={{position:'fixed',left:Math.min(tooltip.x,window.innerWidth-360),top:Math.max(8,tooltip.y-8),width:'340px',background:'#0C0C0C',border:'1px solid rgba(0,212,168,0.4)',borderRadius:'2px',padding:'10px 12px',zIndex:9999,boxShadow:'0 4px 24px rgba(0,0,0,0.8)',pointerEvents:'none'}}>
-          <div style={{fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.08em',color:'#00D4A8',fontFamily:"'IBM Plex Mono',monospace",marginBottom:'6px',borderBottom:'1px solid #1E1E1E',paddingBottom:'5px'}}>{TIPS[tooltip.key].title}</div>
-          <div style={{fontSize:'0.75rem',color:'#888',lineHeight:1.7,fontFamily:"'IBM Plex Sans',sans-serif",whiteSpace:'pre-wrap'}}>{TIPS[tooltip.key].body}</div>
+          style={{position:'fixed',left:Math.min(tooltip.x,window.innerWidth-360),top:Math.max(8,tooltip.y-8),width:'340px',background:'var(--panel)',border:'1px solid rgba(13,212,168,0.4)',borderRadius:'2px',padding:'10px 12px',zIndex:9999,boxShadow:'0 4px 24px rgba(0,0,0,0.8)',pointerEvents:'none'}}>
+          <div style={{fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.08em',color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'6px',borderBottom:'1px solid var(--border)',paddingBottom:'5px'}}>{TIPS[tooltip.key].title}</div>
+          <div style={{fontSize:'0.75rem',color:'var(--text-dim)',lineHeight:1.7,fontFamily:'var(--sans)',whiteSpace:'pre-wrap'}}>{TIPS[tooltip.key].body}</div>
         </div>
       )}
     </div>
