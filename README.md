@@ -1,6 +1,6 @@
 # Rijeka
 
-**Where the trading desk meets the chain.** An open-source derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects. Rates, credit, FX, equities, commodities and crypto, free for everyone.
+**Where the trading desk meets the chain.** An open-source derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects. Rates, FX and crypto forwards today; credit, equities and commodities next. Free for everyone.
 
 Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging market participants, and academic researchers operate blind — without the tools to price, hedge, or understand the true cost of a trade. Rijeka exists to change that.
 
@@ -159,20 +159,22 @@ Validation reports and Python test packages in `model_validation/`.
 
 ## Roadmap
 
-### Phase 1 — Rates (current)
+### Phase 1 — Rates, FX & crypto forwards (live, hosted demo)
 
 | Instrument | Status |
 |-----------|--------|
-| Vanilla IRS / OIS | ✅ Live |
-| Basis Swap | ✅ Live |
+| Vanilla IRS / OIS / basis / amortising | ✅ Live |
 | European Swaption | ✅ Live |
 | Interest Rate Cap / Floor / Collar | ✅ Live |
-| XCCY Swap | Sprint 10 |
-| Bermudan Swaption | Sprint 11 |
+| FX spot / forward / NDF (EUR, GBP, JPY, CHF, AUD, CAD vs USD) | ✅ Live |
+| BTC / ETH / SOL forwards and NDFs | ✅ Live |
+| Bilateral confirmation anchored on Ethereum (Sepolia) | ✅ Live |
+| XCCY Swap | Roadmap |
+| Bermudan Swaption | Roadmap |
 
-### Phase 2 — FX & Credit (in progress)
+### Phase 2 — FX options & Credit (next)
 
-FX spot, forwards and NDFs are live on the same interest-rate-parity model as the crypto forwards (FX · CRYPTO page; `pricing/currency_forward.py`). Next: FX options and cross-currency swaps; CDS, credit options, wrong-way risk in CVA.
+FX and crypto forwards share one interest-rate-parity model (`pricing/currency_forward.py`), booked from the same NEW TRADE ticket as rates. Next: FX options and cross-currency swaps; CDS, credit options, wrong-way risk in CVA.
 
 ### Phase 3 — Equity & Commodity
 

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import ErrorBoundary    from './components/ErrorBoundary'
 import { useAuthStore } from './store/useAuthStore'
 import AuthGuard        from './components/auth/AuthGuard'
 import LoginPage        from './components/auth/LoginPage'
@@ -91,8 +92,8 @@ function PersistentBookingWindow() {
 
         if (useUnified) {
           return (
+            <ErrorBoundary key={w.id} scope="window" onReset={() => close(w.id)}>
             <TradeWindow
-              key={w.id}
               initialProduct={productKey}
               onClose={() => close(w.id)}
               onBook={(payload) => {
@@ -105,21 +106,29 @@ function PersistentBookingWindow() {
                 // (commit 529c232).
               }}
             />
+            </ErrorBoundary>
           )
         }
 
         return (
+          <ErrorBoundary key={w.id} scope="window" onReset={() => close(w.id)}>
           <TradeBookingWindow
-            key={w.id}
             windowId={w.id}
             initialPos={{ x: w.x, y: w.y }}
             trade={w.trade || null}
             onClose={() => close(w.id)}
           />
+          </ErrorBoundary>
         )
       })}
     </>
   )
+}
+
+// A routed page that throws shows the error card; navigating elsewhere heals it.
+function PageBoundary({ children }) {
+  const { pathname } = useLocation()
+  return <ErrorBoundary scope="page" resetKey={pathname}>{children}</ErrorBoundary>
 }
 
 export default function App() {
@@ -132,6 +141,7 @@ export default function App() {
   )
   return (
     <BrowserRouter>
+      <PageBoundary>
       <Routes>
         <Route path="/login"   element={<LoginPage />} />
         <Route path="/signup"  element={<SignupPage />} />
@@ -167,9 +177,10 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/command-center" replace />} />
       </Routes>
+      </PageBoundary>
       <PersistentBookingWindow />
       {/* One messenger for every tab: private Prometheus, support, and rooms. */}
-      <Messenger />
+      <ErrorBoundary scope="widget"><Messenger /></ErrorBoundary>
     </BrowserRouter>
   )
 }
