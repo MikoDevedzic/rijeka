@@ -225,8 +225,10 @@ function DeskHome({ demo, navigate }) {
             {(d.news || []).map(n => (
               <li key={n.url} className={n.summary ? 'has-summary' : ''}>
                 <a href={n.url} target="_blank" rel="noopener noreferrer">{n.title}</a>
-                {n.summary && <details className="dh-news-sum"><summary>AI summary · {n.summary_basis === 'article' ? 'from the article' : 'from the feed blurb'}</summary>
-                  {String(n.summary).split(/\n+/).map((p, i) => <p key={i}>{p}</p>)}</details>}
+                {n.summary && <div className="dh-news-sum">
+                  {String(n.summary).split(/\n+/).map((p, i) => <p key={i} className={/^why it matters/i.test(p) ? 'why' : ''}>{p}</p>)}
+                  <span className="dh-news-basis">AI summary · {n.summary_basis === 'article' ? 'from the article' : 'from the feed blurb'}</span>
+                </div>}
                 <span className="dh-news-meta">{n.source} · {ago(n.published_at)}{n.tags?.[0] ? ` · ${n.tags[0]}` : ''}</span>
               </li>
             ))}

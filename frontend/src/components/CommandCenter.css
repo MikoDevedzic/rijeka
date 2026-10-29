@@ -161,9 +161,7 @@
 .cc-footer a { color: var(--text-dim); text-decoration: none; }
 .cc-footer a:hover { color: var(--text); }
 
-.dh-news-sum { margin: 0.1rem 0 0.15rem; }
-.dh-news-sum summary { cursor: pointer; font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.08em; color: var(--accent); list-style: none; }
-.dh-news-sum summary::-webkit-details-marker { display: none; }
-.dh-news-sum summary::before { content: '▸ '; }
-.dh-news-sum[open] summary::before { content: '▾ '; }
-.dh-news-sum p { margin: 0.25rem 0 0; font-size: 0.82rem; line-height: 1.45; color: var(--text); }
+.dh-news-sum { margin: 0.15rem 0 0.2rem; padding-left: 0.6rem; border-left: 2px solid var(--border-hi); }
+.dh-news-sum p { margin: 0 0 0.25rem; font-size: 0.82rem; line-height: 1.45; color: var(--text); }
+.dh-news-sum p.why { color: var(--text-dim); }
+.dh-news-basis { font-family: var(--mono); font-size: 0.58rem; letter-spacing: 0.1em; color: var(--text-mute); }
