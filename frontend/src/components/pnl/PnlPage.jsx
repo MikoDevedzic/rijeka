@@ -246,9 +246,14 @@ function Tree({ tree, rows }) {
 }
 
 function SignOff({ rep, role, canControl, onSign, busy }) {
+  const navigate = useNavigate()
+  const me = useAuthStore(s => s.session?.user?.id)
   const [comment, setComment] = useState('')
   const signs = rep.signoffs || []
   const traderDone = signs.some(s => s.role === 'TRADER'), ctlDone = signs.some(s => s.role === 'CONTROLLER')
+  const twoPerson = rep.signoff_policy !== 'SINGLE'
+  const iSignedAsTrader = signs.some(s => s.role === 'TRADER' && s.signer_user_id === me)
+  const blocked = twoPerson && iSignedAsTrader && !ctlDone
   return (
     <div className="pnl-sign">
       <ol className="pnl-steps">
@@ -265,8 +270,9 @@ function SignOff({ rep, role, canControl, onSign, busy }) {
           <textarea className="pnl-ta" rows={2} placeholder="Comment for the record (what moved, anything the controller should know)" value={comment} onChange={e => setComment(e.target.value)} />
           <div className="pnl-sign-btns">
             <button className="pnl-btn" disabled={busy || traderDone} onClick={() => onSign('TRADER', comment)}>{traderDone ? 'TRADER SIGNED' : 'SIGN AS TRADER'}</button>
-            <button className="pnl-btn" disabled={busy || ctlDone || !canControl} title={canControl ? '' : 'Needs the controller, CFO or admin role'} onClick={() => onSign('CONTROLLER', comment)}>{ctlDone ? 'CONTROLLER SIGNED' : 'SIGN AS CONTROLLER'}</button>
+            {twoPerson && <button className="pnl-btn" disabled={busy || ctlDone || !canControl || blocked} title={canControl ? '' : 'Needs the controller, CFO or admin role'} onClick={() => onSign('CONTROLLER', comment)}>{ctlDone ? 'CONTROLLER SIGNED' : 'SIGN AS CONTROLLER'}</button>}
           </div>
+          {blocked && <div className="pnl-note" style={{ color: 'var(--amber)' }}>You signed this day as trader. Under the two-person policy the controller must be someone else, whichever hat you wear now. For a one-person desk set the policy to SINGLE: <button className="dh-link" onClick={() => navigate('/configurations/pnl/conventions')}>CONVENTIONS →</button></div>}
           <div className="pnl-note">Your role: {role.toUpperCase()}{canControl ? ' · may sign as controller' : ''}. Signing stores the day first, so what is signed is what is kept.</div>
         </>
       )}

@@ -83,14 +83,16 @@ def signoff_policy(db: Session, uid: str) -> str:
     """The firm's sign-off policy: TWO_PERSON (trader, then a different controller) or SINGLE
     (one signature finalises; a one-person desk, or a shop where the CFO is the risk and
     control function). Default TWO_PERSON."""
+    from api.routes.demo import enabled as demo_enabled
+    default = "SINGLE" if demo_enabled() else "TWO_PERSON"      # a hosted-demo workspace is a one-person desk until it says otherwise
     fm = _firm(db, uid)
     if fm is None:
-        return "TWO_PERSON"
+        return default
     try:
         v = db.execute(text("SELECT signoff_policy FROM risk_settings WHERE firm_id = :f"), {"f": str(fm.firm_id)}).scalar()
     except Exception:
-        db.rollback(); return "TWO_PERSON"
-    return v if v in POLICIES else "TWO_PERSON"
+        db.rollback(); return default
+    return v if v in POLICIES else default
 
 
 class PolicyBody(BaseModel):
@@ -141,8 +143,9 @@ def conventions(db: Session = Depends(get_db), user: dict = Depends(verify_token
                      "final": "both signatures; visible to management with the comments"},
         "your_role": _role(db, user), "you_may_sign_as_controller": _is_controller(db, user), "you_may_see_the_firm": _is_management(db, user),
         "signoff_policy": signoff_policy(db, user["sub"]),
-        "policy_note": "Roles and the sign-off policy are the firm's. On the hosted demo each workspace is its own firm and the person at the desk picks the hat; "
-                       "TWO_PERSON needs a trader and a different controller, SINGLE lets one signature finalise the day (a one-person desk, or a shop where the CFO is also the control function).",
+        "policy_note": "Roles and the sign-off policy are the firm's. On the hosted demo each workspace is its own firm, the person at the desk picks the hat, and the policy "
+                       "starts as SINGLE (one signature finalises the day: a one-person desk, or a shop where the CFO is also the control function); a firm with a control "
+                       "function sets TWO_PERSON, where the trader signs and then a different person with the controller, CFO or admin role.",
         "history_tables": R.tables_present(db), "migration": "docs/migrations/2026-10-30_pnl.sql", "roles_migration": "docs/migrations/2026-10-30_pnl_roles.sql",
     }
 
