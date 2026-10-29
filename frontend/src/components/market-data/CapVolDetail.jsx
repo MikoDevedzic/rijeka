@@ -130,7 +130,7 @@ session.sendRequest(request2)`;
       <SectionLabel>Bloomberg Python (blpapi)</SectionLabel>
       <div className="cb">
         <button className="cb-copy" onClick={() => navigator.clipboard.writeText(code)}>copy</button>
-        <pre style={{ margin: 0, fontSize: '9px', lineHeight: 1.8 }}>{code}</pre>
+        <pre style={{ margin: 0, fontSize:'11px', lineHeight: 1.8 }}>{code}</pre>
       </div>
     </div>
   );
@@ -405,7 +405,7 @@ function CapVolConfig() {
         <select className="bp-sel"><option>Flat</option><option>Linear</option></select>
       </div>
       <div style={{ marginTop: '12px', padding: '8px 10px',
-        background: 'rgba(74,158,255,0.04)', border: '1px solid rgba(74,158,255,0.15)',
+        background: 'rgba(74,154,212,0.04)', border: '1px solid rgba(74,154,212,0.15)',
         borderRadius: '2px', fontSize: '0.8125rem', color: 'var(--text-dim)',
         fontFamily: "'IBM Plex Mono',var(--mono)", lineHeight: 1.7 }}>
         Cap/floor pricing uses direct table lookup from snapped Bloomberg flat vols.

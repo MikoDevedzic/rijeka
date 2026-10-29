@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import RateCurveCanvas from './RateCurveCanvas';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { INTERP_METHODS } from '../../data/ratesCurves';
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel, DescBox } from './_DetailShared';
@@ -17,7 +18,7 @@ function SourceBadge({ src }) {
   const map = {
     BLOOMBERG: { bg:'rgba(74,154,212,0.12)', bd:'rgba(74,154,212,0.3)', c:'#4a9ad4' },
     FED:       { bg:'rgba(144,96,204,0.12)', bd:'rgba(144,96,204,0.3)', c:'#9060cc' },
-    MANUAL:    { bg:'rgba(82,104,120,0.12)', bd:'rgba(82,104,120,0.3)', c:'#666666' },
+    MANUAL:    { bg:'rgba(82,104,120,0.12)', bd:'rgba(82,104,120,0.3)', c:'var(--text-dim)' },
     IMPORT:    { bg:'rgba(240,160,32,0.12)', bd:'rgba(240,160,32,0.3)', c:'#f0a020' },
   };
   const s = map[src] || map.MANUAL;
@@ -31,78 +32,20 @@ function SourceBadge({ src }) {
 }
 
 // Basis sparkline — blue line, bp values
-function BasisCanvas({ instruments, hasData }) {
-  const ref = useRef(null);
-  const active = instruments.filter(i => i.en && i.unit === 'bp' && i.quote != null && TENOR_TO_Y[i.tenor]);
-
-  if (!hasData) return (
+function BasisCanvas({ instruments, hasData, title }) {
+  const points = instruments
+    .filter(i => i.en && i.unit === 'bp' && i.quote != null && TENOR_TO_Y[i.tenor])
+    .map(i => ({ t: TENOR_TO_Y[i.tenor], v: Number(i.quote) }));
+  if (!hasData || points.length < 2) return (
     <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',
-      padding:'8px',marginTop:'6px',height:'80px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+      padding:'8px',marginTop:'6px',height:'96px',display:'flex',alignItems:'center',justifyContent:'center'}}>
       <span style={{fontSize:'0.75rem',color:'var(--text-dim)',letterSpacing:'0.08em'}}>SNAP OR SAVE TO VIEW CURVE</span>
     </div>
   );
-
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas || active.length < 2) return;
-    const dpr = window.devicePixelRatio || 2;
-    const W = canvas.parentElement.offsetWidth || 400;
-    const H = 80;
-    canvas.width = W * dpr; canvas.height = H * dpr;
-    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
-    const ctx = canvas.getContext('2d');
-    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr, dpr);
-
-    const pts = active.map(i => ({ t: TENOR_TO_Y[i.tenor], v: i.quote })).sort((a,b) => a.t - b.t);
-    const maxT = Math.max(...pts.map(p => p.t));
-    const minV = Math.min(...pts.map(p => p.v));
-    const maxV = Math.max(...pts.map(p => p.v));
-    const range = maxV - minV || 1;
-    const PAD = { l:8, r:8, t:10, b:22 };
-    const CW = W - PAD.l - PAD.r, CH = H - PAD.t - PAD.b;
-    const px = t => PAD.l + (t / maxT) * CW;
-    const py = v => PAD.t + CH - ((v - minV) / range) * CH;
-
-    ctx.fillStyle = '#0D0F17'; ctx.fillRect(0, 0, W, H);
-
-    if (minV < 0 && maxV > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 0.5;
-      ctx.setLineDash([3,3]); ctx.beginPath();
-      ctx.moveTo(PAD.l, py(0)); ctx.lineTo(W - PAD.r, py(0)); ctx.stroke();
-      ctx.setLineDash([]);
-    }
-
-    ctx.beginPath();
-    pts.forEach((p,i) => i===0 ? ctx.moveTo(px(p.t), py(p.v)) : ctx.lineTo(px(p.t), py(p.v)));
-    ctx.lineTo(px(maxT), H - PAD.b); ctx.lineTo(px(pts[0].t), H - PAD.b); ctx.closePath();
-    const grad = ctx.createLinearGradient(0, PAD.t, 0, H - PAD.b);
-    grad.addColorStop(0, 'rgba(74,158,255,0.15)'); grad.addColorStop(1, 'rgba(74,158,255,0)');
-    ctx.fillStyle = grad; ctx.fill();
-
-    ctx.beginPath();
-    pts.forEach((p,i) => i===0 ? ctx.moveTo(px(p.t), py(p.v)) : ctx.lineTo(px(p.t), py(p.v)));
-    ctx.strokeStyle = 'rgba(74,158,255,0.2)'; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.stroke();
-    ctx.beginPath();
-    pts.forEach((p,i) => i===0 ? ctx.moveTo(px(p.t), py(p.v)) : ctx.lineTo(px(p.t), py(p.v)));
-    ctx.strokeStyle = '#4A9EFF'; ctx.lineWidth = 2; ctx.stroke();
-    pts.forEach(p => {
-      ctx.beginPath(); ctx.arc(px(p.t), py(p.v), 5, 0, Math.PI*2);
-      ctx.strokeStyle = 'rgba(74,158,255,0.25)'; ctx.lineWidth = 3; ctx.stroke();
-      ctx.beginPath(); ctx.arc(px(p.t), py(p.v), 3, 0, Math.PI*2);
-      ctx.fillStyle = '#4A9EFF'; ctx.fill();
-    });
-    ctx.fillStyle = '#666'; ctx.font = '9px DM Mono,monospace';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    ['1Y','5Y','10Y','20Y','30Y'].forEach(t => {
-      const y = TENOR_TO_Y[t]; if (!y || y > maxT * 1.05) return;
-      ctx.fillText(t, px(y), H - PAD.b + 5);
-    });
-  }, [active.map(i => i.quote).join(',')]);
-
   return (
-    <div style={{background:'#0D0F17',border:'1px solid var(--border)',borderRadius:'2px',
-      overflow:'hidden',marginTop:'6px'}}>
-      <canvas ref={ref} style={{display:'block'}}/>
+    <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',padding:'8px',marginTop:'6px'}}>
+      <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'5px'}}>{title}</div>
+      <RateCurveCanvas points={points} unit="bp" color="#4a9ad4" height={170} />
     </div>
   );
 }
@@ -153,7 +96,7 @@ basis_curve = ql.PiecewiseLogLinearDiscount(
       <SectionLabel>Bootstrap Logic</SectionLabel>
       <div className="cb">
         <button className="cb-copy" onClick={() => navigator.clipboard.writeText(code)}>copy</button>
-        <pre style={{ margin: 0, fontSize: '9px', lineHeight: 1.8 }}>{code}</pre>
+        <pre style={{ margin: 0, fontSize:'11px', lineHeight: 1.8 }}>{code}</pre>
       </div>
     </div>
   );
@@ -283,7 +226,7 @@ function BasisInstruments({ curve }) {
                   : inst.ticker}
               </div>,
               <div key={`src-${i}`} style={tdS}><SourceBadge src={src} /></div>,
-              <div key={`sp-${i}`} style={{...tdR, color:'#4A9EFF'}}>
+              <div key={`sp-${i}`} style={{...tdR, color:'var(--blue)'}}>
                 <input
                   className="qi bp"
                   defaultValue={isBp ? inst.quote.toFixed(1) : inst.quote.toFixed(3)}
@@ -297,7 +240,7 @@ function BasisInstruments({ curve }) {
       </div>
 
       {/* Sparkline */}
-      <BasisCanvas instruments={liveInstruments} hasData={!!snapshotSaved?.[curve.id]} />
+      <BasisCanvas instruments={liveInstruments} hasData={!!snapshotSaved?.[curve.id]} title={`${(curve.name || curve.id).toUpperCase()} · BASIS SPREAD · BP`} />
 
       {/* Snap / Save controls */}
       <div style={{marginTop:'10px', borderTop:'1px solid var(--border)', paddingTop:'10px'}}>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import RateCurveCanvas from './RateCurveCanvas';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { INTERP_METHODS, TENOR_TO_YEARS } from '../../data/ratesCurves';
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel } from './_DetailShared';
@@ -10,7 +11,7 @@ function SourceBadge({ src }) {
   const map = {
     BLOOMBERG: { bg:'rgba(74,154,212,0.12)', bd:'rgba(74,154,212,0.3)', c:'#4a9ad4' },
     FED:       { bg:'rgba(144,96,204,0.12)', bd:'rgba(144,96,204,0.3)', c:'#9060cc' },
-    MANUAL:    { bg:'rgba(82,104,120,0.12)', bd:'rgba(82,104,120,0.3)', c:'#666666' },
+    MANUAL:    { bg:'rgba(82,104,120,0.12)', bd:'rgba(82,104,120,0.3)', c:'var(--text-dim)' },
     IMPORT:    { bg:'rgba(240,160,32,0.12)', bd:'rgba(240,160,32,0.3)', c:'#f0a020' },
   };
   const s = map[src] || map.MANUAL;
@@ -23,74 +24,22 @@ function SourceBadge({ src }) {
   );
 }
 
-// ── Curve sparkline canvas ────────────────────────────────────────────────────
-function CurveCanvas({ instruments, hasData }) {
+// ── Curve chart ────────────────────────────────────────────────────────────────
+function CurveCanvas({ instruments, hasData, title }) {
   if (!hasData) return (
     <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:"2px",padding:"8px",marginTop:"6px",height:"96px",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <span style={{fontSize:"0.48rem",color:"var(--text-dim)",letterSpacing:"0.08em"}}>SNAP OR SAVE TO VIEW CURVE</span>
+      <span style={{fontSize:"0.75rem",color:"var(--text-dim)",letterSpacing:"0.08em"}}>SNAP OR SAVE TO VIEW CURVE</span>
     </div>
   );
-  const ref = useRef(null);
-
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const W = canvas.offsetWidth || 400;
-    const H = 80;
-    canvas.width = W;
-    canvas.height = H;
-    ctx.clearRect(0, 0, W, H);
-
-    const active = instruments.filter(i => i.en && i.quote > 0 && i.tenor !== 'ON');
-    if (active.length < 2) return;
-
-    const pts = active.map(i => ({ t: tenorToYears(i.tenor), r: i.quote }));
-    const maxT = Math.max(...pts.map(p => p.t));
-    const minR = Math.min(...pts.map(p => p.r));
-    const maxR = Math.max(...pts.map(p => p.r));
-    const rRange = maxR - minR || 0.5;
-    const pad = { l: 6, r: 6, t: 6, b: 18 };
-
-    const px = t => pad.l + (t / maxT) * (W - pad.l - pad.r);
-    const py = r => H - pad.b - ((r - minR) / rRange) * (H - pad.t - pad.b);
-
-    ctx.strokeStyle = '#0dd4a8';
-    ctx.lineWidth = 1.5;
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    pts.forEach((p, i) => i === 0 ? ctx.moveTo(px(p.t), py(p.r)) : ctx.lineTo(px(p.t), py(p.r)));
-    ctx.stroke();
-
-    ctx.beginPath();
-    pts.forEach((p, i) => i === 0 ? ctx.moveTo(px(p.t), py(p.r)) : ctx.lineTo(px(p.t), py(p.r)));
-    ctx.lineTo(px(maxT), H - pad.b);
-    ctx.lineTo(px(pts[0].t), H - pad.b);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(13,212,168,0.06)';
-    ctx.fill();
-
-    pts.forEach(p => {
-      ctx.beginPath();
-      ctx.arc(px(p.t), py(p.r), 2, 0, Math.PI * 2);
-      ctx.fillStyle = '#0dd4a8';
-      ctx.fill();
-    });
-
-    ctx.fillStyle = '#666666';
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'center';
-    [1, 2, 3, 5, 7, 10, 15, 20].filter(t => t <= maxT).forEach(t => {
-      ctx.fillText(t + 'Y', px(t), H - 4);
-    });
-  }, [instruments]);
-
+  const points = instruments
+    .filter(i => i.en && i.quote > 0)
+    .map(i => ({ t: i.tenor === 'ON' ? 1 / 365 : tenorToYears(i.tenor), v: Number(i.quote) }));
   return (
     <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',padding:'8px',marginTop:'6px'}}>
       <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'5px'}}>
-        SOFR OIS CURVE · BGN MID
+        {title}
       </div>
-      <canvas ref={ref} style={{width:'100%',display:'block'}} height="80" />
+      <RateCurveCanvas points={points} unit="%" color="#0dd4a8" height={190} />
     </div>
   );
 }
@@ -319,8 +268,8 @@ function OISInstruments({ curve }) {
               </div>,
               <div key={`src-${i}`} style={tdBase}><SourceBadge src={src} /></div>,
               <div key={`mid-${i}`} style={{...tdR, color:'#0dd4a8'}}>{bs.mid ? parseFloat(bs.mid).toFixed(8) : '—'}</div>,
-              <div key={`z-${i}`} style={{...tdR, color:'#8ab0c8'}}>{bs.zero || '—'}</div>,
-              <div key={`df-${i}`} style={{...tdR, color:'#8ab0c8'}}>{bs.df || '—'}</div>,
+              <div key={`z-${i}`} style={{...tdR, color:'var(--text-dim)'}}>{bs.zero || '—'}</div>,
+              <div key={`df-${i}`} style={{...tdR, color:'var(--text-dim)'}}>{bs.df || '—'}</div>,
               <div key={`fw-${i}`} style={{...tdR, color:'#f0a020'}}>{bs.fwd || '—'}</div>,
             ];
           })}
@@ -328,7 +277,7 @@ function OISInstruments({ curve }) {
       </div>
 
       {/* ── Curve chart ───────────────────────────────────────────────────── */}
-      <CurveCanvas instruments={liveInstruments} hasData={!!snapshotSaved?.[curve.id]} />
+      <CurveCanvas instruments={liveInstruments} hasData={!!snapshotSaved?.[curve.id]} title={`${(curve.name || curve.id).toUpperCase()} · PAR CURVE · MID`} />
 
       {/* ── Snap controls ─────────────────────────────────────────────────── */}
       <div style={{marginTop:'10px',borderTop:'1px solid var(--border)',paddingTop:'10px'}}>
@@ -566,7 +515,7 @@ curve.enableExtrapolation()`;
       <SectionLabel>QuantLib Python</SectionLabel>
       <div className="cb">
         <button className="cb-copy" onClick={handleCopy}>copy</button>
-        <pre style={{ margin: 0, fontSize: '9px', lineHeight: 1.8 }}>{code}</pre>
+        <pre style={{ margin: 0, fontSize:'11px', lineHeight: 1.8 }}>{code}</pre>
       </div>
     </div>
   );
