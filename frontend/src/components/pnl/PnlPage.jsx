@@ -89,9 +89,9 @@ export default function PnlPage() {
 
       {view === 'firm' ? <FirmView firm={firm} /> : rep?.date && (<>
         <div className="pnl-cards">
-          <Card label={`DAY · ${fmtD(rep.date)}`} total={t.dod} market={t.market} trading={t.trading} />
-          <Card label="MONTH TO DATE" total={t.mtd} market={t.mtd_market} trading={t.mtd_trading} note={`${t.history_days || 0} stored day${t.history_days === 1 ? '' : 's'} + today`} />
-          <Card label="YEAR TO DATE" total={t.ytd} market={t.ytd_market} trading={t.ytd_trading} note={rep.tables ? (rep.persisted ? 'stored' : 'live · not yet stored') : 'live · history tables not applied'} />
+          <Card label={`DAY · ${fmtD(rep.date)} · BEFORE XVA`} total={t.dod} market={t.market} trading={t.trading} after={t.dod_after_xva} xva={t.xva_dod} />
+          <Card label="MONTH TO DATE" total={t.mtd} market={t.mtd_market} trading={t.mtd_trading} after={t.mtd_after_xva} note={`${t.history_days || 0} stored day${t.history_days === 1 ? '' : 's'} + today`} />
+          <Card label="YEAR TO DATE" total={t.ytd} market={t.ytd_market} trading={t.ytd_trading} after={t.ytd_after_xva} note={rep.tables ? (rep.persisted ? 'stored' : 'live · not yet stored') : 'live · history tables not applied'} />
           <div className="pnl-card meta">
             <span className="pnl-kl">TRADES</span><b>{rep.rows.length}</b>
             <span className="pnl-kl">VALUATIONS</span><b>{rep.meta?.valuations}</b>
@@ -115,6 +115,8 @@ export default function PnlPage() {
           </section>
         </div>
 
+        <XvaPanel x={rep.xva} ccy={rep.reporting_ccy} />
+
         <section className="pnl-panel">
           <header><span>HIERARCHY · DESK → BOOK → TRADE</span><span className="pnl-sub">click a trade for its explain</span></header>
           <Tree tree={rep.tree} rows={rep.rows} ccy={rep.reporting_ccy} />
@@ -134,7 +136,7 @@ export default function PnlPage() {
   )
 }
 
-function Card({ label, total, market, trading, note }) {
+function Card({ label, total, market, trading, note, after, xva }) {
   const span = Math.max(Math.abs(market || 0), Math.abs(trading || 0), 1)
   return (
     <div className="pnl-card">
@@ -143,9 +145,42 @@ function Card({ label, total, market, trading, note }) {
       <div className="pnl-split">
         <div><span>MARKET</span><i><s style={{ width: `${Math.abs(market || 0) / span * 100}%` }} className={tone(market)} /></i><em className={tone(market)}>{sgn(market)}</em></div>
         <div><span>TRADING</span><i><s style={{ width: `${Math.abs(trading || 0) / span * 100}%` }} className={tone(trading)} /></i><em className={tone(trading)}>{sgn(trading)}</em></div>
+        {xva !== undefined && <div><span>XVA</span><i /><em className={tone(xva)}>{xva == null ? 'no prior run' : sgn(xva)}</em></div>}
       </div>
+      <div className="pnl-after"><span>AFTER XVA</span><b className={tone(after)}>{after == null ? '—' : sgn(after)}</b></div>
       {note && <span className="pnl-note">{note}</span>}
     </div>
+  )
+}
+
+function XvaPanel({ x, ccy }) {
+  if (!x) return null
+  const comps = x.components
+  const lvl = x.levels || {}
+  const day = x.day
+  return (
+    <section className="pnl-panel">
+      <header><span>XVA · RESERVES AND THEIR CHANGE</span><span className="pnl-sub">{x.measure.replace('_', '-').toLowerCase()} · netted into the signed P&amp;L: {x.netted.join(', ')} · {ccy}</span></header>
+      <div className="pnl-tree">
+        <div className="pnl-tr head" style={{ gridTemplateColumns: `1fr repeat(${comps.length}, 7.5rem) 8rem` }}>
+          <span className="pnl-tn">COUNTERPARTY</span>{comps.map(c => <span key={c} className={`pnl-tv${x.netted.includes(c.toUpperCase()) ? '' : ' dim'}`}>{c.toUpperCase()}{x.netted.includes(c.toUpperCase()) ? '' : ' ·'}</span>)}<span className="pnl-tv tot">NETTED Δ</span>
+        </div>
+        {x.by_counterparty.map(r => (
+          <div key={r.counterparty} className="pnl-tr d1" style={{ gridTemplateColumns: `1fr repeat(${comps.length}, 7.5rem) 8rem`, cursor: 'default' }}>
+            <span className="pnl-tn" style={{ paddingLeft: 8 }}>{r.counterparty}<small>{r.change ? `level today → change vs ${x.prev_date}` : 'level today · no stored prior run'}</small></span>
+            {comps.map(c => <span key={c} className={`pnl-tv ${tone(r.today[c])}`}>{sgn(r.today[c])}{r.change && <small style={{ display: 'block', color: 'var(--text-mute)' }}>Δ {sgn(r.change[c])}</small>}</span>)}
+            <span className={`pnl-tv tot ${tone(r.change ? comps.filter(c => x.netted.includes(c.toUpperCase())).reduce((a, c) => a + r.change[c], 0) : 0)}`}>{r.change ? sgn(comps.filter(c => x.netted.includes(c.toUpperCase())).reduce((a, c) => a + r.change[c], 0)) : '—'}</span>
+          </div>
+        ))}
+        <div className="pnl-tr d0" style={{ gridTemplateColumns: `1fr repeat(${comps.length}, 7.5rem) 8rem`, cursor: 'default' }}>
+          <span className="pnl-tn" style={{ paddingLeft: 8 }}>BOOK · LEVELS{day ? <small>Δ day vs {day.from}</small> : <small>no prior stored run yet</small>}</span>
+          {comps.map(c => <span key={c} className={`pnl-tv ${tone(lvl[c])}`}>{sgn(lvl[c])}{day && <small style={{ display: 'block', color: 'var(--text-mute)' }}>Δ {sgn(day.by_component[c])}</small>}</span>)}
+          <span className={`pnl-tv tot ${tone(day?.netted)}`}>{day ? sgn(day.netted) : '—'}</span>
+        </div>
+        {!x.by_counterparty.length && <div className="pnl-empty">No netting set to reserve against.</div>}
+      </div>
+      <div className="pnl-note">{x.note}{x.params ? ` · counterparty CDS ${x.params.cp_cds_bp}bp, LGD ${(x.params.lgd * 100).toFixed(0)}% (desk defaults until the record carries its own)` : ''} · KVA and MVA are lifetime costs of capital and margin: shown, and netted only if the policy says so (Configurations › P&amp;L &amp; Control › Conventions).</div>
+    </section>
   )
 }
 

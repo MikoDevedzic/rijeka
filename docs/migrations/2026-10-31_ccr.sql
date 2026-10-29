@@ -17,3 +17,5 @@ CREATE INDEX IF NOT EXISTS ix_ccr_daily_user_date ON ccr_daily (user_id, run_dat
 ALTER TABLE ccr_daily ENABLE ROW LEVEL SECURITY;
 ALTER TABLE risk_settings ADD COLUMN IF NOT EXISTS ccr_paths integer NOT NULL DEFAULT 2000;
 ALTER TABLE risk_settings ADD COLUMN IF NOT EXISTS ccr_drift text NOT NULL DEFAULT 'zero';
+-- which XVA components net into the signed P&L (the rest are shown)
+ALTER TABLE risk_settings ADD COLUMN IF NOT EXISTS xva_netted text NOT NULL DEFAULT 'CVA,DVA,FVA,FBA';

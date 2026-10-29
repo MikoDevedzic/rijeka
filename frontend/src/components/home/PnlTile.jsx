@@ -28,7 +28,7 @@ export default function PnlTile() {
     return () => { alive = false }
   }, [])
   const [stLabel, stTone] = STATUS[s?.status] || STATUS.OPEN
-  const cols = s ? [['DAY', s.dod, s.market, s.trading], ['MTD', s.mtd, s.mtd_market, s.mtd_trading], ['YTD', s.ytd, s.ytd_market, s.ytd_trading]] : []
+  const cols = s ? [['DAY', s.dod, s.market, s.trading, s.dod_after_xva], ['MTD', s.mtd, s.mtd_market, s.mtd_trading, s.mtd_after_xva], ['YTD', s.ytd, s.ytd_market, s.ytd_trading, s.ytd_after_xva]] : []
   return (
     <div className="pt" onClick={() => navigate('/pnl')} role="button" title="Open the P&L page: attribution, hierarchy, sign-off">
       <div className="pt-h">
@@ -39,12 +39,13 @@ export default function PnlTile() {
       {!s && !err && <div className="pt-note">Marking the book…</div>}
       {s && (
         <div className="pt-cols">
-          {cols.map(([l, tot, mk, tr]) => (
+          {cols.map(([l, tot, mk, tr, after]) => (
             <div key={l} className="pt-col">
               <span className="dh-kpi-l">{l}</span>
               <b className={`pt-big ${tone(tot)}`}>{sgn(tot)}</b>
               <small><span>MKT</span><em className={tone(mk)}>{sgn(mk)}</em></small>
               <small><span>TRD</span><em className={tone(tr)}>{sgn(tr)}</em></small>
+              <small><span>AFTER XVA</span><em className={tone(after)}>{after == null ? '—' : sgn(after)}</em></small>
             </div>
           ))}
         </div>

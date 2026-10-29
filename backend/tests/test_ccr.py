@@ -88,7 +88,7 @@ def test_collateral_cuts_the_exposure():
 
 def test_limit_keys_for_counterparties():
     from risk import limits as L
-    rep = {"ccr": {"RIJEKA DEMO BANK AG": {"exposure": {"peak_pfe95_usd": 1.2e6, "epe_1y_usd": 3e5, "current_exposure_usd": 1e5, "pfe95_by_bucket": {"1-5Y": 9e5}}, "cva": {"cva_usd": -4e4}}}}
+    rep = {"ccr": {"RIJEKA DEMO BANK AG": {"exposure": {"peak_pfe95_usd": 1.2e6, "epe_1y_usd": 3e5, "current_exposure_usd": 1e5, "pfe95_by_bucket": {"1-5Y": 9e5}}, "xva": {"cva_usd": -4e4}}}}
     assert L.metric_value("PFE_PEAK:Rijeka Demo Bank AG", rep, []) == 1.2e6 and L.metric_value("PFE:RIJEKA DEMO BANK AG:1-5Y", rep, []) == 9e5
     assert L.metric_value("CVA:RIJEKA DEMO BANK AG", rep, []) == 4e4 and L.metric_value("CE:RIJEKA DEMO BANK AG", rep, []) == 1e5 and L.metric_value("EPE:NOBODY", rep, []) is None
     ev = L.evaluate([{"metric": "PFE_PEAK:RIJEKA DEMO BANK AG", "scope": "ALL", "scope_name": None, "limit": 1e6, "warn_pct": 80}], rep)

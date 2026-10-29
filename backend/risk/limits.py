@@ -90,7 +90,7 @@ def metric_value(metric: str, rep: dict, scope_rows: list[dict]) -> Optional[flo
         c = ccr.get(name)
         if not c:
             return None
-        return {"PFE_PEAK": c["exposure"]["peak_pfe95_usd"], "EPE": c["exposure"]["epe_1y_usd"], "CVA": abs(c["cva"]["cva_usd"]),
+        return {"PFE_PEAK": c["exposure"]["peak_pfe95_usd"], "EPE": c["exposure"]["epe_1y_usd"], "CVA": abs((c.get("xva") or c.get("cva") or {}).get("cva_usd", 0.0)),
                 "CE": c["exposure"]["current_exposure_usd"]}[kind]
     if m.startswith("PFE:"):
         parts = m.split(":")

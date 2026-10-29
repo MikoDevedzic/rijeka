@@ -190,6 +190,19 @@ def status_of(signs: list[dict], policy: str = "TWO_PERSON") -> str:
     return "FINAL" if {"TRADER", "CONTROLLER"} <= roles else "TRADER_SIGNED" if "TRADER" in roles else "CONTROLLER_SIGNED" if "CONTROLLER" in roles else "OPEN"
 
 
+def xva_policy(db: Session, uid: str) -> tuple[str, ...]:
+    """Which XVA components net into the signed P&L (risk_settings.xva_netted, comma-separated)."""
+    from pnl.xva import DEFAULT_NETTED
+    try:
+        fm = db.execute(text("SELECT firm_id FROM firm_members WHERE user_id = :u LIMIT 1"), {"u": uid}).scalar()
+        if fm is None:
+            return DEFAULT_NETTED
+        v = db.execute(text("SELECT xva_netted FROM risk_settings WHERE firm_id = :f"), {"f": str(fm)}).scalar()
+        return tuple(x.strip().upper() for x in v.split(",") if x.strip()) if v else DEFAULT_NETTED
+    except Exception:
+        db.rollback(); return DEFAULT_NETTED
+
+
 def report(db: Session, user: dict, d1: Optional[date] = None) -> dict:
     uid = user["sub"]
     dates = Market.dates(db, uid, upto=d1 or date.today())
@@ -206,8 +219,19 @@ def report(db: Session, user: dict, d1: Optional[date] = None) -> dict:
     totals = {"dod": dod, "market": tree["market_usd"], "trading": tree["trading_usd"],
               "mtd": hist["mtd"] + dod, "ytd": hist["ytd"] + dod, "mtd_market": hist["mtd_market"] + tree["market_usd"], "mtd_trading": hist["mtd_trading"] + tree["trading_usd"],
               "ytd_market": hist["ytd_market"] + tree["market_usd"], "ytd_trading": hist["ytd_trading"] + tree["trading_usd"], "history_days": hist["days"]}
+    # XVA: the reserve levels and their change, the firm's policy on what nets into the signed figure
+    xva = None
+    try:
+        from pnl import xva as X
+        xva = X.section(db, user, d1, xva_policy(db, uid))
+        for k in ("dod", "mtd", "ytd"):
+            ch = xva.get("day" if k == "dod" else k)
+            totals[f"{k}_after_xva"] = totals[k] + ch["netted"] if ch else None
+        totals["xva_dod"] = xva["day"]["netted"] if xva.get("day") else None
+    except Exception as e:              # noqa: BLE001 — the clean P&L stands on its own
+        log.info("pnl: xva section unavailable: %s", e); db.rollback()
     return {"date": d1.isoformat(), "prev_date": d0.isoformat() if d0 else None, "dates": [d.isoformat() for d in dates[-40:]],
-            "reporting_ccy": REPORTING_CCY, "convention": CONVENTION, "rows": rows, "tree": tree, "buckets": buckets(rows), "totals": totals,
+            "reporting_ccy": REPORTING_CCY, "convention": CONVENTION, "rows": rows, "tree": tree, "buckets": buckets(rows), "totals": totals, "xva": xva,
             "signoffs": signs, "status": status_of(signs), "persisted": tables_present(db) and _persisted(db, uid, d1),
             "tables": tables_present(db), "meta": meta, "generated_at": datetime.now(timezone.utc).isoformat()}
 
@@ -269,5 +293,7 @@ def summary(db: Session, user: dict) -> dict:
     return {"date": rep.get("date"), "prev_date": rep.get("prev_date"), "reporting_ccy": REPORTING_CCY, "status": rep.get("status", "OPEN"),
             "dod": t.get("dod"), "mtd": t.get("mtd"), "ytd": t.get("ytd"), "market": t.get("market"), "trading": t.get("trading"),
             "mtd_market": t.get("mtd_market"), "mtd_trading": t.get("mtd_trading"), "ytd_market": t.get("ytd_market"), "ytd_trading": t.get("ytd_trading"),
+            "dod_after_xva": t.get("dod_after_xva"), "mtd_after_xva": t.get("mtd_after_xva"), "ytd_after_xva": t.get("ytd_after_xva"), "xva_dod": t.get("xva_dod"),
+            "xva_levels": (rep.get("xva") or {}).get("levels"),
             "buckets": [{"bucket": b["bucket"], "group": b["group"], "usd": b["usd"]} for b in rep.get("buckets", [])],
             "trades": len(rep.get("rows", [])), "problems": len((rep.get("meta") or {}).get("problems", [])), "persisted": rep.get("persisted", False), "tables": rep.get("tables", False)}

@@ -66,6 +66,11 @@ export function PnlConventions() {
   const load = () => Promise.all([api('/api/pnl/conventions'), api('/api/pnl/policy')]).then(([a, b]) => { setC(a); setPol(b) }).catch(e => setErr(e.message))
   useEffect(() => { load() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
   const setPolicy = async (p) => { try { await api('/api/pnl/policy', { method: 'PUT', body: JSON.stringify({ signoff_policy: p }) }); setMsg(`Sign-off policy set to ${p.replace('_', '-')} for the firm.`); await load() } catch (e) { setMsg(e.message) } }
+  const toggleXva = async (c) => {
+    const cur = pol?.xva_netted || []
+    const next = cur.includes(c) ? cur.filter(x => x !== c) : [...cur, c]
+    try { await api('/api/pnl/policy', { method: 'PUT', body: JSON.stringify({ xva_netted: next }) }); setMsg(`XVA netted into the signed P&L: ${next.join(', ') || 'none'}.`); await load() } catch (e) { setMsg(e.message) }
+  }
   return (
     <div className="pnl">
       <div className="pnl-bar"><div className="pnl-title">P&amp;L CONVENTIONS <span className="pnl-sub">the policy as the engine applies it · read-only</span></div></div>
@@ -109,6 +114,15 @@ export function PnlConventions() {
                 <button key={k} className="pnl-card" disabled={!pol.can_write} onClick={() => setPolicy(k)} style={{ textAlign: 'left', cursor: pol.can_write ? 'pointer' : 'default', borderColor: pol.signoff_policy === k ? 'var(--accent)' : 'var(--border)' }}>
                   <span className="pnl-kl">{l}{pol.signoff_policy === k ? ' · IN FORCE' : ''}</span><span className="rk-sub" style={{ color: 'var(--text)' }}>{d}</span>
                 </button>))}
+            </div>
+          )}
+          {pol && (
+            <div className="pnl-block">
+              <div className="lf-h"><span>XVA NETTED INTO THE SIGNED P&amp;L</span><span>{(pol.xva_netted || []).join(', ') || 'none'}</span></div>
+              <div className="pnl-sign-btns">
+                {(pol.xva_components || []).map(c => <button key={c} className={`pnl-btn ghost${(pol.xva_netted || []).includes(c) ? ' on' : ''}`} disabled={!pol.can_write} onClick={() => toggleXva(c)}>{c}</button>)}
+              </div>
+              <div className="pnl-note">CVA, DVA, FVA and FBA are mark-to-market reserves and net by default. KVA and MVA are lifetime costs of capital and margin: shown on the P&amp;L page, netted only if the firm says so.</div>
             </div>
           )}
           {msg && <div className="pnl-toast">{msg}</div>}

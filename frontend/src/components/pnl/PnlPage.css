@@ -68,3 +68,6 @@
 .pnl-sign-btns { display:flex; gap:0.5rem; flex-wrap:wrap; }
 .pnl-foot { font-size:0.78rem; color:var(--text-dim); line-height:1.5; } .pnl-foot em { color:var(--amber); font-style:normal; }
 @media (max-width:1100px) { .pnl-cards { grid-template-columns:1fr 1fr; } .pnl-grid { grid-template-columns:1fr; } .pnl-tr { grid-template-columns:1fr 6rem 6rem 6rem; } .pnl-tv.dim { display:none; } }
+
+.pnl-after { display:flex; justify-content:space-between; align-items:baseline; border-top:1px solid var(--border); padding-top:0.3rem; margin-top:0.1rem; font-family:var(--mono); font-size:0.6rem; letter-spacing:0.14em; color:var(--text-dim); }
+.pnl-after b { font-size:0.95rem; color:var(--text); }

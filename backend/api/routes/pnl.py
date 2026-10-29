@@ -96,12 +96,15 @@ def signoff_policy(db: Session, uid: str) -> str:
 
 
 class PolicyBody(BaseModel):
-    signoff_policy: str
+    signoff_policy: Optional[str] = None
+    xva_netted: Optional[list[str]] = None
 
 
 @router.get("/policy")
 def get_policy(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return {"signoff_policy": signoff_policy(db, user["sub"]), "policies": list(POLICIES), "can_write": _is_controller(db, user) or _role(db, user) in ("risk",)}
+    from pnl.xva import COMPONENTS
+    return {"signoff_policy": signoff_policy(db, user["sub"]), "policies": list(POLICIES), "xva_netted": list(R.xva_policy(db, user["sub"])),
+            "xva_components": [c.upper() for c in COMPONENTS], "can_write": _is_controller(db, user) or _role(db, user) in ("risk",)}
 
 
 @router.put("/policy")
@@ -111,17 +114,21 @@ def put_policy(body: PolicyBody, db: Session = Depends(get_db), user: dict = Dep
         raise HTTPException(status_code=404, detail="Your account is not in a firm.")
     if not (_is_controller(db, user) or _role(db, user) == "risk"):
         raise HTTPException(status_code=403, detail="The sign-off policy is set by the controller, CFO, risk or admin role, or a firm admin.")
-    pol = body.signoff_policy.upper()
+    from pnl.xva import COMPONENTS
+    pol = (body.signoff_policy or signoff_policy(db, user["sub"])).upper()
     if pol not in POLICIES:
         raise HTTPException(status_code=422, detail=f"signoff_policy must be one of {', '.join(POLICIES)}")
+    netted = [x.upper() for x in (body.xva_netted if body.xva_netted is not None else R.xva_policy(db, user["sub"]))]
+    if any(x.lower() not in COMPONENTS for x in netted):
+        raise HTTPException(status_code=422, detail=f"xva_netted must be among {', '.join(c.upper() for c in COMPONENTS)}")
     try:
-        db.execute(text("INSERT INTO risk_settings (firm_id, signoff_policy, updated_by, updated_by_name) VALUES (:f, :p, :b, :bn) "
-                        "ON CONFLICT (firm_id) DO UPDATE SET signoff_policy = EXCLUDED.signoff_policy, updated_by = EXCLUDED.updated_by, updated_by_name = EXCLUDED.updated_by_name, updated_at = now()"),
-                   {"f": str(fm.firm_id), "p": pol, "b": user["sub"], "bn": _name(user)})
+        db.execute(text("INSERT INTO risk_settings (firm_id, signoff_policy, xva_netted, updated_by, updated_by_name) VALUES (:f, :p, :x, :b, :bn) "
+                        "ON CONFLICT (firm_id) DO UPDATE SET signoff_policy = EXCLUDED.signoff_policy, xva_netted = EXCLUDED.xva_netted, updated_by = EXCLUDED.updated_by, updated_by_name = EXCLUDED.updated_by_name, updated_at = now()"),
+                   {"f": str(fm.firm_id), "p": pol, "x": ",".join(netted), "b": user["sub"], "bn": _name(user)})
         db.commit()
     except Exception as e:
         db.rollback(); raise HTTPException(status_code=409, detail=f"policy needs the market risk tables: {str(e)[:80]}")
-    return {"signoff_policy": pol}
+    return {"signoff_policy": pol, "xva_netted": netted}
 
 
 @router.get("/conventions")

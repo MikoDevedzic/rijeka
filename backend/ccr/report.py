@@ -66,7 +66,8 @@ def _zero_1y(curve, asof: date) -> float:
         return 0.03
 
 
-def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, mkt: Market, st: dict, tpl) -> dict[str, Any]:
+def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, mkt: Market, st: dict, tpl, exposure: bool = True) -> dict[str, Any]:
+    """exposure=False computes only the risk-neutral XVA levels (the P&L's reserve), skipping the real-world run."""
     t0 = time.time()
     uid = user["sub"]
     ns = NettingSet(db, user, trades, asof)
@@ -76,9 +77,9 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
     if not ns.items:
         return {**base, "empty": True}
     currencies, pairs = sorted(ns.currencies), sorted(ns.pairs)
-    rw = C.real_world(db, tpl, currencies, pairs, asof, int(st["window_days"]), st["drift_mode"]) if tpl else C.risk_neutral(db, uid, currencies, pairs)
     rn = C.risk_neutral(db, uid, currencies, pairs)
-    rate_keys = [k for k in rw.order if k.startswith("RATES:")]
+    rw = (C.real_world(db, tpl, currencies, pairs, asof, int(st["window_days"]), st["drift_mode"]) if tpl else rn) if exposure else rn
+    rate_keys = [k for k in rn.order if k.startswith("RATES:")]
     curves = _curves(db, uid, mkt, rate_keys, asof)
     spots = {f"SPOT:{p}": mkt.spot(p) for p in pairs}
     missing = [p for p, s in zip(pairs, spots.values()) if not s]
@@ -112,29 +113,34 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
             im0 = abs(ir01) * simm_ir_risk_weight((ns.max_maturity - asof).days / 365.25) * csa.simm_mpor_scale
         except Exception as e:          # noqa: BLE001
             log.info("ccr: IM estimate failed for %s: %s", base["counterparty"], e)
-    # real world: exposure
-    p_rw = simulate(rw, curves, spots, spot_rates, asof, months, n_paths, seed=7)
-    V_rw, today = netted_paths(ns, p_rw, fx, flat_base)
-    flows = flows_per_step(ns, p_rw, fx) if csa.collateralised else None
-    ex = exposures(V_rw, p_rw.t, csa, im0, flows=flows)
-    # risk neutral: CVA
+    # risk neutral: the XVA reserve levels (the P&L's), always
     p_rn = simulate(rn, curves, spots, spot_rates, asof, months, n_paths, seed=7)
-    V_rn, _ = netted_paths(ns, p_rn, fx, flat_base)
+    V_rn, today = netted_paths(ns, p_rn, fx, flat_base)
+    # real world: exposure (the credit page's)
+    if exposure:
+        p_rw = simulate(rw, curves, spots, spot_rates, asof, months, n_paths, seed=7)
+        V_rw, today = netted_paths(ns, p_rw, fx, flat_base)
+        flows = flows_per_step(ns, p_rw, fx) if csa.collateralised else None
+        ex = exposures(V_rw, p_rw.t, csa, im0, flows=flows)
+    else:
+        p_rw, ex = p_rn, None
     usd_key = next((k for k in rate_keys if k.endswith("USD_SOFR")), rate_keys[0])
     p0 = [float(p_rn.p0[usd_key](tt)) for tt in p_rn.t] + [float(p_rn.p0[usd_key](float(p_rn.t[-1]) + 1 / 12))]
     gross = sum(abs(float(it["trade"].notional or 0)) * fx.get((it["trade"].notional_ccy or "USD").upper(), 1.0) for it in ns.items)
     cv = cva_of(V_rn, p_rn.t, p0, csa, gross, cp_cds_bp=float(st["cp_cds_bp"]), lgd=float(st["lgd"]), im0_usd=im0)
     grid = [d.isoformat() for d in p_rw.grid[1:]]
-    return {**base, "empty": False, "asof": asof.isoformat(), "grid": grid, "t": [float(x) for x in p_rw.t[1:]], "n_paths": n_paths, "months": months,
-            "csa_model": {"preset": csa.preset, "collateralised": csa.collateralised, "threshold_usd": csa.threshold_cp, "mta_usd": csa.mta, "mpor_days": csa.mpor_days, "im_exchanged": csa.im_exchanged},
-            "trades_today": today, "gross_notional_usd": gross,
-            "exposure": {k: v for k, v in ex.items() if k not in ("mean_collateral",)}, "mean_collateral": ex["mean_collateral"],
-            "cva": {k: v for k, v in cv.items() if k not in ("ee_rn", "pfe95_rn")}, "ee_rn": cv["ee_rn"], "pfe95_rn": cv["pfe95_rn"],
-            "calibration": {"real_world": rw.as_dict(), "risk_neutral": rn.as_dict()},
-            "measures": {"exposure": "REAL_WORLD", "cva": "RISK_NEUTRAL"}, "seconds": round(time.time() - t0, 1)}
+    out = {**base, "empty": False, "asof": asof.isoformat(), "grid": grid, "t": [float(x) for x in p_rw.t[1:]], "n_paths": n_paths, "months": months,
+           "csa_model": {"preset": csa.preset, "collateralised": csa.collateralised, "threshold_usd": csa.threshold_cp, "mta_usd": csa.mta, "mpor_days": csa.mpor_days, "im_exchanged": csa.im_exchanged},
+           "trades_today": today, "gross_notional_usd": gross,
+           "xva": {k: v for k, v in cv.items() if k not in ("ee_rn", "pfe95_rn")}, "ee_rn": cv["ee_rn"], "pfe95_rn": cv["pfe95_rn"],
+           "calibration": {"risk_neutral": rn.as_dict()}, "measures": {"xva": "RISK_NEUTRAL"}, "seconds": round(time.time() - t0, 1)}
+    if ex is not None:
+        out.update(exposure={k: v for k, v in ex.items() if k not in ("mean_collateral",)}, mean_collateral=ex["mean_collateral"])
+        out["calibration"]["real_world"] = rw.as_dict(); out["measures"]["exposure"] = "REAL_WORLD"
+    return out
 
 
-def report(db: Session, user: dict, asof: Optional[date] = None, only_counterparty: Optional[str] = None, progress: Optional[dict] = None) -> dict[str, Any]:
+def report(db: Session, user: dict, asof: Optional[date] = None, only_counterparty: Optional[str] = None, progress: Optional[dict] = None, exposure: bool = True) -> dict[str, Any]:
     uid = user["sub"]
     from risk.report import firm_of, template_uid
     dates = Market.dates(db, uid, upto=asof or date.today())
@@ -155,16 +161,16 @@ def report(db: Session, user: dict, asof: Optional[date] = None, only_counterpar
         if progress is not None:
             progress.update(current=cps.get(cid).name if cps.get(cid) else "UNASSIGNED", done=n, total=len(items))
         try:
-            out.append(counterparty_report(db, user, cps.get(cid), ts, asof, mkt, st, tpl))
+            out.append(counterparty_report(db, user, cps.get(cid), ts, asof, mkt, st, tpl, exposure=exposure))
         except Exception as e:          # noqa: BLE001
             db.rollback()
             log.warning("ccr: %s failed: %s", cid, e)
             out.append({"counterparty_id": str(cid) if cid else None, "counterparty": cps.get(cid).name if cps.get(cid) else "UNASSIGNED", "trades": len(ts), "error": str(e)[:200], "empty": True})
     rep = {"date": asof.isoformat(), "dates": [d.isoformat() for d in dates[-40:]], "settings": st, "counterparties": out, "quantiles": ["95", "97.5", "99"],
-           "totals": {"peak_pfe95_usd": sum(c["exposure"]["peak_pfe95_usd"] for c in out if not c.get("empty")),
-                      "epe_1y_usd": sum(c["exposure"]["epe_1y_usd"] for c in out if not c.get("empty")),
-                      "current_exposure_usd": sum(c["exposure"]["current_exposure_usd"] for c in out if not c.get("empty")),
-                      "cva_usd": sum(c["cva"]["cva_usd"] for c in out if not c.get("empty")), "counterparties": len(out)},
+           "totals": {"peak_pfe95_usd": sum(c["exposure"]["peak_pfe95_usd"] for c in out if not c.get("empty") and c.get("exposure")),
+                      "epe_1y_usd": sum(c["exposure"]["epe_1y_usd"] for c in out if not c.get("empty") and c.get("exposure")),
+                      "current_exposure_usd": sum(c["exposure"]["current_exposure_usd"] for c in out if not c.get("empty") and c.get("exposure")),
+                      "cva_usd": sum(c["xva"]["cva_usd"] for c in out if not c.get("empty")), "counterparties": len(out)},
            "generated_at": datetime.now(timezone.utc).isoformat(), "tables": tables_present(db)}
     rep["limits"] = _limits(db, uid, rep)
     rep["breaches"] = sum(1 for x in rep["limits"] if x["status"] == "BREACH")
@@ -188,7 +194,7 @@ def store(db: Session, user: dict, rep: dict) -> dict:
                         "VALUES (:id, :u, :d, :c, :n, CAST(:r AS jsonb), :p, :e, :v, :ce) ON CONFLICT (user_id, run_date, counterparty) DO UPDATE SET report = EXCLUDED.report, "
                         "peak_pfe95 = EXCLUDED.peak_pfe95, epe_1y = EXCLUDED.epe_1y, cva = EXCLUDED.cva, current_exposure = EXCLUDED.current_exposure, counterparty_id = EXCLUDED.counterparty_id, created_at = now()"),
                    {"id": str(uuid.uuid4()), "u": user["sub"], "d": rep["date"], "c": c.get("counterparty_id"), "n": c["counterparty"], "r": json.dumps(slim, default=str),
-                    "p": (c.get("exposure") or {}).get("peak_pfe95_usd"), "e": (c.get("exposure") or {}).get("epe_1y_usd"), "v": (c.get("cva") or {}).get("cva_usd"),
+                    "p": (c.get("exposure") or {}).get("peak_pfe95_usd"), "e": (c.get("exposure") or {}).get("epe_1y_usd"), "v": (c.get("xva") or {}).get("cva_usd"),
                     "ce": (c.get("exposure") or {}).get("current_exposure_usd")})
         n += 1
     db.commit()
@@ -210,7 +216,7 @@ def latest_stored(db: Session, uid: str) -> Optional[dict]:
            "totals": {"peak_pfe95_usd": sum(c["exposure"]["peak_pfe95_usd"] for c in cps if not c.get("empty")),
                       "epe_1y_usd": sum(c["exposure"]["epe_1y_usd"] for c in cps if not c.get("empty")),
                       "current_exposure_usd": sum(c["exposure"]["current_exposure_usd"] for c in cps if not c.get("empty")),
-                      "cva_usd": sum(c["cva"]["cva_usd"] for c in cps if not c.get("empty")), "counterparties": len(cps)}, "from_store": True, "tables": True}
+                      "cva_usd": sum((c.get("xva") or {}).get("cva_usd", 0.0) for c in cps if not c.get("empty")), "counterparties": len(cps)}, "from_store": True, "tables": True}
     rep["limits"] = _limits(db, uid, rep)
     rep["breaches"] = sum(1 for x in rep["limits"] if x["status"] == "BREACH")
     return rep

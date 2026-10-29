@@ -33,6 +33,14 @@ Trade rows roll up book → desk → book total, using the desk and book the tra
 
 Month to date and year to date are sums of the stored daily rows plus the live day, so they are sums of what was signed, not recomputations.
 
+## XVA: the reserves and their change
+
+Clean P&L is before valuation adjustments. The XVA reserves are computed per counterparty netting set by the counterparty-credit engine under the **risk-neutral** measure (the swaption-calibrated Hull-White model, the desk vols, forwards from the curve, the counterparty's CSA): CVA, DVA, FVA, FBA, KVA, MVA, costs negative and benefits positive. Their day-on-day change against the stored daily run is the XVA P&L:
+
+    P&L after XVA = clean P&L − Σ_netted (level_today − level_previous)
+
+Which components net into the signed figure is the firm's policy (`Configurations › P&L & Control › Conventions`): CVA, DVA, FVA and FBA by default, as mark-to-market reserves; KVA and MVA are lifetime costs of capital and margin, shown on the page and netted only if the firm says so. Month and year to date use the stored level at the start of the period. The P&L page shows the levels per counterparty and per component, the change, and the before and after figures; the home tile shows after XVA beside the clean day.
+
 ## End of day, sign-off, management
 
 `POST /api/pnl/eod` (and the daily cron, after the market data rebuild, for every account) stores one mark per trade per date (`eod_marks`) and one attributed row per trade per date (`pnl_daily`). A rerun replaces the day.

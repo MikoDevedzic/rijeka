@@ -1,4 +1,4 @@
-# Counterparty credit: netting sets, two measures, PFE, CVA, limits
+# Counterparty credit: netting sets, real-world exposure, PFE limits
 
 Engine: `backend/ccr/`; page: `RISK › COUNTERPARTY CREDIT`; limits under `Configurations › Market Risk › Limits`.
 
@@ -6,7 +6,7 @@ Engine: `backend/ccr/`; page: `RISK › COUNTERPARTY CREDIT`; limits under `Conf
 
 Pricing and risk management ask different questions of the same model, so the engine runs it twice with two parameter sets and labels every number with its measure.
 
-- **Risk-neutral** (CVA and the other XVAs): the Hull-White mean reversion and volatility calibrated to the swaption surface, spot volatilities from the desk's flat vols, the drift from the curve. These are prices.
+- **Risk-neutral** (the XVA reserves: CVA, DVA, FVA, FBA, KVA, MVA): the Hull-White mean reversion and volatility calibrated to the swaption surface, spot volatilities from the desk's flat vols, the drift from the curve. These are prices, and they belong to the P&L: the same engine computes them per netting set and the P&L page shows them and their change (docs/pnl_attribution.md). The credit page does not show them.
 - **Real-world** (EE, EPE, PFE, limits): volatilities measured from two years of public history (daily changes of each currency's 3M rate, log returns of each spot), a mean reversion set by policy (0.05; two years of daily data cannot identify it, and the estimate is shown beside it), zero drift by default (the forward slope is a risk-neutral artefact, not a forecast; the historical drift is the firm's alternative), and the correlation matrix of all factor shocks from the same history. These are exposures.
 
 ## Joint simulation
@@ -27,11 +27,11 @@ From the counterparty record: NO_CSA → uncollateralised; VM or VM_IM → daily
 
 ## Measures
 
-EE(t) the mean of E⁺; PFE_q(t) its q-quantile over paths at 95, 97.5 and 99 %; EPE the time average of EE over the first year; the peak PFE 95 and its date; the largest PFE 95 inside each tenor bucket; current exposure max(V₀ − C₀, 0). CVA, DVA, FVA, KVA and MVA from the risk-neutral paths through the XVA waterfall with the counterparty's default spread (85bp and 40 % LGD until the record carries its own).
+EE(t) the mean of E⁺; PFE_q(t) its q-quantile over paths at 95, 97.5 and 99 %; EPE the time average of EE over the first year; the peak PFE 95 and its date; the largest PFE 95 inside each tenor bucket; current exposure max(V₀ − C₀, 0). The XVA reserves come from the risk-neutral paths through the XVA waterfall with the counterparty's default spread (85bp and 40 % LGD until the record carries its own) and are reported on the P&L page.
 
 ## Limits
 
-The risk manager sets limits on `PFE_PEAK:<counterparty>`, `PFE:<counterparty>:<bucket>`, `EPE:<counterparty>`, `CVA:<counterparty>` and `CE:<counterparty>` with the same utilisation and breach rules as the market risk limits; breaches reach the home inbox after the daily run.
+Credit limits are to counterparty credit what VaR limits are to market risk. The risk manager sets them on `PFE_PEAK:<counterparty>`, `PFE:<counterparty>:<bucket>`, `EPE:<counterparty>` and `CE:<counterparty>` (and, for a CVA desk, `CVA:<counterparty>` on the reserve) with the same utilisation and breach rules as the market risk limits; breaches reach the home inbox after the daily run.
 
 ## Running it
 

@@ -64,7 +64,7 @@ export default function CcrPage() {
     <div className="pnl rk-page">
       <RiskNav />
       <div className="pnl-bar">
-        <div className="pnl-title">COUNTERPARTY CREDIT <span className="pnl-sub">USD · netting set on shared paths · exposure real-world · CVA risk-neutral</span></div>
+        <div className="pnl-title">COUNTERPARTY CREDIT <span className="pnl-sub">USD · netting set on shared paths · real-world exposure against credit limits</span></div>
         <div className="pnl-ctl">
           {rep && <span className={`pnl-chip ${breaches ? 'red' : 'ok'}`}>{breaches ? `${breaches} BREACH${breaches > 1 ? 'ES' : ''}` : 'WITHIN LIMITS'}</span>}
           {rep?.from_store && <span className="pnl-note">stored run · {fmtD(rep.date)} · {fmtT(rep.stored_at)}</span>}
@@ -82,15 +82,15 @@ export default function CcrPage() {
           <Card label="PEAK PFE 95% · ALL" big={fmt(t.peak_pfe95_usd)} sub="sum over counterparties · real-world" />
           <Card label="EPE · FIRST YEAR" big={fmt(t.epe_1y_usd)} sub="expected positive exposure" />
           <Card label="CURRENT EXPOSURE" big={fmt(t.current_exposure_usd)} sub="after collateral held" />
-          <Card label="CVA · ALL" big={sgn(t.cva_usd)} sub="risk-neutral, XVA waterfall" neg />
           <Card label="COUNTERPARTIES" big={String(t.counterparties)} sub={`${rep.quantiles?.join(' / ')}% quantiles`} />
+          <Card label="LIMITS" big={rep.limits?.length ? `${rep.limits.length}` : '0'} sub={breaches ? `${breaches} in breach` : 'set on peak PFE, PFE by bucket, EPE, exposure'} />
         </div>
 
         <section className="pnl-panel">
           <header><span>BY COUNTERPARTY</span><span className="pnl-sub">click a row for the profile</span></header>
           <div className="pnl-tree">
             <div className="pnl-tr head" style={{ gridTemplateColumns: '1fr 7rem 8rem 8rem 8rem 8rem 8rem 9rem' }}>
-              <span className="pnl-tn">COUNTERPARTY · CSA</span><span className="pnl-tv">TRADES</span><span className="pnl-tv">MTM</span><span className="pnl-tv">CURRENT EXP</span><span className="pnl-tv">EPE 1Y</span><span className="pnl-tv tot">PEAK PFE 95</span><span className="pnl-tv">CVA</span><span className="pnl-tv dim">PEAK AT</span>
+              <span className="pnl-tn">COUNTERPARTY · CSA</span><span className="pnl-tv">TRADES</span><span className="pnl-tv">MTM</span><span className="pnl-tv">CURRENT EXP</span><span className="pnl-tv">EPE 1Y</span><span className="pnl-tv tot">PEAK PFE 95</span><span className="pnl-tv">PFE 99 PEAK</span><span className="pnl-tv dim">PEAK AT</span>
             </div>
             {cps.map(c => (
               <div key={c.counterparty} className={`pnl-tr d1 trade${cur === c ? ' on' : ''}`} style={{ gridTemplateColumns: '1fr 7rem 8rem 8rem 8rem 8rem 8rem 9rem' }} onClick={() => setSel(c.counterparty)}>
@@ -101,7 +101,7 @@ export default function CcrPage() {
                   <span className="pnl-tv">{fmt(c.exposure.current_exposure_usd)}</span>
                   <span className="pnl-tv">{fmt(c.exposure.epe_1y_usd)}</span>
                   <span className="pnl-tv tot">{fmt(c.exposure.peak_pfe95_usd)}</span>
-                  <span className={`pnl-tv ${tone(c.cva.cva_usd)}`}>{sgn(c.cva.cva_usd)}</span>
+                  <span className="pnl-tv">{fmt(Math.max(...c.exposure.pfe['99']))}</span>
                   <span className="pnl-tv dim">{c.exposure.peak_at_years.toFixed(1)}y</span></>}
               </div>
             ))}
@@ -130,14 +130,9 @@ export default function CcrPage() {
               </div>
             </section>
             <section className="pnl-panel">
-              <header><span>CVA · RISK-NEUTRAL</span><span className="pnl-sub">XVA waterfall on the netted paths</span></header>
-              <div className="rk-kv" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
-                {[['CVA', cur.cva.cva_usd], ['DVA', cur.cva.dva_usd], ['FVA', cur.cva.fva_usd], ['KVA', cur.cva.kva_usd], ['MVA', cur.cva.mva_usd], ['CP CDS', `${cur.cva.cp_cds_bp}bp · LGD ${(cur.cva.lgd * 100).toFixed(0)}%`]].map(([k, v]) => <div key={k}><span>{k}</span><b className={typeof v === 'number' ? tone(v) : ''}>{typeof v === 'number' ? sgn(v) : v}</b></div>)}
-              </div>
-              <div className="rk-h">CALIBRATION · REAL-WORLD (EXPOSURE)</div>
+              <header><span>CALIBRATION · REAL-WORLD</span><span className="pnl-sub">measured from the public history; exposure, not price</span></header>
               <Calib c={cur.calibration.real_world} />
-              <div className="rk-h">CALIBRATION · RISK-NEUTRAL (CVA)</div>
-              <Calib c={cur.calibration.risk_neutral} />
+              <div className="pnl-foot">The XVA reserves of this netting set (CVA, DVA, FVA, FBA, KVA, MVA) are valuation, not exposure: they live on the P&amp;L page, computed by the same engine under the risk-neutral measure, and net into the signed P&amp;L by the firm's policy.</div>
             </section>
           </div>
         )}
@@ -148,7 +143,7 @@ export default function CcrPage() {
         </section>
 
         <div className="pnl-foot">
-          <b>Method.</b> Every trade of a counterparty is valued on the same simulated paths, so netting is exact. Rates follow a Hull-White factor per currency and spots a lognormal factor, with Brownian motions correlated by the matrix estimated from two years of public history. For exposure the parameters are real-world: volatilities and mean reversion from that history, zero drift unless the firm chooses the historical drift. For CVA the parameters are risk-neutral: the swaption-calibrated model and the desk vols, forwards from the curve. The CSA on the record is applied to the netted value with the margin period of risk, as in the XVA engine. Caps and swaptions are not simulated yet and are listed as such.
+          <b>Method.</b> Every trade of a counterparty is valued on the same simulated paths, so netting is exact. Rates follow a Hull-White factor per currency and spots a lognormal factor, with Brownian motions correlated by the matrix estimated from two years of public history. The parameters are real-world: volatilities measured from that history, mean reversion by stated policy, zero drift unless the firm chooses the historical drift. The CSA on the record is applied to the netted value with the margin period of risk, as in the XVA engine. Credit limits are set on peak PFE, PFE by bucket, EPE and current exposure, the way market risk limits are set on VaR. Caps and swaptions are not simulated yet and are listed as such.
         </div>
       </>)}
     </div>
@@ -163,7 +158,7 @@ function Profile({ c }) {
   const t = c.t || []
   const mk = (arr, label, color, dash) => ({ label, color, dash, points: arr.map((v, i) => ({ t: t[i], v })) })
   const series = [mk(c.exposure.pfe['99'], 'PFE 99', '#e05040', [2, 3]), mk(c.exposure.pfe['97.5'], 'PFE 97.5', '#f0a020', [4, 3]), mk(c.exposure.pfe['95'], 'PFE 95', '#f0a020'),
-                  mk(c.exposure.ee, 'EE', '#0dd4a8'), mk(c.ee_rn || [], 'EE (risk-neutral)', '#4a9ad4', [1, 3])]
+                  mk(c.exposure.ee, 'EE', '#0dd4a8')]
   return <RateCurveCanvas series={series} unit="" decimals={0} height={240} />
 }
 

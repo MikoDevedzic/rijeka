@@ -106,3 +106,22 @@ def test_role_routes_need_auth():
     c = TestClient(main.app)
     assert c.get("/api/me/role").status_code == 401 and c.put("/api/me/role", json={"role": "risk"}).status_code == 401
     assert c.get("/api/pnl/policy").status_code == 401
+
+
+def test_xva_section_changes_against_the_stored_run(monkeypatch):
+    from datetime import date
+    from pnl import xva as X
+    today = {"by_counterparty": {"BANK": {"cva": -300.0, "dva": 250.0, "fva": -200.0, "fba": 190.0, "kva": -11000.0, "mva": -16000.0}},
+             "total": {"cva": -300.0, "dva": 250.0, "fva": -200.0, "fba": 190.0, "kva": -11000.0, "mva": -16000.0}, "measure": "RISK_NEUTRAL", "date": "2026-10-30", "params": None}
+    prev = (date(2026, 10, 29), {"cva": -262.0, "dva": 259.0, "fva": -184.0, "fba": 196.0, "kva": -11086.0, "mva": -16748.0},
+            {"BANK": {"cva": -262.0, "dva": 259.0, "fva": -184.0, "fba": 196.0, "kva": -11086.0, "mva": -16748.0}})
+    monkeypatch.setattr(X, "levels_today", lambda db, user, asof: today)
+    monkeypatch.setattr(X, "stored_levels", lambda db, uid, upto, strictly_before=True: prev)
+    sec = X.section(None, {"sub": "u"}, date(2026, 10, 30))
+    assert sec["day"]["by_component"]["cva"] == -38.0 and sec["day"]["by_component"]["kva"] == 86.0
+    assert sec["day"]["netted"] == (-38.0) + (-9.0) + (-16.0) + (-6.0)          # CVA, DVA, FVA, FBA only
+    assert sec["day"]["all"] == sec["day"]["netted"] + 86.0 + 748.0
+    sec2 = X.section(None, {"sub": "u"}, date(2026, 10, 30), netted=("CVA", "KVA"))
+    assert sec2["day"]["netted"] == -38.0 + 86.0 and sec2["by_counterparty"][0]["change"]["mva"] == 748.0
+    monkeypatch.setattr(X, "stored_levels", lambda db, uid, upto, strictly_before=True: None)
+    assert X.section(None, {"sub": "u"}, date(2026, 10, 30))["day"] is None
