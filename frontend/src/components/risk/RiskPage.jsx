@@ -141,7 +141,9 @@ export default function RiskPage() {
 
 function Backtest({ bt }) {
   const ref = useRef(null); const [W, setW] = useState(0)
-  useEffect(() => { if (!ref.current) return; const ro = new ResizeObserver(([e]) => setW(e.contentRect.width)); ro.observe(ref.current); return () => ro.disconnect() }, [bt])
+  // measured after every render: the chart div only exists once the series is in, and an
+  // observer attached before that never fires
+  useEffect(() => { const el = ref.current; if (!el) return; const upd = () => setW(el.clientWidth); upd(); const ro = new ResizeObserver(upd); ro.observe(el); return () => ro.disconnect() })
   if (!bt) return <div className="pnl-empty">Loading the backtest…</div>
   const h = bt.headline || {}, s = bt.secondary || {}, ser = bt.series || []
   if (!ser.length) return <div className="pnl-empty">No paired days yet: a day's P&amp;L is tested against the VaR stored the evening before, so the first pair arrives after two daily batches.</div>
