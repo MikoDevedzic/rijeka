@@ -21,7 +21,7 @@ jobs:
       RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL || 'https://rijeka-api.onrender.com' }}
       RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
