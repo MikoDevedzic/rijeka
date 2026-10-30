@@ -96,8 +96,10 @@ def store(db: Session, user: dict, rep: dict) -> dict:
     db.execute(text("INSERT INTO risk_daily (id, user_id, risk_date, report, var_1d, ir01_usd, npv_usd, breaches) "
                     "VALUES (:id, :u, :d, CAST(:r AS jsonb), :v, :i, :n, :b) ON CONFLICT (user_id, risk_date) DO UPDATE SET report = EXCLUDED.report, "
                     "var_1d = EXCLUDED.var_1d, ir01_usd = EXCLUDED.ir01_usd, npv_usd = EXCLUDED.npv_usd, breaches = EXCLUDED.breaches, created_at = now()"),
-               {"id": str(uuid.uuid4()), "u": user["sub"], "d": rep["date"], "r": json.dumps(slim, default=str), "v": (rep.get("var") or {}).get("var_1d"),
-                "i": rep["ladder"].get("ir01_usd"), "n": rep["ladder"].get("npv_usd"), "b": rep.get("breaches", 0)})
+               {"id": str(uuid.uuid4()), "u": user["sub"], "d": rep["date"], "r": json.dumps(slim, default=str),
+                "v": None if (rep.get("var") or {}).get("var_1d") is None else float((rep.get("var") or {}).get("var_1d")),
+                "i": None if rep["ladder"].get("ir01_usd") is None else float(rep["ladder"].get("ir01_usd")),
+                "n": None if rep["ladder"].get("npv_usd") is None else float(rep["ladder"].get("npv_usd")), "b": int(rep.get("breaches", 0))})
     db.commit()
     return {"stored": True, "date": rep["date"], "breaches": rep.get("breaches", 0)}
 

@@ -79,6 +79,7 @@ def cva(V_rn: np.ndarray, t: np.ndarray, p0: list[float], csa: CSA, notional_usd
     params = WaterfallParams(notional=max(notional_usd, 1.0), maturity_y=float(t[-1]), dt=dt, theta=max(theta, 1e-6), cp_cds_bp=cp_cds_bp, lgd=lgd,
                              simm_im_m=(im0_usd / 1e6) if im0_usd else None)
     wf = run_waterfall(V_rn[:, 1:], v0, p0, params, csa)
-    return {"cva_usd": wf.cva, "dva_usd": wf.dva, "fva_usd": wf.fva, "fba_usd": wf.fba, "kva_usd": wf.kva, "mva_usd": wf.mva,
-            "total_usd": wf.cva + wf.dva + wf.fva + wf.fba + wf.kva + wf.mva, "cp_cds_bp": cp_cds_bp, "lgd": lgd,
-            "ee_rn": wf.ee, "pfe95_rn": wf.pfe}
+    f = lambda x: float(x)
+    return {"cva_usd": f(wf.cva), "dva_usd": f(wf.dva), "fva_usd": f(wf.fva), "fba_usd": f(wf.fba), "kva_usd": f(wf.kva), "mva_usd": f(wf.mva),
+            "total_usd": f(wf.cva + wf.dva + wf.fva + wf.fba + wf.kva + wf.mva), "cp_cds_bp": cp_cds_bp, "lgd": lgd,
+            "ee_rn": [f(x) for x in wf.ee], "pfe95_rn": [f(x) for x in wf.pfe]}

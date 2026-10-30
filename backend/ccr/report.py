@@ -184,6 +184,11 @@ def _limits(db: Session, uid: str, rep: dict) -> list[dict]:
     return L.evaluate(lims, {"ladder_rows": [], "var": {}, "stress": [], "ccr": {c["counterparty"]: c for c in rep["counterparties"] if not c.get("empty")}})
 
 
+def _num(x):
+    """Plain float for a database parameter (numpy scalars are not understood by the driver)."""
+    return None if x is None else float(x)
+
+
 def store(db: Session, user: dict, rep: dict) -> dict:
     if not tables_present(db) or not rep.get("date"):
         return {"stored": False}
@@ -194,8 +199,8 @@ def store(db: Session, user: dict, rep: dict) -> dict:
                         "VALUES (:id, :u, :d, :c, :n, CAST(:r AS jsonb), :p, :e, :v, :ce) ON CONFLICT (user_id, run_date, counterparty) DO UPDATE SET report = EXCLUDED.report, "
                         "peak_pfe95 = EXCLUDED.peak_pfe95, epe_1y = EXCLUDED.epe_1y, cva = EXCLUDED.cva, current_exposure = EXCLUDED.current_exposure, counterparty_id = EXCLUDED.counterparty_id, created_at = now()"),
                    {"id": str(uuid.uuid4()), "u": user["sub"], "d": rep["date"], "c": c.get("counterparty_id"), "n": c["counterparty"], "r": json.dumps(slim, default=str),
-                    "p": (c.get("exposure") or {}).get("peak_pfe95_usd"), "e": (c.get("exposure") or {}).get("epe_1y_usd"), "v": (c.get("xva") or {}).get("cva_usd"),
-                    "ce": (c.get("exposure") or {}).get("current_exposure_usd")})
+                    "p": _num((c.get("exposure") or {}).get("peak_pfe95_usd")), "e": _num((c.get("exposure") or {}).get("epe_1y_usd")), "v": _num((c.get("xva") or {}).get("cva_usd")),
+                    "ce": _num((c.get("exposure") or {}).get("current_exposure_usd"))})
         n += 1
     db.commit()
     return {"stored": True, "rows": n, "date": rep["date"]}

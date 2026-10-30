@@ -100,3 +100,9 @@ def test_routes_need_auth_or_cron():
     from fastapi.testclient import TestClient
     c = TestClient(main.app)
     assert c.get("/api/ccr/report").status_code == 401 and c.post("/api/ccr/run").status_code == 401 and c.post("/api/ccr/daily/tick").status_code == 403
+
+
+def test_stored_numbers_are_plain_floats():
+    import numpy as np
+    from ccr.report import _num
+    assert _num(np.float64(1.5)) == 1.5 and type(_num(np.float64(1.5))) is float and _num(None) is None
