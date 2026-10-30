@@ -4,7 +4,7 @@ fastapi==0.141.1
 uvicorn[standard]==0.52.1
 sqlalchemy==2.0.52
 psycopg2-binary==2.9.12
-python-jose[cryptography]==3.5.0
+PyJWT[crypto]==2.10.1
 httpx==0.28.1
 anthropic==0.121.0
 pydantic==2.13.4
@@ -15,3 +15,6 @@ scipy==1.17.1
 holidays==0.102
 web3==7.16.0
 openpyxl==3.1.5
+# transitive (web3) pinned up for the 2026 advisories; certifi likewise
+aiohttp>=3.14.4
+certifi>=2026.10.18

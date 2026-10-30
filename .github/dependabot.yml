@@ -1,0 +1,19 @@
+# Weekly dependency updates, grouped so a Monday morning is one PR per ecosystem, not twenty.
+# Security updates arrive as they are published regardless of the schedule.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule: { interval: weekly, day: monday }
+    groups:
+      python: { patterns: ["*"] }
+    open-pull-requests-limit: 5
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly, day: monday }
+    groups:
+      javascript: { patterns: ["*"] }
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }

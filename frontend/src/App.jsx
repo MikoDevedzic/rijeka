@@ -104,7 +104,7 @@ function PersistentBookingWindow() {
             <TradeWindow
               initialProduct={productKey}
               onClose={() => close(w.id)}
-              onBook={(payload) => {
+              onBook={() => {
                 // L25 fix (Apr 24, 2026): no-op stub.
                 // The real booking path is booking.js::executeBooking which
                 // POSTs to Supabase directly. This callback is retained for
