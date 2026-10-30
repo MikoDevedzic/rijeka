@@ -6,6 +6,7 @@ import AuthGuard        from './components/auth/AuthGuard'
 import LoginPage        from './components/auth/LoginPage'
 import SignupPage       from './components/auth/SignupPage'
 import ConfirmPage      from './components/auth/ConfirmPage'
+import ResetPage        from './components/auth/ResetPage'
 import CommandCenter    from './components/CommandCenter'
 import AppBar           from './components/layout/AppBar'
 import CfgNav           from './components/layout/CfgNav'
@@ -151,6 +152,7 @@ export default function App() {
         <Route path="/login"   element={<LoginPage />} />
         <Route path="/signup"  element={<SignupPage />} />
         <Route path="/confirm" element={<ConfirmPage />} />
+        <Route path="/reset"   element={<ResetPage />} />
         <Route path="/terms"   element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route element={<AuthGuard />}>
