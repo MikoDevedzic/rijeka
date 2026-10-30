@@ -176,7 +176,8 @@ def tick(dry_run: bool = Query(default=False), db: Session = Depends(get_db),
 
 @router.get("/sources")
 def sources(db: Session = Depends(get_db)):
-    """Public: the provenance of the demo's market data and the latest date per curve."""
+    """Public on purpose: the provenance of the demo's market data and the latest date per curve is part
+    of the open-data story (the landing page says 'public sources'; this is the list). No account data."""
     template = demo._template_user_id(db)
     latest: dict[str, dict] = {}
     if template is not None:

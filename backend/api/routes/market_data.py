@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._errors import internal
 
 router = APIRouter(prefix="/api/market-data", tags=["market-data"])
 
@@ -791,7 +792,7 @@ async def snap_otm_vol(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Bloomberg snap error: {str(e)}")
+        raise internal(500, "Bloomberg snap error", e)
 
     return {
         "quotes":    quotes,

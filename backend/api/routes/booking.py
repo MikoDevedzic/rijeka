@@ -62,6 +62,7 @@ import logging
 from db.session import get_db
 from db.models import Trade, TradeLeg, TradeEvent, IdempotencyKey
 from middleware.auth import verify_token
+from api.routes._errors import internal
 from api.routes._leg_defaults import complete_leg
 
 router = APIRouter(prefix="/api/book", tags=["booking"])
@@ -609,4 +610,4 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
     except Exception as e:
         db.rollback()
         log.exception("Booking failed")
-        raise HTTPException(status_code=500, detail=f"Booking failed: {e}")
+        raise internal(500, "Booking failed", e)

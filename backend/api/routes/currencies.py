@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 from db.models import Trade
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._errors import internal
 from pricing.currency_forward import price_currency_forward
 from api.routes.crypto import (ASSETS as CRYPTO_ASSETS, fetch_spot as fetch_crypto_spot, save_spot,
                                latest_snapshot, _quote, _require_trader)
@@ -242,7 +243,7 @@ def snap(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     try:
         prices = fetch_all_spot()
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"spot feeds unavailable: {e}")
+        raise internal(502, "spot feeds unavailable", e)
     n = _save_pairs(db, uuid.UUID(user["sub"]), prices)
     return {"saved": n, "prices": prices, "as_of": date.today().isoformat()}
 
@@ -259,7 +260,7 @@ def tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(No
     try:
         prices = fetch_all_spot()
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"spot feeds unavailable: {e}")
+        raise internal(502, "spot feeds unavailable", e)
     return {"saved": _save_pairs(db, uid, prices), "prices": prices}
 
 

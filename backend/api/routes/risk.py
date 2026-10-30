@@ -24,7 +24,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from db.session import get_db
-from middleware.auth import verify_token
+from middleware.auth import optional_token, verify_token
+from api.routes._limits import heavy
 from risk import limits as L
 from risk import report as R
 from risk import stress as ST
@@ -81,6 +82,8 @@ def risk_report(date_: Optional[str] = Query(default=None, alias="date"), live: 
                 db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """The stored report opens instantly; live=1 recomputes (and stores, so the next visit is instant too)."""
     d = _parse(date_)
+    if live:
+        heavy(user, "live risk report", 4)
     rep = None if live else R.stored_report(db, user["sub"], d)
     if rep is None:
         ctx = _ctx(db, user)
@@ -227,26 +230,21 @@ def _run_backfill(tpl, years: float, overwrite: bool) -> None:
 
 
 @router.get("/history")
-def history_status(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
+def history_status(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None), user: Optional[dict] = Depends(optional_token)):
     from risk import history as H
-    if not _secret_ok(x_rijeka_cron):
-        if not authorization:
-            raise HTTPException(status_code=401, detail="Missing auth")
-        import asyncio
-        asyncio.run(verify_token(authorization))
+    if not _secret_ok(x_rijeka_cron) and user is None:
+        raise HTTPException(status_code=401, detail="Missing auth")
     tpl = R.template_uid(db)
     return {"template": str(tpl) if tpl else None, "series": H.status(db, tpl) if tpl else {}, "backfill": _backfill}
 
 
 @router.post("/history/backfill")
 def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=False), db: Session = Depends(get_db),
-             x_rijeka_cron: Optional[str] = Header(None), authorization: Optional[str] = Header(None)):
+             x_rijeka_cron: Optional[str] = Header(None), user: Optional[dict] = Depends(optional_token)):
     from risk import history as H
     if not _secret_ok(x_rijeka_cron):
-        if not authorization:
+        if user is None:
             raise HTTPException(status_code=401, detail="Missing auth")
-        import asyncio
-        user = asyncio.run(verify_token(authorization))
         if not _can_write(db, user):
             raise HTTPException(status_code=403, detail="Backfill needs the risk or admin role.")
     tpl = R.template_uid(db)

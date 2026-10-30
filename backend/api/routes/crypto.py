@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from db.models import Trade
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._errors import internal
 from pricing.crypto_forward import price_crypto_forward
 
 log = logging.getLogger("rijeka.crypto")
@@ -130,7 +131,7 @@ def snap_spot(db: Session = Depends(get_db), user: dict = Depends(verify_token))
     try:
         prices = fetch_spot()
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"spot feed unavailable: {e}")
+        raise internal(502, "spot feed unavailable", e)
     n = save_spot(db, uuid.UUID(user["sub"]), prices)
     return {"saved": n, "prices": prices, "as_of": date.today().isoformat(), "feed": SPOT_SOURCE_NAME}
 
@@ -148,7 +149,7 @@ def tick_spot(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Head
     try:
         prices = fetch_spot()
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"spot feed unavailable: {e}")
+        raise internal(502, "spot feed unavailable", e)
     return {"saved": save_spot(db, uid, prices), "prices": prices}
 
 

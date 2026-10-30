@@ -10,6 +10,7 @@ import json
 
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._errors import internal
 from pricing.bloomberg_client import (
     check_connection,
     snap_live,
@@ -34,7 +35,7 @@ class TickerOverrideRequest(BaseModel):
 
 
 @router.get("/bloomberg/status")
-async def bloomberg_status():
+async def bloomberg_status(user: dict = Depends(verify_token)):
     return check_connection()
 
 
@@ -458,7 +459,7 @@ async def snap_cap_vol_surface(
         if skew_tickers:
             blp_data.update(snap_live(skew_tickers, "MID"))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Bloomberg fetch failed: {e}")
+        raise internal(502, "Bloomberg fetch failed", e)
 
     # 5. Wipe existing rows for this val_date (idempotent snap)
     db.execute(

@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from ccr import report as R
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._limits import heavy
 
 log = logging.getLogger("rijeka.ccr")
 router = APIRouter(prefix="/api/ccr", tags=["ccr"])
@@ -80,6 +81,7 @@ def _run(ctx: dict, counterparty: Optional[str]) -> None:
 @router.post("/run")
 def run(counterparty: Optional[str] = Query(default=None), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     uid = user["sub"]
+    heavy(user, "counterparty run", 4)
     if _jobs.get(uid, {}).get("running"):
         return {"started": False, "reason": "a run is already in progress", "job": _jobs[uid]}
     threading.Thread(target=_run, args=(_ctx(db, user), counterparty), daemon=True).start()

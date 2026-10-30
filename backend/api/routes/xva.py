@@ -31,6 +31,8 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._limits import heavy
+from api.routes._errors import internal
 from pricing.calibration import calibrate_hw1f, tenor_to_years, hw1f_swaption_vol_normal
 # Same curve builder the pricer uses, so the simulation and the valuation can
 # never end up on different curves. (pricer does not import xva — no cycle.)
@@ -312,7 +314,7 @@ def calibrate(
             discount_fn=disc_fn,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Calibration failed: {str(e)}")
+        raise internal(500, "Calibration failed", e)
     result["curve_id"]   = body.curve_id
     result["curve_note"] = curve_note
 
@@ -431,6 +433,7 @@ def simulate(
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
 ):
+    heavy(user, "XVA simulation", 6)
     # Load HW1F params — from request override or latest calibration
     a        = body.a
     sigma_bp = body.sigma_bp

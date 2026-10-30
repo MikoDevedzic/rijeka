@@ -37,6 +37,7 @@ from api.routes._cashflow_overrides import (  # L4 fix (Site 2)
 )
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._errors import internal
 from pricing.bootstrap import bootstrap_from_dicts
 from pricing.curve import Curve
 from pricing.fx_forward import price_fx_forward
@@ -508,7 +509,7 @@ def compute_par_rate(
     try:
         par_rate = _solve_par_rate(fixed_leg, float_leg, curves, val_date)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Par rate solver error: {e}")
+        raise internal(500, "Par rate solver error", e)
 
     fixed_leg["fixed_rate"] = par_rate
     disc_c = curves[req.curve_id]
@@ -658,7 +659,7 @@ def price_trade(
                 trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
             )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+        raise internal(500, "Pricing error", exc)
     if getattr(result, "error", None):
         raise HTTPException(status_code=422, detail=f"Pricing error: {result.error}")
 
@@ -853,7 +854,7 @@ def price_preview(
             valuation_date=val_date,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+        raise internal(500, "Pricing error", exc)
 
     # Greeks
     greeks = None
@@ -1100,7 +1101,7 @@ def price_swaption_route(
             # methodology gates from the pricer (multi-curve, embedded options, BASIS)
             raise HTTPException(status_code=422, detail=str(exc))
         except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Bermudan pricing error: {exc}")
+            raise internal(500, "Bermudan pricing error", exc)
 
         # Vega via sigma bump (±1bp). 2 additional tree solves.
         vega = None
@@ -1170,7 +1171,7 @@ def price_swaption_route(
             db                   = db,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+        raise internal(500, "Pricing error", exc)
 
     if result.error:
         raise HTTPException(status_code=422, detail=result.error)
@@ -1281,7 +1282,7 @@ def generate_cashflows(
             trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Schedule generation error: {exc}")
+        raise internal(500, "Schedule generation error", exc)
 
     # L4 fix (Site 2): snapshot overridden rows BEFORE the wipe so they
     # can be restored onto freshly-computed rows by period key.
@@ -1415,7 +1416,7 @@ def price_cap_route(
             vol_override_bp = req.vol_override_bp,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+        raise internal(500, "Pricing error", exc)
 
     return {
         "instrument":     "IR_CAP",
@@ -1474,7 +1475,7 @@ def price_floor_route(
             vol_override_bp = req.vol_override_bp,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+        raise internal(500, "Pricing error", exc)
 
     return {
         "instrument":      "IR_FLOOR",
@@ -1538,7 +1539,7 @@ def price_collar_route(
             fallback_vol_bp = req.fallback_vol_bp,
         )
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Pricing error: {exc}")
+        raise internal(500, "Pricing error", exc)
 
     cap   = result["cap"]
     floor = result["floor"]
