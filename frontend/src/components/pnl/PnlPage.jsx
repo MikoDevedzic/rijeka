@@ -162,17 +162,17 @@ function XvaPanel({ x, ccy }) {
     <section className="pnl-panel">
       <header><span>XVA · RESERVES AND THEIR CHANGE</span><span className="pnl-sub">{x.measure.replace('_', '-').toLowerCase()} · netted into the signed P&amp;L: {x.netted.join(', ')} · {ccy}</span></header>
       <div className="pnl-tree">
-        <div className="pnl-tr head" style={{ gridTemplateColumns: `1fr repeat(${comps.length}, 7.5rem) 8rem` }}>
+        <div className="pnl-tr head" style={{ gridTemplateColumns: `minmax(9rem, 1fr) repeat(${comps.length}, minmax(5.2rem, 1fr)) minmax(6rem, 1fr)` }}>
           <span className="pnl-tn">COUNTERPARTY</span>{comps.map(c => <span key={c} className={`pnl-tv${x.netted.includes(c.toUpperCase()) ? '' : ' dim'}`}>{c.toUpperCase()}{x.netted.includes(c.toUpperCase()) ? '' : ' ·'}</span>)}<span className="pnl-tv tot">NETTED Δ</span>
         </div>
         {x.by_counterparty.map(r => (
-          <div key={r.counterparty} className="pnl-tr d1" style={{ gridTemplateColumns: `1fr repeat(${comps.length}, 7.5rem) 8rem`, cursor: 'default' }}>
+          <div key={r.counterparty} className="pnl-tr d1" style={{ gridTemplateColumns: `minmax(9rem, 1fr) repeat(${comps.length}, minmax(5.2rem, 1fr)) minmax(6rem, 1fr)`, cursor: 'default' }}>
             <span className="pnl-tn" style={{ paddingLeft: 8 }}>{r.counterparty}<small>{r.change ? `level today → change vs ${x.prev_date}` : 'level today · no stored prior run'}</small></span>
             {comps.map(c => <span key={c} className={`pnl-tv ${tone(r.today[c])}`}>{sgn(r.today[c])}{r.change && <small style={{ display: 'block', color: 'var(--text-mute)' }}>Δ {sgn(r.change[c])}</small>}</span>)}
             <span className={`pnl-tv tot ${tone(r.change ? comps.filter(c => x.netted.includes(c.toUpperCase())).reduce((a, c) => a + r.change[c], 0) : 0)}`}>{r.change ? sgn(comps.filter(c => x.netted.includes(c.toUpperCase())).reduce((a, c) => a + r.change[c], 0)) : '—'}</span>
           </div>
         ))}
-        <div className="pnl-tr d0" style={{ gridTemplateColumns: `1fr repeat(${comps.length}, 7.5rem) 8rem`, cursor: 'default' }}>
+        <div className="pnl-tr d0" style={{ gridTemplateColumns: `minmax(9rem, 1fr) repeat(${comps.length}, minmax(5.2rem, 1fr)) minmax(6rem, 1fr)`, cursor: 'default' }}>
           <span className="pnl-tn" style={{ paddingLeft: 8 }}>BOOK · LEVELS{day ? <small>Δ day vs {day.from}</small> : <small>no prior stored run yet</small>}</span>
           {comps.map(c => <span key={c} className={`pnl-tv ${tone(lvl[c])}`}>{sgn(lvl[c])}{day && <small style={{ display: 'block', color: 'var(--text-mute)' }}>Δ {sgn(day.by_component[c])}</small>}</span>)}
           <span className={`pnl-tv tot ${tone(day?.netted)}`}>{day ? sgn(day.netted) : '—'}</span>

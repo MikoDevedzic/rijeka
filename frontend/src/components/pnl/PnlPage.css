@@ -42,7 +42,7 @@
 .pnl-caret { font-style:normal; color:var(--text-mute); margin-left:0.4rem; font-size:0.7rem; }
 .pnl-detail { list-style:none; margin:0.3rem 0 0; padding:0 0 0 6rem; display:flex; flex-direction:column; gap:0.15rem; }
 .pnl-detail li { display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.7rem; color:var(--text-dim); }
-.pnl-tree { display:flex; flex-direction:column; font-size:0.84rem; }
+.pnl-tree { display:flex; flex-direction:column; font-size:0.84rem; overflow-x:auto; }
 .pnl-tr { display:grid; grid-template-columns:1fr 8rem 8rem 8rem 13rem; gap:0.6rem; align-items:center; padding:0.4rem 0; border-bottom:1px solid var(--border); cursor:pointer; }
 .pnl-tr.head { cursor:default; font-family:var(--mono); font-size:0.58rem; letter-spacing:0.14em; color:var(--text-dim); }
 .pnl-tr.d0 { font-weight:600; } .pnl-tr.d0 .pnl-tv.tot { color:var(--text-hi); }
