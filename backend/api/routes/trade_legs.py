@@ -39,8 +39,9 @@ from uuid import UUID
 import uuid
 
 from db.session import get_db
-from db.models import TradeLeg
+from db.models import TradeLeg, Trade
 from middleware.auth import verify_token
+from api.routes._leg_defaults import complete_leg
 
 router = APIRouter(prefix="/api/trade-legs", tags=["trade_legs"])
 
@@ -327,6 +328,15 @@ def create_leg(
     payload = body.model_dump()
     if payload.get("embedded_options") is None:
         payload["embedded_options"] = []
+
+    # The stored leg is complete: dates and curves from the trade, canonical
+    # frequency names, conventions by currency (api/routes/_leg_defaults.py).
+    trade = db.query(Trade).filter(Trade.id == payload.get("trade_id")).first() if payload.get("trade_id") else None
+    payload = complete_leg(payload, effective_date=getattr(trade, "effective_date", None),
+                           maturity_date=getattr(trade, "maturity_date", None),
+                           discount_curve_id=getattr(trade, "discount_curve_id", None),
+                           forecast_curve_id=getattr(trade, "forecast_curve_id", None),
+                           currency=getattr(trade, "notional_ccy", None))
 
     leg = TradeLeg(**payload, created_by=user.get("sub"), user_id=uuid.UUID(user["sub"]))
     db.add(leg)

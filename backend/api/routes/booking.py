@@ -62,6 +62,7 @@ import logging
 from db.session import get_db
 from db.models import Trade, TradeLeg, TradeEvent, IdempotencyKey
 from middleware.auth import verify_token
+from api.routes._leg_defaults import complete_leg
 
 router = APIRouter(prefix="/api/book", tags=["booking"])
 log = logging.getLogger(__name__)
@@ -395,6 +396,24 @@ def _serialize_leg(l: TradeLeg) -> dict:
     }
 
 
+def complete_booking(body: "BookingRequest") -> "BookingRequest":
+    """Fill every leg from the trade and the currency conventions, and the
+    trade's discount curve from its first leg, so the stored rows need no
+    fallback at valuation time (see api/routes/_leg_defaults.py)."""
+    legs = [leg.model_copy(update=complete_leg(
+        leg.model_dump(), effective_date=body.effective_date, maturity_date=body.maturity_date,
+        discount_curve_id=body.discount_curve_id, forecast_curve_id=body.forecast_curve_id,
+        currency=body.notional_ccy)) for leg in body.legs]
+    update = {"legs": legs}
+    if not body.discount_curve_id and legs:
+        update["discount_curve_id"] = legs[0].discount_curve_id
+    if not body.forecast_curve_id:
+        fore = next((l.forecast_curve_id for l in legs if l.forecast_curve_id), None)
+        if fore:
+            update["forecast_curve_id"] = fore
+    return body.model_copy(update=update)
+
+
 # ── Route ─────────────────────────────────────────────────────
 
 @router.post("/trade", status_code=201)
@@ -424,6 +443,8 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
     CONFIRMED event) and commit once; the caller must then roll back on error.
     uti: set when the trade already has one (the other party's booking of it).
     """
+    body = complete_booking(body)
+
     # ── Idempotency short-circuit ─────────────────────────────
     if idempotency_key:
         try:

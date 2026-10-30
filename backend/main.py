@@ -41,6 +41,7 @@ from api.routes import (
     me,
     risk,
     ccr,
+    ops,
 )
 
 app = FastAPI(
@@ -95,6 +96,7 @@ app.include_router(pnl.router)
 app.include_router(me.router)
 app.include_router(risk.router)
 app.include_router(ccr.router)
+app.include_router(ops.router)
 
 @app.on_event("startup")
 def _warm_public_pulse():

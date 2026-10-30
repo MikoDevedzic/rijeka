@@ -261,6 +261,15 @@ def lifecycle(db: Session, user: dict) -> dict:
                             "detail": f"{lim.get('utilisation_pct', 0):.0f}% of {lim.get('limit'):,.0f} · as of {last.get('date')}", "href": "/risk"})
     except Exception as e:              # noqa: BLE001
         log.debug("desk: limits failed: %s", e)
+    # 6. A scheduled batch that has not run: the user's P&L, risk or market page is as stale as it.
+    try:
+        from api.routes.ops import stale_batches
+        for b in stale_batches(db):
+            last = (b.get("last") or "never")[:10]
+            actions.append({"kind": "BATCH", "title": f"{b['feeds'].capitalize()} batch has not run",
+                            "detail": f"last {last} · expected {b['rule']}", "href": None})
+    except Exception as e:              # noqa: BLE001
+        log.debug("desk: batches failed: %s", e)
     chain = _chain_health()
     if chain.get("relayer", {}).get("low"):
         actions.append({"kind": "WALLET", "title": "Relayer wallet is low",

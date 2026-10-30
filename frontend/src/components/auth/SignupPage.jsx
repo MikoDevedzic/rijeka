@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore, previewTraderId } from '../../store/useAuthStore'
+import { supabase } from '../../lib/supabase'
 import AuthScene, { Field, SubmitBtn } from './AuthScene'
 
 export default function SignupPage() {
@@ -11,6 +12,7 @@ export default function SignupPage() {
   const [confirm,  setConfirm]  = useState('')
   const [error,    setError]    = useState('')
   const [done,     setDone]     = useState(false)
+  const [notice,   setNotice]   = useState('')
   const [displayHandle, setDisplayHandle] = useState('')
   const [btnState, setBtnState] = useState('idle')
 
@@ -35,10 +37,26 @@ export default function SignupPage() {
     if (password !== confirm) { setError('Passwords do not match.'); return }
     if (password.length < 8)  { setError('Password must be at least 8 characters.'); return }
     setBtnState('loading')
-    const { error: err } = await signUp(email, password)
-    if (err) { setBtnState('idle'); setError(err.message); return }
+    const { data, error: err } = await signUp(email, password)
+    if (err) {
+      setBtnState('idle')
+      const m = String(err.message || '')
+      setError(/rate limit/i.test(m)
+        ? 'Too many sign-ups in the last hour from this site. Wait a few minutes and try again, or sign in if you already have an account.'
+        : m)
+      return
+    }
     setBtnState('success')
+    // With email confirmation switched off the session arrives at once: straight to the desk,
+    // which provisions the workspace on first load.
+    if (data?.session) { setTimeout(() => { window.location.href = '/' }, 400); return }
     setTimeout(() => setDone(true), 400)
+  }
+
+  const resend = async () => {
+    setNotice('')
+    const { error: err } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo: window.location.origin + '/confirm' } })
+    setNotice(err ? err.message : 'Sent again. Give it a few minutes and check the spam folder.')
   }
 
   if (done) {
@@ -50,6 +68,8 @@ export default function SignupPage() {
         {traderId && (
           <div className="au-handle"><span>YOUR HANDLE</span><b>{traderId}</b></div>
         )}
+        <p className="au-alt">It can take a few minutes. Nothing after that? Check spam, then <button type="button" className="au-inline" onClick={resend}>send it again</button>.</p>
+        {notice && <div className="au-notice">{notice}</div>}
         <p className="au-alt"><Link to="/login">← Back to sign in</Link></p>
       </AuthScene>
     )
