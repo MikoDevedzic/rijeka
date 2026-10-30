@@ -22,7 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from db.models import Trade
-from pnl.explain import GROUP, LIVE, ORDER, Valuer, explain_trade, new_trade, unwound_trade
+from pnl.explain import GROUP, LIVE, ORDER, Valuer, explain_trade, new_trade, unwound_trade, amendment_state_at, amended_trade
 from pnl.market import Market
 
 log = logging.getLogger("rijeka.pnl")
@@ -82,7 +82,11 @@ def trade_rows(db: Session, user: dict, d0: Optional[date], d1: date) -> tuple[l
         is_new = d0 is None or (booked is not None and booked > d0)
         try:
             if t.status in LIVE:
-                r = new_trade(db, user, t, d1, m1, valuer) if is_new else explain_trade(db, user, t, d0, d1, m0, m1, valuer)
+                if is_new:
+                    r = new_trade(db, user, t, d1, m1, valuer)
+                else:
+                    old = amendment_state_at(db, t, d0, d1)        # amended in the window: market steps on the old terms, then AMEND
+                    r = amended_trade(db, user, t, old, d0, d1, m0, m1, valuer) if old else explain_trade(db, user, t, d0, d1, m0, m1, valuer)
             elif t.status in ("TERMINATED", "CANCELLED", "MATURED") and d0 is not None and not is_new:
                 when = _d(t.last_modified_at) or d1
                 if when <= d0:

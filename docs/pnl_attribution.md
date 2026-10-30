@@ -25,7 +25,7 @@ The order is the convention. Moving rates before spot is a choice; any other ord
 ## Market P&L versus trading P&L
 
 - **Market**: rows 1 to 5 on trades that were on the book at both dates.
-- **Trading**: new trades, at their close mark (a trade struck at market shows 0; a trade struck off-market shows its day-one P&L); unwinds and terminations, which remove the prior mark plus any termination fee in the terms.
+- **Trading**: new trades, at their close mark (a trade struck at market shows 0; a trade struck off-market shows its day-one P&L); amendments, as one step per trade equal to NPV(new terms, today's market) − NPV(old terms, today's market), the market steps above having been run on the terms that stood at the previous close (several amendments in one window collapse into that one step; the old terms come from the amending event's pre-state or the event stream before it); unwinds and terminations, which remove the prior mark plus any termination fee in the terms.
 
 ## Roll-up and the reporting currency
 

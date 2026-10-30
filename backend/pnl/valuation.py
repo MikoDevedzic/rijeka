@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import math
 from datetime import date
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -73,6 +74,28 @@ def _curve_input(curve_id: str, quotes: Optional[list[dict]]):
                                                             day_count=q.get("day_count")) for q in quotes if q.get("rate") is not None])
 
 
+_LEG_ATTRS = ("id", "leg_ref", "leg_seq", "leg_type", "direction", "currency", "notional", "notional_type", "notional_schedule", "effective_date",
+              "maturity_date", "first_period_start", "last_period_end", "day_count", "payment_frequency", "reset_frequency", "bdc", "stub_type",
+              "payment_lag", "fixed_rate", "fixed_rate_schedule", "spread", "spread_schedule", "forecast_curve_id", "discount_curve_id", "cap_rate",
+              "floor_rate", "embedded_options", "leverage", "ois_compounding", "terms")
+
+
+def legs_for_pricer(trade) -> list[dict]:
+    """Projection-shaped leg dicts (the event stream's) → the dicts the pricer builds from ORM legs,
+    completed from the trade the way booking completes them."""
+    from api.routes._leg_defaults import complete_leg
+    from api.routes.pricer import _leg_to_dict
+    out = []
+    for raw in trade._legs:
+        ns = SimpleNamespace(**{**{a: None for a in _LEG_ATTRS}, **{k: v for k, v in dict(raw).items() if k in _LEG_ATTRS}})
+        d = _leg_to_dict(ns)
+        d = complete_leg(d, effective_date=str(trade.effective_date) if trade.effective_date else None,
+                         maturity_date=str(trade.maturity_date) if trade.maturity_date else None,
+                         discount_curve_id=trade.discount_curve_id, forecast_curve_id=trade.forecast_curve_id, currency=trade.notional_ccy)
+        out.append(d)
+    return out
+
+
 def value(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[str, Any]:
     """{npv, ccy, ir01, ir01_disc, spot01, theta, asof: {curve_id: snapshot date}, fallback: [curve ids valued on 'latest']}"""
     from api.routes.currencies import CURRENCY_INSTRUMENTS
@@ -82,6 +105,11 @@ def value(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[s
     from api.routes.pricer import PriceRequest, price_trade
     ids = trade_curves(trade)
     fallback = [c for c in ids if mkt.quotes(c) is None]
+    if getattr(trade, "_legs", None) is not None:
+        # a trade as it stood before an amendment (pnl.explain.shadow_trade): its legs are not in the
+        # database under this id, so they are handed to the pricer through its snapshot cache
+        from api.routes.pricer import _remember_trade
+        _remember_trade(str(trade.id), str(user["sub"]), trade, legs_for_pricer(trade))
     req = PriceRequest(trade_id=str(trade.id), valuation_date=val_date, curves=[_curve_input(c, mkt.quotes(c)) for c in ids])
     p = price_trade(req, db, user)
     return {"npv": float(p.get("npv") or 0.0), "ccy": (p.get("npv_ccy") or p.get("currency") or trade.notional_ccy or "USD").upper(),
