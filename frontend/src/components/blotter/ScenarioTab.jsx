@@ -928,7 +928,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
   const fwd5y5y = df5>0&&df10>0 ? (-Math.log(df10/df5)/5)*100 : 0
 
   const inp = {background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'3px',color:'var(--text-hi)',fontFamily:'var(--mono)',fontSize:'0.875rem',padding:'4px 8px',outline:'none',width:'100%'}
-  const secHdr = {fontSize:'11px',fontWeight:700,letterSpacing:'0.18em',color:'var(--text)',fontFamily:'var(--sans)',
+  const secHdr = {fontSize: '12px',fontWeight:700,letterSpacing:'0.18em',color:'var(--text)',fontFamily:'var(--sans)',
     paddingLeft:'10px',borderLeft:'3px solid var(--accent)',lineHeight:1.2}
 
   return (

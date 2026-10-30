@@ -130,7 +130,7 @@ session.sendRequest(request2)`;
       <SectionLabel>Self-host snap · Bloomberg Python (blpapi)</SectionLabel>
       <div className="cb">
         <button className="cb-copy" onClick={() => navigator.clipboard.writeText(code)}>copy</button>
-        <pre style={{ margin: 0, fontSize:'11px', lineHeight: 1.8 }}>{code}</pre>
+        <pre style={{ margin: 0, fontSize: '12px', lineHeight: 1.8 }}>{code}</pre>
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
 .nc{border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:3px;padding:.5rem .7rem;margin:.25rem 0 .35rem;background:rgba(255,255,255,.015);max-width:640px}
-.nc-top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;color:var(--text-dim);text-transform:uppercase}
+.nc-top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:0.8rem;letter-spacing:.08em;color:var(--text-dim);text-transform:uppercase}
 .nc-source{color:var(--accent);font-weight:700}
 .nc-title{display:block;margin:.25rem 0 .35rem;color:var(--text);font-size:.92rem;line-height:1.35;text-decoration:none}
 .nc-title:hover{color:var(--accent);text-decoration:underline}
-.nc-bottom{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:.62rem;letter-spacing:.06em}
+.nc-bottom{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;font-family:var(--mono);font-size:0.8rem;letter-spacing:.06em}
 .nc-tag{padding:.05rem .4rem;border-radius:2px;border:1px solid var(--border);color:var(--text-dim)}
 .nc-tag.rates{border-color:rgba(74,222,128,.4);color:#4ade80}
 .nc-tag.credit{border-color:rgba(248,113,113,.4);color:#f87171}
@@ -16,6 +16,6 @@
 .nc-summary{margin:.1rem 0 .45rem;padding:.45rem .6rem;border-left:2px solid var(--border-hi);background:rgba(13,212,168,.03);border-radius:0 3px 3px 0}
 .nc-summary p{margin:0 0 .3rem;font-size:.84rem;line-height:1.45;color:var(--text)}
 .nc-summary p:last-of-type{margin-bottom:.2rem}
-.nc-summary-meta{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;color:var(--text-mute)}
+.nc-summary-meta{display:flex;justify-content:space-between;gap:.6rem;flex-wrap:wrap;font-family:var(--mono);font-size:0.8rem;letter-spacing:.1em;color:var(--text-mute)}
 .nc-summary-meta a{color:var(--accent);text-decoration:none}
 .nc-summary-meta a:hover{text-decoration:underline}

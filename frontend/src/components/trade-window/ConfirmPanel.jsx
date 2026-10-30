@@ -51,7 +51,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   const own = att.parties?.own || {}
   const cp  = att.parties?.counterparty || {}
   const row = (k, v, color) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 10, fontSize: 11, lineHeight: 1.7 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 10, fontSize: 12, lineHeight: 1.7 }}>
       <span className="tbw-mut" style={{ letterSpacing: '0.06em' }}>{k}</span>
       <span style={{ fontFamily: MONO, color: color || 'var(--text-hi)', wordBreak: 'break-all' }}>{v}</span>
     </div>
@@ -114,7 +114,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
           ) : (
             <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid rgba(224,80,64,0.35)', borderRadius: 2, maxWidth: 520 }}>
               <div className="tbw-lbl" style={{ color: 'var(--red)' }}>TERMINATE — BOTH PARTIES SIGN, REGISTRY MARKS THE RECORD CLOSED</div>
-              <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5, margin: '6px 0 10px' }}>
+              <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5, margin: '6px 0 10px' }}>
                 Closes the signed record on-chain with a TradeTermination signature from each party. When the
                 counterparty signs for themselves this needs their signature via the termination request; Rijeka
                 signs both only if it holds their key.
@@ -133,7 +133,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
         </div>
       )}
       {vr && !vr.info && (
-        <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 2, fontSize: 11, fontFamily: MONO,
+        <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 2, fontSize: 12, fontFamily: MONO,
           background: vr.error ? 'rgba(224,80,64,0.06)' : vOk ? 'rgba(13,212,168,0.06)' : 'rgba(240,160,32,0.06)',
           border: '1px solid ' + (vr.error ? 'rgba(224,80,64,0.3)' : vOk ? 'rgba(13,212,168,0.3)' : 'rgba(240,160,32,0.3)'),
           color: vr.error ? 'var(--red)' : vOk ? 'var(--accent)' : 'var(--amber)', lineHeight: 1.7 }}>
@@ -232,13 +232,13 @@ export function ConfirmPanel({
           </div>
 
           {bookedTrade.trade_ref && (
-            <div className="tbw-mut" style={{ marginTop: 10, fontSize: 11 }}>
+            <div className="tbw-mut" style={{ marginTop: 10, fontSize: 12 }}>
               Trade ref: {bookedTrade.trade_ref}
             </div>
           )}
 
           <div className="tbw-mut" style={{
-            marginTop: 16, fontSize: 11, lineHeight: 1.5, maxWidth: 520,
+            marginTop: 16, fontSize: 12, lineHeight: 1.5, maxWidth: 520,
           }}>
             {TERMINAL_COPY[status] || ('Trade status is ' + status + '. No lifecycle actions available in this tab.')}
           </div>
@@ -278,7 +278,7 @@ export function ConfirmPanel({
             PENDING
           </div>
           {bookedTrade.trade_ref && (
-            <div className="tbw-mut" style={{ marginTop: 8, fontSize: 11 }}>
+            <div className="tbw-mut" style={{ marginTop: 8, fontSize: 12 }}>
               Trade ref: {bookedTrade.trade_ref}
             </div>
           )}
@@ -287,7 +287,7 @@ export function ConfirmPanel({
         <SendForConfirmation s={send} />
 
         <div className="tbw-mut" style={{
-          fontSize: 11, lineHeight: 1.5, maxWidth: 520,
+          fontSize: 12, lineHeight: 1.5, maxWidth: 520,
         }}>
           {cpOnNetwork
             ? 'Cancelling closes the trade without settlement — terminal and cannot be undone.'
@@ -352,7 +352,7 @@ export function ConfirmPanel({
             <div className="tbw-lbl" style={{ color: 'var(--red)' }}>
               CANCEL TRADE — TERMINAL ACTION
             </div>
-            <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5 }}>
+            <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5 }}>
               This appends a CANCELLED event to the trade's event stream
               and sets status to CANCELLED permanently. Provide a reason
               below (optional, stored in the audit trail).

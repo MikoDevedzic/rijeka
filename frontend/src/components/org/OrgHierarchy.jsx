@@ -53,7 +53,7 @@ function Btn({ color, onClick, title, children }) {
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         background: hover ? color + '22' : 'none', border: '1px solid ' + color,
-        borderRadius: '2px', color, fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '11px',
+        borderRadius: '2px', color, fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '12px',
         padding: '2px 7px', cursor: 'pointer', letterSpacing: '0.06em',
         transition: 'background 0.12s', whiteSpace: 'nowrap',
       }}
@@ -89,10 +89,10 @@ function NodeRow({ node, depth, collapsed, toggleCollapse, editing, setEditing, 
         ⠿
       </span>
       <button onClick={() => hasKids && toggleCollapse(node.id)}
-        style={{ background: 'none', border: 'none', color: hasKids ? 'var(--text-dim)' : 'transparent', cursor: hasKids ? 'pointer' : 'default', fontSize: '11px', padding: 0, width: '12px', flexShrink: 0, lineHeight: 1 }}>
+        style={{ background: 'none', border: 'none', color: hasKids ? 'var(--text-dim)' : 'transparent', cursor: hasKids ? 'pointer' : 'default', fontSize: '12px', padding: 0, width: '12px', flexShrink: 0, lineHeight: 1 }}>
         {hasKids ? (collapsed.has(node.id) ? '▶' : '▼') : ''}
       </button>
-      <span style={{ color, fontSize: '11px', fontWeight: '700', letterSpacing: '0.1em', width: '30px', flexShrink: 0 }}>
+      <span style={{ color, fontSize: '12px', fontWeight: '700', letterSpacing: '0.1em', width: '30px', flexShrink: 0 }}>
         {TYPE_LABEL[node.node_type]}
       </span>
       {isEditing ? (
@@ -113,7 +113,7 @@ function NodeRow({ node, depth, collapsed, toggleCollapse, editing, setEditing, 
         </span>
       )}
       {!node.is_active && (
-        <span style={{ fontSize: '11px', color: 'var(--red)', letterSpacing: '0.08em', flexShrink: 0 }}>INACTIVE</span>
+        <span style={{ fontSize: '12px', color: 'var(--red)', letterSpacing: '0.08em', flexShrink: 0 }}>INACTIVE</span>
       )}
       {!isEditing && (
         <div style={{ display: 'flex', gap: '5px', flexShrink: 0, marginLeft: 'auto' }}>
@@ -159,7 +159,7 @@ function AddRow({ nodeType, depth, onConfirm, onCancel }) {
     }}>
       <span style={{ width: '13px', flexShrink: 0 }} />
       <span style={{ width: '12px', flexShrink: 0 }} />
-      <span style={{ color, fontSize: '11px', fontWeight: '700', letterSpacing: '0.1em', width: '30px', flexShrink: 0 }}>
+      <span style={{ color, fontSize: '12px', fontWeight: '700', letterSpacing: '0.1em', width: '30px', flexShrink: 0 }}>
         {TYPE_LABEL[nodeType]}
       </span>
       <input ref={inputRef} value={name} onChange={e => setName(e.target.value)}
@@ -313,19 +313,19 @@ export default function OrgHierarchy() {
         </span>
         {/* Legend */}
         {Object.entries(TYPE_LABEL).map(([type, label]) => (
-          <span key={type} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
+          <span key={type} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '1px', background: NODE_COLOR[type], display: 'inline-block', flexShrink: 0 }} />
             <span style={{ color: 'var(--text-dim)', letterSpacing: '0.06em' }}>{label}</span>
           </span>
         ))}
-        <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '4px' }}>· dbl-click to rename</span>
+        <span style={{ fontSize: '12px', color: 'var(--text-dim)', marginLeft: '4px' }}>· dbl-click to rename</span>
         {inactiveCount > 0 && (
           <button onClick={() => setShowInactive(v => !v)}
             style={{
               marginLeft: 'auto', background: showInactive ? 'rgba(217,80,64,0.12)' : 'none',
               border: '1px solid ' + (showInactive ? 'var(--red)' : 'var(--border)'),
               borderRadius: '2px', color: showInactive ? 'var(--red)' : 'var(--text-dim)',
-              fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '11px', padding: '2px 8px', cursor: 'pointer',
+              fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '12px', padding: '2px 8px', cursor: 'pointer',
               letterSpacing: '0.08em', transition: 'all 0.15s',
             }}>
             {showInactive ? 'HIDE INACTIVE (' + inactiveCount + ')' : 'SHOW INACTIVE (' + inactiveCount + ')'}
@@ -336,19 +336,19 @@ export default function OrgHierarchy() {
       {/* Scrollable body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
         {error && (
-          <div style={{ padding: '8px 12px', background: 'rgba(217,80,64,0.12)', border: '1px solid var(--red)', borderRadius: '3px', color: 'var(--red)', fontSize: '11px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ padding: '8px 12px', background: 'rgba(217,80,64,0.12)', border: '1px solid var(--red)', borderRadius: '3px', color: 'var(--red)', fontSize: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
             {error}
             <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer' }}>✕</button>
           </div>
         )}
 
         {loading ? (
-          <div style={{ padding: '20px', color: 'var(--text-dim)', fontSize: '11px' }}>loading...</div>
+          <div style={{ padding: '20px', color: 'var(--text-dim)', fontSize: '12px' }}>loading...</div>
         ) : nodes.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', gap: '12px', color: 'var(--text-dim)', fontSize: '12px' }}>
             <span style={{ letterSpacing: '0.08em' }}>NO ORG STRUCTURE DEFINED</span>
             <button onClick={initFirm} disabled={saving}
-              style={{ background: 'none', border: '1px solid var(--accent)', borderRadius: '3px', color: 'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '11px', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.08em' }}
+              style={{ background: 'none', border: '1px solid var(--accent)', borderRadius: '3px', color: 'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '12px', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.08em' }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(14,201,160,0.1)'}
               onMouseLeave={e => e.currentTarget.style.background = 'none'}>
               {saving ? 'INITIALIZING...' : 'INITIALIZE FIRM NODE'}

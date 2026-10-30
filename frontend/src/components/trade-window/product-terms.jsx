@@ -495,7 +495,7 @@ export function SwaptionTermsBody({ state, update }) {
                  onChange={e => update({ strike: e.target.value })} />
         </Field>
         <Field label="HW1F CROSS-CHECK">
-          <div className="tbw-mono" style={{ padding: '7px 0', fontSize: 11 }}>
+          <div className="tbw-mono" style={{ padding: '7px 0', fontSize: 12 }}>
             <span className="tbw-mut">Model:</span> <span className="tbw-blue">83.0bp</span>
             <span className="tbw-mut"> Mkt:</span> <span className="tbw-blue">86.5bp</span>
             <span className="tbw-negative"> △ −3.46bp ⚠</span>

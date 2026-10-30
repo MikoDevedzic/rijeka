@@ -53,7 +53,7 @@ function Btn({ color, size, onClick, disabled, children }) {
 function Badge({ color, children }) {
   return (
     <span style={{
-      fontSize:'11px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
+      fontSize: '12px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
       padding:'2px 6px', borderRadius:'2px', whiteSpace:'nowrap',
       background:'color-mix(in srgb, ' + color + ' 14%, transparent)',
       color: color,
@@ -65,7 +65,7 @@ function Badge({ color, children }) {
 function Cell({ children, dim }) {
   return (
     <div style={{
-      fontSize:'11px', fontFamily:"'IBM Plex Mono',var(--mono)",
+      fontSize: '12px', fontFamily:"'IBM Plex Mono',var(--mono)",
       color: dim ? 'var(--text-dim)' : 'var(--text)',
       overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'
     }}>{children || '—'}</div>
@@ -204,7 +204,7 @@ export default function LegalEntities() {
           border:'1px dashed var(--accent)', borderRadius:'4px',
           padding:'20px', marginBottom:'20px', background:'var(--panel)'
         }}>
-          <div style={{ fontSize:'11px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
               letterSpacing:'0.08em', marginBottom:'16px' }}>
             NEW LEGAL ENTITY
           </div>
@@ -246,7 +246,7 @@ export default function LegalEntities() {
             <div>
               <label style={L}>
                 REGULATORY REGIME
-                <span style={{ opacity:0.6, fontSize:'11px', marginLeft:'4px' }}>(comma-sep)</span>
+                <span style={{ opacity:0.6, fontSize: '12px', marginLeft:'4px' }}>(comma-sep)</span>
               </label>
               <input style={INP} value={form.regulatory_regime}
                 placeholder="EMIR, DODD-FRANK, MIFID2"

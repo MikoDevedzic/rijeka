@@ -22,7 +22,7 @@ export function SendForConfirmation({ s, compact = false }) {
 
   if (status.status === 'CONFIRMED') return null   // the parent shows the attestation
   if (!status.counterparty?.on_network) return compact ? null : (
-    <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5, maxWidth: 520 }}>
+    <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 520 }}>
       {status.reason} Their countersignature has to come from their own system: confirm below, or send them the
       confirmation request to sign with the command-line tool.
     </div>
@@ -35,7 +35,7 @@ export function SendForConfirmation({ s, compact = false }) {
           <div style={{ fontFamily: MONO, fontSize: 12, color: 'var(--amber)', letterSpacing: '0.04em' }}>
             ◆ SENT TO {cp.toUpperCase()} · AWAITING COUNTERSIGNATURE
           </div>
-          <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5 }}>
+          <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5 }}>
             In <b style={{ color: 'var(--text-hi)' }}>{status.sent[0].room_title}</b>. They review the terms from their side, check them
             against their own booking, and sign with their firm's wallet. This tab updates when they do.
             {!status.counterparty.has_signer && ` ${cp} hasn't registered a signing wallet yet; they'll be asked to when they open the card.`}
@@ -49,7 +49,7 @@ export function SendForConfirmation({ s, compact = false }) {
           <button className="tbw-btn tbw-btn-book" disabled={sending || !status.can_send} onClick={send} style={{ alignSelf: 'flex-start' }}>
             {sending ? '⏳ SENDING…' : `◆ SEND TO ${cp.toUpperCase()} FOR COUNTERSIGNATURE`}
           </button>
-          <div className="tbw-mut" style={{ fontSize: 11, lineHeight: 1.5 }}>
+          <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5 }}>
             {cp} is on Rijeka, so they sign for themselves: the trade goes to your chat with them as a card with the agreed terms
             (not your book or desk), they countersign with their own wallet, and it is anchored on-chain.
           </div>

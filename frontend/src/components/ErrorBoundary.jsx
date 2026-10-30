@@ -79,7 +79,7 @@ export default class ErrorBoundary extends Component {
         <div style={{
           marginTop: 8, maxWidth: 420, padding: '8px 10px', borderRadius: 3,
           border: '1px solid var(--border-hi)', background: 'var(--panel)',
-          fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-dim)', textAlign: 'left',
+          fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-dim)', textAlign: 'left',
           wordBreak: 'break-word',
         }}>{msg}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -94,7 +94,7 @@ export default class ErrorBoundary extends Component {
             {this.state.copied ? 'COPIED' : 'COPY DETAILS'}
           </button>
         </div>
-        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--text-mute)' }}>
+        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-mute)' }}>
           Paste the details to <a href="mailto:miko@rijeka.app" style={{ color: 'var(--accent)' }}>miko@rijeka.app</a> or the support room.
         </div>
       </div>
@@ -109,7 +109,7 @@ export default class ErrorBoundary extends Component {
           <div style={{ width: 560, maxWidth: 'calc(100vw - 32px)', border: '1px solid var(--border-hi)', borderRadius: 8,
             background: 'linear-gradient(180deg, var(--panel-2), var(--panel))', boxShadow: 'var(--shadow-panel)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)',
-              fontSize: 11, letterSpacing: '0.18em', fontWeight: 700, color: 'var(--text)' }}>
+              fontSize: 12, letterSpacing: '0.18em', fontWeight: 700, color: 'var(--text)' }}>
               <span style={{ color: 'var(--amber)' }}>⚠</span> TRADE WINDOW
               <button className="btn" onClick={this.primary} style={{ marginLeft: 'auto', padding: '3px 8px' }}>✕</button>
             </div>

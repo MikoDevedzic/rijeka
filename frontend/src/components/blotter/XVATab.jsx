@@ -521,7 +521,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const lbl = { fontSize:'0.75rem', color:'var(--accent)', letterSpacing:'0.07em',
     fontFamily:'var(--sans)', marginBottom:'2px',
     borderBottom:'1px dashed rgba(13,212,168,0.4)', cursor:'help', paddingBottom:'1px' }
-  const secHdr = { fontSize:'11px', fontWeight:700, letterSpacing:'0.18em', color:'var(--text)',
+  const secHdr = { fontSize: '12px', fontWeight:700, letterSpacing:'0.18em', color:'var(--text)',
     fontFamily:'var(--sans)', paddingLeft:'10px', borderLeft:'3px solid var(--accent)', lineHeight:1.2,
     marginTop:'14px', marginBottom:'8px' }
 

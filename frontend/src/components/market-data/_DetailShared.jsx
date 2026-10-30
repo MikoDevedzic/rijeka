@@ -68,7 +68,7 @@ export function CodeBlock({ children, onCopy }) {
 export function DescBox({ children }) {
   return (
     <div style={{
-      fontSize: '9.5px', color: 'var(--text)', lineHeight: 1.7,
+      fontSize: '12px', color: 'var(--text)', lineHeight: 1.7,
       marginBottom: 10, padding: '8px 10px',
       background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2,
     }}>

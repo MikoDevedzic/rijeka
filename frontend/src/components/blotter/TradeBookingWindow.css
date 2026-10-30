@@ -40,7 +40,7 @@
   flex: 1;
 }
 .tbw-store-badge { display: flex; gap: 3px; }
-.tbw-ids { margin-left: 14px; font-family: 'IBM Plex Mono', var(--mono); font-size: 0.75rem; font-weight: 400;
+.tbw-ids { margin-left: 14px; font-family: 'IBM Plex Mono', var(--mono); font-size: 0.8rem; font-weight: 400;
   letter-spacing: 0.06em; color: var(--text-dim); }
 .tbw-ids b { font-weight: 600; color: var(--text); letter-spacing: 0.02em; }
 .tbw-store-btn {
@@ -96,7 +96,7 @@
 
 .tbw-section-lbl {
   font-family: 'IBM Plex Sans', system-ui, sans-serif;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.10em;
   color: var(--text-dim);
@@ -144,7 +144,7 @@
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 8px; padding: 3rem 1rem; text-align: center;
 }
-.tbw-stub-title { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.14em; color: var(--text-dim); }
+.tbw-stub-title { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.14em; color: var(--text-dim); }
 .tbw-stub-sub   { font-size: 1rem; color: var(--text-dim); opacity: 0.6; }
 .tbw-stub-sprint { font-size: 0.9375rem; font-weight: 700; letter-spacing: 0.12em; color: var(--amber); margin-top: 4px; border: 1px solid var(--amber); padding: 2px 8px; border-radius: 2px; opacity: 0.7; }
 
@@ -177,8 +177,8 @@
 
 /* CONFIRM tab on a confirmed trade: the shared ConfirmPanel, which is styled for the trade window */
 .tbw-confirm .tbw-sec { padding: 14px 16px; }
-.tbw-confirm .tbw-lbl { font-size: 11px; color: var(--text-dim); letter-spacing: 0.12em; margin-bottom: 7px; font-weight: 600; }
-.tbw-confirm .tbw-mut { font-size: 11px; color: var(--text-dim); letter-spacing: 0.03em; }
+.tbw-confirm .tbw-lbl { font-size: 12px; color: var(--text-dim); letter-spacing: 0.12em; margin-bottom: 7px; font-weight: 600; }
+.tbw-confirm .tbw-mut { font-size: 12px; color: var(--text-dim); letter-spacing: 0.03em; }
 .tbw-confirm .tbw-btn { background: transparent; border: 1px solid var(--border); padding: 6px 14px; border-radius: 2px;
-  font-size: 11px; letter-spacing: 0.08em; font-weight: 500; cursor: pointer; color: var(--text-dim); font-family: inherit; }
+  font-size: 12px; letter-spacing: 0.08em; font-weight: 500; cursor: pointer; color: var(--text-dim); font-family: inherit; }
 .tbw-confirm .tbw-btn:disabled { opacity: 0.5; cursor: not-allowed; }

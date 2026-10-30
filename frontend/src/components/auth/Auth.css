@@ -13,8 +13,8 @@
 
 .au-scene-top { display:flex; flex-direction:column; gap:6px; animation:auIn .6s ease both; }
 .au-mark { font-size:clamp(1.3rem, 2.2vw, 1.7rem); font-weight:800; letter-spacing:0.42em; color:var(--accent); text-shadow:0 0 36px rgba(13,212,168,0.35); }
-.au-sub { font-family:var(--mono); font-size:0.76rem; letter-spacing:0.3em; color:var(--text-dim); }
-.au-phase { display:inline-flex; align-items:center; gap:8px; margin-top:6px; padding:4px 10px; border:1px solid var(--border-hi); border-radius:999px; font-family:var(--mono); font-size:0.7rem; letter-spacing:0.18em; color:var(--text-dim); width:max-content; max-width:100%; }
+.au-sub { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.3em; color:var(--text-dim); }
+.au-phase { display:inline-flex; align-items:center; gap:8px; margin-top:6px; padding:4px 10px; border:1px solid var(--border-hi); border-radius:999px; font-family:var(--mono); font-size:0.8rem; letter-spacing:0.18em; color:var(--text-dim); width:max-content; max-width:100%; }
 .au-phase i { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); flex-shrink:0; }
 
 .au-headline { margin:clamp(14px, 3vh, 36px) 0; max-width:620px; animation:auIn .7s ease .1s both; }
@@ -23,7 +23,7 @@
 .au-headline p { font-size:clamp(0.84rem, 1vw, 0.98rem); line-height:1.6; color:var(--text-dim); max-width:540px; margin:0; }
 
 .au-chart { animation:auIn .8s ease .2s both; }
-.au-chart-hdr { display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:0.76rem; letter-spacing:0.22em; color:var(--text-dim); margin-bottom:8px; }
+.au-chart-hdr { display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:0.8rem; letter-spacing:0.22em; color:var(--text-dim); margin-bottom:8px; }
 .au-live { display:inline-flex; align-items:center; gap:7px; }
 .au-live i { width:6px; height:6px; border-radius:50%; background:var(--border-glow); }
 .au-live.on { color:var(--accent); }
@@ -32,7 +32,7 @@
 .au-stage { height:clamp(200px, 32vh, 300px); position:relative; animation:auFade .7s ease both; }
 .au-stage > * { position:absolute; inset:0; }
 .au-dots { display:flex; gap:14px; margin-top:10px; }
-.au-dots button { background:none; border:none; padding:4px 0; cursor:pointer; display:flex; flex-direction:column; gap:5px; align-items:flex-start; color:var(--text-mute); font-family:var(--mono); font-size:0.7rem; letter-spacing:0.22em; transition:color .2s; }
+.au-dots button { background:none; border:none; padding:4px 0; cursor:pointer; display:flex; flex-direction:column; gap:5px; align-items:flex-start; color:var(--text-mute); font-family:var(--mono); font-size:0.8rem; letter-spacing:0.22em; transition:color .2s; }
 .au-dots button i { display:block; width:46px; height:2px; background:var(--border-hi); position:relative; overflow:hidden; border-radius:1px; }
 .au-dots button.on { color:var(--text-dim); }
 .au-dots button.on i::after { content:''; position:absolute; inset:0; background:var(--accent); transform-origin:left; transform:scaleX(0); animation:auProgress linear forwards; animation-duration:9000ms; box-shadow:0 0 8px var(--accent); }
@@ -43,20 +43,20 @@
 .au-anchor-row { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; }
 .au-anchor-step { position:relative; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; opacity:0; animation:auIn .6s ease both; }
 .au-anchor-node { width:68px; height:68px; border-radius:50%; border:1px solid var(--accent-dim); display:grid; place-items:center; background:radial-gradient(circle at 50% 40%, rgba(13,212,168,0.18), transparent 70%); box-shadow:0 0 24px rgba(13,212,168,0.12), inset 0 0 18px rgba(13,212,168,0.08); }
-.au-anchor-node span { font-family:var(--mono); font-size:0.76rem; letter-spacing:0.12em; color:var(--accent); }
+.au-anchor-node span { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.12em; color:var(--accent); }
 .au-anchor-step:last-child .au-anchor-node { border-color:var(--chain); background:radial-gradient(circle at 50% 40%, rgba(240,120,32,0.2), transparent 70%); box-shadow:0 0 24px rgba(240,120,32,0.14); }
 .au-anchor-step:last-child .au-anchor-node span { color:var(--chain); }
 .au-anchor-t { font-size:0.8rem; color:var(--text-hi); font-weight:500; }
-.au-anchor-d { font-family:var(--mono); font-size:0.74rem; letter-spacing:0.06em; color:var(--text-dim); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.au-anchor-d { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.06em; color:var(--text-dim); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .au-anchor-link { position:absolute; top:34px; left:calc(50% + 38px); width:calc(100% - 76px); height:0; border-top:1px dashed var(--accent-dim); opacity:0; animation:auFade .5s ease both; }
 .au-anchor-link::after { content:''; position:absolute; right:-2px; top:-3px; width:5px; height:5px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); animation:auTravel 1.6s linear infinite; }
-.au-anchor-foot { display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.76rem; letter-spacing:0.14em; color:var(--text-dim); animation:auIn .6s ease 3.6s both; }
+.au-anchor-foot { display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.8rem; letter-spacing:0.14em; color:var(--text-dim); animation:auIn .6s ease 3.6s both; }
 .au-anchor-foot .mono { color:var(--text-mute); }
 
 /* maths */
 .au-math { display:flex; flex-direction:column; justify-content:center; gap:14px; height:100%; padding:4px 2px; }
 .au-math-row { display:grid; grid-template-columns:96px 1fr; gap:14px; align-items:baseline; opacity:0; animation:auIn .7s ease both; }
-.au-math-k { font-family:var(--mono); font-size:0.72rem; letter-spacing:0.22em; color:var(--accent); }
+.au-math-k { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.22em; color:var(--accent); }
 .au-math-eq { font-family:'Times New Roman', 'Georgia', serif; font-style:italic; font-size:clamp(0.95rem, 1.25vw, 1.2rem); color:var(--text-hi); letter-spacing:0.01em; line-height:1.4; }
 .au-math-eq sub, .au-math-eq sup { font-size:0.62em; font-style:normal; color:var(--text-dim); }
 .au-math-eq { clip-path:inset(0 100% 0 0); animation:auWipe 1.6s cubic-bezier(.2,.7,.2,1) both; }
@@ -68,9 +68,9 @@
 .au-pulse { display:grid; grid-template-columns:repeat(4, auto); gap:10px clamp(16px, 3vw, 40px); justify-content:start; margin-top:clamp(10px, 2vh, 22px); animation:auIn .8s ease .35s both; }
 .au-pulse div { display:flex; flex-direction:column; gap:3px; }
 .au-pulse b { font-family:var(--mono); font-weight:500; font-size:clamp(1rem, 1.5vw, 1.3rem); color:var(--text-hi); letter-spacing:0.02em; }
-.au-pulse span { font-family:var(--mono); font-size:0.72rem; letter-spacing:0.22em; color:var(--text-dim); white-space:nowrap; }
+.au-pulse span { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.22em; color:var(--text-dim); white-space:nowrap; }
 
-.au-foot { display:flex; gap:18px; margin-top:clamp(12px, 2.4vh, 26px); font-family:var(--mono); font-size:0.76rem; letter-spacing:0.18em; text-transform:uppercase; }
+.au-foot { display:flex; gap:18px; margin-top:clamp(12px, 2.4vh, 26px); font-family:var(--mono); font-size:0.8rem; letter-spacing:0.18em; text-transform:uppercase; }
 .au-foot a { color:var(--text-mute); text-decoration:none; transition:color .15s; }
 .au-foot a:hover { color:var(--accent); }
 
@@ -79,12 +79,12 @@
   background:linear-gradient(180deg, rgba(255,255,255,0.015), transparent 40%), var(--bg-deep); }
 .au-card { width:100%; max-width:380px; display:flex; flex-direction:column; gap:14px; padding:30px 28px; border:1px solid var(--border-hi); border-radius:10px;
   background:linear-gradient(180deg, var(--panel-2), var(--panel)); box-shadow:var(--shadow-panel), 0 0 80px rgba(13,212,168,0.05); animation:auIn .5s ease .15s both; }
-.au-eyebrow { font-family:var(--mono); font-size:0.74rem; letter-spacing:0.28em; color:var(--text-dim); }
+.au-eyebrow { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.28em; color:var(--text-dim); }
 .au-title { font-size:1.25rem; font-weight:600; color:var(--text-hi); letter-spacing:-0.01em; margin:0; }
 .au-lead { font-size:0.82rem; color:var(--text-dim); line-height:1.55; margin:-6px 0 2px; }
 .au-form { display:flex; flex-direction:column; gap:12px; }
 .au-field { display:flex; flex-direction:column; gap:5px; }
-.au-field > span { font-family:var(--mono); font-size:0.74rem; letter-spacing:0.2em; color:var(--text-dim); text-transform:uppercase; }
+.au-field > span { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.2em; color:var(--text-dim); text-transform:uppercase; }
 .au-field input { background:var(--bg-deep); border:1px solid var(--border-hi); border-radius:5px; color:var(--text-hi); font-family:var(--sans); font-size:14px;
   padding:10px 12px; outline:none; width:100%; transition:border-color .15s, box-shadow .15s; }
 .au-field input::placeholder { color:var(--text-mute); }
@@ -92,11 +92,11 @@
 .au-field input:-webkit-autofill { -webkit-box-shadow:0 0 0 100px var(--bg-deep) inset !important; -webkit-text-fill-color:var(--text-hi) !important; }
 .au-handle { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 12px; border:1px solid var(--accent-dim); border-left:3px solid var(--accent);
   border-radius:5px; background:var(--accent-glow); animation:auIn .25s ease both; }
-.au-handle span { font-family:var(--mono); font-size:0.74rem; letter-spacing:0.2em; color:var(--text-dim); }
+.au-handle span { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.2em; color:var(--text-dim); }
 .au-handle b { font-family:var(--mono); font-weight:600; font-size:14px; color:var(--accent); letter-spacing:0.05em; text-shadow:0 0 16px rgba(13,212,168,0.45); }
 .au-handle b .caret { animation:auBlink .6s step-end infinite; }
 .au-error { font-size:12px; color:var(--red); border:1px solid rgba(224,80,64,0.35); border-radius:5px; padding:8px 10px; background:rgba(224,80,64,0.07); animation:auShake .3s ease; }
-.au-btn { margin-top:4px; width:100%; padding:12px 14px; border:none; border-radius:6px; cursor:pointer; font-family:var(--mono); font-size:0.72rem; font-weight:600;
+.au-btn { margin-top:4px; width:100%; padding:12px 14px; border:none; border-radius:6px; cursor:pointer; font-family:var(--mono); font-size:0.8rem; font-weight:600;
   letter-spacing:0.22em; background:var(--accent); color:#04120E; transition:background .2s, box-shadow .2s, transform .1s; }
 .au-btn:hover:not(:disabled) { background:#2ee6bf; box-shadow:0 0 0 3px var(--accent-glow), 0 6px 22px rgba(13,212,168,0.3); }
 .au-btn:active:not(:disabled) { transform:translateY(1px); }
@@ -106,17 +106,17 @@
 .au-alt { font-size:12px; color:var(--text-dim); text-align:center; margin:4px 0 0; }
 .au-alt a { color:var(--accent); text-decoration:none; }
 .au-alt a:hover { text-decoration:underline; }
-.au-legal { font-family:var(--mono); font-size:0.74rem; letter-spacing:0.08em; color:var(--text-mute); text-align:center; max-width:380px; line-height:1.7; }
+.au-legal { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.08em; color:var(--text-mute); text-align:center; max-width:380px; line-height:1.7; }
 .au-legal a { color:var(--text-dim); text-decoration:none; }
 .au-legal a:hover { color:var(--accent); }
 
 /* confirm page: the big handle reveal */
 .au-reveal { text-align:center; padding:22px 16px 18px; border:1px solid var(--border-hi); border-radius:8px; background:var(--bg-deep); transition:border-color .6s, box-shadow .6s; }
 .au-reveal.lit { border-color:var(--accent); box-shadow:0 0 40px rgba(13,212,168,0.18), inset 0 0 40px rgba(13,212,168,0.05); }
-.au-reveal span { display:block; font-family:var(--mono); font-size:0.72rem; letter-spacing:0.26em; color:var(--text-dim); margin-bottom:8px; }
+.au-reveal span { display:block; font-family:var(--mono); font-size:0.8rem; letter-spacing:0.26em; color:var(--text-dim); margin-bottom:8px; }
 .au-reveal b { display:block; font-family:var(--mono); font-weight:600; font-size:clamp(1.4rem, 4vw, 2rem); color:var(--accent); letter-spacing:0.08em; min-height:1.3em; }
 .au-reveal.lit b { text-shadow:0 0 28px rgba(13,212,168,0.6); }
-.au-reveal small { display:block; font-family:var(--mono); font-size:0.7rem; letter-spacing:0.18em; color:var(--text-mute); margin-top:8px; }
+.au-reveal small { display:block; font-family:var(--mono); font-size:0.8rem; letter-spacing:0.18em; color:var(--text-mute); margin-top:8px; }
 .au-check { font-size:1.6rem; color:var(--accent); text-align:center; animation:auPop .6s ease both; }
 
 @keyframes auIn { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }

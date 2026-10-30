@@ -61,7 +61,7 @@ function Btn({ color, size, onClick, disabled, children }) {
 function Badge({ color, children }) {
   return (
     <span style={{
-      fontSize:'11px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
+      fontSize: '12px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
       padding:'2px 6px', borderRadius:'2px', whiteSpace:'nowrap',
       background:'color-mix(in srgb, ' + color + ' 14%, transparent)',
       color: color,
@@ -73,7 +73,7 @@ function Badge({ color, children }) {
 function Cell({ children, dim }) {
   return (
     <div style={{
-      fontSize:'11px', fontFamily:"'IBM Plex Mono',var(--mono)",
+      fontSize: '12px', fontFamily:"'IBM Plex Mono',var(--mono)",
       color: dim ? 'var(--text-dim)' : 'var(--text)',
       overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'
     }}>{children || '—'}</div>
@@ -239,7 +239,7 @@ export default function Counterparties() {
           border:'1px dashed var(--accent)', borderRadius:'4px',
           padding:'20px', marginBottom:'20px', background:'var(--panel)'
         }}>
-          <div style={{ fontSize:'11px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
               letterSpacing:'0.08em', marginBottom:'16px' }}>
             NEW COUNTERPARTY
           </div>
@@ -292,7 +292,7 @@ export default function Counterparties() {
                 </select>
               </div>
               <div>
-                <label style={L}>DISCOUNT CURVE <span style={{ opacity:.6, fontSize:'11px' }}>(auto-mapped)</span></label>
+                <label style={L}>DISCOUNT CURVE <span style={{ opacity:.6, fontSize: '12px' }}>(auto-mapped)</span></label>
                 <input style={INP} value={form.discount_curve_id}
                   onChange={function(e) { f({ discount_curve_id: e.target.value }) }} />
               </div>

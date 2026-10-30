@@ -58,7 +58,7 @@ function FundingSpreads({ curve }) {
     <div>
       {msg && (
         <div style={{
-          fontSize: '9.5px', padding: '4px 10px', borderRadius: 2, marginBottom: 8,
+          fontSize: '12px', padding: '4px 10px', borderRadius: 2, marginBottom: 8,
           background: 'rgba(14,201,160,.10)', border: '1px solid var(--accent-dim)',
           color: 'var(--accent)',
         }}>
@@ -74,12 +74,12 @@ function FundingSpreads({ curve }) {
 
       {/* Source row */}
       <div className="spread-source-row">
-        <span style={{ fontSize: '8.5px', color: 'var(--text-dim)' }}>Source:</span>
+        <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>Source:</span>
         <button className="source-btn active">Manual</button>
         <button className="source-btn disabled" title="On the roadmap">CDS-Implied</button>
         <button className="source-btn disabled" title="On the roadmap">Bond Market</button>
         <button className="source-btn disabled" title="Custom API">Treasury System</button>
-        <span style={{ fontSize: '11px', color: 'var(--text-mute)', marginLeft: 'auto' }}>
+        <span style={{ fontSize: '12px', color: 'var(--text-mute)', marginLeft: 'auto' }}>
           Last updated: 2025-01-15 17:00 EOD
         </span>
       </div>
@@ -137,8 +137,8 @@ function FundingSpreads({ curve }) {
                       onBlur={(e) => updateSpread(curve.id, k, e.target.value)}
                     />
                   </td>
-                  <td className="di" style={{ fontSize: '8.5px' }}>bp over {baseCcyLabel}</td>
-                  <td className="di" style={{ fontSize: '8.5px' }}>{allIn}</td>
+                  <td className="di" style={{ fontSize: '12px' }}>bp over {baseCcyLabel}</td>
+                  <td className="di" style={{ fontSize: '12px' }}>{allIn}</td>
                 </tr>
               );
             })}
@@ -201,7 +201,7 @@ function FundingPreview({ curve }) {
           </tbody>
         </table>
       </div>
-      <div style={{ fontSize: '8.5px', color: 'var(--text-mute)', marginTop: 6 }}>
+      <div style={{ fontSize: '12px', color: 'var(--text-mute)', marginTop: 6 }}>
         Funding rate = OIS rate + firm credit spread.
         Used directly in FVA = −Σₜ D(t)·(EE−ENE)·(funding−OIS).
         Wiring this into the XVA engine is on the roadmap.

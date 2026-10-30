@@ -16,7 +16,7 @@ const COLOR = { npv: 'var(--text-hi)', cva: 'var(--red)', dva: 'var(--blue)', fv
 
 const lbl = { fontSize: '0.8rem', letterSpacing: '0.12em', color: 'var(--text-dim)', fontFamily: 'var(--mono)' }
 const inp = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text-hi)', fontFamily: 'var(--mono)', fontSize: '0.8125rem', padding: '4px 6px', width: '100%', outline: 'none' }
-const secHdr = { fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--text)', fontFamily: 'var(--sans)', paddingLeft: 10, borderLeft: '3px solid var(--accent)', lineHeight: 1.2, margin: '14px 0 8px' }
+const secHdr = { fontSize: 12, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--text)', fontFamily: 'var(--sans)', paddingLeft: 10, borderLeft: '3px solid var(--accent)', lineHeight: 1.2, margin: '14px 0 8px' }
 
 export default function FxXvaPanel({ quote }) {
   const payload = quote ? { pair: `${quote.base_currency}${quote.quote_currency}`, base_notional: quote.base_notional,

@@ -340,7 +340,7 @@ export function TradeFooter({
       <div className="tbw-footer-metrics">
         {metrics.map((m, i) => (
           <div key={i} className="tbw-footer-metric">
-            <div className="tbw-lbl" style={{ fontSize: 11, marginBottom: 2 }}>{m.label}</div>
+            <div className="tbw-lbl" style={{ fontSize: 12, marginBottom: 2 }}>{m.label}</div>
             <div className={`tbw-mono tbw-${m.colorBy || 'default'}`}
                  style={{ fontSize: 13, fontWeight: 500 }}>
               {m.value ?? '—'}
@@ -569,7 +569,7 @@ function CapletTable({ result, ccy }) {
         </table>
       </div>
       <div style={{
-        fontSize: 11,
+        fontSize: 12,
         color: 'var(--text-dim)',
         fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
         padding: '4px 0',
@@ -617,7 +617,7 @@ function SwapCashflowTables({ result, productKey, state }) {
               {(state.swaptionExpiry || '1Y')}{'\u00D7'}{state.tenor || '5Y'}{' \u00B7 Physical Settlement'}
             </span>
           </div>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
             {'On exercise, this swaption delivers into the swap schedule below. '}
             {'Effective date shifts forward by '}{state.swaptionExpiry || '1Y'}{' from today. '}
             {'Sum of PV column = forward swap NPV (\u2248 $0 at ATM strike).'}
@@ -655,11 +655,11 @@ function SwapCashflowTables({ result, productKey, state }) {
             borderBottom: '1px solid var(--border)',
           }}>
             <span style={{
-              fontSize: 11, fontWeight: 700,
+              fontSize: 12, fontWeight: 700,
               letterSpacing: '0.12em', color: 'var(--text-dim)',
             }}>{leg.leg_type} LEG</span>
             <span style={{
-              fontSize: 11, fontWeight: 700,
+              fontSize: 12, fontWeight: 700,
               padding: '1px 6px',
               borderRadius: 2,
               background: leg.direction === 'PAY' ? 'rgba(224,80,64,0.10)' : 'rgba(13,212,168,0.10)',
@@ -698,25 +698,25 @@ function SwapCashflowTables({ result, productKey, state }) {
                   const payShifted = cf.payment_date !== cf.period_end
                   return (
                     <tr key={ci} style={{ borderBottom: '1px solid var(--panel)' }}>
-                      <td style={{ fontSize: 11, padding: '5px 6px', color: 'var(--text-dim)' }}>{fmtDate(cf.period_start)}</td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', color: 'var(--text-dim)' }}>{fmtDate(cf.period_end)}</td>
+                      <td style={{ fontSize: 12, padding: '5px 6px', color: 'var(--text-dim)' }}>{fmtDate(cf.period_start)}</td>
+                      <td style={{ fontSize: 12, padding: '5px 6px', color: 'var(--text-dim)' }}>{fmtDate(cf.period_end)}</td>
                       <td style={{
-                        fontSize: 11, padding: '5px 6px',
+                        fontSize: 12, padding: '5px 6px',
                         color: payShifted ? 'var(--amber)' : 'var(--text-dim)',
                       }}>{fmtDate(cf.payment_date)}</td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--blue)' }}>
+                      <td style={{ fontSize: 12, padding: '5px 6px', textAlign: 'right', color: 'var(--blue)' }}>
                         {cf.dcf != null ? cf.dcf.toFixed(5) : '\u2014'}
                       </td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
+                      <td style={{ fontSize: 12, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
                         {fmtN(cf.notional)}
                       </td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--blue)' }}>
+                      <td style={{ fontSize: 12, padding: '5px 6px', textAlign: 'right', color: 'var(--blue)' }}>
                         {cf.rate != null ? (cf.rate * 100).toFixed(4) + '%' : '\u2014'}
                       </td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--text-hi)' }}>
+                      <td style={{ fontSize: 12, padding: '5px 6px', textAlign: 'right', color: 'var(--text-hi)' }}>
                         {fmtN(cf.amount)}
                       </td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
+                      <td style={{ fontSize: 12, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
                         {cf.df != null ? cf.df.toFixed(5) : '\u2014'}
                       </td>
                       <td style={{
@@ -724,7 +724,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                         fontWeight: 600,
                         color: pv >= 0 ? 'var(--accent)' : 'var(--red)',
                       }}>{fmtPnl(pv)}</td>
-                      <td style={{ fontSize: 11, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
+                      <td style={{ fontSize: 12, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
                         {cf.zero_rate != null ? (cf.zero_rate * 100).toFixed(3) : '\u2014'}
                       </td>
                     </tr>
@@ -735,7 +735,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                   background: 'rgba(255,255,255,0.02)',
                 }}>
                   <td colSpan={6} style={{
-                    fontSize: 11, fontWeight: 700,
+                    fontSize: 12, fontWeight: 700,
                     color: 'var(--text-dim)',
                     padding: '5px 6px',
                     letterSpacing: '0.08em',
@@ -764,7 +764,7 @@ function SwapCashflowTables({ result, productKey, state }) {
       ))}
 
       <div style={{
-        fontSize: 11,
+        fontSize: 12,
         color: 'var(--text-dim)',
         fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
         padding: '4px 0',

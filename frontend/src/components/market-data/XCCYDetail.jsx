@@ -20,7 +20,7 @@ function XCCYDef({ curve }) {
       <DescBox>{curve.description}</DescBox>
       <SectionLabel>Bootstrap logic (roadmap)</SectionLabel>
       <div className="cb">
-        <pre style={{ margin: 0, fontSize: '11px', lineHeight: 1.8, color: 'var(--text-dim)' }}>
+        <pre style={{ margin: 0, fontSize: '12px', lineHeight: 1.8, color: 'var(--text-dim)' }}>
           {stub}
         </pre>
       </div>
@@ -59,7 +59,7 @@ function XCCYInstruments({ curve }) {
           </tbody>
         </table>
       </div>
-      <div style={{ marginTop: 10, fontSize: '8.5px', color: 'var(--text-mute)', padding: '6px 0' }}>
+      <div style={{ marginTop: 10, fontSize: '12px', color: 'var(--text-mute)', padding: '6px 0' }}>
         Roadmap · ql.CrossCurrencyBasisSwapRateHelper · CIP arbitrage constraint
       </div>
     </div>

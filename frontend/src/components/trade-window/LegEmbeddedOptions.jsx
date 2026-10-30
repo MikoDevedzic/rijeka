@@ -50,7 +50,7 @@ function newEntry(type) {
 function dirChipStyle(on, isSell) {
   return {
     padding: '6px 14px',
-    fontSize: 11,
+    fontSize: 12,
     letterSpacing: '0.06em',
     fontWeight: on ? 700 : 400,
     fontFamily:'var(--mono)',
@@ -68,7 +68,7 @@ function dirChipStyle(on, isSell) {
 function typeChipStyle(on, typeColor) {
   return {
     padding: '6px 14px',
-    fontSize: 11,
+    fontSize: 12,
     letterSpacing: '0.06em',
     fontWeight: on ? 700 : 400,
     fontFamily:'var(--mono)',
@@ -170,7 +170,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
   }
 
   const labelStyle = {
-    fontSize: 11,
+    fontSize: 12,
     color: 'var(--text-dim)',
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
@@ -183,7 +183,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
     border: '1px solid var(--text-mute)',
     color: 'var(--text-dim)',
     width: 20, height: 20,
-    fontSize: 11,
+    fontSize: 12,
     borderRadius: 2,
     cursor: 'pointer',
     padding: 0,

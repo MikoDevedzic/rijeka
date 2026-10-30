@@ -1582,7 +1582,7 @@ function XvaFooterRate({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
   const {allIn} = xvaCalc(xva,notionalRef,rateRef,effDate,matDate,parRate)
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderLeft:'1px solid rgba(13,212,168,0.3)',marginLeft:'4px'}}>
-      <span style={{fontSize:'11px',color:'var(--accent)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>ALL-IN RATE</span>
+      <span style={{fontSize: '12px',color:'var(--accent)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>ALL-IN RATE</span>
       <span style={{fontSize:'13px',fontWeight:700,color:'var(--accent)',fontFamily:"'IBM Plex Mono',monospace"}}>{isFinite(allIn)?allIn.toFixed(3)+'%':'—'}</span>
     </div>
   )
@@ -4096,13 +4096,13 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 return metrics
               })().map((m,i)=>(
                 <div key={i} style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid var(--border)'}}>
-                  <span style={{fontSize:'11px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
-                  <span style={{fontSize:'11px',color:m.color,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>{m.val}</span>
+                  <span style={{fontSize: '12px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
+                  <span style={{fontSize: '12px',color:m.color,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>{m.val}</span>
                 </div>
               ))}
               <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid var(--border)'}}>
-                <span style={{fontSize:'11px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>STRUCTURE</span>
-                <span style={{fontSize:'11px',color:'var(--amber)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
+                <span style={{fontSize: '12px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>STRUCTURE</span>
+                <span style={{fontSize: '12px',color:'var(--amber)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
               </div>
               {xvaResult?.xva && <XvaFooterRate xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>}
               {activeTab==='scenario' ? null : (
