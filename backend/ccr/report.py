@@ -74,10 +74,10 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
     """exposure=False computes only the risk-neutral XVA levels (the P&L's reserve), skipping the real-world run."""
     t0 = time.time()
     uid = user["sub"]
-    ns = NettingSet(db, user, trades, asof)
+    ns = NettingSet(db, user, trades, asof, mkt=mkt)
     base = {"counterparty_id": str(cp.id) if cp else None, "counterparty": cp.name if cp else "UNASSIGNED",
             "csa": {"type": getattr(cp, "csa_type", None), "threshold_m": float(getattr(cp, "csa_threshold_m", 0) or 0), "mta_k": float(getattr(cp, "csa_mta_k", 0) or 0)} if cp else None,
-            "trades": len(trades), "simulated": len(ns.items), "skipped": ns.skipped}
+            "trades": len(trades), "simulated": len(ns.items), "skipped": ns.skipped, "options": ns.options}
     if not ns.items:
         return {**base, "empty": True}
     currencies, pairs = sorted(ns.currencies), sorted(ns.pairs)

@@ -98,7 +98,7 @@ PRODUCTS = [
      "formula": "Verify without us: recompute the hash, recover both signers, read the registry",
      "replication": "verifier", "doc": "https://rijeka.app/verify"},
     {"id": "pnl", "name": "P&L attribution and XVA", "group": "Post-trade", "section": None,
-     "default": "Yesterday's mark on yesterday's market → roll the date → cash → each curve by tenor bucket → spot → forward points → residual; then the XVA reserves' change, netted by the firm's policy",
+     "default": "Yesterday's mark on yesterday's market → roll the date → cash → each curve by tenor bucket → spot → forward points → residual (on the terms that stood at the previous close) → amendment: NPV(new terms) − NPV(old terms) on today's market → new trades and unwinds; then the XVA reserves' change, netted by the firm's policy",
      "formula": "Sequential full revaluation: rows sum to the total by construction; P&L after XVA = clean P&L − Σ_netted Δ(CVA, DVA, FVA, FBA[, KVA, MVA])",
      "replication": "doc", "doc": "/docs/pnl_attribution.md"},
     {"id": "market_risk", "name": "Market risk: ladder, VaR, stress, limits", "group": "Risk", "section": None,
@@ -107,7 +107,7 @@ PRODUCTS = [
      "replication": "doc", "doc": "/docs/market_risk.md"},
     {"id": "ccr", "name": "Counterparty credit: netting, real-world PFE, credit limits", "group": "Counterparty risk", "section": None,
      "default": "Netting set on shared paths (HW1F per currency, lognormal per spot; monthly steps sampled as blocks of observed daily changes, the same block for every factor, or Gaussian shocks correlated from public history) → CSA on the netted value → EE, EPE, PFE 95/97.5/99 real-world → limits; the XVA reserves of the risk-neutral run go to the P&L",
-     "formula": "x_i = x_{i−1}·e^{−aΔt} + Σ_block Δr (historical) or σ√Δt·z (Gaussian); E⁺(t) = max(V − C(t−δ) − IM, 0); PFE_q = quantile_q(E⁺); EPE = mean_{t≤1y} EE; real-world: σ from history, a by policy, zero drift",
+     "formula": "x_i = x_{i−1}·e^{−aΔt} + Σ_block Δr (historical) or σ√Δt·z (Gaussian); options on the paths: Bachelier on the path's forward, today's ATM vol flat, physical settlement at expiry; E⁺(t) = max(V − C(t−δ) − IM, 0); PFE_q = quantile_q(E⁺); EPE = mean_{t≤1y} EE; real-world: σ from history, a by policy, zero drift",
      "replication": "doc", "doc": "/docs/ccr.md"},
 ]
 

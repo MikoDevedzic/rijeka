@@ -23,7 +23,7 @@ Instead of Gaussian shocks, each monthly step is a block of 21 consecutive obser
 
 ## Netting
 
-Every trade of a counterparty is valued on the same paths and summed per path and date, so netting is exact. Swaps: fixed leg Σ N·c·τ·P(t,T_j), OIS float leg N·(P(t,T_s) − P(t,T_N)); forwards: ±N·(S_t·DF_base/DF_quote − K)·DF_quote. Caps and swaptions are listed as not simulated, never valued at zero.
+Every trade of a counterparty is valued on the same paths and summed per path and date, so netting is exact. Swaps: fixed leg Σ N·c·τ·P(t,T_j), OIS float leg N·(P(t,T_s) − P(t,T_N)); forwards: ±N·(S_t·DF_base/DF_quote − K)·DF_quote. Options are on the paths too (ccr/options.py): a caplet or floorlet embedded in a float leg is Bachelier on the path's forward for the period with today's ATM cap vol (nearest cap tenor) held flat until its fixing, then the realised payoff max(f_fix − K, 0)·τ·N discounted to its payment; a European swaption is Bachelier on the path's forward swap rate with today's ATM normal vol (nearest expiry × tenor on the surface) until expiry, then the underlying swap on the paths where it was in the money at expiry (physical settlement) and nothing elsewhere. The vol does not move along the path: that is the stated simplification. Anything else is listed as not simulated, never valued at zero.
 
 ## The CSA
 
@@ -45,9 +45,9 @@ A netting set of a few trades simulates in a second or two (analytic valuation o
 
 - The margin period of risk is shorter than the monthly step, so the lagged value is a Brownian bridge inside the step; its noise is drawn independently per step, which makes the 99 % tail look jagged from one month to the next while the 95 % profile is smooth. Common random numbers across steps are a small next step.
 - Trade flows between grid points are margined by construction (the bridge's share of the jump is restored); settlement risk on a coupon is therefore not in the exposure, which is the usual CSA assumption and should be said when it is not the counterparty's.
-- One factor per currency: no curve twist in the exposure. Caps and swaptions are not on the paths yet.
+- One factor per currency: no curve twist in the exposure. Option vols are held at today's level along the paths (no vol dynamics).
 - The default spread for CVA is a desk default until the counterparty record carries its own.
 
 ## Roadmap
 
-Caps and swaptions on the paths; a per-counterparty CDS spread and LGD on the record; wrong-way risk; stressed windows for regulatory EEPE; a term structure of PFE limits by tenor set per counterparty.
+A per-counterparty CDS spread and LGD on the record; wrong-way risk; stressed windows for regulatory EEPE; a term structure of PFE limits by tenor set per counterparty.

@@ -27,7 +27,8 @@ const PHASES = [
     ['NEXT', 'COLLATERAL tab: CSA terms per counterparty, daily VM and IM calls, disputes, settlement status, collateral inventory'],
     ['DONE', 'COUNTERPARTY CREDIT tab: netting sets on shared paths, real-world calibration from public history (two measures), CSA on the netted value, EE/EPE/PFE 95/97.5/99, CVA, credit limits with utilisation, stored daily run'],
     ['DONE', 'Counterparty credit: historical simulation of the exposure paths (blocks of observed daily changes, the same block for every factor) as the default real-world measure, Gaussian shocks as the alternative, chosen per firm'],
-    ['NEXT', 'Counterparty credit next: options on the paths, per-counterparty CDS and LGD, wrong-way risk, stressed EEPE'],
+    ['DONE', 'Counterparty credit: caps, floors and European swaptions valued on the exposure paths (Bachelier on the path forward, today\'s ATM vol held flat, physical settlement at expiry)'],
+    ['NEXT', 'Counterparty credit next: per-counterparty CDS and LGD, wrong-way risk, stressed EEPE, vol dynamics along the paths'],
   ]},
   { title: 'OPERATIONS AND CONTROL', status: 'PARTIAL', items: [
     ['DONE', 'Trade lifecycle events with pre/post state; cashflow generation; confirmation, amendment and termination on chain'],
