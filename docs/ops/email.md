@@ -1,4 +1,14 @@
-# Sign-up email: why it fails and how to fix it
+# Sign-up email: why it failed and how it is set up
+
+**State on 2026-10-30:** auth email goes out through Resend from `desk@rijeka.app`.
+The domain is verified (DKIM TXT `resend._domainkey`, CNAMEs `send` and `rsend`
+at Namecheap, alongside the iCloud MX and SPF on the root, which were left
+untouched). Supabase custom SMTP: host `smtp.resend.com`, port 465, username
+`resend`, password a Resend API key named `supabase-auth` with sending access
+restricted to rijeka.app. Auth email rate limit raised to 100 an hour. A test
+password reset was delivered within a minute. Resend's receiving MX record was
+deliberately not added: it would take over mail for the root domain. The steps
+below remain as the record of how it was done and how to redo it elsewhere.
 
 ## What happens today
 
