@@ -112,8 +112,8 @@ export default function Users() {
       <div style={{ display:'flex', gap:'1.5rem', padding:'0.6rem 2rem', borderBottom:'1px solid var(--border)', background:'var(--bg-deep)', flexShrink:0 }}>
         {Object.entries(ROLE_META).map(([role, meta]) => (
           <div key={role} style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-            <span style={{ fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.1em', color:meta.color, padding:'0.1rem 0.4rem', border:`1px solid ${meta.color}60`, borderRadius:2 }}>{meta.label}</span>
-            <span style={{ fontSize:'0.6rem', color:'var(--text-dim)' }}>{meta.desc}</span>
+            <span style={{ fontSize:'0.74rem', fontWeight:700, letterSpacing:'0.1em', color:meta.color, padding:'0.1rem 0.4rem', border:`1px solid ${meta.color}60`, borderRadius:2 }}>{meta.label}</span>
+            <span style={{ fontSize:'0.74rem', color:'var(--text-dim)' }}>{meta.desc}</span>
           </div>
         ))}
       </div>
@@ -150,7 +150,7 @@ export default function Users() {
             <thead>
               <tr style={{ background:'var(--panel-2)', position:'sticky', top:0, zIndex:2 }}>
                 {['USER','TRADER ID','ROLE','AI ACCESS','STATUS','JOINED','ACTIONS'].map(h => (
-                  <th key={h} style={{ padding:'0.55rem 1.25rem', textAlign:'left', fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)', borderBottom:'1px solid var(--border)', whiteSpace:'nowrap' }}>{h}</th>
+                  <th key={h} style={{ padding:'0.55rem 1.25rem', textAlign:'left', fontSize:'0.74rem', fontWeight:700, letterSpacing:'0.1em', color:'var(--text-dim)', borderBottom:'1px solid var(--border)', whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -250,7 +250,7 @@ export default function Users() {
                             background:'transparent',
                             border: `1px solid ${u.is_active !== false ? 'var(--border)' : 'var(--accent)'}`,
                             color: u.is_active !== false ? 'var(--text-dim)' : 'var(--accent)',
-                            ...mono, fontSize:'0.6rem', fontWeight:700, letterSpacing:'0.08em',
+                            ...mono, fontSize:'0.74rem', fontWeight:700, letterSpacing:'0.08em',
                             padding:'0.2rem 0.6rem', borderRadius:2, cursor:'pointer',
                             opacity: isSaving ? 0.5 : 1,
                           }}
@@ -269,7 +269,7 @@ export default function Users() {
 
       {/* Footer note */}
       <div style={{ padding:'0.6rem 2rem', borderTop:'1px solid var(--border)', background:'var(--bg-deep)', flexShrink:0 }}>
-        <span style={{ fontSize:'0.6rem', color:'var(--text-dim)', letterSpacing:'0.08em' }}>
+        <span style={{ fontSize:'0.74rem', color:'var(--text-dim)', letterSpacing:'0.08em' }}>
           Role changes take effect immediately · Deactivated users cannot log in · AI access requires TRADER or ADMIN role · CONTROLLER and MANAGEMENT need docs/migrations/2026-10-30_pnl_roles.sql
         </span>
       </div>

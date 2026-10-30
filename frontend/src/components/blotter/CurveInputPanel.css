@@ -19,7 +19,7 @@
 
 .cip-panel-title {
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--accent);
@@ -27,7 +27,7 @@
 
 .cip-panel-sub {
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-mute);
 }
 
@@ -66,7 +66,7 @@
 
 .cip-curve-badge {
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 12px;
   padding: 1px 6px;
   border-radius: 2px;
   font-weight: 600;
@@ -96,7 +96,7 @@
 .cip-mode-btn {
   padding: 2px 8px;
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   border: 1px solid rgba(255,255,255,0.08);
@@ -128,7 +128,7 @@
 
 .cip-label {
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--text-mute);
   white-space: nowrap;
@@ -175,7 +175,7 @@
 
 .cip-table th {
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--text-mute);
@@ -207,7 +207,7 @@
   border-radius: 2px;
   padding: 2px 4px;
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--text-dim);
   cursor: pointer;
   width: 90px;
@@ -240,7 +240,7 @@
 
 .cip-warn {
   font-family: var(--sans);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--amber);
   margin: 6px 0 0;
   padding-left: 4px;
@@ -281,7 +281,7 @@
 .cip-error-bar {
   padding: 6px 14px;
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--red);
   background: rgba(217,80,64,0.07);
   border-top: 1px solid rgba(217,80,64,0.2);
@@ -290,7 +290,7 @@
 .cip-empty {
   padding: 16px 14px;
   font-family: var(--sans);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-mute);
   text-align: center;
 }

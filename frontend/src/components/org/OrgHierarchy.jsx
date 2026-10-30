@@ -53,7 +53,7 @@ function Btn({ color, onClick, title, children }) {
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         background: hover ? color + '22' : 'none', border: '1px solid ' + color,
-        borderRadius: '2px', color, fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '9px',
+        borderRadius: '2px', color, fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '11px',
         padding: '2px 7px', cursor: 'pointer', letterSpacing: '0.06em',
         transition: 'background 0.12s', whiteSpace: 'nowrap',
       }}
@@ -89,10 +89,10 @@ function NodeRow({ node, depth, collapsed, toggleCollapse, editing, setEditing, 
         ⠿
       </span>
       <button onClick={() => hasKids && toggleCollapse(node.id)}
-        style={{ background: 'none', border: 'none', color: hasKids ? 'var(--text-dim)' : 'transparent', cursor: hasKids ? 'pointer' : 'default', fontSize: '8px', padding: 0, width: '12px', flexShrink: 0, lineHeight: 1 }}>
+        style={{ background: 'none', border: 'none', color: hasKids ? 'var(--text-dim)' : 'transparent', cursor: hasKids ? 'pointer' : 'default', fontSize: '11px', padding: 0, width: '12px', flexShrink: 0, lineHeight: 1 }}>
         {hasKids ? (collapsed.has(node.id) ? '▶' : '▼') : ''}
       </button>
-      <span style={{ color, fontSize: '9px', fontWeight: '700', letterSpacing: '0.1em', width: '30px', flexShrink: 0 }}>
+      <span style={{ color, fontSize: '11px', fontWeight: '700', letterSpacing: '0.1em', width: '30px', flexShrink: 0 }}>
         {TYPE_LABEL[node.node_type]}
       </span>
       {isEditing ? (
@@ -113,7 +113,7 @@ function NodeRow({ node, depth, collapsed, toggleCollapse, editing, setEditing, 
         </span>
       )}
       {!node.is_active && (
-        <span style={{ fontSize: '9px', color: 'var(--red)', letterSpacing: '0.08em', flexShrink: 0 }}>INACTIVE</span>
+        <span style={{ fontSize: '11px', color: 'var(--red)', letterSpacing: '0.08em', flexShrink: 0 }}>INACTIVE</span>
       )}
       {!isEditing && (
         <div style={{ display: 'flex', gap: '5px', flexShrink: 0, marginLeft: 'auto' }}>
@@ -159,7 +159,7 @@ function AddRow({ nodeType, depth, onConfirm, onCancel }) {
     }}>
       <span style={{ width: '13px', flexShrink: 0 }} />
       <span style={{ width: '12px', flexShrink: 0 }} />
-      <span style={{ color, fontSize: '9px', fontWeight: '700', letterSpacing: '0.1em', width: '30px', flexShrink: 0 }}>
+      <span style={{ color, fontSize: '11px', fontWeight: '700', letterSpacing: '0.1em', width: '30px', flexShrink: 0 }}>
         {TYPE_LABEL[nodeType]}
       </span>
       <input ref={inputRef} value={name} onChange={e => setName(e.target.value)}
@@ -308,24 +308,24 @@ export default function OrgHierarchy() {
 
       {/* Slim control bar — no duplicate header, just status + toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '5px 16px', borderBottom: '1px solid var(--border)', background: 'var(--panel-2)', flexShrink: 0, minHeight: '28px' }}>
-        <span style={{ fontSize: '10px', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
+        <span style={{ fontSize: '12px', color: 'var(--text-dim)', letterSpacing: '0.06em' }}>
           {activeCount} active nodes{saving && ' · saving...'}
         </span>
         {/* Legend */}
         {Object.entries(TYPE_LABEL).map(([type, label]) => (
-          <span key={type} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '9px' }}>
+          <span key={type} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
             <span style={{ width: '7px', height: '7px', borderRadius: '1px', background: NODE_COLOR[type], display: 'inline-block', flexShrink: 0 }} />
             <span style={{ color: 'var(--text-dim)', letterSpacing: '0.06em' }}>{label}</span>
           </span>
         ))}
-        <span style={{ fontSize: '9px', color: 'var(--text-dim)', marginLeft: '4px' }}>· dbl-click to rename</span>
+        <span style={{ fontSize: '11px', color: 'var(--text-dim)', marginLeft: '4px' }}>· dbl-click to rename</span>
         {inactiveCount > 0 && (
           <button onClick={() => setShowInactive(v => !v)}
             style={{
               marginLeft: 'auto', background: showInactive ? 'rgba(217,80,64,0.12)' : 'none',
               border: '1px solid ' + (showInactive ? 'var(--red)' : 'var(--border)'),
               borderRadius: '2px', color: showInactive ? 'var(--red)' : 'var(--text-dim)',
-              fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '9px', padding: '2px 8px', cursor: 'pointer',
+              fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '11px', padding: '2px 8px', cursor: 'pointer',
               letterSpacing: '0.08em', transition: 'all 0.15s',
             }}>
             {showInactive ? 'HIDE INACTIVE (' + inactiveCount + ')' : 'SHOW INACTIVE (' + inactiveCount + ')'}

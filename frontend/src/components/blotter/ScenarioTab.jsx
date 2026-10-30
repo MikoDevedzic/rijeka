@@ -1018,7 +1018,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                     color:'var(--amber)',fontFamily:'var(--sans)',marginBottom:'8px',
                     display:'flex',alignItems:'center',gap:'8px'}}>
                     VOL SCENARIO
-                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'var(--text-mute)'}}>&#946;=0 Normal SABR</span>
+                    <span style={{fontSize:'0.8rem',fontWeight:400,color:'var(--text-mute)'}}>&#946;=0 Normal SABR</span>
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
                     {Object.entries(VOL_SCEN).map(([key,sc]) => (
@@ -1034,7 +1034,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                           display:'inline-block'}}/>
                         <span>{sc.l}</span>
                         {volScenKey===key&&key!=='base'&&(
-                          <span style={{fontSize:'0.6875rem',color:'var(--text-mute)',marginLeft:'auto'}}>{sc.d.slice(0,24)}</span>
+                          <span style={{fontSize:'0.8rem',color:'var(--text-mute)',marginLeft:'auto'}}>{sc.d.slice(0,24)}</span>
                         )}
                       </button>
                     ))}
@@ -1056,7 +1056,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                     color:'var(--amber)',fontFamily:'var(--sans)',marginBottom:'8px',
                     display:'flex',alignItems:'center',gap:'8px'}}>
                     CAP VOL SCENARIO
-                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'var(--text-mute)'}}>Bachelier Normal · flat vol shift</span>
+                    <span style={{fontSize:'0.8rem',fontWeight:400,color:'var(--text-mute)'}}>Bachelier Normal · flat vol shift</span>
                   </div>
                   {[
                     {l:'BASE',          d:null,    shift:0},
@@ -1088,7 +1088,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                           background:sc.shift===0?'var(--accent)':sc.shift>0?'var(--red)':'var(--blue)',
                           display:'inline-block'}}/>
                         <span>{sc.l}</span>
-                        {sc.d && <span style={{fontSize:'0.6875rem',color:'var(--text-mute)',marginLeft:'auto'}}>
+                        {sc.d && <span style={{fontSize:'0.8rem',color:'var(--text-mute)',marginLeft:'auto'}}>
                           {baseVol.toFixed(1)} → {shockedVol.toFixed(1)}bp
                         </span>}
                       </button>
@@ -1126,7 +1126,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
           {/* Scrollable rate rows */}
           <div style={{flex:1,overflowY:'auto',padding:'0 16px 12px'}}>
             <div style={{display:'grid',gridTemplateColumns:'30px 76px 58px 72px 1fr',gap:'6px',padding:'4px 0 5px',
-              fontSize:'10px',letterSpacing:'0.1em',color:'var(--text-mute)',fontFamily:'var(--sans)',borderBottom:'1px solid var(--border-hi)'}}>
+              fontSize:'12px',letterSpacing:'0.1em',color:'var(--text-mute)',fontFamily:'var(--sans)',borderBottom:'1px solid var(--border-hi)'}}>
               <span>TENOR</span><span style={{textAlign:'right'}}>PAR %</span><span style={{textAlign:'right'}}>SHIFT bp</span>
               <span style={{textAlign:'right'}}>SHOCKED %</span><span style={{textAlign:'right'}}>DF</span>
             </div>
@@ -1229,7 +1229,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'var(--panel)',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}
 >
-              <div style={{position:'absolute',top:5,left:8,fontSize:'0.6875rem',
+              <div style={{position:'absolute',top:5,left:8,fontSize:'0.8rem',
                 color:'var(--amber)',letterSpacing:'.10em',fontFamily:'var(--mono)',zIndex:2}}>
                 VOL SURFACE — β​=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'var(--text-mute)',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
               </div>
@@ -1237,7 +1237,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               <div style={{position:'absolute',top:5,right:8,zIndex:3,display:'flex',gap:3}}>
                 <button
                   onClick={()=>setVolMode('rotate')}
-                  style={{padding:'3px 8px',fontSize:'0.6875rem',fontWeight:600,letterSpacing:'.08em',
+                  style={{padding:'3px 8px',fontSize:'0.8rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:'var(--mono)',
                     border: volMode==='rotate'?'1px solid rgba(74,154,212,.5)':'1px solid var(--panel-2)',
                     color: volMode==='rotate'?'var(--blue)':'var(--text-mute)',
@@ -1246,7 +1246,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                 </button>
                 <button
                   onClick={()=>setVolMode(m=>m==='reshape'?'rotate':'reshape')}
-                  style={{padding:'3px 8px',fontSize:'0.6875rem',fontWeight:600,letterSpacing:'.08em',
+                  style={{padding:'3px 8px',fontSize:'0.8rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:'var(--mono)',
                     border: volMode==='reshape'?'1px solid rgba(240,160,32,.5)':'1px solid var(--panel-2)',
                     color: volMode==='reshape'?'var(--amber)':'var(--text-mute)',
@@ -1254,7 +1254,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   ✦ {volMode==='reshape'?'RESHAPING...':'RESHAPE'}
                 </button>
               </div>
-              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.625rem',
+              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.76rem',
                 color:'var(--text-mute)',letterSpacing:'.07em',fontFamily:'var(--mono)',zIndex:2}}>
                 {volMode==='rotate'?'DRAG TO ROTATE · SCROLL TO ZOOM':'DRAG UP/DOWN TO DEFORM VOL · REPRICE FOR ΔP&L'}
               </div>
@@ -1270,12 +1270,12 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                 gap:4,pointerEvents:'none',zIndex:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
                   <div style={{width:16,height:2,background:'rgba(13,212,168,.6)',borderRadius:1}}/>
-                  <span style={{fontSize:'0.625rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>BASE</span>
+                  <span style={{fontSize:'0.76rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>BASE</span>
                 </div>
                 {volScenKey!=='base'&&(
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:16,height:2,background:'var(--amber)',borderRadius:1}}/>
-                    <span style={{fontSize:'0.625rem',color:'var(--amber)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>SHOCKED</span>
+                    <span style={{fontSize:'0.76rem',color:'var(--amber)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>SHOCKED</span>
                   </div>
                 )}
               </div>
@@ -1288,11 +1288,11 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
             <div ref={capVolWrapRef}
               style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'var(--panel)',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}>
-              <div style={{position:'absolute',top:5,left:8,fontSize:'0.6875rem',
+              <div style={{position:'absolute',top:5,left:8,fontSize:'0.8rem',
                 color:'var(--amber)',letterSpacing:'.10em',fontFamily:'var(--mono)',zIndex:2}}>
                 CAP VOL SURFACE — BACHELIER NORMAL
               </div>
-              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.625rem',
+              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.76rem',
                 color:'var(--text-mute)',letterSpacing:'.07em',fontFamily:'var(--mono)',zIndex:2}}>
                 DRAG TO ROTATE · SCROLL TO ZOOM · STRIKE SPREAD (bp) × TENOR (Y)
               </div>
@@ -1306,7 +1306,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',gap:4,pointerEvents:'none',zIndex:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
                   <div style={{width:16,height:2,background:'rgba(13,212,168,.6)',borderRadius:1}}/>
-                  <span style={{fontSize:'0.625rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>
+                  <span style={{fontSize:'0.76rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>
                     {(parseFloat(capVolOverride)||capResult?.vol_bp||85).toFixed(1)}bp · {capResult?.vol_tier||'—'}
                   </span>
                 </div>
@@ -1326,7 +1326,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   color:'var(--text-dim)',fontFamily:'var(--sans)'}}>
                   JOINT RATE + VOL P&L ATTRIBUTION
                 </span>
-                <span style={{fontSize:'0.6875rem',color:'var(--amber)',
+                <span style={{fontSize:'0.8rem',color:'var(--amber)',
                   fontFamily:'var(--mono)'}}>
                   Vol: {jointResult.volScenLabel}
                 </span>
@@ -1345,17 +1345,17 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                    s:'joint − sum (non-linear)'},
                 ].map(({l,v,c,s}) => (
                   <div key={l} style={{background:'var(--bg)',padding:'8px 10px'}}>
-                    <div style={{fontSize:'0.6875rem',fontWeight:600,letterSpacing:'.08em',
+                    <div style={{fontSize:'0.8rem',fontWeight:600,letterSpacing:'.08em',
                       color:'var(--text-mute)',fontFamily:'var(--sans)',marginBottom:3}}>{l}</div>
                     <div style={{fontSize:'1rem',fontWeight:700,color:v!=null?c:'var(--border-hi)',
                       fontFamily:'var(--mono)',marginBottom:2}}>
                       {v!=null ? (v>=0?'+':'-')+'$'+Math.abs(Math.round(v)).toLocaleString() : '—'}
                     </div>
-                    <div style={{fontSize:'0.6875rem',color:'var(--text-mute)'}}>{s}</div>
+                    <div style={{fontSize:'0.8rem',color:'var(--text-mute)'}}>{s}</div>
                   </div>
                 ))}
               </div>
-              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'var(--border)',
+              <div style={{padding:'4px 14px',fontSize:'0.8rem',color:'var(--border)',
                 fontFamily:'var(--mono)'}}>
                 Cross-gamma = joint P&L − (rate P&L + vol P&L) · Non-zero = rate and vol move are correlated
               </div>

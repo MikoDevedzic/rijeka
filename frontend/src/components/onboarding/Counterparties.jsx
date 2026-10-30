@@ -28,7 +28,7 @@ const EMPTY = {
 }
 
 const L = {
-  display:'block', fontSize:'10px', fontFamily:"'IBM Plex Mono',var(--mono)",
+  display:'block', fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
   color:'var(--text-dim)', letterSpacing:'0.08em', marginBottom:'4px'
 }
 const INP = {
@@ -61,7 +61,7 @@ function Btn({ color, size, onClick, disabled, children }) {
 function Badge({ color, children }) {
   return (
     <span style={{
-      fontSize:'9px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
+      fontSize:'11px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
       padding:'2px 6px', borderRadius:'2px', whiteSpace:'nowrap',
       background:'color-mix(in srgb, ' + color + ' 14%, transparent)',
       color: color,
@@ -206,7 +206,7 @@ export default function Counterparties() {
       <div style={{ display:'flex', alignItems:'flex-start',
           justifyContent:'space-between', marginBottom:'20px' }}>
         <div>
-          <div style={{ fontSize:'10px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <div style={{ fontSize:'12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
               letterSpacing:'0.1em', marginBottom:'4px' }}>
             CONFIGURATIONS / ONBOARDING
           </div>
@@ -292,7 +292,7 @@ export default function Counterparties() {
                 </select>
               </div>
               <div>
-                <label style={L}>DISCOUNT CURVE <span style={{ opacity:.6, fontSize:'9px' }}>(auto-mapped)</span></label>
+                <label style={L}>DISCOUNT CURVE <span style={{ opacity:.6, fontSize:'11px' }}>(auto-mapped)</span></label>
                 <input style={INP} value={form.discount_curve_id}
                   onChange={function(e) { f({ discount_curve_id: e.target.value }) }} />
               </div>
@@ -322,7 +322,7 @@ export default function Counterparties() {
           </div>
 
           {!hasCSA && (
-            <div style={{ marginTop:'12px', fontSize:'10px', fontFamily:"'IBM Plex Mono',var(--mono)",
+            <div style={{ marginTop:'12px', fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
                 color:'var(--amber)', opacity:.7 }}>
               NO_CSA — CSA fields will be stored as null
             </div>
@@ -357,7 +357,7 @@ export default function Counterparties() {
             {['NAME','LEGAL ENTITY','CSA TYPE','CCY','DISCOUNT CURVE','IM MODEL','ACTIONS']
               .map(function(h) {
                 return (
-                  <div key={h} style={{ fontSize:'10px', fontFamily:"'IBM Plex Mono',var(--mono)",
+                  <div key={h} style={{ fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
                       color:'var(--text-dim)', letterSpacing:'0.08em' }}>{h}</div>
                 )
               })}
@@ -443,7 +443,7 @@ export default function Counterparties() {
         <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--amber)',
             fontFamily:"'IBM Plex Mono',var(--mono)" }}>{chatErr}</div>
       )}
-      <div style={{ marginTop:'8px', fontSize:'10px', color:'var(--text-dim)',
+      <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--text-dim)',
           fontFamily:"'IBM Plex Mono',var(--mono)" }}>
         {active.length} ACTIVE
         {inactive.length > 0 ? ' · ' + inactive.length + ' INACTIVE' : ''}

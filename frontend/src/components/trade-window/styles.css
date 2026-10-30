@@ -176,7 +176,7 @@
   padding: 4px 8px;
   border: 1px solid;
   border-radius: 2px;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   font-weight: 500;
 }
@@ -233,7 +233,7 @@
   width: 100%;
   text-align: left;
   padding: 8px 10px;
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-dim);
   letter-spacing: 0.1em;
   border-bottom: 1px solid var(--border);
@@ -252,7 +252,7 @@
   padding: 6px 8px;
   font-weight: 500;
   border-bottom: 1px solid var(--border);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.1em;
 }
 
@@ -298,7 +298,7 @@
 }
 
 .tbw-struct-label {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--text-mute);
   letter-spacing: 0.1em;
   margin-right: 4px;

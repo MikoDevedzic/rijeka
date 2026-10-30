@@ -1134,7 +1134,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                     color:'var(--amber)',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'8px',
                     display:'flex',alignItems:'center',gap:'8px'}}>
                     VOL SCENARIO
-                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'var(--text-mute)'}}>&#946;=0 Normal SABR</span>
+                    <span style={{fontSize:'0.8rem',fontWeight:400,color:'var(--text-mute)'}}>&#946;=0 Normal SABR</span>
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
                     {Object.entries(VOL_SCEN).map(([key,sc]) => (
@@ -1150,7 +1150,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                           display:'inline-block'}}/>
                         <span>{sc.l}</span>
                         {volScenKey===key&&key!=='base'&&(
-                          <span style={{fontSize:'0.6875rem',color:'var(--text-dim)',marginLeft:'auto'}}>{sc.d.slice(0,24)}</span>
+                          <span style={{fontSize:'0.8rem',color:'var(--text-dim)',marginLeft:'auto'}}>{sc.d.slice(0,24)}</span>
                         )}
                       </button>
                     ))}
@@ -1172,7 +1172,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                     color:'var(--amber)',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:'8px',
                     display:'flex',alignItems:'center',gap:'8px'}}>
                     CAP VOL SCENARIO
-                    <span style={{fontSize:'0.6875rem',fontWeight:400,color:'var(--text-mute)'}}>Bachelier Normal · flat vol shift</span>
+                    <span style={{fontSize:'0.8rem',fontWeight:400,color:'var(--text-mute)'}}>Bachelier Normal · flat vol shift</span>
                   </div>
                   {[
                     {l:'BASE',          d:null,    shift:0},
@@ -1204,7 +1204,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                           background:sc.shift===0?'var(--accent)':sc.shift>0?'var(--red)':'var(--blue)',
                           display:'inline-block'}}/>
                         <span>{sc.l}</span>
-                        {sc.d && <span style={{fontSize:'0.6875rem',color:'var(--text-mute)',marginLeft:'auto'}}>
+                        {sc.d && <span style={{fontSize:'0.8rem',color:'var(--text-mute)',marginLeft:'auto'}}>
                           {baseVol.toFixed(1)} → {shockedVol.toFixed(1)}bp
                         </span>}
                       </button>
@@ -1351,7 +1351,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
               style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'var(--bg-deep)',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}
 >
-              <div style={{position:'absolute',top:5,left:8,fontSize:'0.5rem',
+              <div style={{position:'absolute',top:5,left:8,fontSize:'0.7rem',
                 color:'var(--amber)',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 VOL SURFACE — β​=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'var(--text-dim)',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
               </div>
@@ -1359,7 +1359,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
               <div style={{position:'absolute',top:5,right:8,zIndex:3,display:'flex',gap:3}}>
                 <button
                   onClick={()=>setVolMode('rotate')}
-                  style={{padding:'3px 8px',fontSize:'0.5rem',fontWeight:600,letterSpacing:'.08em',
+                  style={{padding:'3px 8px',fontSize:'0.7rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:"'IBM Plex Mono',monospace",
                     border: volMode==='rotate'?'1px solid rgba(74,154,212,.5)':'1px solid var(--panel-3)',
                     color: volMode==='rotate'?'var(--blue)':'var(--text-mute)',
@@ -1368,7 +1368,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                 </button>
                 <button
                   onClick={()=>setVolMode(m=>m==='reshape'?'rotate':'reshape')}
-                  style={{padding:'3px 8px',fontSize:'0.5rem',fontWeight:600,letterSpacing:'.08em',
+                  style={{padding:'3px 8px',fontSize:'0.7rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:"'IBM Plex Mono',monospace",
                     border: volMode==='reshape'?'1px solid rgba(240,160,32,.5)':'1px solid var(--panel-3)',
                     color: volMode==='reshape'?'var(--amber)':'var(--text-mute)',
@@ -1376,7 +1376,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   ✦ {volMode==='reshape'?'RESHAPING...':'RESHAPE'}
                 </button>
               </div>
-              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.4375rem',
+              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.72rem',
                 color:'var(--panel-3)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 {volMode==='rotate'?'DRAG TO ROTATE · SCROLL TO ZOOM':'DRAG UP/DOWN TO DEFORM VOL · REPRICE FOR ΔP&L'}
               </div>
@@ -1392,12 +1392,12 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                 gap:4,pointerEvents:'none',zIndex:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
                   <div style={{width:16,height:2,background:'rgba(13,212,168,.6)',borderRadius:1}}/>
-                  <span style={{fontSize:'0.4375rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>BASE</span>
+                  <span style={{fontSize:'0.72rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>BASE</span>
                 </div>
                 {volScenKey!=='base'&&(
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:16,height:2,background:'var(--amber)',borderRadius:1}}/>
-                    <span style={{fontSize:'0.4375rem',color:'var(--amber)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>SHOCKED</span>
+                    <span style={{fontSize:'0.72rem',color:'var(--amber)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>SHOCKED</span>
                   </div>
                 )}
               </div>
@@ -1410,11 +1410,11 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
             <div ref={capVolWrapRef}
               style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'var(--bg-deep)',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}>
-              <div style={{position:'absolute',top:5,left:8,fontSize:'0.5rem',
+              <div style={{position:'absolute',top:5,left:8,fontSize:'0.7rem',
                 color:'var(--amber)',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 CAP VOL SURFACE — BACHELIER NORMAL
               </div>
-              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.4375rem',
+              <div style={{position:'absolute',bottom:6,right:8,fontSize:'0.72rem',
                 color:'var(--panel-3)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 DRAG TO ROTATE · SCROLL TO ZOOM · STRIKE SPREAD (bp) × TENOR (Y)
               </div>
@@ -1428,7 +1428,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
               <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',gap:4,pointerEvents:'none',zIndex:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
                   <div style={{width:16,height:2,background:'rgba(13,212,168,.6)',borderRadius:1}}/>
-                  <span style={{fontSize:'0.4375rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>
+                  <span style={{fontSize:'0.72rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace"}}>
                     {(parseFloat(capVolOverride)||capResult?.vol_bp||85).toFixed(1)}bp · {capResult?.vol_tier||'—'}
                   </span>
                 </div>
@@ -1448,7 +1448,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   color:'var(--text-dim)',fontFamily:"'IBM Plex Sans',var(--sans)"}}>
                   JOINT RATE + VOL P&L ATTRIBUTION
                 </span>
-                <span style={{fontSize:'0.6875rem',color:'var(--amber)',
+                <span style={{fontSize:'0.8rem',color:'var(--amber)',
                   fontFamily:"'IBM Plex Mono',monospace"}}>
                   Vol: {jointResult.volScenLabel}
                 </span>
@@ -1467,17 +1467,17 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                    s:'joint − sum (non-linear)'},
                 ].map(({l,v,c,s}) => (
                   <div key={l} style={{background:'var(--bg-deep)',padding:'8px 10px'}}>
-                    <div style={{fontSize:'0.6875rem',fontWeight:600,letterSpacing:'.08em',
+                    <div style={{fontSize:'0.8rem',fontWeight:600,letterSpacing:'.08em',
                       color:'var(--text-mute)',fontFamily:"'IBM Plex Sans',var(--sans)",marginBottom:3}}>{l}</div>
                     <div style={{fontSize:'1rem',fontWeight:700,color:v!=null?c:'var(--text-mute)',
                       fontFamily:"'IBM Plex Mono',monospace",marginBottom:2}}>
                       {v!=null ? (v>=0?'+':'-')+'$'+Math.abs(Math.round(v)).toLocaleString() : '—'}
                     </div>
-                    <div style={{fontSize:'0.6875rem',color:'var(--text-mute)'}}>{s}</div>
+                    <div style={{fontSize:'0.8rem',color:'var(--text-mute)'}}>{s}</div>
                   </div>
                 ))}
               </div>
-              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'var(--panel-3)',
+              <div style={{padding:'4px 14px',fontSize:'0.8rem',color:'var(--panel-3)',
                 fontFamily:"'IBM Plex Mono',monospace"}}>
                 Cross-gamma = joint P&L − (rate P&L + vol P&L) · Non-zero = rate and vol move are correlated
               </div>
@@ -1579,7 +1579,7 @@ function XvaFooterRate({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
   const {allIn} = xvaCalc(xva,notionalRef,rateRef,effDate,matDate,parRate)
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderLeft:'1px solid rgba(13,212,168,0.3)',marginLeft:'4px'}}>
-      <span style={{fontSize:'9px',color:'var(--accent)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>ALL-IN RATE</span>
+      <span style={{fontSize:'11px',color:'var(--accent)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>ALL-IN RATE</span>
       <span style={{fontSize:'13px',fontWeight:700,color:'var(--accent)',fontFamily:"'IBM Plex Mono',monospace"}}>{isFinite(allIn)?allIn.toFixed(3)+'%':'—'}</span>
     </div>
   )
@@ -1642,11 +1642,11 @@ function XvaInlinePanel({xva,notionalRef,rateRef,effDate,matDate,parRate,onApply
       <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)',borderRadius:'2px',overflow:'hidden'}}>
         {cells.map(({k,l,v,col,b,s}) => (
           <div key={k} style={{background:k==='all_in'?'rgba(13,212,168,0.04)':'var(--bg)',padding:'7px 8px',borderLeft:k==='all_in'?'1px solid rgba(13,212,168,0.15)':'none'}}>
-            <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'3px'}}>{l}</div>
+            <div style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'3px'}}>{l}</div>
             <div style={{fontSize:'0.9375rem',fontWeight:700,color:col,fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'2px'}}>{fD(v)}</div>
             <div style={{borderTop:'1px solid var(--panel-2)',paddingTop:'2px'}}>
               <div style={{fontSize:'0.75rem',fontWeight:600,color:col,fontFamily:"'IBM Plex Mono',var(--mono)",opacity:.8}}>{b}</div>
-              <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',opacity:.5}}>{s}</div>
+              <div style={{fontSize:'0.8rem',color:'var(--text-dim)',opacity:.5}}>{s}</div>
             </div>
           </div>
         ))}
@@ -3072,25 +3072,25 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               <>
                 {/* Identity strip */}
                 <div style={{display:'flex',alignItems:'center',gap:'6px',flexWrap:'wrap'}}>
-                  <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.08em',padding:'2px 7px',borderRadius:'2px',
+                  <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.08em',padding:'2px 7px',borderRadius:'2px',
                     background:'rgba(74,154,212,.1)',color:'var(--blue)',border:'1px solid rgba(74,154,212,.3)'}}>
                     {exerciseType} · {swaptionExpiry}×{tenor}
                   </span>
-                  <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
+                  <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
                     background:dir==='PAY'?'rgba(224,80,64,.1)':'rgba(13,212,168,.1)',
                     color:dir==='PAY'?'var(--red)':'var(--accent)',
                     border:`1px solid ${dir==='PAY'?'rgba(224,80,64,.3)':'rgba(13,212,168,.3)'}`}}>
                     {dir==='PAY'?'PAYER':'RECEIVER'}
                   </span>
-                  <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
+                  <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.06em',padding:'2px 7px',borderRadius:'2px',
                     background:'rgba(13,212,168,.06)',color:'var(--accent)',border:'1px solid rgba(13,212,168,.2)'}}>
                     PHYSICAL SETTLEMENT
                   </span>
-                  <span style={{fontSize:'0.6875rem',padding:'2px 7px',borderRadius:'2px',color:'var(--text-dim)',
+                  <span style={{fontSize:'0.8rem',padding:'2px 7px',borderRadius:'2px',color:'var(--text-dim)',
                     background:'rgba(255,255,255,.03)',border:'1px solid var(--border)'}}>
                     Normal vol {swaptionVol}bp
                   </span>
-                  <span style={{marginLeft:'auto',fontSize:'0.6875rem',color:'var(--text-dim)',letterSpacing:'.06em'}}>
+                  <span style={{marginLeft:'auto',fontSize:'0.8rem',color:'var(--text-dim)',letterSpacing:'.06em'}}>
                     USD_SOFR · VAL {valDate}
                   </span>
                 </div>
@@ -3108,9 +3108,9 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                       {l:'MONEYNESS',     v:swaptionResult.moneyness_bp,  color:'var(--text-dim)', fmt:v=>`${Math.abs(v).toFixed(1)}bp ${v>=0?'ITM':'OTM'}`, sub:`d = ${swaptionResult.d?.toFixed(3)}`},
                     ].map(({l,v,color,fmt,sub})=>(
                       <div key={l} style={{background:'var(--bg)',padding:'8px 10px'}}>
-                        <div style={{fontSize:'0.625rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',marginBottom:'3px'}}>{l}</div>
+                        <div style={{fontSize:'0.76rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',marginBottom:'3px'}}>{l}</div>
                         <div style={{fontSize:'0.9375rem',fontWeight:700,color,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{v!=null?fmt(v):'—'}</div>
-                        <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',marginTop:'2px',opacity:.7}}>{sub}</div>
+                        <div style={{fontSize:'0.8rem',color:'var(--text-dim)',marginTop:'2px',opacity:.7}}>{sub}</div>
                       </div>
                     ))}
                   </div>
@@ -3120,7 +3120,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 <div>
                   <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--text-dim)',marginBottom:'6px',display:'flex',alignItems:'center',gap:'8px'}}>
                     SECOND-ORDER SENSITIVITIES
-                    <span style={{fontSize:'0.6875rem',color:'var(--blue)',fontWeight:400,letterSpacing:'.04em'}}>hover each for definition</span>
+                    <span style={{fontSize:'0.8rem',color:'var(--blue)',fontWeight:400,letterSpacing:'.04em'}}>hover each for definition</span>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'1px',background:'rgba(74,154,212,.15)',border:'1px solid rgba(74,154,212,.2)',borderRadius:'2px',overflow:'hidden'}}>
                     {[
@@ -3135,9 +3135,9 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                       {l:'VEGA % PREMIUM',    v:swaptionResult.vega_pct_premium,  color:'var(--blue)',    fmt:v=>v.toFixed(2)+'%',                            sub:'normalized vega',  tip:'Vega as % of option premium. Normalized across strikes and tenors for comparison.'},
                     ].map(({l,v,color,fmt,sub,tip})=>(
                       <div key={l} style={{background:'var(--bg)',padding:'7px 10px',cursor:'help'}} title={tip}>
-                        <div style={{fontSize:'0.5625rem',fontWeight:700,letterSpacing:'.08em',color:'var(--blue)',marginBottom:'2px',lineHeight:1.3}}>{l}</div>
+                        <div style={{fontSize:'0.72rem',fontWeight:700,letterSpacing:'.08em',color:'var(--blue)',marginBottom:'2px',lineHeight:1.3}}>{l}</div>
                         <div style={{fontSize:'0.875rem',fontWeight:700,color,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{v!=null?fmt(v):'—'}</div>
-                        <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',marginTop:'2px',opacity:.7}}>{sub}</div>
+                        <div style={{fontSize:'0.8rem',color:'var(--text-dim)',marginTop:'2px',opacity:.7}}>{sub}</div>
                       </div>
                     ))}
                   </div>
@@ -3147,7 +3147,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 {/* Vol source tier badge */}
                 {swaptionResult.vol_tier && swaptionResult.vol_tier !== 'MANUAL' && (
                   <div style={{display:'flex',alignItems:'center',gap:'8px',marginBottom:'4px'}}>
-                    <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+                    <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
                       VOL SOURCE
                     </span>
                     {[{tier:'QUOTED',  color:'var(--accent)', bg:'rgba(13,212,168,0.08)',  bd:'rgba(13,212,168,0.3)',  desc:'Market quote — Bloomberg SMKO snap'},
@@ -3176,7 +3176,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 {swaptionResult.hw1f_vol_bp && (
                   <div style={{border:'1px solid rgba(74,154,212,.15)',borderRadius:'2px',background:'rgba(74,154,212,.02)',
                     padding:'8px 12px',display:'flex',gap:'16px',alignItems:'center',flexWrap:'wrap'}}>
-                    <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)'}}>HW1F CROSS-CHECK</span>
+                    <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)'}}>HW1F CROSS-CHECK</span>
                     <span style={{fontSize:'0.875rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
                       Model: <strong style={{color:'var(--text)'}}>{swaptionResult.hw1f_vol_bp.toFixed(1)}bp</strong>
                     </span>
@@ -3276,8 +3276,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 {inst==='IR_SWAPTION' && (
                   <div style={{background:'rgba(74,154,212,0.05)',border:'1px solid rgba(74,154,212,0.2)',borderRadius:'2px',padding:'8px 12px',display:'flex',flexDirection:'column',gap:'3px'}}>
                     <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                      <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.12em',color:'var(--blue)'}}>UNDERLYING FORWARD SWAP CASHFLOWS</span>
-                      <span style={{fontSize:'0.6875rem',padding:'1px 6px',borderRadius:'2px',background:'rgba(74,154,212,0.1)',border:'1px solid rgba(74,154,212,0.3)',color:'var(--blue)'}}>
+                      <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.12em',color:'var(--blue)'}}>UNDERLYING FORWARD SWAP CASHFLOWS</span>
+                      <span style={{fontSize:'0.8rem',padding:'1px 6px',borderRadius:'2px',background:'rgba(74,154,212,0.1)',border:'1px solid rgba(74,154,212,0.3)',color:'var(--blue)'}}>
                         {swaptionExpiry}×{tenor} · Physical Settlement
                       </span>
                     </div>
@@ -3493,7 +3493,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     />
                   </Fld>
                 </Row>
-                <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
+                <div style={{fontSize:'0.8rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
                   {exerciseType==='EUROPEAN'?'Black/Bachelier normal vol · HW1F cross-check':exerciseType==='BERMUDAN'?'HW1F trinomial tree — on the roadmap':'American approximation — Sprint 8'}
                   {' · Physical settlement · Strike blank = ATM forward (computed from OIS curve)'}
                   {swaptionResult && !swaptionStrike && ` · ATM = ${swaptionResult.forward_pct?.toFixed(4)}%`}
@@ -3502,11 +3502,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 {/* ── OPTION FEE ────────────────────────────────────────────── */}
                 <SectionHdr>
                   OPTION FEE
-                  <span style={{fontSize:'0.6875rem',color:'var(--text-dim)',fontWeight:400,letterSpacing:'0.04em',marginLeft:'8px'}}>
+                  <span style={{fontSize:'0.8rem',color:'var(--text-dim)',fontWeight:400,letterSpacing:'0.04em',marginLeft:'8px'}}>
                     {feeAmount ? (feeAmountType==='BP' ? `${feeAmount}bp upfront` : `$${parseFloat(feeAmount).toLocaleString()} upfront`) : 'no premium entered'}
                     {feeSchedule.filter(r=>r.date&&r.amount).length > 0 && ` · ${feeSchedule.filter(r=>r.date&&r.amount).length} scheduled payments`}
                   </span>
-                  <span style={{marginLeft:'auto',fontSize:'0.6875rem',color:'var(--accent)',letterSpacing:'0.04em',cursor:'pointer'}}
+                  <span style={{marginLeft:'auto',fontSize:'0.8rem',color:'var(--accent)',letterSpacing:'0.04em',cursor:'pointer'}}
                     onClick={()=>{ /* switch to details tab handled by parent */ }}>
                     full schedule → DETAILS tab
                   </span>
@@ -3551,7 +3551,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                         {l:'FWD RATE',     v:swaptionResult.forward_pct, color:'var(--accent)', fmt:v=>v.toFixed(4)+'%'},
                       ].map(({l,v,color,fmt})=>(
                         <div key={l} style={{background:'var(--bg)',padding:'7px 10px'}}>
-                          <div style={{fontSize:'0.625rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',marginBottom:'3px'}}>{l}</div>
+                          <div style={{fontSize:'0.76rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',marginBottom:'3px'}}>{l}</div>
                           <div style={{fontSize:'0.875rem',fontWeight:700,color,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{v!=null?fmt(v):'—'}</div>
                         </div>
                       ))}
@@ -3561,7 +3561,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     {swaptionResult.hw1f_vol_bp && (
                       <div style={{background:'rgba(74,154,212,0.03)',padding:'5px 10px',borderTop:'1px solid var(--border)',
                         display:'flex',gap:'16px',alignItems:'center',flexWrap:'wrap'}}>
-                        <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.10em',color:'var(--text-dim)'}}>HW1F CROSS-CHECK</span>
+                        <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'0.10em',color:'var(--text-dim)'}}>HW1F CROSS-CHECK</span>
                         <span style={{fontSize:'0.8125rem',fontFamily:"'IBM Plex Mono',var(--mono)",color:'var(--blue)'}}>
                           Model: {swaptionResult.hw1f_vol_bp.toFixed(1)}bp
                         </span>
@@ -3648,7 +3648,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                     </div>
                   </Fld>
                 </Row>
-                <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
+                <div style={{fontSize:'0.8rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
                   Bachelier (Normal) · vol from the saved cap surface · OIS discounting · SOFR in-arrears · {index} · {CCY_CURVE[ccy]||'USD_SOFR'}
                   {capResult && ' · ATM fwd = ' + (capResult.atm_forward_pct||0).toFixed(4) + '% · vol = ' + (capResult.vol_bp||capResult.cap_vol_bp||0).toFixed(1) + 'bp (' + (capResult.vol_tier||capResult.cap_vol_tier||'') + ')'}
                 </div>
@@ -3672,7 +3672,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                         {l:'ATM FWD',      v:capResult.atm_forward_pct, color:'var(--text-dim)',fmt:v=>v.toFixed(4)+'%'},
                       ]).map(({l,v,color,fmt})=>(
                         <div key={l} style={{background:'var(--bg)',padding:'7px 10px'}}>
-                          <div style={{fontSize:'0.625rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',marginBottom:'3px'}}>{l}</div>
+                          <div style={{fontSize:'0.76rem',fontWeight:700,letterSpacing:'.10em',color:'var(--text-dim)',marginBottom:'3px'}}>{l}</div>
                           <div style={{fontSize:'0.875rem',fontWeight:700,color,fontFamily:"'IBM Plex Mono',var(--mono)"}}>{v!=null?fmt(v):'—'}</div>
                         </div>
                       ))}
@@ -3719,7 +3719,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 {/* ── OPTION FEE ─────────────────────────────────────────── */}
                 <SectionHdr>
                   OPTION FEE
-                  <span style={{fontSize:'0.6875rem',color:'var(--text-dim)',fontWeight:400,letterSpacing:'0.04em',marginLeft:'8px'}}>
+                  <span style={{fontSize:'0.8rem',color:'var(--text-dim)',fontWeight:400,letterSpacing:'0.04em',marginLeft:'8px'}}>
                     {feeAmount ? (feeAmountType==='BP' ? `${feeAmount}bp upfront` : `$${parseFloat(feeAmount).toLocaleString()} upfront`) : 'no premium entered'}
                   </span>
                 </SectionHdr>
@@ -4093,13 +4093,13 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 return metrics
               })().map((m,i)=>(
                 <div key={i} style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid var(--border)'}}>
-                  <span style={{fontSize:'9px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
+                  <span style={{fontSize:'11px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>{m.label}</span>
                   <span style={{fontSize:'11px',color:m.color,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>{m.val}</span>
                 </div>
               ))}
               <div style={{display:'flex',flexDirection:'column',gap:'1px',padding:'0 10px',borderRight:'1px solid var(--border)'}}>
-                <span style={{fontSize:'9px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>STRUCTURE</span>
-                <span style={{fontSize:'9px',color:'var(--amber)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
+                <span style={{fontSize:'11px',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:"'IBM Plex Sans',sans-serif"}}>STRUCTURE</span>
+                <span style={{fontSize:'11px',color:'var(--amber)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
               </div>
               {xvaResult?.xva && <XvaFooterRate xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>}
               {activeTab==='scenario' ? (
@@ -4113,7 +4113,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                   disabled={pricing||swaptionPricing||capPricing}>
                   {(pricing||swaptionPricing||capPricing)?'PRICING...':'▶ PRICE'}
                 </button>
-              {!xvaResult && !isCurrency && <span style={{fontSize:'10px',color:'var(--text-mute)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em',padding:'0 8px'}}>XVA → SIMULATE to price</span>}
+              {!xvaResult && !isCurrency && <span style={{fontSize:'12px',color:'var(--text-mute)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em',padding:'0 8px'}}>XVA → SIMULATE to price</span>}
                 </>
               )}
             </div>}

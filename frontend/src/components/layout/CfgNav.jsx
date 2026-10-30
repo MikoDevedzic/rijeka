@@ -396,7 +396,7 @@ const S = {
   },
   sectionBtnAdmin: { color:'var(--amber)' },
   sectionSprint: {
-    fontSize:'0.6875rem', letterSpacing:'0.06em',
+    fontSize:'0.8rem', letterSpacing:'0.06em',
     color:'var(--text-dim)', opacity:0.4,
     fontWeight:400, marginLeft:'6px',
   },
@@ -422,7 +422,7 @@ const S = {
     transition:'all 0.12s',
   }),
   sprintBadge: {
-    fontSize:'0.625rem', letterSpacing:'0.06em',
+    fontSize:'0.76rem', letterSpacing:'0.06em',
     color:'var(--border)', fontWeight:600,
   },
 }
@@ -449,7 +449,7 @@ export default function CfgNav() {
                   {sec.label}
                   {sec.sprint && <span style={S.sectionSprint}>SPRINT {sec.sprint}</span>}
                 </span>
-                <span style={{ fontSize:'0.6875rem', opacity:0.5 }}>{isOpen ? '\u25DB' : '\u25D9'}</span>
+                <span style={{ fontSize:'0.8rem', opacity:0.5 }}>{isOpen ? '\u25DB' : '\u25D9'}</span>
               </button>
               {sec.snapAll && isOpen && <SnapAllButton role={role} />}
             </div>

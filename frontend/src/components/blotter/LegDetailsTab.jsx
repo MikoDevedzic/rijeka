@@ -26,31 +26,31 @@ const C = {
 const S = {
   root:{ flex:1, overflowY:'auto', padding:'12px 16px', display:'flex', flexDirection:'column', gap:'10px', fontFamily:'var(--sans)' },
   banner:{ display:'flex', alignItems:'center', gap:'10px', background:C.panel, border:'1px solid '+C.border, borderRadius:'3px', padding:'7px 14px' },
-  structLbl:{ fontSize:'10px', color:C.muted, letterSpacing:'0.08em' },
+  structLbl:{ fontSize:'12px', color:C.muted, letterSpacing:'0.08em' },
   structVal:{ fontSize:'13px', color:C.accent, fontFamily:'var(--mono)', fontWeight:600 },
-  zcWrap:{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'10px', color:C.muted, letterSpacing:'0.07em' },
+  zcWrap:{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'12px', color:C.muted, letterSpacing:'0.07em' },
   zcBox:(on)=>({ width:'13px', height:'13px', border:'1px solid '+(on?C.accent:'var(--border-hi)'), borderRadius:'2px', background:on?'rgba(13,212,168,0.15)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', color:C.accent }),
   grid:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' },
   panel:{ background:C.panel, border:'1px solid '+C.border, borderRadius:'3px', padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px' },
   panelHdr:{ display:'flex', alignItems:'center', gap:'8px', fontSize:'11px', letterSpacing:'0.1em', color:C.muted, fontWeight:600 },
-  badge:(pay)=>({ fontSize:'10px', letterSpacing:'0.07em', fontWeight:600, padding:'2px 8px', borderRadius:'2px', background:pay?'rgba(224,80,64,0.12)':'rgba(13,212,168,0.12)', color:pay?C.red:C.accent, border:'1px solid '+(pay?'rgba(224,80,64,0.3)':'rgba(13,212,168,0.3)') }),
+  badge:(pay)=>({ fontSize:'12px', letterSpacing:'0.07em', fontWeight:600, padding:'2px 8px', borderRadius:'2px', background:pay?'rgba(224,80,64,0.12)':'rgba(13,212,168,0.12)', color:pay?C.red:C.accent, border:'1px solid '+(pay?'rgba(224,80,64,0.3)':'rgba(13,212,168,0.3)') }),
   divider:{ height:'1px', background:'var(--border)' },
   secTitle:{ fontSize:'11px', color:C.accent, letterSpacing:'0.08em', fontWeight:600 },
-  secHint:{ fontSize:'10px', color:C.dim, marginTop:'2px', marginBottom:'4px' },
+  secHint:{ fontSize:'12px', color:C.dim, marginTop:'2px', marginBottom:'4px' },
   toolbar:{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' },
-  toolBtn:(color)=>({ fontSize:'10px', color:color||C.accent, background:color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.08)`:'rgba(13,212,168,0.08)', border:`1px solid ${color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.25)`:'rgba(13,212,168,0.2)'}`, borderRadius:'2px', padding:'3px 10px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em' }),
+  toolBtn:(color)=>({ fontSize:'12px', color:color||C.accent, background:color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.08)`:'rgba(13,212,168,0.08)', border:`1px solid ${color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.25)`:'rgba(13,212,168,0.2)'}`, borderRadius:'2px', padding:'3px 10px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em' }),
   tbl:{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' },
-  th:{ fontSize:'10px', color:C.dim, letterSpacing:'0.07em', padding:'4px 4px', textAlign:'left', borderBottom:'1px solid '+C.border, fontWeight:400 },
+  th:{ fontSize:'12px', color:C.dim, letterSpacing:'0.07em', padding:'4px 4px', textAlign:'left', borderBottom:'1px solid '+C.border, fontWeight:400 },
   td:{ padding:'2px 3px', borderBottom:'1px solid var(--border)' },
   cell:{ fontSize:'11px', fontFamily:'var(--mono)', background:C.panel2, border:'1px solid '+C.border, borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', outline:'none', color:C.text, WebkitAppearance:'none', MozAppearance:'textfield', appearance:'textfield' },
   cellRo:{ fontSize:'11px', fontFamily:'var(--mono)', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', color:C.muted, userSelect:'none' },
   cellAmber:{ fontSize:'11px', fontFamily:'var(--mono)', background:'rgba(240,160,32,0.06)', border:'1px solid rgba(240,160,32,0.4)', borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', outline:'none', color:C.amber, WebkitAppearance:'none', MozAppearance:'textfield', appearance:'textfield' },
   del:{ background:'none', border:'none', color:C.red, cursor:'pointer', fontSize:'12px', padding:'0 4px', opacity:0.6 },
   loading:{ fontSize:'11px', color:C.muted, fontStyle:'italic', padding:'8px 2px' },
-  emptyRow:{ fontSize:'10px', color:C.dim, fontStyle:'italic', padding:'5px 2px' },
-  hintBox:{ fontSize:'10px', color:C.muted, lineHeight:1.6, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'2px', padding:'6px 9px', marginTop:'4px' },
-  coming:{ fontSize:'10px', color:C.dim, border:'1px dashed '+C.border, borderRadius:'2px', padding:'8px', textAlign:'center', letterSpacing:'0.05em' },
-  dropZone:(active)=>({ border:'1px dashed '+(active?C.accent:'var(--text-mute)'), borderRadius:'3px', padding:'10px', textAlign:'center', fontSize:'10px', color:active?C.accent:C.dim, background:active?'rgba(13,212,168,0.04)':'transparent', transition:'all 0.15s', cursor:'pointer', letterSpacing:'0.05em' }),
+  emptyRow:{ fontSize:'12px', color:C.dim, fontStyle:'italic', padding:'5px 2px' },
+  hintBox:{ fontSize:'12px', color:C.muted, lineHeight:1.6, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'2px', padding:'6px 9px', marginTop:'4px' },
+  coming:{ fontSize:'12px', color:C.dim, border:'1px dashed '+C.border, borderRadius:'2px', padding:'8px', textAlign:'center', letterSpacing:'0.05em' },
+  dropZone:(active)=>({ border:'1px dashed '+(active?C.accent:'var(--text-mute)'), borderRadius:'3px', padding:'10px', textAlign:'center', fontSize:'12px', color:active?C.accent:C.dim, background:active?'rgba(13,212,168,0.04)':'transparent', transition:'all 0.15s', cursor:'pointer', letterSpacing:'0.05em' }),
 }
 
 function EditCell({ value, original, onChange, placeholder='' }) {
@@ -320,7 +320,7 @@ export default function LegDetailsTab({
             {struct === 'BASIS' ? 'FLOAT LEG 1' : 'FIXED LEG'}
             <span style={S.badge(dir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'PAY LEG 1':'RECEIVE LEG 1') : (dir==='PAY'?'PAY FIXED':'RECEIVE FIXED')}</span>
             {hasFixedOverrides && (
-              <button onClick={resetFixed} style={{marginLeft:'auto', fontSize:'10px', color:C.amber, background:'rgba(240,160,32,0.06)', border:'1px solid rgba(240,160,32,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
+              <button onClick={resetFixed} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(240,160,32,0.06)', border:'1px solid rgba(240,160,32,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
                 RESET TO PAR
               </button>
             )}
@@ -379,7 +379,7 @@ export default function LegDetailsTab({
             {struct === 'BASIS' ? 'FLOAT LEG 2' : 'FLOAT LEG'}
             <span style={S.badge(floatDir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'RECEIVE LEG 2':'PAY LEG 2') : (floatDir==='PAY'?'PAY FLOAT':'RECEIVE FLOAT')}</span>
             {hasFloatOverrides && (
-              <button onClick={resetFloat} style={{marginLeft:'auto', fontSize:'10px', color:C.amber, background:'rgba(240,160,32,0.06)', border:'1px solid rgba(240,160,32,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
+              <button onClick={resetFloat} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(240,160,32,0.06)', border:'1px solid rgba(240,160,32,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
                 RESET TO PAR
               </button>
             )}
@@ -388,7 +388,7 @@ export default function LegDetailsTab({
           <div style={S.secTitle}>PERIOD SCHEDULE</div>
           <div style={S.secHint}>Edit SPREAD BP per period or NOTIONAL for amortizing. Amber = overridden. Hit PRICE to reprice.</div>
           {isEmbedded && (
-            <div style={{display:'flex', alignItems:'center', gap:'8px', margin:'4px 0 6px 0', fontSize:'10px', letterSpacing:'0.07em', color:C.muted}}>
+            <div style={{display:'flex', alignItems:'center', gap:'8px', margin:'4px 0 6px 0', fontSize:'12px', letterSpacing:'0.07em', color:C.muted}}>
               <span>OPTION DIRECTION:</span>
               <button
                 onClick={()=>setCapFloorDirection('BUY')}
@@ -473,7 +473,7 @@ export default function LegDetailsTab({
               <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.12em',
                 color:'var(--text-dim)',marginBottom:'8px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                 OPTION FEE SCHEDULE
-                <span style={{fontSize:'0.6875rem',fontWeight:400,color:'var(--text-dim)',opacity:0.6}}>
+                <span style={{fontSize:'0.8rem',fontWeight:400,color:'var(--text-dim)',opacity:0.6}}>
                   {exerciseType} · {feeAmount?(feeAmountType==='BP'?`${feeAmount}bp`:`$${parseFloat(feeAmount||0).toLocaleString()}`):'no upfront premium'}
                   {feeSettleDate?` · settle ${feeSettleDate}`:''}
                 </span>
@@ -481,7 +481,7 @@ export default function LegDetailsTab({
               <div style={{border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden'}}>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 80px 32px',gap:'1px',background:'var(--border)'}}>
                   {['PAY DATE','AMOUNT','UNIT',''].map(h=>(
-                    <div key={h} style={{background:'var(--panel)',padding:'5px 8px',fontSize:'0.6875rem',
+                    <div key={h} style={{background:'var(--panel)',padding:'5px 8px',fontSize:'0.8rem',
                       fontWeight:700,letterSpacing:'0.08em',color:'var(--text-dim)'}}>{h}</div>
                   ))}
                   {feeAmount && feeSettleDate && (
@@ -489,7 +489,7 @@ export default function LegDetailsTab({
                       <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.875rem',fontFamily:'var(--mono)',color:'var(--amber)'}}>{feeSettleDate}</div>
                       <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.875rem',fontFamily:'var(--mono)',color:'var(--amber)'}}>{feeAmount}</div>
                       <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.875rem',color:'var(--text-dim)'}}>{feeAmountType}</div>
-                      <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.6875rem',color:'var(--text-dim)',display:'flex',alignItems:'center',justifyContent:'center'}}>UPFRT</div>
+                      <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.8rem',color:'var(--text-dim)',display:'flex',alignItems:'center',justifyContent:'center'}}>UPFRT</div>
                     </>
                   )}
                   {(feeSchedule||[]).map((row,i)=>(
@@ -524,7 +524,7 @@ export default function LegDetailsTab({
                   </div>
                 </div>
               </div>
-              <div style={{fontSize:'0.6875rem',color:'var(--text-dim)',marginTop:'4px',opacity:0.6}}>
+              <div style={{fontSize:'0.8rem',color:'var(--text-dim)',marginTop:'4px',opacity:0.6}}>
                 Upfront from TRADE tab · Additional rows for deferred / instalment / Bermudan contingent fees
               </div>
             </div>

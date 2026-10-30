@@ -20,7 +20,7 @@ const EMPTY = {
 }
 
 const L = {
-  display:'block', fontSize:'10px', fontFamily:"'IBM Plex Mono',var(--mono)",
+  display:'block', fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
   color:'var(--text-dim)', letterSpacing:'0.08em', marginBottom:'4px'
 }
 const INP = {
@@ -53,7 +53,7 @@ function Btn({ color, size, onClick, disabled, children }) {
 function Badge({ color, children }) {
   return (
     <span style={{
-      fontSize:'9px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
+      fontSize:'11px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
       padding:'2px 6px', borderRadius:'2px', whiteSpace:'nowrap',
       background:'color-mix(in srgb, ' + color + ' 14%, transparent)',
       color: color,
@@ -171,7 +171,7 @@ export default function LegalEntities() {
       <div style={{ display:'flex', alignItems:'flex-start',
           justifyContent:'space-between', marginBottom:'20px' }}>
         <div>
-          <div style={{ fontSize:'10px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <div style={{ fontSize:'12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
               letterSpacing:'0.1em', marginBottom:'4px' }}>
             CONFIGURATIONS / ONBOARDING
           </div>
@@ -246,7 +246,7 @@ export default function LegalEntities() {
             <div>
               <label style={L}>
                 REGULATORY REGIME
-                <span style={{ opacity:0.6, fontSize:'9px', marginLeft:'4px' }}>(comma-sep)</span>
+                <span style={{ opacity:0.6, fontSize:'11px', marginLeft:'4px' }}>(comma-sep)</span>
               </label>
               <input style={INP} value={form.regulatory_regime}
                 placeholder="EMIR, DODD-FRANK, MIFID2"
@@ -314,7 +314,7 @@ export default function LegalEntities() {
               borderBottom:'1px solid var(--panel-3)' }}>
             {['LEI','NAME','SHORT','CCY','JURIS','SIMM','TYPE','ACTIONS'].map(function(h) {
               return (
-                <div key={h} style={{ fontSize:'10px', fontFamily:"'IBM Plex Mono',var(--mono)",
+                <div key={h} style={{ fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
                     color:'var(--text-dim)', letterSpacing:'0.08em' }}>{h}</div>
               )
             })}
@@ -393,7 +393,7 @@ export default function LegalEntities() {
         </div>
       )}
 
-      <div style={{ marginTop:'8px', fontSize:'10px', color:'var(--text-dim)',
+      <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--text-dim)',
           fontFamily:"'IBM Plex Mono',var(--mono)" }}>
         {active.length} ACTIVE
         {inactive.length > 0 ? ' · ' + inactive.length + ' INACTIVE' : ''}

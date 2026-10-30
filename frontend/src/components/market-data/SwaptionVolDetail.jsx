@@ -67,10 +67,10 @@ function VolSurface({ grid, hasData }) {
       <div style={{ display:'grid', gridTemplateColumns:'28px repeat(' + SWAPTION_TENORS.length + ',1fr)', gap:'2px' }}>
         <div />
         {SWAPTION_TENORS.map((t) => (
-          <div key={t} style={{ fontSize:'0.6875rem', color:'var(--text-dim)', textAlign:'center' }}>{t}</div>
+          <div key={t} style={{ fontSize:'0.8rem', color:'var(--text-dim)', textAlign:'center' }}>{t}</div>
         ))}
         {grid.map((row) => [
-          <div key={row.expiry + '_lbl'} style={{ fontSize:'0.6875rem', color:'var(--text-dim)', textAlign:'right', paddingRight:'3px', display:'flex', alignItems:'center', justifyContent:'flex-end' }}>{row.expiry}</div>,
+          <div key={row.expiry + '_lbl'} style={{ fontSize:'0.8rem', color:'var(--text-dim)', textAlign:'right', paddingRight:'3px', display:'flex', alignItems:'center', justifyContent:'flex-end' }}>{row.expiry}</div>,
           ...row.cells.map((cell) => {
             const v = cell.vol_bp;
             const intensity = v !== null ? (v - minV) / rng : 0;
@@ -80,7 +80,7 @@ function VolSurface({ grid, hasData }) {
             return (
               <div key={cell.tenor} style={{ height:'18px', borderRadius:'1px', background:bg,
                 display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:'0.625rem', color:v !== null ? 'var(--accent)' : 'var(--text-dim)',
+                fontSize:'0.76rem', color:v !== null ? 'var(--accent)' : 'var(--text-dim)',
                 fontFamily:"'IBM Plex Mono',var(--mono)" }}>
                 {v !== null ? v.toFixed(0) : '—'}
               </div>
@@ -237,7 +237,7 @@ function SwvInstruments() {
                       borderBottom:'1px solid var(--panel-2)',
                       background: isBasket(row.expiry, cell.tenor)
                         ? 'rgba(13,212,168,0.03)' : 'transparent' }}>
-                    <div style={{ fontSize:'0.6875rem', color:'var(--text-dim)',
+                    <div style={{ fontSize:'0.8rem', color:'var(--text-dim)',
                       fontFamily:"'IBM Plex Mono',var(--mono)", padding:'1px 4px 0',
                       letterSpacing:'0.02em', lineHeight:1 }}>
                       {cell.ticker.replace(' Curncy', '')}
@@ -649,7 +649,7 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
   });
 
   const thS = {
-    ...mono, fontSize: '0.6875rem', fontWeight: 400, letterSpacing: '0.06em',
+    ...mono, fontSize: '0.8rem', fontWeight: 400, letterSpacing: '0.06em',
     color: 'var(--text-dim)', padding: '3px 5px', textAlign: 'right',
     borderBottom: '1px solid var(--border)',
   };
@@ -762,7 +762,7 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
                       </td>
                       {/* Source badge */}
                       <td style={{ ...mono, padding:'3px 5px', textAlign:'right',
-                        fontSize:'0.6875rem', borderBottom:'1px solid var(--panel-2)',
+                        fontSize:'0.8rem', borderBottom:'1px solid var(--panel-2)',
                         color: dirt ? 'var(--amber)'
                              : src === 'MANUAL' ? 'var(--amber)'
                              : src === 'AUTO' ? 'var(--accent)'
@@ -1314,7 +1314,7 @@ function SwvOTMSkew({ atmGrid }) {
 
   const mono = { fontFamily:"'IBM Plex Mono',var(--mono)" };
   const dim  = { color:'var(--text-dim)' };
-  const thS  = { ...mono, fontSize:'0.6875rem', fontWeight:400, letterSpacing:'0.06em',
+  const thS  = { ...mono, fontSize:'0.8rem', fontWeight:400, letterSpacing:'0.06em',
                  ...dim, padding:'3px 5px', textAlign:'right',
                  borderBottom:'1px solid var(--border)', whiteSpace:'nowrap' };
 
@@ -1331,7 +1331,7 @@ function SwvOTMSkew({ atmGrid }) {
       <div style={{ background:'rgba(13,212,168,0.04)', border:'1px solid rgba(13,212,168,0.15)',
         borderRadius:'2px', padding:'7px 12px', marginBottom:'10px',
         display:'flex', alignItems:'baseline', gap:'12px', flexWrap:'wrap' }}>
-        <span style={{ fontSize:'0.6875rem', fontWeight:700, letterSpacing:'0.12em',
+        <span style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
           color:'var(--accent)', ...mono, whiteSpace:'nowrap' }}>RIJEKA β=0 NORMAL SABR</span>
         <span style={{ fontSize:'0.8125rem', color:'var(--text-dim)', ...mono }}>
           Market vol quotes (snapped from SMKO tickers when self-hosting, or entered by hand) as
@@ -1405,7 +1405,7 @@ function SwvOTMSkew({ atmGrid }) {
         <table style={{ width:'100%', borderCollapse:'collapse', minWidth:'680px' }}>
           <thead>
             <tr>
-              <th colSpan={9 + 1} style={{ ...mono, fontSize:'0.6875rem', color:'var(--text-dim)',
+              <th colSpan={9 + 1} style={{ ...mono, fontSize:'0.8rem', color:'var(--text-dim)',
                 textAlign:'left', padding:'2px 0 4px', letterSpacing:'0.08em',
                 borderBottom:'1px solid var(--border)' }}>
                 SWAP TENOR ↓ &nbsp;·&nbsp; STRIKE vs ATM FORWARD (bp) →
@@ -1465,7 +1465,7 @@ function SwvOTMSkew({ atmGrid }) {
                       <td key={off} style={{ padding:'2px',
                         borderBottom:'1px solid var(--panel-2)' }}>
                         {ticker && (
-                          <div style={{ fontSize:'0.5625rem', color:'rgba(74,154,212,0.5)',
+                          <div style={{ fontSize:'0.72rem', color:'rgba(74,154,212,0.5)',
                             ...mono, padding:'0 4px', lineHeight:1, letterSpacing:'0.01em' }}>
                             {ticker.replace(' SMKO Curncy','')}
                           </div>
@@ -1505,7 +1505,7 @@ function SwvOTMSkew({ atmGrid }) {
                       <td key={off} style={{ padding:'2px',
                         borderBottom:'1px solid var(--panel-2)' }}>
                         {ticker && (
-                          <div style={{ fontSize:'0.5625rem', color:'rgba(13,212,168,0.5)',
+                          <div style={{ fontSize:'0.72rem', color:'rgba(13,212,168,0.5)',
                             ...mono, padding:'0 4px', lineHeight:1, letterSpacing:'0.01em' }}>
                             {ticker.replace(' SMKO Curncy','')}
                           </div>
@@ -1535,7 +1535,7 @@ function SwvOTMSkew({ atmGrid }) {
                       <td style={{ padding:'3px 5px', borderBottom:'1px solid var(--panel-2)',
                         textAlign:'center', whiteSpace:'nowrap' }}
                         title={q.desc}>
-                        <span style={{ ...mono, fontSize:'0.6875rem', fontWeight:700,
+                        <span style={{ ...mono, fontSize:'0.8rem', fontWeight:700,
                           color: q.color,
                           padding:'1px 5px', borderRadius:'2px',
                           background: q.level==='good' ? 'rgba(13,212,168,0.08)'
@@ -1557,11 +1557,11 @@ function SwvOTMSkew({ atmGrid }) {
               <td colSpan={10 + 1} style={{ padding:'4px 6px',
                 borderTop:'1px solid var(--border)', borderBottom:'1px solid var(--panel-2)',
                 background:'rgba(74,154,212,0.03)' }}>
-                <span style={{ fontSize:'0.6875rem', color:'var(--blue)',
+                <span style={{ fontSize:'0.8rem', color:'var(--blue)',
                   fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.08em' }}>
                   SABR INTERPOLATED — no market tickers for these tenors
                 </span>
-                <span style={{ fontSize:'0.6875rem', color:'var(--text-dim)',
+                <span style={{ fontSize:'0.8rem', color:'var(--text-dim)',
                   fontFamily:"'IBM Plex Mono',var(--mono)", marginLeft:'8px' }}>
                   {OTM_INTERP_TENORS.join(' · ')} — params derived from {OTM_SNAP_TENORS.join('/')} anchor points
                 </span>
@@ -1605,7 +1605,7 @@ function SwvOTMSkew({ atmGrid }) {
                   </td>
                   <td style={{ padding:'3px 5px', borderBottom:'1px solid var(--panel-2)',
                     textAlign:'center' }}>
-                    <span style={{ fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.6875rem',
+                    <span style={{ fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.8rem',
                       color:'var(--blue)', padding:'1px 5px', borderRadius:'2px',
                       background:'rgba(74,154,212,0.08)', border:'1px solid rgba(74,154,212,0.2)' }}>
                       INTERP
@@ -1868,7 +1868,7 @@ export default function SwaptionVolDetail() {
           background:'rgba(13,212,168,0.04)', border:'1px solid rgba(13,212,168,0.15)',
           borderRadius:'2px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
-            <span style={{ fontSize:'0.6875rem', fontWeight:700, letterSpacing:'0.12em',
+            <span style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
               color:'var(--accent)', ...mono }}>UNIFIED SURFACE SNAP</span>
             <span style={{ fontSize:'0.75rem', color:'var(--text-dim)', ...mono }}>
               ATM + OTM from same timestamp → spread = abs_vol − ATM → Rijeka SABR calibration

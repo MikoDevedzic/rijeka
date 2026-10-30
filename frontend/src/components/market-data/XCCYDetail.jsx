@@ -20,7 +20,7 @@ function XCCYDef({ curve }) {
       <DescBox>{curve.description}</DescBox>
       <SectionLabel>Bootstrap logic (roadmap)</SectionLabel>
       <div className="cb">
-        <pre style={{ margin: 0, fontSize: '9px', lineHeight: 1.8, color: 'var(--text-dim)' }}>
+        <pre style={{ margin: 0, fontSize: '11px', lineHeight: 1.8, color: 'var(--text-dim)' }}>
           {stub}
         </pre>
       </div>

@@ -121,7 +121,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
   }
 
   const headerLabelStyle = {
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: '0.12em',
     color: 'var(--text-dim)',
     fontFamily:'var(--mono)',
@@ -129,7 +129,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
 
   const addBtnStyle = {
     padding: '4px 12px',
-    fontSize: 10,
+    fontSize: 12,
     letterSpacing: '0.08em',
     fontFamily:'var(--mono)',
     border: '1px dashed var(--border-hi)',
@@ -170,7 +170,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
   }
 
   const labelStyle = {
-    fontSize: 9,
+    fontSize: 11,
     color: 'var(--text-dim)',
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
@@ -197,7 +197,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
           {legLabel ? `${legLabel} — EMBEDDED OPTIONALITY` : 'EMBEDDED OPTIONALITY'}
         </span>
         {entries.length === 0 && (
-          <span style={{ fontSize: 10, color: 'var(--text-mute)', fontStyle: 'italic' }}>
+          <span style={{ fontSize: 12, color: 'var(--text-mute)', fontStyle: 'italic' }}>
             none — plain float leg
           </span>
         )}
@@ -255,7 +255,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
             </div>
 
             {/* Hint */}
-            <div style={{ fontSize: 10, color: 'var(--text-dim)', minWidth: 160 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-dim)', minWidth: 160 }}>
               {hint}
             </div>
 
@@ -274,7 +274,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
 
       {entries.length > 0 && (
         <div style={{
-          fontSize: 10,
+          fontSize: 12,
           color: 'var(--text-mute)',
           marginTop: 10,
           lineHeight: 1.5,

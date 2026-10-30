@@ -14,7 +14,7 @@ const fmt = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toLocaleStri
 const VA = [['NPV', 'npv'], ['CVA', 'cva'], ['DVA', 'dva'], ['FVA', 'fva'], ['FBA', 'fba'], ['KVA', 'kva'], ['MVA', 'mva'], ['ALL-IN', 'all_in']]
 const COLOR = { npv: 'var(--text-hi)', cva: 'var(--red)', dva: 'var(--blue)', fva: 'var(--red)', fba: 'var(--blue)', kva: 'var(--red)', mva: 'var(--amber)', all_in: 'var(--accent)' }
 
-const lbl = { fontSize: '0.66rem', letterSpacing: '0.12em', color: 'var(--text-dim)', fontFamily: 'var(--mono)' }
+const lbl = { fontSize: '0.8rem', letterSpacing: '0.12em', color: 'var(--text-dim)', fontFamily: 'var(--mono)' }
 const inp = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text-hi)', fontFamily: 'var(--mono)', fontSize: '0.8125rem', padding: '4px 6px', width: '100%', outline: 'none' }
 const secHdr = { fontSize: 11, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--text)', fontFamily: 'var(--sans)', paddingLeft: 10, borderLeft: '3px solid var(--accent)', lineHeight: 1.2, margin: '14px 0 8px' }
 

@@ -100,7 +100,7 @@
 .dh-plot { position:relative; width:100%; flex:1 1 auto; min-height:262px; }
 .dh-plot-empty { display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:0.86rem; text-align:center; padding:0 2rem; }
 .dh-grid-line { stroke:var(--border); stroke-width:1; }
-.dh-ax { fill:var(--text-dim); font-family:var(--mono); font-size:10px; letter-spacing:0.06em; }
+.dh-ax { fill:var(--text-dim); font-family:var(--mono); font-size:12px; letter-spacing:0.06em; }
 .dh-val { fill:var(--text); font-family:var(--mono); font-size:10.5px; }
 .dh-line { fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round; stroke-linecap:round; stroke-dasharray:3000; stroke-dashoffset:3000; animation:dhDraw 1.6s cubic-bezier(.3,.7,.2,1) forwards; }
 @keyframes dhDraw { to { stroke-dashoffset:0 } }

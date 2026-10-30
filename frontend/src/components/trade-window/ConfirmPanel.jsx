@@ -99,7 +99,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
             ⛓ COPY PROOF LINK
           </button>
         )}
-        <span className="tbw-mut" style={{ fontSize: 10.5 }}>
+        <span className="tbw-mut" style={{ fontSize: 12.5 }}>
           VERIFY recomputes the hash from the trade as stored now. PROOF PACK downloads
           everything a counterparty or auditor needs to check it themselves, without Rijeka.
         </span>
@@ -197,7 +197,7 @@ export function ConfirmPanel({
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 10 }}>
             {['BOOK', 'SIGN', 'COUNTERSIGN', 'ANCHOR', 'PROOF LINK'].map((step, i, arr) => (
               <span key={step} style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-                fontSize: 10, letterSpacing: '0.12em', fontFamily: 'var(--mono)', color: 'var(--text-dim)' }}>
+                fontSize: 12, letterSpacing: '0.12em', fontFamily: 'var(--mono)', color: 'var(--text-dim)' }}>
                 <span style={{ padding: '3px 8px', border: '1px solid var(--border-hi)', borderRadius: 2,
                   background: 'var(--panel-2)', color: i === 0 ? 'var(--accent)' : 'var(--text-dim)' }}>{step}</span>
                 {i < arr.length - 1 && <span style={{ color: 'var(--text-mute)' }}>›</span>}
@@ -218,7 +218,7 @@ export function ConfirmPanel({
       <div className="tbw-sec">
         <div className="tbw-lbl">TRADE LIFECYCLE</div>
         <div style={{ padding: '20px 0' }}>
-          <div className="tbw-lbl" style={{ fontSize: 10, marginBottom: 6 }}>
+          <div className="tbw-lbl" style={{ fontSize: 12, marginBottom: 6 }}>
             STATUS
           </div>
           <div style={{
@@ -265,7 +265,7 @@ export function ConfirmPanel({
         gap: 18,
       }}>
         <div>
-          <div className="tbw-lbl" style={{ fontSize: 10, marginBottom: 6 }}>
+          <div className="tbw-lbl" style={{ fontSize: 12, marginBottom: 6 }}>
             CURRENT STATUS
           </div>
           <div style={{

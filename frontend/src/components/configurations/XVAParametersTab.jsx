@@ -63,7 +63,7 @@ function RatesHW1FTab(){
   const mono = { fontFamily:'var(--mono)' };
   const methodSection = (title, color, children) => (
     <div style={{ marginBottom:'12px' }}>
-      <div style={{ fontSize:'0.6875rem', fontWeight:700, letterSpacing:'0.12em',
+      <div style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
         color, ...mono, marginBottom:'5px', paddingBottom:'3px',
         borderBottom:`1px solid ${color}22` }}>{title}</div>
       {children}
@@ -75,7 +75,7 @@ function RatesHW1FTab(){
       <span style={{ fontSize:'0.75rem', color:'var(--text-dim)', ...mono }}>{label}</span>
       <span style={{ fontSize:'0.8125rem', color:'var(--text-hi)', ...mono, lineHeight:1.5 }}>
         {value}
-        {note && <span style={{ color:'var(--text-mute)', fontSize:'0.6875rem', marginLeft:'6px' }}>{note}</span>}
+        {note && <span style={{ color:'var(--text-mute)', fontSize:'0.8rem', marginLeft:'6px' }}>{note}</span>}
       </span>
     </div>
   );
@@ -91,9 +91,9 @@ function RatesHW1FTab(){
             padding:'7px 12px', cursor:'pointer',
             borderBottom: showMethod ? '1px solid var(--border)' : 'none' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'0.6875rem', fontWeight:700, letterSpacing:'0.12em',
+            <span style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
               color:'var(--accent)', ...mono }}>WHAT IS BEING CALIBRATED AND WHY</span>
-            <span style={{ fontSize:'0.6875rem', color:'var(--text-mute)', ...mono }}>
+            <span style={{ fontSize:'0.8rem', color:'var(--text-mute)', ...mono }}>
               Hull-White 1-Factor · Q-measure · ATM swaption basket
             </span>
           </div>
@@ -260,7 +260,7 @@ function RatesHW1FTab(){
       {calibResult&&(
         <div style={{padding:'8px 10px',background:'rgba(13,212,168,0.04)',
           border:'1px solid rgba(13,212,168,0.2)',borderRadius:'2px',marginTop:'6px'}}>
-          <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.10em',
+          <div style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'0.10em',
             color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'5px'}}>
             ✔ CALIBRATION COMPLETE
           </div>
@@ -278,15 +278,15 @@ function RatesHW1FTab(){
             ].map(({l,v,c,note})=>(
               <div key={l} style={{background:'var(--bg)',border:'1px solid var(--border)',
                 borderRadius:'2px',padding:'5px 8px'}}>
-                <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',letterSpacing:'0.08em',
+                <div style={{fontSize:'0.8rem',color:'var(--text-mute)',letterSpacing:'0.08em',
                   fontFamily:'var(--mono)',marginBottom:'2px'}}>{l}</div>
                 <div style={{fontSize:'0.875rem',fontWeight:700,color:c,
                   fontFamily:'var(--mono)'}}>{v}</div>
-                <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',marginTop:'1px'}}>{note}</div>
+                <div style={{fontSize:'0.8rem',color:'var(--text-mute)',marginTop:'1px'}}>{note}</div>
               </div>
             ))}
           </div>
-          <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',marginTop:'6px',
+          <div style={{fontSize:'0.8rem',color:'var(--text-mute)',marginTop:'6px',
             fontFamily:'var(--mono)',lineHeight:1.6}}>
             Stored as master calibration · Auto-loads into all trade XVA simulations (IRS + IR_SWAPTION)
           </div>

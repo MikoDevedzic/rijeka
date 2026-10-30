@@ -49,10 +49,10 @@ function CapVolHeatmap({ atmRows, smileRows, hasData }) {
         gridTemplateColumns: '28px repeat(' + CAP_TENORS.length + ', 1fr)', gap: '2px' }}>
         <div />
         {CAP_TENORS.map(t => (
-          <div key={t} style={{ fontSize: '0.6875rem', color: 'var(--text-dim)',
+          <div key={t} style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
             textAlign: 'center' }}>{t}Y</div>
         ))}
-        <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)',
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
           textAlign: 'right', paddingRight: '3px', display: 'flex',
           alignItems: 'center', justifyContent: 'flex-end' }}>ATM</div>
         {CAP_TENORS.map(t => {
@@ -65,7 +65,7 @@ function CapVolHeatmap({ atmRows, smileRows, hasData }) {
           return (
             <div key={t} style={{ height: '18px', borderRadius: '1px', background: bg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.625rem',
+              fontSize: '0.76rem',
               color: v !== null ? 'var(--accent)' : 'var(--text-dim)',
               fontFamily: "'IBM Plex Mono',var(--mono)" }}>
               {v !== null ? v.toFixed(0) : '—'}
@@ -267,7 +267,7 @@ function CapInstruments() {
                 <div key={t} style={{ background: 'var(--panel)',
                   border: '1px solid var(--border)', borderRadius: '2px',
                   padding: '8px 12px', minWidth: '72px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)',
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
                     fontFamily: "'IBM Plex Mono',var(--mono)", marginBottom: '3px' }}>{t}Y</div>
                   <div style={{ fontSize: '1rem', fontWeight: 700,
                     fontFamily: "'IBM Plex Mono',var(--mono)",
@@ -275,7 +275,7 @@ function CapInstruments() {
                     {row ? fmtVol(row.flat_vol_bp) : '—'}
                   </div>
                   {row && (
-                    <div style={{ fontSize: '0.6875rem', color: 'var(--text-dim)',
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
                       fontFamily: "'IBM Plex Mono',var(--mono)", marginTop: '2px' }}>
                       {row.source}
                     </div>

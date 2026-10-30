@@ -340,7 +340,7 @@ export function TradeFooter({
       <div className="tbw-footer-metrics">
         {metrics.map((m, i) => (
           <div key={i} className="tbw-footer-metric">
-            <div className="tbw-lbl" style={{ fontSize: 9, marginBottom: 2 }}>{m.label}</div>
+            <div className="tbw-lbl" style={{ fontSize: 11, marginBottom: 2 }}>{m.label}</div>
             <div className={`tbw-mono tbw-${m.colorBy || 'default'}`}
                  style={{ fontSize: 13, fontWeight: 500 }}>
               {m.value ?? '—'}
@@ -443,7 +443,7 @@ function CashflowSummaryCard({ label, value, colorKey }) {
       padding: '6px 10px',
     }}>
       <div style={{
-        fontSize: 10,
+        fontSize: 12,
         color: 'var(--text-dim)',
         letterSpacing: '0.08em',
         fontWeight: 600,
@@ -507,7 +507,7 @@ function CapletTable({ result, ccy }) {
                   padding: '5px 8px',
                   textAlign: i < 3 ? 'left' : 'right',
                   color: 'var(--text-dim)',
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: 600,
                   letterSpacing: '0.06em',
                   whiteSpace: 'nowrap',
@@ -603,11 +603,11 @@ function SwapCashflowTables({ result, productKey, state }) {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
             <span style={{
-              fontSize: 10, fontWeight: 700,
+              fontSize: 12, fontWeight: 700,
               letterSpacing: '0.12em', color: 'var(--blue)',
             }}>UNDERLYING FORWARD SWAP CASHFLOWS</span>
             <span style={{
-              fontSize: 10,
+              fontSize: 12,
               padding: '1px 6px',
               borderRadius: 2,
               background: 'rgba(74,154,212,0.1)',
@@ -680,7 +680,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                     leg.leg_type === 'FIXED' ? 'RATE' : 'FWD RATE',
                     'AMOUNT','DF','PV','ZR%'].map((h, i) => (
                     <th key={h} style={{
-                      fontSize: 10,
+                      fontSize: 12,
                       color: 'var(--text-dim)',
                       padding: '4px 6px',
                       textAlign: i < 3 ? 'left' : 'right',

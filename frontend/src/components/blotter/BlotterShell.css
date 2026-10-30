@@ -155,7 +155,7 @@
 .tp-section-lbl { font-size: 0.875rem; font-weight: 700; letter-spacing: 0.14em; color: var(--text-dim); margin-top: 10px; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid var(--border); }
 .tp-section-lbl:first-child { margin-top: 0; }
 .tp-row  { display: flex; justify-content: space-between; align-items: baseline; padding: 3px 0; border-bottom: 1px solid rgba(30,48,69,0.4); }
-.tp-lbl  { font-size: 0.55rem; letter-spacing: 0.08em; color: var(--text-dim); }
+.tp-lbl  { font-size: 0.7rem; letter-spacing: 0.08em; color: var(--text-dim); }
 .tp-val  { font-size: 1rem; font-weight: 600; color: var(--text); text-align: right; }
 
 .tp-action-row { margin-top: 12px; }

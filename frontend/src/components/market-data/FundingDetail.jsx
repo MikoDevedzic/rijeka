@@ -79,7 +79,7 @@ function FundingSpreads({ curve }) {
         <button className="source-btn disabled" title="On the roadmap">CDS-Implied</button>
         <button className="source-btn disabled" title="On the roadmap">Bond Market</button>
         <button className="source-btn disabled" title="Custom API">Treasury System</button>
-        <span style={{ fontSize: '8px', color: 'var(--text-mute)', marginLeft: 'auto' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-mute)', marginLeft: 'auto' }}>
           Last updated: 2025-01-15 17:00 EOD
         </span>
       </div>

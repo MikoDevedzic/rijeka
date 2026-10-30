@@ -1,10 +1,10 @@
 /* Trade card inside a chat room */
 .tc { border: 1px solid rgba(74,154,212,0.45); border-radius: 3px; background: var(--panel-2); min-width: min(420px, 100%); max-width: 560px; }
 .tc-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: rgba(74,154,212,0.06); }
-.tc-kind { font-family: 'IBM Plex Mono', var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.12em; color: var(--blue); }
+.tc-kind { font-family: 'IBM Plex Mono', var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: var(--blue); }
 .tc-ref  { font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; color: var(--text); }
 .tc-chip {
-  margin-left: auto; font-family: 'IBM Plex Mono', var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+  margin-left: auto; font-family: 'IBM Plex Mono', var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
   border: 1px solid var(--border-hi); border-radius: 2px; padding: 1px 6px; color: var(--text-dim); white-space: nowrap;
 }
 .tc-chip.ok      { color: var(--accent); border-color: rgba(13,212,168,0.5); }

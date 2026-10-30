@@ -251,11 +251,11 @@ const CalibProofPanel = ({ calib }) => {
           background:'rgba(255,255,255,0.02)',border:'1px solid var(--border)',
           marginBottom: open ? '8px' : '0'}}
       >
-        <span style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'.10em',
+        <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.10em',
           color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
           {open ? '▼' : '►'} CALIBRATION PROOF
         </span>
-        <span style={{marginLeft:'auto',fontSize:'0.6875rem',color: calib.fit_rmse_bp < 1 ? 'var(--accent)' : calib.fit_rmse_bp < 3 ? 'var(--amber)' : 'var(--red)',
+        <span style={{marginLeft:'auto',fontSize:'0.8rem',color: calib.fit_rmse_bp < 1 ? 'var(--accent)' : calib.fit_rmse_bp < 3 ? 'var(--amber)' : 'var(--red)',
           fontFamily:'var(--mono)',fontWeight:700}}>
           RMSE {calib.fit_rmse_bp?.toFixed(2)}bp
         </span>
@@ -265,7 +265,7 @@ const CalibProofPanel = ({ calib }) => {
           {/* Chart */}
           <canvas ref={canvasRef} style={{width:'100%',display:'block',marginBottom:'8px'}}/>
           {/* Table */}
-          <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed',fontFamily:'var(--mono)',fontSize:'0.6875rem'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed',fontFamily:'var(--mono)',fontSize:'0.8rem'}}>
             <thead>
               <tr style={{borderBottom:'1px solid var(--border)'}}>
                 {['INSTRUMENT','EXPIRY','TENOR','MKT VOL','MDL VOL','ERROR'].map(h => (
@@ -293,10 +293,10 @@ const CalibProofPanel = ({ calib }) => {
           </table>
           {/* Footer */}
           <div style={{display:'flex',gap:'12px',marginTop:'6px',paddingTop:'6px',borderTop:'1px solid var(--border)'}}>
-            <span style={{fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
+            <span style={{fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
               Basket: {calib.basket_size} instruments · 5Y-tenor column
             </span>
-            <span style={{marginLeft:'auto',fontSize:'0.6875rem',fontFamily:'var(--mono)',
+            <span style={{marginLeft:'auto',fontSize:'0.8rem',fontFamily:'var(--mono)',
               color: calib.converged ? 'var(--accent)' : 'var(--red)'}}>
               {calib.converged ? '✔ CONVERGED' : '⚠ NOT CONVERGED'} · {calib.iterations} iter
             </span>
@@ -619,7 +619,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                 ) : (
                   <div style={{ ...inp, textAlign:'right', color:'var(--text-dim)' }}>{val}</div>
                 )}
-                {calib && set && <span style={{ fontSize:'0.6875rem', color:'var(--accent)', whiteSpace:'nowrap', background:'rgba(13,212,168,0.08)', border:'1px solid rgba(13,212,168,0.2)', padding:'1px 3px', borderRadius:'2px' }}>CALIB</span>}
+                {calib && set && <span style={{ fontSize:'0.8rem', color:'var(--accent)', whiteSpace:'nowrap', background:'rgba(13,212,168,0.08)', border:'1px solid rgba(13,212,168,0.2)', padding:'1px 3px', borderRadius:'2px' }}>CALIB</span>}
               </div>
             </div>
           ))}
@@ -672,7 +672,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'3px',marginBottom:'6px'}}>
           {[['UNCOLLATERALISED','NO CSA','var(--red)'],['BILATERAL','BILATERAL','var(--blue)'],['ON_CHAIN','ON-CHAIN','var(--accent)']].map(([k,label,c])=>(
             <button key={k} onClick={()=>{ setSettlement(k); setImExchanged(k!=='UNCOLLATERALISED') }}
-              style={{padding:'5px 2px',fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',
+              style={{padding:'5px 2px',fontSize:'0.8rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',
                 fontFamily:'var(--mono)',
                 border:settlement===k?'1px solid '+c:'1px solid var(--border)',
                 background:settlement===k?c+'14':'transparent',color:settlement===k?c:'var(--text-mute)'}}>
@@ -680,7 +680,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
             </button>
           ))}
         </div>
-        <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',lineHeight:1.5,marginBottom:'6px',fontFamily:'var(--sans)'}}>
+        <div style={{fontSize:'0.8rem',color:'var(--text-mute)',lineHeight:1.5,marginBottom:'6px',fontFamily:'var(--sans)'}}>
           {settlement==='UNCOLLATERALISED' && 'No variation margin — full MtM at risk.'}
           {settlement==='BILATERAL' && 'Daily VM under CSA · 10bd MPoR floor · SIMM IM exchanged.'}
           {settlement==='ON_CHAIN' && 'Atomic settlement · continuous VM · zero TH/MTA · 5bd MPoR · SIMM IM × 0.707.'}
@@ -737,7 +737,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
             <option value='imm'>IMM</option>
           </select>
         </div>
-        <div style={{marginTop:'8px',fontSize:'0.6875rem',color:'var(--text-mute)',lineHeight:1.5,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'2px',padding:'5px 7px'}}>
+        <div style={{marginTop:'8px',fontSize:'0.8rem',color:'var(--text-mute)',lineHeight:1.5,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'2px',padding:'5px 7px'}}>
           MVA = −Σ IM(t) × FTP(t) × dt × DF(t) · IM from ISDA SIMM IR delta (RW × IR01), amortising to maturity
         </div>
       </div>
@@ -751,19 +751,19 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
             borderBottom:'1px solid rgba(74,154,212,0.15)', padding:'8px 12px'}}>
             <div style={{display:'flex', alignItems:'center', gap:'10px',
               marginBottom:'5px', flexWrap:'wrap'}}>
-              <span style={{fontSize:'0.6875rem', fontWeight:700, letterSpacing:'0.10em',
+              <span style={{fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.10em',
                 color:'var(--blue)', fontFamily:'var(--mono)'}}>
                 SWAPTION XVA — ANDERSEN-PITERBARG 2-PHASE EE
               </span>
               {swaptionExpiry && swaptionTenor && (
-                <span style={{fontSize:'0.6875rem', padding:'1px 6px', borderRadius:'2px',
+                <span style={{fontSize:'0.8rem', padding:'1px 6px', borderRadius:'2px',
                   background:'rgba(74,154,212,0.1)', border:'1px solid rgba(74,154,212,0.25)',
                   color:'var(--blue)', fontFamily:'var(--mono)'}}>
                   {swaptionExpiry}×{swaptionTenor} · {(direction||'PAY')==='PAY'?'Payer':'Receiver'}
                 </span>
               )}
               {swaptionVol && (
-                <span style={{fontSize:'0.6875rem', color:'var(--text-mute)',
+                <span style={{fontSize:'0.8rem', color:'var(--text-mute)',
                   fontFamily:'var(--mono)'}}>
                   σ_N = {swaptionVol}bp
                   {swaptionResult?.sabr_vol_bp ? ` (SABR at K=${((swaptionResult.forward_rate||0.036)*100).toFixed(3)}%)` : ' (ATM)'}
@@ -774,7 +774,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
               gap:'6px', fontSize:'0.75rem', fontFamily:'var(--mono)'}}>
               <div style={{background:'rgba(13,212,168,0.04)', border:'1px solid rgba(13,212,168,0.12)',
                 borderRadius:'2px', padding:'6px 8px'}}>
-                <div style={{color:'var(--accent)', fontWeight:700, marginBottom:'3px', fontSize:'0.6875rem',
+                <div style={{color:'var(--accent)', fontWeight:700, marginBottom:'3px', fontSize:'0.8rem',
                   letterSpacing:'0.08em'}}>
                   PHASE 1 — PRE-EXPIRY (0 → {swaptionExpiry||'T_exp'})
                 </div>
@@ -788,7 +788,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
               </div>
               <div style={{background:'rgba(74,154,212,0.04)', border:'1px solid rgba(74,154,212,0.12)',
                 borderRadius:'2px', padding:'6px 8px'}}>
-                <div style={{color:'var(--blue)', fontWeight:700, marginBottom:'3px', fontSize:'0.6875rem',
+                <div style={{color:'var(--blue)', fontWeight:700, marginBottom:'3px', fontSize:'0.8rem',
                   letterSpacing:'0.08em'}}>
                   PHASE 2 — POST-EXPIRY ({swaptionExpiry||'T_exp'} → {swaptionExpiry||'T_exp'}+{swaptionTenor||'tenor'})
                 </div>
@@ -824,7 +824,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
             </div>
           )}
           {simResult && (
-            <div style={{position:'absolute',bottom:'6px',right:'12px',fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
+            <div style={{position:'absolute',bottom:'6px',right:'12px',fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
               {simResult.n_paths.toLocaleString()} paths · HW1F · a={simResult.params.a.toFixed(4)} σ={simResult.params.sigma_bp.toFixed(1)}bp
               {simResult.csa && (
                 <span style={{color:simResult.csa.collateralised?'var(--accent)':'var(--red)', marginLeft:'8px'}}>
@@ -858,7 +858,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                   onMouseLeave={()=>setHighlightCurve(null)}
                   style={{background:'var(--bg)',padding:'8px 8px 6px',cursor:'pointer',
                     borderTop:isExp?'2px solid '+def.color:'2px solid transparent'}}>
-                  <div style={{fontSize:'0.6875rem',fontWeight:700,letterSpacing:'0.10em',color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px'}}>{def.label}</div>
+                  <div style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'0.10em',color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px'}}>{def.label}</div>
                   <div style={{fontSize:'0.9375rem',fontWeight:700,color:val!=null?def.color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'3px'}}>
                     {key==='npv' ? fmtDollar(val)
                      : key==='all_in' && xva ? fmtDollar(xva.all_in)
@@ -866,11 +866,11 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                   </div>
                   <div style={{borderTop:'1px solid var(--border)',paddingTop:'3px'}}>
                     {key==='npv' && <div style={{fontSize:'0.75rem',fontWeight:600,color:'var(--text-dim)',fontFamily:'var(--mono)'}}>{parRateKnown?parRate.toFixed(3)+'%':'—'}</div>}
-                    {key==='npv' && <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>par rate</div>}
+                    {key==='npv' && <div style={{fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>par rate</div>}
                     {key==='all_in' && <div style={{fontSize:'0.75rem',fontWeight:700,color:'var(--accent)',fontFamily:'var(--mono)'}}>{parRateKnown?allInRate.toFixed(3)+'%':'—'}</div>}
-                    {key==='all_in' && <div style={{fontSize:'0.6875rem',color:'var(--accent)',fontFamily:'var(--sans)'}}>all-in rate</div>}
+                    {key==='all_in' && <div style={{fontSize:'0.8rem',color:'var(--accent)',fontFamily:'var(--sans)'}}>all-in rate</div>}
                     {bp!=null && <div style={{fontSize:'0.75rem',fontWeight:600,color:def.color+'AA',fontFamily:'var(--mono)'}}>{parseFloat(bp)>=0?'+':''}{bp}bp</div>}
-                    {bp!=null && <div style={{fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>bp on rate</div>}
+                    {bp!=null && <div style={{fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>bp on rate</div>}
                   </div>
                 </div>
               )
@@ -893,15 +893,15 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                   const better = key==='all_in' ? (delta>0) : (delta!=null && Math.abs(oc) < Math.abs(cur))
                   return (
                     <div key={key} style={{background:'var(--bg-deep)',padding:'6px 8px'}}>
-                      <div style={{fontSize:'0.6875rem',letterSpacing:'0.10em',color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'2px'}}>{key==='npv'?'ON-CHAIN':''}</div>
+                      <div style={{fontSize:'0.8rem',letterSpacing:'0.10em',color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'2px'}}>{key==='npv'?'ON-CHAIN':''}</div>
                       <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'var(--accent)':'var(--text-mute)',fontFamily:'var(--mono)'}}>{fmtDollar(oc)}</div>
                       {pct!=null && key!=='all_in' && (
-                        <div style={{fontSize:'0.6875rem',color:better?'var(--accent)':'var(--red)',fontFamily:'var(--mono)'}}>
+                        <div style={{fontSize:'0.8rem',color:better?'var(--accent)':'var(--red)',fontFamily:'var(--mono)'}}>
                           {delta>=0?'+':''}{fmtDollar(delta)} · {pct>=0?'+':''}{pct.toFixed(0)}%
                         </div>
                       )}
                       {key==='all_in' && delta!=null && (
-                        <div style={{fontSize:'0.6875rem',color:delta>=0?'var(--accent)':'var(--red)',fontFamily:'var(--mono)'}}>
+                        <div style={{fontSize:'0.8rem',color:delta>=0?'var(--accent)':'var(--red)',fontFamily:'var(--mono)'}}>
                           {delta>=0?'+':''}{fmtDollar(delta)} vs {simResult.csa?.preset?.replace('_','-')}
                         </div>
                       )}
@@ -909,12 +909,12 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                   )
                 })}
               </div>
-              <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'var(--accent-dim)',fontFamily:'var(--mono)',background:'var(--bg)'}}>
+              <div style={{padding:'4px 14px',fontSize:'0.8rem',color:'var(--accent-dim)',fontFamily:'var(--mono)',background:'var(--bg)'}}>
                 Same {compareResult.n_paths?.toLocaleString()} paths, same seed · ON-CHAIN = continuous VM · {compareResult.csa?.mpor_days}bd MPoR · SIMM IM × {compareResult.csa?.simm_mpor_scale?.toFixed(3)} · IM {fmtDollar(compareResult.capital?.im_0)} vs {fmtDollar(simResult.capital?.im_0)}
               </div>
             </div>
           )}
-          <div style={{padding:'4px 14px',fontSize:'0.6875rem',color:'var(--text-mute)',fontFamily:'var(--mono)',background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
+          <div style={{padding:'4px 14px',fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--mono)',background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
             ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA~ · Click any VA to expand · bp = VA / DV01
           </div>
         </div>

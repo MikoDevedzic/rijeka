@@ -10,7 +10,7 @@
 .ms-launcher:hover { box-shadow: 0 0 28px rgba(240,120,32,0.45); transform: scale(1.05); }
 .ms-launcher-badge {
   position: absolute; top: -4px; right: -4px; background: var(--accent); color: #000;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 10px; font-weight: 700;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; font-weight: 700;
   min-width: 19px; height: 19px; border-radius: 10px; padding: 0 5px;
   display: inline-flex; align-items: center; justify-content: center;
 }
@@ -76,7 +76,7 @@
 .ms-link.danger:hover { color: var(--red); }
 .ms-link:disabled { opacity: 0.4; }
 .ms-tag {
-  font-family: 'IBM Plex Mono', var(--mono); font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
+  font-family: 'IBM Plex Mono', var(--mono); font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
   border: 1px solid; border-radius: 2px; padding: 1px 5px; flex-shrink: 0; vertical-align: middle;
 }
 .ms-tag.private    { color: #f07820; border-color: rgba(240,120,32,0.5); }
@@ -85,7 +85,7 @@
 .ms-tag.compliance { color: var(--amber); border-color: rgba(240,160,32,0.5); }
 .ms-tag.invite     { color: var(--amber); border-color: rgba(240,160,32,0.5); }
 .ms-badge {
-  background: var(--accent); color: #000; font-size: 10px; font-weight: 700; flex-shrink: 0;
+  background: var(--accent); color: #000; font-size: 12px; font-weight: 700; flex-shrink: 0;
   min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px;
   display: inline-flex; align-items: center; justify-content: center;
 }
@@ -143,7 +143,7 @@
 .ms-system a { color: var(--accent); }
 .ms-meta { font-family: 'IBM Plex Mono', var(--mono); font-size: 10.5px; color: var(--text-dim); word-break: break-word; }
 .ms-sources { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
-.ms-sources > span { text-transform: uppercase; letter-spacing: 0.1em; font-size: 9px; font-weight: 700; }
+.ms-sources > span { text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; font-weight: 700; }
 .ms-sources a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted rgba(13,212,168,0.4); }
 .ms-deeper {
   align-self: flex-start; background: none; cursor: pointer; border: 1px solid rgba(240,120,32,0.3); border-radius: 2px;
@@ -197,7 +197,7 @@
   font-family: 'IBM Plex Mono', var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
 }
 .ms-seg button.on { background: var(--panel-3); color: var(--text); }
-.ms-label { display: flex; flex-direction: column; gap: 5px; font-family: 'IBM Plex Mono', var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--text-dim); }
+.ms-label { display: flex; flex-direction: column; gap: 5px; font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; letter-spacing: 0.08em; color: var(--text-dim); }
 .ms-label .ms-sub { font-family: 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: 0; }
 .ms-label input, .ms-label select {
   background: var(--bg); border: 1px solid var(--border-hi); color: var(--text); border-radius: 2px;
