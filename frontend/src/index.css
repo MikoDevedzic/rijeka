@@ -79,16 +79,19 @@
 /* ── Reset ──────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-size: clamp(16px, 0.85vw, 18px); }   /* 16px to 1880px wide, 17px at 2000px, 18px from 2120px: dense pages stay dense on laptops and open up on a trading monitor */
+/* The rem base: every label, caption and control size in the app is in rem. 14px on a laptop,
+   16px from 2130px wide, so dense pages stay dense where space is short and open up on a
+   trading monitor. Body text is set in px below and does not move. */
+html { font-size: clamp(14px, 0.75vw, 16px); }
 
 html, body, #root {
   height: 100%;
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 13px;
   -webkit-font-smoothing: antialiased;
 }
+body { font-size: 13px; }
 /* a faint cold light from the top-left: enough to stop empty areas reading as a void */
 body {
   background:
