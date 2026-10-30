@@ -13,6 +13,9 @@ import { ConfirmPanel } from '../trade-window/ConfirmPanel'
 import FxCryptoPanel from '../trade-window/FxCryptoPanel'
 import { getAttestation, verifyTradeOnChain, getProofPack } from '../trade-window/booking'
 
+// The curve payload for /price/preview: today's stored quotes unless a shocked set is given.
+const curveObj = (curveId, quotes = []) => ({ curve_id: curveId, quotes, interp_method: 'LogLinearDiscount' })
+
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
 const ASSET_CLASSES = ['RATES','FX','CRYPTO','CREDIT','EQUITY','COMMODITY']
@@ -4102,11 +4105,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 <span style={{fontSize:'11px',color:'var(--amber)',fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'0.04em'}}>{struct||'VANILLA'}</span>
               </div>
               {xvaResult?.xva && <XvaFooterRate xva={xvaResult.xva} notionalRef={notionalRef} rateRef={rateRef} effDate={effDate} matDate={matDate} parRate={parRate}/>}
-              {activeTab==='scenario' ? (
-                <button style={{marginLeft:'auto',background:anyShift&&!confirmed?'rgba(13,212,168,0.1)':'rgba(255,255,255,0.04)',border:anyShift&&!confirmed?'1px solid rgba(13,212,168,0.3)':'1px solid var(--border)',color:anyShift&&!confirmed?'var(--accent)':'var(--text-dim)',borderRadius:'2px',padding:'3px 14px',fontSize:'11px',letterSpacing:'0.07em',cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',fontFamily:"'IBM Plex Sans',sans-serif"}} onClick={handleConfirm} disabled={!anyShift||confirmed||scenarioPricing}>
-                  {scenarioPricing?'REPRICING...':(anyShift&&!confirmed)?'CONFIRM SHAPE →':'SHAPE CONFIRMED'}
-                </button>
-              ) : (
+              {activeTab==='scenario' ? null : (
                 <>
                 <button style={{marginLeft:'auto',background:'rgba(240,160,32,0.08)',border:'1px solid rgba(240,160,32,0.4)',color:'var(--amber)',borderRadius:'2px',padding:'5px 18px',fontSize:'12px',fontWeight:700,letterSpacing:'0.08em',cursor:(pricing||swaptionPricing||capPricing)?'not-allowed':'pointer',opacity:(pricing||swaptionPricing||capPricing)?0.5:1,fontFamily:"'IBM Plex Mono',monospace"}}
                   onClick={isCurrency ? () => fxRef.current?.price() : inst==='IR_SWAPTION' ? handlePriceSwaption : (inst==='INTEREST_RATE_CAP'||inst==='INTEREST_RATE_FLOOR'||inst==='INTEREST_RATE_COLLAR') ? handleCapFloorPrice : handlePrice}

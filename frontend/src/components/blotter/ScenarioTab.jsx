@@ -12,6 +12,9 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 
+// The curve payload for /price/preview: today's stored quotes unless a shocked set is given.
+const curveObj = (curveId, quotes = []) => ({ curve_id: curveId, quotes, interp_method: 'LogLinearDiscount' })
+
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
 const CCY_CURVE = {
