@@ -4,6 +4,7 @@ GET  /api/risk/trend                    stored daily VaR / IR01 / NPV / breaches
 GET  /api/risk/limits · POST · DELETE   the firm's limits (risk manager or admin writes)
 GET  /api/risk/metrics                  metric keys a limit can be set on, from the caller's book
 GET  /api/risk/settings · PUT           the firm's VaR settings (risk manager or admin writes)
+GET  /api/risk/backtest?measure=&days=  yesterday's VaR against today's P&L: exceptions, traffic light, Kupiec
 GET  /api/risk/history                  how much risk-factor history exists
 POST /api/risk/history/backfill         cron or admin: start fetching and storing public history (years=) in the background
 POST /api/risk/daily/tick               cron: compute and store today's report for every account
@@ -79,6 +80,15 @@ def risk_report(date_: Optional[str] = Query(default=None, alias="date"), db: Se
     rep["can_write"] = _can_write(db, user)
     rep["role"] = _role(db, user)
     return rep
+
+
+@router.get("/backtest")
+def risk_backtest(measure: str = Query(default="clean"), days: int = Query(default=250, ge=20, le=1000),
+                  db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    from risk import backtest as B
+    if measure not in B.MEASURES:
+        raise HTTPException(status_code=422, detail=f"measure must be one of {B.MEASURES}")
+    return B.run(db, user["sub"], measure=measure, days=days)
 
 
 @router.get("/trend")

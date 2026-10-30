@@ -34,11 +34,19 @@ Named scenarios by full revaluation: every live trade is repriced on the shifted
 
 A limit names a metric, a scope and a value. Metrics: `VAR_99_1D`, `VAR_95_1D`, `ES_99_1D`, `VAR_H`; `IR01`, `IR01:<curve>`, `KR01:<curve>:<bucket>`; `SPOT01:<asset>`; `NPV`; `STRESS:<scenario>`. Scope: the book total, a desk or a book (VaR, ES and stress are book-level in this foundation). Utilisation is |value| / limit; a warning at the configured level, a breach at 100 %. Limits are the firm's, set by the `risk` or `admin` role or a firm admin, and are evaluated on every member's book; breaches reach the home inbox after the daily run.
 
+## Backtesting
+
+Every stored P&L date is paired with the VaR that was standing the evening before (the latest stored risk report dated before it). An exception is a day whose loss exceeded that VaR. Three P&L measures can be tested: **clean** (the market P&L of the positions held at the previous close, which is what the VaR claims to cover), **hypothetical** (clean without carry) and **dirty** (everything, trading included). Over the window the exception count is read two ways:
+
+- the Basel traffic light: the cumulative binomial probability of that many exceptions or fewer at the stated confidence, green below 95 %, yellow to 99.99 %, red beyond, which at 250 days and 99 % is the familiar 0-4 / 5-9 / 10+;
+- Kupiec's proportion-of-failures test: LR = −2 ln[(1−p)^(n−x) p^x] + 2 ln[(1−x/n)^(n−x) (x/n)^x] against a chi-square with one degree of freedom, two-sided, so far too few exceptions is also a finding.
+
+The 95 % VaR and the ladder VaR are backtested alongside the headline. Nothing new is stored; the test reads the two daily series (`pnl_daily`, `risk_daily`) and needs sixty paired days before it says anything and 250 to be read the usual way. `GET /api/risk/backtest?measure=clean&days=250`.
+
 ## Roadmap for VaR
 
 - Parametric (variance-covariance) VaR from the factor covariance, with the same ladder; a cross-check, not a replacement.
 - Monte Carlo VaR on the calibrated HW1F and lognormal spot models the XVA engine already uses.
 - Filtered historical simulation (EWMA / GARCH volatility scaling) so a calm window does not understate a stressed present.
 - Stressed VaR on a chosen crisis window, and expected shortfall at 97.5 % with liquidity horizons in the FRTB sense.
-- Backtesting: daily clean and dirty P&L against VaR, exception counts and the traffic-light zone.
 - Vega and the vol surfaces as risk factors.

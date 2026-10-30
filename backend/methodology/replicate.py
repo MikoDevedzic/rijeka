@@ -102,7 +102,7 @@ PRODUCTS = [
      "formula": "Sequential full revaluation: rows sum to the total by construction; P&L after XVA = clean P&L − Σ_netted Δ(CVA, DVA, FVA, FBA[, KVA, MVA])",
      "replication": "doc", "doc": "/docs/pnl_attribution.md"},
     {"id": "market_risk", "name": "Market risk: ladder, VaR, stress, limits", "group": "Risk", "section": None,
-     "default": "Key-rate IR01 by bump-and-reprice → historical simulation VaR by full revaluation (every trade repriced on each of 2y of observed days; the ladder VaR alongside as the linear comparison) → named stress by full revaluation → limits on any number",
+     "default": "Key-rate IR01 by bump-and-reprice → historical simulation VaR by full revaluation (every trade repriced on each of 2y of observed days; the ladder VaR alongside as the linear comparison) → named stress by full revaluation → limits on any number → backtest: yesterday's VaR against today's clean P&L, Basel traffic light, Kupiec",
      "formula": "P&L_i = Σ_trade [NPV(M + Δ_i) − NPV(M)]·fx; linear: Σ KR01[c,b]·Δ_i[c,b] + Σ spot01[a]·r_i[a]; VaR_q = empirical loss quantile; ES = mean loss beyond; √h horizon",
      "replication": "doc", "doc": "/docs/market_risk.md"},
     {"id": "ccr", "name": "Counterparty credit: netting, real-world PFE, credit limits", "group": "Counterparty risk", "section": None,

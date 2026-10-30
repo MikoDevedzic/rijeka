@@ -39,6 +39,9 @@ export default function RiskPage() {
     catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
   useEffect(() => { load(null) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  const [bt, setBt] = useState(null)
+  const [measure, setMeasure] = useState('clean')
+  useEffect(() => { api(`/api/risk/backtest?measure=${measure}`).then(setBt).catch(() => setBt(null)) }, [measure])
   const v = rep?.var || {}, lad = rep?.ladder || {}
   const worst = (rep?.stress || []).reduce((m, s) => s.pnl_usd < (m?.pnl_usd ?? 0) ? s : m, null)
   const breaches = rep?.breaches || 0, warnings = rep?.warnings || 0
@@ -111,6 +114,12 @@ export default function RiskPage() {
           </section>
         </div>
 
+        <section className="pnl-panel">
+          <header><span>BACKTEST · YESTERDAY'S VAR AGAINST TODAY'S P&amp;L</span>
+            <span className="pnl-sub rk-measure">{['clean', 'hypothetical', 'dirty'].map(m => <button key={m} className={`rk-seg${measure === m ? ' on' : ''}`} onClick={() => setMeasure(m)}>{m.toUpperCase()}</button>)}</span></header>
+          <Backtest bt={bt} />
+        </section>
+
         <div className="pnl-grid">
           <section className="pnl-panel">
             <header><span>STRESS · FULL REVALUATION</span><span className="pnl-sub">loss negative</span></header>
@@ -127,6 +136,45 @@ export default function RiskPage() {
         </div>
       </>)}
     </div>
+  )
+}
+
+function Backtest({ bt }) {
+  const ref = useRef(null); const [W, setW] = useState(0)
+  useEffect(() => { if (!ref.current) return; const ro = new ResizeObserver(([e]) => setW(e.contentRect.width)); ro.observe(ref.current); return () => ro.disconnect() }, [bt])
+  if (!bt) return <div className="pnl-empty">Loading the backtest…</div>
+  const h = bt.headline || {}, s = bt.secondary || {}, ser = bt.series || []
+  if (!ser.length) return <div className="pnl-empty">No paired days yet: a day's P&amp;L is tested against the VaR stored the evening before, so the first pair arrives after two daily batches.</div>
+  const zoneTone = (z) => z === 'GREEN' ? 'ok' : z === 'YELLOW' ? 'amber' : z === 'RED' ? 'red' : ''
+  const H = 140, pad = 14
+  const lim = Math.max(1, ...ser.flatMap(r => [Math.abs(r.pnl || 0), r.var99 || 0, r.var95 || 0]))
+  const y = (x) => H / 2 - (x / lim) * (H / 2 - pad)
+  const n = ser.length, bw = W / Math.max(n, 1)
+  const path = (key) => ser.map((r, i) => `${i === 0 ? 'M' : 'L'}${i * bw + bw / 2},${y(-(r[key] || 0))}`).join(' ')
+  const exc = new Set((h.exception_days || []).map(e => e.date))
+  return (
+    <>
+      <div className="pnl-cards" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
+        <Card label={`EXCEPTIONS · ${pct(h.confidence)}`} big={`${h.exceptions ?? '—'} / ${h.observations ?? '—'}`} sub={`expected ${fmt(h.expected, 1)} · ${bt.measure} P&L`} warn={h.zone === 'RED'} />
+        <div className="pnl-card"><span className="pnl-kl">TRAFFIC LIGHT</span><b className="pnl-big rk-big"><span className={`pnl-chip ${zoneTone(h.zone)}`}>{h.zone || '—'}</span></b><span className="rk-sub">{h.cumulative != null ? `cumulative ${(h.cumulative * 100).toFixed(1)}%` : 'no pairs'}</span></div>
+        <Card label="KUPIEC POF" big={h.kupiec?.p_value != null ? `p ${h.kupiec.p_value.toFixed(3)}` : '—'} sub={h.kupiec?.lr != null ? `LR ${h.kupiec.lr.toFixed(2)} · ${h.kupiec.reject ? 'rejected at 5%' : 'not rejected'}` : ''} warn={!!h.kupiec?.reject && h.exceptions > h.expected} />
+        <Card label={`EXCEPTIONS · ${pct(s.confidence)}`} big={`${s.exceptions ?? '—'} / ${s.observations ?? '—'}`} sub={`expected ${fmt(s.expected, 1)} · ${s.zone || ''}`} />
+        <Card label="WINDOW" big={`${bt.observations}d`} sub={`${fmtD(bt.from)} → ${fmtD(bt.to)}`} note={h.worst_ratio != null ? `worst loss ${(h.worst_ratio * 100).toFixed(0)}% of VaR` : ''} warn={!h.enough} />
+      </div>
+      <div ref={ref} className="rk-hist">{W > 0 && <svg width={W} height={H}>
+        <line x1={0} x2={W} y1={y(0)} y2={y(0)} className="rk-zero" />
+        {ser.map((r, i) => <rect key={r.date} x={i * bw + 0.5} width={Math.max(1, bw - 1)} y={Math.min(y(0), y(r.pnl || 0))} height={Math.abs(y(r.pnl || 0) - y(0))} className={`rk-bin ${exc.has(r.date) ? 'exc' : (r.pnl || 0) < 0 ? 'neg' : 'pos'}`}><title>{`${fmtD(r.date)} · P&L ${sgn(r.pnl)} · VaR ${fmt(r.var99)}`}</title></rect>)}
+        <path d={path('var99')} className="rk-varline" fill="none" />
+        <path d={path('var95')} className="rk-varline2" fill="none" />
+        <text x={2} y={y(0) - 3} className="pnl-ax">0</text><text x={W - 2} y={H - 3} className="pnl-ax" textAnchor="end">−VaR {pct(h.confidence)} dashed · {pct(s.confidence)} dotted</text>
+      </svg>}</div>
+      {(h.exception_days || []).length > 0 && <>
+        <div className="rk-h">EXCEPTION DAYS</div>
+        {h.exception_days.slice(-8).reverse().map(e => <div key={e.date} className="rk-wd"><span>{fmtD(e.date)}</span><span>VaR {fmt(e.var)}</span><b className="neg">{sgn(e.pnl)} · {(e.ratio * 100).toFixed(0)}% of VaR</b></div>)}
+      </>}
+      {bt.note && <div className="pnl-foot"><em>{bt.note}</em></div>}
+      <div className="pnl-foot">Clean P&amp;L is the market P&amp;L of the positions held at the previous close, which is what the VaR claims to cover; hypothetical strips carry; dirty includes trading. The traffic light is the cumulative binomial probability of the exception count (green below 95%, yellow to 99.99%, red beyond: at 250 days and 99% the familiar 0-4, 5-9, 10+). Kupiec's test is two-sided: far too few exceptions is also a finding.</div>
+    </>
   )
 }
 
