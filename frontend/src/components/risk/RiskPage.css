@@ -32,7 +32,7 @@
 @media (max-width:1100px) { .rk-cards { grid-template-columns:1fr 1fr; } .rk-row, .rk-lim, .rk-srow { grid-template-columns:1fr 7rem 7rem; } }
 
 /* the switch under RISK */
-.rk-switch { display:inline-flex; border:1px solid var(--border-hi); border-radius:3px; overflow:hidden; margin:0 0 0.4rem; align-self:flex-start; }
+.rk-switch { display:inline-flex; flex:none; border:1px solid var(--border-hi); border-radius:3px; overflow:hidden; margin:0 0 0.4rem; align-self:flex-start; }
 .rk-seg { font-family:var(--mono); font-size:0.78rem; font-weight:700; letter-spacing:0.16em; color:var(--text-dim); text-decoration:none; padding:0.55rem 1.3rem; background:transparent; border-right:1px solid var(--border-hi); transition:color .12s, background .12s; }
 .rk-seg:last-child { border-right:none; }
 .rk-seg:hover { color:var(--text); background:rgba(255,255,255,0.03); }
