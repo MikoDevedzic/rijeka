@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import ErrorBoundary    from './components/ErrorBoundary'
+import { hit } from './lib/usage'
 import { useAuthStore } from './store/useAuthStore'
 import AuthGuard        from './components/auth/AuthGuard'
 import LoginPage        from './components/auth/LoginPage'
@@ -133,8 +134,10 @@ function PersistentBookingWindow() {
 }
 
 // A routed page that throws shows the error card; navigating elsewhere heals it.
+// It also counts the view: one beacon per route change (lib/usage.js).
 function PageBoundary({ children }) {
   const { pathname } = useLocation()
+  useEffect(() => { hit('view', pathname) }, [pathname])
   return <ErrorBoundary scope="page" resetKey={pathname}>{children}</ErrorBoundary>
 }
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore, previewTraderId } from '../../store/useAuthStore'
 import { supabase } from '../../lib/supabase'
+import { hit } from '../../lib/usage'
 import AuthScene, { Field, SubmitBtn } from './AuthScene'
 
 export default function SignupPage() {
@@ -37,6 +38,7 @@ export default function SignupPage() {
     if (password !== confirm) { setError('Passwords do not match.'); return }
     if (password.length < 8)  { setError('Password must be at least 8 characters.'); return }
     setBtnState('loading')
+    hit('signup_started')
     const { data, error: err } = await signUp(email, password)
     if (err) {
       setBtnState('idle')
