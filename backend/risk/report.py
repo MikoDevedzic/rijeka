@@ -19,6 +19,7 @@ from risk import limits as L
 from risk import sensitivities as S
 from risk import stress as ST
 from risk import var as V
+from risk import var_full as VF
 
 log = logging.getLogger("rijeka.risk")
 
@@ -33,29 +34,55 @@ def firm_of(db: Session, uid: str):
     return fm.firm_id if fm else None
 
 
+METHOD_DEFAULTS = {"var_method": "FULL_REVAL", "ccr_sampling": "HISTORICAL", "ccr_paths": 2000, "ccr_drift": "zero"}
+VAR_METHODS = ("FULL_REVAL", "LADDER")
+CCR_SAMPLINGS = ("HISTORICAL", "GAUSSIAN")
+_BASE_COLS = "confidence, secondary_confidence, horizon_days, window_days, min_observations, updated_by_name, updated_at"
+_METHOD_COLS = "var_method, ccr_sampling, ccr_paths, ccr_drift"
+
+
 def settings(db: Session, firm_id) -> dict:
-    out = dict(V.DEFAULTS)
+    out = {**V.DEFAULTS, **METHOD_DEFAULTS}
     if firm_id is None or not L.tables_present(db):
         return {**out, "stored": False}
-    try:
-        r = db.execute(text("SELECT confidence, secondary_confidence, horizon_days, window_days, min_observations, updated_by_name, updated_at "
-                            "FROM risk_settings WHERE firm_id = :f"), {"f": str(firm_id)}).first()
-    except Exception:
-        db.rollback(); r = None
+    r = None
+    for cols in (_BASE_COLS + ", " + _METHOD_COLS, _BASE_COLS):      # the method columns arrive with 2026-10-31_risk_methods.sql
+        try:
+            r = db.execute(text(f"SELECT {cols} FROM risk_settings WHERE firm_id = :f"), {"f": str(firm_id)}).first()
+            break
+        except Exception:
+            db.rollback()
     if r is None:
         return {**out, "stored": False}
-    return {"confidence": float(r.confidence), "secondary_confidence": float(r.secondary_confidence), "horizon_days": int(r.horizon_days),
-            "window_days": int(r.window_days), "min_observations": int(r.min_observations), "updated_by": r.updated_by_name,
-            "updated_at": r.updated_at.isoformat() if r.updated_at else None, "stored": True}
+    got = {"confidence": float(r.confidence), "secondary_confidence": float(r.secondary_confidence), "horizon_days": int(r.horizon_days),
+           "window_days": int(r.window_days), "min_observations": int(r.min_observations), "updated_by": r.updated_by_name,
+           "updated_at": r.updated_at.isoformat() if r.updated_at else None, "stored": True}
+    for k in METHOD_DEFAULTS:
+        v = getattr(r, k, None)
+        got[k] = (int(v) if k == "ccr_paths" else str(v)) if v is not None else METHOD_DEFAULTS[k]
+    return {**out, **got}
 
 
 def save_settings(db: Session, firm_id, body: dict, by: str, by_name: str) -> dict:
-    s = {**V.DEFAULTS, **{k: body[k] for k in V.DEFAULTS if k in body and body[k] is not None}}
-    db.execute(text("INSERT INTO risk_settings (firm_id, confidence, secondary_confidence, horizon_days, window_days, min_observations, updated_by, updated_by_name, updated_at) "
-                    "VALUES (:f, :c, :c2, :h, :w, :m, :b, :bn, now()) ON CONFLICT (firm_id) DO UPDATE SET confidence = EXCLUDED.confidence, "
-                    "secondary_confidence = EXCLUDED.secondary_confidence, horizon_days = EXCLUDED.horizon_days, window_days = EXCLUDED.window_days, "
-                    "min_observations = EXCLUDED.min_observations, updated_by = EXCLUDED.updated_by, updated_by_name = EXCLUDED.updated_by_name, updated_at = now()"),
-               {"f": str(firm_id), "c": s["confidence"], "c2": s["secondary_confidence"], "h": s["horizon_days"], "w": s["window_days"], "m": s["min_observations"], "b": by, "bn": by_name})
+    cur = settings(db, firm_id)
+    s = {**cur, **{k: body[k] for k in {**V.DEFAULTS, **METHOD_DEFAULTS} if k in body and body[k] is not None}}
+    params = {"f": str(firm_id), "c": s["confidence"], "c2": s["secondary_confidence"], "h": s["horizon_days"], "w": s["window_days"],
+              "m": s["min_observations"], "b": by, "bn": by_name, "vm": s["var_method"], "cs": s["ccr_sampling"], "cp": int(s["ccr_paths"]), "cd": s["ccr_drift"]}
+    full = ("INSERT INTO risk_settings (firm_id, confidence, secondary_confidence, horizon_days, window_days, min_observations, updated_by, updated_by_name, updated_at, "
+            "var_method, ccr_sampling, ccr_paths, ccr_drift) VALUES (:f, :c, :c2, :h, :w, :m, :b, :bn, now(), :vm, :cs, :cp, :cd) "
+            "ON CONFLICT (firm_id) DO UPDATE SET confidence = EXCLUDED.confidence, secondary_confidence = EXCLUDED.secondary_confidence, "
+            "horizon_days = EXCLUDED.horizon_days, window_days = EXCLUDED.window_days, min_observations = EXCLUDED.min_observations, "
+            "updated_by = EXCLUDED.updated_by, updated_by_name = EXCLUDED.updated_by_name, updated_at = now(), var_method = EXCLUDED.var_method, "
+            "ccr_sampling = EXCLUDED.ccr_sampling, ccr_paths = EXCLUDED.ccr_paths, ccr_drift = EXCLUDED.ccr_drift")
+    base = ("INSERT INTO risk_settings (firm_id, confidence, secondary_confidence, horizon_days, window_days, min_observations, updated_by, updated_by_name, updated_at) "
+            "VALUES (:f, :c, :c2, :h, :w, :m, :b, :bn, now()) ON CONFLICT (firm_id) DO UPDATE SET confidence = EXCLUDED.confidence, "
+            "secondary_confidence = EXCLUDED.secondary_confidence, horizon_days = EXCLUDED.horizon_days, window_days = EXCLUDED.window_days, "
+            "min_observations = EXCLUDED.min_observations, updated_by = EXCLUDED.updated_by, updated_by_name = EXCLUDED.updated_by_name, updated_at = now()")
+    try:
+        db.execute(text(full), params)
+    except Exception:                      # the method columns are not there yet: keep the base parameters
+        db.rollback()
+        db.execute(text(base), params)
     db.commit()
     return settings(db, firm_id)
 
@@ -74,6 +101,9 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     st = settings(db, firm_id)
     tpl = template_uid(db)
     var = V.compute(db, tpl, lad["ladder"], lad["spot01"], d, st) if tpl else {"observations": 0, "enough": False, "missing_factors": []}
+    if tpl and st.get("var_method", "FULL_REVAL") == "FULL_REVAL":
+        # the headline VaR reprices the book on each historical day; the ladder VaR rides along as the linear comparison
+        var = VF.compute(db, user, tpl, trades, d, mkt, fx, st, linear=var)
     stress = ST.run(db, user, trades, d, mkt, fx)
     rep = {"date": d.isoformat(), "dates": [x.isoformat() for x in dates[-40:]], "reporting_ccy": REPORTING_CCY, "settings": st,
            "ladder": {k: v for k, v in lad.items() if k != "rows"}, "ladder_rows": lad["rows"], "var": var, "stress": stress,

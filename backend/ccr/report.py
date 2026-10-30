@@ -24,7 +24,7 @@ from pnl.report import fx_to_usd
 from pnl.valuation import _curve_input
 
 log = logging.getLogger("rijeka.ccr")
-DEFAULTS = {"n_paths": 2000, "drift_mode": "zero", "window_days": 730, "cp_cds_bp": 85.0, "lgd": 0.40}
+DEFAULTS = {"n_paths": 2000, "drift_mode": "zero", "window_days": 730, "cp_cds_bp": 85.0, "lgd": 0.40, "sampling": "HISTORICAL"}
 
 
 def tables_present(db: Session) -> bool:
@@ -38,14 +38,18 @@ def settings(db: Session, firm_id) -> dict:
     out = dict(DEFAULTS)
     if firm_id is None:
         return out
-    try:
-        r = db.execute(text("SELECT ccr_paths, ccr_drift, window_days FROM risk_settings WHERE firm_id = :f"), {"f": str(firm_id)}).first()
-        if r:
-            if r.ccr_paths: out["n_paths"] = int(r.ccr_paths)
-            if r.ccr_drift: out["drift_mode"] = str(r.ccr_drift)
-            if r.window_days: out["window_days"] = int(r.window_days)
-    except Exception:
-        db.rollback()
+    r = None
+    for cols in ("ccr_paths, ccr_drift, window_days, ccr_sampling", "ccr_paths, ccr_drift, window_days"):   # ccr_sampling: 2026-10-31_risk_methods.sql
+        try:
+            r = db.execute(text(f"SELECT {cols} FROM risk_settings WHERE firm_id = :f"), {"f": str(firm_id)}).first()
+            break
+        except Exception:
+            db.rollback()
+    if r:
+        if r.ccr_paths: out["n_paths"] = int(r.ccr_paths)
+        if r.ccr_drift: out["drift_mode"] = str(r.ccr_drift)
+        if r.window_days: out["window_days"] = int(r.window_days)
+        if getattr(r, "ccr_sampling", None): out["sampling"] = str(r.ccr_sampling)
     return out
 
 
@@ -79,6 +83,9 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
     currencies, pairs = sorted(ns.currencies), sorted(ns.pairs)
     rn = C.risk_neutral(db, uid, currencies, pairs)
     rw = (C.real_world(db, tpl, currencies, pairs, asof, int(st["window_days"]), st["drift_mode"]) if tpl else rn) if exposure else rn
+    if exposure and rw is not rn:
+        # the firm's choice for the exposure run: blocks of observed changes (default) or Gaussian shocks
+        rw.sampling = str(st.get("sampling", "HISTORICAL")).upper() if rw.panel is not None else "GAUSSIAN"
     rate_keys = [k for k in rn.order if k.startswith("RATES:")]
     curves = _curves(db, uid, mkt, rate_keys, asof)
     spots = {f"SPOT:{p}": mkt.spot(p) for p in pairs}
@@ -136,7 +143,7 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
            "calibration": {"risk_neutral": rn.as_dict()}, "measures": {"xva": "RISK_NEUTRAL"}, "seconds": round(time.time() - t0, 1)}
     if ex is not None:
         out.update(exposure={k: v for k, v in ex.items() if k not in ("mean_collateral",)}, mean_collateral=ex["mean_collateral"])
-        out["calibration"]["real_world"] = rw.as_dict(); out["measures"]["exposure"] = "REAL_WORLD"
+        out["calibration"]["real_world"] = rw.as_dict(); out["measures"]["exposure"] = "REAL_WORLD"; out["sampling"] = rw.sampling
     return out
 
 

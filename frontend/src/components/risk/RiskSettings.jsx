@@ -109,7 +109,7 @@ export function VarSettingsPage() {
   const set = (k) => (e) => setS(x => ({ ...x, [k]: e.target.value }))
   const save = async () => {
     setBusy(true); setMsg(null)
-    try { await api('/api/risk/settings', { method: 'PUT', body: JSON.stringify({ confidence: Number(s.confidence), secondary_confidence: Number(s.secondary_confidence), horizon_days: Number(s.horizon_days), window_days: Number(s.window_days), min_observations: Number(s.min_observations) }) }); setMsg('Saved for the firm.'); await load() }
+    try { await api('/api/risk/settings', { method: 'PUT', body: JSON.stringify({ confidence: Number(s.confidence), secondary_confidence: Number(s.secondary_confidence), horizon_days: Number(s.horizon_days), window_days: Number(s.window_days), min_observations: Number(s.min_observations), var_method: s.var_method, ccr_sampling: s.ccr_sampling, ccr_paths: Number(s.ccr_paths), ccr_drift: s.ccr_drift }) }); setMsg('Saved for the firm.'); await load() }
     catch (e) { setMsg(e.message) } finally { setBusy(false) }
   }
   const backfill = async () => {
@@ -120,7 +120,7 @@ export function VarSettingsPage() {
   const series = Object.entries(hist?.series || {})
   return (
     <div className="pnl">
-      <div className="pnl-bar"><div className="pnl-title">VAR SETTINGS <span className="pnl-sub">historical simulation on the ladder · the firm's parameters</span></div>
+      <div className="pnl-bar"><div className="pnl-title">VAR SETTINGS <span className="pnl-sub">historical simulation · the firm's parameters and methods</span></div>
         <div className="pnl-ctl"><button className="pnl-btn ghost" onClick={() => navigate('/risk')}>MARKET RISK →</button></div></div>
       {msg && <div className="pnl-toast">{msg}</div>}
       {s && (<>
@@ -130,8 +130,21 @@ export function VarSettingsPage() {
             {[['confidence', 'CONFIDENCE', '0.99'], ['secondary_confidence', 'SECONDARY', '0.95'], ['horizon_days', 'HORIZON (DAYS)', '1'], ['window_days', 'WINDOW (DAYS)', '730'], ['min_observations', 'MIN OBSERVATIONS', '60']].map(([k, l, ph]) => (
               <label key={k} className="pnl-card"><span className="pnl-kl">{l}</span><input style={inp} value={s[k] ?? ''} placeholder={ph} onChange={set(k)} disabled={!s.can_write} /></label>))}
           </div>
+          <div className="rk-h" style={{ marginTop: '0.9rem' }}>METHODS</div>
+          <div className="pnl-cards" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+            <label className="pnl-card"><span className="pnl-kl">VAR METHOD</span>
+              <select style={inp} value={s.var_method || 'FULL_REVAL'} onChange={set('var_method')} disabled={!s.can_write}>
+                <option value="FULL_REVAL">Full revaluation</option><option value="LADDER">Ladder (linear)</option></select></label>
+            <label className="pnl-card"><span className="pnl-kl">EXPOSURE SAMPLING</span>
+              <select style={inp} value={s.ccr_sampling || 'HISTORICAL'} onChange={set('ccr_sampling')} disabled={!s.can_write}>
+                <option value="HISTORICAL">Historical (blocks of observed changes)</option><option value="GAUSSIAN">Gaussian (correlated normal shocks)</option></select></label>
+            <label className="pnl-card"><span className="pnl-kl">EXPOSURE PATHS</span><input style={inp} value={s.ccr_paths ?? ''} placeholder="2000" onChange={set('ccr_paths')} disabled={!s.can_write} /></label>
+            <label className="pnl-card"><span className="pnl-kl">EXPOSURE DRIFT</span>
+              <select style={inp} value={s.ccr_drift || 'zero'} onChange={set('ccr_drift')} disabled={!s.can_write}>
+                <option value="zero">Zero (rates and spots stay put in expectation)</option><option value="historical">Historical (the window's drift)</option></select></label>
+          </div>
           <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write || !s.tables} onClick={save}>SAVE FOR THE FIRM</button></div>
-          <div className="pnl-foot">VaR is the empirical loss quantile of the ladder applied to each historical day's changes in the window; expected shortfall is the mean loss beyond it; the horizon scales by √t. Linear in the factors: convexity and vol are outside it. {!s.tables && <em>Settings need the market risk tables (docs/migrations/2026-10-30_market_risk.sql); the defaults apply until then.</em>}</div>
+          <div className="pnl-foot">VaR is the empirical loss quantile over the window; expected shortfall is the mean loss beyond it; the horizon scales by √t. <b>Full revaluation</b> reprices every live trade on each historical day's shifted market, so convexity and the curve shape inside a bucket are in the number; the ladder VaR is computed alongside as the linear comparison. <b>Ladder</b> applies the day's changes to the key-rate sensitivities: fast, linear in the factors. Exposure sampling drives the counterparty credit run: <b>historical</b> builds each monthly step from a block of observed daily changes, the same block for every factor, keeping the window's fat tails and co-movements; <b>Gaussian</b> draws correlated normal shocks. {!s.tables && <em>Settings need the market risk tables (docs/migrations/2026-10-30_market_risk.sql); the defaults apply until then.</em>}</div>
         </section>
         <section className="pnl-panel" style={{ maxWidth: 980 }}>
           <header><span>RISK-FACTOR HISTORY</span><span className="pnl-sub">public sources, stored on the template account, extended by the daily rebuild</span></header>

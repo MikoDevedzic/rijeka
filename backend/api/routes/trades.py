@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from db.models import Trade, Counterparty
 from middleware.auth import verify_token
+from api.routes.pricer import invalidate_trade_cache
 from api.routes._instrument_alias import normalize_instrument_type  # M009 inbound translator
 from api.routes.trade_cards import their_refs
 from pydantic import BaseModel, field_validator, model_validator
@@ -200,6 +201,7 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
         trade = Trade(**kwargs)
         db.add(trade)
         db.commit()
+        invalidate_trade_cache()
         db.refresh(trade)
     except Exception as e:
         db.rollback()
@@ -223,6 +225,7 @@ def update_trade(trade_id: str, body: TradeUpdate, db: Session = Depends(get_db)
         setattr(t, k, v)
     t.last_modified_by = uuid.UUID(user["sub"])
     db.commit()
+    invalidate_trade_cache()
     return {"id": trade_id, "status": t.status}
 
 @router.delete("/{trade_id}")
@@ -234,4 +237,5 @@ def delete_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depe
         raise HTTPException(status_code=400, detail="Only PENDING or CANCELLED trades can be deleted")
     db.delete(t)
     db.commit()
+    invalidate_trade_cache()
     return {"deleted": trade_id}

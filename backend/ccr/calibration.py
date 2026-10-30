@@ -49,9 +49,13 @@ class Calibration:
     drift_mode: str = "forward"           # forward | zero | historical
     window: Optional[tuple[date, date]] = None
     notes: list[str] = field(default_factory=list)
+    sampling: str = "GAUSSIAN"            # GAUSSIAN: correlated normal shocks; HISTORICAL: blocks of observed daily changes
+    panel: Optional[np.ndarray] = None    # (days, factors in `order`) observed daily changes: rate in decimals, spot log return
+    panel_dates: list = field(default_factory=list)
 
     def as_dict(self) -> dict:
-        return {"measure": self.measure, "drift_mode": self.drift_mode, "order": self.order,
+        return {"measure": self.measure, "drift_mode": self.drift_mode, "order": self.order, "sampling": self.sampling,
+                "panel_days": int(self.panel.shape[0]) if self.panel is not None else 0,
                 "window": [d.isoformat() for d in self.window] if self.window else None, "notes": self.notes,
                 "factors": {k: {"kind": f.kind, "a": f.a, "sigma": f.sigma, "drift": f.drift, "source": f.source, "observations": f.observations} for k, f in self.factors.items()},
                 "corr": [[round(float(x), 4) for x in row] for row in self.corr.tolist()]}
@@ -121,7 +125,21 @@ def real_world(db: Session, tpl, currencies: list[str], pairs: list[str], asof: 
             notes.append(f"{pair}: no history, desk vol used")
     order = list(factors)
     corr = _correlation(order, shocks)
-    return Calibration("REAL_WORLD", factors, corr, order, drift_mode=drift_mode, window=(start, asof), notes=notes)
+    panel, panel_dates = _panel(order, shocks)
+    if panel is None and order:
+        notes.append("historical sampling unavailable: not every factor has history on common dates; Gaussian shocks used")
+    return Calibration("REAL_WORLD", factors, corr, order, drift_mode=drift_mode, window=(start, asof), notes=notes,
+                       panel=panel, panel_dates=panel_dates)
+
+
+def _panel(order: list[str], shocks: dict[str, dict[date, float]], min_days: int = 120) -> tuple[Optional[np.ndarray], list]:
+    """The aligned daily changes of every factor on their common dates, for historical sampling."""
+    if not order or any(not shocks.get(k) for k in order):
+        return None, []
+    common = sorted(set.intersection(*(set(shocks[k]) for k in order)))
+    if len(common) < min_days:
+        return None, []
+    return np.array([[shocks[k][d] for k in order] for d in common]), common
 
 
 def _correlation(order: list[str], shocks: dict[str, dict[date, float]]) -> np.ndarray:

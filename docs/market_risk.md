@@ -6,15 +6,19 @@ Engine: `backend/risk/`; page: `RISK` next to P&L; settings and limits under `Co
 
 For every live trade and every curve it is valued on, each tenor bucket's quotes are bumped +1bp and the trade is repriced on the as-of market through the production pricers. The result is key-rate IR01 by (curve, bucket); the buckets (0-1Y, 1-5Y, 5-10Y, 10Y+) are the same the P&L explain uses, so a day's rates P&L and the ladder speak the same language. Spot deltas (FX01, BTC01) are the pricers' PV for +1 % spot. Totals are in the reporting currency at the close.
 
-## VaR: historical simulation on the ladder
+## VaR: historical simulation by full revaluation
 
-Risk factors are the curve quotes (par rates, in basis points) averaged into the ladder's buckets, and the spots (log returns). For every historical day *i* in the window:
+Risk factors are the curve quotes (par rates, in basis points, tenor by tenor) and the spots (log returns). For every historical day *i* in the window, today's market is shifted by that day's observed changes and every live trade is repriced on it through the production pricers:
+
+    P&L_i = Σ_trade [ NPV(trade, M + Δ_i) − NPV(trade, M) ] · fx
+
+VaR at confidence *q* is the empirical *q*-quantile of the losses; expected shortfall is the mean loss beyond it; the horizon scales by √h. Only days on which every factor the book is exposed to has an observation are used; factors with no history are listed on the page, not dropped quietly. A tenor without its own history that day takes the average change of its bucket. The bootstrapped curves are cached per shifted market, so a day costs one bootstrap per curve and one valuation per trade; beyond a budget of valuations (60,000 per report) the full revaluation is skipped and the ladder VaR reported, with a note.
+
+The ladder VaR is computed alongside as the linear comparison:
 
     P&L_i = Σ_curve Σ_bucket KR01[c,b] · Δ_i[c,b]  +  Σ_asset spot01[a] · r_i[a]
 
-VaR at confidence *q* is the empirical *q*-quantile of the losses; expected shortfall is the mean loss beyond it; the horizon scales by √h. Only days on which every factor the book is exposed to has an observation are used; factors with no history are listed on the page, not dropped quietly.
-
-This is the sensitivities-based (linear) form. It is fast and transparent, and it is honest about what it leaves out: convexity, vol, and any non-linearity in the book. The other forms are on the roadmap (below).
+The difference between the two is the convexity and the inside-bucket curve shape that the ladder cannot see. The firm chooses the headline method (Configurations › Market Risk › VaR settings): full revaluation by default, the ladder when speed matters more.
 
 Parameters (the firm's, set by the risk manager): confidence (0.99), secondary confidence (0.95), horizon (1 day), window (730 days), minimum observations (60; below it the page says the number is not meaningful).
 
@@ -32,7 +36,6 @@ A limit names a metric, a scope and a value. Metrics: `VAR_99_1D`, `VAR_95_1D`, 
 
 ## Roadmap for VaR
 
-- Full-revaluation historical simulation: reprice the book on each historical day's market rather than apply it to the ladder; exact for options and convexity, slower.
 - Parametric (variance-covariance) VaR from the factor covariance, with the same ladder; a cross-check, not a replacement.
 - Monte Carlo VaR on the calibrated HW1F and lognormal spot models the XVA engine already uses.
 - Filtered historical simulation (EWMA / GARCH volatility scaling) so a calm window does not understate a stressed present.

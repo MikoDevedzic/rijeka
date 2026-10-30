@@ -17,6 +17,10 @@ One Hull-White factor per currency, one lognormal factor per spot, monthly steps
 
 The real-world run shifts the factor so the short rate's expectation stays at today's level (or follows the historical drift). Spots: S_t = S_0·exp((μ − σ²/2)t + σW_t), μ the rate differential or zero.
 
+### Historical simulation (the default real-world sampling)
+
+Instead of Gaussian shocks, each monthly step is a block of 21 consecutive observed daily changes from the calibration window (the 3M rate's daily changes in decimals, the spots' daily log returns), the block's start drawn uniformly, the same block for every factor. The sum of the block is the step's increment: for a rate factor it enters the Hull-White recursion x_i = x_{i−1}·e^{−aΔt} + Σ Δr in place of σ√Δt·z, for a spot it is the step's log return. The panel is demeaned so the drift is the stated one (zero or historical), not the window's. What this keeps that the Gaussian run cannot: the window's fat tails, its volatility clustering within a block, and the realised co-movement of rates and spots without a correlation matrix. The firm chooses between the two (Configurations › Market Risk › VaR settings); when a factor has no history on common dates the run falls back to Gaussian shocks and says so.
+
 ## Netting
 
 Every trade of a counterparty is valued on the same paths and summed per path and date, so netting is exact. Swaps: fixed leg Σ N·c·τ·P(t,T_j), OIS float leg N·(P(t,T_s) − P(t,T_N)); forwards: ±N·(S_t·DF_base/DF_quote − K)·DF_quote. Caps and swaptions are listed as not simulated, never valued at zero.
@@ -46,4 +50,4 @@ A netting set of a few trades simulates in a second or two (analytic valuation o
 
 ## Roadmap
 
-Historical Monte Carlo (paths bootstrapped from blocks of observed changes, full revaluation) as the second real-world model; caps and swaptions on the paths; a per-counterparty CDS spread and LGD on the record; wrong-way risk; stressed windows for regulatory EEPE; a term structure of PFE limits by tenor set per counterparty.
+Caps and swaptions on the paths; a per-counterparty CDS spread and LGD on the record; wrong-way risk; stressed windows for regulatory EEPE; a term structure of PFE limits by tenor set per counterparty.

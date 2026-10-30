@@ -18,9 +18,11 @@ Sprint 13 Patch 5: Legacy `cap_strike_schedule` / `floor_strike_schedule`
 import json as _json
 import math as _math
 import uuid
+import time as _time
+from types import SimpleNamespace
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -227,6 +229,10 @@ def _require_trader(user: dict) -> None:
         raise HTTPException(status_code=403, detail="Trader or Admin role required")
 
 
+_BOOTSTRAP_CACHE: dict = {}
+_BOOTSTRAP_CACHE_MAX = 4096
+
+
 def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str) -> Curve:
     """
     Build a Curve. Priority:
@@ -254,7 +260,16 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str
                 "currency":   curve_ccy,
                 "spot_lag":   curve_spot_lag,
             })
-        return bootstrap_from_dicts(valuation_date, dicts)
+        # The same quotes on the same date bootstrap to the same curve: a full-revaluation
+        # VaR or a stress run reprices every trade of the book on each shifted market, and
+        # without this every trade would bootstrap the curve again.
+        key = (ci.curve_id, valuation_date, tuple((d["tenor"], d["quote_type"], float(d["rate"]), d["day_count"]) for d in dicts))
+        curve = _BOOTSTRAP_CACHE.get(key)
+        if curve is None:
+            if len(_BOOTSTRAP_CACHE) >= _BOOTSTRAP_CACHE_MAX:
+                _BOOTSTRAP_CACHE.clear()
+            curve = _BOOTSTRAP_CACHE[key] = bootstrap_from_dicts(valuation_date, dicts)
+        return curve
 
     if ci.flat_rate is not None:
         return Curve(valuation_date=valuation_date, flat_rate=float(ci.flat_rate))
@@ -511,6 +526,46 @@ def compute_par_rate(
     }
 
 
+# ── Trade snapshot cache ──────────────────────────────────────────────────────
+# A P&L explain, a ladder, a stress run or a full-revaluation VaR reprices the same
+# trade hundreds of times on different markets; the trade and its legs do not change
+# between those calls, and each database round trip to the hosted Postgres costs more
+# than the pricing itself. The snapshot holds the plain fields the pricer reads and
+# lives a short while; the routes that change a trade or a leg drop it.
+_TRADE_CACHE: dict[tuple[str, str], tuple[float, Any, list[dict]]] = {}
+TRADE_CACHE_TTL_SECONDS = 90.0
+_TRADE_CACHE_MAX = 2048
+_TRADE_FIELDS = ("id", "trade_ref", "instrument_type", "structure", "asset_class", "effective_date", "maturity_date",
+                 "discount_curve_id", "forecast_curve_id", "terms", "notional", "notional_ccy", "user_id", "status")
+
+
+def _trade_snapshot(trade_id: str, user_id: str):
+    hit = _TRADE_CACHE.get((trade_id, user_id))
+    if hit is None:
+        return None
+    if _time.monotonic() - hit[0] > TRADE_CACHE_TTL_SECONDS:
+        _TRADE_CACHE.pop((trade_id, user_id), None)
+        return None
+    return hit[1], hit[2]
+
+
+def _remember_trade(trade_id: str, user_id: str, trade, legs: list[dict]):
+    snap = SimpleNamespace(**{f: getattr(trade, f, None) for f in _TRADE_FIELDS})
+    if len(_TRADE_CACHE) >= _TRADE_CACHE_MAX:
+        _TRADE_CACHE.clear()
+    _TRADE_CACHE[(trade_id, user_id)] = (_time.monotonic(), snap, [dict(l) for l in legs])
+    return snap
+
+
+def invalidate_trade_cache(trade_id=None) -> None:
+    """Called by every route that books, amends or deletes a trade or a leg."""
+    if trade_id is None:
+        _TRADE_CACHE.clear()
+        return
+    for key in [k for k in _TRADE_CACHE if k[0] == str(trade_id)]:
+        _TRADE_CACHE.pop(key, None)
+
+
 # ── POST /price ───────────────────────────────────────────────────────────────
 
 @router.post("/price")
@@ -523,26 +578,31 @@ def price_trade(
     user_id_uuid = uuid.UUID(user["sub"])
     val_date = request.valuation_date or date.today()
 
-    trade = db.query(Trade).filter(Trade.id == request.trade_id, Trade.user_id == user_id_uuid).first()
-    if not trade:
-        raise HTTPException(status_code=404, detail="Trade not found")
+    cached = _trade_snapshot(str(request.trade_id), str(user_id_uuid))
+    if cached is not None:
+        trade, legs = cached[0], [dict(l) for l in cached[1]]
+    else:
+        trade = db.query(Trade).filter(Trade.id == request.trade_id, Trade.user_id == user_id_uuid).first()
+        if not trade:
+            raise HTTPException(status_code=404, detail="Trade not found")
 
-    # Currency trades (FX spot / forward / NDF, crypto forwards) have no legs:
-    # priced from trade.terms on one model (api/routes/currencies.py)
-    from api.routes.currencies import CURRENCY_INSTRUMENTS, price_booked as _price_currency
-    if str(trade.instrument_type or "").upper() in CURRENCY_INSTRUMENTS:
-        return _price_currency(trade, db, user, val_date)
+        # Currency trades (FX spot / forward / NDF, crypto forwards) have no legs:
+        # priced from trade.terms on one model (api/routes/currencies.py)
+        from api.routes.currencies import CURRENCY_INSTRUMENTS, price_booked as _price_currency
+        if str(trade.instrument_type or "").upper() in CURRENCY_INSTRUMENTS:
+            return _price_currency(trade, db, user, val_date)
 
-    orm_legs = (
-        db.query(TradeLeg)
-        .filter(TradeLeg.trade_id == request.trade_id, TradeLeg.user_id == user_id_uuid)
-        .order_by(TradeLeg.leg_seq)
-        .all()
-    )
-    if not orm_legs:
-        raise HTTPException(status_code=422, detail="Trade has no legs")
+        orm_legs = (
+            db.query(TradeLeg)
+            .filter(TradeLeg.trade_id == request.trade_id, TradeLeg.user_id == user_id_uuid)
+            .order_by(TradeLeg.leg_seq)
+            .all()
+        )
+        if not orm_legs:
+            raise HTTPException(status_code=422, detail="Trade has no legs")
 
-    legs = [_leg_to_dict(leg) for leg in orm_legs]
+        legs = [_leg_to_dict(leg) for leg in orm_legs]
+        trade = _remember_trade(str(request.trade_id), str(user_id_uuid), trade, legs)
     # A leg booked without its own dates or curves takes the trade's: the ticket books legs
     # that way, and a schedule or a discount curve must never be missing in silence.
     for lg in legs:

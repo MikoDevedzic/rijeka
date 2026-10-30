@@ -112,7 +112,7 @@ export default function CcrPage() {
         {cur && !cur.empty && (
           <div className="pnl-grid">
             <section className="pnl-panel">
-              <header><span>{cur.counterparty} · EXPOSURE PROFILE</span><span className="pnl-sub">real-world · {cur.n_paths} paths · monthly to {cur.months}M · {cur.seconds}s</span></header>
+              <header><span>{cur.counterparty} · EXPOSURE PROFILE</span><span className="pnl-sub">real-world · {cur.sampling === 'HISTORICAL' ? 'historical simulation' : 'Gaussian shocks'} · {cur.n_paths} paths · monthly to {cur.months}M · {cur.seconds}s</span></header>
               <Profile c={cur} />
               <div className="rk-kv" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
                 {Object.entries(cur.exposure.pfe95_by_bucket).map(([b, v]) => <div key={b}><span>PFE95 {b}</span><b>{fmt(v)}</b></div>)}
@@ -143,7 +143,7 @@ export default function CcrPage() {
         </section>
 
         <div className="pnl-foot">
-          <b>Method.</b> Every trade of a counterparty is valued on the same simulated paths, so netting is exact. Rates follow a Hull-White factor per currency and spots a lognormal factor, with Brownian motions correlated by the matrix estimated from two years of public history. The parameters are real-world: volatilities measured from that history, mean reversion by stated policy, zero drift unless the firm chooses the historical drift. The CSA on the record is applied to the netted value with the margin period of risk, as in the XVA engine. Credit limits are set on peak PFE, PFE by bucket, EPE and current exposure, the way market risk limits are set on VaR. Caps and swaptions are not simulated yet and are listed as such.
+          <b>Method.</b> Every trade of a counterparty is valued on the same simulated paths, so netting is exact. Rates follow a Hull-White factor per currency and spots a lognormal factor. In the historical simulation (the default) every monthly step is a block of observed daily changes from two years of public history, the same block for every factor, so the window's fat tails and co-movements are kept as they were; the Gaussian alternative draws normal shocks correlated by the matrix estimated from the same history. The parameters are real-world: volatilities measured from that history, mean reversion by stated policy, zero drift unless the firm chooses the historical drift. The CSA on the record is applied to the netted value with the margin period of risk, as in the XVA engine. Credit limits are set on peak PFE, PFE by bucket, EPE and current exposure, the way market risk limits are set on VaR. Caps and swaptions are not simulated yet and are listed as such.
         </div>
       </>)}
     </div>

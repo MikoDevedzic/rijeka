@@ -149,6 +149,10 @@ class SettingsBody(BaseModel):
     horizon_days: Optional[int] = None
     window_days: Optional[int] = None
     min_observations: Optional[int] = None
+    var_method: Optional[str] = None          # FULL_REVAL | LADDER
+    ccr_sampling: Optional[str] = None        # HISTORICAL | GAUSSIAN  (the real-world exposure run)
+    ccr_paths: Optional[int] = None
+    ccr_drift: Optional[str] = None           # zero | historical
 
 
 @router.get("/settings")
@@ -169,6 +173,14 @@ def put_settings(body: SettingsBody, db: Session = Depends(get_db), user: dict =
         raise HTTPException(status_code=422, detail="confidence must be between 0.5 and 1")
     if b.get("window_days") is not None and not (30 <= b["window_days"] <= 3650):
         raise HTTPException(status_code=422, detail="window_days must be 30..3650")
+    if b.get("var_method") is not None and b["var_method"] not in R.VAR_METHODS:
+        raise HTTPException(status_code=422, detail=f"var_method must be one of {R.VAR_METHODS}")
+    if b.get("ccr_sampling") is not None and b["ccr_sampling"] not in R.CCR_SAMPLINGS:
+        raise HTTPException(status_code=422, detail=f"ccr_sampling must be one of {R.CCR_SAMPLINGS}")
+    if b.get("ccr_paths") is not None and not (200 <= b["ccr_paths"] <= 20000):
+        raise HTTPException(status_code=422, detail="ccr_paths must be 200..20000")
+    if b.get("ccr_drift") is not None and b["ccr_drift"] not in ("zero", "historical"):
+        raise HTTPException(status_code=422, detail="ccr_drift must be zero or historical")
     return R.save_settings(db, f, b, user["sub"], _name(user))
 
 

@@ -41,6 +41,7 @@ import uuid
 from db.session import get_db
 from db.models import TradeLeg, Trade
 from middleware.auth import verify_token
+from api.routes.pricer import invalidate_trade_cache
 from api.routes._leg_defaults import complete_leg
 
 router = APIRouter(prefix="/api/trade-legs", tags=["trade_legs"])
@@ -341,6 +342,7 @@ def create_leg(
     leg = TradeLeg(**payload, created_by=user.get("sub"), user_id=uuid.UUID(user["sub"]))
     db.add(leg)
     db.commit()
+    invalidate_trade_cache()
     db.refresh(leg)
     return leg
 
@@ -379,5 +381,6 @@ def update_leg(
     leg.last_modified_at = datetime.utcnow()
     leg.last_modified_by = user.get("sub")
     db.commit()
+    invalidate_trade_cache()
     db.refresh(leg)
     return leg

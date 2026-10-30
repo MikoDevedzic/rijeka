@@ -40,6 +40,7 @@ import logging
 from db.session import get_db
 from db.models import Trade, TradeLeg, TradeEvent, IdempotencyKey
 from middleware.auth import verify_token
+from api.routes.pricer import invalidate_trade_cache
 from projections.trade_projection import project_from_db
 from api.routes.booking import _serialize_trade, _serialize_leg
 
@@ -211,6 +212,7 @@ def append_trade_event(
     )
     db.add(event)
     db.commit()
+    invalidate_trade_cache()
     db.refresh(event)
     return event
 
@@ -395,6 +397,7 @@ def _apply_lifecycle_transition(
             ))
 
         db.commit()
+        invalidate_trade_cache()
         return result
 
     except IntegrityError as e:

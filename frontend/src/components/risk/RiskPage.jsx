@@ -98,7 +98,10 @@ export default function RiskPage() {
               <div><span>VAR 1D</span><b>{fmt(v.var_1d)}</b></div>
               <div><span>ES 1D</span><b>{fmt(v.es_1d)}</b></div>
               <div><span>HORIZON</span><b>{v.horizon_days}d · √t</b></div>
+              {v.linear && <div><span>LINEAR (LADDER) VAR 1D</span><b>{fmt(v.linear.var_1d)}</b></div>}
+              {v.convexity_1d != null && <div><span>CONVEXITY</span><b className={tone(-v.convexity_1d)}>{sgn(v.convexity_1d)}</b></div>}
             </div>
+            {v.note && <div className="pnl-foot"><em>{v.note}</em></div>}
             {(v.worst_days || []).length > 0 && <>
               <div className="rk-h">WORST DAYS IN THE WINDOW</div>
               {v.worst_days.map(w => <div key={w.date} className="rk-wd"><span>{fmtD(w.date)}</span><b className={tone(w.pnl)}>{sgn(w.pnl)}</b></div>)}
