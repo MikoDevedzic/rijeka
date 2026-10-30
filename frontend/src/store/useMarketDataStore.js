@@ -201,7 +201,7 @@ const useMarketDataStore = create((set, get) => ({
           [curveId]: { date: data.valuation_date, source: data.source },
         },
       }));
-    } catch (_) {
+    } catch {
       // Non-fatal
     }
   },

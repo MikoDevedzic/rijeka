@@ -32,8 +32,8 @@ const TTS = {
   theta: {t:'THETA — TIME DECAY',b:'NPV(T+1 day) − NPV(T). Calendar day method.',f:'THETA = NPV(T+1) − NPV(T)'},
 }
 function Tooltip({ id, children }) {
-  const t = TTS[id]; if (!t) return <span>{children}</span>
   const wrapRef=useRef(null); const tipRef=useRef(null)
+  const t = TTS[id]; if (!t) return <span>{children}</span>
   const show=()=>{
     const tip=tipRef.current; const wrap=wrapRef.current; if(!tip||!wrap) return
     tip.style.display='block'
@@ -136,7 +136,7 @@ export default function PricerPage() {
   useEffect(() => {
     ;(async()=>{
       setTLd(true)
-      try { const h=await authHdrs(); const r=await fetch(API+'/api/trades/',{headers:h}); if(r.ok) setTrades(await r.json()) } catch{}
+      try { const h=await authHdrs(); const r=await fetch(API+'/api/trades/',{headers:h}); if(r.ok) setTrades(await r.json()) } catch { /* ignore: trade list is optional */ }
       setTLd(false)
     })()
   },[])
@@ -165,7 +165,7 @@ export default function PricerPage() {
         setOvr(ov); setBumps(bmp); setCvPils({})
         const snaps={}
         await Promise.all(idArr.map(async cid=>{
-          try{const sr=await fetch(`${API}/api/market-data/snapshots/${cid}/latest`,{headers:h}); const sd=await sr.json(); if(sd.exists) snaps[cid]=sd}catch{}
+          try{const sr=await fetch(`${API}/api/market-data/snapshots/${cid}/latest`,{headers:h}); const sd=await sr.json(); if(sd.exists) snaps[cid]=sd}catch { /* ignore: no snapshot for this curve */ }
         }))
         setSnaps(snaps)
       } catch(e){setError('Failed to load curves: '+e.message)}
@@ -181,7 +181,6 @@ export default function PricerPage() {
   },[mode])
 
   // Handlers
-  const onOvr = useCallback((cid,v)=>setOvr(o=>({...o,[cid]:{...o[cid],enabled:v}})),[])
   const onRate= useCallback((cid,v)=>setOvr(o=>({...o,[cid]:{...o[cid],rate:v}})),[])
   const onPar = useCallback((cid,v)=>setBumps(b=>({...b,[cid]:{...b[cid],parallel:v}})),[])
   const onTnr = useCallback((cid,tenor,v)=>setBumps(b=>({...b,[cid]:{...b[cid],tenors:{...b[cid]?.tenors,[tenor]:v}}})),[])

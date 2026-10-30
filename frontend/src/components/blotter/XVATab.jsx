@@ -312,21 +312,20 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const canvasRef = useRef(null)
   const [tooltip, setTooltip] = useState(null)
   const [calib, setCalibState] = useState(() => {
-    try { const s = sessionStorage.getItem('rijeka_xva_calib'); return s ? JSON.parse(s) : null } catch(_) { return null }
+    try { const s = sessionStorage.getItem('rijeka_xva_calib'); return s ? JSON.parse(s) : null } catch { return null }
   })
   const setCalib = (v) => {
     setCalibState(v)
-    try { if (v) sessionStorage.setItem('rijeka_xva_calib', JSON.stringify(v)); else sessionStorage.removeItem('rijeka_xva_calib') } catch(_) {}
+    try { if (v) sessionStorage.setItem('rijeka_xva_calib', JSON.stringify(v)); else sessionStorage.removeItem('rijeka_xva_calib') } catch { /* ignore: sessionStorage unavailable */ }
   }
-  const [calibErr, setCalibErr] = useState(null)
-  const [calibrating, setCalibrating] = useState(false)
+  const [calibErr] = useState(null)
   const [simulating, setSimulating] = useState(false)
   const [simResult, setSimResultState] = useState(() => {
-    try { const s = sessionStorage.getItem('rijeka_xva_sim'); return s ? JSON.parse(s) : null } catch(_) { return null }
+    try { const s = sessionStorage.getItem('rijeka_xva_sim'); return s ? JSON.parse(s) : null } catch { return null }
   })
   const setSimResult = (v) => {
     setSimResultState(v)
-    try { if (v) sessionStorage.setItem('rijeka_xva_sim', JSON.stringify(v)); else sessionStorage.removeItem('rijeka_xva_sim') } catch(_) {}
+    try { if (v) sessionStorage.setItem('rijeka_xva_sim', JSON.stringify(v)); else sessionStorage.removeItem('rijeka_xva_sim') } catch { /* ignore: sessionStorage unavailable */ }
   }
   const [simErr, setSimErr] = useState(null)
   const [paths, setPaths] = useState(2000)
@@ -355,11 +354,11 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const [imYieldBp, setImYieldBp] = useState('')
   const [compareOnChain, setCompareOnChain] = useState(false)
   const [compareResult, setCompareResultState] = useState(() => {
-    try { const s = sessionStorage.getItem('rijeka_xva_cmp'); return s ? JSON.parse(s) : null } catch(_) { return null }
+    try { const s = sessionStorage.getItem('rijeka_xva_cmp'); return s ? JSON.parse(s) : null } catch { return null }
   })
   const setCompareResult = (v) => {
     setCompareResultState(v)
-    try { if (v) sessionStorage.setItem('rijeka_xva_cmp', JSON.stringify(v)); else sessionStorage.removeItem('rijeka_xva_cmp') } catch(_) {}
+    try { if (v) sessionStorage.setItem('rijeka_xva_cmp', JSON.stringify(v)); else sessionStorage.removeItem('rijeka_xva_cmp') } catch { /* ignore: sessionStorage unavailable */ }
   }
   const num = (v) => { const n = parseFloat(String(v).replace(/,/g,'')); return isNaN(n) ? null : n }
   const csaBody = (preset) => {
@@ -389,7 +388,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         const session = await getSession()
         const res = await fetch(API + '/api/xva/calibration/latest', { headers: { Authorization: 'Bearer ' + session.access_token } })
         if (res.ok) { const d = await res.json(); if (d.exists) setCalib(d) }
-      } catch(_) {}
+      } catch { /* ignore: stale comparison state */ }
     })()
   }, [])
 
@@ -403,21 +402,6 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     const ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr)
     drawExposureChart(canvas, simResult.ee, simResult.ene, simResult.pfe, highlightCurve, simResult.sample_paths)
   }, [simResult, highlightCurve])
-
-  const handleCalibrate = async () => {
-    setCalibrating(true); setCalibErr(null)
-    try {
-      const session = await getSession()
-      const res = await fetch(API + '/api/xva/calibrate', {
-        method:'POST', headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
-        body: JSON.stringify({})
-      })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d.detail || 'Calibration failed')
-      setCalib(d)
-    } catch(e) { setCalibErr(e.message) }
-    finally { setCalibrating(false) }
-  }
 
   const handleSimulate = async () => {
     setSimulating(true); setSimErr(null)
@@ -444,13 +428,6 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
       })()
       const TENOR_YEARS = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
       const toCurve = obj => Object.entries(TENOR_YEARS).map(([k,t]) => ({ t, spread_bp: parseFloat(obj[k]) || 0 }))
-      const flatSpread = obj => {
-        const raw = obj['5Y']
-        const v = (raw !== null && raw !== undefined && raw !== '') ? raw
-          : (Object.values(obj).find(x => x !== null && x !== undefined && x !== '') ?? '85')
-        const n = parseFloat(v)
-        return isNaN(n) ? 85 : n
-      }
       const EXPIRY_Y = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
       const TENOR_Y  = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'9Y':9,'10Y':10,'15Y':15,'20Y':20,'30Y':30}
       const body = {
@@ -530,13 +507,6 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     xvaParamsRef.current = () => {
       const TMAP = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
       const toCurveP = obj => Object.entries(TMAP).map(([k,t]) => ({ t, spread_bp: parseFloat(obj[k]) || 0 }))
-      const flat = obj => {
-        const raw = obj['5Y']
-        const v = (raw !== null && raw !== undefined && raw !== '') ? raw
-          : (Object.values(obj).find(x => x !== null && x !== undefined && x !== '') ?? '85')
-        const n = parseFloat(v)
-        return isNaN(n) ? 0 : n
-      }
       return {
         cp_cds_curve:  toCurveP(cpCdsRef.current),
         own_cds_curve: toCurveP(ownCdsRef.current),
@@ -579,7 +549,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   )
 
   const xva = simResult?.xva
-  const tradeN = (() => { try { const n=trade?parseFloat(trade.notional):parseFloat((notionalRef?.current?.value||'10000000').replace(/,/g,'')); return isNaN(n)?10000000:n } catch(_){return 10000000} })()
+  const tradeN = (() => { try { const n=trade?parseFloat(trade.notional):parseFloat((notionalRef?.current?.value||'10000000').replace(/,/g,'')); return isNaN(n)?10000000:n } catch {return 10000000} })()
   const matY = simResult ? simResult.steps/12 : 5
   const dv01 = tradeN * matY / 10000
   // Prefer the solved par rate passed down as a prop. Reading rateRef here is
@@ -590,7 +560,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const parRate = (() => {
     const p = typeof parRateProp === 'number' ? parRateProp : parseFloat(parRateProp)
     if (isFinite(p) && p > 0) return p
-    try { const r = parseFloat(rateRef?.current?.value); return isFinite(r) && r > 0 ? r : NaN } catch (_) { return NaN }
+    try { const r = parseFloat(rateRef?.current?.value); return isFinite(r) && r > 0 ? r : NaN } catch { return NaN }
   })()
   const parRateKnown = isFinite(parRate)
   const xvaTotalBp = xva ? [xva.cva,xva.dva,xva.fva,xva.fba,xva.kva,xva.mva].reduce((s,v)=>s+(v||0),0)/dv01 : 0

@@ -3,7 +3,6 @@ import CurveDesignerWindow from './CurveDesignerWindow'
 import LegDetailsTab from './LegDetailsTab'
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import useMarketDataStore from '../../store/useMarketDataStore'
-import { supabase } from '../../lib/supabase'
 import { getSessionSafe } from '../../lib/session'
 import './TradeBookingWindow.css'
 import XVATab from './XVATab'
@@ -271,7 +270,6 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
   const [activeVolP, setActiveVolP] = useState(SABR_BASE.map(p=>({...p})))
   const [jointResult, setJointResult] = useState(null)
   const [unsavedVol,  setUnsavedVol]  = useState(false) // {rateOnly, volOnly, joint, base}
-  const smileCanvasRef = useRef(null)  // kept for compat but unused
   const volCanvasRef   = useRef(null)
   const volWrapRef     = useRef(null)
   const capVolCanvasRef = useRef(null)
@@ -436,24 +434,6 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
       const loop=()=>{if(!alive)return;requestAnimationFrame(loop);renderer.render(scene,camera)}
       loop()
       volThreeRef.current.stopLoop=()=>{alive=false}
-
-      // Native mouse/wheel events — React synthetic events don't work reliably with Three.js
-      const onDown=e=>{
-        volDragRef.current={ds:{x:e.clientX,y:e.clientY},dsph:{...volSphRef.current}}
-        canvas.style.cursor='grabbing'
-      }
-      const onMove=e=>{
-        if(!volDragRef.current)return
-        const{ds,dsph}=volDragRef.current
-        volSphRef.current.th=dsph.th-(e.clientX-ds.x)*0.005
-        volSphRef.current.ph=Math.max(0.08,Math.min(1.5,dsph.ph-(e.clientY-ds.y)*0.005))
-        volCamUpdate()
-      }
-      const onUp=()=>{ volDragRef.current=null; canvas.style.cursor='grab' }
-      const onWheel=e=>{
-        volSphRef.current.r=Math.max(5,Math.min(22,volSphRef.current.r+e.deltaY*0.012))
-        volCamUpdate(); e.preventDefault()
-      }
     })
     return()=>{
       const t=volThreeRef.current; if(!t)return
@@ -1187,7 +1167,6 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                   ].map(sc=>{
                     const baseVol = parseFloat(capVolOverride)||85
                     const shockedVol = Math.max(1, baseVol + sc.shift)
-                    const isActive = sc.shift===0?(capVolOverride===String(baseVol)||!sc.d):false
                     return (
                       <button key={sc.l}
                         onClick={()=>{
@@ -1356,7 +1335,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 >
               <div style={{position:'absolute',top:5,left:8,fontSize:'0.7rem',
                 color:'var(--amber)',letterSpacing:'.10em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
-                VOL SURFACE — β​=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'var(--text-dim)',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
+                VOL SURFACE — β=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'var(--text-dim)',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
               </div>
               {/* Mode button — top right of vol pane */}
               <div style={{position:'absolute',top:5,right:8,zIndex:3,display:'flex',gap:3}}>
@@ -1575,7 +1554,7 @@ function xvaCalc(xva, notionalRef, rateRef, effDate, matDate, parRate) {
       ? parRate
       : (isFinite(fromRef) && fromRef > 0 ? fromRef : NaN)
     return { allIn: isFinite(par) ? par + bp/100 : NaN, bp, dv01: dv, par }
-  } catch(_) { return { allIn: NaN, bp: 0, dv01: 1, par: NaN } }
+  } catch { return { allIn: NaN, bp: 0, dv01: 1, par: NaN } }
 }
 
 function XvaFooterRate({xva,notionalRef,rateRef,effDate,matDate,parRate}) {
@@ -1677,7 +1656,6 @@ function SwaptionDecayChart({ result, expiry }) {
     ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr, dpr)
 
     const NPV = result.npv
-    const sigma = parseFloat(result.vol_bp||86.5) / 10000
     const PAD = {l:8, r:60, t:10, b:20}
     const CW = W - PAD.l - PAD.r
     const CH = H - PAD.t - PAD.b
@@ -1738,7 +1716,7 @@ function SwaptionDecayChart({ result, expiry }) {
   return <canvas ref={ref} style={{display:'block'}}/>
 }
 
-export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, windowId, trade: initialTrade }) {
+export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, trade: initialTrade }) {
   const { fetchTrades } = useTradesStore()
   const { curves, curveInterp } = useMarketDataStore()
   const dataLoaded    = useRef(false)
@@ -1765,7 +1743,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   // FX and digital assets: the panel prices and builds the trade body; the window owns parties, dates and buttons
   const isCurrency = ac === 'FX' || ac === 'CRYPTO'
   const fxRef = useRef(null)
-  const [store,  setStore]  = useState('WORKING')
+  const [store]  = useState('WORKING')
   const [ownEntityId, setOwnEntityId] = useState('')
   const [cpId,   setCpId]   = useState('')
   const [ccy,    setCcy]    = useState('USD')
@@ -1793,14 +1771,13 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [err,           setErr]          = useState('')
   const [bookedTrade,   setBookedTrade]  = useState(null)
   const [analytics,     setAnalytics]    = useState(null)
-  const [analyticsErr,  setAnalyticsErr] = useState(null)
+  const [, setAnalyticsErr]              = useState(null)
   // Clear stale errors on mount
   React.useEffect(()=>{setAnalyticsErr(null)},[])
   const [xvaResult,     setXvaResult]    = useState(null)
-  const [xvaPricing,    setXvaPricing]   = useState(false)
   const [xvaApplied,    setXvaApplied]   = useState(false)
   const xvaParamsRef = useRef(null) // populated by XVATab on every param change
-  const [xvaErr,        setXvaErr]       = useState(null)
+  const [xvaErr]        = useState(null)
   const [valDate,       setValDate]      = useState('')
   // VIEW MODE — set when opening existing trade from blotter
   const [viewTrade,     setViewTrade]    = useState(initialTrade || null)
@@ -1850,9 +1827,9 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
 
   // SCENARIO tab state moved to <ScenarioTab /> component
   const [parRate,       setParRate]      = useState(null)
-  const [parError,      setParError]     = useState(null)
+  const [, setParError]                = useState(null)
   const [notionalState, setNotionalState] = useState(10000000)
-  const [fraDay,         setFraDay]         = useState('ACT/360')
+  const [fraDay]         = useState('ACT/360')
   const [index2,         setIndex2]         = useState('EFFR')
   const [floatResetFreq2,setFloatResetFreq2] = useState('DAILY')
   const [floatPayFreq2,  setFloatPayFreq2]   = useState('ANNUAL')
@@ -1868,7 +1845,6 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const [feeAmount,            setFeeAmount]            = useState('')
   const [feeAmountType,        setFeeAmountType]        = useState('BP')        // BP | $
   const [feeSettleDate,        setFeeSettleDate]        = useState('')
-  const [showFeeSchedule,      setShowFeeSchedule]      = useState(false)
   const [feeSchedule,          setFeeSchedule]          = useState([{date:'',amount:''}])
   const [swaptionResult,       setSwaptionResult]       = useState(null)
   const [swaptionPricing,      setSwaptionPricing]      = useState(false)
@@ -1882,8 +1858,6 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   // rather than in the load effect: the coupon input is uncontrolled, and a
   // state change mid-load remounts it and wipes the value.
   const [rateMode,      setRateMode]      = useState(initialTrade ? 'FIXED' : 'PAR')
-  const [targetNpv,     setTargetNpv]    = useState('')
-  const [solvingNpv,    setSolvingNpv]   = useState(false)
 
   // ── Cap / Floor / Collar state ──────────────────────────────────────
   const [capRate,    setCapRate]    = useState('4.5')
@@ -2149,7 +2123,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       setEffDate(data.effective_date)
       setMatDate(data.maturity_date)
       // dates set — par rate will auto-populate from store via useEffect
-    } catch(e) { /* silent */ }
+    } catch { /* silent */ }
     finally { setDatesLoading(false) }
   }
 
@@ -2320,7 +2294,6 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
   const floatDir = dir === 'PAY' ? 'RECEIVE' : 'PAY'
 
   const buildLegs = (tradeId, notional) => {
-    const structLabel = deriveStructLabel()
     const curveId     = CCY_CURVE[ccy] || 'USD_SOFR'
     const forecastId  = INDEX_CURVE[index] || curveId
     const isOIS       = struct === 'OIS'
@@ -2484,7 +2457,6 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
     const isOIS      = struct === 'OIS'
     const isZC       = zcToggle
     const rateSchedPrev = rateSchedule.filter(r=>r.date&&r.rate!=='').map(r=>({date:r.date,rate:parseFloat(r.rate)/100}))
-    const spreadSchedPrev = spreadSchedule.filter(r=>r.date&&r.spread_bps!=='').map(r=>({date:r.date,spread:parseFloat(r.spread_bps)/10000}))
     const session    = await getSession()
     const h = { Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' }
 
@@ -2760,59 +2732,6 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
       }
     } catch(e) { setSwaptionErr(e.message) }
     finally { setSwaptionPricing(false) }
-  }
-
-  const handlePriceXva = async () => {
-    setXvaPricing(true); setXvaErr(null)
-    try {
-      const session = await getSession()
-      const n = parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))
-      // rateRef belongs to the TRADE tab and is unmounted while the XVA tab is
-      // showing, so it cannot be the only source for the strike — falling back
-      // to a hardcoded 3.665 mis-struck the simulation. Prefer the solved par.
-      const frRef  = parseFloat(rateRef.current?.value)
-      const frPar  = typeof parRate === 'number' ? parRate : parseFloat(parRate)
-      const frPct  = (isFinite(frRef) && frRef > 0) ? frRef
-                   : ((isFinite(frPar) && frPar > 0) ? frPar : NaN)
-      const fr = frPct / 100
-      const matY = (new Date(matDate)-new Date(effDate))/(365.25*24*3600*1000)
-      const res = await fetch(API+'/api/xva/simulate', {
-        method:'POST',
-        headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
-        body: JSON.stringify(Object.assign(
-          { notional:isNaN(n)?10000000:n, maturity_y:Math.max(0.5,matY), fixed_rate:isNaN(fr)?0.0365:fr, paths:2000,
-            // Same curve, same date, same TV the pricer used.
-            valuation_date: valDate || undefined,
-            curve_id:       CCY_CURVE[ccy] || 'USD_SOFR',
-            npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
-            ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
-            direction: dir || 'PAY' },
-          // Swaption-specific fields — add expiry/vol/direction for 2-phase EE
-          inst === 'IR_SWAPTION' ? (() => {
-            const EXPIRY_Y = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
-            const TENOR_Y  = {'1Y':1,'2Y':2,'3Y':3,'4Y':4,'5Y':5,'6Y':6,'7Y':7,'8Y':8,'9Y':9,'10Y':10,'12Y':12,'15Y':15,'20Y':20,'25Y':25,'30Y':30}
-            return {
-              instrument_type:    'IR_SWAPTION',
-              swaption_expiry_y:  EXPIRY_Y[swaptionExpiry] || 1.0,
-              swaption_tenor_y:   TENOR_Y[tenor] || 5.0,
-              swaption_vol_bp:    parseFloat(swaptionVol) || 84.0,
-              swaption_is_payer:  dir === 'PAY',
-              direction:          dir === 'PAY' ? 'PAY' : 'RECEIVE',
-              // Override maturity to full swaption life (expiry + tenor)
-              maturity_y: (EXPIRY_Y[swaptionExpiry]||1) + (TENOR_Y[tenor]||5),
-              // Strike: ATM forward if blank
-              fixed_rate: swaptionResult?.forward_rate || isNaN(fr) ? 0.0365 : fr,
-            }
-          })() : {},
-          typeof xvaParamsRef.current === 'function' ? xvaParamsRef.current() : (xvaParamsRef.current || {})
-        ))
-      })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d.detail||'XVA failed')
-      setXvaResult(d); setXvaApplied(false)
-      try { sessionStorage.setItem('rijeka_xva_sim', JSON.stringify(d)) } catch(_) {}
-    } catch(e) { setXvaErr(e.message) }
-    finally { setXvaPricing(false) }
   }
 
   const handleApplyXvaToRate = () => {
@@ -3197,7 +3116,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                       </span>
                     )}
                     <span style={{fontSize:'0.75rem',color:'var(--text-dim)'}}>
-                      a={swaptionResult.hw1f_params?.a?.toFixed(4)} · σ​={swaptionResult.hw1f_params?.sigma_bp?.toFixed(1)}bp
+                      a={swaptionResult.hw1f_params?.a?.toFixed(4)} · σ={swaptionResult.hw1f_params?.sigma_bp?.toFixed(1)}bp
                     </span>
                   </div>
                 )}
@@ -3807,7 +3726,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                             }}
                             type='text' placeholder='—' autoComplete='off'
                             defaultValue={parRate != null ? String(parRate) : ''}
-                            onChange={e=>{ if(rateRef.current) rateRef.current.dataset.userEdited='1' }}
+                            onChange={()=>{ if(rateRef.current) rateRef.current.dataset.userEdited='1' }}
                             onBlur={e=>{ const v=parseFloat(e.target.value); if(!isNaN(v)) setParRate(v) }}
                           />
                           <button
@@ -3893,9 +3812,6 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
               </div>
               
             </SectionHdr>
-            {false&&(
-              <div style={{fontSize:'0.875rem',color:'var(--amber)',fontFamily:"'IBM Plex Mono',var(--mono)",marginBottom:'4px'}}>\u26a0 {analyticsErr}</div>
-            )}
             {pricing&&(
               <div style={{display:'flex',alignItems:'center',gap:'8px',color:'var(--text-dim)',fontSize:'0.875rem',marginBottom:'8px'}}>
                 <div style={{width:'12px',height:'12px',border:'2px solid var(--border)',borderTop:'2px solid var(--accent)',borderRadius:'50%',animation:'spin 0.8s linear infinite',flexShrink:0}}/>
@@ -3903,7 +3819,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 <style dangerouslySetInnerHTML={{__html:'@keyframes spin{to{transform:rotate(360deg)}}'}}/>
               </div>
             )}
-            {true&&(<>
+            <>
               <div style={{border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden',marginBottom:'12px'}}>
                 <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
                   <colgroup>
@@ -3987,7 +3903,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 </div>
               )}
 
-            </>)}
+            </>
             </div>
           {/* XVA → see XVA tab for full simulation */}
           {activeTab==='main' && !xvaResult && !isCurrency && (
@@ -4010,7 +3926,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, w
                 <span style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--accent)'}}>XVA</span>
                 {xvaResult?.params && (
                   <span style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'.03em'}}>
-                    HW1F · a={xvaResult.params.a.toFixed(4)} · σ​={xvaResult.params.sigma_bp.toFixed(1)}bp · {xvaResult.n_paths.toLocaleString()} paths
+                    HW1F · a={xvaResult.params.a.toFixed(4)} · σ={xvaResult.params.sigma_bp.toFixed(1)}bp · {xvaResult.n_paths.toLocaleString()} paths
                   </span>
                 )}
                 <div style={{marginLeft:'auto',display:'flex',gap:'6px',alignItems:'center'}}>

@@ -23,7 +23,7 @@ export function provisionDemo(session) {
   // Already done in this browser session: restore the result for the banner
   // and still make sure the JWT carries the role the server granted.
   let cached = null
-  try { cached = JSON.parse(sessionStorage.getItem(KEY) || 'null') } catch {}
+  try { cached = JSON.parse(sessionStorage.getItem(KEY) || 'null') } catch { /* ignore: sessionStorage unavailable or corrupt */ }
   if (cached?.uid === uid && cached.out) {
     _syncRole(session, cached.out)
     return Promise.resolve(cached.out)
@@ -60,7 +60,7 @@ async function _provision(session) {
     console.warn('[demo] provisioning skipped:', e?.message)
     return null
   }
-  try { sessionStorage.setItem(KEY, JSON.stringify({ uid, out: { ...out, role_changed: false } })) } catch {}
+  try { sessionStorage.setItem(KEY, JSON.stringify({ uid, out: { ...out, role_changed: false } })) } catch { /* ignore: sessionStorage unavailable */ }
   _syncRole(session, out)
   return out
 }

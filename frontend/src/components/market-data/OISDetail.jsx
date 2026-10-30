@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import RateCurveCanvas from './RateCurveCanvas';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { INTERP_METHODS, TENOR_TO_YEARS } from '../../data/ratesCurves';
@@ -63,7 +63,7 @@ function OISInstruments({ curve }) {
   const [csvParsed, setCsvParsed]               = useState([]);
   const [csvError, setCsvError]                 = useState(null);
   const [quoteSources, setQuoteSources]         = useState({});
-  const [snapshotReady, setSnapshotReady]       = useState(false);
+  const [, setSnapshotReady]                    = useState(false);
   const storeCurve = useMarketDataStore(s => s.curves.find(c => c.id === curve.id));
   const liveInstruments = storeCurve?.instruments || curve.instruments;
 
@@ -105,7 +105,7 @@ function OISInstruments({ curve }) {
   // Bloomberg
   const fetchBlpStatus = async () => {
     try { setBlpStatus(await (await fetch('/api/bloomberg/status')).json()); }
-    catch (e) { setBlpStatus({ connected: false, installed: false, error: 'Could not reach backend' }); }
+    catch { setBlpStatus({ connected: false, installed: false, error: 'Could not reach backend' }); }
   };
 
   const fetchBlpTickers = async (curveId) => {
@@ -301,7 +301,7 @@ function OISInstruments({ curve }) {
               style={{background:'var(--panel-2)',border:'1px solid var(--border)',color:'var(--text)',
                 fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',padding:'0.25rem 0.45rem',borderRadius:2,outline:'none'}} />
             <button
-              onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch(_){} }}
+              onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
               style={{padding:'0.25rem 0.85rem',background:'rgba(14,201,160,0.07)',
                 border:'1px solid var(--accent)',borderRadius:2,fontFamily:"'IBM Plex Mono',var(--mono)",

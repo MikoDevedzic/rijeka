@@ -4,7 +4,7 @@
 // parity points and the basis beside every quoted point), and its
 // conventions. Points are saved as {PAIR}_FWD snapshots: manual, Bloomberg
 // snap, or import, like any rates curve.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel, DescBox } from './_DetailShared'
 import RateCurveCanvas from './RateCurveCanvas'

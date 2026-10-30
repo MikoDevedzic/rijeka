@@ -4,7 +4,8 @@
 // and the maths that runs underneath. Nine seconds each, cross-fade, dots to
 // jump, pause on hover, static first scene under prefers-reduced-motion.
 import { useEffect, useRef, useState } from 'react'
-import VolSurface3D, { toGrid } from './VolSurface3D'
+import VolSurface3D from './VolSurface3D'
+import { toGrid } from './volGrid'
 
 const DWELL_MS = 9000
 const years = (t) => { const m = /^(\d+)(D|W|M|Y)$/.exec(t || ''); if (!m) return t === 'ON' ? 1 / 365 : null; const n = +m[1]; return { D: n / 365, W: n / 52, M: n / 12, Y: n }[m[2]] }
@@ -13,7 +14,7 @@ const FALLBACK_PAR = [['1Y', 3.76], ['2Y', 4.06], ['3Y', 4.10], ['5Y', 4.12], ['
 // ── Scene 2: bootstrap ────────────────────────────────────────────────────
 // Annual-coupon bootstrap of par rates on integer years (linear in par rate
 // between quoted tenors): DF_n = (1 - s_n Σ DF_k) / (1 + s_n); z = -ln DF / t.
-export function bootstrap(quotes) {
+function bootstrap(quotes) {
   const q = (quotes || []).map(x => ({ t: years(x.tenor), r: Number(x.rate) })).filter(x => x.t != null && x.t >= 1 && !isNaN(x.r)).sort((a, b) => a.t - b.t)
   if (q.length < 3) return null
   const T = Math.round(q[q.length - 1].t)

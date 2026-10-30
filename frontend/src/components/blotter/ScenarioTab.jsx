@@ -124,7 +124,6 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
   const [activeVolP, setActiveVolP] = useState(SABR_BASE.map(p=>({...p})))
   const [jointResult, setJointResult] = useState(null)
   const [unsavedVol,  setUnsavedVol]  = useState(false) // {rateOnly, volOnly, joint, base}
-  const smileCanvasRef = useRef(null)  // kept for compat but unused
   const volCanvasRef   = useRef(null)
   const volWrapRef     = useRef(null)
   const capVolCanvasRef = useRef(null)
@@ -289,24 +288,6 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       const loop=()=>{if(!alive)return;requestAnimationFrame(loop);renderer.render(scene,camera)}
       loop()
       volThreeRef.current.stopLoop=()=>{alive=false}
-
-      // Native mouse/wheel events — React synthetic events don't work reliably with Three.js
-      const onDown=e=>{
-        volDragRef.current={ds:{x:e.clientX,y:e.clientY},dsph:{...volSphRef.current}}
-        canvas.style.cursor='grabbing'
-      }
-      const onMove=e=>{
-        if(!volDragRef.current)return
-        const{ds,dsph}=volDragRef.current
-        volSphRef.current.th=dsph.th-(e.clientX-ds.x)*0.005
-        volSphRef.current.ph=Math.max(0.08,Math.min(1.5,dsph.ph-(e.clientY-ds.y)*0.005))
-        volCamUpdate()
-      }
-      const onUp=()=>{ volDragRef.current=null; canvas.style.cursor='grab' }
-      const onWheel=e=>{
-        volSphRef.current.r=Math.max(5,Math.min(22,volSphRef.current.r+e.deltaY*0.012))
-        volCamUpdate(); e.preventDefault()
-      }
     })
     return()=>{
       const t=volThreeRef.current; if(!t)return
@@ -1071,7 +1052,6 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   ].map(sc=>{
                     const baseVol = parseFloat(capVolOverride)||85
                     const shockedVol = Math.max(1, baseVol + sc.shift)
-                    const isActive = sc.shift===0?(capVolOverride===String(baseVol)||!sc.d):false
                     return (
                       <button key={sc.l}
                         onClick={()=>{
@@ -1234,7 +1214,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
 >
               <div style={{position:'absolute',top:5,left:8,fontSize:'0.8rem',
                 color:'var(--amber)',letterSpacing:'.10em',fontFamily:'var(--mono)',zIndex:2}}>
-                VOL SURFACE — β​=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'var(--text-mute)',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
+                VOL SURFACE — β=0 NORMAL SABR {volScenKey!=='base'&&<span style={{color:'var(--text-mute)',marginLeft:6}}>· {VOL_SCEN[volScenKey]?.l}</span>}
               </div>
               {/* Mode button — top right of vol pane */}
               <div style={{position:'absolute',top:5,right:8,zIndex:3,display:'flex',gap:3}}>

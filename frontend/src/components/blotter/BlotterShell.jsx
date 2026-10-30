@@ -1,8 +1,22 @@
 import { useState, useEffect } from 'react'
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
-import { useTabStore } from '../../store/useTabStore'
 import useBookingStore from '../../store/useBookingStore'
 import './BlotterShell.css'
+
+const TH = ({ col, label, sortCol, sortDir, onSort }) => (
+  <th className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)}>
+    {label}{sortCol === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+  </th>
+)
+
+function Row({ label, value, color }) {
+  return (
+    <div className="tp-row">
+      <span className="tp-lbl">{label}</span>
+      <span className="tp-val" style={color ? { color } : {}}>{value || '—'}</span>
+    </div>
+  )
+}
 
 const AC = {
   RATES:     { c: 'var(--accent)', a: 'RTS' },
@@ -61,12 +75,6 @@ export default function BlotterShell() {
 
   const live    = trades.filter(t => t.status === 'LIVE').length
   const pending = trades.filter(t => t.status === 'PENDING').length
-
-  const TH = ({ col, label }) => (
-    <th className={sortCol === col ? 'th-sort' : ''} onClick={() => sort(col)}>
-      {label}{sortCol === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
-    </th>
-  )
 
   return (
     <div className="bl-root">
@@ -181,16 +189,16 @@ export default function BlotterShell() {
                       }}
                     />
                   </th>
-                  <TH col="trade_ref"    label="REF" />
+                  <TH col="trade_ref"    label="REF" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
                   <th>CLASS</th>
-                  <TH col="instrument_type" label="INSTRUMENT" />
+                  <TH col="instrument_type" label="INSTRUMENT" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
                   <th>STRUCTURE</th>
                   <th>COUNTERPARTY</th>
                   <th title="The counterparty's own trade ref for this trade">THEIR REF</th>
-                  <TH col="notional" label="NOTIONAL" />
+                  <TH col="notional" label="NOTIONAL" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
                   <th>TENOR</th>
-                  <TH col="trade_date"   label="DATE" />
-                  <TH col="status"       label="STATUS" />
+                  <TH col="trade_date"   label="DATE" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
+                  <TH col="status"       label="STATUS" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
                   <th>STORE</th>
                   <th title="Unique Transaction Identifier: the same on both parties' bookings">UTI</th>
                 </tr>
@@ -277,15 +285,6 @@ function TradePanel({ trade: t, onClose }) {
   const ac = AC[t.asset_class] || { c: 'var(--text-dim)', a: t.asset_class }
   const st = ST[t.status]      || { c: 'var(--text-dim)', l: t.status }
   const sr = SR[t.store]        || { c: 'var(--text-dim)', l: t.store }
-
-  function Row({ label, value, color }) {
-    return (
-      <div className="tp-row">
-        <span className="tp-lbl">{label}</span>
-        <span className="tp-val" style={color ? { color } : {}}>{value || '—'}</span>
-      </div>
-    )
-  }
 
   return (
     <div className="tp-root">

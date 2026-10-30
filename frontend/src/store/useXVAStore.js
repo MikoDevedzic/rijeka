@@ -111,7 +111,7 @@ const useXVAStore = create((set, get) => ({
         })),
         snapshotSaved: { date: data.valuation_date, source: data.source },
       }));
-    } catch (_) {}
+    } catch { /* ignore: snapshot fetch failure leaves the grid as is */ }
   },
 
   setCalibration: (result) => set({ calibration: result }),

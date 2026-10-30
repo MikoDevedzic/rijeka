@@ -21,7 +21,7 @@ function localToday() {
 
 // ── Vol surface heatmap ──────────────────────────────────────────────────────
 
-function CapVolHeatmap({ atmRows, smileRows, hasData }) {
+function CapVolHeatmap({ atmRows, hasData }) {
   if (!hasData) return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--border)',
       borderRadius: '2px', padding: '8px', marginTop: '6px', height: '60px',

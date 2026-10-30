@@ -236,7 +236,7 @@ export function OptionFeeBlock({ spec, state, update }) {
 
 // ── AnalyticsBlock (metrics grid + collapsible breakdown table) ─────────────
 
-export function AnalyticsBlock({ descriptor, result, pricing, error, state }) {
+export function AnalyticsBlock({ descriptor, result, pricing, error }) {
   const [open, setOpen] = useState(true)
 
   if (error) {
@@ -312,7 +312,7 @@ export function AnalyticsBlock({ descriptor, result, pricing, error, state }) {
 
 // ── XVASummary (universal, simple link to XVA tab) ──────────────────────────
 
-export function XVASummary({ result }) {
+export function XVASummary() {
   return (
     <div className="tbw-sec">
       <div className="tbw-sec-header">

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import RateCurveCanvas from './RateCurveCanvas';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { INTERP_METHODS } from '../../data/ratesCurves';
@@ -263,7 +263,7 @@ function BasisInstruments({ curve }) {
                 fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', padding:'0.25rem 0.45rem',
                 borderRadius:2, outline:'none'}} />
             <button
-              onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch(_){} }}
+              onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
               style={{padding:'0.25rem 0.85rem', background:'rgba(14,201,160,0.07)',
                 border:'1px solid var(--accent)', borderRadius:2,

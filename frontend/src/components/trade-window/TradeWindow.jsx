@@ -51,7 +51,8 @@ import { useTabStore }    from '../../store/useTabStore'
 import './products/rates'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { getSessionMaybe } from '../../lib/session'
-import FxCryptoPanel, { SHAPE_OF } from './FxCryptoPanel'
+import FxCryptoPanel from './FxCryptoPanel'
+import { SHAPE_OF } from './fx-shape'
 import FxXvaPanel from './FxXvaPanel'
 import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
 // import './products/fx'
@@ -133,7 +134,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   }
   if (!product) throw new Error(`Unknown product: ${productKey}`)
 
-  const { curves, curveInterp }        = useMarketDataStore()
+  const { curveInterp }                = useMarketDataStore()
 
   const [structure, setStructure]      = useState(product.defaultStructure)
   const [direction, setDirection]      = useState('PAY')
@@ -223,7 +224,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // Patch 21: XVA integration — params ref for XVATab to write to,
   // sim result state for shell-level consumption later.
   const xvaParamsRef = useRef(null)
-  const [xvaSimResult, setXvaSimResult] = useState(null)
+  const [, setXvaSimResult] = useState(null)
   const [pos, setPos] = useState(() => ({
     x: Math.max(10, (typeof window !== 'undefined' ? window.innerWidth : 1400) - 1287) / 2,
     y: 30,
@@ -395,7 +396,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       const t = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(typeof t.detail === 'string' ? t.detail : (t.detail ? JSON.stringify(t.detail) : 'Booking failed'))
       setBookedTrade(t)
-      try { useTradesStore.getState().fetchTrades?.() } catch {}
+      try { useTradesStore.getState().fetchTrades?.() } catch { /* ignore: blotter refresh is best effort */ }
       onBook?.({ productKey: body.instrument_type, trade: t })
     } catch (e) {
       setBookErr(e.message || String(e))

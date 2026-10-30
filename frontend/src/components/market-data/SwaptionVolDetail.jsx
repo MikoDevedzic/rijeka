@@ -6,7 +6,7 @@
 //   Vol Config tab   — interpolation method, smile settings
 // Pure Black theme — same CSS variables as rest of app.
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import useXVAStore from '../../store/useXVAStore';
 import {
   SWAPTION_EXPIRIES, SWAPTION_TENORS,
@@ -94,7 +94,7 @@ function VolSurface({ grid, hasData }) {
 
 // ── Instruments tab ───────────────────────────────────────────────────────────
 function SwvInstruments() {
-  const { grid, updateVol, toggleCell, saveSnapshot, loadLatestSnapshot,
+  const { grid, updateVol, saveSnapshot, loadLatestSnapshot,
           snapshotSaving, snapshotSaved, snapshotError, filledCount } = useXVAStore();
 
   const [saveDate,      setSaveDate]      = useState(new Date().toISOString().slice(0, 10));
@@ -113,7 +113,7 @@ function SwvInstruments() {
     try {
       const res = await fetch('/api/bloomberg/status');
       setBlpStatus(await res.json());
-    } catch (e) {
+    } catch {
       setBlpStatus({ connected: false, installed: false, error: 'Could not reach backend' });
     }
   };
@@ -1086,7 +1086,6 @@ function sabrQuality(offsets) {
   const hasNeg  = offsets.some(o => o < 0);
   const hasPos  = offsets.some(o => o > 0);
   const hasWing = offsets.some(o => Math.abs(o) >= 100);
-  const hasNear = offsets.some(o => Math.abs(o) <= 50 && o !== 0);
   const n       = offsets.length;
 
   if (n === 0)                            return { level:'none',    color:'var(--text-dim)',  label:'NO DATA',    desc:'α from ATM only · ρ and ν are initial guesses · flat smile' };
@@ -1125,7 +1124,6 @@ function SwvOTMSkew({ atmGrid }) {
   const [loadedDate,   setLoadedDate]   = useState(null);
   const [sabrParams,   setSabrParams]   = useState(null);
   const [activeExpiry, setActiveExpiry] = useState(SWAPTION_EXPIRIES[3]); // 5Y default
-  const [showSabr,     setShowSabr]     = useState(false);
   // Always absolute vol mode — Bloomberg SMKO tickers give absolute vols
   const absMode = true;
   // Bloomberg SMKO snap state
@@ -1161,7 +1159,7 @@ function SwvOTMSkew({ atmGrid }) {
         };
       });
       setSkewGrid(newGrid);
-    } catch {}
+    } catch { /* ignore: snapshot fetch failure leaves the grid as is */ }
   };
 
   const loadSabrParams = async () => {
@@ -1173,7 +1171,7 @@ function SwvOTMSkew({ atmGrid }) {
       if (!res.ok) return;
       const data = await res.json();
       if (data.exists) setSabrParams(data);
-    } catch {}
+    } catch { /* ignore: snapshot fetch failure leaves the grid as is */ }
   };
 
   // Bloomberg SMKO snap — snaps absolute vols for negative OTM strikes
@@ -1725,7 +1723,7 @@ function SwvOTMSkew({ atmGrid }) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function SwaptionVolDetail() {
-  const { grid, filledCount, snapshotSaved, updateVol, saveSnapshot } = useXVAStore();
+  const { grid, filledCount, updateVol, saveSnapshot } = useXVAStore();
   const filled = filledCount();
   const total  = SWAPTION_EXPIRIES.length * SWAPTION_TENORS.length;
 

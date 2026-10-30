@@ -156,12 +156,12 @@ export default function LegDetailsTab({
   struct, dir, floatDir, ccy, index,
   effDate, matDate, valDate,
   notionalRef, rateRef, spreadRef, parRate,
-  fixedPayFreq, fixedDc, fixedBdc, fixedCal,
-  floatPayFreq, floatDc, floatBdc, floatCal, floatResetFreq,
+  fixedPayFreq, fixedDc, fixedBdc,
+  floatPayFreq, floatDc, floatBdc, floatResetFreq,
   zcToggle, setZcToggle,
-  rateSchedule, setRateSchedule,
-  notionalSchedule, setNotionalSchedule,
-  spreadSchedule, setSpreadSchedule,
+  setRateSchedule,
+  setNotionalSchedule,
+  setSpreadSchedule,
   deriveStructLabel, getSession,
   scheduleRef,
   index2, floatDc2, floatPayFreq2, floatResetFreq2,
@@ -259,8 +259,8 @@ export default function LegDetailsTab({
   const updateFixed = (i,k,v) => setFixedRows(p=>p.map((r,j)=>j===i?{...r,[k]:v}:r))
   const updateFloat = (i,k,v) => setFloatRows(p=>p.map((r,j)=>j===i?{...r,[k]:v}:r))
 
-  const handlePasteFixed = async () => { try { const text=await navigator.clipboard.readText(); const rows=parsePaste(text,false); if(rows.length)setFixedRows(rows) } catch(e){} }
-  const handlePasteFloat = async () => { try { const text=await navigator.clipboard.readText(); const rows=parsePaste(text,true); if(rows.length)setFloatRows(rows) } catch(e){} }
+  const handlePasteFixed = async () => { try { const text=await navigator.clipboard.readText(); const rows=parsePaste(text,false); if(rows.length)setFixedRows(rows) } catch { /* ignore: clipboard unavailable or denied */ } }
+  const handlePasteFloat = async () => { try { const text=await navigator.clipboard.readText(); const rows=parsePaste(text,true); if(rows.length)setFloatRows(rows) } catch { /* ignore: clipboard unavailable or denied */ } }
   const handleExport = () => exportToExcel(fixedRows, floatRows, 'TRADE', dir, floatDir, ccy, index)
   const handleFileImport = async (file) => {
     if (!file) return

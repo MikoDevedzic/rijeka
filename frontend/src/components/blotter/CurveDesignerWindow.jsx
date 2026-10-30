@@ -14,7 +14,7 @@ const PRESETS = {
 const CAP = 300  // max bp shift in either direction
 const BP_PER_PX = 0.4  // fixed sensitivity — never dynamic
 
-export default function CurveDesignerWindow({ onClose, curveId, baseRates, analytics, tradeRef, onConfirm }) {
+export default function CurveDesignerWindow({ onClose, curveId, baseRates, tradeRef, onConfirm }) {
   const canvasRef    = useRef(null)
   const shiftsRef    = useRef(TENORS.map(()=>0))
   const sigmaRef     = useRef(4)
@@ -29,7 +29,7 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
   const [interpMode, setInterpMode] = useState('LOG_LINEAR')
   const [confirmed,  setConfirmed]  = useState(true)
   const [dragTip,    setDragTip]    = useState(null)
-  const [tick,       setTick]       = useState(0)
+  const [shifts,     setShifts]     = useState(() => TENORS.map(()=>0))
 
   useEffect(()=>{ baseRatesRef.current = baseRates },[baseRates])
   const getBase = t => (baseRatesRef.current && baseRatesRef.current[t] != null) ? parseFloat(baseRatesRef.current[t]) : 3.665
@@ -222,6 +222,7 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
           return Math.max(-CAP, Math.min(CAP, Math.round((s+bpDelta*weight)*10)/10))
         })
         shiftsRef.current=newShifts
+        setShifts(newShifts)
         setDragTip({x:mx+16,y:my-32,bp:Math.round(newShifts[idx]),tenor:TENORS[idx]})
         scheduleDraw()
         return
@@ -231,7 +232,7 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
 
     const onUp=()=>{
       if(dragRef.current){
-        dragRef.current=null; setDragTip(null); setConfirmed(false); setTick(t=>t+1); scheduleDraw()
+        dragRef.current=null; setDragTip(null); setConfirmed(false); setShifts([...shiftsRef.current]); scheduleDraw()
       }
     }
 
@@ -248,11 +249,11 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
   const applyPreset=key=>{
     setPresetKey(key)
     shiftsRef.current=[...(PRESETS[key]||PRESETS.flat0)]
-    setConfirmed(false); setTick(t=>t+1); scheduleDraw()
+    setConfirmed(false); setShifts([...shiftsRef.current]); scheduleDraw()
   }
   const handleReset=()=>{
     shiftsRef.current=TENORS.map(()=>0)
-    setPresetKey('flat0'); setConfirmed(true); setTick(t=>t+1); scheduleDraw()
+    setPresetKey('flat0'); setConfirmed(true); setShifts([...shiftsRef.current]); scheduleDraw()
   }
   const handleConfirm=()=>{
     setConfirmed(true)
@@ -264,7 +265,7 @@ export default function CurveDesignerWindow({ onClose, curveId, baseRates, analy
     }
   }
 
-  const sh=shiftsRef.current
+  const sh=shifts
   const anyShift=sh.some(s=>Math.abs(s)>0.05)
   const avgBp=Math.round(sh.reduce((a,b)=>a+b,0)/TENORS.length)
   const inp={background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'2px',

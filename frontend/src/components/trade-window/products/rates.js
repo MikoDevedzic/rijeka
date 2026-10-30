@@ -331,7 +331,7 @@ registerProduct({
   ],
   defaultStructure: 'EUROPEAN',
 
-  direction: state => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
+  direction: () => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
 
   terms: {
     title: 'OPTION TERMS',
@@ -447,11 +447,11 @@ registerProduct({
   structures: [],
   defaultStructure: null,
 
-  direction: state => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
+  direction: () => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
 
   terms: {
     title: 'CAP TERMS',
-    helper: state => ({ text: '↑ BUY CAP · protection vs rising rates', color: 'var(--red)' }),
+    helper: () => ({ text: '↑ BUY CAP · protection vs rising rates', color: 'var(--red)' }),
     footerText: 'Bachelier (Normal) · vol from cap surface · OIS discounting · SOFR in-arrears',
     Component: CapTermsBody,
   },
@@ -519,11 +519,11 @@ registerProduct({
   structures: [],
   defaultStructure: null,
 
-  direction: state => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
+  direction: () => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
 
   terms: {
     title: 'FLOOR TERMS',
-    helper: state => ({ text: '↓ BUY FLOOR · protection vs falling rates', color: 'var(--accent)' }),
+    helper: () => ({ text: '↓ BUY FLOOR · protection vs falling rates', color: 'var(--accent)' }),
     footerText: 'Bachelier (Normal) · put-call vol symmetry via |K−ATM| · OIS discounting · SOFR in-arrears',
     Component: FloorTermsBody,
   },
@@ -591,11 +591,11 @@ registerProduct({
   structures: [],
   defaultStructure: null,
 
-  direction: state => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
+  direction: () => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
 
   terms: {
     title: 'COLLAR TERMS',
-    helper: state => ({ text: '↕ BUY COLLAR · cap + floor spread', color: 'var(--amber)' }),
+    helper: () => ({ text: '↕ BUY COLLAR · cap + floor spread', color: 'var(--amber)' }),
     footerText: 'Long Cap − Short Floor · Bachelier (Normal) · zero-cost spread = cap − floor',
     Component: CollarTermsBody,
   },

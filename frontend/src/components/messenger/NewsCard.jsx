@@ -14,7 +14,7 @@ function when(iso) {
 
 export default function NewsCard({ card }) {
   let host = ''
-  try { host = new URL(card.url).hostname.replace(/^www\./, '') } catch {}
+  try { host = new URL(card.url).hostname.replace(/^www\./, '') } catch { /* ignore: malformed URL, host stays empty */ }
   return (
     <div className="nc">
       <div className="nc-top">

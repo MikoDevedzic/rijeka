@@ -11,7 +11,7 @@
 // leg configuration that pre-populates the leg builder.
 // fixed_rate left blank '' — trader must enter their rate.
 
-export const IR_SWAP_STRUCTURES = [
+const IR_SWAP_STRUCTURES = [
   {
     value:       'VANILLA',
     label:       'VANILLA',
@@ -236,28 +236,6 @@ export const IR_SWAP_STRUCTURES = [
     ],
   },
 ];
-
-// ── Helpers ──────────────────────────────────────────────────
-
-export function getStructureByValue(value) {
-  return IR_SWAP_STRUCTURES.find(s => s.value === value)
-    ?? IR_SWAP_STRUCTURES[0];    // default VANILLA
-}
-
-/**
- * Returns a leg array ready to load into the leg builder.
- * Each leg gets a fresh UUID and seq index.
- * Caller may override currency / notional / dates after the call.
- */
-export function getStructureLegs(structureValue) {
-  const s = getStructureByValue(structureValue);
-  return s.legs.map((leg, i) => ({
-    ...leg,
-    leg_id:  crypto.randomUUID(),
-    leg_ref: `L${i + 1}`,
-    leg_seq: i,
-  }));
-}
 
 // ── IrSwapStructureSelector component ───────────────────────
 

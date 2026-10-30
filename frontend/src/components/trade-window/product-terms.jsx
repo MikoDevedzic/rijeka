@@ -201,7 +201,7 @@ export function SwapTermsBody({ state, update }) {
         const data = await res.json()
         if (cancelled) return
         update({ effDate: data.effective_date, matDate: data.maturity_date })
-      } catch (_) { /* silent */ }
+      } catch { /* silent */ }
     })()
     return () => { cancelled = true }
   }, [tenor, ccy, tradeDate])
@@ -659,7 +659,7 @@ export function CollarTermsBody({ state, update }) {
 
 // ── FX stubs for future reference (Sprint 11+) ─────────────────────────────
 
-export function FxForwardTermsBody({ state, update }) {
+export function FxForwardTermsBody() {
   return (
     <Row cols={6}>
       <Field label="BASE CCY"><select><option>USD</option><option>EUR</option></select></Field>
@@ -672,7 +672,7 @@ export function FxForwardTermsBody({ state, update }) {
   )
 }
 
-export function FxOptionTermsBody({ state, update }) {
+export function FxOptionTermsBody() {
   // Placeholder — expand in Sprint 11+ when FX options come online
   return <div className="tbw-mut">FX option terms — on the roadmap</div>
 }
