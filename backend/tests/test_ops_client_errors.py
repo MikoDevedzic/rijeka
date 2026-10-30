@@ -58,6 +58,10 @@ def test_health_carries_the_summary_and_rejects_oversize_or_malformed():
     assert c.post("/api/ops/client-error", content=b"[1,2]", headers={"Content-Type": "application/json"}).json()["accepted"] is False
     c.post("/api/ops/client-error", json={"message": "ReferenceError: curveObj is not defined", "route": "/blotter"})
     h = c.get("/api/ops/health").json()
-    assert h["ok"] is True and h["client_errors"]["last_24h"] == 1
-    assert h["client_errors"]["top"][0]["message"].startswith("ReferenceError")
-    assert json.dumps(h)                                                                           # serialisable
+    assert h["ok"] is True and h["client_errors"] == {"last_24h": 1}                              # the public body carries a count only
+    assert "commit" in h and json.dumps(h)                                                         # serialisable
+    assert c.get("/api/ops/client-errors").status_code == 401                                      # the text needs a signed-in operator
+    from middleware.auth import verify_token
+    c.app.dependency_overrides[verify_token] = lambda: {"sub": "op", "user_metadata": {"role": "admin"}}
+    e = c.get("/api/ops/client-errors").json()
+    assert e["last_24h"] == 1 and e["top"][0]["message"].startswith("ReferenceError")

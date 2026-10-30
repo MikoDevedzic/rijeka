@@ -12,6 +12,8 @@ Engine: backend/pnl. The attribution convention is stated in the report itself.
 """
 from __future__ import annotations
 
+import hmac
+
 import logging
 import os
 from datetime import date
@@ -195,7 +197,7 @@ def run_eod(date_: Optional[str] = Query(default=None, alias="date"), db: Sessio
 
 def _secret_ok(given: Optional[str]) -> bool:
     want = os.environ.get("RIJEKA_CRON_SECRET")
-    return bool(want) and given == want
+    return bool(want) and given is not None and hmac.compare_digest(given, want)
 
 
 @router.post("/eod/tick")

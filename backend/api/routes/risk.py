@@ -11,6 +11,8 @@ POST /api/risk/daily/tick               cron: compute and store today's report f
 """
 from __future__ import annotations
 
+import hmac
+
 import logging
 import os
 from datetime import date
@@ -71,7 +73,7 @@ def _can_write(db: Session, user: dict) -> bool:
 
 def _secret_ok(given: Optional[str]) -> bool:
     want = os.environ.get("RIJEKA_CRON_SECRET")
-    return bool(want) and given == want
+    return bool(want) and given is not None and hmac.compare_digest(given, want)
 
 
 @router.get("/report")

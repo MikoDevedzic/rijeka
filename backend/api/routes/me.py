@@ -68,7 +68,7 @@ def put_defaults(body: DefaultsBody, db: Session = Depends(get_db), user: dict =
     return get_defaults(db, user)
 
 
-SELF_ROLES = ("trader", "controller", "risk", "management", "admin")
+SELF_ROLES = ("trader", "controller", "risk", "management")      # never admin: that is the Users page, by an admin
 
 
 class RoleBody(BaseModel):
@@ -99,4 +99,6 @@ def put_role(body: RoleBody, db: Session = Depends(get_db), user: dict = Depends
     db.execute(text("UPDATE auth.users SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || jsonb_build_object('role', :r) WHERE id = :id"),
                {"r": role, "id": uid})
     db.commit()
+    from middleware.auth import forget_role
+    forget_role(uid)
     return {"role": role, "changed": role != current, "note": "refresh the session so the token carries the new role"}

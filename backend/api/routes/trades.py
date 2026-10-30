@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from db.session import get_db
-from db.models import Trade, Counterparty
+from db.models import Trade, Counterparty, LegalEntity
 from middleware.auth import verify_token
 from api.routes.pricer import invalidate_trade_cache
 from api.routes._instrument_alias import normalize_instrument_type  # M009 inbound translator
@@ -197,6 +197,11 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
         "created_by":           uuid.UUID(user["sub"]),
     }
     kwargs["structure"] = body.structure
+    # a trade may only point at the caller's own entity and counterparty
+    if kwargs.get("counterparty_id") and not db.query(Counterparty).filter(Counterparty.id == kwargs["counterparty_id"], Counterparty.user_id == kwargs["user_id"]).first():
+        raise HTTPException(status_code=422, detail="counterparty_id is not one of yours")
+    if kwargs.get("own_legal_entity_id") and not db.query(LegalEntity).filter(LegalEntity.id == kwargs["own_legal_entity_id"], LegalEntity.user_id == kwargs["user_id"]).first():
+        raise HTTPException(status_code=422, detail="own_legal_entity_id is not one of yours")
     try:
         trade = Trade(**kwargs)
         db.add(trade)
@@ -205,12 +210,14 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
         db.refresh(trade)
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"DB error: {str(e)}")
+        raise HTTPException(status_code=500, detail="The trade could not be saved; the error is in the server log.")
     cp = db.query(Counterparty).filter(Counterparty.id == trade.counterparty_id).first() if trade.counterparty_id else None
     return serialize(trade, cp)
 
 @router.put("/{trade_id}")
 def update_trade(trade_id: str, body: TradeUpdate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    if str((user.get("user_metadata") or {}).get("role", "viewer")).lower() not in ("trader", "admin"):
+        raise HTTPException(status_code=403, detail="Editing a trade requires the Trader or Admin role.")
     t = db.query(Trade).filter(Trade.id == uuid.UUID(trade_id), Trade.user_id == uuid.UUID(user["sub"])).first()
     if not t:
         raise HTTPException(status_code=404, detail="Trade not found")

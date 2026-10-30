@@ -17,7 +17,15 @@ const fmtLast = (v) => !v ? 'never' : v.length > 10 ? fmtT(v) : new Date(v + 'T0
 export default function SystemPage() {
   const [h, setH] = useState(null)
   const [err, setErr] = useState(null)
-  const load = () => fetch(`${API}/api/ops/health`).then(r => r.ok ? r.json() : Promise.reject(new Error(`health ${r.status}`))).then(setH).catch(e => setErr(e.message))
+  const load = () => fetch(`${API}/api/ops/health`).then(r => r.ok ? r.json() : Promise.reject(new Error(`health ${r.status}`)))
+    .then(async h => {
+      try {                                                   // browser error text is for signed-in operators only
+        const { getSessionMaybe } = await import('../../lib/session'); const s = await getSessionMaybe()
+        const r = await fetch(`${API}/api/ops/client-errors`, { headers: { Authorization: `Bearer ${s?.access_token}` } })
+        if (r.ok) h = { ...h, client_errors: await r.json() }
+      } catch { /* ignore: the health table still renders */ }
+      setH(h)
+    }).catch(e => setErr(e.message))
   useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t) }, [])
   const checks = Object.entries(h?.checks || {})
   const ce = h?.client_errors

@@ -247,8 +247,9 @@ def deliver(message_id: uuid.UUID, *, sender: Optional[BotClient] = None) -> boo
         link.last_sent_at = datetime.now(timezone.utc)
         db.commit()
         return True
-    except Exception:
-        log.exception("telegram mirror failed for message %s", message_id)
+    except Exception as e:              # noqa: BLE001 — the exception text carries the bot URL; log the class only
+        log.warning("telegram mirror failed for message %s: %s %s", message_id, type(e).__name__,
+                    getattr(getattr(e, "response", None), "status_code", ""))
         db.rollback()
         return False
     finally:

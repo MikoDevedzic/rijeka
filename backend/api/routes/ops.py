@@ -28,6 +28,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from db.session import get_db
+from middleware.auth import verify_token
 
 router = APIRouter(prefix="/api/ops", tags=["ops"])
 log = logging.getLogger(__name__)
@@ -105,12 +106,18 @@ def stale_batches(db: Session) -> list[dict]:
 
 @router.get("/health")
 def ops_health(db: Session = Depends(get_db)):
-    """Batch freshness, client errors, and the commit this process runs (Render's RENDER_GIT_COMMIT):
-    the release-sync workflow reads `commit` to move the branch the frontend deploys from. The bare
-    /health path belongs to the curves router, which is why the commit lives here."""
+    """Batch freshness and the commit this process runs (Render's RENDER_GIT_COMMIT): the release-sync
+    workflow reads `commit` to move the branch the frontend deploys from. The bare /health path belongs
+    to the curves router, which is why the commit lives here. Browser error text is not in this public
+    body (anyone can post it); it is served to signed-in users by /client-errors."""
     import os
-    return {**health(db), "client_errors": client_error_summary(),
+    return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]},
             "commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or None}
+
+
+@router.get("/client-errors")
+def ops_client_errors(user: dict = Depends(verify_token)):
+    return client_error_summary()
 
 
 # ── browser errors ───────────────────────────────────────────────────────────
@@ -130,9 +137,8 @@ def scrub(text_: Any, limit: int = ERR_FIELD) -> str:
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
+    # uvicorn runs with --proxy-headers, so request.client already holds the address the trusted
+    # proxy saw; reading X-Forwarded-For ourselves would let a client prepend any hop it likes
     return request.client.host if request.client else "unknown"
 
 

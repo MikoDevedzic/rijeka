@@ -7,7 +7,14 @@ algorithm is pinned to ES256, expiry is enforced, the audience claim is not chec
 There is no shared-secret (HS256) path: a shared secret is one value that, once leaked,
 mints a token for any user, and the legacy secret for this project was committed to the
 public repository in March 2026 (commit 3025de4). SUPABASE_JWT_SECRET is not read.
-The JWKS is cached and refetched once on a key id the cache does not know (rotation)."""
+The JWKS is cached and refetched once on a key id the cache does not know (rotation).
+
+Roles: the token's user_metadata.role is written by the client at sign-up and can be
+rewritten by the client, so it is not trusted on its own. After verification the caller's
+profiles.role is read from the database (one primary-key query, cached 30 s per user) and
+placed into the user dict, both as user["role"] and over user_metadata.role, so every
+route that reads the role reads the database's answer. The claim is used only when no
+profile row exists."""
 from __future__ import annotations
 
 import logging
@@ -24,6 +31,37 @@ log = logging.getLogger("rijeka.auth")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://upuewetohnocfshkhafg.supabase.co").rstrip("/")
 JWKS_TTL = 3600.0
 _jwks: dict = {"at": 0.0, "keys": None}
+ROLE_TTL = 30.0
+_roles: dict[str, tuple[float, Optional[str]]] = {}
+
+
+def db_role_for(sub: str) -> Optional[str]:
+    """profiles.role for a user id, cached briefly; None when there is no row or the DB is unreachable."""
+    hit = _roles.get(sub)
+    now = time.time()
+    if hit and now - hit[0] < ROLE_TTL:
+        return hit[1]
+    role = None
+    try:
+        from sqlalchemy import text
+        from db.session import SessionLocal
+        db = SessionLocal()
+        try:
+            r = db.execute(text("SELECT role FROM profiles WHERE id = :id"), {"id": sub}).scalar()
+            role = str(r).lower() if r else None
+        finally:
+            db.close()
+    except Exception as e:                  # noqa: BLE001 — the claim is the fallback, the failure is logged
+        log.warning("role lookup failed: %s", type(e).__name__)
+    if len(_roles) > 5000:
+        _roles.clear()
+    _roles[sub] = (now, role)
+    return role
+
+
+def forget_role(sub: str) -> None:
+    """Call after changing a user's role so the next request sees it."""
+    _roles.pop(sub, None)
 
 
 async def _get_jwks(force: bool = False) -> Optional[dict]:
@@ -65,7 +103,13 @@ async def verify_token(authorization: Optional[str] = Header(None)) -> dict:
     if key is None:
         raise HTTPException(status_code=401, detail="Invalid token")
     try:
-        return jwt.decode(token, key.key, algorithms=["ES256"], options={"verify_aud": False, "require": ["exp", "sub"]})
+        payload = dict(jwt.decode(token, key.key, algorithms=["ES256"], options={"verify_aud": False, "require": ["exp", "sub"]}))
     except PyJWTError as e:
         log.info("token rejected: %s", type(e).__name__)
         raise HTTPException(status_code=401, detail="Invalid token")
+    meta = dict(payload.get("user_metadata") or {})
+    role = db_role_for(str(payload["sub"])) or (str(meta.get("role") or "viewer").lower())
+    meta["role"] = role
+    payload["user_metadata"] = meta
+    payload["role"] = role
+    return payload

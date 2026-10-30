@@ -461,6 +461,13 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
         if cached:
             return {**cached.result, "idempotent_replay": True}
 
+    # a booking may only point at the caller's own entity and counterparty
+    from db.models import Counterparty, LegalEntity
+    if body.counterparty_id and not db.query(Counterparty).filter(Counterparty.id == uuid.UUID(body.counterparty_id), Counterparty.user_id == user_id).first():
+        raise HTTPException(status_code=422, detail="counterparty_id is not one of yours")
+    if body.own_legal_entity_id and not db.query(LegalEntity).filter(LegalEntity.id == uuid.UUID(body.own_legal_entity_id), LegalEntity.user_id == user_id).first():
+        raise HTTPException(status_code=422, detail="own_legal_entity_id is not one of yours")
+
     # ── Generate IDs up front ─────────────────────────────────
     trade_id = uuid.uuid4()
     event_id = uuid.uuid4()

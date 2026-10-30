@@ -133,6 +133,13 @@ function PersistentBookingWindow() {
   )
 }
 
+// The Users page is for admins; everyone else lands on the configurations home.
+function AdminOnly({ children }) {
+  const { profile } = useAuthStore()
+  if ((profile?.role || 'viewer') !== 'admin') return <Navigate to="/configurations" replace />
+  return children
+}
+
 // A routed page that throws shows the error card; navigating elsewhere heals it.
 // It also counts the view: one beacon per route change (lib/usage.js).
 function PageBoundary({ children }) {
@@ -190,7 +197,7 @@ export default function App() {
               <Route path="market-data/capfloor"             element={<CapVolDetail />} />
               <Route path="market-data/crypto"               element={<FxWorkspace />} />
               <Route path="xva-parameters/hw1f"          element={<XVAParametersTab />} />
-              <Route path="users"              element={<Users />} />
+              <Route path="users"              element={<AdminOnly><Users /></AdminOnly>} />
               <Route path="system"             element={<SystemPage />} />
             </Route>
           </Route>

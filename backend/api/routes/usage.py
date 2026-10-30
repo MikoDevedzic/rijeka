@@ -43,13 +43,12 @@ _table: dict[str, Any] = {"at": 0.0, "present": None}
 
 def visitor_id(ip: str, ua: str, day: date, secret: Optional[str] = None) -> str:
     """Daily-rotating, one-way: the same person on the same day and device is one visitor."""
-    salt = secret if secret is not None else (os.environ.get("RIJEKA_CRON_SECRET") or os.environ.get("RIJEKA_USAGE_SALT") or "rijeka")
+    salt = secret if secret is not None else (os.environ.get("RIJEKA_USAGE_SALT") or "rijeka-usage")   # a stable, non-privileged salt
     return hashlib.sha256(f"{ip}|{ua}|{day.isoformat()}|{salt}".encode()).hexdigest()[:16]
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for")
-    return fwd.split(",")[0].strip() if fwd else (request.client.host if request.client else "unknown")
+    return request.client.host if request.client else "unknown"      # resolved by uvicorn's proxy-header handling
 
 
 def _allow(ip: str, now: float) -> bool:

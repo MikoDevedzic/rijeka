@@ -19,7 +19,8 @@ GitHub themselves; social engineering; volumetric denial of service.
 ## What is in place
 
 - Authentication: Supabase ES256 tokens verified by public key (PyJWT, algorithm
-  pinned); no shared-secret path. Roles come from the database, not the token.
+  pinned); no shared-secret path. After verification the caller's role is read from
+  the database (profiles.role) and overrides whatever the token claims.
 - Data isolation: every table carries Postgres row-level security; the API queries by
   the caller's user id and firm.
 - Secrets: never in the repository (.env files ignored, GitHub secret scanning and push
@@ -28,8 +29,9 @@ GitHub themselves; social engineering; volumetric denial of service.
   limits and body size caps.
 - Dependencies are pinned and audited (`pip-audit`, `npm audit`); Dependabot is
   configured in `.github/dependabot.yml`.
-- Transport: HSTS, frame denial and content-type sniffing protection on the app;
-  the API is reached over HTTPS only.
+- Transport: HSTS (set by Netlify), frame denial and content-type sniffing protection
+  on the app; the API is reached over HTTPS only. A content security policy is on the
+  list, not yet in place.
 
 ## Supported versions
 

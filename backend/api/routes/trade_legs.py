@@ -319,7 +319,7 @@ def create_leg(
     if role not in WRITE_ROLES:
         raise HTTPException(status_code=403, detail="Leg creation requires Trader or Admin role.")
 
-    existing = db.query(TradeLeg).filter(TradeLeg.id == body.id).first()
+    existing = db.query(TradeLeg).filter(TradeLeg.id == body.id, TradeLeg.user_id == uuid.UUID(user["sub"])).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Leg {body.id} already exists.")
 
@@ -332,7 +332,11 @@ def create_leg(
 
     # The stored leg is complete: dates and curves from the trade, canonical
     # frequency names, conventions by currency (api/routes/_leg_defaults.py).
-    trade = db.query(Trade).filter(Trade.id == payload.get("trade_id")).first() if payload.get("trade_id") else None
+    trade = None
+    if payload.get("trade_id"):
+        trade = db.query(Trade).filter(Trade.id == payload["trade_id"], Trade.user_id == uuid.UUID(user["sub"])).first()
+        if trade is None:
+            raise HTTPException(status_code=404, detail="Trade not found")        # not yours, or not there: same answer
     payload = complete_leg(payload, effective_date=getattr(trade, "effective_date", None),
                            maturity_date=getattr(trade, "maturity_date", None),
                            discount_curve_id=getattr(trade, "discount_curve_id", None),

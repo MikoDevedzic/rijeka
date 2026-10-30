@@ -92,7 +92,8 @@ def _cp_identity(db: Session, cp: Counterparty) -> dict:
 def trade_parts(db: Session, trade: Trade) -> tuple:
     """(own entity, counterparty entity, counterparty {lei, name}, legs): load once per request, pass as `parts`."""
     own, cp = _load_parties(db, trade, trade.user_id)
-    return own, cp, _cp_identity(db, cp), db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
+    # the record both parties sign carries the owner's legs only: a leg row written by anyone else is not part of it
+    return own, cp, _cp_identity(db, cp), db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id, TradeLeg.user_id == trade.user_id).all()
 
 
 def _canonical_for(db: Session, trade: Trade, version: int = CANONICAL_SCHEMA_VERSION,

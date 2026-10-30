@@ -68,8 +68,9 @@ def status(user: dict = Depends(verify_token)):
         try:
             me = c.get_me().get("result") or {}
             out["bot_username"] = me.get("username")
-        except Exception as e:  # token wrong, network down — say so, don't 500
-            out["bot_error"] = str(e)[:200]
+        except Exception as e:  # token wrong, network down — say which, never the message (the URL carries the token)
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            out["bot_error"] = f"telegram {status}" if status else type(e).__name__
     return out
 
 

@@ -7,6 +7,8 @@ Engine: backend/ccr. Exposure and limits are real-world; CVA is risk-neutral; bo
 """
 from __future__ import annotations
 
+import hmac
+
 import datetime as _dt
 import logging
 import os
@@ -41,7 +43,7 @@ def _ctx(db: Session, user: dict) -> dict:
 
 def _secret_ok(given: Optional[str]) -> bool:
     want = os.environ.get("RIJEKA_CRON_SECRET")
-    return bool(want) and given == want
+    return bool(want) and given is not None and hmac.compare_digest(given, want)
 
 
 @router.get("/report")
