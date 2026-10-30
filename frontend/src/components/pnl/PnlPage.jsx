@@ -67,6 +67,10 @@ export default function PnlPage() {
 
   return (
     <div className="pnl">
+      <nav className="rk-switch" aria-label="P&L views">
+        <button className={`rk-seg${view === 'book' ? ' on' : ''}`} onClick={() => setView('book')}>MY BOOK</button>
+        <button className={`rk-seg${view === 'firm' ? ' on' : ''}`} onClick={() => setView('firm')} title="Every book in the firm, with sign-off state (management, controller, CFO, admin)">MANAGEMENT</button>
+      </nav>
       <div className="pnl-bar">
         <div className="pnl-title">P&amp;L · ATTRIBUTION <span className="pnl-sub">{rep?.reporting_ccy || 'USD'} · {rep?.prev_date ? <>vs {fmtD(rep.prev_date)}</> : 'first mark'}</span></div>
         <div className="pnl-ctl">
@@ -77,8 +81,6 @@ export default function PnlPage() {
           </label>
           <span className={`pnl-chip ${stTone}`}>{stLabel}</span>
           <button className="pnl-btn" onClick={runEod} disabled={busy || !rep?.date}>{busy ? 'WORKING…' : 'RUN END OF DAY'}</button>
-          <button className={`pnl-btn ghost${view === 'book' ? ' on' : ''}`} onClick={() => setView('book')}>MY BOOK</button>
-          <button className={`pnl-btn ghost${view === 'firm' ? ' on' : ''}`} onClick={() => setView('firm')} title="Every book in the firm, with sign-off state (controller, CFO, admin)">MANAGEMENT</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/blotter')}>BLOTTER →</button>
         </div>
       </div>

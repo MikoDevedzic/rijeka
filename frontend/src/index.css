@@ -35,8 +35,8 @@
   /* Text */
   --text:         #DCE3EA;
   --text-hi:      #F4F7FA;
-  --text-dim:     #8B98A8;
-  --text-mute:    #5F6C7B;
+  --text-dim:     #A1AEBD;
+  --text-mute:    #8290A0;
   --text-muted:   #8B98A8;   /* legacy name used by the auth pages */
 
   /* Accent — teal */
