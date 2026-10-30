@@ -84,7 +84,7 @@ function Meetings({ d }) {
 }
 
 function PathChart({ d, loading }) {
-  const ref = useRef(null); const { w: W, h } = useSize(ref); const H = Math.max(262, Math.floor(h) || 0)
+  const ref = useRef(null); const { w: W, h } = useSize(ref); const H = Math.max(150, Math.floor(h) || 0)   // the plot yields height when the hero row is fixed; 150px keeps the labels legible
   const [hov, setHov] = useState(null)
   const model = useMemo(() => {
     if (!d?.path?.length) return null

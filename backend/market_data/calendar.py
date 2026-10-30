@@ -275,7 +275,7 @@ def auctions(d0: date, d1: date) -> list[dict]:
         if d0 <= d <= d1:
             amt = float(a.get("offeringAmount") or 0) / 1e9
             out.append(_row(d, "13:00", "USD", f"UST {a.get('securityTerm')} {a.get('securityType', '').lower()} auction", "AUCTION", 3, source=SOURCES["ust"],
-                            note=f"${amt:.0f}bn{' · reopening' if a.get('reopening') == 'Yes' else ''}"))
+                            note=(f"${amt:.0f}bn" if amt else "size on announcement") + (" · reopening" if a.get("reopening") == "Yes" else "")))
     return out
 
 

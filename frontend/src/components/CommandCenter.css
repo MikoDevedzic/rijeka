@@ -92,7 +92,9 @@
 @media (max-width:720px)  { .dh-grid { grid-template-columns:1fr; } .dh-modules-note { display:none; } }
 
 /* ── hero: curve + surface ── */
-.dh-hero { display:grid; grid-template-columns:7fr 5fr; gap:1rem; padding-top:1rem; }
+/* a definite row height: the policy path chart fills it, the week-ahead list scrolls inside it, and the
+   book, lifecycle and news keep the rest of the screen */
+.dh-hero { display:grid; grid-template-columns:7fr 5fr; grid-template-rows:clamp(26rem, 38vh, 32rem); gap:1rem; padding-top:1rem; }
 .dh-card header .dh-sub { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.08em; color:var(--text-dim); display:flex; gap:0.5rem; align-items:center; }
 .dh-card header .dh-sub b { color:var(--text); font-weight:600; }
 .dh-card header .dh-sub .dh-link { margin-left:0.75rem; }
@@ -276,7 +278,8 @@
 .pt-note { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.08em; color:var(--text-mute); }
 
 /* ── THE WEEK AHEAD ─────────────────────────────────────────────────────── */
-.dh-week { display:flex; flex-direction:column; min-height:0; }
+/* a fixed height: the policy path chart fills whatever the hero row gives it, and the list scrolls inside */
+.dh-week { display:flex; flex-direction:column; min-height:0; height:100%; }
 .dh-chip { background:transparent; border:1px solid var(--border-hi); color:var(--text-dim); font-family:var(--mono); font-size:0.8rem; letter-spacing:0.1em; padding:0.1rem 0.5rem; border-radius:2px; cursor:pointer; }
 .dh-chip.on { color:var(--accent); border-color:var(--accent); background:var(--accent-glow); }
 .wk-list { flex:1; min-height:0; overflow:auto; margin-top:0.5rem; }
@@ -297,3 +300,20 @@
 .wk-act b { color:var(--text-hi); } .wk-act i { font-style:normal; font-size:0.8rem; } .wk-act i.up { color:var(--red); } .wk-act i.dn { color:var(--accent); }
 .wk-foot { margin-top:0.5rem; }
 @media (max-width:1100px) { .wk-row { grid-template-columns:3.4rem 2.4rem 1fr 6rem 7rem; } }
+
+/* ── One screen on a trading monitor ─────────────────────────────────────
+   On a display at least 1000px tall the desk home fits the viewport: the three lower
+   cards share what is left under the hero and their long parts (the book brief, the
+   action inbox and anchors, the news) scroll inside. Shorter screens keep the page scroll. */
+@media (min-height: 1000px) and (min-width: 1101px) {
+  .cc-root { height:100vh; min-height:0; overflow:hidden; }
+  .dh { min-height:0; overflow:hidden; }
+  .dh-grid { grid-auto-rows:minmax(0, 1fr); }
+  .dh-grid > .dh-card { overflow:hidden; }
+  .dh-grid > .dh-card:first-child { overflow:auto; scrollbar-width:thin; scrollbar-color:var(--border-hi) transparent; }   /* the book card scrolls as a whole: nothing in it is hidden */
+  .lf-block { min-height:0; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--border-hi) transparent; }
+}
+
+/* the policy path plot yields height to the decisions row and the footnote when the hero row is fixed */
+.dh-curve { min-height:0; }
+.dh-curve .dh-plot { flex:1 1 0; min-height:9rem; }
