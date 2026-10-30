@@ -1,11 +1,13 @@
 """
 Operations: is every scheduled batch current, and what is breaking in browsers?
 
-GET /api/ops/health is public and carries no account data: for each batch the
-cron drives it reports the last run and whether that is recent enough. The
-cron's final step calls it and fails the workflow run when anything is stale,
-so GitHub mails the repository owner; the desk's inbox shows the same item to
-signed-in users, because a stale batch is their stale page.
+GET /api/ops/health is public and carries no account data: for each batch it
+reports the last run and whether that is recent enough, plus the in-process
+scheduler's own record of its last cycle (scheduler.py drives the batches on
+Render; the GitHub cron is the second driver). The workflow's final step calls
+it and fails the run when anything is stale, so GitHub mails the repository
+owner; the desk's inbox shows the same item to signed-in users, because a
+stale batch is their stale page.
 
 POST /api/ops/client-error takes uncaught browser errors from the app (window
 errors, unhandled promises, React boundaries). They live in memory on this
@@ -111,7 +113,9 @@ def ops_health(db: Session = Depends(get_db)):
     to the curves router, which is why the commit lives here. Browser error text is not in this public
     body (anyone can post it); it is served to signed-in users by /client-errors."""
     import os
+    import scheduler
     return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]},
+            "scheduler": scheduler.status(),
             "commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or None}
 
 

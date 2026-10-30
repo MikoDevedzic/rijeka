@@ -1,12 +1,16 @@
-# Keeps the frontend from running ahead of the API.
+# Keeps the frontend from running ahead of the API (the outside copy).
 #
-# Netlify builds app.rijeka.app from the `release` branch, not from main. This job
-# runs every five minutes, asks the live API which commit it is running (Render sets
-# RENDER_GIT_COMMIT; GET /api/ops/health reports it) and moves `release` to that commit. So a push
-# to main deploys the API first (Render, after CI), and the frontend follows once the
-# API is actually serving that commit. A failed API deploy leaves the frontend where it
-# was. It is a schedule rather than a job in ci.yml because Render waits for the
-# commit's checks before deploying, and a check that waits for Render would never end.
+# Netlify builds app.rijeka.app from the `release` branch, not from main. This job asks the
+# live API which commit it is running (Render sets RENDER_GIT_COMMIT; GET /api/ops/health
+# reports it) and moves `release` to that commit. So a push to main deploys the API first
+# (Render, after CI), and the frontend follows once the API is actually serving that commit.
+# A failed API deploy leaves the frontend where it was.
+#
+# The API does the same move itself at startup when RIJEKA_GITHUB_TOKEN is set on Render
+# (backend/scheduler.py); that is the path that runs on time. GitHub runs this schedule on a
+# best-effort basis (on 2026-10-30 it did not fire once in a day), so it is the backstop and the
+# manual button, not the driver. It is a schedule rather than a job in ci.yml because Render
+# waits for the commit's checks before deploying, and a check that waits for Render would never end.
 name: release-sync
 on:
   schedule:

@@ -108,6 +108,14 @@ def _warm_public_pulse():
         public.warm()
     except Exception:
         pass
+
+
+@app.on_event("startup")
+def _start_scheduler():
+    # Batches and the release move run inside this process on Render (see scheduler.py); the
+    # GitHub workflows remain a second driver and the external stale-batch alarm.
+    import scheduler
+    scheduler.start()
 app.include_router(crypto.router)
 app.include_router(currencies.router)
 
