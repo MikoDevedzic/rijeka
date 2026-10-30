@@ -50,7 +50,7 @@ export default function Lifecycle({ demo, empty, reducedMotion }) {
   return (
     <section className="dh-card dh-life">
       <header>
-        <span>LIFECYCLE</span>
+        <span>LIFECYCLE <em className="dh-h-sub">your trades, from booking to the chain</em></span>
         <span className="dh-sub">
           {chain?.anchored ? <><i className={`lf-beat${chain.reachable === false ? ' bad' : ''}`} />{chain.network}</> : d ? 'OFF-CHAIN' : ''}
           <a className="dh-link" href="https://rijeka.app/verify" target="_blank" rel="noopener noreferrer">VERIFIER ↗</a>
@@ -58,6 +58,7 @@ export default function Lifecycle({ demo, empty, reducedMotion }) {
       </header>
 
       <DeskGlobe arcs={d?.arcs || []} home={d?.home} anchors={anchors} chain={chain} network={d?.network} reducedMotion={reducedMotion} />
+      <div className="lf-explain">Each arc is one of your trades, drawn from your entity's city to the counterparty's; the satellites are confirmations other desks on the network have anchored. Below: the chain the proofs live on, what needs your action, and your latest anchors with their block and transaction.</div>
 
       <div className="lf-health">
         <div><span className="dh-kpi-l">BLOCK</span><b className={chain?.reachable === false ? 'bad' : ''}>{chain?.latest_block ? `#${Number(chain.latest_block).toLocaleString()}` : chain?.anchored ? 'NO NODE' : '—'}</b></div>
