@@ -7,7 +7,7 @@ Two hosts deploy from this repository:
 - **app.rijeka.app** on Netlify builds the **`release`** branch, not `main`.
 
 `.github/workflows/release-sync.yml` runs every five minutes, reads the commit the live
-API is serving from `GET /health` (`commit`, from Render's `RENDER_GIT_COMMIT`) and moves
+API is serving from `GET /api/ops/health` (`commit`, from Render's `RENDER_GIT_COMMIT`) and moves
 `release` to it. The frontend therefore lands a few minutes after the API that serves
 it, never before; a failed API deploy leaves the frontend where it was; a Render rollback
 rolls the frontend back too (the push is forced, `release` is a pointer, not history).

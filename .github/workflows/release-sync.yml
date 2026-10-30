@@ -2,7 +2,7 @@
 #
 # Netlify builds app.rijeka.app from the `release` branch, not from main. This job
 # runs every five minutes, asks the live API which commit it is running (Render sets
-# RENDER_GIT_COMMIT; /health reports it) and moves `release` to that commit. So a push
+# RENDER_GIT_COMMIT; GET /api/ops/health reports it) and moves `release` to that commit. So a push
 # to main deploys the API first (Render, after CI), and the frontend follows once the
 # API is actually serving that commit. A failed API deploy leaves the frontend where it
 # was. It is a schedule rather than a job in ci.yml because Render waits for the
@@ -29,7 +29,7 @@ jobs:
         run: |
           main=$(git rev-parse origin/main)
           release=$(git rev-parse origin/release 2>/dev/null || echo none)
-          live=$(curl -s --max-time 30 "$API/health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit") or "")' 2>/dev/null || true)
+          live=$(curl -s --max-time 30 "$API/api/ops/health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit") or "")' 2>/dev/null || true)
           echo "main=$main release=$release live=$live"
           if [ -z "$live" ]; then echo "the API reports no commit yet"; exit 0; fi
           if [ "$release" = "$live" ]; then echo "release already at the live commit"; exit 0; fi

@@ -114,8 +114,8 @@ _tg_listeners()
 
 @app.get("/health", tags=["meta"])
 def health():
-    # commit: Render sets RENDER_GIT_COMMIT on every deploy; the release-sync workflow reads it
-    # to advance the branch the frontend deploys from, so the app never runs ahead of the API.
+    # Note: this path is shadowed by the curves router's /health (registered first); the commit the
+    # release-sync workflow reads is served by GET /api/ops/health. Kept here for completeness.
     import os as _os
     return {"status": "ok", "service": "rijeka-api", "version": "0.4.0", "commit": _os.environ.get("RENDER_GIT_COMMIT") or _os.environ.get("GIT_COMMIT") or None}
 

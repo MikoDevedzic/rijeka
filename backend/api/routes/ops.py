@@ -105,7 +105,12 @@ def stale_batches(db: Session) -> list[dict]:
 
 @router.get("/health")
 def ops_health(db: Session = Depends(get_db)):
-    return {**health(db), "client_errors": client_error_summary()}
+    """Batch freshness, client errors, and the commit this process runs (Render's RENDER_GIT_COMMIT):
+    the release-sync workflow reads `commit` to move the branch the frontend deploys from. The bare
+    /health path belongs to the curves router, which is why the commit lives here."""
+    import os
+    return {**health(db), "client_errors": client_error_summary(),
+            "commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or None}
 
 
 # ── browser errors ───────────────────────────────────────────────────────────
