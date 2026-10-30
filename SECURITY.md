@@ -30,8 +30,12 @@ GitHub themselves; social engineering; volumetric denial of service.
 - Dependencies are pinned and audited (`pip-audit`, `npm audit`); Dependabot is
   configured in `.github/dependabot.yml`.
 - Transport: HSTS (set by Netlify), frame denial and content-type sniffing protection
-  on the app; the API is reached over HTTPS only. A content security policy is on the
-  list, not yet in place.
+  on the app; the API is reached over HTTPS only. A content security policy is sent in
+  report-only mode (`Content-Security-Policy-Report-Only` in `netlify.toml`, reports to
+  `POST /api/ops/csp-report`, read back at `GET /api/ops/csp-reports`); it is switched to
+  enforcing once the report list has stayed empty for a week. No script is loaded from a
+  CDN at runtime: three.js and ExcelJS are bundled, and the one static page that still
+  references a CDN (`xva.html`) pins it with subresource integrity.
 
 ## Supported versions
 

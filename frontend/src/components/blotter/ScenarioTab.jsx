@@ -10,6 +10,7 @@
 // decomposition for rate+vol joint scenarios.
 // ────────────────────────────────────────────────────────────────────────────────────
 
+import { loadThree, legacyRenderer, LEGACY_LIGHT } from '../../lib/three'
 import React, { useState, useRef, useEffect } from 'react'
 
 // The curve payload for /price/preview: today's stored quotes unless a shocked set is given.
@@ -253,24 +254,19 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
 
   useEffect(()=>{
     if(!IS_SWPN)return
-    const load=()=>new Promise(res=>{
-      if(window.THREE){res();return}
-      const s=document.createElement('script')
-      s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
-      s.onload=res; document.head.appendChild(s)
-    })
+    const load=()=>loadThree()
     load().then(()=>{
       const canvas=volCanvasRef.current,wrap=volWrapRef.current
       if(!canvas||!wrap)return
       const THREE=window.THREE
-      const renderer=new THREE.WebGLRenderer({canvas,antialias:true})
+      const renderer=legacyRenderer(THREE,{canvas,antialias:true})
       renderer.setPixelRatio(window.devicePixelRatio)
       renderer.setClearColor(0x0A0A0E)
       const scene=new THREE.Scene()
       const camera=new THREE.PerspectiveCamera(42,1,0.1,200)
-      scene.add(new THREE.AmbientLight(0x203040,1.5))
-      const dl=new THREE.DirectionalLight(0x00D4A8,0.5);dl.position.set(5,10,8);scene.add(dl)
-      const dl2=new THREE.DirectionalLight(0x4A9EFF,0.25);dl2.position.set(-5,4,-4);scene.add(dl2)
+      scene.add(new THREE.AmbientLight(0x203040,1.5*LEGACY_LIGHT))
+      const dl=new THREE.DirectionalLight(0x00D4A8,0.5*LEGACY_LIGHT);dl.position.set(5,10,8);scene.add(dl)
+      const dl2=new THREE.DirectionalLight(0x4A9EFF,0.25*LEGACY_LIGHT);dl2.position.set(-5,4,-4);scene.add(dl2)
       const gh=new THREE.GridHelper(12,12,0x181B24,0x101318);gh.position.y=-0.05;scene.add(gh)
       volThreeRef.current={THREE,renderer,scene,camera,meshes:{},alive:true}
       volCamUpdate()
@@ -401,24 +397,19 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
 
     const meshRef = {current:null}
 
-    const load = () => new Promise(res=>{
-      if(window.THREE){res();return}
-      const s=document.createElement('script')
-      s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
-      s.onload=res; document.head.appendChild(s)
-    })
+    const load = () => loadThree()
 
     load().then(()=>{
       if(!alive) return
       const THREE = window.THREE
-      const renderer = new THREE.WebGLRenderer({canvas, antialias:true})
+      const renderer = legacyRenderer(THREE, {canvas, antialias:true})
       renderer.setPixelRatio(window.devicePixelRatio)
       renderer.setClearColor(0x0A0A0E)
       const scene = new THREE.Scene()
       const camera = new THREE.PerspectiveCamera(42,1,0.1,200)
-      scene.add(new THREE.AmbientLight(0x203040,1.5))
-      const dl=new THREE.DirectionalLight(0x00D4A8,0.5); dl.position.set(5,10,8); scene.add(dl)
-      const dl2=new THREE.DirectionalLight(0x4A9EFF,0.25); dl2.position.set(-5,4,-4); scene.add(dl2)
+      scene.add(new THREE.AmbientLight(0x203040,1.5*LEGACY_LIGHT))
+      const dl=new THREE.DirectionalLight(0x00D4A8,0.5*LEGACY_LIGHT); dl.position.set(5,10,8); scene.add(dl)
+      const dl2=new THREE.DirectionalLight(0x4A9EFF,0.25*LEGACY_LIGHT); dl2.position.set(-5,4,-4); scene.add(dl2)
       const gh=new THREE.GridHelper(12,12,0x181B24,0x101318); gh.position.y=-0.05; scene.add(gh)
       capThreeRef.current = {THREE,renderer,scene,camera,alive:true}
       camUpdate()

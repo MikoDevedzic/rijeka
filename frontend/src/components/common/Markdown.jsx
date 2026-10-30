@@ -12,6 +12,9 @@ DOMPurify.addHook('afterSanitizeAttributes', node => {
 })
 
 export default function Markdown({ text, className = 'pm-md' }) {
-  const html = DOMPurify.sanitize(marked.parse(text || ''))
+  const html = DOMPurify.sanitize(marked.parse(text || ''), {
+    FORBID_TAGS: ['img', 'style', 'svg', 'math', 'iframe', 'object', 'embed'],
+    FORBID_ATTR: ['style'],
+  })
   return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />
 }

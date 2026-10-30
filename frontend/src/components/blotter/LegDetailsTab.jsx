@@ -68,9 +68,8 @@ function parsePaste(text, isFloat=false) {
 }
 
 async function loadExcelJS() {
-  if (window.ExcelJS) return window.ExcelJS
-  await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s) })
-  return window.ExcelJS
+  const m = await import('exceljs')      // bundled by Vite: nothing is fetched from a CDN at runtime
+  return m.default || m
 }
 
 async function exportToExcel(fixedRows, floatRows, tradeRef='TRADE', dir='PAY', floatDir='RECEIVE', ccy='USD', index='SOFR') {
@@ -126,16 +125,41 @@ async function exportToExcel(fixedRows, floatRows, tradeRef='TRADE', dir='PAY', 
   const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='rijeka_'+tradeRef+'_schedule.xlsx'; a.click(); URL.revokeObjectURL(url)
 }
 
-async function parseExcelFile(file) {
-  if (!window.XLSX) {
-    await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/xlsx@0.20.3/dist/xlsx.full.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s) })
+// A cell's plain value: rich text and hyperlinks as text, formulas as their result, dates as YYYY-MM-DD.
+function cellValue(c) {
+  const v = c.value
+  if (v === null || v === undefined) return v
+  if (v instanceof Date) return v.toISOString().slice(0, 10)
+  if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) return v.richText.map(t => t.text).join('')
+    if ('result' in v) return v.result
+    if ('text' in v) return v.text
+    return String(v)
   }
-  const XLSX=window.XLSX
-  return new Promise((resolve,reject)=>{
-    const reader=new FileReader()
-    reader.onload=e=>{ const wb=XLSX.read(e.target.result,{type:'binary'}); const fixed=wb.Sheets['Fixed Leg']?XLSX.utils.sheet_to_json(wb.Sheets['Fixed Leg']):[]; const float=wb.Sheets['Float Leg']?XLSX.utils.sheet_to_json(wb.Sheets['Float Leg']):[]; resolve({fixed,float}) }
-    reader.onerror=reject; reader.readAsBinaryString(file)
+  return v
+}
+
+// First row as headers, the rows below as objects keyed by them (the shape SheetJS's
+// sheet_to_json gave); empty rows and empty cells are skipped.
+function sheetToJson(ws) {
+  if (!ws) return []
+  const headers = [], out = []
+  ws.eachRow((row, n) => {
+    if (n === 1) { row.eachCell((c, i) => { headers[i] = String(cellValue(c) ?? '') }); return }
+    const o = {}; let any = false
+    row.eachCell((c, i) => { const k = headers[i]; if (!k) return; o[k] = cellValue(c); any = true })
+    if (any) out.push(o)
   })
+  return out
+}
+
+// Parsed with ExcelJS (already bundled for the export) rather than SheetJS: the npm
+// registry's SheetJS stops at 0.18.5, which carries two unfixed advisories.
+async function parseExcelFile(file) {
+  const ExcelJS = await loadExcelJS()
+  const wb = new ExcelJS.Workbook()
+  await wb.xlsx.load(await file.arrayBuffer())
+  return { fixed: sheetToJson(wb.getWorksheet('Fixed Leg')), float: sheetToJson(wb.getWorksheet('Float Leg')) }
 }
 
 function deriveSchedules(fixedRows, floatRows) {
@@ -332,7 +356,7 @@ export default function LegDetailsTab({
             <button style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
             <button style={S.toolBtn()} onClick={handlePasteFixed}>PASTE</button>
             <button style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
-            <input ref={fileInputRef} type='file' accept='.xlsx,.xls,.csv' style={{display:'none'}} onChange={e=>{handleFileImport(e.target.files[0]);e.target.value=''}} />
+            <input ref={fileInputRef} type='file' accept='.xlsx' style={{display:'none'}} onChange={e=>{handleFileImport(e.target.files[0]);e.target.value=''}} />
             <button style={S.toolBtn(C.blue)} onClick={()=>{fileTarget.current='fixed';fileInputRef.current?.click()}}>IMPORT XLS</button>
           </div>
           <div onDragOver={e=>{e.preventDefault();setDropFixed(true)}} onDragLeave={()=>setDropFixed(false)} onDrop={e=>handleDrop(e,false)}>

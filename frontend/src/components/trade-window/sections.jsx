@@ -291,13 +291,7 @@ export function AnalyticsBlock({ descriptor, result, pricing, error }) {
                 {breakdown.rows.map((row, ri) => (
                   <tr key={ri}>
                     {row.map((cell, ci) => (
-                      <td key={ci}
-                          dangerouslySetInnerHTML={
-                            typeof cell === 'string' && cell.includes('<')
-                              ? { __html: cell } : undefined
-                          }>
-                        {typeof cell === 'string' && cell.includes('<') ? undefined : cell}
-                      </td>
+                      <td key={ci}>{cell}</td>
                     ))}
                   </tr>
                 ))}
