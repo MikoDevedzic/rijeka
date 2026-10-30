@@ -22,7 +22,7 @@ jobs:
       RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - name: start the server-side backfill (everything but the BoE)
