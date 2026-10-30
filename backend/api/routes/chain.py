@@ -175,28 +175,11 @@ def _resolve_parties(db: Session, trade: Trade, parts: Optional[tuple] = None):
     return k_own, k_cp, own_id, cp_id
 
 
-def _check_chain_quota(db: Session, user_id) -> None:
-    """
-    RIJEKA_CHAIN_DAILY_LIMIT caps anchoring actions (confirm, countersign,
-    amend, terminate) per user per rolling 24h. The hosted demo pays Sepolia
-    gas from one relayer; a visitor in a loop must not drain it. 0/unset =
-    no cap (local dev, self-hosted).
-    """
-    raw = os.getenv("RIJEKA_CHAIN_DAILY_LIMIT", "").strip()
-    try:
-        limit = int(raw) if raw else 0
-    except ValueError:
-        limit = 0
-    if limit <= 0:
-        return
-    n = db.execute(text("""
-        SELECT count(*) FROM trade_events
-         WHERE user_id = :uid AND event_type IN ('CONFIRMED', 'AMENDED', 'TERMINATED')
-           AND created_at > now() - interval '24 hours'"""), {"uid": user_id}).scalar() or 0
-    if n >= limit:
-        raise HTTPException(status_code=429, detail=(
-            f"This account has anchored {n} actions in the last 24h, the demo's limit of {limit}. "
-            f"Try again tomorrow, or run Rijeka yourself with your own relayer."))
+def _check_chain_quota(db: Session, user_id, kind: str = "confirm") -> None:
+    """Charge the relayer budget for this caller before anything is sent (chain/budget.py):
+    per user, per firm and global caps on anchoring attempts per rolling 24h. 429 when over."""
+    from chain.budget import charge
+    charge(db, user_id, kind=kind)
 
 
 def _eip712_ctx():
@@ -302,7 +285,7 @@ def countersign(
     address registered for their legal entity before anything is submitted.
     """
     user_id = _check_write_role(user)
-    _check_chain_quota(db, user_id)
+    _check_chain_quota(db, user_id, kind="countersign")
     _validate_idempotency_header(idempotency_key)
     cached = _lookup_idempotent(db, user_id, idempotency_key)
     if cached:
@@ -315,7 +298,7 @@ def countersign(
 
 def countersign_trade(db: Session, trade: Trade, address: str, signature: str, *,
                       expected_hash: Optional[str] = None, idempotency_key: Optional[str] = None,
-                      note: Optional[dict] = None) -> dict:
+                      note: Optional[dict] = None, charge_user=None) -> dict:
     """
     Verify the counterparty's signature over the trade's CURRENT canonical
     hash and anchor the confirmation. Shared by POST /countersign (the booker
@@ -323,7 +306,11 @@ def countersign_trade(db: Session, trade: Trade, address: str, signature: str, *
 
     expected_hash: the hash the signer reviewed; if the booking has changed
     since, refuse rather than anchor terms they didn't see.
+    charge_user: who pays the relayer budget when the caller has not been charged yet (the
+    chat-card signer); the /countersign route charges its own caller before calling here.
     """
+    if charge_user is not None:
+        _check_chain_quota(db, charge_user, kind="countersign")
     k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
     ensure_uti(db, trade)   # committed with the CONFIRMED event
     payload, h = _canonical_for(db, trade)
@@ -399,7 +386,7 @@ def confirm_on_chain(
     user: dict = Depends(verify_token),
 ):
     user_id = _check_write_role(user)
-    _check_chain_quota(db, user_id)
+    _check_chain_quota(db, user_id, kind="confirm")
     _validate_idempotency_header(idempotency_key)
     cached = _lookup_idempotent(db, user_id, idempotency_key)
     if cached:
@@ -705,7 +692,7 @@ def amend_on_chain(trade_id: str, body: AmendBody,
     Rows and event commit together; any failure leaves the booking untouched.
     """
     user_id = _check_write_role(user)
-    _check_chain_quota(db, user_id)
+    _check_chain_quota(db, user_id, kind="amend")
     _validate_idempotency_header(idempotency_key)
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:
@@ -796,7 +783,7 @@ def terminate_on_chain(trade_id: str, body: TerminateBody,
                        db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """Close the signed record on-chain with both signatures; TERMINATED event and status."""
     user_id = _check_write_role(user)
-    _check_chain_quota(db, user_id)
+    _check_chain_quota(db, user_id, kind="terminate")
     _validate_idempotency_header(idempotency_key)
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:

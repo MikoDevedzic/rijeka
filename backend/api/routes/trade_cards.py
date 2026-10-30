@@ -787,7 +787,8 @@ def card_countersign(message_id: str, body: CountersignBody, db: Session = Depen
     if registered_signer(db, _cp_lei(db, trade)) is None:
         raise HTTPException(status_code=409, detail="Your firm hasn't registered a signing wallet yet.")
     countersign_trade(db, trade, body.address, body.signature, expected_hash=body.trade_hash,
-                      note={"channel": "chat", "room_id": str(room.id), "user_id": str(me.user_id)})
+                      note={"channel": "chat", "room_id": str(room.id), "user_id": str(me.user_id)},
+                      charge_user=me.user_id)          # the signer pays the relayer budget, not the booker
 
     # countersign_trade committed the CONFIRMED event; tell the room.
     db.expire_all()
