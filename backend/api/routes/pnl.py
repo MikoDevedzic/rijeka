@@ -164,8 +164,10 @@ def _marking_ctx(db: Session, user: dict) -> dict:
 
 
 @router.get("/report")
-def pnl_report(date_: Optional[str] = Query(default=None, alias="date"), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    rep = R.report(db, _marking_ctx(db, user), _parse(date_))
+def pnl_report(date_: Optional[str] = Query(default=None, alias="date"), live: bool = Query(default=False),
+               db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """The stored day opens instantly; live=1 revalues every trade now (RUN END OF DAY stores it)."""
+    rep = R.report(db, _marking_ctx(db, user), _parse(date_), prefer_stored=not live)
     rep["signoff_policy"] = signoff_policy(db, user["sub"])
     rep["status"] = R.status_of(rep.get("signoffs", []), rep["signoff_policy"])
     rep["can_control"] = _is_controller(db, user)

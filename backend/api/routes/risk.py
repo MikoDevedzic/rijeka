@@ -1,5 +1,5 @@
 """
-GET  /api/risk/report?date=             ladder, VaR, stress, limits for the caller's book
+GET  /api/risk/report?date=&live=       ladder, VaR, stress, limits for the caller's book (stored first; live=1 recomputes and stores)
 GET  /api/risk/trend                    stored daily VaR / IR01 / NPV / breaches
 GET  /api/risk/limits · POST · DELETE   the firm's limits (risk manager or admin writes)
 GET  /api/risk/metrics                  metric keys a limit can be set on, from the caller's book
@@ -75,8 +75,19 @@ def _secret_ok(given: Optional[str]) -> bool:
 
 
 @router.get("/report")
-def risk_report(date_: Optional[str] = Query(default=None, alias="date"), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    rep = R.report(db, _ctx(db, user), _parse(date_))
+def risk_report(date_: Optional[str] = Query(default=None, alias="date"), live: bool = Query(default=False),
+                db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """The stored report opens instantly; live=1 recomputes (and stores, so the next visit is instant too)."""
+    d = _parse(date_)
+    rep = None if live else R.stored_report(db, user["sub"], d)
+    if rep is None:
+        ctx = _ctx(db, user)
+        rep = R.report(db, ctx, d)
+        rep["from_store"] = False
+        try:
+            R.store(db, ctx, rep)
+        except Exception as e:          # noqa: BLE001 — a store failure must not hide the report
+            db.rollback(); log.info("risk: store after live report failed: %s", e)
     rep["can_write"] = _can_write(db, user)
     rep["role"] = _role(db, user)
     return rep

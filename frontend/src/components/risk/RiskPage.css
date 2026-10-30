@@ -21,7 +21,10 @@
 .rk-measure { display:flex; gap:0.3rem; } .rk-measure .rk-seg { padding:0.1rem 0.5rem; }
 .rk-kv { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); border:1px solid var(--border); }
 .rk-kv > div { background:var(--bg); padding:0.4rem 0.6rem; display:flex; flex-direction:column; gap:0.1rem; } .rk-kv span { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.12em; color:var(--text-dim); } .rk-kv b { font-family:var(--mono); font-size:0.86rem; color:var(--text); }
-.rk-wd { display:flex; justify-content:space-between; font-family:var(--mono); font-size:0.86rem; padding:0.2rem 0; border-bottom:1px solid var(--border); color:var(--text-dim); }
+.rk-wd { display:flex; justify-content:space-between; gap:0.8rem; font-family:var(--mono); font-size:0.86rem; padding:0.2rem 0; border-bottom:1px solid var(--border); color:var(--text-dim); }
+.rk-wd .dim { flex:1; color:var(--text-mute); } .rk-wd.exc { background:rgba(255,80,80,0.08); } .rk-wd.exc .dim { color:var(--red); }
+.rk-vector { max-height:22rem; overflow:auto; border:1px solid var(--border); padding:0 0.5rem; margin-top:0.3rem; }
+.rk-vector-h { display:flex; justify-content:space-between; align-items:center; margin-top:0.6rem; } .rk-vector-h .pnl-btn { padding:0.15rem 0.5rem; }
 .rk-stress { display:flex; flex-direction:column; }
 .rk-srow { display:grid; grid-template-columns:6rem 1fr 10rem 8rem; gap:0.7rem; align-items:center; padding:0.35rem 0; border-bottom:1px solid var(--border); font-size:0.86rem; }
 .rk-sname { color:var(--text); } .rk-sbar { display:block; height:8px; background:var(--border); position:relative; } .rk-sbar i { display:block; height:100%; background:var(--text-mute); } .rk-sbar i.neg { background:var(--red); } .rk-sbar i.pos { background:var(--accent); }

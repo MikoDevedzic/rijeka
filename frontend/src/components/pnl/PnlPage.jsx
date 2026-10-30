@@ -41,11 +41,15 @@ export default function PnlPage() {
   const [firm, setFirm] = useState(null)
   const [toast, setToast] = useState(null)
 
-  const load = async (d) => {
+  // The stored day opens at once; RECALCULATE revalues every trade now (RUN END OF DAY stores it).
+  const load = async (d, live = false) => {
     setBusy(true); setErr(null)
-    try { const j = await api(`/api/pnl/report${d ? `?date=${d}` : ''}`); setRep(j); if (j.date) setDate(j.date) }
+    const q = [d ? `date=${d}` : '', live ? 'live=1' : ''].filter(Boolean).join('&')
+    try { const j = await api(`/api/pnl/report${q ? `?${q}` : ''}`); setRep(j); if (j.date) setDate(j.date) }
     catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
+  const fmtT = (iso) => iso ? new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ''
+  const sourceNote = rep ? (rep.from_store ? `stored · computed ${fmtT(rep.stored_at || rep.generated_at)}` : (rep.tables ? 'live · not stored' : 'live · history tables not applied')) : ''
   useEffect(() => { load(null) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (view === 'firm') api(`/api/pnl/firm${date ? `?date=${date}` : ''}`).then(setFirm).catch(e => setToast(e.message)) }, [view, date])
 
@@ -80,6 +84,8 @@ export default function PnlPage() {
             </select>
           </label>
           <span className={`pnl-chip ${stTone}`}>{stLabel}</span>
+          {rep && <span className="pnl-note">{sourceNote}</span>}
+          <button className="pnl-btn ghost" onClick={() => load(date, true)} disabled={busy || !rep?.date}>{busy ? 'WORKING…' : 'RECALCULATE'}</button>
           <button className="pnl-btn" onClick={runEod} disabled={busy || !rep?.date}>{busy ? 'WORKING…' : 'RUN END OF DAY'}</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/blotter')}>BLOTTER →</button>
         </div>
@@ -93,7 +99,7 @@ export default function PnlPage() {
         <div className="pnl-cards">
           <Card label={`DAY · ${fmtD(rep.date)} · BEFORE XVA`} total={t.dod} market={t.market} trading={t.trading} after={t.dod_after_xva} xva={t.xva_dod} />
           <Card label="MONTH TO DATE" total={t.mtd} market={t.mtd_market} trading={t.mtd_trading} after={t.mtd_after_xva} note={`${t.history_days || 0} stored day${t.history_days === 1 ? '' : 's'} + today`} />
-          <Card label="YEAR TO DATE" total={t.ytd} market={t.ytd_market} trading={t.ytd_trading} after={t.ytd_after_xva} note={rep.tables ? (rep.persisted ? 'stored' : 'live · not yet stored') : 'live · history tables not applied'} />
+          <Card label="YEAR TO DATE" total={t.ytd} market={t.ytd_market} trading={t.ytd_trading} after={t.ytd_after_xva} note={sourceNote} />
           <div className="pnl-card meta">
             <span className="pnl-kl">TRADES</span><b>{rep.rows.length}</b>
             <span className="pnl-kl">VALUATIONS</span><b>{rep.meta?.valuations}</b>

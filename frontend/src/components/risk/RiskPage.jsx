@@ -33,10 +33,19 @@ export default function RiskPage() {
   const [err, setErr] = useState(null)
   const [busy, setBusy] = useState(false)
   const [date, setDate] = useState(null)
-  const load = async (d) => {
+  // The stored report opens at once; RECALCULATE reprices the book now (and stores the result).
+  const load = async (d, live = false) => {
     setBusy(true); setErr(null)
-    try { const j = await api(`/api/risk/report${d ? `?date=${d}` : ''}`); setRep(j); if (j.date) setDate(j.date) }
+    const q = [d ? `date=${d}` : '', live ? 'live=1' : ''].filter(Boolean).join('&')
+    try { const j = await api(`/api/risk/report${q ? `?${q}` : ''}`); setRep(j); if (j.date) setDate(j.date) }
     catch (e) { setErr(e.message) } finally { setBusy(false) }
+  }
+  const fmtT = (iso) => iso ? new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : ''
+  const [showVector, setShowVector] = useState(false)
+  const downloadVector = () => {
+    const rows = (rep?.var?.series || []).map(r => `${r.date},${r.pnl}`)
+    const blob = new Blob([`date,pnl_usd\n${rows.join('\n')}\n`], { type: 'text/csv' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `var-pnl-vector-${rep?.date || 'latest'}.csv`; a.click(); URL.revokeObjectURL(a.href)
   }
   useEffect(() => { load(null) }, [])  // eslint-disable-line react-hooks/exhaustive-deps
   const [bt, setBt] = useState(null)
@@ -56,6 +65,8 @@ export default function RiskPage() {
             <select value={date || ''} onChange={e => load(e.target.value)} disabled={busy}>{(rep?.dates || []).slice().reverse().map(d => <option key={d} value={d}>{fmtD(d)}</option>)}</select>
           </label>
           {rep && <span className={`pnl-chip ${breaches ? 'red' : warnings ? 'amber' : 'ok'}`}>{breaches ? `${breaches} BREACH${breaches > 1 ? 'ES' : ''}` : warnings ? `${warnings} WARNING${warnings > 1 ? 'S' : ''}` : 'WITHIN LIMITS'}</span>}
+          {rep && <span className="pnl-note">{rep.from_store ? `stored · computed ${fmtT(rep.generated_at)}` : `live · ${fmtT(rep.generated_at)}`}</span>}
+          {rep && <button className="pnl-btn" onClick={() => load(date, true)} disabled={busy}>{busy ? 'REPRICING…' : 'RECALCULATE'}</button>}
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/limits')}>LIMITS →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/var')}>VAR SETTINGS →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/pnl')}>P&amp;L →</button>
@@ -108,6 +119,13 @@ export default function RiskPage() {
             {(v.worst_days || []).length > 0 && <>
               <div className="rk-h">WORST DAYS IN THE WINDOW</div>
               {v.worst_days.map(w => <div key={w.date} className="rk-wd"><span>{fmtD(w.date)}</span><b className={tone(w.pnl)}>{sgn(w.pnl)}</b></div>)}
+            </>}
+            {(v.series || []).length > 0 && <>
+              <div className="rk-h rk-vector-h"><span>P&amp;L VECTOR · {v.series.length} DAYS</span>
+                <span><button className="pnl-btn ghost" onClick={() => setShowVector(x => !x)}>{showVector ? 'HIDE' : 'SHOW ALL DAYS'}</button> <button className="pnl-btn ghost" onClick={downloadVector}>DOWNLOAD CSV</button></span></div>
+              {showVector && <div className="rk-vector">
+                {v.series.slice().reverse().map((r) => <div key={r.date} className={`rk-wd${r.pnl < -(v.var_1d || 0) ? ' exc' : ''}`}><span>{fmtD(r.date)}</span><span className="dim">{r.pnl < -(v.var_1d || 0) ? 'beyond VaR' : r.pnl < -(v.var_1d_secondary || 0) ? `beyond ${pct(v.secondary_confidence)}` : ''}</span><b className={tone(r.pnl)}>{sgn(r.pnl)}</b></div>)}
+              </div>}
             </>}
             {(v.missing_factors || []).length > 0 && <div className="pnl-foot"><em>No history for: {v.missing_factors.join(', ')}. Their risk is in the ladder, not in VaR.</em></div>}
             {!v.enough && <div className="pnl-foot"><em>Too little history for a meaningful VaR. The backfill fetches two years from public sources (Configurations › Market Risk › VaR settings).</em></div>}

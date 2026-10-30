@@ -121,8 +121,8 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
 def store(db: Session, user: dict, rep: dict) -> dict:
     if not L.tables_present(db) or not rep.get("date"):
         return {"stored": False}
-    slim = {k: v for k, v in rep.items() if k not in ("ladder_rows",)}
-    slim["var"] = {k: v for k, v in (rep.get("var") or {}).items() if k not in ("series", "histogram")}
+    # the whole report, by-trade rows and the P&L vector included: the page opens from the store
+    slim = {k: v for k, v in rep.items() if k not in ("can_write", "role", "from_store", "stored_at")}
     db.execute(text("INSERT INTO risk_daily (id, user_id, risk_date, report, var_1d, ir01_usd, npv_usd, breaches) "
                     "VALUES (:id, :u, :d, CAST(:r AS jsonb), :v, :i, :n, :b) ON CONFLICT (user_id, risk_date) DO UPDATE SET report = EXCLUDED.report, "
                     "var_1d = EXCLUDED.var_1d, ir01_usd = EXCLUDED.ir01_usd, npv_usd = EXCLUDED.npv_usd, breaches = EXCLUDED.breaches, created_at = now()"),
@@ -132,6 +132,25 @@ def store(db: Session, user: dict, rep: dict) -> dict:
                 "n": None if rep["ladder"].get("npv_usd") is None else float(rep["ladder"].get("npv_usd")), "b": int(rep.get("breaches", 0))})
     db.commit()
     return {"stored": True, "date": rep["date"], "breaches": rep.get("breaches", 0)}
+
+
+def stored_report(db: Session, uid: str, d: Optional[date] = None) -> Optional[dict]:
+    """The stored report for a date (the latest when none is given), as the page expects it."""
+    if not L.tables_present(db):
+        return None
+    try:
+        if d is not None:
+            r = db.execute(text("SELECT report, created_at FROM risk_daily WHERE user_id = :u AND risk_date = :d"), {"u": uid, "d": d}).first()
+        else:
+            r = db.execute(text("SELECT report, created_at FROM risk_daily WHERE user_id = :u ORDER BY risk_date DESC LIMIT 1"), {"u": uid}).first()
+    except Exception:
+        db.rollback(); return None
+    if r is None or not r.report:
+        return None
+    rep = dict(r.report)
+    rep["from_store"] = True
+    rep["stored_at"] = r.created_at.isoformat() if r.created_at else None
+    return rep
 
 
 def latest_stored(db: Session, uid: str) -> Optional[dict]:

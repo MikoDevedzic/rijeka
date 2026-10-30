@@ -203,7 +203,48 @@ def xva_policy(db: Session, uid: str) -> tuple[str, ...]:
         db.rollback(); return DEFAULT_NETTED
 
 
-def report(db: Session, user: dict, d1: Optional[date] = None) -> dict:
+def rows_from_store(records: list) -> list[dict]:
+    """pnl_daily rows joined to the trade and its marks, in the shape trade_rows() produces."""
+    out = []
+    for r in records:
+        g = {"ir01": r.ir01, "ir01_disc": r.ir01_disc, "spot01": r.spot01, "theta": r.theta}
+        det = r.detail or {}
+        out.append({"trade_id": str(r.trade_id), "trade_ref": r.trade_ref, "kind": r.kind, "desk": r.desk or "UNASSIGNED", "book": r.book or "UNASSIGNED",
+                    "instrument": r.instrument_type, "ccy": r.ccy, "usd": float(r.usd or 0), "market_usd": float(r.market_usd or 0), "trading_usd": float(r.trading_usd or 0),
+                    "rows": list(r.rows or []), "total_by_ccy": {r.ccy: float(r.total or 0)}, "unconverted": [],
+                    "mark": float(r.npv) if r.npv is not None else None, "mark_prev": float(r.npv_prev) if r.npv_prev is not None else None,
+                    "greeks": {k: (float(v) if v is not None else None) for k, v in g.items()}, "fallback": det.get("fallback", []),
+                    "counterparty_id": str(r.counterparty_id) if r.counterparty_id else None, "notional": float(r.notional) if r.notional else None,
+                    "notional_ccy": r.notional_ccy, "status": r.status, "maturity": r.maturity_date.isoformat() if r.maturity_date else None})
+    return out
+
+
+def stored_rows(db: Session, uid: str, d1: date) -> tuple[list[dict], dict]:
+    """The day's persisted rows (end of day, or the batch), or ([], {}) when the day is not stored."""
+    if not tables_present(db):
+        return [], {}
+    try:
+        recs = db.execute(text("""
+            SELECT p.trade_id, p.kind, p.ccy, p.total, p.usd, p.market_usd, p.trading_usd, p.rows, p.desk, p.book, p.created_at, p.prev_date,
+                   t.trade_ref, t.instrument_type, t.counterparty_id, t.notional, t.notional_ccy, t.status, t.maturity_date,
+                   m.npv, m.ir01, m.ir01_disc, m.spot01, m.theta, m.detail, mp.npv AS npv_prev
+            FROM pnl_daily p
+            JOIN trades t ON t.id = p.trade_id
+            LEFT JOIN eod_marks m ON m.user_id = p.user_id AND m.trade_id = p.trade_id AND m.mark_date = p.pnl_date
+            LEFT JOIN eod_marks mp ON mp.user_id = p.user_id AND mp.trade_id = p.trade_id AND mp.mark_date = p.prev_date
+            WHERE p.user_id = :u AND p.pnl_date = :d ORDER BY t.trade_ref"""), {"u": uid, "d": d1}).all()
+    except Exception as e:
+        log.debug("stored_rows: %s", e); db.rollback(); return [], {}
+    if not recs:
+        return [], {}
+    stored_at = max((r.created_at for r in recs if r.created_at), default=None)
+    return rows_from_store(recs), {"valuations": 0, "problems": [], "from_store": True, "stored_at": stored_at.isoformat() if stored_at else None,
+                                   "prev_date": recs[0].prev_date.isoformat() if recs[0].prev_date else None}
+
+
+def report(db: Session, user: dict, d1: Optional[date] = None, prefer_stored: bool = False) -> dict:
+    """prefer_stored: open the persisted day when there is one (instant); otherwise, and always when
+    False, value every trade on the as-of markets (the live explain)."""
     uid = user["sub"]
     dates = Market.dates(db, uid, upto=d1 or date.today())
     if not dates:
@@ -211,7 +252,14 @@ def report(db: Session, user: dict, d1: Optional[date] = None) -> dict:
     d1 = d1 if d1 and d1 in dates else dates[-1]
     prev = [d for d in dates if d < d1]
     d0 = prev[-1] if prev else None
-    rows, meta = trade_rows(db, user, d0, d1)
+    rows, meta = ([], {})
+    if prefer_stored:
+        rows, meta = stored_rows(db, uid, d1)
+        if rows and meta.get("prev_date"):
+            d0 = date.fromisoformat(meta["prev_date"])
+    if not rows:
+        rows, meta = trade_rows(db, user, d0, d1)
+        meta["from_store"] = False
     tree = rollup(rows)
     hist = history(db, uid, d1)
     dod = tree["usd"]
@@ -233,6 +281,7 @@ def report(db: Session, user: dict, d1: Optional[date] = None) -> dict:
     return {"date": d1.isoformat(), "prev_date": d0.isoformat() if d0 else None, "dates": [d.isoformat() for d in dates[-40:]],
             "reporting_ccy": REPORTING_CCY, "convention": CONVENTION, "rows": rows, "tree": tree, "buckets": buckets(rows), "totals": totals, "xva": xva,
             "signoffs": signs, "status": status_of(signs), "persisted": tables_present(db) and _persisted(db, uid, d1),
+            "from_store": bool(meta.get("from_store")), "stored_at": meta.get("stored_at"),
             "tables": tables_present(db), "meta": meta, "generated_at": datetime.now(timezone.utc).isoformat()}
 
 

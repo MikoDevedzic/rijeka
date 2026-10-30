@@ -125,7 +125,7 @@ def compute(db: Session, user: dict, template_uid, trades, d: date, mkt: Market,
                 "var_1d_secondary": second["var"], "es_1d_secondary": second["es"],
                 "window_from": pnl[0][0].isoformat() if pnl else None, "window_to": pnl[-1][0].isoformat() if pnl else None,
                 "worst_days": [{"date": dd.isoformat(), "pnl": v} for dd, v in worst], "histogram": _hist(vals),
-                "series": [{"date": dd.isoformat(), "pnl": v} for dd, v in pnl[-260:]], "valuations": valuer.calls})
+                "series": [{"date": dd.isoformat(), "pnl": v} for dd, v in pnl], "valuations": valuer.calls})
     if linear:
         out["linear"] = {"var_1d": linear.get("var_1d"), "es_1d": linear.get("es_1d"), "observations": linear.get("observations"),
                          "method": linear.get("method")}

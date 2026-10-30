@@ -119,7 +119,7 @@ def compute(db: Session, template_uid, ladder: list[dict], spot01: dict[str, flo
             "var_1d_secondary": second["var"], "es_1d_secondary": second["es"],
             "window_from": pnl[0][0].isoformat() if pnl else None, "window_to": pnl[-1][0].isoformat() if pnl else None,
             "worst_days": [{"date": d.isoformat(), "pnl": v} for d, v in worst], "missing_factors": missing,
-            "histogram": _hist(vals), "series": [{"date": d.isoformat(), "pnl": v} for d, v in pnl[-260:]]}
+            "histogram": _hist(vals), "series": [{"date": d.isoformat(), "pnl": v} for d, v in pnl]}
 
 
 def _hist(vals: list[float], bins: int = 24) -> list[dict]:
