@@ -256,3 +256,11 @@ def confirmations(limit: int = 50, db: Session = Depends(get_db)):
     body = _register(db, n)
     _reg_cache.update(at=now, body=body, n=n)
     return body
+
+
+@router.get("/calendar")
+def calendar_week_ahead():
+    """The week ahead: decisions and releases across USD, EUR, GBP, CHF, JPY with last prints and actuals.
+    Public, no account data, cached for half an hour (see market_data/calendar.py for every source)."""
+    from market_data.calendar import cached_week_ahead
+    return cached_week_ahead()

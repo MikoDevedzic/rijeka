@@ -4,6 +4,7 @@ import WorldClock from './home/WorldClock'
 import PolicyPath from './home/PolicyPath'
 import Lifecycle from './home/Lifecycle'
 import PnlTile from './home/PnlTile'
+import WeekAhead from './home/WeekAhead'
 import RoleSwitch from './layout/RoleSwitch'
 import { getSessionMaybe } from '../lib/session'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -180,10 +181,7 @@ function DeskHome({ demo, navigate }) {
 
       <div className="dh-hero">
         <PolicyPath onCurves={() => navigate('/configurations/market-data/curves')} />
-        <section className="dh-card dh-vol">
-          <header><span>USD SWAPTION · ATM NORMAL VOL (bp)</span><button className="dh-link" onClick={() => navigate('/configurations/market-data/swvol')}>SURFACE →</button></header>
-          <VolSurface snap={d.vol} loading={d.loading} />
-        </section>
+        <WeekAhead />
       </div>
 
       <div className="dh-grid">
@@ -313,34 +311,6 @@ function CurveChart({ snap, loading }) {
 }
 
 // ── Vol surface ─────────────────────────────────────────────────────────────
-function VolSurface({ snap, loading }) {
-  const [hov, setHov] = useState(null)
-  const grid = useMemo(() => {
-    const cells = (snap?.quotes || []).map(q => { const m = /^(\d+)Yx(\d+)Y$/.exec(q.tenor || ''); return m && q.rate != null ? { e: +m[1], t: +m[2], v: Number(q.rate) } : null }).filter(Boolean)
-    const es = [...new Set(cells.map(c => c.e))].sort((a, b) => a - b), ts = [...new Set(cells.map(c => c.t))].sort((a, b) => a - b)
-    const vs = cells.map(c => c.v); return { cells, es, ts, lo: Math.min(...vs), hi: Math.max(...vs) }
-  }, [snap])
-  if (!grid.cells.length) return <div className="dh-plot dh-plot-empty">{loading ? 'Loading surface…' : 'No swaption vol snapshot loaded.'}</div>
-  const at = (e, t) => grid.cells.find(c => c.e === e && c.t === t)
-  const alpha = v => 0.10 + 0.78 * ((v - grid.lo) / Math.max(1e-9, grid.hi - grid.lo))
-  return (
-    <div className="dh-vs" style={{ '--cols': grid.ts.length }}>
-      <div className="dh-vs-corner">EXP \ TENOR</div>
-      {grid.ts.map(t => <div key={'h' + t} className="dh-vs-h">{t}Y</div>)}
-      {grid.es.map(e => [
-        <div key={'r' + e} className="dh-vs-h">{e}Y</div>,
-        ...grid.ts.map(t => { const c = at(e, t); return (
-          <div key={e + 'x' + t} className="dh-vs-c" style={c ? { background: `color-mix(in srgb, var(--accent) ${Math.round(alpha(c.v) * 100)}%, var(--panel))`, color: alpha(c.v) > 0.5 ? 'var(--bg)' : 'var(--text)' } : undefined}
-               onMouseEnter={() => c && setHov(c)} onMouseLeave={() => setHov(null)} title={c ? `${e}Yx${t}Y · ${c.v.toFixed(1)}bp` : ''}>
-            {c ? c.v.toFixed(0) : ''}
-          </div>) })
-      ])}
-      <div className="dh-vs-foot">{hov ? <><b>{hov.e}Yx{hov.t}Y</b> {hov.v.toFixed(1)}bp normal</> : <>{grid.lo.toFixed(0)}–{grid.hi.toFixed(0)}bp · darker is higher · hover a cell</>}</div>
-    </div>
-  )
-}
-
-// ── Maturity ladder ─────────────────────────────────────────────────────────
 function Ladder({ trades }) {
   const ref = useRef(null); const W = useSize(ref)
   const buckets = useMemo(() => {

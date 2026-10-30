@@ -235,6 +235,8 @@ One set of names on every ticket, SIMM-aligned. Rate factors are per basis point
 
 ## Market data
 
+The home page carries **the week ahead**: central bank decisions and the releases a rates desk waits for (CPI, payrolls, GDP, unemployment) across USD, EUR, GBP, CHF and JPY, plus UST coupon auctions, with the last print and, once out, the actual and the surprise against it. Dates come from the agencies' published schedules (central banks, BLS, BEA, Japan's Statistics Bureau), the ONS API for the UK, and the usual slot, flagged, where a calendar is not machine-readable (euro area, Switzerland); actuals from BLS, ONS, Eurostat and the SNB, all keyless. There is no consensus column, because survey medians are a terminal product. `backend/market_data/calendar.py`, `GET /api/public/calendar`.
+
 The hosted demo prices on **demo market data rebuilt daily from public sources**, never on terminal data (Bloomberg data is licensed to a seat and cannot be redistributed). Every snapshot is stamped with its provenance and the app says so on the home page.
 
 | Curve | Built from | Indicative assumption |

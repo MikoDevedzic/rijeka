@@ -274,3 +274,26 @@
 .pt-col small em { font-style:normal; color:var(--text-dim); }
 .pt-col .pos, .pt-col em.pos { color:var(--accent); } .pt-col .neg, .pt-col em.neg { color:var(--red); }
 .pt-note { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.08em; color:var(--text-mute); }
+
+/* ── THE WEEK AHEAD ─────────────────────────────────────────────────────── */
+.dh-week { display:flex; flex-direction:column; min-height:0; }
+.dh-chip { background:transparent; border:1px solid var(--border-hi); color:var(--text-dim); font-family:var(--mono); font-size:0.8rem; letter-spacing:0.1em; padding:0.1rem 0.5rem; border-radius:2px; cursor:pointer; }
+.dh-chip.on { color:var(--accent); border-color:var(--accent); background:var(--accent-glow); }
+.wk-list { flex:1; min-height:0; overflow:auto; margin-top:0.5rem; }
+.wk-dh { font-family:var(--mono); font-size:0.8rem; letter-spacing:0.14em; color:var(--text-mute); padding:0.55rem 0 0.25rem; border-bottom:1px solid var(--border); }
+.wk-day.today .wk-dh { color:var(--accent); }
+.wk-day.past .wk-row:not(.out) { opacity:0.6; }
+.wk-row { display:grid; grid-template-columns:3.6rem 2.6rem 1fr 7rem 9rem; gap:0.6rem; align-items:baseline; padding:0.28rem 0; border-bottom:1px solid var(--border); font-family:var(--mono); font-size:0.86rem; color:var(--text); }
+.wk-row.t1 .wk-name { color:var(--text-hi); font-weight:600; }
+.wk-row.t3 { color:var(--text-dim); } .wk-row.t3 .wk-name { font-size:0.82rem; }
+.wk-row.cb .wk-name { color:var(--amber); font-weight:600; }
+.wk-time { color:var(--text-dim); }
+.wk-ccy { font-size:0.78rem; letter-spacing:0.1em; color:var(--text-dim); }
+.wk-name em { font-style:normal; color:var(--text-mute); font-weight:400; }
+.wk-est { font-style:normal; color:var(--amber); margin-left:0.3rem; }
+.wk-last, .wk-act { display:flex; gap:0.4rem; align-items:baseline; justify-content:flex-end; white-space:nowrap; }
+.wk-last small, .wk-act small { font-size:0.7rem; letter-spacing:0.12em; color:var(--text-mute); }
+.wk-na { color:var(--text-mute); font-size:0.72rem; letter-spacing:0.08em; }
+.wk-act b { color:var(--text-hi); } .wk-act i { font-style:normal; font-size:0.8rem; } .wk-act i.up { color:var(--red); } .wk-act i.dn { color:var(--accent); }
+.wk-foot { margin-top:0.5rem; }
+@media (max-width:1100px) { .wk-row { grid-template-columns:3.4rem 2.4rem 1fr 6rem 7rem; } }
