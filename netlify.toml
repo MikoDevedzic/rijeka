@@ -1,6 +1,7 @@
 [build]
   base    = "frontend"
-  command = "npm run build"
+  # COMMIT_REF is Netlify's; the app reports it as the release on client errors (lib/errors.js)
+  command = "VITE_COMMIT=${COMMIT_REF:-dev} npm run build"
   publish = "dist"
 
 [build.environment]

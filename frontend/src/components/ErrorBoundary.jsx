@@ -11,6 +11,7 @@
 // `onReset` is offered as the primary action when given (close the window).
 // ────────────────────────────────────────────────────────────────────────────────────
 import { Component } from 'react'
+import { report } from '../lib/errors'
 
 const COPY = {
   window: { title: 'This window hit an error',  action: 'CLOSE WINDOW' },
@@ -26,8 +27,10 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    // Keep the stack in the console for the user's bug report; nothing leaves the browser.
+    // The stack stays in the console for the user's bug report, and the message and
+    // stack (never a token) go to the operator's error log (lib/errors.js).
     console.error('[rijeka] render error in', this.props.scope || 'app', error, info?.componentStack)
+    report(error, 'boundary', { stack: `${error?.stack || ''}\n${info?.componentStack || ''}` })
   }
 
   componentDidUpdate(prev) {

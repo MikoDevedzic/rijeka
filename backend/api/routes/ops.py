@@ -1,20 +1,29 @@
 """
-Operations: is every scheduled batch current?
+Operations: is every scheduled batch current, and what is breaking in browsers?
 
 GET /api/ops/health is public and carries no account data: for each batch the
 cron drives it reports the last run and whether that is recent enough. The
 cron's final step calls it and fails the workflow run when anything is stale,
 so GitHub mails the repository owner; the desk's inbox shows the same item to
 signed-in users, because a stale batch is their stale page.
+
+POST /api/ops/client-error takes uncaught browser errors from the app (window
+errors, unhandled promises, React boundaries). They live in memory on this
+process only: the last 200, with a count per (message, route) over 24 hours,
+60 a minute per client address and 4 KB a report, tokens stripped. The health
+body carries the summary as `client_errors`; it is information for the
+operator and never fails the cron.
 """
 from __future__ import annotations
 
 import logging
+import re
 import time
+from collections import deque
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -96,4 +105,82 @@ def stale_batches(db: Session) -> list[dict]:
 
 @router.get("/health")
 def ops_health(db: Session = Depends(get_db)):
-    return health(db)
+    return {**health(db), "client_errors": client_error_summary()}
+
+
+# ── browser errors ───────────────────────────────────────────────────────────
+ERR_KEEP = 200                      # ring buffer of reports
+ERR_WINDOW_SECONDS = 24 * 3600      # the summary's horizon
+ERR_PER_MINUTE = 60                 # per client address; beyond it reports are dropped silently
+ERR_MAX_BODY = 4096                 # bytes
+ERR_FIELD = 1000                    # characters kept per text field (stack gets 4x)
+_errors: deque = deque(maxlen=ERR_KEEP)
+_rate: dict[str, deque] = {}
+_TOKEN_RE = re.compile(r"(Bearer\s+[A-Za-z0-9._~+/=-]+|eyJ[A-Za-z0-9_-]{8,}(?:\.[A-Za-z0-9_-]+){0,2})")
+
+
+def scrub(text_: Any, limit: int = ERR_FIELD) -> str:
+    """Anything shaped like a bearer token or a JWT is replaced before it is kept."""
+    return _TOKEN_RE.sub("[token]", str(text_ or ""))[:limit]
+
+
+def _client_ip(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _allow(ip: str, now: float) -> bool:
+    q = _rate.setdefault(ip, deque())
+    while q and now - q[0] > 60:
+        q.popleft()
+    if len(q) >= ERR_PER_MINUTE:
+        return False
+    q.append(now)
+    if len(_rate) > 2000:               # forget quiet addresses
+        for k in [k for k, v in _rate.items() if not v or now - v[-1] > 60]:
+            _rate.pop(k, None)
+    return True
+
+
+def record_client_error(body: dict, ip: str, now: Optional[float] = None) -> bool:
+    now = now or time.time()
+    if not _allow(ip, now):
+        return False
+    _errors.append({"at": now, "message": scrub(body.get("message")), "stack": scrub(body.get("stack"), ERR_FIELD * 4),
+                    "url": scrub(body.get("url"), 300), "route": scrub(body.get("route"), 200) or "/",
+                    "user_agent": scrub(body.get("user_agent"), 200), "release": scrub(body.get("release"), 60),
+                    "source": scrub(body.get("source"), 20) or "window", "client_at": scrub(body.get("at"), 40)})
+    return True
+
+
+def client_error_summary(now: Optional[float] = None) -> dict:
+    now = now or time.time()
+    recent = [e for e in _errors if now - e["at"] <= ERR_WINDOW_SECONDS]
+    groups: dict[tuple[str, str], dict] = {}
+    for e in recent:
+        g = groups.setdefault((e["message"][:200], e["route"]), {"message": e["message"][:200], "route": e["route"], "count": 0, "last": 0.0,
+                                                                  "source": e["source"], "release": e["release"]})
+        g["count"] += 1
+        g["last"] = max(g["last"], e["at"])
+    top = sorted(groups.values(), key=lambda g: (-g["count"], -g["last"]))[:5]
+    for g in top:
+        g["last"] = datetime.fromtimestamp(g["last"], tz=timezone.utc).isoformat()
+    return {"last_24h": len(recent), "distinct": len(groups), "top": top, "kept": len(_errors), "limit_per_minute": ERR_PER_MINUTE}
+
+
+@router.post("/client-error", status_code=202)
+async def ops_client_error(request: Request):
+    raw = await request.body()
+    if len(raw) > ERR_MAX_BODY:
+        return {"accepted": False, "reason": "too large"}
+    try:
+        import json
+        body = json.loads(raw or b"{}")
+        if not isinstance(body, dict):
+            raise ValueError("not an object")
+    except Exception:                 # noqa: BLE001 — a malformed report is dropped, never an error back to a failing page
+        return {"accepted": False, "reason": "malformed"}
+    ok = record_client_error(body, _client_ip(request))
+    return {"accepted": ok}

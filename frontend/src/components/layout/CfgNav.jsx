@@ -163,6 +163,20 @@ const NAV = [
     ],
   },
   {
+    id: 'operations',
+    label: 'OPERATIONS',
+    roles: ['viewer','trader','controller','management','risk','admin'],
+    children: [
+      {
+        id: 'ops-items',
+        label: null,
+        children: [
+          { label: 'SYSTEM',             path: '/configurations/system',                    live: true  },
+        ],
+      },
+    ],
+  },
+  {
     id: 'admin',
     label: 'ADMIN',
     roles: ['admin'],

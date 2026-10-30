@@ -2,6 +2,11 @@
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
+import { install as installErrorReporting } from './lib/errors'
+
+// Uncaught errors are also reported to the operator (lib/errors.js): a blank page
+// nobody tells us about is the one failure mode that stays invisible.
+installErrorReporting()
 
 // A blank page tells nobody anything. Errors that escape React (module
 // evaluation, auth bootstrap, unhandled promises) or an app that never mounts

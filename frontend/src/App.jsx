@@ -32,6 +32,7 @@ import SwaptionVolDetail from './components/market-data/SwaptionVolDetail'
 import CapVolDetail      from './components/market-data/CapVolDetail'
 import FxWorkspace       from './components/market-data/FxWorkspace'
 import XVAParametersTab  from './components/configurations/XVAParametersTab'
+import SystemPage        from './components/configurations/SystemPage'
 import Messenger, { MessengerPage } from './components/messenger/Messenger'
 
 function BlotterLayout() {
@@ -187,6 +188,7 @@ export default function App() {
               <Route path="market-data/crypto"               element={<FxWorkspace />} />
               <Route path="xva-parameters/hw1f"          element={<XVAParametersTab />} />
               <Route path="users"              element={<Users />} />
+              <Route path="system"             element={<SystemPage />} />
             </Route>
           </Route>
         </Route>
