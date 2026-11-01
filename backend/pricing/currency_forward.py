@@ -6,11 +6,17 @@ BTCUSD: USD per BTC) is covered interest parity. Borrow QUOTE, buy BASE
 today, lend BASE; the forward must repay the QUOTE interest:
 
     T          = ACT/365 year fraction from the valuation date to settlement
+    T_s        = the same to the spot date: a quoted FX spot rate is the price for
+                 delivery on the spot date (T+2 for most pairs), not today
     DF_q(T)    = discount factor in the quote currency (its OIS curve)
     DF_b(T)    = discount factor in the base currency: its OIS curve, or for
                  a digital asset exp(-r_b T) with r_b the funding / staking rate
-    F          = S * DF_b(T) / DF_q(T)
+    F          = S * [DF_b(T)/DF_b(T_s)] / [DF_q(T)/DF_q(T_s)]   (carry from spot to settlement)
     NPV_quote  = dir * N_base * (F - K) * DF_q(T),   dir = +1 BUY base / -1 SELL base
+
+With no spot date (a digital asset, whose quoted spot settles at once) T_s = 0 and
+F = S * DF_b(T) / DF_q(T). Treating an FX spot as today's rate drops the carry over the
+spot lag: four calendar days from a Friday, about 5.6 pips on a 6-month USDJPY.
 
 Deliverable or non-deliverable makes no difference to the value: an NDF
 pays the same (F - K) * N_base in the settlement currency against a fixing.
@@ -72,6 +78,14 @@ def _zero(df: float, t: float) -> float:
     return -math.log(df) / t if df > 0 and t > 0 else 0.0
 
 
+def implied_base_rate(forward: float, spot: float, df_q: float, df_q_spot: float, t: float, t_spot: float) -> float:
+    """The continuous base rate that makes the parity forward equal `forward` (market points mode)."""
+    tau = t - t_spot
+    if tau <= 0 or forward <= 0:
+        return 0.0
+    return -math.log(forward * (df_q / df_q_spot) / spot) / tau
+
+
 def price_currency_forward(
     *,
     base_currency: str,
@@ -86,8 +100,10 @@ def price_currency_forward(
     base_rate: Optional[float] = None,
     direction: str = "BUY",
     pip: float = 1e-4,
+    spot_date: Optional[date] = None,
 ) -> CurrencyForwardResult:
-    """Exactly one of base_curve / base_rate gives the base-currency discounting."""
+    """Exactly one of base_curve / base_rate gives the base-currency discounting. spot_date: the date the
+    quoted spot settles (FX pairs); None for an asset whose quoted spot settles at once."""
     d = str(direction or "BUY").upper()
     if d not in DIRECTIONS:
         raise ValueError("direction must be BUY or SELL (of the base currency)")
@@ -102,26 +118,40 @@ def price_currency_forward(
 
     sign = 1.0 if d == "BUY" else -1.0
     t = year_fraction(valuation_date, settlement_date)
+    sd = spot_date if (spot_date is not None and spot_date > valuation_date) else valuation_date
+    t_s = year_fraction(valuation_date, sd)
+
+    def dfs(on: date, from_: date):
+        """(DF_q, DF_b) from `from_` to the settlement date, the curves as of `on`."""
+        if from_ >= settlement_date:
+            return 1.0, 1.0
+        q = float(quote_curve.df(settlement_date)) / max(float(quote_curve.df(from_)), 1e-12)
+        if base_curve is not None:
+            b = float(base_curve.df(settlement_date)) / max(float(base_curve.df(from_)), 1e-12)
+        else:
+            b = math.exp(-float(base_rate) * year_fraction(from_, settlement_date))
+        return q, b
+
     df_q = float(quote_curve.df(settlement_date))
     df_b = float(base_curve.df(settlement_date)) if base_curve is not None else math.exp(-float(base_rate) * t)
     if df_q <= 0 or df_b <= 0:
         raise ValueError("discount factors must be positive")
-
-    F = spot * df_b / df_q
+    fq, fb = dfs(valuation_date, sd)            # spot to settlement
+    F = spot * fb / fq
     K = float(forward_rate) if forward_rate is not None else F
     npv = sign * base_notional * (F - K) * df_q
 
-    bump = math.exp(-1e-4 * t)              # +1 bp continuous on one curve
-    npv_b = sign * base_notional * (F * bump - K) * df_q          # base curve up: DF_b down, F down
-    npv_q = sign * base_notional * (F / bump - K) * df_q * bump   # quote curve up: DF_q down, F up
+    tau = max(t - t_s, 0.0)
+    npv_b = sign * base_notional * (F * math.exp(-1e-4 * tau) - K) * df_q                          # base curve +1bp
+    npv_q = sign * base_notional * (F * math.exp(1e-4 * tau) - K) * df_q * math.exp(-1e-4 * t)      # quote curve +1bp
 
-    # One day later, same spot and the same curves: discount factors unwind by one day.
+    # One day later, same spot and the same curves: discount factors unwind by one day, and so does the spot date.
     d1 = valuation_date + timedelta(days=1)
     if settlement_date > d1:
-        t1 = year_fraction(d1, settlement_date)
         df_q1 = df_q / max(float(quote_curve.df(d1)), 1e-12)
-        df_b1 = (df_b / max(float(base_curve.df(d1)), 1e-12)) if base_curve is not None else math.exp(-float(base_rate) * t1)
-        theta = sign * base_notional * (spot * df_b1 / df_q1 - K) * df_q1 - npv
+        sd1 = sd + timedelta(days=1) if spot_date is not None and sd > valuation_date else d1
+        fq1, fb1 = dfs(d1, sd1)
+        theta = sign * base_notional * (spot * fb1 / fq1 - K) * df_q1 - npv
     else:
         theta = -npv
 

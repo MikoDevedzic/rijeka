@@ -51,6 +51,14 @@ def bachelier_put(F: float, K: float, T: float, sigma: float) -> float:
     return bachelier_call(F, K, T, sigma) - (F - K)
 
 
+def option_time(valuation_date: date, start: date, end: date) -> float:
+    """Option time of a SOFR caplet in years: from the valuation date to the middle of its
+    accrual period (the in-arrears convention this module states), on ACT/365F. A normal vol
+    is quoted per 365-day year, so time must be too; measuring it on ACT/360 overstated the
+    variance by 365/360 (≈ +0.7% of an at-the-money premium) until 2026-11."""
+    return max((start - valuation_date).days + 0.5 * (end - start).days, 0.0) / 365.0
+
+
 # ── Caplet schedule ───────────────────────────────────────────────────────────
 
 def _add_months(d: date, months: int) -> date:
@@ -77,14 +85,14 @@ def caplet_schedule(spot_date: date, tenor_y: float, freq_per_year: int = 4) -> 
     for i in range(1, n + 1):
         end  = _mod_following(_add_months(spot_date, i * mpm))
         tau  = (end - prev).days / 360.0
-        expY = (end - spot_date).days / 360.0
+        expY = (end - spot_date).days / 365.0
         sched.append({
             "period":       i,
             "start_date":   prev,
             "end_date":     end,
             "tau":          tau,
             "expiry_y":     expY,                    # T_end (payment date)
-            "expiry_start_y": (prev - spot_date).days / 360.0,  # T_start (option expiry)
+            "expiry_start_y": (prev - spot_date).days / 365.0,  # T_start from spot, ACT/365F (display; pricing uses option_time)
         })
         prev = end
     return sched
@@ -272,7 +280,7 @@ def price_cap(
         F   = fwd_rates[i]
         df  = dfs[i]
         tau = cp['tau']
-        T   = max(cp['expiry_start_y'] + cp['tau'] / 2.0, 0.0)   # T_mid: midpoint of accrual period (matches Bloomberg)
+        T   = option_time(valuation_date, cp['start_date'], cp['end_date'])   # T_mid: midpoint of accrual period (matches Bloomberg)
         pv  = notional * tau * df * bachelier_call(F, cap_rate, T, sigma)
         npv += pv
         caplets.append({
@@ -292,7 +300,7 @@ def price_cap(
     # Vega: reprice with +1bp vol
     npv_vega_up = sum(
         notional * sched[i]['tau'] * dfs[i] *
-        bachelier_call(fwd_rates[i], cap_rate, max(sched[i]['expiry_start_y']+sched[i]['tau']/2.0,0.0), sigma + bump)
+        bachelier_call(fwd_rates[i], cap_rate, option_time(valuation_date, sched[i]['start_date'], sched[i]['end_date']), sigma + bump)
         for i in range(len(sched))
     )
     vega = npv_vega_up - npv
@@ -300,7 +308,7 @@ def price_cap(
     # IR01: parallel +1bp shift to forward rates
     npv_ir_up = sum(
         notional * sched[i]['tau'] * dfs[i] *
-        bachelier_call(fwd_rates[i] + bump, cap_rate, max(sched[i]['expiry_start_y']+sched[i]['tau']/2.0,0.0), sigma)
+        bachelier_call(fwd_rates[i] + bump, cap_rate, option_time(valuation_date, sched[i]['start_date'], sched[i]['end_date']), sigma)
         for i in range(len(sched))
     )
     ir01  = npv_ir_up - npv
@@ -364,7 +372,7 @@ def price_floor(
     npv, caplets = 0.0, []
     for i, cp in enumerate(sched):
         F  = fwd_rates[i]; df = dfs[i]; tau = cp['tau']
-        T  = max(cp['expiry_start_y'] + cp['tau'] / 2.0, 0.0)   # T_mid: midpoint (matches Bloomberg)
+        T  = option_time(valuation_date, cp['start_date'], cp['end_date'])   # T_mid: midpoint (matches Bloomberg)
         pv = notional * tau * df * bachelier_put(F, floor_rate, T, sigma)
         npv += pv
         caplets.append({'period':cp['period'],
@@ -374,10 +382,10 @@ def price_floor(
 
     bump = 0.0001
     npv_vega_up = sum(notional*sched[i]['tau']*dfs[i]*bachelier_put(
-        fwd_rates[i],floor_rate,max(sched[i]['expiry_start_y']+sched[i]['tau']/2.0,0.0),sigma+bump) for i in range(len(sched)))
+        fwd_rates[i],floor_rate,option_time(valuation_date, sched[i]['start_date'], sched[i]['end_date']),sigma+bump) for i in range(len(sched)))
     vega = npv_vega_up - npv
     npv_ir_up = sum(notional*sched[i]['tau']*dfs[i]*bachelier_put(
-        fwd_rates[i]+bump,floor_rate,max(sched[i]['expiry_start_y']+sched[i]['tau']/2.0,0.0),sigma) for i in range(len(sched)))
+        fwd_rates[i]+bump,floor_rate,option_time(valuation_date, sched[i]['start_date'], sched[i]['end_date']),sigma) for i in range(len(sched)))
     ir01 = npv_ir_up - npv
 
     return CapFloorResult(
@@ -607,7 +615,7 @@ def _price_strip_core(
         N   = notionals[i]
         df  = dfs_disc[i]
         tau = taus[i]
-        T   = max((p.period_start - valuation_date).days / 360.0 + tau / 2.0, 0.0)
+        T   = option_time(valuation_date, p.period_start, p.period_end)
 
         # Per-caplet vol lookup
         if vol_override_bp is not None:

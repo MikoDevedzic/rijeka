@@ -347,7 +347,8 @@ def cap_workbook(mkt: Market):
     _readme(wb, "Interest rate cap", [
         f"Default trade: USD 10m, 5y quarterly cap on SOFR, strike = ATM forward {K:.4%}, flat normal vol 85bp (override, so the "
         "replication does not depend on the cap surface).",
-        "Each caplet: forward F = (DF(start)/DF(end) − 1)/τ; price = N·τ·DF(end)·[(F − K)·N(d) + σ√T·n(d)], d = (F − K)/(σ√T), T = time to fixing.",
+        "Each caplet: forward F = (DF(start)/DF(end) − 1)/τ; price = N·τ·DF(end)·[(F − K)·N(d) + σ√T·n(d)], d = (F − K)/(σ√T), "
+        "T = time from the valuation date to the middle of the accrual period on ACT/365F (SOFR fixes in arrears over the period).",
         f"Rijeka NPV: {res.npv:,.2f} over {res.n_caplets} caplets.",
     ], mkt)
     _curve_sheet(wb, mkt)
@@ -358,14 +359,14 @@ def cap_workbook(mkt: Market):
     ws["D1"] = "Cap PV (formulas)"; ws["E1"] = None
     ws["D2"] = "Cap PV (Rijeka)"; ws["E2"] = res.npv; ws["E2"].fill = RJ; ws["E2"].number_format = "#,##0.00"
     ws["D3"] = "Difference"; ws["E3"] = "=E1-E2"; ws["E3"].number_format = "#,##0.00"
-    _hdr(ws, 5, ["Start", "End", "τ", "T to fixing (y)", "DF(start)", "DF(end)", "Forward", "d", "Caplet PV", "Rijeka PV"])
+    _hdr(ws, 5, ["Start", "End", "τ", "T to mid-period (y)", "DF(start)", "DF(end)", "Forward", "d", "Caplet PV", "Rijeka PV"])
     r0 = 6
     for k, cp in enumerate(res.caplets):
         r = r0 + k
         ws.cell(row=r, column=1, value=cp["start_date"]).number_format = "yyyy-mm-dd"
         ws.cell(row=r, column=2, value=cp["end_date"]).number_format = "yyyy-mm-dd"
         ws.cell(row=r, column=3, value=f"=YEARFRAC(A{r},B{r},2)")
-        ws.cell(row=r, column=4, value=f"=(A{r}-ValDate)/365")
+        ws.cell(row=r, column=4, value=f"=MAX((A{r}-ValDate)+(B{r}-A{r})/2,0)/365")
         ws.cell(row=r, column=5, value=f"={DF(f'A{r}')}").number_format = "0.000000"
         ws.cell(row=r, column=6, value=f"={DF(f'B{r}')}").number_format = "0.000000"
         ws.cell(row=r, column=7, value=f"=(E{r}/F{r}-1)/C{r}").number_format = "0.0000%"
@@ -406,7 +407,7 @@ def crypto_ndf_workbook(mkt: Market):
     _readme(wb, "Crypto NDF", [
         "Default trade: buy 10 BTC forward, 3 months, USD-settled, strike at the forward (so the NPV is zero on day one). "
         "Change the strike or the spot on the Inputs sheet to see the mark.",
-        "NPV = (F − K)·N·DF_USD(T), the same formula as an FX NDF with BTC as the foreign currency (pricing/fx_forward.py).",
+        "NPV = (F − K)·N·DF_USD(T), the same formula as an FX NDF with BTC as the base currency (pricing/currency_forward.py).",
         "The canonical on-chain record for this trade is the CRYPTO_FORWARD product in chain/canonical.py (ISDA Digital Asset Derivatives Definitions vocabulary).",
     ], mkt)
     _curve_sheet(wb, mkt)

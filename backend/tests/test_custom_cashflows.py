@@ -281,7 +281,6 @@ def test_custom_flow_appears_in_cashflows_list_with_correct_type(flat_curve):
     )
 
 
-@pytest.mark.xfail(reason="ZERO_COUPON pricer has pre-existing Decimal/float bug at pricing/ir_swap.py:206 - investigate separately")
 def test_zero_coupon_leg_with_custom_fee(flat_curve):
     """ZERO_COUPON branch must also honor custom cashflows."""
     leg = _base_leg(leg_type='ZERO_COUPON', fixed_rate=0.0)

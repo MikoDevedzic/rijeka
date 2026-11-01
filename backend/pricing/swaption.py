@@ -124,11 +124,16 @@ def _annuity_and_forward(
 
     # ── Build annual payment schedule backward from end_date ─────────────────
     # Mirrors Bloomberg: coupons at start + 1Y, start + 2Y, ..., end
+    # Counted from end_date (end − k periods), so a month-end or 29 February anchor does not drift.
+    # pay_freq_y is the period length in years (1.0 annual, 0.5 semi-annual, 0.25 quarterly).
+    step_months = max(1, int(round(12 * pay_freq_y)))
     pay_dates = []
+    k = 0
     cursor = end_date
     while cursor > start_date:
         pay_dates.append(cursor)
-        cursor = cursor - _rdelta(years=int(1 / pay_freq_y))
+        k += 1
+        cursor = end_date - _rdelta(months=step_months * k)
     pay_dates.reverse()
 
     # Ensure we don't have extra dates before start

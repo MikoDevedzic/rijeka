@@ -4,7 +4,7 @@ Starting from yesterday's mark on yesterday's market, the valuation is moved one
 thing at a time, in a fixed order, and each step's change is one row:
 
   CARRY      roll the valuation date to today on yesterday's market (theta, roll-down, accrual)
-  CASH       coupons and settlements that paid between the two dates (realised)
+  CASH       coupons and settlements that left the mark: paid on or after the previous close, before today
   RATES      each curve the trade is valued on, moved tenor bucket by tenor bucket
              (0-1Y, 1-5Y, 5-10Y, 10Y+), discount curve first, then forecast, then the base
   FX         the spot rate, then the quoted forward points (FX and digital-asset forwards)
@@ -71,12 +71,17 @@ class Valuer:
 
 
 def cash_settled(db: Session, trade, d0: date, d1: date) -> dict[str, float]:
-    """Flows paid in (d0, d1], signed from our side, by currency."""
+    """Flows that left the mark between the closes: paid in [d0, d1), signed from our side, by currency.
+
+    The pricer keeps a flow in a trade's value on its payment date (pricing/ir_swap.py skips only
+    payments before the valuation date), so a coupon paying on d1 is still in today's mark and
+    leaves it tomorrow, when it is cash. Counting (d0, d1] counted it twice on its payment date,
+    once in the mark and once as cash, and took it back the next day, until 2026-11."""
     out: dict[str, float] = {}
     try:
         rows = db.execute(text(
             "SELECT c.currency, coalesce(c.amount_override, c.amount) AS amt, l.direction FROM cashflows c "
-            "JOIN trade_legs l ON l.id = c.leg_id WHERE c.trade_id = :t AND c.payment_date > :d0 AND c.payment_date <= :d1"),
+            "JOIN trade_legs l ON l.id = c.leg_id WHERE c.trade_id = :t AND c.payment_date >= :d0 AND c.payment_date < :d1"),
             {"t": str(getattr(trade, "_cash_id", None) or trade.id), "d0": d0, "d1": d1}).all()
     except Exception as e:          # noqa: BLE001 — no schedule, no cash
         log.debug("cash: %s", e); db.rollback(); return out

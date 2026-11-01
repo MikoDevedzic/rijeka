@@ -99,3 +99,15 @@ CCY_CALENDAR = {
 
 def ccy_to_calendar(ccy: str) -> str:
     return CCY_CALENDAR.get((ccy or 'USD').upper(), 'NEW_YORK')
+
+
+KNOWN = {"NEW_YORK", "LONDON", "TARGET", "TOKYO", "ZURICH", "SYDNEY", "TORONTO"}
+
+
+def leg_calendar(leg: dict) -> str:
+    """The calendar a leg's dates roll on: its payment_calendar when it names known calendars
+    (NEW_YORK, TARGET+LONDON, ...), otherwise its currency's."""
+    c = str(leg.get("payment_calendar") or "").upper().replace(" ", "_")
+    if c and all(part in KNOWN for part in c.split("+")):
+        return c
+    return ccy_to_calendar(leg.get("currency") or "USD")

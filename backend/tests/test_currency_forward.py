@@ -148,7 +148,10 @@ def test_pair_route_prices_eurusd_from_snapshots():
     assert r.status_code == 200, r.text
     b = r.json()
     assert b["pair"] == "EURUSD" and b["base_discounting"] == "EUR_ESTR" and b["spot_source"] == "snapshot 2026-10-28"
-    assert b["forward"] == pytest.approx(1.1133 * curves["EUR_ESTR"].df(SET) / curves["USD_SOFR"].df(SET))
+    # a quoted FX spot settles on the spot date (Wed 28 Oct -> Fri 30 Oct); the forward carries from there
+    sd = date(2026, 10, 30)
+    e, u = curves["EUR_ESTR"], curves["USD_SOFR"]
+    assert b["forward"] == pytest.approx(1.1133 * (e.df(SET) / e.df(sd)) / (u.df(SET) / u.df(sd)))
     assert s.status_code == 200 and s.json()["settlement_date"] == "2026-10-30"      # Wed 28 Oct → T+2 = Fri 30 Oct
 
 
@@ -215,7 +218,7 @@ def test_forward_points_interpolation_and_market_mode():
     main.app.dependency_overrides.clear()
     assert r.status_code == 200, r.text
     b = r.json()
-    days = (SET - VAL).days
+    days = (SET - date(2026, 10, 30)).days          # forward points are quoted from the spot date (T+2)
     expect_pts = currencies.interp_points({"1M": 10.0, "3M": 50.0, "6M": 90.0}, days)
     assert b["forward_mode"] == "MARKET" and b["market_points"] == pytest.approx(expect_pts)
     assert b["forward"] == pytest.approx(1.1133 + expect_pts * 1e-4)

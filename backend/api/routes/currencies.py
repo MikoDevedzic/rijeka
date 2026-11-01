@@ -286,9 +286,15 @@ def _curve(db: Session, user_id: str, curve_id: str, val_date: date):
         raise HTTPException(status_code=422, detail=f"{curve_id}: {e}")
 
 
-def spot_date(val_date: date, crypto: bool) -> date:
+def spot_date(val_date: date, crypto: bool, base: Optional[str] = None, quote: Optional[str] = None) -> date:
+    """T+1 for a digital asset; T+2 for an FX pair, counted in business days of both currencies when
+    they are given (a Tokyo holiday moves USDJPY spot), weekdays otherwise."""
     if crypto:
         return val_date + timedelta(days=1)
+    if base and quote:
+        from pricing.calendars import add_business_days, ccy_to_calendar
+        cals = sorted({ccy_to_calendar(base), ccy_to_calendar(quote)})
+        return add_business_days(val_date, 2, "+".join(cals))
     d, n = val_date, 0
     while n < 2:
         d += timedelta(days=1)
@@ -305,9 +311,9 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     shape = (shape or "FORWARD").upper()
     if shape not in ("SPOT", "FORWARD", "NDF"):
         raise HTTPException(status_code=422, detail="shape must be SPOT, FORWARD or NDF")
-    settle = settlement or spot_date(val_date, crypto)
+    settle = settlement or spot_date(val_date, crypto, base, quote)
     if shape == "SPOT":
-        settle = spot_date(val_date, crypto)
+        settle = spot_date(val_date, crypto, base, quote)
     if spot_override is not None:
         S, s_src = float(spot_override), "request"
     elif st["spot"] is not None:
@@ -336,10 +342,13 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
             raise HTTPException(status_code=422, detail=f"No {st['base_curve']} snapshot and no flat rate for {base}.")
         kw["base_rate"], b_src = float(rate) / 100, (st.get("base_fallback") or
                                                      (f"flat {flat}% ({base}_FLAT)" if flat is not None else f"flat {rate}% ({POLICY_RATE_NOTE})"))
+    # a quoted FX spot settles on the spot date, and the forward carries from there; a digital
+    # asset's spot settles at once (pricing/currency_forward.py)
+    fx_spot = None if crypto else spot_date(val_date, False, base, quote)
     try:
         implied = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
                                          forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
-                                         quote_curve=q_curve, direction=direction, pip=st["pip"], **kw)
+                                         quote_curve=q_curve, direction=direction, pip=st["pip"], spot_date=fx_spot, **kw)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     mode = forward_mode(db, user_id)          # digital assets too: futures / forward prices by expiry are a quoted curve
@@ -347,18 +356,19 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     r, f_src, basis_pts = implied, "implied from the two OIS curves (interest-rate parity)", None
     mkt_pts = None
     if fc:
-        days = (settle - val_date).days
+        days = (settle - (fx_spot or val_date)).days          # forward points are quoted from the spot date
         mkt_pts = interp_points(fc, days)
         f_mkt = S + mkt_pts * st["pip"]
         basis_pts = mkt_pts - implied.forward_points
         if mode == "MARKET" and shape != "SPOT" and f_mkt > 0:
-            # the market forward implies the base-currency discount factor: DF_b = F·DF_q/S
-            df_b = f_mkt * implied.df_quote / S
-            t = implied.t
+            # the market forward implies the base-currency rate over spot -> settlement
+            from pricing.currency_forward import implied_base_rate, year_fraction
+            sd = fx_spot or val_date
+            rate_b = implied_base_rate(f_mkt, S, implied.df_quote, float(q_curve.df(sd)), implied.t, year_fraction(val_date, sd))
             r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
                                        forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
-                                       quote_curve=q_curve, direction=direction, pip=st["pip"],
-                                       base_rate=-math.log(df_b) / t if t > 0 else 0.0)
+                                       quote_curve=q_curve, direction=direction, pip=st["pip"], spot_date=fx_spot,
+                                       base_rate=rate_b)
             f_src = f"market points ({pair}_FWD {st['forward_curve']['valuation_date']}, {st['forward_curve']['source']}), basis {basis_pts:+.1f} pts vs parity"
     out = r.__dict__.copy()
     out.update(pair=pair, shape=shape, valuation_date=val_date.isoformat(), settlement_date=settle.isoformat(),

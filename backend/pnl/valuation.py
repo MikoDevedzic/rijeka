@@ -102,6 +102,10 @@ def value(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[s
     itype = str(trade.instrument_type or "").upper()
     if itype in CURRENCY_INSTRUMENTS:
         return _value_currency(db, user, trade, val_date, mkt)
+    if itype in SWAPTIONS:
+        v = _value_swaption(db, user, trade, val_date, mkt)
+        if v is not None:
+            return v
     from api.routes.pricer import PriceRequest, price_trade
     ids = trade_curves(trade)
     fallback = [c for c in ids if mkt.quotes(c) is None]
@@ -115,6 +119,66 @@ def value(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[s
     return {"npv": float(p.get("npv") or 0.0), "ccy": (p.get("npv_ccy") or p.get("currency") or trade.notional_ccy or "USD").upper(),
             "ir01": p.get("ir01"), "ir01_disc": p.get("ir01_disc"), "spot01": None, "theta": p.get("theta"),
             "asof": {c: mkt.snapshot_date(c) for c in ids}, "fallback": fallback}
+
+
+SWAPTIONS = ("IR_SWAPTION",)
+
+
+def _trade_legs(db: Session, user: dict, trade) -> list[dict]:
+    if getattr(trade, "_legs", None) is not None:
+        return legs_for_pricer(trade)
+    from api.routes.pricer import _leg_to_dict
+    from db.models import TradeLeg
+    rows = (db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id, TradeLeg.user_id == trade.user_id)
+            .order_by(TradeLeg.leg_seq).all())
+    return [_leg_to_dict(r) for r in rows]
+
+
+def _value_swaption(db: Session, user: dict, trade, val_date: date, mkt: Market) -> Optional[dict[str, Any]]:
+    """A booked European swaption, valued as the option (pricing/swaption.py, Bachelier on the OIS annuity).
+
+    The booking carries the underlying swap's legs; expiry, strike and payer/receiver are read the way
+    the exposure engine reads them (ccr/options.swaption_terms: trade.terms first, else the forward start
+    of the fixed leg, its rate and its direction), and the vol is the nearest point of the day's
+    {CCY}_SWVOL_ATM grid. Until 2026-11 P&L, VaR, stress and the ladder valued a booked swaption as its
+    underlying swap: no option value, a full swap delta, no vega. The booking does not record whether the
+    option was bought or sold; it is valued long, and the result says so. Past expiry it is the
+    underlying swap (physical settlement): None hands it back to the swap pricer."""
+    from ccr.options import swaption_terms, swaption_vol_bp
+    from api.routes.pricer import _build_curve
+    from pricing.swaption import price_swaption
+    legs = _trade_legs(db, user, trade)
+    fixed = next((l for l in legs if str(l.get("leg_type", "")).upper() == "FIXED"), None)
+    if fixed is None or not fixed.get("effective_date") or not fixed.get("maturity_date"):
+        return None
+    terms = swaption_terms(trade, legs, val_date)
+    expiry = terms["expiry"]
+    if expiry is None or expiry <= val_date:
+        return None
+    start = date.fromisoformat(str(fixed["effective_date"])[:10])
+    mat = date.fromisoformat(str(fixed["maturity_date"])[:10])
+    ccy = str(fixed.get("currency") or trade.notional_ccy or "USD").upper()
+    cid = fixed.get("discount_curve_id") or trade.discount_curve_id or "USD_SOFR"
+    fallback = [] if mkt.quotes(cid) else [cid]
+    curve = _build_curve(_curve_input(cid, mkt.quotes(cid)), val_date, db, user["sub"])
+    expiry_y = (expiry - val_date).days / 365.0
+    tenor_y = max((mat - start).days / 365.25, 0.25)
+    vol_bp, vol_src = swaption_vol_bp(mkt, ccy, expiry_y, tenor_y)
+    freq = str(fixed.get("payment_frequency") or "ANNUAL").upper()
+    period_y = {"ANNUAL": 1.0, "SEMI_ANNUAL": 0.5, "SEMIANNUAL": 0.5, "QUARTERLY": 0.25, "MONTHLY": 1 / 12}.get(freq, 1.0)
+    notional = float(fixed.get("notional") or trade.notional or 0.0)
+
+    def npv(c):
+        r = price_swaption(notional, expiry_y, tenor_y, terms["K"], vol_bp, terms["is_payer"], c, period_y, val_date,
+                           swap_effective_date=start, swap_maturity_date=mat)
+        if r.error:
+            raise ValueError(f"swaption: {r.error}")
+        return r
+    base = npv(curve)
+    ir01 = npv(curve.shifted(1.0)).npv - base.npv           # +1bp zero, the swaps' IR01 definition
+    return {"npv": float(base.npv), "ccy": ccy, "ir01": ir01, "ir01_disc": None, "spot01": None, "theta": float(base.theta),
+            "vega": float(base.vega), "asof": {cid: mkt.snapshot_date(cid)} if hasattr(mkt, "snapshot_date") else {},
+            "fallback": fallback, "model": f"Bachelier {vol_bp:.1f}bp ({vol_src}), valued long, expiry {expiry}"}
 
 
 def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[str, Any]:
@@ -141,24 +205,28 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
         else:
             flat = mkt.single(f"{base}_FLAT", "FLAT")
             kw["base_rate"] = float(flat if flat is not None else POLICY_RATE_PCT.get(base, 0.0)) / 100.0
-    settle = t["settle"] if t["shape"] != "SPOT" else spot_date(val_date, crypto)
+    settle = t["settle"] if t["shape"] != "SPOT" else spot_date(val_date, crypto, base, quote)
     if settle <= val_date:
         return {"npv": 0.0, "ccy": quote, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0, "asof": {}, "fallback": fallback, "settled": True}
     pip = PIP.get(pair, 1.0 if crypto else 1e-4)
+    fx_spot = None if crypto else spot_date(val_date, False, base, quote)   # an FX spot quote settles T+2; the forward carries from there
     r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,
-                               valuation_date=val_date, settlement_date=settle, quote_curve=q_curve, direction=t["direction"], pip=pip, **kw)
+                               valuation_date=val_date, settlement_date=settle, quote_curve=q_curve, direction=t["direction"], pip=pip,
+                               spot_date=fx_spot, **kw)
     # The desk's forward mode: on MARKET, quoted forward points ({PAIR}_FWD, as of the market date)
     # replace parity, exactly as the ticket prices (currencies._price). Points are a curve in
     # their own right and get their own attribution step.
     pts = forward_points(mkt, pair)
     if pts and t["shape"] != "SPOT" and market_mode(mkt):
-        days = (settle - val_date).days
+        days = (settle - (fx_spot or val_date)).days           # points are quoted from the spot date
         f_mkt = S + interp_points(pts, days) * pip
         if f_mkt > 0 and r.t > 0:
-            df_b = f_mkt * r.df_quote / S
+            from pricing.currency_forward import implied_base_rate, year_fraction
+            sd = fx_spot or val_date
+            rate_b = implied_base_rate(f_mkt, S, r.df_quote, float(q_curve.df(sd)), r.t, year_fraction(val_date, sd))
             r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,
                                        valuation_date=val_date, settlement_date=settle, quote_curve=q_curve, direction=t["direction"], pip=pip,
-                                       base_rate=-math.log(df_b) / r.t)
+                                       spot_date=fx_spot, base_rate=rate_b)
     return {"npv": float(r.npv), "ccy": quote, "ir01": getattr(r, "ir01", None), "ir01_disc": getattr(r, "ir01_disc", None),
             "spot01": getattr(r, "spot01", None), "theta": getattr(r, "theta", None),
             "asof": {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT")}, "fallback": fallback}

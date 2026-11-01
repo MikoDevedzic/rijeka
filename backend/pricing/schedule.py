@@ -94,6 +94,7 @@ def generate_schedule(
     first_period_start: Optional[date] = None,
     last_period_end:    Optional[date] = None,
     is_float:           bool          = False,
+    calendar:           Optional[str] = None,
 ) -> List[CouponPeriod]:
     """
     Generate a list of CouponPeriod objects for a leg.
@@ -104,13 +105,17 @@ def generate_schedule(
       - fixing_date for float legs = 2 business days before period_start.
     """
     freq_upper = (frequency or "QUARTERLY").upper().replace("-", "_").replace(" ", "_")
+    # Business days for the payment adjustment, the payment lag and the fixing date. Until 2026-11 the
+    # adjustment always used New York and the lag and fixing date counted weekdays only, so a lag across
+    # Thanksgiving, or a EUR leg on a TARGET holiday, paid on a holiday. Callers pass the leg's calendar.
+    cal = calendar or "NEW_YORK"
 
     # Zero coupon — single period
     if freq_upper in ("ZERO", "ZERO_COUPON", "ZEROCOUPON", "BULLET"):
         start = first_period_start or effective_date
         end   = last_period_end or maturity_date
-        pay   = _add_lag(apply_bdc(end, bdc), payment_lag)
-        fix   = _fixing_date(start) if is_float else None
+        pay   = _add_lag(apply_bdc(end, bdc, cal), payment_lag, cal)
+        fix   = _fixing_date(start, cal) if is_float else None
         return [CouponPeriod(
             period_start=start,
             period_end=end,
@@ -129,22 +134,47 @@ def generate_schedule(
     if delta is None:
         raise ValueError(f"Unknown payment_frequency: {frequency!r}")
 
-    # Build unadjusted end dates rolling backward from maturity
-    end_dates = []
-    cursor = maturity_date
-    if last_period_end and last_period_end < maturity_date:
+    # Unadjusted period dates, each counted from the roll anchor (anchor ± k periods). Stepping
+    # from the previous date instead carries a short month into every later period: 31 Aug rolled
+    # back quarterly gave 31 May, 28 Feb, 28 Nov, 28 Aug ... where ISDA and QuantLib give 30 Nov
+    # and 31 Aug. No end-of-month rule is applied (QuantLib's endOfMonth = false).
+    #   SHORT_FRONT  roll backward from maturity; an odd first period is short (default)
+    #   LONG_FRONT   as SHORT_FRONT, the odd first period merged into the next one
+    #   SHORT_BACK   roll forward from the effective date; an odd last period is short
+    #   LONG_BACK    as SHORT_BACK, the odd last period merged into the previous one
+    # first_period_start / last_period_end, when given, fix the stub explicitly as before.
+    stub = (stub_type or "SHORT_FRONT").upper().replace("-", "_").replace(" ", "_")
+    if stub not in ("SHORT_FRONT", "LONG_FRONT", "SHORT_BACK", "LONG_BACK"):
+        raise ValueError(f"Unknown stub_type: {stub_type!r}")
+    start0 = first_period_start or effective_date
+    if stub in ("SHORT_FRONT", "LONG_FRONT") or last_period_end:
+        anchor = last_period_end if (last_period_end and last_period_end < maturity_date) else maturity_date
+        end_dates = [maturity_date] if anchor != maturity_date else []
+        end_dates.append(anchor)
+        k = 1
+        while True:
+            prev = anchor - delta * k
+            if prev <= effective_date:
+                break
+            end_dates.append(prev)
+            k += 1
+        end_dates.sort()
+        odd_first = len(end_dates) >= 2 and end_dates[0] - delta != start0
+        if stub == "LONG_FRONT" and odd_first and not first_period_start:
+            end_dates = end_dates[1:]
+    else:
+        end_dates = []
+        k = 1
+        while True:
+            nxt = effective_date + delta * k
+            if nxt >= maturity_date:
+                break
+            end_dates.append(nxt)
+            k += 1
+        odd_last = bool(end_dates) and end_dates[-1] + delta != maturity_date
+        if stub == "LONG_BACK" and odd_last:
+            end_dates = end_dates[:-1]
         end_dates.append(maturity_date)
-        cursor = last_period_end
-    end_dates.append(cursor)
-
-    while True:
-        prev = cursor - delta
-        if prev <= effective_date:
-            break
-        cursor = prev
-        end_dates.append(cursor)
-
-    end_dates.sort()
 
     # Pair into periods
     starts = [first_period_start or effective_date] + end_dates[:-1]
@@ -154,8 +184,8 @@ def generate_schedule(
     for s, e in zip(starts, ends):
         if s >= e:
             continue
-        pay = _add_lag(apply_bdc(e, bdc), payment_lag)
-        fix = _fixing_date(s) if is_float else None
+        pay = _add_lag(apply_bdc(e, bdc, cal), payment_lag, cal)
+        fix = _fixing_date(s, cal) if is_float else None
         periods.append(CouponPeriod(
             period_start=s,
             period_end=e,
@@ -168,24 +198,13 @@ def generate_schedule(
     return periods
 
 
-def _add_lag(d: date, lag: int) -> date:
+def _add_lag(d: date, lag: int, calendar: str = "NEW_YORK") -> date:
+    """`lag` business days of the calendar after (before, if negative) d."""
     if lag == 0:
         return d
-    step = timedelta(days=1) if lag > 0 else timedelta(days=-1)
-    count = 0
-    while count < abs(lag):
-        d += step
-        if not _is_weekend(d):
-            count += 1
-    return d
+    return _cal_add_bd(d, lag, calendar)
 
 
-def _fixing_date(period_start: date) -> date:
-    """2 business days before period_start (London/NY convention)."""
-    d = period_start
-    count = 0
-    while count < 2:
-        d -= timedelta(days=1)
-        if not _is_weekend(d):
-            count += 1
-    return d
+def _fixing_date(period_start: date, calendar: str = "NEW_YORK") -> date:
+    """2 business days before period_start on the leg's calendar."""
+    return _cal_add_bd(period_start, -2, calendar)

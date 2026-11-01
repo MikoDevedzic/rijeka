@@ -15,7 +15,7 @@ Starting from yesterday's mark on yesterday's market, the valuation is moved one
 | Step | Row | What moves |
 |---|---|---|
 | 1 | CARRY | The valuation date rolls to today on yesterday's market: theta, roll-down, accrual |
-| 2 | CASH | Coupons and settlements paid in (yesterday, today], signed from our side |
+| 2 | CASH | Coupons and settlements that left the mark: paid in [yesterday, today), signed from our side. A flow paying today is still in today's mark (the pricer values it until its payment date has passed) and is cash tomorrow; counting (yesterday, today] booked it twice on its payment date and reversed it the next day (fixed 2026-11) |
 | 3 | RATES | Each curve the trade is valued on, one tenor bucket at a time: 0-1Y, 1-5Y, 5-10Y, 10Y+. Discount curve first, then forecast, then the base currency's curve. A single-quote curve (flat rate, funding) is one step |
 | 4 | FX | The spot rate, then the quoted forward points |
 | 5 | RESIDUAL | Today's mark on today's market minus the last step: cross effects and anything not moved explicitly (a vol surface today). Shown, never absorbed |

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 
 from pricing.schedule import generate_schedule, CouponPeriod
+from pricing.calendars import leg_calendar
 from pricing.curve import Curve
 from pricing.day_count import dcf as calc_dcf
 
@@ -76,8 +77,10 @@ def _project_float_rate(
         return (1.0 / df_h - 1.0) / tau_h if (df_h > 1e-10 and tau_h > 0) else 0.0
 
     # Period under way. Project the remaining stub over its own accrual factor.
-    # With a fixing, blend realised (elapsed) and forward (remaining); without
-    # one, assume the elapsed portion accrued at the rate the remaining stub
+    # With a fixing (the simple rate realised over the elapsed days), compound it with
+    # the remaining forward: (1 + R·τe)(1 + F·τr) − 1 over τ, which is what daily
+    # compounding gives; adding R·τe + F·τr understated the coupon by R·F·τe·τr.
+    # Without one, assume the elapsed portion accrued at the rate the remaining stub
     # implies — an approximation, but far better than assuming it accrued zero.
     if p.period_start < valuation_date:
         df2     = fc.df(p.period_end)
@@ -88,7 +91,7 @@ def _project_float_rate(
         if realised is None:
             return fwd_rem
         tau_elapsed = max(tau - tau_rem, 0.0)
-        return (realised * tau_elapsed + fwd_rem * tau_rem) / tau
+        return ((1.0 + realised * tau_elapsed) * (1.0 + fwd_rem * tau_rem) - 1.0) / tau
 
     # Ordinary forward-starting period
     df1 = fc.df(p.period_start)
@@ -303,13 +306,19 @@ def price_leg(
     if leg_type == "ZERO_COUPON":
         # Apply notional schedule if present (e.g. ZC on amortizing structure)
         eff_notional = _resolve_notional_schedule(notional_schedule, eff, notional) if notional_schedule else notional
-        T       = calc_dcf("ACT/365F", eff, mat)
+        T       = float(calc_dcf("ACT/365F", eff, mat))     # a Decimal here made every zero-coupon leg raise (fixed 2026-11)
         amount  = eff_notional * ((1.0 + fixed_rate) ** T - 1.0)
-        df_mat  = discount_curve.df(mat)
-        zero_r  = discount_curve.zero_rate(mat)
+        # paid on the adjusted maturity (+ lag) like every other leg; once paid it is out of the value
+        from pricing.schedule import apply_bdc as _bdc, _add_lag
+        _cal    = leg_calendar(leg)
+        pay_zc  = _add_lag(_bdc(mat, bdc, _cal), payment_lag, _cal)
+        if pay_zc < valuation_date:
+            amount = 0.0
+        df_mat  = discount_curve.df(pay_zc)
+        zero_r  = discount_curve.zero_rate(pay_zc)
         pv_cf   = amount * df_mat * sign
         cf = CashflowResult(
-            period_start=eff, period_end=mat, payment_date=mat,
+            period_start=eff, period_end=mat, payment_date=pay_zc,
             fixing_date=None, currency=currency, notional=eff_notional,
             rate=fixed_rate, dcf=T, amount=amount,
             pv=pv_cf, df=df_mat, zero_rate=zero_r,
@@ -353,7 +362,7 @@ def price_leg(
         notional=Decimal(str(notional)), bdc=bdc,
         payment_lag=payment_lag, stub_type=stub_type,
         first_period_start=fps, last_period_end=lpe,
-        is_float=is_float,
+        is_float=is_float, calendar=leg_calendar(leg),
     )
 
     cashflows = []

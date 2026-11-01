@@ -59,9 +59,12 @@ def simulate(calib: Calibration, curves: dict[str, object], spots: dict[str, flo
              asof: date, months: int, n_paths: int = 2000, seed: int = 7) -> Paths:
     """curves: RATES factor key -> Curve; spots: SPOT key -> S_0; spot_rates: SPOT key -> (r_quote, r_base) continuous."""
     T = max(1, months)
-    dt = 1.0 / 12.0
     grid = [asof] + [add_months(asof, k) for k in range(1, T + 1)]
-    t = np.arange(T + 1) * dt
+    # Grid times on the clock every trade date uses (days / 365.25, ccr.valuation.years), so a fixing or
+    # an expiry that falls on a grid date is at that grid point. Exact twelfths put a date one grid
+    # point early (365/365.25 < 1) until 2026-11; each step uses its own length below.
+    t = np.array([(g - asof).days / 365.25 for g in grid])
+    dts = np.diff(t)
     rng = np.random.default_rng(seed)
     order = calib.order
     historical = calib.sampling == "HISTORICAL" and calib.panel is not None and calib.panel.shape[1] == len(order)
@@ -82,9 +85,10 @@ def simulate(calib: Calibration, curves: dict[str, object], spots: dict[str, flo
         f = calib.factors[key]
         if f.kind == "RATES":
             a, sig = max(f.a, 1e-4), max(f.sigma, 1e-6)
-            std = sig * math.sqrt((1 - math.exp(-2 * a * dt)) / (2 * a))
             xs = np.zeros((n_paths, T + 1))
             for i in range(1, T + 1):
+                dt = float(dts[i - 1])
+                std = sig * math.sqrt((1 - math.exp(-2 * a * dt)) / (2 * a))
                 shock = inc[i - 1, :, j] if historical else std * z[i - 1, :, j]
                 xs[:, i] = xs[:, i - 1] * math.exp(-a * dt) + shock
             pf = df_fn(curves[key], asof); p0[key] = pf
@@ -110,7 +114,7 @@ def simulate(calib: Calibration, curves: dict[str, object], spots: dict[str, flo
                 lw = np.concatenate([np.zeros((n_paths, 1)), lw], axis=1)
                 s[key] = spots[key] * np.exp(mu * t[None, :] + lw)
             else:
-                w = np.cumsum(z[:, :, j], axis=0).T * math.sqrt(dt)        # (paths, T)
+                w = np.cumsum(z[:, :, j] * np.sqrt(dts)[:, None], axis=0).T  # (paths, T)
                 w = np.concatenate([np.zeros((n_paths, 1)), w], axis=1)
                 s[key] = spots[key] * np.exp((mu - 0.5 * sig ** 2) * t[None, :] + sig * w)
     return Paths(grid=grid, t=t, x=x, r=r, s=s, p0=p0, calib=calib, n_paths=n_paths)
@@ -140,4 +144,10 @@ def bond(paths: Paths, key: str, i: int, T_years: float) -> np.ndarray:
     pf = paths.p0[key]
     ratio = pf(T_years) / max(pf(t_i), 1e-12)
     var = (sig ** 2) / (4 * a) * B * B * (1 - math.exp(-2 * a * t_i))
-    return ratio * np.exp(-B * paths.x[key][:, i] - var)
+    # The affine formula is in x = r − f(0,t) (Andersen–Piterbarg), which is the driftless OU deviation
+    # stored in paths.x plus phi(t) = sigma²/(2a²)·(1 − e^{−at})², the convexity part of alpha. Using the
+    # stored deviation alone priced every bond high by exp(B·phi): forward rates on the paths sat phi
+    # below the curve (≈ 8bp at 5y, 27bp at 10y for a = 3%, sigma = 85bp) until 2026-11. The risk-neutral
+    # martingale check in tests/reference/test_ref_ccr.py pins it.
+    phi = (sig ** 2) / (2 * a * a) * (1 - math.exp(-a * t_i)) ** 2
+    return ratio * np.exp(-B * (paths.x[key][:, i] + phi) - var)

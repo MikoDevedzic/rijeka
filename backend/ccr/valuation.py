@@ -33,11 +33,13 @@ def years(asof: date, d: date) -> float:
 def leg_schedule(leg: dict, asof: date):
     """[(start, end, pay, τ)] from the pricer's leg dict, using the production schedule generator."""
     from pricing.schedule import generate_schedule
+    from pricing.calendars import leg_calendar
     eff = date.fromisoformat(str(leg["effective_date"])[:10]); mat = date.fromisoformat(str(leg["maturity_date"])[:10])
     freq = leg.get("payment_frequency") or ("ANNUAL" if str(leg.get("leg_type", "")).upper() == "FIXED" else "QUARTERLY")
     periods = generate_schedule(eff, mat, freq, leg.get("day_count") or "ACT/360", Decimal(str(leg.get("notional") or 0)),
                                 bdc=leg.get("bdc") or "MOD_FOLLOWING", payment_lag=int(leg.get("payment_lag") or 0),
-                                stub_type=leg.get("stub_type") or "SHORT_FRONT", is_float=str(leg.get("leg_type", "")).upper() == "FLOAT")
+                                stub_type=leg.get("stub_type") or "SHORT_FRONT", is_float=str(leg.get("leg_type", "")).upper() == "FLOAT",
+                                calendar=leg_calendar(leg))
     return [(p.period_start, p.period_end, p.payment_date, float(p.dcf)) for p in periods]
 
 

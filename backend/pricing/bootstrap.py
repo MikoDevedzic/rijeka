@@ -176,8 +176,11 @@ def _annual_periods(
     spot_date = _add_bd(val_date, spot_lag, calendar)
     periods: List[Tuple[date, date, float]] = []
     cursor = maturity
+    k = 1
     while True:
-        prev = cursor - relativedelta(years=1)
+        # maturity − k years, counted from the anchor: stepping back from the previous date would
+        # carry a 28 February into every earlier year (no drift; ISDA and QuantLib roll the same way)
+        prev = maturity - relativedelta(years=k)
         if prev <= spot_date:
             tau = float(_dcf_fn(dc, spot_date, cursor))
             periods.append((spot_date, cursor, tau))
@@ -185,6 +188,7 @@ def _annual_periods(
         tau = float(_dcf_fn(dc, prev, cursor))
         periods.append((prev, cursor, tau))
         cursor = prev
+        k += 1
     periods.reverse()
     return periods
 
@@ -341,7 +345,9 @@ def bootstrap_curve(
         annual_sparse.sort()
         max_y = max(y for y, _ in annual_sparse)
         for y in range(1, max_y + 1):
-            mat  = date(spot.year + y, spot.month, spot.day)
+            # spot + y years, not date(spot.year + y, ...): a spot date of 29 February has no
+            # twin in a common year (QuantLib and ISDA roll it to 28 February).
+            mat  = spot + relativedelta(years=y)
             rate = _interpolate_rate(y, annual_sparse)
             df_n = _bootstrap_ois(valuation_date, mat, rate, df_pillars, swap_dc, df_spot, spot_lag, calendar)
             df_pillars.append((mat, df_n))

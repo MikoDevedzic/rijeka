@@ -40,7 +40,6 @@ from middleware.auth import verify_token
 from api.routes._errors import internal
 from pricing.bootstrap import bootstrap_from_dicts
 from pricing.curve import Curve
-from pricing.fx_forward import price_fx_forward
 from pricing.greeks import compute_greeks
 from pricing.ir_swap import price_swap, price_leg
 from pricing.swaption import price_swaption, _N
@@ -208,6 +207,7 @@ def _leg_to_dict(leg: TradeLeg) -> dict:
         "bdc":               leg.bdc or "MOD_FOLLOWING",
         "stub_type":         leg.stub_type or "SHORT_FRONT",
         "payment_lag":       int(leg.payment_lag) if leg.payment_lag is not None else 0,
+        "payment_calendar":  getattr(leg, "payment_calendar", None),
         "fixed_rate":        float(leg.fixed_rate) if leg.fixed_rate is not None else 0.0,
         "spread":            float(leg.spread) if leg.spread is not None else 0.0,
         "forecast_curve_id": leg.forecast_curve_id,
@@ -426,7 +426,6 @@ _IR = {"IR_SWAP","OIS_SWAP","BASIS_SWAP","XCCY_SWAP","CAPPED_SWAP","FLOORED_SWAP
        "COLLARED_SWAP","CALLABLE_SWAP","CANCELLABLE_SWAP","IR_SWAPTION",
        "BERMUDAN_SWAPTION","IR_CAP","IR_FLOOR",
        "IR_COLLAR","FRA"}
-_FX = {"FX_FORWARD","NDF"}
 
 
 # ── Par rate bisection solver ─────────────────────────────────────────────────
@@ -650,14 +649,10 @@ def price_trade(
         curve_pillars[cid] = pils
 
     try:
-        if trade.instrument_type in _FX:
-            result = price_fx_forward(
-                trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
-            )
-        else:
-            result = price_swap(
-                trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
-            )
+        # currency trades never reach here: they return through currencies.price_booked above
+        result = price_swap(
+            trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
+        )
     except Exception as exc:
         raise internal(500, "Pricing error", exc)
     if getattr(result, "error", None):
