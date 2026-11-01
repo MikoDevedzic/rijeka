@@ -9,6 +9,7 @@
 \usepackage{parskip}
 \usepackage{enumitem}
 \usepackage{tabularx}
+\usepackage{longtable}
 \usepackage[hyphens]{url}
 \usepackage[hidelinks]{hyperref}
 \emergencystretch=2em
@@ -22,7 +23,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.0 · October 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.1 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -37,7 +38,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, risk, XVA, digital-asset derivatives and on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.0 · October 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.1 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -71,7 +72,7 @@ $\Phi$, $\varphi$ & standard normal distribution and density \\
 Business-day adjustment is Modified Following on the currency's calendar unless the trade says otherwise. Spot lag is two business days for USD, EUR, JPY and CHF, one for CAD, zero for GBP, AUD and NZD (\code{pricing/bootstrap.py}, \code{CCY_SPOT_LAG}).
 
 %--------------------------------------------------------------------
-\section{Discount curve construction}
+\section{Discount curve construction}\label{sec:curve}
 \emph{Module: \code{pricing/bootstrap.py}, \code{pricing/curve.py}.}
 
 \subsection{Instruments}
@@ -81,7 +82,7 @@ A curve is built from an overnight deposit and a strip of OIS par swap rates (te
 \begin{enumerate}[leftmargin=1.4em]
 \item The overnight deposit gives $P(t_0+1\mathrm{d}) = 1/(1 + r_{ON}\,\tau_{ACT/360})$.
 \item The spot discount factor $P(t_s)$ is obtained by extrapolating the overnight zero rate to the spot date and is \emph{frozen} as an explicit pillar. This is the step that makes the bootstrap and the pricer agree to the last cent: both read the same $P(t_s)$.
-\item Annual OIS swaps are bootstrapped on a dense integer-year grid ($1$Y to the longest quote), with missing years filled by linear interpolation of par rates, so that every annual period end is a pillar.
+\item Annual OIS swaps are bootstrapped on a dense integer-year grid ($1$Y to the longest quote, each year counted from the spot date, so a 29 February spot rolls to 28 February), with missing years filled by linear interpolation of par rates, so that every annual period end is a pillar. This gap fill is a convention: QuantLib's bootstrap of the same quotes interpolates log-linearly in discount factors between quoted maturities, and the two curves agree at the quotes but part by up to 1.3bp in zero rate (and 4bp in a single three-month forward) between them (\S\ref{sec:quantlib}).
 \item Week- and month-tenor swaps are then bootstrapped in maturity order against the pillars already present.
 \end{enumerate}
 For an OIS swap of par rate $R$ with annual periods $(T_{i-1},T_i]$, $i=1\dots n$, accrual factors $\tau_i$ (ACT/360 for USD), the terminal discount factor solves the par condition with the floating leg replaced by its telescoping value $P(t_s)-P(T_n)$:
@@ -102,17 +103,17 @@ equivalent to a piecewise-constant forward rate. Beyond the last pillar the cont
 A parallel shift of $b$ basis points is applied to zero rates: $P_b(T) = P(T)\,e^{-b\cdot 10^{-4}\,T}$ with $T$ in ACT/365F years (\code{Curve.shifted}).
 
 %--------------------------------------------------------------------
-\section{Schedules and cashflows}
+\section{Schedules and cashflows}\label{sec:schedules}
 \emph{Module: \code{pricing/schedule.py}, \code{pricing/day_count.py}, \code{pricing/ir_swap.py}.}
 
-Coupon periods are rolled backward from the maturity date at the payment frequency (monthly, quarterly, semi-annual, annual, or zero-coupon), producing a short front stub by default; explicit first-period-start and last-period-end dates override this. Period end dates are unadjusted; payment dates apply the business-day convention and any payment lag. Floating fixings are two business days before the period start.
+Coupon periods are rolled from an anchor at the payment frequency (monthly, quarterly, semi-annual, annual, or zero-coupon), every date counted from the anchor ($\text{anchor}\pm k$ periods) so that a month-end does not drift: rolled back quarterly from 31 August the dates are 31 May, 28 February, 30 November, 31 August. No end-of-month rule is applied. The stub type chooses the anchor: \code{SHORT_FRONT} (the default) and \code{LONG_FRONT} roll backward from maturity, \code{SHORT_BACK} and \code{LONG_BACK} forward from the effective date, the long variants merging the odd period into its neighbour; explicit first-period-start and last-period-end dates override this. Period end dates are unadjusted; payment dates apply the business-day convention and the payment lag in business days of the leg's calendar (its \code{payment_calendar}, else its currency's: New York, TARGET, London, Tokyo, Zurich, Sydney, Toronto, or a join of them). Floating fixings are two business days before the period start on the same calendar. A period whose accrual ends on a weekend at month-end is therefore paid on the preceding business day, before its accrual ends; QuantLib, which adjusts accrual dates as ISDA does, would not build such a coupon, and the reference checks reproduce it coupon by coupon. (Before November 2026 the dates drifted after a short month, the stub type was ignored, and the lag and fixing dates counted weekdays only; NPV moved by less than 0.02bp of notional, individual coupon dates by up to three days.)
 
 A fixed coupon over $(d_{s},d_{e}]$ is $N\,r\,\tau(d_s,d_e)$. A floating coupon on a compounded overnight index is projected from the forecast curve as
 \begin{equation}
 r_{float} = \frac{1}{\tau(d_s,d_e)}\left(\frac{P_f(d_s)}{P_f(d_e)} - 1\right) + s,
 \label{eq:float}
 \end{equation}
-which equals the daily-compounded in-arrears rate implied by the curve; $s$ is the spread. For a period already in progress, a realised fixing (when supplied) covers the elapsed part and the curve the remainder, weighted by accrual. Notional, fixed-rate and spread schedules (step-ups, amortisation) are resolved per period from their effective dates.
+which equals the daily-compounded in-arrears rate implied by the curve; $s$ is the spread. For a period already in progress, a realised fixing $R$ (when supplied) covers the elapsed part $\tau_e$ and the curve's forward $F$ the remainder $\tau_r$, compounded: $r=\big[(1+R\tau_e)(1+F\tau_r)-1\big]/\tau$. \emph{Known limitation:} no production path supplies realised SOFR yet, so the elapsed days are assumed to have accrued at the remaining stub's forward; the error is the difference between realised and forward SOFR times the elapsed fraction (11bp of notional in the reference test, where they differ by 40bp). Notional, fixed-rate and spread schedules (step-ups, amortisation) are resolved per period from their effective dates.
 
 Each coupon is discounted at its business-day-adjusted payment date, the date the cash moves. (Engine versions before October 2026 discounted at the unadjusted period end; where a date rolled over a weekend the two differ by a day or two of discounting. Corrected in v0.5, with the Excel replications as the independent check.)
 
@@ -162,14 +163,16 @@ C &= \frac{z}{\chi(z)},\qquad z=\frac{\nu}{\alpha}(F-K),\qquad
 with $C=1$ at the money. Parameters $(\alpha,\rho,\nu)$ are fitted to quoted volatilities at strike offsets $\{-200,-100,-50,-25,0,+25,+50,+100,+200\}$bp by weighted least squares, with $\alpha$ constrained so the at-the-money volatility is matched exactly. The fit RMSE is stored with the parameters.
 
 %--------------------------------------------------------------------
-\section{Caps, floors and collars}
+\section{Caps, floors and collars}\label{sec:caps}
 \emph{Module: \code{pricing/cap_floor.py}, \code{pricing/cap_vol_strip.py}, \code{pricing/cap_sabr.py}.}
 
-A cap on a compounded overnight index is a strip of quarterly caplets, ACT/360, settled $T+2$, Modified Following, with each caplet expiring at the \emph{end} of its accrual period (fixing in arrears). For caplet $(d_s,d_e]$ with forward $F$ from \eqref{eq:float}, time to fixing $T$ and normal volatility $\sigma_N$,
+A cap on a compounded overnight index is a strip of quarterly caplets, ACT/360 accrual, from two calendar days after the valuation date, weekend dates moved to the following Monday. The rate fixes in arrears over the whole period; the caplet is valued with option time to the \emph{middle} of its accrual period, $T=\big[(d_s-t_0)+\tfrac12(d_e-d_s)\big]/365$ (\code{option_time}; documented as Bloomberg's convention). Time is on ACT/365F because normal vols are quoted per 365-day year; before November 2026 it was measured on ACT/360, which overstated the variance by $365/360$. For caplet $(d_s,d_e]$ with forward $F$ from \eqref{eq:float} and normal volatility $\sigma_N$,
 \begin{equation}
 \text{caplet} = N\,\tau\,P(d_e)\,\Big[(F-K)\,\Phi(d) + \sigma_N\sqrt{T}\,\varphi(d)\Big],\qquad d=\frac{F-K}{\sigma_N\sqrt{T}},
 \end{equation}
-and a floorlet is the corresponding put. The at-the-money strike of a cap is the annuity-weighted average of its caplet forwards. A collar is a long cap and a short floor.
+and a floorlet is the corresponding put. The at-the-money strike of a cap is the annuity-weighted average of its caplet forwards. A collar is a long cap and a short floor. QuantLib's compounded-overnight caplet pricer, which models the backward-looking accrual itself, values the reference caps 0.6--2.0\% of premium lower and the reference floor 2.5\% higher (\S\ref{sec:quantlib}); that is the size of the mid-period convention.
+
+\emph{Booking gap.} The legacy trade window books a cap, floor or collar as a generic two-leg swap and does not store the cap or floor strike, so a booked cap cannot be valued as a cap from what is stored. Booking these products through the unified trade window, with the strikes on the floating leg's embedded options, is the fix; until then caps are a pricing tool, not a booked position.
 
 Caplet volatilities are stripped from flat cap volatilities one strike column at a time: the 1Y bucket is solved so that four Bachelier caplets reproduce the 1Y cap price; each later bucket (2Y, 3Y, 3--5Y, 5--7Y, 7--10Y) is solved after subtracting the value of the buckets already priced, piecewise flat within a bucket. A $\beta=0$ SABR smile is then fitted per expiry bucket across strikes.
 
@@ -195,11 +198,15 @@ V(T_e)=\frac{1-e^{-2aT_e}}{2a},
 where $P(0,T)$ is the \emph{market} discount factor from the bootstrapped curve (a flat-rate approximation is the fallback only when no curve is supplied). A constant-parameter model cannot fit a whole surface; following standard XVA practice it is calibrated to the 5Y-tenor column ($1$Y$\times5$Y, $2$Y$\times5$Y, $3$Y$\times5$Y, $5$Y$\times5$Y) by least squares, and the fit diagnostics are stored with the parameters. The calibration was verified against Jamshidian's decomposition to within $0.01\%$.
 
 %--------------------------------------------------------------------
-\section{Exposure, collateral and the credit support annex}
+\section{Exposure, collateral and the credit support annex}\label{sec:exposure}
 \emph{Module: \code{pricing/csa.py}, \code{pricing/xva_engine.py}, \code{api/routes/xva.py}.}
 
 \subsection{Simulation}
-Short-rate paths are simulated under the calibrated Hull--White model on a monthly grid with the exact fit to the initial curve, and the trade is revalued on every path and date, giving mark-to-market paths $V(t)$ from our side.
+Short-rate paths are simulated under the calibrated Hull--White model on a monthly grid with the exact fit to the initial curve, and the trade is revalued on every path and date, giving mark-to-market paths $V(t)$ from our side. With $r(t)=f(0,t)+\phi(t)+x(t)$, $x$ the driftless Ornstein--Uhlenbeck deviation and $\phi(t)=\tfrac{\sigma^2}{2a^2}(1-e^{-at})^2$, a bond on a path is
+\begin{equation}
+P(t,T)=\frac{P(0,T)}{P(0,t)}\exp\!\Big[-B(t,T)\big(x(t)+\phi(t)\big)-\tfrac{\sigma^2}{4a}B(t,T)^2\big(1-e^{-2at}\big)\Big],\qquad B=\frac{1-e^{-a(T-t)}}{a}.
+\end{equation}
+The counterparty engine (\code{ccr/simulate.py}) omitted $\phi(t)$ until November 2026, which priced bonds high and put path forwards $\phi(t)$ below the curve (8bp at five years, 27bp at ten, for $a=3\%$, $\sigma=85$bp); the risk-neutral martingale check in the reference suite now pins it. Grid times are the grid dates' distance in 365.25-day years, the clock every trade date uses, so a fixing or expiry on a grid date sits on that grid point. A European swaption on the paths is valued before expiry with Bachelier at today's ATM normal vol on each path's forward swap rate and exercised at expiry on the Hull--White paths; the two vols generally differ, and expected exposure jumps at expiry by their ratio (13--25\% in the reference test). Embedded caplets fix on the path at their fixing date.
 
 \subsection{Variation margin and the margin period of risk}
 Variation margin held at $t$ was called against the exposure one margin period of risk $\delta$ earlier:
@@ -253,15 +260,15 @@ where $\omega_i$ is an optional wrong-way-risk multiplier, $\kappa$ the capital 
 
 %--------------------------------------------------------------------
 \section{P\&L attribution}
-\emph{Module: \code{pricing/pnl.py}, the scenario engine in the trade window.}
+\emph{Module: \code{pnl/explain.py}, \code{pnl/valuation.py}; full description in \code{docs/pnl_attribution.md}.}
 
-Daily P\&L is explained by a Taylor expansion in the taxonomy above: theta, \code{IR01}$\times\Delta r$, \code{IR01_DISC}$\times\Delta r_{disc}$, $\tfrac12$\code{GAMMA}$\times\Delta r^2$, vega$\times\Delta\sigma$, carry and roll-down, with the residual reported as \emph{unexplained}, never absorbed. The joint rate-and-volatility scenario engine attributes a shock the same way per trade. A desk-level daily P\&L with new-trade and amendment effects, and independent price verification against an external snapshot, are on the roadmap and depend on a market-data feed that moves day to day.
+Daily P\&L is attributed by sequential full revaluation: from yesterday's mark on yesterday's market the valuation is moved one thing at a time, in a fixed order (carry, cash, each curve tenor bucket by bucket, FX spot and points), each step's change a row, and what is left between the last step and today's mark on today's market is a \emph{residual} row, shown and never spread. An amendment in the window is one step, $NPV(\text{new terms}, m_1)-NPV(\text{old terms}, m_1)$, after the market steps run on the old terms. The rows sum to the change in mark plus cash by construction. Cash counts the flows that left the mark, those paid in $[d_0,d_1)$: the pricer keeps a flow in the value on its payment date, so a coupon paying today is cash tomorrow (before November 2026 the window was $(d_0,d_1]$ and a payment date's P\&L counted the coupon twice, reversed the next day). A volatility move has no step of its own and lands in the residual. Booked European swaptions are valued as options in P\&L, VaR, stress and the ladder (Bachelier at the day's nearest ATM grid vol, expiry at the fixed leg's forward start); until November 2026 they were valued as their underlying swap.
 
 %--------------------------------------------------------------------
 \section{Currency and digital-asset forwards}
-\emph{Module: \code{pricing/fx_forward.py}, \code{chain/canonical.py} (\code{CRYPTO_FORWARD}, \code{CRYPTO_OPTION}).}
+\emph{Module: \code{pricing/currency_forward.py}, \code{pricing/crypto_forward.py}, \code{chain/canonical.py} (\code{CRYPTO_FORWARD}, \code{CRYPTO_OPTION}).}
 
-FX spot, forwards and non-deliverable forwards on a currency pair, and forwards on BTC, ETH or SOL against USD, are one product priced by covered interest parity (cash-and-carry): borrow the quote currency, buy the base today and lend it, so the forward must repay the quote-currency interest. Each currency discounts off its own overnight-index curve (USD SOFR, EUR €STR, GBP SONIA, JPY TONAR, CHF SARON, AUD AONIA, CAD CORRA); a digital asset discounts at its funding rate $r_c$ (lending or staking yield, continuously compounded). With spot $S$ in quote per base, $P_q(T)$ the quote-currency discount factor and $P_b(T)$ the base-currency one, $F = S\,P_b(T)/P_q(T)$ and $NPV_q=\pm N_b\,(F-K)\,P_q(T)$; deliverable or non-deliverable changes the settlement mechanics, not the value. When a pair carries a quoted forward curve (forward points by tenor, saved like any other snapshot: Bloomberg, manual or import), the outright at a date is spot plus the points interpolated linearly in time, and the difference to the parity forward is reported as the cross-currency basis; the account chooses, in configuration, whether forwards are priced off quoted points or implied from the two curves, and every quote states which it used. For a digital asset against USD this reads
+FX spot, forwards and non-deliverable forwards on a currency pair, and forwards on BTC, ETH or SOL against USD, are one product priced by covered interest parity (cash-and-carry): borrow the quote currency, buy the base today and lend it, so the forward must repay the quote-currency interest. Each currency discounts off its own overnight-index curve (USD SOFR, EUR €STR, GBP SONIA, JPY TONAR, CHF SARON, AUD AONIA, CAD CORRA); a digital asset discounts at its funding rate $r_c$ (lending or staking yield, continuously compounded). With spot $S$ in quote per base, $P_q(T)$ the quote-currency discount factor and $P_b(T)$ the base-currency one, and $t_s$ the spot date (two business days of both currencies for a pair; the valuation date for a digital asset, whose quoted spot settles at once), $F = S\,\frac{P_b(T)/P_b(t_s)}{P_q(T)/P_q(t_s)}$ and $NPV_q=\pm N_b\,(F-K)\,P_q(T)$; quoted forward points are measured from the spot date. (Before November 2026 the spot was applied from the valuation date, dropping the carry over the spot lag: 5.6 pips on a six-month USDJPY from a Friday.) deliverable or non-deliverable changes the settlement mechanics, not the value. When a pair carries a quoted forward curve (forward points by tenor, saved like any other snapshot: Bloomberg, manual or import), the outright at a date is spot plus the points interpolated linearly in time, and the difference to the parity forward is reported as the cross-currency basis; the account chooses, in configuration, whether forwards are priced off quoted points or implied from the two curves, and every quote states which it used. For a digital asset against USD this reads
 \begin{equation}
 F = S\,\frac{e^{-r_cT}}{P_{USD}(T)} = S\,e^{(r_{USD}-r_c)T},\qquad NPV = (F-K)\,N\,P_{USD}(T).
 \end{equation}
@@ -294,10 +301,71 @@ The registry contract has no owner and no administrative function. \code{confirm
 A proof pack contains the canonical record, the hash, both signatures and the anchor. The public verifier, a single self-contained page, (i) re-serialises the record and recomputes the keccak256 hash, (ii) rebuilds both EIP-712 digests and recovers both signers, (iii) reads the registry on a public node and checks status and parties. No Rijeka server is contacted. The contract source is verified on Sourcify so the reader can audit what the registry does before trusting it. \textbf{What it proves:} that these exact terms were signed by these two keys and recorded at that block. \textbf{What it does not prove:} that a key belongs to a legal entity; that binding is a matter of the firms' own key management and registration.
 
 %--------------------------------------------------------------------
+\section{Independent reference: QuantLib}\label{sec:quantlib}
+\emph{Suite: \code{backend/tests/reference/}; table: \code{python -m tests.reference.report}.}
+
+Every number above is rebuilt in QuantLib (version 1.44), an independent open-source library, on a frozen USD SOFR snapshot of 33 quotes with the shape of the daily demo build (valuation date 30 October 2026). The suite runs in continuous integration with every commit; each comparison carries a tolerance and fails the build when the difference grows past it. Two kinds of comparison are made.
+\begin{itemize}[leftmargin=1.4em]
+\item \textbf{Replica (same conventions).} QuantLib is given Rijeka's discount factors (a \code{DiscountCurve}, log-linear on ACT/365F, which is Rijeka's interpolation) and Rijeka's stated conventions, and must reproduce Rijeka's number to rounding. Schedules are generated by QuantLib's own \code{Schedule}, so a date error shows as a value difference; SOFR is projected by an overnight index fixing every calendar day, which reproduces $P(d_s)/P(d_e)-1$ exactly; Hull--White comparisons use QuantLib's \code{HullWhite} model with the same $(a,\sigma)$.
+\item \textbf{Convention.} QuantLib's own bootstrap and market SOFR conventions (\code{OISRateHelper}: payment lag two days, modified following, the SOFR fixing calendar), QuantLib's compounded-overnight caplet pricer, or a different but legitimate definition of a sensitivity. These differences are reported with their cause and bounded.
+\end{itemize}
+The inputs are a public-data curve rebuild and synthetic volatilities: a clean comparison says the engine computes what the methodology says, not that the demo market is a live mark.
+
+{\small
+\begin{longtable}{>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{5.0cm} r r >{\raggedright\arraybackslash}p{1.8cm} r >{\raggedright\arraybackslash}p{1.6cm}}
+\toprule
+Product & Metric & $n$ & Worst & Unit & Tol. & Kind\\
+\midrule
+\endhead
+Curve & implied rate & 1 & -2.62e-10 & bp & 1.00e-06 & replica \\
+Curve & par rate on Rijeka DFs & 32 & 2.80e-11 & bp & 1.00e-06 & replica \\
+Curve & zero rate (cc, ACT/365F) & 39 & 1.25 & bp & 1.5 & convention \\
+Curve & simple fwd ACT/365F, replica & 7 & -8.84e-12 & bp & 1.00e-06 & replica \\
+Curve & simple fwd ACT/365F, market bootstrap & 7 & 4.3 & bp & 6 & convention \\
+IRS & NPV, replica & 14 & -1.12e-11 & bp of notional & 1.00e-06 & replica \\
+IRS & DV01 (+1bp zero), replica & 12 & 1.17e-10 & \% of DV01 & 1.00e-04 & replica \\
+IRS & NPV, QuantLib market conventions & 12 & -0.0974 & bp of notional & 1 & convention \\
+IRS & par rate, replica & 4 & -4.00e-13 & bp & 1.00e-06 & replica \\
+IRS & NPV vs true accrual & 1 & -11.1 & bp of notional & 12 & convention \\
+FX forward & forward rate & 3 & -2.22e-12 & pips & 1.00e-06 & replica \\
+FX forward & NPV (quote ccy) & 3 & -3.07e-12 & bp of notional & 1.00e-06 & replica \\
+FX forward & spot01 (+1\% spot) & 3 & 1.52e-12 & \% of value & 1.00e-06 & replica \\
+FX forward & IR01 quote curve & 3 & 1.90e-10 & \% of value & 1.00e-06 & replica \\
+FX forward & IR01 base curve & 3 & 4.51e-10 & \% of value & 1.00e-06 & replica \\
+FX forward & forward from the spot date & 3 & -2.22e-12 & pips & 1.00e-06 & replica \\
+FX forward & NPV, spot date T+2 (joint calendar) & 3 & 2.13e-12 & bp of notional & 1.00e-06 & replica \\
+FX forward & NPV with no spot date vs T+2 market & 3 & 4.6 & bp of notional & 5 & convention \\
+Crypto NDF & forward price & 3 & 0 & USD & 1.00e-06 & replica \\
+Crypto NDF & NPV (USD) & 3 & -1.97e-12 & bp of notional & 1.00e-06 & replica \\
+Crypto NDF & NPV vs replication by hand & 3 & -3.74e-13 & bp of notional & 1.00e-06 & replica \\
+Swaption & NPV & 21 & 9.31e-13 & bp of notional & 1.00e-06 & replica \\
+Swaption & vega (1bp vol) & 6 & 2.99e-14 & \% of vega & 1.00e-06 & replica \\
+Swaption & delta: analytic forward delta vs +1bp curve bump & 6 & 13.8 & \% of delta & 15 & convention \\
+Cap/floor & NPV, replica & 4 & 4.39e-06 & \% of premium & 0.001 & replica \\
+Cap/floor & vega (1bp vol), replica & 4 & -6.99e-04 & \% of vega & 0.05 & replica \\
+Cap/floor & NPV vs QuantLib compounded-SOFR caplet pricer & 4 & -2.48 & \% of premium & 3 & convention \\
+Bermudan (HW1F) & Bermudan NPV, tree vs QuantLib tree & 12 & -0.428 & bp of notional & 1 & replica \\
+Bermudan (HW1F) & European NPV, tree vs QuantLib Jamshidian & 12 & -0.444 & bp of notional & 1 & replica \\
+European (HW1F) & Jamshidian closed form, Rijeka vs QuantLib & 12 & 4.51e-05 & bp of notional & 0.001 & replica \\
+CCR paths & martingale (bp of price) & 10 & -0.623 & standard errors & 4 & replica \\
+CCR paths & E[D$\cdot$V] at expiry vs QuantLib Jamshidian & 12 & -1.07 & standard errors & 4 & replica \\
+CCR paths & value today (Bachelier, 90bp) vs at expiry (Hull-White) & 3 & 24.7 & \% of value & 40 & convention \\
+CCR paths & E[D$\cdot$payoff] vs QuantLib HW zero-bond put & 3 & -1.13 & standard errors & 4 & replica \\
+Key-rate ladder & KR01 (+1bp quotes, rebootstrap) & 20 & 0.0314 & \% of DV01 & 0.5 & convention \\
+Key-rate ladder & ladder total (par +1bp) vs ticket IR01 (zero +1bp) & 5 & -2.14 & \% of DV01 & 3.5 & convention \\
+\bottomrule
+\end{longtable}}
+
+\textbf{Causes of the convention differences.} Curve: the integer-year gap fill (\S\ref{sec:curve}). Swaps: market accrual adjustment and payment lag against Rijeka's default unadjusted accrual and the booked lag; under 0.1bp of notional. FX: the spot-date carry, now applied (the row keeps the old, valuation-date convention visible). Swaption delta: Rijeka's ticket \code{IR01} for a swaption is the analytic forward delta $A\,\Phi(d)\cdot 1$bp with the annuity held, while a curve bump also moves the annuity; up to 14\% apart on a 5Y$\times$10Y. Caps: the mid-period option time against QuantLib's compounded-rate model (\S\ref{sec:caps}). Exposure: market Bachelier vol before expiry against the Hull--White vol at exercise (\S\ref{sec:exposure}). Ladder: a 1bp move in par quotes is a slightly smaller move in zero rates, so the ladder total sits about 2\% below the ticket's \code{IR01}; both are published and labelled.
+
+\textbf{Findings fixed in November 2026}, each pinned by a test: the counterparty path bond formula (S1); booked swaptions valued as their underlying swap in P\&L and market risk (S1); coupon dates drifting after a short month, and the stub type ignored (S3, dates off by up to three days); the curve failing to build when spot is 29 February (S2); zero-coupon legs failing to price (S2); the FX forward applied from the valuation date instead of the spot date (S2, up to 3.7bp of notional); cap option time on ACT/360 (S2, $+0.7\%$ of an ATM premium); a period under way adding realised and forward SOFR instead of compounding them (S3); the P\&L cash window counting a coupon twice on its payment date (S2); payment lag and fixing dates in weekdays and New York business days only (S3); an unreachable legacy FX pricer with an inverted discount-factor ratio, removed (S4). \textbf{Open:} realised SOFR fixings for periods under way (\S\ref{sec:schedules}); cap and floor booking (\S\ref{sec:caps}).
+
+%--------------------------------------------------------------------
 \section{Model governance and known limitations}
 \begin{itemize}[leftmargin=1.4em]
 \item \textbf{Validation.} Versioned validation reports live in \code{model_validation/}; v0.4.2 covers IRS and OIS (38 tests against Bloomberg), later versions swaptions (delta of \$3 on a \$10m 5Y), caps (0.1\% at matched volatility), SABR and the scenario engine.
 \item \textbf{Replications.} The Excel workbooks in the Methodology tab are regenerated on request from the user's own snapshot; the engine's value is written beside the formula result with a difference cell.
+\item \textbf{Independent reference.} Every product is repriced in QuantLib on every commit (\S\ref{sec:quantlib}); a difference that grows past its stated tolerance fails the build.
 \item \textbf{Open items, stated plainly.} Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. SIMM covers interest-rate delta; vega and other risk classes are on the roadmap.
 \item \textbf{Change control.} Every change to a pricing module is a commit in a public repository with its tests; this document is versioned with the code.
 \end{itemize}

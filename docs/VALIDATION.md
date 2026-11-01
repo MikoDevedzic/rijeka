@@ -16,6 +16,34 @@ The methodology you are testing against is written down in
 [`docs/methodology/rijeka_methodology.pdf`](methodology/rijeka_methodology.pdf),
 with the module named in every section.
 
+## Reference checks
+
+Before an outsider does it, QuantLib does. `backend/tests/reference/` reprices every product in
+[QuantLib](https://www.quantlib.org) (pinned in `backend/requirements-dev.txt`) on a frozen USD SOFR
+snapshot, on every commit, in CI:
+
+- **Replica:** QuantLib on Rijeka's own discount factors and stated conventions (QuantLib's own
+  schedule generator, an overnight index that compounds exactly like Rijeka's projection, the same
+  Hull-White parameters). These must agree to rounding: curve repricing, swaps (spot, forward, amortising,
+  step-up, stubs, month-end roll, payment lag over a holiday, zero coupon), FX and crypto forwards,
+  European swaptions, caps and floors, Bermudans on the Hull-White tree, the Jamshidian closed form,
+  exposure paths (martingale, swaption and caplet at expiry), DV01.
+- **Convention:** QuantLib's own bootstrap and market SOFR conventions, its compounded-SOFR caplet
+  pricer, and alternative definitions of a sensitivity. Reported with the cause, bounded by a tolerance.
+
+Every comparison has a tolerance; a difference that grows past it fails the build. Run it and print the table:
+
+```bash
+cd backend && pip install -r requirements-dev.txt
+python -m pytest tests/reference -q
+python -m tests.reference.report --summary
+```
+
+The table, the tolerances and the conventions behind every non-zero difference are in the methodology,
+section "Independent reference: QuantLib". The inputs are a public-data curve rebuild and synthetic
+vols: a clean comparison says the engine computes what the methodology says, not that the demo market
+is a live mark. A reference check that fails is a finding like any other, and is filed the same way.
+
 ## How a finding is filed
 
 Open a [validation finding](https://github.com/MikoDevedzic/rijeka/issues/new?template=validation_finding.yml).

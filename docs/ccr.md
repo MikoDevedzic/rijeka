@@ -11,9 +11,11 @@ Pricing and risk management ask different questions of the same model, so the en
 
 ## Joint simulation
 
-One Hull-White factor per currency, one lognormal factor per spot, monthly steps to the netting set's last maturity, Brownian motions correlated by the calibration's matrix (identity in the risk-neutral run). Bond prices are affine in the factor and reproduce today's curve:
+One Hull-White factor per currency, one lognormal factor per spot, monthly steps to the netting set's last maturity, Brownian motions correlated by the calibration's matrix (identity in the risk-neutral run). Grid times are each grid date's distance from the as-of date in 365.25-day years, the clock every trade date is read on, so a fixing or an expiry on a grid date is at that grid point; each step uses its own length. The short rate is r(t) = f(0,t) + φ(t) + x(t), with x the driftless Ornstein-Uhlenbeck deviation and φ(t) = σ²/(2a²)·(1 − e^{−at})². Bond prices are affine in x + φ (that is, in r − f(0,t)) and reproduce today's curve:
 
-    P(t,T) = P(0,T)/P(0,t) · exp(−B(t,T)·x_t − σ²/(4a)·B(t,T)²·(1 − e^{−2at})),   B(t,T) = (1 − e^{−a(T−t)})/a
+    P(t,T) = P(0,T)/P(0,t) · exp(−B(t,T)·(x_t + φ(t)) − σ²/(4a)·B(t,T)²·(1 − e^{−2at})),   B(t,T) = (1 − e^{−a(T−t)})/a
+
+Until November 2026 the formula was evaluated on x_t alone, which priced every bond on a path high by exp(B·φ) and put path forwards φ(t) below the curve: 8bp at five years, 27bp at ten for a = 3 %, σ = 85bp, so payer exposure was understated and receiver exposure overstated, more so the longer the horizon. The risk-neutral martingale check in `backend/tests/reference/test_ref_ccr.py` (E[D(t)·P(t,T)] = P(0,T)) pins it, and the same suite checks a swaption and a caplet valued on the paths against QuantLib's exact Hull-White prices.
 
 The real-world run shifts the factor so the short rate's expectation stays at today's level (or follows the historical drift). Spots: S_t = S_0·exp((μ − σ²/2)t + σW_t), μ the rate differential or zero.
 
@@ -23,7 +25,7 @@ Instead of Gaussian shocks, each monthly step is a block of 21 consecutive obser
 
 ## Netting
 
-Every trade of a counterparty is valued on the same paths and summed per path and date, so netting is exact. Swaps: fixed leg Σ N·c·τ·P(t,T_j), OIS float leg N·(P(t,T_s) − P(t,T_N)); forwards: ±N·(S_t·DF_base/DF_quote − K)·DF_quote. Options are on the paths too (ccr/options.py): a caplet or floorlet embedded in a float leg is Bachelier on the path's forward for the period with today's ATM cap vol (nearest cap tenor) held flat until its fixing, then the realised payoff max(f_fix − K, 0)·τ·N discounted to its payment; a European swaption is Bachelier on the path's forward swap rate with today's ATM normal vol (nearest expiry × tenor on the surface) until expiry, then the underlying swap on the paths where it was in the money at expiry (physical settlement) and nothing elsewhere. The vol does not move along the path: that is the stated simplification. Anything else is listed as not simulated, never valued at zero.
+Every trade of a counterparty is valued on the same paths and summed per path and date, so netting is exact. Swaps: fixed leg Σ N·c·τ·P(t,T_j), OIS float leg N·(P(t,T_s) − P(t,T_N)); forwards: ±N·(S_t·DF_base/DF_quote − K)·DF_quote. Options are on the paths too (ccr/options.py): a caplet or floorlet embedded in a float leg is Bachelier on the path's forward for the period with today's ATM cap vol (nearest cap tenor) held flat until its fixing, then the realised payoff max(f_fix − K, 0)·τ·N discounted to its payment; a European swaption is Bachelier on the path's forward swap rate with today's ATM normal vol (nearest expiry × tenor on the surface) until expiry, then the underlying swap on the paths where it was in the money at expiry (physical settlement) and nothing elsewhere. The vol does not move along the path: that is the stated simplification. A consequence worth knowing: before expiry a swaption is valued with today's market vol, at expiry it is exercised on the Hull-White paths, whose implied vol comes from the calibrated (a, σ); where the two differ, expected exposure steps at expiry by their ratio (13–25 % in the reference test, a = 3 %, σ = 85bp against 90bp market vol). Anything else is listed as not simulated, never valued at zero.
 
 ## The CSA
 
