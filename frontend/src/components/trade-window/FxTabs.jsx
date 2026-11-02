@@ -7,7 +7,9 @@
 //   FxCashflowsPanel — the settlement flows (deliverable: two legs; NDF: one net cash amount)
 //   FxScenarioPanel  — spot and rate shocks repriced with the same closed form the engine uses
 // ────────────────────────────────────────────────────────────────────────────────────
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { getSessionSafe } from '../../lib/session'
+const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
 const fmt = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d })
 const rateDp = (q) => q?.base_currency && ['BTC', 'ETH', 'SOL'].includes(q.base_currency) ? 2 : q?.pair === 'USDJPY' ? 3 : 5
@@ -53,11 +55,15 @@ export function FxDetailsPanel({ quote, terms, crypto }) {
         <div style={secHdr}>TERM SHEET · AS IT WILL BE BOOKED</div>
         <Grid items={[
           ['INSTRUMENT', cash ? 'FX NON-DELIVERABLE OPTION' : 'FX OPTION', `${quote.pair} · canonical record v2 · ISDA FX and Currency Option Definitions`],
-          ['OPTION', `${quote.base_currency} ${quote.option_type}`, `the right to ${quote.option_type === 'CALL' ? 'buy' : 'sell'} ${quote.base_currency} against ${quote.quote_currency}`],
+          ['OPTION', quote.style === 'TOUCH' ? (quote.touch_type || '').replace(/_/g, ' ') : quote.style === 'DIGITAL' ? `${quote.base_currency} ${quote.option_type} DIGITAL` : `${quote.base_currency} ${quote.option_type}${quote.style && quote.style !== 'EUROPEAN' ? ' · ' + quote.style.replace('_', ' ') : ''}`,
+            quote.style === 'TOUCH' ? `pays ${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} ${quote.pay_at_hit ? 'at the hit' : 'at expiry'}` : quote.style === 'DIGITAL' ? `pays ${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} if ${quote.option_type === 'CALL' ? 'above' : 'below'} the strike` : `the right to ${quote.option_type === 'CALL' ? 'buy' : 'sell'} ${quote.base_currency} against ${quote.quote_currency}${quote.style === 'AMERICAN' ? ', any day to expiry' : ''}`],
+          ...(quote.style === 'BARRIER' ? [['BARRIER', `${(quote.barrier_type || '').replace('_', '-AND-')} at ${fmt(quote.barrier, dp)}`, `continuous monitoring${quote.rebate ? ` · rebate ${quote.rebate} ${quote.quote_currency} per ${quote.base_currency}` : ''}`]] : []),
+          ...(quote.style === 'DOUBLE_BARRIER' || (quote.style === 'TOUCH' && (quote.touch_type || '').startsWith('DOUBLE')) ? [['BARRIERS', `${fmt(quote.lower, dp)} – ${fmt(quote.upper, dp)}`, `${(quote.barrier_type || quote.touch_type || '').replace(/_/g, ' ')} · continuous monitoring`]] : []),
+          ...(quote.style === 'TOUCH' && !(quote.touch_type || '').startsWith('DOUBLE') ? [['BARRIER', fmt(quote.barrier, dp), 'continuous monitoring']] : []),
           ['SIDE', `${quote.direction} the option`, quote.direction === 'BUY' ? 'we pay the premium and hold the right' : 'we receive the premium and are exercised against'],
           ['NOTIONAL', `${fmt(quote.base_notional, 0)} ${quote.base_currency}`, `${fmt(quote.quote_notional)} ${quote.quote_currency} at the strike`],
-          ['STRIKE', fmt(quote.strike, dp), quote.strike === quote.forward ? 'at the forward' : `forward ${fmt(quote.forward, dp)}`],
-          ['EXPIRY', quote.expiry_date, `${t.expiry_time || '10:00 New York'} · European · T = ${fmt(quote.t_expiry, 4)}y`],
+          ...(quote.style !== 'TOUCH' ? [['STRIKE', fmt(quote.strike, dp), quote.strike === quote.forward ? 'at the forward' : `forward ${fmt(quote.forward, dp)}`]] : []),
+          ['EXPIRY', quote.expiry_date, `${t.expiry_time || '10:00 New York'} · ${quote.style === 'AMERICAN' ? 'American' : 'European'} · T = ${fmt(quote.t_expiry, 4)}y`],
           ['SETTLEMENT DATE', quote.settlement_date, cash ? `cash in ${quote.quote_currency}` : 'delivery of both currencies'],
           ['PREMIUM', `${fmt(Math.abs(quote.npv))} ${quote.quote_currency}`, `${quote.direction === 'BUY' ? 'paid' : 'received'} on ${quote.valuation_date} · ${fmt(Math.abs(quote.npv) / quote.base_notional / quote.spot * 100, 3)}% of ${quote.base_currency} notional`],
           [cash ? 'FIXING SOURCE' : 'FIXING', cash ? (t.fixing_source || '—') : 'none (deliverable)', cash ? `on ${quote.expiry_date}` : ''],
@@ -68,9 +74,9 @@ export function FxDetailsPanel({ quote, terms, crypto }) {
           ['SPOT', fmt(quote.spot, dp), quote.spot_source || ''],
           ['FORWARD TO SETTLEMENT', fmt(quote.forward, dp), quote.forward_mode === 'MARKET' && quote.market_points != null ? 'quoted points' : 'implied from yields'],
           ['VOL', `${fmt(quote.vol_pct, 3)}%`, `${quote.vol_tier} · ${quote.vol_source}`],
-          ['FORWARD DELTA', `${fmt(quote.forward_delta * 100, 1)}%`, `d1 ${fmt(quote.d1, 4)} · d2 ${fmt(quote.d2, 4)}`],
+          ...(quote.forward_delta != null ? [['FORWARD DELTA', `${fmt(quote.forward_delta * 100, 1)}%`, `d1 ${fmt(quote.d1, 4)} · d2 ${fmt(quote.d2, 4)}`]] : [['DELTA', `${fmt(quote.delta_base_units, 0)} ${quote.base_currency}`, 'by repricing, ±1% spot']]),
           [`${quote.quote_currency} CURVE`, quote.quote_curve || '—', `DF ${fmt(quote.df_quote, 6)} to settlement${quote.quote_curve_snapshot ? ' · ' + quote.quote_curve_snapshot : ''}`],
-          ['MODEL', 'Garman–Kohlhagen', 'Black–Scholes with the base currency as the dividend-paying asset; σ from the ATM/RR/BF surface'],
+          ['MODEL', quote.method || 'Garman–Kohlhagen', quote.style && quote.style !== 'EUROPEAN' ? 'same lognormal dynamics; σ from the ATM/RR/BF surface at the strike, held flat for the barrier' : 'Black–Scholes with the base currency as the dividend-paying asset; σ from the ATM/RR/BF surface'],
         ]} />
         <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Terms are edited on the TRADE tab; this is the record the counterparty will sign.</div>
       </div>
@@ -112,7 +118,9 @@ export function FxCashflowsPanel({ quote, crypto }) {
   const dp = rateDp(quote)
   if (quote.shape === 'OPTION') {
     const call = quote.option_type === 'CALL'
-    const intrinsic = sign * quote.base_notional * Math.max(call ? quote.forward - quote.strike : quote.strike - quote.forward, 0)
+    const payoutStyle = quote.style === 'DIGITAL' || quote.style === 'TOUCH'
+    const intrinsic = payoutStyle ? sign * (quote.style === 'DIGITAL' ? ((call ? quote.forward > quote.strike : quote.forward < quote.strike) ? quote.payout * (quote.payout_currency === 'BASE' ? quote.forward : 1) : 0) : 0)
+                                  : sign * quote.base_notional * Math.max(call ? quote.forward - quote.strike : quote.strike - quote.forward, 0)
     const premium = -sign * Math.abs(quote.npv)
     return (
       <div className="tbw-no-drag" style={wrap}>
@@ -122,9 +130,9 @@ export function FxCashflowsPanel({ quote, crypto }) {
           <tbody>
             <tr><td style={tdL}>PREMIUM<div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{sign > 0 ? 'paid' : 'received'} on the trade date; not part of the value after it is paid</div></td>
               <td style={td}>{quote.valuation_date}</td><td style={{ ...td, color: premium >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(premium)} {quote.quote_currency}</td><td style={td}>1.000000</td><td style={td}>{fmt(premium)}</td></tr>
-            <tr><td style={tdL}>PAYOFF AT EXPIRY<div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>max({call ? 'S − K' : 'K − S'}, 0) × N, at today's forward; the fixing on {quote.expiry_date} decides</div></td>
+            <tr><td style={tdL}>{payoutStyle ? 'PAYOUT' : 'PAYOFF AT EXPIRY'}<div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{quote.style === 'TOUCH' ? `${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} ${quote.pay_at_hit ? 'when the barrier is hit' : 'at expiry if ' + ((quote.touch_type || '').includes('NO') ? 'never touched' : 'touched')}; at today's forward the barrier is not reached` : quote.style === 'DIGITAL' ? `${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} if the fixing is ${call ? 'above' : 'below'} ${fmt(quote.strike, dp)}; shown at today's forward` : `max(${call ? 'S − K' : 'K − S'}, 0) × N, at today's forward; the fixing on ${quote.expiry_date} decides${quote.style === 'BARRIER' || quote.style === 'DOUBLE_BARRIER' ? ' and the barrier must not have knocked it out' : ''}`}</div></td>
               <td style={td}>{quote.settlement_date}</td><td style={{ ...td, color: intrinsic >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(intrinsic)} {quote.quote_currency}</td><td style={td}>{fmt(quote.df_quote, 6)}</td><td style={td}>{fmt(intrinsic * quote.df_quote)}</td></tr>
-            <tr><td style={{ ...tdL, fontWeight: 700, borderBottom: 'none' }}>OPTION VALUE</td><td style={{ ...td, borderBottom: 'none' }} colSpan={3}>intrinsic {fmt(intrinsic * quote.df_quote)} + time value {fmt(sign * quote.time_value)}</td>
+            <tr><td style={{ ...tdL, fontWeight: 700, borderBottom: 'none' }}>OPTION VALUE</td><td style={{ ...td, borderBottom: 'none' }} colSpan={3}>{quote.time_value != null ? `intrinsic ${fmt(intrinsic * quote.df_quote)} + time value ${fmt(sign * quote.time_value)}` : `${quote.method || ''}`}</td>
               <td style={{ ...td, fontWeight: 700, borderBottom: 'none', color: quote.npv >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(quote.npv)}</td></tr>
           </tbody>
         </table>
@@ -216,6 +224,51 @@ function Slider({ label, v, set, min, max, step, unit }) {
   )
 }
 
+function StyleLadder({ quote }) {
+  // every style repriced by the engine itself on a grid of spot and vol shocks (POST /api/currency/option/ladder)
+  const [lad, setLad] = useState(null)
+  const [err, setErr] = useState(null)
+  useEffect(() => {
+    let dead = false
+    setLad(null); setErr(null)
+    ;(async () => {
+      try {
+        const session = await getSessionSafe()
+        const body = { pair: quote.pair, option_type: quote.option_type, base_notional: quote.base_notional, expiry_date: quote.expiry_date, settlement_date: quote.settlement_date,
+                       strike: quote.strike, direction: quote.direction, valuation_date: quote.valuation_date, spot: quote.spot, settlement_type: quote.settlement_type,
+                       style: quote.style, payout: quote.payout, payout_currency: quote.payout_currency, barrier_type: quote.barrier_type, barrier: quote.barrier,
+                       lower: quote.lower, upper: quote.upper, rebate: quote.rebate || 0, touch_type: quote.touch_type, pay_at_hit: !!quote.pay_at_hit }
+        const r = await fetch(`${API}/api/currency/option/ladder`, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const j = await r.json()
+        if (!r.ok) throw new Error(j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : `ladder ${r.status}`)
+        if (!dead) setLad(j)
+      } catch (e) { if (!dead) setErr(e.message) }
+    })()
+    return () => { dead = true }
+  }, [quote])
+  const dp = rateDp(quote)
+  if (err) return <div className="tbw-no-drag" style={wrap}><div style={{ color: 'var(--red)', padding: '16px 0' }}>{err}</div></div>
+  if (!lad) return <div className="tbw-no-drag" style={wrap}><div style={{ color: 'var(--text-dim)', padding: '16px 0' }}>Repricing the {(quote.style || '').replace('_', ' ').toLowerCase()} on the shock grid…</div></div>
+  const vols = lad.vol_shocks_pts
+  return (
+    <div className="tbw-no-drag" style={wrap}>
+      <div style={{ background: 'rgba(240,160,32,0.06)', borderBottom: '1px solid rgba(240,160,32,0.15)', padding: '5px 12px', margin: '0 -16px', fontSize: '0.8125rem', color: 'var(--amber)' }}>
+        ⚠ Scenario — the engine repriced on every cell ({quote.method}); for analysis only, nothing is saved.
+      </div>
+      <div style={secHdr}>NPV {quote.quote_currency} · SPOT SHOCK × VOL SHOCK (points)</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead><tr><th style={th}>SPOT</th><th style={th}>LEVEL</th>{vols.map(v => <th key={v} style={th}>{v > 0 ? '+' : ''}{v} pt</th>)}</tr></thead>
+        <tbody>{lad.rows.map(r => (
+          <tr key={r.spot_pct} style={{ background: r.spot_pct === 0 ? 'var(--accent-glow)' : 'transparent' }}>
+            <td style={td}>{r.spot_pct > 0 ? '+' : ''}{r.spot_pct}%</td><td style={td}>{fmt(r.spot, dp)}</td>
+            {vols.map(v => { const x = r.npv[String(v)]; return <td key={v} style={{ ...td, color: x == null ? 'var(--text-mute)' : x >= 0 ? 'var(--green)' : 'var(--red)' }}>{x == null ? '—' : fmt(x)}</td> })}
+          </tr>))}</tbody>
+      </table>
+      <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Base NPV {fmt(lad.base_npv)} at vol {fmt(lad.base_vol_pct, 2)}% · FX01 {fmt(lad.spot01)} · vega {fmt(lad.vega)} per point. A barrier or touch option's value is not smooth near its barrier; read the whole row, not a slope.</div>
+    </div>
+  )
+}
+
 export function FxScenarioPanel({ quote, crypto }) {
   const [spot, setSpot] = useState(0)
   const [qbp, setQbp] = useState(0)
@@ -226,6 +279,7 @@ export function FxScenarioPanel({ quote, crypto }) {
   const base = useMemo(() => quote ? reprice(quote, 0, 0, 0, 0) : null, [quote])
   const now = useMemo(() => quote ? reprice(quote, spot, qbp, bbp, vpt) : null, [quote, spot, qbp, bbp, vpt])
   if (!quote) return <Empty what="Scenarios" />
+  if (option && quote.style && quote.style !== 'EUROPEAN') return <StyleLadder quote={quote} />
   const spotLadder = [-10, -5, -2, -1, 0, 1, 2, 5, 10]
   const rateLadder = [-100, -50, -25, 0, 25, 50, 100]
   const d = (x) => x - base.npv

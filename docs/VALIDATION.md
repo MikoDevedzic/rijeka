@@ -26,7 +26,7 @@ snapshot, on every commit, in CI:
   schedule generator, an overnight index that compounds exactly like Rijeka's projection, the same
   Hull-White parameters). These must agree to rounding: curve repricing, swaps (spot, forward, amortising,
   step-up, stubs, month-end roll, payment lag over a holiday, zero coupon), FX and crypto forwards,
-  European swaptions, caps and floors, FX options (Garman-Kohlhagen and the smile), Bermudans on the Hull-White tree, the Jamshidian closed form,
+  European swaptions, caps and floors, FX options (Garman-Kohlhagen and the smile; American, digital, barrier, double barrier and touch against their QuantLib engines), Bermudans on the Hull-White tree, the Jamshidian closed form,
   exposure paths (martingale, swaption and caplet at expiry), DV01.
 - **Convention:** QuantLib's own bootstrap and market SOFR conventions, its compounded-SOFR caplet
   pricer, and alternative definitions of a sensitivity. Reported with the cause, bounded by a tolerance.

@@ -55,9 +55,29 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const [optSettle, setOptSettle] = useState('')          // '' = two business days after expiry (the server fills it)
   const [cashSettled, setCashSettled] = useState(false)
   const [volOv, setVolOv] = useState('')
+  // style (pricing/fx_exotic.py): EUROPEAN | AMERICAN | DIGITAL | BARRIER | DOUBLE_BARRIER | TOUCH
+  const [style, setStyle] = useState('EUROPEAN')
+  const [payout, setPayout] = useState('1000000')
+  const [payoutCcy, setPayoutCcy] = useState('QUOTE')
+  const [barrierType, setBarrierType] = useState('UP_OUT')
+  const [barrier, setBarrier] = useState('')
+  const [lowerB, setLowerB] = useState('')
+  const [upperB, setUpperB] = useState('')
+  const [rebate, setRebate] = useState('')
+  const [touchType, setTouchType] = useState('ONE_TOUCH')
+  const [payAtHit, setPayAtHit] = useState(false)
+  const styleFields = () => {
+    const f = { style }
+    if (style === 'DIGITAL' || style === 'TOUCH') { f.payout = Number(payout); f.payout_currency = payoutCcy }
+    if (style === 'BARRIER') { f.barrier_type = barrierType; f.barrier = Number(barrier); if (rebate !== '') f.rebate = Number(rebate) }
+    if (style === 'DOUBLE_BARRIER') { f.barrier_type = barrierType.startsWith('KNOCK') ? barrierType : 'KNOCK_OUT'; f.lower = Number(lowerB); f.upper = Number(upperB) }
+    if (style === 'TOUCH') { f.touch_type = touchType; f.pay_at_hit = payAtHit; if (touchType.startsWith('DOUBLE')) { f.lower = Number(lowerB); f.upper = Number(upperB) } else f.barrier = Number(barrier) }
+    return f
+  }
 
   useEffect(() => { setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? 10 : 10_000_000); setQuote(null) }, [crypto])
-  useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, tenor, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv])
+  useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, tenor, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit])
+  useEffect(() => { if (style === 'DOUBLE_BARRIER') setBarrierType(b => b.startsWith('KNOCK') ? b : 'KNOCK_OUT'); if (style === 'BARRIER') setBarrierType(b => b.startsWith('KNOCK') ? 'UP_OUT' : b) }, [style])
 
   const load = async () => {
     try { const m = await call('/api/currency/pairs'); setPairs(m.pairs || []); setFeeds(m.feeds || null) } catch (e) { onError?.(e.message) }
@@ -77,7 +97,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     try {
       if (option) {
         const body = { pair, option_type: optType, base_notional: Number(notional), expiry_date: expiry, direction,
-                       settlement_type: cashSettled ? 'NON_DELIVERABLE' : 'DELIVERABLE' }
+                       settlement_type: cashSettled ? 'NON_DELIVERABLE' : 'DELIVERABLE', ...styleFields() }
         if (optSettle) body.settlement_date = optSettle
         if (strike !== '') body.strike = Number(strike)
         if (spotOv !== '') body.spot = Number(spotOv)
@@ -108,8 +128,10 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         notional: Number(notional), notional_ccy: cur.base, maturity_date: quote.settlement_date, discount_curve_id: cur.quote_curve,
         terms: {
           direction, currency_pair: pair, base_currency: cur.base, quote_currency: cur.quote,
-          option_type: optType, exercise_style: 'EUROPEAN',
-          base_notional: String(notional), strike: String(quote.strike), quote_notional: String(Number(notional) * quote.strike),
+          option_type: optType, exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
+          base_notional: String(notional), ...(style !== 'TOUCH' ? { strike: String(quote.strike), quote_notional: String(Number(notional) * quote.strike) } : {}),
+          ...Object.fromEntries(Object.entries(styleFields()).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])),
+          ...(style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}),
           expiry_date: quote.expiry_date, expiry_time: '10:00 New York', settlement_date: quote.settlement_date,
           settlement_type: ndo ? 'NON_DELIVERABLE' : 'DELIVERABLE',
           ...(ndo ? { settlement_currency: cur.quote, fixing_source: cur.fixing_default } : {}),
@@ -143,7 +165,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       },
     }
   }
-  useImperativeHandle(ref, () => ({ price, payload, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv])
+  useImperativeHandle(ref, () => ({ price, payload, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit])
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────
   const dp = rateDp(pair)
@@ -170,12 +192,13 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       ['FORWARD TO SETTLEMENT', fmt(r.forward, dp), `${r.forward_mode === 'MARKET' && r.market_points != null ? 'quoted points' : 'implied from yields'}${r.forward_source ? ' · ' + r.forward_source : ''}`],
       ['STRIKE', fmt(r.strike, dp), strike === '' ? 'at the forward' : `${fmt((r.strike / r.forward - 1) * 100, 2)}% from the forward`],
       ['VOL', `${fmt(r.vol_pct, 3)}%`, `${r.vol_tier} · ${r.vol_source}${r.vol_snapshot ? ' · ' + r.vol_snapshot : ''}`],
-      ['FORWARD DELTA', pct(r.forward_delta, 1), `d1 ${fmt(r.d1, 4)} · d2 ${fmt(r.d2, 4)} · premium-excluded`],
-      ['INTRINSIC / TIME VALUE', `${money(r.intrinsic * r.df_quote)} / ${money(r.time_value)}`, 'on the forward, discounted'],
+      ...(r.forward_delta != null ? [['FORWARD DELTA', pct(r.forward_delta, 1), `d1 ${fmt(r.d1, 4)} · d2 ${fmt(r.d2, 4)} · premium-excluded`]] : []),
+      ...(r.intrinsic != null ? [['INTRINSIC / TIME VALUE', `${money(r.intrinsic * r.df_quote)} / ${money(r.time_value)}`, 'on the forward, discounted']] : []),
+      ...(r.style && r.style !== 'EUROPEAN' ? [['STYLE', r.style.replace('_', ' '), [r.barrier_type, r.barrier && `barrier ${fmt(r.barrier, dp)}`, r.lower && `[${fmt(r.lower, dp)}, ${fmt(r.upper, dp)}]`, r.touch_type, r.payout && `pays ${fmt(r.payout, 0)} ${r.payout_currency === 'BASE' ? r.base_currency : qc}`, r.pay_at_hit ? 'paid at hit' : null, r.rebate ? `rebate ${r.rebate}` : null].filter(Boolean).join(' · ')]] : []),
       ['GAMMA', money(r.gamma_1pct), 'change in FX01 for a further +1% spot'],
       [`IR01 ${qc} / ${r.base_currency}`, `${money(r.ir01_disc)} / ${money(r.ir01_base)}`, '+1 bp on each curve'],
       [`DF ${qc}`, fmt(r.df_quote, 6), `to settlement · T_exp ${fmt(r.t_expiry, 4)}y · T_settle ${fmt(r.t_settle, 4)}y`],
-      ['MODEL', 'Garman–Kohlhagen', r.model || ''],
+      ['MODEL', r.method || 'Garman–Kohlhagen', r.model || ''],
     ] }),
   } }
   const forwardDescriptor = { analytics: {
@@ -262,10 +285,80 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             <span className="tbw-lbl">OPTION TERMS</span>
             <span className="tbw-helper-badge">→ {direction === 'BUY' ? 'we hold' : 'we write'} the right to {optType === 'CALL' ? 'buy' : 'sell'} {cur?.base || 'base'} against {qc} · {cashSettled ? `cash-settled in ${qc}` : 'deliverable'}</span>
           </div>
-          <div className="tbw-grid-6">
-            <div><div className="tbw-lbl">STRIKE <span className="tbw-mut">· {qc} per {cur?.base || 'base'}</span></div>
-              <input className="tbw-mono" type="text" inputMode="decimal" placeholder="at the forward" value={strike} onChange={e => setStrike(e.target.value.replace(/[^0-9.]/g, ''))} />
+          <div className="tbw-chip-row" style={{ gap: 4, marginBottom: 10 }}>
+            {[['EUROPEAN', 'EUROPEAN'], ['AMERICAN', 'AMERICAN'], ['DIGITAL', 'DIGITAL'], ['BARRIER', 'BARRIER'], ['DOUBLE_BARRIER', 'DOUBLE BARRIER'], ['TOUCH', 'TOUCH']].map(([k, l]) => (
+              <button key={k} className={`tbw-chip ${style === k ? 'is-on' : ''}`} onClick={() => setStyle(k)}>{l}</button>
+            ))}
+          </div>
+          {style !== 'EUROPEAN' && style !== 'AMERICAN' && (
+            <div className="tbw-grid-6" style={{ marginBottom: 10 }}>
+              {(style === 'DIGITAL' || style === 'TOUCH') && (<>
+                <div><div className="tbw-lbl">PAYOUT</div>
+                  <input className="tbw-mono" type="text" inputMode="decimal" value={payout} onChange={e => setPayout(e.target.value.replace(/[^0-9.]/g, ''))} />
+                </div>
+                <div><div className="tbw-lbl">PAID IN</div>
+                  <div className="tbw-chip-row" style={{ gap: 4 }}>
+                    <button className={`tbw-chip ${payoutCcy === 'QUOTE' ? 'is-on' : ''}`} onClick={() => setPayoutCcy('QUOTE')}>{qc}</button>
+                    <button className={`tbw-chip ${payoutCcy === 'BASE' ? 'is-on' : ''}`} onClick={() => setPayoutCcy('BASE')}>{cur?.base || 'BASE'}</button>
+                  </div>
+                </div>
+              </>)}
+              {style === 'BARRIER' && (<>
+                <div><div className="tbw-lbl">BARRIER TYPE</div>
+                  <select value={barrierType} onChange={e => setBarrierType(e.target.value)}>
+                    {['UP_OUT', 'UP_IN', 'DOWN_OUT', 'DOWN_IN'].map(b => <option key={b} value={b}>{b.replace('_', '-AND-')}</option>)}
+                  </select>
+                </div>
+                <div><div className="tbw-lbl">BARRIER <span className="tbw-mut">· {qc} per {cur?.base || 'base'}</span></div>
+                  <input className="tbw-mono" type="text" inputMode="decimal" placeholder="level" value={barrier} onChange={e => setBarrier(e.target.value.replace(/[^0-9.]/g, ''))} />
+                </div>
+                <div><div className="tbw-lbl">REBATE <span className="tbw-mut">· {qc} per {cur?.base || 'base'}</span></div>
+                  <input className="tbw-mono" type="text" inputMode="decimal" placeholder="0" value={rebate} onChange={e => setRebate(e.target.value.replace(/[^0-9.]/g, ''))} />
+                </div>
+              </>)}
+              {style === 'DOUBLE_BARRIER' && (<>
+                <div><div className="tbw-lbl">BARRIER TYPE</div>
+                  <select value={barrierType} onChange={e => setBarrierType(e.target.value)}>
+                    {['KNOCK_OUT', 'KNOCK_IN'].map(b => <option key={b} value={b}>{b.replace('_', '-')}</option>)}
+                  </select>
+                </div>
+              </>)}
+              {style === 'TOUCH' && (<>
+                <div><div className="tbw-lbl">TOUCH TYPE</div>
+                  <select value={touchType} onChange={e => setTouchType(e.target.value)}>
+                    {['ONE_TOUCH', 'NO_TOUCH', 'DOUBLE_ONE_TOUCH', 'DOUBLE_NO_TOUCH'].map(b => <option key={b} value={b}>{b.replace(/_/g, ' ')}</option>)}
+                  </select>
+                </div>
+                {touchType === 'ONE_TOUCH' && (
+                  <div><div className="tbw-lbl">PAID</div>
+                    <div className="tbw-chip-row" style={{ gap: 4 }}>
+                      <button className={`tbw-chip ${!payAtHit ? 'is-on' : ''}`} onClick={() => setPayAtHit(false)}>AT EXPIRY</button>
+                      <button className={`tbw-chip ${payAtHit ? 'is-on' : ''}`} onClick={() => setPayAtHit(true)}>AT HIT</button>
+                    </div>
+                  </div>
+                )}
+              </>)}
+              {((style === 'TOUCH' && !touchType.startsWith('DOUBLE'))) && (
+                <div><div className="tbw-lbl">BARRIER <span className="tbw-mut">· {qc} per {cur?.base || 'base'}</span></div>
+                  <input className="tbw-mono" type="text" inputMode="decimal" placeholder="level" value={barrier} onChange={e => setBarrier(e.target.value.replace(/[^0-9.]/g, ''))} />
+                </div>
+              )}
+              {(style === 'DOUBLE_BARRIER' || (style === 'TOUCH' && touchType.startsWith('DOUBLE'))) && (<>
+                <div><div className="tbw-lbl">LOWER</div>
+                  <input className="tbw-mono" type="text" inputMode="decimal" placeholder="below spot" value={lowerB} onChange={e => setLowerB(e.target.value.replace(/[^0-9.]/g, ''))} />
+                </div>
+                <div><div className="tbw-lbl">UPPER</div>
+                  <input className="tbw-mono" type="text" inputMode="decimal" placeholder="above spot" value={upperB} onChange={e => setUpperB(e.target.value.replace(/[^0-9.]/g, ''))} />
+                </div>
+              </>)}
             </div>
+          )}
+          <div className="tbw-grid-6">
+            {style !== 'TOUCH' && (
+              <div><div className="tbw-lbl">STRIKE <span className="tbw-mut">· {qc} per {cur?.base || 'base'}</span></div>
+                <input className="tbw-mono" type="text" inputMode="decimal" placeholder="at the forward" value={strike} onChange={e => setStrike(e.target.value.replace(/[^0-9.]/g, ''))} />
+              </div>
+            )}
             <div><div className="tbw-lbl">VOL % <span className="tbw-mut">· {cur?.vol_surface ? `${cur.vol_surface.source} surface ${cur.vol_surface.valuation_date}` : 'no surface: desk default'}</span></div>
               <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.vol_surface ? 'from the surface' : 'default level'} value={volOv} onChange={e => setVolOv(e.target.value.replace(/[^0-9.]/g, ''))} />
             </div>
@@ -286,7 +379,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             </div>
           </div>
           <div className="tbw-helper-text" style={{ marginTop: 10 }}>
-            Garman–Kohlhagen on the forward to settlement · σ from the pair's ATM / 25Δ RR / 25Δ BF surface, Malz smile in delta (Market data › FX › Volatility) · premium in {qc} on the trade date · ACT/365
+            {style === 'EUROPEAN' ? 'Garman–Kohlhagen' : style === 'AMERICAN' ? 'Leisen–Reimer binomial tree, early exercise at every node' : style === 'DIGITAL' ? 'Reiner–Rubinstein cash-or-nothing / asset-or-nothing' : style === 'TOUCH' ? 'first-passage and survival probabilities, continuous monitoring' : 'survival-density integral, continuous monitoring'} on the forward to settlement · σ from the pair's ATM / 25Δ RR / 25Δ BF surface at the strike (Market data › FX › Volatility) · premium in {qc} on the trade date · ACT/365
           </div>
         </div>
       )}
