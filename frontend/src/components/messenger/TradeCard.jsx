@@ -16,8 +16,24 @@ const freq = (f) => (f || '').toLowerCase().replace('_', '-')
 // The booker's-side summary saved on the card, phrased for the other party.
 function flipSummary(sm) {
   if (!sm) return null
-  const flip = { PAY: 'RECEIVE', RECEIVE: 'PAY' }
-  return { ...sm, you: sm.them, them: sm.you, legs: (sm.legs || []).map(l => ({ ...l, you: flip[l.you] || l.you })) }
+  const flip = { PAY: 'RECEIVE', RECEIVE: 'PAY', BUY: 'SELL', SELL: 'BUY' }
+  return { ...sm, you: sm.them, them: sm.you, legs: (sm.legs || []).map(l => ({ ...l, you: flip[l.you] || l.you })),
+           product: sm.product ? { ...sm.product, you: flip[sm.product.you] || sm.product.you } : sm.product }
+}
+
+// A product record (FX forward, NDF, FX option, digital asset): one block of terms, bought or sold.
+const PRODUCT_LEAD = ['currency_pair', 'digital_asset', 'option_type', 'style', 'exercise_style', 'strike', 'forward_rate', 'forward_price', 'barrier_type', 'barrier',
+                      'lower', 'upper', 'rebate', 'touch_type', 'payout', 'payout_currency', 'expiry_date', 'value_date', 'settlement_date', 'settlement_type']
+function ProductLines({ p }) {
+  const f = p.fields || {}
+  const keys = [...PRODUCT_LEAD.filter(k => f[k] != null), ...Object.keys(f).filter(k => !PRODUCT_LEAD.includes(k))]
+  const show = (v) => typeof v === 'boolean' ? (v ? 'yes' : 'no') : (Number.isFinite(Number(v)) && String(v).length > 6 ? num(v) : String(v))
+  return (
+    <div className="tc-leg">
+      <b>{p.you === 'BUY' ? 'You buy' : 'You sell'} the {(p.name || '').replace(/_/g, ' ').toLowerCase()}</b>
+      <span> {keys.map(k => `${k.replace(/_/g, ' ')} ${show(f[k])}`).join(' · ')}</span>
+    </div>
+  )
 }
 
 function LegLine({ l }) {
@@ -63,6 +79,7 @@ export default function TradeCard({ m }) {
             {s.them?.name && <span className="tc-sub"> · with {s.them.name}</span>}
           </div>
           {s.legs?.map((l, i) => <LegLine key={i} l={l} />)}
+          {s.product && <ProductLines p={s.product} />}
           <div className="tc-dates">Trade {s.trade_date} · Effective {s.effective_date} · Maturity {s.maturity_date}</div>
         </> : null}
         {s?.uti && <div className="tc-hash" title={`Unique trade identifier, shared by both parties: ${s.uti}`}>UTI {s.uti.slice(0, 8)}…{s.uti.slice(-8)}</div>}

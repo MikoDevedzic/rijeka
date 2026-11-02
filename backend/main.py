@@ -1,3 +1,4 @@
+import logging
 import os
 os.environ["TZ"] = "America/New_York"
 """
@@ -7,6 +8,7 @@ Sprint 3D: pricer router added.
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api.routes import (
     schedules,
@@ -52,6 +54,25 @@ app = FastAPI(
     version="0.4.0",
 )
 
+class _UnhandledToJson:
+    """An exception no route handles becomes a JSON 500 here, inside the CORS layer, so the browser
+    sees an error with a message instead of a blocked response it reports as a lost connection.
+    Added before CORSMiddleware so that CORS wraps it (Starlette's last add_middleware is outermost)."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        try:
+            await self.app(scope, receive, send)
+        except Exception:
+            logging.getLogger("rijeka").exception("unhandled error on %s %s", scope.get("method"), scope.get("path"))
+            response = JSONResponse({"detail": "Rijeka hit an internal error on this request; it is in the server log."}, status_code=500)
+            await response(scope, receive, send)
+
+
+app.add_middleware(_UnhandledToJson)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted({

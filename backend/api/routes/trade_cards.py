@@ -131,7 +131,15 @@ def summarise(payload: dict, viewer_lei: str, names: Optional[dict] = None) -> d
         side = lambda l: l.get("direction") if booker else _flip(l.get("direction"))
         index = lambda l: l.get("forecast_curve_id") or (t.get("terms") or {}).get("float_index")
     legs = []
-    for l in payload["legs"]:
+    # A product record (FX forward, NDF, FX option, digital-asset forward or option) has no legs:
+    # one block of terms with a buyer and a seller, read as "you buy" / "you sell".
+    product = None
+    P = payload.get("product")
+    if P:
+        you_lei = you.get("lei")
+        product = {"name": P.get("product"), "you": "BUY" if P.get("buyer") == you_lei else "SELL",
+                   "fields": {k: v for k, v in P.items() if k not in ("product", "buyer", "seller") and v is not None and v != ""}}
+    for l in payload.get("legs") or []:
         fixed = (l.get("leg_type") or "").upper() == "FIXED"
         try:
             spread_bp = round(float(l.get("spread") or 0) * 10000, 4)
@@ -151,7 +159,7 @@ def summarise(payload: dict, viewer_lei: str, names: Optional[dict] = None) -> d
         "instrument": t.get("instrument_type"), "structure": t.get("structure"),
         "notional": t.get("notional"), "ccy": t.get("notional_ccy"),
         "trade_date": t.get("trade_date"), "effective_date": t.get("effective_date"),
-        "maturity_date": t.get("maturity_date"), "legs": legs,
+        "maturity_date": t.get("maturity_date"), "legs": legs, "product": product,
         "you": you, "them": them, "uti": payload.get("uti"),
     }
 
@@ -169,11 +177,16 @@ def compare(shared: dict, theirs: dict) -> list[dict]:
             breaks.append({"field": f, "shared": shared["trade"].get(f), "yours": theirs["trade"].get(f)})
     if shared["parties"] != theirs["parties"]:
         breaks.append({"field": "parties", "shared": " / ".join(shared["parties"]), "yours": " / ".join(theirs["parties"])})
+    sp, tp = shared.get("product") or {}, theirs.get("product") or {}
+    for f in sorted(set(sp) | set(tp)):
+        if sp.get(f) != tp.get(f):
+            label = {"buyer": "who buys", "seller": "who sells"}.get(f, f)
+            breaks.append({"field": label, "shared": sp.get(f), "yours": tp.get(f)})
     key = lambda l: ((l.get("leg_type") or "").upper(), l.get("currency"), l.get("index"))
     mine = {}
-    for l in theirs["legs"]:
+    for l in theirs.get("legs") or []:
         mine.setdefault(key(l), []).append(l)
-    for l in shared["legs"]:
+    for l in shared.get("legs") or []:
         name = f"{key(l)[0]} leg"
         cands = mine.get(key(l)) or []
         if not cands:

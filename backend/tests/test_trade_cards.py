@@ -120,3 +120,42 @@ def test_mirror_booking_hashes_to_the_same_v2_record():
     assert [m["direction"] for m in mirrored] == ["RECEIVE", "PAY"]
     assert mirrored[1]["embedded_options"][0]["direction"] == "BUY"
     assert mirrored[1]["terms"]["custom_cashflows"][0]["amount"] == 25000
+
+
+def _fxo(**over):
+    terms = {"style": "BARRIER", "strike": "1.17", "barrier": "1.25", "direction": "BUY", "expiry_date": "2027-02-02", "expiry_time": "10:00 New York",
+             "option_type": "CALL", "barrier_type": "UP_OUT", "base_currency": "EUR", "base_notional": "10000000", "currency_pair": "EURUSD",
+             "exercise_style": "EUROPEAN", "premium_amount": "0", "quote_currency": "USD", "quote_notional": "11700000", "settlement_date": "2027-02-04",
+             "settlement_type": "DELIVERABLE", "premium_currency": "USD", "calculation_agent": None, "automatic_exercise": True,
+             "barrier_monitoring": "CONTINUOUS", "premium_payment_date": "2026-11-02", "barrier_determination_agent": None}
+    terms.update(over)
+    return _trade(asset_class="FX", instrument_type="FX_OPTION", structure="BARRIER", notional_ccy="EUR", terms=terms)
+
+
+def test_product_records_summarise_and_compare():
+    """An FX option (or forward) record has a product block and no legs: each side reads buy/sell, and a
+    counterparty booking with the same terms shows no breaks. (A KeyError here is what made the chat
+    send fail as 'could not reach Rijeka' on 2026-11-02.)"""
+    rec = canonical_payload(_fxo(), [], BOOKER, CP)
+    booker, cp = summarise(rec, BOOKER["lei"], NAMES), summarise(rec, CP["lei"], NAMES)
+    assert booker["legs"] == [] and booker["product"]["you"] == "BUY" and cp["product"]["you"] == "SELL"
+    assert booker["product"]["name"] == "FX_OPTION" and booker["product"]["fields"]["barrier_type"] == "UP_OUT"
+    assert "buyer" not in booker["product"]["fields"] and "payout" not in booker["product"]["fields"]     # nulls dropped
+    theirs = canonical_payload(_fxo(direction="SELL"), [], CP, BOOKER)            # their booking: they sold it
+    assert compare(rec, theirs) == []
+    off = canonical_payload(_fxo(direction="SELL", strike="1.18"), [], CP, BOOKER)
+    assert [b["field"] for b in compare(rec, off)] == ["strike"]
+    swapped = canonical_payload(_fxo(), [], CP, BOOKER)                            # they think they bought it
+    assert {b["field"] for b in compare(rec, swapped)} == {"who buys", "who sells"}
+
+
+def test_unhandled_errors_answer_as_json_with_cors():
+    from fastapi.testclient import TestClient
+    from main import app
+    @app.get("/__boom")
+    def boom():
+        raise KeyError("legs")
+    c = TestClient(app, raise_server_exceptions=False)
+    r = c.get("/__boom", headers={"Origin": "https://app.rijeka.app"})
+    assert r.status_code == 500 and "server log" in r.json()["detail"]
+    assert r.headers.get("access-control-allow-origin") == "https://app.rijeka.app"
