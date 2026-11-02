@@ -726,6 +726,88 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
     }
 
 
+# ── Stand-alone XVA for an FX or digital-asset option, any style ──────────────────────────────
+
+class CurrencyOptionXvaRequest(BaseModel):
+    trade: dict                           # the ticket's booking body (instrument_type, notional, notional_ccy, maturity_date, terms)
+    vol_pct: Optional[float] = None       # override; else the pair's surface at the option's expiry and strike
+    paths: int = Field(default=2000, ge=200, le=10000)
+    valuation_date: Optional[date] = None
+    cp_cds_bp: float = 85.0
+    own_cds_bp: float = 42.0
+    ftp_bp: float = 55.0
+    fba_ratio: float = 0.55
+    lgd: float = 0.40
+    own_lgd: float = 0.40
+    hurdle_rate: float = 0.12
+    capital_model: str = "sa_ccr"
+    counterparty_rw: float = 1.0
+    wwr_multiplier: float = 1.0
+    cp_cds_curve: Optional[list] = None
+    own_cds_curve: Optional[list] = None
+    ftp_curve: Optional[list] = None
+    csa: Optional[dict] = None
+
+
+@router.post("/currency-option")
+def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """XVA for an FX or digital-asset option, any style, through the rates waterfall: the option valued along
+    simulated spot paths with the credit engine's model (pricing/fx_xva.option_xva)."""
+    heavy(user, "XVA simulation", 6)
+    from types import SimpleNamespace
+    from api.routes.currencies import _price_option, spec_from
+    from pnl.valuation import _currency_terms
+    from pricing import fx_xva
+    d = dict(body.trade or {})
+    itype = str(d.get("instrument_type") or "").upper()
+    if itype not in ("FX_OPTION", "CRYPTO_OPTION"):
+        raise HTTPException(status_code=422, detail="trade.instrument_type must be FX_OPTION or CRYPTO_OPTION")
+    try:
+        t = SimpleNamespace(terms=d.get("terms") or {}, instrument_type=itype, notional=d.get("notional"),
+                            maturity_date=date.fromisoformat(str(d.get("maturity_date"))[:10]) if d.get("maturity_date") else None)
+        pair, terms = _currency_terms(t)
+    except (KeyError, ValueError, TypeError) as e:
+        raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
+    val_date = body.valuation_date or date.today()
+    q = _price_option(db, user["sub"], pair, option_type=terms["option_type"], base_notional=float(terms["notional"]), expiry=terms["expiry"],
+                      settlement=terms["settle"], strike=terms["K"], direction=terms["direction"], val_date=val_date, vol_pct=body.vol_pct,
+                      spot_override=None, settlement_type=terms.get("settlement_type", "DELIVERABLE"), style_fields=terms.get("style_fields") or {})
+    spec = spec_from(terms.get("style_fields") or {}, terms["option_type"], float(q["strike"]) if q.get("strike") is not None else None)
+    if spec.strike is None and spec.style != "TOUCH":
+        spec.strike = float(q["forward"])
+    try:
+        csa = CSA.from_request(body.csa)
+    except Exception as e:      # noqa: BLE001
+        raise HTTPException(status_code=422, detail=f"csa: {e}")
+    t_s = float(q.get("t_settle") or ((terms["settle"] - val_date).days / 365.0))
+    df_q = float(q["df_quote"])
+    inp = fx_xva.OptionXvaInput(pair=pair, base_notional=float(terms["notional"]), spot=float(q["spot"]), forward=float(q["forward"]),
+                                t_expiry=float(q.get("t_expiry") or ((terms["expiry"] - val_date).days / 365.0)), t_settle=t_s, df_quote_t=df_q,
+                                quote_zero=-math.log(max(df_q, 1e-12)) / max(t_s, 1e-9), vol=float(q["vol"]), spec=spec,
+                                direction=terms["direction"], spot01=float(q.get("spot01") or 0.0),
+                                vol_source=("desk input" if body.vol_pct is not None else f"{pair}_VOL surface at the option's expiry and strike"))
+    wf, meta = fx_xva.option_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
+                                 ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
+                                 capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
+                                 cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve)
+    npv = float(q["npv"])
+    raw = wf.exposure_paths if csa.collateralised else meta["_paths"]
+    step = max(1, raw.shape[0] // min(80, raw.shape[0]))
+    return {
+        "sample_paths": [[round(float(v), 0) for v in row] for row in raw[::step, :]],
+        "ee": [round(v, 2) for v in wf.ee], "ene": [round(v, 2) for v in wf.ene], "pfe": [round(v, 2) for v in wf.pfe],
+        "ee_gross": [round(v, 2) for v in wf.ee_gross], "ene_gross": [round(v, 2) for v in wf.ene_gross],
+        "collateral": [round(v, 2) for v in wf.collateral_mean], "im_profile": [round(v, 2) for v in wf.im_profile],
+        "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
+        "quote_currency": q["quote_currency"], "pair": pair, "style": spec.style, "expiry_step": None,
+        "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fva": round(wf.fva, 2),
+                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2),
+                "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
+                "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "style")},
+    }
+
+
 # ── Incremental XVA: the netting set with the trade and without it ───────────────────────────
 
 class IncrementalXvaRequest(BaseModel):

@@ -7,8 +7,10 @@ methodology document carries its own version (v1.2). Commits on `main` are the d
 
 - XVA on every ticket: an incremental charge from the credit engine (the counterparty's netting set with
   the trade and without it, same paths) for rates, FX and digital-asset products, options included; the
-  stand-alone forward XVA reads the pair's own vol surface; Excel replications of the FX and digital-asset
-  forward XVA with the engine's draws.
+  stand-alone forward XVA reads the pair's own vol surface; a stand-alone option XVA for every FX and
+  digital-asset style (the option valued along simulated paths with the credit engine's model), with the
+  simulated paths drawn behind the profiles and the on-chain comparison on the FX and crypto tickets as on
+  the rates tab; Excel replications of the FX and digital-asset forward XVA with the engine's draws.
 - Licence: the market-risk, counterparty-credit and P&L engines (`backend/risk`, `backend/ccr`, `backend/pnl`)
   move from the platform (BSL 1.1) to the engine side (Apache-2.0), alongside pricing and chain.
 - Launch audit: three independent reviews, the S1 list fixed the same day (tenant scope on the

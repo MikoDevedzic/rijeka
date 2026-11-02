@@ -146,3 +146,52 @@ def test_forward_xva_hands_back_the_paths_for_the_chart():
     assert meta["_paths"].shape == (300, meta["steps"]) and abs(float(meta["_paths"][:, 0].mean())) < 2e5
     wf2, meta2 = fx_xva.forward_xva(inp, CSA.from_request({"preset": "ON_CHAIN"}), n_paths=300)
     assert wf2.exposure_paths.shape == meta2["_paths"].shape, "residual paths under a CSA, same grid"
+
+
+# ── stand-alone option XVA: the style valued along the simulated paths ───────────────────────────
+
+def _opt(style="EUROPEAN", direction="BUY", **kw):
+    from pricing import fx_xva
+    from pricing.fx_exotic import ExoticSpec
+    spec = ExoticSpec(style, "CALL", strike=1.17, **kw) if style != "TOUCH" else ExoticSpec("TOUCH", "CALL", payout=1e6, touch_type="ONE_TOUCH", barrier=1.25)
+    return fx_xva.OptionXvaInput(pair="EURUSD", base_notional=1e7, spot=1.16, forward=1.17, t_expiry=0.48, t_settle=0.5, df_quote_t=0.98,
+                                 quote_zero=0.04, vol=0.08, spec=spec, direction=direction, spot01=50000.0)
+
+
+def test_option_exposure_is_one_sided_and_starts_at_the_premium():
+    from pricing import fx_xva
+    from pricing.csa import CSA
+    from pricing.fx_exotic import price_exotic, ExoticSpec
+    inp = _opt()
+    V, p0, v0 = fx_xva.simulate_option_paths(inp, n_paths=400)
+    assert V.shape == (400, 6) and (V >= -1e-6).all(), "a bought option is never a liability after the premium"
+    x = price_exotic(ExoticSpec("EUROPEAN", "CALL", strike=1.17), base_notional=1e7, spot=1.16, forward=1.17, df_quote=0.98, t_expiry=0.48, vol=0.08, direction="BUY")
+    assert v0 == pytest.approx(x.npv, rel=0.03), "V0 is the option's own value under the same model"
+    wf, meta = fx_xva.option_xva(inp, CSA.uncollateralised(), n_paths=400)
+    assert wf.cva < 0 and abs(wf.dva) < 1e-6 and meta["_paths"].shape == V.shape and "closed form" in meta["model"]
+    Vs, _, v0s = fx_xva.simulate_option_paths(_opt(direction="SELL"), n_paths=400)
+    assert (Vs <= 1e-6).all() and v0s == pytest.approx(-v0)
+
+
+def test_every_style_runs_on_the_paths_and_a_knock_out_cannot_exceed_its_vanilla():
+    from pricing import fx_xva
+    from pricing.csa import CSA
+    styles = [("EUROPEAN", {}), ("AMERICAN", {}), ("DIGITAL", {"payout": 1e6}), ("BARRIER", {"barrier_type": "UP_OUT", "barrier": 1.25}),
+              ("DOUBLE_BARRIER", {"barrier_type": "KNOCK_OUT", "lower": 1.05, "upper": 1.30}), ("TOUCH", {})]
+    ee = {}
+    for style, kw in styles:
+        # uncollateralised: the margin-period bridge draws its own noise per run, so only gross paths compare pathwise
+        wf, meta = fx_xva.option_xva(_opt(style, **kw), CSA.uncollateralised(), n_paths=300)
+        assert len(wf.ee) == 6 and all(v >= -1e-6 for v in wf.ee) and meta["style"] == style
+        ee[style] = wf.ee
+    assert max(ee["BARRIER"]) <= max(ee["EUROPEAN"]) + 1e-6, "an up-and-out call is worth at most the vanilla on every path"
+
+
+def test_option_route_rejects_a_forward_and_malformed_terms():
+    from api.routes.xva import CurrencyOptionXvaRequest, currency_option_xva
+    with pytest.raises(HTTPException) as e:
+        currency_option_xva(CurrencyOptionXvaRequest(trade={"instrument_type": "FX_FORWARD", "terms": {}}), db=None, user={"sub": "u"})
+    assert e.value.status_code == 422
+    with pytest.raises(HTTPException) as e:
+        currency_option_xva(CurrencyOptionXvaRequest(trade={"instrument_type": "FX_OPTION", "notional": 1e6, "terms": {"currency_pair": "EURUSD"}}), db=None, user={"sub": "u"})
+    assert e.value.status_code == 422 and "terms" in e.value.detail

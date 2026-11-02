@@ -38,28 +38,14 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
       tradeId={tradeId} priced={!!quote} ccy={quote?.quote_currency || 'USD'} />
   )
 
-  if (quote?.shape === 'OPTION') {
-    // The stand-alone waterfall below simulates a forward's exposure, so an option has no number of its
-    // own here: its exposure (one-sided for the buyer, the payoff fixed at expiry) is valued on the credit
-    // run's paths (Garman–Kohlhagen before expiry), which is exactly what the incremental run reports.
-    return (
-      <div className="tbw-no-drag" style={{ padding: '0 0 8px' }}>
-        <div style={{ padding: '14px 16px 0', fontSize: '0.75rem', color: 'var(--text-mute)', lineHeight: 1.45 }}>
-          The forward's stand-alone waterfall does not apply to an option. Its XVA is the netting set's charge below: the credit engine values the option on the simulated paths (Garman–Kohlhagen before expiry, the payoff fixed at expiry) with the counterparty's CSA applied.
-        </div>
-        {incremental}
-      </div>
-    )
-  }
+  const isOption = quote?.shape === 'OPTION'
 
   const run = async () => {
     if (!quote || !payload) return
     setBusy(true); setErr(null)
     try {
       const session = await getSessionMaybe()
-      const body = {
-        pair: payload.pair, base_notional: Number(payload.base_notional), settlement_date: payload.settlement_date,
-        forward_rate: payload.forward_rate ?? null, direction: payload.direction || 'BUY',
+      const common = {
         vol_pct: p.vol_pct === '' ? null : Number(p.vol_pct), paths: Number(p.paths) || 2000,
         cp_cds_bp: Number(p.cp_cds_bp), own_cds_bp: Number(p.own_cds_bp), ftp_bp: Number(p.ftp_bp),
         lgd: Number(p.lgd) / 100, own_lgd: Number(p.lgd) / 100, hurdle_rate: Number(p.hurdle) / 100,
@@ -67,8 +53,13 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           : csa === 'BILATERAL' ? { preset: 'BILATERAL', threshold_cp: 500000, mta: 100000, mpor_days: 10, im_exchanged: im }
           : { preset: 'ON_CHAIN', im_exchanged: im },
       }
+      const body = isOption
+        ? { trade: buildTrade?.(), ...common }
+        : { pair: payload.pair, base_notional: Number(payload.base_notional), settlement_date: payload.settlement_date,
+            forward_rate: payload.forward_rate ?? null, direction: payload.direction || 'BUY', ...common }
+      if (isOption && !body.trade) throw new Error('Price the option first')
       const post = async (b) => {
-        const r = await fetch(`${API}/api/xva/currency`, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
+        const r = await fetch(`${API}/api/xva/${isOption ? 'currency-option' : 'currency'}`, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
         const j = await r.json()
         if (!r.ok) throw new Error(j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : `xva ${r.status}`)
         return j
@@ -85,13 +76,15 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
     <div className="tbw-no-drag" style={{ padding: '0 16px 16px', fontFamily: 'var(--sans)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16 }}>
         <div>
-          <div style={secHdr}>FORWARD MODEL</div>
+          <div style={secHdr}>{isOption ? 'OPTION ON THE PATHS' : 'FORWARD MODEL'}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div><div style={lbl}>VOL % (OVERRIDE)</div><input style={inp} value={p.vol_pct} placeholder={res?.params?.vol_pct != null ? String(res.params.vol_pct) : 'surface'} onChange={set('vol_pct')} /></div>
             <div><div style={lbl}>PATHS</div><input style={inp} value={p.paths} onChange={set('paths')} /></div>
           </div>
           <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.4 }}>
-            Lognormal forward, exposure ±N·(F<sub>t</sub> − K)·DF. Vol is the pair's surface at the forward's tenor (ATM); type a number to override. A pair without a surface uses the demo default, and the run says so.
+            {isOption
+              ? <>Lognormal spot at the option's vol; on every path the {quote?.style ? quote.style.replace(/_/g, ' ').toLowerCase() : 'option'} is valued with its closed form, the credit engine's model: before expiry the holder's value with the time left (barriers and touches carry which paths have knocked, monitored at the grid points; an American as its European, a lower bound), after it the payoff fixed and discounted to settlement. Bought: one-sided exposure after the premium. Vol from the pair's surface at the option's expiry and strike; type a number to override.</>
+              : <>Lognormal forward, exposure ±N·(F<sub>t</sub> − K)·DF. Vol is the pair's surface at the forward's tenor (ATM); type a number to override. A pair without a surface uses the demo default, and the run says so.</>}
           </div>
           <div style={secHdr}>SPREADS (BP) · LGD · HURDLE</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
@@ -125,7 +118,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           <ExposureCanvas result={res} height={230} />
           {res && (
             <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginTop: 6 }}>
-              vol {res.params.vol_pct}% ({res.params.vol_source}) · {res.n_paths} paths · {res.steps} monthly steps · {res.sample_paths?.length || 0} paths drawn ({res.csa?.collateralised ? 'residual after collateral' : 'gross MtM'}) · IM weight {res.params.im_rw_per_pct} per 1% ({res.params.im_basis}) · CSA {res.csa?.preset}
+              {res.params.style ? res.params.style.replace(/_/g, ' ') + ' · ' : ''}vol {Number(res.params.vol_pct).toFixed(2)}% ({res.params.vol_source}) · {res.n_paths} paths · {res.steps} monthly steps · {res.sample_paths?.length || 0} paths drawn ({res.csa?.collateralised ? 'residual after collateral' : 'gross MtM'}) · IM weight {res.params.im_rw_per_pct} per 1% ({res.params.im_basis}) · CSA {res.csa?.preset}
             </div>
           )}
         </div>
@@ -140,7 +133,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
       </div>
       {cmp?.xva && res?.xva && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 1, background: 'var(--border)', border: '1px solid var(--border)', borderTop: 0 }}>
-          {VA.map(([k, key]) => (
+          {VA.map(([, key]) => (
             <div key={key} style={{ background: 'var(--bg)', padding: '6px 10px' }}>
               <div style={{ ...lbl, color: 'var(--accent)' }}>{key === 'npv' ? 'ON-CHAIN' : ''}&nbsp;</div>
               <div style={{ fontFamily: 'var(--mono)', fontSize: '0.875rem', fontWeight: 700, color: COLOR[key] }}>{fmt(cmp.xva[key])}</div>

@@ -297,7 +297,9 @@ def run_waterfall(
                 rc_t = max(float(resid_mean[i]), 0.0)
                 v_for_mult = float(resid_mean[i])
             if addon > 0:
-                mult = min(1.0, 0.05 + 0.95 * math.exp(v_for_mult / (1.9 * addon)))
+                # the multiplier is capped at 1, so the exponent can be capped without changing it: an exposure far
+                # above the add-on (a digital's payout against a tiny add-on) must not overflow
+                mult = min(1.0, 0.05 + 0.95 * math.exp(min(v_for_mult / (1.9 * addon), 50.0)))
             else:
                 mult = 1.0
             if params.capital_model == "imm":
