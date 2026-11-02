@@ -17,7 +17,7 @@ Live documents, the ones kept current with the code:
 | [schema.sql](schema.sql) | The database schema as first laid down |
 | [migrations/](migrations/) | SQL to apply, dated; `applied-before-2026-10/` holds the early ones already in every database |
 
-Papers: `Rijeka_Methodology_v1.1.pdf` (and `.tex`), `blockchain_derivatives_paper_v5.pdf` (and `.tex`).
+Papers: the methodology (v1.2) is `methodology/rijeka_methodology.pdf` with its `.tex`; `blockchain_derivatives_paper_v5.pdf` (and `.tex`) is the design paper.
 
 [archive/](archive/) holds superseded architecture notes (v8 to v25) and sprint handoffs. They
 describe the system as it was at the time and are kept for the record; nothing in them is
