@@ -32,7 +32,8 @@ def test_workbook_builds_with_formulas_and_reference(product):
     assert len(formulas) > 10
     assert any("PillarDF" in f for f in formulas), "DF interpolation must reference the curve pillars"
     if product in ("swaption", "cap", "crypto_ndo", "fx_option", "fx_option_styles", "crypto_option_styles"):
-        assert any("NORM.S.DIST" in f for f in formulas)
+        assert any("NORMSDIST(" in f for f in formulas)
+    assert not any("NORM.S.DIST" in f or "_xlfn" in f for f in formulas), "only legacy spreadsheet functions: no compatibility prompt in Excel"
     assert isinstance(ref, float)
 
 

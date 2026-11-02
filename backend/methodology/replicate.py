@@ -330,8 +330,8 @@ def swaption_workbook(mkt: Market):
     ws["A17"] = "Forward F"; ws["B17"] = "=(B16-C13)/B15"; ws["B17"].number_format = "0.0000%"
     ws["A18"] = "σ√T"; ws["B18"] = "=B4/10000*SQRT(B2)"
     ws["A19"] = "d"; ws["B19"] = "=B5*(B17-B3)/B18"
-    ws["A20"] = "N(d)"; ws["B20"] = "=NORM.S.DIST(B19,TRUE)"
-    ws["A21"] = "n(d)"; ws["B21"] = "=NORM.S.DIST(B19,FALSE)"
+    ws["A20"] = "N(d)"; ws["B20"] = "=NORMSDIST(B19)"
+    ws["A21"] = "n(d)"; ws["B21"] = "=NORMDIST(B19,0,1,FALSE)"
     ws["A22"] = "Price (formulas)"; ws["B22"] = "=B1*B15*B18*(B19*B20+B21)"; ws["B22"].number_format = "#,##0.00"
     ws["A23"] = "Price (Rijeka)"; ws["B23"] = res.npv; ws["B23"].fill = RJ; ws["B23"].number_format = "#,##0.00"
     ws["A24"] = "Difference"; ws["B24"] = "=B22-B23"; ws["B24"].number_format = "#,##0.00"
@@ -388,7 +388,7 @@ def cap_workbook(mkt: Market):
         ws.cell(row=r, column=6, value=f"={DF(f'B{r}')}").number_format = "0.000000"
         ws.cell(row=r, column=7, value=f"=(E{r}/F{r}-1)/C{r}").number_format = "0.0000%"
         ws.cell(row=r, column=8, value=f"=IF(D{r}>0,(G{r}-$B$2)/($B$3/10000*SQRT(D{r})),0)")
-        ws.cell(row=r, column=9, value=f"=IF(D{r}>0,$B$1*C{r}*F{r}*((G{r}-$B$2)*NORM.S.DIST(H{r},TRUE)+$B$3/10000*SQRT(D{r})*NORM.S.DIST(H{r},FALSE)),$B$1*C{r}*F{r}*MAX(G{r}-$B$2,0))").number_format = "#,##0.00"
+        ws.cell(row=r, column=9, value=f"=IF(D{r}>0,$B$1*C{r}*F{r}*((G{r}-$B$2)*NORMSDIST(H{r})+$B$3/10000*SQRT(D{r})*NORMDIST(H{r},0,1,FALSE)),$B$1*C{r}*F{r}*MAX(G{r}-$B$2,0))").number_format = "#,##0.00"
         c = ws.cell(row=r, column=10, value=cp.get("pv", cp.get("npv", 0.0))); c.fill = RJ; c.number_format = "#,##0.00"
     r1 = r0 + len(res.caplets) - 1
     ws["E1"] = f"=SUM(I{r0}:I{r1})"; ws["E1"].number_format = "#,##0.00"
@@ -546,7 +546,7 @@ CRYPTO_CASE = dict(pair="BTCUSD", base="BTC", quote="USD", spot=65_000.0, base_r
 
 
 def _N(x: str) -> str:
-    return f"NORM.S.DIST({x},TRUE)"
+    return f"NORMSDIST({x})"           # the legacy function: Excel 2007, Numbers and Google Sheets read it without a compatibility prompt
 
 
 def _fx_dates(val: date, settle_lag: int = 2) -> tuple[date, date]:
@@ -640,7 +640,7 @@ def _option_workbook(mkt: Market, case: dict):
     _ref_cell(ws, 11, f"Spot position ({base}) = fwd delta·DF_{quote}·F/S·N", "=B10*DFq*Fwd/Spot*Notl", res.delta_base_units, "#,##0.0000")
     _ref_cell(ws, 12, f"{case['delta']}: NPV change for +1% spot (repriced)",
               f"=Notl*DFq*B2*(Fwd*1.01*{_N('B2*((LN(Fwd*1.01/B1)+0.5*Sigma^2*Te)/SqT)')}-B1*{_N('B2*((LN(Fwd*1.01/B1)+0.5*Sigma^2*Te)/SqT-SqT)')})-B8", res.spot01)
-    ws["A13"] = "Vega analytic per 1 vol pt = N·DF·F·n(d₁)·√T_e·0.01"; ws["B13"] = "=Notl*DFq*Fwd*NORM.S.DIST(B3,FALSE)*SQRT(Te)*0.01"; ws["B13"].number_format = "#,##0.00"
+    ws["A13"] = "Vega analytic per 1 vol pt = N·DF·F·n(d₁)·√T_e·0.01"; ws["B13"] = "=Notl*DFq*Fwd*NORMDIST(B3,0,1,FALSE)*SQRT(Te)*0.01"; ws["B13"].number_format = "#,##0.00"
     d1u = "((LN(Fwd/B1)+0.5*(Sigma+0.01)^2*Te)/((Sigma+0.01)*SQRT(Te)))"
     _ref_cell(ws, 14, "Vega repriced (σ + 1 pt) − premium", f"=Notl*DFq*B2*(Fwd*{_N('B2*' + d1u)}-B1*{_N('B2*(' + d1u + '-(Sigma+0.01)*SQRT(Te))')})-B8", res.vega)
     _ref_cell(ws, 15, f"{'IR01 (discounting, ' + quote + ' +1bp)' if crypto else 'IR01 ' + quote + ' curve (+1bp)'}: F up by the carry, DF down",
