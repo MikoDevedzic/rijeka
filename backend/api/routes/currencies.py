@@ -34,6 +34,7 @@ from middleware.auth import verify_token
 from api.routes._errors import internal
 from pricing.currency_forward import price_currency_forward
 from pricing.fx_option import price_fx_option
+from pricing.fx_exotic import ExoticSpec, price_exotic
 from pricing.fx_vol import TENOR_YEARS as VOL_TENORS, lookup_vol, parse_surface, quotes_from_grid
 from api.routes.crypto import (ASSETS as CRYPTO_ASSETS, fetch_spot as fetch_crypto_spot, save_spot,
                                latest_snapshot, _quote, _require_trader)
@@ -444,11 +445,33 @@ class CurrencyOptionRequest(BaseModel):
     vol_pct: Optional[float] = Field(None, gt=0, description="override, vol points; omitted = the pair's surface")
     spot: Optional[float] = Field(None, gt=0)
     settlement_type: str = Field("DELIVERABLE", description="DELIVERABLE | NON_DELIVERABLE (cash in the quote currency)")
+    # styles beyond the European vanilla (pricing/fx_exotic.py)
+    style: str = Field("EUROPEAN", description="EUROPEAN | AMERICAN | DIGITAL | BARRIER | DOUBLE_BARRIER | TOUCH")
+    payout: Optional[float] = Field(None, gt=0, description="DIGITAL / TOUCH: the amount paid")
+    payout_currency: str = Field("QUOTE", description="QUOTE (cash-or-nothing) | BASE (a fixed base amount)")
+    barrier_type: Optional[str] = Field(None, description="BARRIER: UP_IN | UP_OUT | DOWN_IN | DOWN_OUT; DOUBLE_BARRIER: KNOCK_IN | KNOCK_OUT")
+    barrier: Optional[float] = Field(None, gt=0)
+    lower: Optional[float] = Field(None, gt=0)
+    upper: Optional[float] = Field(None, gt=0)
+    rebate: float = Field(0.0, ge=0, description="BARRIER: quote-currency amount per unit of base notional")
+    touch_type: Optional[str] = Field(None, description="TOUCH: ONE_TOUCH | NO_TOUCH | DOUBLE_ONE_TOUCH | DOUBLE_NO_TOUCH")
+    pay_at_hit: bool = False
+
+
+def spec_from(fields: dict, option_type: str, strike: Optional[float]) -> ExoticSpec:
+    """An ExoticSpec from request or trade.terms fields (style defaults to EUROPEAN)."""
+    g = lambda k, d=None: fields.get(k, d) if fields.get(k) is not None else d
+    return ExoticSpec(style=str(g("style", "EUROPEAN")).upper(), option_type=str(option_type or "CALL").upper(), strike=strike,
+                      payout=float(g("payout")) if g("payout") is not None else None, payout_currency=str(g("payout_currency", "QUOTE")).upper(),
+                      barrier_type=str(g("barrier_type")).upper() if g("barrier_type") else None,
+                      barrier=float(g("barrier")) if g("barrier") is not None else None, lower=float(g("lower")) if g("lower") is not None else None,
+                      upper=float(g("upper")) if g("upper") is not None else None, rebate=float(g("rebate", 0.0) or 0.0),
+                      touch_type=str(g("touch_type")).upper() if g("touch_type") else None, pay_at_hit=bool(g("pay_at_hit", False)))
 
 
 def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, base_notional: float, expiry: date, settlement: Optional[date],
                   strike: Optional[float], direction: str, val_date: date, vol_pct: Optional[float], spot_override: Optional[float],
-                  settlement_type: str = "DELIVERABLE") -> dict:
+                  settlement_type: str = "DELIVERABLE", style_fields: Optional[dict] = None) -> dict:
     """An FX option on the pair's market: the forward to settlement from the forward engine (so the account's
     forward mode, quoted points or parity, applies), the vol from the pair's surface, Garman–Kohlhagen on top."""
     base, quote = split_pair(pair)
@@ -463,16 +486,31 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
                  direction="BUY", spot_override=spot_override, base_rate_pct=None)
     F, S, df_q = float(fwd["forward"]), float(fwd["spot"]), float(fwd["df_quote"])
     T_e = (expiry - val_date).days / 365.0
-    K = float(strike) if strike is not None else F
+    spec = spec_from(style_fields or {}, option_type, float(strike) if strike is not None else None)
+    if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER", "DIGITAL") and spec.strike is None:
+        spec.strike = F
+    K = spec.strike if spec.strike is not None else F
     vs = latest_snapshot(db, user_id, f"{pair}_VOL")
     vol, tier, vol_note = lookup_vol(vs.quotes if vs else None, pair, T_e, F, K, vol_pct)
     try:
-        r = price_fx_option(base_currency=base, quote_currency=quote, base_notional=base_notional, option_type=option_type, strike=K,
-                            spot=S, forward=F, df_quote=df_q, valuation_date=val_date, expiry_date=expiry, settlement_date=settle, vol=vol,
-                            direction=direction, spot_date=spot_date(val_date, False, base, quote))
+        if spec.style == "EUROPEAN":
+            r = price_fx_option(base_currency=base, quote_currency=quote, base_notional=base_notional, option_type=option_type, strike=K,
+                                spot=S, forward=F, df_quote=df_q, valuation_date=val_date, expiry_date=expiry, settlement_date=settle, vol=vol,
+                                direction=direction, spot_date=spot_date(val_date, False, base, quote))
+            out = r.__dict__.copy()
+            out["method"] = "Garman–Kohlhagen"
+        else:
+            x = price_exotic(spec, base_notional=base_notional, spot=S, forward=F, df_quote=df_q, t_expiry=T_e, vol=vol, direction=direction)
+            out = {"base_currency": base, "quote_currency": quote, "option_type": spec.option_type, "direction": str(direction).upper(),
+                   "base_notional": float(base_notional), "strike": K, "spot": S, "forward": F, "vol": vol, "t_expiry": T_e,
+                   "t_settle": (settle - val_date).days / 365.0, "df_quote": df_q, "npv": x.npv, "premium_unit": x.unit, "d1": None, "d2": None,
+                   "forward_delta": None, "delta_base_units": x.delta_base_units, "spot01": x.spot01, "gamma_1pct": x.gamma_1pct, "vega": x.vega,
+                   "ir01": x.ir01, "ir01_disc": x.ir01_disc, "ir01_base": x.ir01_base, "theta": x.theta, "intrinsic": None, "time_value": None,
+                   "method": x.method, "r_quote": x.r_quote, "r_base": x.r_base}
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    out = r.__dict__.copy()
+    out.update(style=spec.style, payout=spec.payout, payout_currency=spec.payout_currency, barrier_type=spec.barrier_type, barrier=spec.barrier,
+               lower=spec.lower, upper=spec.upper, rebate=spec.rebate, touch_type=spec.touch_type, pay_at_hit=spec.pay_at_hit)
     out.update(pair=pair, shape="OPTION", valuation_date=val_date.isoformat(), expiry_date=expiry.isoformat(), settlement_date=settle.isoformat(),
                settlement_type=str(settlement_type or "DELIVERABLE").upper(), vol_pct=round(vol * 100, 4), vol_tier=tier, vol_source=vol_note,
                vol_snapshot=vs.valuation_date.isoformat() if vs else None,
@@ -481,7 +519,7 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
                implied_forward=fwd["implied_forward"], market_points=fwd["market_points"], basis_points=fwd["basis_points"],
                forward_points=fwd["forward_points"], df_base=fwd["df_base"], quote_rate=fwd["quote_rate"], base_rate=fwd["base_rate"],
                t=fwd["t"], quote_notional=base_notional * K,
-               model="Garman–Kohlhagen on the forward to settlement; σ from the pair's ATM/RR25/BF25 surface (Malz smile in delta); ACT/365")
+               model=f"{out.get('method', 'Garman–Kohlhagen')} on the forward to settlement; σ from the pair's ATM/RR25/BF25 surface (Malz smile in delta); ACT/365")
     return out
 
 
@@ -491,7 +529,44 @@ def price_option(req: CurrencyOptionRequest, db: Session = Depends(get_db), user
     val_date = req.valuation_date or date.today()
     return _price_option(db, user["sub"], pair, option_type=req.option_type, base_notional=req.base_notional, expiry=req.expiry_date,
                          settlement=req.settlement_date, strike=req.strike, direction=req.direction, val_date=val_date, vol_pct=req.vol_pct,
-                         spot_override=req.spot, settlement_type=req.settlement_type)
+                         spot_override=req.spot, settlement_type=req.settlement_type,
+                         style_fields={k: getattr(req, k) for k in ("style", "payout", "payout_currency", "barrier_type", "barrier", "lower", "upper",
+                                                                    "rebate", "touch_type", "pay_at_hit")})
+
+
+class OptionLadderRequest(CurrencyOptionRequest):
+    spot_shocks_pct: list[float] = Field(default=[-10, -5, -2, -1, 0, 1, 2, 5, 10])
+    vol_shocks_pts: list[float] = Field(default=[-2, -1, 0, 1, 2])
+
+
+@router.post("/option/ladder")
+def option_ladder(req: OptionLadderRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """NPV repriced on a grid of spot and vol shocks, for the ticket's scenario tab (every style, the same pricer)."""
+    pair = req.pair.upper(); split_pair(pair)
+    val_date = req.valuation_date or date.today()
+    st = pair_state(db, user["sub"], pair)
+    S0 = req.spot or st.get("spot")
+    if not S0:
+        raise HTTPException(status_code=422, detail=f"No {pair} spot saved. Click SNAP SPOT or pass spot.")
+    fields = {k: getattr(req, k) for k in ("style", "payout", "payout_currency", "barrier_type", "barrier", "lower", "upper", "rebate", "touch_type", "pay_at_hit")}
+    base = _price_option(db, user["sub"], pair, option_type=req.option_type, base_notional=req.base_notional, expiry=req.expiry_date,
+                         settlement=req.settlement_date, strike=req.strike, direction=req.direction, val_date=val_date, vol_pct=req.vol_pct,
+                         spot_override=S0, settlement_type=req.settlement_type, style_fields=fields)
+    vol0 = base["vol_pct"]
+    rows = []
+    for sp in req.spot_shocks_pct[:15]:
+        row = {"spot_pct": sp, "spot": S0 * (1 + sp / 100.0), "npv": {}}
+        for vp in req.vol_shocks_pts[:7]:
+            try:
+                q = _price_option(db, user["sub"], pair, option_type=req.option_type, base_notional=req.base_notional, expiry=req.expiry_date,
+                                  settlement=req.settlement_date, strike=base["strike"], direction=req.direction, val_date=val_date,
+                                  vol_pct=max(vol0 + vp, 0.05), spot_override=S0 * (1 + sp / 100.0), settlement_type=req.settlement_type, style_fields=fields)
+                row["npv"][f"{vp:g}"] = q["npv"]
+            except HTTPException:
+                row["npv"][f"{vp:g}"] = None
+        rows.append(row)
+    return {"pair": pair, "style": base["style"], "base_npv": base["npv"], "base_vol_pct": vol0, "spot": S0, "spot_shocks_pct": req.spot_shocks_pct[:15],
+            "vol_shocks_pts": req.vol_shocks_pts[:7], "rows": rows, "spot01": base["spot01"], "vega": base["vega"]}
 
 
 class FlatRateRequest(BaseModel):
@@ -526,10 +601,10 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date) -> dict:
     if itype == "FX_OPTION":
         try:
             pair = str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper()
-            out = _price_option(db, user["sub"], pair, option_type=str(t["option_type"]), base_notional=float(t.get("base_notional") or trade.notional),
+            out = _price_option(db, user["sub"], pair, option_type=str(t.get("option_type") or "CALL"), base_notional=float(t.get("base_notional") or trade.notional),
                                 expiry=date.fromisoformat(str(t["expiry_date"])), settlement=date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)),
-                                strike=float(t["strike"]), direction=str(t.get("direction") or "BUY"), val_date=val_date, vol_pct=None, spot_override=None,
-                                settlement_type=str(t.get("settlement_type") or "DELIVERABLE"))
+                                strike=float(t["strike"]) if t.get("strike") not in (None, "") else None, direction=str(t.get("direction") or "BUY"), val_date=val_date,
+                                vol_pct=None, spot_override=None, settlement_type=str(t.get("settlement_type") or "DELIVERABLE"), style_fields=t)
         except (KeyError, TypeError, ValueError) as e:
             raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
         out.update(trade_id=str(trade.id), trade_ref=trade.trade_ref, instrument_type=itype, npv_ccy=out["quote_currency"], legs=[], shape="OPTION")

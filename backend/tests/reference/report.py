@@ -13,11 +13,11 @@ from collections import OrderedDict
 
 import QuantLib as ql
 
-from tests.reference import (test_ref_bermudan, test_ref_ccr, test_ref_curve, test_ref_fx, test_ref_greeks, test_ref_options,
-                             test_ref_swaps)
+from tests.reference import (test_ref_bermudan, test_ref_ccr, test_ref_curve, test_ref_fx, test_ref_fxo, test_ref_fxo_styles, test_ref_greeks,
+                             test_ref_options, test_ref_swaps)
 from tests.reference.refmarket import VAL
 
-MODULES = (test_ref_curve, test_ref_swaps, test_ref_fx, test_ref_options, test_ref_bermudan, test_ref_ccr, test_ref_greeks)
+MODULES = (test_ref_curve, test_ref_swaps, test_ref_fx, test_ref_fxo, test_ref_fxo_styles, test_ref_options, test_ref_bermudan, test_ref_ccr, test_ref_greeks)
 
 
 def rows():

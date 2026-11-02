@@ -311,21 +311,40 @@ _FXO_FIELDS = (
     "premium_amount", "premium_currency", "premium_payment_date",
     "automatic_exercise",       # bool
     "calculation_agent",        # LEI, or null (both parties)
+    # styles beyond the vanilla (pricing/fx_exotic.py); absent fields are null in the record
+    "style",                    # EUROPEAN | AMERICAN | DIGITAL | BARRIER | DOUBLE_BARRIER | TOUCH
+    "payout", "payout_currency",            # DIGITAL / TOUCH: amount and QUOTE | BASE
+    "barrier_type",             # BARRIER: UP_IN | UP_OUT | DOWN_IN | DOWN_OUT; DOUBLE_BARRIER: KNOCK_IN | KNOCK_OUT
+    "barrier", "lower", "upper",            # levels, quote per base
+    "rebate",                   # BARRIER: quote amount per unit base, paid at hit (out) or at expiry (in)
+    "touch_type",               # ONE_TOUCH | NO_TOUCH | DOUBLE_ONE_TOUCH | DOUBLE_NO_TOUCH
+    "pay_at_hit",               # bool, TOUCH
+    "barrier_monitoring",       # CONTINUOUS
+    "barrier_determination_agent",          # LEI, or null
 )
-_FXO_REQUIRED = ("currency_pair", "base_currency", "quote_currency", "option_type", "base_notional", "strike",
+_FXO_REQUIRED = ("currency_pair", "base_currency", "quote_currency", "option_type", "base_notional",
                  "expiry_date", "settlement_date", "settlement_type", "premium_amount", "premium_currency", "premium_payment_date")
+_FXO_STYLE_REQUIRED = {"EUROPEAN": ("strike",), "AMERICAN": ("strike",), "DIGITAL": ("strike", "payout", "payout_currency"),
+                       "BARRIER": ("strike", "barrier_type", "barrier"), "DOUBLE_BARRIER": ("strike", "barrier_type", "lower", "upper"),
+                       "TOUCH": ("payout", "payout_currency", "touch_type")}
 _FXO_NDO_REQUIRED = ("settlement_currency", "fixing_source")
 _FXO_UPPER = ("currency_pair", "base_currency", "quote_currency", "option_type", "exercise_style", "settlement_type", "settlement_currency",
-              "premium_currency")
-_FXO_NUMERIC = ("base_notional", "quote_notional", "strike", "premium_amount")
+              "premium_currency", "style", "payout_currency", "barrier_type", "touch_type", "barrier_monitoring")
+_FXO_NUMERIC = ("base_notional", "quote_notional", "strike", "premium_amount", "payout", "barrier", "lower", "upper", "rebate")
 
 
 def _fx_option_product_v2(trade: Any, own: str, cp: str) -> dict:
     terms = dict(_get(trade, "terms") or {})
-    terms.setdefault("exercise_style", "EUROPEAN")
+    style = str(terms.get("style") or "EUROPEAN").upper()
+    if style not in _FXO_STYLE_REQUIRED:
+        raise ValueError(f"style must be one of {', '.join(_FXO_STYLE_REQUIRED)}")
+    terms["style"] = style
+    terms.setdefault("exercise_style", "AMERICAN" if style == "AMERICAN" else "EUROPEAN")
     terms.setdefault("expiry_time", "10:00 New York")
     terms.setdefault("automatic_exercise", True)
-    missing = [f for f in _FXO_REQUIRED if terms.get(f) in (None, "")]
+    if style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH"):
+        terms.setdefault("barrier_monitoring", "CONTINUOUS")
+    missing = [f for f in _FXO_REQUIRED + _FXO_STYLE_REQUIRED[style] if terms.get(f) in (None, "")]
     st = str(terms.get("settlement_type") or "").upper()
     if st == "NON_DELIVERABLE":
         missing += [f for f in _FXO_NDO_REQUIRED if terms.get(f) in (None, "")]
@@ -335,18 +354,27 @@ def _fx_option_product_v2(trade: Any, own: str, cp: str) -> dict:
         raise ValueError("settlement_type must be DELIVERABLE or NON_DELIVERABLE")
     if str(terms["option_type"]).upper() not in ("CALL", "PUT"):
         raise ValueError("option_type must be CALL or PUT")
-    if str(terms["exercise_style"]).upper() != "EUROPEAN":
-        raise ValueError("exercise_style must be EUROPEAN in Phase 1")
+    if str(terms["exercise_style"]).upper() != ("AMERICAN" if style == "AMERICAN" else "EUROPEAN"):
+        raise ValueError("exercise_style must match the style (AMERICAN for an American option, EUROPEAN otherwise)")
+    if style == "BARRIER" and str(terms["barrier_type"]).upper() not in ("UP_IN", "UP_OUT", "DOWN_IN", "DOWN_OUT"):
+        raise ValueError("barrier_type must be UP_IN, UP_OUT, DOWN_IN or DOWN_OUT")
+    if style == "DOUBLE_BARRIER":
+        if str(terms["barrier_type"]).upper() not in ("KNOCK_IN", "KNOCK_OUT"):
+            raise ValueError("barrier_type must be KNOCK_IN or KNOCK_OUT")
+        if Decimal(str(terms["lower"])) >= Decimal(str(terms["upper"])):
+            raise ValueError("lower must be below upper")
+    if style == "TOUCH" and str(terms["touch_type"]).upper() not in ("ONE_TOUCH", "NO_TOUCH", "DOUBLE_ONE_TOUCH", "DOUBLE_NO_TOUCH"):
+        raise ValueError("touch_type must be ONE_TOUCH, NO_TOUCH, DOUBLE_ONE_TOUCH or DOUBLE_NO_TOUCH")
     base, quote = str(terms["base_currency"]).upper(), str(terms["quote_currency"]).upper()
     if str(terms["currency_pair"]).upper() != base + quote:
         raise ValueError("currency_pair must be base_currency followed by quote_currency")
-    if Decimal(str(terms["base_notional"])) <= 0 or Decimal(str(terms["strike"])) <= 0:
+    if Decimal(str(terms["base_notional"])) <= 0 or (terms.get("strike") not in (None, "") and Decimal(str(terms["strike"])) <= 0):
         raise ValueError("base_notional and strike must be positive")
     if str(terms["settlement_date"]) < str(terms["expiry_date"]):
         raise ValueError("settlement_date must be on or after expiry_date")
     buyer, seller = _sides(terms.get("direction"), own, cp, pays=("BUY", "LONG"), gets=("SELL", "SHORT"))
     out = {"product": "FX_NDO" if st == "NON_DELIVERABLE" else "FX_OPTION", "buyer": buyer, "seller": seller}
-    if terms.get("quote_notional") in (None, ""):
+    if terms.get("quote_notional") in (None, "") and terms.get("strike") not in (None, ""):
         terms["quote_notional"] = str(Decimal(str(terms["base_notional"])) * Decimal(str(terms["strike"])))
     for f in _FXO_FIELDS:
         v = terms.get(f)
@@ -356,6 +384,8 @@ def _fx_option_product_v2(trade: Any, own: str, cp: str) -> dict:
             v = _num_str(v)
         if f == "automatic_exercise":
             v = bool(v) if v not in (None, "") else True
+        if f == "pay_at_hit":
+            v = bool(v) if v not in (None, "") else (False if style == "TOUCH" else None)
         out[f] = normalise(v)
     return out
 

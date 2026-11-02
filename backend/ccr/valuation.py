@@ -135,19 +135,30 @@ class NettingSet:
     def _fx_option(self, t, mkt) -> dict:
         """A European FX option as an item: the strike, expiry and settlement from the terms, the vol from the
         day's {PAIR}_VOL surface at the option's own expiry and strike (desk default when there is none)."""
+        from api.routes.currencies import spec_from
         from pricing.fx_vol import lookup_vol
         pair, terms = _currency_terms(t)
         base, quote = pair[:3], pair[3:]
         S = mkt.spot(pair) if mkt is not None else None
         T_e = max(years(self.asof, terms["expiry"]), 1 / 365)
-        F = S or terms["K"]                                         # the smile is read at the strike against today's level
-        vol, tier, note = lookup_vol(mkt.quotes(f"{pair}_VOL") if mkt is not None else None, pair, T_e, F, terms["K"], None)
+        spec = spec_from(terms.get("style_fields") or {}, terms["option_type"], terms["K"])
+        if spec.strike is None and spec.style != "TOUCH":
+            spec.strike = S or 1.0
+        K = spec.strike if spec.strike is not None else (S or 1.0)
+        F = S or K                                                  # the smile is read at the strike against today's level
+        vol, tier, note = lookup_vol(mkt.quotes(f"{pair}_VOL") if mkt is not None else None, pair, T_e, F, K, None)
         sign = 1.0 if str(terms.get("direction", "BUY")).upper() == "BUY" else -1.0
-        self.options.append({"trade_ref": t.trade_ref, "kind": f"FX {terms['option_type']} {pair}", "strike": terms["K"],
-                             "strike_text": f"{terms['K']:g} {quote} per {base}", "expiry": terms["expiry"].isoformat(),
-                             "vol_bp": vol * 1e4, "vol_pct": round(vol * 100, 3), "vol_source": f"{tier}: {note}", "side": "LONG" if sign > 0 else "SHORT"})
-        return {"trade": t, "kind": "FX_OPTION", "ccy": quote, "pair": pair, "base": base, "quote": quote, "terms": terms, "K": terms["K"],
-                "option_type": terms["option_type"], "expiry": terms["expiry"], "settle": terms["settle"], "N": terms["notional"], "vol": vol,
+        label = f"FX {spec.option_type} {pair}" if spec.style in ("EUROPEAN", "AMERICAN") else f"FX {spec.style.replace('_', ' ')} {pair}"
+        if spec.style == "AMERICAN":
+            label = f"FX AMERICAN {spec.option_type} {pair}"
+        detail = (f"{spec.barrier_type} at {spec.barrier:g}" if spec.style == "BARRIER" else f"{spec.barrier_type} [{spec.lower:g}, {spec.upper:g}]" if spec.style == "DOUBLE_BARRIER"
+                  else f"{spec.touch_type} {'at ' + format(spec.barrier, 'g') if spec.barrier else '[' + format(spec.lower, 'g') + ', ' + format(spec.upper, 'g') + ']'}, pays {spec.payout:g} {quote if spec.payout_currency == 'QUOTE' else base}" if spec.style == "TOUCH"
+                  else f"pays {spec.payout:g} {quote if spec.payout_currency == 'QUOTE' else base}" if spec.style == "DIGITAL" else "")
+        self.options.append({"trade_ref": t.trade_ref, "kind": label, "strike": K, "strike_text": (f"{K:g} {quote} per {base}" if spec.style != "TOUCH" else "—") + (f" · {detail}" if detail else ""),
+                             "expiry": terms["expiry"].isoformat(), "vol_bp": vol * 1e4, "vol_pct": round(vol * 100, 3), "vol_source": f"{tier}: {note}",
+                             "side": "LONG" if sign > 0 else "SHORT"})
+        return {"trade": t, "kind": "FX_OPTION", "ccy": quote, "pair": pair, "base": base, "quote": quote, "terms": terms, "K": K, "spec": spec,
+                "option_type": spec.option_type, "expiry": terms["expiry"], "settle": terms["settle"], "N": terms["notional"], "vol": vol,
                 "sign": sign, "maturity": terms["settle"]}
 
     @property

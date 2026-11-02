@@ -248,12 +248,14 @@ def _value_swaption_long(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, 
 
 # ── FX options ───────────────────────────────────────────────────────────────
 def value_fx_option(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float], flat_base: dict[str, float]) -> np.ndarray:
-    """A European FX option on the paths (pricing/fx_option.py's model). Before expiry: Garman–Kohlhagen on the
-    path's forward to settlement (spot × DF_base/DF_quote, the base either a simulated curve or the flat rate
-    the forward uses) at the vol the option was valued with today, held flat; the vol does not move along the
-    path, as for the swaptions. At and after expiry: the payoff is fixed on the spot at the expiry grid point
-    and discounted to settlement until paid. Sign: from our side (sold options negative)."""
-    from pricing.fx_option import gk_value
+    """An FX option on the paths, any style (pricing/fx_exotic.py's model). Before expiry: the style's closed form
+    on the path's spot with the continuous rates the path's bonds imply to settlement, at the vol the option was
+    valued with today, held flat; barriers and touches carry which paths have already knocked, monitored at the
+    grid points seen so far (discrete, where the pricer is continuous: a stated simplification); an American
+    option is valued as its European on the paths (early exercise is not simulated: a lower bound). At and after
+    expiry: the payoff fixed on the expiry grid point (knock status included) and discounted to settlement until
+    paid. Sign: from our side (sold options negative)."""
+    from pricing.fx_exotic import ExoticSpec, knocked_so_far, value_on_paths
     asof = paths.grid[0]; t_i = float(paths.t[i])
     T_e, T_s = _years(asof, item["expiry"]), _years(asof, item["settle"])
     if T_s <= t_i + 1e-9:
@@ -261,19 +263,38 @@ def value_fx_option(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float
     qkey = f"RATES:{CURVE_OF.get(item['quote'], item['quote'] + '_OIS')}"
     dfq = bond(paths, qkey, i, T_s)
     S = paths.s[f"SPOT:{item['pair']}"]
-    K, call, N = item["K"], item["option_type"] == "CALL", item["N"]
+    spec = item.get("spec") or ExoticSpec("EUROPEAN", item["option_type"], strike=item["K"])
     k = fx_to_usd.get(item["quote"], 1.0) * float(item.get("sign", 1.0))
+    N = item["N"]
+    scale = N if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else 1.0
+    i_exp = min(j for j in range(len(paths.t)) if float(paths.t[j]) >= T_e - 1e-9)
+    j_last = min(i, i_exp)
+    knocked = knocked_so_far(spec, S[:, :j_last + 1]) if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else np.zeros(paths.n_paths, dtype=bool)
     if t_i < T_e - 1e-9:
         bkey = f"RATES:{CURVE_OF.get(item['base'])}" if item["base"] in CURVE_OF else None
         dfb = bond(paths, bkey, i, T_s) if bkey and bkey in paths.x else np.full(paths.n_paths, math.exp(-flat_base.get(item["pair"], 0.0) * (T_s - t_i)))
-        F = S[:, i] * dfb / dfq
-        vol = item["vol"]
-        sT = vol * math.sqrt(T_e - t_i)
-        d1 = (np.log(F / K) + 0.5 * sT * sT) / sT
-        d2 = d1 - sT
-        from scipy.stats import norm
-        unit = (F * norm.cdf(d1) - K * norm.cdf(d2)) if call else (K * norm.cdf(-d2) - F * norm.cdf(-d1))
-        return k * N * dfq * unit
-    i_exp = min(j for j in range(len(paths.t)) if float(paths.t[j]) >= T_e - 1e-9)
-    payoff = np.maximum(S[:, i_exp] - K, 0.0) if call else np.maximum(K - S[:, i_exp], 0.0)
-    return k * N * payoff * dfq
+        tau = T_e - t_i
+        # as the pricer: the forward and discount factor to settlement, spread over the time to expiry; the style
+        # formulas take scalar rates, the path mean of the implied continuous rates (rates are a small effect on an
+        # option next to spot and vol; the forward itself is per path through the spot)
+        r_q = -np.log(np.maximum(dfq, 1e-12)) / tau
+        r_b = -np.log(np.maximum(dfb, 1e-12)) / tau
+        rq, rb = float(np.mean(r_q)), float(np.mean(r_b))
+        v = value_on_paths(spec, S[:, i], rq, rb, item["vol"], tau, knocked, 1.0)
+        return k * scale * v
+    # at or after expiry: the payoff fixed at the expiry grid point, with the knock status then
+    from pricing.fx_exotic import _expired
+    S_T = S[:, i_exp]
+    v = np.zeros(paths.n_paths)
+    if spec.style in ("EUROPEAN", "AMERICAN", "DIGITAL"):
+        v = np.array([_expired(spec, float(s), 1.0) for s in S_T])
+    elif spec.style in ("BARRIER", "DOUBLE_BARRIER"):
+        van = np.array([_expired(ExoticSpec("EUROPEAN", spec.option_type, strike=spec.strike), float(s), 1.0) for s in S_T])
+        alive_pays = spec.barrier_type.endswith("OUT")
+        v = np.where(knocked != alive_pays, van, spec.rebate if spec.style == "BARRIER" else 0.0)
+    else:                                       # TOUCH
+        hit_pays = spec.touch_type in ("ONE_TOUCH", "DOUBLE_ONE_TOUCH")
+        v = np.where(knocked == hit_pays, spec.payout, 0.0)
+        if spec.pay_at_hit:
+            v = np.where(knocked, 0.0, v)        # paid at the hit, already settled
+    return k * scale * v * dfq
