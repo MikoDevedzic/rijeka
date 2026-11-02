@@ -19,6 +19,7 @@ GET /api/xva/calibration/latest
 """
 
 import json
+import uuid
 import math
 import numpy as np
 from datetime import date, timedelta
@@ -664,6 +665,20 @@ class CurrencyXvaRequest(BaseModel):
     csa: Optional[dict] = None
 
 
+def surface_vol_pct(db, user_id: str, pair: str, t_years: float, forward: float, snapshot=None, lookup=None):
+    """The pair's own surface at the forward's tenor and strike (ATM), in PERCENT as ForwardXvaInput takes it
+    (lookup_vol returns a decimal); (None, None) when the pair has no surface, so the engine's default applies."""
+    from api.routes.currencies import latest_snapshot
+    from pricing.fx_vol import lookup_vol
+    snapshot = snapshot or latest_snapshot
+    lookup = lookup or lookup_vol
+    vs = snapshot(db, user_id, f"{pair}_VOL")
+    if not vs or not getattr(vs, "quotes", None):
+        return None, None
+    v, tier, note = lookup(vs.quotes, pair, t_years, forward, forward, None)
+    return float(v) * 100.0, f"{pair}_VOL surface, ATM at {t_years:.2f}y ({tier}; {getattr(vs, 'valuation_date', '')})"
+
+
 @router.post("/currency")
 def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """XVA for an FX or crypto forward through the rates waterfall (pricing/fx_xva.py)."""
@@ -679,9 +694,12 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
         csa = CSA.from_request(body.csa)
     except Exception as e:      # noqa: BLE001
         raise HTTPException(status_code=422, detail=f"csa: {e}")
+    vol_pct, vol_source = body.vol_pct, ("desk input" if body.vol_pct is not None else None)
+    if vol_pct is None:
+        vol_pct, vol_source = surface_vol_pct(db, user["sub"], pair, float(q["t"]), float(q["forward"]))
     inp = fx_xva.ForwardXvaInput(pair=pair, base_notional=body.base_notional, forward=float(q["forward"]),
                                  strike=float(q["forward_rate"]), t_years=float(q["t"]), df_quote_t=float(q["df_quote"]),
-                                 quote_zero=float(q["quote_rate"]), direction=body.direction, vol_pct=body.vol_pct,
+                                 quote_zero=float(q["quote_rate"]), direction=body.direction, vol_pct=vol_pct, vol_source=vol_source,
                                  spot01=float(q.get("spot01", q.get("delta_quote_per_pct", 0.0))))
     wf, meta = fx_xva.forward_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
                                   ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd,
@@ -701,3 +719,142 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model")},
     }
+
+
+# ── Incremental XVA: the netting set with the trade and without it ───────────────────────────
+
+class IncrementalXvaRequest(BaseModel):
+    counterparty_id: Optional[str] = None
+    trade: Optional[dict] = None          # the booking body the ticket would send (instrument_type, terms, legs, ...)
+    trade_id: Optional[str] = None        # or a stored trade: the marginal effect of removing it
+    n_paths: Optional[int] = Field(default=None, ge=200, le=5000)
+
+
+XVA_KEYS = ("cva", "dva", "fva", "fba", "kva", "mva")
+
+
+def hypothetical_trade(d: dict, counterparty_id, user_id: str):
+    """A Trade-shaped object the credit engine can value without a row: the ticket's booking body, its legs
+    completed per currency convention as POST /api/book/trade would store them."""
+    from types import SimpleNamespace
+    from api.routes._instrument_alias import normalize_instrument_type
+    from api.routes._leg_defaults import complete_leg
+    d = dict(d or {})
+    itype = normalize_instrument_type(d.get("instrument_type"))
+    if not itype:
+        raise HTTPException(status_code=422, detail="trade.instrument_type is required")
+    def _d(k):
+        v = d.get(k)
+        try:
+            return date.fromisoformat(str(v)[:10]) if v else None
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"trade.{k} must be an ISO date")
+    eff, mat = _d("effective_date"), _d("maturity_date")
+    if not mat:
+        raise HTTPException(status_code=422, detail="trade.maturity_date is required")
+    ccy = str(d.get("notional_ccy") or "USD").upper()
+    legs = [complete_leg(dict(l), effective_date=eff, maturity_date=mat, currency=ccy,
+                         discount_curve_id=d.get("discount_curve_id"), forecast_curve_id=d.get("forecast_curve_id"))
+            for l in (d.get("legs") or [])]
+    for lg in legs:
+        for k in ("effective_date", "maturity_date"):
+            if lg.get(k) is not None and not isinstance(lg[k], str):
+                lg[k] = str(lg[k])
+    return SimpleNamespace(id=uuid.uuid4(), trade_ref="THIS TRADE", instrument_type=itype, structure=d.get("structure"),
+                           notional=float(d.get("notional") or 0.0), notional_ccy=ccy, trade_date=_d("trade_date") or date.today(),
+                           effective_date=eff or date.today(), maturity_date=mat, terms=dict(d.get("terms") or {}),
+                           counterparty_id=counterparty_id, user_id=user_id, status="PENDING",
+                           discount_curve_id=d.get("discount_curve_id") or (legs[0].get("discount_curve_id") if legs else None),
+                           forecast_curve_id=d.get("forecast_curve_id"), asset_class=d.get("asset_class"), _legs=legs)
+
+
+def xva_levels(rep: Optional[dict]) -> dict:
+    """The six components and their total from a counterparty report; zeros for an empty set."""
+    x = (rep or {}).get("xva") or {}
+    out = {k: float(x.get(f"{k}_usd") or 0.0) for k in XVA_KEYS}
+    out["total"] = sum(out.values())
+    return out
+
+
+def align_ee(r0: Optional[dict], r1: Optional[dict]) -> dict:
+    """EE profiles on one date grid: the two runs can end on different dates when the new trade is the longest."""
+    g0 = list(zip((r0 or {}).get("grid") or [], (r0 or {}).get("ee_rn") or []))
+    g1 = list(zip((r1 or {}).get("grid") or [], (r1 or {}).get("ee_rn") or []))
+    grid = sorted({d for d, _ in g0} | {d for d, _ in g1})
+    d0, d1 = dict(g0), dict(g1)
+    return {"grid": grid, "without": [round(d0.get(d, 0.0), 2) for d in grid], "with": [round(d1.get(d, 0.0), 2) for d in grid]}
+
+
+@router.post("/incremental")
+def incremental_xva(body: IncrementalXvaRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """The counterparty's netting set valued on the credit engine's risk-neutral paths with the trade and
+    without it, same paths (common random numbers): the charge the desk quotes, not the trade on its own."""
+    if not body.trade and not body.trade_id:
+        raise HTTPException(status_code=422, detail="trade or trade_id is required")
+    heavy(user, "counterparty run", 4)
+    import time as _time
+    from ccr.report import LIVE, counterparty_report, settings
+    from db.models import Counterparty, Trade
+    from pnl.market import Market
+    from risk.report import firm_of, template_uid
+    t0 = _time.time()
+    uid = user["sub"]
+    dates = Market.dates(db, uid, upto=date.today())
+    if not dates:
+        raise HTTPException(status_code=422, detail="No market dates: save or snap a curve first.")
+    asof = dates[-1]
+    mkt = Market(db, uid, asof)
+    st = dict(settings(db, firm_of(db, uid)))
+    if body.n_paths:
+        st["n_paths"] = int(body.n_paths)
+    tpl = template_uid(db)
+    cp = None
+    if body.counterparty_id:
+        try:
+            cpid = uuid.UUID(body.counterparty_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="counterparty_id must be a UUID")
+        cp = db.query(Counterparty).filter(Counterparty.id == cpid, Counterparty.user_id == uuid.UUID(uid)).first()
+        if cp is None:
+            raise HTTPException(status_code=404, detail="Counterparty not found")
+    cp_id = cp.id if cp else None
+    existing = [t for t in db.query(Trade).filter(Trade.user_id == uuid.UUID(uid), Trade.counterparty_id == cp_id).all() if t.status in LIVE]
+    if body.trade_id:
+        try:
+            tid = uuid.UUID(body.trade_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="trade_id must be a UUID")
+        if not any(t.id == tid for t in existing):
+            raise HTTPException(status_code=404, detail="Trade not found in this counterparty's live set")
+        with_trades, without, mode = existing, [t for t in existing if t.id != tid], "MARGINAL"
+    else:
+        hyp = hypothetical_trade(body.trade, cp_id, uid)
+        with_trades, without, mode = existing + [hyp], existing, "INCREMENTAL"
+
+    def run(trades):
+        if not trades:
+            return None
+        try:
+            return counterparty_report(db, user, cp, trades, asof, mkt, st, tpl, exposure=False)
+        except HTTPException:
+            raise
+        except Exception as e:          # noqa: BLE001
+            db.rollback()
+            raise internal(422, "The credit engine could not value this set", e)
+
+    r0, r1 = run(without), run(with_trades)
+    if r1 is None or r1.get("empty"):
+        reasons = "; ".join(f"{x.get('trade_ref')}: {x.get('reason')}" for x in (r1 or {}).get("skipped") or [])
+        raise HTTPException(status_code=422, detail=f"The trade cannot be valued on the exposure paths yet. {reasons}".strip())
+    w0, w1 = xva_levels(r0), xva_levels(r1)
+    inc = {k: round(w1[k] - w0[k], 2) for k in list(XVA_KEYS) + ["total"]}
+    notes = ["common random numbers: both runs draw the same paths (seed 7), so the difference is the trade, not the noise",
+             "risk-neutral measure: the Hull-White parameters calibrated to the swaption surface, the spots' implied vols, the drift from the curves",
+             "the CSA, threshold and MTA are the counterparty record's; IM when the record exchanges it"]
+    if r1.get("skipped"):
+        notes.append("not on the paths: " + "; ".join(f"{x.get('trade_ref')} ({x.get('reason')})" for x in r1["skipped"]))
+    return {"mode": mode, "counterparty": r1.get("counterparty"), "counterparty_id": r1.get("counterparty_id"), "asof": asof.isoformat(),
+            "csa": r1.get("csa_model"), "measure": "RISK_NEUTRAL", "n_paths": r1.get("n_paths"), "months": r1.get("months"),
+            "other_trades": len(without), "without": {k: round(v, 2) for k, v in w0.items()}, "with": {k: round(v, 2) for k, v in w1.items()},
+            "incremental": inc, "ee": align_ee(r0, r1), "cp_cds_bp": float(st.get("cp_cds_bp") or 85.0), "lgd": float(st.get("lgd") or 0.4),
+            "notes": notes, "seconds": round(_time.time() - t0, 1)}

@@ -48,7 +48,8 @@ const PHASES = [
   { title: 'FX & DIGITAL ASSETS', status: 'LIVE', items: [
     ['DONE', 'FX spot, forwards and NDFs on G10 pairs and non-deliverable forwards on BTC, ETH and SOL on one interest-rate-parity model, each currency on its own curve, a digital asset at its funding rate; public spot feeds; one FX · CRYPTO page; booked and confirmed on chain in the ISDA Digital Asset Derivatives Definitions\' vocabulary; Excel replications for the EURUSD forward and the crypto NDF with the engine\'s NPV, FX01 / CRY01, IR01 and FUND01'],
     ['DONE', 'Digital-asset options on BTC, ETH and SOL: European, American, digital, barrier, double barrier and touch on the FX option engine with the funding rate as the carry, cash-settled (NDO); CRY01, IR01 (discounting) and FUND01; vol surfaces, VOL step, VaR, stress, exposure paths, canonical record, Excel replications'],
-    ['NEXT', 'XVA replication for FX and digital assets (the lognormal forward from the pair\'s surface) and for the real-world counterparty-credit paths (historical blocks)'],
+    ['DONE', 'XVA replication for FX and digital assets: the lognormal forward rebuilt in cells from the engine\'s draws (or re-rolled live), the pair\'s surface interpolated to the forward\'s tenor with the smile fixed point at the forward, the CSA and margin-period bridge, IM from the spot sensitivity, the full waterfall, a convergence sheet'],
+    ['NEXT', 'XVA replication for the real-world counterparty-credit paths (historical blocks)'],
     ['NEXT', 'Implied crypto vol surfaces from a venue (Deribit DVOL and chain marks) in place of the realised-vol-scaled synthetic ones; venue adapters for crypto OTC desks'],
   ]},
   { title: 'PHASE 2 · FX & CREDIT', status: 'PARTIAL', items: [

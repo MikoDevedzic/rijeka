@@ -8,6 +8,7 @@
 import { useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
 import RateCurveCanvas from '../market-data/RateCurveCanvas'
+import IncrementalXva from './IncrementalXva'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const fmt = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d })
@@ -18,7 +19,7 @@ const lbl = { fontSize: '0.8rem', letterSpacing: '0.12em', color: 'var(--text-di
 const inp = { background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, color: 'var(--text-hi)', fontFamily: 'var(--mono)', fontSize: '0.8125rem', padding: '4px 6px', width: '100%', outline: 'none' }
 const secHdr = { fontSize: 12, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--text)', fontFamily: 'var(--sans)', paddingLeft: 10, borderLeft: '3px solid var(--accent)', lineHeight: 1.2, margin: '14px 0 8px' }
 
-export default function FxXvaPanel({ quote }) {
+export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId }) {
   const payload = quote ? { pair: `${quote.base_currency}${quote.quote_currency}`, base_notional: quote.base_notional,
     settlement_date: quote.settlement_date, forward_rate: quote.forward_rate, direction: quote.direction } : null
   const [p, setP] = useState({ vol_pct: '', cp_cds_bp: 85, own_cds_bp: 42, ftp_bp: 55, lgd: 40, hurdle: 12, paths: 2000 })
@@ -29,17 +30,21 @@ export default function FxXvaPanel({ quote }) {
   const [err, setErr] = useState(null)
   const set = (k) => (e) => setP(s => ({ ...s, [k]: e.target.value }))
 
+  const incremental = (
+    <IncrementalXva counterpartyId={counterpartyId} counterpartyName={counterpartyName} buildTrade={buildTrade}
+      tradeId={tradeId} priced={!!quote} ccy={quote?.quote_currency || 'USD'} />
+  )
+
   if (quote?.shape === 'OPTION') {
-    // The pre-trade waterfall simulates a forward's exposure. An option's exposure (one-sided for the
-    // buyer, the payoff fixed at expiry) is simulated on the counterparty credit run once the trade is
-    // booked (RISK › CREDIT), with the same CSA presets.
+    // The stand-alone waterfall below simulates a forward's exposure, so an option has no number of its
+    // own here: its exposure (one-sided for the buyer, the payoff fixed at expiry) is valued on the credit
+    // run's paths (Garman–Kohlhagen before expiry), which is exactly what the incremental run reports.
     return (
-      <div className="tbw-no-drag" style={{ padding: '24px 16px' }}>
-        <div className="empty-state" style={{ padding: '32px 24px' }}>
-          <div className="empty-icon">◇</div>
-          <div className="empty-title">XVA for an FX option comes from the credit run</div>
-          <div className="empty-sub">This tab's waterfall is the forward's. Book the option and open RISK › CREDIT: the counterparty's netting set values it on the simulated paths (Garman–Kohlhagen before expiry, the payoff fixed at expiry) and reports CVA, DVA, FVA and the exposure profile with the CSA applied.</div>
+      <div className="tbw-no-drag" style={{ padding: '0 0 8px' }}>
+        <div style={{ padding: '14px 16px 0', fontSize: '0.75rem', color: 'var(--text-mute)', lineHeight: 1.45 }}>
+          The forward's stand-alone waterfall does not apply to an option. Its XVA is the netting set's charge below: the credit engine values the option on the simulated paths (Garman–Kohlhagen before expiry, the payoff fixed at expiry) with the counterparty's CSA applied.
         </div>
+        {incremental}
       </div>
     )
   }
@@ -134,6 +139,7 @@ export default function FxXvaPanel({ quote }) {
       <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginTop: 6 }}>
         ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA · same waterfall and CSA model as the rates book · {ccy}
       </div>
+      <div style={{ margin: '12px -16px 0', borderTop: '1px solid var(--border)' }}>{incremental}</div>
     </div>
   )
 }

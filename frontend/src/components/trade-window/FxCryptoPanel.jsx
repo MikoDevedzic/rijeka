@@ -187,7 +187,10 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       },
     }
   }
-  useImperativeHandle(ref, () => ({ price, payload, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit])
+  // The trade POST body as TradeWindow sends it, minus the parties, desk and book: what the
+  // incremental XVA run values as the hypothetical trade (POST /api/xva/incremental).
+  const bookBody = () => { const today = iso(new Date()); return { ...payload(), trade_date: today, effective_date: today } }
+  useImperativeHandle(ref, () => ({ price, payload, bookBody, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit])
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────
   const dp = rateDp(pair)

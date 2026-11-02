@@ -267,6 +267,53 @@ def test_xva_rates_workbook_carries_the_engine_draws_and_a_live_mode():
     assert len(wb["Convergence"]._charts) == 1 and total == pytest.approx(eng["runs"]["BILATERAL"][1].xva_total)
 
 
+def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
+    import numpy as np
+    from methodology.fx_xva_workbook import N_PATHS, XVA_CRYPTO_CASE, XVA_FX_CASE, engine_runs, forward_inputs
+    from pricing.csa import CSA
+    from pricing.fx_vol import quotes_from_grid, vol_at
+    from pricing.fx_xva import forward_xva
+    mkt = _mkt()
+    for product, case in (("xva_fx", XVA_FX_CASE), ("xva_crypto", XVA_CRYPTO_CASE)):
+        fi = forward_inputs(mkt, case)
+        eng = engine_runs(fi)
+        assert eng["noise"]["z"].shape == (N_PATHS, eng["T"]) and eng["T"] >= 6 and abs(eng["noise"]["z"].mean()) < 0.1
+        assert set(eng["runs"]) == {"UNCOLLATERALISED", "BILATERAL", "ON_CHAIN"}
+        assert eng["runs"]["BILATERAL"][1].cva > eng["runs"]["UNCOLLATERALISED"][1].cva           # margining cuts the cost (less negative)
+        assert fi["inp"].vol_pct is None and fi["pillars"] == []                                    # the test market has no surface: the engine's default, labelled
+        data, total = rep.build(product, mkt)
+        wb = load_workbook(io.BytesIO(data))
+        for s_ in ("Model", "Calibration", "Normals", "Paths", "Exposure", "Waterfall", "Engine", "Convergence", "Checks"):
+            assert s_ in wb.sheetnames
+        assert any(dv.formula1 == '"ENGINE,LIVE"' for dv in wb["Model"].data_validations.dataValidation)
+        assert any(dv.formula1 == '"UNCOLLATERALISED,BILATERAL,ON_CHAIN"' for dv in wb["Exposure"].data_validations.dataValidation)
+        assert wb["Normals"]["B6"].value == pytest.approx(float(eng["noise"]["z"][0, 0]))          # the engine's first draw, as a value
+        assert wb["Paths"]["B6"].value.startswith('=IF(Mode="ENGINE",Normals!B6,NORMSINV(RAND()))')
+        assert "default" in wb["Calibration"]["B4"].value and wb["Calibration"]["B5"].value == pytest.approx(eng["sigma"])
+        # the Engine sheet's BILATERAL column is forward_xva's own run on the same draws and bridge seed
+        wf, _ = forward_xva(fi["inp"], CSA.from_request({"preset": "BILATERAL"}), n_paths=N_PATHS, waterfall_rng=np.random.default_rng(43))
+        es = wb["Engine"]
+        assert es["C4"].value == "BILATERAL"
+        got = {es.cell(row=r, column=1).value: es.cell(row=r, column=3).value for r in range(5, 17)}
+        for label, attr in (("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("XVA total", "xva_total"), ("IM₀", "im_0"), ("EAD at t = 0", "ead_0")):
+            assert got[label] == pytest.approx(getattr(wf, attr))
+        assert total == pytest.approx(wf.xva_total) and wf.im_0 == pytest.approx(abs(fi["fwd"].spot01) * eng["rw"])
+        formulas = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")]
+        assert any("NORMSDIST(" in f or "NORMSINV(" in f for f in formulas) and not any("NORM.S.DIST" in f or "_xlfn" in f for f in formulas)
+        assert any("LIVE" in str(c.value) for row in wb["Checks"].iter_rows(min_row=5, min_col=8, max_col=8) for c in row)
+        assert len(wb["Convergence"]._charts) == 1
+    # with a surface saved, the Calibration sheet carries the quotes and σ is the smile vol at K = F, as the XVA route reads it
+    mkt.fx_vol_quotes = quotes_from_grid({"1M": {"ATM": 7.2, "RR25": -0.35, "BF25": 0.2}, "6M": {"ATM": 7.6, "RR25": -0.45, "BF25": 0.25}, "1Y": {"ATM": 7.9, "RR25": -0.5, "BF25": 0.28}})
+    fi = forward_inputs(mkt, XVA_FX_CASE)
+    assert len(fi["pillars"]) == 3 and fi["inp"].vol_pct == pytest.approx(100 * vol_at(fi["pillars"], fi["inp"].t_years, fi["inp"].forward, fi["inp"].forward))
+    assert 7.5 < fi["inp"].vol_pct < 7.7 and fi["inp"].vol_pct != pytest.approx(7.6 + 0.3 * (fi["inp"].t_years - 0.5) / 0.5)   # the smile moves it off the interpolated ATM
+    data, _ = rep.build("xva_fx", mkt)
+    wb = load_workbook(io.BytesIO(data))
+    cal = wb["Calibration"]
+    assert cal["A10"].value == "1M" and cal["C10"].value == 7.2 and cal["D11"].value == -0.45 and str(cal["B5"].value).startswith("=F")
+    assert any("NORMSDIST(" in str(c.value) for row in cal.iter_rows(min_col=4, max_col=4) for c in row)
+
+
 def test_hw1f_mc_matches_the_route_loop():
     """The extracted simulation is the route's loop: same rng order, same reconstitution. Checked against a
     re-implementation here at a few points, and the par-swap anchor near zero on a flat curve."""

@@ -7,6 +7,7 @@
 import { lazy, Suspense, useMemo } from 'react'
 import Loading from '../common/Loading'
 import { getSessionSafe } from '../../lib/session'
+import IncrementalXva from './IncrementalXva'
 // The tab's code is fetched the first time the tab is opened, not with the shell.
 const XVATab = lazy(() => import('../blotter/XVATab'))
 
@@ -19,6 +20,11 @@ export default function XvaPanel({
   result,
   xvaParamsRef,
   onSimResult,
+  // Incremental XVA (the counterparty's netting set with and without this trade)
+  counterpartyId,
+  counterpartyName,
+  buildTrade,
+  tradeId,
 }) {
   // Adapter refs: read-only snapshots of current state, rebuilt on change.
   const notionalRef = useMemo(() => ({
@@ -33,6 +39,7 @@ export default function XvaPanel({
   }, [state.coupon, state.parRate])
 
   return (
+    <>
     <Suspense fallback={<Loading />}>
     <XVATab
       // Trade context — null for new trades (XVATab tolerates this)
@@ -73,5 +80,14 @@ export default function XvaPanel({
       swaptionResult={productKey === 'IR_SWAPTION' ? result : null}
     />
     </Suspense>
+    <IncrementalXva
+      counterpartyId={counterpartyId}
+      counterpartyName={counterpartyName}
+      buildTrade={buildTrade}
+      tradeId={tradeId}
+      priced={!!result}
+      ccy={state.ccy || 'USD'}
+    />
+    </>
   )
 }

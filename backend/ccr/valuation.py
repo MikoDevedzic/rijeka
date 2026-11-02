@@ -59,7 +59,10 @@ class NettingSet:
             itype = str(t.instrument_type or "").upper()
             try:
                 if itype in SWAPS or itype in O.SWAPTIONS:
-                    legs = [_leg_to_dict(l) for l in db.query(TradeLeg).filter(TradeLeg.trade_id == t.id).order_by(TradeLeg.leg_seq).all()]
+                    # a hypothetical trade (the ticket's incremental XVA) carries its legs; a stored one has them in the table
+                    own = getattr(t, "_legs", None)
+                    legs = [dict(l) for l in own] if own is not None else \
+                        [_leg_to_dict(l) for l in db.query(TradeLeg).filter(TradeLeg.trade_id == t.id).order_by(TradeLeg.leg_seq).all()]
                     if not legs:
                         raise ValueError("no legs")
                     ccy = (legs[0].get("currency") or t.notional_ccy or "USD").upper()

@@ -173,6 +173,10 @@ tree, the Swagger page live but unlinked, `frontend/README.md` is Vite boilerpla
   counterparty's ref, proof link and live follow); the gate and the 4,156-line legacy window, its CSS and
   the curve designer are deleted; vitest added with a CI step. View mode was verified by reading and by
   the contract test, not in a browser.
+- **After C, same evening**: XVA on every ticket from the credit engine (incremental charge, with and
+  without the trade on the same paths; options included), the stand-alone forward XVA on the pair's own
+  surface, Excel replications of the FX and digital-asset forward XVA (50 checks each, all PASS); a
+  new-version bar so an open tab learns of a deploy.
 
 ## The plan to 90+
 

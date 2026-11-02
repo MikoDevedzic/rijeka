@@ -56,6 +56,7 @@ class ForwardXvaInput:
     direction: str = "BUY"      # of the base currency
     vol_pct: Optional[float] = None
     spot01: Optional[float] = None   # PV for +1 % spot, drives SIMM-style IM
+    vol_source: Optional[str] = None # where vol_pct came from (the pair's surface, a desk input); None = the demo default
 
 
 def monthly_grid(t_years: float) -> tuple[int, float]:
@@ -64,8 +65,10 @@ def monthly_grid(t_years: float) -> tuple[int, float]:
     return steps, t_years / steps
 
 
-def simulate_paths(inp: ForwardXvaInput, n_paths: int = 2000, seed: int = 42) -> tuple[np.ndarray, list[float], float]:
-    """MtM paths from our side on the monthly grid, P(0, k·dt) on the quote curve, and V0."""
+def simulate_paths(inp: ForwardXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
+    """MtM paths from our side on the monthly grid, P(0, k·dt) on the quote curve, and V0.
+    noise_out, when given, receives the standard normals drawn (z, n_paths × steps) and the forward paths (f_t),
+    so the Excel replication can rebuild every path from the engine's own draws."""
     steps, dt = monthly_grid(inp.t_years)
     sigma = (inp.vol_pct if inp.vol_pct is not None else default_vol_pct(inp.pair)) / 100.0
     sign = 1.0 if str(inp.direction).upper() == "BUY" else -1.0
@@ -79,6 +82,8 @@ def simulate_paths(inp: ForwardXvaInput, n_paths: int = 2000, seed: int = 42) ->
     df_t_T = np.array([inp.df_quote_t / p0[k] for k in range(1, steps + 1)])
     paths = sign * inp.base_notional * (f_t - inp.strike) * df_t_T[None, :]
     v0 = sign * inp.base_notional * (inp.forward - inp.strike) * inp.df_quote_t
+    if noise_out is not None:
+        noise_out.update(z=z, f_t=f_t, df_t_T=df_t_T, sigma=sigma, steps=steps, dt=dt)
     return paths, p0, v0
 
 
@@ -86,8 +91,8 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
                 own_cds_bp: float = 42.0, ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40,
                 own_lgd: float = 0.40, hurdle_rate: float = 0.12, capital_model: str = "sa_ccr",
                 counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None, own_cds_curve=None,
-                ftp_curve=None) -> tuple[WaterfallResult, dict]:
-    paths, p0, v0 = simulate_paths(inp, n_paths=n_paths)
+                ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None) -> tuple[WaterfallResult, dict]:
+    paths, p0, v0 = simulate_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     steps, dt = monthly_grid(inp.t_years)
     rw = im_risk_weight(inp.pair)
     im_m = abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None
@@ -98,9 +103,9 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         ir01=None, simm_im_m=im_m,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa)
+    wf = run_waterfall(paths, v0, p0, params, csa, **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     meta = {"vol_pct": inp.vol_pct if inp.vol_pct is not None else default_vol_pct(inp.pair),
-            "vol_source": "desk input" if inp.vol_pct is not None else "demo default (no public vol surface)",
+            "vol_source": (inp.vol_source or "desk input") if inp.vol_pct is not None else "demo default (no surface for this pair)",
             "im_rw_per_pct": rw, "im_basis": "SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM",
-            "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward, flat vol, same waterfall as rates"}
+            "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward at the surface's ATM vol to settlement, same waterfall as rates"}
     return wf, meta

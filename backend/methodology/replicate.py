@@ -83,6 +83,14 @@ PRODUCTS = [
      "default": "Pay 3.643% on USD 10m for 2y · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · a, σ from the swaption calibration · presets uncollateralised / bilateral 10bd / on-chain 5bd",
      "formula": "r = x + α(t), x stepped exactly; P(t,T) = A·e^(−B·r); V = (K·annuity − (1 − P))·N; C from V(t−δ) by Brownian bridge; EE/ENE/PFE; CVA, DVA, FVA, FBA, SA-CCR EAD → KVA, SIMM IM → MVA; RMSE of the fit and a grid around it",
      "replication": "xlsx"},
+    {"id": "xva_fx", "name": "XVA on an FX forward: lognormal forward from the pair's surface, CSA, waterfall", "group": "Counterparty risk", "section": "9-10",
+     "default": "Buy EUR 10m six months forward at the fair forward · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · σ from the EURUSD surface at K = F · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "formula": "F_t = F₀·exp(−σ²t/2 + σ·W); V = side·N·(F_t − K)·DF_q(t,T); σ = ATM/RR/BF interpolated to T, Malz smile at Δ = N(½σ√T); C from V(t−δ) by Brownian bridge; EE/ENE/PFE; CVA, DVA, FVA, FBA, SA-CCR EAD → KVA, IM = SIMM FX weight × FX01 → MVA",
+     "replication": "xlsx"},
+    {"id": "xva_crypto", "name": "XVA on a crypto NDF: lognormal forward from the pair's surface, CSA, waterfall", "group": "Counterparty risk", "section": "9-10",
+     "default": "Buy 10 BTC six months forward, USD-settled, at the fair forward · monthly grid · 200 paths (ENGINE or LIVE) · σ from the BTCUSD surface at K = F, or the engine's default without one · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "formula": "the FX forward's book with the funding rate as the base rate; IM = an assumed weight × CRY01 (a digital asset is outside SIMM), labelled",
+     "replication": "xlsx"},
     {"id": "xva", "name": "XVA under a CSA: exposure and collateral", "group": "Counterparty risk", "section": "9-10",
      "default": "Monte Carlo MtM paths (HW1F for rates, lognormal forward for FX and digital assets); VM lagged by the MPoR, IM exchanged; E⁺ = max(V − C − IM, 0), E⁻ = min(V − C + IM, 0), PFE 95%",
      "formula": "C(t) = max(V(t−δ) − TH_cp, 0) − max(−V(t−δ) − TH_own, 0), zero below MTA; presets uncollateralised / bilateral 10bd / on-chain 5bd",
@@ -920,9 +928,20 @@ def xva_rates_workbook(mkt):
     return _b(mkt)
 
 
+def xva_fx_workbook(mkt):
+    from methodology.fx_xva_workbook import xva_fx_workbook as _b
+    return _b(mkt)
+
+
+def xva_crypto_workbook(mkt):
+    from methodology.fx_xva_workbook import xva_crypto_workbook as _b
+    return _b(mkt)
+
+
 BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook, "xva_rates": xva_rates_workbook,
             "fx_forward": fx_forward_workbook, "fx_option": fx_option_workbook, "fx_option_styles": fx_option_styles_workbook,
-            "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook, "crypto_option_styles": crypto_option_styles_workbook}
+            "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook, "crypto_option_styles": crypto_option_styles_workbook,
+            "xva_fx": xva_fx_workbook, "xva_crypto": xva_crypto_workbook}
 
 
 def build(product: str, mkt: Market) -> tuple[bytes, float]:

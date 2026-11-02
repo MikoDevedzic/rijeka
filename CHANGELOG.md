@@ -5,6 +5,10 @@ methodology document carries its own version (v1.2). Commits on `main` are the d
 
 ## 0.6.0 · 2 November 2026 (launch candidate)
 
+- XVA on every ticket: an incremental charge from the credit engine (the counterparty's netting set with
+  the trade and without it, same paths) for rates, FX and digital-asset products, options included; the
+  stand-alone forward XVA reads the pair's own vol surface; Excel replications of the FX and digital-asset
+  forward XVA with the engine's draws.
 - Licence: the market-risk, counterparty-credit and P&L engines (`backend/risk`, `backend/ccr`, `backend/pnl`)
   move from the platform (BSL 1.1) to the engine side (Apache-2.0), alongside pricing and chain.
 - Launch audit: three independent reviews, the S1 list fixed the same day (tenant scope on the

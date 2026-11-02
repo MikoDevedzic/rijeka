@@ -41,7 +41,7 @@ import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, INDEX_CURVE } from './booking'
+import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, INDEX_CURVE } from './booking'
 import { TENOR_Y, EXPIRY_Y } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
@@ -631,6 +631,23 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   }, [booking, pricing, economics, onBook])
 
+  // Incremental XVA (XVA tab): the counterparty's netting set with and without
+  // this trade. A stored or just-booked trade goes by id (the marginal effect of
+  // removing it); a hypothetical one as the body the booking would send. The
+  // rates builder throws when the ticket cannot be booked yet (a swaption with a
+  // blank strike before pricing): IncrementalXva shows the message as the reason
+  // its button is disabled.
+  const incrementalTradeId  = bookedTrade?.id || null
+  const counterpartyName    = useMemo(() =>
+    refData.counterparties.find(c => c.id === economics.counterpartyId)?.name
+      || initialTrade?.counterparty_name || null,
+    [refData.counterparties, economics.counterpartyId, initialTrade])
+  const buildRatesTrade = useCallback(() => buildBookingBody(state, direction, {
+    ownEntityId: economics.ownEntityId || null, counterpartyId: economics.counterpartyId || null,
+    desk: economics.desk || null, book: economics.book || null, priced: result,
+  }), [state, direction, economics, result])
+  const buildCurrencyTrade = useCallback(() => fxRef.current?.bookBody ? fxRef.current.bookBody() : null, [])
+
   // Sprint 12 item 3 — CONFIRM handler: PENDING -> CONFIRMED
   const handleConfirm = useCallback(async (mode = 'chain') => {
     if (!bookedTrade?.id) return
@@ -1025,7 +1042,13 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       )}
       {tabsVisited['XVA'] && isCurrency && (
         <div style={{ display: activeTab === 'XVA' ? 'block' : 'none' }}>
-          <FxXvaPanel quote={fxQuote} />
+          <FxXvaPanel
+            quote={fxQuote}
+            counterpartyId={economics.counterpartyId || null}
+            counterpartyName={counterpartyName}
+            buildTrade={buildCurrencyTrade}
+            tradeId={incrementalTradeId}
+          />
         </div>
       )}
 
@@ -1038,6 +1061,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             result={result}
             xvaParamsRef={xvaParamsRef}
             onSimResult={setXvaSimResult}
+            counterpartyId={economics.counterpartyId || null}
+            counterpartyName={counterpartyName}
+            buildTrade={buildRatesTrade}
+            tradeId={incrementalTradeId}
           />
         </div>
       )}

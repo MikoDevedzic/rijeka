@@ -79,6 +79,28 @@ Same trade, same model, three CSAs: uncollateralised, bilateral (10bd MPoR), on-
 
 `xva_rates` in the Methodology tab (`backend/methodology/xva_workbook.py`): the same simulation on a 2-year pay-fixed swap at 200 paths, with the engine's random draws as values (ENGINE mode reproduces every EE, ENE, PFE and XVA to rounding; the Checks sheet says so) or Excel's own draws (LIVE mode, with a Convergence sheet). Sheets: Model (the exact-fit step, the grid, α(t)), Calibration (the basket, the closed-form model vol per point, the objective and RMSE, an RMSE grid around the fit), Bonds, Normals, Paths, Exposure (CSA preset or your terms, the Brownian-bridge lag, collateral, residuals), Waterfall, Engine, Convergence. The grid and calibration dates are written as values on the engine's own day count (valuation + round(t·365), the instruments at 365.25), so every discount factor matches the engine to the day; evaluated with a spreadsheet engine, all 86 checks pass at 6e-13 relative in ENGINE mode.
 
+`xva_fx` and `xva_crypto` (`backend/methodology/fx_xva_workbook.py`, one builder for both): the forward engine on a 6-month EURUSD forward (buy EUR 10m) and a 6-month BTCUSD NDF (buy 10 BTC), struck at the fair forward from the same parity formulas as the forward books, 200 paths with the engine's draws (ENGINE) or Excel's (LIVE). Sheets: Model (the forward, DF_q(T) and the quote zero from the curve, the monthly grid with DF_q(t,T) on the flat quote zero as the engine has it, V(0)), Calibration (the pair's surface as quoted; ATM, RR25 and BF25 interpolated to the forward's tenor and the Malz smile fixed point at K = F laid out iteration by iteration, exactly as `fx_vol.vol_at` does it; the engine's default, labelled, when the account has no surface for the pair), Normals, Paths (ΣZ, W, F_t, V), Exposure (the same presets and margin-period bridge; IM = the pair's weight on FX01 / CRY01, SIMM's FX delta weight for a G10 pair and a labelled assumption for a digital asset, passed to the waterfall unscaled as the engine does), Waterfall (the IR supervisory factor, as the engine applies it for now), Engine, Convergence. Evaluated with a spreadsheet engine, all 50 checks pass in each book under every preset, with or without a surface, at 3e-12 relative or better.
+
+## Incremental XVA on the ticket
+
+The number a desk quotes pre-trade is not the trade's stand-alone XVA but the change in the counterparty's
+reserves: the netting set valued on the credit engine's risk-neutral paths with the trade and without it,
+same paths (common random numbers, seed 7), difference per component. `POST /api/xva/incremental` takes
+the ticket's booking body (`trade`: instrument, terms, legs; the legs are completed per currency
+convention exactly as the booking route stores them) or a stored `trade_id` (the marginal effect of
+removing it), runs `ccr.report.counterparty_report` twice with `exposure=False`, and returns `without`,
+`with`, `incremental` (CVA, DVA, FVA, FBA, KVA, MVA, total; costs negative, benefits positive), the two EE
+profiles on one date grid, the CSA from the counterparty record, the paths and months, and the notes. It
+covers every product the exposure paths value: swaps, swaptions, caps and floors, FX and digital-asset
+forwards and options. The XVA tab of every ticket shows it under the stand-alone number with the label
+"the charge the desk would quote; the number above is the trade on its own"; a freshly booked or an opened
+trade shows the marginal form. Limits stated in the engine's notes: vol held flat along the paths, the
+risk-neutral measure's calibration, the CSA as recorded.
+
+The stand-alone forward XVA (`/api/xva/currency`) reads the pair's own vol surface at the forward's tenor
+(ATM) when one exists, in percent as the engine takes it, and names the source; the demo default applies
+only to a pair without a surface.
+
 ## Parameters and defaults
 
 CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; ftp 55bp; fba_ratio 0.55; hurdle 12 %; capital model SA-CCR; counterparty risk weight 100 %; WWR 1. Monthly grid; `n_paths` from the ticket (2000 default).
