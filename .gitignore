@@ -1,202 +1,46 @@
-# ============================================================
-# PYTHON
-# ============================================================
+# Rijeka .gitignore. Short on purpose: what is local stays local, everything else is the repository.
+
+# ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*.pyo
+.venv/
+.pytest_cache/
+.ruff_cache/
 
-# ============================================================
-# NODE / FRONTEND / VITE
-# ============================================================
+# ── Node / Vite ──────────────────────────────────────────────────────────────
 node_modules/
-frontend/node_modules/
 dist/
-frontend/dist/
 .vite/
 
-# ============================================================
-# ENV / SECRETS
-# ============================================================
+# ── Secrets and local environments (the examples are tracked) ────────────────
 .env
 .env.*
 !.env.example
-.env.local
-.env.*.local
-backend/.env
-frontend/.env
-SUPABASE_JWT_SECRET
-
-# ============================================================
-# DEV SCRIPTS (ad-hoc .js / .py / .cjs)
-# ============================================================
-fix_*.js
-fix_*.py
-fix_*.cjs
-patch_*.js
-patch_*.py
-patch_*.cjs
-write_*.js
-write_*.py
-check_*.js
-find_*.js
-find_*.cjs
-build_*.js
-wire_*.js
-wire_*.cjs
-deliver_*.js
-deploy_*.js
-deploy_*.cjs
-debug_*.js
-diag*.js
-read_*.js
-read_*.txt
-rebrand_*.js
-redesign_*.js
-remove_*.js
-remove_*.cjs
-rename_*.js
-restore_*.js
-rewrite_*.js
-update_*.js
-undo_*.js
-add_*.js
-add_*.cjs
-apply_*.js
-apply_*.cjs
-scrub_*.cjs
-strip_*.cjs
-cleanup_*.cjs
-prep_commit_*.cjs
-dopamine_*.js
-inventory.js
-setup_auth.js
-setup_auth.ps1
-git_commit.js
-create_docs.js
-register.html
-/index.html
-node
-copy
-
-# ============================================================
-# SPRINT SCAFFOLDING
-# ============================================================
-SPRINT_*.js
-SPRINT*.js
-sprint*.js
-sprint */
-PATCH*.js
-DIAG*.js
-FIX_*.js
-REPLACE_*.js
-
-# NEW: Sprint 11/12 scratch (.py, .txt, .sql, .cjs not caught by sprint*.js above)
-sprint11_*
-sprint12_*
-
-# ============================================================
-# INTERNAL / STRATEGIC DOCS (local only, never GitHub)
-# ============================================================
-/ARCHITECTURE.md
-/ARCHITECTURE_v*.md
-/HANDOFF_*.md
-SPRINT*_HANDOFF.md
-docs/SPRINT*
-docs/write_*
-docs/archive/ARCHITECTURE_v*.md
-docs/*.tex
-docs/*.html
-
-# NEW: canonical _docs/ directory (charter, architecture, sensitivities, design tokens, handoff)
-_docs/
-
-# NEW: superseded root drafts
-RIJEKA_CORRECTNESS_CHARTER_*_DRAFT.md
-
-# ============================================================
-# BACKUPS
-# ============================================================
-*_READ.txt
-*_backup.*
-TradeBookingWindow_backup.jsx
-
-# NEW: patch-script backups
 *.bak
+*.bak.*
 
-# ============================================================
-# STANDALONE PUBLIC HTML TOOLS (deployed manually to Netlify)
-# ============================================================
-xva.html
-irs.html
-rijeka_xva_ee_rijeka.html
-
-# ============================================================
-# AD-HOC TEST / EXPLORATORY SCRIPTS
-# ============================================================
-backend/test_*.py
-cap_bloomberg_addition.py
-cap_floor.py
-cap_floor_routes.py
-cap_market_data_addition.py
-cap_sabr.py
-cap_sabr_routes.py
-cap_sabr_routes_v2.py
-cap_vol_strip.py
-rijeka_script*.js
-show_line_*.js
-show_line_700.js
-LegDetailsTab_FINAL.js
-link_register.js
-rebuild_command_center.js
-write_gitignore.cjs
-
-# ============================================================
-# ACCIDENTAL SHELL-MISTAKE FILES
-# ============================================================
-frontend/src/components/blotter/cd
-frontend/src/components/blotter/powershell
-
-# ============================================================
-# MIGRATION SQL (run manually in Supabase)
-# ============================================================
-migration_*.sql
-*_DEPLOY.sql
-
-# ============================================================
-# SCRATCH / DEPLOYMENT
-# ============================================================
-netlify_drop/
-backend/api/routes/*_*.cjs
-frontend/src/components/**/*.cjs
-
-# ============================================================
-# LOGS / TMP
-# ============================================================
+# ── Build output, logs, OS and editor files ──────────────────────────────────
 *.log
 *.tmp
 *.swp
-
-# ============================================================
-# OS / IDE
-# ============================================================
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
-.env.test
+.claude/launch.json
+chain/out/
+chain/cache/
+chain/broadcast/
+
+# ── Local only, never on GitHub ──────────────────────────────────────────────
+# The landing site (rijeka.app) and the public tools, deployed by hand with the Netlify CLI.
+netlify_drop/
+# Internal working notes, scratch and marketing drafts. The public documentation is docs/.
+_docs/
 _scratch/
-verify_test_users.py
-
-# Patch mover backups (Sprint 12/13) 
-*.bak_patch* 
-*.bak_1776* 
-
-# ── Local environments, backups, scratch ─────────────────────────────
-.venv/
-backend/.venv/
-*.bak
-*.bak.*
-.fuse_hidden*
-$null
-*.cjs
-setup_mac.sh
+_marketing/
+# Sprint-era notes that may still sit at the repository root on a developer's machine.
+/ARCHITECTURE*.md
+/HANDOFF_*.md
+/SPRINT*_HANDOFF.md
+/sprint */

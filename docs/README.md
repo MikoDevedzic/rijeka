@@ -21,6 +21,8 @@ Live documents, the ones kept current with the code:
 
 Papers: the methodology (v1.2) is `methodology/rijeka_methodology.pdf` with its `.tex`; `blockchain_derivatives_paper_v5.pdf` (and `.tex`) is the design paper.
 
-[archive/](archive/) holds superseded architecture notes (v8 to v25) and sprint handoffs. They
-describe the system as it was at the time and are kept for the record; nothing in them is
-a current instruction. The README at the repository root is the current overview.
+[archive/](archive/) holds dated documents kept for the record: the launch audit, briefs and
+handovers, the April 2026 product taxonomy and sensitivity framework that the code's comments
+cite, and the March options roadmap. They describe the system as it was when written; nothing in
+them is a current instruction. The README at the repository root and [architecture.md](architecture.md)
+are the current overview.
