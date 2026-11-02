@@ -136,3 +136,13 @@ def test_forward_xva_takes_the_surface_vol_in_percent():
                                lookup=lambda quotes, pair, T, F, K, o: (0.076, "ATM", "note"))
     assert pct == pytest.approx(7.6) and "EURUSD_VOL surface" in src and "0.50y" in src
     assert surface_vol_pct(None, "u", "SOLUSD", 0.5, 150.0, snapshot=lambda db, u, cid: None) == (None, None)
+
+
+def test_forward_xva_hands_back_the_paths_for_the_chart():
+    from pricing import fx_xva
+    from pricing.csa import CSA
+    inp = fx_xva.ForwardXvaInput(pair="EURUSD", base_notional=1e7, forward=1.17, strike=1.17, t_years=0.5, df_quote_t=0.98, quote_zero=0.04, direction="BUY", vol_pct=8.0)
+    wf, meta = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=300)
+    assert meta["_paths"].shape == (300, meta["steps"]) and abs(float(meta["_paths"][:, 0].mean())) < 2e5
+    wf2, meta2 = fx_xva.forward_xva(inp, CSA.from_request({"preset": "ON_CHAIN"}), n_paths=300)
+    assert wf2.exposure_paths.shape == meta2["_paths"].shape, "residual paths under a CSA, same grid"

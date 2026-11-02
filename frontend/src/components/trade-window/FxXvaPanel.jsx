@@ -2,12 +2,13 @@
 // ────────────────────────────────────────────────────────────────────────────────────
 // XVA for an FX or crypto forward: the same waterfall as the rates book
 // (CVA / DVA / FVA / FBA / KVA / MVA under the chosen CSA), with the exposure
-// profile from a lognormal forward at a flat vol the desk sets.
+// profile from a lognormal forward at the pair's surface ATM vol (a desk override here), the simulated
+// paths drawn behind the profiles as on the rates tab, and the on-chain comparison on the same paths.
 // POST /api/xva/currency (backend/pricing/fx_xva.py).
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
-import RateCurveCanvas from '../market-data/RateCurveCanvas'
+import ExposureCanvas from './ExposureCanvas'
 import IncrementalXva from './IncrementalXva'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -26,6 +27,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const [csa, setCsa] = useState('NO CSA')
   const [im, setIm] = useState(false)
   const [res, setRes] = useState(null)
+  const [cmp, setCmp] = useState(null)           // the same run under the ON-CHAIN preset
+  const [compare, setCompare] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const set = (k) => (e) => setP(s => ({ ...s, [k]: e.target.value }))
@@ -64,19 +67,18 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           : csa === 'BILATERAL' ? { preset: 'BILATERAL', threshold_cp: 500000, mta: 100000, mpor_days: 10, im_exchanged: im }
           : { preset: 'ON_CHAIN', im_exchanged: im },
       }
-      const r = await fetch(`${API}/api/xva/currency`, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      const j = await r.json()
-      if (!r.ok) throw new Error(j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : `xva ${r.status}`)
-      setRes(j)
+      const post = async (b) => {
+        const r = await fetch(`${API}/api/xva/currency`, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
+        const j = await r.json()
+        if (!r.ok) throw new Error(j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : `xva ${r.status}`)
+        return j
+      }
+      setRes(await post(body))
+      // the same forward, the same seed, under atomic settlement: the difference is the collateral terms alone
+      setCmp(compare && csa !== 'ON-CHAIN' ? await post({ ...body, csa: { preset: 'ON_CHAIN', im_exchanged: im } }) : null)
     } catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
 
-  const dt = res?.dt || 1 / 12
-  const series = res ? [
-    { label: 'EE', color: '#0dd4a8', points: res.ee.map((v, i) => ({ t: (i + 1) * dt, v })) },
-    { label: 'ENE', color: '#4a9ad4', dash: [5, 3], points: res.ene.map((v, i) => ({ t: (i + 1) * dt, v })) },
-    { label: 'PFE 95%', color: '#f0a020', dash: [3, 2], points: res.pfe.map((v, i) => ({ t: (i + 1) * dt, v })) },
-  ] : []
   const ccy = quote?.quote_currency || 'USD'
 
   return (
@@ -85,11 +87,11 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         <div>
           <div style={secHdr}>FORWARD MODEL</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div><div style={lbl}>VOL % (FLAT)</div><input style={inp} value={p.vol_pct} placeholder={res?.params?.vol_pct != null ? String(res.params.vol_pct) : 'default'} onChange={set('vol_pct')} /></div>
+            <div><div style={lbl}>VOL % (OVERRIDE)</div><input style={inp} value={p.vol_pct} placeholder={res?.params?.vol_pct != null ? String(res.params.vol_pct) : 'surface'} onChange={set('vol_pct')} /></div>
             <div><div style={lbl}>PATHS</div><input style={inp} value={p.paths} onChange={set('paths')} /></div>
           </div>
           <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.4 }}>
-            Lognormal forward, flat vol, exposure ±N·(F<sub>t</sub> − K)·DF. Leave blank for the demo default; there is no public vol surface for FX or digital assets.
+            Lognormal forward, exposure ±N·(F<sub>t</sub> − K)·DF. Vol is the pair's surface at the forward's tenor (ATM); type a number to override. A pair without a surface uses the demo default, and the run says so.
           </div>
           <div style={secHdr}>SPREADS (BP) · LGD · HURDLE</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
@@ -109,6 +111,9 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, fontSize: '0.78rem', color: 'var(--text-dim)' }}>
             <input type="checkbox" checked={im} onChange={e => setIm(e.target.checked)} /> SIMM IM exchanged
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: '0.78rem', color: 'var(--text-dim)' }} title="A second run on the same paths under the ON-CHAIN preset (continuous VM, 5bd MPoR); the difference is the collateral terms alone">
+            <input type="checkbox" checked={compare} onChange={e => setCompare(e.target.checked)} /> Compare on-chain
+          </label>
           <button onClick={run} disabled={busy || !quote} style={{ marginTop: 14, width: '100%', padding: '8px 0', fontFamily: 'var(--mono)', fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer',
             background: 'rgba(13,212,168,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3 }}>
             {busy ? 'SIMULATING…' : !quote ? 'PRICE THE TICKET FIRST' : '▶ SIMULATE'}
@@ -117,13 +122,10 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         </div>
         <div>
           <div style={secHdr}>EXPOSURE · {ccy}</div>
-          {res ? <RateCurveCanvas series={series} unit="" decimals={0} height={230} /> :
-            <div style={{ height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border)', borderRadius: 3, background: 'var(--panel)', color: 'var(--text-mute)', fontFamily: 'var(--mono)', fontSize: '0.8125rem', letterSpacing: '0.08em' }}>
-              EE / ENE / PFE — press SIMULATE
-            </div>}
+          <ExposureCanvas result={res} height={230} />
           {res && (
             <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginTop: 6 }}>
-              vol {res.params.vol_pct}% ({res.params.vol_source}) · {res.n_paths} paths · {res.steps} monthly steps · IM weight {res.params.im_rw_per_pct} per 1% ({res.params.im_basis}) · CSA {res.csa?.preset}
+              vol {res.params.vol_pct}% ({res.params.vol_source}) · {res.n_paths} paths · {res.steps} monthly steps · {res.sample_paths?.length || 0} paths drawn ({res.csa?.collateralised ? 'residual after collateral' : 'gross MtM'}) · IM weight {res.params.im_rw_per_pct} per 1% ({res.params.im_basis}) · CSA {res.csa?.preset}
             </div>
           )}
         </div>
@@ -136,8 +138,20 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           </div>
         ))}
       </div>
+      {cmp?.xva && res?.xva && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 1, background: 'var(--border)', border: '1px solid var(--border)', borderTop: 0 }}>
+          {VA.map(([k, key]) => (
+            <div key={key} style={{ background: 'var(--bg)', padding: '6px 10px' }}>
+              <div style={{ ...lbl, color: 'var(--accent)' }}>{key === 'npv' ? 'ON-CHAIN' : ''}&nbsp;</div>
+              <div style={{ fontFamily: 'var(--mono)', fontSize: '0.875rem', fontWeight: 700, color: COLOR[key] }}>{fmt(cmp.xva[key])}</div>
+              <div style={{ fontSize: '0.7rem', fontFamily: 'var(--mono)', color: 'var(--text-mute)' }}>{key === 'npv' ? '' : (cmp.xva[key] - res.xva[key] >= 0 ? '+' : '') + fmt(cmp.xva[key] - res.xva[key])}</div>
+            </div>
+          ))}
+        </div>
+      )}
       <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginTop: 6 }}>
         ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA · same waterfall and CSA model as the rates book · {ccy}
+        {cmp && <> · ON-CHAIN row: the same {cmp.n_paths} paths under continuous VM and a {cmp.csa?.mpor_days}bd margin period; the difference is the collateral terms alone</>}
       </div>
       <div style={{ margin: '12px -16px 0', borderTop: '1px solid var(--border)' }}>{incremental}</div>
     </div>

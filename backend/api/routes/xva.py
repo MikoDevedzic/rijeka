@@ -707,7 +707,12 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                                   counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
                                   cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve)
     npv = float(q["npv"])
+    # a fan of simulated MtM paths behind the profiles, as the rates tab draws: residual paths under a CSA, gross without
+    raw = wf.exposure_paths if csa.collateralised else meta["_paths"]
+    step = max(1, raw.shape[0] // min(80, raw.shape[0]))
+    sample_paths = [[round(float(v), 0) for v in row] for row in raw[::step, :]]
     return {
+        "sample_paths": sample_paths,
         "ee": [round(v, 2) for v in wf.ee], "ene": [round(v, 2) for v in wf.ene], "pfe": [round(v, 2) for v in wf.pfe],
         "ee_gross": [round(v, 2) for v in wf.ee_gross], "ene_gross": [round(v, 2) for v in wf.ene_gross],
         "collateral": [round(v, 2) for v in wf.collateral_mean], "im_profile": [round(v, 2) for v in wf.im_profile],
