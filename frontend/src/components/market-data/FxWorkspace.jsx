@@ -128,6 +128,24 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const [spotIn, setSpotIn] = useState('')
   const [fund, setFund] = useState('')
   const [flat, setFlat] = useState('')
+  // option vols: ATM / 25Δ risk reversal / 25Δ butterfly by tenor, in vol points
+  const VOL_TENORS = ['1W', '1M', '2M', '3M', '6M', '9M', '1Y', '2Y']
+  const [vols, setVols] = useState({})
+  useEffect(() => { setVols(p.vol_surface?.grid ? JSON.parse(JSON.stringify(p.vol_surface.grid)) : {}) }, [pair, p.vol_surface?.valuation_date])   // eslint-disable-line react-hooks/exhaustive-deps
+  const setVol = (tn, k, v) => setVols(g => ({ ...g, [tn]: { ...(g[tn] || {}), [k]: v } }))
+  const saveVols = async () => {
+    const grid = {}
+    for (const tn of VOL_TENORS) {
+      const row = vols[tn] || {}; const atm = parseFloat(row.ATM)
+      if (isNaN(atm)) continue
+      grid[tn] = { ATM: atm }
+      for (const k of ['RR25', 'BF25']) { const n = parseFloat(row[k]); if (!isNaN(n)) grid[tn][k] = n }
+    }
+    if (Object.keys(grid).length < 2) return flash('err', 'Enter an ATM vol at two tenors or more')
+    setBusy('vols')
+    try { await call('/api/currency/vol-surface', { method: 'POST', body: JSON.stringify({ pair, grid, source: 'MANUAL' }) }); flash('ok', `${pair} vol surface saved`); await reload() }
+    catch (e) { flash('err', e.message) } finally { setBusy('') }
+  }
   const tenors = md?.forward_tenors || Object.keys(TENOR_DAYS)
 
   useEffect(() => { setPts(p.forward_points ? { ...p.forward_points } : {}); setSpotIn(''); setFund(p.funding_pct ?? ''); setFlat(p.base_flat_pct ?? '') }, [pair, p.forward_curve?.valuation_date, p.spot_as_of])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -190,12 +208,42 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   }
 
   const tabs = [{ id: 'points', label: p.crypto ? 'Forward points (USD)' : 'Forward points', badge: p.forward_curve?.tenors?.length },
+                ...(p.crypto ? [] : [{ id: 'vols', label: 'Volatility', badge: p.vol_surface?.tenors?.length }]),
                 { id: 'spot', label: p.crypto ? 'Spot & funding' : 'Spot' }, { id: 'conv', label: 'Conventions' }]
   const mode = md?.forward_mode || 'MARKET'
   const thL = { fontSize: '0.78rem', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 6px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
   const thR = { ...thL, textAlign: 'right' }
   const td = { fontSize: '0.875rem', color: 'var(--text)', padding: '5px 6px 5px 0', borderBottom: '1px solid var(--panel-2)' }
   const tdR = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+
+  const volsPanel = (
+    <div>
+      <DescBox>
+        Option vols as the market quotes them, in vol points per year: the at-the-money vol, the 25-delta risk reversal (σ<sub>25Δ call</sub> − σ<sub>25Δ put</sub>) and the 25-delta butterfly ((σ<sub>25Δ call</sub> + σ<sub>25Δ put</sub>)/2 − ATM).
+        The pricer builds the smile at a strike from these three with a quadratic in the call's forward delta (Malz) and interpolates each quote linearly in time; the ticket shows which tier it used.
+        {p.vol_surface ? <> Saved surface: <b>{p.vol_surface.source}</b> · {p.vol_surface.valuation_date} · {p.vol_surface.tenors.length} tenors.</> : <> No surface saved: options price off a flat desk default and say so.</>}
+      </DescBox>
+      <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr 1fr 1fr 1fr', minWidth: 560 }}>
+        <div style={thL}>TENOR</div><div style={thR}>ATM %</div><div style={thR}>RR 25Δ</div><div style={thR}>BF 25Δ</div><div style={thR}>σ 25Δ PUT</div><div style={thR}>σ 25Δ CALL</div>
+        {VOL_TENORS.map(tn => {
+          const row = vols[tn] || {}; const atm = parseFloat(row.ATM); const rr = parseFloat(row.RR25) || 0; const bf = parseFloat(row.BF25) || 0
+          const ok = !isNaN(atm)
+          return [
+            <div key={tn + 'a'} style={{ ...td, color: 'var(--accent)' }}>{tn}</div>,
+            <div key={tn + 'b'} style={tdR}><input className="inp" style={{ width: 70, textAlign: 'right' }} value={row.ATM ?? ''} onChange={e => setVol(tn, 'ATM', e.target.value)} placeholder="—" /></div>,
+            <div key={tn + 'c'} style={tdR}><input className="inp" style={{ width: 70, textAlign: 'right' }} value={row.RR25 ?? ''} onChange={e => setVol(tn, 'RR25', e.target.value)} placeholder="0" /></div>,
+            <div key={tn + 'd'} style={tdR}><input className="inp" style={{ width: 70, textAlign: 'right' }} value={row.BF25 ?? ''} onChange={e => setVol(tn, 'BF25', e.target.value)} placeholder="0" /></div>,
+            <div key={tn + 'e'} style={{ ...tdR, color: 'var(--text-dim)' }}>{ok ? fmt(atm + bf - rr / 2, 2) : '—'}</div>,
+            <div key={tn + 'f'} style={{ ...tdR, color: 'var(--text-dim)' }}>{ok ? fmt(atm + bf + rr / 2, 2) : '—'}</div>,
+          ]
+        })}
+      </div>
+      <div className="row" style={{ marginTop: 12, gap: 8 }}>
+        <button className="btn primary" onClick={saveVols} disabled={!!busy}>{busy === 'vols' ? 'SAVING…' : '▶ SAVE TO DB (MANUAL)'}</button>
+        <span className="lbl" style={{ margin: 0 }}>Saved as {pair}_VOL; the daily demo build writes a synthetic surface for the G10 pairs and says so.</span>
+      </div>
+    </div>
+  )
 
   const pointsPanel = (
     <div>
@@ -294,7 +342,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
         </div>
       </div>
       <InnerTabs tabs={tabs} />
-      <InnerBody tabs={tabs} panels={{ points: pointsPanel, spot: spotPanel, conv: convPanel }} />
+      <InnerBody tabs={tabs} panels={{ points: pointsPanel, vols: volsPanel, spot: spotPanel, conv: convPanel }} />
     </div>
   )
 }

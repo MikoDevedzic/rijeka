@@ -1,7 +1,10 @@
 // FX and digital-asset leg of the NEW TRADE window: spot / forward / NDF on a
 // currency pair or a crypto forward, priced on interest-rate parity by
-// /api/currency/forward/price. The window owns the counterparty, book and
-// footer buttons; it calls price() and payload() on this panel through a ref.
+// /api/currency/forward/price, and a European FX option (call or put on the
+// base currency) priced by /api/currency/option/price: Garman–Kohlhagen on the
+// same forward, the vol from the pair's ATM/RR/BF surface. The window owns the
+// counterparty, book and footer buttons; it calls price() and payload() on this
+// panel through a ref.
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react'
 import { getSessionSafe } from '../../lib/session'
 import { AnalyticsBlock } from './sections'
@@ -45,9 +48,16 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const [fundOv, setFundOv] = useState('')
   const [quote, setQuote] = useState(null)
   const [busy, setBusy] = useState('')
+  // option terms (shape OPTION): call or put on the base, expiry, cash or physical, a vol override
+  const option = shape === 'OPTION'
+  const [optType, setOptType] = useState('CALL')
+  const [expiry, setExpiry] = useState(plusMonths(3))
+  const [optSettle, setOptSettle] = useState('')          // '' = two business days after expiry (the server fills it)
+  const [cashSettled, setCashSettled] = useState(false)
+  const [volOv, setVolOv] = useState('')
 
   useEffect(() => { setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? 10 : 10_000_000); setQuote(null) }, [crypto])
-  useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, tenor, strike, spotOv, fundOv])
+  useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, tenor, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv])
 
   const load = async () => {
     try { const m = await call('/api/currency/pairs'); setPairs(m.pairs || []); setFeeds(m.feeds || null) } catch (e) { onError?.(e.message) }
@@ -65,6 +75,16 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const price = async () => {
     setBusy('price'); setQuote(null)
     try {
+      if (option) {
+        const body = { pair, option_type: optType, base_notional: Number(notional), expiry_date: expiry, direction,
+                       settlement_type: cashSettled ? 'NON_DELIVERABLE' : 'DELIVERABLE' }
+        if (optSettle) body.settlement_date = optSettle
+        if (strike !== '') body.strike = Number(strike)
+        if (spotOv !== '') body.spot = Number(spotOv)
+        if (volOv !== '') body.vol_pct = Number(volOv)
+        const q = await call('/api/currency/option/price', { method: 'POST', body: JSON.stringify(body) })
+        setQuote(q); onPriced?.(q); return q
+      }
       const body = { pair, shape, base_notional: Number(notional), direction }
       if (shape !== 'SPOT') body.settlement_date = settlement
       if (strike !== '') body.forward_rate = Number(strike)
@@ -78,6 +98,26 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // The trade POST body minus what the window owns (parties, dates, desk, book).
   const payload = () => {
     if (!quote || !cur) throw new Error('Price it first')
+    if (option) {
+      // the option's terms as the canonical record names them (chain/canonical.py, FX_OPTION):
+      // buyer and seller of the option, the strike, expiry and settlement, the premium as a cash flow
+      const ndo = cashSettled
+      const premiumDate = quote.valuation_date
+      return {
+        asset_class: 'FX', instrument_type: 'FX_OPTION', structure: 'VANILLA',
+        notional: Number(notional), notional_ccy: cur.base, maturity_date: quote.settlement_date, discount_curve_id: cur.quote_curve,
+        terms: {
+          direction, currency_pair: pair, base_currency: cur.base, quote_currency: cur.quote,
+          option_type: optType, exercise_style: 'EUROPEAN',
+          base_notional: String(notional), strike: String(quote.strike), quote_notional: String(Number(notional) * quote.strike),
+          expiry_date: quote.expiry_date, expiry_time: '10:00 New York', settlement_date: quote.settlement_date,
+          settlement_type: ndo ? 'NON_DELIVERABLE' : 'DELIVERABLE',
+          ...(ndo ? { settlement_currency: cur.quote, fixing_source: cur.fixing_default } : {}),
+          premium_amount: String(Math.abs(Math.round(quote.npv * 100) / 100)), premium_currency: cur.quote, premium_payment_date: premiumDate,
+          vol_pct: quote.vol_pct, vol_tier: quote.vol_tier, automatic_exercise: true, calculation_agent: null,
+        },
+      }
+    }
     const K = strike !== '' ? Number(strike) : quote.forward
     const settle = quote.settlement_date
     if (crypto) return {
@@ -103,7 +143,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       },
     }
   }
-  useImperativeHandle(ref, () => ({ price, payload, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst])
+  useImperativeHandle(ref, () => ({ price, payload, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv])
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────
   const dp = rateDp(pair)
@@ -115,7 +155,30 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const ir01 = (r) => r.ir01 ?? (r.rho_base_per_bp + r.rho_quote_per_bp)
   const effDate = (() => { const d = new Date(); let n = crypto ? 0 : 2; while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) n-- } return iso(d) })()
   const ndf = shape === 'NDF'
-  const descriptor = { analytics: {
+  const pct = (v, d = 2) => v == null || isNaN(v) ? '—' : `${(Number(v) * 100).toFixed(d)}%`
+  const optionDescriptor = { analytics: {
+    metrics: (r) => [
+      { label: 'OPTION NPV', value: money(r.npv), colorBy: sgn(r.npv) },
+      { label: 'DELTA', value: `${fmt(r.delta_base_units, 0)} ${r.base_currency}`, colorBy: sgn(r.delta_base_units) },
+      { label: 'FX01', value: money(r.spot01), colorBy: sgn(r.spot01) },
+      { label: 'VEGA / 1pt', value: money(r.vega), colorBy: sgn(r.vega) },
+      { label: 'IR01', value: money(r.ir01), colorBy: sgn(r.ir01) },
+      { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta) },
+    ],
+    breakdown: (r) => ({ kind: 'market', columns: ['ITEM', 'VALUE', 'NOTE'], rows: [
+      ['SPOT', fmt(r.spot, dp), r.spot_source || ''],
+      ['FORWARD TO SETTLEMENT', fmt(r.forward, dp), `${r.forward_mode === 'MARKET' && r.market_points != null ? 'quoted points' : 'implied from yields'}${r.forward_source ? ' · ' + r.forward_source : ''}`],
+      ['STRIKE', fmt(r.strike, dp), strike === '' ? 'at the forward' : `${fmt((r.strike / r.forward - 1) * 100, 2)}% from the forward`],
+      ['VOL', `${fmt(r.vol_pct, 3)}%`, `${r.vol_tier} · ${r.vol_source}${r.vol_snapshot ? ' · ' + r.vol_snapshot : ''}`],
+      ['FORWARD DELTA', pct(r.forward_delta, 1), `d1 ${fmt(r.d1, 4)} · d2 ${fmt(r.d2, 4)} · premium-excluded`],
+      ['INTRINSIC / TIME VALUE', `${money(r.intrinsic * r.df_quote)} / ${money(r.time_value)}`, 'on the forward, discounted'],
+      ['GAMMA', money(r.gamma_1pct), 'change in FX01 for a further +1% spot'],
+      [`IR01 ${qc} / ${r.base_currency}`, `${money(r.ir01_disc)} / ${money(r.ir01_base)}`, '+1 bp on each curve'],
+      [`DF ${qc}`, fmt(r.df_quote, 6), `to settlement · T_exp ${fmt(r.t_expiry, 4)}y · T_settle ${fmt(r.t_settle, 4)}y`],
+      ['MODEL', 'Garman–Kohlhagen', r.model || ''],
+    ] }),
+  } }
+  const forwardDescriptor = { analytics: {
     metrics: (r) => [
       { label: 'NET NPV', value: money(r.npv), colorBy: sgn(r.npv) },
       { label: `${crypto ? r.base_currency : 'FX'}01`, value: money(spot01(r)), colorBy: sgn(spot01(r)) },
@@ -134,6 +197,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       ['MODEL', crypto ? 'F = S·e^(−r·T) / DF_quote' : 'F = S·DF_base / DF_quote', `NPV = ±N·(F − K)·DF_quote · ACT/365 · ${ndf || crypto ? 'cash-settled' : 'deliverable'}`],
     ] }),
   } }
+  const descriptor = option ? optionDescriptor : forwardDescriptor
 
   return (
     <>
@@ -149,28 +213,85 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             <input className="tbw-mono" type="text" inputMode="decimal" value={fmtAmt(notional, crypto)} placeholder={crypto ? '10' : '10,000,000'}
                    onChange={e => { const v = parseAmt(e.target.value); if (v !== '') setNotional(v); else if (e.target.value === '') setNotional('') }} />
           </div>
-          <div><div className="tbw-lbl">DIRECTION</div>
+          <div><div className="tbw-lbl">{option ? 'SIDE' : 'DIRECTION'}</div>
             <div className="tbw-chip-row" style={{ gap: 4 }}>
               {['BUY', 'SELL'].map(d => (
-                <button key={d} className={`tbw-chip ${direction === d ? 'is-on' : ''}`} onClick={() => setDirection(d)}>{d} {cur?.base || ''}</button>
+                <button key={d} className={`tbw-chip ${direction === d ? 'is-on' : ''}`} onClick={() => setDirection(d)}>{d} {option ? 'OPTION' : (cur?.base || '')}</button>
               ))}
             </div>
           </div>
-          <div><div className="tbw-lbl">TENOR</div>
-            <select value={shape === 'SPOT' ? 'SPOT' : tenor} disabled={shape === 'SPOT'} onChange={e => { setTenor(e.target.value); setSettlement(tenorDate(e.target.value)) }}>
-              {shape === 'SPOT' && <option value="SPOT">SPOT</option>}{TENORS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-          <div><div className="tbw-lbl">EFF DATE <span className="tbw-mut">· {crypto ? 'T+0' : 'SPOT T+2'}</span></div>
-            <input type="date" value={effDate} readOnly />
-          </div>
-          <div><div className="tbw-lbl">MAT DATE <span className="tbw-mut">· {shape === 'SPOT' ? 'VALUE' : ndf || crypto ? 'SETTLEMENT' : 'VALUE'}</span></div>
-            <input type="date" value={shape === 'SPOT' ? (quote?.settlement_date || effDate) : settlement} disabled={shape === 'SPOT'} onChange={e => setSettlement(e.target.value)} />
-          </div>
+          {option ? (
+            <div><div className="tbw-lbl">TYPE <span className="tbw-mut">· on {cur?.base || 'base'}</span></div>
+              <div className="tbw-chip-row" style={{ gap: 4 }}>
+                {['CALL', 'PUT'].map(d => (
+                  <button key={d} className={`tbw-chip ${optType === d ? 'is-on' : ''}`} onClick={() => setOptType(d)}>{d}</button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div><div className="tbw-lbl">TENOR</div>
+              <select value={shape === 'SPOT' ? 'SPOT' : tenor} disabled={shape === 'SPOT'} onChange={e => { setTenor(e.target.value); setSettlement(tenorDate(e.target.value)) }}>
+                {shape === 'SPOT' && <option value="SPOT">SPOT</option>}{TENORS.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          )}
+          {option ? (
+            <div><div className="tbw-lbl">EXPIRY <span className="tbw-mut">· 10:00 NY</span></div>
+              <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} />
+            </div>
+          ) : (
+            <div><div className="tbw-lbl">EFF DATE <span className="tbw-mut">· {crypto ? 'T+0' : 'SPOT T+2'}</span></div>
+              <input type="date" value={effDate} readOnly />
+            </div>
+          )}
+          {option ? (
+            <div><div className="tbw-lbl">SETTLEMENT <span className="tbw-mut">· blank = expiry + 2bd</span></div>
+              <input type="date" value={optSettle || quote?.settlement_date || ''} onChange={e => setOptSettle(e.target.value)} />
+            </div>
+          ) : (
+            <div><div className="tbw-lbl">MAT DATE <span className="tbw-mut">· {shape === 'SPOT' ? 'VALUE' : ndf || crypto ? 'SETTLEMENT' : 'VALUE'}</span></div>
+              <input type="date" value={shape === 'SPOT' ? (quote?.settlement_date || effDate) : settlement} disabled={shape === 'SPOT'} onChange={e => setSettlement(e.target.value)} />
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="tbw-sec">
+      {option && (
+        <div className="tbw-sec">
+          <div className="tbw-terms-header">
+            <span className="tbw-lbl">OPTION TERMS</span>
+            <span className="tbw-helper-badge">→ {direction === 'BUY' ? 'we hold' : 'we write'} the right to {optType === 'CALL' ? 'buy' : 'sell'} {cur?.base || 'base'} against {qc} · {cashSettled ? `cash-settled in ${qc}` : 'deliverable'}</span>
+          </div>
+          <div className="tbw-grid-6">
+            <div><div className="tbw-lbl">STRIKE <span className="tbw-mut">· {qc} per {cur?.base || 'base'}</span></div>
+              <input className="tbw-mono" type="text" inputMode="decimal" placeholder="at the forward" value={strike} onChange={e => setStrike(e.target.value.replace(/[^0-9.]/g, ''))} />
+            </div>
+            <div><div className="tbw-lbl">VOL % <span className="tbw-mut">· {cur?.vol_surface ? `${cur.vol_surface.source} surface ${cur.vol_surface.valuation_date}` : 'no surface: desk default'}</span></div>
+              <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.vol_surface ? 'from the surface' : 'default level'} value={volOv} onChange={e => setVolOv(e.target.value.replace(/[^0-9.]/g, ''))} />
+            </div>
+            <div><div className="tbw-lbl">SETTLEMENT</div>
+              <div className="tbw-chip-row" style={{ gap: 4 }}>
+                <button className={`tbw-chip ${!cashSettled ? 'is-on' : ''}`} onClick={() => setCashSettled(false)}>DELIVER</button>
+                <button className={`tbw-chip ${cashSettled ? 'is-on' : ''}`} onClick={() => setCashSettled(true)}>CASH {qc}</button>
+              </div>
+            </div>
+            <div><div className="tbw-lbl">SPOT <span className="tbw-mut">· {cur?.spot_as_of || 'not snapped'}</span></div>
+              <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.spot ? fmt(cur.spot, dp) : 'snap first'} value={spotOv} onChange={e => setSpotOv(e.target.value.replace(/[^0-9.]/g, ''))} />
+            </div>
+            <div><div className="tbw-lbl">{qc} DISCOUNTING</div>
+              <input className="tbw-mono" value={cur?.quote_curve || '—'} readOnly />
+            </div>
+            <div><div className="tbw-lbl">MARKET DATA</div>
+              <button className="tbw-chip" style={{ width: '100%' }} onClick={snap} disabled={!!busy}>{busy === 'snap' ? 'SNAPPING…' : '● SNAP SPOT'}</button>
+            </div>
+          </div>
+          <div className="tbw-helper-text" style={{ marginTop: 10 }}>
+            Garman–Kohlhagen on the forward to settlement · σ from the pair's ATM / 25Δ RR / 25Δ BF surface, Malz smile in delta (Market data › FX › Volatility) · premium in {qc} on the trade date · ACT/365
+          </div>
+        </div>
+      )}
+
+      <div className="tbw-sec" style={option ? { display: 'none' } : undefined}>
         <div className="tbw-terms-header">
           <span className="tbw-lbl">FORWARD TERMS</span>
           <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · funding is a desk input` : ndf ? `non-deliverable · cash-settled in ${qc}` : shape === 'SPOT' ? 'spot · T+2 delivery' : 'deliverable · both principals exchange'}</span>

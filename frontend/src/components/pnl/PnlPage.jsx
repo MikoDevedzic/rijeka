@@ -14,7 +14,7 @@ import { useAuthStore } from '../../store/useAuthStore'
 import './PnlPage.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
-const BUCKET_LABEL = { CARRY: 'CARRY', CASH: 'CASH SETTLED', RATES: 'RATES', FX: 'FX · SPOT & POINTS', RESIDUAL: 'RESIDUAL', AMEND: 'AMENDMENTS', NEW: 'NEW TRADES', UNWIND: 'UNWINDS' }
+const BUCKET_LABEL = { CARRY: 'CARRY', CASH: 'CASH SETTLED', RATES: 'RATES', FX: 'FX · SPOT & POINTS', VOL: 'VOLATILITY', RESIDUAL: 'RESIDUAL', AMEND: 'AMENDMENTS', NEW: 'NEW TRADES', UNWIND: 'UNWINDS' }
 const fmt = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d })
 const sgn = (n, d = 0) => n == null || isNaN(n) ? '—' : `${n > 0 ? '+' : n < 0 ? '−' : ''}${fmt(Math.abs(n), d)}`
 const tone = (n) => n > 0.5 ? 'pos' : n < -0.5 ? 'neg' : ''
