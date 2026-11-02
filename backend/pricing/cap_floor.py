@@ -30,7 +30,6 @@ from typing import Optional
 
 from scipy.stats import norm as _norm
 from scipy.interpolate import interp1d
-import numpy as np
 
 
 # ── Bachelier caplet/floorlet ────────────────────────────────────────────────
@@ -150,12 +149,7 @@ def lookup_cap_vol(
 
     # ATM row
     atm_row = next((r for r in tenor_rows if r.get('is_atm')), None)
-    if atm_row:
-        atm_vol_bp = float(atm_row['flat_vol_bp'])
-        atm_spread_bp = 0
-    else:
-        atm_vol_bp    = fallback_vol_bp
-        atm_spread_bp = 0
+    atm_vol_bp = float(atm_row['flat_vol_bp']) if atm_row else fallback_vol_bp
 
     # Strike spread vs ATM forward
     # For floors: use absolute value of spread (put-call symmetry in Normal model)
@@ -238,7 +232,6 @@ def price_cap(
     vol_override_bp: Optional[float] = None,  # explicit vol override, skips surface
 ) -> CapFloorResult:
     """Price a cap as sum of Bachelier call caplets."""
-    from dateutil.relativedelta import relativedelta
     spot_date = valuation_date + timedelta(days=2)
     sched = caplet_schedule(spot_date, tenor_y, freq_per_year)
 
@@ -246,8 +239,6 @@ def price_cap(
     fwd_rates = []
     dfs       = []
     for cp in sched:
-        t_s = (cp['start_date'] - valuation_date).days / 360.0
-        t_e = cp['expiry_y']
         df_s = discount_curve.df(cp['start_date'])
         df_e = discount_curve.df(cp['end_date'])
         tau  = cp['tau']
