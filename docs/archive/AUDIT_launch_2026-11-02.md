@@ -166,7 +166,13 @@ tree, the Swagger page live but unlinked, `frontend/README.md` is Vite boilerpla
   guide corrected (migrations, roles), `model_validation/README.md`, lazy routes and vendor chunks
   (first screen 450 → 286 kB gzip), ruff at zero findings in CI, the duplicate landing copies and dead
   redirects removed, the validation issue template extended.
-- **Batch C** is next.
+- **Batch C shipped 2 November 2026**: the unified trade window books swaptions, caps, floors and collars
+  through the atomic route (`booking.js` builders with 11 unit tests; the bodies validated through the
+  backend's `BookingRequest`, `complete_booking` and the exposure engine's term reader) and opens every
+  existing trade (view mode: read-only ticket, legs fetched, priced on open, CONFIRM with the UTI, the
+  counterparty's ref, proof link and live follow); the gate and the 4,156-line legacy window, its CSS and
+  the curve designer are deleted; vitest added with a CI step. View mode was verified by reading and by
+  the contract test, not in a browser.
 
 ## The plan to 90+
 

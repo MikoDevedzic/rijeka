@@ -25,6 +25,18 @@
 
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from './schedule_translator'
 import { getSessionMaybe } from '../../lib/session'
+import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, addDays, expiryShiftDays } from './product-defaults'
+
+// Unified-window product key → the instrument_type the backend stores and the
+// engines match on (ccr/options.py, pnl/valuation.py, pricing/ir_swap.py).
+export const INSTRUMENT_OF = {
+  IR_SWAP:      'IR_SWAP',
+  IR_SWAPTION:  'IR_SWAPTION',
+  RATES_CAP:    'IR_CAP',
+  RATES_FLOOR:  'IR_FLOOR',
+  RATES_COLLAR: 'IR_COLLAR',
+}
+const CAP_LIKE = new Set(['RATES_CAP', 'RATES_FLOOR', 'RATES_COLLAR'])
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -35,7 +47,7 @@ const CCY_CURVE = {
   CAD: 'CAD_CORRA',
 }
 
-const INDEX_CURVE = {
+export const INDEX_CURVE = {
   'SOFR':'USD_SOFR','TERM SOFR 1M':'USD_TSOFR_1M','TERM SOFR 3M':'USD_TSOFR_3M',
   'TERM SOFR 6M':'USD_TSOFR_6M','EFFR':'USD_EFFR',
   '\u20acSTR':'EUR_ESTR','EURIBOR 1M':'EUR_ESTR','EURIBOR 3M':'EUR_EURIBOR_3M',
@@ -84,16 +96,29 @@ async function getSession() {
 
 /**
  * Build legs for the atomic booking payload. No trade_id or id (server assigns).
- * IR_SWAP only. VANILLA / OIS => fixed + float. BASIS => two floats.
+ *   IR_SWAP       VANILLA / OIS => fixed + float. BASIS => two floats.
+ *   IR_SWAPTION   the underlying forward-starting swap: fixed + float, dates
+ *                 shifted by the expiry, fixed_rate = the strike.
+ *   RATES_CAP / RATES_FLOOR / RATES_COLLAR
+ *                 one float leg OPT-1 with no participation in the rate
+ *                 (leverage 0): only its embedded caplets / floorlets have value.
+ * extras.priced is the last preview-pricing result (ATM strike, priced vol).
  */
-export function buildLegs(state, direction, notional) {
-  if (state.productKey !== 'IR_SWAP') {
-    throw new Error(
-      'buildLegs: only IR_SWAP is supported in atomic booking (got ' +
-      state.productKey + ').'
-    )
+export function buildLegs(state, direction, notional, extras = {}) {
+  switch (state.productKey) {
+    case 'IR_SWAP':     return buildSwapLegs(state, direction, notional)
+    case 'IR_SWAPTION': return buildSwaptionLegs(state, direction, notional, extras)
+    case 'RATES_CAP': case 'RATES_FLOOR': case 'RATES_COLLAR':
+      return buildCapFloorLegs(state, direction, notional)
+    default:
+      throw new Error(
+        'buildLegs: atomic booking supports IR_SWAP, IR_SWAPTION and the cap, ' +
+        'floor and collar (got ' + state.productKey + ').'
+      )
   }
+}
 
+function buildSwapLegs(state, direction, notional) {
   const ccy        = state.ccy || 'USD'
   const curveId    = CCY_CURVE[ccy] || 'USD_SOFR'
   const isOIS      = state.structure === 'OIS'
@@ -187,15 +212,226 @@ export function buildLegs(state, direction, notional) {
   return [fixedLeg, floatLeg]
 }
 
+// ── Option products ──────────────────────────────────────────────────────────
+// Until November 2026 the legacy ticket booked these as the generic swap's legs
+// and terms: a cap lost its strike, a swaption its expiry, vol and side, and the
+// desk valued them as swaps. The option terms live on the trade (what the
+// exposure engine and the P&L valuation read: ccr/options.swaption_terms,
+// pnl/valuation._value_swaption) and the strikes on the float leg's
+// embedded_options (what the pricers read).
+
+/** The premium in currency: OptionFeeBlock's PREMIUM AMOUNT in bp of notional
+ *  or in currency (state.premiumMode). Null when none was entered. */
+function premiumAmount(state, notional) {
+  const n = parseFloat(String(state.premium ?? '').replace(/[^0-9.-]/g, ''))
+  if (!isFinite(n) || n === 0) return null
+  return (state.premiumMode || 'BP') === 'BP' ? (n / 10000) * notional : n
+}
+
+/** The swaption's strike as a decimal: the STRIKE field, or blank = the ATM
+ *  forward the last /api/price/swaption call computed. */
+function swaptionStrike(state, extras) {
+  const raw = String(state.strike ?? SWAPTION_DEFAULTS.strike).trim()
+  if (raw !== '') {
+    const k = parseFloat(raw)
+    if (!isFinite(k)) throw new Error('Strike must be a number (percent) or blank for ATM.')
+    return k / 100
+  }
+  const fwd = extras.priced?.forward_rate
+  if (fwd == null || !isFinite(Number(fwd))) {
+    throw new Error('Strike is blank (ATM): price the swaption first so the ATM forward is known.')
+  }
+  return Number(fwd)
+}
+
+function buildSwaptionLegs(state, direction, notional, extras = {}) {
+  const shift  = expiryShiftDays(state.expiry)
+  const strike = swaptionStrike(state, extras)
+  // The underlying is the forward-starting swap the option delivers into,
+  // struck at the option's strike.
+  return buildSwapLegs({ ...state, structure: 'VANILLA' }, direction, notional).map(l => ({
+    ...l,
+    effective_date: addDays(state.effDate, shift),
+    maturity_date:  addDays(state.matDate, shift),
+    ...(l.leg_type === 'FIXED' ? { fixed_rate: strike } : {}),
+  }))
+}
+
+/** The cap-like products' strikes as decimals; null when the product has no
+ *  such leg (a cap has no floor_rate). */
+function capFloorRates(state) {
+  const pct = v => { const n = parseFloat(String(v)); return isFinite(n) ? n / 100 : NaN }
+  const hasCap   = state.productKey === 'RATES_CAP'   || state.productKey === 'RATES_COLLAR'
+  const hasFloor = state.productKey === 'RATES_FLOOR' || state.productKey === 'RATES_COLLAR'
+  const cap   = hasCap   ? pct(state.capRate   ?? CAPFLOOR_DEFAULTS.capRate)   : null
+  const floor = hasFloor ? pct(state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate) : null
+  if (hasCap   && isNaN(cap))   throw new Error('Cap rate must be a number (percent).')
+  if (hasFloor && isNaN(floor)) throw new Error('Floor rate must be a number (percent).')
+  return { cap, floor }
+}
+
+function buildCapFloorLegs(state, direction, notional) {
+  const ccy        = state.ccy || 'USD'
+  const curveId    = CCY_CURVE[ccy] || 'USD_SOFR'
+  const index      = state.index || 'SOFR'
+  const forecastId = INDEX_CURVE[index] || curveId
+  const payLag     = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
+  const side       = state.optionSide || CAPFLOOR_DEFAULTS.optionSide
+  const theirs     = side === 'BUY' ? 'SELL' : 'BUY'
+  const { cap, floor } = capFloorRates(state)
+  const strikeEntry = (type, dir, k) => ({
+    type, direction: dir, default_strike: k,
+    strike_schedule: [{ date: state.effDate, strike: k }],
+  })
+  // BUY: we own the cap (and, in a collar, sold the floor).
+  const embedded = []
+  if (cap   != null) embedded.push(strikeEntry('CAP',   side, cap))
+  if (floor != null) embedded.push(strikeEntry('FLOOR', state.productKey === 'RATES_COLLAR' ? theirs : side, floor))
+  return [{
+    leg_ref: 'OPT-1', leg_seq: 1, leg_type: 'FLOAT',
+    direction: 'RECEIVE', currency: ccy, notional, notional_type: 'BULLET',
+    effective_date: state.effDate, maturity_date: state.matDate,
+    day_count:         state.capDayCount  || CAPFLOOR_DEFAULTS.capDayCount,
+    payment_frequency: state.capPayFreq   || CAPFLOOR_DEFAULTS.capPayFreq,
+    reset_frequency:   state.capResetFreq || CAPFLOOR_DEFAULTS.capResetFreq,
+    bdc:               state.floatBdc     || 'MOD_FOLLOWING',
+    payment_calendar:  state.floatCal     || null,
+    stub_type: 'SHORT_FRONT', payment_lag: payLag,
+    fixed_rate: 0, spread: 0, spread_schedule: null, leverage: 0,
+    discount_curve_id: curveId, forecast_curve_id: forecastId,
+    ois_compounding: null,
+    embedded_options: embedded,
+    terms: {},
+  }]
+}
+
+/** The vanilla (fixed-for-float) swap terms. Shared by the swap and, with the
+ *  strike as the fixed rate, the swaption's underlying. */
+function vanillaTerms(state, direction, fixedRate) {
+  const dir      = direction
+  const floatDir = dir === 'PAY' ? 'RECEIVE' : 'PAY'
+  return {
+    direction: dir, float_direction: floatDir,
+    fixed_rate:      fixedRate || null,
+    fixed_pay_freq:  state.fixedPayFreq || 'ANNUAL',
+    fixed_day_count: state.fixedDc      || 'ACT/360',
+    fixed_bdc:       state.fixedBdc     || 'MOD_FOLLOWING',
+    fixed_calendar:  state.fixedCal     || null,
+    float_index:      state.index           || 'SOFR',
+    float_reset_freq: state.floatResetFreq  || 'DAILY',
+    float_pay_freq:   state.floatPayFreq    || 'ANNUAL',
+    float_day_count:  state.floatDc         || 'ACT/360',
+    float_bdc:        state.floatBdc        || 'MOD_FOLLOWING',
+    float_calendar:   state.floatCal        || null,
+    spread:   parseBps(state.spread),
+    leverage: parseLev(state.leverage),
+  }
+}
+
+/** POST /api/book/trade body for IR_SWAPTION. */
+export function buildSwaptionBookingBody(state, direction, extras = {}) {
+  const notional  = Number(state.notional) || 0
+  const ccy       = state.ccy || 'USD'
+  const expiry    = state.expiry ?? SWAPTION_DEFAULTS.expiry
+  const shift     = expiryShiftDays(expiry)
+  const strike    = swaptionStrike(state, extras)
+  const structure = state.structure || 'EUROPEAN'
+  const volBp     = parseFloat(String(state.volBp ?? SWAPTION_DEFAULTS.volBp))
+  const terms = {
+    ...vanillaTerms(state, direction, strike),
+    option: 'SWAPTION',
+    side: state.optionSide || SWAPTION_DEFAULTS.optionSide,
+    is_payer: direction === 'PAY',
+    expiry_date: addDays(state.valDate, shift),
+    expiry_tenor: expiry,
+    exercise_type: structure,
+    ...(structure === 'BERMUDAN' && Array.isArray(state.exerciseScheduleY) && state.exerciseScheduleY.length
+      ? { exercise_schedule_y: state.exerciseScheduleY.map(Number).filter(t => Number.isFinite(t) && t > 0).sort((a, b) => a - b) }
+      : {}),
+    strike,
+    vol_bp: isFinite(volBp) ? volBp : null,
+    premium_amount: premiumAmount(state, notional),
+    premium_currency: ccy,
+    premium_payment_date: state.settleDate || state.effDate,
+  }
+  return {
+    store: extras.store || 'WORKING',
+    asset_class: 'RATES',
+    instrument_type: INSTRUMENT_OF.IR_SWAPTION,
+    structure,
+    own_legal_entity_id: extras.ownEntityId   || null,
+    counterparty_id:     extras.counterpartyId || null,
+    notional,
+    notional_ccy: ccy,
+    trade_date:     state.tradeDate,
+    effective_date: state.effDate,
+    maturity_date:  state.matDate,
+    desk: extras.desk || null,
+    book: extras.book || null,
+    terms,
+    legs: buildLegs(state, direction, notional, extras),
+  }
+}
+
+/** POST /api/book/trade body for RATES_CAP / RATES_FLOOR / RATES_COLLAR. */
+export function buildCapFloorBookingBody(state, direction, extras = {}) {
+  const notional = Number(state.notional) || 0
+  const ccy      = state.ccy || 'USD'
+  const { cap, floor } = capFloorRates(state)
+  const priced   = extras.priced || null
+  const volOv    = parseFloat(String(state.volOverride ?? CAPFLOOR_DEFAULTS.volOverride))
+  const pricedVol = priced?.vol_bp ?? priced?.cap_vol_bp ?? null
+  const pricedNpv = priced?.npv ?? priced?.net_npv ?? null
+  const terms = {
+    option: INSTRUMENT_OF[state.productKey].replace('IR_', ''),
+    side: state.optionSide || CAPFLOOR_DEFAULTS.optionSide,
+    cap_rate: cap, floor_rate: floor,
+    vol_bp: isFinite(volOv) ? volOv : pricedVol,
+    premium_amount: premiumAmount(state, notional) ?? pricedNpv,
+    premium_currency: ccy,
+    premium_payment_date: state.settleDate || state.effDate,
+    direction, float_direction: 'RECEIVE',
+    float_index:      state.index        || 'SOFR',
+    float_reset_freq: state.capResetFreq || CAPFLOOR_DEFAULTS.capResetFreq,
+    float_pay_freq:   state.capPayFreq   || CAPFLOOR_DEFAULTS.capPayFreq,
+    float_day_count:  state.capDayCount  || CAPFLOOR_DEFAULTS.capDayCount,
+    float_bdc:        state.floatBdc     || 'MOD_FOLLOWING',
+    float_calendar:   state.floatCal     || null,
+    spread: 0, leverage: 0,
+  }
+  return {
+    store: extras.store || 'WORKING',
+    asset_class: 'RATES',
+    instrument_type: INSTRUMENT_OF[state.productKey],
+    structure: null,
+    own_legal_entity_id: extras.ownEntityId   || null,
+    counterparty_id:     extras.counterpartyId || null,
+    notional,
+    notional_ccy: ccy,
+    trade_date:     state.tradeDate,
+    effective_date: state.effDate,
+    maturity_date:  state.matDate,
+    desk: extras.desk || null,
+    book: extras.book || null,
+    terms,
+    legs: buildLegs(state, direction, notional, extras),
+  }
+}
+
 /**
  * Build the /api/book/trade atomic body from shell state.
  * Includes both trade-level fields AND legs in one payload.
+ * Dispatches on state.productKey; the IR_SWAP body is unchanged since Sprint 12.
  */
-export function buildBookingBody(state, direction, extras) {
+export function buildBookingBody(state, direction, extras = {}) {
+  if (state.productKey === 'IR_SWAPTION') return buildSwaptionBookingBody(state, direction, extras)
+  if (CAP_LIKE.has(state.productKey))     return buildCapFloorBookingBody(state, direction, extras)
+  if (state.productKey !== 'IR_SWAP') {
+    throw new Error('buildBookingBody: unsupported product ' + state.productKey)
+  }
   const fixedRate = parseCoupon(state.coupon)
   const isBASIS   = state.structure === 'BASIS'
   const dir       = direction
-  const floatDir  = dir === 'PAY' ? 'RECEIVE' : 'PAY'
 
   const terms = isBASIS
     ? {
@@ -211,22 +447,7 @@ export function buildBookingBody(state, direction, extras) {
         float_pay_freq2:   state.floatPayFreq2   || 'ANNUAL',
         float_day_count2:  state.floatDc2        || 'ACT/360',
       }
-    : {
-        direction: dir, float_direction: floatDir,
-        fixed_rate:      fixedRate || null,
-        fixed_pay_freq:  state.fixedPayFreq || 'ANNUAL',
-        fixed_day_count: state.fixedDc      || 'ACT/360',
-        fixed_bdc:       state.fixedBdc     || 'MOD_FOLLOWING',
-        fixed_calendar:  state.fixedCal     || null,
-        float_index:      state.index           || 'SOFR',
-        float_reset_freq: state.floatResetFreq  || 'DAILY',
-        float_pay_freq:   state.floatPayFreq    || 'ANNUAL',
-        float_day_count:  state.floatDc         || 'ACT/360',
-        float_bdc:        state.floatBdc        || 'MOD_FOLLOWING',
-        float_calendar:   state.floatCal        || null,
-        spread:   parseBps(state.spread),
-        leverage: parseLev(state.leverage),
-      }
+    : vanillaTerms(state, dir, fixedRate)
 
   const notional = Number(state.notional) || 0
 
@@ -262,10 +483,10 @@ export function buildBookingBody(state, direction, extras) {
  * same key returns the same result without double-booking.
  */
 export async function executeBooking({ state, direction, extras = {} }) {
-  if (state.productKey !== 'IR_SWAP') {
+  if (!INSTRUMENT_OF[state.productKey]) {
     throw new Error(
-      'Atomic booking currently supports IR_SWAP only. ' +
-      'Other products still book via legacy path.'
+      'Atomic booking supports IR_SWAP, IR_SWAPTION and the cap, floor and collar ' +
+      '(got ' + state.productKey + ').'
     )
   }
   if (!state.notional || Number(state.notional) <= 0) throw new Error('Notional is required.')

@@ -18,6 +18,8 @@ import { registerProduct } from '../registry'
 import { SwapTermsBody, SwaptionTermsBody, CapTermsBody,
          FloorTermsBody, CollarTermsBody } from '../product-terms'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from '../schedule_translator'
+import { TENOR_Y as TENOR_Y_MAP, FREQ_PER_YEAR, SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS,
+         addDays, expiryYears, expiryShiftDays } from '../product-defaults'
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -66,22 +68,8 @@ const INDEX_PAY_LAG = {
   'TERM SARON 3M':0,'BBSW 3M':0,'BBSW 6M':0,
 }
 
-// Tenor string → years as float. Matches legacy TradeBookingWindow.TENOR_YEARS.
-const TENOR_Y_MAP = {
-  'ON':1/365,'1W':7/365,'1M':1/12,'2M':2/12,'3M':3/12,'6M':6/12,'9M':9/12,
-  '1Y':1,'18M':1.5,'2Y':2,'3Y':3,'4Y':4,'5Y':5,'6Y':6,'7Y':7,'8Y':8,
-  '9Y':9,'10Y':10,'12Y':12,'15Y':15,'20Y':20,'25Y':25,'30Y':30,'40Y':40,'50Y':50,
-}
-
-// Option-expiry tenor string → years as float.
-const EXPIRY_Y_MAP = {
-  '1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10,
-}
-
-// Pay-frequency string → number of accruals per year.
-const FREQ_PER_YEAR = {
-  'MONTHLY':12, 'QUARTERLY':4, 'SEMI_ANNUAL':2, 'ANNUAL':1,
-}
+// Tenor and frequency tables, and the option products' field defaults, are
+// shared with the TERMS bodies and the booking: ../product-defaults.js.
 
 // ── IR SWAP ─────────────────────────────────────────────────────────────────
 
@@ -335,9 +323,12 @@ registerProduct({
 
   terms: {
     title: 'OPTION TERMS',
-    helper: state => state.direction === 'PAY'
-      ? { text: '→ PAYER (right to pay fixed)',     color: 'var(--red)' }
-      : { text: '← RECEIVER (right to receive fixed)', color: 'var(--accent)' },
+    helper: state => {
+      const sold = state.optionSide === 'SELL'
+      return state.direction === 'PAY'
+        ? { text: (sold ? '→ SOLD PAYER (holder may pay us fixed)' : '→ PAYER (right to pay fixed)'), color: 'var(--red)' }
+        : { text: (sold ? '← SOLD RECEIVER (holder may receive fixed from us)' : '← RECEIVER (right to receive fixed)'), color: 'var(--accent)' }
+    },
     footerText: 'Black/Bachelier normal vol · HW1F cross-check · Physical settlement · ' +
                 'Strike blank = ATM forward (computed from OIS curve)',
     Component: SwaptionTermsBody,
@@ -389,14 +380,21 @@ registerProduct({
 
   pricing: {
     endpoint: '/api/price/swaption',
+    // From the keys SwaptionTermsBody and PrimaryEconomics write: expiry (tenor
+    // string), tenor, strike (% or blank = ATM), volBp, ccy, valDate, direction,
+    // and the swap dates shifted by the expiry (they carry the T+2 spot lag).
     buildPayload: state => {
+      const expiry   = state.expiry ?? SWAPTION_DEFAULTS.expiry
+      const expiry_y = expiryYears(expiry)
+      const shift    = expiryShiftDays(expiry)
+      const strikeRaw = String(state.strike ?? SWAPTION_DEFAULTS.strike).trim()
+      const strike   = strikeRaw !== '' && isFinite(parseFloat(strikeRaw)) ? parseFloat(strikeRaw) / 100 : null
+      const volBp    = parseFloat(String(state.volBp ?? SWAPTION_DEFAULTS.volBp))
       // ── Sprint 13B: Bermudan dispatch ────────────────────────────────────
       // When structure === 'BERMUDAN', send a default annual exercise
-      // schedule from year 1 through expiry_y (inclusive). Schedule editor
-      // UI is Sprint 13C; this default produces a sensible "annual European
-      // on every coupon up to expiry" Bermudan that matches the most common
-      // market convention. User can override via state.exerciseScheduleY
-      // when the editor lands.
+      // schedule from year 1 through expiry_y (inclusive): "annual European
+      // on every coupon up to expiry", the most common market convention.
+      // User can override via state.exerciseScheduleY when the editor lands.
       const isBermudan = state.structure === 'BERMUDAN'
       let exercise_schedule_y = null
       if (isBermudan) {
@@ -410,7 +408,7 @@ registerProduct({
           // Snap-aligned to dt=1/12 by integer years; expiry_y itself is
           // appended to guarantee the Bermudan ≥ European invariant holds
           // tautologically (the European exercise is in the schedule).
-          const E = Number(state.expiryY) || 1
+          const E = expiry_y
           const out = []
           for (let y = 1; y <= Math.floor(E); y++) out.push(y)
           if (out.length === 0 || out[out.length - 1] !== E) out.push(E)
@@ -418,14 +416,18 @@ registerProduct({
         }
       }
       return {
-        notional:            state.notional,
-        expiry_y:            state.expiryY,
-        tenor_y:             state.tenorY,
-        strike:              state.strike,
+        notional:            Number(state.notional) || 0,
+        expiry_y,
+        tenor_y:             TENOR_Y_MAP[state.tenor] || 5,
+        strike,
+        vol_bp:              isFinite(volBp) ? volBp : 86.5,
         is_payer:            state.direction === 'PAY',
-        curve_id:            state.curveId,
-        vol_override_bp:     state.volOverride,
-        valuation_date:      state.valuationDate,
+        pay_freq_y:          1.0,
+        valuation_date:      state.valDate,
+        effective_date:      state.effDate ? addDays(state.effDate, shift) : null,
+        maturity_date:       state.matDate ? addDays(state.matDate, shift) : null,
+        curve_id:            CCY_CURVE[state.ccy] || 'USD_SOFR',
+        exercise_type:       state.structure || 'EUROPEAN',
         // Sprint 13B
         structure:           state.structure || 'EUROPEAN',
         exercise_schedule_y,
@@ -451,7 +453,10 @@ registerProduct({
 
   terms: {
     title: 'CAP TERMS',
-    helper: () => ({ text: '↑ BUY CAP · protection vs rising rates', color: 'var(--red)' }),
+    helper: state => ({
+      text: state.optionSide === 'SELL' ? '↑ SELL CAP · premium received, pay above the strike' : '↑ BUY CAP · protection vs rising rates',
+      color: 'var(--red)',
+    }),
     footerText: 'Bachelier (Normal) · vol from cap surface · OIS discounting · SOFR in-arrears',
     Component: CapTermsBody,
   },
@@ -491,11 +496,11 @@ registerProduct({
   pricing: {
     endpoint: '/api/price/cap',
     buildPayload: state => {
-      const payFreq = state.capPayFreq || 'QUARTERLY'
+      const payFreq = state.capPayFreq || CAPFLOOR_DEFAULTS.capPayFreq
       return {
         notional: Number(state.notional) || 0,
         tenor_y:  TENOR_Y_MAP[state.tenor] || 5,
-        cap_rate: (parseFloat(state.capRate) || 0) / 100,
+        cap_rate: (parseFloat(state.capRate ?? CAPFLOOR_DEFAULTS.capRate) || 0) / 100,
         freq_per_year: FREQ_PER_YEAR[payFreq] || 4,
         curve_id: CCY_CURVE[state.ccy] || 'USD_SOFR',
         valuation_date: state.valDate,
@@ -523,7 +528,10 @@ registerProduct({
 
   terms: {
     title: 'FLOOR TERMS',
-    helper: () => ({ text: '↓ BUY FLOOR · protection vs falling rates', color: 'var(--accent)' }),
+    helper: state => ({
+      text: state.optionSide === 'SELL' ? '↓ SELL FLOOR · premium received, pay below the strike' : '↓ BUY FLOOR · protection vs falling rates',
+      color: 'var(--accent)',
+    }),
     footerText: 'Bachelier (Normal) · put-call vol symmetry via |K−ATM| · OIS discounting · SOFR in-arrears',
     Component: FloorTermsBody,
   },
@@ -563,11 +571,11 @@ registerProduct({
   pricing: {
     endpoint: '/api/price/floor',
     buildPayload: state => {
-      const payFreq = state.capPayFreq || 'QUARTERLY'
+      const payFreq = state.capPayFreq || CAPFLOOR_DEFAULTS.capPayFreq
       return {
         notional: Number(state.notional) || 0,
         tenor_y:  TENOR_Y_MAP[state.tenor] || 5,
-        floor_rate: (parseFloat(state.floorRate) || 0) / 100,
+        floor_rate: (parseFloat(state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate) || 0) / 100,
         freq_per_year: FREQ_PER_YEAR[payFreq] || 4,
         curve_id: CCY_CURVE[state.ccy] || 'USD_SOFR',
         valuation_date: state.valDate,
@@ -595,7 +603,10 @@ registerProduct({
 
   terms: {
     title: 'COLLAR TERMS',
-    helper: () => ({ text: '↕ BUY COLLAR · cap + floor spread', color: 'var(--amber)' }),
+    helper: state => ({
+      text: state.optionSide === 'SELL' ? '↕ SELL COLLAR · sell cap, buy floor' : '↕ BUY COLLAR · buy cap, sell floor',
+      color: 'var(--amber)',
+    }),
     footerText: 'Long Cap − Short Floor · Bachelier (Normal) · zero-cost spread = cap − floor',
     Component: CollarTermsBody,
   },
@@ -637,12 +648,12 @@ registerProduct({
   pricing: {
     endpoint: '/api/price/collar',
     buildPayload: state => {
-      const payFreq = state.capPayFreq || 'QUARTERLY'
+      const payFreq = state.capPayFreq || CAPFLOOR_DEFAULTS.capPayFreq
       return {
         notional: Number(state.notional) || 0,
         tenor_y:  TENOR_Y_MAP[state.tenor] || 5,
-        cap_rate:   (parseFloat(state.capRate)   || 0) / 100,
-        floor_rate: (parseFloat(state.floorRate) || 0) / 100,
+        cap_rate:   (parseFloat(state.capRate   ?? CAPFLOOR_DEFAULTS.capRate)   || 0) / 100,
+        floor_rate: (parseFloat(state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate) || 0) / 100,
         freq_per_year: FREQ_PER_YEAR[payFreq] || 4,
         curve_id: CCY_CURVE[state.ccy] || 'USD_SOFR',
         valuation_date: state.valDate,

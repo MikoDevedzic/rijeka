@@ -198,24 +198,31 @@ export function ProductTerms({ descriptor, state, update }) {
 // ── OptionFeeBlock (shown only when descriptor.optionFee !== null) ──────────
 
 export function OptionFeeBlock({ spec, state, update }) {
-  const [mode, setMode] = useState('BP')
+  // The unit lives in state (premiumMode) because the booking converts the
+  // premium to currency with it: bp of notional, or the currency amount.
+  const mode = state.premiumMode || 'BP'
+  const entered = parseFloat(String(state.premium ?? '').replace(/[^0-9.-]/g, ''))
   return (
     <div className="tbw-sec">
       <div className="tbw-sec-header">
         <span className="tbw-lbl">OPTION FEE</span>
-        <span className="tbw-helper-text">no premium entered</span>
+        <span className="tbw-helper-text">
+          {isFinite(entered) && entered !== 0
+            ? (mode === 'BP' ? `${entered} bp of notional` : `${entered.toLocaleString()} ${state.ccy || 'USD'}`)
+            : 'no premium entered · the priced NPV is booked as the premium'}
+        </span>
       </div>
       <div className="tbw-grid" style={{ gridTemplateColumns: '1fr 1fr 2fr', gap: 12 }}>
         <Field label="PREMIUM AMOUNT">
           <div style={{ display: 'flex', gap: 4 }}>
-            <input className="tbw-mono tbw-amber" value={state.premium ?? '0.00'}
+            <input className="tbw-mono tbw-amber" value={state.premium ?? ''} placeholder="0.00"
                    onChange={e => update({ premium: e.target.value })} style={{ flex: 1 }} />
             {spec.premiumInBpOrDollar && (
               <>
                 <button className={`tbw-chip ${mode === 'BP' ? 'is-on-amber' : ''}`}
-                        onClick={() => setMode('BP')}>BP</button>
+                        onClick={() => update({ premiumMode: 'BP' })}>BP</button>
                 <button className={`tbw-chip ${mode === 'DOLLAR' ? 'is-on-amber' : ''}`}
-                        onClick={() => setMode('DOLLAR')}>$</button>
+                        onClick={() => update({ premiumMode: 'DOLLAR' })}>$</button>
               </>
             )}
           </div>
@@ -617,12 +624,12 @@ function SwapCashflowTables({ result, productKey, state }) {
               border: '1px solid rgba(74,154,212,0.3)',
               color: 'var(--blue)',
             }}>
-              {(state.swaptionExpiry || '1Y')}{'\u00D7'}{state.tenor || '5Y'}{' \u00B7 Physical Settlement'}
+              {(state.expiry || '1Y')}{'\u00D7'}{state.tenor || '5Y'}{' \u00B7 Physical Settlement'}
             </span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
             {'On exercise, this swaption delivers into the swap schedule below. '}
-            {'Effective date shifts forward by '}{state.swaptionExpiry || '1Y'}{' from today. '}
+            {'Effective date shifts forward by '}{state.expiry || '1Y'}{' from today. '}
             {'Sum of PV column = forward swap NPV (\u2248 $0 at ATM strike).'}
           </div>
         </div>
@@ -882,11 +889,13 @@ export function CashflowsPanel({ result, productKey, state }) {
     )
   }
 
-  const isCapLike = productKey === 'RATES_CAP'
-                 || productKey === 'RATES_FLOOR'
-                 || productKey === 'RATES_COLLAR'
-                 || result.caplets
-                 || result.cap?.caplets
+  // The caplet table needs the preview pricers' caplet strip. A booked cap
+  // repriced through /price comes back as its OPT-1 leg with CAPLET /
+  // FLOORLET cashflows, which the leg tables show.
+  const hasCaplets = !!(result.caplets || result.cap?.caplets)
+  const isCapLike = hasCaplets || (
+    (productKey === 'RATES_CAP' || productKey === 'RATES_FLOOR' || productKey === 'RATES_COLLAR')
+    && !(result.legs && result.legs.length))
 
   // Swaption: synthesize legs from the response if backend didn't return any.
   const effectiveResult =

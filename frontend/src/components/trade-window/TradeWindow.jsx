@@ -41,9 +41,10 @@ import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain } from './booking'
+import { executeBooking, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, INDEX_CURVE } from './booking'
+import { TENOR_Y, EXPIRY_Y } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
-import { useTradesStore } from '../../store/useTradesStore'
+import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import { useTabStore }    from '../../store/useTabStore'
 
 // Import all product modules to register them at load time.
@@ -75,6 +76,122 @@ function localDate() {
   return n.getFullYear() + '-' + p(n.getMonth() + 1) + '-' + p(n.getDate())
 }
 
+// ── View mode: an existing trade opened from the blotter ─────────────────────
+// The window is populated from the trade row (terms, dates, parties) and its
+// legs, every input is read-only, the footer and the CONFIRM tab are in the
+// booked state, and PRICE revalues through POST /price with the trade_id.
+
+// instrument_type as stored (canonical IR_*, or INTEREST_RATE_* on older rows) → product key
+const PRODUCT_OF_INSTRUMENT = {
+  IR_SWAP: 'IR_SWAP', IR_SWAPTION: 'IR_SWAPTION',
+  IR_CAP: 'RATES_CAP',       INTEREST_RATE_CAP: 'RATES_CAP',
+  IR_FLOOR: 'RATES_FLOOR',   INTEREST_RATE_FLOOR: 'RATES_FLOOR',
+  IR_COLLAR: 'RATES_COLLAR', INTEREST_RATE_COLLAR: 'RATES_COLLAR',
+}
+const CURRENCY_AC = {
+  FX_SPOT: 'FX', FX_FORWARD: 'FX', NDF: 'FX', FX_SWAP: 'FX', FX_OPTION: 'FX',
+  CRYPTO_FORWARD: 'CRYPTO', CRYPTO_OPTION: 'CRYPTO',
+}
+const CAP_LIKE = new Set(['RATES_CAP', 'RATES_FLOOR', 'RATES_COLLAR'])
+const STATUS_COLOR = {
+  PENDING: 'var(--amber)', CONFIRMED: 'var(--blue)', LIVE: 'var(--accent)',
+  CANCELLED: 'var(--red)', TERMINATED: 'var(--text-dim)', MATURED: 'var(--text-dim)',
+}
+
+/** Where a stored trade lands in the window: asset class, currency instrument, registry product. */
+function viewTarget(trade) {
+  const it = String(trade?.instrument_type || '').toUpperCase()
+  if (CURRENCY_AC[it]) return { assetClass: CURRENCY_AC[it], curInst: it, productKey: 'IR_SWAP' }
+  return { assetClass: 'RATES', curInst: 'FX_FORWARD', productKey: PRODUCT_OF_INSTRUMENT[it] || 'IR_SWAP' }
+}
+
+const iso = d => (d ? String(d).slice(0, 10) : null)
+// A decimal rate as the percent string the inputs show, without float noise.
+const pctStr = v => (v == null || v === '' || isNaN(Number(v))) ? undefined : String(+(Number(v) * 100).toFixed(8))
+const TENOR_LABELS = ['1M', '3M', '6M', '1Y', '2Y', '3Y', '5Y', '7Y', '10Y', '15Y', '20Y', '30Y']
+const INDEX_OF_CURVE = Object.fromEntries(Object.entries(INDEX_CURVE).map(([k, v]) => [v, k]))
+
+/** The nearest tenor chip to the booked schedule, for display. */
+function tenorLabel(effDate, matDate) {
+  if (!effDate || !matDate) return '5Y'
+  const years = (new Date(matDate) - new Date(effDate)) / (365.25 * 86400e3)
+  return TENOR_LABELS.reduce((best, t) => Math.abs(TENOR_Y[t] - years) < Math.abs(TENOR_Y[best] - years) ? t : best, '5Y')
+}
+
+/** The expiry tenor chip nearest a booked expiry date. */
+function expiryLabel(tradeDate, expiryDate) {
+  if (!tradeDate || !expiryDate) return undefined
+  const years = (new Date(expiryDate) - new Date(tradeDate)) / (365.25 * 86400e3)
+  return Object.keys(EXPIRY_Y).reduce((best, t) => Math.abs(EXPIRY_Y[t] - years) < Math.abs(EXPIRY_Y[best] - years) ? t : best, '1Y')
+}
+
+/**
+ * The product state of a stored rates trade: trade.terms first (what the
+ * ticket books since 2026-11), the legs as the fallback for older rows.
+ * Mirrors the legacy window's populate effect, extended to the options.
+ */
+function viewProductState(trade, legs = []) {
+  const t      = trade.terms || {}
+  const fixed  = legs.find(l => l.leg_type === 'FIXED')
+  const floats = legs.filter(l => l.leg_type === 'FLOAT')
+  const float  = floats[0]
+  const { productKey } = viewTarget(trade)
+  const bp = v => (v == null || isNaN(Number(v))) ? undefined : String(+(Number(v) * 10000).toFixed(4))
+  const embedded = Array.isArray(float?.embedded_options) ? float.embedded_options : []
+  const emb = type => embedded.find(e => String(e.type).toUpperCase() === type)
+  const s = {
+    coupon:          pctStr(t.fixed_rate ?? fixed?.fixed_rate) ?? '',
+    rateUserEdited:  true,
+    parRate:         null,
+    index:           t.float_index || t.index1 || INDEX_OF_CURVE[float?.forecast_curve_id] || 'SOFR',
+    fixedPayFreq:    t.fixed_pay_freq  || fixed?.payment_frequency || 'ANNUAL',
+    fixedDc:         t.fixed_day_count || fixed?.day_count         || 'ACT/360',
+    fixedBdc:        t.fixed_bdc       || fixed?.bdc               || 'MOD_FOLLOWING',
+    fixedCal:        t.fixed_calendar  || fixed?.payment_calendar  || undefined,
+    floatResetFreq:  t.float_reset_freq || float?.reset_frequency   || 'DAILY',
+    floatPayFreq:    t.float_pay_freq   || float?.payment_frequency || 'ANNUAL',
+    floatDc:         t.float_day_count  || float?.day_count         || 'ACT/360',
+    floatBdc:        t.float_bdc        || float?.bdc               || 'MOD_FOLLOWING',
+    floatCal:        t.float_calendar   || float?.payment_calendar  || undefined,
+    spread:          bp(t.spread ?? float?.spread) ?? '0',
+    leverage:        String(t.leverage ?? float?.leverage ?? '1.0'),
+  }
+  if (trade.structure === 'BASIS') {
+    Object.assign(s, {
+      index2:          t.index2 || INDEX_OF_CURVE[floats[1]?.forecast_curve_id] || 'EFFR',
+      floatResetFreq2: t.float_reset_freq2 || floats[1]?.reset_frequency   || 'DAILY',
+      floatPayFreq2:   t.float_pay_freq2   || floats[1]?.payment_frequency || 'ANNUAL',
+      floatDc2:        t.float_day_count2  || floats[1]?.day_count         || 'ACT/360',
+    })
+  }
+  const premium = {
+    premium:     t.premium_amount != null ? String(t.premium_amount) : '',
+    premiumMode: 'DOLLAR',
+    settleDate:  iso(t.premium_payment_date) || '',
+    optionSide:  t.side || emb('CAP')?.direction || emb('FLOOR')?.direction || 'BUY',
+  }
+  if (productKey === 'IR_SWAPTION') {
+    Object.assign(s, premium, {
+      expiry: t.expiry_tenor || expiryLabel(iso(trade.trade_date), iso(t.expiry_date)) || '1Y',
+      volBp:  t.vol_bp != null ? String(t.vol_bp) : undefined,
+      strike: pctStr(t.strike ?? fixed?.fixed_rate) ?? '',
+    })
+  } else if (CAP_LIKE.has(productKey)) {
+    Object.assign(s, premium, {
+      capRate:      pctStr(t.cap_rate   ?? emb('CAP')?.default_strike),
+      floorRate:    pctStr(t.floor_rate ?? emb('FLOOR')?.default_strike),
+      capResetFreq: s.floatResetFreq, capPayFreq: s.floatPayFreq, capDayCount: s.floatDc,
+      volOverride:  t.vol_bp != null ? String(t.vol_bp) : '',
+    })
+  } else if (embedded.length) {
+    // a swap with caplets or floorlets on its float leg
+    s.floatLegEmbeddedOptions = embedded
+      .filter(e => e.type && e.direction)
+      .map(e => ({ type: e.type, direction: e.direction, defaultStrike: pctStr(e.default_strike) || '' }))
+  }
+  return s
+}
+
 // Supabase session fetch — used by getSessionWithCache below.
 async function getSession() {
   const session = await getSessionMaybe()
@@ -93,13 +210,17 @@ const SECTION_ORDER = [
   'footer',
 ]
 
-export default function TradeWindow({ onClose, onBook, onViewTrade, initialProduct = 'IR_SWAP' }) {
-  const [productKey, setProductKey]   = useState(initialProduct)
+export default function TradeWindow({ onClose, onBook, onViewTrade, initialProduct = 'IR_SWAP', initialTrade = null, initialPos = null }) {
+  // View mode: initialTrade is a stored trade (blotter row). Fixed for the
+  // window's life; a window never switches between a new and a stored trade.
+  const viewMode = !!initialTrade
+  const view0    = viewMode ? viewTarget(initialTrade) : null
+  const [productKey, setProductKey]   = useState(view0?.productKey || initialProduct)
   const product                        = getProduct(productKey)
   // FX and digital assets share one panel (interest-rate parity) and are not
   // registry products: the window keeps parties, dates, tabs and footer.
-  const [assetClass, setAssetClass]    = useState(product?.assetClass || 'RATES')
-  const [curInst, setCurInst]          = useState('FX_FORWARD')
+  const [assetClass, setAssetClass]    = useState(view0?.assetClass || product?.assetClass || 'RATES')
+  const [curInst, setCurInst]          = useState(view0?.curInst || 'FX_FORWARD')
   const isCurrency                     = assetClass === 'FX' || assetClass === 'CRYPTO'
   const fxRef                          = useRef(null)
   const winRef                         = useRef(null)
@@ -116,9 +237,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     CRYPTO: [{ key: 'CRYPTO_FORWARD', label: 'Crypto forward' }, { key: 'CRYPTO_OPTION', label: 'Crypto option' }],
   }
   const fxTerms = useMemo(() => {
+    if (viewMode) return initialTrade.terms || null       // the term sheet as booked
     if (!fxQuote) return null
     try { return fxRef.current?.payload?.()?.terms || null } catch { return null }
-  }, [fxQuote])
+  }, [fxQuote, viewMode, initialTrade])
   const currencyFooter = {
     footer: {
       structureLabel: () => (curInst === 'FX_OPTION' && fxTerms?.style ? fxTerms.style.replace(/_/g, ' ') : (SHAPE_OF[curInst] || 'FORWARD')),
@@ -138,9 +260,23 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
   const { curveInterp }                = useMarketDataStore()
 
-  const [structure, setStructure]      = useState(product.defaultStructure)
-  const [direction, setDirection]      = useState('PAY')
-  const [economics, setEconomics]      = useState({
+  const [structure, setStructure]      = useState(() => viewMode
+    ? (initialTrade.structure || initialTrade.terms?.exercise_type || product.defaultStructure)
+    : product.defaultStructure)
+  const [direction, setDirection]      = useState(() => {
+    const t = initialTrade?.terms || {}
+    if (t.direction === 'PAY' || t.direction === 'RECEIVE') return t.direction
+    if (typeof t.is_payer === 'boolean') return t.is_payer ? 'PAY' : 'RECEIVE'
+    return 'PAY'
+  })
+  const [economics, setEconomics]      = useState(() => viewMode ? {
+    notional: Number(initialTrade.notional) || 0, ccy: initialTrade.notional_ccy || 'USD',
+    tenor: tenorLabel(iso(initialTrade.effective_date), iso(initialTrade.maturity_date)),
+    effDate: iso(initialTrade.effective_date), matDate: iso(initialTrade.maturity_date),
+    tradeDate: iso(initialTrade.trade_date), valDate: null,
+    ownEntityId: initialTrade.own_legal_entity_id || '', counterpartyId: initialTrade.counterparty_id || '',
+    desk: initialTrade.desk || '', book: initialTrade.book || '',
+  } : {
     notional: 10_000_000, ccy: 'USD', tenor: '5Y',
     effDate: null, matDate: null, tradeDate: null,
     valDate: null,
@@ -176,7 +312,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           loading: false,
           error: (cpR.ok && leR.ok) ? null : 'reference data unavailable',
         })
-        // Default to the first own entity, as the legacy window does.
+        // Default to the first own entity, as the legacy window does. A stored
+        // trade shows what it was booked with, defaults or not.
+        if (viewMode) return
         if (own.length) setEconomics(e => (e.ownEntityId ? e : { ...e, ownEntityId: own[0].id }))
         // The trader's default desk and book (Configurations › P&L & Control), when the ticket has none yet.
         const df = dfR && dfR.ok ? await dfR.json() : null
@@ -186,14 +324,17 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       }
     })()
     return () => { cancelled = true }
-  }, [])
-  const [productState, setProductState] = useState({})
+  }, [viewMode])
+  // View mode: from the trade's terms at once, refined from its legs below.
+  const [productState, setProductState] = useState(() => (viewMode && !view0.assetClass.match(/FX|CRYPTO/))
+    ? viewProductState(initialTrade, []) : {})
   const [result, setResult]             = useState(null)
   const [pricing, setPricing]           = useState(false)
   const [error, setError]               = useState('')
 
-  // Sprint 10 Patch 6 — booking state
-  const [bookedTrade, setBookedTrade] = useState(null)
+  // Sprint 10 Patch 6 — booking state. In view mode the stored trade is the
+  // booked trade: the footer and the CONFIRM tab start in the booked state.
+  const [bookedTrade, setBookedTrade] = useState(initialTrade || null)
   const [booking,     setBooking]     = useState(false)
   const [bookErr,     setBookErr]     = useState('')
 
@@ -227,7 +368,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // sim result state for shell-level consumption later.
   const xvaParamsRef = useRef(null)
   const [, setXvaSimResult] = useState(null)
-  const [pos, setPos] = useState(() => ({
+  const [pos, setPos] = useState(() => initialPos || ({
     x: Math.max(10, (typeof window !== 'undefined' ? window.innerWidth : 1400) - 1287) / 2,
     y: 30,
   }))
@@ -258,23 +399,62 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     setDragging(true)
   }
 
-  // Reset state when product changes — each product owns its own state shape
+  // Reset state when product changes — each product owns its own state shape.
+  // Not on mount: the initial state is already the product's (and, in view
+  // mode, the stored trade's).
+  const firstProductRender = useRef(true)
   useEffect(() => {
+    if (firstProductRender.current) { firstProductRender.current = false; return }
     setStructure(product.defaultStructure)
     setProductState({})
     setResult(null)
     setError('')
   }, [productKey])
 
-  // Set valuation date and trade date to today on mount — mirrors legacy.
+  // Set valuation date to today on mount, and the trade date of a new ticket — mirrors legacy.
   useEffect(() => {
     const today = localDate()
-    setEconomics(e => ({ ...e, valDate: today, tradeDate: today }))
+    setEconomics(e => ({ ...e, valDate: today, tradeDate: e.tradeDate || today }))
   }, [])
 
+  // View mode: the legs, for the conventions an older row's terms do not carry.
+  useEffect(() => {
+    if (!viewMode || isCurrency) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const session = await getSession()
+        if (!session?.access_token || cancelled) return
+        const res = await fetch(API + '/api/trade-legs/' + initialTrade.id, { headers: { Authorization: 'Bearer ' + session.access_token } })
+        if (!res.ok || cancelled) return
+        const legs = await res.json()
+        if (cancelled || !Array.isArray(legs) || !legs.length) return
+        setProductState(s => ({ ...s, ...viewProductState(initialTrade, legs) }))
+      } catch (e) { console.warn('[tw] legs fetch failed', e) }
+    })()
+    return () => { cancelled = true }
+  }, [viewMode, isCurrency, initialTrade])
+
+  // View mode: the trade's shared identifiers (its UTI, the counterparty's own
+  // ref for it), and its status followed live from the blotter store — the
+  // counterparty's countersignature from chat, a cancel from another window.
+  // Only PENDING is followed: a status this window set itself is never undone.
+  const theirRef   = useTradesStore(s => (viewMode ? s.theirRefs[initialTrade.id] : null) || null)
+  const liveStatus = useTradesStore(s => viewMode ? s.trades.find(t => t.id === initialTrade.id)?.status : undefined)
+  useEffect(() => {
+    if (!viewMode || !liveStatus || liveStatus === 'PENDING') return
+    setBookedTrade(b => (b && b.status === 'PENDING') ? { ...b, status: liveStatus } : b)
+  }, [viewMode, liveStatus])
+  const [utiCopied, setUtiCopied] = useState(false)
+  const copyUti = () => {
+    const uti = bookedTrade?.uti
+    if (!uti) return
+    navigator.clipboard?.writeText(uti).then(() => { setUtiCopied(true); setTimeout(() => setUtiCopied(false), 1500) }).catch(() => {})
+  }
+
   const state = useMemo(() => ({
-    productKey, structure, direction, ...economics, ...productState,
-  }), [productKey, structure, direction, economics, productState])
+    productKey, structure, direction, readOnly: viewMode, ...economics, ...productState,
+  }), [productKey, structure, direction, viewMode, economics, productState])
 
   // Fields that belong in `economics` (shell-level). Everything else is
   // routed to productState. Descriptors call update() with either kind
@@ -310,33 +490,48 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
                                   product.pricing.timeoutMs || 30000)
 
     try {
-      const endpoint = typeof product.pricing.endpoint === 'function'
-        ? product.pricing.endpoint(state) : product.pricing.endpoint
       const curveId  = CCY_CURVE[state.ccy] || 'USD_SOFR'
-      const payload  = {
-        ...product.pricing.buildPayload(state),
-        curves: [{
-          curve_id: curveId,
-          quotes: [],
-          interp_method: curveInterp?.[curveId] || 'LogLinearDiscount',
-        }],
-      }
+      const curves   = [{
+        curve_id: curveId,
+        quotes: [],
+        interp_method: curveInterp?.[curveId] || 'LogLinearDiscount',
+      }]
 
       // Session with 5s deadline + cache fallback (copied pattern from Sprint 9.1)
       const session = await getSessionWithCache(sessionCacheRef)
+      const post = async (path, body) => {
+        const res = await fetch(API + path, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: ac.signal,
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.detail || 'Pricing failed')
+        return data
+      }
 
-      const res = await fetch(API + endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + session.access_token,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-        signal: ac.signal,
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Pricing failed')
+      if (viewMode) {
+        // A stored trade is revalued as booked: POST /price with its trade_id
+        // (a currency trade returns through currencies.price_booked). A
+        // swaption's option analytics come from its pricer on the booked
+        // terms; the booked legs supply the cashflows.
+        const booked = await post('/price', { trade_id: initialTrade.id, valuation_date: state.valDate, curves })
+        if (isCurrency) { setFxQuote(booked); return }
+        let data = booked
+        if (productKey === 'IR_SWAPTION' && state.effDate && state.matDate) {
+          try {
+            const opt = await post(product.pricing.endpoint, { ...product.pricing.buildPayload(state), curves })
+            data = { ...opt, legs: booked.legs, curve_mode: booked.curve_mode, trade_id: booked.trade_id }
+          } catch (e) { console.warn('[tw] swaption revaluation fell back to the booked legs', e) }
+        }
+        setResult(product.pricing.parseResponse(data))
+        return
+      }
 
+      const endpoint = typeof product.pricing.endpoint === 'function'
+        ? product.pricing.endpoint(state) : product.pricing.endpoint
+      const data = await post(endpoint, { ...product.pricing.buildPayload(state), curves })
       setResult(product.pricing.parseResponse(data))
     } catch (e) {
       if (e?.name === 'AbortError') setError('Pricing request aborted')
@@ -345,7 +540,29 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       clearTimeout(abortTimer)
       setPricing(false)
     }
-  }, [pricing, product, state])
+  }, [pricing, product, productKey, state, viewMode, isCurrency, initialTrade, curveInterp])
+
+  // View mode: value the trade as soon as the window opens, so the analytics,
+  // the footer and the CASHFLOWS tab show the booked trade without a click.
+  const pricedOnOpen = useRef(false)
+  useEffect(() => {
+    if (!viewMode || pricedOnOpen.current || !state.valDate) return
+    pricedOnOpen.current = true
+    handlePrice()
+  }, [viewMode, state.valDate, handlePrice])
+
+  // View mode: a confirmed trade's on-chain record (hash, both signatures,
+  // block), loaded when the CONFIRM tab opens. {attestation, on_chain} from
+  // the backend, {error} when it could not be read.
+  useEffect(() => {
+    if (!viewMode || activeTab !== '◆ CONFIRM' || attestation !== null) return
+    if (!['CONFIRMED', 'TERMINATED'].includes(bookedTrade?.status)) return
+    let live = true
+    getAttestation(bookedTrade.id)
+      .then(r => { if (live) setAttestation(r || { error: 'empty response' }) })
+      .catch(e => { if (live) setAttestation({ error: e.message || String(e) }) })
+    return () => { live = false }
+  }, [viewMode, activeTab, attestation, bookedTrade])
 
   // Sprint 10 Patch 6 — booking handlers
   const handleBook = useCallback(async () => {
@@ -368,17 +585,24 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           counterpartyId:  economics.counterpartyId || null,
           desk:            economics.desk || null,
           book:            economics.book || null,
+          // the last preview result: a blank swaption strike books its ATM
+          // forward, a cap without a vol override books the priced vol
+          priced:          result,
         },
       })
       setBookedTrade(r.trade)
-      if (r.priceData) setResult(product.pricing.parseResponse(r.priceData))
+      // The option products' own analytics (vega, vol, caplets) came from the
+      // preview; /price after booking returns the swap-shaped valuation of
+      // the stored legs, which is what the swap shows.
+      if (r.priceData && productKey === 'IR_SWAP') setResult(product.pricing.parseResponse(r.priceData))
+      try { useTradesStore.getState().fetchTrades?.({ quiet: true }) } catch { /* blotter refresh is best effort */ }
       onBook?.({ productKey, trade: r.trade })
     } catch (e) {
       setBookErr(e.message || String(e))
     } finally {
       setBooking(false)
     }
-  }, [booking, pricing, state, direction, product, productKey, onBook, economics])
+  }, [booking, pricing, state, direction, product, productKey, onBook, economics, result])
 
   const handleBookCurrency = useCallback(async () => {
     if (booking || pricing) return
@@ -604,6 +828,16 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   }, [dragging])
 
+  // A stored cap, floor or collar is revalued through /price, which returns
+  // the swap-shaped valuation of its OPT-1 leg (NPV, IR01, theta, the leg's
+  // caplet cashflows), not the preview pricer's caplet strip: show it with the
+  // swap's analytics and footer, under the product's own structure label.
+  const swapProduct    = getProduct('IR_SWAP')
+  const displayProduct = useMemo(() => (viewMode && CAP_LIKE.has(productKey) && swapProduct)
+    ? { ...product, analytics: swapProduct.analytics, footer: { ...swapProduct.footer, structureLabel: product.footer.structureLabel } }
+    : product, [viewMode, productKey, product, swapProduct])
+  const status = bookedTrade?.status || 'PENDING'
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -633,16 +867,36 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             title="Maximize (n/a)"
           />
         </div>
-        <div className="tbw-title" style={bookedTrade ? { color: 'var(--accent)' } : {}}>
+        <div className="tbw-title" style={bookedTrade && !viewMode ? { color: 'var(--accent)' } : {}}>
           {booking
             ? 'BOOKING...'
-            : bookedTrade
-              ? '✓ BOOKED · ' + (bookedTrade.trade_ref || bookedTrade.id)
-              : bookErr
-                ? 'ERROR: ' + bookErr
-                : 'NEW TRADE'}
+            : viewMode
+              ? (bookedTrade.trade_ref || bookedTrade.id) + ' · ' + status
+              : bookedTrade
+                ? '✓ BOOKED · ' + (bookedTrade.trade_ref || bookedTrade.id)
+                : bookErr
+                  ? 'ERROR: ' + bookErr
+                  : 'NEW TRADE'}
+          {viewMode && theirRef && (
+            <span className="tbw-ids" title={`${theirRef.firm}'s own ref for this trade`}>
+              THEIR REF <b>{theirRef.trade_ref}</b>
+            </span>
+          )}
+          {viewMode && bookedTrade.uti && (
+            <span className="tbw-ids tbw-no-drag" onClick={copyUti} onMouseDown={e => e.stopPropagation()}
+                  style={{ cursor: 'pointer' }}
+                  title={`${bookedTrade.uti}\nThe same on both parties' bookings. Click to copy.`}>
+              UTI <b>{utiCopied ? 'COPIED' : shortUti(bookedTrade.uti)}</b>
+            </span>
+          )}
         </div>
-        {bookedTrade && (
+        {viewMode && (
+          <span className="tbw-status-badge tbw-no-drag"
+                style={{ marginLeft: 'auto', marginRight: 12, color: STATUS_COLOR[status] || 'var(--text-dim)' }}>
+            {status}
+          </span>
+        )}
+        {bookedTrade && !viewMode && (
           <div className="tbw-no-drag" style={{ display: 'flex', gap: '8px', marginLeft: 'auto', marginRight: '12px' }}>
             <button
               type="button"
@@ -665,6 +919,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       {/* TRADE content stays mounted (hidden when tab != TRADE) so auto-fetch
           effects in SwapTermsBody don't re-fire every tab switch. */}
       <div style={{ display: activeTab === 'TRADE' ? 'block' : 'none' }}>
+        {/* View mode: the whole ticket is read-only — a disabled fieldset
+            disables every input, select and chip inside it at once. */}
+        <fieldset className="tbw-fieldset" disabled={viewMode}>
         <InstrumentSelector
           assetClasses={[...new Set([...listAssetClasses(), 'FX', 'CRYPTO'])]}
           activeAssetClass={assetClass}
@@ -683,7 +940,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           refData={refData}
         />
 
-        {isCurrency && (<>
+        {isCurrency && !viewMode && (<>
             <FxCryptoPanel ref={fxRef} ac={assetClass} inst={curInst} onPriced={setFxQuote} onError={(m) => setBookErr(m)} />
             <XVASummary result={fxQuote} />
           </>)}
@@ -709,9 +966,21 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             update={updateProductState}
           />
         )}
+        </>)}
+        </fieldset>
 
+        {/* View mode, currency trade: the term sheet as booked and the
+            valuation /price returned for it (FxCryptoPanel is a ticket, not a view). */}
+        {isCurrency && viewMode && (<>
+          {error && <div className="tbw-sec"><div className="tbw-error">{error}</div></div>}
+          {!fxQuote && pricing && <div className="tbw-sec tbw-mut">valuing…</div>}
+          <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} />
+          <XVASummary result={fxQuote} />
+        </>)}
+
+        {!isCurrency && (<>
         <AnalyticsBlock
-          descriptor={product}
+          descriptor={displayProduct}
           result={result}
           pricing={pricing}
           error={error}
@@ -805,6 +1074,13 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             onCancelTrade={handleCancelTrade}
             onRemoteConfirmed={handleRemoteConfirmed}
           />
+          {attestation && !attestation.attestation && ['CONFIRMED', 'TERMINATED'].includes(status) && (
+            <div className="tbw-sec tbw-mut">
+              {attestation.error
+                ? 'Could not load the confirmation record: ' + attestation.error
+                : 'Confirmed off-chain: no signatures and nothing anchored, so there is no on-chain record for this trade.'}
+            </div>
+          )}
         </div>
       )}
 
@@ -815,7 +1091,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       )}
 
       <TradeFooter
-        descriptor={isCurrency ? currencyFooter : product}
+        descriptor={isCurrency ? currencyFooter : displayProduct}
         result={isCurrency ? fxQuote : result}
         state={state}
         pricing={pricing}

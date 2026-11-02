@@ -31,6 +31,7 @@
 import React, { useEffect, useRef } from 'react'
 import LegEmbeddedOptions from './LegEmbeddedOptions'
 import { getSessionMaybe } from '../../lib/session'
+import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS } from './product-defaults'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -137,11 +138,59 @@ function LegHeader({ label, dirLabel, dirColor }) {
   )
 }
 
+// BUY / SELL of an option: BUY, we hold the right (and pay the premium);
+// SELL, we wrote it. Same chips as the PAY / RECEIVE direction, SELL in red.
+function SideField({ state, update }) {
+  const side = state.optionSide || 'BUY'
+  return (
+    <Field label="SIDE">
+      <div className="tbw-chip-row" style={{ gap: 4 }}>
+        <button type="button" className={`tbw-chip ${side === 'BUY' ? 'is-on' : ''}`}
+                title="BUY: we hold the right and pay the premium"
+                onClick={() => update({ optionSide: 'BUY' })}>BUY</button>
+        <button type="button" className={`tbw-chip tbw-chip-dir-pay ${side === 'SELL' ? 'is-on' : ''}`}
+                title="SELL: we wrote the option and receive the premium"
+                onClick={() => update({ optionSide: 'SELL' })}>SELL</button>
+      </div>
+    </Field>
+  )
+}
+
+// The schedule dates for the tenor from the trade date (the backend applies
+// the currency's spot lag and calendar). Every rates product needs them for
+// pricing and booking; a booked trade (state.readOnly) keeps its own.
+function useScheduleDates(state, update) {
+  const { tradeDate, tenor, ccy, readOnly } = state
+  useEffect(() => {
+    if (readOnly || !tradeDate || !tenor || !ccy) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const session = await getSession()
+        if (!session || cancelled) return
+        const res = await fetch(API + '/api/schedules/preview', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + session.access_token,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ trade_date: tradeDate, tenor, currency: ccy }),
+        })
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        if (cancelled) return
+        update({ effDate: data.effective_date, matDate: data.maturity_date })
+      } catch { /* silent */ }
+    })()
+    return () => { cancelled = true }
+  }, [tenor, ccy, tradeDate, readOnly])
+}
+
 // ── IR_SWAP body ───────────────────────────────────────────────────────────
 
 export function SwapTermsBody({ state, update }) {
   const {
-    ccy = 'USD', tenor = '5Y', tradeDate, effDate, matDate, valDate,
+    ccy = 'USD', effDate, matDate, valDate,
     direction = 'PAY', structure = 'VANILLA',
   } = state
   const isBasis = structure === 'BASIS'
@@ -166,9 +215,12 @@ export function SwapTermsBody({ state, update }) {
   const floatDc2        = state.floatDc2        ?? 'ACT/360'
 
   // ── Effect: CCY change cascade (skip first render) ───────────────────────
+  // A booked trade (state.readOnly) keeps its conventions: the cascade would
+  // reset the index and day counts when the trade's currency is loaded.
   const firstCcyRender = useRef(true)
   useEffect(() => {
     if (firstCcyRender.current) { firstCcyRender.current = false; return }
+    if (state.readOnly) return
     const newIdx = (CCY_INDICES[ccy] || ['SOFR'])[0]
     const def = INDEX_DEFAULTS[newIdx] || ['DAILY','ANNUAL','ACT/360']
     update({
@@ -179,35 +231,15 @@ export function SwapTermsBody({ state, update }) {
       fixedDc:  'ACT/360',
       rateUserEdited: false,
     })
-  }, [ccy])
+  }, [ccy, state.readOnly])
 
   // ── Effect: schedule-dates auto-fetch ────────────────────────────────────
-  useEffect(() => {
-    if (!tradeDate || !tenor || !ccy) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const session = await getSession()
-        if (!session || cancelled) return
-        const res = await fetch(API + '/api/schedules/preview', {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + session.access_token,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ trade_date: tradeDate, tenor, currency: ccy }),
-        })
-        if (!res.ok || cancelled) return
-        const data = await res.json()
-        if (cancelled) return
-        update({ effDate: data.effective_date, matDate: data.maturity_date })
-      } catch { /* silent */ }
-    })()
-    return () => { cancelled = true }
-  }, [tenor, ccy, tradeDate])
+  useScheduleDates(state, update)
 
   // ── Effect: par-rate auto-fetch ──────────────────────────────────────────
+  // Not on a booked trade: its coupon is struck.
   useEffect(() => {
+    if (state.readOnly) return
     if (!effDate || !matDate || !ccy) return
     if (state.rateUserEdited) return
     let cancelled = false
@@ -269,7 +301,7 @@ export function SwapTermsBody({ state, update }) {
     // the valuation date or a day count left the old par rate on screen.
   }, [effDate, matDate, ccy, structure, direction, valDate, index,
       fixedPayFreq, fixedDc, fixedBdc, floatResetFreq, floatPayFreq,
-      floatDc, floatBdc, spread, leverage, state.notional, state.rateUserEdited])
+      floatDc, floatBdc, spread, leverage, state.notional, state.rateUserEdited, state.readOnly])
 
   // ── Sprint 13 Patch 5 ─ structure-sync effect removed ──
   // Per PRODUCT_TAXONOMY §1.11, embedded optionality is a leg-level feature
@@ -477,29 +509,30 @@ export function SwapTermsBody({ state, update }) {
 
 // ── IR_SWAPTION body ───────────────────────────────────────────────────────
 
+// State keys: expiry (tenor string), volBp, strike (% or blank = ATM forward),
+// optionSide; the underlying swap's conventions are SwapTermsBody's keys. The
+// defaults shown are SWAPTION_DEFAULTS, which the pricer and the booking apply
+// to an untouched field too.
 export function SwaptionTermsBody({ state, update }) {
+  const expiry = state.expiry ?? SWAPTION_DEFAULTS.expiry
+  const volBp  = state.volBp  ?? SWAPTION_DEFAULTS.volBp
+  const strike = state.strike ?? SWAPTION_DEFAULTS.strike
   return (
     <>
       <Row cols={4}>
+        <SideField state={state} update={update} />
         <Field label="OPTION EXPIRY">
-          <select value={state.expiry ?? '1Y'} onChange={e => update({ expiry: e.target.value })}>
+          <select value={expiry} onChange={e => update({ expiry: e.target.value })}>
             {['1M','3M','6M','1Y','2Y','3Y','5Y'].map(t => <option key={t}>{t}</option>)}
           </select>
         </Field>
         <Field label="NORMAL VOL (bp)">
-          <input className="tbw-mono tbw-blue" value={state.volBp ?? '86.5'}
+          <input className="tbw-mono tbw-blue" value={volBp}
                  onChange={e => update({ volBp: e.target.value })} />
         </Field>
         <Field label="STRIKE (%) blank=ATM">
-          <input className="tbw-mono tbw-blue" value={state.strike ?? '3.6390'}
+          <input className="tbw-mono tbw-blue" value={strike} placeholder="ATM forward"
                  onChange={e => update({ strike: e.target.value })} />
-        </Field>
-        <Field label="HW1F CROSS-CHECK">
-          <div className="tbw-mono" style={{ padding: '7px 0', fontSize: 12 }}>
-            <span className="tbw-mut">Model:</span> <span className="tbw-blue">83.0bp</span>
-            <span className="tbw-mut"> Mkt:</span> <span className="tbw-blue">86.5bp</span>
-            <span className="tbw-negative"> △ −3.46bp ⚠</span>
-          </div>
         </Field>
       </Row>
       {/* Legs inherited from SwapTermsBody — swaption has same underlying swap legs */}
@@ -509,18 +542,23 @@ export function SwaptionTermsBody({ state, update }) {
 }
 
 // ── RATES_CAP body ──────────────────────────────────────────────────────────
+// State keys (shared by the three cap-like bodies): capRate / floorRate (%),
+// index, capResetFreq, capPayFreq, capDayCount, volOverride (bp), optionSide.
+// Defaults are CAPFLOOR_DEFAULTS, applied by the pricer and the booking too.
 
 export function CapTermsBody({ state, update }) {
+  useScheduleDates(state, update)
   const ccy         = state.ccy         || 'USD'
-  const capRate     = state.capRate     ?? '4.5'
+  const capRate     = state.capRate     ?? CAPFLOOR_DEFAULTS.capRate
   const index       = state.index       ?? (CCY_INDICES[ccy]?.[0] || 'SOFR')
-  const resetFreq   = state.capResetFreq ?? 'DAILY'
-  const payFreq     = state.capPayFreq   ?? 'QUARTERLY'
-  const dayCount    = state.capDayCount  ?? 'ACT/360'
-  const volOverride = state.volOverride  ?? ''
+  const resetFreq   = state.capResetFreq ?? CAPFLOOR_DEFAULTS.capResetFreq
+  const payFreq     = state.capPayFreq   ?? CAPFLOOR_DEFAULTS.capPayFreq
+  const dayCount    = state.capDayCount  ?? CAPFLOOR_DEFAULTS.capDayCount
+  const volOverride = state.volOverride  ?? CAPFLOOR_DEFAULTS.volOverride
   return (
     <>
-      <Row cols={6}>
+      <Row cols={7}>
+        <SideField state={state} update={update} />
         <Field label="CAP RATE (%)">
           <input className="tbw-mono tbw-negative" value={capRate}
                  onChange={e => update({ capRate: e.target.value })} />
@@ -561,16 +599,18 @@ export function CapTermsBody({ state, update }) {
 // ── RATES_FLOOR body ───────────────────────────────────────────────────────
 
 export function FloorTermsBody({ state, update }) {
+  useScheduleDates(state, update)
   const ccy         = state.ccy         || 'USD'
-  const floorRate   = state.floorRate   ?? '3.0'
+  const floorRate   = state.floorRate   ?? CAPFLOOR_DEFAULTS.floorRate
   const index       = state.index       ?? (CCY_INDICES[ccy]?.[0] || 'SOFR')
-  const resetFreq   = state.capResetFreq ?? 'DAILY'
-  const payFreq     = state.capPayFreq   ?? 'QUARTERLY'
-  const dayCount    = state.capDayCount  ?? 'ACT/360'
-  const volOverride = state.volOverride  ?? ''
+  const resetFreq   = state.capResetFreq ?? CAPFLOOR_DEFAULTS.capResetFreq
+  const payFreq     = state.capPayFreq   ?? CAPFLOOR_DEFAULTS.capPayFreq
+  const dayCount    = state.capDayCount  ?? CAPFLOOR_DEFAULTS.capDayCount
+  const volOverride = state.volOverride  ?? CAPFLOOR_DEFAULTS.volOverride
   return (
     <>
-      <Row cols={6}>
+      <Row cols={7}>
+        <SideField state={state} update={update} />
         <Field label="FLOOR RATE (%)">
           <input className="tbw-mono tbw-positive" value={floorRate}
                  onChange={e => update({ floorRate: e.target.value })} />
@@ -611,16 +651,18 @@ export function FloorTermsBody({ state, update }) {
 // ── RATES_COLLAR body ──────────────────────────────────────────────────────
 
 export function CollarTermsBody({ state, update }) {
+  useScheduleDates(state, update)
   const ccy         = state.ccy         || 'USD'
-  const capRate     = state.capRate     ?? '4.5'
-  const floorRate   = state.floorRate   ?? '3.0'
+  const capRate     = state.capRate     ?? CAPFLOOR_DEFAULTS.capRate
+  const floorRate   = state.floorRate   ?? CAPFLOOR_DEFAULTS.floorRate
   const index       = state.index       ?? (CCY_INDICES[ccy]?.[0] || 'SOFR')
-  const resetFreq   = state.capResetFreq ?? 'DAILY'
-  const payFreq     = state.capPayFreq   ?? 'QUARTERLY'
-  const dayCount    = state.capDayCount  ?? 'ACT/360'
+  const resetFreq   = state.capResetFreq ?? CAPFLOOR_DEFAULTS.capResetFreq
+  const payFreq     = state.capPayFreq   ?? CAPFLOOR_DEFAULTS.capPayFreq
+  const dayCount    = state.capDayCount  ?? CAPFLOOR_DEFAULTS.capDayCount
   return (
     <>
-      <Row cols={6}>
+      <Row cols={7}>
+        <SideField state={state} update={update} />
         <Field label="CAP RATE (%)">
           <input className="tbw-mono tbw-negative" value={capRate}
                  onChange={e => update({ capRate: e.target.value })} />

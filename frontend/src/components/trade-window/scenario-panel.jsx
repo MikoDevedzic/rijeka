@@ -69,12 +69,12 @@ export default function ScenarioPanel({
       floatBdc={state.floatBdc || 'MOD_FOLLOWING'}
       getSession={getSession}
       inst={INST_MAP[productKey] || productKey}
-      swaptionExpiry={state.swaptionExpiry || '1Y'}
+      swaptionExpiry={state.expiry || '1Y'}
       swaptionTenor={state.tenor || '5Y'}
-      swaptionVol={state.swaptionVol || '86.5'}
+      swaptionVol={state.volBp || '86.5'}
       swaptionResult={productKey === 'IR_SWAPTION' ? result : null}
       capResult={(productKey === 'RATES_CAP' || productKey === 'RATES_FLOOR' || productKey === 'RATES_COLLAR') ? result : null}
-      capVolOverride={state.capVolOverride || ''}
+      capVolOverride={state.volOverride || ''}
       setCapVolOverride={() => {}}
       handleCapFloorPrice={() => {}}
     />

@@ -203,6 +203,13 @@ class BookingRequest(BaseModel):
     strategy:            Optional[str] = None
     legs:                List[LegInput]
 
+    @field_validator("instrument_type", mode="before")
+    @classmethod
+    def _canonical_instrument_type(cls, v):
+        # INTEREST_RATE_* → IR_*, as POST /api/trades does; the engines match on the canonical names.
+        from api.routes._instrument_alias import normalize_instrument_type
+        return normalize_instrument_type(v)
+
     @field_validator("notional")
     @classmethod
     def positive_notional(cls, v):

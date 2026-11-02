@@ -18,8 +18,8 @@ import useBookingStore    from './store/useBookingStore'
 import Messenger, { MessengerPage } from './components/messenger/Messenger'
 
 // Everything a user does not meet on the first screen after sign-in is fetched when
-// first visited (React.lazy): the configuration pages, market data, docs, P&L, risk,
-// counterparty credit, and the legacy booking window. Nothing below has an effect
+// first visited (React.lazy): the configuration pages, market data, docs, P&L, risk
+// and counterparty credit. Nothing below has an effect
 // at import time, so the order modules load in does not matter; the realtime stores
 // (trades, chat, market data) are imported by the eager shell above and start where
 // they always did. A named export is adapted to the default React.lazy expects.
@@ -46,7 +46,6 @@ const Privacy           = named(() => import('./components/docs/Legal'), 'Privac
 const Users             = lazy(() => import('./components/admin/Users'))
 const XVAParametersTab  = lazy(() => import('./components/configurations/XVAParametersTab'))
 const SystemPage        = lazy(() => import('./components/configurations/SystemPage'))
-const TradeBookingWindow = lazy(() => import('./components/blotter/TradeBookingWindow'))
 
 function BlotterLayout() {
   return (
@@ -79,70 +78,32 @@ function ConfigLayout() {
 }
 
 
-// Renders one window per entry in store — survives navigation.
-// Gates between legacy TradeBookingWindow and new unified TradeWindow based
-// on the localStorage feature flag 'rijeka.tbw.unified.products' (Sprint 10).
+// Renders one trade window per entry in the booking store — survives navigation.
+// A window with a trade shows that stored trade (read-only terms, revaluation,
+// confirmation); one without is a new ticket for `productKey` (IR_SWAP unless
+// the opener says otherwise). Both are the unified TradeWindow: the legacy
+// TradeBookingWindow and its per-product localStorage gate were retired in the
+// launch audit (batch C) once booking.js covered every rates product.
 function PersistentBookingWindow() {
   const { windows, close } = useBookingStore()
   if (!windows.length) return null
-
-  // Per-product rollout of the unified TradeWindow. Comma-separated product
-  // keys in localStorage 'rijeka.tbw.unified.products' override the default.
-  //
-  // Default is IR_SWAP: the unified shell is where Sprint 10-13 landed (leg
-  // schedules, atomic confirm/cancel, on-chain confirmation) and the legacy
-  // window's CONFIRM tab is still a Sprint 6A placeholder. It is IR_SWAP only
-  // because booking.js::executeBooking throws for every other product —
-  // widening this default would break booking for cap / floor / collar /
-  // swaption. Set the key to 'legacy' (or any value without IR_SWAP) to go
-  // back; set it to a wider list once atomic booking covers those products.
-  const UNIFIED_DEFAULT = 'IR_SWAP'
-  const flag = localStorage.getItem('rijeka.tbw.unified.products')
-  const unifiedSet = new Set(
-    (flag === null ? UNIFIED_DEFAULT : flag)
-      .split(',').map(s => s.trim()).filter(Boolean)
-  )
-
   return (
     <>
-      {windows.map(w => {
-        const productKey = w.productKey || 'IR_SWAP'
-        const isNewTrade = !w.trade
-        const useUnified = isNewTrade && unifiedSet.has(productKey)
-
-        if (useUnified) {
-          return (
-            <ErrorBoundary key={w.id} scope="window" onReset={() => close(w.id)}>
-            <TradeWindow
-              initialProduct={productKey}
-              onClose={() => close(w.id)}
-              onBook={() => {
-                // L25 fix (Apr 24, 2026): no-op stub.
-                // The real booking path is booking.js::executeBooking which
-                // POSTs to Supabase directly. This callback is retained for
-                // prop-signature compatibility with TradeWindow but intentionally
-                // does no work. Blotter refresh is handled by useTradesStore
-                // and useTabStore in TradeWindow's handleConfirm/handleCancelTrade
-                // (commit 529c232).
-              }}
-            />
-            </ErrorBoundary>
-          )
-        }
-
-        return (
-          <ErrorBoundary key={w.id} scope="window" onReset={() => close(w.id)}>
-          <Suspense fallback={<Loading label="LOADING WINDOW..." style={{ position: 'fixed', left: w.x, top: w.y, zIndex: 1000 }} />}>
-          <TradeBookingWindow
-            windowId={w.id}
+      {windows.map(w => (
+        <ErrorBoundary key={w.id} scope="window" onReset={() => close(w.id)}>
+          <TradeWindow
+            initialProduct={w.productKey || 'IR_SWAP'}
+            initialTrade={w.trade || null}
             initialPos={{ x: w.x, y: w.y }}
-            trade={w.trade || null}
             onClose={() => close(w.id)}
+            onBook={() => {
+              // No-op: booking.js::executeBooking books, and TradeWindow
+              // refreshes useTradesStore / useTabStore itself after booking,
+              // confirming and cancelling. Kept for the prop signature.
+            }}
           />
-          </Suspense>
-          </ErrorBoundary>
-        )
-      })}
+        </ErrorBoundary>
+      ))}
     </>
   )
 }

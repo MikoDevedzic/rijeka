@@ -67,9 +67,9 @@ export default function XvaPanel({
       instrumentType={productKey}
 
       // Swaption context (only relevant for IR_SWAPTION)
-      swaptionExpiry={state.swaptionExpiry || '1Y'}
+      swaptionExpiry={state.expiry || '1Y'}
       swaptionTenor={state.tenor || '5Y'}
-      swaptionVol={state.swaptionVol || '86.5'}
+      swaptionVol={state.volBp || '86.5'}
       swaptionResult={productKey === 'IR_SWAPTION' ? result : null}
     />
     </Suspense>

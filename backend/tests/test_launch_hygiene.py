@@ -187,3 +187,37 @@ def test_scheduler_records_the_exception_class_only():
     assert S.run_step("t", boom, "s", session_factory=Sess) is False
     detail = S.status()["steps"]["t"]["detail"]
     assert "RuntimeError" in detail and "postgresql" not in detail and "secret" not in detail
+
+
+# ── the unified ticket books options through the atomic route ─────────────────────────────────
+
+def test_booking_request_accepts_a_cap_as_one_zero_participation_float_leg_with_embedded_options():
+    from api.routes.booking import BookingRequest, LegInput, complete_booking
+    leg = LegInput(leg_ref="OPT-1", leg_seq=1, leg_type="FLOAT", direction="RECEIVE", currency="USD",
+                   notional=Decimal("10000000"), leverage=Decimal("0"), spread=Decimal("0"),
+                   embedded_options=[{"type": "CAP", "direction": "BUY", "default_strike": 0.045,
+                                      "strike_schedule": [{"date": "2026-11-04", "strike": 0.045}]}])
+    body = BookingRequest(asset_class="RATES", instrument_type="INTEREST_RATE_CAP", notional=Decimal("10000000"),
+                          trade_date=date(2026, 11, 2), effective_date=date(2026, 11, 4), maturity_date=date(2031, 11, 4),
+                          terms={"option": "CAP", "side": "BUY", "cap_rate": 0.045, "float_index": "SOFR"}, legs=[leg])
+    assert body.instrument_type == "IR_CAP" and body.structure is None
+    done = complete_booking(body)
+    lg = done.legs[0]
+    assert float(lg.leverage) == 0 and lg.embedded_options[0]["type"] == "CAP"
+    assert lg.effective_date == date(2026, 11, 4) and lg.discount_curve_id == "USD_SOFR" and lg.forecast_curve_id
+
+
+def test_booking_request_keeps_a_swaptions_forward_starting_underlying():
+    from api.routes.booking import BookingRequest, LegInput, complete_booking
+    legs = [LegInput(leg_ref="FIXED-1", leg_seq=1, leg_type="FIXED", direction="PAY", currency="USD", notional=Decimal("1e7"),
+                     effective_date=date(2027, 11, 4), maturity_date=date(2032, 11, 4), fixed_rate=Decimal("0.0375")),
+            LegInput(leg_ref="FLOAT-1", leg_seq=2, leg_type="FLOAT", direction="RECEIVE", currency="USD", notional=Decimal("1e7"),
+                     effective_date=date(2027, 11, 4), maturity_date=date(2032, 11, 4), forecast_curve_id="USD_SOFR")]
+    body = BookingRequest(asset_class="RATES", instrument_type="IR_SWAPTION", structure="EUROPEAN", notional=Decimal("1e7"),
+                          trade_date=date(2026, 11, 2), effective_date=date(2026, 11, 4), maturity_date=date(2032, 11, 4),
+                          terms={"option": "SWAPTION", "side": "BUY", "is_payer": True, "expiry_date": "2027-11-04",
+                                 "strike": 0.0375, "exercise_type": "EUROPEAN", "direction": "PAY"}, legs=legs)
+    done = complete_booking(body)
+    assert done.structure == "EUROPEAN"
+    assert done.legs[0].effective_date == date(2027, 11, 4), "the underlying keeps its forward start"
+    assert float(done.legs[0].fixed_rate) == 0.0375
