@@ -19,8 +19,6 @@ export default function Users() {
   const [saving, setSaving] = useState(null)
   const [search, setSearch] = useState('')
 
-  useEffect(() => { fetchUsers() }, [])
-
   async function fetchUsers() {
     setLoading(true); setError(null)
     const { data, error: err } = await supabase
@@ -31,6 +29,10 @@ export default function Users() {
     setUsers(data || [])
     setLoading(false)
   }
+
+  // The mount fetch flips the loading flag before its await; the lint rule cannot see past the call.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchUsers() }, [])
 
   async function updateRole(userId, role) {
     setSaving(userId)

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._limits import heavy
 from prometheus import book_brief as bb
 
 router = APIRouter(prefix="/api/prometheus", tags=["prometheus"])
@@ -20,4 +21,6 @@ router = APIRouter(prefix="/api/prometheus", tags=["prometheus"])
 
 @router.get("/brief")
 def brief(refresh: bool = Query(default=False), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    if refresh:
+        heavy(user, "book brief", 3)
     return bb.brief(db, user, refresh=refresh)

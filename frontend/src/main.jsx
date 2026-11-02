@@ -33,12 +33,20 @@ function showFatal(title, detail) {
   root.replaceChildren(box)
 }
 
+// Once React has mounted, an error that escapes a handler must not replace a
+// live desk: it is already reported to the operator by lib/errors.js (and the
+// error boundary catches render errors), so here it is only logged. Before the
+// mount, or if nothing ever mounts, the card above is the only thing a user sees.
+const mounted = () => root.childElementCount > 0 && !root.querySelector('[data-fatal]')
+
 window.addEventListener('error', (e) => {
   const err = e.error || e.message
+  if (mounted()) { console.error('[rijeka] uncaught error after mount', err); return }
   showFatal('The desk hit an error while loading', (err && err.stack) || String(err) + (e.filename ? `\n${e.filename}:${e.lineno}` : ''))
 })
 window.addEventListener('unhandledrejection', (e) => {
   const r = e.reason
+  if (mounted()) { console.error('[rijeka] unhandled rejection after mount', r); return }
   showFatal('The desk hit an error while loading', (r && r.stack) || String(r))
 })
 setTimeout(() => {

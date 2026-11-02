@@ -144,9 +144,16 @@ def write_cashflow_schedule(
         db, body.trade_id, _user_id_for_snapshot,
     )
 
+    # The schedule belongs to the caller's own trade: a foreign trade id is "not found", and the
+    # wipe is scoped to the caller's rows like wipe_projected_cashflows below.
+    from db.models import Trade
+    if not db.query(Trade.id).filter(Trade.id == body.trade_id, Trade.user_id == _user_id_for_snapshot).first():
+        raise HTTPException(status_code=404, detail="Trade not found")
+
     # Wipe only PROJECTED cashflows — preserve CONFIRMED/SETTLED
     db.query(Cashflow).filter(
         Cashflow.trade_id == body.trade_id,
+        Cashflow.user_id == _user_id_for_snapshot,
         Cashflow.status == "PROJECTED"
     ).delete(synchronize_session=False)
 

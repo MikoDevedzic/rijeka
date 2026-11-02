@@ -58,7 +58,7 @@ export function LimitsPage() {
                 {canWrite ? <button className="pnl-btn ghost" disabled={busy} onClick={() => remove(l.id)}>REMOVE</button> : <span />}
               </div>
             ))}
-            {!(rep.limits || []).length && <div className="pnl-empty">{rep.tables ? 'No limits set yet.' : 'Limits need the market risk tables: docs/migrations/2026-10-30_market_risk.sql.'}</div>}
+            {!(rep.limits || []).length && <div className="pnl-empty">{rep.tables ? 'No limits set yet.' : 'Limits need the market risk tables: ask your administrator to apply the latest database migration.'}</div>}
           </div>
         </section>
         <section className="pnl-panel" style={{ maxWidth: 900 }}>
@@ -144,7 +144,7 @@ export function VarSettingsPage() {
                 <option value="zero">Zero (rates and spots stay put in expectation)</option><option value="historical">Historical (the window's drift)</option></select></label>
           </div>
           <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write || !s.tables} onClick={save}>SAVE FOR THE FIRM</button></div>
-          <div className="pnl-foot">VaR is the empirical loss quantile over the window; expected shortfall is the mean loss beyond it; the horizon scales by √t. <b>Full revaluation</b> reprices every live trade on each historical day's shifted market, so convexity and the curve shape inside a bucket are in the number; the ladder VaR is computed alongside as the linear comparison. <b>Ladder</b> applies the day's changes to the key-rate sensitivities: fast, linear in the factors. Exposure sampling drives the counterparty credit run: <b>historical</b> builds each monthly step from a block of observed daily changes, the same block for every factor, keeping the window's fat tails and co-movements; <b>Gaussian</b> draws correlated normal shocks. {!s.tables && <em>Settings need the market risk tables (docs/migrations/2026-10-30_market_risk.sql); the defaults apply until then.</em>}</div>
+          <div className="pnl-foot">VaR is the empirical loss quantile over the window; expected shortfall is the mean loss beyond it; the horizon scales by √t. <b>Full revaluation</b> reprices every live trade on each historical day's shifted market, so convexity and the curve shape inside a bucket are in the number; the ladder VaR is computed alongside as the linear comparison. <b>Ladder</b> applies the day's changes to the key-rate sensitivities: fast, linear in the factors. Exposure sampling drives the counterparty credit run: <b>historical</b> builds each monthly step from a block of observed daily changes, the same block for every factor, keeping the window's fat tails and co-movements; <b>Gaussian</b> draws correlated normal shocks. {!s.tables && <em>Settings need the market risk tables: ask your administrator to apply the latest database migration; the defaults apply until then.</em>}</div>
         </section>
         <section className="pnl-panel" style={{ maxWidth: 980 }}>
           <header><span>RISK-FACTOR HISTORY</span><span className="pnl-sub">public sources, stored on the template account, extended by the daily rebuild</span></header>

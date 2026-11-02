@@ -121,6 +121,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
 
   const [volScenKey, setVolScenKey] = useState('base')
   const [isVolThreeReady, setIsVolThreeReady] = useState(false)
+  const [threeError, setThreeError] = useState(false)   // the 3D module or WebGL failed: the panel says so instead of throwing
   const [volMode, setVolMode] = useState('rotate')  // 'rotate' | 'reshape'
   const [activeVolP, setActiveVolP] = useState(SABR_BASE.map(p=>({...p})))
   const [jointResult, setJointResult] = useState(null)
@@ -284,7 +285,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       const loop=()=>{if(!alive)return;requestAnimationFrame(loop);renderer.render(scene,camera)}
       loop()
       volThreeRef.current.stopLoop=()=>{alive=false}
-    })
+    }).catch(err=>{ console.error('[rijeka] 3D vol surface unavailable', err); setThreeError(true) })
     return()=>{
       const t=volThreeRef.current; if(!t)return
       t.alive=false; t.stopLoop?.(); t.ro?.disconnect(); t.renderer?.dispose()
@@ -449,7 +450,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
 
       const loop=()=>{if(!alive)return;requestAnimationFrame(loop);renderer.render(scene,camera)}
       loop()
-    })
+    }).catch(err=>{ console.error('[rijeka] 3D vol surface unavailable', err); setThreeError(true) })
 
     return()=>{
       alive=false
@@ -1232,11 +1233,18 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                 color:'var(--text-mute)',letterSpacing:'.07em',fontFamily:'var(--mono)',zIndex:2}}>
                 {volMode==='rotate'?'DRAG TO ROTATE · SCROLL TO ZOOM':'DRAG UP/DOWN TO DEFORM VOL · REPRICE FOR ΔP&L'}
               </div>
-              {!isVolThreeReady && (
+              {!isVolThreeReady && !threeError && (
                 <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
                   justifyContent:'center',color:'var(--text-mute)',fontSize:'0.75rem',
                   fontFamily:'var(--mono)',letterSpacing:'.08em'}}>
                   PRICE SWAPTION FIRST TO LOAD SURFACE
+                </div>
+              )}
+              {threeError && (
+                <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
+                  justifyContent:'center',color:'var(--amber)',fontSize:'0.75rem',
+                  fontFamily:'var(--mono)',letterSpacing:'.08em',zIndex:4,background:'var(--panel)'}}>
+                  3D VIEW UNAVAILABLE · RELOAD TO TRY AGAIN
                 </div>
               )}
               {/* Legend */}
@@ -1270,11 +1278,18 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                 color:'var(--text-mute)',letterSpacing:'.07em',fontFamily:'var(--mono)',zIndex:2}}>
                 DRAG TO ROTATE · SCROLL TO ZOOM · STRIKE SPREAD (bp) × TENOR (Y)
               </div>
-              {!capResult && (
+              {!capResult && !threeError && (
                 <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
                   justifyContent:'center',color:'var(--text-mute)',fontSize:'0.75rem',
                   fontFamily:'var(--mono)',letterSpacing:'.08em'}}>
                   PRICE CAP/FLOOR FIRST TO LOAD SURFACE
+                </div>
+              )}
+              {threeError && (
+                <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
+                  justifyContent:'center',color:'var(--amber)',fontSize:'0.75rem',
+                  fontFamily:'var(--mono)',letterSpacing:'.08em',zIndex:4,background:'var(--panel)'}}>
+                  3D VIEW UNAVAILABLE · RELOAD TO TRY AGAIN
                 </div>
               )}
               <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',gap:4,pointerEvents:'none',zIndex:2}}>

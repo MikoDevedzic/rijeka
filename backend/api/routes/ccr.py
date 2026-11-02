@@ -54,6 +54,7 @@ def ccr_report(live: bool = Query(default=False), date_: Optional[str] = Query(d
         if stored:
             stored["job"] = _jobs.get(user["sub"])
             return stored
+    heavy(user, "counterparty run", 4)          # a live report is the Monte Carlo in the request thread
     rep = R.report(db, _ctx(db, user), _parse(date_))
     rep["job"] = _jobs.get(user["sub"])
     rep["from_store"] = False
@@ -93,6 +94,17 @@ def status(user: dict = Depends(verify_token)):
     return {"job": _jobs.get(user["sub"]), "tables": None}
 
 
+
+def _market_date(db: Session, uid: str):
+    """The latest market date an account's batch would be stored under; None when it has no data."""
+    try:
+        from pnl.market import Market
+        ds = Market.dates(db, uid)
+        return max(ds) if ds else None
+    except Exception:           # noqa: BLE001
+        db.rollback(); return None
+
+
 @router.post("/daily/tick")
 def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None)):
     if not _secret_ok(x_rijeka_cron):
@@ -101,13 +113,17 @@ def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Hea
         return {"stored": False, "reason": "tables missing: apply docs/migrations/2026-10-31_ccr.sql"}
     from api.routes.pnl import _as_user
     users = [str(r.user_id) for r in db.execute(text("SELECT DISTINCT user_id FROM trades WHERE status IN ('PENDING','CONFIRMED','LIVE')")).all()]
-    done, failed = [], []
+    done, failed, skipped = [], [], []
     for uid in users:
         try:
+            md = _market_date(db, uid)
+            latest = R.latest_stored(db, uid)
+            if md is not None and latest and latest.get("date") == md.isoformat():
+                skipped.append(uid[:8]); continue          # already stored for this market date
             ctx = _as_user(db, uid)
             rep = R.report(db, ctx)
             out = R.store(db, ctx, rep)
             done.append({"user": uid[:8], **out, "breaches": rep.get("breaches", 0)})
         except Exception as e:          # noqa: BLE001
             db.rollback(); failed.append({"user": uid[:8], "error": str(e)[:160]})
-    return {"accounts": len(users), "done": done, "failed": failed}
+    return {"accounts": len(users), "done": done, "failed": failed, "skipped": skipped}

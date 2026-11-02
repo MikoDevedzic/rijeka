@@ -44,7 +44,7 @@ def test_a_failing_step_is_recorded_and_the_cycle_continues(monkeypatch):
     ran = S.run_cycle(steps, now=5000, session_factory=factory)
     assert ran == ["news", "spots", "risk"] and seen == ["s3", "s3"]
     st = S.status()["steps"]
-    assert st["news"]["ok"] is False and "feed down" in st["news"]["detail"]
+    assert st["news"]["ok"] is False and "RuntimeError" in st["news"]["detail"] and "feed down" not in st["news"]["detail"]   # the record is public
     assert st["spots"]["ok"] is True and "posted" in st["spots"]["detail"]
     assert dbs[0].rolled and dbs[1].committed and all(d.closed for d in dbs)
     # nothing is due a minute later; the daily group waits two hours

@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._limits import heavy
 from prometheus import agent
 from prometheus.tools import ReadOnlyViolation, Toolbox, make_readonly
 
@@ -61,6 +62,9 @@ def analyse(body: AnalyseRequest, db: Session = Depends(get_db), user: dict = De
     if not os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_API_KEY") == "PLACEHOLDER":
         raise HTTPException(status_code=503, detail="Prometheus is not configured on this server.")
 
+    heavy(user, "Prometheus", 10)
+    if agent.tokens_used(user["sub"]) >= agent.DAILY_TOKENS:
+        raise HTTPException(status_code=429, detail="Prometheus has used today's allowance for this account; it resets at midnight UTC.")
     make_readonly(db)
     toolbox = Toolbox(db, user["sub"])
 
@@ -77,7 +81,9 @@ def analyse(body: AnalyseRequest, db: Session = Depends(get_db), user: dict = De
         context = _COMPARE_BRIEF + json.dumps(trades, indent=1)
 
     try:
-        result = agent.answer([m.model_dump() for m in body.messages], toolbox, context)
+        result = agent.answer([m.model_dump() for m in body.messages], toolbox, context, sub=user["sub"])
+    except agent.BudgetExceeded:
+        raise HTTPException(status_code=429, detail="Prometheus has used today's allowance for this account; it resets at midnight UTC.")
     except ReadOnlyViolation:
         log.error("prometheus: a tool attempted a write — blocked")
         raise HTTPException(status_code=500, detail="Prometheus hit an internal error.")

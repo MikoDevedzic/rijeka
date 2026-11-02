@@ -29,6 +29,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Header
+from api.routes._errors import internal
 from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlalchemy import text
@@ -349,7 +350,7 @@ def countersign_trade(db: Session, trade: Trade, address: str, signature: str, *
         receipt = be.confirm(h, k_own.address, k_cp.address, sig_own, sig_cp)
     except Exception as e:
         log.exception("countersign anchoring failed")
-        raise HTTPException(status_code=502, detail=f"Chain anchoring failed: {e}")
+        raise internal(502, "Chain anchoring failed", e)
 
     attestation = {
         "schema_version": CANONICAL_SCHEMA_VERSION,
@@ -426,7 +427,7 @@ def confirm_on_chain(
         receipt = be.confirm(h, key_own.address, key_cp.address, sig_own, sig_cp)
     except Exception as e:
         log.exception("on-chain confirm failed")
-        raise HTTPException(status_code=502, detail=f"Chain anchoring failed: {e}")
+        raise internal(502, "Chain anchoring failed", e)
 
     attestation = {
         "schema_version": CANONICAL_SCHEMA_VERSION,
@@ -594,7 +595,7 @@ def _apply_attested_event(db: Session, trade: Trade, *, event_type: str, new_sta
     except Exception as e:
         db.rollback()
         log.exception("%s failed", event_type)
-        raise HTTPException(status_code=500, detail=f"{event_type} failed: {e}")
+        raise internal(500, f"{event_type} failed", e)
 
 
 def _cp_signature_or_ours(db, trade, k_own, k_cp, td_cp, td_own, address, signature, what: str):
@@ -711,7 +712,7 @@ def amend_on_chain(trade_id: str, body: AmendBody,
         receipt = be.amend(prev, new, sig_own, sig_cp)
     except Exception as e:
         log.exception("on-chain amend failed")
-        raise HTTPException(status_code=502, detail=f"Chain anchoring failed: {e}")
+        raise internal(502, "Chain anchoring failed", e)
 
     attestation = {
         "schema_version": attested_version(att),
@@ -801,7 +802,7 @@ def terminate_on_chain(trade_id: str, body: TerminateBody,
         receipt = be.terminate(h, sig_own, sig_cp)
     except Exception as e:
         log.exception("on-chain terminate failed")
-        raise HTTPException(status_code=502, detail=f"Chain anchoring failed: {e}")
+        raise internal(502, "Chain anchoring failed", e)
     attestation = {**att, "terminated": True, "bilateral": bilateral,
                    "termination": {"anchor": receipt.to_dict(), "reason": body.reason,
                                    "signatures": {"own": _hexb(sig_own), "counterparty": _hexb(sig_cp)}}}

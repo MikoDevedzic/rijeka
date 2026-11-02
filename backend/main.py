@@ -1,10 +1,13 @@
+"""Rijeka: the FastAPI application. Routers, CORS, the unhandled-error envelope, the in-process scheduler."""
 import logging
 import os
-os.environ["TZ"] = "America/New_York"
-"""
-Rijeka — FastAPI application entry point
-Sprint 3D: pricer router added.
-"""
+
+os.environ["TZ"] = "America/New_York"          # the desk's clock, before anything reads the time
+
+# Under uvicorn the root logger has no handler at INFO, so every log.info in the batches and the
+# auth layer was dropped on Render. One configuration, env-driven; uvicorn keeps its own loggers.
+logging.basicConfig(level=os.getenv("RIJEKA_LOG_LEVEL", "INFO").upper(),
+                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

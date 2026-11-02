@@ -16,7 +16,12 @@ export default function Methodology() {
   const [products, setProducts] = useState(null)
   const [busy, setBusy] = useState(null)
   const [err, setErr] = useState(null)
-  useEffect(() => { authed('/api/methodology/products').then(r => r.json()).then(setProducts).catch(e => setErr(e.message)) }, [])
+  useEffect(() => {
+    authed('/api/methodology/products')
+      .then(async r => { if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`); return r.json() })
+      .then(setProducts)
+      .catch(e => setErr(`Could not load the product list: ${e.message}`))
+  }, [])
 
   const download = async (p) => {
     setBusy(p.id); setErr(null)

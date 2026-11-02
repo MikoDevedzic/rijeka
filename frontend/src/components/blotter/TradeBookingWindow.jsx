@@ -267,6 +267,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
   const [volScenKey, setVolScenKey] = useState('base')
   const [isVolThreeReady, setIsVolThreeReady] = useState(false)
+  const [threeError, setThreeError] = useState(false)   // the 3D module or WebGL failed: the panel says so instead of throwing
   const [volMode, setVolMode] = useState('rotate')  // 'rotate' | 'reshape'
   const [activeVolP, setActiveVolP] = useState(SABR_BASE.map(p=>({...p})))
   const [jointResult, setJointResult] = useState(null)
@@ -430,7 +431,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
       const loop=()=>{if(!alive)return;requestAnimationFrame(loop);renderer.render(scene,camera)}
       loop()
       volThreeRef.current.stopLoop=()=>{alive=false}
-    })
+    }).catch(err=>{ console.error('[rijeka] 3D vol surface unavailable', err); setThreeError(true) })
     return()=>{
       const t=volThreeRef.current; if(!t)return
       t.alive=false; t.stopLoop?.(); t.ro?.disconnect(); t.renderer?.dispose()
@@ -592,7 +593,7 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
 
       const loop=()=>{if(!alive)return;requestAnimationFrame(loop);renderer.render(scene,camera)}
       loop()
-    })
+    }).catch(err=>{ console.error('[rijeka] 3D vol surface unavailable', err); setThreeError(true) })
 
     return()=>{
       alive=false
@@ -1353,11 +1354,18 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                 color:'var(--panel-3)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 {volMode==='rotate'?'DRAG TO ROTATE · SCROLL TO ZOOM':'DRAG UP/DOWN TO DEFORM VOL · REPRICE FOR ΔP&L'}
               </div>
-              {!isVolThreeReady && (
+              {!isVolThreeReady && !threeError && (
                 <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
                   justifyContent:'center',color:'var(--border-hi)',fontSize:'0.75rem',
                   fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'.08em'}}>
                   PRICE SWAPTION FIRST TO LOAD SURFACE
+                </div>
+              )}
+              {threeError && (
+                <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
+                  justifyContent:'center',color:'var(--amber)',fontSize:'0.75rem',
+                  fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'.08em',zIndex:4,background:'var(--bg-deep)'}}>
+                  3D VIEW UNAVAILABLE · RELOAD TO TRY AGAIN
                 </div>
               )}
               {/* Legend */}
@@ -1391,11 +1399,18 @@ function ScenarioTab({ ccy, index, dir, struct, effDate, matDate, valDate, curve
                 color:'var(--panel-3)',letterSpacing:'.07em',fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}>
                 DRAG TO ROTATE · SCROLL TO ZOOM · STRIKE SPREAD (bp) × TENOR (Y)
               </div>
-              {!capResult && (
+              {!capResult && !threeError && (
                 <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
                   justifyContent:'center',color:'var(--border-hi)',fontSize:'0.75rem',
                   fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'.08em'}}>
                   PRICE CAP/FLOOR FIRST TO LOAD SURFACE
+                </div>
+              )}
+              {threeError && (
+                <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',
+                  justifyContent:'center',color:'var(--amber)',fontSize:'0.75rem',
+                  fontFamily:"'IBM Plex Mono',monospace",letterSpacing:'.08em',zIndex:4,background:'var(--bg-deep)'}}>
+                  3D VIEW UNAVAILABLE · RELOAD TO TRY AGAIN
                 </div>
               )}
               <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',gap:4,pointerEvents:'none',zIndex:2}}>
@@ -2796,7 +2811,11 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
     try {
       setBookingStep('Creating trade...')
       const r = await executeBooking(true)
-      if (r) { await fetchTrades(); setBookedTrade(r.trade); setAnalytics(r.priceData); setAnalyticsErr(null) }
+      if (r) {
+        await fetchTrades(); setBookedTrade(r.trade); setAnalytics(r.priceData); setAnalyticsErr(null)
+        // The booked record is now the trade this window shows: CONFIRM sends it on without reopening it.
+        setViewTrade({ status: 'PENDING', ...r.trade })
+      }
     } catch(e) { setErr(e.message) }
     finally { setBooking(false); setBookingStep('') }
   }
@@ -2816,11 +2835,12 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
       const t = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(t?.detail ? (typeof t.detail === 'string' ? t.detail : JSON.stringify(t.detail)) : 'Booking failed')
       await fetchTrades(); setBookedTrade(t)
+      setViewTrade({ status: 'PENDING', ...t })
     } catch(e) { setErr(e.message) }
     finally { setBooking(false); setBookingStep('') }
   }
   const handleNewTrade = () => {
-    setBookedTrade(null); setAnalytics(null); setAnalyticsErr(null); setErr('')
+    setBookedTrade(null); setViewTrade(null); setAnalytics(null); setAnalyticsErr(null); setErr('')
     if(rateRef.current){rateRef.current.value='';rateRef.current.dataset.userEdited=''}
     if(spreadRef.current) spreadRef.current.value='0'
     if(leverageRef.current) leverageRef.current.value='1.0'
@@ -3069,7 +3089,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
                       {l:'OPTION NPV',    v:swaptionResult.npv,           color:'var(--accent)', fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${(Math.abs(swaptionResult.npv)/parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))*100).toFixed(3)}% of notional`},
                       {l:'VEGA / 1bp',    v:swaptionResult.vega,          color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${swaptionResult.vega_pct_premium?.toFixed(2)}% of premium`},
                       {l:'FWD DELTA / 1bp', v:swaptionResult.ir01,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`A·N(d)·1bp, annuity held · N(d) = ${swaptionResult.n_d?.toFixed(4)}`},
-                      {l:'CURVE DV01',    v:swaptionResult.dv01_curve,    color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:'+1bp zero shift, repriced · what risk and P&L use'},
+                      {l:'CURVE IR01',    v:swaptionResult.dv01_curve,    color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:'+1bp zero shift, repriced · what risk and P&L use'},
                       {l:'THETA / day',   v:swaptionResult.theta,         color:'var(--amber)',  fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${swaptionResult.theta!=null?(swaptionResult.theta/swaptionResult.npv*100).toFixed(3):'—'}% / day`},
                       {l:'FORWARD RATE',  v:swaptionResult.forward_pct,   color:'var(--accent)', fmt:v=>v.toFixed(4)+'%', sub:'ATM strike'},
                       {l:'MONEYNESS',     v:swaptionResult.moneyness_bp,  color:'var(--text-dim)', fmt:v=>`${Math.abs(v).toFixed(1)}bp ${v>=0?'ITM':'OTM'}`, sub:`d = ${swaptionResult.d?.toFixed(3)}`},
@@ -3467,7 +3487,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
                   </Fld>
                 </Row>
                 <div style={{fontSize:'0.8rem',color:'var(--text-dim)',padding:'2px 0 4px',letterSpacing:'0.06em',opacity:0.6}}>
-                  {exerciseType==='EUROPEAN'?'Black/Bachelier normal vol · HW1F cross-check':exerciseType==='BERMUDAN'?'HW1F trinomial tree — on the roadmap':'American approximation — Sprint 8'}
+                  {exerciseType==='EUROPEAN'?'Black/Bachelier normal vol · HW1F cross-check':exerciseType==='BERMUDAN'?'HW1F trinomial tree — on the roadmap':'American approximation — on the roadmap'}
                   {' · Physical settlement · Strike blank = ATM forward (computed from OIS curve)'}
                   {swaptionResult && !swaptionStrike && ` · ATM = ${swaptionResult.forward_pct?.toFixed(4)}%`}
                 </div>
@@ -3521,7 +3541,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
                         {l:'P&L',          v:swaptionResult.pnl,         color:(swaptionResult.pnl||0)>=0?'var(--accent)':'var(--red)', fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
                         {l:'VEGA / 1bp',   v:swaptionResult.vega,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
                         {l:'FWD DELTA',    v:swaptionResult.ir01,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
-                        {l:'CURVE DV01',   v:swaptionResult.dv01_curve,  color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
+                        {l:'CURVE IR01',   v:swaptionResult.dv01_curve,  color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
                         {l:'FWD RATE',     v:swaptionResult.forward_pct, color:'var(--accent)', fmt:v=>v.toFixed(4)+'%'},
                       ].map(({l,v,color,fmt})=>(
                         <div key={l} style={{background:'var(--bg)',padding:'7px 10px'}}>

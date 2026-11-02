@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import useBookingStore from '../../store/useBookingStore'
+import { productLabel } from '../../lib/labels'
 import './BlotterShell.css'
 
 const TH = ({ col, label, sortCol, sortDir, onSort }) => (
@@ -8,15 +9,6 @@ const TH = ({ col, label, sortCol, sortDir, onSort }) => (
     {label}{sortCol === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
   </th>
 )
-
-function Row({ label, value, color }) {
-  return (
-    <div className="tp-row">
-      <span className="tp-lbl">{label}</span>
-      <span className="tp-val" style={color ? { color } : {}}>{value || '—'}</span>
-    </div>
-  )
-}
 
 const AC = {
   RATES:     { c: 'var(--accent)', a: 'RTS' },
@@ -238,7 +230,7 @@ export default function BlotterShell() {
                           {ac.a}
                         </span>
                       </td>
-                      <td className="bl-td-dim">{t.instrument_type}</td>
+                      <td className="bl-td-dim">{productLabel(t.instrument_type)}</td>
                       <td>
                         {t.structure
                           ? <span className="bl-structure-badge">{t.structure.replace(/_/g, ' ')}</span>
@@ -276,60 +268,6 @@ export default function BlotterShell() {
       {/* Right panel removed — trades open as floating windows */}
 
       {/* TradeBookingWindow now rendered at App root — persists across navigation */}
-    </div>
-  )
-}
-
-// ── Trade summary panel ───────────────────────────────────────────────────────
-function TradePanel({ trade: t, onClose }) {
-  const ac = AC[t.asset_class] || { c: 'var(--text-dim)', a: t.asset_class }
-  const st = ST[t.status]      || { c: 'var(--text-dim)', l: t.status }
-  const sr = SR[t.store]        || { c: 'var(--text-dim)', l: t.store }
-
-  return (
-    <div className="tp-root">
-      <div className="tp-header" style={{ borderTop: `2px solid ${ac.c}` }}>
-        <div className="tp-ref">{t.trade_ref}</div>
-        <div className="tp-badges">
-          <span className="bl-ac-badge" style={{ color: ac.c, borderColor: ac.c + '40' }}>{ac.a}</span>
-          <span className="bl-status-dot" style={{ background: st.c }} />
-          <span className="bl-status-txt" style={{ color: st.c }}>{st.l}</span>
-        </div>
-        <button className="tp-close" onClick={onClose}>✕</button>
-      </div>
-
-      <div className="tp-body">
-        <div className="tp-section-lbl">TRADE</div>
-        <Row label="INSTRUMENT"   value={t.instrument_type} />
-        <Row label="STRUCTURE"    value={t.structure?.replace(/_/g, ' ')} />
-        <Row label="COUNTERPARTY" value={t.counterparty?.name} />
-        <Row label="STORE"        value={sr.l} color={sr.c} />
-
-        <div className="tp-section-lbl">ECONOMICS</div>
-        <Row label="NOTIONAL"  value={`${Number(t.notional || 0).toLocaleString()} ${t.notional_ccy || ''}`} />
-        <Row label="TENOR"     value={(() => {
-          if (!t.effective_date || !t.maturity_date) return '—'
-          const y = (new Date(t.maturity_date) - new Date(t.effective_date)) / (365.25 * 864e5)
-          return y >= 1 ? `${y.toFixed(1)}Y` : `${Math.round(y * 12)}M`
-        })()} />
-        <Row label="TRADE DATE"    value={t.trade_date?.substring(0, 10)} />
-        <Row label="EFFECTIVE"     value={t.effective_date?.substring(0, 10)} />
-        <Row label="MATURITY"      value={t.maturity_date?.substring(0, 10)} />
-
-        <div className="tp-section-lbl">DESK</div>
-        <Row label="DESK"   value={t.desk} />
-        <Row label="BOOK"   value={t.book} />
-        <Row label="TRADER" value={t.created_by_name || t.created_by?.substring(0, 8)} />
-
-        <div className="tp-action-row">
-          <button
-            className="tp-action-btn"
-            onClick={() => window.location.href = `/pricer?trade=${t.id}`}
-          >
-            ▶ PRICE IN PRICER
-          </button>
-        </div>
-      </div>
     </div>
   )
 }

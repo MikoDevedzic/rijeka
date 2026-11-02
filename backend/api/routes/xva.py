@@ -25,7 +25,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -129,11 +129,10 @@ class CalibrateRequest(BaseModel):
 
 
 class SimulateRequest(BaseModel):
-    trade_id: Optional[str] = None       # if provided, loads trade from DB
-    notional: float = 10_000_000.0
-    maturity_y: float = 5.0
+    notional: float = Field(default=10_000_000.0, gt=0)
+    maturity_y: float = Field(default=5.0, gt=0, le=60)
     fixed_rate: float = 0.03643
-    paths: int = 2000
+    paths: int = Field(default=2000, ge=100, le=10_000)
     # Trade TV from the pricer. XVA is an ADJUSTMENT to this, not a
     # standalone value — all_in = npv + Σ XVA. If the caller does not
     # supply it we return npv=None rather than silently reporting 0.0,
@@ -187,6 +186,7 @@ def calibrate(
     role = user.get("user_metadata", {}).get("role", "viewer").lower()
     if role not in ("trader", "admin"):
         raise HTTPException(status_code=403, detail="Trader or Admin role required")
+    heavy(user, "calibration", 4)
 
     val_date = body.valuation_date or date.today()
     user_id  = user.get("sub")
@@ -667,6 +667,7 @@ class CurrencyXvaRequest(BaseModel):
 @router.post("/currency")
 def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """XVA for an FX or crypto forward through the rates waterfall (pricing/fx_xva.py)."""
+    heavy(user, "XVA simulation", 6)
     from api.routes.currencies import _price, split_pair
     from pricing import fx_xva
     pair = body.pair.upper()

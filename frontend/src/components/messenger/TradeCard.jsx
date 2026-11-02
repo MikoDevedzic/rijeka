@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useChatStore } from '../../store/useChatStore'
+import { productLabel } from '../../lib/labels'
 import { hasWallet, connect, ensureChain, signTypedData, personalSign, sameAddress, shortAddress, chainName } from '../../lib/wallet'
 import './TradeCard.css'
 
@@ -75,7 +76,7 @@ export default function TradeCard({ m }) {
       <div className="tc-body">
         {s ? <>
           <div className="tc-line">
-            {s.instrument?.replace('_', ' ')}{s.structure ? ' · ' + s.structure : ''} · <b>{s.ccy} {num(s.notional)}</b>
+            {productLabel(s.instrument)}{s.structure ? ' · ' + s.structure : ''} · <b>{s.ccy} {num(s.notional)}</b>
             {s.them?.name && <span className="tc-sub"> · with {s.them.name}</span>}
           </div>
           {s.legs?.map((l, i) => <LegLine key={i} l={l} />)}
@@ -359,7 +360,7 @@ export function TradePicker({ roomId, onClose }) {
         {data?.trades.map(t => (
           <button key={t.id} className="tc-pick" disabled={busy} onClick={() => share(t.id)}>
             <span className="tc-ref">{t.trade_ref}</span>
-            <span>{(t.instrument || '').replace('_', ' ')} · {t.ccy} {num(t.notional)} · {t.maturity_date}</span>
+            <span>{productLabel(t.instrument)} · {t.ccy} {num(t.notional)} · {t.maturity_date}</span>
             <span className={`tc-chip ${t.status === 'CONFIRMED' ? 'ok' : t.status === 'PENDING' ? 'pending' : ''}`}>{t.status}</span>
           </button>
         ))}

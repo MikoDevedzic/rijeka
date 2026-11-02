@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
+import { productLabel } from '../../lib/labels'
 import { useAuthStore } from '../../store/useAuthStore'
 import './PnlPage.css'
 
@@ -137,7 +138,7 @@ export default function PnlPage() {
 
         <div className="pnl-foot">
           <b>Convention.</b> {rep.convention} Reporting currency {rep.reporting_ccy} at the close. Marks are the production pricers on the saved market of each date; nothing here is estimated from sensitivities.
-          {!rep.tables && <> <em>History tables are not applied on this server (docs/migrations/2026-10-30_pnl.sql): the report is computed live and MTD / YTD equal the day.</em></>}
+          {!rep.tables && <> <em>History tables are not applied on this server: ask your administrator to apply the latest database migration. Until then the report is computed live and MTD / YTD equal the day.</em></>}
         </div>
       </>)}
     </div>
@@ -256,7 +257,7 @@ function Tree({ tree, rows }) {
       <div className={`pnl-tr d${depth}${isTrade ? ' trade' : ''}`} onClick={() => toggle(k)}>
         <span className="pnl-tn" style={{ paddingLeft: 8 + depth * 18 }}>
           <i className="pnl-caret">{isOpen ? '▾' : '▸'}</i>{n.name}
-          {isTrade && <small>{(r?.instrument || '').replace('_', ' ')}{r?.kind !== 'EXPLAINED' ? ` · ${r?.kind}` : ''}{r?.fallback?.length ? ' · latest curve used' : ''}</small>}
+          {isTrade && <small>{productLabel(r?.instrument)}{r?.kind !== 'EXPLAINED' ? ` · ${r?.kind}` : ''}{r?.fallback?.length ? ' · latest curve used' : ''}</small>}
           {!isTrade && <small>{n.count} trade{n.count === 1 ? '' : 's'}</small>}
         </span>
         <span className={`pnl-tv ${tone(n.market_usd)}`}>{sgn(n.market_usd)}</span>

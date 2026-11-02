@@ -656,23 +656,3 @@ export function CollarTermsBody({ state, update }) {
     </>
   )
 }
-
-// ── FX stubs for future reference (Sprint 11+) ─────────────────────────────
-
-export function FxForwardTermsBody() {
-  return (
-    <Row cols={6}>
-      <Field label="BASE CCY"><select><option>USD</option><option>EUR</option></select></Field>
-      <Field label="QUOTE CCY"><select><option>EUR</option><option>GBP</option></select></Field>
-      <Field label="SPOT RATE"><input className="tbw-mono" defaultValue="1.0823" /></Field>
-      <Field label="FWD POINTS"><input className="tbw-mono" defaultValue="+12.4" /></Field>
-      <Field label="VALUE DATE"><input type="date" /></Field>
-      <Field label="SETTLEMENT"><select><option>PHYSICAL</option><option>NDF</option></select></Field>
-    </Row>
-  )
-}
-
-export function FxOptionTermsBody() {
-  // Placeholder — expand in Sprint 11+ when FX options come online
-  return <div className="tbw-mut">FX option terms — on the roadmap</div>
-}

@@ -41,7 +41,7 @@ const TIPS = {
   hurdle: { title: 'Hurdle rate (%)',
     body: 'Required return on regulatory capital.\n\nKVA = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]\nCapital(t) = SA-CCR EAD(t) x 8% (Basel III RWA)\n\nTypical: 10-15% for investment banks. At 12% hurdle, a 5Y $10M IRS generates ~$70-80K KVA. KVA is often larger than CVA for vanilla rates trades.' },
   simmIm: { title: 'SIMM IM ($M)',
-    body: 'ISDA SIMM initial margin for the inter-dealer hedge in $M. Linear MVA proxy:\n\nMVA~ = -(IM x $1M) x (FTP/10000) x T/2\n\nAssumes flat IM for T/2 years on average.\n\nFull Sprint 6B: IM(path, t) computed on each Monte Carlo path using ISDA SIMM delta sensitivities. MVA = -(FTP/10000) x Sum[ IM(t) x dt x DF(t) ].' },
+    body: 'ISDA SIMM initial margin for the inter-dealer hedge in $M. Linear MVA proxy:\n\nMVA~ = -(IM x $1M) x (FTP/10000) x T/2\n\nAssumes flat IM for T/2 years on average.\n\nOn the roadmap: IM(path, t) computed on each Monte Carlo path using ISDA SIMM delta sensitivities. MVA = -(FTP/10000) x Sum[ IM(t) x dt x DF(t) ].' },
   settlement: { title: 'Settlement / CSA',
     body: 'How the trade is margined. Every VA is computed on the RESIDUAL exposure after collateral:\n\nE+(t) = max(V(t) − VM(t) − IM_recv, 0)\n\nUNCOLLATERALISED — no variation margin. Full MtM at risk. IM may still be posted (legacy MVA).\n\nBILATERAL — daily VM under a CSA, thresholds and MTA apply, 10 business-day margin period of risk (BCBS-IOSCO floor for non-cleared). SIMM IM exchanged.\n\nON-CHAIN — atomic settlement: continuous VM, zero threshold and MTA, 5bd MPoR (the cleared floor). SIMM risk weights scale by sqrt(5/10) = 0.707, so IM and MVA fall 29.3%; SA-CCR margined maturity factor 1.5·sqrt(MPoR/250) cuts KVA by the same factor.' },
   mpor: { title: 'Margin period of risk (bd)',
@@ -55,7 +55,7 @@ const TIPS = {
   compare: { title: 'Compare on-chain',
     body: 'Runs a second simulation on the SAME paths under the ON-CHAIN preset (continuous VM, 5bd MPoR) and shows each VA side by side with the current settlement. Same seed, so the difference is purely the collateral terms.' },
   capModel: { title: 'Capital model',
-    body: 'Regulatory CCR capital framework for KVA.\n\nSA-CCR (current standard): EAD = 1.4 x (RC + AddOn). RC = max(NPV,0). AddOn = Notional x SF x MF. SF(IRS)=0.5%. MF=sqrt(min(M,1)).\n\nCEM (legacy): EAD = max(NPV,0) + Notional x addon%. Addon: 0.5% (1-5Y IRS). Simpler, less risk-sensitive.\n\nIMM: full MC EPE with supervisory approval. Sprint 8.' },
+    body: 'Regulatory CCR capital framework for KVA.\n\nSA-CCR (current standard): EAD = 1.4 x (RC + AddOn). RC = max(NPV,0). AddOn = Notional x SF x MF. SF(IRS)=0.5%. MF=sqrt(min(M,1)).\n\nCEM (legacy): EAD = max(NPV,0) + Notional x addon%. Addon: 0.5% (1-5Y IRS). Simpler, less risk-sensitive.\n\nIMM: full MC EPE with supervisory approval — on the roadmap.' },
 }
 
 function fmtDollar(v) {
@@ -885,7 +885,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
             </div>
           )}
           <div style={{padding:'4px 14px',fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--mono)',background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
-            ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA~ · Click any VA to expand · bp = VA / DV01
+            ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA~ · Click any VA to expand · bp = VA / IR01
           </div>
         </div>
       </div>

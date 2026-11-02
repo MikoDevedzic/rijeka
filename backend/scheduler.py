@@ -122,8 +122,8 @@ def run_step(name: str, fn: Callable[..., Any], secret: str, session_factory=Non
             db.rollback()
         except Exception:                 # noqa: BLE001
             pass
-        log.warning("scheduler: %s failed: %s", name, type(e).__name__)
-        _record(name, False, f"{type(e).__name__}: {e}")
+        log.warning("scheduler: %s failed: %s: %s", name, type(e).__name__, str(e)[:500])
+        _record(name, False, f"{type(e).__name__} (the message is in the server log)")   # the record is public on /api/ops/health
         return False
     finally:
         db.close()

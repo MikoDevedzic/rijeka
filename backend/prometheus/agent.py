@@ -34,8 +34,40 @@ _client: anthropic.Anthropic | None = None
 def _get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic()  # ANTHROPIC_API_KEY from env
+        # ANTHROPIC_API_KEY from env. A bounded wait: a request thread is held for the whole exchange.
+        _client = anthropic.Anthropic(timeout=180.0, max_retries=1)
     return _client
+
+
+# A daily token allowance per account (input + output, every round), in process: one demo account
+# cannot run the bill. Reset at UTC midnight; RIJEKA_PROMETHEUS_DAILY_TOKENS sets the size.
+DAILY_TOKENS = int(os.getenv("RIJEKA_PROMETHEUS_DAILY_TOKENS", "400000"))
+_budget: dict[str, tuple[str, int]] = {}
+
+
+class BudgetExceeded(Exception):
+    pass
+
+
+def _today() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def tokens_used(sub: str) -> int:
+    day, n = _budget.get(sub, (None, 0))
+    return n if day == _today() else 0
+
+
+def charge(sub: str, usage) -> int:
+    """Adds a response's usage to the account's day; returns the day's total."""
+    n = int(getattr(usage, "input_tokens", 0) or 0) + int(getattr(usage, "output_tokens", 0) or 0)
+    total = tokens_used(sub) + n
+    _budget[sub] = (_today(), total)
+    if len(_budget) > 5000:
+        for k in [k for k, (d, _) in _budget.items() if d != _today()]:
+            _budget.pop(k, None)
+    return total
 
 
 @dataclass
@@ -75,7 +107,7 @@ def _source_path(name: str, args: dict) -> str | None:
         return None
 
 
-def answer(messages: list[dict], toolbox: SourceToolbox, context: str | None = None) -> Answer:
+def answer(messages: list[dict], toolbox: SourceToolbox, context: str | None = None, sub: str | None = None) -> Answer:
     system = [{"type": "text", "text": PERSONA, "cache_control": {"type": "ephemeral"}}]
     if context:
         # Server-built context (e.g. the trades open in Compare). After the
@@ -87,6 +119,8 @@ def answer(messages: list[dict], toolbox: SourceToolbox, context: str | None = N
     client = _get_client()
 
     for _ in range(MAX_TOOL_ROUNDS + 1):
+        if sub and tokens_used(sub) >= DAILY_TOKENS:
+            raise BudgetExceeded(f"{sub[:8]} used its daily allowance")
         resp = client.beta.messages.create(
             model=MODEL,
             max_tokens=16000,
@@ -97,6 +131,9 @@ def answer(messages: list[dict], toolbox: SourceToolbox, context: str | None = N
             betas=_BETAS,
             extra_body={"fallbacks": "default"},
         )
+
+        if sub:
+            charge(sub, getattr(resp, "usage", None))
 
         if resp.stop_reason == "refusal":
             return Answer(

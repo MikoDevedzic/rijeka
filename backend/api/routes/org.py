@@ -13,7 +13,7 @@ router = APIRouter()
 class OrgNodeCreate(BaseModel):
     name: str
     node_type: str
-    parent_id: Optional[str] = None
+    parent_id: Optional[uuid.UUID] = None
     sort_order: int = 0
 
 
@@ -46,7 +46,7 @@ def create_node(body: OrgNodeCreate, db: Session = Depends(get_db), user: dict =
     node = OrgNode(
         name=body.name,
         node_type=body.node_type,
-        parent_id=uuid.UUID(body.parent_id) if body.parent_id else None,
+        parent_id=body.parent_id,
         sort_order=body.sort_order,
         created_by=uuid.UUID(user["sub"]),
         user_id=uuid.UUID(user["sub"]),

@@ -82,10 +82,9 @@ def risk_report(date_: Optional[str] = Query(default=None, alias="date"), live: 
                 db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """The stored report opens instantly; live=1 recomputes (and stores, so the next visit is instant too)."""
     d = _parse(date_)
-    if live:
-        heavy(user, "live risk report", 4)
     rep = None if live else R.stored_report(db, user["sub"], d)
     if rep is None:
+        heavy(user, "live risk report", 4)       # any compute, not only live=1: a date with no stored row is one too
         ctx = _ctx(db, user)
         rep = R.report(db, ctx, d)
         rep["from_store"] = False
@@ -157,8 +156,11 @@ def delete_limit(limit_id: str, db: Session = Depends(get_db), user: dict = Depe
 
 @router.get("/metrics")
 def metrics(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    """Keys a limit can be set on, from what the caller's book actually reports."""
-    rep = R.report(db, _ctx(db, user))
+    """Keys a limit can be set on, from what the caller's book actually reports (the stored report when there is one)."""
+    rep = R.stored_report(db, user["sub"])
+    if rep is None:
+        heavy(user, "live risk report", 4)
+        rep = R.report(db, _ctx(db, user))
     keys = ["VAR_99_1D", "VAR_95_1D", "ES_99_1D", "VAR_H", "NPV", "IR01"]
     for row in rep["ladder"].get("ladder", []):
         keys.append(f"IR01:{row['curve']}")
@@ -282,6 +284,17 @@ def ingest_history(payload: dict, overwrite: bool = Query(default=False), db: Se
     return {"received": {c: len(v) for c, v in days.items()}, "written": written}
 
 
+
+def _market_date(db: Session, uid: str):
+    """The latest market date an account's batch would be stored under; None when it has no data."""
+    try:
+        from pnl.market import Market
+        ds = Market.dates(db, uid)
+        return max(ds) if ds else None
+    except Exception:           # noqa: BLE001
+        db.rollback(); return None
+
+
 @router.post("/daily/tick")
 def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None)):
     if not _secret_ok(x_rijeka_cron):
@@ -290,9 +303,12 @@ def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Hea
         return {"stored": False, "reason": "tables missing: apply docs/migrations/2026-10-30_market_risk.sql"}
     from api.routes.pnl import _as_user
     users = [str(r.user_id) for r in db.execute(text("SELECT DISTINCT user_id FROM trades")).all()]
-    done, failed = [], []
+    done, failed, skipped = [], [], []
     for uid in users:
         try:
+            md = _market_date(db, uid)
+            if md is not None and R.stored_report(db, uid, md) is not None:
+                skipped.append(uid[:8]); continue          # already stored for this market date
             ctx = _as_user(db, uid)
             rep = R.report(db, ctx)
             out = R.store(db, ctx, rep)
@@ -300,4 +316,4 @@ def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Hea
         except Exception as e:          # noqa: BLE001
             db.rollback(); failed.append({"user": uid[:8], "error": str(e)[:160]})
             log.warning("risk daily for %s failed: %s", uid[:8], e)
-    return {"accounts": len(users), "done": done, "failed": failed}
+    return {"accounts": len(users), "done": done, "failed": failed, "skipped": skipped}

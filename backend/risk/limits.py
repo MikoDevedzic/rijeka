@@ -3,7 +3,7 @@ desk or a book), a value and a warning level. Keys follow the report:
 
   VAR_99_1D · VAR_95_1D · ES_99_1D · VAR_H          VaR and expected shortfall (reporting ccy)
   IR01 · IR01:<curve> · KR01:<curve>:<bucket>        rates sensitivities, absolute value
-  SPOT01:<asset>                                     FX01 / BTC01, absolute value
+  SPOT01:<asset>                                     FX01 / CRY01, absolute value
   NPV                                                absolute mark
   STRESS:<scenario id>                               the scenario's loss (positive = loss)
 

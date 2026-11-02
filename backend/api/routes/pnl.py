@@ -28,6 +28,7 @@ from db.models import FirmMember
 from db.session import get_db
 from middleware.auth import verify_token
 from api.routes._limits import heavy
+from api.routes._errors import internal
 from pnl import report as R
 
 log = logging.getLogger("rijeka.pnl")
@@ -130,7 +131,7 @@ def put_policy(body: PolicyBody, db: Session = Depends(get_db), user: dict = Dep
                    {"f": str(fm.firm_id), "p": pol, "x": ",".join(netted), "b": user["sub"], "bn": _name(user)})
         db.commit()
     except Exception as e:
-        db.rollback(); raise HTTPException(status_code=409, detail=f"policy needs the market risk tables: {str(e)[:80]}")
+        db.rollback(); raise internal(409, "The policy could not be saved; the market risk tables may be missing", e)
     return {"signoff_policy": pol, "xva_netted": netted}
 
 
@@ -193,6 +194,7 @@ def pnl_dates(db: Session = Depends(get_db), user: dict = Depends(verify_token))
 
 @router.post("/eod")
 def run_eod(date_: Optional[str] = Query(default=None, alias="date"), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    heavy(user, "end of day", 4)
     rep = R.report(db, _marking_ctx(db, user), _parse(date_))
     out = R.persist(db, user, rep)
     return {**out, "totals": rep.get("totals"), "status": rep.get("status")}
@@ -203,6 +205,17 @@ def _secret_ok(given: Optional[str]) -> bool:
     return bool(want) and given is not None and hmac.compare_digest(given, want)
 
 
+
+def _market_date(db: Session, uid: str):
+    """The latest market date an account's batch would be stored under; None when it has no data."""
+    try:
+        from pnl.market import Market
+        ds = Market.dates(db, uid)
+        return max(ds) if ds else None
+    except Exception:           # noqa: BLE001
+        db.rollback(); return None
+
+
 @router.post("/eod/tick")
 def eod_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None)):
     if not _secret_ok(x_rijeka_cron):
@@ -210,9 +223,12 @@ def eod_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Heade
     if not R.tables_present(db):
         return {"persisted": False, "reason": "tables missing: apply docs/migrations/2026-10-30_pnl.sql"}
     users = [str(r.user_id) for r in db.execute(text("SELECT DISTINCT user_id FROM trades")).all()]
-    done, failed = [], []
+    done, failed, skipped = [], [], []
     for uid in users:
         try:
+            md = _market_date(db, uid)
+            if md is not None and R.stored_rows(db, uid, md)[0]:
+                skipped.append(uid[:8]); continue          # already persisted for this market date
             ctx = _as_user(db, uid)
             rep = R.report(db, ctx)
             out = R.persist(db, ctx, rep)
@@ -220,7 +236,7 @@ def eod_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Heade
         except Exception as e:          # noqa: BLE001
             db.rollback(); failed.append({"user": uid[:8], "error": str(e)[:160]})
             log.warning("eod for %s failed: %s", uid[:8], e)
-    return {"accounts": len(users), "done": done, "failed": failed}
+    return {"accounts": len(users), "done": done, "failed": failed, "skipped": skipped}
 
 
 class SignBody(BaseModel):

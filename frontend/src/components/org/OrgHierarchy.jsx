@@ -230,8 +230,6 @@ export default function OrgHierarchy() {
   const [error,        setError]        = useState(null)
   const [showInactive, setShowInactive] = useState(false)
 
-  useEffect(() => { fetchNodes() }, [])
-
   async function fetchNodes() {
     setLoading(true); setError(null)
     const { data, error: err } = await supabase.from('org_nodes').select('*')
@@ -239,6 +237,10 @@ export default function OrgHierarchy() {
     if (err) { setError(err.message); setLoading(false); return }
     setNodes(data ?? []); setLoading(false)
   }
+
+  // The mount fetch flips the loading flag before its await; the lint rule cannot see past the call.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchNodes() }, [])
 
   const tree          = useMemo(() => buildTree(nodes, showInactive), [nodes, showInactive])
   const activeCount   = nodes.filter(n => n.is_active).length

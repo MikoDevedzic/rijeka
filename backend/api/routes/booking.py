@@ -178,7 +178,7 @@ class LegInput(BaseModel):
         return self
 
 
-NO_LEG_INSTRUMENTS = {"FX_SPOT", "FX_FORWARD", "NDF", "FX_SWAP", "FX_OPTION", "CRYPTO_FORWARD", "CRYPTO_OPTION"}
+NO_LEG_INSTRUMENTS = {"FX_SPOT", "FX_FORWARD", "NDF", "FX_OPTION", "CRYPTO_FORWARD", "CRYPTO_OPTION"}   # FX_SWAP returns when it has a pricer
 
 
 class BookingRequest(BaseModel):
@@ -243,14 +243,20 @@ class BookingRequest(BaseModel):
         canonical allowlist. This prevents clients from bypassing the
         TradeCreate validator by going through the booking endpoint.
         """
-        from api.routes.trades import _ALLOWED_IR_SWAP_STRUCTURES
-        if self.instrument_type == "IR_SWAP":
-            if self.structure and self.structure not in _ALLOWED_IR_SWAP_STRUCTURES:
-                raise ValueError(
-                    f"Invalid structure '{self.structure}' for IR_SWAP. "
-                    f"Allowed: {sorted(_ALLOWED_IR_SWAP_STRUCTURES)}"
-                )
+        from api.routes.trades import validated_structure      # one rule for both create paths
+        self.structure = validated_structure(self.instrument_type, self.structure, self.terms)
         return self
+
+    @field_validator("own_legal_entity_id", "counterparty_id")
+    @classmethod
+    def _ids_are_uuids(cls, v, info):
+        if v in (None, ""):
+            return None
+        try:
+            uuid.UUID(str(v))
+        except ValueError:
+            raise ValueError(f"{info.field_name} must be a UUID")
+        return str(v)
 
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -606,7 +612,7 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
             )
 
         log.exception("Booking integrity error")
-        raise HTTPException(status_code=409, detail=f"Integrity error: {msg}")
+        raise HTTPException(status_code=409, detail="The booking conflicts with an existing record or a database rule. The detail is in the server log.")
 
     except HTTPException:
         db.rollback()

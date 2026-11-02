@@ -20,7 +20,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
 
+from sqlalchemy.orm import Session
+from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._roles import require_admin
 
 log = logging.getLogger("rijeka.csp")
 router = APIRouter(tags=["csp"])
@@ -102,5 +105,6 @@ async def csp_report(request: Request):
 
 
 @router.get("/api/ops/csp-reports")
-def csp_reports(user: dict = Depends(verify_token)):
+def csp_reports(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    require_admin(db, user)
     return {"count": len(_reports), "kept": KEEP, "reports": list(_reports)}

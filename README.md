@@ -1,81 +1,44 @@
 # Rijeka
 
-**Where the trading desk meets the chain.** An open-source derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects. Rates, FX and crypto forwards today; credit, equities and commodities next. Free for everyone.
+**Where the trading desk meets the chain.** An open-source OTC derivatives desk: the pricing, risk and bilateral confirmation a trading desk runs on, in open code, with the confirmed record anchored on Ethereum. Rates, FX and digital assets are live; credit, equities and commodities next. Free for everyone.
 
-Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging market participants, and academic researchers operate blind — without the tools to price, hedge, or understand the true cost of a trade. Rijeka exists to change that.
+Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging-market participants and academic researchers operate blind, without the tools to price, hedge or understand the true cost of a trade. Rijeka exists to change that.
 
-Named after a village in Bosnia — *rijeka* means "river" in Bosnian, Croatian, and Serbian — this platform is built on the belief that the mathematics of modern finance should be accessible to anyone with the ambition to use it.
-
----
-
-## Live Tools
-
-No login required. Open in any browser.
-
-| Tool | URL | What it does |
-|------|-----|-------------|
-| IRS Pricer | rijeka.app/irs | Price a vanilla IRS, drag the yield curve, reprice live |
-| XVA Simulator | rijeka.app/xva | HW1F Monte Carlo EE/ENE/PFE profiles and CVA |
-| XVA Waterfall | rijeka.app/xva_ee | Paste an EE profile, get full XVA waterfall |
-| Vol Surface Scenario | rijeka.app/vol_surface | 3D SABR swaption vol surface — shock it, reprice live |
+Named after a village in Bosnia (*rijeka* means "river" in Bosnian, Croatian and Serbian), it is built on the belief that the mathematics of modern finance should be accessible to anyone with the ambition to use it.
 
 ---
 
-## What It Does
+## What is live
 
-### Pricing & Analytics
+Hosted demo at [app.rijeka.app](https://app.rijeka.app); the in-app **ROADMAP** is the honest status of every item (DONE means in the code and tested).
 
-- OIS curve bootstrapping (SOFR, €STR, SONIA) — validated to Bloomberg SWPM reference prices
-- Interest rate swap pricing with per-leg Greeks: IR01, IR01_DISC, Theta, Gamma
-- European swaption pricing — Bachelier normal vol model, Bloomberg-validated ($3 NPV delta on $10M 5Y trade)
-- **Interest rate cap / floor / collar** — Bachelier Normal model, T_mid convention, Bloomberg-validated (0.1% gap at matched vol), vol override, per-caplet cashflows
-- Par rate solving, cashflow generation, T+2 spot lag, ACT/360 DCF
+- **Pricing.** OIS bootstrap per currency (SOFR, €STR, SONIA, SARON, TONA, AONIA, CORRA); IRS, OIS and basis swaps; European swaptions (Bachelier on a β=0 SABR surface); caps, floors and collars; Bermudans on a Hull-White trinomial tree; FX spot, forwards and NDFs on the G10 pairs and non-deliverable forwards on BTC, ETH and SOL on one interest-rate-parity model; FX and digital-asset options in six styles (European, American, digital, barrier, double barrier, touch) on one engine, each against its QuantLib counterpart.
+- **Risk.** Key-rate IR01 ladders by bump-and-reprice with FX01 / CRY01, FUND01 and vega; historical-simulation VaR by full revaluation with the curves, spots and volatility surfaces as factors, the ladder VaR alongside; named stress; backtesting (Basel traffic light, Kupiec); limits with utilisation and breaches.
+- **Counterparty credit and XVA.** Netting sets on shared Hull-White and lognormal paths, real-world calibration from public history with historical block sampling, the CSA on the netted value, EE / EPE / PFE and credit limits; the XVA waterfall (CVA, DVA, FVA, FBA, KVA, MVA) under CSA presets with a margin period of risk; SIMM initial margin.
+- **P&L.** Attribution by sequential full revaluation (carry, cash, curves by bucket, spot, points, vol, residual), day / MTD / YTD, trader and controller sign-off, XVA P&L.
+- **Confirmation on chain.** Canonical record v2 → EIP-712 → registry on Sepolia; amend and terminate; a public verifier that trusts nothing of Rijeka's. Messenger with firms, rooms, trade cards and wallet countersigning; Telegram mirror.
+- **Open box.** The methodology (v1.2) names the module for every formula; the Methodology tab exports an Excel replication per product from your own market data, the ticket rebuilt in cells with every number linked to its derivation and a Checks sheet against the engine; the XVA book carries the engine's own Monte Carlo draws.
+- **Prometheus.** A read-only assistant inside the messenger: sees your book and the engine, never changes anything.
 
-### Vol Surface — β=0 Normal SABR
+## Validation
 
-- Full swaption vol surface calibration using Hagan 2002 β=0 Normal SABR
-- Bloomberg OTM ticker integration (SMKO) — 8 strikes per expiry/tenor bucket, ±200bp
-- α (level), ρ (skew), ν (curvature) calibrated per expiry/tenor bucket via L-BFGS-B
-- Interactive 3D surface: rotate, apply preset scenarios, or drag to create custom vol shocks
-- Live Bachelier repricing: ΔNPV, Vega, IR01 update on every scenario change
-- **Cap/floor vol surface** — 3D mesh from Bloomberg snapped `cap_vol_surface` quotes (tenor × strike spread × vol)
+Every product is repriced in QuantLib on every commit: 424 comparisons in `backend/tests/reference`, each with a tolerance that fails the build when exceeded; 696 Python tests; 16 Foundry tests on the registry contract. What is validated against what, and the open findings ([#31](https://github.com/MikoDevedzic/rijeka/issues/31)–[#36](https://github.com/MikoDevedzic/rijeka/issues/36)), is in [docs/VALIDATION.md](docs/VALIDATION.md); the April 2026 Bloomberg comparison for IRS and OIS (v0.4.2, 38 tests) is kept in `model_validation/` as history. Independent validators are wanted and named on the report: USD 250 for a confirmed S1 or S2 pricing finding.
 
-### XVA — Valuation Adjustments
+## Public tools
 
-- Hull-White one-factor (HW1F) Monte Carlo — calibrated to ATM swaption vol surface
-- Full XVA waterfall: CVA, DVA, FVA, FBA, KVA, MVA
-- Swaption XVA: Andersen-Piterbarg 2-phase EE (option value pre-expiry, conditional swap post-expiry)
-- All-in rate: par rate adjusted for the true bilateral cost of the trade
-- HW1F calibration RMSE: 0.08bp on 5Y-tenor basket
+No login required, on [rijeka.app](https://rijeka.app): the IRS pricer with a draggable curve (`/irs`), the XVA simulator (`/xva`) and waterfall (`/xva_ee`), the SABR vol surface scenario (`/vol_surface`), the Bermudan tree, the attribution and SIMM tools, and the verifier (`/verify`). Their source is the landing site, deployed separately from this repository.
 
-### Joint Rate + Vol Scenario Engine
+## Desk home
 
-The trade window CURVE SCENARIO tab shows both axes simultaneously:
+Under the policy path, the next four decisions of the currency's central bank (FOMC, ECB, BoE, SNB, BoJ; published calendars in `backend/market_data/policy_path.py`) show what the curve prices for each: the forward overnight rate between consecutive meetings, the step in basis points against the window before, and the running total. Indicative, from the demo curve, not a forecast.
 
-- **Top panel:** yield curve — drag any tenor point to reshape, Gaussian ripple propagation
-- **Bottom panel:** 3D SABR vol surface (swaption) or cap vol surface (cap/floor/collar) — ROTATE mode, rotatable/zoomable mesh
-- **Single repricing button** runs 4 parallel calls and decomposes P&L:
+The desk home opens on the **desk globe**: a turning Earth lit by the real sun, the five desks glowing while their session is open, every live trade drawn as an arc from your entity's home city to the counterparty's, and an orbital ring that holds one satellite per confirmation anchored on the registry. Beside it, chain health (latest block, relayer wallet, registry), an inbox of what needs your action (countersign requests, trades awaiting the other side, maturities inside 30 days, confirmations that never reached the chain, a low relayer wallet) and the latest anchors with their proof links. Land outlines are Natural Earth 110m (public domain); the globe is plain canvas, no 3D library.
 
-```
-ΔNPV rate only   =  shocked rate,  base vol
-ΔNPV vol only    =  base rate,     shocked vol
-ΔNPV joint       =  shocked rate,  shocked vol
-ΔNPV cross-gamma =  joint − rate − vol  (the non-linear term no system shows)
-```
+**Relayer budget.** The hosted demo pays Sepolia gas from one relayer, so every anchoring action (confirm, countersign, amend, terminate, the chat-card countersign included) is charged to the person who pressed the button before anything is sent, and counted as an attempt, so a reverted or timed-out transaction still counts. Three rolling 24-hour caps: `RIJEKA_CHAIN_DAILY_LIMIT` per user (unset = off, for local and self-hosted), `RIJEKA_CHAIN_FIRM_DAILY_LIMIT` per firm (default three times the user cap), `RIJEKA_CHAIN_GLOBAL_DAILY_LIMIT` for everyone (default 200 once the user cap is set; with no cap set at all the budget is off and nothing is counted). Concurrent clicks serialise on an advisory lock. `RIJEKA_CHAIN_MAX_FEE_GWEI` (default 100) is a ceiling on the fee the relayer will pay; above it nothing is sent. Sends are serialised per process on the pending nonce, and a revert, a timeout or a used nonce is reconciled against the registry: if the record is already there, by this relayer or by the counterparty, it is taken as the anchor rather than retried into the same revert. Attempts are stored in `chain_attempts` (`docs/migrations/2026-10-31_chain_attempts.sql`), in memory until that table exists.
 
-### Market Data
+## Prometheus
 
-- Market data snapshot layer: Bloomberg, Refinitiv, and manual sources
-- ATM + OTM swaption vol surface snap with unified button (ATM ICPL + SMKO OTM in one pass)
-- Cap/floor vol surface snap from Bloomberg cap surface tickers
-- SABR calibration runs automatically after each surface snap, results stored with fit diagnostics
-
-### Trade Infrastructure
-
-- Multi-instrument trade blotter: IRS, OIS, Basis Swap, European Swaption, Cap, Floor, Collar
-- Full org hierarchy: firm → division → desk → book
-- Legal entity and counterparty master data
-- Role-based access: VIEWER / TRADER / ADMIN
+The desk's quant, risk and margin analyst. Reads everything, changes nothing. Live today: read-only chat over your trades and the engine, in-app news summaries, and the **book brief** on the home page: the pricers compute a fact sheet (NPV and IR01 per trade, curve moves, pending confirmations, maturities, CSA terms, news tagged to the positions), Prometheus narrates it citing fact ids, and every number in the prose is checked against the sheet before it is shown; forecasting and advice are rejected. Next: scenario risk across the whole book, counterparty exposure and CVA commentary, SIMM margin against thresholds, a Telegram digest.
 
 ---
 
@@ -130,69 +93,15 @@ see [SELF-HOSTING.md](SELF-HOSTING.md). The full schema is in
 
 ---
 
-## Model Validation
+## Design principles
 
-Every instrument goes through documented validation before it's considered production-ready.
-
-| Version | Instruments | Status |
-|---------|------------|--------|
-| v0.4.2 | IRS, OIS — OIS bootstrap | ✅ 38/38 tests passed |
-| v0.5.0 | European Swaption — Bachelier + HW1F | ✅ Bloomberg delta $3 on $10M 5Y |
-| v0.6.0 | SABR calibration, joint scenario P&L attribution | ✅ Live |
-| v0.4.3 | Interest Rate Cap / Floor / Collar — Bachelier Normal | ✅ Bloomberg delta 0.1% on $10M 5Y at matched vol |
-
-Validation reports and Python test packages in `model_validation/`.
-
----
-
-## Design Principles
-
-**No black boxes.** Every formula is documented. Every number is traceable.
+**No black boxes.** Every formula is documented, every number is traceable to the module that produced it, and every workbook shows its derivation.
 
 **Institutional quality, open access.** The same mathematics used at tier-1 banks, available to anyone.
 
-**SIMM-aligned risk taxonomy.** Greeks follow ISDA SIMM conventions — IR01 not DV01, proper sensitivity aggregation.
+**One taxonomy.** IR01 not DV01; FX01 on a pair and CRY01 on a digital asset; on a digital asset IR01 is discounting only and FUND01 the funding rate; SIMM-aligned aggregation.
 
-**Audit-ready.** All market data snaps are timestamped and sourced. Calibration results are stored with full fit diagnostics.
-
----
-
-## Roadmap
-
-### Phase 1 — Rates, FX & crypto forwards (live, hosted demo)
-
-| Instrument | Status |
-|-----------|--------|
-| Vanilla IRS / OIS / basis / amortising | ✅ Live |
-| European Swaption | ✅ Live |
-| Interest Rate Cap / Floor / Collar | ✅ Live |
-| FX spot / forward / NDF (EUR, GBP, JPY, CHF, AUD, CAD vs USD) | ✅ Live |
-| BTC / ETH / SOL forwards and NDFs | ✅ Live |
-| Bilateral confirmation anchored on Ethereum (Sepolia) | ✅ Live |
-| XCCY Swap | Roadmap |
-| Bermudan Swaption | Roadmap |
-
-Under the policy path, the next four decisions of the currency's central bank (FOMC, ECB, BoE, SNB, BoJ; published calendars in `backend/market_data/policy_path.py`) show what the curve prices for each: the forward overnight rate between consecutive meetings, the step in basis points against the window before, and the running total. Indicative, from the demo curve, not a forecast.
-
-The desk home opens on the **desk globe**: a turning Earth lit by the real sun, the five desks glowing while their session is open, every live trade drawn as an arc from your entity's home city to the counterparty's, and an orbital ring that holds one satellite per confirmation anchored on the registry. Beside it, chain health (latest block, relayer wallet, registry), an inbox of what needs your action (countersign requests, trades awaiting the other side, maturities inside 30 days, confirmations that never reached the chain, a low relayer wallet) and the latest anchors with their proof links. Land outlines are Natural Earth 110m (public domain); the globe is plain canvas, no 3D library.
-
-**Relayer budget.** The hosted demo pays Sepolia gas from one relayer, so every anchoring action (confirm, countersign, amend, terminate, the chat-card countersign included) is charged to the person who pressed the button before anything is sent, and counted as an attempt, so a reverted or timed-out transaction still counts. Three rolling 24-hour caps: `RIJEKA_CHAIN_DAILY_LIMIT` per user (unset = off, for local and self-hosted), `RIJEKA_CHAIN_FIRM_DAILY_LIMIT` per firm (default three times the user cap), `RIJEKA_CHAIN_GLOBAL_DAILY_LIMIT` for everyone (default 200 once the user cap is set; with no cap set at all the budget is off and nothing is counted). Concurrent clicks serialise on an advisory lock. `RIJEKA_CHAIN_MAX_FEE_GWEI` (default 100) is a ceiling on the fee the relayer will pay; above it nothing is sent. Sends are serialised per process on the pending nonce, and a revert, a timeout or a used nonce is reconciled against the registry: if the record is already there, by this relayer or by the counterparty, it is taken as the anchor rather than retried into the same revert. Attempts are stored in `chain_attempts` (`docs/migrations/2026-10-31_chain_attempts.sql`), in memory until that table exists.
-
-### Phase 2 — FX options & Credit (next)
-
-FX and crypto forwards share one interest-rate-parity model (`pricing/currency_forward.py`), booked from the same NEW TRADE ticket as rates. FX options and options on BTC, ETH and SOL are live (European, American, digital, barrier, double barrier and touch, each against its QuantLib engine, with the vol surface in the P&L explain, the ladder, VaR and stress; a digital-asset option is the FX option with the funding rate as the carry, cash-settled, with CRY01, IR01 as the discounting sensitivity and FUND01). Next: cross-currency swaps; CDS, credit options, wrong-way risk in CVA.
-
-### Phase 3 — Equity & Commodity
-
-Equity swaps, equity options (Black-Scholes / Heston), commodity swaps and options.
-
-### Phase 4 — Risk Infrastructure
-
-Full market risk (VaR, SVaR, FRTB), CCR (PFE, SA-CCR, IMM), collateral management, PnL attribution.
-
-### PROMETHEUS — AI Layer
-
-The desk's quant, risk and margin analyst. Reads everything, changes nothing. Live today: read-only chat over your trades and the engine, in-app news summaries, and the **book brief** on the home page: the pricers compute a fact sheet (NPV and IR01 per trade, curve moves, pending confirmations, maturities, CSA terms, news tagged to the positions), Prometheus narrates it citing fact ids, and every number in the prose is checked against the sheet before it is shown; forecasting and advice are rejected. Next: scenario risk across the whole book, counterparty exposure and CVA commentary, SIMM margin against thresholds, a Telegram digest.
+**Audit-ready.** Every snapshot is stamped with its source and provenance; calibrations are stored with their fit diagnostics; every pricing change ships with a test and a before/after number.
 
 ---
 
@@ -208,11 +117,11 @@ End of day (`POST /api/pnl/eod`, and daily by cron for every account) stores one
 
 A `RISK` tab next to P&L, and `Configurations › Market Risk` for the risk manager.
 
-- **Ladder.** Key-rate IR01 by curve and tenor bucket (0-1Y, 1-5Y, 5-10Y, 10Y+, the same buckets as the P&L explain), by bumping each bucket 1bp and repricing every trade through the production pricers; FX01 and BTC01 per asset from the pricers. Totals in the reporting currency.
+- **Ladder.** Key-rate IR01 by curve and tenor bucket (0-1Y, 1-5Y, 5-10Y, 10Y+, the same buckets as the P&L explain), by bumping each bucket 1bp and repricing every trade through the production pricers; FX01 and CRY01 per asset from the pricers, vega per surface and bucket. Totals in the reporting currency.
 - **VaR.** Historical simulation by full revaluation: each day's observed changes in the window (basis points per tenor, log returns for spots) shift today's market and every live trade is repriced on it; VaR is the empirical loss quantile, expected shortfall the mean beyond it, the horizon scales by √t. The ladder VaR (the same changes applied to the key-rate sensitivities) is computed alongside as the linear comparison, and the gap is reported as convexity. The firm chooses the headline method; confidence, horizon, window and minimum observations are its settings.
 - **History.** Risk factors come from the public sources the demo already uses (Treasury par yields, NY Fed SOFR, ECB €STR and AAA curve, BoE SONIA and gilts, ECB reference FX, Coinbase daily closes), fetched over a date range and stored as the template account's snapshots, which the daily rebuild extends. `risk-backfill.yml` fetches two years on dispatch.
 - **Stress.** Named scenarios by full revaluation: parallel ±25/±100bp, steepener, flattener, USD ±10%, digital assets ±30%, a combined risk-off.
-- **Limits.** The risk manager (`risk` or `admin` role, or a firm admin) sets limits on any reported number: VaR and ES, IR01 total or per curve or bucket, FX01/BTC01 per asset, NPV, any scenario's loss; scope book total, desk or book; a warning level. Utilisation and breaches show on the risk page and in the home inbox after the daily run.
+- **Limits.** The risk manager (`risk` or `admin` role, or a firm admin) sets limits on any reported number: VaR and ES, IR01 total or per curve or bucket, FX01 / CRY01 per asset, NPV, any scenario's loss; scope book total, desk or book; a warning level. Utilisation and breaches show on the risk page and in the home inbox after the daily run.
 
 Tables: `docs/migrations/2026-10-30_market_risk.sql`.
 
@@ -224,16 +133,19 @@ Tables: `docs/migrations/2026-10-30_market_risk.sql`.
 
 One set of names on every ticket, SIMM-aligned. Rate factors are per basis point; spot factors are per 1 % (the SIMM delta convention for FX and equity).
 
-| Factor | Rates (IRS, swaption, cap/floor) | FX forward / NDF | Crypto forward |
-|--------|-----------------------------------|------------------|----------------|
-| NPV | settlement currency | quote currency | USD |
-| IR01 | +1 bp on every rate curve | = IR01 DISC + IR01 BASE | = IR01 DISC + FUND01 |
-| IR01 DISC | +1 bp on the discount curve only | +1 bp on the quote (settlement) curve | +1 bp on the USD curve |
-| IR01 BASE / FUND01 | — | +1 bp on the base-currency curve | +1 bp on the asset funding rate |
-| FX01 / BTC01 | — | PV for +1 % spot | PV for +1 % spot |
-| THETA | one day's carry | one day's carry | one day's carry |
-| GAMMA | dollar convexity to ±1 bp | — (a forward is linear in spot) | — |
-| XVA | HW1F Monte Carlo exposure → waterfall | lognormal forward exposure → the same waterfall | the same, with an assumed IM weight (outside SIMM) |
+| Factor | Rates (IRS, swaption, cap/floor) | FX forward / NDF | Crypto forward | FX option | Crypto option |
+|--------|-----------------------------------|------------------|----------------|-----------|---------------|
+| NPV | settlement currency | quote currency | USD | quote currency | USD |
+| IR01 | +1 bp on every rate curve | = IR01 DISC + IR01 BASE | = IR01 DISC + FUND01 | = IR01 DISC + IR01 BASE | IR01 DISC only |
+| IR01 DISC | +1 bp on the discount curve only | +1 bp on the quote (settlement) curve | +1 bp on the USD curve | +1 bp on the quote curve | +1 bp on the USD curve |
+| IR01 BASE / FUND01 | — | +1 bp on the base-currency curve | +1 bp on the asset funding rate | +1 bp on the base curve | FUND01: +1 bp on the funding rate, reported apart |
+| FX01 / CRY01 | — | PV for +1 % spot | PV for +1 % spot | FX01 | CRY01 |
+| VEGA | swaption / cap surface, +1 bp normal vol | — | — | +1 vol point | +1 vol point |
+| THETA | one day's carry | one day's carry | one day's carry | one calendar day | one calendar day |
+| GAMMA | dollar convexity to ±1 bp | — (a forward is linear in spot) | — | spot gamma | spot gamma |
+| XVA | HW1F Monte Carlo exposure → waterfall | lognormal forward exposure → the same waterfall | the same, with an assumed IM weight (outside SIMM) | on the exposure paths (ccr) | on the exposure paths (ccr) |
+
+The names on screen: `IR01 DISC` is the key `IR01_DISC`; `SPOT01` in the limits catalogue is FX01 or CRY01 by asset.
 
 ## Market data
 
@@ -258,8 +170,9 @@ The spread schedules live in one place, `backend/market_data/demo_feed.py`, and 
 
 - `docs/methodology/rijeka_methodology.pdf` (v1.2, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
 - `docs/VALIDATION.md` — the validation charter, what is validated against what, and the open findings
-- `docs/EXOTIC_OPTIONS_ROADMAP.md` — options coverage roadmap
-- `docs/DEPLOY_CHECKLIST.md` — deployment reference
+- `docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md` — the per-module notes behind the methodology chapters
+- `docs/ops/deploy.md` — the deploy chain (API first on Render, then the app from the `release` branch)
+- `docs/archive/AUDIT_launch_2026-11-02.md` — the launch audit and the plan it set
 
 ---
 

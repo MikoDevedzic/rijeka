@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._limits import heavy
 from pricing.bootstrap import bootstrap_from_dicts
 from api.routes.pricer import _map_qt, CURVE_DC, CURVE_CAL, CURVE_SPOT_LAG, CURVE_CCY
 from methodology import replicate as rep
@@ -70,6 +71,7 @@ def market_for(db: Session, user_id: str) -> rep.Market:
 def replication(product: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     if product not in rep.BUILDERS:
         raise HTTPException(status_code=404, detail=f"No Excel replication for '{product}'.")
+    heavy(user, "Excel replication", 6)          # the XVA book runs a calibration and a Monte Carlo per download
     mkt = market_for(db, user["sub"])
     data, _ = rep.build(product, mkt)
     name = f"rijeka_{product}_replication_{mkt.valuation_date.isoformat()}.xlsx"

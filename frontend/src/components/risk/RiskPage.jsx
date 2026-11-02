@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
+import { productLabel } from '../../lib/labels'
 import RiskNav from './RiskNav'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
@@ -95,7 +96,7 @@ export default function RiskPage() {
             <div className="rk-rows">
               {(rep.ladder_rows || []).map(r => (
                 <div key={r.trade_id} className="rk-row">
-                  <span className="rk-ref">{r.trade_ref}<small>{(r.instrument || '').replace('_', ' ')} · {r.desk} / {r.book}</small></span>
+                  <span className="rk-ref">{r.trade_ref}<small>{productLabel(r.instrument)} · {r.desk} / {r.book}</small></span>
                   <span className={`pnl-tv ${tone(r.ir01)}`}>{sgn(r.ir01)} <small>IR01</small>{r.fund01_total ? <> · {sgn(r.fund01_total)} <small>FUND01</small></> : null}</span>
                   <span className="pnl-tv">{Object.entries(r.spot01).map(([a, x]) => `${a} ${sgn(x)}`).join(' ') || '—'} <small>SPOT01</small></span>
                   <span className={`pnl-tv ${tone(r.npv)}`}>{sgn(r.npv)} {r.ccy}</span>

@@ -1,11 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from db.session import get_db
-from db.models import Trade, Counterparty, LegalEntity
+from db.models import Trade, TradeEvent, Counterparty, LegalEntity
 from middleware.auth import verify_token
 from api.routes.pricer import invalidate_trade_cache
 from api.routes._instrument_alias import normalize_instrument_type  # M009 inbound translator
 from api.routes.trade_cards import their_refs
+from api.routes._errors import internal
 from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Dict, Any
 from datetime import date
@@ -43,6 +45,46 @@ FX_OPTION_STRUCTURES = ("EUROPEAN", "AMERICAN", "DIGITAL", "BARRIER", "DOUBLE_BA
 def fx_option_structure(terms) -> str:
     t = terms or {}
     return str(t.get("style") or t.get("exercise_style") or "EUROPEAN").upper()
+
+
+def validated_structure(instrument_type: Optional[str], structure: Optional[str], terms) -> Optional[str]:
+    """The structure a trade row carries, derived and checked the same way on both create paths
+    (POST /api/trades and POST /api/book/trade). IR_SWAP: VANILLA by default, else the allowlist.
+    FX_OPTION / CRYPTO_OPTION: the option's style; a stated structure must agree with it. Other
+    instruments keep what they were given. Raises ValueError (a 422 at the route)."""
+    if instrument_type == "IR_SWAP":
+        structure = structure or "VANILLA"
+        if structure not in _ALLOWED_IR_SWAP_STRUCTURES:
+            raise ValueError(f"Invalid structure '{structure}' for IR_SWAP. Allowed: {sorted(_ALLOWED_IR_SWAP_STRUCTURES)}")
+        return structure
+    if instrument_type in ("FX_OPTION", "CRYPTO_OPTION"):
+        style = fx_option_structure(terms)
+        if style not in FX_OPTION_STRUCTURES:
+            raise ValueError(f"Unknown FX option style '{style}'. Allowed: {list(FX_OPTION_STRUCTURES)}")
+        if not structure or structure.upper() == "VANILLA":
+            return style
+        if structure.upper() != style:
+            raise ValueError(f"structure '{structure}' does not match the option's style '{style}'")
+        return style
+    return structure
+
+
+def _uuid_or_none(v, name: str):
+    if v in (None, ""):
+        return None
+    try:
+        uuid.UUID(str(v))
+    except ValueError:
+        raise ValueError(f"{name} must be a UUID")
+    return str(v)
+
+
+def _iso_date(v, name: str) -> str:
+    try:
+        date.fromisoformat(str(v))
+    except ValueError:
+        raise ValueError(f"{name} must be an ISO date (YYYY-MM-DD)")
+    return str(v)
 
 
 def display_structure(t) -> Optional[str]:
@@ -94,37 +136,35 @@ class TradeCreate(BaseModel):
         """
         return normalize_instrument_type(v)
 
+    @field_validator("status")
+    @classmethod
+    def _created_pending(cls, v):
+        # A trade is created PENDING with a BOOKED event; every later status is a lifecycle fact that
+        # goes through /api/trade-events and /api/chain, so it carries an event and, where anchored,
+        # both signatures. PUT refuses the same shortcut.
+        if str(v or "PENDING").upper() != "PENDING":
+            raise ValueError("a trade is created PENDING; status changes go through /api/trade-events and /api/chain")
+        return "PENDING"
+
+    @field_validator("own_legal_entity_id")
+    @classmethod
+    def _entity_uuid(cls, v):
+        return _uuid_or_none(v, "own_legal_entity_id")
+
+    @field_validator("counterparty_id")
+    @classmethod
+    def _counterparty_uuid(cls, v):
+        return _uuid_or_none(v, "counterparty_id")
+
+    @field_validator("trade_date", "effective_date", "maturity_date")
+    @classmethod
+    def _dates_iso(cls, v, info):
+        return _iso_date(v, info.field_name)
+
     @model_validator(mode="after")
     def default_and_validate_structure(self):
-        """
-        Sprint 12 — PRODUCT_TAXONOMY v2 + migration 007.
-
-        For IR_SWAP trades:
-          - NULL/empty structure defaults to 'VANILLA' per §7 (closes L22 backend-side).
-          - Structure must be in _ALLOWED_IR_SWAP_STRUCTURES; otherwise raises 422
-            instead of waiting for the DB CHECK to throw 500.
-
-        Non-IR_SWAP instrument types are unvalidated here — their own per-instrument
-        CHECK constraints (migrations 010+) will enforce their structure sets.
-        """
-        if self.instrument_type == "IR_SWAP":
-            if not self.structure:
-                self.structure = "VANILLA"
-            if self.structure not in _ALLOWED_IR_SWAP_STRUCTURES:
-                raise ValueError(
-                    f"Invalid structure '{self.structure}' for IR_SWAP. "
-                    f"Allowed: {sorted(_ALLOWED_IR_SWAP_STRUCTURES)}"
-                )
-        if self.instrument_type in ("FX_OPTION", "CRYPTO_OPTION"):
-            style = fx_option_structure(self.terms)
-            if style not in FX_OPTION_STRUCTURES:
-                raise ValueError(f"Unknown FX option style '{style}'. Allowed: {list(FX_OPTION_STRUCTURES)}")
-            if not self.structure or self.structure.upper() == "VANILLA":
-                self.structure = style
-            elif self.structure.upper() != style:
-                raise ValueError(f"structure '{self.structure}' does not match the option's style '{style}'")
-            else:
-                self.structure = style
+        """Structure rules shared with the booking route (validated_structure)."""
+        self.structure = validated_structure(self.instrument_type, self.structure, self.terms)
         return self
 
 class TradeUpdate(BaseModel):
@@ -238,6 +278,13 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
     try:
         trade = Trade(**kwargs)
         db.add(trade)
+        db.flush()
+        # The BOOKED event: the first fact of the trade's lifecycle, as POST /api/book/trade writes it,
+        # so an event stream exists for every trade however it was created.
+        payload = {"trade": {k: (str(v) if isinstance(v, (uuid.UUID, date)) else v) for k, v in kwargs.items()}, "legs": []}
+        db.add(TradeEvent(id=uuid.uuid4(), trade_id=new_id, event_type="BOOKED", event_date=kwargs["trade_date"],
+                          effective_date=kwargs["effective_date"], payload=payload, pre_state={}, post_state=payload,
+                          user_id=kwargs["user_id"], created_by=kwargs["user_id"]))
         db.commit()
         invalidate_trade_cache()
         db.refresh(trade)
@@ -249,10 +296,10 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
     return serialize(trade, cp)
 
 @router.put("/{trade_id}")
-def update_trade(trade_id: str, body: TradeUpdate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+def update_trade(trade_id: uuid.UUID, body: TradeUpdate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     if str((user.get("user_metadata") or {}).get("role", "viewer")).lower() not in ("trader", "admin"):
         raise HTTPException(status_code=403, detail="Editing a trade requires the Trader or Admin role.")
-    t = db.query(Trade).filter(Trade.id == uuid.UUID(trade_id), Trade.user_id == uuid.UUID(user["sub"])).first()
+    t = db.query(Trade).filter(Trade.id == trade_id, Trade.user_id == uuid.UUID(user["sub"])).first()
     if not t:
         raise HTTPException(status_code=404, detail="Trade not found")
     updates = body.dict(exclude_none=True)
@@ -267,16 +314,24 @@ def update_trade(trade_id: str, body: TradeUpdate, db: Session = Depends(get_db)
     t.last_modified_by = uuid.UUID(user["sub"])
     db.commit()
     invalidate_trade_cache()
-    return {"id": trade_id, "status": t.status}
+    return {"id": str(trade_id), "status": t.status}
 
 @router.delete("/{trade_id}")
-def delete_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    t = db.query(Trade).filter(Trade.id == uuid.UUID(trade_id), Trade.user_id == uuid.UUID(user["sub"])).first()
+def delete_trade(trade_id: uuid.UUID, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    t = db.query(Trade).filter(Trade.id == trade_id, Trade.user_id == uuid.UUID(user["sub"])).first()
     if not t:
         raise HTTPException(status_code=404, detail="Trade not found")
     if t.status not in ("PENDING", "CANCELLED"):
         raise HTTPException(status_code=400, detail="Only PENDING or CANCELLED trades can be deleted")
-    db.delete(t)
-    db.commit()
+    # Events are kept (ON DELETE RESTRICT, and a trigger refuses their deletion): a trade with a
+    # lifecycle is cancelled through /api/trade-events, not deleted.
+    if db.query(TradeEvent).filter(TradeEvent.trade_id == t.id).count():
+        raise HTTPException(status_code=409, detail="This trade has lifecycle events and cannot be deleted; cancel it instead.")
+    try:
+        db.delete(t)
+        db.commit()
+    except IntegrityError as e:
+        db.rollback()
+        raise internal(409, "The trade could not be deleted; other records refer to it", e)
     invalidate_trade_cache()
     return {"deleted": trade_id}

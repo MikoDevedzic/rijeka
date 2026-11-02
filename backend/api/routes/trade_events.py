@@ -419,7 +419,7 @@ def _apply_lifecycle_transition(
                 return {**cached.result, "idempotent_replay": True}
 
         log.exception(f"{event_type} integrity error")
-        raise HTTPException(status_code=409, detail=f"Integrity error: {msg}")
+        raise HTTPException(status_code=409, detail=f"{event_type} conflicts with the trade's current state. The detail is in the server log.")
 
     except HTTPException:
         db.rollback()

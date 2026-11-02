@@ -18,7 +18,7 @@ Starting from yesterday's mark on yesterday's market, the valuation is moved one
 | 2 | CASH | Coupons and settlements that left the mark: paid in [yesterday, today), signed from our side. A flow paying today is still in today's mark (the pricer values it until its payment date has passed) and is cash tomorrow; counting (yesterday, today] booked it twice on its payment date and reversed it the next day (fixed 2026-11) |
 | 3 | RATES | Each curve the trade is valued on, one tenor bucket at a time: 0-1Y, 1-5Y, 5-10Y, 10Y+. Discount curve first, then forecast, then the base currency's curve. A single-quote curve (flat rate, funding) is one step |
 | 4 | FX | The spot rate, then the quoted forward points |
-| 5 | VOL | The option's volatility surface (`{PAIR}_VOL`: ATM, 25Δ RR, 25Δ BF per tenor), moved bucket by bucket after spot and points; FX options only, so a day's vega P&L is its own row. Swaption and cap vols have no step yet and land in the residual |
+| 5 | VOL | The option's volatility surface (`{PAIR}_VOL`: ATM, 25Δ RR, 25Δ BF per tenor), moved bucket by bucket after spot and points; the swaption ATM grid (`{CCY}_SWVOL_ATM`, by expiry) the same way, so a day's vega P&L is its own row. Cap vols have no step yet and land in the residual |
 | 5 | RESIDUAL | Today's mark on today's market minus the last step: cross effects and anything not moved explicitly (a vol surface today). Shown, never absorbed |
 
 The order is the convention. Moving rates before spot is a choice; any other order is equally valid and gives slightly different rows. The order is printed on the report so that two people reading the same number agree on what it means.
@@ -50,7 +50,7 @@ Sign-off (`pnl_signoffs`): the trader reviews the attribution and signs with a c
 
 ## Limits, stated
 
-- Vol surfaces are not yet a step; an option's vol P&L lands in RESIDUAL.
+- Cap and floor vols are not yet a step; a cap's vol P&L lands in RESIDUAL (FX, digital-asset and swaption surfaces have their VOL step).
 - A mirror booking without legs has no mark and is listed as not explained.
 - Amendments are explained as market moves on the new terms; the amendment's own effect is not separated yet.
 - History accumulates from the day the tables are applied (`docs/migrations/2026-10-30_pnl.sql`).

@@ -166,7 +166,7 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
     cps = {str(c.id): c for c in db.query(Counterparty).filter(Counterparty.user_id == uid).all()} if trades else {}
     totals: dict[str, float] = {}
     ir01_total = 0.0
-    spot01: dict[str, float] = {}          # FX01 / BTC01 by base asset, PV for +1 % spot
+    spot01: dict[str, float] = {}          # FX01 / CRY01 by base asset, PV for +1 % spot
     theta: dict[str, float] = {}           # one-day carry by currency
     ccys: set[str] = set()
     priced = 0
@@ -268,7 +268,7 @@ def narrate(sheet: dict, client=None) -> list[dict]:
     """Paragraphs with fact ids, from the model, through structured output. Raises on API failure."""
     if client is None:
         import anthropic
-        client = anthropic.Anthropic()
+        client = anthropic.Anthropic(timeout=120.0, max_retries=1)
     lines = [f"[{f['id']}] {f['text']}" for f in sheet["facts"]]
     user = (f"Valuation date {sheet['valuation_date']}. {sheet['trades']} trades, {sheet['priced']} priced.\n\nFACTS\n"
             + "\n".join(lines))

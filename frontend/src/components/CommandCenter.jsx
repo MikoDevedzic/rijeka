@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import BookBrief from './home/BookBrief'
+import { productLabel } from '../lib/labels'
 import WorldClock from './home/WorldClock'
 import PolicyPath from './home/PolicyPath'
 import Lifecycle from './home/Lifecycle'
@@ -100,13 +101,14 @@ function useSize(ref) {
 
 function useCountUp(target, ms = 700) {
   const [v, setV] = useState(0)
+  const n = Number(target) || 0
   useEffect(() => {
-    const n = Number(target) || 0; if (!n) { setV(0); return }
+    if (!n) return
     const t0 = performance.now(); let raf
     const step = (t) => { const k = Math.min(1, (t - t0) / ms); setV(Math.round(n * (1 - Math.pow(1 - k, 3)))); if (k < 1) raf = requestAnimationFrame(step) }
     raf = requestAnimationFrame(step); return () => cancelAnimationFrame(raf)
-  }, [target, ms])
-  return v
+  }, [n, ms])
+  return n ? v : 0   // a zero target reads 0 at once; no state write inside the effect
 }
 
 const BOOT_KEY = 'rijeka.booted'
@@ -142,7 +144,7 @@ function DeskHome({ demo, navigate }) {
     })
     return () => { alive = false }
   }, [])
-  const endBoot = () => { try { sessionStorage.setItem(BOOT_KEY, uid) } catch {}; setBooting(false) }
+  const endBoot = () => { try { sessionStorage.setItem(BOOT_KEY, uid) } catch { /* storage may be unavailable; the boot screen then shows again next time */ } setBooting(false) }
   if (booting) return <BootScreen steps={steps} ready={!d.loading} sofr={d.sofr} name={traderName(session)} role={(session?.user?.user_metadata?.role || 'viewer').toUpperCase()} onDone={endBoot} />
 
   const trades = d.trades || []
@@ -152,7 +154,6 @@ function DeskHome({ demo, navigate }) {
   const asOf = d.sofr?.valuation_date
   const stale = daysOld(asOf)
   const showPath = !d.loading && confirmed === 0
-  const r2 = quote(d.sofr, '2Y'), r10 = quote(d.sofr, '10Y'), r5 = quote(d.sofr, '5Y'), r30 = quote(d.sofr, '30Y')
 
   return (
     <div className="dh">
@@ -200,7 +201,7 @@ function DeskHome({ demo, navigate }) {
             {trades.slice(0, 4).map(t => (
               <li key={t.id} onClick={() => navigate('/blotter')}>
                 <span className="dh-ref">{t.trade_ref}</span>
-                <span className="dh-mid">{(t.instrument_type || '').replace('_', ' ')} · {t.notional_ccy} {fmtM(t.notional)} · {fmtD(t.maturity_date)}</span>
+                <span className="dh-mid">{productLabel(t.instrument_type)} · {t.notional_ccy} {fmtM(t.notional)} · {fmtD(t.maturity_date)}</span>
                 <span className={`dh-st ${String(t.status).toLowerCase()}`}>{t.status}</span>
               </li>
             ))}

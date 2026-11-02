@@ -1,5 +1,5 @@
 """One risk taxonomy across products: FX and crypto forwards carry NPV, IR01, IR01_DISC, IR01_BASE
-(or FUND01), FX01/BTC01 and THETA like a swap carries NPV, IR01, IR01_DISC, THETA; and their XVA
+(or FUND01), FX01/CRY01 and THETA like a swap carries NPV, IR01, IR01_DISC, THETA; and their XVA
 runs through the same waterfall."""
 from datetime import date
 

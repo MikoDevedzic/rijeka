@@ -12,7 +12,6 @@ import CommandCenter    from './components/CommandCenter'
 import AppBar           from './components/layout/AppBar'
 import CfgNav           from './components/layout/CfgNav'
 import BlotterShell     from './components/blotter/BlotterShell'
-import PricerPage       from './components/pricer/PricerPage'
 import PnlPage          from './components/pnl/PnlPage'
 import { BookingDefaults, PnlConventions } from './components/pnl/PnlSettings'
 import RiskPage         from './components/risk/RiskPage'
@@ -172,7 +171,6 @@ export default function App() {
           <Route path="/messenger" element={<MessengerPage />} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
-            <Route path="/pricer"  element={<PricerPage />} />
             <Route path="/pnl"     element={<PnlPage />} />
             <Route path="/risk"    element={<RiskPage />} />
             <Route path="/risk/ccr" element={<CcrPage />} />

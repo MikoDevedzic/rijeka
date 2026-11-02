@@ -53,6 +53,8 @@ export default function FxWorkspace() {
     const m = await call('/api/currency/pairs'); setMd(m)
     if (bbg === null) { try { const st = await call('/bloomberg/status'); setBbg({ available: !!st?.connected, error: st?.error || '' }) } catch { setBbg({ available: false }) } }
   }, [bbg])
+  // load() writes state only after its awaits; the lint rule cannot see past the call and flags it anyway.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load().catch(e => flash('err', e.message)) }, [load])
   useEffect(() => { setInnerTab('points') }, [sel])   // eslint-disable-line react-hooks/exhaustive-deps
 

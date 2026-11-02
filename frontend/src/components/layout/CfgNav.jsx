@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { RATES_CURVES } from '../../data/ratesCurves'
 import useMarketDataStore from '../../store/useMarketDataStore'
@@ -253,7 +253,7 @@ function SnapAllButton({ role }) {
               if (idx!==-1) updateQuote(curveId, idx, String(q.rate))
             })
           }
-        } catch(_) { errors.push(curveId) }
+        } catch { errors.push(curveId) }
         await new Promise(r => setTimeout(r,200))
       }
 
@@ -278,7 +278,7 @@ function SnapAllButton({ role }) {
         } else {
           errors.push('swvol-atm')
         }
-      } catch(_) { errors.push('swvol-atm') }
+      } catch { errors.push('swvol-atm') }
 
       // ── Step 3: Swaption OTM + SABR ──────────────────────────────────────
       setSnap({ status:'running', step:'SWVOL OTM', stepIdx:2, total:STEPS.length })
@@ -332,7 +332,7 @@ function SnapAllButton({ role }) {
           })
           if (!skewRes.ok) errors.push('swvol-otm-save')
         }
-      } catch(_) { errors.push('swvol-otm') }
+      } catch { errors.push('swvol-otm') }
 
       // ── Step 4: Cap/floor surface ─────────────────────────────────────────
       setSnap({ status:'running', step:'CAP/FLOOR', stepIdx:3, total:STEPS.length })
@@ -342,7 +342,7 @@ function SnapAllButton({ role }) {
           body:JSON.stringify({ valuation_date:today }),
         })
         if (!capRes.ok) errors.push('cap-floor')
-      } catch(_) { errors.push('cap-floor') }
+      } catch { errors.push('cap-floor') }
 
       setSnap({ status:'done', errors, date:today })
       setTimeout(() => setSnap(null), 10000)
@@ -461,7 +461,7 @@ export default function CfgNav() {
               >
                 <span style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                   {sec.label}
-                  {sec.sprint && <span style={S.sectionSprint}>SPRINT {sec.sprint}</span>}
+                  {sec.sprint && <span style={S.sectionSprint}>ON THE ROADMAP</span>}
                 </span>
                 <span style={{ fontSize:'0.8rem', opacity:0.5 }}>{isOpen ? '\u25DB' : '\u25D9'}</span>
               </button>
@@ -480,8 +480,8 @@ export default function CfgNav() {
                     onClick={e => { if (!item.live) e.preventDefault() }}
                   >
                     <span>{item.label}</span>
-                    {!item.live && item.sprint && (
-                      <span style={S.sprintBadge}>{item.sprint}</span>
+                    {!item.live && (
+                      <span style={S.sprintBadge}>ROADMAP</span>
                     )}
                   </NavLink>
                 ))}

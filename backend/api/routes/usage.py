@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from middleware.auth import verify_token
+from api.routes._roles import require_admin
 
 log = logging.getLogger("rijeka.usage")
 router = APIRouter(tags=["usage"])
@@ -167,4 +168,5 @@ def usage(db: Session, today: Optional[date] = None, days: int = DAYS) -> dict[s
 
 @router.get("/api/ops/usage")
 def ops_usage(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    require_admin(db, user)                     # platform-wide numbers, not one account's
     return usage(db)
