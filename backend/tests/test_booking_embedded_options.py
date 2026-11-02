@@ -31,7 +31,6 @@ from api.routes.booking import (
     BookingRequest,
     _normalize_leg_embedded_options,
     build_booked_payload,
-    _validate_embedded_options_entry,
 )
 from api.routes.trade_legs import (
     TradeLegCreate,

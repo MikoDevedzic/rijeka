@@ -20,7 +20,7 @@ GET /api/market-data/snapshots/date/{valuation_date}
 from datetime import date, datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -257,7 +257,6 @@ async def save_vol_skew(
     UPSERT on (valuation_date, expiry_label, tenor_label).
     After saving, triggers SABR calibration for each bucket.
     """
-    import json as _json
     role = user.get("user_metadata", {}).get("role", "viewer").lower()
     if role not in ("trader", "admin"):
         raise HTTPException(status_code=403, detail="Trader or Admin role required")
@@ -635,7 +634,6 @@ async def save_manual_sabr_params(
     Used when market data is thin or quant team wants to override.
     source = 'MANUAL' marks these as user-set vs AUTO from calibration.
     """
-    import json as _json
     role = user.get("user_metadata", {}).get("role", "viewer").lower()
     if role not in ("trader", "admin"):
         raise HTTPException(status_code=403, detail="Trader or Admin role required")

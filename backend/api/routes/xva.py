@@ -21,7 +21,7 @@ GET /api/xva/calibration/latest
 import json
 import math
 import numpy as np
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,7 +40,7 @@ from pricing.hw1f_mc import simulate_swap_paths
 from api.routes.pricer import CurveInput, _build_curve
 from pricing.curve import discount_fn_from_curve
 from pricing.csa import CSA
-from pricing.xva_engine import WaterfallParams, run_waterfall, simm_ir_risk_weight
+from pricing.xva_engine import WaterfallParams, run_waterfall
 
 router = APIRouter(prefix="/api/xva", tags=["xva"])
 

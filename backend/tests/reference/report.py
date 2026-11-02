@@ -28,7 +28,7 @@ def rows():
 
 
 def summary(rs):
-    groups: "OrderedDict[tuple, list]" = OrderedDict()
+    groups: OrderedDict[tuple, list] = OrderedDict()
     for r in rs:
         groups.setdefault((r.product, r.metric, r.unit, r.kind), []).append(r)
     lines = []

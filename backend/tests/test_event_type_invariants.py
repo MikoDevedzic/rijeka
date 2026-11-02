@@ -30,7 +30,6 @@ Layered coverage:
     access to the Postgres instance.
 """
 
-import os
 import re
 import pytest
 

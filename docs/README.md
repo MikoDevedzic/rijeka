@@ -4,6 +4,10 @@ Live documents, the ones kept current with the code:
 
 | Document | What it covers |
 |---|---|
+| [architecture.md](architecture.md) | The map: app, API, database, chain, landing site; the data flow of a trade; the deploy chain |
+| [model_inventory.md](model_inventory.md) | Every model: module, methodology section, reference rows, replication, validation status, open findings |
+| [glossary.md](glossary.md) | The names on every screen: sensitivities, explain steps, products, measures |
+| [ops/environment.md](ops/environment.md) | Every environment variable, where it is read, its default |
 | [pnl_attribution.md](pnl_attribution.md) | P&L attribution: sequential full revaluation, the convention, sign-off, the AMEND step |
 | [market_risk.md](market_risk.md) | Ladder, VaR by full revaluation and on the ladder, stress, limits, backtesting |
 | [ccr.md](ccr.md) | Counterparty credit: real-world paths, historical sampling, netting, CSA, options on the paths, PFE limits |

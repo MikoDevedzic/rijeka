@@ -1,5 +1,4 @@
 """NEWS room: feed parsing, tagging, cron auth, read-only posting."""
-import os
 from unittest.mock import MagicMock
 
 import pytest

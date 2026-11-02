@@ -100,7 +100,7 @@ def swaption_rows(p=None) -> list[Row]:
                 und, legs = _underlying(expiry, years, K, payer)
                 item = {"expiry": expiry, "fixed_sched": und["legs"][0][1], "start": expiry, "N": N, "K": K, "vol": 0.0090,
                         "is_payer": payer, "ccy": "USD"}
-                v = value_swaption(item, p, i_e, FX, lambda it, pp, j: value_swap(und, pp, j, FX))
+                v = value_swaption(item, p, i_e, FX, lambda it, pp, j: value_swap(und, pp, j, FX))  # noqa: B023  (called within this iteration only)
                 x = D[:, i_e] * v
                 se = x.std() / math.sqrt(len(x))
                 ois = ql.OvernightIndexedSwap(ql.Swap.Payer if payer else ql.Swap.Receiver, N, sch, K, ql.Actual360(), null_index(h))

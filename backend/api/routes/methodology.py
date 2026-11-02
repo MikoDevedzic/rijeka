@@ -8,7 +8,6 @@ GET /api/methodology/{product}/replication.xlsx the workbook (see methodology/re
 
 from __future__ import annotations
 
-from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response

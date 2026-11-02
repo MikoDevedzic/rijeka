@@ -243,7 +243,6 @@ def history_status(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] =
 @router.post("/history/backfill")
 def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=False), db: Session = Depends(get_db),
              x_rijeka_cron: Optional[str] = Header(None), user: Optional[dict] = Depends(optional_token)):
-    from risk import history as H
     if not _secret_ok(x_rijeka_cron):
         if user is None:
             raise HTTPException(status_code=401, detail="Missing auth")

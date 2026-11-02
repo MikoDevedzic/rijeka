@@ -19,8 +19,7 @@ swap on a monthly grid at 200 paths keeps the book near 60,000 formula cells."""
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
-from typing import Optional
+from datetime import timedelta
 
 import numpy as np
 from openpyxl import Workbook
@@ -33,7 +32,7 @@ from pricing.calibration import calibrate_hw1f, hw1f_swaption_vol_normal, tenor_
 from pricing.csa import CSA, BUSINESS_DAYS_PER_YEAR, MPOR_FLOOR_BILATERAL_BD, MPOR_FLOOR_CLEARED_BD, SIMM_REFERENCE_MPOR_BD
 from pricing.curve import discount_fn_from_curve
 from pricing.hw1f_mc import grids, simulate_swap_paths
-from pricing.xva_engine import ALPHA, CAP_R, SF_IR, SIMM_IR_RW, WaterfallParams, run_waterfall, simm_ir_risk_weight
+from pricing.xva_engine import ALPHA, CAP_R, SF_IR, SIMM_IR_RW, WaterfallParams, run_waterfall
 
 N_PATHS, MATURITY_Y, NOTIONAL, FIXED_RATE, DIRECTION = 200, 2.0, 10_000_000.0, 0.03643, "PAY"
 DT = 1.0 / 12.0
@@ -481,7 +480,7 @@ def _engine_sheet(wb, eng, rs, rt, fit):
     r += 1
     ws.cell(row=r, column=1, value="PER STEP: EE / ENE / PFE under each preset").font = W.F_SECTION; r += 1
     hdr = ["step"] + [f"{p} {m}" for p in PRESETS for m in ("EE", "ENE", "PFE")] + ["selected EE", "selected ENE", "selected PFE"]
-    W.header(ws, r, hdr); hr = r; r += 1
+    W.header(ws, r, hdr); hr = r; r += 1  # noqa: F841  launch audit: assigned, never used
     for j in range(1, T + 1):
         ws.cell(row=r, column=1, value=j)
         col = 2

@@ -15,7 +15,6 @@ macros, no external links, so the file opens clean in Excel, Numbers and Google 
 """
 from __future__ import annotations
 
-from datetime import date
 from typing import Any, Optional
 
 from openpyxl import Workbook

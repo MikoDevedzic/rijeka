@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pricing.curve import Curve
-from pricing.crypto_forward import price_crypto_forward, fair_forward, year_fraction
+from pricing.crypto_forward import price_crypto_forward
 
 VAL = date(2026, 10, 28)
 SET = date(2027, 1, 28)

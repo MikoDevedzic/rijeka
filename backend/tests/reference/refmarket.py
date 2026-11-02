@@ -64,7 +64,7 @@ def rijeka_quotes(quotes=USD_SOFR, bump: Optional[dict[str, float]] = None) -> l
     return [PillarQuote(t, DEPOSIT if t == "ON" else OIS_SWAP, (r + bump.get(t, 0.0)) / 100.0) for t, r in quotes]
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def rijeka_curve() -> Curve:
     return bootstrap_curve(VAL, rijeka_quotes())
 

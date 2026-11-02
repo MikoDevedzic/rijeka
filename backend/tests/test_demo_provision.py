@@ -6,7 +6,6 @@ Postgres (UUID/ARRAY columns), so these tests pin the pure parts — the demo
 LEI shape, the dev-key scope, the market-data copy SQL, the role upgrade —
 and the quota's refusal path through the route with a fake session.
 """
-import os
 import uuid
 from unittest.mock import MagicMock
 

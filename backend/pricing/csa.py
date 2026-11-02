@@ -50,7 +50,7 @@ Presets
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from typing import Optional
 
 BUSINESS_DAYS_PER_YEAR = 250
@@ -108,13 +108,13 @@ class CSA:
     # ── Presets ──────────────────────────────────────────────────────────────
 
     @classmethod
-    def uncollateralised(cls) -> "CSA":
+    def uncollateralised(cls) -> CSA:
         return cls(preset="UNCOLLATERALISED")
 
     @classmethod
     def bilateral(cls, threshold_cp: float = 0.0, threshold_own: float = 0.0,
                   mta: float = 0.0, mpor_days: float = MPOR_FLOOR_BILATERAL_BD,
-                  im_exchanged: bool = True) -> "CSA":
+                  im_exchanged: bool = True) -> CSA:
         return cls(preset="BILATERAL", collateralised=True,
                    threshold_cp=threshold_cp, threshold_own=threshold_own,
                    mta=mta, mpor_days=max(mpor_days, MPOR_FLOOR_BILATERAL_BD),
@@ -122,7 +122,7 @@ class CSA:
 
     @classmethod
     def on_chain(cls, mpor_days: float = MPOR_FLOOR_CLEARED_BD,
-                 im_exchanged: bool = True, im_yield_pickup_bp: float = 0.0) -> "CSA":
+                 im_exchanged: bool = True, im_yield_pickup_bp: float = 0.0) -> CSA:
         return cls(preset="ON_CHAIN", collateralised=True,
                    threshold_cp=0.0, threshold_own=0.0, mta=0.0,
                    mpor_days=max(mpor_days, MPOR_FLOOR_CLEARED_BD),
@@ -131,7 +131,7 @@ class CSA:
                    settlement="on_chain")
 
     @classmethod
-    def from_request(cls, d: Optional[dict]) -> "CSA":
+    def from_request(cls, d: Optional[dict]) -> CSA:
         """Build from a request dict: {preset, ...overrides}. None → uncollateralised."""
         if not d:
             return cls.uncollateralised()

@@ -19,7 +19,7 @@ from datetime import date, timedelta
 import QuantLib as ql
 
 from pricing.fx_option import forward_delta, price_fx_option
-from pricing.fx_vol import parse_surface, smile_vol, vol_at
+from pricing.fx_vol import parse_surface, vol_at
 from tests.reference.refmarket import VAL, Row, assert_rows, qd, set_eval
 
 N = 10_000_000.0

@@ -30,7 +30,6 @@ from pnl.market import Market, is_vol_surface
 from pnl.valuation import spot_curve, trade_curves
 from risk import history as H
 from risk import var as V
-from risk.stress import asset_of
 from risk.var import _bucket_of, quantiles, _hist
 
 MAX_VALUATIONS = 60_000          # per report: beyond this the full revaluation is skipped and the ladder VaR reported, with a note

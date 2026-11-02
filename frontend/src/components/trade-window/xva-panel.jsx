@@ -4,9 +4,11 @@
 // unified TradeWindow shell. Same pattern as DetailsPanel (Patch 20).
 // ────────────────────────────────────────────────────────────────────────────────────
 
-import { useMemo } from 'react'
-import XVATab from '../blotter/XVATab'
+import { lazy, Suspense, useMemo } from 'react'
+import Loading from '../common/Loading'
 import { getSessionSafe } from '../../lib/session'
+// The tab's code is fetched the first time the tab is opened, not with the shell.
+const XVATab = lazy(() => import('../blotter/XVATab'))
 
 const getSession = getSessionSafe
 
@@ -31,6 +33,7 @@ export default function XvaPanel({
   }, [state.coupon, state.parRate])
 
   return (
+    <Suspense fallback={<Loading />}>
     <XVATab
       // Trade context — null for new trades (XVATab tolerates this)
       trade={null}
@@ -69,5 +72,6 @@ export default function XvaPanel({
       swaptionVol={state.swaptionVol || '86.5'}
       swaptionResult={productKey === 'IR_SWAPTION' ? result : null}
     />
+    </Suspense>
   )
 }

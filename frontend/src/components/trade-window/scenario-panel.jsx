@@ -5,10 +5,12 @@
 // XvaPanel (Patches 20 + 21).
 // ────────────────────────────────────────────────────────────────────────────────────
 
-import { useMemo } from 'react'
-import ScenarioTab from '../blotter/ScenarioTab'
+import { lazy, Suspense, useMemo } from 'react'
+import Loading from '../common/Loading'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { getSessionMaybe } from '../../lib/session'
+// The tab's code is fetched the first time the tab is opened, not with the shell.
+const ScenarioTab = lazy(() => import('../blotter/ScenarioTab'))
 
 const getSession = async () => {
   const session = await getSessionMaybe()
@@ -45,6 +47,7 @@ export default function ScenarioPanel({
   }, [state.coupon, state.parRate])
 
   return (
+    <Suspense fallback={<Loading />}>
     <ScenarioTab
       ccy={state.ccy || 'USD'}
       index={state.index || 'SOFR'}
@@ -75,5 +78,6 @@ export default function ScenarioPanel({
       setCapVolOverride={() => {}}
       handleCapFloorPrice={() => {}}
     />
+    </Suspense>
   )
 }

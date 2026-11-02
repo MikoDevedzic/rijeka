@@ -71,7 +71,7 @@ def bermudan_rows() -> list[Row]:
                 pay_y = [d / 365.0 for d in days[1:]]
                 dcf = [(dates[i + 1] - dates[i]).days / 360.0 for i in range(len(dates) - 1)]
                 jam = price_european_swaption_hw1f_jamshidian(N, K, payer, days[0] / 365.0, pay_y, dcf, A, SIGMA,
-                                                              discount_fn=lambda t: h.discount(t))
+                                                              discount_fn=lambda t: h.discount(t))  # noqa: B023  (called within this iteration only)
                 rows.append(Row("European (HW1F)", case, "Jamshidian closed form, Rijeka vs QuantLib", float(jam["npv"]), eur_j.NPV(),
                                 "bp of notional", 1e-3, scale=1e4 / N))
     return rows

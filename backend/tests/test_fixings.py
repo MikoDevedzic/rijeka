@@ -1,6 +1,6 @@
 """Realised overnight fixings from the daily snapshots (pricing/fixings.py): compounding, carry over days
 without a snapshot, the no-data case, and the swap pricer using the lookup."""
-from datetime import date, timedelta
+from datetime import date
 import json
 
 import pytest

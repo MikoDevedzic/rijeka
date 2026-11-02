@@ -8,7 +8,6 @@ waterfall with the counterparty's default spread."""
 from __future__ import annotations
 
 import math
-from datetime import date
 from typing import Any, Optional
 
 import numpy as np

@@ -42,7 +42,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable
 
 from eth_utils import keccak
 

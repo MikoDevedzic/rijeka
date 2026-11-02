@@ -136,7 +136,7 @@ def crypto_history(start: date, end: date) -> dict[date, dict[str, float]]:
             b = min(end, a + timedelta(days=290))
             try:
                 rows = json.loads(_get(COINBASE_CANDLES.format(asset=asset, a=a.isoformat(), b=b.isoformat())))
-                for t, lo, hi, op, cl, *_ in rows:
+                for t, _lo, _hi, _op, cl, *_ in rows:
                     d = datetime.fromtimestamp(int(t), tz=timezone.utc).date()
                     out.setdefault(d, {})[f"{asset}USD"] = float(cl)
             except Exception as e:      # noqa: BLE001
@@ -233,7 +233,7 @@ def series(db: Session, user_id, curve_id: str, start: date, end: date, by_type:
 def changes(ser: list[tuple[date, dict[str, float]]], kind: str) -> list[tuple[date, dict[str, float]]]:
     """Consecutive-observation changes: bp for rates, log return in percent for spots."""
     out = []
-    for (d0, q0), (d1, q1) in zip(ser, ser[1:]):
+    for (_d0, q0), (d1, q1) in zip(ser, ser[1:]):
         ch = {}
         for t, v1 in q1.items():
             v0 = q0.get(t)

@@ -18,7 +18,6 @@ from projections.trade_projection import (
     project,
     empty_projection,
     EventLike,
-    EventType,
     ProjectionError,
 )
 

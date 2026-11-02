@@ -249,21 +249,21 @@ class EvmBackend:
         fees = self._fees()
         for attempt in (1, 2):
             nonce = self._retry("nonce", lambda: self.w3.eth.get_transaction_count(self.relayer.address, "pending"))
-            tx = self._retry("build", lambda: fn.build_transaction({"from": self.relayer.address, "nonce": nonce, "chainId": self.chain_id, **fees}))
+            tx = self._retry("build", lambda: fn.build_transaction({"from": self.relayer.address, "nonce": nonce, "chainId": self.chain_id, **fees}))  # noqa: B023  (called within this iteration only)
             signed = self.relayer.sign_transaction(tx)
             state = {"used": False}
 
             def broadcast():
                 try:
-                    return self.w3.eth.send_raw_transaction(signed.raw_transaction)
+                    return self.w3.eth.send_raw_transaction(signed.raw_transaction)  # noqa: B023  (called within this iteration only)
                 except ValueError as e:    # the node answered: it already has this tx, the nonce is spent, or it rejected it
                     msg = str(e).lower()
                     if any(k in msg for k in _NONCE_USED):
-                        state["used"] = True
+                        state["used"] = True  # noqa: B023  (called within this iteration only)
                         return None
                     if any(k in msg for k in _ALREADY_SENT):
                         log.info("chain: node already holds the %s transaction; waiting for its receipt", label)
-                        return signed.hash
+                        return signed.hash  # noqa: B023  (called within this iteration only)
                     raise
             h = self._retry("send", broadcast)
             if state["used"]:
@@ -277,8 +277,8 @@ class EvmBackend:
                     continue
                 raise RuntimeError(f"{label}(): the relayer nonce was used by another transaction and the registry has no record")
             try:
-                rcpt = self._retry("receipt", lambda: self.w3.eth.wait_for_transaction_receipt(h, timeout=RECEIPT_TIMEOUT))
-            except Exception as e:          # noqa: BLE001 — timeout or node gone: the registry is the truth
+                rcpt = self._retry("receipt", lambda: self.w3.eth.wait_for_transaction_receipt(h, timeout=RECEIPT_TIMEOUT))  # noqa: B023  (called within this iteration only)
+            except Exception:          # noqa: BLE001 — timeout or node gone: the registry is the truth
                 done = self._recorded(reconcile, label)
                 if done:
                     return done
@@ -288,7 +288,7 @@ class EvmBackend:
                 if done:
                     return done
                 raise RuntimeError(f"{label}() reverted in tx {h.hex()}")
-            blk = self._retry("block", lambda: self.w3.eth.get_block(rcpt.blockNumber))
+            blk = self._retry("block", lambda: self.w3.eth.get_block(rcpt.blockNumber))  # noqa: B023  (called within this iteration only)
             tx_hex = "0x" + h.hex() if not h.hex().startswith("0x") else h.hex()
             return AnchorReceipt(True, self.chain_id, self.registry, tx_hex,
                                  int(rcpt.blockNumber), int(blk.timestamp), self._explorer_tx(tx_hex))

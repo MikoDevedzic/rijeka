@@ -23,7 +23,6 @@ GET  /api/chain/status
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
@@ -31,8 +30,6 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Header
 from api.routes._errors import internal
 from pydantic import BaseModel
-from sqlalchemy import desc
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from db.session import get_db
@@ -47,7 +44,7 @@ from chain.signing import (confirmation_typed_data, amendment_typed_data, termin
                            sign, recover, eip712_digest)
 from chain.lifecycle import latest_attested_event, anchored_attestation, is_terminated
 from chain.canonical import TRADE_FIELDS_V2, LEG_FIELDS_V2
-from projections.trade_projection import project, project_from_db, EventLike
+from projections.trade_projection import project, EventLike
 from db.models import IdempotencyKey
 from copy import deepcopy
 from datetime import date as _date

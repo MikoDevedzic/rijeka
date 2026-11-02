@@ -1,0 +1,27 @@
+# Ruff — defects, not style. Run from backend/: .venv/bin/ruff check .
+# CI runs the same command in the "backend tests" job before pytest.
+target-version = "py311"   # CI and Render run 3.11; the local venv is 3.13
+line-length = 160
+exclude = [".venv", "tests/reference/__pycache__"]
+
+[lint]
+# E9  syntax / io errors        F  pyflakes (undefined names, unused imports, ...)
+# E7  statement-level mistakes  B  bugbear (likely bugs)  UP  pyupgrade  W6  deprecated
+select = ["E9", "E7", "F", "B", "UP", "W6"]
+ignore = [
+    "E701",   # multiple statements on one line (colon) — house style in pricers/workbooks
+    "E702",   # multiple statements on one line (semicolon) — same
+    "E731",   # lambda assignment — used deliberately for small pricers/keys
+    "E741",   # ambiguous variable name (l, I, O)
+    "B008",   # function call in default argument — FastAPI's Depends()/Query()
+    "B904",   # raise without `from` inside except — 92 sites, mostly HTTPException in routes; chaining only changes the traceback
+    "B905",   # zip() without strict= — not worth a sweep
+    "UP006",  # List[...] -> list[...]  (kept: pydantic models and typing imports are widespread)
+    "UP007",  # Optional[X] -> X | None
+    "UP017",  # timezone.utc -> datetime.UTC — alias for alias, 49 sites of churn
+    "UP035",  # deprecated typing imports
+    "UP045",  # Optional[X] -> X | None (pyupgrade split of UP007)
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["B011", "B017"]

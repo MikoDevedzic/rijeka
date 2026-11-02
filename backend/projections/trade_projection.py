@@ -27,7 +27,7 @@ from enum import Enum
 # Event types — canonical superset. trade_events.py::VALID_EVENT_TYPES
 # should import from here once Sprint 12 item 3 ships.
 # ────────────────────────────────────────────────────────────────────────────
-class EventType(str, Enum):
+class EventType(str, Enum):  # noqa: UP042  StrEnum would change str()/format of members
     BOOKED              = "BOOKED"
     CONFIRMED           = "CONFIRMED"       # new in Sprint 12 — closes BUG-L1
     ACTIVATED           = "ACTIVATED"
@@ -66,7 +66,7 @@ class EventLike:
     payload: dict[str, Any]
 
     @classmethod
-    def from_row(cls, row) -> "EventLike":
+    def from_row(cls, row) -> EventLike:
         return cls(
             event_seq=int(row.event_seq),
             event_type=str(row.event_type),
@@ -74,7 +74,7 @@ class EventLike:
         )
 
     @classmethod
-    def from_dict(cls, d: dict) -> "EventLike":
+    def from_dict(cls, d: dict) -> EventLike:
         return cls(
             event_seq=int(d["event_seq"]),
             event_type=str(d["event_type"]),

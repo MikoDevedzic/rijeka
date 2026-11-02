@@ -26,21 +26,16 @@ separately as a Phase-2 calibration rebuild work item.
 import math
 import pytest
 from datetime import date
-from typing import List, Callable
+from typing import Callable
 
 import numpy as np
 
 from pricing.bermudan_swaption import (
     HW1FTrinomialTree,
-    SwapTerms,
     price_bermudan_swaption_hw1f,
     price_european_swaption_hw1f_tree,
     price_european_swaption_hw1f_jamshidian,
-    price_swaption_via_tree,
     hw1f_B,
-    hw1f_A,
-    hw1f_bond_price,
-    market_inst_forward,
 )
 
 

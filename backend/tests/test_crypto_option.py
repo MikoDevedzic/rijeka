@@ -59,7 +59,7 @@ def test_route_prices_a_bitcoin_option_with_the_fx_engine_and_the_desk_taxonomy(
     assert b["ir01"] == pytest.approx(b["ir01_disc"]) and b["fund01"] == pytest.approx(b["ir01_base"])      # IR01 is discounting; funding is FUND01
     assert "Black-76" in b["method"]
     # the same numbers from the engine directly: the funding rate is the base rate of the forward
-    T_s = (SET - VAL).days / 365.0
+    T_s = (SET - VAL).days / 365.0  # noqa: F841  launch audit: assigned, never used
     e = price_fx_option(base_currency="BTC", quote_currency="USD", base_notional=10, option_type="CALL", strike=b["strike"], spot=65000.0, forward=b["forward"],
                         df_quote=b["df_quote"], valuation_date=VAL, expiry_date=EXP, settlement_date=SET, vol=b["vol"], direction="BUY", spot_date=VAL + timedelta(days=1))
     assert b["npv"] == pytest.approx(e.npv) and b["vega"] == pytest.approx(e.vega) and b["spot01"] == pytest.approx(e.spot01)

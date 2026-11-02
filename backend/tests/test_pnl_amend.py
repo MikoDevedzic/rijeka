@@ -31,7 +31,7 @@ M0, M1 = FakeMarket(D0, {"USD_SOFR": Q0}), FakeMarket(D1, {"USD_SOFR": Q1})
 
 def fake_value(db, user, trade, d, mkt):
     """A toy swap: receive fixed on notional, against the 2Y par rate, with a day of carry. Exact and deterministic."""
-    legs = getattr(trade, "_legs", None) or getattr(trade, "legs")
+    legs = getattr(trade, "_legs", None) or trade.legs
     fixed = next(l for l in legs if l["leg_type"] == "FIXED")
     r2y = mkt.single("USD_SOFR", "2Y") / 100.0
     years = 2.0 - (d - D0).days / 365.0

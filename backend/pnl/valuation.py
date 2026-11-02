@@ -4,7 +4,6 @@ assets. The market is handed over explicitly (as-of quotes), never read as 'late
 from __future__ import annotations
 
 import logging
-import math
 from datetime import date
 from types import SimpleNamespace
 from typing import Any, Optional
@@ -276,7 +275,6 @@ def _value_fx_option(t: dict, pair: str, base: str, quote: str, S: float, fwd, v
     if spec.strike is None and spec.style != "TOUCH":
         spec.strike = float(fwd.forward)
     K = spec.strike if spec.strike is not None else float(fwd.forward)
-    call = spec.option_type == "CALL"
     sign = 1.0 if str(t["direction"]).upper() == "BUY" else -1.0
     vol_cid = f"{pair}_VOL"
     asof = {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT"), vol_cid: mkt.snapshot_date(vol_cid)}

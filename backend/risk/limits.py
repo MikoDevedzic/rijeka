@@ -12,7 +12,7 @@ Limits are the firm's (set by the risk manager) and apply to each member's book.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session

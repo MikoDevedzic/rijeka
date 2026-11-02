@@ -44,7 +44,7 @@ def actact_isda(d1: date, d2: date) -> Decimal:
     days_y1 = 366 if _is_leap(d1.year) else 365
     frac += Decimal((end_y1 - d1).days) / Decimal(days_y1)
     # full years between
-    for y in range(d1.year + 1, d2.year):
+    for _y in range(d1.year + 1, d2.year):
         frac += Decimal(1)
     # 1 Jan of d2's year → d2
     start_y2 = date(d2.year, 1, 1)

@@ -539,7 +539,6 @@ class TestCountersignCLI:
 from unittest.mock import MagicMock
 from fastapi import HTTPException as _HTTPExc
 from chain import lifecycle
-from chain.signing import amendment_typed_data, termination_typed_data
 
 
 class TestLifecycleHelpers:

@@ -24,14 +24,15 @@ its own door so nobody has to guess.
 - **No silent methodology changes.** If a formula changes, `docs/methodology/rijeka_methodology.tex`
   changes in the same pull request, and the known-limitations section is updated if a limitation is
   removed or added.
-- **Risk vocabulary is ISDA SIMM's.** `IR01`, `IR01_DISC`, `THETA`, `GAMMA`, `VEGA`. Not PV01, not DV01.
+- **Risk vocabulary is ISDA SIMM's.** `IR01`, `IR01_DISC`, `FX01` / `CRY01`, `FUND01`, `VEGA`, `THETA`, `GAMMA`: the one table is [docs/glossary.md](docs/glossary.md). Not PV01, not DV01.
 - **Nothing in the app may depend on Rijeka's servers to verify a confirmation.** The verifier stays
   self-contained.
 
 ## Running it
 
 ```bash
-cd backend && pip install -r requirements.txt && python -m pytest -q      # ~400 tests, no network
+cd backend && pip install -r requirements.txt -r requirements-dev.txt     # QuantLib for tests/reference, ruff
+python -m pytest -q                                                       # ~700 tests, no network; ruff check . first
 cd frontend && npm install && npm run dev
 ```
 

@@ -192,7 +192,7 @@ def compare(shared: dict, theirs: dict) -> list[dict]:
         if not cands:
             breaks.append({"field": name, "shared": "present", "yours": "missing"}); continue
         # the candidate with the fewest differences (a basis swap has two FLOAT legs)
-        diff = lambda c: [f for f in sorted(set(l) | set(c)) if l.get(f) != c.get(f)]
+        diff = lambda c: [f for f in sorted(set(l) | set(c)) if l.get(f) != c.get(f)]  # noqa: B023  (called within this iteration only)
         best = min(cands, key=lambda c: len(diff(c)))
         cands.remove(best)
         for f in diff(best):

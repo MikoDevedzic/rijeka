@@ -17,7 +17,6 @@ continuous spread: the same bump, so the numbers must agree."""
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Optional
 
 import QuantLib as ql
 

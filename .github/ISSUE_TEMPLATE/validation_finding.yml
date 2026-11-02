@@ -7,7 +7,7 @@ body:
     id: product
     attributes:
       label: Product
-      options: [IRS / OIS, Basis swap, European swaption, Cap / floor / collar, SABR surface, Bermudan swaption (HW1F tree), HW1F calibration, XVA under CSA, SIMM IM / SA-CCR, Crypto NDF / NDO, Curve bootstrap, Registry contract / verifier, Other]
+      options: [Curve bootstrap, IRS / OIS, Basis swap, European swaption, Cap / floor / collar, SABR surface, Bermudan swaption (HW1F tree), HW1F calibration, XVA under CSA, SIMM IM / SA-CCR, FX spot / forward / NDF, Crypto NDF, FX option (European), FX option style (American / digital / barrier / touch), Crypto option, Market risk (ladder / VaR / stress / backtest), Counterparty credit (exposure paths / PFE), P&L attribution, Registry contract / verifier, Other]
     validations: { required: true }
   - type: dropdown
     id: severity

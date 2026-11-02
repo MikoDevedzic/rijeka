@@ -12,7 +12,7 @@ from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 
 from middleware.auth import verify_token
-from pricing.calendars import add_business_days, apply_bdc, next_business_day, ccy_to_calendar
+from pricing.calendars import add_business_days, next_business_day, ccy_to_calendar
 from pricing.schedule import generate_schedule
 
 router = APIRouter(prefix="/api/schedules", tags=["schedules"])

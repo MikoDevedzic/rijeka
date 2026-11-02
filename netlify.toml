@@ -7,19 +7,8 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# Serve landing page at root
-[[redirects]]
-  from   = "/"
-  to     = "/landing.html"
-  status = 200
-
-# Serve IRS pricer (already static, no redirect needed — just in case)
-[[redirects]]
-  from   = "/irs.html"
-  to     = "/irs.html"
-  status = 200
-
-# SPA catch-all — must be LAST
+# The app is a single page; the landing site and the public tools live at rijeka.app (netlify_drop/),
+# not here. SPA catch-all:
 [[redirects]]
   from   = "/*"
   to     = "/index.html"
@@ -40,29 +29,3 @@
     # loaded from index.css; connect-src is Supabase (REST + realtime), the API and the
     # GitHub issues feed (docs/ValidationLog).
     Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://upuewetohnocfshkhafg.supabase.co wss://upuewetohnocfshkhafg.supabase.co https://rijeka-api.onrender.com https://api.github.com; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; report-uri https://rijeka-api.onrender.com/api/ops/csp-report"
-
-# The static pages (landing, IRS and XVA explainers) carry their own inline scripts and
-# handlers, so they get a looser script-src. These rules come after /* on purpose: when
-# several rules match, the later one is meant to take the header; check with
-# `curl -sI https://rijeka.app/landing.html` after the first deploy that a single
-# Content-Security-Policy-Report-Only header comes back.
-[[headers]]
-  for = "/"
-  [headers.values]
-    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; report-uri https://rijeka-api.onrender.com/api/ops/csp-report"
-
-[[headers]]
-  for = "/landing.html"
-  [headers.values]
-    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; report-uri https://rijeka-api.onrender.com/api/ops/csp-report"
-
-[[headers]]
-  for = "/irs.html"
-  [headers.values]
-    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; report-uri https://rijeka-api.onrender.com/api/ops/csp-report"
-
-[[headers]]
-  for = "/xva.html"
-  [headers.values]
-    # Chart.js from cdnjs, pinned with subresource integrity in the page itself
-    Content-Security-Policy-Report-Only = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; report-uri https://rijeka-api.onrender.com/api/ops/csp-report"

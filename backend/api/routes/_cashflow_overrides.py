@@ -45,7 +45,7 @@ mechanism architectural debt, separate sprint item).
 """
 
 from __future__ import annotations
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from datetime import date
 from uuid import UUID
 

@@ -172,12 +172,13 @@ The spread schedules live in one place, `backend/market_data/demo_feed.py`, and 
 - `docs/VALIDATION.md` — the validation charter, what is validated against what, and the open findings
 - `docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md` — the per-module notes behind the methodology chapters
 - `docs/ops/deploy.md` — the deploy chain (API first on Render, then the app from the `release` branch)
+- `docs/architecture.md` — the map of the pieces and the data flow of a trade; `docs/ops/environment.md` — every environment variable; `docs/model_inventory.md` — every model with its validation status; `docs/glossary.md` — the names on every screen; `CHANGELOG.md`
 - `docs/archive/AUDIT_launch_2026-11-02.md` — the launch audit and the plan it set
 
 ---
 
 ## License
 
-**Apache-2.0** for the engine and the standard (`backend/pricing`, `backend/chain`, `chain/`, the methodology, the schema, the tests, the validation reports) and **Business Source License 1.1** for the platform (API, database layer, frontend): free to run for your own organisation, free to teach and study, not to be offered to others as a hosted service without a commercial licence; each version becomes Apache-2.0 after four years. Path table in [LICENSE](LICENSE). © 2026 Rijeka LLC
+**Apache-2.0** for the engine and the standard (`backend/pricing`, `backend/chain`, `chain/`, the methodology, the schema, the tests, the validation reports) and **Business Source License 1.1** for the platform (API, database layer, frontend): free to run for your own organisation, free to teach and study, not to be offered to others as a hosted service without a commercial licence; each version becomes Apache-2.0 after four years. The market-risk, counterparty-credit and P&L engines (`backend/risk`, `backend/ccr`, `backend/pnl`) sit on the platform side today. Path table, every directory named, in [LICENSE](LICENSE); GitHub shows the licence as "Other" because the file is this dual text. © 2026 Rijeka LLC
 
 Built by someone who spent a career inside trading floor infrastructure — pricing systems, risk frameworks, and margin engines — and believed the tools deserved to be free.

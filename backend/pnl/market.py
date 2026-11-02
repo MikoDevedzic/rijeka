@@ -51,10 +51,10 @@ class Market:
         return self.single(f"{pair}_SPOT", "SPOT")
 
     # ── overrides (new Market, same cache) ──────────────────────────────────
-    def override(self, curve_id: str, quotes: list[dict]) -> "Market":
+    def override(self, curve_id: str, quotes: list[dict]) -> Market:
         return Market(self.db, self.user_id, self.as_of, {**self.overrides, curve_id: quotes}, self._cache)
 
-    def with_single(self, curve_id: str, tenor: str, rate: float) -> "Market":
+    def with_single(self, curve_id: str, tenor: str, rate: float) -> Market:
         return self.override(curve_id, [{"tenor": tenor, "rate": rate, "quote_type": "SPOT" if tenor == "SPOT" else "FLAT", "enabled": True}])
 
     def signature(self) -> str:

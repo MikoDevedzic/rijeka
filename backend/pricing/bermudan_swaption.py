@@ -46,9 +46,9 @@ References
 """
 
 import math
-from datetime import date, timedelta
+from datetime import date
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any, Protocol, Sequence
+from typing import Callable, List, Optional, Dict, Any, Protocol, Sequence
 
 import numpy as np
 

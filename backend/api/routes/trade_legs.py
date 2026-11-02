@@ -29,7 +29,7 @@ Sprint 13 Patch 5 changes:
   - Dropped the `validate_strike_schedule_shape` model validator.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, List

@@ -27,8 +27,6 @@ Reference:
 """
 
 import math
-import json
-from datetime import date
 from typing import Callable, Optional
 
 import numpy as np

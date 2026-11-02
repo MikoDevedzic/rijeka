@@ -56,7 +56,7 @@ export default function Methodology() {
           <a className="doc-btn primary" href="/methodology/rijeka_methodology.pdf" target="_blank" rel="noopener noreferrer">OPEN PDF ↗</a>
           <a className="doc-btn" href="/methodology/rijeka_methodology.pdf" download="rijeka_methodology.pdf">⬇ DOWNLOAD PDF</a>
           <a className="doc-btn" href="https://github.com/MikoDevedzic/rijeka/blob/main/docs/methodology/rijeka_methodology.tex" target="_blank" rel="noopener noreferrer">LATEX SOURCE ↗</a>
-          <a className="doc-btn" href="https://github.com/MikoDevedzic/rijeka/tree/main/model_validation" target="_blank" rel="noopener noreferrer">VALIDATION REPORTS ↗</a>
+          <a className="doc-btn" href="https://github.com/MikoDevedzic/rijeka/blob/main/docs/model_inventory.md" target="_blank" rel="noopener noreferrer">MODEL INVENTORY ↗</a>
         </div>
       </section>
       {err && <div className="doc-err">{err}</div>}
@@ -84,7 +84,7 @@ export default function Methodology() {
         </section>
       ))}
       <ValidationLog />
-      <footer className="doc-foot">Model validation reports live in <code>model_validation/</code> and <code>docs/</code> in the repository. Engine and standard: Apache-2.0. Platform: Business Source License 1.1.</footer>
+      <footer className="doc-foot">What is validated against what: <code>docs/VALIDATION.md</code>; the one-table view: <code>docs/model_inventory.md</code>; the April 2026 Bloomberg comparison is kept in <code>model_validation/</code>. Engine and standard: Apache-2.0. Platform: Business Source License 1.1.</footer>
     </div>
   )
 }

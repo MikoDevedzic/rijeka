@@ -1,0 +1,56 @@
+# Changelog
+
+By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
+methodology document carries its own version (v1.2). Commits on `main` are the detail.
+
+## 0.6.0 · 2 November 2026 (launch candidate)
+
+- Launch audit: three independent reviews, the S1 list fixed the same day (tenant scope on the
+  cashflow bulk write, a BOOKED event for every trade however created, no driver or RPC text to
+  clients, rate limits on every expensive handler, a Prometheus daily allowance, admin gate on
+  platform analytics, logging configured; the app's global error handler no longer erases a mounted
+  desk; confirm works on a fresh cap/floor/collar/swaption booking). Architecture page, environment
+  reference, model inventory, glossary, this changelog, one version constant.
+- XVA replication for rates: the Hull-White Monte Carlo rebuilt in Excel from the engine's own draws,
+  the swaption calibration with an RMSE grid, the CSA bridge and the waterfall; a live mode.
+- Methodology v1.2: market-risk and counterparty-credit chapters; the app serves the current PDF.
+- Digital-asset options (BTC, ETH, SOL) in every style on the FX option engine; CRY01, IR01 as
+  discounting, FUND01; vol surfaces as VaR factors; VOL stress scenarios.
+- FX options: European, American, digital, barrier, double barrier, touch, each against QuantLib;
+  FX vol surfaces; the VOL step in P&L; Excel replications for every style but American.
+- Open-box replications: cover, ticket rebuilt in cells, derivation ledger, scenario chart, Checks
+  sheet; SHOW MATH on the ticket; legacy spreadsheet functions only.
+- Blotter follows the trades table live; the counterparty's booking of a product trade needs no legs.
+- Deploy chain: Render deploys every commit on main; `release` follows main on frontend-only and
+  docs-only pushes.
+
+## 1 November 2026
+
+- QuantLib reference suite: every product repriced independently on every commit (424 comparisons);
+  the pricing fixes it found; methodology v1.1 with the Independent reference section.
+
+## 30–31 October 2026
+
+- Counterparty credit: netting sets on shared paths, two measures, historical block sampling, PFE
+  and credit limits, caps, floors and swaptions on the exposure paths; XVA on the P&L page.
+- Market risk: full-revaluation historical VaR, stress, limits, backtesting; stored daily runs.
+- P&L: an AMEND step; sign-off policy per firm.
+- Security pass: roles from the database, tenant-scoped legs, no token in errors, relayer budget,
+  report-only content security policy, no runtime CDN scripts, PyJWT and Vite updates.
+- Batches and the release move run inside the API; browser errors reported to a System page; usage
+  beacons without cookies; auth email through Resend.
+
+## 28–29 October 2026
+
+- FX spot, forwards and NDFs on the G10 pairs and digital-asset NDFs on one interest-rate-parity
+  model; one risk taxonomy across rates, FX and crypto; quoted forward curves and the basis.
+- P&L attribution by sequential full revaluation with end of day and sign-off; market risk (ladder,
+  VaR, stress, limits); Prometheus book brief with audited numbers; news summaries.
+- Demo market data rebuilt daily from public sources; the policy path; the desk globe; the week
+  ahead.
+
+## Before 27 October 2026
+
+Rates desk: OIS bootstrap, IRS / OIS / basis, European swaptions and SABR, caps and floors,
+Bermudans, XVA under CSA, SIMM, on-chain confirmation on Sepolia, the messenger, the hosted demo.
+Released under MIT until 27 October 2026 (tags up to `v0.5.4`), under Apache-2.0 / BSL 1.1 since.

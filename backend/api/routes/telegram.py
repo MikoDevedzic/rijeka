@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
@@ -62,7 +61,7 @@ def _link_out(link: Optional[TelegramLink]) -> dict:
 @router.get("/status")
 def status(user: dict = Depends(verify_token)):
     out = {"enabled": tg.enabled(), "public_url": tg.public_url(),
-           "webhook_path": f"/api/telegram/webhook/{{TELEGRAM_WEBHOOK_SECRET}}"}
+           "webhook_path": "/api/telegram/webhook/{TELEGRAM_WEBHOOK_SECRET}"}
     c = tg.client()
     if c is not None:
         try:

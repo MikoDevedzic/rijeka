@@ -9,12 +9,11 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Optional
 
-import numpy as np
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ccr import calibration as C
-from ccr.exposure import BUCKETS, csa_from_counterparty, cva as cva_of, exposures
+from ccr.exposure import csa_from_counterparty, cva as cva_of, exposures
 from ccr.simulate import simulate
 from ccr.valuation import NettingSet, flows_per_step, netted_paths
 from db.models import Counterparty, Trade

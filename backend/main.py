@@ -10,6 +10,8 @@ logging.basicConfig(level=os.getenv("RIJEKA_LOG_LEVEL", "INFO").upper(),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 from fastapi import FastAPI
+
+from version import VERSION
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -54,7 +56,7 @@ from api.routes import (
 app = FastAPI(
     title="Rijeka API",
     description="Open-source full revaluation derivatives risk platform.",
-    version="0.4.0",
+    version=VERSION,
 )
 
 class _UnhandledToJson:
@@ -153,7 +155,7 @@ def health():
     # Note: this path is shadowed by the curves router's /health (registered first); the commit the
     # release-sync workflow reads is served by GET /api/ops/health. Kept here for completeness.
     import os as _os
-    return {"status": "ok", "service": "rijeka-api", "version": "0.4.0", "commit": _os.environ.get("RENDER_GIT_COMMIT") or _os.environ.get("GIT_COMMIT") or None}
+    return {"status": "ok", "service": "rijeka-api", "version": VERSION, "commit": _os.environ.get("RENDER_GIT_COMMIT") or _os.environ.get("GIT_COMMIT") or None}
 
 
 

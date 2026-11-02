@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import math
 from datetime import date, timedelta
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy.orm import Session
 

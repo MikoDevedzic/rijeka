@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy.orm import Session
 

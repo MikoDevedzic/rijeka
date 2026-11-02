@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from pricing.curve import Curve
-from pricing.ir_swap import price_leg, price_swap
+from pricing.ir_swap import price_leg
 
 VAL = date(2026, 10, 30)
 

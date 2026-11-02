@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 import time
-import uuid
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from typing import Any, Optional
@@ -21,7 +20,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from db.models import ChatMessage, ChatRoomMember, Counterparty, FirmMember, LegalEntity, Trade
+from db.models import Counterparty, FirmMember, LegalEntity, Trade
 from db.session import get_db
 from middleware.auth import verify_token
 

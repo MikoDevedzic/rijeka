@@ -156,6 +156,18 @@ check, the validation issue template lacks the FX, crypto, risk and credit produ
 `miko@`, migration numbers cited that do not exist as files, `.gitignore` rules that fight the docs
 tree, the Swagger page live but unlinked, `frontend/README.md` is Vite boilerplate.
 
+## Status
+
+- **Batch A shipped 2 November 2026** (PR 50): every S1, the backend S2 hygiene, the frontend quick
+  fixes, the README top half, the two stale docs.
+- **Batch B shipped 2 November 2026**: `docs/architecture.md`, `docs/ops/environment.md` and a complete
+  `.env.example`, `CHANGELOG.md` with one version constant (0.6.0, tagged), `docs/model_inventory.md`,
+  `docs/glossary.md`, LICENSE with every directory named and stubs, privacy v1.1, the self-hosting
+  guide corrected (migrations, roles), `model_validation/README.md`, lazy routes and vendor chunks
+  (first screen 450 → 286 kB gzip), ruff at zero findings in CI, the duplicate landing copies and dead
+  redirects removed, the validation issue template extended.
+- **Batch C** is next.
+
 ## The plan to 90+
 
 Three batches, in order. Each is a PR with tests, merged through the usual chain.

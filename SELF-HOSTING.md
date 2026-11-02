@@ -15,16 +15,19 @@ honest list of what that takes today.
 | Piece | What it is | Notes |
 |---|---|---|
 | Postgres with auth | A [Supabase](https://supabase.com) project | Auth (sign-in, JWTs), row-level security and the `authenticated` role come from Supabase. Any Postgres works for the data, but sign-in currently assumes Supabase auth. |
-| Backend | FastAPI, Python 3.11 | `backend/`. One process; `render.yaml` shows a working deployment. |
+| Backend | FastAPI, Python 3.11 or later | `backend/`. One process with the batches in it; `render.yaml` shows a working deployment; every variable is in [`docs/ops/environment.md`](docs/ops/environment.md). |
 | Frontend | React / Vite static build | `frontend/`. Any static host (Netlify, S3, nginx). |
 | Ethereum RPC + relayer | Only for on-chain confirmation | Sepolia for testing, mainnet when you mean it. The registry contract is in `chain/`; deploy your own or use ours. |
 
 ## Steps
 
 1. **Create a Supabase project.** In the SQL editor run [`docs/schema.sql`](docs/schema.sql)
-   (26 tables, RLS policies, the sign-up trigger). Copy the connection string from
-   *Settings → Database* and the project URL from *Settings → API*. No JWT secret is needed: tokens are
-   verified against the project's published ES256 keys.
+   (27 tables, RLS policies, the sign-up trigger), then every file in
+   [`docs/migrations/`](docs/migrations/) in date order (they add the P&L, market-risk,
+   counterparty-credit, usage and relayer tables, the newer roles, the option structures and the
+   realtime publication; each says what it does and is safe to run once). Copy the connection
+   string from *Settings → Database* and the project URL from *Settings → API*. No JWT secret is
+   needed: tokens are verified against the project's published ES256 keys.
 2. **Backend.** `cp backend/.env.example backend/.env`, fill in `DATABASE_URL`,
    `SUPABASE_URL`, `FRONTEND_URL`. Then
    ```bash
@@ -36,8 +39,10 @@ honest list of what that takes today.
    then `cd frontend && npm install && npm run build` and serve `dist/`.
 4. **Firms and entities.** Sign up, then insert your firm, its members and its LEI
    into `firms`, `firm_members`, `firm_leis` (there is no admin UI for this yet;
-   `backend/api/routes/demo.py` shows the rows a workspace needs). Set
-   `role: trader` or `admin` in the user's auth metadata so booking is allowed.
+   `backend/api/routes/demo.py` shows the rows a workspace needs). Set the user's role in
+   `profiles.role` (`trader`, `admin`, `controller`, `risk`, `cfo`, `management`; the API reads it
+   from the database and ignores the token's claim) so booking is allowed. On the hosted demo the
+   USERS page under Configurations edits it.
 5. **Market data.** Snapshots are per user. Load curves through *Configurations →
    Market data* (manual quotes or the Bloomberg sprint importer in
    `backend/api/routes/bloomberg.py`, which runs on the machine with the terminal).
@@ -49,13 +54,24 @@ honest list of what that takes today.
 
 ## What is not there yet
 
-- No docker-compose; no admin screens for firms or roles; no migration runner
-  (`docs/schema.sql` is the whole schema, regenerate with `backend/scripts/export_schema.sh`).
+- No docker-compose; no admin screen for firms; no migration runner (`docs/schema.sql` plus the
+  dated files in `docs/migrations/`, by hand; `backend/scripts/export_schema.sh` regenerates the
+  schema from a database that has them applied).
 - The backend connects with the Postgres owner role and enforces tenant
   isolation in application code; the RLS policies protect direct Supabase
   client access. Review `api/routes/*` before exposing it to firms that compete.
 - Market data is whatever you load. Nothing ships with a live feed.
 - The registry contract has not had an external audit.
+
+## What the hosted demo stores
+
+For anyone deciding between the demo and self-hosting: the hosted demo stores your email and
+password hash (Supabase auth), the entities, trades, confirmations and market data you create, your
+messages in the rooms you join, and the daily marks, P&L and risk runs of your sandbox. Prometheus and
+the book brief send the relevant trade facts to Anthropic's API when you use them. Usage beacons carry
+a daily-rotating hash, no account link; browser error reports carry the error text and route. The
+full statement is the privacy notice in the app (`frontend/src/legal/privacy.js`). The demo may be
+reset.
 
 ## Licence
 

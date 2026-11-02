@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import os
 import uuid
 from datetime import date, timedelta
@@ -36,8 +35,7 @@ from pricing.currency_forward import price_currency_forward
 from pricing.fx_option import price_fx_option
 from pricing.fx_exotic import ExoticSpec, price_exotic
 from pricing.fx_vol import TENOR_YEARS as VOL_TENORS, lookup_vol, parse_surface, quotes_from_grid
-from api.routes.crypto import (ASSETS as CRYPTO_ASSETS, fetch_spot as fetch_crypto_spot, save_spot,
-                               latest_snapshot, _quote, _require_trader)
+from api.routes.crypto import (ASSETS as CRYPTO_ASSETS, fetch_spot as fetch_crypto_spot, latest_snapshot, _quote, _require_trader)
 
 log = logging.getLogger("rijeka.currency")
 router = APIRouter(prefix="/api/currency", tags=["currency"])

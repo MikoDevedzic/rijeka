@@ -114,8 +114,9 @@ def ops_health(db: Session = Depends(get_db)):
     body (anyone can post it); it is served to signed-in users by /client-errors."""
     import os
     import scheduler
+    from version import VERSION
     return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]},
-            "scheduler": scheduler.status(),
+            "scheduler": scheduler.status(), "version": VERSION,
             "commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or None}
 
 

@@ -18,7 +18,6 @@ from typing import Callable
 import numpy as np
 
 from ccr.calibration import Calibration
-from pnl.market import Market
 from pnl.explain import tenor_years  # noqa: F401  (kept for callers that bucket by tenor)
 
 

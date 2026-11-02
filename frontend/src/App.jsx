@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import ErrorBoundary    from './components/ErrorBoundary'
+import Loading          from './components/common/Loading'
 import { hit } from './lib/usage'
 import { useAuthStore } from './store/useAuthStore'
 import AuthGuard        from './components/auth/AuthGuard'
@@ -12,34 +13,46 @@ import CommandCenter    from './components/CommandCenter'
 import AppBar           from './components/layout/AppBar'
 import CfgNav           from './components/layout/CfgNav'
 import BlotterShell     from './components/blotter/BlotterShell'
-import PnlPage          from './components/pnl/PnlPage'
-import { BookingDefaults, PnlConventions } from './components/pnl/PnlSettings'
-import RiskPage         from './components/risk/RiskPage'
-import CcrPage          from './components/risk/CcrPage'
-import { LimitsPage, VarSettingsPage, StressCatalogue } from './components/risk/RiskSettings'
-import CurvesWorkspace  from './components/market-data/CurvesWorkspace'
-import OrgHierarchy     from './components/org/OrgHierarchy'
-import LegalEntities    from './components/onboarding/LegalEntities'
-import Counterparties   from './components/onboarding/Counterparties'
-import Methodology      from './components/docs/Methodology'
-import Roadmap          from './components/docs/Roadmap'
-import { Terms, Privacy } from './components/docs/Legal'
-import Users            from './components/admin/Users'
-import TradeBookingWindow from './components/blotter/TradeBookingWindow'
 import TradeWindow        from './components/trade-window/TradeWindow'
 import useBookingStore    from './store/useBookingStore'
-import SwaptionVolDetail from './components/market-data/SwaptionVolDetail'
-import CapVolDetail      from './components/market-data/CapVolDetail'
-import FxWorkspace       from './components/market-data/FxWorkspace'
-import XVAParametersTab  from './components/configurations/XVAParametersTab'
-import SystemPage        from './components/configurations/SystemPage'
 import Messenger, { MessengerPage } from './components/messenger/Messenger'
+
+// Everything a user does not meet on the first screen after sign-in is fetched when
+// first visited (React.lazy): the configuration pages, market data, docs, P&L, risk,
+// counterparty credit, and the legacy booking window. Nothing below has an effect
+// at import time, so the order modules load in does not matter; the realtime stores
+// (trades, chat, market data) are imported by the eager shell above and start where
+// they always did. A named export is adapted to the default React.lazy expects.
+const named = (load, name) => lazy(() => load().then(m => ({ default: m[name] })))
+const PnlPage           = lazy(() => import('./components/pnl/PnlPage'))
+const BookingDefaults   = named(() => import('./components/pnl/PnlSettings'), 'BookingDefaults')
+const PnlConventions    = named(() => import('./components/pnl/PnlSettings'), 'PnlConventions')
+const RiskPage          = lazy(() => import('./components/risk/RiskPage'))
+const CcrPage           = lazy(() => import('./components/risk/CcrPage'))
+const LimitsPage        = named(() => import('./components/risk/RiskSettings'), 'LimitsPage')
+const VarSettingsPage   = named(() => import('./components/risk/RiskSettings'), 'VarSettingsPage')
+const StressCatalogue   = named(() => import('./components/risk/RiskSettings'), 'StressCatalogue')
+const CurvesWorkspace   = lazy(() => import('./components/market-data/CurvesWorkspace'))
+const SwaptionVolDetail = lazy(() => import('./components/market-data/SwaptionVolDetail'))
+const CapVolDetail      = lazy(() => import('./components/market-data/CapVolDetail'))
+const FxWorkspace       = lazy(() => import('./components/market-data/FxWorkspace'))
+const OrgHierarchy      = lazy(() => import('./components/org/OrgHierarchy'))
+const LegalEntities     = lazy(() => import('./components/onboarding/LegalEntities'))
+const Counterparties    = lazy(() => import('./components/onboarding/Counterparties'))
+const Methodology       = lazy(() => import('./components/docs/Methodology'))
+const Roadmap           = lazy(() => import('./components/docs/Roadmap'))
+const Terms             = named(() => import('./components/docs/Legal'), 'Terms')
+const Privacy           = named(() => import('./components/docs/Legal'), 'Privacy')
+const Users             = lazy(() => import('./components/admin/Users'))
+const XVAParametersTab  = lazy(() => import('./components/configurations/XVAParametersTab'))
+const SystemPage        = lazy(() => import('./components/configurations/SystemPage'))
+const TradeBookingWindow = lazy(() => import('./components/blotter/TradeBookingWindow'))
 
 function BlotterLayout() {
   return (
     <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
-      <div style={{flex:1,overflow:'hidden'}}><AuthGuard /></div>
+      <div style={{flex:1,overflow:'hidden'}}><Suspense fallback={<Loading />}><AuthGuard /></Suspense></div>
     </div>
   )
 }
@@ -48,7 +61,7 @@ function DocLayout() {
   return (
     <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
-      <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><AuthGuard /></main>
+      <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><Suspense fallback={<Loading />}><AuthGuard /></Suspense></main>
     </div>
   )
 }
@@ -59,7 +72,7 @@ function ConfigLayout() {
       <AppBar />
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
         <CfgNav />
-        <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><AuthGuard /></main>
+        <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><Suspense fallback={<Loading />}><AuthGuard /></Suspense></main>
       </div>
     </div>
   )
@@ -119,12 +132,14 @@ function PersistentBookingWindow() {
 
         return (
           <ErrorBoundary key={w.id} scope="window" onReset={() => close(w.id)}>
+          <Suspense fallback={<Loading label="LOADING WINDOW..." style={{ position: 'fixed', left: w.x, top: w.y, zIndex: 1000 }} />}>
           <TradeBookingWindow
             windowId={w.id}
             initialPos={{ x: w.x, y: w.y }}
             trade={w.trade || null}
             onClose={() => close(w.id)}
           />
+          </Suspense>
           </ErrorBoundary>
         )
       })}
@@ -158,6 +173,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <PageBoundary>
+      <Suspense fallback={<Loading />}>
       <Routes>
         <Route path="/login"   element={<LoginPage />} />
         <Route path="/signup"  element={<SignupPage />} />
@@ -202,6 +218,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/command-center" replace />} />
       </Routes>
+      </Suspense>
       </PageBoundary>
       <PersistentBookingWindow />
       {/* One messenger for every tab: private Prometheus, support, and rooms. */}

@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Optional
 
 import numpy as np
 
@@ -225,13 +224,11 @@ def flows_per_step(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float]) ->
     for it in ns.items:
         if it["kind"] != "SWAP":
             continue
-        key = f"RATES:{CURVE_OF.get(it['ccy'], it['ccy'] + '_OIS')}"
-        pf = paths.p0.get(key)
         k = fx_to_usd.get(it["ccy"], 1.0)
         for lg, sched in it["legs"]:
             pay_sign = 1.0 if str(lg.get("direction", "")).upper().startswith("PAY") else -1.0
             N = float(lg.get("notional") or 0.0)
-            for (ps, pe, pay, tau) in sched:
+            for (_ps, _pe, pay, tau) in sched:
                 tp = years(asof, pay)
                 if tp <= 0:
                     continue

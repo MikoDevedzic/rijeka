@@ -20,20 +20,18 @@ import io
 import math
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from decimal import Decimal
 from typing import Optional
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 
 from methodology import workbook as W
 from pricing.curve import Curve
-from pricing.schedule import generate_schedule
 from pricing.ir_swap import price_swap
 from pricing.swaption import price_swaption
-from pricing.cap_floor import price_cap, bachelier_call
+from pricing.cap_floor import price_cap
 from pricing.fx_option import price_fx_option
 from pricing.currency_forward import price_currency_forward
 from pricing.fx_exotic import ExoticSpec, price_exotic
@@ -324,13 +322,13 @@ def swaption_workbook(mkt: Market):
     _hdr(ws, 8, ["Payment date", "τ (ACT/360-ish annual)", "DF", "τ·DF"])
     rows = []
     for k in range(1, 6):
-        r = 8 + k; d = date(T0.year + k, T0.month, T0.day); prev = date(T0.year + k - 1, T0.month, T0.day)
+        r = 8 + k; d = date(T0.year + k, T0.month, T0.day); prev = date(T0.year + k - 1, T0.month, T0.day)  # noqa: F841  launch audit: assigned, never used
         ws.cell(row=r, column=1, value=d).number_format = "yyyy-mm-dd"
         ws.cell(row=r, column=2, value=f"=YEARFRAC(DATE(YEAR(A{r})-1,MONTH(A{r}),DAY(A{r})),A{r},2)")
         ws.cell(row=r, column=3, value=f"={DF(f'A{r}')}").number_format = "0.000000"
         ws.cell(row=r, column=4, value=f"=B{r}*C{r}")
         rows.append(r)
-    ws["A15"] = "Annuity A"; ws["B15"] = f"=SUM(D9:D13)"
+    ws["A15"] = "Annuity A"; ws["B15"] = "=SUM(D9:D13)"
     ws["A16"] = "DF(T0)"; ws["B16"] = f"={DF('B6')}"
     ws["A17"] = "Forward F"; ws["B17"] = "=(B16-C13)/B15"; ws["B17"].number_format = "0.0000%"
     ws["A18"] = "σ√T"; ws["B18"] = "=B4/10000*SQRT(B2)"
@@ -681,7 +679,7 @@ def _option_workbook(mkt: Market, case: dict):
                                       ("spot position", f"Φ(d₁)·DF_{quote}·F/S·N", "European!B11", f"in {base}", "#,##0.0000"),
                                       (delta, "NPV(F·1.01) − NPV", "European!B12", "the forward moves with spot, the discounting does not", "#,##0.00"),
                                       ("vega", "NPV(σ + 0.01) − NPV", "European!B14", "repriced; the analytic N·DF·F·n(d₁)·√T_e·0.01 on B13", "#,##0.00"),
-                                      ("IR01", f"NPV(F·e^(1bp·T_s), DF·e^(−1bp·T_s)) − NPV", "European!B15", f"+1bp on the {quote} curve: the forward up by the carry, the discount factor down", "#,##0.0000"),
+                                      ("IR01", "NPV(F·e^(1bp·T_s), DF·e^(−1bp·T_s)) − NPV", "European!B15", f"+1bp on the {quote} curve: the forward up by the carry, the discount factor down", "#,##0.0000"),
                                       (fund, "NPV(F·e^(−1bp·T_s)) − NPV", "European!B16", "+1bp on the base rate: the forward down by the carry", "#,##0.0000")]:
         W.derive(wb, sym, notn, ref, note, fmt)
     # Scenario: NPV against spot, by the same closed form, with the payoff at expiry beside it
@@ -780,7 +778,7 @@ def _styles_workbook(mkt: Market, case: dict):
         ws.cell(row=r, column=2, value=phi); ws.cell(row=r, column=3, value=eta)
         ws.cell(row=r, column=4, value=f"={H}").number_format = fmt_px
         P, E_, Hc = f"{L['φ']}{r}", f"{L['η']}{r}", f"{L['H']}{r}"
-        ws.cell(row=r, column=5, value=f"=LN(Spot/$B$1)/SqT+(1+$B$5)*SqT")
+        ws.cell(row=r, column=5, value="=LN(Spot/$B$1)/SqT+(1+$B$5)*SqT")
         ws.cell(row=r, column=6, value=f"=LN(Spot/{Hc})/SqT+(1+$B$5)*SqT")
         ws.cell(row=r, column=7, value=f"=LN({Hc}^2/(Spot*$B$1))/SqT+(1+$B$5)*SqT")
         ws.cell(row=r, column=8, value=f"=LN({Hc}/Spot)/SqT+(1+$B$5)*SqT")
@@ -793,7 +791,7 @@ def _styles_workbook(mkt: Market, case: dict):
         ws.cell(row=r, column=14, value=f"=$B$4*DFe*({_N(E_ + '*' + x2 + '-' + E_ + '*SqT')}-({Hc}/Spot)^(2*$B$5)*{_N(E_ + '*' + y2 + '-' + E_ + '*SqT')})")
         ws.cell(row=r, column=15, value=f"=$B$4*(({Hc}/Spot)^($B$5+$B$6)*{_N(E_ + '*' + z)}+({Hc}/Spot)^($B$5-$B$6)*{_N(E_ + '*' + z + '-2*' + E_ + '*$B$6*SqT')})")
         hi, lo = price_of[(bt, ot)]
-        term = lambda expr: "".join((("+" if ch == "+" else "-") if ch in "+-" else f"{L[ch]}{r}") for ch in expr)
+        term = lambda expr: "".join((("+" if ch == "+" else "-") if ch in "+-" else f"{L[ch]}{r}") for ch in expr)  # noqa: B023  (called within this iteration only)
         ws.cell(row=r, column=16, value=f"=IF($B$1>{Hc},{term(hi)},{term(lo)})").number_format = "0.000000"
         ws.cell(row=r, column=17, value=f"={L['Per EUR (formulas)']}{r}*Notl").number_format = "#,##0.00"
         c = ws.cell(row=r, column=18, value=ref(style="BARRIER", option_type=ot, strike=F, barrier_type=bt, barrier=(Hup if bt.startswith("UP") else Hdn), rebate=R)); c.fill = RJ; c.number_format = "#,##0.00"

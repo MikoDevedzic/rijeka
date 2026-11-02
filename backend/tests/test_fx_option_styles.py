@@ -2,7 +2,7 @@
 paths (knock monitoring, dispatch) and the canonical record."""
 from datetime import date, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from uuid import uuid4
 
 import numpy as np
@@ -10,7 +10,6 @@ import pytest
 
 from pricing.curve import Curve
 from pricing.fx_exotic import ExoticSpec, knocked_so_far, price_exotic, value, value_on_paths
-from pricing.fx_vol import quotes_from_grid
 from tests.test_fx_option import FakeMarket, USD, VOL, _mock_db, _market, _trade, curves  # noqa: F401  (fixture)
 
 VAL = date(2026, 10, 30)
@@ -105,7 +104,7 @@ def test_exposure_engine_dispatches_styles_and_fixes_the_payoff_at_expiry():
         assert np.all(value_fx_option(item, p, p.grid.index(date(2027, 6, 30)), fx, flat) == 0.0)
 
 
-def test_route_prices_styles_and_the_ladder(curves):
+def test_route_prices_styles_and_the_ladder(curves):  # noqa: F811  (pytest fixture, imported above)
     from api.routes import currencies
     import main
     from fastapi.testclient import TestClient
@@ -134,7 +133,7 @@ def test_route_prices_styles_and_the_ladder(curves):
         main.app.dependency_overrides.clear()
 
 
-def test_booked_styles_are_valued_and_recorded(curves, monkeypatch):
+def test_booked_styles_are_valued_and_recorded(curves, monkeypatch):  # noqa: F811  (pytest fixture, imported above)
     from chain.canonical import canonical_payload
     from pnl.valuation import value
     own = SimpleNamespace(lei="529900T8BM49AURSDO55", name="Rijeka")

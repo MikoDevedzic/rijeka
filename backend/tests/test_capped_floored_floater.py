@@ -34,13 +34,12 @@ from decimal import Decimal
 import pytest
 
 from pricing.cap_floor import (
-    StripResult,
     price_caplet_strip_over_periods,
     price_floorlet_strip_over_periods,
     _resolve_strike_at,
 )
 from pricing.curve import Curve
-from pricing.ir_swap import price_leg, _normalize_embedded_options
+from pricing.ir_swap import price_leg
 from pricing.schedule import generate_schedule
 
 
