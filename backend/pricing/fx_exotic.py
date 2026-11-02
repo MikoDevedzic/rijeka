@@ -100,25 +100,37 @@ def _phi(z: np.ndarray, v: float) -> np.ndarray:
     return np.exp(-0.5 * z * z / v) / math.sqrt(2.0 * math.pi * v)
 
 
+def _image_density(y: np.ndarray, m: float, v: float, lower, upper) -> np.ndarray:
+    """Method of images with the drift restored, term by term in log space: each image c contributes
+    exp(−(y − c − m)²/2v + c·m/v)/√(2πv), the same as exp(m·y/v − m²/2v)·φ(y − c) but with the exponent
+    bounded, so a tiny variance (a 0.2 % vol) or a far barrier can no longer overflow to inf × 0 = NaN.
+    lower/upper: None, a float, or an array broadcastable to y (per-path barriers)."""
+    y = np.asarray(y, dtype=float)
+    const = -0.5 * math.log(2.0 * math.pi * v)
+
+    def term(c):
+        return np.exp(-0.5 * (y - c - m) ** 2 / v + c * m / v + const)
+
+    if lower is None and upper is None:
+        out = term(0.0)
+    elif lower is None or upper is None:
+        b = upper if lower is None else lower
+        out = term(0.0) - term(2.0 * b)
+    else:
+        width = upper - lower
+        out = np.zeros_like(y)
+        for n in range(-IMAGE_TERMS, IMAGE_TERMS + 1):
+            out = out + term(2.0 * n * width) - term(2.0 * lower - 2.0 * n * width)
+    out = np.where(np.isfinite(out), out, 0.0)
+    out[out < 0] = 0.0
+    return out
+
+
 def survival_density(y: np.ndarray, m: float, v: float, lower: Optional[float], upper: Optional[float]) -> np.ndarray:
     """Density of Y_T = ln(S_T/S) at y with Y never having left (lower, upper) in [0, T], for a Brownian
     motion with total drift m and variance v over [0, T]. Method of images for the driftless motion
     (one or two absorbing barriers), the drift restored by Girsanov: × exp(m·y/v − m²/(2v))."""
-    y = np.asarray(y, dtype=float)
-    if lower is None and upper is None:
-        base = _phi(y - m, v)
-        return base
-    if lower is None or upper is None:
-        b = upper if lower is None else lower
-        base = _phi(y, v) - _phi(y - 2.0 * b, v)
-    else:
-        width = upper - lower
-        base = np.zeros_like(y)
-        for n in range(-IMAGE_TERMS, IMAGE_TERMS + 1):
-            base += _phi(y - 2.0 * n * width, v) - _phi(y - 2.0 * lower + 2.0 * n * width, v)
-    out = np.exp(m * y / v - m * m / (2.0 * v)) * base
-    out[out < 0] = 0.0
-    return out
+    return _image_density(y, m, v, lower, upper)
 
 
 def _expect_surviving(payoff, S: float, b: float, sigma: float, T: float, lower: Optional[float], upper: Optional[float]) -> float:
@@ -343,18 +355,7 @@ def _survival_matrix(S: np.ndarray, b: float, sigma: float, T: float, lower_abs:
     y = x[None, :] - lnS[:, None]                                        # log return per path
     lb = None if lower_abs is None else lower_abs - lnS                  # barrier in log-return terms, per path
     ub = None if upper_abs is None else upper_abs - lnS
-    if lb is None and ub is None:
-        base = _phi(y - m, v) * np.exp(-(m * y / v - m * m / (2.0 * v)))   # so the Girsanov factor below restores a plain normal
-    elif lb is None or ub is None:
-        bb = (ub if lb is None else lb)[:, None]
-        base = _phi(y, v) - _phi(y - 2.0 * bb, v)
-    else:
-        width = (ub - lb)[:, None]
-        base = np.zeros_like(y)
-        for k in range(-IMAGE_TERMS, IMAGE_TERMS + 1):
-            base += _phi(y - 2.0 * k * width, v) - _phi(y - 2.0 * lb[:, None] + 2.0 * k * width, v)
-    dens = np.exp(m * y / v - m * m / (2.0 * v)) * base
-    dens[dens < 0] = 0.0
+    dens = _image_density(y, m, v, None if lb is None else lb[:, None], None if ub is None else ub[:, None])
     h = (hi - lo) / (n - 1)
     w = np.ones(n); w[1:-1:2] = 4.0; w[2:-1:2] = 2.0
     return x, h, w, dens

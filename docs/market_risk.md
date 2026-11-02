@@ -49,6 +49,8 @@ Every stored P&L date is paired with the VaR that was standing the evening befor
 
 The 95 % VaR and the ladder VaR are backtested alongside the headline. Nothing new is stored; the test reads the two daily series (`pnl_daily`, `risk_daily`) and needs sixty paired days before it says anything and 250 to be read the usual way. `GET /api/risk/backtest?measure=clean&days=250`.
 
+**Stress and vol.** A rate scenario moves the curves and leaves the vol surfaces alone; the two VOL scenarios move the FX surfaces' ATM rows by a number of points and the swaption grid by bp of normal vol, every option repriced in full. A trade whose pricer cannot value the shifted market is listed under the scenario, not summed as zero.
+
 ## Roadmap for VaR
 
 - Parametric (variance-covariance) VaR from the factor covariance, with the same ladder; a cross-check, not a replacement.

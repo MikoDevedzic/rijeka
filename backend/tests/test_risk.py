@@ -83,3 +83,22 @@ def test_routes_need_auth_or_cron():
     c = TestClient(main.app)
     assert c.get("/api/risk/report").status_code == 401 and c.get("/api/risk/limits").status_code == 401
     assert c.post("/api/risk/daily/tick").status_code == 403 and c.post("/api/risk/history/backfill").status_code == 401
+
+
+def test_rate_scenarios_leave_vol_surfaces_alone_and_vol_scenarios_move_the_level():
+    surf = [{"tenor": "3M", "quote_type": "ATM", "rate": 7.0}, {"tenor": "3M", "quote_type": "RR25", "rate": -0.3}, {"tenor": "3M", "quote_type": "BF25", "rate": 0.2}]
+    grid = [{"tenor": "1Yx5Y", "quote_type": "SWVOL", "rate": 85.0}]
+    m = _M({"USD_SOFR": [{"tenor": "1Y", "rate": 4.0}], "EURUSD_VOL": surf, "USD_SWVOL_ATM": grid}, {})
+    dn = ST.shifted_market(m, {"rates": {"*": -100}}, ["USD_SOFR", "EURUSD_VOL", "USD_SWVOL_ATM"], [])
+    assert dn.quotes("EURUSD_VOL") == surf and dn.quotes("USD_SWVOL_ATM") == grid and dn.quotes("USD_SOFR")[0]["rate"] == 3.0
+    up = ST.shifted_market(m, {"vols": {"FX": 5, "SWVOL": 50}}, ["USD_SOFR", "EURUSD_VOL", "USD_SWVOL_ATM"], [])
+    assert [q["rate"] for q in up.quotes("EURUSD_VOL")] == [12.0, -0.3, 0.2] and up.quotes("USD_SWVOL_ATM")[0]["rate"] == 135.0
+    assert up.quotes("USD_SOFR")[0]["rate"] == 4.0
+    assert {s["id"] for s in ST.SCENARIOS} >= {"VOL_UP", "VOL_DN"}
+
+
+def test_stored_report_carries_no_nan():
+    from risk.report import finite
+    nan = float("nan")
+    assert finite({"a": nan, "b": [1.0, float("inf"), {"c": nan}], "d": "x", "e": 2.5}) == {"a": None, "b": [1.0, None, {"c": None}], "d": "x", "e": 2.5}
+    assert finite(nan) is None and finite(3.0) == 3.0

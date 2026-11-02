@@ -1,6 +1,7 @@
 """Named scenarios by full revaluation. Rates in basis points per curve (optionally by
-tenor bucket), spots in percent; every live trade is repriced on the shifted market and
-the P&L is the difference. The catalogue is the firm's policy; it is listed on the
+tenor bucket), spots in percent, vols in points (FX surfaces: the ATM rows; swaption grids:
+every point, in bp of normal vol); every live trade is repriced on the shifted market and
+the P&L is the difference. A rate scenario leaves the vol surfaces alone. The catalogue is the firm's policy; it is listed on the
 Configurations page and in the report."""
 from __future__ import annotations
 
@@ -10,7 +11,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from pnl.explain import BUCKETS, LIVE, Valuer, _bucket_quotes
-from pnl.market import Market
+import math
+
+from pnl.market import Market, is_vol_surface
 from pnl.valuation import spot_curve, trade_curves
 
 SHORT = ("0-1Y", "1-5Y")
@@ -26,6 +29,8 @@ SCENARIOS = [
     {"id": "USD_DN_10", "name": "USD −10% vs all", "group": "FX", "spots": {"EUR": 10, "GBP": 10, "AUD": 10, "JPY": -10, "CHF": -10, "CAD": -10}},
     {"id": "CRYPTO_DN_30", "name": "Digital assets −30%", "group": "CRYPTO", "spots": {"BTC": -30, "ETH": -30, "SOL": -30}},
     {"id": "CRYPTO_UP_30", "name": "Digital assets +30%", "group": "CRYPTO", "spots": {"BTC": 30, "ETH": 30, "SOL": 30}},
+    {"id": "VOL_UP", "name": "Vol +5 pts (FX) · +50bp (swaptions)", "group": "VOL", "vols": {"FX": 5, "SWVOL": 50}},
+    {"id": "VOL_DN", "name": "Vol −3 pts (FX) · −30bp (swaptions)", "group": "VOL", "vols": {"FX": -3, "SWVOL": -30}},
     {"id": "RISK_OFF", "name": "Risk-off: rates −50, USD +5%, crypto −30%", "group": "COMBINED", "rates": {"*": -50},
      "spots": {"EUR": -5, "GBP": -5, "AUD": -5, "JPY": 5, "CHF": 5, "CAD": 5, "BTC": -30, "ETH": -30, "SOL": -30}},
 ]
@@ -42,6 +47,13 @@ def shifted_market(mkt: Market, scn: dict, curves: list[str], spots: list[str]) 
     for cid in curves:
         q = m.quotes(cid)
         if not q:
+            continue
+        if is_vol_surface(cid):
+            vols = scn.get("vols") or {}
+            pts = vols.get(cid, vols.get("SWVOL" if cid.endswith("_SWVOL_ATM") else "FX"))
+            if pts is not None:
+                level = (lambda x: True) if cid.endswith("_SWVOL_ATM") else (lambda x: (x.get("quote_type") or "ATM") == "ATM")
+                m = m.override(cid, [{**x, "rate": float(x["rate"]) + pts} if level(x) else x for x in q])
             continue
         bp = (scn.get("rates") or {}).get(cid, (scn.get("rates") or {}).get("*"))
         if bp is not None:
@@ -78,15 +90,18 @@ def run(db: Session, user: dict, trades, d: date, mkt: Market, fx, scenarios=Non
     out = []
     for scn in scenarios or SCENARIOS:
         m = shifted_market(mkt, scn, curves, spots)
-        total = 0.0; by_trade = []
+        total = 0.0; by_trade = []; not_priced = []
         for t in live:
             if str(t.id) not in base:
                 continue
             try:
                 v = valuer(t, d, m); p = v["npv"] * (fx(v["ccy"]) or 0.0) - base[str(t.id)]
             except Exception:           # noqa: BLE001
-                continue
+                not_priced.append(t.trade_ref); continue
+            if not math.isfinite(p):    # a pricer that returned NaN on the shifted market: said, not summed
+                not_priced.append(t.trade_ref); continue
             total += p; by_trade.append({"trade_ref": t.trade_ref, "pnl": p})
         out.append({**{k: scn[k] for k in ("id", "name", "group")}, "pnl_usd": total,
-                    "worst_trades": sorted(by_trade, key=lambda x: x["pnl"])[:3], "valuations": valuer.calls})
+                    "worst_trades": sorted(by_trade, key=lambda x: x["pnl"])[:3], "valuations": valuer.calls,
+                    **({"not_priced": not_priced} if not_priced else {})})
     return out

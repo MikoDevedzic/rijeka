@@ -185,3 +185,32 @@ def test_trade_structure_follows_the_style():
     assert display_structure(old) == "DIGITAL" and old.structure == "VANILLA"
     assert display_structure(SimpleNamespace(instrument_type="FX_OPTION", structure=None, terms={})) == "EUROPEAN"
     assert display_structure(SimpleNamespace(instrument_type="IR_SWAP", structure="VANILLA", terms={"style": "DIGITAL"})) == "VANILLA"
+
+
+def test_survival_density_is_finite_at_tiny_vol_and_integrates_to_the_no_hit_probability():
+    """The image series in log space: a 0.18 % vol with a far barrier (the stress case that produced a NaN on
+    2026-11-02) now gives zero, and in a normal case the density integrates to the closed-form P(no hit)."""
+    import math
+    from pricing.fx_exotic import survival_density, _N
+    for sigma, T, b in ((0.0018, 0.25, 0.58), (0.085, 0.5, 0.07), (0.085, 0.5, -0.05)):
+        m, v = (0.0185 - 0.5 * sigma * sigma) * T, sigma * sigma * T
+        sd = math.sqrt(v)
+        lower, upper = (None, b) if b > 0 else (b, None)
+        lo = lower if lower is not None else m - 12 * sd
+        hi = upper if upper is not None else m + 12 * sd
+        y = np.linspace(lo, hi, 20001)
+        dens = survival_density(y, m, v, lower, upper)
+        assert np.all(np.isfinite(dens)) and np.all(dens >= 0)
+        p_no = np.trapezoid(dens, y)
+        eta = 1.0 if b > 0 else -1.0
+        if 2 * b * m / v < 700:                                          # the closed form itself overflows in the tiny-vol case
+            closed = _N(eta * (b - m) / sd) - math.exp(2 * b * m / v) * _N(eta * (-b - m) / sd)
+            assert p_no == pytest.approx(closed, abs=2e-4), (sigma, b)
+        else:
+            assert p_no == pytest.approx(1.0, abs=1e-6)                 # a barrier hundreds of standard deviations away is never hit
+    # two barriers: the series still integrates to a probability in (0, 1) and a wide corridor gives ≈ 1
+    m, v = 0.004, 0.085 ** 2 * 0.5
+    y = np.linspace(-0.05, 0.07, 4001)
+    assert 0.0 < np.trapezoid(survival_density(y, m, v, -0.05, 0.07), y) < 1.0
+    y = np.linspace(-2.0, 2.0, 40001)
+    assert np.trapezoid(survival_density(y, m, v, -2.0, 2.0), y) == pytest.approx(1.0, abs=1e-6)
