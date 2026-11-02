@@ -46,7 +46,7 @@ is a live mark. A reference check that fails is a finding like any other, and is
 
 ## How a finding is filed
 
-Open a [validation finding](https://github.com/MikoDevedzic/rijeka/issues/new?template=validation_finding.yml).
+Open a [validation finding](https://github.com/MikoDevedzic/rijeka/issues/new?template=validation_finding.yml). The findings of the November 2026 QuantLib validation that are still open are issues [#31](https://github.com/MikoDevedzic/rijeka/issues/31) to [#36](https://github.com/MikoDevedzic/rijeka/issues/36), with the `validation` label.
 The template asks for the product, the test, the expected value and how you got
 it, the observed value, and a severity:
 
@@ -87,6 +87,9 @@ purpose.
 | XVA under CSA | `pricing/xva_engine.py`, `pricing/csa.py` | parity with legacy loop; **validator wanted** |
 | FX spot / forward / NDF (G10) | `pricing/currency_forward.py` | interest-rate parity, each currency on its own OIS curve; demo accounts discount non-USD currencies flat at a policy rate and say so; EURUSD Excel replication; **validator wanted** |
 | Crypto NDF (BTC/ETH/SOL) | `pricing/crypto_forward.py` | S1 finding 2026-10-28: the first Excel replication had the discount-factor ratio inverted (forward below spot at positive USD rates); the engine's parity test caught it, workbook, engine and methodology corrected the same day. Open for independent re-validation; **validator wanted** |
+| FX option (European) | `pricing/fx_option.py`, `pricing/fx_vol.py` | QuantLib replica rows for value and delta, repriced Greeks bounded against the analytic ones; the smile reproduces its quotes; Excel replication; **validator wanted** |
+| FX option styles (American, digital, barrier, double barrier, touch) | `pricing/fx_exotic.py` | each against its QuantLib engine (QD+ and Leisen–Reimer, analytic digital, barrier, double barrier, digital-American and double-barrier-binary); Excel replications for every style but American; open findings [#32](https://github.com/MikoDevedzic/rijeka/issues/32) flat smile vol across the barrier, [#33](https://github.com/MikoDevedzic/rijeka/issues/33) grid monitoring on the exposure paths |
+| Market risk: VaR, stress, backtest | `risk/var_full.py`, `risk/stress.py` | historical simulation by full revaluation; vol surfaces as factors since 2 Nov 2026 ([#30](https://github.com/MikoDevedzic/rijeka/issues/30) closed); backtest reads the stored series; **validator wanted** |
 | SIMM IM / SA-CCR | `pricing/xva_engine.py` | trace workbook; **validator wanted** |
 | Crypto NDF / NDO | `methodology/replicate.py` | formulas only; **validator wanted** |
 | Registry contract | `chain/src/TradeConfirmationRegistry.sol` | 16 Foundry tests, Sourcify-verified; **external audit wanted before mainnet** |

@@ -180,7 +180,7 @@ The desk home opens on the **desk globe**: a turning Earth lit by the real sun, 
 
 ### Phase 2 — FX options & Credit (next)
 
-FX and crypto forwards share one interest-rate-parity model (`pricing/currency_forward.py`), booked from the same NEW TRADE ticket as rates. Next: FX options and cross-currency swaps; CDS, credit options, wrong-way risk in CVA.
+FX and crypto forwards share one interest-rate-parity model (`pricing/currency_forward.py`), booked from the same NEW TRADE ticket as rates. FX options are live (European, American, digital, barrier, double barrier and touch, each against its QuantLib engine, with the vol surface in the P&L explain, the ladder, VaR and stress). Next: cross-currency swaps; CDS, credit options, wrong-way risk in CVA.
 
 ### Phase 3 — Equity & Commodity
 

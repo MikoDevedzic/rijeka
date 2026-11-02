@@ -15,7 +15,7 @@
 - CAPPED_SWAP / FLOORED_SWAP / COLLARED_SWAP (embedded optionality on float leg)
 
 ### FX
-- FX_OPTION (vanilla, barrier, digital)
+- FX_OPTION — European, American, digital, single and double barrier, one-touch / no-touch / double touch: live 2026-11-02 (`pricing/fx_exotic.py`), each against its QuantLib engine
 - FX_DIGITAL_OPTION
 - EXTENDABLE_FORWARD
 
@@ -43,7 +43,7 @@
 ### FX (priority order)
 1. FX_ASIAN_OPTION — payoff based on average spot over observation period. Heavy EM/commodity use.
 2. FX_BARRIER_WINDOW — barrier only active during a specific observation window (vs continuous).
-3. FX_DOUBLE_BARRIER — two simultaneous barriers (e.g. up-and-out + down-and-out). Common in EM.
+3. ~~FX_DOUBLE_BARRIER~~ — done 2026-11-02 (knock-in / knock-out, two-barrier image series).
 4. FX_COMPOUND_OPTION — option on an option (call on call, etc.). Rare but exists.
 5. FX_ONE_TOUCH — pays fixed payout if spot touches barrier any time before expiry.
 6. FX_NO_TOUCH — pays fixed payout if spot NEVER touches barrier before expiry.
