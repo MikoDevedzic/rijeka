@@ -36,13 +36,14 @@ jobs:
           live=$(curl -s --max-time 30 "$API/api/ops/health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit") or "")' 2>/dev/null || true)
           echo "main=$main release=$release live=$live"
           if [ -z "$live" ]; then echo "the API reports no commit yet"; exit 0; fi
-          if [ "$release" = "$live" ]; then echo "release already at the live commit"; exit 0; fi
           if ! git cat-file -e "$live^{commit}" 2>/dev/null; then echo "live commit unknown to this clone"; exit 0; fi
           if ! git merge-base --is-ancestor "$live" "$main"; then echo "live commit is not on main"; exit 0; fi
           # Render skips a commit that touches only the frontend, the landing site or docs (render.yaml
           # buildFilter), so the API keeps serving an older commit while main is ahead on frontend-only
           # work. Those commits are safe for the frontend to take: move release to main's head when
-          # everything between the live commit and main is outside the API.
+          # everything between the live commit and main is outside the API. (Until 2 November 2026 the
+          # job returned early when release already sat at the live commit, so a frontend-only or
+          # docs-only push never reached the app through this job.)
           target="$live"
           if [ "$live" != "$main" ]; then
             changed=$(git diff --name-only "$live" "$main")
