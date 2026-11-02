@@ -421,7 +421,7 @@ CREATE TABLE public.trades (
     version_seq integer DEFAULT 0 NOT NULL,
     CONSTRAINT chk_trades_instrument_type_no_legacy CHECK (((instrument_type IS NULL) OR (instrument_type !~~ 'INTEREST_RATE_%'::text))),
     CONSTRAINT chk_trades_ir_swap_structure_valid CHECK (((instrument_type <> 'IR_SWAP'::text) OR (structure = ANY (ARRAY['VANILLA'::text, 'OIS'::text, 'BASIS'::text, 'ZERO_COUPON'::text, 'STEP_UP'::text, 'AMORTIZING'::text, 'ACCRETING'::text])))),
-    CONSTRAINT trades_structure_check CHECK ((structure = ANY (ARRAY['VANILLA'::text, 'OIS'::text, 'BASIS'::text, 'XCCY'::text, 'ZERO_COUPON'::text, 'STEP_UP'::text, 'INFLATION_ZC'::text, 'INFLATION_YOY'::text, 'CMS'::text, 'CMS_SPREAD'::text])))
+    CONSTRAINT chk_trades_fx_option_structure_valid CHECK (((instrument_type <> 'FX_OPTION'::text) OR (structure = ANY (ARRAY['EUROPEAN'::text, 'AMERICAN'::text, 'DIGITAL'::text, 'BARRIER'::text, 'DOUBLE_BARRIER'::text, 'TOUCH'::text, 'VANILLA'::text]))))
 );
 
 ALTER TABLE ONLY public.trades FORCE ROW LEVEL SECURITY;

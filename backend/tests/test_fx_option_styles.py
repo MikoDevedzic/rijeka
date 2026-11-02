@@ -180,10 +180,6 @@ def test_trade_structure_follows_the_style():
         TradeCreate(**base, structure="DIGITAL", terms={"style": "BARRIER"})
     with pytest.raises(ValueError):
         TradeCreate(**base, terms={"style": "LOOKBACK"})
-    # the table's CHECK (trades_structure_check) still knows only the swap structures: a style it would reject is stored as
-    # VANILLA until docs/migrations/2026-11-02_trades_structure.sql has run, and the blotter reads the style from the terms
-    from api.routes.trades import stored_structure
-    assert stored_structure("BARRIER") == "VANILLA" and stored_structure("VANILLA") == "VANILLA" and stored_structure("OIS") == "OIS" and stored_structure(None) is None
     # rows booked before the rule: shown from their terms, the row itself untouched
     old = SimpleNamespace(instrument_type="FX_OPTION", structure="VANILLA", terms={"style": "DIGITAL"})
     assert display_structure(old) == "DIGITAL" and old.structure == "VANILLA"

@@ -45,20 +45,6 @@ def fx_option_structure(terms) -> str:
     return str(t.get("style") or t.get("exercise_style") or "EUROPEAN").upper()
 
 
-# What the trades table accepts today. The column was created (Sprint 4) with an inline CHECK,
-# trades_structure_check, over these ten values (docs/schema.sql). Until
-# docs/migrations/2026-11-02_trades_structure.sql drops it, an option style the CHECK does not know
-# is stored as VANILLA and the blotter reads the style from the terms (display_structure). Once the
-# migration has run, delete this set and stored_structure returns the style as validated.
-STORED_STRUCTURES = {"VANILLA", "OIS", "BASIS", "XCCY", "ZERO_COUPON", "STEP_UP", "INFLATION_ZC", "INFLATION_YOY", "CMS", "CMS_SPREAD"}
-
-
-def stored_structure(structure: Optional[str]) -> Optional[str]:
-    if structure and structure not in STORED_STRUCTURES:
-        return "VANILLA"
-    return structure
-
-
 def display_structure(t) -> Optional[str]:
     """The structure the blotter shows. FX options booked before the structure followed the style
     carry VANILLA (or nothing) in the row; their terms still say what they are, so the row is read
@@ -243,7 +229,7 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
         "user_id":              uuid.UUID(user["sub"]),
         "created_by":           uuid.UUID(user["sub"]),
     }
-    kwargs["structure"] = stored_structure(body.structure)
+    kwargs["structure"] = body.structure
     # a trade may only point at the caller's own entity and counterparty
     if kwargs.get("counterparty_id") and not db.query(Counterparty).filter(Counterparty.id == kwargs["counterparty_id"], Counterparty.user_id == kwargs["user_id"]).first():
         raise HTTPException(status_code=422, detail="counterparty_id is not one of yours")

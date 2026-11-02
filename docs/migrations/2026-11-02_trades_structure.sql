@@ -7,8 +7,7 @@
 -- style. Those rows are NOT backfilled: structure is in the canonical record that was hashed and
 -- signed on-chain for the confirmed ones, and the blotter already reads their style from the
 -- terms (api/routes/trades.display_structure).
--- After running this, delete STORED_STRUCTURES in backend/api/routes/trades.py so new bookings
--- store the style itself.
+-- Applied to the hosted database on 2026-11-02 (docs/schema.sql updated).
 BEGIN;
 ALTER TABLE trades DROP CONSTRAINT IF EXISTS trades_structure_check;
 ALTER TABLE trades DROP CONSTRAINT IF EXISTS chk_trades_fx_option_structure_valid;
