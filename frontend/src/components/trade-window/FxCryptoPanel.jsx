@@ -120,11 +120,12 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     if (!quote || !cur) throw new Error('Price it first')
     if (option) {
       // the option's terms as the canonical record names them (chain/canonical.py, FX_OPTION):
-      // buyer and seller of the option, the strike, expiry and settlement, the premium as a cash flow
+      // buyer and seller of the option, the strike, expiry and settlement, the premium as a cash flow.
+      // The trade's structure is the style, so the blotter tells a digital from a barrier.
       const ndo = cashSettled
       const premiumDate = quote.valuation_date
       return {
-        asset_class: 'FX', instrument_type: 'FX_OPTION', structure: 'VANILLA',
+        asset_class: 'FX', instrument_type: 'FX_OPTION', structure: style,
         notional: Number(notional), notional_ccy: cur.base, maturity_date: quote.settlement_date, discount_curve_id: cur.quote_curve,
         terms: {
           direction, currency_pair: pair, base_currency: cur.base, quote_currency: cur.quote,

@@ -94,7 +94,8 @@ export const useTradesStore = create((set, get) => ({
             || (theirs?.trade_ref || '').toLowerCase().includes(q)
             || (t.counterparty?.name || '').toLowerCase().includes(q)
             || (t.desk || '').toLowerCase().includes(q)
-            || (t.instrument_type || '').toLowerCase().includes(q) ))
+            || (t.instrument_type || '').toLowerCase().includes(q)
+            || (t.structure || '').toLowerCase().replace(/_/g, ' ').includes(q) ))
           return false
       }
       return true

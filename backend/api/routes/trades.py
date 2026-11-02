@@ -31,6 +31,27 @@ _ALLOWED_IR_SWAP_STRUCTURES = {
     "AMORTIZING", "ACCRETING",
 }
 
+# FX_OPTION: the structure is the option's style (PRODUCT_TAXONOMY §2.2, the same rule as the
+# swaption's "structure = exercise style"), the one the ticket chose and the terms carry as
+# `style` (pricing/fx_exotic.py). A legacy booking that names only `exercise_style` is EUROPEAN or
+# AMERICAN; one that names neither is EUROPEAN.
+FX_OPTION_STRUCTURES = ("EUROPEAN", "AMERICAN", "DIGITAL", "BARRIER", "DOUBLE_BARRIER", "TOUCH")
+
+
+def fx_option_structure(terms) -> str:
+    t = terms or {}
+    return str(t.get("style") or t.get("exercise_style") or "EUROPEAN").upper()
+
+
+def display_structure(t) -> Optional[str]:
+    """The structure the blotter shows. FX options booked before the structure followed the style
+    carry VANILLA (or nothing) in the row; their terms still say what they are, so the row is read
+    from the terms rather than rewritten."""
+    s = getattr(t, "structure", None)
+    if getattr(t, "instrument_type", None) == "FX_OPTION" and (not s or s == "VANILLA"):
+        return fx_option_structure(getattr(t, "terms", None))
+    return s
+
 class TradeCreate(BaseModel):
     trade_ref: Optional[str] = None
     status: str = "PENDING"
@@ -92,6 +113,16 @@ class TradeCreate(BaseModel):
                     f"Invalid structure '{self.structure}' for IR_SWAP. "
                     f"Allowed: {sorted(_ALLOWED_IR_SWAP_STRUCTURES)}"
                 )
+        if self.instrument_type == "FX_OPTION":
+            style = fx_option_structure(self.terms)
+            if style not in FX_OPTION_STRUCTURES:
+                raise ValueError(f"Unknown FX option style '{style}'. Allowed: {list(FX_OPTION_STRUCTURES)}")
+            if not self.structure or self.structure.upper() == "VANILLA":
+                self.structure = style
+            elif self.structure.upper() != style:
+                raise ValueError(f"structure '{self.structure}' does not match the option's style '{style}'")
+            else:
+                self.structure = style
         return self
 
 class TradeUpdate(BaseModel):
@@ -110,7 +141,7 @@ def serialize(t, cp=None):
         "store": t.store,
         "asset_class": t.asset_class,
         "instrument_type": t.instrument_type,
-        "structure": getattr(t, "structure", None),
+        "structure": display_structure(t),
         "counterparty_id": str(t.counterparty_id) if t.counterparty_id else None,
         "counterparty": {"id": str(cp.id), "name": cp.name} if cp else None,
         "own_entity": None,

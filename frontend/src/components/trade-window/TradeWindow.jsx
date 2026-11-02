@@ -122,7 +122,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   }, [fxQuote])
   const currencyFooter = {
     footer: {
-      structureLabel: () => (SHAPE_OF[curInst] || 'FORWARD'),
+      structureLabel: () => (curInst === 'FX_OPTION' && fxTerms?.style ? fxTerms.style.replace(/_/g, ' ') : (SHAPE_OF[curInst] || 'FORWARD')),
       metrics: (r) => r ? [
         { label: 'NET NPV ' + r.quote_currency, value: Number(r.npv).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
         { label: (assetClass === 'CRYPTO' ? r.base_currency : 'FX') + '01', value: Number(r.spot01 ?? r.delta_quote_per_pct).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: (r.spot01 ?? r.delta_quote_per_pct) >= 0 ? 'pos' : 'neg' },

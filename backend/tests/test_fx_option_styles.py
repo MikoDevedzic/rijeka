@@ -166,3 +166,22 @@ def test_booked_styles_are_valued_and_recorded(curves, monkeypatch):
     assert 0.99 * 1e7 * 0.03 < av["npv"] <= 1e7 * 0.03 and av["vega"] == 0.0            # (1.20 − 1.17) × N, discounted three days
     unknown = value(None, {"sub": "u"}, _trade("BUY", style="BARRIER", barrier_type="UP_OUT", barrier="1.25", strike="1.17", **dates), after, _market(after, spot=1.20))
     assert "knock status not recorded" in unknown["model"] and unknown["npv"] == pytest.approx(av["npv"])
+
+
+def test_trade_structure_follows_the_style():
+    from api.routes.trades import TradeCreate, display_structure
+    base = dict(asset_class="FX", instrument_type="FX_OPTION", trade_date="2026-11-02", effective_date="2026-11-02", maturity_date="2027-02-04")
+    assert TradeCreate(**base, terms={"style": "DIGITAL"}).structure == "DIGITAL"                       # blank: from the terms
+    assert TradeCreate(**base, structure="VANILLA", terms={"style": "BARRIER"}).structure == "BARRIER"   # the old default is overridden
+    assert TradeCreate(**base, structure="touch", terms={"style": "TOUCH"}).structure == "TOUCH"
+    assert TradeCreate(**base, terms={"exercise_style": "AMERICAN"}).structure == "AMERICAN"             # legacy ticket
+    assert TradeCreate(**base, terms={}).structure == "EUROPEAN"
+    with pytest.raises(ValueError):
+        TradeCreate(**base, structure="DIGITAL", terms={"style": "BARRIER"})
+    with pytest.raises(ValueError):
+        TradeCreate(**base, terms={"style": "LOOKBACK"})
+    # rows booked before the rule: shown from their terms, the row itself untouched
+    old = SimpleNamespace(instrument_type="FX_OPTION", structure="VANILLA", terms={"style": "DIGITAL"})
+    assert display_structure(old) == "DIGITAL" and old.structure == "VANILLA"
+    assert display_structure(SimpleNamespace(instrument_type="FX_OPTION", structure=None, terms={})) == "EUROPEAN"
+    assert display_structure(SimpleNamespace(instrument_type="IR_SWAP", structure="VANILLA", terms={"style": "DIGITAL"})) == "VANILLA"
