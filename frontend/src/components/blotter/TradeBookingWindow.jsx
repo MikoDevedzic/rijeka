@@ -3064,11 +3064,12 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
                 {/* Primary option analytics */}
                 <div>
                   <div style={{fontSize:'0.75rem',fontWeight:700,letterSpacing:'.12em',color:'var(--text-dim)',marginBottom:'6px'}}>OPTION ANALYTICS</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:'1px',background:'var(--border)',border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:'1px',background:'var(--border)',border:'1px solid var(--border)',borderRadius:'2px',overflow:'hidden'}}>
                     {[
                       {l:'OPTION NPV',    v:swaptionResult.npv,           color:'var(--accent)', fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${(Math.abs(swaptionResult.npv)/parseFloat((notionalRef.current?.value||'10000000').replace(/,/g,''))*100).toFixed(3)}% of notional`},
                       {l:'VEGA / 1bp',    v:swaptionResult.vega,          color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${swaptionResult.vega_pct_premium?.toFixed(2)}% of premium`},
-                      {l:'IR01 (DELTA)',  v:swaptionResult.ir01,          color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`N(d) = ${swaptionResult.n_d?.toFixed(4)}`},
+                      {l:'FWD DELTA / 1bp', v:swaptionResult.ir01,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`A·N(d)·1bp, annuity held · N(d) = ${swaptionResult.n_d?.toFixed(4)}`},
+                      {l:'CURVE DV01',    v:swaptionResult.dv01_curve,    color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:'+1bp zero shift, repriced · what risk and P&L use'},
                       {l:'THETA / day',   v:swaptionResult.theta,         color:'var(--amber)',  fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString(), sub:`${swaptionResult.theta!=null?(swaptionResult.theta/swaptionResult.npv*100).toFixed(3):'—'}% / day`},
                       {l:'FORWARD RATE',  v:swaptionResult.forward_pct,   color:'var(--accent)', fmt:v=>v.toFixed(4)+'%', sub:'ATM strike'},
                       {l:'MONEYNESS',     v:swaptionResult.moneyness_bp,  color:'var(--text-dim)', fmt:v=>`${Math.abs(v).toFixed(1)}bp ${v>=0?'ITM':'OTM'}`, sub:`d = ${swaptionResult.d?.toFixed(3)}`},
@@ -3519,7 +3520,8 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
                         {l:'PREMIUM PAID', v:swaptionResult.fee_usd||0,  color:'var(--amber)',  fmt:v=>v?'-$'+Math.round(Math.abs(v)).toLocaleString():'—'},
                         {l:'P&L',          v:swaptionResult.pnl,         color:(swaptionResult.pnl||0)>=0?'var(--accent)':'var(--red)', fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
                         {l:'VEGA / 1bp',   v:swaptionResult.vega,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
-                        {l:'IR01',         v:swaptionResult.ir01,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
+                        {l:'FWD DELTA',    v:swaptionResult.ir01,        color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
+                        {l:'CURVE DV01',   v:swaptionResult.dv01_curve,  color:'var(--blue)',   fmt:v=>(v>=0?'+':'')+' $'+Math.round(v).toLocaleString()},
                         {l:'FWD RATE',     v:swaptionResult.forward_pct, color:'var(--accent)', fmt:v=>v.toFixed(4)+'%'},
                       ].map(({l,v,color,fmt})=>(
                         <div key={l} style={{background:'var(--bg)',padding:'7px 10px'}}>

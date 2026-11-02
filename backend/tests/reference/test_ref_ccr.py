@@ -15,9 +15,9 @@ must hold, each checked here on 40,000 paths against Monte Carlo standard errors
 3. A caplet, fixed on the path at its fixing date and paid at the period end, equals QuantLib's
    HullWhite.discountBondOption price of the equivalent zero-bond put.
 
-And one consistency fact is reported, not asserted: before expiry the engine values a swaption with
-Bachelier at today's market vol on each path's forward, at expiry it exercises on the Hull-White paths,
-whose own implied vol comes from (a, σ). Where those vols differ, expected exposure jumps at expiry."""
+Before expiry the engine values a swaption with Bachelier at the normal vol its own Hull-White model
+implies (ccr/options.hw_implied_vol), so today's value is the Jamshidian price and expected exposure does
+not step at expiry; the gap to the market quote is reported as a convention row."""
 from __future__ import annotations
 
 import math
@@ -110,12 +110,16 @@ def swaption_rows(p=None) -> list[Row]:
                 rows.append(Row("CCR paths", case, "E[D·V] at expiry vs QuantLib Jamshidian", x.mean(), sw.NPV(), "standard errors", 4.0,
                                 scale=1.0 / se, extra={"se_bp_notional": se * 1e4 / N}))
                 if k_name == "ATM" and payer:
+                    # before expiry the paths value the option at the Hull-White implied vol of their own model,
+                    # so today's value is the exact Hull-White price and nothing steps at expiry
                     v0 = float(value_swaption(item, p, 0, FX, None)[0])
-                    rows.append(Row("CCR paths", case, "value today (Bachelier, 90bp) vs at expiry (Hull-White)", v0, sw.NPV(),
-                                    "% of value", 40.0, kind="convention", scale=100 / sw.NPV(),
-                                    cause="model consistency: before expiry the path value uses today's market normal vol; "
-                                          "exercise happens on Hull-White paths whose implied vol comes from (a, σ). "
-                                          "EE jumps at expiry by the ratio of the two vols"))
+                    rows.append(Row("CCR paths", case, "value today (Bachelier at the HW implied vol) vs QuantLib Jamshidian", v0, sw.NPV(),
+                                    "bp of notional", 0.5, scale=1e4 / N,
+                                    cause="the paths read P(0,t) from the dated curve at one-day granularity (ccr/simulate.df_fn) and "
+                                          "measure dates in 365.25-day years; QuantLib uses the exact dates"))
+                    rows.append(Row("CCR paths", case, "HW implied vol vs the market vol it replaces", item["hw_vol_bp"], item["vol"] * 1e4,
+                                    "bp", 40.0, kind="convention", cause="the calibrated (a, σ) against the ATM quote; the gap that used to "
+                                                                        "step expected exposure at expiry, now a reported fact"))
     return rows
 
 

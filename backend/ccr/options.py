@@ -10,9 +10,10 @@ and is said on the page. A caplet that has fixed pays max(f_fix − K, 0)·τ·N
 date, f_fix read from the path at its fixing; a swaption past expiry is the underlying
 swap on the paths where it was in the money at expiry (physical settlement) and nothing
 elsewhere. Sign: we are long an option we bought (a cap on a leg we pay), short one we
-sold. Vols: {CCY}_SWVOL_ATM snapshot quotes 'AYxBY' for swaptions, the cap vol table's
-ATM flat vol by cap tenor for caplets; a desk default of 85bp when neither exists, and the
-item says which."""
+sold. Vols: caplets use the cap vol table's ATM flat vol by cap tenor (85bp desk default when
+there is none), and the item says which. A swaption before expiry is valued at the normal vol
+the paths' own Hull-White model implies for it (hw_implied_vol), so the value before expiry and
+the exercise at expiry are one model; the market {CCY}_SWVOL_ATM quote is reported beside it."""
 from __future__ import annotations
 
 import logging
@@ -184,6 +185,43 @@ def value_swaption(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]
     return float(item.get("sign", 1.0)) * _value_swaption_long(item, paths, i, fx_to_usd, swap_value)
 
 
+def hw_implied_vol(item: dict, paths: Paths) -> float:
+    """The normal vol (decimal) at which Bachelier on today's forward swap rate equals the exact Hull-White
+    price of the swaption on the paths' own model (Jamshidian with the factor's a, sigma and the curve the
+    paths reproduce). Valuing with it before expiry is consistent with exercising on the paths at expiry;
+    with today's market vol instead, expected exposure stepped at expiry by the ratio of the two vols
+    (13–25 % in the reference test) until 2026-11. Cached on the item per path set."""
+    cache = item.setdefault("_hw_vol", {})
+    if id(paths) in cache:
+        return cache[id(paths)]
+    from scipy.optimize import brentq
+    from pricing.bermudan_swaption import price_european_swaption_hw1f_jamshidian
+    asof = paths.grid[0]
+    key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
+    f = paths.calib.factors[key]
+    a, sig = max(f.a, 1e-4), max(f.sigma, 1e-6)
+    T_exp = _years(asof, item["expiry"])
+    future = [(pay, tau) for (_, _, pay, tau) in item["fixed_sched"] if _years(asof, pay) > T_exp - 1e-9]
+    vol = item["vol"]
+    if future and T_exp > 1e-6:
+        p0 = paths.p0[key]
+        pay_y = [_years(asof, pay) for pay, _ in future]
+        taus = [tau for _, tau in future]
+        A0 = sum(tau * p0(ty) for ty, tau in zip(pay_y, taus))
+        F0 = (p0(_years(asof, item["start"])) - p0(pay_y[-1])) / max(A0, 1e-12)
+        try:
+            jam = price_european_swaption_hw1f_jamshidian(1.0, item["K"], item["is_payer"], T_exp, pay_y, taus, a, sig, discount_fn=p0)
+            target = float(jam["npv"]) / max(A0, 1e-12)                    # per unit of annuity
+            intrinsic = max(F0 - item["K"], 0.0) if item["is_payer"] else max(item["K"] - F0, 0.0)
+            if target > intrinsic + 1e-12:
+                vol = brentq(lambda s: float(bachelier(np.array([F0]), item["K"], T_exp, s, item["is_payer"])[0]) - target, 1e-6, 0.05, xtol=1e-9)
+        except Exception as e:              # noqa: BLE001 — keep the market vol and say nothing new
+            log.debug("ccr: HW implied vol for %s: %s", item.get("trade", ""), e)
+    item["hw_vol_bp"] = vol * 1e4
+    cache[id(paths)] = vol
+    return vol
+
+
 def _value_swaption_long(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float], swap_value) -> np.ndarray:
     asof = paths.grid[0]; t_i = float(paths.t[i])
     T_exp = _years(asof, item["expiry"])
@@ -197,7 +235,7 @@ def _value_swaption_long(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, 
         A = sum(tau * bond(paths, key, i, _years(asof, pay)) for pay, tau in future)
         T0 = _years(asof, item["start"]); Tn = _years(asof, future[-1][0])
         F = (bond(paths, key, i, T0) - bond(paths, key, i, Tn)) / np.maximum(A, 1e-12)
-        return item["N"] * A * bachelier(F, item["K"], T_exp - t_i, item["vol"], item["is_payer"]) * k
+        return item["N"] * A * bachelier(F, item["K"], T_exp - t_i, hw_implied_vol(item, paths), item["is_payer"]) * k
     # at or after expiry: physical settlement on the paths that were in the money at expiry
     i_exp = min(j for j in range(len(paths.t)) if float(paths.t[j]) >= T_exp - 1e-9)
     cache = item.setdefault("_exercised", {})

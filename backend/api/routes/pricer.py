@@ -1186,9 +1186,27 @@ def price_swaption_route(
     if result.error:
         raise HTTPException(status_code=422, detail=result.error)
 
+    # Two deltas, both published and labelled. result.ir01 is the analytic forward delta, A·N(d)·1bp
+    # with the annuity held; dv01_curve bumps every zero rate +1bp and reprices, which also moves the
+    # annuity and moves the forward by less than 1bp. They differ by up to 14 % on a 5Y×10Y
+    # (tests/reference/test_ref_options.py); the risk ladder and P&L use the curve bump.
+    dv01_curve = None
+    try:
+        bumped = price_swaption(
+            notional=req.notional, expiry_y=req.expiry_y, tenor_y=req.tenor_y, strike=strike,
+            vol_bp=result.vol_bp, is_payer=req.is_payer, discount_curve=curve.shifted(1.0), pay_freq_y=req.pay_freq_y,
+            valuation_date=val_date, swap_effective_date=req.effective_date, swap_maturity_date=req.maturity_date,
+        )
+        if not bumped.error:
+            dv01_curve = bumped.npv - result.npv
+    except Exception:                       # noqa: BLE001 — the forward delta still answers
+        dv01_curve = None
+
     return {
         "instrument":     "IR_SWAPTION",
         "structure":      "EUROPEAN",
+        "dv01_curve":     round(dv01_curve, 2) if dv01_curve is not None else None,
+        "ir01_note":      "ir01 is the forward delta A·N(d)·1bp with the annuity held; dv01_curve reprices on a +1bp parallel zero shift",
         "valuation_date": val_date.isoformat(),
         "curve_id":       req.curve_id,
         "notional":       req.notional,

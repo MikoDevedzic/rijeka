@@ -144,6 +144,14 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
     if ex is not None:
         out.update(exposure={k: v for k, v in ex.items() if k not in ("mean_collateral",)}, mean_collateral=ex["mean_collateral"])
         out["calibration"]["real_world"] = rw.as_dict(); out["measures"]["exposure"] = "REAL_WORLD"; out["sampling"] = rw.sampling
+    # the vol a swaption was valued at on the paths (ccr/options.hw_implied_vol), beside the market quote
+    for it in ns.items:
+        if it.get("kind") == "SWAPTION" and it.get("hw_vol_bp") is not None:
+            for o in ns.options:
+                if o.get("trade_ref") == it["trade"].trade_ref and "SWAPTION" in str(o.get("kind", "")):
+                    o["vol_bp_on_paths"] = round(float(it["hw_vol_bp"]), 2)
+                    o["vol_source"] = f"{o.get('vol_source', '')}; valued on the paths at the Hull-White implied vol"
+
     return out
 
 
