@@ -17,6 +17,14 @@ The substance underneath (pricing, risk, methodology, validation, security model
 CI) would score 90+ on its own in all three reviews. The gap is a thin layer of hygiene at the edges an
 outside user meets first. None of it is architectural.
 
+## Found and fixed during the audit
+
+- The app served a methodology PDF three days older than the repository's (a hand-copied file under
+  `frontend/public`). The frontend build now copies it from `docs/methodology` (prebuild step).
+- The release-sync workflow exited early whenever `release` already sat at the API's live commit, before
+  its frontend-and-docs-only branch could run, so a push Render does not build never reached
+  app.rijeka.app through it. Fixed the same day; the in-process mover already had the order right.
+
 ## S1: fix before anyone outside is pointed at it
 
 1. **Cross-tenant write.** `POST /api/cashflows/bulk` deletes every PROJECTED cashflow for a `trade_id`
