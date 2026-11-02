@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "cp ../docs/methodology/rijeka_methodology.pdf public/methodology/rijeka_methodology.pdf",
+    "prebuild": "cp ../docs/methodology/rijeka_methodology.pdf public/methodology/rijeka_methodology.pdf && node scripts/write_version.mjs",
     "build": "vite build",
     "lint": "eslint .",
     "test": "vitest run",

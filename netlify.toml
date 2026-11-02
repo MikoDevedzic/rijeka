@@ -15,6 +15,12 @@
   status = 200
   force  = false
 
+# The build's own version stamp: never cached, so an open tab learns of a newer deploy (lib/version.js).
+[[headers]]
+  for = "/version.json"
+  [headers.values]
+    Cache-Control = "no-store"
+
 [[headers]]
   for = "/*"
   [headers.values]

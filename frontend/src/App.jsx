@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import ErrorBoundary    from './components/ErrorBoundary'
 import Loading          from './components/common/Loading'
+import NewVersionBar from './components/common/NewVersionBar'
 import { hit } from './lib/usage'
 import { useAuthStore } from './store/useAuthStore'
 import AuthGuard        from './components/auth/AuthGuard'
@@ -133,6 +134,7 @@ export default function App() {
   )
   return (
     <BrowserRouter>
+      <NewVersionBar />
       <PageBoundary>
       <Suspense fallback={<Loading />}>
       <Routes>
