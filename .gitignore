@@ -97,13 +97,13 @@ sprint12_*
 # ============================================================
 # INTERNAL / STRATEGIC DOCS (local only, never GitHub)
 # ============================================================
-ARCHITECTURE.md
-ARCHITECTURE_v*.md
-HANDOFF_*.md
+/ARCHITECTURE.md
+/ARCHITECTURE_v*.md
+/HANDOFF_*.md
 SPRINT*_HANDOFF.md
 docs/SPRINT*
 docs/write_*
-docs/ARCHITECTURE_v*.md
+docs/archive/ARCHITECTURE_v*.md
 docs/*.tex
 docs/*.html
 
