@@ -34,6 +34,7 @@ from pricing.ir_swap import price_swap
 from pricing.swaption import price_swaption
 from pricing.cap_floor import price_cap, bachelier_call
 from pricing.fx_option import price_fx_option
+from pricing.currency_forward import price_currency_forward
 from pricing.fx_exotic import ExoticSpec, price_exotic
 
 # ── Products ────────────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ PRODUCTS = [
      "replication": "xlsx"},
     {"id": "fx_forward", "name": "FX forward (EURUSD)", "group": "FX & digital assets", "section": "12",
      "default": "EUR/USD · EUR 10m · 3-month deliverable forward · rate at the fair forward",
-     "formula": "F = S·DF_EUR(T)/DF_USD(T) (covered interest parity, each currency on its own curve); NPV_USD = ±N_EUR·(F − K)·DF_USD(T)",
+     "formula": "F = S·DF_EUR(T)/DF_USD(T) (covered interest parity, each currency on its own curve); NPV_USD = ±N_EUR·(F − K)·DF_USD(T); FX01 and both IR01s beside the engine's",
      "replication": "xlsx"},
     {"id": "fx_option", "name": "FX option (EURUSD European)", "group": "FX & digital assets", "section": "13",
      "default": "EUR/USD · EUR 10m · 3-month call · strike at the forward · ATM vol from the pair's surface (7.5% without one)",
@@ -69,7 +70,7 @@ PRODUCTS = [
      "replication": "xlsx"},
     {"id": "crypto_ndf", "name": "Crypto NDF", "group": "FX & digital assets", "section": "12",
      "default": "BTC/USD · 10 BTC · 3-month non-deliverable forward · strike at the forward",
-     "formula": "F = S·DF_BTC(T)/DF_USD(T) (cash-and-carry with a BTC funding rate, the same model as an FX forward); NPV = (F − K)·N·DF_USD(T)",
+     "formula": "F = S·DF_BTC(T)/DF_USD(T) (cash-and-carry with a BTC funding rate, the same model as an FX forward); NPV = (F − K)·N·DF_USD(T); CRY01, IR01 (discounting) and FUND01 beside the engine's",
      "replication": "xlsx"},
     {"id": "crypto_ndo", "name": "Crypto NDO (European option)", "group": "FX & digital assets", "section": "12",
      "default": "BTC/USD · 10 BTC · 3-month call · strike at the forward · ATM vol from the BTCUSD surface (60% without one) · funding 3%",
@@ -432,7 +433,32 @@ def crypto_ndf_workbook(mkt: Market):
     ws["A12"] = "Strike K"; ws["B12"] = "=B8"; ws["B12"].fill = IN; ws["B12"].number_format = "#,##0.00"
     ws["A13"] = "NPV (formulas) = (F − K)·N·DF_USD"; ws["B13"] = "=(B8-B12)*B2*B5"; ws["B13"].number_format = "#,##0.00"
     ws["A14"] = "Reference forward (Rijeka)"; ws["B14"] = F; ws["B14"].fill = RJ; ws["B14"].number_format = "#,##0.00"
-    return wb, 0.0
+    r = _forward_engine_rows(ws, mkt, base="BTC", quote="USD", S=spot_px, N=10, T=T, base_rate=r_btc, K_cell="B12", npv_cell="B13", k_off=-1000.0, crypto=True, row0=16)
+    _widths(ws, [62, 18, 18, 14])
+    return wb, r.npv
+
+
+def _forward_engine_rows(ws, mkt: Market, *, base: str, quote: str, S: float, N: float, T: date, base_rate: float, K_cell: str, npv_cell: str,
+                         k_off: float, crypto: bool, row0: int):
+    """Beneath a forward's formula block: the engine's NPV and sensitivities at an off-market strike, with the
+    sheet's closed forms beside them. NPV = N·(S·DF_b − K·DF_q): FX01/CRY01 = N·S·DF_b·1 %; IR01 on the discounting
+    curve = −N·K·ΔDF_q for +1bp; the base curve's (FUND01 on a digital asset) = N·S·ΔDF_b for +1bp."""
+    t = (T - mkt.valuation_date).days / 365.0
+    F = S * math.exp(-base_rate * t) / mkt.curve.df(T)
+    K = F + k_off
+    r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=N, forward_rate=K, spot=S, valuation_date=mkt.valuation_date,
+                               settlement_date=T, quote_curve=mkt.curve, base_rate=base_rate, direction="BUY")
+    ws[K_cell] = K
+    delta, fund = ("CRY01", "FUND01") if crypto else ("FX01", f"IR01 BASE ({base})")
+    ws.cell(row=row0, column=1, value=f"Engine comparison at K = F {k_off:+,.4g} (the yellow strike above)").font = Font(bold=True)
+    _hdr(ws, row0 + 1, ["", "Formulas", "Rijeka engine", "Difference"])
+    _ref_cell(ws, row0 + 2, f"NPV ({quote})", f"={npv_cell}", r.npv)
+    _ref_cell(ws, row0 + 3, f"{delta}: NPV for +1% spot = N·S·DF_{base}·1%", "=B2*B1*0.01*B7", getattr(r, "spot01", None) if getattr(r, "spot01", None) is not None else r.delta_quote_per_pct)
+    _ref_cell(ws, row0 + 4, f"IR01{' (discounting)' if crypto else ' ' + quote + ' curve'}: −N·K·[DF_{quote}·e^(−1bp·T) − DF_{quote}]", f"=-B2*{K_cell}*(B5*EXP(-0.0001*B4)-B5)", r.ir01_disc, "#,##0.0000")
+    _ref_cell(ws, row0 + 5, f"{fund}: N·S·[DF_{base}·e^(−1bp·T) − DF_{base}]", "=B2*B1*(B7*EXP(-0.0001*B4)-B7)", r.ir01_base, "#,##0.0000")
+    ws.cell(row=row0 + 7, column=1, value=("On a digital asset IR01 is the discounting sensitivity alone and FUND01 the funding rate's; " if crypto else "IR01 is the sum of both curves' rows; ")
+            + "a forward is linear in spot, so the +1% row is exact (no gamma).")
+    return r
 
 
 def fx_forward_workbook(mkt: Market):
@@ -466,8 +492,9 @@ def fx_forward_workbook(mkt: Market):
     F = spot * math.exp(-r_eur * t) / mkt.curve.df(T)
     ws["A13"] = "Reference forward (Rijeka)"; ws["B13"] = F; ws["B13"].fill = RJ; ws["B13"].number_format = "0.00000"
     ws["A15"] = "Positive USD rates above EUR rates put the forward above spot: borrow USD, buy EUR today, lend EUR; the forward repays the USD interest."
-    _widths(ws, [40, 18])
-    return wb, 0.0
+    r = _forward_engine_rows(ws, mkt, base="EUR", quote="USD", S=spot, N=10_000_000, T=T, base_rate=r_eur, K_cell="B11", npv_cell="B12", k_off=-0.0050, crypto=False, row0=17)
+    _widths(ws, [62, 18, 18, 14])
+    return wb, r.npv
 
 
 # ── FX and digital-asset options ───────────────────────────────────────────
