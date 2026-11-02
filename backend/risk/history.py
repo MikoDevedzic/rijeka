@@ -3,8 +3,9 @@
 The daily demo rebuild writes today's curves and spots to the template account; the
 backfill writes the same shapes for past dates, so one table holds the whole series and
 tomorrow's tick simply appends. Per curve, the risk factors are the quote tenors (par
-rates in percent); per pair, the spot. Changes are taken between consecutive stored
-dates: absolute basis points for rates, log returns for spots."""
+rates in percent); per pair, the spot; per vol surface, every quote (tenor and type). Changes are
+taken between consecutive stored dates: absolute basis points for rates (hundredths of a point for
+vols, the same convention), log returns for spots."""
 from __future__ import annotations
 
 import csv
@@ -180,7 +181,7 @@ def build_days(start: date, end: date) -> dict[str, dict[date, list[dict]]]:
     return out
 
 
-def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwrite: bool = False) -> dict[str, int]:
+def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwrite: bool = False, source: str = SOURCE) -> dict[str, int]:
     """Upsert as the template user's snapshots. Existing rows (the daily rebuild's) win unless overwrite."""
     n: dict[str, int] = {}
     for cid, by_date in days.items():
@@ -189,7 +190,7 @@ def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwri
                 "INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
                 "VALUES (:c, :d, CAST(:q AS jsonb), :s, :u, :u) ON CONFLICT (user_id, curve_id, valuation_date) "
                 + ("DO UPDATE SET quotes = EXCLUDED.quotes, source = EXCLUDED.source" if overwrite else "DO NOTHING")),
-                {"c": cid, "d": d, "q": json.dumps(quotes), "s": SOURCE, "u": str(user_id)})
+                {"c": cid, "d": d, "q": json.dumps(quotes), "s": source, "u": str(user_id)})
             n[cid] = n.get(cid, 0) + (res.rowcount or 0)
     db.commit()
     return n
@@ -200,17 +201,30 @@ def backfill(db: Session, user_id, years: float = 2.0, end: Optional[date] = Non
     start = end - timedelta(days=int(365 * years))
     days = build_days(start, end)
     written = store(db, user_id, days, overwrite=overwrite)
+    # the vol surfaces follow from the stored series (risk/vols.py); synthetic either way, so always rewritten
+    from risk import vols
+    vdays = vols.history_days(db, user_id, start, end)
+    written.update(store(db, user_id, vdays, overwrite=True, source=vols.SOURCE))
+    days.update(vdays)
     return {"start": start.isoformat(), "end": end.isoformat(), "built": {c: len(v) for c, v in days.items()}, "written": written}
 
 
 # ── reading the series ───────────────────────────────────────────────────────
 
-def series(db: Session, user_id, curve_id: str, start: date, end: date) -> list[tuple[date, dict[str, float]]]:
+def factor_key(q: dict, by_type: bool) -> str:
+    """A quote's factor name: its tenor, or 'tenor|type' on a surface that quotes several rows per tenor."""
+    return f"{q.get('tenor')}|{q.get('quote_type') or ''}" if by_type else str(q.get("tenor"))
+
+
+def series(db: Session, user_id, curve_id: str, start: date, end: date, by_type: Optional[bool] = None) -> list[tuple[date, dict[str, float]]]:
+    """by_type: key the quotes by tenor and quote type (a vol surface); default: by the curve's kind."""
+    from pnl.market import is_vol_surface
+    bt = is_vol_surface(curve_id) if by_type is None else by_type
     rows = db.execute(text("SELECT valuation_date, quotes FROM market_data_snapshots WHERE user_id = :u AND curve_id = :c "
                            "AND valuation_date BETWEEN :a AND :b ORDER BY valuation_date"), {"u": str(user_id), "c": curve_id, "a": start, "b": end}).all()
     out = []
     for r in rows:
-        q = {x["tenor"]: float(x["rate"]) for x in (r.quotes or []) if x.get("rate") is not None and x.get("enabled", True)}
+        q = {factor_key(x, bt): float(x["rate"]) for x in (r.quotes or []) if x.get("rate") is not None and x.get("enabled", True)}
         if q:
             out.append((r.valuation_date, q))
     return out
@@ -233,7 +247,8 @@ def changes(ser: list[tuple[date, dict[str, float]]], kind: str) -> list[tuple[d
 
 def status(db: Session, user_id) -> dict[str, Any]:
     rows = db.execute(text("SELECT curve_id, count(*) n, min(valuation_date) a, max(valuation_date) b FROM market_data_snapshots "
-                           "WHERE user_id = :u AND (curve_id = ANY(:ids) OR curve_id LIKE '%\\_SPOT') GROUP BY curve_id ORDER BY curve_id"),
+                           "WHERE user_id = :u AND (curve_id = ANY(:ids) OR curve_id LIKE '%\\_SPOT' OR curve_id LIKE '%\\_VOL' "
+                           "OR curve_id LIKE '%\\_SWVOL\\_ATM') GROUP BY curve_id ORDER BY curve_id"),
                       {"u": str(user_id), "ids": list(RATE_CURVES)}).all()
     return {r.curve_id: {"observations": int(r.n), "from": r.a.isoformat(), "to": r.b.isoformat()} for r in rows}
 

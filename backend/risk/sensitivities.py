@@ -2,8 +2,8 @@
 
 For every trade and every curve it is valued on, each tenor bucket's quotes are bumped
 +1bp and the trade repriced on the as-of market: KR01 by (curve, bucket). A volatility
-surface ({PAIR}_VOL, FX options) is bumped +1 vol point per bucket instead: vega by
-(surface, bucket), kept apart from the rate ladder. Spot deltas come from the currency
+surface ({PAIR}_VOL for FX options, {CCY}_SWVOL_ATM for swaptions) is bumped +1 vol point
+(+1bp of normal vol) per bucket instead: vega by (surface, bucket), kept apart from the rate ladder. Spot deltas come from the currency
 pricer (PV for +1 % spot). Totals: IR01 per curve (sum of the buckets), book IR01, vega
 per surface, spot01 per asset, NPV. The same bucket set as the P&L explain, so a
 day's rates P&L and the ladder speak the same language."""
@@ -16,12 +16,12 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from pnl.explain import BUCKETS, LIVE, Valuer, _bucket_quotes
-from pnl.market import Market
+from pnl.market import Market, is_vol_surface
 from pnl.valuation import spot_curve, trade_curves
 
 log = logging.getLogger("rijeka.risk")
 BUMP_BP = 1.0
-VOL_BUMP = 100.0        # in the bump unit (bp/100): one volatility point on a {PAIR}_VOL surface
+VOL_BUMP = 100.0        # in the bump unit (bp/100): one volatility point on a {PAIR}_VOL surface, 1bp of normal vol on a swaption grid
 
 
 def _bumped(quotes: list[dict], lo: float, hi: float, bp: float) -> list[dict]:
@@ -37,7 +37,7 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
         q = mkt.quotes(cid)
         if not q:
             continue
-        is_vol = cid.endswith("_VOL")
+        is_vol = is_vol_surface(cid)
         target, bump = (vega, VOL_BUMP) if is_vol else (kr01, BUMP_BP)
         if len(q) <= 1:                                 # a flat rate or funding level: one bucket
             m = mkt.override(cid, _bumped(q, 0.0, 1e9, bump))
@@ -98,5 +98,5 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx) -> di
     vega_ladder = [{"curve": cid, "buckets": {b: by_vol[cid].get(b, 0.0) for b, *_ in BUCKETS} | ({"FLAT": by_vol[cid]["FLAT"]} if "FLAT" in by_vol[cid] else {}),
                     "total": sum(by_vol[cid].values())} for cid in sorted(by_vol)]
     return {"rows": rows, "ladder": ladder, "spot01": spot01, "npv_usd": npv_usd, "ir01_usd": ir01_usd, "valuations": valuer.calls,
-            "vega": vega_ladder, "vega_usd": vega_usd, "vol_bump": "1 vol point",
+            "vega": vega_ladder, "vega_usd": vega_usd, "vol_bump": "1 vol point (FX) · 1bp normal vol (swaptions)",
             "problems": problems, "unconverted": sorted(unconverted), "bump_bp": BUMP_BP, "buckets": [b[0] for b in BUCKETS]}

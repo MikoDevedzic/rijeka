@@ -8,7 +8,7 @@ thing at a time, in a fixed order, and each step's change is one row:
   RATES      each curve the trade is valued on, moved tenor bucket by tenor bucket
              (0-1Y, 1-5Y, 5-10Y, 10Y+), discount curve first, then forecast, then the base
   FX         the spot rate, then the quoted forward points (FX and digital-asset forwards)
-  VOL        the option's volatility surface, tenor bucket by tenor bucket (FX options)
+  VOL        the option's volatility surface, tenor bucket by tenor bucket (FX options; a swaption's ATM grid by expiry)
   RESIDUAL   whatever is left between the last step and today's mark on today's market:
              cross effects and anything not moved explicitly (a vol surface, a quote the
              market has that the step list does not). Shown, never spread.
@@ -34,7 +34,7 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from pnl.market import Market, quote_differs, quote_key
+from pnl.market import Market, quote_differs, quote_key, is_vol_surface
 from pnl.valuation import points_curve, spot_curve, trade_curves, value
 
 log = logging.getLogger("rijeka.pnl")
@@ -53,7 +53,10 @@ def tenor_years(t: str) -> float:
         return 0.0
     m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([DWMY])", t)
     if not m:
-        return 0.0
+        g = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([DWMY])\s*X\s*\d+(?:\.\d+)?\s*[DWMY]", t)      # a swaption grid point "1Yx5Y": its expiry
+        if not g:
+            return 0.0
+        m = g
     n, u = float(m.group(1)), m.group(2)
     return {"D": n / 365, "W": n / 52, "M": n / 12, "Y": n}[u]
 
@@ -125,8 +128,8 @@ def explain_trade(db: Session, user: dict, trade, d0: date, d1: date, m0: Market
         rows.append({"bucket": "CASH", "label": f"Cash settled {c}", "ccy": c, "pnl": amt})
     mk, cur = m0, v10["npv"]
     moved: list[str] = []
-    rate_curves = [c for c in trade_curves(trade) if not c.endswith("_VOL")]
-    vol_curves = [c for c in trade_curves(trade) if c.endswith("_VOL")]
+    rate_curves = [c for c in trade_curves(trade) if not is_vol_surface(c)]
+    vol_curves = [c for c in trade_curves(trade) if is_vol_surface(c)]
     def _move(cid: str, bucket: str):
         nonlocal mk, cur
         q0, q1 = m0.quotes(cid), m1.quotes(cid)

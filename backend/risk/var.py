@@ -1,17 +1,19 @@
 """Historical-simulation VaR on the ladder.
 
 Each historical day's observed changes (bp per quote tenor, averaged into the ladder's
-tenor buckets; log returns for spots) are applied to today's sensitivities:
-    P&L_i = Σ_curve Σ_bucket KR01[c,b] · Δ_i[c,b]  +  Σ_asset spot01[a] · r_i[a]
+tenor buckets; log returns for spots; the ATM vol move per bucket for a surface) are
+applied to today's sensitivities:
+    P&L_i = Σ_curve Σ_bucket KR01[c,b] · Δ_i[c,b]  +  Σ_asset spot01[a] · r_i[a]  +  Σ_surface Σ_bucket vega[s,b] · Δσ_i[s,b]
 VaR at a confidence level is the empirical loss quantile over the window; expected
 shortfall is the mean loss beyond it; the multi-day figure scales by √horizon. This is
 the sensitivities-based form (linear in the factors): fast, transparent, and honest about
-what it leaves out (convexity, vol). Factors with no history are listed, not ignored."""
+what it leaves out (convexity, the smile's own moves). Factors with no history are listed, not
+ignored; a vol surface is secondary and held still on a day it has no observation."""
 from __future__ import annotations
 
 import math
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
@@ -38,7 +40,8 @@ def _bucket_of(tenor: str) -> str:
     return BUCKETS[-1][0]
 
 
-def factor_changes(db: Session, template_uid, curves: list[str], spots: list[str], asof: date, window_days: int) -> dict[str, list[tuple[date, dict[str, float]]]]:
+def factor_changes(db: Session, template_uid, curves: list[str], spots: list[str], asof: date, window_days: int,
+                   surfaces: Optional[list[str]] = None) -> dict[str, list[tuple[date, dict[str, float]]]]:
     start = asof - timedelta(days=window_days)
     out = {}
     for cid in curves:
@@ -46,11 +49,19 @@ def factor_changes(db: Session, template_uid, curves: list[str], spots: list[str
         ch = H.changes(ser, "rate")
         # average the tenor changes into the ladder's buckets
         out[cid] = [(d, _to_buckets(c)) for d, c in ch]
+    for cid in surfaces or []:
+        ch = H.changes(H.series(db, template_uid, cid, start, asof), "rate")
+        out[cid] = [(d, _to_buckets(_atm_only(c))) for d, c in ch]       # the level's move per bucket, in hundredths of a point
     for a in spots:
         sid, sign = spot_series_id(a)
         ser = H.series(db, template_uid, sid, start, asof)
         out[f"{a}_SPOT"] = [(d, {"SPOT": sign * c.get("SPOT", 0.0)}) for d, c in H.changes(ser, "spot")]
     return out
+
+
+def _atm_only(ch: dict[str, float]) -> dict[str, float]:
+    """A surface's changes keyed 'tenor|type': the level rows (ATM; every row of a swaption grid), by tenor."""
+    return {k.split("|", 1)[0]: v for k, v in ch.items() if (k.split("|", 1)[1] if "|" in k else "") in ("ATM", "SWVOL", "")}
 
 
 def _to_buckets(ch: dict[str, float]) -> dict[str, float]:
@@ -62,16 +73,19 @@ def _to_buckets(ch: dict[str, float]) -> dict[str, float]:
     return {b: sum(v) / len(v) for b, v in acc.items()}
 
 
-def simulate(ladder: list[dict], spot01: dict[str, float], changes: dict[str, list[tuple[date, dict[str, float]]]]) -> tuple[list[tuple[date, float]], list[str]]:
-    """Daily P&L per historical date, over the dates every factor has (intersection)."""
+def simulate(ladder: list[dict], spot01: dict[str, float], changes: dict[str, list[tuple[date, dict[str, float]]]],
+             vega: Optional[list[dict]] = None) -> tuple[list[tuple[date, float]], list[str]]:
+    """Daily P&L per historical date, over the dates every curve and spot has (intersection); a vega
+    surface is secondary: it contributes on the days it was observed and is held still otherwise."""
     kr = {row["curve"]: row["buckets"] for row in ladder}
+    vg = {row["curve"]: row["buckets"] for row in (vega or []) if any(abs(v) > 1e-9 for v in row["buckets"].values())}
     needed = [c for c in kr if any(abs(v) > 1e-9 for v in kr[c].values())] + [f"{a}_SPOT" for a, v in spot01.items() if abs(v) > 1e-9]
-    missing = [f for f in needed if not changes.get(f)]
+    missing = [f for f in needed + list(vg) if not changes.get(f)]
     usable = [f for f in needed if changes.get(f)]
     if not usable:
         return [], missing
     by_date: dict[date, dict[str, dict[str, float]]] = {}
-    for f in usable:
+    for f in usable + [s for s in vg if changes.get(s)]:
         for d, ch in changes[f]:
             by_date.setdefault(d, {})[f] = ch
     pnl = []
@@ -87,6 +101,9 @@ def simulate(ladder: list[dict], spot01: dict[str, float], changes: dict[str, li
             f = f"{a}_SPOT"
             if f in row:
                 v += s01 * row[f].get("SPOT", 0.0)
+        for s_, buckets in vg.items():
+            if s_ in row:
+                v += sum(buckets.get(b, 0.0) * row[s_].get(b, 0.0) / 100.0 for b in buckets)      # vega per point × points moved
         pnl.append((d, v))
     return pnl, missing
 
@@ -102,11 +119,12 @@ def quantiles(pnl: list[float], confidence: float) -> dict[str, float]:
     return {"var": max(0.0, var), "es": max(0.0, sum(tail) / len(tail))}
 
 
-def compute(db: Session, template_uid, ladder: list[dict], spot01: dict[str, float], asof: date, settings: dict) -> dict[str, Any]:
+def compute(db: Session, template_uid, ladder: list[dict], spot01: dict[str, float], asof: date, settings: dict,
+            vega: Optional[list[dict]] = None) -> dict[str, Any]:
     s = {**DEFAULTS, **(settings or {})}
     curves = [row["curve"] for row in ladder]
-    ch = factor_changes(db, template_uid, curves, list(spot01), asof, int(s["window_days"]))
-    pnl, missing = simulate(ladder, spot01, ch)
+    ch = factor_changes(db, template_uid, curves, list(spot01), asof, int(s["window_days"]), surfaces=[row["curve"] for row in (vega or [])])
+    pnl, missing = simulate(ladder, spot01, ch, vega)
     vals = [v for _, v in pnl]
     main, second = quantiles(vals, float(s["confidence"])), quantiles(vals, float(s["secondary_confidence"]))
     h = max(1, int(s["horizon_days"]))

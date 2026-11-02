@@ -71,6 +71,13 @@ class Market:
         return [r.valuation_date for r in rows]
 
 
+def is_vol_surface(curve_id: Optional[str]) -> bool:
+    """A volatility surface rather than a rate curve: {PAIR}_VOL (FX, vol points per tenor and quote
+    type) or {CCY}_SWVOL_ATM (swaptions, normal bp on an expiry × tenor grid)."""
+    c = str(curve_id or "")
+    return c.endswith("_VOL") or c.endswith("_SWVOL_ATM")
+
+
 def quote_key(q: dict) -> tuple:
     """A quote's identity within a curve: its tenor, and its type where a tenor carries several rows
     (a vol surface quotes ATM, RR25 and BF25 at each tenor)."""

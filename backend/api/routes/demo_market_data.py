@@ -139,6 +139,15 @@ def refresh(db: Session, valuation_date: Optional[date] = None, dry_run: bool = 
         saved, fitted = _upsert_skew(db, template, valuation_date, built["skew"])
         caps = _upsert_caps(db, template, built["caps"])
         db.commit()
+        # the vol surfaces' level follows the realised vol of the series just stored (risk/vols.py),
+        # so the day's surface continues the history the VaR samples
+        from risk import vols
+        try:
+            summary["vol_surfaces_scaled"] = sum(vols.refresh(db, template, valuation_date).values())
+        except Exception as e:      # noqa: BLE001 — the parametric surfaces stand when the series cannot be read
+            db.rollback()
+            log.warning("vol surfaces not scaled for %s: %s", valuation_date, e)
+            summary["vol_surfaces_scaled"] = 0
     except IntegrityError as e:
         db.rollback()
         if "source_check" in str(e.orig):

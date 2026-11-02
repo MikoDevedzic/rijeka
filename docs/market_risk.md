@@ -6,19 +6,19 @@ Engine: `backend/risk/`; page: `RISK` next to P&L; settings and limits under `Co
 
 For every live trade and every curve it is valued on, each tenor bucket's quotes are bumped +1bp and the trade is repriced on the as-of market through the production pricers. The result is key-rate IR01 by (curve, bucket); the buckets (0-1Y, 1-5Y, 5-10Y, 10Y+) are the same the P&L explain uses, so a day's rates P&L and the ladder speak the same language. Spot deltas (FX01, BTC01) are the pricers' PV for +1 % spot. Totals are in the reporting currency at the close. A 1bp move in every par quote is a slightly smaller move in zero rates, so the ladder total sits about 2 % below the trade ticket's IR01 (which bumps zero rates); both are correct, and the bucket values agree with a QuantLib rebootstrap to 0.05 % of DV01 (`backend/tests/reference/test_ref_greeks.py`).
 
-**Vega.** A volatility surface the trade is valued on (`{PAIR}_VOL`, FX options) is bumped +1 vol point per tenor bucket and reported as vega by (surface, bucket), kept apart from the rate ladder; the page shows a VEGA card when the book carries one. Volatility is not a VaR factor yet: its history is days old and the per-tenor shift does not describe three quotes per tenor, so vol surfaces are left out of the historical simulation and the methodology lists this as open.
+**Vega.** A volatility surface the trade is valued on (`{PAIR}_VOL` for FX options, `{CCY}_SWVOL_ATM` for swaptions) is bumped +1 vol point (+1bp of normal vol) per tenor bucket, a swaption grid by expiry, and reported as vega by (surface, bucket), kept apart from the rate ladder; the page shows a VEGA card when the book carries one.
 
-A booked European swaption is valued as the option everywhere on this page (VaR, stress, ladder): Bachelier on the OIS annuity at the nearest point of the day's ATM normal-vol grid; expiry, strike, payer or receiver and bought or sold from the booked terms (the fixed leg's forward start, rate and direction for bookings older than November 2026, valued long). Until November 2026 it was valued as its underlying swap. A cap, floor or collar is a zero-participation float leg whose embedded caplets carry the value; the ticket's swaption delta is a forward delta with the curve DV01 shown beside it, and the ladder uses the curve bump. The vol is not a risk factor yet: rate moves reprice the option, vol moves do not.
+A booked European swaption is valued as the option everywhere on this page (VaR, stress, ladder): Bachelier on the OIS annuity at the nearest point of the day's ATM normal-vol grid; expiry, strike, payer or receiver and bought or sold from the booked terms (the fixed leg's forward start, rate and direction for bookings older than November 2026, valued long). Until November 2026 it was valued as its underlying swap. A cap, floor or collar is a zero-participation float leg whose embedded caplets carry the value; the ticket's swaption delta is a forward delta with the curve DV01 shown beside it, and the ladder uses the curve bump. The ATM surface is a risk factor like the curves: a day's vol move reprices the option in VaR, the explain and the ladder.
 
 ## VaR: historical simulation by full revaluation
 
-Risk factors are the curve quotes (par rates, in basis points, tenor by tenor) and the spots (log returns). For every historical day *i* in the window, today's market is shifted by that day's observed changes and every live trade is repriced on it through the production pricers:
+Risk factors are the curve quotes (par rates, in basis points, tenor by tenor), the spots (log returns) and the volatility surfaces (every quote: ATM, 25-delta risk reversal and butterfly per tenor on an FX surface; the swaption ATM grid point by point, in hundredths of a point). For every historical day *i* in the window, today's market is shifted by that day's observed changes and every live trade is repriced on it through the production pricers:
 
     P&L_i = Σ_trade [ NPV(trade, M + Δ_i) − NPV(trade, M) ] · fx
 
-VaR at confidence *q* is the empirical *q*-quantile of the losses; expected shortfall is the mean loss beyond it; the horizon scales by √h. Only days on which every factor the book is exposed to has an observation are used; factors with no history are listed on the page, not dropped quietly. A tenor without its own history that day takes the average change of its bucket. The bootstrapped curves are cached per shifted market, so a day costs one bootstrap per curve and one valuation per trade; beyond a budget of valuations (60,000 per report) the full revaluation is skipped and the ladder VaR reported, with a note.
+VaR at confidence *q* is the empirical *q*-quantile of the losses; expected shortfall is the mean loss beyond it; the horizon scales by √h. The curves and spots define the window: only days on which every one of them has an observation are used, and factors with no history are listed on the page, not dropped quietly. A volatility surface is a secondary factor: on a day it was observed its quotes move with the rest, on a day it was not (its history is shorter: the demo's surfaces date from November 2026) it is held still, and the page says how many of the window's days each surface covered. A tenor without its own history that day takes the average change of its bucket. The bootstrapped curves are cached per shifted market, so a day costs one bootstrap per curve and one valuation per trade; beyond a budget of valuations (60,000 per report) the full revaluation is skipped and the ladder VaR reported, with a note.
 
-The ladder VaR is computed alongside as the linear comparison:
+The ladder VaR is computed alongside as the linear comparison (with vega × the ATM move per bucket for the surfaces):
 
     P&L_i = Σ_curve Σ_bucket KR01[c,b] · Δ_i[c,b]  +  Σ_asset spot01[a] · r_i[a]
 
@@ -29,6 +29,8 @@ Parameters (the firm's, set by the risk manager): confidence (0.99), secondary c
 ## History
 
 Risk-factor history comes from the public sources the demo already prices on: Treasury par yields and NY Fed SOFR; ECB €STR and the AAA par curve; Bank of England SONIA and gilt yields; ECB reference FX rates; Coinbase daily closes. Each day's curve is built with the same spread schedules as the live demo curve and stored as the template account's snapshot, so the daily rebuild simply extends the series. `risk-backfill.yml` fetches two years on dispatch.
+
+**Volatility history.** No public source quotes implied vols, so the demo's surfaces are synthetic in shape and market-driven in level: each day the parametric surface's ATM is scaled by √(realised vol over the tenor's window ÷ realised vol over the whole series on file), from the stored spot series for an FX pair and from the 5Y par rate's bp changes for the swaption grid (`risk/vols.py`), clipped to [½, 2]; risk reversals and butterflies stay as quoted. The backfill writes these surfaces for every date it has a series for, and the daily rebuild's last step rewrites the day's surface the same way, so the series is one. Every such row is labelled. A desk with a real feed stores its own surfaces under the same ids and the VaR samples those instead.
 
 ## Stress
 
@@ -53,4 +55,4 @@ The 95 % VaR and the ladder VaR are backtested alongside the headline. Nothing n
 - Monte Carlo VaR on the calibrated HW1F and lognormal spot models the XVA engine already uses.
 - Filtered historical simulation (EWMA / GARCH volatility scaling) so a calm window does not understate a stressed present.
 - Stressed VaR on a chosen crisis window, and expected shortfall at 97.5 % with liquidity horizons in the FRTB sense.
-- Vega and the vol surfaces as risk factors.
+- The smile's own moves (risk reversal and butterfly) on the ladder VaR; they are in the full revaluation already.

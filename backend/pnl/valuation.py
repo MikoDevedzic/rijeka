@@ -32,7 +32,10 @@ def trade_curves(trade) -> list[str]:
             out.append(f"{pair}_VOL")              # the option's vol surface: a curve of its own in the explain and the ladder
         return out
     ids = [c for c in dict.fromkeys([trade.discount_curve_id, trade.forecast_curve_id]) if c]
-    return ids or ["USD_SOFR"]
+    ids = ids or ["USD_SOFR"]
+    if itype in SWAPTIONS:                        # the option's ATM surface: a vol factor in the explain, the ladder and VaR
+        ids.append(f"{str(trade.notional_ccy or 'USD').upper()}_SWVOL_ATM")
+    return ids
 
 
 def points_curve(trade) -> Optional[str]:

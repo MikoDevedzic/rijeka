@@ -1,15 +1,22 @@
 """Historical-simulation VaR by full revaluation.
 
 Each historical day's observed changes are applied to today's market, quote by quote
-(bp per tenor for every curve the book is valued on, log returns for spots), and every
-live trade is repriced on that shifted market through the production pricers:
+(bp per tenor for every curve the book is valued on, log returns for spots, and for every
+volatility surface the book is valued on each quote's own change: ATM, risk reversal and
+butterfly per tenor, the swaption grid point by point), and every live trade is repriced
+on that shifted market through the production pricers:
     P&L_i = Σ_trades [ NPV(trade, market + Δ_i) − NPV(trade, market) ] · fx
 VaR is the empirical loss quantile over the window, expected shortfall the mean loss
 beyond it, the multi-day figure scales by √horizon. Nothing is linearised: convexity,
 the curve shape inside a bucket and the spot-rate cross terms are all in the number.
 The ladder VaR is computed alongside as the linear comparison; the gap between the two
 is the convexity the ladder cannot see. The bootstrapped curves are cached per market,
-so a day costs one bootstrap per curve plus one valuation per trade."""
+so a day costs one bootstrap per curve plus one valuation per trade.
+
+The curves and spots define the window: a day counts when every one of them has an
+observation. A vol surface's history is shorter (the demo's surfaces date from November
+2026), so it is a secondary factor: on a day without its observation it is held still, and
+the report says how many of the window's days each surface covered."""
 from __future__ import annotations
 
 import math
@@ -19,7 +26,7 @@ from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from pnl.explain import LIVE, Valuer
-from pnl.market import Market
+from pnl.market import Market, is_vol_surface
 from pnl.valuation import spot_curve, trade_curves
 from risk import history as H
 from risk import var as V
@@ -48,14 +55,30 @@ def shift_quotes(quotes: list[dict], change_bp: dict[str, float]) -> list[dict]:
     return out
 
 
+def shift_vol_quotes(quotes: list[dict], change: dict[str, float]) -> list[dict]:
+    """A surface's quotes plus the day's change per 'tenor|type' (hundredths of a point); a quote
+    without its own history takes the average change of its type across the surface."""
+    by_type: dict[str, list[float]] = {}
+    for k, v in change.items():
+        by_type.setdefault(k.split("|", 1)[1] if "|" in k else "", []).append(v)
+    avg = {t: sum(v) / len(v) for t, v in by_type.items()}
+    out = []
+    for q in quotes:
+        k = H.factor_key(q, True)
+        c = change.get(k, avg.get(q.get("quote_type") or ""))
+        out.append({**q, "rate": float(q["rate"]) + c / 100.0} if c is not None else q)
+    return out
+
+
 def shifted_market(mkt: Market, day: dict[str, dict[str, float]], curves: list[str], spots: list[str]) -> Market:
-    """day: factor -> change; rates keyed by curve id (bp per tenor), spots by '<PAIR>_SPOT' ({'SPOT': log return %})."""
+    """day: factor -> change; rates keyed by curve id (bp per tenor), vol surfaces by surface id
+    (per 'tenor|type'), spots by '<PAIR>_SPOT' ({'SPOT': log return %})."""
     m = mkt
     for cid in curves:
         q = m.quotes(cid)
         ch = day.get(cid)
         if q and ch:
-            m = m.override(cid, shift_quotes(q, ch))
+            m = m.override(cid, shift_vol_quotes(q, ch) if is_vol_surface(cid) else shift_quotes(q, ch))
     for pair in spots:
         ch = day.get(f"{pair}_SPOT")
         s = m.spot(pair)
@@ -64,34 +87,37 @@ def shifted_market(mkt: Market, day: dict[str, dict[str, float]], curves: list[s
     return m
 
 
-def factor_days(db: Session, template_uid, curves: list[str], pairs: list[str], asof: date, window_days: int) -> tuple[list[tuple[date, dict]], list[str]]:
-    """Per historical date, every factor's change; only dates where every factor with history has one."""
+def factor_days(db: Session, template_uid, curves: list[str], pairs: list[str], asof: date, window_days: int,
+                series=None) -> tuple[list[tuple[date, dict]], list[str], dict[str, dict]]:
+    """Per historical date, every factor's change. The curves and spots with history define the dates
+    (every one of them must have an observation); a vol surface is secondary: present when observed,
+    absent (held still) otherwise. Returns (days, factors with no history, surface coverage)."""
+    series = series or H.series
     start = asof - timedelta(days=window_days)
     changes: dict[str, list[tuple[date, dict[str, float]]]] = {}
     for cid in curves:
-        changes[cid] = H.changes(H.series(db, template_uid, cid, start, asof), "rate")
+        changes[cid] = H.changes(series(db, template_uid, cid, start, asof), "rate")
     for pair in pairs:
-        changes[f"{pair}_SPOT"] = [(d, {"SPOT": c.get("SPOT", 0.0)}) for d, c in H.changes(H.series(db, template_uid, f"{pair}_SPOT", start, asof), "spot")]
+        changes[f"{pair}_SPOT"] = [(d, {"SPOT": c.get("SPOT", 0.0)}) for d, c in H.changes(series(db, template_uid, f"{pair}_SPOT", start, asof), "spot")]
     missing = [f for f, ch in changes.items() if not ch]
-    usable = [f for f, ch in changes.items() if ch]
+    core = [f for f, ch in changes.items() if ch and not is_vol_surface(f)]
+    vols = [f for f, ch in changes.items() if ch and is_vol_surface(f)]
     by_date: dict[date, dict] = {}
-    for f in usable:
+    for f in core + vols:
         for d, ch in changes[f]:
             by_date.setdefault(d, {})[f] = ch
-    days = [(d, row) for d, row in sorted(by_date.items()) if all(f in row for f in usable)]
-    return days, missing
+    days = [(d, row) for d, row in sorted(by_date.items()) if all(f in row for f in core)] if core else []
+    coverage = {f: {"days": sum(1 for _, row in days if f in row), "of": len(days), "from": changes[f][0][0].isoformat()} for f in vols}
+    return days, missing, coverage
 
 
 def compute(db: Session, user: dict, template_uid, trades, d: date, mkt: Market, fx, settings: dict,
             linear: Optional[dict] = None, max_valuations: int = MAX_VALUATIONS) -> dict[str, Any]:
     s = {**V.DEFAULTS, **(settings or {})}
     live = [t for t in trades if t.status in LIVE]
-    # volatility surfaces ({PAIR}_VOL) are not VaR factors yet: their history is days old and their
-    # quotes are three rows per tenor, which the per-tenor shift does not describe; vega is on the
-    # ladder and the VOL step in the P&L explain, and the methodology lists this as open
-    curves = sorted({c for t in live for c in trade_curves(t) if mkt.quotes(c) and not c.endswith("_VOL")})
+    curves = sorted({c for t in live for c in trade_curves(t) if mkt.quotes(c)})       # rate curves and vol surfaces alike
     pairs = sorted({spot_curve(t).replace("_SPOT", "") for t in live if spot_curve(t)})
-    days, missing = factor_days(db, template_uid, curves, pairs, d, int(s["window_days"]))
+    days, missing, coverage = factor_days(db, template_uid, curves, pairs, d, int(s["window_days"]))
     valuer = Valuer(db, user)
     base: dict[str, float] = {}
     for t in live:
@@ -103,10 +129,12 @@ def compute(db: Session, user: dict, template_uid, trades, d: date, mkt: Market,
     budget = len(days) * len(priced)
     out: dict[str, Any] = {"method": METHOD, "confidence": s["confidence"], "secondary_confidence": s["secondary_confidence"],
                            "horizon_days": max(1, int(s["horizon_days"])), "window_days": int(s["window_days"]), "min_observations": int(s["min_observations"]),
-                           "missing_factors": missing, "trades": len(priced), "valuations_planned": budget}
+                           "missing_factors": missing, "trades": len(priced), "valuations_planned": budget,
+                           "vol_factors": [c for c in curves if is_vol_surface(c)],
+                           "partial_factors": {f: c for f, c in coverage.items() if c["days"] < c["of"]}}
     if budget > max_valuations:
         lin = linear or {}
-        return {**lin, **{k: out[k] for k in ("missing_factors", "trades", "valuations_planned")},
+        return {**lin, **{k: out[k] for k in ("missing_factors", "trades", "valuations_planned", "vol_factors", "partial_factors")},
                 "method": lin.get("method", V.compute.__doc__ or "ladder"), "full_revaluation": False,
                 "note": f"full revaluation skipped: {budget:,} valuations exceed the budget of {max_valuations:,}; the ladder VaR is reported"}
     pnl: list[tuple[date, float]] = []

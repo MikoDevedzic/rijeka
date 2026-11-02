@@ -129,6 +129,8 @@ export default function RiskPage() {
               </div>}
             </>}
             {(v.missing_factors || []).length > 0 && <div className="pnl-foot"><em>No history for: {v.missing_factors.join(', ')}. Their risk is in the ladder, not in VaR.</em></div>}
+            {(v.vol_factors || []).length > 0 && <div className="pnl-foot"><em>Volatility factors: {v.vol_factors.join(', ')} (every quote of the surface, repriced in full).
+              {Object.keys(v.partial_factors || {}).length > 0 && <> Shorter history than the window: {Object.entries(v.partial_factors).map(([f, c]) => `${f} ${c.days} of ${c.of} days from ${c.from}`).join('; ')}. On the other days the surface is held still.</>}</em></div>}
             {!v.enough && <div className="pnl-foot"><em>Too little history for a meaningful VaR. The backfill fetches two years from public sources (Configurations › Market Risk › VaR settings).</em></div>}
           </section>
         </div>
@@ -151,7 +153,7 @@ export default function RiskPage() {
         </div>
 
         <div className="pnl-foot">
-          <b>Method.</b> The ladder bumps each tenor bucket of each curve by {lad.bump_bp}bp and reprices every trade through the production pricers; spot deltas are the pricers' PV for +1% spot. VaR applies each historical day's observed changes (bp per bucket, log returns for spots, from public sources stored on the template account) to the ladder: linear in the factors, so convexity and vol are outside it and said so. Stress reprices the book in full on the shifted market. Limits are the firm's, set by the risk manager, and evaluated against these numbers.
+          <b>Method.</b> The ladder bumps each tenor bucket of each curve by {lad.bump_bp}bp and reprices every trade through the production pricers; spot deltas are the pricers' PV for +1% spot. VaR reprices the book in full on each historical day's observed changes (bp per quote, log returns for spots, and every quote of each volatility surface the book is valued on, from public sources stored on the template account; the demo's surfaces are scaled by realised vol and labelled). The ladder VaR alongside is linear in the factors (vega × the ATM move), so convexity and the smile's own moves are outside it. Stress reprices the book in full on the shifted market. Limits are the firm's, set by the risk manager, and evaluated against these numbers.
         </div>
       </>)}
     </div>

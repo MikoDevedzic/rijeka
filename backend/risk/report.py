@@ -100,7 +100,7 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     firm_id = firm_of(db, uid)
     st = settings(db, firm_id)
     tpl = template_uid(db)
-    var = V.compute(db, tpl, lad["ladder"], lad["spot01"], d, st) if tpl else {"observations": 0, "enough": False, "missing_factors": []}
+    var = V.compute(db, tpl, lad["ladder"], lad["spot01"], d, st, vega=lad.get("vega")) if tpl else {"observations": 0, "enough": False, "missing_factors": []}
     if tpl and st.get("var_method", "FULL_REVAL") == "FULL_REVAL":
         # the headline VaR reprices the book on each historical day; the ladder VaR rides along as the linear comparison
         var = VF.compute(db, user, tpl, trades, d, mkt, fx, st, linear=var)
