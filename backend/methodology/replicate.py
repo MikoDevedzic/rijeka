@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import io
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
@@ -33,6 +33,8 @@ from pricing.schedule import generate_schedule
 from pricing.ir_swap import price_swap
 from pricing.swaption import price_swaption
 from pricing.cap_floor import price_cap, bachelier_call
+from pricing.fx_option import price_fx_option
+from pricing.fx_exotic import ExoticSpec, price_exotic
 
 # ── Products ────────────────────────────────────────────────────────────────
 
@@ -56,6 +58,14 @@ PRODUCTS = [
     {"id": "fx_forward", "name": "FX forward (EURUSD)", "group": "FX & digital assets", "section": "12",
      "default": "EUR/USD · EUR 10m · 3-month deliverable forward · rate at the fair forward",
      "formula": "F = S·DF_EUR(T)/DF_USD(T) (covered interest parity, each currency on its own curve); NPV_USD = ±N_EUR·(F − K)·DF_USD(T)",
+     "replication": "xlsx"},
+    {"id": "fx_option", "name": "FX option (EURUSD European)", "group": "FX & digital assets", "section": "13",
+     "default": "EUR/USD · EUR 10m · 3-month call · strike at the forward · ATM vol from the pair's surface (7.5% without one)",
+     "formula": "Garman–Kohlhagen on the forward to settlement: C = DF_USD(T_s)·[F·N(d₁) − K·N(d₂)], d₁ = [ln(F/K) + ½σ²T_e]/(σ√T_e); delta, vega beside the engine's",
+     "replication": "xlsx"},
+    {"id": "fx_option_styles", "name": "FX option styles: digital, barrier, touch, double barrier", "group": "FX & digital assets", "section": "13",
+     "default": "EUR/USD · 3 months · digitals USD 1m / EUR 1m · the eight single barriers at ±5% with a rebate · one-touch, no-touch, double touches · double knock-out and knock-in",
+     "formula": "Reiner–Rubinstein closed forms (A–F with η, φ) for barriers and touches; the two-barrier image series summed term by term for double barriers and double touches; American is a tree and has no spreadsheet form",
      "replication": "xlsx"},
     {"id": "crypto_ndf", "name": "Crypto NDF", "group": "FX & digital assets", "section": "12",
      "default": "BTC/USD · 10 BTC · 3-month non-deliverable forward · strike at the forward",
@@ -140,6 +150,7 @@ class Market:
     curve: Curve
     vol_quotes: list        # swaption ATM quotes (tenor "ExT", rate bp)
     vol_date: Optional[date]
+    fx_vol_quotes: list = field(default_factory=list)   # EURUSD_VOL surface quotes (tenor, quote_type, rate %)
 
 
 # ── Shared sheets ───────────────────────────────────────────────────────────
@@ -482,8 +493,285 @@ def crypto_ndo_workbook(mkt: Market):
     return wb, ref
 
 
+# ── FX options ──────────────────────────────────────────────────────────────
+# Both workbooks share the Inputs sheet: spot, the two curves, the dates, the
+# vol, and from them the forward to settlement, the quote rate r and the carry
+# b over the time to expiry — exactly how pricing/fx_exotic.price_exotic reads
+# its inputs (r = −ln DF_q(T_s)/T_e, b = ln(F/S)/T_e), so every style sheet is
+# in the engine's own variables.
+
+FX_SPOT, FX_R_EUR, FX_VOL_DEFAULT, FX_NOTIONAL = 1.1133, 0.025, 0.075, 10_000_000
+_NAMES = {"Spot": "B1", "Notl": "B2", "Te": "B5", "Ts": "B6", "DFq": "B7", "Fwd": "B10", "Sigma": "B11", "Rq": "B12", "Bc": "B13", "SqT": "B14", "DFe": "B15", "DFb": "B16"}
+
+
+def _N(x: str) -> str:
+    return f"NORM.S.DIST({x},TRUE)"
+
+
+def _fx_dates(val: date) -> tuple[date, date]:
+    exp = date(val.year + (val.month + 2) // 12, (val.month + 2) % 12 + 1, min(val.day, 28))
+    while exp.weekday() >= 5:
+        exp += timedelta(days=1)
+    settle = exp + timedelta(days=2)
+    while settle.weekday() >= 5:
+        settle += timedelta(days=1)
+    return exp, settle
+
+
+def _fx_vol(mkt: Market) -> tuple[float, str]:
+    for q in mkt.fx_vol_quotes or []:
+        if str(q.get("tenor", "")).upper() == "3M" and str(q.get("quote_type", "ATM")).upper() == "ATM" and q.get("rate") is not None:
+            return float(q["rate"]) / 100.0, "the account's EURUSD surface, 3M ATM"
+    return FX_VOL_DEFAULT, "a flat desk default (no EURUSD surface saved)"
+
+
+def _fx_inputs(wb, mkt: Market):
+    """Inputs sheet and the engine's view of the same numbers (S, F, DF_q to settlement, T_e, σ)."""
+    val = mkt.valuation_date
+    exp, settle = _fx_dates(val)
+    vol, vol_src = _fx_vol(mkt)
+    ws = wb.create_sheet("Inputs", 1)
+    ws["A1"] = "EUR/USD spot (USD per EUR)"; ws["B1"] = FX_SPOT; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
+    ws["A2"] = "Notional (EUR)"; ws["B2"] = FX_NOTIONAL; ws["B2"].fill = IN; ws["B2"].number_format = "#,##0"
+    ws["A3"] = "Expiry date"; ws["B3"] = exp; ws["B3"].number_format = "yyyy-mm-dd"; ws["B3"].fill = IN
+    ws["A4"] = "Settlement date (expiry + 2 business days)"; ws["B4"] = settle; ws["B4"].number_format = "yyyy-mm-dd"; ws["B4"].fill = IN
+    ws["A5"] = "T_e to expiry (ACT/365)"; ws["B5"] = "=(B3-ValDate)/365"
+    ws["A6"] = "T_s to settlement (ACT/365)"; ws["B6"] = "=(B4-ValDate)/365"
+    ws["A7"] = "USD DF(T_s) from the SOFR curve"; ws["B7"] = f"={DF('B4')}"; ws["B7"].number_format = "0.000000"
+    ws["A8"] = "EUR rate (cont., p.a., flat)"; ws["B8"] = FX_R_EUR; ws["B8"].fill = IN; ws["B8"].number_format = "0.00%"
+    ws["A9"] = "EUR DF(T_s) = exp(−r_EUR·T_s)"; ws["B9"] = "=EXP(-B8*B6)"; ws["B9"].number_format = "0.000000"
+    ws["A10"] = "Forward to settlement F = S·DF_EUR/DF_USD"; ws["B10"] = "=B1*B9/B7"; ws["B10"].number_format = "0.00000"
+    ws["A11"] = "Vol σ (lognormal, decimal)"; ws["B11"] = vol; ws["B11"].fill = IN; ws["B11"].number_format = "0.00%"
+    ws["A12"] = "r = −ln DF_USD(T_s) / T_e  (the engine's quote rate)"; ws["B12"] = "=-LN(B7)/B5"; ws["B12"].number_format = "0.0000%"
+    ws["A13"] = "b = ln(F/S) / T_e  (the engine's carry)"; ws["B13"] = "=LN(B10/B1)/B5"; ws["B13"].number_format = "0.0000%"
+    ws["A14"] = "σ√T_e"; ws["B14"] = "=B11*SQRT(B5)"
+    ws["A15"] = "e^(−r·T_e) = DF_USD(T_s)"; ws["B15"] = "=EXP(-B12*B5)"; ws["B15"].number_format = "0.000000"
+    ws["A16"] = "e^((b−r)·T_e) = F·DF_USD(T_s)/S"; ws["B16"] = "=EXP((B13-B12)*B5)"; ws["B16"].number_format = "0.000000"
+    ws["A18"] = (f"Vol source: {vol_src}. The engine applies the smile vol at the strike; at the forward that is the ATM vol, and a barrier or touch "
+                 "is valued at the same flat vol across the barrier (methodology §13). Change any yellow cell and every style sheet reprices.")
+    for name, ref in _NAMES.items():
+        wb.defined_names[name] = DefinedName(name, attr_text=f"Inputs!${ref[0]}${ref[1:]}")
+    _widths(ws, [52, 16])
+    T_e, T_s = (exp - val).days / 365.0, (settle - val).days / 365.0
+    df_s = mkt.curve.df(settle)
+    F = FX_SPOT * math.exp(-FX_R_EUR * T_s) / df_s
+    return dict(val=val, exp=exp, settle=settle, S=FX_SPOT, N=FX_NOTIONAL, F=F, df=df_s, T_e=T_e, T_s=T_s, vol=vol)
+
+
+def _ref_cell(ws, row, label, formula, ref, fmt="#,##0.00"):
+    ws.cell(row=row, column=1, value=label)
+    ws.cell(row=row, column=2, value=formula).number_format = fmt
+    c = ws.cell(row=row, column=3, value=ref); c.fill = RJ; c.number_format = fmt
+    ws.cell(row=row, column=4, value=f"=B{row}-C{row}").number_format = fmt
+
+
+def fx_option_workbook(mkt: Market):
+    wb = Workbook()
+    _readme(wb, "FX option (European)", [
+        "Default trade: buy a 3-month EUR call / USD put on EUR 10m, strike at the forward, settled two business days after expiry.",
+        "Garman–Kohlhagen on the forward to settlement, discounted in USD to settlement: C = DF_USD(T_s)·[F·N(d₁) − K·N(d₂)], "
+        "d₁ = [ln(F/K) + ½σ²T_e]/(σ√T_e), d₂ = d₁ − σ√T_e; the put from parity (pricing/fx_option.py, methodology §13).",
+        "Delta: forward delta Φ(d₁) and the spot position in EUR = Φ(d₁)·DF_USD·F/S·N. Vega: the engine reprices at σ + 1 point; the analytic "
+        "N·DF·F·n(d₁)·√T_e·0.01 is shown beside it (the gap is volga over the one-point move).",
+        "EUR is discounted flat at the yellow rate because the hosted demo carries no EUR OIS curve; on a desk DF_EUR comes from the €STR curve.",
+        "The canonical on-chain record is the FX_OPTION product in chain/canonical.py (ISDA FX and Currency Option Definitions fields).",
+    ], mkt)
+    _curve_sheet(wb, mkt)
+    p = _fx_inputs(wb, mkt)
+    res = price_fx_option(base_currency="EUR", quote_currency="USD", base_notional=p["N"], option_type="CALL", strike=p["F"], spot=p["S"], forward=p["F"],
+                          df_quote=p["df"], valuation_date=p["val"], expiry_date=p["exp"], settlement_date=p["settle"], vol=p["vol"], direction="BUY")
+    ws = wb.create_sheet("European", 2)
+    ws["A1"] = "Strike K (USD per EUR)"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
+    ws["A2"] = "Call (1) / Put (-1) on EUR"; ws["B2"] = 1; ws["B2"].fill = IN
+    ws["A3"] = "d₁"; ws["B3"] = "=(LN(Fwd/B1)+0.5*Sigma^2*Te)/SqT"
+    ws["A4"] = "d₂"; ws["B4"] = "=B3-SqT"
+    ws["A5"] = "Premium per EUR (USD)"; ws["B5"] = f"=DFq*B2*(Fwd*{_N('B2*B3')}-B1*{_N('B2*B4')})"; ws["B5"].number_format = "0.000000"
+    _hdr(ws, 7, ["", "Formulas", "Rijeka engine", "Difference"])
+    _ref_cell(ws, 8, "Premium total (USD) = NPV bought", "=B5*Notl", res.npv)
+    _ref_cell(ws, 9, "Premium in EUR", "=B8/Spot", res.npv / p["S"])
+    _ref_cell(ws, 10, "Forward delta Φ(d₁) (put: Φ(d₁) − 1)", f"=IF(B2=1,{_N('B3')},{_N('B3')}-1)", res.forward_delta, "0.000000")
+    _ref_cell(ws, 11, "Spot position (EUR) = fwd delta·DF_USD·F/S·N", "=B10*DFq*Fwd/Spot*Notl", res.delta_base_units, "#,##0")
+    ws["A12"] = "Vega analytic per 1 vol pt = N·DF·F·n(d₁)·√T_e·0.01"; ws["B12"] = "=Notl*DFq*Fwd*NORM.S.DIST(B3,FALSE)*SQRT(Te)*0.01"; ws["B12"].number_format = "#,##0.00"
+    d1u = "((LN(Fwd/B1)+0.5*(Sigma+0.01)^2*Te)/((Sigma+0.01)*SQRT(Te)))"
+    _ref_cell(ws, 13, "Vega repriced (σ + 1 pt) − premium", f"=Notl*DFq*B2*(Fwd*{_N('B2*' + d1u)}-B1*{_N('B2*(' + d1u + '-(Sigma+0.01)*SQRT(Te))')})-B8", res.vega)
+    ws["A15"] = "Put–call parity check: C − P = DF_USD·(F − K)·N"; ws["B15"] = f"=Notl*DFq*((Fwd*{_N('B3')}-B1*{_N('B4')})-(B1*{_N('-B4')}-Fwd*{_N('-B3')}))-Notl*DFq*(Fwd-B1)"; ws["B15"].number_format = "0.000000"
+    ws["A17"] = "Sold option: the same numbers with the opposite sign. The premium is a cash flow on its payment date, not part of the value once paid."
+    _widths(ws, [52, 18, 18, 14])
+    return wb, res.npv
+
+
+def fx_option_styles_workbook(mkt: Market):
+    wb = Workbook()
+    _readme(wb, "FX option styles", [
+        "Default: 3-month EUR/USD options on EUR 10m (payouts USD 1m or EUR 1m), strike at the forward, barriers 5% either side of spot, rebate USD 0.01 per EUR.",
+        "Digital (Reiner–Rubinstein): cash-or-nothing Q·e^(−rT)·N(±d₂); a fixed EUR amount is asset-or-nothing Q·S·e^((b−r)T)·N(±d₁); "
+        "d₁ = [ln(S/K) + (b + ½σ²)T]/(σ√T).",
+        "Single barrier: the Reiner–Rubinstein terms A–F with η (+1 down, −1 up) and φ (+1 call, −1 put), μ = (b − ½σ²)/σ², λ = √(μ² + 2r/σ²); "
+        "knock-out rebate paid at the hit (term F), knock-in rebate paid at expiry if never hit (term E) — the engine's convention. "
+        "The engine integrates the payoff against the survival density numerically (pricing/fx_exotic.py); the closed forms here are its independent check.",
+        "Touch: P(no hit) = N(ηx₂ − ησ√T) − (H/S)^(2μ)·N(ηy₂ − ησ√T); one-touch at expiry Q·e^(−rT)·(1 − P), at the hit Q·F/R (the first-passage value), no-touch Q·e^(−rT)·P.",
+        "Double barrier and double touch: the survival density between two barriers is the image series Σₙ [φ(y − 2nW) − φ(y − 2l + 2nW)] with the drift restored "
+        "by exp(my/v − m²/2v); integrated against the payoff each image term is a pair of normal probabilities, listed one row per n on the DoubleBarrier sheet "
+        "and summed (n = −12…12, as the engine). Knock-in = vanilla − knock-out; double one-touch = Q·e^(−rT) − double no-touch.",
+        "American: valued on a Leisen–Reimer tree (801 steps); a tree is not a spreadsheet formula, so its check is QuantLib's (methodology §15), not this workbook.",
+        "All values are from the holder's side; a sold option carries the opposite sign.",
+    ], mkt)
+    _curve_sheet(wb, mkt)
+    p = _fx_inputs(wb, mkt)
+    S, F, N = p["S"], p["F"], p["N"]
+    Hup, Hdn, R, Q = round(S * 1.05, 4), round(S * 0.95, 4), 0.01, 1_000_000.0
+    kw = dict(base_notional=N, spot=S, forward=F, df_quote=p["df"], t_expiry=p["T_e"], vol=p["vol"], direction="BUY")
+
+    def ref(**spec):
+        return price_exotic(ExoticSpec(**spec), **kw).npv
+
+    # ── Digital ──
+    ws = wb.create_sheet("Digital", 2)
+    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
+    ws["A2"] = "Payout Q (USD for cash-or-nothing; EUR for the EUR-amount digital)"; ws["B2"] = Q; ws["B2"].fill = IN; ws["B2"].number_format = "#,##0"
+    ws["A3"] = "d₁ = [ln(S/K) + (b + ½σ²)T_e]/(σ√T_e)"; ws["B3"] = "=(LN(Spot/B1)+(Bc+0.5*Sigma^2)*Te)/SqT"
+    ws["A4"] = "d₂ = d₁ − σ√T_e"; ws["B4"] = "=B3-SqT"
+    _hdr(ws, 6, ["", "Formulas", "Rijeka engine", "Difference"])
+    _ref_cell(ws, 7, "Cash-or-nothing call: Q·e^(−rT)·N(d₂)", f"=B2*DFe*{_N('B4')}", ref(style="DIGITAL", option_type="CALL", strike=F, payout=Q))
+    _ref_cell(ws, 8, "Cash-or-nothing put: Q·e^(−rT)·N(−d₂)", f"=B2*DFe*{_N('-B4')}", ref(style="DIGITAL", option_type="PUT", strike=F, payout=Q))
+    _ref_cell(ws, 9, "EUR-amount call (asset-or-nothing): Q·S·e^((b−r)T)·N(d₁)", f"=B2*Spot*DFb*{_N('B3')}", ref(style="DIGITAL", option_type="CALL", strike=F, payout=Q, payout_currency="BASE"))
+    _ref_cell(ws, 10, "EUR-amount put: Q·S·e^((b−r)T)·N(−d₁)", f"=B2*Spot*DFb*{_N('-B3')}", ref(style="DIGITAL", option_type="PUT", strike=F, payout=Q, payout_currency="BASE"))
+    ws["A12"] = "Parity: cash call + cash put = Q·e^(−rT)"; ws["B12"] = "=B7+B8-B2*DFe"; ws["B12"].number_format = "0.000000"
+    _widths(ws, [62, 18, 18, 14])
+
+    # ── Barrier ──
+    ws = wb.create_sheet("Barrier", 3)
+    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
+    ws["A2"] = "Up barrier H (above spot)"; ws["B2"] = Hup; ws["B2"].fill = IN; ws["B2"].number_format = "0.0000"
+    ws["A3"] = "Down barrier H (below spot)"; ws["B3"] = Hdn; ws["B3"].fill = IN; ws["B3"].number_format = "0.0000"
+    ws["A4"] = "Rebate R (USD per EUR of notional)"; ws["B4"] = R; ws["B4"].fill = IN; ws["B4"].number_format = "0.0000"
+    ws["A5"] = "μ = (b − ½σ²)/σ²"; ws["B5"] = "=(Bc-0.5*Sigma^2)/Sigma^2"
+    ws["A6"] = "λ = √(μ² + 2r/σ²)"; ws["B6"] = "=SQRT(B5^2+2*Rq/Sigma^2)"
+    cols = ["Type", "φ", "η", "H", "x₁", "x₂", "y₁", "y₂", "z", "A", "B", "C", "D", "E", "F", "Per EUR (formulas)", "Total (formulas)", "Rijeka engine", "Difference"]
+    _hdr(ws, 8, cols)
+    cases = [("UP_IN", "CALL"), ("UP_IN", "PUT"), ("UP_OUT", "CALL"), ("UP_OUT", "PUT"), ("DOWN_IN", "CALL"), ("DOWN_IN", "PUT"), ("DOWN_OUT", "CALL"), ("DOWN_OUT", "PUT")]
+    price_of = {  # (barrier_type, option) → (formula if K > H, formula if K < H), in terms of the row's A..F cells
+        ("DOWN_IN", "CALL"): ("C+E", "A-B+D+E"), ("UP_IN", "CALL"): ("A+E", "B-C+D+E"),
+        ("DOWN_IN", "PUT"): ("B-C+D+E", "A+E"), ("UP_IN", "PUT"): ("A-B+D+E", "C+E"),
+        ("DOWN_OUT", "CALL"): ("A-C+F", "B-D+F"), ("UP_OUT", "CALL"): ("F", "A-B+C-D+F"),
+        ("DOWN_OUT", "PUT"): ("A-B+C-D+F", "F"), ("UP_OUT", "PUT"): ("B-D+F", "A-C+F"),
+    }
+    L = {c: get_column_letter(i + 1) for i, c in enumerate(cols)}
+    for k, (bt, ot) in enumerate(cases):
+        r = 9 + k
+        phi, eta, H = (1 if ot == "CALL" else -1), (-1 if bt.startswith("UP") else 1), ("$B$2" if bt.startswith("UP") else "$B$3")
+        ws.cell(row=r, column=1, value=f"{bt.replace('_', '-and-').lower()} {ot.lower()}")
+        ws.cell(row=r, column=2, value=phi); ws.cell(row=r, column=3, value=eta)
+        ws.cell(row=r, column=4, value=f"={H}").number_format = "0.0000"
+        P, E_, Hc = f"{L['φ']}{r}", f"{L['η']}{r}", f"{L['H']}{r}"
+        ws.cell(row=r, column=5, value=f"=LN(Spot/$B$1)/SqT+(1+$B$5)*SqT")
+        ws.cell(row=r, column=6, value=f"=LN(Spot/{Hc})/SqT+(1+$B$5)*SqT")
+        ws.cell(row=r, column=7, value=f"=LN({Hc}^2/(Spot*$B$1))/SqT+(1+$B$5)*SqT")
+        ws.cell(row=r, column=8, value=f"=LN({Hc}/Spot)/SqT+(1+$B$5)*SqT")
+        ws.cell(row=r, column=9, value=f"=LN({Hc}/Spot)/SqT+$B$6*SqT")
+        x1, x2, y1, y2, z = (f"{L[c]}{r}" for c in ("x₁", "x₂", "y₁", "y₂", "z"))
+        ws.cell(row=r, column=10, value=f"={P}*Spot*DFb*{_N(P + '*' + x1)}-{P}*$B$1*DFe*{_N(P + '*' + x1 + '-' + P + '*SqT')}")
+        ws.cell(row=r, column=11, value=f"={P}*Spot*DFb*{_N(P + '*' + x2)}-{P}*$B$1*DFe*{_N(P + '*' + x2 + '-' + P + '*SqT')}")
+        ws.cell(row=r, column=12, value=f"={P}*Spot*DFb*({Hc}/Spot)^(2*($B$5+1))*{_N(E_ + '*' + y1)}-{P}*$B$1*DFe*({Hc}/Spot)^(2*$B$5)*{_N(E_ + '*' + y1 + '-' + E_ + '*SqT')}")
+        ws.cell(row=r, column=13, value=f"={P}*Spot*DFb*({Hc}/Spot)^(2*($B$5+1))*{_N(E_ + '*' + y2)}-{P}*$B$1*DFe*({Hc}/Spot)^(2*$B$5)*{_N(E_ + '*' + y2 + '-' + E_ + '*SqT')}")
+        ws.cell(row=r, column=14, value=f"=$B$4*DFe*({_N(E_ + '*' + x2 + '-' + E_ + '*SqT')}-({Hc}/Spot)^(2*$B$5)*{_N(E_ + '*' + y2 + '-' + E_ + '*SqT')})")
+        ws.cell(row=r, column=15, value=f"=$B$4*(({Hc}/Spot)^($B$5+$B$6)*{_N(E_ + '*' + z)}+({Hc}/Spot)^($B$5-$B$6)*{_N(E_ + '*' + z + '-2*' + E_ + '*$B$6*SqT')})")
+        hi, lo = price_of[(bt, ot)]
+        term = lambda expr: "".join((("+" if ch == "+" else "-") if ch in "+-" else f"{L[ch]}{r}") for ch in expr)
+        ws.cell(row=r, column=16, value=f"=IF($B$1>{Hc},{term(hi)},{term(lo)})").number_format = "0.000000"
+        ws.cell(row=r, column=17, value=f"={L['Per EUR (formulas)']}{r}*Notl").number_format = "#,##0.00"
+        c = ws.cell(row=r, column=18, value=ref(style="BARRIER", option_type=ot, strike=F, barrier_type=bt, barrier=(Hup if bt.startswith("UP") else Hdn), rebate=R)); c.fill = RJ; c.number_format = "#,##0.00"
+        ws.cell(row=r, column=19, value=f"={L['Total (formulas)']}{r}-{L['Rijeka engine']}{r}").number_format = "#,##0.00"
+    ws["A18"] = "In + out = vanilla + both rebates' values; move K across H and the IF picks the other branch of each case (Haug, §4.17.1)."
+    _widths(ws, [22, 4, 4, 9] + [9] * 5 + [11] * 6 + [16, 16, 16, 12])
+
+    # ── Touch ──
+    ws = wb.create_sheet("Touch", 4)
+    ws["A1"] = "Payout Q (USD)"; ws["B1"] = Q; ws["B1"].fill = IN; ws["B1"].number_format = "#,##0"
+    ws["A2"] = "Up barrier H (above spot)"; ws["B2"] = Hup; ws["B2"].fill = IN; ws["B2"].number_format = "0.0000"
+    ws["A3"] = "Down barrier H (below spot)"; ws["B3"] = Hdn; ws["B3"].fill = IN; ws["B3"].number_format = "0.0000"
+    ws["A4"] = "μ"; ws["B4"] = "=(Bc-0.5*Sigma^2)/Sigma^2"
+    ws["A5"] = "λ"; ws["B5"] = "=SQRT(B4^2+2*Rq/Sigma^2)"
+    _hdr(ws, 7, ["Barrier", "η", "H", "x₂ − σ√T", "y₂ − σ√T", "z", "P(no hit)", "First-passage value per USD", "", "", "", ""])
+    for k, (lab, eta, H) in enumerate((("up", -1, "$B$2"), ("down", 1, "$B$3"))):
+        r = 8 + k
+        ws.cell(row=r, column=1, value=lab); ws.cell(row=r, column=2, value=eta); ws.cell(row=r, column=3, value=f"={H}").number_format = "0.0000"
+        ws.cell(row=r, column=4, value=f"=LN(Spot/C{r})/SqT+$B$4*SqT")
+        ws.cell(row=r, column=5, value=f"=LN(C{r}/Spot)/SqT+$B$4*SqT")
+        ws.cell(row=r, column=6, value=f"=LN(C{r}/Spot)/SqT+$B$5*SqT")
+        ws.cell(row=r, column=7, value=f"={_N(f'B{r}*D{r}')}-(C{r}/Spot)^(2*$B$4)*{_N(f'B{r}*E{r}')}").number_format = "0.000000"
+        ws.cell(row=r, column=8, value=f"=(C{r}/Spot)^($B$4+$B$5)*{_N(f'B{r}*F{r}')}+(C{r}/Spot)^($B$4-$B$5)*{_N(f'B{r}*F{r}-2*B{r}*$B$5*SqT')}").number_format = "0.000000"
+    _hdr(ws, 11, ["", "Formulas", "Rijeka engine", "Difference"])
+    rows = [("One-touch up, paid at the hit: Q·first-passage", "=B1*H8", dict(touch_type="ONE_TOUCH", barrier=Hup, pay_at_hit=True)),
+            ("One-touch up, paid at expiry: Q·e^(−rT)·(1 − P)", "=B1*DFe*(1-G8)", dict(touch_type="ONE_TOUCH", barrier=Hup)),
+            ("No-touch up: Q·e^(−rT)·P", "=B1*DFe*G8", dict(touch_type="NO_TOUCH", barrier=Hup)),
+            ("One-touch down, paid at the hit", "=B1*H9", dict(touch_type="ONE_TOUCH", barrier=Hdn, pay_at_hit=True)),
+            ("One-touch down, paid at expiry", "=B1*DFe*(1-G9)", dict(touch_type="ONE_TOUCH", barrier=Hdn)),
+            ("No-touch down", "=B1*DFe*G9", dict(touch_type="NO_TOUCH", barrier=Hdn))]
+    for k, (lab, f, spec) in enumerate(rows):
+        _ref_cell(ws, 12 + k, lab, f, ref(style="TOUCH", payout=Q, **spec))
+    ws["A19"] = "The double touches are on the DoubleBarrier sheet (they need the two-barrier series)."
+    _widths(ws, [52, 18, 18, 14, 12, 12, 12, 26])
+
+    # ── Double barrier (image series) ──
+    ws = wb.create_sheet("DoubleBarrier", 5)
+    Lo, Up = Hdn, Hup
+    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
+    ws["A2"] = "Lower barrier L"; ws["B2"] = Lo; ws["B2"].fill = IN; ws["B2"].number_format = "0.0000"
+    ws["A3"] = "Upper barrier U"; ws["B3"] = Up; ws["B3"].fill = IN; ws["B3"].number_format = "0.0000"
+    ws["A4"] = "Touch payout Q (USD)"; ws["B4"] = Q; ws["B4"].fill = IN; ws["B4"].number_format = "#,##0"
+    ws["A5"] = "l = ln(L/S)"; ws["B5"] = "=LN(B2/Spot)"
+    ws["A6"] = "u = ln(U/S)"; ws["B6"] = "=LN(B3/Spot)"
+    ws["A7"] = "W = u − l"; ws["B7"] = "=B6-B5"
+    ws["A8"] = "k = ln(K/S)"; ws["B8"] = "=LN(B1/Spot)"
+    ws["A9"] = "m = (b − ½σ²)·T_e"; ws["B9"] = "=(Bc-0.5*Sigma^2)*Te"
+    ws["A10"] = "v = σ²·T_e"; ws["B10"] = "=Sigma^2*Te"
+    ws["A11"] = "s = √v"; ws["B11"] = "=SQRT(B10)"
+    ws["A12"] = "call integrates over (max(l,k), u); put over (l, min(u,k))"
+    hdr = ["n", "c₁ = 2nW", "c₂ = 2l − 2nW", "Call term(c₁)", "Call term(c₂)", "Put term(c₁)", "Put term(c₂)", "Survival(c₁)", "Survival(c₂)"]
+    _hdr(ws, 14, hdr)
+    G = lambda x, c: _N(f"(({x})-({c})-$B$9)/$B$11")
+    G1 = lambda x, c: _N(f"(({x})-({c})-$B$9-$B$10)/$B$11")
+    def call_term(c):
+        a = "MAX($B$5,$B$8)"
+        return f"IF({a}<$B$6,EXP($B$9*({c})/$B$10)*(Spot*EXP(({c})+$B$9+$B$10/2)*({G1('$B$6', c)}-{G1(a, c)})-$B$1*({G('$B$6', c)}-{G(a, c)})),0)"
+    def put_term(c):
+        bb = "MIN($B$6,$B$8)"
+        return f"IF({bb}>$B$5,EXP($B$9*({c})/$B$10)*($B$1*({G(bb, c)}-{G('$B$5', c)})-Spot*EXP(({c})+$B$9+$B$10/2)*({G1(bb, c)}-{G1('$B$5', c)})),0)"
+    def surv_term(c):
+        return f"EXP($B$9*({c})/$B$10)*({G('$B$6', c)}-{G('$B$5', c)})"
+    r0 = 15
+    for k, n in enumerate(range(-12, 13)):
+        r = r0 + k
+        ws.cell(row=r, column=1, value=n)
+        ws.cell(row=r, column=2, value=f"=2*A{r}*$B$7"); ws.cell(row=r, column=3, value=f"=2*$B$5-2*A{r}*$B$7")
+        ws.cell(row=r, column=4, value="=" + call_term(f"B{r}")); ws.cell(row=r, column=5, value="=" + call_term(f"C{r}"))
+        ws.cell(row=r, column=6, value="=" + put_term(f"B{r}")); ws.cell(row=r, column=7, value="=" + put_term(f"C{r}"))
+        ws.cell(row=r, column=8, value="=" + surv_term(f"B{r}")); ws.cell(row=r, column=9, value="=" + surv_term(f"C{r}"))
+    r1 = r0 + 24
+    s_ = lambda col: f"SUM({col}{r0}:{col}{r1})"
+    ws["K1"] = "Vanilla call per EUR (Garman–Kohlhagen)"; ws["L1"] = f"=DFq*(Fwd*{_N('(LN(Fwd/B1)+0.5*Sigma^2*Te)/SqT')}-B1*{_N('(LN(Fwd/B1)-0.5*Sigma^2*Te)/SqT')})"
+    ws["K2"] = "Vanilla put per EUR"; ws["L2"] = "=L1-DFq*(Fwd-B1)"
+    for j, h in enumerate(["Formulas", "Rijeka engine", "Difference"], 12):      # row 4, columns L–N only (B4 is the touch payout)
+        c = ws.cell(row=4, column=j, value=h); c.font = H; c.fill = HF; c.alignment = Alignment(horizontal="center")
+    def ref2(label, row, formula, value):
+        ws.cell(row=row, column=11, value=label); ws.cell(row=row, column=12, value=formula).number_format = "#,##0.00"
+        c = ws.cell(row=row, column=13, value=value); c.fill = RJ; c.number_format = "#,##0.00"
+        ws.cell(row=row, column=14, value=f"=L{row}-M{row}").number_format = "#,##0.00"
+    ref2("Double knock-out call: e^(−rT)·Σ(call c₁ − call c₂)·N", 5, f"=DFe*({s_('D')}-{s_('E')})*Notl", ref(style="DOUBLE_BARRIER", option_type="CALL", strike=F, barrier_type="KNOCK_OUT", lower=Lo, upper=Up))
+    ref2("Double knock-in call = vanilla − knock-out", 6, "=L1*Notl-L5", ref(style="DOUBLE_BARRIER", option_type="CALL", strike=F, barrier_type="KNOCK_IN", lower=Lo, upper=Up))
+    ref2("Double knock-out put", 7, f"=DFe*({s_('F')}-{s_('G')})*Notl", ref(style="DOUBLE_BARRIER", option_type="PUT", strike=F, barrier_type="KNOCK_OUT", lower=Lo, upper=Up))
+    ref2("Double knock-in put = vanilla − knock-out", 8, "=L2*Notl-L7", ref(style="DOUBLE_BARRIER", option_type="PUT", strike=F, barrier_type="KNOCK_IN", lower=Lo, upper=Up))
+    ref2("Double no-touch: Q·e^(−rT)·Σ(survival c₁ − survival c₂)", 9, f"=B4*DFe*({s_('H')}-{s_('I')})", ref(style="TOUCH", touch_type="DOUBLE_NO_TOUCH", payout=Q, lower=Lo, upper=Up))
+    ref2("Double one-touch = Q·e^(−rT) − double no-touch", 10, "=B4*DFe-L9", ref(style="TOUCH", touch_type="DOUBLE_ONE_TOUCH", payout=Q, lower=Lo, upper=Up))
+    ws["K12"] = "Each row n is one image of the two-barrier reflection; the sum converges in a handful of terms at these widths (Ikeda–Kunitomo, 1992)."
+    _widths(ws, [6, 12, 12, 14, 14, 14, 14, 13, 13, 2, 50, 18, 18, 14])
+    return wb, ref(style="DOUBLE_BARRIER", option_type="CALL", strike=F, barrier_type="KNOCK_OUT", lower=Lo, upper=Up)
+
+
 BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook,
-            "fx_forward": fx_forward_workbook, "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook}
+            "fx_forward": fx_forward_workbook, "fx_option": fx_option_workbook, "fx_option_styles": fx_option_styles_workbook,
+            "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook}
 
 
 def build(product: str, mkt: Market) -> tuple[bytes, float]:

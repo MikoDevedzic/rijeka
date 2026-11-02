@@ -55,9 +55,10 @@ def market_for(db: Session, user_id: str) -> rep.Market:
     val = snap.valuation_date
     curve = bootstrap_from_dicts(val, quotes)
     vol = _latest(db, user_id, "USD_SWVOL_ATM")
+    fxv = _latest(db, user_id, "EURUSD_VOL")
     return rep.Market(valuation_date=val, curve_id="USD_SOFR", snapshot_date=snap.valuation_date, source=snap.source,
                       quotes=snap.quotes or [], curve=curve, vol_quotes=(vol.quotes if vol else []) or [],
-                      vol_date=vol.valuation_date if vol else None)
+                      vol_date=vol.valuation_date if vol else None, fx_vol_quotes=(fxv.quotes if fxv else []) or [])
 
 
 @router.get("/{product}/replication.xlsx")
