@@ -159,3 +159,23 @@ def test_unhandled_errors_answer_as_json_with_cors():
     r = c.get("/__boom", headers={"Origin": "https://app.rijeka.app"})
     assert r.status_code == 500 and "server log" in r.json()["detail"]
     assert r.headers.get("access-control-allow-origin") == "https://app.rijeka.app"
+
+
+def test_product_mirror_books_without_legs_and_hashes_to_the_same_record():
+    """The counterparty's booking of an FX option, built the way book_mirror builds it: the terms with the
+    direction flipped, no legs. BookingRequest used to refuse a trade without legs, so the countersigner's
+    blotter never received product trades (2026-11-02)."""
+    from api.routes.booking import BookingRequest
+    src = _fxo()
+    ours = canonical_payload(src, [], BOOKER, CP)
+    mirrored = _mirror_terms(src["terms"])
+    assert mirrored["direction"] == "SELL" and mirrored["option_type"] == "CALL" and mirrored["barrier_type"] == "UP_OUT"
+    theirs = canonical_payload(_trade(trade_ref="THEIRS", asset_class="FX", instrument_type="FX_OPTION", structure="BARRIER", notional_ccy="EUR", terms=mirrored), [], CP, BOOKER)
+    assert ours == theirs
+    body = BookingRequest(asset_class="FX", instrument_type="FX_OPTION", structure="BARRIER", notional=Decimal("10000000"), notional_ccy="EUR",
+                          trade_date=date(2026, 11, 2), effective_date=date(2026, 11, 2), maturity_date=date(2027, 2, 4), terms=mirrored, legs=[])
+    assert body.legs == []
+    import pytest
+    with pytest.raises(ValueError):
+        BookingRequest(asset_class="RATES", instrument_type="IR_SWAP", notional=Decimal("1"), trade_date=date(2026, 11, 2),
+                       effective_date=date(2026, 11, 2), maturity_date=date(2027, 2, 4), legs=[])

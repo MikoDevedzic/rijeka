@@ -178,8 +178,11 @@ class LegInput(BaseModel):
         return self
 
 
+NO_LEG_INSTRUMENTS = {"FX_SPOT", "FX_FORWARD", "NDF", "FX_SWAP", "FX_OPTION", "CRYPTO_FORWARD", "CRYPTO_OPTION"}
+
+
 class BookingRequest(BaseModel):
-    """Full atomic booking payload. Matches TradeCreate + legs."""
+    """Full atomic booking payload. Matches TradeCreate + legs (none for a product trade)."""
     trade_ref:           Optional[str] = None
     asset_class:         str
     instrument_type:     str
@@ -209,10 +212,12 @@ class BookingRequest(BaseModel):
 
     @field_validator("legs")
     @classmethod
-    def at_least_one_leg(cls, v):
-        if not v:
+    def at_least_one_leg(cls, v, info):
+        # A product trade (FX spot, forward, NDF, option, digital asset) is one block of terms with no
+        # legs; everything else is built from its legs.
+        if not v and info.data.get("instrument_type") not in NO_LEG_INSTRUMENTS:
             raise ValueError("at least one leg is required")
-        return v
+        return v or []
 
     @model_validator(mode="after")
     def validate_dates(self):
