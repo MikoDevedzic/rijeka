@@ -106,9 +106,14 @@ bound); at and after expiry the payoff fixed at the expiry grid point and discou
 option's exposure is one-sided after the premium (CVA, no DVA); a sold one the reverse. The ticket draws the
 simulated paths behind EE, ENE and PFE, and the on-chain comparison runs the same paths under atomic settlement.
 
-The stand-alone forward XVA (`/api/xva/currency`) reads the pair's own vol surface at the forward's tenor
-(ATM) when one exists, in percent as the engine takes it, and names the source; the demo default applies
-only to a pair without a surface.
+**Vol along the paths.** Both stand-alone engines and the credit engine use the surface, not one number held:
+the spot steps with the piecewise forward vols of the pair's ATM term structure (`fx_vol.step_vols`), so its
+log-variance at every grid date is the surface's ATM variance there; an option is valued at each date at the
+forward vol for its remaining life with the quoted risk reversal and butterfly at the remaining tenor, read at
+the delta of the path's own forward against the strike (`fx_vol.path_vols`, sticky-delta); paths are valued in
+eight vol buckets. The ticket's VOL switch chooses SURFACE (the default) or FLAT, the one-vol case the Excel
+books `xva_fx` and `xva_crypto` replicate. Vol of vol is not modelled; a stochastic-vol model is on the roadmap
+behind its own validation gate. A pair without a surface uses the demo default, and the run says so.
 
 ## Parameters and defaults
 

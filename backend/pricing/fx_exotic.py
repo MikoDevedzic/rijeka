@@ -467,3 +467,22 @@ def value_on_paths(spec: ExoticSpec, S: np.ndarray, r: float, rb: float, sigma: 
         dnt = Q * dfT * p_no * df_settle_extra
         return dnt if spec.touch_type == "DOUBLE_NO_TOUCH" else Q * dfT * df_settle_extra - dnt
     raise ValueError(spec.style)
+
+
+def value_on_paths_vols(spec: ExoticSpec, S: np.ndarray, r: float, rb: float, sigmas, T: float, knocked: np.ndarray,
+                        df_settle_extra: float = 1.0, buckets: int = 8) -> np.ndarray:
+    """value_on_paths for paths that each carry their own vol (the smile at their moneyness): the paths are
+    grouped into at most `buckets` vol quantile bins and each bin is valued at its mean vol. The bins are
+    narrow (a bucket spans a fraction of a vol point), so the grouping error is far below the Monte Carlo error."""
+    S = np.asarray(S, dtype=float); sig = np.asarray(sigmas, dtype=float)
+    out = np.zeros_like(S)
+    if sig.size == 0:
+        return out
+    if np.ptp(sig) < 1e-6 or buckets <= 1:
+        return value_on_paths(spec, S, r, rb, float(sig.mean()), T, knocked, df_settle_extra)
+    edges = np.quantile(sig, np.linspace(0, 1, buckets + 1)[1:-1])
+    idx = np.searchsorted(edges, sig, side="right")
+    for b in np.unique(idx):
+        m = idx == b
+        out[m] = value_on_paths(spec, S[m], r, rb, float(sig[m].mean()), T, knocked[m], df_settle_extra)
+    return out

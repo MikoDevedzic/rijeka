@@ -38,6 +38,7 @@ class Factor:
     drift: float = 0.0       # annualised drift applied in the real-world run (rates: per year in rate units; spots: log)
     source: str = ""
     observations: int = 0
+    pillars: Optional[list] = None   # SPOT, risk-neutral: the pair's surface; the paths step with its ATM term structure
 
 
 @dataclass
@@ -178,8 +179,20 @@ def risk_neutral(db: Session, user_id: str, currencies: list[str], pairs: list[s
         cid = CURVE_OF.get(ccy, f"{ccy}_OIS")
         factors[f"RATES:{cid}"] = Factor(f"RATES:{cid}", "RATES", a=a, sigma=sigma, source=src if ccy == "USD" else f"{src} (USD parameters applied to {ccy})")
     from pricing.fx_xva import default_vol_pct
+    from pricing.fx_vol import atm_vol, parse_surface
     for pair in pairs:
-        factors[f"SPOT:{pair}"] = Factor(f"SPOT:{pair}", "SPOT", sigma=default_vol_pct(pair) / 100.0, source="desk flat vol (no public vol surface)")
+        pillars = None
+        try:
+            from api.routes.crypto import latest_snapshot
+            vs = latest_snapshot(db, user_id, f"{pair}_VOL")
+            pillars = parse_surface(vs.quotes) if vs and vs.quotes else None
+        except Exception:
+            db.rollback(); pillars = None
+        if pillars:
+            factors[f"SPOT:{pair}"] = Factor(f"SPOT:{pair}", "SPOT", sigma=atm_vol(pillars, 1.0), pillars=pillars,
+                                             source=f"{pair}_VOL surface: ATM term structure ({len(pillars)} tenors); the 1Y ATM shown")
+        else:
+            factors[f"SPOT:{pair}"] = Factor(f"SPOT:{pair}", "SPOT", sigma=default_vol_pct(pair) / 100.0, source="desk flat vol (no surface for this pair)")
     order = list(factors)
     return Calibration("RISK_NEUTRAL", factors, np.eye(len(order)), order, drift_mode="forward",
                        notes=["independent factors: pricing uses the curve's forwards and the desk vols; correlation is a real-world input"])

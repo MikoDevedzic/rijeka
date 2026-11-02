@@ -55,6 +55,7 @@ const PHASES = [
   { title: 'PHASE 2 · FX & CREDIT', status: 'PARTIAL', items: [
     ['DONE', 'FX options: European, American, digital, barrier, double barrier and touch, each against its QuantLib engine; FX vol surfaces (ATM, 25Δ risk reversal and butterfly per tenor, Malz smile in delta); vega on the ladder, VOL step in the P&L explain, vol in VaR and stress, on the exposure paths and in the canonical record; Excel replications for every style but American'],
     ['NEXT', 'Cross-currency swaps; vanna–volga on barriers and touches; Brownian-bridge barrier monitoring on the exposure paths'],
+    ['NEXT', 'Stochastic vol on the exposure paths (Heston; a jump variant for digital assets) behind its own validation gate: today the surface\'s term structure and smile are applied along the paths, its level does not move'],
     ['NEXT', 'CDS and credit options; wrong-way risk in CVA'],
   ]},
   { title: 'PHASE 3 · EQUITY & COMMODITY', status: 'PLANNED', items: [['NEXT', 'Equity and commodity derivatives on the same pricing and confirmation rails']] },

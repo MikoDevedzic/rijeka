@@ -5,6 +5,10 @@ methodology document carries its own version (v1.2). Commits on `main` are the d
 
 ## 0.6.0 · 2 November 2026 (launch candidate)
 
+- Vol along the exposure paths: the surface's ATM term structure drives the simulated spots and an option is valued at
+  each date at the forward vol for its remaining life and the smile at its moneyness (sticky-delta), in the ticket's
+  XVA and in the credit engine alike; the credit engine's risk-neutral spot vol comes from the pair's surface instead
+  of a desk default. RE-ROLL, seed and engine time on every XVA tab.
 - XVA on every ticket: an incremental charge from the credit engine (the counterparty's netting set with
   the trade and without it, same paths) for rates, FX and digital-asset products, options included; the
   stand-alone forward XVA reads the pair's own vol surface; a stand-alone option XVA for every FX and

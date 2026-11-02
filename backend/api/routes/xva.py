@@ -668,6 +668,7 @@ class CurrencyXvaRequest(BaseModel):
     ftp_curve: Optional[list] = None
     csa: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
+    vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
 
 
 def surface_vol_pct(db, user_id: str, pair: str, t_years: float, forward: float, snapshot=None, lookup=None):
@@ -700,12 +701,18 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
     except Exception as e:      # noqa: BLE001
         raise HTTPException(status_code=422, detail=f"csa: {e}")
     vol_pct, vol_source = body.vol_pct, ("desk input" if body.vol_pct is not None else None)
+    pillars = None
     if vol_pct is None:
         vol_pct, vol_source = surface_vol_pct(db, user["sub"], pair, float(q["t"]), float(q["forward"]))
+        if str(body.vol_mode).upper() != "FLAT":
+            from api.routes.currencies import latest_snapshot
+            from pricing.fx_vol import parse_surface
+            vs = latest_snapshot(db, user["sub"], f"{pair}_VOL")
+            pillars = parse_surface(vs.quotes) if vs and vs.quotes else None
     inp = fx_xva.ForwardXvaInput(pair=pair, base_notional=body.base_notional, forward=float(q["forward"]),
                                  strike=float(q["forward_rate"]), t_years=float(q["t"]), df_quote_t=float(q["df_quote"]),
                                  quote_zero=float(q["quote_rate"]), direction=body.direction, vol_pct=vol_pct, vol_source=vol_source,
-                                 spot01=float(q.get("spot01", q.get("delta_quote_per_pct", 0.0))))
+                                 spot01=float(q.get("spot01", q.get("delta_quote_per_pct", 0.0))), pillars=pillars or None)
     import time as _time
     _t0 = _time.perf_counter()
     wf, meta = fx_xva.forward_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
@@ -731,7 +738,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                 "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "vol_mode", "step_vols_pct")},
     }
 
 
@@ -757,6 +764,7 @@ class CurrencyOptionXvaRequest(BaseModel):
     ftp_curve: Optional[list] = None
     csa: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
+    vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
 
 
 @router.post("/currency-option")
@@ -791,11 +799,18 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
         raise HTTPException(status_code=422, detail=f"csa: {e}")
     t_s = float(q.get("t_settle") or ((terms["settle"] - val_date).days / 365.0))
     df_q = float(q["df_quote"])
+    pillars = None
+    if body.vol_pct is None and str(body.vol_mode).upper() != "FLAT":
+        from api.routes.currencies import latest_snapshot
+        from pricing.fx_vol import parse_surface
+        vs = latest_snapshot(db, user["sub"], f"{pair}_VOL")
+        pillars = parse_surface(vs.quotes) if vs and vs.quotes else None
     inp = fx_xva.OptionXvaInput(pair=pair, base_notional=float(terms["notional"]), spot=float(q["spot"]), forward=float(q["forward"]),
                                 t_expiry=float(q.get("t_expiry") or ((terms["expiry"] - val_date).days / 365.0)), t_settle=t_s, df_quote_t=df_q,
                                 quote_zero=-math.log(max(df_q, 1e-12)) / max(t_s, 1e-9), vol=float(q["vol"]), spec=spec,
                                 direction=terms["direction"], spot01=float(q.get("spot01") or 0.0),
-                                vol_source=("desk input" if body.vol_pct is not None else f"{pair}_VOL surface at the option's expiry and strike"))
+                                vol_source=("desk input" if body.vol_pct is not None else f"{pair}_VOL surface at the option's expiry and strike"),
+                                pillars=pillars or None)
     import time as _time
     _t0 = _time.perf_counter()
     wf, meta = fx_xva.option_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
@@ -818,7 +833,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
                 "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "style")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "style", "vol_mode")},
     }
 
 

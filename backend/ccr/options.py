@@ -280,7 +280,16 @@ def value_fx_option(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float
         r_q = -np.log(np.maximum(dfq, 1e-12)) / tau
         r_b = -np.log(np.maximum(dfb, 1e-12)) / tau
         rq, rb = float(np.mean(r_q)), float(np.mean(r_b))
-        v = value_on_paths(spec, S[:, i], rq, rb, item["vol"], tau, knocked, 1.0)
+        if item.get("pillars"):
+            # the surface's forward vol for the remaining life, the smile at each path's moneyness (sticky-delta);
+            # until 2 November 2026 today's vol at the strike was held along the whole path
+            from pricing.fx_exotic import value_on_paths_vols
+            from pricing.fx_vol import path_vols
+            f_exp = S[:, i] * np.exp((rq - rb) * tau)
+            sig = path_vols(item["pillars"], t_i, T_e, f_exp, spec.strike if spec.style != "TOUCH" else None)
+            v = value_on_paths_vols(spec, S[:, i], rq, rb, sig, tau, knocked, 1.0)
+        else:
+            v = value_on_paths(spec, S[:, i], rq, rb, item["vol"], tau, knocked, 1.0)
         return k * scale * v
     # at or after expiry: the payoff fixed at the expiry grid point, with the knock status then
     from pricing.fx_exotic import _expired

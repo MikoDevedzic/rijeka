@@ -30,6 +30,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const [cmp, setCmp] = useState(null)           // the same run under the ON-CHAIN preset
   const [compare, setCompare] = useState(false)
   const [seed, setSeed] = useState(42)             // 42 repeats exactly; RE-ROLL draws a fresh one
+  const [volMode, setVolMode] = useState('SURFACE') // SURFACE: term structure (and smile) along the paths; FLAT: one vol held
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const set = (k) => (e) => setP(s => ({ ...s, [k]: e.target.value }))
@@ -48,7 +49,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
     try {
       const session = await getSessionMaybe()
       const common = {
-        seed: useSeed, vol_pct: p.vol_pct === '' ? null : Number(p.vol_pct), paths: Number(p.paths) || 2000,
+        seed: useSeed, vol_mode: volMode, vol_pct: p.vol_pct === '' ? null : Number(p.vol_pct), paths: Number(p.paths) || 2000,
         cp_cds_bp: Number(p.cp_cds_bp), own_cds_bp: Number(p.own_cds_bp), ftp_bp: Number(p.ftp_bp),
         lgd: Number(p.lgd) / 100, own_lgd: Number(p.lgd) / 100, hurdle_rate: Number(p.hurdle) / 100,
         csa: csa === 'NO CSA' ? (im ? { preset: 'UNCOLLATERALISED', im_exchanged: true } : null)
@@ -82,6 +83,13 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div><div style={lbl}>VOL % (OVERRIDE)</div><input style={inp} value={p.vol_pct} placeholder={res?.params?.vol_pct != null ? String(res.params.vol_pct) : 'surface'} onChange={set('vol_pct')} /></div>
             <div><div style={lbl}>PATHS</div><input style={inp} value={p.paths} onChange={set('paths')} /></div>
+          </div>
+          <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+            {[['SURFACE', 'SURFACE · TERM + SMILE'], ['FLAT', 'FLAT VOL']].map(([k, label]) => (
+              <button key={k} onClick={() => setVolMode(k)} title={k === 'SURFACE' ? "The paths step with the surface's ATM term structure; an option is valued at each date at the forward vol for its remaining life and the smile at its path's moneyness (sticky-delta)" : 'One vol, today\'s at the strike and expiry, held along the whole path (the Excel replication\'s case)'}
+                style={{ flex: 1, padding: '4px 0', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', fontFamily: 'var(--mono)', cursor: 'pointer', background: 'transparent', borderRadius: 2,
+                  border: volMode === k ? '1px solid var(--accent)' : '1px solid var(--border)', color: volMode === k ? 'var(--accent)' : 'var(--text-dim)' }}>{label}</button>
+            ))}
           </div>
           <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.4 }}>
             {isOption
@@ -125,7 +133,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           <ExposureCanvas result={res} height={230} />
           {res && (
             <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginTop: 6 }}>
-              {res.params.style ? res.params.style.replace(/_/g, ' ') + ' · ' : ''}vol {Number(res.params.vol_pct).toFixed(2)}% ({res.params.vol_source}) · {res.n_paths} paths · {res.steps} monthly steps · seed {res.seed ?? seed}{res.seed === 42 ? ' (repeats exactly)' : ' (re-rolled)'} · {res.path_steps?.toLocaleString()} path-steps simulated in {res.engine_ms} ms · {res.sample_paths?.length || 0} paths drawn ({res.csa?.collateralised ? 'residual after collateral' : 'gross MtM'}) · IM weight {res.params.im_rw_per_pct} per 1% ({res.params.im_basis}) · CSA {res.csa?.preset}
+              {res.params.style ? res.params.style.replace(/_/g, ' ') + ' · ' : ''}vol {Number(res.params.vol_pct).toFixed(2)}% ({res.params.vol_source}) · {res.params.vol_mode}{res.params.step_vols_pct ? ' · step vols ' + res.params.step_vols_pct.slice(0, 4).map(v => v.toFixed(1)).join('/') + (res.params.step_vols_pct.length > 4 ? '…' : '') + '%' : ''} · {res.n_paths} paths · {res.steps} monthly steps · seed {res.seed ?? seed}{res.seed === 42 ? ' (repeats exactly)' : ' (re-rolled)'} · {res.path_steps?.toLocaleString()} path-steps simulated in {res.engine_ms} ms · {res.sample_paths?.length || 0} paths drawn ({res.csa?.collateralised ? 'residual after collateral' : 'gross MtM'}) · IM weight {res.params.im_rw_per_pct} per 1% ({res.params.im_basis}) · CSA {res.csa?.preset}
             </div>
           )}
         </div>

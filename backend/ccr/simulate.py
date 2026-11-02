@@ -112,6 +112,13 @@ def simulate(calib: Calibration, curves: dict[str, object], spots: dict[str, flo
                 lw = np.cumsum(inc[:, :, j], axis=0).T                      # (paths, T) cumulative observed log returns
                 lw = np.concatenate([np.zeros((n_paths, 1)), lw], axis=1)
                 s[key] = spots[key] * np.exp(mu * t[None, :] + lw)
+            elif getattr(f, "pillars", None):
+                # the surface's ATM term structure: each step at its forward vol, so Var(ln S_t) is the ATM variance at t
+                from pricing.fx_vol import step_vols
+                sv = np.array(step_vols(f.pillars, t[1:]))                   # (T,)
+                incr = (mu - 0.5 * sv ** 2)[:, None] * dts[:, None] + (sv * np.sqrt(dts))[:, None] * z[:, :, j]
+                lw = np.concatenate([np.zeros((n_paths, 1)), np.cumsum(incr, axis=0).T], axis=1)
+                s[key] = spots[key] * np.exp(lw)
             else:
                 w = np.cumsum(z[:, :, j] * np.sqrt(dts)[:, None], axis=0).T  # (paths, T)
                 w = np.concatenate([np.zeros((n_paths, 1)), w], axis=1)

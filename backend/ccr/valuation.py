@@ -160,9 +160,11 @@ class NettingSet:
         self.options.append({"trade_ref": t.trade_ref, "kind": label, "strike": K, "strike_text": (f"{K:g} {quote} per {base}" if spec.style != "TOUCH" else "—") + (f" · {detail}" if detail else ""),
                              "expiry": terms["expiry"].isoformat(), "vol_bp": vol * 1e4, "vol_pct": round(vol * 100, 3), "vol_source": f"{tier}: {note}",
                              "side": "LONG" if sign > 0 else "SHORT"})
+        from pricing.fx_vol import parse_surface
+        pillars = parse_surface(mkt.quotes(f"{pair}_VOL")) if mkt is not None else None
         return {"trade": t, "kind": "FX_OPTION", "ccy": quote, "pair": pair, "base": base, "quote": quote, "terms": terms, "K": K, "spec": spec,
                 "option_type": spec.option_type, "expiry": terms["expiry"], "settle": terms["settle"], "N": terms["notional"], "vol": vol,
-                "sign": sign, "maturity": terms["settle"]}
+                "sign": sign, "maturity": terms["settle"], "pillars": pillars or None}
 
     @property
     def months(self) -> int:

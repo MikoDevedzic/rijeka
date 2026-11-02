@@ -140,3 +140,62 @@ def quotes_from_grid(grid: dict[str, dict[str, float]]) -> list[dict]:
                 continue                  # a tenor quoted ATM-only carries no RR/BF row, so it does not read as a flat smile
             out.append({"tenor": t, "quote_type": qt, "rate": float(v), "enabled": True})
     return out
+
+
+# ── Along a simulated path: the term structure and the smile at the path's moneyness ───────────────
+#
+# An option valued at a later date t with expiry T should carry (i) the ATM vol the surface implies for
+# the remaining life, the forward vol from t to T (variance is additive: σ_f²·(T−t) = σ_T²·T − σ_t²·t), and
+# (ii) the smile at the path's moneyness, read sticky-delta: the quoted RR and BF at the remaining tenor,
+# the delta from the path's forward against the strike (the FX convention: the smile floats with the
+# forward). The simulation itself steps the spot with the piecewise forward vols, so the variance of
+# log S_t equals the surface's ATM variance at every grid date. Until 2 November 2026 one vol, today's at
+# the original strike and expiry, was held along the whole path.
+
+def atm_vol(pillars: list[Pillar], T: float) -> float:
+    return _lin([(p.t, p.atm) for p in pillars], max(T, 0.0))
+
+
+def atm_variance(pillars: list[Pillar], T: float) -> float:
+    return atm_vol(pillars, T) ** 2 * max(T, 0.0)
+
+
+def forward_vol(pillars: list[Pillar], t1: float, t2: float) -> float:
+    """The ATM vol from t1 to t2 the surface implies; floored at a quarter of the spot vol to t2 where quoted
+    vols fall fast enough to make the forward variance negative (a calendar arbitrage in the quotes)."""
+    if t2 <= t1 + 1e-12:
+        return atm_vol(pillars, t2)
+    v = atm_variance(pillars, t2) - atm_variance(pillars, t1)
+    floor = (0.25 * atm_vol(pillars, t2)) ** 2 * (t2 - t1)
+    return float((max(v, floor) / (t2 - t1)) ** 0.5)
+
+
+def step_vols(pillars: list[Pillar], grid_t) -> list[float]:
+    """The vol to apply on each step of a grid 0 < t_1 < ... < t_n so that the cumulative variance at t_k is
+    the surface's ATM variance at t_k."""
+    out, prev = [], 0.0
+    for tk in grid_t:
+        out.append(forward_vol(pillars, prev, float(tk)))
+        prev = float(tk)
+    return out
+
+
+def path_vols(pillars: list[Pillar], t: float, T: float, F, K: Optional[float], iterations: int = 6):
+    """Per-path vol at date t for expiry T: ATM level = the forward vol t→T, smile = the quoted RR/BF at the
+    remaining tenor read at the delta of each path's forward F (array) against K. No strike (a touch) → the
+    ATM forward vol for every path."""
+    import numpy as np
+    from scipy.stats import norm
+    F = np.asarray(F, dtype=float)
+    tau = max(T - t, 1e-6)
+    atm_f = forward_vol(pillars, t, T)
+    pil = _interp(pillars, tau)
+    if K is None or (pil.rr == 0.0 and pil.bf == 0.0):
+        return np.full(F.shape, atm_f)
+    sigma = np.full(F.shape, atm_f)
+    for _ in range(iterations):
+        sT = np.maximum(sigma, 1e-4) * tau ** 0.5
+        delta = norm.cdf((np.log(F / K) + 0.5 * sT * sT) / sT)
+        x = delta - 0.5
+        sigma = np.maximum(atm_f - 2.0 * pil.rr * x + 16.0 * pil.bf * x * x, 1e-4)
+    return sigma
