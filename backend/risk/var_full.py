@@ -86,7 +86,10 @@ def compute(db: Session, user: dict, template_uid, trades, d: date, mkt: Market,
             linear: Optional[dict] = None, max_valuations: int = MAX_VALUATIONS) -> dict[str, Any]:
     s = {**V.DEFAULTS, **(settings or {})}
     live = [t for t in trades if t.status in LIVE]
-    curves = sorted({c for t in live for c in trade_curves(t) if mkt.quotes(c)})
+    # volatility surfaces ({PAIR}_VOL) are not VaR factors yet: their history is days old and their
+    # quotes are three rows per tenor, which the per-tenor shift does not describe; vega is on the
+    # ladder and the VOL step in the P&L explain, and the methodology lists this as open
+    curves = sorted({c for t in live for c in trade_curves(t) if mkt.quotes(c) and not c.endswith("_VOL")})
     pairs = sorted({spot_curve(t).replace("_SPOT", "") for t in live if spot_curve(t)})
     days, missing = factor_days(db, template_uid, curves, pairs, d, int(s["window_days"]))
     valuer = Valuer(db, user)

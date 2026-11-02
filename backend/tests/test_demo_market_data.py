@@ -104,7 +104,9 @@ def test_assemble_skips_curves_whose_feed_failed_and_stamps_sources():
     collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)[0:2] and f.fetch_ust_par(text=UST_XML)},
                  "failed": {"estr": "timeout", "aaa": "timeout", "boe": "timeout", "saron": "timeout"}}
     built = f.assemble(collected, date(2026, 10, 29))
-    assert set(built["curves"]) == {"USD_SOFR", "USD_SWVOL_ATM"}
+    fx_vols = {f"{pair}_VOL" for pair in f.FX_VOL_LEVELS}                     # synthetic FX option surfaces, always written
+    assert set(built["curves"]) == {"USD_SOFR", "USD_SWVOL_ATM"} | fx_vols
+    assert built["curves"]["EURUSD_VOL"]["source"] == "DEMO · synthetic surface" and len(built["curves"]["EURUSD_VOL"]["quotes"]) == 24
     assert built["curves"]["USD_SOFR"]["source"].startswith("DEMO · NY Fed SOFR") and "as of 2026-10-28" in built["curves"]["USD_SOFR"]["source"]
     assert built["curves"]["USD_SWVOL_ATM"]["source"] == "DEMO · synthetic surface"
     assert built["failed"]["estr"] == "timeout" and len(built["caps"]) == 54
@@ -166,7 +168,7 @@ def test_tick_writes_template_rows_then_copies_to_demo_accounts(monkeypatch):
     assert b["skew_saved"] == 15 and b["sabr_fitted"] == 15 and b["caps_saved"] == 54 and b["copied_to"] == 2
     assert copy.call_count == 2 and copy.call_args_list[0].args[1:] == ("tmpl", "visitor-1")
     sqls = [str(c.args[0]) for c in db.execute.call_args_list]
-    assert sum("INSERT INTO market_data_snapshots" in s for s in sqls) == 2          # USD_SOFR + USD_SWVOL_ATM
+    assert sum("INSERT INTO market_data_snapshots" in s for s in sqls) == 2 + len(f.FX_VOL_LEVELS)   # USD_SOFR + USD_SWVOL_ATM + the FX vol surfaces
     assert sum("INSERT INTO sabr_params" in s for s in sqls) == 15
     assert sum("INSERT INTO cap_vol_surface" in s for s in sqls) == 54
     assert db.commit.called

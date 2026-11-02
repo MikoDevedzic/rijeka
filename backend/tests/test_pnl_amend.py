@@ -55,7 +55,7 @@ def _pure(monkeypatch):
 
 
 def test_order_and_group_carry_the_amend_bucket():
-    assert E.ORDER == ["CARRY", "CASH", "RATES", "FX", "RESIDUAL", "AMEND", "NEW", "UNWIND"]
+    assert E.ORDER == ["CARRY", "CASH", "RATES", "FX", "VOL", "RESIDUAL", "AMEND", "NEW", "UNWIND"]
     assert E.GROUP["AMEND"] == "TRADING"
 
 

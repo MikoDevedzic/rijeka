@@ -24,6 +24,7 @@ from pnl.valuation import _currency_terms
 log = logging.getLogger("rijeka.ccr")
 SWAPS = ("IR_SWAP", "OIS", "OIS_SWAP", "BASIS_SWAP")
 FORWARDS = ("FX_SPOT", "FX_FORWARD", "NDF", "CRYPTO_FORWARD")
+FX_OPTIONS = ("FX_OPTION",)
 
 
 def years(asof: date, d: date) -> float:
@@ -92,6 +93,10 @@ class NettingSet:
                     self.pairs.add(pair); self.currencies.add(quote)
                     if base in CURVE_OF:
                         self.currencies.add(base)
+                elif itype in FX_OPTIONS:
+                    self.items.append(self._fx_option(t, mkt)); self.pairs.add(self.items[-1]["pair"]); self.currencies.add(self.items[-1]["quote"])
+                    if self.items[-1]["base"] in CURVE_OF:
+                        self.currencies.add(self.items[-1]["base"])
                 else:
                     self.skipped.append({"trade_ref": t.trade_ref, "reason": f"{itype} not simulated yet"})
             except Exception as e:          # noqa: BLE001
@@ -126,6 +131,24 @@ class NettingSet:
                              "expiry": expiry.isoformat(), "vol_bp": vol, "vol_source": src, "side": "LONG" if terms["sign"] > 0 else "SHORT"})
         return {"trade": t, "kind": "SWAPTION", "ccy": ccy, "legs": scheds, "fixed_sched": fixed_sched, "start": start, "maturity": maturity,
                 "expiry": expiry, "K": terms["K"], "is_payer": terms["is_payer"], "N": N, "vol": vol / 1e4, "sign": terms["sign"]}
+
+    def _fx_option(self, t, mkt) -> dict:
+        """A European FX option as an item: the strike, expiry and settlement from the terms, the vol from the
+        day's {PAIR}_VOL surface at the option's own expiry and strike (desk default when there is none)."""
+        from pricing.fx_vol import lookup_vol
+        pair, terms = _currency_terms(t)
+        base, quote = pair[:3], pair[3:]
+        S = mkt.spot(pair) if mkt is not None else None
+        T_e = max(years(self.asof, terms["expiry"]), 1 / 365)
+        F = S or terms["K"]                                         # the smile is read at the strike against today's level
+        vol, tier, note = lookup_vol(mkt.quotes(f"{pair}_VOL") if mkt is not None else None, pair, T_e, F, terms["K"], None)
+        sign = 1.0 if str(terms.get("direction", "BUY")).upper() == "BUY" else -1.0
+        self.options.append({"trade_ref": t.trade_ref, "kind": f"FX {terms['option_type']} {pair}", "strike": terms["K"],
+                             "strike_text": f"{terms['K']:g} {quote} per {base}", "expiry": terms["expiry"].isoformat(),
+                             "vol_bp": vol * 1e4, "vol_pct": round(vol * 100, 3), "vol_source": f"{tier}: {note}", "side": "LONG" if sign > 0 else "SHORT"})
+        return {"trade": t, "kind": "FX_OPTION", "ccy": quote, "pair": pair, "base": base, "quote": quote, "terms": terms, "K": terms["K"],
+                "option_type": terms["option_type"], "expiry": terms["expiry"], "settle": terms["settle"], "N": terms["notional"], "vol": vol,
+                "sign": sign, "maturity": terms["settle"]}
 
     @property
     def months(self) -> int:
@@ -228,6 +251,8 @@ def netted_paths(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float], flat
                     v = v + O.value_caplets(it, paths, i, fx_to_usd)
             elif it["kind"] == "SWAPTION":
                 v = O.value_swaption(it, paths, i, fx_to_usd, swap_at)
+            elif it["kind"] == "FX_OPTION":
+                v = O.value_fx_option(it, paths, i, fx_to_usd, flat_base)
             else:
                 v = value_forward(it, paths, i, fx_to_usd, flat_base)
             V[:, i] += v

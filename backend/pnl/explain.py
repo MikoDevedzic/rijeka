@@ -8,6 +8,7 @@ thing at a time, in a fixed order, and each step's change is one row:
   RATES      each curve the trade is valued on, moved tenor bucket by tenor bucket
              (0-1Y, 1-5Y, 5-10Y, 10Y+), discount curve first, then forecast, then the base
   FX         the spot rate, then the quoted forward points (FX and digital-asset forwards)
+  VOL        the option's volatility surface, tenor bucket by tenor bucket (FX options)
   RESIDUAL   whatever is left between the last step and today's mark on today's market:
              cross effects and anything not moved explicitly (a vol surface, a quote the
              market has that the step list does not). Shown, never spread.
@@ -33,14 +34,15 @@ from typing import Any, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from pnl.market import Market, quote_differs
+from pnl.market import Market, quote_differs, quote_key
 from pnl.valuation import points_curve, spot_curve, trade_curves, value
 
 log = logging.getLogger("rijeka.pnl")
 
 BUCKETS = (("0-1Y", 0.0, 1.0001), ("1-5Y", 1.0001, 5.0001), ("5-10Y", 5.0001, 10.0001), ("10Y+", 10.0001, 1e9))
-ORDER = ["CARRY", "CASH", "RATES", "FX", "RESIDUAL", "AMEND", "NEW", "UNWIND"]
-GROUP = {"CARRY": "MARKET", "CASH": "MARKET", "RATES": "MARKET", "FX": "MARKET", "RESIDUAL": "MARKET", "AMEND": "TRADING", "NEW": "TRADING", "UNWIND": "TRADING"}
+ORDER = ["CARRY", "CASH", "RATES", "FX", "VOL", "RESIDUAL", "AMEND", "NEW", "UNWIND"]
+GROUP = {"CARRY": "MARKET", "CASH": "MARKET", "RATES": "MARKET", "FX": "MARKET", "VOL": "MARKET", "RESIDUAL": "MARKET", "AMEND": "TRADING",
+         "NEW": "TRADING", "UNWIND": "TRADING"}
 AMENDING_EVENTS = ("AMENDED", "PARTIAL_TERMINATION")
 LIVE = ("PENDING", "CONFIRMED", "LIVE")
 
@@ -97,16 +99,17 @@ def cash_settled(db: Session, trade, d0: date, d1: date) -> dict[str, float]:
 
 
 def _bucket_quotes(current: list[dict], target: list[dict], lo: float, hi: float) -> list[dict]:
-    """Current quotes with the tenors in [lo, hi) taken from the target."""
-    tgt = {q.get("tenor"): q for q in target}
+    """Current quotes with the tenors in [lo, hi) taken from the target (every row of a tenor: a vol
+    surface has ATM, RR25 and BF25 rows per tenor, pnl.market.quote_key)."""
+    tgt = {quote_key(q): q for q in target}
     out = []
     seen = set()
     for q in current:
-        t = q.get("tenor"); seen.add(t)
-        y = tenor_years(t)
-        out.append(dict(tgt[t]) if lo <= y < hi and t in tgt else dict(q))
-    for t, q in tgt.items():                      # a tenor the old snapshot did not have
-        if t not in seen and lo <= tenor_years(t) < hi:
+        k = quote_key(q); seen.add(k)
+        y = tenor_years(k[0])
+        out.append(dict(tgt[k]) if lo <= y < hi and k in tgt else dict(q))
+    for k, q in tgt.items():                      # a tenor the old snapshot did not have
+        if k not in seen and lo <= tenor_years(k[0]) < hi:
             out.append(dict(q))
     return out
 
@@ -122,21 +125,26 @@ def explain_trade(db: Session, user: dict, trade, d0: date, d1: date, m0: Market
         rows.append({"bucket": "CASH", "label": f"Cash settled {c}", "ccy": c, "pnl": amt})
     mk, cur = m0, v10["npv"]
     moved: list[str] = []
-    for cid in trade_curves(trade):
+    rate_curves = [c for c in trade_curves(trade) if not c.endswith("_VOL")]
+    vol_curves = [c for c in trade_curves(trade) if c.endswith("_VOL")]
+    def _move(cid: str, bucket: str):
+        nonlocal mk, cur
         q0, q1 = m0.quotes(cid), m1.quotes(cid)
         if not quote_differs(q0, q1):
-            continue
+            return
         if len(q1) <= 1 or len(q0) <= 1:         # a single quote (flat rate, funding): one step
             mk = mk.override(cid, q1); val = v(trade, d1, mk)
-            rows.append({"bucket": "RATES", "label": f"{cid} level", "curve": cid, "tenor": "FLAT", "ccy": ccy, "pnl": val["npv"] - cur}); cur = val["npv"]
-            moved.append(cid); continue
+            rows.append({"bucket": bucket, "label": f"{cid} level", "curve": cid, "tenor": "FLAT", "ccy": ccy, "pnl": val["npv"] - cur}); cur = val["npv"]
+            moved.append(cid); return
         for name, lo, hi in BUCKETS:
             blended = _bucket_quotes(mk.quotes(cid) or q0, q1, lo, hi)
             if not quote_differs(mk.quotes(cid) or q0, blended):
                 continue
             mk = mk.override(cid, blended); val = v(trade, d1, mk)
-            rows.append({"bucket": "RATES", "label": f"{cid} {name}", "curve": cid, "tenor": name, "ccy": ccy, "pnl": val["npv"] - cur}); cur = val["npv"]
+            rows.append({"bucket": bucket, "label": f"{cid} {name}", "curve": cid, "tenor": name, "ccy": ccy, "pnl": val["npv"] - cur}); cur = val["npv"]
         moved.append(cid)
+    for cid in rate_curves:
+        _move(cid, "RATES")
     sc = spot_curve(trade)
     if sc:
         s0, s1 = m0.single(sc, "SPOT"), m1.single(sc, "SPOT")
@@ -147,6 +155,8 @@ def explain_trade(db: Session, user: dict, trade, d0: date, d1: date, m0: Market
     if pc and quote_differs(m0.quotes(pc), m1.quotes(pc)):
         mk = mk.override(pc, m1.quotes(pc)); val = v(trade, d1, mk)
         rows.append({"bucket": "FX", "label": f"{pc.replace('_FWD', '')} forward points", "curve": pc, "ccy": ccy, "pnl": val["npv"] - cur}); cur = val["npv"]
+    for cid in vol_curves:                        # after spot and points: vega on the moved underlying
+        _move(cid, "VOL")
     v11 = v(trade, d1, m1)
     resid = v11["npv"] - cur
     if abs(resid) > 0.005:

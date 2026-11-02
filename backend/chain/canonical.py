@@ -265,7 +265,7 @@ _NUMERIC = ("notional_amount", "strike_price", "premium_amount", "forward_price"
 # date. An NDF names the settlement currency, the fixing source and the
 # fixing date; a deliverable forward does not.
 
-FX_INSTRUMENTS = ("FX_SPOT", "FX_FORWARD", "NDF")
+FX_INSTRUMENTS = ("FX_SPOT", "FX_FORWARD", "NDF", "FX_OPTION")
 
 _FX_FIELDS = (
     "currency_pair",            # EURUSD
@@ -287,8 +287,83 @@ _FX_UPPER = ("currency_pair", "base_currency", "quote_currency", "settlement_typ
 _FX_NUMERIC = ("base_notional", "quote_notional", "forward_rate")
 
 
+# ── Currency options (ISDA FX and Currency Option Definitions) ───────────
+#
+# A European option on a currency pair: the right to buy (CALL) or sell (PUT) the base
+# currency against the quote currency at the strike, exercised at the expiry time on the
+# expiry date, settled on the settlement date by delivery of both currencies or, for a
+# non-deliverable option, in the settlement currency against a fixing. The booker states
+# BUY or SELL of the option in trade.terms.direction; the record names buyer and seller by
+# LEI. The premium is an amount, a currency and a payment date.
+
+_FXO_FIELDS = (
+    "currency_pair", "base_currency", "quote_currency",
+    "option_type",              # CALL | PUT on the base currency
+    "exercise_style",           # EUROPEAN
+    "base_notional",            # amount of the base currency
+    "quote_notional",           # base_notional * strike
+    "strike",                   # quote per base
+    "expiry_date", "expiry_time",       # e.g. "10:00 New York"
+    "settlement_date",
+    "settlement_type",          # DELIVERABLE | NON_DELIVERABLE
+    "settlement_currency",      # NDO only
+    "fixing_source",            # NDO only
+    "premium_amount", "premium_currency", "premium_payment_date",
+    "automatic_exercise",       # bool
+    "calculation_agent",        # LEI, or null (both parties)
+)
+_FXO_REQUIRED = ("currency_pair", "base_currency", "quote_currency", "option_type", "base_notional", "strike",
+                 "expiry_date", "settlement_date", "settlement_type", "premium_amount", "premium_currency", "premium_payment_date")
+_FXO_NDO_REQUIRED = ("settlement_currency", "fixing_source")
+_FXO_UPPER = ("currency_pair", "base_currency", "quote_currency", "option_type", "exercise_style", "settlement_type", "settlement_currency",
+              "premium_currency")
+_FXO_NUMERIC = ("base_notional", "quote_notional", "strike", "premium_amount")
+
+
+def _fx_option_product_v2(trade: Any, own: str, cp: str) -> dict:
+    terms = dict(_get(trade, "terms") or {})
+    terms.setdefault("exercise_style", "EUROPEAN")
+    terms.setdefault("expiry_time", "10:00 New York")
+    terms.setdefault("automatic_exercise", True)
+    missing = [f for f in _FXO_REQUIRED if terms.get(f) in (None, "")]
+    st = str(terms.get("settlement_type") or "").upper()
+    if st == "NON_DELIVERABLE":
+        missing += [f for f in _FXO_NDO_REQUIRED if terms.get(f) in (None, "")]
+    if missing:
+        raise ValueError(f"FX_OPTION record needs {', '.join(missing)} in trade.terms — both parties must state them")
+    if st not in ("DELIVERABLE", "NON_DELIVERABLE"):
+        raise ValueError("settlement_type must be DELIVERABLE or NON_DELIVERABLE")
+    if str(terms["option_type"]).upper() not in ("CALL", "PUT"):
+        raise ValueError("option_type must be CALL or PUT")
+    if str(terms["exercise_style"]).upper() != "EUROPEAN":
+        raise ValueError("exercise_style must be EUROPEAN in Phase 1")
+    base, quote = str(terms["base_currency"]).upper(), str(terms["quote_currency"]).upper()
+    if str(terms["currency_pair"]).upper() != base + quote:
+        raise ValueError("currency_pair must be base_currency followed by quote_currency")
+    if Decimal(str(terms["base_notional"])) <= 0 or Decimal(str(terms["strike"])) <= 0:
+        raise ValueError("base_notional and strike must be positive")
+    if str(terms["settlement_date"]) < str(terms["expiry_date"]):
+        raise ValueError("settlement_date must be on or after expiry_date")
+    buyer, seller = _sides(terms.get("direction"), own, cp, pays=("BUY", "LONG"), gets=("SELL", "SHORT"))
+    out = {"product": "FX_NDO" if st == "NON_DELIVERABLE" else "FX_OPTION", "buyer": buyer, "seller": seller}
+    if terms.get("quote_notional") in (None, ""):
+        terms["quote_notional"] = str(Decimal(str(terms["base_notional"])) * Decimal(str(terms["strike"])))
+    for f in _FXO_FIELDS:
+        v = terms.get(f)
+        if isinstance(v, str) and f in _FXO_UPPER:
+            v = v.upper()
+        if f in _FXO_NUMERIC and v not in (None, ""):
+            v = _num_str(v)
+        if f == "automatic_exercise":
+            v = bool(v) if v not in (None, "") else True
+        out[f] = normalise(v)
+    return out
+
+
 def _fx_product_v2(trade: Any, own: str, cp: str) -> dict:
     itype = str(_get(trade, "instrument_type") or "").upper()
+    if itype == "FX_OPTION":
+        return _fx_option_product_v2(trade, own, cp)
     terms = dict(_get(trade, "terms") or {})
     missing = [f for f in _FX_REQUIRED if terms.get(f) in (None, "")]
     st = str(terms.get("settlement_type") or "").upper()

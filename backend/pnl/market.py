@@ -71,9 +71,15 @@ class Market:
         return [r.valuation_date for r in rows]
 
 
+def quote_key(q: dict) -> tuple:
+    """A quote's identity within a curve: its tenor, and its type where a tenor carries several rows
+    (a vol surface quotes ATM, RR25 and BF25 at each tenor)."""
+    return (q.get("tenor"), q.get("quote_type") or "")
+
+
 def quote_differs(a: Optional[list[dict]], b: Optional[list[dict]]) -> bool:
     if a is None or b is None:
         return False
-    ka = {q.get("tenor"): float(q["rate"]) for q in a}
-    kb = {q.get("tenor"): float(q["rate"]) for q in b}
+    ka = {quote_key(q): float(q["rate"]) for q in a}
+    kb = {quote_key(q): float(q["rate"]) for q in b}
     return ka != kb

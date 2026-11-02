@@ -28,6 +28,8 @@ def trade_curves(trade) -> list[str]:
         else:
             bc = CURVE_FOR.get(base)
             out += [c for c in (bc, f"{base}_FLAT") if c]
+        if itype == "FX_OPTION":
+            out.append(f"{pair}_VOL")              # the option's vol surface: a curve of its own in the explain and the ladder
         return out
     ids = [c for c in dict.fromkeys([trade.discount_curve_id, trade.forecast_curve_id]) if c]
     return ids or ["USD_SOFR"]
@@ -56,6 +58,12 @@ def _currency_terms(trade) -> tuple[str, dict]:
         pair = f"{str(t['digital_asset']).upper()}USD"
         terms = {"notional": float(t.get("notional_amount") or trade.notional), "K": float(t["forward_price"]) if t.get("forward_price") not in (None, "") else None,
                  "settle": date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)), "shape": "NDF"}
+    elif itype == "FX_OPTION":
+        pair = str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper()
+        terms = {"notional": float(t.get("base_notional") or trade.notional), "K": float(t["strike"]), "shape": "OPTION",
+                 "option_type": str(t.get("option_type") or "CALL").upper(), "expiry": date.fromisoformat(str(t["expiry_date"])),
+                 "settle": date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)),
+                 "settlement_type": str(t.get("settlement_type") or "DELIVERABLE").upper()}
     else:
         pair = str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper()
         terms = {"notional": float(t.get("base_notional") or trade.notional), "K": float(t["forward_rate"]) if t.get("forward_rate") not in (None, "") else None,
@@ -207,7 +215,7 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
             flat = mkt.single(f"{base}_FLAT", "FLAT")
             kw["base_rate"] = float(flat if flat is not None else POLICY_RATE_PCT.get(base, 0.0)) / 100.0
     settle = t["settle"] if t["shape"] != "SPOT" else spot_date(val_date, crypto, base, quote)
-    if settle <= val_date:
+    if settle <= val_date or (t["shape"] == "OPTION" and t["expiry"] <= val_date and settle <= val_date):
         return {"npv": 0.0, "ccy": quote, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0, "asof": {}, "fallback": fallback, "settled": True}
     pip = PIP.get(pair, 1.0 if crypto else 1e-4)
     fx_spot = None if crypto else spot_date(val_date, False, base, quote)   # an FX spot quote settles T+2; the forward carries from there
@@ -228,9 +236,41 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
             r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,
                                        valuation_date=val_date, settlement_date=settle, quote_curve=q_curve, direction=t["direction"], pip=pip,
                                        spot_date=fx_spot, base_rate=rate_b)
+    if t["shape"] == "OPTION":
+        return _value_fx_option(t, pair, base, quote, S, r, val_date, mkt, qid, fallback)
     return {"npv": float(r.npv), "ccy": quote, "ir01": getattr(r, "ir01", None), "ir01_disc": getattr(r, "ir01_disc", None),
             "spot01": getattr(r, "spot01", None), "theta": getattr(r, "theta", None),
             "asof": {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT")}, "fallback": fallback}
+
+
+def _value_fx_option(t: dict, pair: str, base: str, quote: str, S: float, fwd, val_date: date, mkt: Market, qid: str, fallback: list) -> dict[str, Any]:
+    """A booked FX option on the day's market: the forward engine's forward and discount factor to settlement
+    (quoted points or parity, as the account prices), the vol from the day's {PAIR}_VOL snapshot (a desk default
+    when there is none, and the result says so), Garman–Kohlhagen on top (pricing/fx_option.py). After expiry and
+    before settlement the payoff is fixed: the spot on the expiry date against the strike, discounted."""
+    from api.routes.currencies import spot_date
+    from pricing.fx_option import price_fx_option
+    from pricing.fx_vol import lookup_vol
+    K, call, expiry, settle = t["K"], t["option_type"] == "CALL", t["expiry"], t["settle"]
+    sign = 1.0 if str(t["direction"]).upper() == "BUY" else -1.0
+    vol_cid = f"{pair}_VOL"
+    asof = {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT"), vol_cid: mkt.snapshot_date(vol_cid)}
+    if expiry <= val_date:
+        # expired, not yet settled: the fixing is the spot of the expiry date (the market as of expiry)
+        s_exp = Market(mkt.db, mkt.user_id, expiry).spot(pair) if hasattr(mkt, "db") else S
+        payoff = max((s_exp or S) - K, 0.0) if call else max(K - (s_exp or S), 0.0)
+        npv = sign * t["notional"] * payoff * float(fwd.df_quote)
+        return {"npv": npv, "ccy": quote, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0, "vega": 0.0, "asof": asof,
+                "fallback": fallback, "model": f"expired {expiry}: fixed payoff, paid {settle}"}
+    T_e = (expiry - val_date).days / 365.0
+    vol, tier, note = lookup_vol(mkt.quotes(vol_cid), pair, T_e, float(fwd.forward), K, None)
+    r = price_fx_option(base_currency=base, quote_currency=quote, base_notional=t["notional"], option_type=t["option_type"], strike=K, spot=S,
+                        forward=float(fwd.forward), df_quote=float(fwd.df_quote), valuation_date=val_date, expiry_date=expiry, settlement_date=settle,
+                        vol=vol, direction=t["direction"], spot_date=spot_date(val_date, False, base, quote))
+    if tier == "DEFAULT":
+        fallback = fallback + [vol_cid]
+    return {"npv": float(r.npv), "ccy": quote, "ir01": r.ir01, "ir01_disc": r.ir01_disc, "spot01": r.spot01, "theta": r.theta, "vega": r.vega,
+            "asof": asof, "fallback": fallback, "model": f"Garman–Kohlhagen {vol * 100:.2f}% ({note})"}
 
 
 def forward_points(mkt: Market, pair: str) -> Optional[dict]:

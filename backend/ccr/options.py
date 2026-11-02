@@ -244,3 +244,36 @@ def _value_swaption_long(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, 
         mask = swap_value(item, paths, i_exp) > 0.0
         cache[id(paths)] = mask
     return np.where(mask, swap_value(item, paths, i), 0.0)
+
+
+# ── FX options ───────────────────────────────────────────────────────────────
+def value_fx_option(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float], flat_base: dict[str, float]) -> np.ndarray:
+    """A European FX option on the paths (pricing/fx_option.py's model). Before expiry: Garman–Kohlhagen on the
+    path's forward to settlement (spot × DF_base/DF_quote, the base either a simulated curve or the flat rate
+    the forward uses) at the vol the option was valued with today, held flat; the vol does not move along the
+    path, as for the swaptions. At and after expiry: the payoff is fixed on the spot at the expiry grid point
+    and discounted to settlement until paid. Sign: from our side (sold options negative)."""
+    from pricing.fx_option import gk_value
+    asof = paths.grid[0]; t_i = float(paths.t[i])
+    T_e, T_s = _years(asof, item["expiry"]), _years(asof, item["settle"])
+    if T_s <= t_i + 1e-9:
+        return np.zeros(paths.n_paths)
+    qkey = f"RATES:{CURVE_OF.get(item['quote'], item['quote'] + '_OIS')}"
+    dfq = bond(paths, qkey, i, T_s)
+    S = paths.s[f"SPOT:{item['pair']}"]
+    K, call, N = item["K"], item["option_type"] == "CALL", item["N"]
+    k = fx_to_usd.get(item["quote"], 1.0) * float(item.get("sign", 1.0))
+    if t_i < T_e - 1e-9:
+        bkey = f"RATES:{CURVE_OF.get(item['base'])}" if item["base"] in CURVE_OF else None
+        dfb = bond(paths, bkey, i, T_s) if bkey and bkey in paths.x else np.full(paths.n_paths, math.exp(-flat_base.get(item["pair"], 0.0) * (T_s - t_i)))
+        F = S[:, i] * dfb / dfq
+        vol = item["vol"]
+        sT = vol * math.sqrt(T_e - t_i)
+        d1 = (np.log(F / K) + 0.5 * sT * sT) / sT
+        d2 = d1 - sT
+        from scipy.stats import norm
+        unit = (F * norm.cdf(d1) - K * norm.cdf(d2)) if call else (K * norm.cdf(-d2) - F * norm.cdf(-d1))
+        return k * N * dfq * unit
+    i_exp = min(j for j in range(len(paths.t)) if float(paths.t[j]) >= T_e - 1e-9)
+    payoff = np.maximum(S[:, i_exp] - K, 0.0) if call else np.maximum(K - S[:, i_exp], 0.0)
+    return k * N * payoff * dfq

@@ -33,6 +33,8 @@ from db.session import get_db
 from middleware.auth import verify_token
 from api.routes._errors import internal
 from pricing.currency_forward import price_currency_forward
+from pricing.fx_option import price_fx_option
+from pricing.fx_vol import TENOR_YEARS as VOL_TENORS, lookup_vol, parse_surface, quotes_from_grid
 from api.routes.crypto import (ASSETS as CRYPTO_ASSETS, fetch_spot as fetch_crypto_spot, save_spot,
                                latest_snapshot, _quote, _require_trader)
 
@@ -165,6 +167,16 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
     fc = forward_curve(db, user_id, pair)
     out.update(forward_curve=fc and {"valuation_date": fc["valuation_date"], "source": fc["source"], "tenors": sorted(fc["points"], key=TENOR_DAYS.get)},
                forward_points=fc["points"] if fc else None)
+    vs = latest_snapshot(db, user_id, f"{pair}_VOL") if not is_crypto(base) else None
+    if vs:
+        grid: dict[str, dict[str, float]] = {}
+        for q in vs.quotes or []:
+            if q.get("rate") is not None and q.get("enabled", True):
+                grid.setdefault(str(q.get("tenor")).upper(), {})[str(q.get("quote_type", "ATM")).upper()] = float(q["rate"])
+        out["vol_surface"] = {"valuation_date": vs.valuation_date.isoformat(), "source": vs.source,
+                              "tenors": sorted(grid, key=lambda k: VOL_TENORS.get(k, 99)), "grid": grid}
+    else:
+        out["vol_surface"] = None
     if is_crypto(base):
         f = latest_snapshot(db, user_id, f"{base}_FUNDING")
         out.update(base_curve=None, funding_pct=_quote(f, "FLAT"), funding_as_of=f.valuation_date.isoformat() if f else None)
@@ -213,6 +225,36 @@ def save_forward_curve(req: ForwardCurveIn, db: Session = Depends(get_db), user:
         db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u AND curve_id = :c AND valuation_date = :d"), {"u": uid, "c": cid, "d": today})
         db.execute(text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
                         "VALUES (:c, :d, CAST(:q AS jsonb), :s, :u, :u)"), {"c": cid, "d": today, "q": json.dumps(q), "s": req.source.upper(), "u": uid})
+    db.commit()
+    return pair_state(db, uid, pair)
+
+
+class VolSurfaceIn(BaseModel):
+    pair: str
+    valuation_date: Optional[date] = None
+    grid: dict[str, dict[str, float]] = Field(..., description="tenor -> {ATM, RR25, BF25} in vol points (% p.a.)")
+    source: str = "MANUAL"
+
+
+@router.post("/vol-surface")
+def save_vol_surface(req: VolSurfaceIn, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Save a pair's option vols by tenor (ATM, 25-delta risk reversal, 25-delta butterfly) as a {PAIR}_VOL snapshot."""
+    _require_trader(user)
+    pair = req.pair.upper(); base, _ = split_pair(pair)
+    if is_crypto(base):
+        raise HTTPException(status_code=422, detail="digital-asset vols are not in Phase 1")
+    if req.source.upper() not in ("MANUAL", "BLOOMBERG", "IMPORT"):
+        raise HTTPException(status_code=422, detail="source must be MANUAL, BLOOMBERG or IMPORT")
+    grid = {t.upper(): {k.upper(): float(v) for k, v in (row or {}).items() if v is not None} for t, row in req.grid.items() if t.upper() in VOL_TENORS}
+    quotes = quotes_from_grid({t: r for t, r in grid.items() if r.get("ATM")})
+    if len(parse_surface(quotes)) < 2:
+        raise HTTPException(status_code=422, detail="give an ATM vol at two tenors or more")
+    from sqlalchemy import text
+    uid, today = uuid.UUID(user["sub"]), req.valuation_date or date.today()
+    cid = f"{pair}_VOL"
+    db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u AND curve_id = :c AND valuation_date = :d"), {"u": uid, "c": cid, "d": today})
+    db.execute(text("INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
+                    "VALUES (:c, :d, CAST(:q AS jsonb), :s, :u, :u)"), {"c": cid, "d": today, "q": json.dumps(quotes), "s": req.source.upper(), "u": uid})
     db.commit()
     return pair_state(db, uid, pair)
 
@@ -390,6 +432,68 @@ def price_forward(req: CurrencyPriceRequest, db: Session = Depends(get_db), user
                   base_rate_pct=req.base_rate_pct)
 
 
+class CurrencyOptionRequest(BaseModel):
+    pair: str = Field(..., examples=["EURUSD"])
+    option_type: str = Field(..., description="CALL | PUT on the base currency")
+    base_notional: float = Field(..., gt=0)
+    expiry_date: date
+    settlement_date: Optional[date] = Field(None, description="omitted: two business days after expiry")
+    strike: Optional[float] = Field(None, gt=0, description="omitted = at the forward")
+    direction: str = Field("BUY", description="BUY | SELL of the option")
+    valuation_date: Optional[date] = None
+    vol_pct: Optional[float] = Field(None, gt=0, description="override, vol points; omitted = the pair's surface")
+    spot: Optional[float] = Field(None, gt=0)
+    settlement_type: str = Field("DELIVERABLE", description="DELIVERABLE | NON_DELIVERABLE (cash in the quote currency)")
+
+
+def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, base_notional: float, expiry: date, settlement: Optional[date],
+                  strike: Optional[float], direction: str, val_date: date, vol_pct: Optional[float], spot_override: Optional[float],
+                  settlement_type: str = "DELIVERABLE") -> dict:
+    """An FX option on the pair's market: the forward to settlement from the forward engine (so the account's
+    forward mode, quoted points or parity, applies), the vol from the pair's surface, Garman–Kohlhagen on top."""
+    base, quote = split_pair(pair)
+    if is_crypto(base):
+        raise HTTPException(status_code=422, detail="digital-asset options are not in Phase 1 (see CRYPTO_OPTION on the roadmap)")
+    if expiry <= val_date:
+        raise HTTPException(status_code=422, detail="expiry_date must be after the valuation date")
+    settle = settlement or spot_date(expiry, False, base, quote)
+    if settle < expiry:
+        raise HTTPException(status_code=422, detail="settlement_date must be on or after the expiry date")
+    fwd = _price(db, user_id, pair, shape="FORWARD", base_notional=base_notional, settlement=settle, val_date=val_date, K=None,
+                 direction="BUY", spot_override=spot_override, base_rate_pct=None)
+    F, S, df_q = float(fwd["forward"]), float(fwd["spot"]), float(fwd["df_quote"])
+    T_e = (expiry - val_date).days / 365.0
+    K = float(strike) if strike is not None else F
+    vs = latest_snapshot(db, user_id, f"{pair}_VOL")
+    vol, tier, vol_note = lookup_vol(vs.quotes if vs else None, pair, T_e, F, K, vol_pct)
+    try:
+        r = price_fx_option(base_currency=base, quote_currency=quote, base_notional=base_notional, option_type=option_type, strike=K,
+                            spot=S, forward=F, df_quote=df_q, valuation_date=val_date, expiry_date=expiry, settlement_date=settle, vol=vol,
+                            direction=direction, spot_date=spot_date(val_date, False, base, quote))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    out = r.__dict__.copy()
+    out.update(pair=pair, shape="OPTION", valuation_date=val_date.isoformat(), expiry_date=expiry.isoformat(), settlement_date=settle.isoformat(),
+               settlement_type=str(settlement_type or "DELIVERABLE").upper(), vol_pct=round(vol * 100, 4), vol_tier=tier, vol_source=vol_note,
+               vol_snapshot=vs.valuation_date.isoformat() if vs else None,
+               spot_source=fwd["spot_source"], base_discounting=fwd["base_discounting"], quote_curve=fwd["quote_curve"],
+               quote_curve_snapshot=fwd["quote_curve_snapshot"], forward_mode=fwd["forward_mode"], forward_source=fwd["forward_source"],
+               implied_forward=fwd["implied_forward"], market_points=fwd["market_points"], basis_points=fwd["basis_points"],
+               forward_points=fwd["forward_points"], df_base=fwd["df_base"], quote_rate=fwd["quote_rate"], base_rate=fwd["base_rate"],
+               t=fwd["t"], quote_notional=base_notional * K,
+               model="Garman–Kohlhagen on the forward to settlement; σ from the pair's ATM/RR25/BF25 surface (Malz smile in delta); ACT/365")
+    return out
+
+
+@router.post("/option/price")
+def price_option(req: CurrencyOptionRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    pair = req.pair.upper(); split_pair(pair)
+    val_date = req.valuation_date or date.today()
+    return _price_option(db, user["sub"], pair, option_type=req.option_type, base_notional=req.base_notional, expiry=req.expiry_date,
+                         settlement=req.settlement_date, strike=req.strike, direction=req.direction, val_date=val_date, vol_pct=req.vol_pct,
+                         spot_override=req.spot, settlement_type=req.settlement_type)
+
+
 class FlatRateRequest(BaseModel):
     currency: str
     rate_pct: float = Field(..., description="flat continuous zero used when the currency has no OIS curve, % p.a.")
@@ -412,13 +516,24 @@ def set_flat(req: FlatRateRequest, db: Session = Depends(get_db), user: dict = D
     return {"currency": ccy, "flat_pct": float(req.rate_pct)}
 
 
-CURRENCY_INSTRUMENTS = ("FX_SPOT", "FX_FORWARD", "NDF", "CRYPTO_FORWARD")
+CURRENCY_INSTRUMENTS = ("FX_SPOT", "FX_FORWARD", "NDF", "CRYPTO_FORWARD", "FX_OPTION")
 
 
 def price_booked(trade: Trade, db: Session, user: dict, val_date: date) -> dict:
     """A booked currency trade, from trade.terms (the canonical record's fields)."""
     t = dict(trade.terms or {})
     itype = str(trade.instrument_type or "").upper()
+    if itype == "FX_OPTION":
+        try:
+            pair = str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper()
+            out = _price_option(db, user["sub"], pair, option_type=str(t["option_type"]), base_notional=float(t.get("base_notional") or trade.notional),
+                                expiry=date.fromisoformat(str(t["expiry_date"])), settlement=date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)),
+                                strike=float(t["strike"]), direction=str(t.get("direction") or "BUY"), val_date=val_date, vol_pct=None, spot_override=None,
+                                settlement_type=str(t.get("settlement_type") or "DELIVERABLE"))
+        except (KeyError, TypeError, ValueError) as e:
+            raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
+        out.update(trade_id=str(trade.id), trade_ref=trade.trade_ref, instrument_type=itype, npv_ccy=out["quote_currency"], legs=[], shape="OPTION")
+        return out
     try:
         if itype == "CRYPTO_FORWARD":
             pair = f"{str(t['digital_asset']).upper()}USD"

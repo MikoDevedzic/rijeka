@@ -348,6 +348,31 @@ def skew_spread_bp(offset_bp: int) -> float:
     return round(0.00056 * k * k + 0.008 * k, 2)
 
 
+# Synthetic FX volatility surfaces, ATM / 25-delta risk reversal / 25-delta butterfly in vol
+# points by tenor, levels and skews typical of late 2026: USD calls bid against JPY and the
+# commodity currencies (negative RR for a BASE/USD pair means puts on the base are dearer), a
+# gently rising term structure, butterflies of 20–35bp of vol. No free public source quotes FX
+# vols; the methodology says so and every response names the tier.
+FX_VOL_TENORS = ["1W", "1M", "2M", "3M", "6M", "9M", "1Y", "2Y"]
+FX_VOL_LEVELS = {   # pair: (ATM 1W, ATM 2Y, RR25, BF25)
+    "EURUSD": (6.9, 7.6, -0.35, 0.22), "GBPUSD": (7.9, 8.5, -0.70, 0.28), "AUDUSD": (9.6, 9.9, -1.00, 0.32),
+    "USDJPY": (10.4, 9.6, -1.30, 0.35), "USDCHF": (7.6, 7.4, -0.60, 0.25), "USDCAD": (6.3, 6.8, 0.30, 0.20),
+}
+
+
+def build_fx_vols(pair: str) -> list[dict]:
+    lo, hi, rr, bf = FX_VOL_LEVELS[pair]
+    out = []
+    for t in FX_VOL_TENORS:
+        y = tenor_years(t)
+        w = min(max(math.log1p(y * 12) / math.log1p(24), 0.0), 1.0)          # 0 at 1W, 1 at 2Y, concave
+        atm = round(lo + (hi - lo) * w, 2)
+        out += [{"tenor": t, "quote_type": "ATM", "rate": atm, "enabled": True},
+                {"tenor": t, "quote_type": "RR25", "rate": round(rr * (0.6 + 0.4 * w), 2), "enabled": True},
+                {"tenor": t, "quote_type": "BF25", "rate": round(bf * (0.8 + 0.2 * w), 2), "enabled": True}]
+    return out
+
+
 def build_swvol_atm() -> list[dict]:
     return [{"tenor": f"{e}Yx{t}Y", "quote_type": "SWVOL", "rate": atm_normal_vol_bp(e, t), "enabled": True}
             for e in SWVOL_EXPIRIES for t in SWVOL_TENORS]
@@ -438,6 +463,8 @@ def assemble(collected: dict, valuation_date: date) -> dict:
 
     synthetic = "DEMO · synthetic surface"
     curves["USD_SWVOL_ATM"] = {"quotes": build_swvol_atm(), "source": synthetic}
+    for pair in FX_VOL_LEVELS:
+        curves[f"{pair}_VOL"] = {"quotes": build_fx_vols(pair), "source": synthetic}
     skew = build_skew_cells(synthetic)
     fwd = par_rate_lookup(curves["USD_SOFR"]["quotes"]) if "USD_SOFR" in curves else (lambda _y: 4.0)
     caps = build_cap_rows(valuation_date, fwd, synthetic)
