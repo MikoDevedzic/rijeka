@@ -28,6 +28,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 
+from methodology import workbook as W
 from pricing.curve import Curve
 from pricing.schedule import generate_schedule
 from pricing.ir_swap import price_swap
@@ -128,21 +129,8 @@ PRODUCTS = [
 
 # ── Styling helpers ─────────────────────────────────────────────────────────
 
-H = Font(bold=True, color="FFFFFF"); HF = PatternFill("solid", fgColor="0B3D34")
-IN = PatternFill("solid", fgColor="FFF4D6")      # inputs the reader may change
-RJ = PatternFill("solid", fgColor="E6F4F1")      # Rijeka reference values
-MONO = Font(name="Consolas")
-
-
-def _hdr(ws, row, cols):
-    for i, c in enumerate(cols, 1):
-        cell = ws.cell(row=row, column=i, value=c); cell.font = H; cell.fill = HF
-        cell.alignment = Alignment(horizontal="center")
-
-
-def _widths(ws, widths):
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
+H, HF, IN, RJ, MONO = W.F_H, W.FILL_H, W.FILL_IN, W.FILL_RJ, W.F_MONO
+_hdr, _widths = W.header, W.widths
 
 
 @dataclass
@@ -161,26 +149,11 @@ class Market:
 
 # ── Shared sheets ───────────────────────────────────────────────────────────
 
-def _readme(wb, title, lines, mkt: Market):
-    ws = wb.active; ws.title = "README"
-    ws["A1"] = f"Rijeka · {title} · Excel replication"; ws["A1"].font = Font(bold=True, size=14)
-    rows = [
-        "What this is: the default trade rebuilt with live Excel formulas from the market data Rijeka used, "
-        "beside the value Rijeka's engine produced. Change a yellow input and the sheet reprices.",
-        f"Market data: {mkt.curve_id} snapshot {mkt.snapshot_date} ({mkt.source}); valuation date {mkt.valuation_date}.",
-        "Curve sheet: pillar dates and discount factors from Rijeka's OIS bootstrap (pricing/bootstrap.py). "
-        "Every DF used elsewhere is interpolated log-linearly between bracketing pillar dates, exactly as pricing/curve.py does.",
-        "Colour key: yellow = input you may change · green = Rijeka engine value for comparison · white = formula.",
-        "Day counts: ACT/360 = YEARFRAC(…, 2); 30/360 bond basis ≈ YEARFRAC(…, 0) (differs only on end-of-February dates).",
-        "Business-day adjustment and payment dates are taken from Rijeka's schedule generator as values.",
-        "Each coupon is discounted at its business-day-adjusted payment date, in the sheet and in the engine alike.",
-        "", *lines, "",
-        "Source: github.com/MikoDevedzic/rijeka · backend/methodology/replicate.py. Apache-2.0.",
-    ]
-    for i, t in enumerate(rows, 3):
-        ws.cell(row=i, column=1, value=t).alignment = Alignment(wrap_text=True, vertical="top")
-    ws.column_dimensions["A"].width = 120
-    return ws
+def _readme(wb, title, lines, mkt: Market, summary: Optional[list] = None):
+    """The book's name and cover notes; the first line describes the default trade. W.finish writes the Cover."""
+    lines = [l for l in lines if l]
+    W.start(wb, title, lines[1:], mkt, summary=[("Default trade", lines[0])] + list(summary or []))
+    return wb.active
 
 
 def _curve_sheet(wb, mkt: Market):
@@ -239,6 +212,7 @@ def _leg_sheet(wb, name, leg: dict, mkt: Market, rijeka_pv: float, rijeka_rows: 
     ws["D2"] = "Leg PV (formulas)"; ws["E2"] = None   # filled below
     ws["D3"] = "Leg PV (Rijeka)"; ws["E3"] = rijeka_pv; ws["E3"].fill = RJ; ws["E3"].number_format = "#,##0.00"
     ws["D4"] = "Difference"; ws["E4"] = "=E2-E3"; ws["E4"].number_format = "#,##0.00"
+    W.check(wb, name, f"{leg['direction']} {leg['leg_type']} leg PV", "E2", "E3", 1e-9)
     cols = ["Start", "End", "Payment", "τ (formula)", "DF(start)", "DF(end)", "DF(pay)", "Rate", "Cashflow", "PV", "Rijeka PV"]
     _hdr(ws, 7, cols)
     r0 = 8
@@ -298,6 +272,19 @@ def _swap_workbook(mkt: Market, *, title, fixed_dc, fixed_freq, float_dc, float_
     ws["A5"] = "Par rate (formulas)"; ws["B5"] = "='FLOAT leg'!E2/SUMPRODUCT('FIXED leg'!D8:D200,'FIXED leg'!G8:G200)/'FIXED leg'!B2"; ws["B5"].number_format = "0.0000%"
     ws["A6"] = "Set the fixed rate on the FIXED leg sheet to the par rate and the NPV goes to zero."
     _widths(ws, [24, 18])
+    W.check(wb, "Summary", "NPV (receive − pay)", "B1", "B2", 1e-9)
+    W.ticket(wb, "ANALYTICS", [("NPV", "Summary!B1", "#,##0.00", "receive − pay, in USD"), ("PAR RATE", "Summary!B5", "0.0000%", "the fixed rate that zeroes the NPV"),
+                               ("FIXED LEG PV", "'FIXED leg'!E2", "#,##0.00", "Σ N·r·τ·DF(pay)"), ("FLOAT LEG PV", "'FLOAT leg'!E2", "#,##0.00", "Σ N·f·τ·DF(pay)")])
+    W.ticket(wb, "TERMS", [("NOTIONAL", "'FIXED leg'!B2", "#,##0", "USD"), ("FIXED RATE", "'FIXED leg'!B3", "0.0000%", f"{fixed_dc} {fixed_freq.lower()}"),
+                           ("VALUATION DATE", "Curve!B1", "yyyy-mm-dd", "the curve's snapshot date")])
+    W.derive(wb, "τ", f"YEARFRAC(start, end, basis) · {fixed_dc} on the fixed leg, {float_dc} on the float leg", "'FIXED leg'!D8", "the first coupon's accrual fraction", "0.000000")
+    W.derive(wb, "DF(pay)", "log-linear between the bracketing pillar dates: exp((1−w)·ln DF₀ + w·ln DF₁), w = (pay − d₀)/(d₁ − d₀)", "'FIXED leg'!G8", "pricing/curve.py's interpolation, on calendar-day fractions", "0.000000")
+    W.derive(wb, "f (float rate)", "(DF(start)/DF(end) − 1)/τ_ACT/360 + spread", "'FLOAT leg'!H8", "for a compounded overnight index this is the compounded daily rate over the period", "0.0000%")
+    W.derive(wb, "cashflow", "N · rate · τ", "'FIXED leg'!I8", "the first fixed coupon", "#,##0.00")
+    W.derive(wb, "PV", "cashflow · DF(pay)", "'FIXED leg'!J8", "discounted at the business-day-adjusted payment date", "#,##0.00")
+    W.derive(wb, "leg PV", "Σ PV over the coupons", "'FIXED leg'!E2", "", "#,##0.00")
+    W.derive(wb, "NPV", "float leg PV − fixed leg PV", "Summary!B1", "we pay fixed, receive float", "#,##0.00")
+    W.derive(wb, "par rate", "float leg PV / Σ τ_i·DF(pay_i) / N", "Summary!B5", "the fixed rate at which NPV = 0", "0.0000%")
     return wb, res.npv
 
 
@@ -352,6 +339,18 @@ def swaption_workbook(mkt: Market):
     ws["A27"] = "Rijeka annuity (per unit notional)"; ws["B27"] = res.annuity / 10_000_000; ws["B27"].fill = RJ
     ws["A29"] = "Rijeka's engine uses the underlying swap's business-day-adjusted schedule; this sheet uses unadjusted annual dates, so expect a difference of a few dollars per million."
     _widths(ws, [30, 22, 14, 14])
+    W.check(wb, "Swaption", "Price (Bachelier, unadjusted annual dates vs the engine's adjusted schedule)", "B22", "B23", 2e-3)
+    W.check(wb, "Swaption", "Forward swap rate", "B17", "B26", 2e-3)
+    W.ticket(wb, "ANALYTICS", [("PRICE", "Swaption!B22", "#,##0.00", "USD, bought"), ("FORWARD", "Swaption!B17", "0.0000%", "the underlying's par rate at expiry"),
+                               ("ANNUITY", "Swaption!B15", "0.000000", "Σ τ·DF over the underlying's payment dates")])
+    W.ticket(wb, "TERMS", [("NOTIONAL", "Swaption!B1", "#,##0", "USD"), ("EXPIRY", "Swaption!B2", "0.00", "years"), ("STRIKE", "Swaption!B3", "0.0000%", "at the forward"),
+                           ("NORMAL VOL", "Swaption!B4", "0.0", "bp, surface point 1Yx5Y")])
+    for sym, notn, ref, note, fmt in [("τ·DF", "τ_i · DF(T_i) per payment date", "Swaption!D9", "annual ACT/360 accrual", "0.000000"),
+                                      ("A", "Σ τ_i·DF(T_i)", "Swaption!B15", "the annuity", "0.000000"), ("DF(T₀)", "DF at expiry", "Swaption!B16", "", "0.000000"),
+                                      ("F", "(DF(T₀) − DF(T_n)) / A", "Swaption!B17", "the forward swap rate", "0.0000%"), ("σ√T", "σ_bp/10⁴ · √T", "Swaption!B18", "", "0.000000"),
+                                      ("d", "±(F − K)/(σ√T)", "Swaption!B19", "+ payer, − receiver", "0.000000"), ("N(d), n(d)", "Φ(d), φ(d)", "Swaption!B20", "", "0.000000"),
+                                      ("V", "N·A·σ√T·[d·N(d) + n(d)]", "Swaption!B22", "Bachelier", "#,##0.00")]:
+        W.derive(wb, sym, notn, ref, note, fmt)
     return wb, res.npv
 
 
@@ -380,8 +379,9 @@ def cap_workbook(mkt: Market):
     r0 = 6
     for k, cp in enumerate(res.caplets):
         r = r0 + k
-        ws.cell(row=r, column=1, value=cp["start_date"]).number_format = "yyyy-mm-dd"
-        ws.cell(row=r, column=2, value=cp["end_date"]).number_format = "yyyy-mm-dd"
+        _d = lambda x: x if isinstance(x, date) else date.fromisoformat(str(x)[:10])      # real dates, so YEARFRAC needs no coercion
+        ws.cell(row=r, column=1, value=_d(cp["start_date"])).number_format = "yyyy-mm-dd"
+        ws.cell(row=r, column=2, value=_d(cp["end_date"])).number_format = "yyyy-mm-dd"
         ws.cell(row=r, column=3, value=f"=YEARFRAC(A{r},B{r},2)")
         ws.cell(row=r, column=4, value=f"=MAX((A{r}-ValDate)+(B{r}-A{r})/2,0)/365")
         ws.cell(row=r, column=5, value=f"={DF(f'A{r}')}").number_format = "0.000000"
@@ -393,6 +393,14 @@ def cap_workbook(mkt: Market):
     r1 = r0 + len(res.caplets) - 1
     ws["E1"] = f"=SUM(I{r0}:I{r1})"; ws["E1"].number_format = "#,##0.00"
     _widths(ws, [12, 12, 10, 14, 11, 11, 11, 10, 14, 14])
+    W.check(wb, "Cap", "Cap PV (Σ caplets)", "E1", "E2", 1e-6)
+    W.ticket(wb, "ANALYTICS", [("CAP PV", "Cap!E1", "#,##0.00", f"Σ of {res.n_caplets} caplets, USD")])
+    W.ticket(wb, "TERMS", [("NOTIONAL", "Cap!B1", "#,##0", "USD"), ("STRIKE", "Cap!B2", "0.0000%", "the ATM forward"), ("NORMAL VOL", "Cap!B3", "0.0", "bp, flat override")])
+    for sym, notn, ref, note, fmt in [("τ", "YEARFRAC(start, end, ACT/360)", f"Cap!C{r0}", "the first caplet", "0.000000"),
+                                      ("T", "time to the middle of the accrual period, ACT/365F", f"Cap!D{r0}", "SOFR fixes in arrears over the period", "0.000000"),
+                                      ("F", "(DF(start)/DF(end) − 1)/τ", f"Cap!G{r0}", "", "0.0000%"), ("d", "(F − K)/(σ√T)", f"Cap!H{r0}", "", "0.000000"),
+                                      ("caplet", "N·τ·DF(end)·[(F − K)·N(d) + σ√T·n(d)]", f"Cap!I{r0}", "Bachelier call", "#,##0.00"), ("cap", "Σ caplets", "Cap!E1", "", "#,##0.00")]:
+        W.derive(wb, sym, notn, ref, note, fmt)
     return wb, res.npv
 
 
@@ -435,6 +443,16 @@ def crypto_ndf_workbook(mkt: Market):
     ws["A14"] = "Reference forward (Rijeka)"; ws["B14"] = F; ws["B14"].fill = RJ; ws["B14"].number_format = "#,##0.00"
     r = _forward_engine_rows(ws, mkt, base="BTC", quote="USD", S=spot_px, N=10, T=T, base_rate=r_btc, K_cell="B12", npv_cell="B13", k_off=-1000.0, crypto=True, row0=16)
     _widths(ws, [62, 18, 18, 14])
+    W.ticket(wb, "ANALYTICS", [("NET NPV", "Inputs!B18", "#,##0.00", "USD, at the yellow strike"), ("CRY01", "Inputs!B19", "#,##0.00", "PV for +1% spot"),
+                               ("IR01 (DISC)", "Inputs!B20", "#,##0.0000", "+1bp on the USD curve"), ("FUND01", "Inputs!B21", "#,##0.0000", "+1bp on the funding rate")])
+    W.ticket(wb, "MARKET", [("SPOT", "Inputs!B1", "#,##0.00", "USD per BTC"), ("FAIR FORWARD", "Inputs!B8", "#,##0.00", "cash-and-carry"), ("DF USD", "Inputs!B5", "0.000000", "to settlement"),
+                            ("FUNDING RATE", "Inputs!B6", "0.00%", "continuous, p.a.")])
+    for sym, notn, ref, note, fmt in [("T", "(settlement − valuation)/365", "Inputs!B4", "ACT/365", "0.0000"), ("DF_USD", "from the SOFR curve, log-linear", "Inputs!B5", "", "0.000000"),
+                                      ("DF_BTC", "exp(−r_c·T)", "Inputs!B7", "the funding rate as the base rate", "0.000000"), ("F", "S·DF_BTC/DF_USD", "Inputs!B8", "cash-and-carry forward", "#,##0.00"),
+                                      ("NPV", "(F − K)·N·DF_USD", "Inputs!B13", "", "#,##0.00"), ("CRY01", "N·S·DF_BTC·1%", "Inputs!B19", "exact: a forward is linear in spot", "#,##0.00"),
+                                      ("IR01", "−N·K·[DF_USD·e^(−1bp·T) − DF_USD]", "Inputs!B20", "the discounting curve alone", "#,##0.0000"),
+                                      ("FUND01", "N·S·[DF_BTC·e^(−1bp·T) − DF_BTC]", "Inputs!B21", "the funding rate", "#,##0.0000")]:
+        W.derive(wb, sym, notn, ref, note, fmt)
     return wb, r.npv
 
 
@@ -494,6 +512,15 @@ def fx_forward_workbook(mkt: Market):
     ws["A15"] = "Positive USD rates above EUR rates put the forward above spot: borrow USD, buy EUR today, lend EUR; the forward repays the USD interest."
     r = _forward_engine_rows(ws, mkt, base="EUR", quote="USD", S=spot, N=10_000_000, T=T, base_rate=r_eur, K_cell="B11", npv_cell="B12", k_off=-0.0050, crypto=False, row0=17)
     _widths(ws, [62, 18, 18, 14])
+    W.ticket(wb, "ANALYTICS", [("NET NPV", "Inputs!B19", "#,##0.00", "USD, at the yellow rate K"), ("FX01", "Inputs!B20", "#,##0.00", "PV for +1% spot"),
+                               ("IR01 USD", "Inputs!B21", "#,##0.0000", "+1bp on the USD curve"), ("IR01 EUR", "Inputs!B22", "#,##0.0000", "+1bp on the EUR rate")])
+    W.ticket(wb, "MARKET", [("SPOT", "Inputs!B1", "0.00000", "USD per EUR"), ("FAIR FORWARD", "Inputs!B8", "0.00000", "covered interest parity"), ("POINTS", "Inputs!B9", "0.0", "(F − S)·10⁴"),
+                            ("DF USD", "Inputs!B5", "0.000000", "to settlement")])
+    for sym, notn, ref, note, fmt in [("T", "(settlement − valuation)/365", "Inputs!B4", "ACT/365", "0.0000"), ("DF_USD", "from the SOFR curve, log-linear", "Inputs!B5", "", "0.000000"),
+                                      ("DF_EUR", "exp(−r_EUR·T)", "Inputs!B7", "flat here; the €STR curve on a desk", "0.000000"), ("F", "S·DF_EUR/DF_USD", "Inputs!B8", "parity", "0.00000"),
+                                      ("NPV", "N·(F − K)·DF_USD", "Inputs!B12", "", "#,##0.00"), ("FX01", "N·S·DF_EUR·1%", "Inputs!B20", "exact: a forward is linear in spot", "#,##0.00"),
+                                      ("IR01 USD", "−N·K·[DF_USD·e^(−1bp·T) − DF_USD]", "Inputs!B21", "", "#,##0.0000"), ("IR01 EUR", "N·S·[DF_EUR·e^(−1bp·T) − DF_EUR]", "Inputs!B22", "", "#,##0.0000")]:
+        W.derive(wb, sym, notn, ref, note, fmt)
     return wb, r.npv
 
 
@@ -575,11 +602,7 @@ def _fx_inputs(wb, mkt: Market, case: dict = FX_CASE):
     return dict(val=val, exp=exp, settle=settle, S=S, N=N, F=F, df=df_s, T_e=T_e, T_s=T_s, vol=vol, base=base, quote=quote, case=case)
 
 
-def _ref_cell(ws, row, label, formula, ref, fmt="#,##0.00"):
-    ws.cell(row=row, column=1, value=label)
-    ws.cell(row=row, column=2, value=formula).number_format = fmt
-    c = ws.cell(row=row, column=3, value=ref); c.fill = RJ; c.number_format = fmt
-    ws.cell(row=row, column=4, value=f"=B{row}-C{row}").number_format = fmt
+_ref_cell = W.ref_cell
 
 
 def _option_workbook(mkt: Market, case: dict):
@@ -630,6 +653,49 @@ def _option_workbook(mkt: Market, case: dict):
     ws["A20"] = ("Sold option: the same numbers with the opposite sign. The premium is a cash flow on its payment date, not part of the value once paid. "
                  "The rate rows assume the carry runs over T_s from the valuation date, as the engine does without a spot lag" + (" (a digital asset settles its spot the next day)." if crypto else "."))
     _widths(ws, [58, 18, 18, 14])
+    W.dropdown(ws, "B2", ["1", "-1"])
+    delta, fund = case["delta"], case["funding"]
+    W.ticket(wb, "ANALYTICS", [("OPTION NPV", "European!B8", "#,##0.00", f"{quote}, bought"), ("DELTA", "European!B11", "#,##0.0000", f"spot position in {base}"),
+                               (delta, "European!B12", "#,##0.00", "PV for +1% spot, repriced"), ("VEGA / 1PT", "European!B14", "#,##0.00", "repriced at σ + 1 point"),
+                               ("IR01" + (" (DISC)" if crypto else " " + quote), "European!B15", "#,##0.0000", f"+1bp on the {quote} curve"),
+                               (fund, "European!B16", "#,##0.0000", "+1bp on the funding rate" if crypto else f"+1bp on the {base} curve"),
+                               ("FORWARD DELTA", "European!B10", "0.0%", "Φ(d₁), premium-excluded")])
+    W.ticket(wb, "MARKET", [("SPOT", "Inputs!B1", case["spot_fmt"], f"{quote} per {base}"), ("FORWARD TO SETTLEMENT", "Inputs!B10", case["spot_fmt"], "S·DF_b/DF_q"),
+                            ("STRIKE", "European!B1", case["spot_fmt"], "at the forward unless changed"), ("VOL", "Inputs!B11", "0.00%", "lognormal, the surface's ATM"),
+                            (f"DF {quote}", "Inputs!B7", "0.000000", "to settlement"), ("T_e / T_s", "Inputs!B5", "0.0000", "ACT/365 to expiry; settlement on Inputs!B6")])
+    for sym, notn, ref, note, fmt in [("T_e, T_s", "(expiry − valuation)/365, (settlement − valuation)/365", "Inputs!B5", "ACT/365", "0.0000"),
+                                      (f"DF_{quote}", "from the SOFR curve to settlement, log-linear", "Inputs!B7", "", "0.000000"),
+                                      (f"DF_{base}", f"exp(−r_{base}·T_s)", "Inputs!B9", "the funding rate as the base rate" if crypto else "flat here", "0.000000"),
+                                      ("F", f"S·DF_{base}/DF_{quote}", "Inputs!B10", "the forward to settlement", case["spot_fmt"]),
+                                      ("r, b", f"−ln DF_{quote}/T_e,  ln(F/S)/T_e", "Inputs!B12", "the engine's quote rate and carry; b on Inputs!B13", "0.0000%"),
+                                      ("σ√T_e", "σ·√T_e", "Inputs!B14", "", "0.000000"),
+                                      ("d₁", "[ln(F/K) + ½σ²T_e]/(σ√T_e)", "European!B3", "", "0.000000"), ("d₂", "d₁ − σ√T_e", "European!B4", "", "0.000000"),
+                                      ("premium / unit", f"DF_{quote}·φ·[F·N(φd₁) − K·N(φd₂)]", "European!B5", "φ = +1 call, −1 put; the put from parity", "#,##0.000000"),
+                                      ("NPV", "premium · N", "European!B8", "bought; a sold option carries the opposite sign", "#,##0.00"),
+                                      ("forward delta", "Φ(d₁)  (put: Φ(d₁) − 1)", "European!B10", "premium-excluded, the delta the smile is quoted on", "0.0000"),
+                                      ("spot position", f"Φ(d₁)·DF_{quote}·F/S·N", "European!B11", f"in {base}", "#,##0.0000"),
+                                      (delta, "NPV(F·1.01) − NPV", "European!B12", "the forward moves with spot, the discounting does not", "#,##0.00"),
+                                      ("vega", "NPV(σ + 0.01) − NPV", "European!B14", "repriced; the analytic N·DF·F·n(d₁)·√T_e·0.01 on B13", "#,##0.00"),
+                                      ("IR01", f"NPV(F·e^(1bp·T_s), DF·e^(−1bp·T_s)) − NPV", "European!B15", f"+1bp on the {quote} curve: the forward up by the carry, the discount factor down", "#,##0.0000"),
+                                      (fund, "NPV(F·e^(−1bp·T_s)) − NPV", "European!B16", "+1bp on the base rate: the forward down by the carry", "#,##0.0000")]:
+        W.derive(wb, sym, notn, ref, note, fmt)
+    # Scenario: NPV against spot, by the same closed form, with the payoff at expiry beside it
+    sc = wb.create_sheet("Scenario")
+    sc["A1"] = "NPV AGAINST SPOT"; sc["A1"].font = W.F_TITLE
+    sc["A2"] = "The forward moves one for one with spot; the discounting does not. The payoff line is the option at expiry, discounted."; sc["A2"].font = W.F_SUB
+    W.header(sc, 4, ["Spot shock", "Spot", "Forward", "d₁", "d₂", "NPV", "Payoff at expiry (disc.)"])
+    for i, sh in enumerate(range(-10, 11, 2)):
+        r = 5 + i
+        sc.cell(row=r, column=1, value=sh / 100.0).number_format = "0%"
+        sc.cell(row=r, column=2, value=f"=Spot*(1+A{r})").number_format = case["spot_fmt"]
+        sc.cell(row=r, column=3, value=f"=Fwd*(1+A{r})").number_format = case["spot_fmt"]
+        sc.cell(row=r, column=4, value=f"=(LN(C{r}/European!$B$1)+0.5*Sigma^2*Te)/SqT").number_format = "0.0000"
+        sc.cell(row=r, column=5, value=f"=D{r}-SqT").number_format = "0.0000"
+        sc.cell(row=r, column=6, value=f"=Notl*DFq*European!$B$2*(C{r}*{_N('European!$B$2*D' + str(r))}-European!$B$1*{_N('European!$B$2*E' + str(r))})").number_format = "#,##0"
+        sc.cell(row=r, column=7, value=f"=Notl*DFq*MAX(European!$B$2*(C{r}-European!$B$1),0)").number_format = "#,##0"
+    W.widths(sc, [12, 14, 14, 10, 10, 16, 22])
+    sc.sheet_view.showGridLines = False
+    W.scenario(wb, "Scenario", (2, 5, 15), [("NPV", (6, 5, 15)), ("Payoff at expiry", (7, 5, 15))], f"{base} {'call' if True else 'put'} on {case['notional']:g} {base}: NPV vs spot", f"spot ({quote} per {base})", quote)
     return wb, res.npv
 
 
@@ -727,6 +793,7 @@ def _styles_workbook(mkt: Market, case: dict):
         ws.cell(row=r, column=17, value=f"={L['Per EUR (formulas)']}{r}*Notl").number_format = "#,##0.00"
         c = ws.cell(row=r, column=18, value=ref(style="BARRIER", option_type=ot, strike=F, barrier_type=bt, barrier=(Hup if bt.startswith("UP") else Hdn), rebate=R)); c.fill = RJ; c.number_format = "#,##0.00"
         ws.cell(row=r, column=19, value=f"={L['Total (formulas)']}{r}-{L['Rijeka engine']}{r}").number_format = "#,##0.00"
+        W.check(wb, "Barrier", f"{bt.replace('_', '-and-').lower()} {ot.lower()} (Reiner–Rubinstein)", f"{L['Total (formulas)']}{r}", f"{L['Rijeka engine']}{r}", 1e-5)
     ws["A18"] = "In + out = vanilla + both rebates' values; move K across H and the IF picks the other branch of each case (Haug, §4.17.1)."
     _widths(ws, [22, 4, 4, 9] + [9] * 5 + [11] * 6 + [16, 16, 16, 12])
 
@@ -803,6 +870,7 @@ def _styles_workbook(mkt: Market, case: dict):
         ws.cell(row=row, column=11, value=label); ws.cell(row=row, column=12, value=formula).number_format = "#,##0.00"
         c = ws.cell(row=row, column=13, value=value); c.fill = RJ; c.number_format = "#,##0.00"
         ws.cell(row=row, column=14, value=f"=L{row}-M{row}").number_format = "#,##0.00"
+        W.check(wb, "DoubleBarrier", label, f"L{row}", f"M{row}", 1e-5)
     ref2("Double knock-out call: e^(−rT)·Σ(call c₁ − call c₂)·N", 5, f"=DFe*({s_('D')}-{s_('E')})*Notl", ref(style="DOUBLE_BARRIER", option_type="CALL", strike=F, barrier_type="KNOCK_OUT", lower=Lo, upper=Up))
     ref2("Double knock-in call = vanilla − knock-out", 6, "=L1*Notl-L5", ref(style="DOUBLE_BARRIER", option_type="CALL", strike=F, barrier_type="KNOCK_IN", lower=Lo, upper=Up))
     ref2("Double knock-out put", 7, f"=DFe*({s_('F')}-{s_('G')})*Notl", ref(style="DOUBLE_BARRIER", option_type="PUT", strike=F, barrier_type="KNOCK_OUT", lower=Lo, upper=Up))
@@ -811,6 +879,28 @@ def _styles_workbook(mkt: Market, case: dict):
     ref2("Double one-touch = Q·e^(−rT) − double no-touch", 10, "=B4*DFe-L9", ref(style="TOUCH", touch_type="DOUBLE_ONE_TOUCH", payout=Q, lower=Lo, upper=Up))
     ws["K12"] = "Each row n is one image of the two-barrier reflection; the sum converges in a handful of terms at these widths (Ikeda–Kunitomo, 1992)."
     _widths(ws, [6, 12, 12, 14, 14, 14, 14, 13, 13, 2, 50, 18, 18, 14])
+    W.ticket(wb, "DIGITAL", [("CASH CALL", "Digital!B7", "#,##0.00", f"pays Q {quote} above the strike"), ("CASH PUT", "Digital!B8", "#,##0.00", ""),
+                             (f"{base}-AMOUNT CALL", "Digital!B9", "#,##0.00", "asset-or-nothing"), (f"{base}-AMOUNT PUT", "Digital!B10", "#,##0.00", "")])
+    W.ticket(wb, "BARRIER (total, formulas)", [(f"{bt.replace('_', '-and-').lower()} {ot.lower()}", f"Barrier!Q{9 + k}", "#,##0.00", "Reiner–Rubinstein") for k, (bt, ot) in enumerate(cases)])
+    W.ticket(wb, "TOUCH", [(lab, f"Touch!B{12 + k}", "#,##0.00", "") for k, (lab, _, _) in enumerate(rows)])
+    W.ticket(wb, "DOUBLE BARRIER", [("KNOCK-OUT CALL", "DoubleBarrier!L5", "#,##0.00", "image series"), ("KNOCK-IN CALL", "DoubleBarrier!L6", "#,##0.00", "vanilla − knock-out"),
+                                    ("KNOCK-OUT PUT", "DoubleBarrier!L7", "#,##0.00", ""), ("KNOCK-IN PUT", "DoubleBarrier!L8", "#,##0.00", ""),
+                                    ("DOUBLE NO-TOUCH", "DoubleBarrier!L9", "#,##0.00", "Q·e^(−rT)·P(no exit)"), ("DOUBLE ONE-TOUCH", "DoubleBarrier!L10", "#,##0.00", "Q·e^(−rT) − DNT")])
+    for sym, notn, ref_, note, fmt in [("r, b", f"−ln DF_{quote}/T_e,  ln(F/S)/T_e", "Inputs!B12", "the engine's quote rate and carry (b on Inputs!B13)", "0.0000%"),
+                                       ("d₁, d₂ (digital)", "[ln(S/K) + (b + ½σ²)T]/(σ√T), d₁ − σ√T", "Digital!B3", "", "0.000000"),
+                                       ("cash digital", "Q·e^(−rT)·N(±d₂)", "Digital!B7", "cash-or-nothing", "#,##0.00"),
+                                       (f"{base}-amount digital", "Q·S·e^((b−r)T)·N(±d₁)", "Digital!B9", "asset-or-nothing", "#,##0.00"),
+                                       ("μ", "(b − ½σ²)/σ²", "Barrier!B5", "Reiner–Rubinstein", "0.000000"), ("λ", "√(μ² + 2r/σ²)", "Barrier!B6", "", "0.000000"),
+                                       ("x₁, x₂, y₁, y₂, z", "ln(S/K)/σ√T + (1+μ)σ√T, ln(S/H)/σ√T + (1+μ)σ√T, ln(H²/SK)/σ√T + (1+μ)σ√T, ln(H/S)/σ√T + (1+μ)σ√T, ln(H/S)/σ√T + λσ√T", "Barrier!E9", "the first case's row; the others follow", "0.000000"),
+                                       ("A … F", "the six Reiner–Rubinstein terms with φ (call/put) and η (down/up)", "Barrier!J9", "A on J9 … F on O9", "0.000000"),
+                                       ("barrier price", "the case's combination of A–F, by K against H", "Barrier!P9", "Haug §4.17.1 table; × N on the next column", "0.000000"),
+                                       ("P(no hit)", "N(ηx₂ − ησ√T) − (H/S)^(2μ)·N(ηy₂ − ησ√T)", "Touch!G8", "survival to expiry, up barrier", "0.000000"),
+                                       ("first-passage value", "(H/S)^(μ+λ)·N(ηz) + (H/S)^(μ−λ)·N(ηz − 2ηλσ√T)", "Touch!H8", "one unit paid at the hit", "0.000000"),
+                                       ("m, v", "(b − ½σ²)·T, σ²·T", "DoubleBarrier!B9", "the log-return's drift and variance (v on B10)", "0.000000"),
+                                       ("image term", "e^(m·c/v)·[S·e^(c+m+v/2)·(N(…) − N(…)) − K·(N(…) − N(…))] for the image c = 2nW", "DoubleBarrier!D15", "n = −12 … 12, one row each", "0.000000"),
+                                       ("knock-out", "e^(−rT)·Σₙ(term(c₁) − term(c₂))·N", "DoubleBarrier!L5", "", "#,##0.00"),
+                                       ("double no-touch", "Q·e^(−rT)·Σₙ(survival(c₁) − survival(c₂))", "DoubleBarrier!L9", "", "#,##0.00")]:
+        W.derive(wb, sym, notn, ref_, note, fmt)
     return wb, ref(style="DOUBLE_BARRIER", option_type="CALL", strike=F, barrier_type="KNOCK_OUT", lower=Lo, upper=Up)
 
 
@@ -829,5 +919,6 @@ BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workb
 
 def build(product: str, mkt: Market) -> tuple[bytes, float]:
     wb, ref = BUILDERS[product](mkt)
+    W.finish(wb)
     bio = io.BytesIO(); wb.save(bio)
     return bio.getvalue(), ref

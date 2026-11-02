@@ -238,6 +238,7 @@ export function OptionFeeBlock({ spec, state, update }) {
 
 export function AnalyticsBlock({ descriptor, result, pricing, error }) {
   const [open, setOpen] = useState(true)
+  const [math, setMath] = useState(false)      // SHOW MATH: each card annotated with the formula it came from
 
   if (error) {
     return (
@@ -263,17 +264,22 @@ export function AnalyticsBlock({ descriptor, result, pricing, error }) {
 
   return (
     <div className="tbw-sec">
-      <div className="tbw-sec-header">
+      <div className="tbw-sec-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span className="tbw-lbl">
           ANALYTICS <span className="tbw-mut" style={{ marginLeft: 6 }}>
             {result.curve_id || ''} · {result.valuation_date || ''}
           </span>
         </span>
+        {metrics.some(m => m.math) && (
+          <button className="tbw-breakdown-toggle" onClick={() => setMath(x => !x)} title="Annotate each number with the formula that produced it">
+            {math ? '▾' : '▸'} Σ MATH
+          </button>
+        )}
       </div>
 
       <div className="tbw-metrics-grid">
         {metrics.map((m, i) => (
-          <MetricCard key={i} {...m} />
+          <MetricCard key={i} {...m} showMath={math} />
         ))}
       </div>
 
@@ -381,7 +387,7 @@ function Field({ label, children }) {
   )
 }
 
-function MetricCard({ label, value, colorBy }) {
+function MetricCard({ label, value, colorBy, math, showMath }) {
   return (
     <div className="tbw-metric-card">
       <div className="tbw-lbl" style={{ marginBottom: 6 }}>{label}</div>
@@ -389,6 +395,9 @@ function MetricCard({ label, value, colorBy }) {
            style={{ fontSize: 16, fontWeight: 500 }}>
         {value ?? '—'}
       </div>
+      {showMath && math && (
+        <div className="tbw-mono tbw-mut" style={{ fontSize: 10.5, lineHeight: 1.45, marginTop: 6, whiteSpace: 'pre-line' }}>{math}</div>
+      )}
     </div>
   )
 }

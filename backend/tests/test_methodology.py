@@ -26,7 +26,7 @@ def _mkt(flat=0.04):
 def test_workbook_builds_with_formulas_and_reference(product):
     data, ref = rep.build(product, _mkt())
     wb = load_workbook(io.BytesIO(data))
-    assert "README" in wb.sheetnames and "Curve" in wb.sheetnames
+    assert wb.sheetnames[0] == "Cover" and "Curve" in wb.sheetnames and "Checks" in wb.sheetnames
     assert "PillarDates" in wb.defined_names and "PillarDF" in wb.defined_names and "ValDate" in wb.defined_names
     formulas = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")]
     assert len(formulas) > 10
@@ -208,3 +208,38 @@ def test_fx_option_workbooks_carry_the_engine_and_the_closed_forms():
     for w, green, label in zip([ko_c, van_c - ko_c, ko_p, van_p - ko_p, dnt, Qd * dfT - dnt], greens, ["DKO call", "DKI call", "DKO put", "DKI put", "DNT", "DOT"]):
         assert green == pytest.approx(w, rel=2e-6), label
     assert greens[4] == pytest.approx(price_exotic(ExoticSpec(style="TOUCH", touch_type="DOUBLE_NO_TOUCH", payout=Qd, lower=Lo, upper=Up), **kw).npv)
+
+
+def test_every_workbook_has_the_open_box_sheets_and_live_links():
+    """Cover with the verdict, Ticket and Derivation that link into the sheets, Checks with a PASS/FAIL per comparison."""
+    import re
+    for product in rep.BUILDERS:
+        data, _ = rep.build(product, _mkt())
+        wb = load_workbook(io.BytesIO(data))
+        assert wb.sheetnames[:3] == ["Cover", "Ticket", "Derivation"] and wb.sheetnames[-1] == "Checks", product
+        cover = wb["Cover"]
+        assert any(isinstance(c.value, str) and "COUNTIF(Checks" in c.value for row in cover.iter_rows() for c in row), product
+        checks = wb["Checks"]
+        rows = [r for r in checks.iter_rows(min_row=5) if r[0].value]
+        assert rows, product
+        for r in rows:
+            sheet = r[0].value
+            assert sheet in wb.sheetnames
+            assert str(r[2].value).startswith(f"='{sheet}'!") and str(r[7].value).startswith("=IF(F")
+            assert r[1].hyperlink is not None
+        # every ticket and derivation reference points at a cell that holds something
+        for name in ("Ticket", "Derivation"):
+            ws = wb[name]
+            for row in ws.iter_rows(min_row=5):
+                for c in row:
+                    if c.hyperlink and c.hyperlink.target and c.hyperlink.target.startswith("#"):
+                        m = re.fullmatch(r"#'([^']+)'!([A-Z]+[0-9]+)", c.hyperlink.target)
+                        assert m and m.group(1) in wb.sheetnames and wb[m.group(1)][m.group(2)].value is not None, (product, name, c.hyperlink.target)
+
+
+def test_option_workbooks_carry_a_scenario_chart_and_a_call_put_dropdown():
+    for product in ("fx_option", "crypto_ndo"):
+        data, _ = rep.build(product, _mkt())
+        wb = load_workbook(io.BytesIO(data))
+        assert "Scenario" in wb.sheetnames and len(wb["Scenario"]._charts) == 1
+        assert any(dv.formula1 == '"1,-1"' for dv in wb["European"].data_validations.dataValidation)

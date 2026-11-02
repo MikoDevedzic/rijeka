@@ -9,6 +9,7 @@ const PHASES = [
     ['DONE', 'On-chain bilateral confirmation: canonical record v2 → EIP-712 → registry on Sepolia; amend and terminate; public verifier'],
     ['DONE', 'Messenger: firms, rooms, trade cards, wallet countersigning; Telegram mirror; Market News room'],
     ['DONE', 'Hosted demo: sandbox workspace on sign-in, demo counterparty, Excel methodology replications'],
+    ['DONE', 'Open-box replications: every workbook with a cover and verdict, the ticket rebuilt in cells with links into the maths, a derivation ledger, a scenario chart and a Checks sheet; SHOW MATH on the ticket annotates each number with its formula'],
     ['NOW',  'Go-live of the hosted demo (app.rijeka.app) and the first recorded walkthrough'],
     ['NEXT', 'Shared market-data feed with a factor-model simulator so curves move; P&L and XVA tick on the desk'],
     ['NEXT', 'House dealer: Rijeka quotes mid ± spread so a solo learner always has a counterparty (paper only)'],

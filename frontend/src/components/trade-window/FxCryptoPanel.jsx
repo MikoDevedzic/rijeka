@@ -200,16 +200,30 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const effDate = (() => { const d = new Date(); let n = crypto ? 0 : 2; while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) n-- } return iso(d) })()
   const ndf = shape === 'NDF'
   const pct = (v, d = 2) => v == null || isNaN(v) ? '—' : `${(Number(v) * 100).toFixed(d)}%`
+  // SHOW MATH: the formula behind each card, with this quote's own numbers (the Excel replication's Derivation sheet, live)
+  const mathOf = (r) => {
+    const F = fmt(r.forward, dp), K = fmt(r.strike, dp), S = fmt(r.spot, dp), T = fmt(r.t_expiry, 4), sig = fmt(r.vol_pct, 2)
+    const gk = r.style === 'EUROPEAN' || !r.style
+    return {
+      npv: gk ? `DF_${qc}·[F·N(d₁) − K·N(d₂)]·N\nd₁ = [ln(F/K) + ½σ²T]/(σ√T) = ${fmt(r.d1, 4)} · d₂ = ${fmt(r.d2, 4)}\nF ${F} · K ${K} · σ ${sig}% · T ${T}y · DF ${fmt(r.df_quote, 6)}` : `${r.method}\nF ${F} · K ${K} · σ ${sig}% · T ${T}y`,
+      delta: gk ? `Φ(d₁)·DF_${qc}·F/S·N = ${fmt(r.forward_delta * 100, 1)}% · ${fmt(r.df_quote, 4)} · ${F}/${S} · N` : `[NPV(S·1.01) − NPV(S·0.99)] / (0.02·S)`,
+      spot01: `NPV(F·1.01) − NPV\nthe forward moves one for one with spot; the discounting does not`,
+      vega: `NPV(σ + 1pt) − NPV\nrepriced at ${fmt(r.vol_pct + 1, 2)}%`,
+      ir01: crypto ? `NPV(DF_${qc}·e^(−1bp·T), F·e^(+1bp·T)) − NPV\nthe ${qc} curve alone: the forward up by the carry, DF down` : `IR01 ${qc} + IR01 ${r.base_currency}\n+1bp on each curve, repriced`,
+      fund01: `NPV(F·e^(−1bp·T)) − NPV\n+1bp on the funding rate: the forward down by the carry`,
+      theta: `NPV(T − 1/365) − NPV\nsame spot, curves and vol, one calendar day later`,
+    }
+  }
   const optionDescriptor = { analytics: {
-    metrics: (r) => [
-      { label: 'OPTION NPV', value: money(r.npv), colorBy: sgn(r.npv) },
-      { label: 'DELTA', value: `${fmt(r.delta_base_units, 0)} ${r.base_currency}`, colorBy: sgn(r.delta_base_units) },
-      { label: DELTA_LABEL(crypto), value: money(r.spot01), colorBy: sgn(r.spot01) },
-      { label: 'VEGA / 1pt', value: money(r.vega), colorBy: sgn(r.vega) },
-      { label: crypto ? 'IR01 (DISC)' : 'IR01', value: money(r.ir01), colorBy: sgn(r.ir01) },
-      ...(crypto ? [{ label: 'FUND01', value: money(r.fund01 ?? r.ir01_base), colorBy: sgn(r.fund01 ?? r.ir01_base) }] : []),
-      { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta) },
-    ],
+    metrics: (r) => { const m = mathOf(r); return [
+      { label: 'OPTION NPV', value: money(r.npv), colorBy: sgn(r.npv), math: m.npv },
+      { label: 'DELTA', value: `${fmt(r.delta_base_units, 0)} ${r.base_currency}`, colorBy: sgn(r.delta_base_units), math: m.delta },
+      { label: DELTA_LABEL(crypto), value: money(r.spot01), colorBy: sgn(r.spot01), math: m.spot01 },
+      { label: 'VEGA / 1pt', value: money(r.vega), colorBy: sgn(r.vega), math: m.vega },
+      { label: crypto ? 'IR01 (DISC)' : 'IR01', value: money(r.ir01), colorBy: sgn(r.ir01), math: m.ir01 },
+      ...(crypto ? [{ label: 'FUND01', value: money(r.fund01 ?? r.ir01_base), colorBy: sgn(r.fund01 ?? r.ir01_base), math: m.fund01 }] : []),
+      { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta), math: m.theta },
+    ] },
     breakdown: (r) => ({ kind: 'market', columns: ['ITEM', 'VALUE', 'NOTE'], rows: [
       ['SPOT', fmt(r.spot, dp), r.spot_source || ''],
       ['FORWARD TO SETTLEMENT', fmt(r.forward, dp), `${r.forward_mode === 'MARKET' && r.market_points != null ? 'quoted points' : 'implied from yields'}${r.forward_source ? ' · ' + r.forward_source : ''}`],
@@ -226,12 +240,12 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   } }
   const forwardDescriptor = { analytics: {
     metrics: (r) => [
-      { label: 'NET NPV', value: money(r.npv), colorBy: sgn(r.npv) },
-      { label: DELTA_LABEL(crypto), value: money(spot01(r)), colorBy: sgn(spot01(r)) },
-      { label: crypto ? 'IR01 (DISC)' : 'IR01', value: money(ir01(r)), colorBy: sgn(ir01(r)) },
-      ...(crypto ? [{ label: 'FUND01', value: money(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp), colorBy: sgn(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp) }]
-                 : [{ label: 'IR01 DISC', value: money(r.ir01_disc ?? r.rho_quote_per_bp), colorBy: sgn(r.ir01_disc ?? r.rho_quote_per_bp) }]),
-      { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta) },
+      { label: 'NET NPV', value: money(r.npv), colorBy: sgn(r.npv), math: `±N·(F − K)·DF_${qc}\nF = S·DF_${r.base_currency}/DF_${qc} = ${fmt(r.forward, dp)} · K ${fmt(r.forward_rate, dp)} · DF ${fmt(r.df_quote, 6)}` },
+      { label: DELTA_LABEL(crypto), value: money(spot01(r)), colorBy: sgn(spot01(r)), math: `N·S·DF_${r.base_currency}·1%\nexact: a forward is linear in spot` },
+      { label: crypto ? 'IR01 (DISC)' : 'IR01', value: money(ir01(r)), colorBy: sgn(ir01(r)), math: crypto ? `−N·K·[DF_${qc}·e^(−1bp·T) − DF_${qc}]\nthe discounting curve alone` : `IR01 ${qc} + IR01 ${r.base_currency}\n−N·K·ΔDF_${qc} + N·S·ΔDF_${r.base_currency}` },
+      ...(crypto ? [{ label: 'FUND01', value: money(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp), colorBy: sgn(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp), math: `N·S·[DF_${r.base_currency}·e^(−1bp·T) − DF_${r.base_currency}]\n+1bp on the funding rate` }]
+                 : [{ label: 'IR01 DISC', value: money(r.ir01_disc ?? r.rho_quote_per_bp), colorBy: sgn(r.ir01_disc ?? r.rho_quote_per_bp), math: `−N·K·[DF_${qc}·e^(−1bp·T) − DF_${qc}]\nthe ${qc} curve alone` }]),
+      { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta), math: `NPV one calendar day later, same market` },
     ],
     breakdown: (r) => ({ kind: 'market', columns: ['ITEM', 'VALUE', 'NOTE'], rows: [
       ['SPOT', fmt(r.spot, dp), r.spot_source || ''],
