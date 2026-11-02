@@ -172,16 +172,35 @@ def live_commit(url: str) -> Optional[str]:
         return None
 
 
+API_PATHS_EXCLUDED = ("frontend/", "netlify_drop/", "docs/")
+
+
+def frontend_only(files: list[str]) -> bool:
+    """True when every changed path is outside the API (what render.yaml's buildFilter skips)."""
+    return bool(files) and all(f.startswith(API_PATHS_EXCLUDED) or f.endswith(".md") for f in files)
+
+
 def sync_release(own: str, repo: str, token: str, gh=github, branch: str = "release",
                  base: str = "main") -> str:
-    """Moves `release` to `own` when `own` is on `base` and `release` is elsewhere. Returns what happened."""
+    """Moves `release` to `own` when `own` is on `base` and `release` is elsewhere; to `base`'s head instead
+    when `base` is ahead of `own` on frontend, landing-site or docs changes only (Render does not deploy
+    those, so the API never serves them, but the frontend must). Returns what happened."""
     code, ref = gh("GET", f"/repos/{repo}/git/ref/heads/{branch}", token)
     current = (ref or {}).get("object", {}).get("sha") if code == 200 else None
-    if current == own:
-        return "release already at this commit"
     code, cmp = gh("GET", f"/repos/{repo}/compare/{base}...{own}", token)
     if code != 200 or (cmp or {}).get("status") not in ("identical", "behind"):
         return f"commit is not on {base} (compare {code}: {(cmp or {}).get('status')}); left alone"
+    target = own
+    if (cmp or {}).get("status") == "behind":
+        code2, ahead = gh("GET", f"/repos/{repo}/compare/{own}...{base}", token)
+        files = [f.get("filename", "") for f in (ahead or {}).get("files", [])] if code2 == 200 else []
+        if frontend_only(files):
+            code3, head = gh("GET", f"/repos/{repo}/git/ref/heads/{base}", token)
+            if code3 == 200 and (head or {}).get("object", {}).get("sha"):
+                target = head["object"]["sha"]
+    if current == target:
+        return "release already at this commit"
+    own = target
     if current is None:
         code, _ = gh("POST", f"/repos/{repo}/git/refs", token, {"ref": f"refs/heads/{branch}", "sha": own})
     else:

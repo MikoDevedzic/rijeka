@@ -60,13 +60,17 @@ def test_without_the_cron_secret_steps_do_not_run(monkeypatch):
     assert called == [] and "RIJEKA_CRON_SECRET" in S.status()["steps"]["news"]["detail"]
 
 
-def _gh_factory(release_sha, compare_status, log):
+def _gh_factory(release_sha, compare_status, log, ahead_files=None, main_sha="m" * 40):
     def gh(method, path, token, body=None):
         log.append((method, path, body))
         if path.endswith("/git/ref/heads/release"):
             return (200, {"object": {"sha": release_sha}}) if release_sha else (404, {"message": "Not Found"})
-        if "/compare/" in path:
+        if path.endswith("/git/ref/heads/main"):
+            return 200, {"object": {"sha": main_sha}}
+        if "/compare/main..." in path:
             return 200, {"status": compare_status}
+        if "/compare/" in path:                       # own...main: what main has beyond the live commit
+            return 200, {"status": "ahead", "files": [{"filename": f} for f in (ahead_files or [])]}
         return 200, {}
     return gh
 
@@ -83,6 +87,18 @@ def test_release_moves_only_to_a_commit_on_main():
     log.clear()
     assert S.sync_release(own, "o/r", "t", gh=_gh_factory(None, "identical", log)) == "release -> aaaaaaa"
     assert log[-1][0] == "POST" and log[-1][2]["ref"] == "refs/heads/release"
+
+
+def test_release_follows_main_when_main_is_ahead_on_frontend_only():
+    own, main = "a" * 40, "m" * 40
+    log = []
+    fe = ["frontend/src/App.jsx", "docs/ops/deploy.md", "README.md"]
+    assert S.sync_release(own, "o/r", "t", gh=_gh_factory("b" * 40, "behind", log, ahead_files=fe, main_sha=main)) == f"release -> {main[:7]}"
+    assert log[-1][2]["sha"] == main
+    log.clear()
+    assert S.sync_release(own, "o/r", "t", gh=_gh_factory("b" * 40, "behind", log, ahead_files=fe + ["backend/main.py"])) == "release -> aaaaaaa"
+    assert S.sync_release(own, "o/r", "t", gh=_gh_factory(main, "behind", [], ahead_files=fe, main_sha=main)) == "release already at this commit"
+    assert S.frontend_only([]) is False and S.frontend_only(["netlify_drop/index.html"]) is True
 
 
 def test_start_is_a_no_op_when_disabled(monkeypatch):
