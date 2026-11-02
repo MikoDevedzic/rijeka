@@ -135,6 +135,7 @@ class WaterfallResult:
     simm_rw: float                  # MPoR-scaled risk weight actually used
     simm_rw_10d: float              # published (10bd) weight for reference
     mf_0: float                     # SA-CCR maturity factor at t=0
+    bridge_noise: Optional[np.ndarray] = None   # the standard normals drawn for the margin-period bridge (n_paths, T)
 
     @property
     def xva_total(self) -> float:
@@ -144,7 +145,7 @@ class WaterfallResult:
 # ── Collateral ───────────────────────────────────────────────────────────────
 
 def lagged_values(paths: np.ndarray, v0: float, dt: float, lag_y: float,
-                  rng: np.random.Generator) -> np.ndarray:
+                  rng: np.random.Generator, noise_out: Optional[np.ndarray] = None) -> np.ndarray:
     """
     V(t_i − δ) for every grid time t_i = (i+1)·dt, via Brownian bridge.
 
@@ -175,7 +176,10 @@ def lagged_values(paths: np.ndarray, v0: float, dt: float, lag_y: float,
         lo = ext[:, max(j - 1, 0)]
         dv = hi - lo
         s2 = float(np.var(dv))
-        noise = rng.standard_normal(n_paths) * math.sqrt(max(w * (1.0 - w) * s2, 0.0))
+        z = rng.standard_normal(n_paths)
+        if noise_out is not None:
+            noise_out[:, i] = z                     # the draw itself; the replication rescales it the same way
+        noise = z * math.sqrt(max(w * (1.0 - w) * s2, 0.0))
         out[:, i] = lo + w * dv + noise
     return out
 
@@ -234,7 +238,8 @@ def run_waterfall(
     im_arr = np.asarray(im_profile)
 
     # ── Collateral and residual exposure ─────────────────────────────────────
-    v_lag = lagged_values(paths, v0, DT, csa.mpor_years, rng) if csa.collateralised else None
+    bridge = np.zeros_like(paths)
+    v_lag = lagged_values(paths, v0, DT, csa.mpor_years, rng, noise_out=bridge) if csa.collateralised else None
     coll  = collateral_held(v_lag, csa) if v_lag is not None else np.zeros_like(paths)
     resid = paths - coll
 
@@ -315,7 +320,7 @@ def run_waterfall(
         ee=ee.tolist(), ene=ene.tolist(), pfe=pfe.tolist(),
         ee_gross=ee_g.tolist(), ene_gross=ene_g.tolist(),
         collateral_mean=coll_mean.tolist(), im_profile=im_profile,
-        exposure_paths=resid,
+        exposure_paths=resid, bridge_noise=bridge,
         cva=-abs(cva), dva=abs(dva), fva=-abs(fva), fba=abs(fba),
         kva=-abs(kva), mva=-abs(mva),
         ead_0=ead_0, capital_0=cap_0, im_0=im_0,

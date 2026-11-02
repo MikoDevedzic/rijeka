@@ -46,7 +46,7 @@ TAB = {"Cover": INK, "Ticket": ACCENT, "Derivation": "1F5FBF", "Checks": AMBER}
 
 def _meta(wb: Workbook) -> dict:
     if not hasattr(wb, "_rijeka"):
-        wb._rijeka = {"title": "", "lines": [], "mkt": None, "summary": [], "checks": [], "ticket": [], "derivation": [], "scenario": None}
+        wb._rijeka = {"title": "", "lines": [], "mkt": None, "summary": [], "checks": [], "ticket": [], "derivation": [], "scenario": None, "live": None}
     return wb._rijeka
 
 
@@ -61,8 +61,13 @@ def start(wb: Workbook, title: str, lines: list[str], mkt, summary: Optional[lis
 
 
 def check(wb: Workbook, sheet: str, label: str, formula_ref: str, engine_ref: str, tol: float = 1e-5) -> None:
-    """A formula-against-engine comparison for the Checks sheet: relative tolerance on max(|engine|, 1)."""
+    """A formula-against-engine comparison for the Checks sheet: relative tolerance on max(|engine|, 1).
+    A ref may name its own sheet ("Engine!E5"); otherwise it lives on `sheet`."""
     _meta(wb)["checks"].append({"sheet": sheet, "label": label, "formula": formula_ref, "engine": engine_ref, "tol": tol})
+
+
+def _on(sheet: str, ref: str) -> tuple[str, str]:
+    return _split(ref) if "!" in ref else (sheet, ref)
 
 
 def ticket(wb: Workbook, section: str, rows: list[tuple]) -> None:
@@ -73,6 +78,11 @@ def ticket(wb: Workbook, section: str, rows: list[tuple]) -> None:
 def derive(wb: Workbook, symbol: str, notation: str, ref: Optional[str], note: str = "", fmt: str = "General") -> None:
     """One line of the derivation ledger: the symbol, its formula in notation, the cell that computes it."""
     _meta(wb)["derivation"].append((symbol, notation, ref, note, fmt))
+
+
+def live(wb: Workbook, mode_name: str) -> None:
+    """A Monte Carlo book: when the named cell reads LIVE the checks say so instead of PASS / FAIL."""
+    _meta(wb)["live"] = mode_name
 
 
 def ref_cell(ws, row: int, label: str, formula: str, engine: float, fmt: str = "#,##0.00", tol: float = 1e-5) -> None:
@@ -146,7 +156,10 @@ def _cover(wb: Workbook) -> None:
         ws.conditional_formatting.add(f"B{r}", CellIsRule(operator="equal", formula=["0"], fill=FILL_PASS)); r += 1
         ws.cell(row=r, column=1, value="Worst relative difference").font = Font(color=MUTED); c = ws.cell(row=r, column=2, value="=MAX(Checks!$F:$F)"); c.font = F_MONO; c.number_format = "0.0E+00"; r += 1
         ws.cell(row=r, column=1, value="Verdict").font = Font(color=MUTED)
-        c = ws.cell(row=r, column=2, value='=IF(COUNTIF(Checks!$H:$H,"FAIL")=0,"EVERY FORMULA REPRODUCES THE ENGINE","SEE THE CHECKS SHEET")'); c.font = Font(bold=True)
+        verdict = '=IF(COUNTIF(Checks!$H:$H,"FAIL")=0,"EVERY FORMULA REPRODUCES THE ENGINE","SEE THE CHECKS SHEET")'
+        if m["live"]:
+            verdict = f'=IF({m["live"]}="LIVE","LIVE MONTE CARLO: SEE THE CONVERGENCE SHEET",{verdict[1:]})'
+        c = ws.cell(row=r, column=2, value=verdict); c.font = Font(bold=True)
         ws.conditional_formatting.add(f"B{r}", CellIsRule(operator="equal", formula=['"EVERY FORMULA REPRODUCES THE ENGINE"'], fill=FILL_PASS, font=Font(bold=True, color=INK)))
         ws.conditional_formatting.add(f"B{r}", CellIsRule(operator="equal", formula=['"SEE THE CHECKS SHEET"'], fill=FILL_FAIL, font=Font(bold=True, color=RED)))
         r += 1
@@ -235,18 +248,23 @@ def _checks(wb: Workbook) -> None:
     r = 5
     for ck in m["checks"]:
         s = ck["sheet"]
-        ws.cell(row=r, column=1, value=s)
-        link(ws.cell(row=r, column=2), f"{s}!{ck['formula']}", ck["label"])
-        ws.cell(row=r, column=3, value=f"='{s}'!{ck['formula']}").font = F_MONO
-        ws.cell(row=r, column=4, value=f"='{s}'!{ck['engine']}").font = F_MONO
+        fs, fa = _on(s, ck["formula"]); es, ea = _on(s, ck["engine"])
+        ws.cell(row=r, column=1, value=fs)
+        link(ws.cell(row=r, column=2), f"{fs}!{fa}", ck["label"])
+        ws.cell(row=r, column=3, value=f"='{fs}'!{fa}").font = F_MONO
+        ws.cell(row=r, column=4, value=f"='{es}'!{ea}").font = F_MONO
         ws.cell(row=r, column=5, value=f"=C{r}-D{r}").font = F_MONO
         c = ws.cell(row=r, column=6, value=f"=ABS(E{r})/MAX(ABS(D{r}),1)"); c.font = F_MONO; c.number_format = "0.0E+00"
         t = ws.cell(row=r, column=7, value=ck["tol"]); t.font = F_MONO; t.number_format = "0.0E+00"
-        ws.cell(row=r, column=8, value=f'=IF(F{r}<=G{r},"PASS","FAIL")').font = Font(bold=True)
+        verdict = f'IF(F{r}<=G{r},"PASS","FAIL")'
+        if m["live"]:
+            verdict = f'IF({m["live"]}="LIVE","LIVE",{verdict})'
+        ws.cell(row=r, column=8, value=f"={verdict}").font = Font(bold=True)
         r += 1
     rng = f"H5:H{r - 1}"
     ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=['"PASS"'], fill=FILL_PASS, font=Font(bold=True, color=INK)))
     ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=['"FAIL"'], fill=FILL_FAIL, font=Font(bold=True, color=RED)))
+    ws.conditional_formatting.add(rng, CellIsRule(operator="equal", formula=['"LIVE"'], fill=FILL_BAND, font=Font(bold=True, color=MUTED)))
     for row in ws.iter_rows(min_row=5, max_row=r - 1, min_col=3, max_col=5):
         for c in row:
             c.number_format = "#,##0.0000"

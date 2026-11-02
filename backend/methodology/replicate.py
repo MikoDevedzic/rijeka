@@ -81,6 +81,10 @@ PRODUCTS = [
      "default": "BTC/USD · 3 months · digitals USD 100k / 1 BTC · the eight single barriers at ±15% with a rebate · touches · double knock-out and knock-in",
      "formula": "the FX option styles' closed forms with the funding rate as the carry (Reiner–Rubinstein; the two-barrier image series); American is a tree",
      "replication": "xlsx"},
+    {"id": "xva_rates", "name": "XVA on a swap: Hull-White Monte Carlo, calibration, CSA, waterfall", "group": "Counterparty risk", "section": "9-10",
+     "default": "Pay 3.643% on USD 10m for 2y · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · a, σ from the swaption calibration · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "formula": "r = x + α(t), x stepped exactly; P(t,T) = A·e^(−B·r); V = (K·annuity − (1 − P))·N; C from V(t−δ) by Brownian bridge; EE/ENE/PFE; CVA, DVA, FVA, FBA, SA-CCR EAD → KVA, SIMM IM → MVA; RMSE of the fit and a grid around it",
+     "replication": "xlsx"},
     {"id": "xva", "name": "XVA under a CSA: exposure and collateral", "group": "Counterparty risk", "section": "9-10",
      "default": "Monte Carlo MtM paths (HW1F for rates, lognormal forward for FX and digital assets); VM lagged by the MPoR, IM exchanged; E⁺ = max(V − C − IM, 0), E⁻ = min(V − C + IM, 0), PFE 95%",
      "formula": "C(t) = max(V(t−δ) − TH_cp, 0) − max(−V(t−δ) − TH_own, 0), zero below MTA; presets uncollateralised / bilateral 10bd / on-chain 5bd",
@@ -145,6 +149,7 @@ class Market:
     vol_date: Optional[date]
     fx_vol_quotes: list = field(default_factory=list)   # EURUSD_VOL surface quotes (tenor, quote_type, rate %)
     vol_quotes_by_pair: dict = field(default_factory=dict)   # {pair: surface quotes} for the other pairs (BTCUSD)
+    hw1f: Optional[dict] = None                              # the account's stored HW1F calibration: a, sigma_bp, theta, valuation_date
 
 
 # ── Shared sheets ───────────────────────────────────────────────────────────
@@ -912,7 +917,12 @@ def crypto_option_styles_workbook(mkt: Market):
     return _styles_workbook(mkt, CRYPTO_CASE)
 
 
-BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook,
+def xva_rates_workbook(mkt):
+    from methodology.xva_workbook import xva_rates_workbook as _b
+    return _b(mkt)
+
+
+BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook, "xva_rates": xva_rates_workbook,
             "fx_forward": fx_forward_workbook, "fx_option": fx_option_workbook, "fx_option_styles": fx_option_styles_workbook,
             "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook, "crypto_option_styles": crypto_option_styles_workbook}
 

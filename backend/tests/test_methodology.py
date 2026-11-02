@@ -226,7 +226,7 @@ def test_every_workbook_has_the_open_box_sheets_and_live_links():
         for r in rows:
             sheet = r[0].value
             assert sheet in wb.sheetnames
-            assert str(r[2].value).startswith(f"='{sheet}'!") and str(r[7].value).startswith("=IF(F")
+            assert str(r[2].value).startswith(f"='{sheet}'!") and str(r[7].value).startswith("=IF(") and '"PASS"' in str(r[7].value)
             assert r[1].hyperlink is not None
         # every ticket and derivation reference points at a cell that holds something
         for name in ("Ticket", "Derivation"):
@@ -244,3 +244,41 @@ def test_option_workbooks_carry_a_scenario_chart_and_a_call_put_dropdown():
         wb = load_workbook(io.BytesIO(data))
         assert "Scenario" in wb.sheetnames and len(wb["Scenario"]._charts) == 1
         assert any(dv.formula1 == '"1,-1"' for dv in wb["European"].data_validations.dataValidation)
+
+
+def test_xva_rates_workbook_carries_the_engine_draws_and_a_live_mode():
+    from methodology.xva_workbook import N_PATHS, engine_runs, hw1f_fit
+    mkt = _mkt()
+    fit = hw1f_fit(mkt)
+    assert 0 < fit["a"] < 1 and 5 < fit["sigma_bp"] < 150 and fit["basket"]
+    eng = engine_runs(mkt, fit)
+    assert eng["sim"].z.shape == (N_PATHS, eng["T"]) and abs(eng["sim"].z.mean()) < 0.1
+    assert set(eng["runs"]) == {"UNCOLLATERALISED", "BILATERAL", "ON_CHAIN"}
+    assert eng["runs"]["ON_CHAIN"][1].cva > eng["runs"]["UNCOLLATERALISED"][1].cva            # margining cuts the cost (less negative)
+    data, total = rep.build("xva_rates", mkt)
+    wb = load_workbook(io.BytesIO(data))
+    for s_ in ("Model", "Calibration", "Bonds", "Normals", "Paths", "Exposure", "Waterfall", "Engine", "Convergence", "Checks"):
+        assert s_ in wb.sheetnames
+    assert any(dv.formula1 == '"ENGINE,LIVE"' for dv in wb["Model"].data_validations.dataValidation)
+    assert wb["Normals"]["B6"].value == pytest.approx(float(eng["sim"].z[0, 0]))                  # the engine's first draw, as a value
+    z = wb["Paths"]["B6"].value
+    assert z.startswith('=IF(Mode="ENGINE",Normals!B6,NORMSINV(RAND()))')
+    assert any("LIVE" in str(c.value) for row in wb["Checks"].iter_rows(min_row=5, min_col=8, max_col=8) for c in row)
+    assert len(wb["Convergence"]._charts) == 1 and total == pytest.approx(eng["runs"]["BILATERAL"][1].xva_total)
+
+
+def test_hw1f_mc_matches_the_route_loop():
+    """The extracted simulation is the route's loop: same rng order, same reconstitution. Checked against a
+    re-implementation here at a few points, and the par-swap anchor near zero on a flat curve."""
+    import math
+    import numpy as np
+    from pricing.hw1f_mc import grids, simulate_swap_paths
+    T, DT, a, sig = 12, 1 / 12, 0.05, 0.0080
+    p0 = lambda t: math.exp(-0.04 * t)
+    p0g, f0g = grids(p0, T, DT, 0.04)
+    assert all(abs(f - 0.04) < 1e-9 for f in f0g)
+    par = (1 - p0g[T]) / sum(DT * p0g[j + 1] for j in range(T))
+    sim = simulate_swap_paths(a, sig, p0g, f0g, T, DT, 1e7, par, 4000, direction="RECEIVE", seed=1)
+    assert abs(sim.paths[:, 0].mean()) < 1.5e4                                                   # a par swap is worth ~0 at the first step
+    rng = np.random.default_rng(1); z0 = rng.standard_normal(4000)
+    assert np.allclose(sim.z[:, 0], z0) and np.allclose(sim.x[:, 0], sig * math.sqrt((1 - math.exp(-2 * a * DT)) / (2 * a)) * z0)

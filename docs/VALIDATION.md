@@ -84,7 +84,7 @@ purpose.
 | SABR surface | `pricing/sabr.py` | internal fit diagnostics only; **validator wanted** |
 | Bermudan (HW1F tree) | `pricing/bermudan_swaption.py` | gate vs Bachelier; **validator wanted** |
 | HW1F calibration | `pricing/calibration.py` | Jamshidian check 0.01%; **validator wanted** |
-| XVA under CSA | `pricing/xva_engine.py`, `pricing/csa.py` | parity with legacy loop; **validator wanted** |
+| XVA under CSA | `pricing/xva_engine.py`, `pricing/csa.py`, `pricing/hw1f_mc.py` | parity with legacy loop; Excel replication `xva_rates` rebuilds the Hull-White paths, the CSA and the waterfall from the engine's draws, with the calibration shown and a live Monte Carlo mode; **validator wanted** |
 | FX spot / forward / NDF (G10) | `pricing/currency_forward.py` | interest-rate parity, each currency on its own OIS curve; demo accounts discount non-USD currencies flat at a policy rate and say so; EURUSD Excel replication; **validator wanted** |
 | Crypto NDF (BTC/ETH/SOL) | `pricing/crypto_forward.py` | S1 finding 2026-10-28: the first Excel replication had the discount-factor ratio inverted (forward below spot at positive USD rates); the engine's parity test caught it, workbook, engine and methodology corrected the same day. Open for independent re-validation; **validator wanted** |
 | FX option (European) | `pricing/fx_option.py`, `pricing/fx_vol.py` | QuantLib replica rows for value and delta, repriced Greeks bounded against the analytic ones; the smile reproduces its quotes; Excel replication; **validator wanted** |

@@ -10,6 +10,8 @@ const PHASES = [
     ['DONE', 'Messenger: firms, rooms, trade cards, wallet countersigning; Telegram mirror; Market News room'],
     ['DONE', 'Hosted demo: sandbox workspace on sign-in, demo counterparty, Excel methodology replications'],
     ['DONE', 'Open-box replications: every workbook with a cover and verdict, the ticket rebuilt in cells with links into the maths, a derivation ledger, a scenario chart and a Checks sheet; SHOW MATH on the ticket annotates each number with its formula'],
+    ['DONE', 'XVA replication for rates: the Hull-White Monte Carlo rebuilt in cells from the engine\'s own draws (or re-rolled live), the swaption calibration with an RMSE grid around the fit, the CSA and margin-period bridge, the full waterfall, a convergence sheet'],
+    ['NEXT', 'XVA replication for FX and digital assets (the lognormal forward from the pair\'s surface) and for the real-world counterparty-credit paths (historical blocks)'],
     ['NOW',  'Go-live of the hosted demo (app.rijeka.app) and the first recorded walkthrough'],
     ['NEXT', 'Shared market-data feed with a factor-model simulator so curves move; P&L and XVA tick on the desk'],
     ['NEXT', 'House dealer: Rijeka quotes mid ± spread so a solo learner always has a counterparty (paper only)'],

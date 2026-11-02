@@ -57,10 +57,13 @@ def market_for(db: Session, user_id: str) -> rep.Market:
     vol = _latest(db, user_id, "USD_SWVOL_ATM")
     fxv = _latest(db, user_id, "EURUSD_VOL")
     btc = _latest(db, user_id, "BTCUSD_VOL")
+    cal = db.execute(text("""SELECT a, sigma_bp, theta, valuation_date, fit_rmse_bp FROM xva_calibration
+                             WHERE user_id = :u AND model = 'HW1F' ORDER BY valuation_date DESC, created_at DESC LIMIT 1"""), {"u": user_id}).first()
+    hw1f = {"a": cal.a, "sigma_bp": cal.sigma_bp, "theta": cal.theta, "valuation_date": cal.valuation_date.isoformat(), "fit_rmse_bp": cal.fit_rmse_bp} if cal else None
     return rep.Market(valuation_date=val, curve_id="USD_SOFR", snapshot_date=snap.valuation_date, source=snap.source,
                       quotes=snap.quotes or [], curve=curve, vol_quotes=(vol.quotes if vol else []) or [],
                       vol_date=vol.valuation_date if vol else None, fx_vol_quotes=(fxv.quotes if fxv else []) or [],
-                      vol_quotes_by_pair={"BTCUSD": (btc.quotes if btc else []) or []})
+                      vol_quotes_by_pair={"BTCUSD": (btc.quotes if btc else []) or []}, hw1f=hw1f)
 
 
 @router.get("/{product}/replication.xlsx")

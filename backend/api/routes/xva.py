@@ -34,6 +34,7 @@ from middleware.auth import verify_token
 from api.routes._limits import heavy
 from api.routes._errors import internal
 from pricing.calibration import calibrate_hw1f, tenor_to_years, hw1f_swaption_vol_normal
+from pricing.hw1f_mc import simulate_swap_paths
 # Same curve builder the pricer uses, so the simulation and the valuation can
 # never end up on different curves. (pricer does not import xva — no cycle.)
 from api.routes.pricer import CurveInput, _build_curve
@@ -468,7 +469,6 @@ def simulate(
     n_paths = min(body.paths, 10000)
     rng     = np.random.default_rng(seed=42)
 
-    std_dt = sigma * math.sqrt((1 - math.exp(-2 * a * DT)) / (2 * a))
 
     # ── Initial term structure ───────────────────────────────────────────────
     # Generating paths from a single flat rate at theta ignores the shape of the
@@ -507,65 +507,9 @@ def simulate(
         f0_grid = [theta] * (T + 1)
         curve_source = "flat-theta-fallback"
 
-    # ── Monte Carlo ──────────────────────────────────────────────────────────
-    # Shape: (n_paths, T)
-    # Hull-White in its exact-fit form: r(t) = x(t) + alpha(t), where x is a
-    # zero-mean Ornstein-Uhlenbeck process and alpha(t) is the deterministic
-    # shift that makes the model reproduce the initial curve exactly:
-    #
-    #     alpha(t) = f(0,t) + (sigma^2 / 2a^2)(1 - e^-at)^2
-    #
-    # Bonds then reconstitute as P(t,T) = A(t,T) e^-B(t,T) r(t) with
-    # A(t,T) = P(0,T)/P(0,t) * exp[ B f(0,t) - (sigma^2/4a)(1-e^-2at) B^2 ].
-    # At t=0 this returns the market DF by construction, so a par swap prices
-    # to ~0 in the simulation — see `anchor` in the response, which should
-    # collapse toward zero now that the model and the pricer share a curve.
-    paths = np.zeros((n_paths, T))
-    ann_mean = np.zeros(T)      # mean annuity per step — used to decay the TV anchor
-    x = np.zeros(n_paths)       # OU deviation; x(0) = 0
-
-    for i in range(T):
-        z = rng.standard_normal(n_paths)
-        x = x * math.exp(-a * DT) + std_dt * z
-        # No floor on r: Hull-White is a Gaussian model and negative rates are
-        # admissible. Clamping biases discount factors and breaks the exact fit.
-        t_step = (i + 1) * DT
-        alpha  = f0_grid[i + 1] + (sigma * sigma / (2 * a * a)) * (1 - math.exp(-a * t_step)) ** 2
-        r = x + alpha
-
-        # Analytical swaption-style NPV per path at time step i
-        t_now = (i + 1) * DT
-        rem = T - (i + 1)
-        if rem <= 0:
-            paths[:, i] = 0.0
-            continue
-
-        # Reconstitution coefficients at t_now, off the market curve
-        p0_t  = p0_grid[i + 1]
-        f0_t  = f0_grid[i + 1]
-        e2at  = 1.0 - math.exp(-2.0 * a * t_now)
-
-        # Annuity: sum of market-consistent zero-bond prices over remaining steps
-        ann = np.zeros(n_paths)
-        for j in range(i + 1, T):
-            tau   = (j + 1) * DT - t_now
-            B     = (1 - math.exp(-a * tau)) / a
-            log_A = (math.log(p0_grid[j + 1] / p0_t)
-                     + B * f0_t
-                     - (sigma * sigma / (4 * a)) * e2at * B * B)
-            ann += DT * np.exp(log_A - B * r)
-
-        # Discount factor to maturity
-        tau_m  = T * DT - t_now
-        B_m    = (1 - math.exp(-a * tau_m)) / a
-        log_Am = (math.log(p0_grid[T] / p0_t)
-                  + B_m * f0_t
-                  - (sigma * sigma / (4 * a)) * e2at * B_m * B_m)
-        df_m = np.exp(log_Am - B_m * r)
-
-        ann_mean[i] = float(np.mean(ann))
-        paths[:, i] = (K * ann - (1 - df_m)) * N
-
+    # ── Monte Carlo (pricing/hw1f_mc.py: the exact-fit Hull-White step and the bond reconstitution) ──
+    sim = simulate_swap_paths(a, sigma, p0_grid, f0_grid, T, DT, N, K, n_paths, direction="RECEIVE", rng=rng)
+    paths, ann_mean = sim.paths, sim.ann_mean
     # ── Exposure profiles ────────────────────────────────────────────────────
     # `paths` above is the RECEIVER value: K·A − (1 − DF), i.e. receive fixed.
     # The PAY FIXED trade is its mirror, so the payer is what needs flipping.
