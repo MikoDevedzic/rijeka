@@ -195,3 +195,13 @@ def test_option_route_rejects_a_forward_and_malformed_terms():
     with pytest.raises(HTTPException) as e:
         currency_option_xva(CurrencyOptionXvaRequest(trade={"instrument_type": "FX_OPTION", "notional": 1e6, "terms": {"currency_pair": "EURUSD"}}), db=None, user={"sub": "u"})
     assert e.value.status_code == 422 and "terms" in e.value.detail
+
+
+def test_a_fresh_seed_moves_the_numbers_within_the_monte_carlo_error_and_the_same_seed_repeats():
+    from pricing import fx_xva
+    from pricing.csa import CSA
+    inp = fx_xva.ForwardXvaInput(pair="EURUSD", base_notional=1e7, forward=1.17, strike=1.17, t_years=0.5, df_quote_t=0.98, quote_zero=0.04, vol_pct=8.0)
+    a, _ = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=2000, seed=42)
+    b, _ = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=2000, seed=42)
+    c, _ = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=2000, seed=7)
+    assert a.cva == b.cva and a.cva != c.cva and abs(a.cva - c.cva) < 0.15 * abs(a.cva)

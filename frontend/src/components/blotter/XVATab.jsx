@@ -24,7 +24,7 @@ const TIPS = {
   theta: { title: 'Long-run rate theta',
     body: 'Drift anchor. Each Monte Carlo step:\nr(t+dt) = r(t) x exp(-a x dt) + theta x (1 - exp(-a x dt)) + sigma x sqrt((1-exp(-2a x dt))/(2a)) x Z\n\nTaken from the 5Y SOFR OIS swap rate on your bootstrapped curve. A full Hull-White calibration uses time-dependent theta(t) to exactly reprice today\'s yield curve. Flat approximation is adequate for XVA.' },
   paths: { title: 'Monte Carlo paths',
-    body: 'Number of simulated short-rate scenarios, monthly time steps.\n\nEE(t) = (1/N) x Sum[ max(NPV_i(t), 0) ] - converges at ~500 paths\nENE(t) = (1/N) x Sum[ min(NPV_i(t), 0) ] - converges at ~500 paths\nPFE 95th percentile - needs ~2,000 for stable tail\nXVA integrals - converge at ~1,000 paths\n\nSeed fixed at 42 for reproducibility.' },
+    body: 'Number of simulated short-rate scenarios, monthly time steps.\n\nEE(t) = (1/N) x Sum[ max(NPV_i(t), 0) ] - converges at ~500 paths\nENE(t) = (1/N) x Sum[ min(NPV_i(t), 0) ] - converges at ~500 paths\nPFE 95th percentile - needs ~2,000 for stable tail\nXVA integrals - converge at ~1,000 paths\n\nSIMULATE uses seed 42, so it repeats exactly; RE-ROLL draws a fresh seed and the numbers move within the Monte Carlo error.' },
   wwr: { title: 'Wrong-way risk x',
     body: 'Multiplier on EE before CVA integration.\n\nWWR_CVA = -LGD x Sum[ (WWR x EE(t)) x dPD_cp(t) x DF(t) ]\n\n1.0 = no WWR. 1.5 = 50% amplification. SA-CCR embeds supervisory alpha=1.4 for general WWR - this slider adds a desk overlay.\n\nExample: receive-fixed IRS with a leveraged fund. Rates spike -> IRS in the money -> fund is under stress from rate-sensitive liabilities. EE and default probability move together.' },
   rmse: { title: 'Calibration RMSE (bp)',
@@ -321,7 +321,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     drawExposureChart(canvas, simResult.ee, simResult.ene, simResult.pfe, highlightCurve, simResult.sample_paths)
   }, [simResult, highlightCurve])
 
-  const handleSimulate = async () => {
+  const handleSimulate = async (useSeed = 42) => {      // 42 repeats exactly; RE-ROLL passes a fresh seed
     setSimulating(true); setSimErr(null)
     try {
       const session = await getSession()
@@ -353,6 +353,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         maturity_y: Math.max(0.5, matYears),
         fixed_rate: isNaN(fixedRate) ? 0.0365 : fixedRate,
         paths,
+        seed: Number.isFinite(useSeed) ? useSeed : 42,
         direction: direction || trade?.direction || 'PAY',
         a:        aOverride   ? parseFloat(aOverride)   : undefined,
         sigma_bp: sigOverride ? parseFloat(sigOverride) : undefined,
@@ -538,9 +539,14 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         {calibErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {calibErr}</div>}
 
         <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
-          <button onClick={handleSimulate} disabled={simulating}
-            style={{flex:1,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:'var(--mono)',border:'1px solid rgba(13,212,168,0.4)',background:'rgba(13,212,168,0.06)',color:'var(--accent)',opacity:simulating?0.5:1}}>
+          <button onClick={()=>handleSimulate(42)} disabled={simulating}
+            style={{flex:2,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:'var(--mono)',border:'1px solid rgba(13,212,168,0.4)',background:'rgba(13,212,168,0.06)',color:'var(--accent)',opacity:simulating?0.5:1}}>
             {simulating?'SIMULATING...':'▶ SIMULATE'}
+          </button>
+          <button onClick={()=>handleSimulate(1+Math.floor(Math.random()*2147483000))} disabled={simulating||!simResult}
+            title="The same model with fresh random numbers: the numbers move within the Monte Carlo error and settle as you raise PATHS"
+            style={{flex:1,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:'var(--mono)',border:'1px solid var(--border)',background:'transparent',color:simResult?'var(--text-dim)':'var(--text-mute)',opacity:simulating?0.5:1}}>
+            RE-ROLL
           </button>
         </div>
         <CalibProofPanel calib={calib}/>
@@ -696,6 +702,11 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         {/* Exposure chart */}
         <div style={{flex:1,position:'relative',background:'var(--panel)',borderBottom:'1px solid var(--border)',minHeight:'160px'}}>
           <canvas ref={canvasRef} style={{display:'block',width:'100%',height:'100%'}}/>
+          {simResult && (
+            <div style={{position:'absolute',left:'12px',bottom:'6px',fontSize:'0.7rem',color:'var(--text-mute)',fontFamily:'var(--mono)',pointerEvents:'none'}}>
+              seed {simResult.seed ?? 42}{(simResult.seed ?? 42)===42?' (repeats exactly)':' (re-rolled)'} · {simResult.path_steps?.toLocaleString()} path-steps simulated in {simResult.engine_ms} ms
+            </div>
+          )}
           {!simResult && (
             <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
               <div style={{fontSize:'0.8125rem',color:'var(--text-mute)',letterSpacing:'0.08em',fontFamily:'var(--mono)'}}>EE / ENE / PFE — press SIMULATE</div>

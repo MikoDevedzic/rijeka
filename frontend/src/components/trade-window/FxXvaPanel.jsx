@@ -29,6 +29,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const [res, setRes] = useState(null)
   const [cmp, setCmp] = useState(null)           // the same run under the ON-CHAIN preset
   const [compare, setCompare] = useState(false)
+  const [seed, setSeed] = useState(42)             // 42 repeats exactly; RE-ROLL draws a fresh one
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const set = (k) => (e) => setP(s => ({ ...s, [k]: e.target.value }))
@@ -40,13 +41,14 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
 
   const isOption = quote?.shape === 'OPTION'
 
-  const run = async () => {
+  const run = async (useSeed = 42) => {
     if (!quote || !payload) return
+    setSeed(useSeed)
     setBusy(true); setErr(null)
     try {
       const session = await getSessionMaybe()
       const common = {
-        vol_pct: p.vol_pct === '' ? null : Number(p.vol_pct), paths: Number(p.paths) || 2000,
+        seed: useSeed, vol_pct: p.vol_pct === '' ? null : Number(p.vol_pct), paths: Number(p.paths) || 2000,
         cp_cds_bp: Number(p.cp_cds_bp), own_cds_bp: Number(p.own_cds_bp), ftp_bp: Number(p.ftp_bp),
         lgd: Number(p.lgd) / 100, own_lgd: Number(p.lgd) / 100, hurdle_rate: Number(p.hurdle) / 100,
         csa: csa === 'NO CSA' ? (im ? { preset: 'UNCOLLATERALISED', im_exchanged: true } : null)
@@ -107,10 +109,15 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, fontSize: '0.78rem', color: 'var(--text-dim)' }} title="A second run on the same paths under the ON-CHAIN preset (continuous VM, 5bd MPoR); the difference is the collateral terms alone">
             <input type="checkbox" checked={compare} onChange={e => setCompare(e.target.checked)} /> Compare on-chain
           </label>
-          <button onClick={run} disabled={busy || !quote} style={{ marginTop: 14, width: '100%', padding: '8px 0', fontFamily: 'var(--mono)', fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer',
-            background: 'rgba(13,212,168,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3 }}>
-            {busy ? 'SIMULATING…' : !quote ? 'PRICE THE TICKET FIRST' : '▶ SIMULATE'}
-          </button>
+          <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
+            <button onClick={() => run(42)} disabled={busy || !quote} style={{ flex: 2, padding: '8px 0', fontFamily: 'var(--mono)', fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer',
+              background: 'rgba(13,212,168,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3 }}>
+              {busy ? 'SIMULATING…' : !quote ? 'PRICE THE TICKET FIRST' : '▶ SIMULATE'}
+            </button>
+            <button onClick={() => run(1 + Math.floor(Math.random() * 2147483000))} disabled={busy || !quote || !res} title="The same model with fresh random numbers: the numbers move within the Monte Carlo error and settle as you raise PATHS"
+              style={{ flex: 1, padding: '8px 0', fontFamily: 'var(--mono)', fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: 'pointer',
+              background: 'transparent', border: '1px solid var(--border)', color: res ? 'var(--text-dim)' : 'var(--text-mute)', borderRadius: 3 }}>RE-ROLL</button>
+          </div>
           {err && <div style={{ marginTop: 8, fontSize: '0.75rem', color: 'var(--red)' }}>{err}</div>}
         </div>
         <div>
@@ -118,7 +125,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           <ExposureCanvas result={res} height={230} />
           {res && (
             <div style={{ fontSize: '0.7rem', color: 'var(--text-mute)', fontFamily: 'var(--mono)', marginTop: 6 }}>
-              {res.params.style ? res.params.style.replace(/_/g, ' ') + ' · ' : ''}vol {Number(res.params.vol_pct).toFixed(2)}% ({res.params.vol_source}) · {res.n_paths} paths · {res.steps} monthly steps · {res.sample_paths?.length || 0} paths drawn ({res.csa?.collateralised ? 'residual after collateral' : 'gross MtM'}) · IM weight {res.params.im_rw_per_pct} per 1% ({res.params.im_basis}) · CSA {res.csa?.preset}
+              {res.params.style ? res.params.style.replace(/_/g, ' ') + ' · ' : ''}vol {Number(res.params.vol_pct).toFixed(2)}% ({res.params.vol_source}) · {res.n_paths} paths · {res.steps} monthly steps · seed {res.seed ?? seed}{res.seed === 42 ? ' (repeats exactly)' : ' (re-rolled)'} · {res.path_steps?.toLocaleString()} path-steps simulated in {res.engine_ms} ms · {res.sample_paths?.length || 0} paths drawn ({res.csa?.collateralised ? 'residual after collateral' : 'gross MtM'}) · IM weight {res.params.im_rw_per_pct} per 1% ({res.params.im_basis}) · CSA {res.csa?.preset}
             </div>
           )}
         </div>
