@@ -78,6 +78,9 @@ def test_payer_minus_receiver_equals_the_forward_swap_and_exercise_follows_money
     itm = swap_at(pay, p, i_exp) > 0
     assert np.all(after[~itm] == 0.0) and np.all(after[itm] == swap_at(pay, p, i_exp + 3)[itm])
     assert 0.2 < itm.mean() < 0.8                                   # struck near the money, roughly half the paths exercise
+    sold = {**pay, "sign": -1.0, "_exercised": {}}
+    assert np.allclose(O.value_swaption(sold, p, 0, fx, swap_at), -vp)             # written: the holder's value, from our side
+    assert np.allclose(O.value_swaption(sold, p, i_exp + 3, fx, swap_at), -after)  # exercised against us where the holder was in the money
 
 
 def test_vol_lookups_fall_back_and_read_the_grid():
@@ -98,3 +101,7 @@ def test_swaption_terms_from_trade_and_legs():
     t2 = SimpleNamespace(terms={}, trade_date=None)
     s2 = O.swaption_terms(t2, legs, ASOF)
     assert s2["expiry"] == date(2027, 10, 29) and s2["K"] == 0.0375 and s2["is_payer"] is False
+    assert s["sign"] == 1.0 and s2["sign"] == 1.0                                   # long unless the terms say otherwise
+    t3 = SimpleNamespace(terms={"expiry_date": "2027-11-01", "strike": 0.04, "is_payer": False, "side": "SELL"}, trade_date=None)
+    s3 = O.swaption_terms(t3, legs, ASOF)
+    assert s3 == {"expiry": date(2027, 11, 1), "K": 0.04, "is_payer": False, "sign": -1.0}

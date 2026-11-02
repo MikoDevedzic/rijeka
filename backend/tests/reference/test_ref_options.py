@@ -136,8 +136,46 @@ def cap_rows() -> list[Row]:
     return rows
 
 
+def booked_cap_rows() -> list[Row]:
+    """A cap as the ticket books it since 2026-11: one float leg with leverage 0 and the strike on its
+    embedded_options, priced by the swap pricer (pricing/ir_swap.py → cap_floor._price_strip_core) on the
+    leg's own schedule (modified following, New York). Replica: QuantLib's Bachelier formula on those dates,
+    forwards from the unadjusted accrual dates, discounted at the payment date, option time to mid-period."""
+    from pricing.ir_swap import price_swap
+    from pricing.schedule import generate_schedule
+    from decimal import Decimal
+    set_eval(VAL)
+    c = rijeka_curve()
+    h = replica_handle(c)
+    rows = []
+    for kind, side, K, eff, mat in (("CAP", "BUY", 0.040, date(2026, 11, 3), date(2031, 11, 3)),
+                                    ("FLOOR", "SELL", 0.030, date(2026, 11, 3), date(2029, 11, 3)),
+                                    ("CAP", "BUY", 0.038, date(2027, 2, 26), date(2030, 2, 26))):    # a month-end-ish roll
+        leg = {"leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "notional": N, "effective_date": str(eff), "maturity_date": str(mat),
+               "payment_frequency": "QUARTERLY", "day_count": "ACT/360", "bdc": "MOD_FOLLOWING", "leverage": 0.0,
+               "embedded_options": [{"type": kind, "direction": side, "default_strike": K}], "discount_curve_id": "USD_SOFR",
+               "forecast_curve_id": "USD_SOFR"}
+        r = price_swap("cap", [leg], {"USD_SOFR": c}, VAL)
+        assert r.error is None
+        sign = 1.0 if side == "BUY" else -1.0
+        pv = 0.0
+        for per in generate_schedule(eff, mat, "QUARTERLY", "ACT/360", Decimal(str(N)), bdc="MOD_FOLLOWING"):
+            s, e, pay = per.period_start, per.period_end, per.payment_date
+            tau = float(per.dcf)
+            F = (h.discount(qd(s)) / h.discount(qd(e)) - 1) / tau
+            T = option_time(VAL, s, e)
+            pv += N * tau * ql.bachelierBlackFormula(ql.Option.Call if kind == "CAP" else ql.Option.Put, K, F, 0.0085 * math.sqrt(T), h.discount(qd(pay)))
+        rows.append(Row("Cap/floor", f"booked {side} {kind} K={K:.2%} {eff}-{mat} (leverage-0 float leg)", "NPV through the swap pricer, replica",
+                        r.npv, sign * pv, "% of premium", 1e-6, scale=100 / pv))
+    return rows
+
+
 def all_rows() -> list[Row]:
-    return swaption_rows() + cap_rows()
+    return swaption_rows() + cap_rows() + booked_cap_rows()
+
+
+def test_booked_caps_through_the_swap_pricer():
+    assert_rows(booked_cap_rows())
 
 
 def test_european_swaptions_against_quantlib():

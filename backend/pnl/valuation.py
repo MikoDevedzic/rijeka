@@ -139,11 +139,10 @@ def _value_swaption(db: Session, user: dict, trade, val_date: date, mkt: Market)
 
     The booking carries the underlying swap's legs; expiry, strike and payer/receiver are read the way
     the exposure engine reads them (ccr/options.swaption_terms: trade.terms first, else the forward start
-    of the fixed leg, its rate and its direction), and the vol is the nearest point of the day's
-    {CCY}_SWVOL_ATM grid. Until 2026-11 P&L, VaR, stress and the ladder valued a booked swaption as its
-    underlying swap: no option value, a full swap delta, no vega. The booking does not record whether the
-    option was bought or sold; it is valued long, and the result says so. Past expiry it is the
-    underlying swap (physical settlement): None hands it back to the swap pricer."""
+    of the fixed leg, its rate and its direction; terms.side BUY/SELL, long when absent), and the vol is
+    the nearest point of the day's {CCY}_SWVOL_ATM grid. Until 2026-11 P&L, VaR, stress and the ladder
+    valued a booked swaption as its underlying swap: no option value, a full swap delta, no vega. Past
+    expiry it is the underlying swap (physical settlement): None hands it back to the swap pricer."""
     from ccr.options import swaption_terms, swaption_vol_bp
     from api.routes.pricer import _build_curve
     from pricing.swaption import price_swaption
@@ -175,10 +174,12 @@ def _value_swaption(db: Session, user: dict, trade, val_date: date, mkt: Market)
             raise ValueError(f"swaption: {r.error}")
         return r
     base = npv(curve)
-    ir01 = npv(curve.shifted(1.0)).npv - base.npv           # +1bp zero, the swaps' IR01 definition
-    return {"npv": float(base.npv), "ccy": ccy, "ir01": ir01, "ir01_disc": None, "spot01": None, "theta": float(base.theta),
-            "vega": float(base.vega), "asof": {cid: mkt.snapshot_date(cid)} if hasattr(mkt, "snapshot_date") else {},
-            "fallback": fallback, "model": f"Bachelier {vol_bp:.1f}bp ({vol_src}), valued long, expiry {expiry}"}
+    sign = terms["sign"]                                     # −1 when we sold the option
+    ir01 = sign * (npv(curve.shifted(1.0)).npv - base.npv)   # +1bp zero, the swaps' IR01 definition
+    return {"npv": sign * float(base.npv), "ccy": ccy, "ir01": ir01, "ir01_disc": None, "spot01": None, "theta": sign * float(base.theta),
+            "vega": sign * float(base.vega), "asof": {cid: mkt.snapshot_date(cid)} if hasattr(mkt, "snapshot_date") else {},
+            "fallback": fallback,
+            "model": f"Bachelier {vol_bp:.1f}bp ({vol_src}), {'bought' if sign > 0 else 'sold'}, expiry {expiry}"}
 
 
 def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[str, Any]:

@@ -123,9 +123,9 @@ class NettingSet:
         vol, src = O.swaption_vol_bp(mkt, ccy, expiry_y, tenor_y)
         N = max(float(lg.get("notional") or 0.0) for lg in under)
         self.options.append({"trade_ref": t.trade_ref, "kind": "PAYER SWAPTION" if terms["is_payer"] else "RECEIVER SWAPTION", "strike": terms["K"],
-                             "expiry": expiry.isoformat(), "vol_bp": vol, "vol_source": src, "side": "LONG"})
+                             "expiry": expiry.isoformat(), "vol_bp": vol, "vol_source": src, "side": "LONG" if terms["sign"] > 0 else "SHORT"})
         return {"trade": t, "kind": "SWAPTION", "ccy": ccy, "legs": scheds, "fixed_sched": fixed_sched, "start": start, "maturity": maturity,
-                "expiry": expiry, "K": terms["K"], "is_payer": terms["is_payer"], "N": N, "vol": vol / 1e4}
+                "expiry": expiry, "K": terms["K"], "is_payer": terms["is_payer"], "N": N, "vol": vol / 1e4, "sign": terms["sign"]}
 
     @property
     def months(self) -> int:
@@ -151,7 +151,8 @@ def value_swap(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]) ->
             ps0 = future[0][0]
             p_start = bond(paths, key, i, years(asof, ps0)) if years(asof, ps0) > t_i else np.ones(paths.n_paths)
             p_end = bond(paths, key, i, years(asof, future[-1][2]))
-            pv = N * (p_start - p_end)
+            lev = 1.0 if lg.get("leverage") is None else float(lg.get("leverage"))
+            pv = lev * N * (p_start - p_end)
             spread = float(lg.get("spread") or 0.0)
             if spread:
                 pv = pv + sum(N * spread * tau * bond(paths, key, i, years(asof, pay)) for (_, _, pay, tau) in future)

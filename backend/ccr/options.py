@@ -173,11 +173,18 @@ def swaption_terms(trade, legs: list[dict], asof: date) -> dict[str, Any]:
         is_payer = str(t["direction"]).upper().startswith("PAY")
     else:
         is_payer = bool(fixed and str(fixed.get("direction", "")).upper().startswith("PAY"))
-    return {"expiry": expiry, "K": K, "is_payer": is_payer}
+    # bought (we hold the right) or sold; the ticket books terms.side since 2026-11, earlier bookings are long
+    sign = -1.0 if str(t.get("side", "BUY")).upper() in ("SELL", "SHORT", "WRITE") else 1.0
+    return {"expiry": expiry, "K": K, "is_payer": is_payer, "sign": sign}
 
 
 def value_swaption(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float], swap_value) -> np.ndarray:
-    """swap_value(item, paths, j) values the underlying swap (struck at K) on the paths at grid j."""
+    """swap_value(item, paths, j) values the underlying swap (struck at K) on the paths at grid j; the result
+    is from our side: negative when we sold the option and the holder exercises against us."""
+    return float(item.get("sign", 1.0)) * _value_swaption_long(item, paths, i, fx_to_usd, swap_value)
+
+
+def _value_swaption_long(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float], swap_value) -> np.ndarray:
     asof = paths.grid[0]; t_i = float(paths.t[i])
     T_exp = _years(asof, item["expiry"])
     key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"

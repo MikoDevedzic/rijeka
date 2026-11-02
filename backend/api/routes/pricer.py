@@ -622,6 +622,14 @@ def price_trade(
     except NotImplementedError as exc:
         raise HTTPException(status_code=501, detail=str(exc))
 
+    # a leg with embedded caplets or floorlets (a capped floater; a cap, floor or collar booked as a
+    # zero-participation float leg) prices them off the cap vol surface, as the preview does
+    if any(lg.get("embedded_options") for lg in legs):
+        _rows = _load_cap_surface(db, val_date.isoformat(), user["sub"])
+        for lg in legs:
+            if lg.get("embedded_options"):
+                lg["_vol_surface_rows"] = _rows
+
     curves: dict = {}
     for ci in request.curves:
         try:

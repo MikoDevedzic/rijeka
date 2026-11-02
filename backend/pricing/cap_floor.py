@@ -584,7 +584,7 @@ def _price_strip_core(
         K    = _resolve_strike_at(strike_entries, p.period_start, default_strike)
         N    = _resolve_notional_at(notional_schedule, p.period_start, default_notional)
         fwds.append(fwd)
-        dfs_disc.append(discount_curve.df(p.period_end))
+        dfs_disc.append(discount_curve.df(p.payment_date))      # paid with the coupon, on the adjusted date
         taus.append(tau)
         strikes.append(float(K) if K is not None else 0.0)
         notionals.append(N)

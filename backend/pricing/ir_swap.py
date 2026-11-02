@@ -288,6 +288,10 @@ def price_leg(
     stub_type   = leg.get("stub_type") or "SHORT_FRONT"
     fixed_rate  = float(leg.get("fixed_rate") or 0)
     spread      = float(leg.get("spread") or 0)
+    # participation in the floating rate: 1 for a plain floater, 2 for a leveraged one, 0 for a leg that
+    # carries only its embedded caplets or floorlets (how a cap, floor or collar is booked); booked and
+    # ignored until 2026-11
+    leverage    = 1.0 if leg.get("leverage") is None else float(leg.get("leverage"))
     fixed_rate_schedule  = leg.get("fixed_rate_schedule") or None
     spread_schedule      = leg.get("spread_schedule") or None
     notional_schedule    = leg.get("notional_schedule") or None
@@ -392,7 +396,7 @@ def price_leg(
             tau  = float(p.dcf)
             fwd  = _project_float_rate(fc, p, tau, valuation_date, day_count, fixings, fixing_lookup, leg)
             eff_spread = _resolve_spread_schedule(spread_schedule, p.period_start, spread) if spread_schedule else spread
-            rate = fwd + eff_spread
+            rate = leverage * fwd + eff_spread
         else:
             if fixed_rate_schedule:
                 rate = _resolve_step_up_rate(fixed_rate_schedule, p.period_start, fixed_rate)

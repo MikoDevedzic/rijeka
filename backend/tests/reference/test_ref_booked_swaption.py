@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date
 from types import SimpleNamespace
 
+import pytest
 import QuantLib as ql
 
 from pnl.valuation import value
@@ -65,6 +66,22 @@ def test_booked_swaption_is_valued_as_the_option():
         assert abs(v["npv"] - swap) > 0.5 * opt                     # not the underlying swap any more
         assert v["vega"] > 0 and "Bachelier 91.5bp" in v["model"]
         assert (v["ir01"] > 0) == payer                              # a payer gains when rates rise
+
+
+def test_sold_swaption_and_booked_terms():
+    vols = [{"tenor": "1Yx5Y", "rate": 91.5}]
+    _, _, F = _ql_price(0.035, True, 91.5)
+    bought = _trade(F, True)
+    sold = _trade(F, True)
+    sold.terms = {**sold.terms, "side": "SELL", "option": "SWAPTION", "expiry_date": str(EXPIRY), "strike": F, "is_payer": True, "vol_bp": 90.0}
+    vb = value(None, {"sub": "u"}, bought, VAL, Mkt(vols))
+    vs = value(None, {"sub": "u"}, sold, VAL, Mkt(vols))
+    assert vs["npv"] == pytest.approx(-vb["npv"]) and vs["vega"] == pytest.approx(-vb["vega"]) and vs["ir01"] == pytest.approx(-vb["ir01"])
+    assert "sold" in vs["model"] and "bought" in vb["model"]
+    # a booked strike overrides the leg's rate, and the day's grid vol is used for marking, not the booked vol
+    struck = _trade(F, True)
+    struck.terms = {**struck.terms, "strike": F + 0.005, "expiry_date": str(EXPIRY)}
+    assert value(None, {"sub": "u"}, struck, VAL, Mkt(vols))["npv"] == pytest.approx(_ql_price(F + 0.005, True, 91.5)[0], abs=1e-6 * N)
 
 
 def test_desk_default_vol_when_the_grid_is_missing_and_it_says_so():

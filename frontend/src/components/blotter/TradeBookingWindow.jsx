@@ -1830,6 +1830,7 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
   const [swaptionVol,          setSwaptionVol]          = useState('86.5')
   const [swaptionStrike,       setSwaptionStrike]       = useState('')    // blank = ATM
   const [exerciseType,         setExerciseType]         = useState('EUROPEAN')  // EUROPEAN | BERMUDAN | AMERICAN
+  const [optionSide,           setOptionSide]           = useState('BUY')       // BUY (we hold the right) | SELL — swaptions, caps, floors, collars
   const [bermudanFirst,        setBermudanFirst]        = useState('')
   const [bermudanLast,         setBermudanLast]         = useState('')
   const [bermudanFreq,         setBermudanFreq]         = useState('3M')
@@ -2390,6 +2391,43 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
     if (isNaN(rateVal)) { setErr('Coupon is required — price the trade first.'); return null }
     const session = await getSession()
     const h = { Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' }
+
+    // ── Option terms (swaptions, caps, floors, collars) ─────────────────────
+    // Until November 2026 these products were booked as the generic swap's legs and terms: a cap lost
+    // its strike, a swaption its expiry, vol and side, and the desk valued them as swaps. The option
+    // terms now live on the trade (what the exposure engine and the P&L valuation read:
+    // ccr/options.swaption_terms, pnl/valuation._value_swaption) and the strikes on the float leg's
+    // embedded_options (what the pricers read).
+    const IS_SWPN_BOOK = inst === 'IR_SWAPTION'
+    const IS_OPT_BOOK  = inst === 'INTEREST_RATE_CAP' || inst === 'INTEREST_RATE_FLOOR' || inst === 'INTEREST_RATE_COLLAR'
+    const feeNum = feeAmount ? parseFloat(feeAmount) : 0
+    const premiumAmt = feeAmountType === 'BP' ? (feeNum / 10000) * notional : feeNum
+    const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10) }
+    let optionTerms = {}
+    let fwdDates = null
+    if (IS_SWPN_BOOK) {
+      const EXPIRY_YRS = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
+      const expiryY = EXPIRY_YRS[swaptionExpiry] || 1.0
+      const shift = Math.round(expiryY * 365.25)
+      const strike = swaptionStrike.trim() ? parseFloat(swaptionStrike) / 100
+                   : (swaptionResult?.forward_rate != null ? Number(swaptionResult.forward_rate) : rateVal / 100)
+      fwdDates = { eff: addDays(effDate, shift), mat: addDays(matDate, shift), strike }
+      optionTerms = {
+        option: 'SWAPTION', side: optionSide, is_payer: dir === 'PAY',
+        expiry_date: addDays(valDate, shift), expiry_tenor: swaptionExpiry, exercise_type: exerciseType,
+        strike, vol_bp: parseFloat(swaptionVol) || null,
+        premium_amount: premiumAmt || null, premium_currency: ccy, premium_payment_date: feeSettleDate || effDate,
+      }
+    } else if (IS_OPT_BOOK) {
+      optionTerms = {
+        option: inst.replace('INTEREST_RATE_', ''), side: optionSide,
+        cap_rate:   (inst === 'INTEREST_RATE_CAP'   || inst === 'INTEREST_RATE_COLLAR') ? parseFloat(capRate)   / 100 : null,
+        floor_rate: (inst === 'INTEREST_RATE_FLOOR' || inst === 'INTEREST_RATE_COLLAR') ? parseFloat(floorRate) / 100 : null,
+        vol_bp: capVolOverride ? parseFloat(capVolOverride) : (capResult?.vol_bp ?? null),
+        premium_amount: premiumAmt || (capResult?.npv ?? null), premium_currency: ccy, premium_payment_date: feeSettleDate || effDate,
+      }
+    }
+
     const tradeRes = await fetch(API+'/api/trades/', { method:'POST', headers:h, body:JSON.stringify({
       status:'PENDING', store: finalBook?store:'WORKING',
       asset_class:ac, instrument_type:inst, structure:inst==='IR_SWAP'?struct:null,
@@ -2416,12 +2454,27 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
         float_day_count:floatDc, float_bdc:floatBdc, float_calendar:floatCal,
         spread:parseFloat(spreadRef.current ? spreadRef.current.value : '0')/10000,
         leverage:parseFloat(leverageRef.current ? leverageRef.current.value : '1.0'),
+        ...optionTerms,
       }
     })})
     if (!tradeRes.ok) { const e=await tradeRes.json().catch(()=>({})); throw new Error(e.detail||'Booking failed') }
     const trade  = await tradeRes.json()
     const tradeId = trade.id||trade.trade_id
-    const legs   = buildLegs(tradeId, notional)
+    let legs = buildLegs(tradeId, notional)
+    if (IS_SWPN_BOOK && fwdDates) {
+      // the underlying is the forward-starting swap the option delivers into, struck at the option's strike
+      legs = legs.map(l => ({ ...l, effective_date: fwdDates.eff, maturity_date: fwdDates.mat,
+                              ...(l.leg_type === 'FIXED' ? { fixed_rate: fwdDates.strike } : {}) }))
+    } else if (IS_OPT_BOOK) {
+      // one float leg with no participation in the rate (leverage 0): only its caplets / floorlets have
+      // value, which is the cap. BUY: we own the cap (and, in a collar, sold the floor).
+      const flt = legs.find(l => l.leg_type === 'FLOAT') || legs[legs.length - 1]
+      const mine = optionSide, theirs = optionSide === 'BUY' ? 'SELL' : 'BUY'
+      const embedded = []
+      if (optionTerms.cap_rate   != null && !isNaN(optionTerms.cap_rate))   embedded.push({ type: 'CAP',   direction: mine,   default_strike: optionTerms.cap_rate })
+      if (optionTerms.floor_rate != null && !isNaN(optionTerms.floor_rate)) embedded.push({ type: 'FLOOR', direction: inst === 'INTEREST_RATE_COLLAR' ? theirs : mine, default_strike: optionTerms.floor_rate })
+      legs = [{ ...flt, leg_ref: 'OPT-1', leg_seq: 1, direction: 'RECEIVE', leverage: 0, spread: 0, spread_schedule: null, embedded_options: embedded }]
+    }
     await Promise.all(legs.map(leg => fetch(API+'/api/trade-legs/',{method:'POST',headers:h,body:JSON.stringify(leg)})))
     const curveId = CCY_CURVE[ccy]||'USD_SOFR'
     const vd = valDate
@@ -3344,6 +3397,12 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
                   />
                 </SectionHdr>
                 <Row>
+                  <Fld label='SIDE' flex={1.0}>
+                    <div style={{display:'flex',gap:'5px',height:'34px'}}>
+                      <DirBtn label='BUY'  active={optionSide==='BUY'}  color='var(--accent)' onClick={()=>setOptionSide('BUY')}/>
+                      <DirBtn label='SELL' active={optionSide==='SELL'} color='var(--red)'    onClick={()=>setOptionSide('SELL')}/>
+                    </div>
+                  </Fld>
                   {/* Exercise type */}
                   <Fld label='EXERCISE TYPE' flex={1.6}>
                     <div style={{display:'flex',gap:'5px',height:'34px'}}>
@@ -3506,13 +3565,19 @@ export default function TradeBookingWindow({ onClose, onViewTrade, initialPos, t
                 <SectionHdr>
                   {inst === 'INTEREST_RATE_CAP' ? 'CAP TERMS' : inst === 'INTEREST_RATE_FLOOR' ? 'FLOOR TERMS' : 'COLLAR TERMS'}
                   <Badge
-                    label={inst === 'INTEREST_RATE_CAP' ? '↑ BUY CAP · protection vs rising rates'
-                         : inst === 'INTEREST_RATE_FLOOR' ? '↓ BUY FLOOR · protection vs falling rates'
-                         : '↕ BUY COLLAR · cap + floor spread'}
+                    label={inst === 'INTEREST_RATE_CAP' ? (optionSide==='BUY' ? '↑ BUY CAP · protection vs rising rates' : '↑ SELL CAP · premium received, pay above the strike')
+                         : inst === 'INTEREST_RATE_FLOOR' ? (optionSide==='BUY' ? '↓ BUY FLOOR · protection vs falling rates' : '↓ SELL FLOOR · premium received, pay below the strike')
+                         : (optionSide==='BUY' ? '↕ BUY COLLAR · buy cap, sell floor' : '↕ SELL COLLAR · sell cap, buy floor')}
                     color={inst === 'INTEREST_RATE_CAP' ? 'var(--red)' : inst === 'INTEREST_RATE_FLOOR' ? 'var(--accent)' : 'var(--amber)'}
                   />
                 </SectionHdr>
                 <Row>
+                  <Fld label='SIDE' flex={0.9}>
+                    <div style={{display:'flex',gap:'5px',height:'34px'}}>
+                      <DirBtn label='BUY'  active={optionSide==='BUY'}  color='var(--accent)' onClick={()=>setOptionSide('BUY')}/>
+                      <DirBtn label='SELL' active={optionSide==='SELL'} color='var(--red)'    onClick={()=>setOptionSide('SELL')}/>
+                    </div>
+                  </Fld>
                   {(inst === 'INTEREST_RATE_CAP' || inst === 'INTEREST_RATE_COLLAR') && (
                     <Fld label="CAP RATE (%)" flex={1.2}>
                       <input style={{...inp,fontSize:'1.0625rem',fontWeight:700,color:'var(--red)',borderColor:'rgba(224,80,64,0.4)'}}
