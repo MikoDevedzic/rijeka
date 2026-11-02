@@ -99,11 +99,12 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
                 own_cds_bp: float = 42.0, ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40,
                 own_lgd: float = 0.40, hurdle_rate: float = 0.12, capital_model: str = "sa_ccr",
                 counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None, own_cds_curve=None,
-                ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None) -> tuple[WaterfallResult, dict]:
+                ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
+                simm_im_m: Optional[float] = None) -> tuple[WaterfallResult, dict]:
     paths, p0, v0 = simulate_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     steps, dt = monthly_grid(inp.t_years)
     rw = im_risk_weight(inp.pair)
-    im_m = abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None
+    im_m = simm_im_m if simm_im_m is not None else (abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None)
     params = WaterfallParams(
         notional=abs(inp.base_notional * inp.forward), maturity_y=inp.t_years, dt=dt, theta=max(inp.quote_zero, 1e-6),
         lgd=lgd, own_lgd=own_lgd, cp_cds_bp=cp_cds_bp, own_cds_bp=own_cds_bp, cp_cds_curve=cp_cds_curve,
@@ -215,11 +216,12 @@ def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 
 def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0, own_cds_bp: float = 42.0,
                ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
                capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
-               own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None) -> tuple[WaterfallResult, dict]:
+               own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
+               simm_im_m: Optional[float] = None) -> tuple[WaterfallResult, dict]:
     paths, p0, v0 = simulate_option_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     steps, dt = monthly_grid(inp.t_settle)
     rw = im_risk_weight(inp.pair)
-    im_m = abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None
+    im_m = simm_im_m if simm_im_m is not None else (abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None)
     spec = inp.spec
     notional = abs(inp.base_notional * inp.forward) if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else abs(float(spec.payout or 0.0))
     params = WaterfallParams(

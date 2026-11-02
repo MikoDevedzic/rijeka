@@ -669,6 +669,7 @@ class CurrencyXvaRequest(BaseModel):
     csa: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
+    simm_im_m: Optional[float] = None    # IM in $M for MVA; None = SIMM-style weight on the spot delta
 
 
 def surface_vol_pct(db, user_id: str, pair: str, t_years: float, forward: float, snapshot=None, lookup=None):
@@ -719,7 +720,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                                   ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd,
                                   hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
                                   counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed))
+                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m)
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(q["npv"])
     # a fan of simulated MtM paths behind the profiles, as the rates tab draws: residual paths under a CSA, gross without
@@ -738,6 +739,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                 "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
+        "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "vol_mode", "step_vols_pct")},
     }
 
@@ -765,6 +767,7 @@ class CurrencyOptionXvaRequest(BaseModel):
     csa: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
+    simm_im_m: Optional[float] = None    # IM in $M for MVA; None = SIMM-style weight on the spot delta
 
 
 @router.post("/currency-option")
@@ -816,7 +819,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
     wf, meta = fx_xva.option_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
                                  ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                  capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-                                 cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed))
+                                 cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m)
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(q["npv"])
     raw = wf.exposure_paths if csa.collateralised else meta["_paths"]
@@ -833,6 +836,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
                 "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
+        "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "style", "vol_mode")},
     }
 
