@@ -113,7 +113,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   }, [assetClass, curInst, productKey])
   const [fxQuote, setFxQuote]          = useState(null)
   const CURRENCY_PRODUCTS = {
-    FX:     [{ key: 'FX_SPOT', label: 'FX spot' }, { key: 'FX_FORWARD', label: 'FX forward' }, { key: 'NDF', label: 'NDF' }, { key: 'FX_SWAP', label: 'FX swap', live: false }, { key: 'FX_OPTION', label: 'FX option', live: false }],
+    FX:     [{ key: 'FX_SPOT', label: 'FX spot' }, { key: 'FX_FORWARD', label: 'FX forward' }, { key: 'NDF', label: 'NDF' }, { key: 'FX_SWAP', label: 'FX swap', live: false }, { key: 'FX_OPTION', label: 'FX option' }],
     CRYPTO: [{ key: 'CRYPTO_FORWARD', label: 'Crypto forward' }, { key: 'CRYPTO_OPTION', label: 'Crypto option', live: false }],
   }
   const fxTerms = useMemo(() => {
@@ -129,6 +129,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         { label: 'IR01', value: Number(r.ir01 ?? (r.rho_base_per_bp + r.rho_quote_per_bp)).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
         { label: 'IR01 DISC', value: Number(r.ir01_disc ?? r.rho_quote_per_bp).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
         { label: 'THETA', value: Number(r.theta ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: (r.theta ?? 0) >= 0 ? 'pos' : 'neg' },
+        ...(r.shape === 'OPTION' ? [{ label: 'VEGA / 1pt', value: Number(r.vega ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: (r.vega ?? 0) >= 0 ? 'pos' : 'neg' }] : []),
       ] : [],
     },
   }

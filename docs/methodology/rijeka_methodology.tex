@@ -325,7 +325,7 @@ A proof pack contains the canonical record, the hash, both signatures and the an
 
 %--------------------------------------------------------------------
 \section{Independent reference: QuantLib}\label{sec:quantlib}
-\emph{Suite: \code{backend/tests/reference/}; table: \code{python -m tests.reference.report}.}
+\emph{Suite: \code{backend/tests/reference/}; table: \texttt{python -m tests.reference.report}.}
 
 Every number above is rebuilt in QuantLib (version 1.44), an independent open-source library, on a frozen USD SOFR snapshot of 33 quotes with the shape of the daily demo build (valuation date 30 October 2026). The suite runs in continuous integration with every commit; each comparison carries a tolerance and fails the build when the difference grows past it. Two kinds of comparison are made.
 \begin{itemize}[leftmargin=1.4em]
