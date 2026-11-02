@@ -47,7 +47,7 @@ jobs:
           target="$live"
           if [ "$live" != "$main" ]; then
             changed=$(git diff --name-only "$live" "$main")
-            api=$(printf '%s\n' "$changed" | grep -vE '^(frontend/|netlify_drop/|docs/)' | grep -vE '\.md$' || true)
+            api=$(printf '%s\n' "$changed" | grep -vE '^(frontend/|netlify_drop/|docs/|\.github/)' | grep -vE '\.md$' || true)
             if [ -z "$api" ]; then target="$main"; echo "main is ahead of the API on frontend/docs only: release follows main"; fi
           fi
           if [ "$release" = "$target" ]; then echo "release already at $target"; exit 0; fi

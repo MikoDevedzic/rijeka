@@ -99,6 +99,8 @@ def test_release_follows_main_when_main_is_ahead_on_frontend_only():
     assert S.sync_release(own, "o/r", "t", gh=_gh_factory("b" * 40, "behind", log, ahead_files=fe + ["backend/main.py"])) == "release -> aaaaaaa"
     assert S.sync_release(own, "o/r", "t", gh=_gh_factory(main, "behind", [], ahead_files=fe, main_sha=main)) == "release already at this commit"
     assert S.frontend_only([]) is False and S.frontend_only(["netlify_drop/index.html"]) is True
+    assert S.frontend_only([".github/workflows/release-sync.yml", "README.md"]) is True
+    assert S.frontend_only([".github/workflows/ci.yml", "backend/main.py"]) is False
 
 
 def test_start_is_a_no_op_when_disabled(monkeypatch):

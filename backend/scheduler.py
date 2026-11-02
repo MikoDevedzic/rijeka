@@ -172,7 +172,7 @@ def live_commit(url: str) -> Optional[str]:
         return None
 
 
-API_PATHS_EXCLUDED = ("frontend/", "netlify_drop/", "docs/")
+API_PATHS_EXCLUDED = ("frontend/", "netlify_drop/", "docs/", ".github/")   # workflows are not in the API image either
 
 
 def frontend_only(files: list[str]) -> bool:
