@@ -41,6 +41,7 @@ from api.routes._errors import internal
 from pricing.bootstrap import bootstrap_from_dicts
 from pricing.curve import Curve
 from pricing.greeks import compute_greeks
+from pricing import fixings as _fixings
 from pricing.ir_swap import price_swap, price_leg
 from pricing.swaption import price_swaption, _N
 from pricing.bermudan_swaption import price_bermudan_swaption_hw1f  # Sprint 13A/B
@@ -650,8 +651,9 @@ def price_trade(
 
     try:
         # currency trades never reach here: they return through currencies.price_booked above
+        fixing_lookup, fixing_notes = _fixings.lookup_for(db, user["sub"], legs)
         result = price_swap(
-            trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
+            trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date, fixing_lookup=fixing_lookup
         )
     except Exception as exc:
         raise internal(500, "Pricing error", exc)
@@ -662,7 +664,7 @@ def price_trade(
     try:
         greeks = compute_greeks(
             trade_id=str(trade.id), legs=legs, curves=curves,
-            valuation_date=val_date, base_npv=float(result.npv or 0)
+            valuation_date=val_date, base_npv=float(result.npv or 0), fixing_lookup=fixing_lookup
         )
     except Exception:
         pass
@@ -702,6 +704,7 @@ def price_trade(
         "curve_mode":     _curve_mode(request.curves),
         "staleness":      curve_staleness(curves, val_date),
         "curve_pillars":  curve_pillars,
+        "fixings":   fixing_notes,
         "npv":       float(result.npv)       if result.npv is not None else None,
         "ir01":      float(greeks.ir01)      if greeks and greeks.ir01 is not None else None,
         "ir01_disc": float(greeks.ir01_disc) if greeks and greeks.ir01_disc is not None else None,
@@ -841,12 +844,14 @@ def price_preview(
         })
 
     # Price
+    fixing_lookup, fixing_notes = _fixings.lookup_for(db, user["sub"], legs)
     try:
         result = price_swap(
             trade_id="preview",
             legs=legs,
             curves=curves,
             valuation_date=val_date,
+            fixing_lookup=fixing_lookup,
         )
     except Exception as exc:
         raise internal(500, "Pricing error", exc)
@@ -860,6 +865,7 @@ def price_preview(
             curves=curves,
             valuation_date=val_date,
             base_npv=float(result.npv or 0),
+            fixing_lookup=fixing_lookup,
         )
     except Exception:
         pass
@@ -916,6 +922,7 @@ def price_preview(
         "curve_mode":     _curve_mode(request.curves),
         "staleness":      curve_staleness(curves, val_date),
         "curve_pillars":  curve_pillars,
+        "fixings":   fixing_notes,
         "npv":       float(result.npv)       if result.npv is not None else None,
         "ir01":      float(greeks.ir01)      if greeks and greeks.ir01 is not None else None,
         "ir01_disc": float(greeks.ir01_disc) if greeks and greeks.ir01_disc is not None else None,
@@ -1273,8 +1280,9 @@ def generate_cashflows(
             raise HTTPException(status_code=422, detail=f"Curve '{ci.curve_id}': {exc}")
 
     try:
+        fixing_lookup, _ = _fixings.lookup_for(db, user["sub"], legs)
         result = price_swap(
-            trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date
+            trade_id=str(trade.id), legs=legs, curves=curves, valuation_date=val_date, fixing_lookup=fixing_lookup
         )
     except Exception as exc:
         raise internal(500, "Schedule generation error", exc)

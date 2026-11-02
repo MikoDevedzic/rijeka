@@ -40,6 +40,7 @@ def compute_greeks(
     curves:         Dict[str, Curve],
     valuation_date: date,
     base_npv:       Optional[float] = None,
+    fixing_lookup=None,
 ) -> Greeks:
     """
     Compute IR01, IR01_DISC, Theta for a swap.
@@ -50,17 +51,17 @@ def compute_greeks(
     the discounting sensitivity from the forecasting sensitivity.
     """
     if base_npv is None:
-        base = price_swap(trade_id, legs, curves, valuation_date)
+        base = price_swap(trade_id, legs, curves, valuation_date, fixing_lookup)
         base_npv = float(base.npv or 0)
 
     # ── IR01: shift ALL curves +1bp ──────────────────────────────────────────
     bumped_all = {k: v.shifted(1.0) for k, v in curves.items()}
-    ir01_result = price_swap(trade_id, legs, bumped_all, valuation_date)
+    ir01_result = price_swap(trade_id, legs, bumped_all, valuation_date, fixing_lookup)
     ir01 = float(ir01_result.npv or 0) - base_npv
 
     # Gamma: dollar convexity for 1bp parallel move
     bumped_down  = {k: v.shifted(-1.0) for k, v in curves.items()}
-    gamma_result = price_swap(trade_id, legs, bumped_down, valuation_date)
+    gamma_result = price_swap(trade_id, legs, bumped_down, valuation_date, fixing_lookup)
     gamma        = float(ir01_result.npv or 0) + float(gamma_result.npv or 0) - 2.0 * base_npv
 
     # ── IR01_DISC: shift DISCOUNT curves only, keep forecast curves flat ─────
@@ -94,7 +95,7 @@ def compute_greeks(
         for cid in disc_ids:
             if cid in bumped_disc:
                 bumped_disc[cid] = bumped_disc[cid].shifted(1.0)
-        disc_result = price_swap(trade_id, legs, bumped_disc, valuation_date)
+        disc_result = price_swap(trade_id, legs, bumped_disc, valuation_date, fixing_lookup)
     else:
         # Complex case: same curve used for disc + fcast
         # Create bumped copies with suffix, patch legs temporarily
@@ -114,7 +115,7 @@ def compute_greeks(
             else:
                 patched_legs.append(leg)
 
-        disc_result = price_swap(trade_id, patched_legs, bumped_disc, valuation_date)
+        disc_result = price_swap(trade_id, patched_legs, bumped_disc, valuation_date, fixing_lookup)
 
     ir01_disc = float(disc_result.npv or 0) - base_npv
 
@@ -140,7 +141,7 @@ def compute_greeks(
 
     tomorrow     = valuation_date + timedelta(days=1)
     theta_curves = {k: _roll_curve(v, tomorrow) for k, v in curves.items()}
-    theta_result = price_swap(trade_id, legs, theta_curves, tomorrow)
+    theta_result = price_swap(trade_id, legs, theta_curves, tomorrow, fixing_lookup)
     theta        = float(theta_result.npv or 0) - base_npv
 
     return Greeks(ir01=ir01, ir01_disc=ir01_disc, theta=theta, gamma=gamma)

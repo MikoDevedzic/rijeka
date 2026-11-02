@@ -16,7 +16,7 @@ pricing/curve.py shifted) against QuantLib's ZeroSpreadedTermStructure with the 
 continuous spread: the same bump, so the numbers must agree."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 import QuantLib as ql
@@ -183,9 +183,27 @@ def seasoned_rows() -> list[Row]:
     elapsed = (VAL - eff).days
     realised = (growth - 1) * 360 / elapsed
     rows = []
-    for label, fix in (("with the fixing", {str(eff): realised}), ("no fixing supplied", None)):
-        legs = _legs(eff, mat, 0.036, fixed_freq="QUARTERLY", float_freq="QUARTERLY", fixings=fix)
-        r = _rijeka(legs)
+    # the production path: the realised rate rebuilt from daily ON snapshots (pricing/fixings.py), SOFR_FIX every day
+    import json
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.orm import Session
+    from pricing import fixings as FX
+    sdb = Session(create_engine("sqlite://"))
+    sdb.execute(text("CREATE TABLE market_data_snapshots (curve_id TEXT, user_id TEXT, valuation_date DATE, quotes TEXT)"))
+    dd = eff - timedelta(days=1)
+    while dd < VAL:
+        sdb.execute(text("INSERT INTO market_data_snapshots VALUES ('USD_SOFR', 'tpl', :d, :q)"),
+                    {"d": dd, "q": json.dumps([{"tenor": "ON", "rate": 4.30}])})
+        dd += timedelta(days=1)
+    sdb.commit()
+    FX._cache.clear()
+    for label, fix in (("with the fixing", {str(eff): realised}), ("fixings from the daily ON snapshots", "lookup"), ("no fixing supplied", None)):
+        legs = _legs(eff, mat, 0.036, fixed_freq="QUARTERLY", float_freq="QUARTERLY", fixings=None if fix == "lookup" else fix)
+        if fix == "lookup":
+            lookup, _ = FX.lookup_for(sdb, "tpl", legs, owner="tpl")
+            r = price_swap("ref", legs, {"USD_SOFR": rijeka_curve()}, VAL, fixing_lookup=lookup)
+        else:
+            r = _rijeka(legs)
         sw = ql.Swap([_ql_leg(legs[0], idx, market=False), _ql_leg(legs[1], idx, market=False)], [True, False])
         sw.setPricingEngine(ql.DiscountingSwapEngine(h))
         if fix:

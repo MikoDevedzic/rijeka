@@ -47,6 +47,8 @@ def _project_float_rate(
     valuation_date: date,
     day_count:      str,
     fixings:        Optional[Dict[Any, Any]] = None,
+    fixing_lookup=None,
+    leg:            Optional[Dict[str, Any]] = None,
 ) -> float:
     """
     Forward rate for a coupon period, correct for periods already under way.
@@ -64,6 +66,9 @@ def _project_float_rate(
         return 0.0
 
     realised = _resolve_fixing(fixings, p.period_start)
+    if realised is None and fixing_lookup is not None and p.period_start < valuation_date:
+        # the realised overnight rate rebuilt from the daily snapshots (pricing/fixings.py)
+        realised = fixing_lookup(p.period_start, min(valuation_date, p.period_end), day_count, leg)
 
     # Period wholly elapsed, payment still outstanding. Both DFs are 1.0 here,
     # which would project a ZERO coupon. Use the fixing if we have one, else
@@ -268,6 +273,7 @@ def price_leg(
     discount_curve: Curve,
     forecast_curve: Optional[Curve],
     valuation_date: date,
+    fixing_lookup=None,
 ) -> LegResult:
     leg_id      = str(leg.get("id", ""))
     leg_ref     = leg.get("leg_ref", "")
@@ -384,7 +390,7 @@ def price_leg(
         if is_float:
             fc   = forecast_curve or discount_curve
             tau  = float(p.dcf)
-            fwd  = _project_float_rate(fc, p, tau, valuation_date, day_count, fixings)
+            fwd  = _project_float_rate(fc, p, tau, valuation_date, day_count, fixings, fixing_lookup, leg)
             eff_spread = _resolve_spread_schedule(spread_schedule, p.period_start, spread) if spread_schedule else spread
             rate = fwd + eff_spread
         else:
@@ -540,6 +546,7 @@ def price_swap(
     legs:           List[Dict[str, Any]],
     curves:         Dict[str, Curve],
     valuation_date: date,
+    fixing_lookup=None,
 ) -> SwapResult:
     """
     Price a multi-leg swap. Computes per-leg IR01 and IR01_DISC.
@@ -548,6 +555,9 @@ def price_swap(
     IR01_DISC — bump ONLY discount curve +1bp, keep forecast flat -> delta PNL
                 When disc == forecast curve, we create a split copy so
                 forecasting is unaffected by the discount bump.
+    fixing_lookup(period_start, asof, day_count, leg) -> realised simple rate of a
+                period under way, or None (pricing/fixings.py); without it the
+                elapsed part is assumed to have accrued at the forward.
     """
     if not curves:
         return SwapResult(trade_id=trade_id, npv=0.0,
@@ -575,18 +585,18 @@ def price_swap(
                               error=f"Discount curve '{disc_id}' not found.")
 
         # Base price
-        lr = price_leg(leg, disc_curve, fore_curve, valuation_date)
+        lr = price_leg(leg, disc_curve, fore_curve, valuation_date, fixing_lookup)
 
         # IR01: bump all curves
         disc_bumped = bumped_all.get(disc_id) or bumped_all.get("default")
         fore_bumped = bumped_all.get(fore_id) or bumped_all.get("default")
-        lr_all = price_leg(leg, disc_bumped, fore_bumped, valuation_date)
+        lr_all = price_leg(leg, disc_bumped, fore_bumped, valuation_date, fixing_lookup)
         lr.ir01 = lr_all.pv - lr.pv
 
         # IR01_DISC: bump only discount, keep forecast flat
         disc_only = bumped_disc_curves.get(disc_id + "__disc") or bumped_disc_curves.get("default__disc")
         fore_flat = curves.get(fore_id) or curves.get("default")
-        lr_disc = price_leg(leg, disc_only, fore_flat, valuation_date) if disc_only else lr
+        lr_disc = price_leg(leg, disc_only, fore_flat, valuation_date, fixing_lookup) if disc_only else lr
         lr.ir01_disc = lr_disc.pv - lr.pv
 
         leg_results.append(lr)
