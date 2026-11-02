@@ -274,7 +274,7 @@ function Tree({ tree, rows }) {
               <em className={tone(x.usd)}>{x.usd != null ? sgn(x.usd) : '—'}</em>
             </div>
           ))}
-          {r.greeks && <div className="pnl-xg">IR01 {fmt(r.greeks.ir01)} · IR01 DISC {fmt(r.greeks.ir01_disc)} · FX01/BTC01 {fmt(r.greeks.spot01)} · THETA {fmt(r.greeks.theta)} · at the close</div>}
+          {r.greeks && <div className="pnl-xg">IR01 {fmt(r.greeks.ir01)} · IR01 DISC {fmt(r.greeks.ir01_disc)} · FX01/CRY01 {fmt(r.greeks.spot01)} · THETA {fmt(r.greeks.theta)} · at the close</div>}
         </div>
       )}
       {isOpen && !isTrade && n.children.map((c, i) => <Row key={`${k}/${c.name}/${i}`} n={c} depth={depth + 1} k={`${k}/${c.name}/${i}`} />)}

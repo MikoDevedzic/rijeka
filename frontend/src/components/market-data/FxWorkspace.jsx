@@ -208,7 +208,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   }
 
   const tabs = [{ id: 'points', label: p.crypto ? 'Forward points (USD)' : 'Forward points', badge: p.forward_curve?.tenors?.length },
-                ...(p.crypto ? [] : [{ id: 'vols', label: 'Volatility', badge: p.vol_surface?.tenors?.length }]),
+                { id: 'vols', label: 'Volatility', badge: p.vol_surface?.tenors?.length },
                 { id: 'spot', label: p.crypto ? 'Spot & funding' : 'Spot' }, { id: 'conv', label: 'Conventions' }]
   const mode = md?.forward_mode || 'MARKET'
   const thL = { fontSize: '0.78rem', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 6px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }

@@ -28,7 +28,7 @@ def trade_curves(trade) -> list[str]:
         else:
             bc = CURVE_FOR.get(base)
             out += [c for c in (bc, f"{base}_FLAT") if c]
-        if itype == "FX_OPTION":
+        if itype in ("FX_OPTION", "CRYPTO_OPTION"):
             out.append(f"{pair}_VOL")              # the option's vol surface: a curve of its own in the explain and the ladder
         return out
     ids = [c for c in dict.fromkeys([trade.discount_curve_id, trade.forecast_curve_id]) if c]
@@ -61,6 +61,12 @@ def _currency_terms(trade) -> tuple[str, dict]:
         pair = f"{str(t['digital_asset']).upper()}USD"
         terms = {"notional": float(t.get("notional_amount") or trade.notional), "K": float(t["forward_price"]) if t.get("forward_price") not in (None, "") else None,
                  "settle": date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)), "shape": "NDF"}
+    elif itype == "CRYPTO_OPTION":
+        pair = f"{str(t['digital_asset']).upper()}USD"
+        terms = {"notional": float(t.get("notional_amount") or trade.notional), "K": float(t["strike_price"]) if t.get("strike_price") not in (None, "") else None,
+                 "shape": "OPTION", "option_type": str(t.get("option_type") or "CALL").upper(), "expiry": date.fromisoformat(str(t["expiration_date"])),
+                 "settle": date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)),
+                 "settlement_type": "NON_DELIVERABLE", "style_fields": dict(t)}
     elif itype == "FX_OPTION":
         pair = str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper()
         terms = {"notional": float(t.get("base_notional") or trade.notional), "K": float(t["strike"]) if t.get("strike") not in (None, "") else None,
@@ -240,10 +246,19 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
                                        valuation_date=val_date, settlement_date=settle, quote_curve=q_curve, direction=t["direction"], pip=pip,
                                        spot_date=fx_spot, base_rate=rate_b)
     if t["shape"] == "OPTION":
-        return _value_fx_option(t, pair, base, quote, S, r, val_date, mkt, qid, fallback, q_curve, kw)
-    return {"npv": float(r.npv), "ccy": quote, "ir01": getattr(r, "ir01", None), "ir01_disc": getattr(r, "ir01_disc", None),
-            "spot01": getattr(r, "spot01", None), "theta": getattr(r, "theta", None),
-            "asof": {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT")}, "fallback": fallback}
+        return _taxonomy(_value_fx_option(t, pair, base, quote, S, r, val_date, mkt, qid, fallback, q_curve, kw), crypto)
+    return _taxonomy({"npv": float(r.npv), "ccy": quote, "ir01": getattr(r, "ir01", None), "ir01_disc": getattr(r, "ir01_disc", None),
+                      "ir01_base": getattr(r, "ir01_base", None), "spot01": getattr(r, "spot01", None), "theta": getattr(r, "theta", None),
+                      "asof": {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT")}, "fallback": fallback}, crypto)
+
+
+def _taxonomy(v: dict[str, Any], crypto: bool) -> dict[str, Any]:
+    """The desk's names: on a digital asset IR01 is the discounting curve's sensitivity alone and the funding
+    rate's sensitivity is FUND01; on a currency pair both legs are rate curves and IR01 is their sum."""
+    if crypto and v.get("ir01_disc") is not None:
+        v["fund01"] = v.get("ir01_base") if v.get("ir01_base") is not None else (v["ir01"] - v["ir01_disc"] if v.get("ir01") is not None else None)
+        v["ir01"] = v["ir01_disc"]
+    return v
 
 
 def _value_fx_option(t: dict, pair: str, base: str, quote: str, S: float, fwd, val_date: date, mkt: Market, qid: str, fallback: list,
@@ -292,15 +307,17 @@ def _value_fx_option(t: dict, pair: str, base: str, quote: str, S: float, fwd, v
     if tier == "DEFAULT":
         fallback = fallback + [vol_cid]
     if spec.style == "EUROPEAN":
+        from api.routes.currencies import is_crypto
         r = price_fx_option(base_currency=base, quote_currency=quote, base_notional=t["notional"], option_type=spec.option_type, strike=K, spot=S,
                             forward=float(fwd.forward), df_quote=float(fwd.df_quote), valuation_date=val_date, expiry_date=expiry, settlement_date=settle,
-                            vol=vol, direction=t["direction"], spot_date=spot_date(val_date, False, base, quote))
-        return {"npv": float(r.npv), "ccy": quote, "ir01": r.ir01, "ir01_disc": r.ir01_disc, "spot01": r.spot01, "theta": r.theta, "vega": r.vega,
-                "asof": asof, "fallback": fallback, "model": f"Garman–Kohlhagen {vol * 100:.2f}% ({note})"}
+                            vol=vol, direction=t["direction"], spot_date=spot_date(val_date, is_crypto(base), base, quote))
+        return {"npv": float(r.npv), "ccy": quote, "ir01": r.ir01, "ir01_disc": r.ir01_disc, "ir01_base": r.ir01_base, "spot01": r.spot01, "theta": r.theta,
+                "vega": r.vega, "asof": asof, "fallback": fallback,
+                "model": f"{'Black-76' if is_crypto(base) else 'Garman–Kohlhagen'} {vol * 100:.2f}% ({note})"}
     x = price_exotic(spec, base_notional=t["notional"], spot=S, forward=float(fwd.forward), df_quote=float(fwd.df_quote), t_expiry=T_e, vol=vol,
                      direction=t["direction"])
-    return {"npv": float(x.npv), "ccy": quote, "ir01": x.ir01, "ir01_disc": x.ir01_disc, "spot01": x.spot01, "theta": x.theta, "vega": x.vega,
-            "asof": asof, "fallback": fallback, "model": f"{x.method}, {vol * 100:.2f}% ({note})"}
+    return {"npv": float(x.npv), "ccy": quote, "ir01": x.ir01, "ir01_disc": x.ir01_disc, "ir01_base": x.ir01_base, "spot01": x.spot01, "theta": x.theta,
+            "vega": x.vega, "asof": asof, "fallback": fallback, "model": f"{x.method}, {vol * 100:.2f}% ({note})"}
 
 
 def forward_points(mkt: Market, pair: str) -> Optional[dict]:

@@ -53,3 +53,5 @@ A netting set of a few trades simulates in a second or two (analytic valuation o
 ## Roadmap
 
 A per-counterparty CDS spread and LGD on the record; wrong-way risk; stressed windows for regulatory EEPE; a term structure of PFE limits by tenor set per counterparty.
+
+**Digital-asset options (2 November 2026).** A `CRYPTO_OPTION` is valued on the paths exactly as the FX option (same styles, the asset's funding rate as its base rate, cash-settled the day after expiry); its surface is `{ASSET}USD_VOL`.

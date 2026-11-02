@@ -360,8 +360,16 @@ FX_VOL_LEVELS = {   # pair: (ATM 1W, ATM 2Y, RR25, BF25)
 }
 
 
+# Digital assets: the same shape at crypto levels (ATM 55–90 %, calls bid in a bull market so the
+# risk reversal is positive, fat wings), scaled day by day by realised vol like the FX surfaces
+# (risk/vols.py). No public source quotes crypto implied vols the demo can rely on; Deribit's are
+# the next step and the methodology says so.
+CRYPTO_VOL_LEVELS = {"BTCUSD": (52.0, 60.0, 2.0, 3.0), "ETHUSD": (62.0, 70.0, 3.0, 3.5), "SOLUSD": (82.0, 90.0, 4.0, 4.5)}
+VOL_LEVELS = {**FX_VOL_LEVELS, **CRYPTO_VOL_LEVELS}
+
+
 def build_fx_vols(pair: str) -> list[dict]:
-    lo, hi, rr, bf = FX_VOL_LEVELS[pair]
+    lo, hi, rr, bf = VOL_LEVELS[pair]
     out = []
     for t in FX_VOL_TENORS:
         y = tenor_years(t)
@@ -463,7 +471,7 @@ def assemble(collected: dict, valuation_date: date) -> dict:
 
     synthetic = "DEMO · synthetic surface"
     curves["USD_SWVOL_ATM"] = {"quotes": build_swvol_atm(), "source": synthetic}
-    for pair in FX_VOL_LEVELS:
+    for pair in VOL_LEVELS:
         curves[f"{pair}_VOL"] = {"quotes": build_fx_vols(pair), "source": synthetic}
     skew = build_skew_cells(synthetic)
     fwd = par_rate_lookup(curves["USD_SOFR"]["quotes"]) if "USD_SOFR" in curves else (lambda _y: 4.0)

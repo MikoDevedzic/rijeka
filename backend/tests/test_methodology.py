@@ -31,7 +31,7 @@ def test_workbook_builds_with_formulas_and_reference(product):
     formulas = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")]
     assert len(formulas) > 10
     assert any("PillarDF" in f for f in formulas), "DF interpolation must reference the curve pillars"
-    if product in ("swaption", "cap", "crypto_ndo", "fx_option", "fx_option_styles"):
+    if product in ("swaption", "cap", "crypto_ndo", "fx_option", "fx_option_styles", "crypto_option_styles"):
         assert any("NORM.S.DIST" in f for f in formulas)
     assert isinstance(ref, float)
 
@@ -54,7 +54,7 @@ def test_irs_reference_is_the_engine_value():
 
 def test_products_list_covers_crypto_and_post_trade():
     ids = {p["id"] for p in rep.PRODUCTS}
-    assert {"irs", "ois", "swaption", "cap", "fx_forward", "fx_option", "fx_option_styles", "crypto_ndf", "crypto_ndo", "xva", "simm", "confirm"} <= ids
+    assert {"irs", "ois", "swaption", "cap", "fx_forward", "fx_option", "fx_option_styles", "crypto_ndf", "crypto_ndo", "crypto_option_styles", "xva", "simm", "confirm"} <= ids
     for p in rep.PRODUCTS:
         assert p["replication"] in ("xlsx", "doc", "xlsx-static", "verifier")
         if p["replication"] == "xlsx":

@@ -6,6 +6,8 @@ Engine: `backend/risk/`; page: `RISK` next to P&L; settings and limits under `Co
 
 For every live trade and every curve it is valued on, each tenor bucket's quotes are bumped +1bp and the trade is repriced on the as-of market through the production pricers. The result is key-rate IR01 by (curve, bucket); the buckets (0-1Y, 1-5Y, 5-10Y, 10Y+) are the same the P&L explain uses, so a day's rates P&L and the ladder speak the same language. Spot deltas (FX01, BTC01) are the pricers' PV for +1 % spot. Totals are in the reporting currency at the close. A 1bp move in every par quote is a slightly smaller move in zero rates, so the ladder total sits about 2 % below the trade ticket's IR01 (which bumps zero rates); both are correct, and the bucket values agree with a QuantLib rebootstrap to 0.05 % of DV01 (`backend/tests/reference/test_ref_greeks.py`).
 
+**Delta and the rates on a digital asset.** The desk's names: `FX01` is the spot delta of a currency pair and `CRY01` that of a digital asset (PV for +1% spot). On a digital-asset trade `IR01` is the discounting curve's sensitivity alone and the funding rate's sensitivity is `FUND01`: the ladder keeps `{ASSET}_FUNDING` out of the IR01 totals and reports it beside them; on a currency pair both legs are rate curves and `IR01` is their sum.
+
 **Vega.** A volatility surface the trade is valued on (`{PAIR}_VOL` for FX options, `{CCY}_SWVOL_ATM` for swaptions) is bumped +1 vol point (+1bp of normal vol) per tenor bucket, a swaption grid by expiry, and reported as vega by (surface, bucket), kept apart from the rate ladder; the page shows a VEGA card when the book carries one.
 
 A booked European swaption is valued as the option everywhere on this page (VaR, stress, ladder): Bachelier on the OIS annuity at the nearest point of the day's ATM normal-vol grid; expiry, strike, payer or receiver and bought or sold from the booked terms (the fixed leg's forward start, rate and direction for bookings older than November 2026, valued long). Until November 2026 it was valued as its underlying swap. A cap, floor or collar is a zero-participation float leg whose embedded caplets carry the value; the ticket's swaption delta is a forward delta with the curve DV01 shown beside it, and the ladder uses the curve bump. The ATM surface is a risk factor like the curves: a day's vol move reprices the option in VaR, the explain and the ladder.
@@ -49,7 +51,7 @@ Every stored P&L date is paired with the VaR that was standing the evening befor
 
 The 95 % VaR and the ladder VaR are backtested alongside the headline. Nothing new is stored; the test reads the two daily series (`pnl_daily`, `risk_daily`) and needs sixty paired days before it says anything and 250 to be read the usual way. `GET /api/risk/backtest?measure=clean&days=250`.
 
-**Stress and vol.** A rate scenario moves the curves and leaves the vol surfaces alone; the two VOL scenarios move the FX surfaces' ATM rows by a number of points and the swaption grid by bp of normal vol, every option repriced in full. A trade whose pricer cannot value the shifted market is listed under the scenario, not summed as zero.
+**Stress and vol.** A rate scenario moves the curves and leaves the vol surfaces alone; the two VOL scenarios move the FX surfaces' ATM rows by a number of points (a larger one for the digital assets' surfaces) and the swaption grid by bp of normal vol, every option repriced in full. A trade whose pricer cannot value the shifted market is listed under the scenario, not summed as zero.
 
 ## Roadmap for VaR
 

@@ -48,7 +48,8 @@ const PHASES = [
     ['DONE', 'Crypto NDF / NDO in the canonical record (ISDA Digital Asset Derivatives Definitions vocabulary)'],
     ['DONE', 'Excel replications for crypto NDF and NDO (parity forward, Black-76)'],
     ['DONE', 'Crypto non-deliverable forwards on BTC, ETH and SOL: public spot feed, funding rate, cash-and-carry pricer, booking, on-chain confirmation (Configurations → Digital assets)'],
-    ['NEXT', 'Crypto options in the engine and the page; venue adapters for crypto OTC desks'],
+    ['DONE', 'Digital-asset options on BTC, ETH and SOL: European, American, digital, barrier, double barrier and touch on the FX option engine with the funding rate as the carry, cash-settled (NDO); CRY01, IR01 (discounting) and FUND01; vol surfaces, VOL step, VaR, stress, exposure paths, canonical record, Excel replications'],
+    ['NEXT', 'Implied crypto vol surfaces from a venue (Deribit DVOL and chain marks) in place of the realised-vol-scaled synthetic ones; venue adapters for crypto OTC desks'],
   ]},
   { title: 'PHASE 2 · FX & CREDIT', status: 'PARTIAL', items: [
     ['DONE', 'FX spot, forwards and NDFs on G10 pairs, priced on the same interest-rate-parity model as crypto, booked and confirmed on chain (FX · CRYPTO page)'],

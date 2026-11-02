@@ -33,12 +33,13 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
     base = valuer(trade, d, mkt)
     kr01: dict[str, dict[str, float]] = {}
     vega: dict[str, dict[str, float]] = {}
+    fund01: dict[str, dict[str, float]] = {}          # a digital asset's funding rate: the desk's FUND01, kept out of IR01
     for cid in trade_curves(trade):
         q = mkt.quotes(cid)
         if not q:
             continue
         is_vol = is_vol_surface(cid)
-        target, bump = (vega, VOL_BUMP) if is_vol else (kr01, BUMP_BP)
+        target, bump = (vega, VOL_BUMP) if is_vol else (fund01, BUMP_BP) if cid.endswith("_FUNDING") else (kr01, BUMP_BP)
         if len(q) <= 1:                                 # a flat rate or funding level: one bucket
             m = mkt.override(cid, _bumped(q, 0.0, 1e9, bump))
             target.setdefault(cid, {})["FLAT"] = valuer(trade, d, m)["npv"] - base["npv"]
@@ -55,8 +56,9 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
         from risk.stress import asset_of
         spot01[asset_of(sc.replace("_SPOT", ""))[0]] = float(base["spot01"])
     return {"trade_id": str(trade.id), "trade_ref": trade.trade_ref, "instrument": trade.instrument_type, "desk": trade.desk or "UNASSIGNED",
-            "book": trade.book or "UNASSIGNED", "ccy": base["ccy"], "npv": base["npv"], "kr01": kr01, "spot01": spot01, "vega": vega,
+            "book": trade.book or "UNASSIGNED", "ccy": base["ccy"], "npv": base["npv"], "kr01": kr01, "spot01": spot01, "vega": vega, "fund01": fund01,
             "ir01": sum(sum(b.values()) for b in kr01.values()), "vega_total": sum(sum(b.values()) for b in vega.values()),
+            "fund01_total": sum(sum(b.values()) for b in fund01.values()),
             "theta": base.get("theta"), "fallback": base.get("fallback", [])}
 
 
@@ -74,8 +76,9 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx) -> di
             problems.append({"trade_ref": t.trade_ref, "reason": str(detail)[:160]})
     by_curve: dict[str, dict[str, float]] = {}
     by_vol: dict[str, dict[str, float]] = {}
+    by_fund: dict[str, float] = {}
     spot01: dict[str, float] = {}
-    npv_usd = ir01_usd = vega_usd = 0.0
+    npv_usd = ir01_usd = vega_usd = fund01_usd = 0.0
     unconverted: set[str] = set()
     for r in rows:
         k = fx(r["ccy"])
@@ -91,6 +94,9 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx) -> di
             for b, v in buckets.items():
                 by_vol.setdefault(cid, {})[b] = by_vol.setdefault(cid, {}).get(b, 0.0) + v * k
                 vega_usd += v * k
+        for cid, buckets in (r.get("fund01") or {}).items():
+            by_fund[cid] = by_fund.get(cid, 0.0) + sum(buckets.values()) * k
+            fund01_usd += sum(buckets.values()) * k
         for a, v in r["spot01"].items():
             spot01[a] = spot01.get(a, 0.0) + v * k
     ladder = [{"curve": cid, "buckets": {b: by_curve[cid].get(b, 0.0) for b, *_ in BUCKETS} | ({"FLAT": by_curve[cid]["FLAT"]} if "FLAT" in by_curve[cid] else {}),
@@ -99,4 +105,5 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx) -> di
                     "total": sum(by_vol[cid].values())} for cid in sorted(by_vol)]
     return {"rows": rows, "ladder": ladder, "spot01": spot01, "npv_usd": npv_usd, "ir01_usd": ir01_usd, "valuations": valuer.calls,
             "vega": vega_ladder, "vega_usd": vega_usd, "vol_bump": "1 vol point (FX) · 1bp normal vol (swaptions)",
+            "fund01": by_fund, "fund01_usd": fund01_usd,
             "problems": problems, "unconverted": sorted(unconverted), "bump_bp": BUMP_BP, "buckets": [b[0] for b in BUCKETS]}

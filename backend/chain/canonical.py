@@ -231,28 +231,40 @@ _CRYPTO_COMMON = (
 )
 _CRYPTO_OPTION_FIELDS = _CRYPTO_COMMON + (
     "option_type",              # CALL | PUT
-    "exercise_style",           # EUROPEAN (the Definitions' default)
+    "exercise_style",           # EUROPEAN | AMERICAN
     "strike_price", "strike_currency",
     "expiration_date", "expiration_time",
     "premium_amount", "premium_currency", "premium_payment_date",
     "automatic_exercise",       # bool
 )
+# A non-European style (2026-11-02) adds its terms, the FX option's vocabulary; a European NDO keeps
+# the record shape above byte for byte, so records confirmed before the styles still verify.
+_CRYPTO_OPTION_STYLE_FIELDS = (
+    "style", "payout", "payout_currency", "barrier_type", "barrier", "lower", "upper", "rebate", "touch_type", "pay_at_hit",
+    "barrier_monitoring", "barrier_determination_agent",
+)
 _CRYPTO_FORWARD_FIELDS = _CRYPTO_COMMON + (
     "forward_price", "price_currency",
 )
 _CRYPTO_REQUIRED = {
-    "CRYPTO_OPTION":  ("digital_asset", "notional_amount", "option_type", "exercise_style", "strike_price",
-                       "strike_currency", "expiration_date", "valuation_date", "settlement_date",
+    "CRYPTO_OPTION":  ("digital_asset", "notional_amount", "option_type", "exercise_style",
+                       "expiration_date", "valuation_date", "settlement_date",
                        "settlement_currency", "settlement_price_source",
                        "premium_amount", "premium_currency", "premium_payment_date"),
     "CRYPTO_FORWARD": ("digital_asset", "notional_amount", "forward_price", "price_currency",
                        "valuation_date", "settlement_date", "settlement_currency", "settlement_price_source"),
 }
 _UPPER = ("digital_asset", "option_type", "exercise_style", "settlement_currency", "strike_currency",
-          "premium_currency", "price_currency")
+          "premium_currency", "price_currency", "style", "payout_currency", "barrier_type", "touch_type", "barrier_monitoring")
 # Stored in trade.terms as JSON, so these arrive as strings; "4100.50" and
 # "4100.5" must hash the same.
-_NUMERIC = ("notional_amount", "strike_price", "premium_amount", "forward_price")
+_NUMERIC = ("notional_amount", "strike_price", "premium_amount", "forward_price", "payout", "barrier", "lower", "upper", "rebate")
+# per style, the terms a digital-asset option must state (the FX option's list with the Definitions' strike name)
+_CRYPTO_STYLE_REQUIRED = {"EUROPEAN": ("strike_price", "strike_currency"), "AMERICAN": ("strike_price", "strike_currency"),
+                          "DIGITAL": ("strike_price", "strike_currency", "payout", "payout_currency"),
+                          "BARRIER": ("strike_price", "strike_currency", "barrier_type", "barrier"),
+                          "DOUBLE_BARRIER": ("strike_price", "strike_currency", "barrier_type", "lower", "upper"),
+                          "TOUCH": ("payout", "payout_currency", "touch_type")}
 
 
 # ── Currency products: FX spot, forward, NDF ─────────────────────────────
@@ -335,15 +347,8 @@ _FXO_NUMERIC = ("base_notional", "quote_notional", "strike", "premium_amount", "
 
 def _fx_option_product_v2(trade: Any, own: str, cp: str) -> dict:
     terms = dict(_get(trade, "terms") or {})
-    style = str(terms.get("style") or "EUROPEAN").upper()
-    if style not in _FXO_STYLE_REQUIRED:
-        raise ValueError(f"style must be one of {', '.join(_FXO_STYLE_REQUIRED)}")
-    terms["style"] = style
-    terms.setdefault("exercise_style", "AMERICAN" if style == "AMERICAN" else "EUROPEAN")
+    style = _style_defaults(terms)
     terms.setdefault("expiry_time", "10:00 New York")
-    terms.setdefault("automatic_exercise", True)
-    if style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH"):
-        terms.setdefault("barrier_monitoring", "CONTINUOUS")
     missing = [f for f in _FXO_REQUIRED + _FXO_STYLE_REQUIRED[style] if terms.get(f) in (None, "")]
     st = str(terms.get("settlement_type") or "").upper()
     if st == "NON_DELIVERABLE":
@@ -354,17 +359,7 @@ def _fx_option_product_v2(trade: Any, own: str, cp: str) -> dict:
         raise ValueError("settlement_type must be DELIVERABLE or NON_DELIVERABLE")
     if str(terms["option_type"]).upper() not in ("CALL", "PUT"):
         raise ValueError("option_type must be CALL or PUT")
-    if str(terms["exercise_style"]).upper() != ("AMERICAN" if style == "AMERICAN" else "EUROPEAN"):
-        raise ValueError("exercise_style must match the style (AMERICAN for an American option, EUROPEAN otherwise)")
-    if style == "BARRIER" and str(terms["barrier_type"]).upper() not in ("UP_IN", "UP_OUT", "DOWN_IN", "DOWN_OUT"):
-        raise ValueError("barrier_type must be UP_IN, UP_OUT, DOWN_IN or DOWN_OUT")
-    if style == "DOUBLE_BARRIER":
-        if str(terms["barrier_type"]).upper() not in ("KNOCK_IN", "KNOCK_OUT"):
-            raise ValueError("barrier_type must be KNOCK_IN or KNOCK_OUT")
-        if Decimal(str(terms["lower"])) >= Decimal(str(terms["upper"])):
-            raise ValueError("lower must be below upper")
-    if style == "TOUCH" and str(terms["touch_type"]).upper() not in ("ONE_TOUCH", "NO_TOUCH", "DOUBLE_ONE_TOUCH", "DOUBLE_NO_TOUCH"):
-        raise ValueError("touch_type must be ONE_TOUCH, NO_TOUCH, DOUBLE_ONE_TOUCH or DOUBLE_NO_TOUCH")
+    _style_checks(terms, style)
     base, quote = str(terms["base_currency"]).upper(), str(terms["quote_currency"]).upper()
     if str(terms["currency_pair"]).upper() != base + quote:
         raise ValueError("currency_pair must be base_currency followed by quote_currency")
@@ -429,9 +424,18 @@ def _crypto_product_v2(trade: Any, own: str, cp: str) -> dict:
     itype = str(_get(trade, "instrument_type") or "").upper()
     terms = dict(_get(trade, "terms") or {})
     fields = _CRYPTO_OPTION_FIELDS if itype == "CRYPTO_OPTION" else _CRYPTO_FORWARD_FIELDS
-    missing = [f for f in _CRYPTO_REQUIRED[itype] if terms.get(f) in (None, "")]
+    required = _CRYPTO_REQUIRED[itype]
+    style = None
+    if itype == "CRYPTO_OPTION":
+        style = _style_defaults(terms, fx=False)
+        required = required + _CRYPTO_STYLE_REQUIRED[style]
+        if style != "EUROPEAN":
+            fields = fields + _CRYPTO_OPTION_STYLE_FIELDS
+    missing = [f for f in required if terms.get(f) in (None, "")]
     if missing:
         raise ValueError(f"{itype} record needs {', '.join(missing)} in trade.terms — both parties must state them")
+    if style is not None and terms.get("exercise_style") not in (None, ""):
+        _style_checks(terms, style)
     buyer, seller = _sides(terms.get("direction"), own, cp, pays=("BUY", "LONG"), gets=("SELL", "SHORT"))
     out = {"product": "NDO" if itype == "CRYPTO_OPTION" else "NDF", "buyer": buyer, "seller": seller}
     for f in fields:
@@ -445,7 +449,39 @@ def _crypto_product_v2(trade: Any, own: str, cp: str) -> dict:
         raise ValueError("notional_amount must be positive")
     if out["product"] == "NDO" and out["option_type"] not in ("CALL", "PUT"):
         raise ValueError("option_type must be CALL or PUT")
+    if out["product"] == "NDO" and style != "EUROPEAN":
+        out["pay_at_hit"] = bool(terms.get("pay_at_hit")) if terms.get("pay_at_hit") not in (None, "") else (False if style == "TOUCH" else None)
     return out
+
+
+def _style_defaults(terms: dict, fx: bool = True) -> str:
+    """The option's style with the defaults every record carries; returns the style. The digital-asset
+    record (fx=False) leaves automatic_exercise as booked, to keep its legacy byte shape."""
+    style = str(terms.get("style") or "EUROPEAN").upper()
+    if style not in _FXO_STYLE_REQUIRED:
+        raise ValueError(f"style must be one of {', '.join(_FXO_STYLE_REQUIRED)}")
+    terms["style"] = style
+    terms.setdefault("exercise_style", "AMERICAN" if style == "AMERICAN" else "EUROPEAN")
+    if fx:
+        terms.setdefault("automatic_exercise", True)
+    if style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH"):
+        terms.setdefault("barrier_monitoring", "CONTINUOUS")
+    return style
+
+
+def _style_checks(terms: dict, style: str) -> None:
+    """The style's own consistency rules, shared by the FX and the digital-asset option."""
+    if str(terms["exercise_style"]).upper() != ("AMERICAN" if style == "AMERICAN" else "EUROPEAN"):
+        raise ValueError("exercise_style must match the style (AMERICAN for an American option, EUROPEAN otherwise)")
+    if style == "BARRIER" and str(terms["barrier_type"]).upper() not in ("UP_IN", "UP_OUT", "DOWN_IN", "DOWN_OUT"):
+        raise ValueError("barrier_type must be UP_IN, UP_OUT, DOWN_IN or DOWN_OUT")
+    if style == "DOUBLE_BARRIER":
+        if str(terms["barrier_type"]).upper() not in ("KNOCK_IN", "KNOCK_OUT"):
+            raise ValueError("barrier_type must be KNOCK_IN or KNOCK_OUT")
+        if Decimal(str(terms["lower"])) >= Decimal(str(terms["upper"])):
+            raise ValueError("lower must be below upper")
+    if style == "TOUCH" and str(terms["touch_type"]).upper() not in ("ONE_TOUCH", "NO_TOUCH", "DOUBLE_ONE_TOUCH", "DOUBLE_NO_TOUCH"):
+        raise ValueError("touch_type must be ONE_TOUCH, NO_TOUCH, DOUBLE_ONE_TOUCH or DOUBLE_NO_TOUCH")
 
 
 def _canonical_v2(trade: Any, legs: Iterable[Any], own_entity: Any, counterparty: Any) -> dict:

@@ -70,7 +70,7 @@ def history_days(db: Session, user_id, start: date, end: date) -> dict[str, dict
     """{surface id: {date: quotes}} for every date in [start, end] the underlying series has."""
     out: dict[str, dict[date, list[dict]]] = {}
     since = start - timedelta(days=LOOKBACK_DAYS)
-    for pair in feed.FX_VOL_LEVELS:
+    for pair in feed.VOL_LEVELS:                                   # G10 pairs and the digital assets alike
         ser = [(d, q["SPOT"]) for d, q in H.series(db, user_id, f"{pair}_SPOT", since, end) if q.get("SPOT")]
         prices = [p for _, p in ser]
         for i, (d, _) in enumerate(ser):

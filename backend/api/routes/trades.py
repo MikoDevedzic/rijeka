@@ -50,7 +50,7 @@ def display_structure(t) -> Optional[str]:
     carry VANILLA (or nothing) in the row; their terms still say what they are, so the row is read
     from the terms rather than rewritten."""
     s = getattr(t, "structure", None)
-    if getattr(t, "instrument_type", None) == "FX_OPTION" and (not s or s == "VANILLA"):
+    if getattr(t, "instrument_type", None) in ("FX_OPTION", "CRYPTO_OPTION") and (not s or s == "VANILLA"):
         return fx_option_structure(getattr(t, "terms", None))
     return s
 
@@ -115,7 +115,7 @@ class TradeCreate(BaseModel):
                     f"Invalid structure '{self.structure}' for IR_SWAP. "
                     f"Allowed: {sorted(_ALLOWED_IR_SWAP_STRUCTURES)}"
                 )
-        if self.instrument_type == "FX_OPTION":
+        if self.instrument_type in ("FX_OPTION", "CRYPTO_OPTION"):
             style = fx_option_structure(self.terms)
             if style not in FX_OPTION_STRUCTURES:
                 raise ValueError(f"Unknown FX option style '{style}'. Allowed: {list(FX_OPTION_STRUCTURES)}")

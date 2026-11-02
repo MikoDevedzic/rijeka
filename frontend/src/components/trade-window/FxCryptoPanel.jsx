@@ -18,7 +18,7 @@ const TENORS = ['1W', '2W', '1M', '2M', '3M', '6M', '9M', '1Y', '18M', '2Y']
 const tenorDate = (t) => { const d = new Date(); const n = parseInt(t); if (t.endsWith('W')) d.setDate(d.getDate() + 7 * n); else if (t.endsWith('M')) d.setMonth(d.getMonth() + n); else d.setFullYear(d.getFullYear() + n); return iso(d) }
 const fmtAmt = (v, crypto) => { const n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? '' : n.toLocaleString('en-US', { maximumFractionDigits: crypto ? 8 : 0 }) }
 const parseAmt = (v) => { const n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? '' : n }
-import { SHAPE_OF } from './fx-shape'
+import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
 const plusMonths = (m) => { const d = new Date(); d.setMonth(d.getMonth() + m); return iso(d) }
 
 async function call(path, opts = {}) {
@@ -53,7 +53,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const [optType, setOptType] = useState('CALL')
   const [expiry, setExpiry] = useState(plusMonths(3))
   const [optSettle, setOptSettle] = useState('')          // '' = two business days after expiry (the server fills it)
-  const [cashSettled, setCashSettled] = useState(false)
+  const [cashSettled, setCashSettled] = useState(crypto)
   const [volOv, setVolOv] = useState('')
   // style (pricing/fx_exotic.py): EUROPEAN | AMERICAN | DIGITAL | BARRIER | DOUBLE_BARRIER | TOUCH
   const [style, setStyle] = useState('EUROPEAN')
@@ -75,7 +75,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     return f
   }
 
-  useEffect(() => { setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? 10 : 10_000_000); setQuote(null) }, [crypto])
+  useEffect(() => { setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? 10 : 10_000_000); setCashSettled(crypto); setPayout(crypto ? '100000' : '1000000'); setQuote(null) }, [crypto])
   useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, tenor, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit])
   useEffect(() => { if (style === 'DOUBLE_BARRIER') setBarrierType(b => b.startsWith('KNOCK') ? b : 'KNOCK_OUT'); if (style === 'BARRIER') setBarrierType(b => b.startsWith('KNOCK') ? 'UP_OUT' : b) }, [style])
 
@@ -118,6 +118,27 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // The trade POST body minus what the window owns (parties, dates, desk, book).
   const payload = () => {
     if (!quote || !cur) throw new Error('Price it first')
+    if (option && crypto) {
+      // a digital-asset option: the CRYPTO_OPTION (NDO) record's fields (ISDA Digital Asset Derivatives
+      // Definitions vocabulary) plus the style's terms; cash-settled against the settlement price source
+      const premiumDate = quote.valuation_date
+      return {
+        asset_class: 'CRYPTO', instrument_type: 'CRYPTO_OPTION', structure: style,
+        notional: Number(notional), notional_ccy: cur.base, maturity_date: quote.settlement_date, discount_curve_id: cur.quote_curve,
+        terms: {
+          direction, digital_asset: cur.base, notional_amount: String(notional), option_type: optType,
+          exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
+          ...(style !== 'TOUCH' ? { strike_price: String(quote.strike), strike_currency: 'USD' } : {}),
+          ...Object.fromEntries(Object.entries(styleFields()).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])),
+          ...(style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}),
+          expiration_date: quote.expiry_date, expiration_time: '08:00 UTC', valuation_date: quote.expiry_date, valuation_time: '08:00 UTC',
+          settlement_date: quote.settlement_date, settlement_currency: 'USD', settlement_price_source: cur.fixing_default,
+          premium_amount: String(Math.abs(Math.round(quote.npv * 100) / 100)), premium_currency: 'USD', premium_payment_date: premiumDate,
+          vol_pct: quote.vol_pct, vol_tier: quote.vol_tier, automatic_exercise: true, calculation_agent: null,
+          disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
+        },
+      }
+    }
     if (option) {
       // the option's terms as the canonical record names them (chain/canonical.py, FX_OPTION):
       // buyer and seller of the option, the strike, expiry and settlement, the premium as a cash flow.
@@ -183,9 +204,10 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     metrics: (r) => [
       { label: 'OPTION NPV', value: money(r.npv), colorBy: sgn(r.npv) },
       { label: 'DELTA', value: `${fmt(r.delta_base_units, 0)} ${r.base_currency}`, colorBy: sgn(r.delta_base_units) },
-      { label: 'FX01', value: money(r.spot01), colorBy: sgn(r.spot01) },
+      { label: DELTA_LABEL(crypto), value: money(r.spot01), colorBy: sgn(r.spot01) },
       { label: 'VEGA / 1pt', value: money(r.vega), colorBy: sgn(r.vega) },
-      { label: 'IR01', value: money(r.ir01), colorBy: sgn(r.ir01) },
+      { label: crypto ? 'IR01 (DISC)' : 'IR01', value: money(r.ir01), colorBy: sgn(r.ir01) },
+      ...(crypto ? [{ label: 'FUND01', value: money(r.fund01 ?? r.ir01_base), colorBy: sgn(r.fund01 ?? r.ir01_base) }] : []),
       { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta) },
     ],
     breakdown: (r) => ({ kind: 'market', columns: ['ITEM', 'VALUE', 'NOTE'], rows: [
@@ -196,8 +218,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       ...(r.forward_delta != null ? [['FORWARD DELTA', pct(r.forward_delta, 1), `d1 ${fmt(r.d1, 4)} · d2 ${fmt(r.d2, 4)} · premium-excluded`]] : []),
       ...(r.intrinsic != null ? [['INTRINSIC / TIME VALUE', `${money(r.intrinsic * r.df_quote)} / ${money(r.time_value)}`, 'on the forward, discounted']] : []),
       ...(r.style && r.style !== 'EUROPEAN' ? [['STYLE', r.style.replace('_', ' '), [r.barrier_type, r.barrier && `barrier ${fmt(r.barrier, dp)}`, r.lower && `[${fmt(r.lower, dp)}, ${fmt(r.upper, dp)}]`, r.touch_type, r.payout && `pays ${fmt(r.payout, 0)} ${r.payout_currency === 'BASE' ? r.base_currency : qc}`, r.pay_at_hit ? 'paid at hit' : null, r.rebate ? `rebate ${r.rebate}` : null].filter(Boolean).join(' · ')]] : []),
-      ['GAMMA', money(r.gamma_1pct), 'change in FX01 for a further +1% spot'],
-      [`IR01 ${qc} / ${r.base_currency}`, `${money(r.ir01_disc)} / ${money(r.ir01_base)}`, '+1 bp on each curve'],
+      ['GAMMA', money(r.gamma_1pct), `change in ${DELTA_LABEL(crypto)} for a further +1% spot`],
+      [crypto ? `IR01 ${qc} / FUND01` : `IR01 ${qc} / ${r.base_currency}`, `${money(r.ir01_disc)} / ${money(r.ir01_base)}`, crypto ? '+1 bp on the USD curve (IR01) / on the funding rate (FUND01)' : '+1 bp on each curve'],
       [`DF ${qc}`, fmt(r.df_quote, 6), `to settlement · T_exp ${fmt(r.t_expiry, 4)}y · T_settle ${fmt(r.t_settle, 4)}y`],
       ['MODEL', r.method || 'Garman–Kohlhagen', r.model || ''],
     ] }),
@@ -205,9 +227,10 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const forwardDescriptor = { analytics: {
     metrics: (r) => [
       { label: 'NET NPV', value: money(r.npv), colorBy: sgn(r.npv) },
-      { label: `${crypto ? r.base_currency : 'FX'}01`, value: money(spot01(r)), colorBy: sgn(spot01(r)) },
-      { label: 'IR01', value: money(ir01(r)), colorBy: sgn(ir01(r)) },
-      { label: 'IR01 DISC', value: money(r.ir01_disc ?? r.rho_quote_per_bp), colorBy: sgn(r.ir01_disc ?? r.rho_quote_per_bp) },
+      { label: DELTA_LABEL(crypto), value: money(spot01(r)), colorBy: sgn(spot01(r)) },
+      { label: crypto ? 'IR01 (DISC)' : 'IR01', value: money(ir01(r)), colorBy: sgn(ir01(r)) },
+      ...(crypto ? [{ label: 'FUND01', value: money(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp), colorBy: sgn(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp) }]
+                 : [{ label: 'IR01 DISC', value: money(r.ir01_disc ?? r.rho_quote_per_bp), colorBy: sgn(r.ir01_disc ?? r.rho_quote_per_bp) }]),
       { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta) },
     ],
     breakdown: (r) => ({ kind: 'market', columns: ['ITEM', 'VALUE', 'NOTE'], rows: [
@@ -260,7 +283,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             </div>
           )}
           {option ? (
-            <div><div className="tbw-lbl">EXPIRY <span className="tbw-mut">· 10:00 NY</span></div>
+            <div><div className="tbw-lbl">EXPIRY <span className="tbw-mut">· {crypto ? '08:00 UTC' : '10:00 NY'}</span></div>
               <input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} />
             </div>
           ) : (
@@ -269,7 +292,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             </div>
           )}
           {option ? (
-            <div><div className="tbw-lbl">SETTLEMENT <span className="tbw-mut">· blank = expiry + 2bd</span></div>
+            <div><div className="tbw-lbl">SETTLEMENT <span className="tbw-mut">· blank = expiry + {crypto ? '1 day' : '2bd'}</span></div>
               <input type="date" value={optSettle || quote?.settlement_date || ''} onChange={e => setOptSettle(e.target.value)} />
             </div>
           ) : (
@@ -284,7 +307,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         <div className="tbw-sec">
           <div className="tbw-terms-header">
             <span className="tbw-lbl">OPTION TERMS</span>
-            <span className="tbw-helper-badge">→ {direction === 'BUY' ? 'we hold' : 'we write'} the right to {optType === 'CALL' ? 'buy' : 'sell'} {cur?.base || 'base'} against {qc} · {cashSettled ? `cash-settled in ${qc}` : 'deliverable'}</span>
+            <span className="tbw-helper-badge">→ {direction === 'BUY' ? 'we hold' : 'we write'} the right to {optType === 'CALL' ? 'buy' : 'sell'} {cur?.base || 'base'} against {qc} · {cashSettled ? `cash-settled in ${qc}${crypto ? ' against ' + (cur?.fixing_default || 'the settlement price source') : ''}` : 'deliverable'}</span>
           </div>
           <div className="tbw-chip-row" style={{ gap: 4, marginBottom: 10 }}>
             {[['EUROPEAN', 'EUROPEAN'], ['AMERICAN', 'AMERICAN'], ['DIGITAL', 'DIGITAL'], ['BARRIER', 'BARRIER'], ['DOUBLE_BARRIER', 'DOUBLE BARRIER'], ['TOUCH', 'TOUCH']].map(([k, l]) => (
@@ -365,8 +388,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             </div>
             <div><div className="tbw-lbl">SETTLEMENT</div>
               <div className="tbw-chip-row" style={{ gap: 4 }}>
-                <button className={`tbw-chip ${!cashSettled ? 'is-on' : ''}`} onClick={() => setCashSettled(false)}>DELIVER</button>
-                <button className={`tbw-chip ${cashSettled ? 'is-on' : ''}`} onClick={() => setCashSettled(true)}>CASH {qc}</button>
+                {!crypto && <button className={`tbw-chip ${!cashSettled ? 'is-on' : ''}`} onClick={() => setCashSettled(false)}>DELIVER</button>}
+                <button className={`tbw-chip ${cashSettled ? 'is-on' : ''}`} onClick={() => setCashSettled(true)}>{crypto ? `CASH ${qc} · NDO` : `CASH ${qc}`}</button>
               </div>
             </div>
             <div><div className="tbw-lbl">SPOT <span className="tbw-mut">· {cur?.spot_as_of || 'not snapped'}</span></div>
@@ -380,7 +403,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             </div>
           </div>
           <div className="tbw-helper-text" style={{ marginTop: 10 }}>
-            {style === 'EUROPEAN' ? 'Garman–Kohlhagen' : style === 'AMERICAN' ? 'Leisen–Reimer binomial tree, early exercise at every node' : style === 'DIGITAL' ? 'Reiner–Rubinstein cash-or-nothing / asset-or-nothing' : style === 'TOUCH' ? 'first-passage and survival probabilities, continuous monitoring' : 'survival-density integral, continuous monitoring'} on the forward to settlement · σ from the pair's ATM / 25Δ RR / 25Δ BF surface at the strike (Market data › FX › Volatility) · premium in {qc} on the trade date · ACT/365
+            {style === 'EUROPEAN' ? (crypto ? 'Black-76, the funding rate as the carry' : 'Garman–Kohlhagen') : style === 'AMERICAN' ? 'Leisen–Reimer binomial tree, early exercise at every node' : style === 'DIGITAL' ? 'Reiner–Rubinstein cash-or-nothing / asset-or-nothing' : style === 'TOUCH' ? 'first-passage and survival probabilities, continuous monitoring' : 'survival-density integral, continuous monitoring'} on the forward to settlement · σ from the pair's ATM / 25Δ RR / 25Δ BF surface at the strike (Market data › FX › Volatility) · premium in {qc} on the trade date · ACT/365
           </div>
         </div>
       )}

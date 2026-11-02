@@ -80,7 +80,7 @@ export default function RiskPage() {
           <Card label={`VAR ${pct(v.confidence)} · ${v.horizon_days}D`} big={fmt(v.var_h)} sub={`ES ${fmt(v.es_h)} · ${pct(v.secondary_confidence)} VaR ${fmt(v.var_1d_secondary)}`}
                 note={v.enough ? `${v.observations} days · ${fmtD(v.window_from)} → ${fmtD(v.window_to)}` : `only ${v.observations} days of history · needs ${v.min_observations}`} warn={!v.enough} />
           <Card label="IR01 · ALL CURVES" big={sgn(lad.ir01_usd)} sub={`per bp · ${lad.bump_bp}bp bump`} note={`${(lad.ladder || []).length} curves`} />
-          <Card label="FX01 · BTC01" big={Object.entries(lad.spot01 || {}).map(([a, x]) => `${a} ${sgn(x)}`).join(' · ') || '—'} sub="PV for +1% spot" note="by asset" />
+          <Card label="FX01 · CRY01" big={Object.entries(lad.spot01 || {}).map(([a, x]) => `${a} ${sgn(x)}`).join(' · ') || '—'} sub="PV for +1% spot" note={`by asset${lad.fund01_usd ? ` · FUND01 ${sgn(lad.fund01_usd)}` : ''}`} />
           {(lad.vega || []).length > 0 && <Card label="VEGA · FX VOL" big={sgn(lad.vega_usd)} sub="PV for +1 vol point" note={(lad.vega || []).map(v => v.curve.replace('_VOL', '')).join(' · ')} />}
           <Card label="WORST STRESS" big={worst ? sgn(worst.pnl_usd) : '—'} sub={worst?.name || ''} note={`${(rep.stress || []).length} scenarios`} warn={worst && worst.pnl_usd < 0} />
           <Card label="NPV" big={sgn(lad.npv_usd)} sub={`${(rep.ladder_rows || []).length} trades${lad.problems?.length ? ` · ${lad.problems.length} not priced` : ''}`} note={`${lad.valuations} valuations`} />
@@ -96,7 +96,7 @@ export default function RiskPage() {
               {(rep.ladder_rows || []).map(r => (
                 <div key={r.trade_id} className="rk-row">
                   <span className="rk-ref">{r.trade_ref}<small>{(r.instrument || '').replace('_', ' ')} · {r.desk} / {r.book}</small></span>
-                  <span className={`pnl-tv ${tone(r.ir01)}`}>{sgn(r.ir01)} <small>IR01</small></span>
+                  <span className={`pnl-tv ${tone(r.ir01)}`}>{sgn(r.ir01)} <small>IR01</small>{r.fund01_total ? <> · {sgn(r.fund01_total)} <small>FUND01</small></> : null}</span>
                   <span className="pnl-tv">{Object.entries(r.spot01).map(([a, x]) => `${a} ${sgn(x)}`).join(' ') || '—'} <small>SPOT01</small></span>
                   <span className={`pnl-tv ${tone(r.npv)}`}>{sgn(r.npv)} {r.ccy}</span>
                 </div>

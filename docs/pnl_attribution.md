@@ -54,3 +54,5 @@ Sign-off (`pnl_signoffs`): the trader reviews the attribution and signs with a c
 - A mirror booking without legs has no mark and is listed as not explained.
 - Amendments are explained as market moves on the new terms; the amendment's own effect is not separated yet.
 - History accumulates from the day the tables are applied (`docs/migrations/2026-10-30_pnl.sql`).
+
+The VOL step covers every surface a trade is valued on: an FX or digital-asset option's `{PAIR}_VOL`, a swaption's `{CCY}_SWVOL_ATM` (by expiry).

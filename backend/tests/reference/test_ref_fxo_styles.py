@@ -159,8 +159,60 @@ def touch_rows() -> list[Row]:
     return rows
 
 
+# ── a digital asset: the same engines at crypto parameters ─────────────────
+C_S0, C_R_B, C_VOL, C_N = 65_000.0, 0.03, 0.60, 10.0        # BTC/USD spot, funding rate as the base rate, vol, 10 BTC
+
+
+def _crypto_process(vol: float):
+    set_eval(VAL)
+    spot = ql.QuoteHandle(ql.SimpleQuote(C_S0))
+    rq = ql.YieldTermStructureHandle(ql.FlatForward(qd(VAL), R_Q, A365, ql.Continuous))
+    rb = ql.YieldTermStructureHandle(ql.FlatForward(qd(VAL), C_R_B, A365, ql.Continuous))
+    vs = ql.BlackVolTermStructureHandle(ql.BlackConstantVol(qd(VAL), ql.NullCalendar(), vol, A365))
+    return ql.GarmanKohlagenProcess(spot, rb, rq, vs)
+
+
+def crypto_rows() -> list[Row]:
+    """BTC options through the FX engines: Black-76 with the funding rate as the carry (the digital-asset option is
+    the FX option with its base rate renamed), a cash digital, an up-and-out call, a one-touch, a double no-touch."""
+    rows = []
+    expiry = VAL + timedelta(days=91)
+    T = (expiry - VAL).days / 365.0
+    F = C_S0 * math.exp((R_Q - C_R_B) * T)
+    kw = dict(base_notional=C_N, spot=C_S0, forward=F, df_quote=math.exp(-R_Q * T), t_expiry=T, vol=C_VOL, direction="BUY")
+    proc = _crypto_process(C_VOL)
+    scale_n = 1e4 / (C_N * C_S0)
+    for call, K in ((True, F), (False, 60_000.0)):
+        r = price_exotic(ExoticSpec("EUROPEAN", "CALL" if call else "PUT", strike=K), **kw)
+        opt = ql.VanillaOption(ql.PlainVanillaPayoff(ql.Option.Call if call else ql.Option.Put, K), ql.EuropeanExercise(qd(expiry)))
+        opt.setPricingEngine(ql.AnalyticEuropeanEngine(proc))
+        rows.append(Row("Crypto option", f"BTC 3M {'call' if call else 'put'} K={K:,.0f} (funding 3%, vol 60%)", "NPV (USD) vs Black-76 on the carry forward", r.npv, C_N * opt.NPV(), "bp of notional", 1e-6, scale=scale_n))
+    r = price_exotic(ExoticSpec("DIGITAL", "CALL", strike=F, payout=100_000.0), **kw)
+    opt = ql.VanillaOption(ql.CashOrNothingPayoff(ql.Option.Call, F, 100_000.0), ql.EuropeanExercise(qd(expiry)))
+    opt.setPricingEngine(ql.AnalyticEuropeanEngine(proc))
+    rows.append(Row("Crypto option", "BTC 3M cash digital call, pays USD 100k", "NPV vs QuantLib cash-or-nothing", r.npv, opt.NPV(), "bp of payout", 1e-6, scale=1e4 / 100_000.0))
+    H = 80_000.0
+    r = price_exotic(ExoticSpec("BARRIER", "CALL", strike=F, barrier_type="UP_OUT", barrier=H, rebate=100.0), **kw)
+    opt = ql.BarrierOption(ql.Barrier.UpOut, H, 100.0, ql.PlainVanillaPayoff(ql.Option.Call, F), ql.EuropeanExercise(qd(expiry)))
+    opt.setPricingEngine(ql.AnalyticBarrierEngine(proc))
+    rows.append(Row("Crypto option", "BTC 3M up-and-out call at 80k, rebate USD 100 per BTC", "NPV vs QuantLib Reiner–Rubinstein", r.npv, C_N * opt.NPV(), "bp of notional", 2e-3, scale=scale_n))
+    r = price_exotic(ExoticSpec("TOUCH", strike=None, payout=100_000.0, touch_type="ONE_TOUCH", barrier=H, pay_at_hit=True), **kw)
+    opt = ql.VanillaOption(ql.CashOrNothingPayoff(ql.Option.Call, H, 100_000.0), ql.AmericanExercise(qd(VAL), qd(expiry), False))
+    opt.setPricingEngine(ql.AnalyticDigitalAmericanEngine(proc))
+    rows.append(Row("Crypto option", "BTC 3M one-touch at 80k, paid at the hit", "NPV vs QuantLib digital American", r.npv, opt.NPV(), "bp of payout", 2e-3, scale=1e4 / 100_000.0))
+    r = price_exotic(ExoticSpec("TOUCH", strike=None, payout=100_000.0, touch_type="DOUBLE_NO_TOUCH", lower=55_000.0, upper=80_000.0), **kw)
+    opt = ql.DoubleBarrierOption(ql.DoubleBarrier.KnockOut, 55_000.0, 80_000.0, 0.0, ql.CashOrNothingPayoff(ql.Option.Call, 0.0, 100_000.0), ql.EuropeanExercise(qd(expiry)))
+    opt.setPricingEngine(ql.AnalyticDoubleBarrierBinaryEngine(proc))
+    rows.append(Row("Crypto option", "BTC 3M double no-touch 55k–80k", "NPV vs QuantLib double-barrier binary", r.npv, opt.NPV(), "bp of payout", 2e-3, scale=1e4 / 100_000.0))
+    return rows
+
+
+def test_crypto_options_through_the_fx_engines():
+    assert_rows(crypto_rows())
+
+
 def all_rows() -> list[Row]:
-    return american_rows() + digital_rows() + barrier_rows() + double_barrier_rows() + touch_rows()
+    return american_rows() + digital_rows() + barrier_rows() + double_barrier_rows() + touch_rows() + crypto_rows()
 
 
 def test_american_against_quantlib():

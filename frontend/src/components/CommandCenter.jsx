@@ -234,7 +234,7 @@ function DeskHome({ demo, navigate }) {
   )
 }
 
-// The desk's numbers: book NPV, IR01, FX01/BTC01 and theta, summed by the pricers on the
+// The desk's numbers: book NPV, IR01, FX01/CRY01 and theta, summed by the pricers on the
 // brief's fact sheet (backend/prometheus/book_brief.py). Nothing is computed here.
 function RiskStrip({ sheet }) {
   const t = sheet?.totals
@@ -245,7 +245,7 @@ function RiskStrip({ sheet }) {
     <div className="rk" aria-label="Book risk">
       <div><span className="dh-kpi-l">BOOK NPV</span><b className={sign(t?.npv)}>{t ? money(t.npv) : '…'}</b><small>{asOf ? `ON ${asOf.toUpperCase()}` : 'PRICING'}</small></div>
       <div><span className="dh-kpi-l">IR01</span><b>{t ? (t.ir01 != null ? fmtN(t.ir01) : '—') : '…'}</b><small>PER BP · ALL CURVES</small></div>
-      <div><span className="dh-kpi-l">FX01 · BTC01</span><b>{t ? money(t.spot01) : '…'}</b><small>PV FOR +1% SPOT</small></div>
+      <div><span className="dh-kpi-l">FX01 · CRY01</span><b>{t ? money(t.spot01) : '…'}</b><small>PV FOR +1% SPOT</small></div>
       <div><span className="dh-kpi-l">THETA</span><b className={sign(t?.theta)}>{t ? money(t.theta) : '…'}</b><small>ONE DAY'S CARRY</small></div>
     </div>
   )

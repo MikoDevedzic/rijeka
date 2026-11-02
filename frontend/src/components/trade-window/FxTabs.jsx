@@ -1,4 +1,5 @@
 // trade-window/FxTabs.jsx
+import { DELTA_LABEL } from './fx-shape'
 // ────────────────────────────────────────────────────────────────────────────────────
 // DETAILS, CASHFLOWS and CURVE SCENARIO for an FX or crypto forward. A forward
 // has one settlement and no schedule, so these are purpose-built views over
@@ -54,7 +55,7 @@ export function FxDetailsPanel({ quote, terms, crypto }) {
       <div className="tbw-no-drag" style={wrap}>
         <div style={secHdr}>TERM SHEET · AS IT WILL BE BOOKED</div>
         <Grid items={[
-          ['INSTRUMENT', cash ? 'FX NON-DELIVERABLE OPTION' : 'FX OPTION', `${quote.pair} · canonical record v2 · ISDA FX and Currency Option Definitions`],
+          ['INSTRUMENT', crypto ? 'DIGITAL-ASSET OPTION (NDO)' : cash ? 'FX NON-DELIVERABLE OPTION' : 'FX OPTION', `${quote.pair} · canonical record v2 · ${crypto ? 'ISDA Digital Asset Derivatives Definitions' : 'ISDA FX and Currency Option Definitions'}`],
           ['OPTION', quote.style === 'TOUCH' ? (quote.touch_type || '').replace(/_/g, ' ') : quote.style === 'DIGITAL' ? `${quote.base_currency} ${quote.option_type} DIGITAL` : `${quote.base_currency} ${quote.option_type}${quote.style && quote.style !== 'EUROPEAN' ? ' · ' + quote.style.replace('_', ' ') : ''}`,
             quote.style === 'TOUCH' ? `pays ${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} ${quote.pay_at_hit ? 'at the hit' : 'at expiry'}` : quote.style === 'DIGITAL' ? `pays ${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} if ${quote.option_type === 'CALL' ? 'above' : 'below'} the strike` : `the right to ${quote.option_type === 'CALL' ? 'buy' : 'sell'} ${quote.base_currency} against ${quote.quote_currency}${quote.style === 'AMERICAN' ? ', any day to expiry' : ''}`],
           ...(quote.style === 'BARRIER' ? [['BARRIER', `${(quote.barrier_type || '').replace('_', '-AND-')} at ${fmt(quote.barrier, dp)}`, `continuous monitoring${quote.rebate ? ` · rebate ${quote.rebate} ${quote.quote_currency} per ${quote.base_currency}` : ''}`]] : []),
@@ -63,10 +64,10 @@ export function FxDetailsPanel({ quote, terms, crypto }) {
           ['SIDE', `${quote.direction} the option`, quote.direction === 'BUY' ? 'we pay the premium and hold the right' : 'we receive the premium and are exercised against'],
           ['NOTIONAL', `${fmt(quote.base_notional, 0)} ${quote.base_currency}`, `${fmt(quote.quote_notional)} ${quote.quote_currency} at the strike`],
           ...(quote.style !== 'TOUCH' ? [['STRIKE', fmt(quote.strike, dp), quote.strike === quote.forward ? 'at the forward' : `forward ${fmt(quote.forward, dp)}`]] : []),
-          ['EXPIRY', quote.expiry_date, `${t.expiry_time || '10:00 New York'} · ${quote.style === 'AMERICAN' ? 'American' : 'European'} · T = ${fmt(quote.t_expiry, 4)}y`],
-          ['SETTLEMENT DATE', quote.settlement_date, cash ? `cash in ${quote.quote_currency}` : 'delivery of both currencies'],
+          ['EXPIRY', quote.expiry_date, `${t.expiration_time || t.expiry_time || (crypto ? '08:00 UTC' : '10:00 New York')} · ${quote.style === 'AMERICAN' ? 'American' : 'European'} · T = ${fmt(quote.t_expiry, 4)}y`],
+          ['SETTLEMENT DATE', quote.settlement_date, cash ? `cash in ${quote.quote_currency}${crypto ? ' against the settlement price' : ''}` : 'delivery of both currencies'],
           ['PREMIUM', `${fmt(Math.abs(quote.npv))} ${quote.quote_currency}`, `${quote.direction === 'BUY' ? 'paid' : 'received'} on ${quote.valuation_date} · ${fmt(Math.abs(quote.npv) / quote.base_notional / quote.spot * 100, 3)}% of ${quote.base_currency} notional`],
-          [cash ? 'FIXING SOURCE' : 'FIXING', cash ? (t.fixing_source || '—') : 'none (deliverable)', cash ? `on ${quote.expiry_date}` : ''],
+          [cash ? (crypto ? 'SETTLEMENT PRICE SOURCE' : 'FIXING SOURCE') : 'FIXING', cash ? (t.settlement_price_source || t.fixing_source || '—') : 'none (deliverable)', cash ? `on ${quote.expiry_date}` : ''],
           ['CALCULATION AGENT', t.calculation_agent || 'none named', 'automatic exercise'],
         ]} />
         <div style={secHdr}>MARKET IT WAS PRICED ON</div>
@@ -76,7 +77,7 @@ export function FxDetailsPanel({ quote, terms, crypto }) {
           ['VOL', `${fmt(quote.vol_pct, 3)}%`, `${quote.vol_tier} · ${quote.vol_source}`],
           ...(quote.forward_delta != null ? [['FORWARD DELTA', `${fmt(quote.forward_delta * 100, 1)}%`, `d1 ${fmt(quote.d1, 4)} · d2 ${fmt(quote.d2, 4)}`]] : [['DELTA', `${fmt(quote.delta_base_units, 0)} ${quote.base_currency}`, 'by repricing, ±1% spot']]),
           [`${quote.quote_currency} CURVE`, quote.quote_curve || '—', `DF ${fmt(quote.df_quote, 6)} to settlement${quote.quote_curve_snapshot ? ' · ' + quote.quote_curve_snapshot : ''}`],
-          ['MODEL', quote.method || 'Garman–Kohlhagen', quote.style && quote.style !== 'EUROPEAN' ? 'same lognormal dynamics; σ from the ATM/RR/BF surface at the strike, held flat for the barrier' : 'Black–Scholes with the base currency as the dividend-paying asset; σ from the ATM/RR/BF surface'],
+          ['MODEL', quote.method || (crypto ? 'Black-76 on the carry forward' : 'Garman–Kohlhagen'), quote.style && quote.style !== 'EUROPEAN' ? 'same lognormal dynamics; σ from the ATM/RR/BF surface at the strike, held flat for the barrier' : crypto ? 'the FX option engine with the funding rate as the base rate; σ from the ATM/RR/BF surface' : 'Black–Scholes with the base currency as the dividend-paying asset; σ from the ATM/RR/BF surface'],
         ]} />
         <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Terms are edited on the TRADE tab; this is the record the counterparty will sign.</div>
       </div>
@@ -224,7 +225,7 @@ function Slider({ label, v, set, min, max, step, unit }) {
   )
 }
 
-function StyleLadder({ quote }) {
+function StyleLadder({ crypto,  quote }) {
   // every style repriced by the engine itself on a grid of spot and vol shocks (POST /api/currency/option/ladder)
   const [lad, setLad] = useState(null)
   const [err, setErr] = useState(null)
@@ -264,7 +265,7 @@ function StyleLadder({ quote }) {
             {vols.map(v => { const x = r.npv[String(v)]; return <td key={v} style={{ ...td, color: x == null ? 'var(--text-mute)' : x >= 0 ? 'var(--green)' : 'var(--red)' }}>{x == null ? '—' : fmt(x)}</td> })}
           </tr>))}</tbody>
       </table>
-      <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Base NPV {fmt(lad.base_npv)} at vol {fmt(lad.base_vol_pct, 2)}% · FX01 {fmt(lad.spot01)} · vega {fmt(lad.vega)} per point. A barrier or touch option's value is not smooth near its barrier; read the whole row, not a slope.</div>
+      <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Base NPV {fmt(lad.base_npv)} at vol {fmt(lad.base_vol_pct, 2)}% · {DELTA_LABEL(crypto)} {fmt(lad.spot01)} · vega {fmt(lad.vega)} per point. A barrier or touch option's value is not smooth near its barrier; read the whole row, not a slope.</div>
     </div>
   )
 }
@@ -279,7 +280,7 @@ export function FxScenarioPanel({ quote, crypto }) {
   const base = useMemo(() => quote ? reprice(quote, 0, 0, 0, 0) : null, [quote])
   const now = useMemo(() => quote ? reprice(quote, spot, qbp, bbp, vpt) : null, [quote, spot, qbp, bbp, vpt])
   if (!quote) return <Empty what="Scenarios" />
-  if (option && quote.style && quote.style !== 'EUROPEAN') return <StyleLadder quote={quote} />
+  if (option && quote.style && quote.style !== 'EUROPEAN') return <StyleLadder crypto={crypto} quote={quote} />
   const spotLadder = [-10, -5, -2, -1, 0, 1, 2, 5, 10]
   const rateLadder = [-100, -50, -25, 0, 25, 50, 100]
   const d = (x) => x - base.npv
@@ -301,7 +302,7 @@ export function FxScenarioPanel({ quote, crypto }) {
             ['FORWARD', fmt(now.forward, dp), `base ${fmt(base.forward, dp)}`],
             [`NPV ${quote.quote_currency}`, fmt(now.npv), `base ${fmt(base.npv)}`],
             ['ΔNPV', (d(now.npv) >= 0 ? '+' : '') + fmt(d(now.npv)), 'vs base'],
-            ['FIRST ORDER', (spot * (quote.spot01 ?? 0) + qbp * (quote.ir01_disc ?? 0) + bbp * (quote.ir01_base ?? 0) + vpt * (quote.vega ?? 0) >= 0 ? '+' : '') + fmt(spot * (quote.spot01 ?? 0) + qbp * (quote.ir01_disc ?? 0) + bbp * (quote.ir01_base ?? 0) + vpt * (quote.vega ?? 0)), `${crypto ? quote.base_currency : 'FX'}01·Δspot + IR01s·Δbp${option ? ' + vega·Δvol' : ''}`],
+            ['FIRST ORDER', (spot * (quote.spot01 ?? 0) + qbp * (quote.ir01_disc ?? 0) + bbp * (quote.ir01_base ?? 0) + vpt * (quote.vega ?? 0) >= 0 ? '+' : '') + fmt(spot * (quote.spot01 ?? 0) + qbp * (quote.ir01_disc ?? 0) + bbp * (quote.ir01_base ?? 0) + vpt * (quote.vega ?? 0)), `${DELTA_LABEL(crypto)}·Δspot + ${crypto ? 'IR01·Δbp + FUND01·Δbp' : 'IR01s·Δbp'}${option ? ' + vega·Δvol' : ''}`],
           ]} />
         </div>
         <div>
@@ -326,7 +327,7 @@ export function FxScenarioPanel({ quote, crypto }) {
                 <td style={td}>{d(q.npv) >= 0 ? '+' : ''}{fmt(d(q.npv))}</td><td style={td}>{d(bb.npv) >= 0 ? '+' : ''}{fmt(d(bb.npv))}</td>
               </tr>) })}</tbody>
           </table>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>{option ? 'An option is convex in spot: ΔNPV runs ahead of FX01 × the shock on the way up and behind it on the way down, which is the gamma; the vol slider moves the smile level, not its shape.' : `A forward is linear in spot, so ΔNPV equals ${crypto ? quote.base_currency : 'FX'}01 × the shock exactly; the rate ladder shows the two curve legs offsetting at a fair strike.`}</div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>{option ? `An option is convex in spot: ΔNPV runs ahead of ${DELTA_LABEL(crypto)} × the shock on the way up and behind it on the way down, which is the gamma; the vol slider moves the smile level, not its shape.` : `A forward is linear in spot, so ΔNPV equals ${DELTA_LABEL(crypto)} × the shock exactly; the rate ladder shows the two curve legs offsetting at a fair strike.`}</div>
         </div>
       </div>
     </div>

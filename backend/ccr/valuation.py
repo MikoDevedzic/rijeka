@@ -24,7 +24,7 @@ from pnl.valuation import _currency_terms
 log = logging.getLogger("rijeka.ccr")
 SWAPS = ("IR_SWAP", "OIS", "OIS_SWAP", "BASIS_SWAP")
 FORWARDS = ("FX_SPOT", "FX_FORWARD", "NDF", "CRYPTO_FORWARD")
-FX_OPTIONS = ("FX_OPTION",)
+FX_OPTIONS = ("FX_OPTION", "CRYPTO_OPTION")      # one model: the digital asset's funding rate is its base rate
 
 
 def years(asof: date, d: date) -> float:
@@ -148,9 +148,10 @@ class NettingSet:
         F = S or K                                                  # the smile is read at the strike against today's level
         vol, tier, note = lookup_vol(mkt.quotes(f"{pair}_VOL") if mkt is not None else None, pair, T_e, F, K, None)
         sign = 1.0 if str(terms.get("direction", "BUY")).upper() == "BUY" else -1.0
-        label = f"FX {spec.option_type} {pair}" if spec.style in ("EUROPEAN", "AMERICAN") else f"FX {spec.style.replace('_', ' ')} {pair}"
+        cls = "CRYPTO" if str(t.instrument_type or "").upper() == "CRYPTO_OPTION" else "FX"
+        label = f"{cls} {spec.option_type} {pair}" if spec.style in ("EUROPEAN", "AMERICAN") else f"{cls} {spec.style.replace('_', ' ')} {pair}"
         if spec.style == "AMERICAN":
-            label = f"FX AMERICAN {spec.option_type} {pair}"
+            label = f"{cls} AMERICAN {spec.option_type} {pair}"
         detail = (f"{spec.barrier_type} at {spec.barrier:g}" if spec.style == "BARRIER" else f"{spec.barrier_type} [{spec.lower:g}, {spec.upper:g}]" if spec.style == "DOUBLE_BARRIER"
                   else f"{spec.touch_type} {'at ' + format(spec.barrier, 'g') if spec.barrier else '[' + format(spec.lower, 'g') + ', ' + format(spec.upper, 'g') + ']'}, pays {spec.payout:g} {quote if spec.payout_currency == 'QUOTE' else base}" if spec.style == "TOUCH"
                   else f"pays {spec.payout:g} {quote if spec.payout_currency == 'QUOTE' else base}" if spec.style == "DIGITAL" else "")

@@ -72,8 +72,12 @@ PRODUCTS = [
      "formula": "F = S·DF_BTC(T)/DF_USD(T) (cash-and-carry with a BTC funding rate, the same model as an FX forward); NPV = (F − K)·N·DF_USD(T)",
      "replication": "xlsx"},
     {"id": "crypto_ndo", "name": "Crypto NDO (European option)", "group": "FX & digital assets", "section": "12",
-     "default": "BTC/USD · 10 BTC · 3-month call · strike at the forward · 60% lognormal vol",
-     "formula": "Black-76: C = DF·[F·N(d₁) − K·N(d₂)], d₁ = [ln(F/K) + ½σ²T]/(σ√T), d₂ = d₁ − σ√T",
+     "default": "BTC/USD · 10 BTC · 3-month call · strike at the forward · ATM vol from the BTCUSD surface (60% without one) · funding 3%",
+     "formula": "Black-76 on the forward F = S·e^(−r_c·T)/DF_USD: C = DF_USD·[F·N(d₁) − K·N(d₂)]; CRY01, IR01 (discounting), FUND01 and vega beside the engine's",
+     "replication": "xlsx"},
+    {"id": "crypto_option_styles", "name": "Crypto option styles: digital, barrier, touch, double barrier", "group": "FX & digital assets", "section": "12",
+     "default": "BTC/USD · 3 months · digitals USD 100k / 1 BTC · the eight single barriers at ±15% with a rebate · touches · double knock-out and knock-in",
+     "formula": "the FX option styles' closed forms with the funding rate as the carry (Reiner–Rubinstein; the two-barrier image series); American is a tree",
      "replication": "xlsx"},
     {"id": "xva", "name": "XVA under a CSA: exposure and collateral", "group": "Counterparty risk", "section": "9-10",
      "default": "Monte Carlo MtM paths (HW1F for rates, lognormal forward for FX and digital assets); VM lagged by the MPoR, IM exchanged; E⁺ = max(V − C − IM, 0), E⁻ = min(V − C + IM, 0), PFE 95%",
@@ -151,6 +155,7 @@ class Market:
     vol_quotes: list        # swaption ATM quotes (tenor "ExT", rate bp)
     vol_date: Optional[date]
     fx_vol_quotes: list = field(default_factory=list)   # EURUSD_VOL surface quotes (tenor, quote_type, rate %)
+    vol_quotes_by_pair: dict = field(default_factory=dict)   # {pair: surface quotes} for the other pairs (BTCUSD)
 
 
 # ── Shared sheets ───────────────────────────────────────────────────────────
@@ -465,97 +470,82 @@ def fx_forward_workbook(mkt: Market):
     return wb, 0.0
 
 
-def crypto_ndo_workbook(mkt: Market):
-    spot_px, r_btc, sigma = 65_000.0, 0.03, 0.60
-    wb = Workbook()
-    _readme(wb, "Crypto NDO", [
-        "Default trade: buy a 3-month European call on 10 BTC, USD-settled, strike at the forward, 60% lognormal vol.",
-        "Black-76 on the forward: C = DF_USD·[F·N(d₁) − K·N(d₂)], d₁ = [ln(F/K) + ½σ²T]/(σ√T), d₂ = d₁ − σ√T. Put via parity: P = C − DF·(F − K).",
-        "Premium is quoted in USD and in BTC (premium / spot). The canonical on-chain record is the CRYPTO_OPTION product in chain/canonical.py.",
-    ], mkt)
-    _curve_sheet(wb, mkt)
-    ws, T = _crypto_common(wb, mkt, spot_px, r_btc, 3)
-    F, dfT, t = _ref_forward(mkt, spot_px, r_btc, T)
-    ws["A12"] = "Strike K"; ws["B12"] = "=B8"; ws["B12"].fill = IN; ws["B12"].number_format = "#,##0.00"
-    ws["A13"] = "Vol σ (lognormal)"; ws["B13"] = sigma; ws["B13"].fill = IN; ws["B13"].number_format = "0.00%"
-    ws["A14"] = "Call (1) / Put (-1)"; ws["B14"] = 1; ws["B14"].fill = IN
-    ws["A15"] = "d₁"; ws["B15"] = "=(LN(B8/B12)+0.5*B13^2*B4)/(B13*SQRT(B4))"
-    ws["A16"] = "d₂"; ws["B16"] = "=B15-B13*SQRT(B4)"
-    ws["A17"] = "Premium per BTC (USD)"; ws["B17"] = "=B5*B14*(B8*NORM.S.DIST(B14*B15,TRUE)-B12*NORM.S.DIST(B14*B16,TRUE))"; ws["B17"].number_format = "#,##0.00"
-    ws["A18"] = "Premium total (USD)"; ws["B18"] = "=B17*B2"; ws["B18"].number_format = "#,##0.00"
-    ws["A19"] = "Premium in BTC"; ws["B19"] = "=B18/B1"; ws["B19"].number_format = "0.0000"
-    # reference
-    from math import erf, sqrt, log
-    N = lambda x: 0.5 * (1 + erf(x / sqrt(2)))
-    d1 = (log(F / F) + 0.5 * sigma ** 2 * t) / (sigma * sqrt(t)); d2 = d1 - sigma * sqrt(t)
-    ref = dfT * (F * N(d1) - F * N(d2)) * 10
-    ws["A21"] = "Reference premium total (Rijeka, same formula)"; ws["B21"] = ref; ws["B21"].fill = RJ; ws["B21"].number_format = "#,##0.00"
-    return wb, ref
-
-
-# ── FX options ──────────────────────────────────────────────────────────────
-# Both workbooks share the Inputs sheet: spot, the two curves, the dates, the
-# vol, and from them the forward to settlement, the quote rate r and the carry
-# b over the time to expiry — exactly how pricing/fx_exotic.price_exotic reads
-# its inputs (r = −ln DF_q(T_s)/T_e, b = ln(F/S)/T_e), so every style sheet is
-# in the engine's own variables.
+# ── FX and digital-asset options ───────────────────────────────────────────
+# Both option workbooks share the Inputs sheet: spot, the two rates, the dates, the vol, and from
+# them the forward to settlement, the quote rate r and the carry b over the time to expiry, exactly
+# how pricing/fx_exotic.price_exotic reads its inputs (r = −ln DF_q(T_s)/T_e, b = ln(F/S)/T_e), so
+# every style sheet is in the engine's own variables.
 
 FX_SPOT, FX_R_EUR, FX_VOL_DEFAULT, FX_NOTIONAL = 1.1133, 0.025, 0.075, 10_000_000
 _NAMES = {"Spot": "B1", "Notl": "B2", "Te": "B5", "Ts": "B6", "DFq": "B7", "Fwd": "B10", "Sigma": "B11", "Rq": "B12", "Bc": "B13", "SqT": "B14", "DFe": "B15", "DFb": "B16"}
+
+# The two option cases: a currency pair (the base currency's rate from its curve, flat here) and a digital
+# asset (its funding rate as the base rate, cash-settled the day after expiry). Same formulas, different labels.
+FX_CASE = dict(pair="EURUSD", base="EUR", quote="USD", spot=FX_SPOT, base_rate=FX_R_EUR, base_rate_label="EUR rate (cont., p.a., flat)",
+               notional=FX_NOTIONAL, vol_default=FX_VOL_DEFAULT, settle_lag=2, spot_fmt="0.00000", barrier_pct=0.05, payout=1_000_000.0, rebate=0.01,
+               rate_note="EUR is discounted flat at the yellow rate because the hosted demo carries no EUR OIS curve; on a desk DF_EUR comes from the €STR curve.",
+               delta="FX01", funding="IR01 BASE")
+CRYPTO_CASE = dict(pair="BTCUSD", base="BTC", quote="USD", spot=65_000.0, base_rate=0.03, base_rate_label="BTC funding rate (cont., p.a.)",
+                   notional=10.0, vol_default=0.60, settle_lag=1, spot_fmt="#,##0.00", barrier_pct=0.15, payout=100_000.0, rebate=100.0,
+                   rate_note="The funding (lending or staking) rate is the digital asset's base rate: F = S·e^(−r_c·T)/DF_USD, the cash-and-carry forward.",
+                   delta="CRY01", funding="FUND01")
 
 
 def _N(x: str) -> str:
     return f"NORM.S.DIST({x},TRUE)"
 
 
-def _fx_dates(val: date) -> tuple[date, date]:
+def _fx_dates(val: date, settle_lag: int = 2) -> tuple[date, date]:
     exp = date(val.year + (val.month + 2) // 12, (val.month + 2) % 12 + 1, min(val.day, 28))
     while exp.weekday() >= 5:
         exp += timedelta(days=1)
-    settle = exp + timedelta(days=2)
-    while settle.weekday() >= 5:
+    settle = exp + timedelta(days=settle_lag)
+    while settle_lag >= 2 and settle.weekday() >= 5:
         settle += timedelta(days=1)
     return exp, settle
 
 
-def _fx_vol(mkt: Market) -> tuple[float, str]:
-    for q in mkt.fx_vol_quotes or []:
+def _fx_vol(mkt: Market, case: dict) -> tuple[float, str]:
+    quotes = mkt.fx_vol_quotes if case["pair"] == "EURUSD" else (mkt.vol_quotes_by_pair or {}).get(case["pair"])
+    for q in quotes or []:
         if str(q.get("tenor", "")).upper() == "3M" and str(q.get("quote_type", "ATM")).upper() == "ATM" and q.get("rate") is not None:
-            return float(q["rate"]) / 100.0, "the account's EURUSD surface, 3M ATM"
-    return FX_VOL_DEFAULT, "a flat desk default (no EURUSD surface saved)"
+            return float(q["rate"]) / 100.0, f"the account's {case['pair']} surface, 3M ATM"
+    return case["vol_default"], f"a flat desk default (no {case['pair']} surface saved)"
 
 
-def _fx_inputs(wb, mkt: Market):
+def _fx_inputs(wb, mkt: Market, case: dict = FX_CASE):
     """Inputs sheet and the engine's view of the same numbers (S, F, DF_q to settlement, T_e, σ)."""
     val = mkt.valuation_date
-    exp, settle = _fx_dates(val)
-    vol, vol_src = _fx_vol(mkt)
+    exp, settle = _fx_dates(val, case["settle_lag"])
+    vol, vol_src = _fx_vol(mkt, case)
+    base, quote, S, rb, N = case["base"], case["quote"], case["spot"], case["base_rate"], case["notional"]
     ws = wb.create_sheet("Inputs", 1)
-    ws["A1"] = "EUR/USD spot (USD per EUR)"; ws["B1"] = FX_SPOT; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
-    ws["A2"] = "Notional (EUR)"; ws["B2"] = FX_NOTIONAL; ws["B2"].fill = IN; ws["B2"].number_format = "#,##0"
+    ws["A1"] = f"{base}/{quote} spot ({quote} per {base})"; ws["B1"] = S; ws["B1"].fill = IN; ws["B1"].number_format = case["spot_fmt"]
+    ws["A2"] = f"Notional ({base})"; ws["B2"] = N; ws["B2"].fill = IN; ws["B2"].number_format = "#,##0.####"
     ws["A3"] = "Expiry date"; ws["B3"] = exp; ws["B3"].number_format = "yyyy-mm-dd"; ws["B3"].fill = IN
-    ws["A4"] = "Settlement date (expiry + 2 business days)"; ws["B4"] = settle; ws["B4"].number_format = "yyyy-mm-dd"; ws["B4"].fill = IN
+    ws["A4"] = f"Settlement date (expiry + {case['settle_lag']} {'business days' if case['settle_lag'] >= 2 else 'day'})"; ws["B4"] = settle; ws["B4"].number_format = "yyyy-mm-dd"; ws["B4"].fill = IN
     ws["A5"] = "T_e to expiry (ACT/365)"; ws["B5"] = "=(B3-ValDate)/365"
     ws["A6"] = "T_s to settlement (ACT/365)"; ws["B6"] = "=(B4-ValDate)/365"
-    ws["A7"] = "USD DF(T_s) from the SOFR curve"; ws["B7"] = f"={DF('B4')}"; ws["B7"].number_format = "0.000000"
-    ws["A8"] = "EUR rate (cont., p.a., flat)"; ws["B8"] = FX_R_EUR; ws["B8"].fill = IN; ws["B8"].number_format = "0.00%"
-    ws["A9"] = "EUR DF(T_s) = exp(−r_EUR·T_s)"; ws["B9"] = "=EXP(-B8*B6)"; ws["B9"].number_format = "0.000000"
-    ws["A10"] = "Forward to settlement F = S·DF_EUR/DF_USD"; ws["B10"] = "=B1*B9/B7"; ws["B10"].number_format = "0.00000"
+    ws["A7"] = f"{quote} DF(T_s) from the SOFR curve"; ws["B7"] = f"={DF('B4')}"; ws["B7"].number_format = "0.000000"
+    ws["A8"] = case["base_rate_label"]; ws["B8"] = rb; ws["B8"].fill = IN; ws["B8"].number_format = "0.00%"
+    ws["A9"] = f"{base} DF(T_s) = exp(−r_{base}·T_s)"; ws["B9"] = "=EXP(-B8*B6)"; ws["B9"].number_format = "0.000000"
+    ws["A10"] = f"Forward to settlement F = S·DF_{base}/DF_{quote}"; ws["B10"] = "=B1*B9/B7"; ws["B10"].number_format = case["spot_fmt"]
     ws["A11"] = "Vol σ (lognormal, decimal)"; ws["B11"] = vol; ws["B11"].fill = IN; ws["B11"].number_format = "0.00%"
-    ws["A12"] = "r = −ln DF_USD(T_s) / T_e  (the engine's quote rate)"; ws["B12"] = "=-LN(B7)/B5"; ws["B12"].number_format = "0.0000%"
+    ws["A12"] = f"r = −ln DF_{quote}(T_s) / T_e  (the engine's quote rate)"; ws["B12"] = "=-LN(B7)/B5"; ws["B12"].number_format = "0.0000%"
     ws["A13"] = "b = ln(F/S) / T_e  (the engine's carry)"; ws["B13"] = "=LN(B10/B1)/B5"; ws["B13"].number_format = "0.0000%"
     ws["A14"] = "σ√T_e"; ws["B14"] = "=B11*SQRT(B5)"
-    ws["A15"] = "e^(−r·T_e) = DF_USD(T_s)"; ws["B15"] = "=EXP(-B12*B5)"; ws["B15"].number_format = "0.000000"
-    ws["A16"] = "e^((b−r)·T_e) = F·DF_USD(T_s)/S"; ws["B16"] = "=EXP((B13-B12)*B5)"; ws["B16"].number_format = "0.000000"
+    ws["A15"] = f"e^(−r·T_e) = DF_{quote}(T_s)"; ws["B15"] = "=EXP(-B12*B5)"; ws["B15"].number_format = "0.000000"
+    ws["A16"] = f"e^((b−r)·T_e) = F·DF_{quote}(T_s)/S"; ws["B16"] = "=EXP((B13-B12)*B5)"; ws["B16"].number_format = "0.000000"
     ws["A18"] = (f"Vol source: {vol_src}. The engine applies the smile vol at the strike; at the forward that is the ATM vol, and a barrier or touch "
                  "is valued at the same flat vol across the barrier (methodology §13). Change any yellow cell and every style sheet reprices.")
+    ws["A19"] = case["rate_note"]
     for name, ref in _NAMES.items():
         wb.defined_names[name] = DefinedName(name, attr_text=f"Inputs!${ref[0]}${ref[1:]}")
-    _widths(ws, [52, 16])
+    _widths(ws, [58, 16])
     T_e, T_s = (exp - val).days / 365.0, (settle - val).days / 365.0
     df_s = mkt.curve.df(settle)
-    F = FX_SPOT * math.exp(-FX_R_EUR * T_s) / df_s
-    return dict(val=val, exp=exp, settle=settle, S=FX_SPOT, N=FX_NOTIONAL, F=F, df=df_s, T_e=T_e, T_s=T_s, vol=vol)
+    F = S * math.exp(-rb * T_s) / df_s
+    return dict(val=val, exp=exp, settle=settle, S=S, N=N, F=F, df=df_s, T_e=T_e, T_s=T_s, vol=vol, base=base, quote=quote, case=case)
 
 
 def _ref_cell(ws, row, label, formula, ref, fmt="#,##0.00"):
@@ -565,45 +555,72 @@ def _ref_cell(ws, row, label, formula, ref, fmt="#,##0.00"):
     ws.cell(row=row, column=4, value=f"=B{row}-C{row}").number_format = fmt
 
 
-def fx_option_workbook(mkt: Market):
+def _option_workbook(mkt: Market, case: dict):
+    base, quote, crypto = case["base"], case["quote"], case["pair"] != "EURUSD"
     wb = Workbook()
-    _readme(wb, "FX option (European)", [
-        "Default trade: buy a 3-month EUR call / USD put on EUR 10m, strike at the forward, settled two business days after expiry.",
-        "Garman–Kohlhagen on the forward to settlement, discounted in USD to settlement: C = DF_USD(T_s)·[F·N(d₁) − K·N(d₂)], "
-        "d₁ = [ln(F/K) + ½σ²T_e]/(σ√T_e), d₂ = d₁ − σ√T_e; the put from parity (pricing/fx_option.py, methodology §13).",
-        "Delta: forward delta Φ(d₁) and the spot position in EUR = Φ(d₁)·DF_USD·F/S·N. Vega: the engine reprices at σ + 1 point; the analytic "
-        "N·DF·F·n(d₁)·√T_e·0.01 is shown beside it (the gap is volga over the one-point move).",
-        "EUR is discounted flat at the yellow rate because the hosted demo carries no EUR OIS curve; on a desk DF_EUR comes from the €STR curve.",
-        "The canonical on-chain record is the FX_OPTION product in chain/canonical.py (ISDA FX and Currency Option Definitions fields).",
+    _readme(wb, "Crypto NDO (European option)" if crypto else "FX option (European)", [
+        (f"Default trade: buy a 3-month {base} call / {quote} put on {case['notional']:g} {base}, strike at the forward, "
+         + ("cash-settled against the settlement price source the day after expiry (a non-deliverable option in the ISDA Digital Asset Derivatives Definitions' vocabulary)." if crypto
+            else "settled two business days after expiry.")),
+        (f"{'Black-76' if crypto else 'Garman–Kohlhagen'} on the forward to settlement, discounted in {quote} to settlement: C = DF_{quote}(T_s)·[F·N(d₁) − K·N(d₂)], "
+         "d₁ = [ln(F/K) + ½σ²T_e]/(σ√T_e), d₂ = d₁ − σ√T_e; the put from parity (pricing/fx_option.py, methodology §12–13). "
+         + ("The digital asset's funding rate is its base rate: one engine with the FX option." if crypto else "")),
+        (f"Delta ({case['delta']}): forward delta Φ(d₁) and the spot position in {base} = Φ(d₁)·DF_{quote}·F/S·N. Vega: the engine reprices at σ + 1 point; the analytic "
+         "N·DF·F·n(d₁)·√T_e·0.01 is shown beside it (the gap is volga over the one-point move). "
+         + ("IR01 on a digital asset is the discounting curve's sensitivity alone; the funding rate's is FUND01." if crypto else "IR01 is the sum of both curves' sensitivities.")),
+        case["rate_note"],
+        ("The canonical on-chain record is the CRYPTO_OPTION product (NDO) in chain/canonical.py (ISDA Digital Asset Derivatives Definitions fields)." if crypto
+         else "The canonical on-chain record is the FX_OPTION product in chain/canonical.py (ISDA FX and Currency Option Definitions fields)."),
     ], mkt)
     _curve_sheet(wb, mkt)
-    p = _fx_inputs(wb, mkt)
-    res = price_fx_option(base_currency="EUR", quote_currency="USD", base_notional=p["N"], option_type="CALL", strike=p["F"], spot=p["S"], forward=p["F"],
-                          df_quote=p["df"], valuation_date=p["val"], expiry_date=p["exp"], settlement_date=p["settle"], vol=p["vol"], direction="BUY")
+    p = _fx_inputs(wb, mkt, case)
+    res = price_fx_option(base_currency=base, quote_currency=quote, base_notional=p["N"], option_type="CALL", strike=p["F"], spot=p["S"], forward=p["F"],
+                          df_quote=p["df"], valuation_date=p["val"], expiry_date=p["exp"], settlement_date=p["settle"], vol=p["vol"], direction="BUY",
+                          spot_date=None)      # the carry runs from the valuation date here, as the sheet's rate rows do (the note says so)
     ws = wb.create_sheet("European", 2)
-    ws["A1"] = "Strike K (USD per EUR)"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
-    ws["A2"] = "Call (1) / Put (-1) on EUR"; ws["B2"] = 1; ws["B2"].fill = IN
+    ws["A1"] = f"Strike K ({quote} per {base})"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = case["spot_fmt"]
+    ws["A2"] = f"Call (1) / Put (-1) on {base}"; ws["B2"] = 1; ws["B2"].fill = IN
     ws["A3"] = "d₁"; ws["B3"] = "=(LN(Fwd/B1)+0.5*Sigma^2*Te)/SqT"
     ws["A4"] = "d₂"; ws["B4"] = "=B3-SqT"
-    ws["A5"] = "Premium per EUR (USD)"; ws["B5"] = f"=DFq*B2*(Fwd*{_N('B2*B3')}-B1*{_N('B2*B4')})"; ws["B5"].number_format = "0.000000"
+    ws["A5"] = f"Premium per {base} ({quote})"; ws["B5"] = f"=DFq*B2*(Fwd*{_N('B2*B3')}-B1*{_N('B2*B4')})"; ws["B5"].number_format = "#,##0.000000"
     _hdr(ws, 7, ["", "Formulas", "Rijeka engine", "Difference"])
-    _ref_cell(ws, 8, "Premium total (USD) = NPV bought", "=B5*Notl", res.npv)
-    _ref_cell(ws, 9, "Premium in EUR", "=B8/Spot", res.npv / p["S"])
+    _ref_cell(ws, 8, f"Premium total ({quote}) = NPV bought", "=B5*Notl", res.npv)
+    _ref_cell(ws, 9, f"Premium in {base}", "=B8/Spot", res.npv / p["S"], "#,##0.000000")
     _ref_cell(ws, 10, "Forward delta Φ(d₁) (put: Φ(d₁) − 1)", f"=IF(B2=1,{_N('B3')},{_N('B3')}-1)", res.forward_delta, "0.000000")
-    _ref_cell(ws, 11, "Spot position (EUR) = fwd delta·DF_USD·F/S·N", "=B10*DFq*Fwd/Spot*Notl", res.delta_base_units, "#,##0")
-    ws["A12"] = "Vega analytic per 1 vol pt = N·DF·F·n(d₁)·√T_e·0.01"; ws["B12"] = "=Notl*DFq*Fwd*NORM.S.DIST(B3,FALSE)*SQRT(Te)*0.01"; ws["B12"].number_format = "#,##0.00"
+    _ref_cell(ws, 11, f"Spot position ({base}) = fwd delta·DF_{quote}·F/S·N", "=B10*DFq*Fwd/Spot*Notl", res.delta_base_units, "#,##0.0000")
+    _ref_cell(ws, 12, f"{case['delta']}: NPV change for +1% spot (repriced)",
+              f"=Notl*DFq*B2*(Fwd*1.01*{_N('B2*((LN(Fwd*1.01/B1)+0.5*Sigma^2*Te)/SqT)')}-B1*{_N('B2*((LN(Fwd*1.01/B1)+0.5*Sigma^2*Te)/SqT-SqT)')})-B8", res.spot01)
+    ws["A13"] = "Vega analytic per 1 vol pt = N·DF·F·n(d₁)·√T_e·0.01"; ws["B13"] = "=Notl*DFq*Fwd*NORM.S.DIST(B3,FALSE)*SQRT(Te)*0.01"; ws["B13"].number_format = "#,##0.00"
     d1u = "((LN(Fwd/B1)+0.5*(Sigma+0.01)^2*Te)/((Sigma+0.01)*SQRT(Te)))"
-    _ref_cell(ws, 13, "Vega repriced (σ + 1 pt) − premium", f"=Notl*DFq*B2*(Fwd*{_N('B2*' + d1u)}-B1*{_N('B2*(' + d1u + '-(Sigma+0.01)*SQRT(Te))')})-B8", res.vega)
-    ws["A15"] = "Put–call parity check: C − P = DF_USD·(F − K)·N"; ws["B15"] = f"=Notl*DFq*((Fwd*{_N('B3')}-B1*{_N('B4')})-(B1*{_N('-B4')}-Fwd*{_N('-B3')}))-Notl*DFq*(Fwd-B1)"; ws["B15"].number_format = "0.000000"
-    ws["A17"] = "Sold option: the same numbers with the opposite sign. The premium is a cash flow on its payment date, not part of the value once paid."
-    _widths(ws, [52, 18, 18, 14])
+    _ref_cell(ws, 14, "Vega repriced (σ + 1 pt) − premium", f"=Notl*DFq*B2*(Fwd*{_N('B2*' + d1u)}-B1*{_N('B2*(' + d1u + '-(Sigma+0.01)*SQRT(Te))')})-B8", res.vega)
+    _ref_cell(ws, 15, f"{'IR01 (discounting, ' + quote + ' +1bp)' if crypto else 'IR01 ' + quote + ' curve (+1bp)'}: F up by the carry, DF down",
+              f"=Notl*DFq*EXP(-0.0001*Ts)*B2*(Fwd*EXP(0.0001*(Ts-1/365*0))*{_N('B2*((LN(Fwd*EXP(0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT)')}-B1*{_N('B2*((LN(Fwd*EXP(0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT-SqT)')})-B8",
+              res.ir01_disc, "#,##0.0000")
+    _ref_cell(ws, 16, f"{case['funding']} ({base} +1bp): F down by the carry",
+              f"=Notl*DFq*B2*(Fwd*EXP(-0.0001*Ts)*{_N('B2*((LN(Fwd*EXP(-0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT)')}-B1*{_N('B2*((LN(Fwd*EXP(-0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT-SqT)')})-B8",
+              res.ir01_base, "#,##0.0000")
+    ws["A18"] = f"Put–call parity check: C − P = DF_{quote}·(F − K)·N"; ws["B18"] = f"=Notl*DFq*((Fwd*{_N('B3')}-B1*{_N('B4')})-(B1*{_N('-B4')}-Fwd*{_N('-B3')}))-Notl*DFq*(Fwd-B1)"; ws["B18"].number_format = "0.000000"
+    ws["A20"] = ("Sold option: the same numbers with the opposite sign. The premium is a cash flow on its payment date, not part of the value once paid. "
+                 "The rate rows assume the carry runs over T_s from the valuation date, as the engine does without a spot lag" + (" (a digital asset settles its spot the next day)." if crypto else "."))
+    _widths(ws, [58, 18, 18, 14])
     return wb, res.npv
 
 
-def fx_option_styles_workbook(mkt: Market):
+def fx_option_workbook(mkt: Market):
+    return _option_workbook(mkt, FX_CASE)
+
+
+def crypto_ndo_workbook(mkt: Market):
+    return _option_workbook(mkt, CRYPTO_CASE)
+
+
+def _styles_workbook(mkt: Market, case: dict):
+    base, quote, crypto = case["base"], case["quote"], case["pair"] != "EURUSD"
     wb = Workbook()
-    _readme(wb, "FX option styles", [
-        "Default: 3-month EUR/USD options on EUR 10m (payouts USD 1m or EUR 1m), strike at the forward, barriers 5% either side of spot, rebate USD 0.01 per EUR.",
+    _readme(wb, "Crypto option styles" if crypto else "FX option styles", [
+        (f"Default: 3-month {base}/{quote} options on {case['notional']:g} {base} (payouts {quote} {case['payout']:,.0f} or {base} {case['payout'] / (case['spot'] if crypto else 1):g}), "
+         f"strike at the forward, barriers {case['barrier_pct']:.0%} either side of spot, rebate {quote} {case['rebate']:g} per {base}."
+         + (" The digital asset's funding rate is the carry; settlement in cash the day after expiry." if crypto else "")),
         "Digital (Reiner–Rubinstein): cash-or-nothing Q·e^(−rT)·N(±d₂); a fixed EUR amount is asset-or-nothing Q·S·e^((b−r)T)·N(±d₁); "
         "d₁ = [ln(S/K) + (b + ½σ²)T]/(σ√T).",
         "Single barrier: the Reiner–Rubinstein terms A–F with η (+1 down, −1 up) and φ (+1 call, −1 put), μ = (b − ½σ²)/σ², λ = √(μ² + 2r/σ²); "
@@ -617,9 +634,10 @@ def fx_option_styles_workbook(mkt: Market):
         "All values are from the holder's side; a sold option carries the opposite sign.",
     ], mkt)
     _curve_sheet(wb, mkt)
-    p = _fx_inputs(wb, mkt)
+    p = _fx_inputs(wb, mkt, case)
     S, F, N = p["S"], p["F"], p["N"]
-    Hup, Hdn, R, Q = round(S * 1.05, 4), round(S * 0.95, 4), 0.01, 1_000_000.0
+    Hup, Hdn, R, Q = round(S * (1 + case["barrier_pct"]), 4), round(S * (1 - case["barrier_pct"]), 4), case["rebate"], case["payout"]
+    fmt_px = case["spot_fmt"]
     kw = dict(base_notional=N, spot=S, forward=F, df_quote=p["df"], t_expiry=p["T_e"], vol=p["vol"], direction="BUY")
 
     def ref(**spec):
@@ -627,24 +645,24 @@ def fx_option_styles_workbook(mkt: Market):
 
     # ── Digital ──
     ws = wb.create_sheet("Digital", 2)
-    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
-    ws["A2"] = "Payout Q (USD for cash-or-nothing; EUR for the EUR-amount digital)"; ws["B2"] = Q; ws["B2"].fill = IN; ws["B2"].number_format = "#,##0"
+    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = fmt_px
+    ws["A2"] = f"Payout Q ({quote} for cash-or-nothing; {base} for the {base}-amount digital)"; ws["B2"] = Q; ws["B2"].fill = IN; ws["B2"].number_format = "#,##0"
     ws["A3"] = "d₁ = [ln(S/K) + (b + ½σ²)T_e]/(σ√T_e)"; ws["B3"] = "=(LN(Spot/B1)+(Bc+0.5*Sigma^2)*Te)/SqT"
     ws["A4"] = "d₂ = d₁ − σ√T_e"; ws["B4"] = "=B3-SqT"
     _hdr(ws, 6, ["", "Formulas", "Rijeka engine", "Difference"])
     _ref_cell(ws, 7, "Cash-or-nothing call: Q·e^(−rT)·N(d₂)", f"=B2*DFe*{_N('B4')}", ref(style="DIGITAL", option_type="CALL", strike=F, payout=Q))
     _ref_cell(ws, 8, "Cash-or-nothing put: Q·e^(−rT)·N(−d₂)", f"=B2*DFe*{_N('-B4')}", ref(style="DIGITAL", option_type="PUT", strike=F, payout=Q))
-    _ref_cell(ws, 9, "EUR-amount call (asset-or-nothing): Q·S·e^((b−r)T)·N(d₁)", f"=B2*Spot*DFb*{_N('B3')}", ref(style="DIGITAL", option_type="CALL", strike=F, payout=Q, payout_currency="BASE"))
-    _ref_cell(ws, 10, "EUR-amount put: Q·S·e^((b−r)T)·N(−d₁)", f"=B2*Spot*DFb*{_N('-B3')}", ref(style="DIGITAL", option_type="PUT", strike=F, payout=Q, payout_currency="BASE"))
+    _ref_cell(ws, 9, f"{base}-amount call (asset-or-nothing): Q·S·e^((b−r)T)·N(d₁)", f"=B2*Spot*DFb*{_N('B3')}", ref(style="DIGITAL", option_type="CALL", strike=F, payout=Q, payout_currency="BASE"))
+    _ref_cell(ws, 10, f"{base}-amount put: Q·S·e^((b−r)T)·N(−d₁)", f"=B2*Spot*DFb*{_N('-B3')}", ref(style="DIGITAL", option_type="PUT", strike=F, payout=Q, payout_currency="BASE"))
     ws["A12"] = "Parity: cash call + cash put = Q·e^(−rT)"; ws["B12"] = "=B7+B8-B2*DFe"; ws["B12"].number_format = "0.000000"
     _widths(ws, [62, 18, 18, 14])
 
     # ── Barrier ──
     ws = wb.create_sheet("Barrier", 3)
-    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
-    ws["A2"] = "Up barrier H (above spot)"; ws["B2"] = Hup; ws["B2"].fill = IN; ws["B2"].number_format = "0.0000"
-    ws["A3"] = "Down barrier H (below spot)"; ws["B3"] = Hdn; ws["B3"].fill = IN; ws["B3"].number_format = "0.0000"
-    ws["A4"] = "Rebate R (USD per EUR of notional)"; ws["B4"] = R; ws["B4"].fill = IN; ws["B4"].number_format = "0.0000"
+    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = fmt_px
+    ws["A2"] = "Up barrier H (above spot)"; ws["B2"] = Hup; ws["B2"].fill = IN; ws["B2"].number_format = fmt_px
+    ws["A3"] = "Down barrier H (below spot)"; ws["B3"] = Hdn; ws["B3"].fill = IN; ws["B3"].number_format = fmt_px
+    ws["A4"] = f"Rebate R ({quote} per {base} of notional)"; ws["B4"] = R; ws["B4"].fill = IN; ws["B4"].number_format = "#,##0.0000"
     ws["A5"] = "μ = (b − ½σ²)/σ²"; ws["B5"] = "=(Bc-0.5*Sigma^2)/Sigma^2"
     ws["A6"] = "λ = √(μ² + 2r/σ²)"; ws["B6"] = "=SQRT(B5^2+2*Rq/Sigma^2)"
     cols = ["Type", "φ", "η", "H", "x₁", "x₂", "y₁", "y₂", "z", "A", "B", "C", "D", "E", "F", "Per EUR (formulas)", "Total (formulas)", "Rijeka engine", "Difference"]
@@ -662,7 +680,7 @@ def fx_option_styles_workbook(mkt: Market):
         phi, eta, H = (1 if ot == "CALL" else -1), (-1 if bt.startswith("UP") else 1), ("$B$2" if bt.startswith("UP") else "$B$3")
         ws.cell(row=r, column=1, value=f"{bt.replace('_', '-and-').lower()} {ot.lower()}")
         ws.cell(row=r, column=2, value=phi); ws.cell(row=r, column=3, value=eta)
-        ws.cell(row=r, column=4, value=f"={H}").number_format = "0.0000"
+        ws.cell(row=r, column=4, value=f"={H}").number_format = fmt_px
         P, E_, Hc = f"{L['φ']}{r}", f"{L['η']}{r}", f"{L['H']}{r}"
         ws.cell(row=r, column=5, value=f"=LN(Spot/$B$1)/SqT+(1+$B$5)*SqT")
         ws.cell(row=r, column=6, value=f"=LN(Spot/{Hc})/SqT+(1+$B$5)*SqT")
@@ -687,15 +705,15 @@ def fx_option_styles_workbook(mkt: Market):
 
     # ── Touch ──
     ws = wb.create_sheet("Touch", 4)
-    ws["A1"] = "Payout Q (USD)"; ws["B1"] = Q; ws["B1"].fill = IN; ws["B1"].number_format = "#,##0"
-    ws["A2"] = "Up barrier H (above spot)"; ws["B2"] = Hup; ws["B2"].fill = IN; ws["B2"].number_format = "0.0000"
-    ws["A3"] = "Down barrier H (below spot)"; ws["B3"] = Hdn; ws["B3"].fill = IN; ws["B3"].number_format = "0.0000"
+    ws["A1"] = f"Payout Q ({quote})"; ws["B1"] = Q; ws["B1"].fill = IN; ws["B1"].number_format = "#,##0"
+    ws["A2"] = "Up barrier H (above spot)"; ws["B2"] = Hup; ws["B2"].fill = IN; ws["B2"].number_format = fmt_px
+    ws["A3"] = "Down barrier H (below spot)"; ws["B3"] = Hdn; ws["B3"].fill = IN; ws["B3"].number_format = fmt_px
     ws["A4"] = "μ"; ws["B4"] = "=(Bc-0.5*Sigma^2)/Sigma^2"
     ws["A5"] = "λ"; ws["B5"] = "=SQRT(B4^2+2*Rq/Sigma^2)"
     _hdr(ws, 7, ["Barrier", "η", "H", "x₂ − σ√T", "y₂ − σ√T", "z", "P(no hit)", "First-passage value per USD", "", "", "", ""])
     for k, (lab, eta, H) in enumerate((("up", -1, "$B$2"), ("down", 1, "$B$3"))):
         r = 8 + k
-        ws.cell(row=r, column=1, value=lab); ws.cell(row=r, column=2, value=eta); ws.cell(row=r, column=3, value=f"={H}").number_format = "0.0000"
+        ws.cell(row=r, column=1, value=lab); ws.cell(row=r, column=2, value=eta); ws.cell(row=r, column=3, value=f"={H}").number_format = fmt_px
         ws.cell(row=r, column=4, value=f"=LN(Spot/C{r})/SqT+$B$4*SqT")
         ws.cell(row=r, column=5, value=f"=LN(C{r}/Spot)/SqT+$B$4*SqT")
         ws.cell(row=r, column=6, value=f"=LN(C{r}/Spot)/SqT+$B$5*SqT")
@@ -716,10 +734,10 @@ def fx_option_styles_workbook(mkt: Market):
     # ── Double barrier (image series) ──
     ws = wb.create_sheet("DoubleBarrier", 5)
     Lo, Up = Hdn, Hup
-    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
-    ws["A2"] = "Lower barrier L"; ws["B2"] = Lo; ws["B2"].fill = IN; ws["B2"].number_format = "0.0000"
-    ws["A3"] = "Upper barrier U"; ws["B3"] = Up; ws["B3"].fill = IN; ws["B3"].number_format = "0.0000"
-    ws["A4"] = "Touch payout Q (USD)"; ws["B4"] = Q; ws["B4"].fill = IN; ws["B4"].number_format = "#,##0"
+    ws["A1"] = "Strike K"; ws["B1"] = "=Fwd"; ws["B1"].fill = IN; ws["B1"].number_format = fmt_px
+    ws["A2"] = "Lower barrier L"; ws["B2"] = Lo; ws["B2"].fill = IN; ws["B2"].number_format = fmt_px
+    ws["A3"] = "Upper barrier U"; ws["B3"] = Up; ws["B3"].fill = IN; ws["B3"].number_format = fmt_px
+    ws["A4"] = f"Touch payout Q ({quote})"; ws["B4"] = Q; ws["B4"].fill = IN; ws["B4"].number_format = "#,##0"
     ws["A5"] = "l = ln(L/S)"; ws["B5"] = "=LN(B2/Spot)"
     ws["A6"] = "u = ln(U/S)"; ws["B6"] = "=LN(B3/Spot)"
     ws["A7"] = "W = u − l"; ws["B7"] = "=B6-B5"
@@ -769,9 +787,17 @@ def fx_option_styles_workbook(mkt: Market):
     return wb, ref(style="DOUBLE_BARRIER", option_type="CALL", strike=F, barrier_type="KNOCK_OUT", lower=Lo, upper=Up)
 
 
+def fx_option_styles_workbook(mkt: Market):
+    return _styles_workbook(mkt, FX_CASE)
+
+
+def crypto_option_styles_workbook(mkt: Market):
+    return _styles_workbook(mkt, CRYPTO_CASE)
+
+
 BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook,
             "fx_forward": fx_forward_workbook, "fx_option": fx_option_workbook, "fx_option_styles": fx_option_styles_workbook,
-            "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook}
+            "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook, "crypto_option_styles": crypto_option_styles_workbook}
 
 
 def build(product: str, mkt: Market) -> tuple[bytes, float]:

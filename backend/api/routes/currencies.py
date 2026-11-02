@@ -168,7 +168,7 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
     fc = forward_curve(db, user_id, pair)
     out.update(forward_curve=fc and {"valuation_date": fc["valuation_date"], "source": fc["source"], "tenors": sorted(fc["points"], key=TENOR_DAYS.get)},
                forward_points=fc["points"] if fc else None)
-    vs = latest_snapshot(db, user_id, f"{pair}_VOL") if not is_crypto(base) else None
+    vs = latest_snapshot(db, user_id, f"{pair}_VOL")
     if vs:
         grid: dict[str, dict[str, float]] = {}
         for q in vs.quotes or []:
@@ -420,6 +420,12 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                forward_mode=mode, forward_source=f_src, implied_forward=implied.forward, implied_points=implied.forward_points,
                market_points=mkt_pts, basis_points=basis_pts,
                model="F = S·DF_base/DF_quote (parity) or S + quoted points (market); NPV_quote = ±N_base·(F−K)·DF_quote; ACT/365")
+    # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the
+    # funding rate's is FUND01; on a currency pair both legs are rate curves and IR01 is their sum
+    out["crypto"] = crypto
+    out["fund01"] = out.get("ir01_base") if crypto else None
+    if crypto and out.get("ir01_disc") is not None:
+        out["ir01"] = out["ir01_disc"]
     return out
 
 
@@ -475,11 +481,12 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
     """An FX option on the pair's market: the forward to settlement from the forward engine (so the account's
     forward mode, quoted points or parity, applies), the vol from the pair's surface, Garman–Kohlhagen on top."""
     base, quote = split_pair(pair)
-    if is_crypto(base):
-        raise HTTPException(status_code=422, detail="digital-asset options are not in Phase 1 (see CRYPTO_OPTION on the roadmap)")
+    crypto = is_crypto(base)                      # a digital asset: the same model, the funding rate as the base rate, cash-settled
+    if crypto:
+        settlement_type = "NON_DELIVERABLE"
     if expiry <= val_date:
         raise HTTPException(status_code=422, detail="expiry_date must be after the valuation date")
-    settle = settlement or spot_date(expiry, False, base, quote)
+    settle = settlement or spot_date(expiry, crypto, base, quote)
     if settle < expiry:
         raise HTTPException(status_code=422, detail="settlement_date must be on or after the expiry date")
     fwd = _price(db, user_id, pair, shape="FORWARD", base_notional=base_notional, settlement=settle, val_date=val_date, K=None,
@@ -496,9 +503,9 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
         if spec.style == "EUROPEAN":
             r = price_fx_option(base_currency=base, quote_currency=quote, base_notional=base_notional, option_type=option_type, strike=K,
                                 spot=S, forward=F, df_quote=df_q, valuation_date=val_date, expiry_date=expiry, settlement_date=settle, vol=vol,
-                                direction=direction, spot_date=spot_date(val_date, False, base, quote))
+                                direction=direction, spot_date=spot_date(val_date, crypto, base, quote))
             out = r.__dict__.copy()
-            out["method"] = "Garman–Kohlhagen"
+            out["method"] = "Black-76 on the forward (the funding rate as the carry)" if crypto else "Garman–Kohlhagen"
         else:
             x = price_exotic(spec, base_notional=base_notional, spot=S, forward=F, df_quote=df_q, t_expiry=T_e, vol=vol, direction=direction)
             out = {"base_currency": base, "quote_currency": quote, "option_type": spec.option_type, "direction": str(direction).upper(),
@@ -511,6 +518,12 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
         raise HTTPException(status_code=422, detail=str(e))
     out.update(style=spec.style, payout=spec.payout, payout_currency=spec.payout_currency, barrier_type=spec.barrier_type, barrier=spec.barrier,
                lower=spec.lower, upper=spec.upper, rebate=spec.rebate, touch_type=spec.touch_type, pay_at_hit=spec.pay_at_hit)
+    # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the
+    # funding rate's is FUND01; on a currency pair both curves are rates and IR01 is their sum
+    out["fund01"] = out["ir01_base"] if crypto else None
+    if crypto:
+        out["ir01"] = out["ir01_disc"]
+    out["crypto"] = crypto
     out.update(pair=pair, shape="OPTION", valuation_date=val_date.isoformat(), expiry_date=expiry.isoformat(), settlement_date=settle.isoformat(),
                settlement_type=str(settlement_type or "DELIVERABLE").upper(), vol_pct=round(vol * 100, 4), vol_tier=tier, vol_source=vol_note,
                vol_snapshot=vs.valuation_date.isoformat() if vs else None,
@@ -521,6 +534,19 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
                t=fwd["t"], quote_notional=base_notional * K,
                model=f"{out.get('method', 'Garman–Kohlhagen')} on the forward to settlement; σ from the pair's ATM/RR25/BF25 surface (Malz smile in delta); ACT/365")
     return out
+
+
+def _booked_option_args(t: dict, trade: Trade) -> dict:
+    """The option-pricing arguments of a booked FX_OPTION or CRYPTO_OPTION, from its canonical terms."""
+    if str(trade.instrument_type or "").upper() == "CRYPTO_OPTION":
+        return dict(pair=f"{str(t['digital_asset']).upper()}USD", option_type=str(t.get("option_type") or "CALL"),
+                    base_notional=float(t.get("notional_amount") or trade.notional), expiry=date.fromisoformat(str(t["expiration_date"])),
+                    settlement=date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)),
+                    strike=float(t["strike_price"]) if t.get("strike_price") not in (None, "") else None, settlement_type="NON_DELIVERABLE")
+    return dict(pair=str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper(),
+                option_type=str(t.get("option_type") or "CALL"), base_notional=float(t.get("base_notional") or trade.notional),
+                expiry=date.fromisoformat(str(t["expiry_date"])), settlement=date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)),
+                strike=float(t["strike"]) if t.get("strike") not in (None, "") else None, settlement_type=str(t.get("settlement_type") or "DELIVERABLE"))
 
 
 @router.post("/option/price")
@@ -591,20 +617,19 @@ def set_flat(req: FlatRateRequest, db: Session = Depends(get_db), user: dict = D
     return {"currency": ccy, "flat_pct": float(req.rate_pct)}
 
 
-CURRENCY_INSTRUMENTS = ("FX_SPOT", "FX_FORWARD", "NDF", "CRYPTO_FORWARD", "FX_OPTION")
+CURRENCY_INSTRUMENTS = ("FX_SPOT", "FX_FORWARD", "NDF", "CRYPTO_FORWARD", "FX_OPTION", "CRYPTO_OPTION")
+OPTION_INSTRUMENTS = ("FX_OPTION", "CRYPTO_OPTION")
 
 
 def price_booked(trade: Trade, db: Session, user: dict, val_date: date) -> dict:
     """A booked currency trade, from trade.terms (the canonical record's fields)."""
     t = dict(trade.terms or {})
     itype = str(trade.instrument_type or "").upper()
-    if itype == "FX_OPTION":
+    if itype in OPTION_INSTRUMENTS:
         try:
-            pair = str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper()
-            out = _price_option(db, user["sub"], pair, option_type=str(t.get("option_type") or "CALL"), base_notional=float(t.get("base_notional") or trade.notional),
-                                expiry=date.fromisoformat(str(t["expiry_date"])), settlement=date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)),
-                                strike=float(t["strike"]) if t.get("strike") not in (None, "") else None, direction=str(t.get("direction") or "BUY"), val_date=val_date,
-                                vol_pct=None, spot_override=None, settlement_type=str(t.get("settlement_type") or "DELIVERABLE"), style_fields=t)
+            a = _booked_option_args(t, trade)
+            out = _price_option(db, user["sub"], a.pop("pair"), direction=str(t.get("direction") or "BUY"), val_date=val_date, vol_pct=None,
+                                spot_override=None, style_fields=t, **a)
         except (KeyError, TypeError, ValueError) as e:
             raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
         out.update(trade_id=str(trade.id), trade_ref=trade.trade_ref, instrument_type=itype, npv_ccy=out["quote_currency"], legs=[], shape="OPTION")
