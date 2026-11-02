@@ -5,6 +5,8 @@ methodology document carries its own version (v1.2). Commits on `main` are the d
 
 ## 0.6.0 · 2 November 2026 (launch candidate)
 
+- Licence: the market-risk, counterparty-credit and P&L engines (`backend/risk`, `backend/ccr`, `backend/pnl`)
+  move from the platform (BSL 1.1) to the engine side (Apache-2.0), alongside pricing and chain.
 - Launch audit: three independent reviews, the S1 list fixed the same day (tenant scope on the
   cashflow bulk write, a BOOKED event for every trade however created, no driver or RPC text to
   clients, rate limits on every expensive handler, a Prometheus daily allowance, admin gate on

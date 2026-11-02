@@ -17,8 +17,8 @@ its own door so nobody has to guess.
   inbound under Apache-2.0, whichever part of the tree it lands in. Platform contributions are then
   distributed under the BSL and relicensed to Apache-2.0 on the Change Date, like the rest of the
   platform. No assignment of copyright.
-- **Pricing changes come with a test and a number.** A change to anything under `backend/pricing/`
-  or `backend/chain/` needs a test that pins the new behaviour and, in the pull request, the before
+- **Pricing changes come with a test and a number.** A change to anything under `backend/pricing/`,
+  `backend/risk/`, `backend/ccr/`, `backend/pnl/` or `backend/chain/` needs a test that pins the new behaviour and, in the pull request, the before
   and after value on the default trade of the affected product (the Methodology tab's Excel export
   is the quickest way to produce it).
 - **No silent methodology changes.** If a formula changes, `docs/methodology/rijeka_methodology.tex`

@@ -3,7 +3,10 @@ Rijeka is licensed in two parts. The boundary is by path.
 APACHE LICENSE 2.0  (see LICENSE-APACHE)  — the engine and the standard,
 meant to be adopted, embedded and forked freely, with an explicit patent grant:
 
-    backend/pricing/        curve bootstrap, pricing, risk, XVA, SIMM, SA-CCR
+    backend/pricing/        curve bootstrap, pricing, XVA, SIMM, SA-CCR
+    backend/risk/           key-rate ladder, VaR, stress, backtesting, limits, vol history
+    backend/ccr/            counterparty-credit exposure paths and calibration
+    backend/pnl/            marks, P&L attribution, XVA P&L
     backend/chain/          canonical trade record, EIP-712 signing, attestation,
                             key resolution, lifecycle guard
                             (except backend/chain/telegram.py, which is platform)
@@ -21,9 +24,6 @@ else. Named, so nobody has to infer:
     backend/api/            the HTTP routes
     backend/db/             models and the session
     backend/middleware/     authentication
-    backend/risk/           ladder, VaR, stress, backtesting, limits, vol history
-    backend/ccr/            counterparty-credit exposure paths and calibration
-    backend/pnl/            marks, attribution, XVA P&L
     backend/market_data/    the public-source demo feed, policy path, calendar
     backend/news/           the news room and summaries
     backend/prometheus/     the read-only assistant and the book brief
@@ -33,9 +33,8 @@ else. Named, so nobody has to infer:
 You may run it for your own organisation, modify it, teach with it and study
 it; you may not offer it to others as a hosted service or a competing product
 without a commercial licence. Each version becomes Apache-2.0 four years after
-it is published. (The market-risk, counterparty-credit and P&L engines sit on
-the platform side today; the licensor may move them to the Apache side in a
-later version, which the path table above will say.)
+it is published. (The market-risk, counterparty-credit and P&L engines moved
+from the platform side to the Apache side on 2 November 2026.)
 
 Versions published before 27 October 2026 were released under the MIT License
 and remain available under it.
