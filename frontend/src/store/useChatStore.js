@@ -222,7 +222,7 @@ export const useChatStore = create((set, get) => ({
   },
   countersign: async (messageId, body) => {
     const r = await post(`/cards/${messageId}/countersign`, body)
-    if (r.your_booking) refreshBlotter()
+    refreshBlotter()   // the booking, when it was made; the realtime stream covers the rest
     return r
   },
   // Book a confirmed trade into your own blotter (your side of it).
@@ -276,7 +276,7 @@ export const useChatStore = create((set, get) => ({
 
 // A booking from a confirmation lands in the blotter: reload it if it is loaded.
 function refreshBlotter() {
-  import('./useTradesStore').then(m => m.useTradesStore.getState().fetchTrades?.()).catch(() => {})
+  import('./useTradesStore').then(m => m.useTradesStore.getState().fetchTrades?.({ quiet: true })).catch(() => {})
 }
 
 // Plain-English names for data lookups, shown under a private answer.

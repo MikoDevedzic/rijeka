@@ -55,12 +55,12 @@ const STATUSES      = ['PENDING', 'LIVE', 'MATURED', 'CANCELLED']
 const STORES        = ['WORKING', 'PRODUCTION', 'HISTORY']
 
 export default function BlotterShell() {
-  const { trades, theirRefs, loading, error, fetchTrades, filters, setFilter, filteredTrades } = useTradesStore()
+  const { trades, theirRefs, loading, error, fetchTrades, startLive, filters, setFilter, filteredTrades } = useTradesStore()
   const [sortCol, setSortCol]        = useState('trade_date')
   const [sortDir, setSortDir]        = useState('desc')
   const [selectedIds, setSelectedIds] = useState(new Set())
 
-  useEffect(() => { fetchTrades() }, [])
+  useEffect(() => { fetchTrades(); return startLive() }, [])   // live while the blotter is on screen
 
   const sort = col => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')

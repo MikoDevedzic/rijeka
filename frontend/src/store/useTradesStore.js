@@ -28,8 +28,9 @@ export const useTradesStore = create((set, get) => ({
   setFilter:    (k, v) => set(s => ({ filters: { ...s.filters, [k]: v } })),
   resetFilters: ()     => set({ filters: { ...INIT_FILTERS } }),
 
-  fetchTrades: async () => {
-    set({ loading: true, error: null })
+  // quiet: a background refresh keeps the table on screen instead of showing the loading state.
+  fetchTrades: async ({ quiet = false } = {}) => {
+    if (!quiet) set({ loading: true, error: null })
     const { data, error } = await supabase
       .from('trades')
       .select(`*,
@@ -42,6 +43,39 @@ export const useTradesStore = create((set, get) => ({
       ? set({ error: error.message, loading: false })
       : set({ trades: data || [],   loading: false })
     if (!error) fetchTheirRefs().then(theirRefs => set({ theirRefs })).catch(() => {})
+  },
+
+  // Live blotter. The table's own changes arrive over realtime (the trades table is in the
+  // supabase_realtime publication; RLS limits the stream to this user's rows), so a confirmation
+  // countersigned by the other firm, a booking made from a chat card, or a colleague's amendment
+  // shows here without a reload. Behind it, a refetch when the tab comes back into view and a
+  // slow poll, for a browser whose realtime socket has dropped.
+  _stopLive: null,
+  startLive: () => {
+    if (get()._stopLive) return get()._stopLive
+    let timer = null
+    const refresh = async () => {
+      if (!(await getSessionMaybe())?.access_token) return
+      get().fetchTrades({ quiet: true })
+    }
+    const soon = () => { clearTimeout(timer); timer = setTimeout(refresh, 300) }
+    const channel = supabase
+      .channel('trades-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'trades' }, soon)
+      .subscribe()
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    const poll = setInterval(() => { if (document.visibilityState === 'visible') refresh() }, 60_000)
+    const stop = () => {
+      clearTimeout(timer); clearInterval(poll)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+      supabase.removeChannel(channel)
+      set({ _stopLive: null })
+    }
+    set({ _stopLive: stop })
+    return stop
   },
 
   addTrade: async (trade) => {
