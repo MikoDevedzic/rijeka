@@ -172,6 +172,7 @@ const NAV = [
         label: null,
         children: [
           { label: 'SYSTEM',             path: '/configurations/system',                    live: true  },
+          { label: 'MODULES',            path: '/configurations/modules',                   live: true, roles: ['admin'] },
         ],
       },
     ],
@@ -472,7 +473,7 @@ export default function CfgNav() {
                 {group.label && (
                   <span style={S.groupLabel}>{group.label}</span>
                 )}
-                {group.children.map(item => (
+                {group.children.filter(item => !item.roles || item.roles.includes(role)).map(item => (
                   <NavLink
                     key={item.path}
                     to={item.live ? item.path : '#'}

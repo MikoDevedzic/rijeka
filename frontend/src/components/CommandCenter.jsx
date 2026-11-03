@@ -5,6 +5,7 @@ import WorldClock from './home/WorldClock'
 import PolicyPath from './home/PolicyPath'
 import Lifecycle from './home/Lifecycle'
 import PnlTile from './home/PnlTile'
+import { useModulesStore } from '../store/useModulesStore'
 import WeekAhead from './home/WeekAhead'
 import RoleSwitch from './layout/RoleSwitch'
 import { getSessionMaybe } from '../lib/session'
@@ -24,6 +25,7 @@ const NAV = [
 
 export default function CommandCenter() {
   const navigate  = useNavigate()
+  const modules   = useModulesStore(s => s.modules)
   const location  = useLocation()
   const session   = useAuthStore(s => s.session)
   const profile   = useAuthStore(s => s.profile)
@@ -195,7 +197,7 @@ function DeskHome({ demo, navigate }) {
             <div className="dh-kpi"><span className="dh-kpi-l">GROSS NOTIONAL</span><span className="dh-kpi-v small">{d.loading ? '…' : Object.entries(notional).map(([c, n]) => `${c} ${fmtM(n)}`).join(' · ') || '—'}</span></div>
           </div>
           {trades.length > 0 && <RiskStrip sheet={sheet} />}
-          {trades.length > 0 && <PnlTile />}
+          {trades.length > 0 && modules.PNL !== false && <PnlTile />}
           <Ladder trades={trades} />
           <ul className="dh-list">
             {trades.slice(0, 4).map(t => (

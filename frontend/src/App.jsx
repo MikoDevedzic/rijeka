@@ -48,6 +48,7 @@ const Privacy           = named(() => import('./components/docs/Legal'), 'Privac
 const Users             = lazy(() => import('./components/admin/Users'))
 const XVAParametersTab  = lazy(() => import('./components/configurations/XVAParametersTab'))
 const SystemPage        = lazy(() => import('./components/configurations/SystemPage'))
+const ModulesPage        = lazy(() => import('./components/configurations/ModulesPage'))
 
 function BlotterLayout() {
   return (
@@ -110,6 +111,13 @@ function PersistentBookingWindow() {
   )
 }
 
+// A page whose module the firm switched off sends the visitor home (store/useModulesStore ROUTE_MODULES).
+function ModuleGate({ keys, children }) {
+  const modules = useModulesStore(s => s.modules)
+  if (keys.some(k => modules[k] === false)) return <Navigate to="/command-center" replace />
+  return children
+}
+
 // The Users page is for admins; everyone else lands on the configurations home.
 function AdminOnly({ children }) {
   const { profile } = useAuthStore()
@@ -151,10 +159,10 @@ export default function App() {
           <Route path="/messenger" element={<MessengerPage />} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
-            <Route path="/pnl"     element={<PnlPage />} />
-            <Route path="/risk"    element={<RiskPage />} />
-            <Route path="/risk/ccr" element={<CcrPage />} />
-            <Route path="/risk/capital" element={<CapitalPage />} />
+            <Route path="/pnl"     element={<ModuleGate keys={['PNL']}><PnlPage /></ModuleGate>} />
+            <Route path="/risk"    element={<ModuleGate keys={['MARKET_RISK']}><RiskPage /></ModuleGate>} />
+            <Route path="/risk/ccr" element={<ModuleGate keys={['COUNTERPARTY_CREDIT']}><CcrPage /></ModuleGate>} />
+            <Route path="/risk/capital" element={<ModuleGate keys={['CAPITAL']}><CapitalPage /></ModuleGate>} />
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />
@@ -178,6 +186,7 @@ export default function App() {
               <Route path="xva-parameters/hw1f"          element={<XVAParametersTab />} />
               <Route path="users"              element={<AdminOnly><Users /></AdminOnly>} />
               <Route path="system"             element={<SystemPage />} />
+              <Route path="modules"            element={<AdminOnly><ModulesPage /></AdminOnly>} />
             </Route>
           </Route>
         </Route>

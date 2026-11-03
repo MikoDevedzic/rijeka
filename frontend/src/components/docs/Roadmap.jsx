@@ -43,6 +43,7 @@ const PHASES = [
     ['NEXT', 'Portfolio reconciliation with counterparties: positions and valuations, breaks and ageing — the on-chain record makes this cheap'],
     ['NEXT', 'Regulatory reporting: UTI/UPI generation, EMIR and CFTC trade reports, margin and valuation reporting'],
     ['NEXT', 'Limits and pre-trade checks: notional, tenor, counterparty and product limits enforced at booking'],
+    ['DONE', 'Module switches per firm with presets (dealer, corporate, fund, classroom) and an audit trail: pages, tabs and batches follow them'],
     ['NEXT', 'Model governance: model inventory, validation status per product, change log, approval workflow'],
     ['NEXT', 'Entitlements and audit: roles per firm, four-eyes on sensitive actions, immutable audit trail'],
     ['PARTIAL', 'End-of-day batch: daily marks and attributed P&L rows stored per account; P&L sign-off. Next: official close, archived snapshots and reports'],

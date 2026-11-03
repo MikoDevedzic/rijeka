@@ -1,5 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useModulesStore } from '../../store/useModulesStore'
 import RoleSwitch from './RoleSwitch'
 import { openAppWindow } from '../../lib/windows'
 import './AppBar.css'
@@ -20,6 +22,12 @@ export default function AppBar() {
   const user      = useAuthStore(s => s.session?.user)
   const signOut   = useAuthStore(s => s.signOut)
   const demo      = useAuthStore(s => s.demo)
+  const modules   = useModulesStore(s => s.modules)
+  const loadModules = useModulesStore(s => s.load)
+  useEffect(() => { if (user) loadModules() }, [user, loadModules])
+  const shown = MODULES.filter(m =>
+    m.path === '/pnl' ? modules.PNL !== false :
+    m.path === '/risk' ? (modules.MARKET_RISK !== false || modules.COUNTERPARTY_CREDIT !== false || modules.CAPITAL !== false) : true)
 
   const displayName = user?.email?.split('@')[0]?.toUpperCase()
     || user?.user_metadata?.full_name?.toUpperCase()
@@ -43,7 +51,7 @@ export default function AppBar() {
       <div style={{width:'1px',height:'20px',background:'var(--border)',flexShrink:0}}/>
 
       <nav style={{display:'flex',alignItems:'stretch',height:'100%'}}>
-        {MODULES.map(mod=>{
+        {shown.map(mod=>{
           // The active tab pops out exactly the page you're on; others open at their start.
           const target = isActive(mod) ? location.pathname + location.search : mod.path
           const popOut = () => openAppWindow(target, 'rijeka' + mod.path.replace(/\//g, '-'))

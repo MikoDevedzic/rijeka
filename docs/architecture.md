@@ -71,6 +71,17 @@ public tools (IRS pricer, XVA simulator and waterfall, SABR surface, Bermudan tr
 the verifier, terms and privacy. It reads the API's public endpoints (pulse, calendar, the register of
 anchored confirmations).
 
+## Module switches
+
+A firm runs the modules it needs (`backend/modules.py`; `firms.modules`, `firms.modules_preset`, `module_events`;
+`GET/PUT /api/modules`, the admin's MODULES page under Configurations → Operations). A switch hides the module's
+pages and tabs, sends a direct visit to its route home, and makes the nightly batches skip the firm's accounts
+(`pnl.eod_tick`, `risk.daily_tick`, `ccr.daily_tick`); the routes stay callable, the data stays, and switching
+back on resumes with history intact. Null, or the columns missing, means every module on. Presets: DEALER
+(everything), CORPORATE (book, confirm, P&L, the ticket's XVA), FUND (everything but capital), CLASSROOM
+(everything; the chain's network is a deployment setting). Planned modules (collateral, XVA reserves, IPV) are
+listed and not switchable until they exist.
+
 ## Data flow of a trade
 
 1. **Price.** The ticket posts terms to `/price` (rates) or `/api/currencies/price` (FX and digital

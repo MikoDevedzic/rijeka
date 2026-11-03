@@ -3,6 +3,16 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.7.3 · 3 November 2026
+
+- Module switches per firm (Configurations → Operations → MODULES, admins; `GET/PUT /api/modules`,
+  `backend/modules.py`): on-chain confirmation, P&L, XVA on the ticket, market risk, counterparty credit, capital,
+  Prometheus, news, with collateral, XVA reserves and IPV listed as planned. A switch hides the module's pages and
+  tabs (the app bar, the risk tabs, the ticket's XVA, CAPITAL and CONFIRM tabs, the home page's P&L tile), sends a
+  direct visit to its route home, and skips its nightly batch for the firm's accounts; it never deletes anything.
+  Presets DEALER, CORPORATE, FUND, CLASSROOM. Every change is a `module_events` row with who, when, before and
+  after; `docs/migrations/2026-11-04_firm_modules.sql`, until which every module is on.
+
 ## 0.7.2 · 3 November 2026
 
 - Configurations → Counterparties: EDIT TERMS on every row (ISDA, CSA type, currency, threshold, MTA, discount curve,

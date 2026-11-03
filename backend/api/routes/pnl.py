@@ -224,8 +224,11 @@ def eod_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Heade
         return {"persisted": False, "reason": "tables missing: apply docs/migrations/2026-10-30_pnl.sql"}
     users = [str(r.user_id) for r in db.execute(text("SELECT DISTINCT user_id FROM trades")).all()]
     done, failed, skipped = [], [], []
+    import modules as M
     for uid in users:
         try:
+            if not M.is_on(db, uid, "PNL"):
+                skipped.append(uid[:8] + " (module off)"); continue
             md = _market_date(db, uid)
             if md is not None and R.stored_rows(db, uid, md)[0]:
                 skipped.append(uid[:8]); continue          # already persisted for this market date

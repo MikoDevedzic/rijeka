@@ -13,15 +13,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState } from 'react'
+import { useModulesStore } from '../../store/useModulesStore'
 
 const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CAPITAL','CURVE SCENARIO','◆ CONFIRM']
+const TAB_MODULE = { 'XVA': 'XVA', 'CAPITAL': 'CAPITAL', '◆ CONFIRM': 'CHAIN_CONFIRM' }
 
 // ── TabBar ─────────────────────────────────────────────────────────────────
 
 export function TabBar({ active = 'TRADE', onTab = () => {} }) {
+  const modules = useModulesStore(s => s.modules)
+  const tabs = TABS.filter(t => !TAB_MODULE[t] || modules[TAB_MODULE[t]] !== false)
   return (
     <div className="tbw-tabbar">
-      {TABS.map(t => (
+      {tabs.map(t => (
         <button key={t} className={`tbw-tab ${t === active ? 'is-active' : ''}`}
                 onClick={() => onTab(t)}>{t}</button>
       ))}

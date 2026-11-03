@@ -140,8 +140,11 @@ def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Hea
     from api.routes.pnl import _as_user
     users = [str(r.user_id) for r in db.execute(text("SELECT DISTINCT user_id FROM trades WHERE status IN ('PENDING','CONFIRMED','LIVE')")).all()]
     done, failed, skipped = [], [], []
+    import modules as M
     for uid in users:
         try:
+            if not M.is_on(db, uid, "COUNTERPARTY_CREDIT"):
+                skipped.append(uid[:8] + " (module off)"); continue
             md = _market_date(db, uid)
             latest = R.latest_stored(db, uid)
             if md is not None and latest and latest.get("date") == md.isoformat():
