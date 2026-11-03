@@ -177,6 +177,16 @@ tree, the Swagger page live but unlinked, `frontend/README.md` is Vite boilerpla
   without the trade on the same paths; options included), the stand-alone forward XVA on the pair's own
   surface, Excel replications of the FX and digital-asset forward XVA (50 checks each, all PASS); a
   new-version bar so an open tab learns of a deploy.
+- **Batch D shipped 3 November 2026** (PRs 69 and 70, live at 16ea9e5 with six checks green on main): a
+  staging layer that touches nothing in production (`backend/stack/`: a local PostgreSQL with the auth
+  stub, the migration runner with its ledger, two seeded users in two firms, ES256 tokens from an opt-in
+  JWKS file), 59 integration tests against it in a CI job of their own, a one-command self-host
+  (`docker-compose.yml`: db, migrate, GoTrue, api, nginx; smoke-tested in CI), a worker tier for the runs
+  a person starts (`jobs` queue with SKIP LOCKED, heartbeat, `rijeka-worker` in `render.yaml`), and a
+  confirm that answers 202 after 25 s and reconciles the anchor from the scheduler. Pending on Miko:
+  Render Blueprint sync for the worker, then `2026-11-03_jobs.sql` and
+  `2026-11-03_profiles_role_check.sql`; until the first is applied the routes run in-process as before
+  and `/api/ops/health` says so.
 
 ## The plan to 90+
 
