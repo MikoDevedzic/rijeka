@@ -1,0 +1,17 @@
+# Build context for frontend/Dockerfile is the repository root; keep it small.
+**/node_modules/
+**/.venv/
+**/__pycache__/
+**/dist/
+.git/
+netlify_drop/
+_docs/
+_marketing/
+_scratch/
+chain/out/
+chain/cache/
+chain/lib/
+backend/stack/.local/
+.env
+.env.*
+!.env.selfhost.example

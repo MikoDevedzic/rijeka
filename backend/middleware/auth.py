@@ -8,6 +8,8 @@ There is no shared-secret (HS256) path: a shared secret is one value that, once 
 mints a token for any user, and the legacy secret for this project was committed to the
 public repository in March 2026 (commit 3025de4). SUPABASE_JWT_SECRET is not read.
 The JWKS is cached and refetched once on a key id the cache does not know (rotation).
+RIJEKA_JWKS_FILE (opt-in; the local stack and CI, never render.yaml) reads the key set from a
+JSON file instead: backend/stack/keys.py writes it and stack/token.py signs with its private half.
 
 Roles: the token's user_metadata.role is written by the client at sign-up and can be
 rewritten by the client, so it is not trusted on its own. After verification the caller's
@@ -17,6 +19,7 @@ route that reads the role reads the database's answer. The claim is used only wh
 profile row exists."""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time
@@ -64,7 +67,29 @@ def forget_role(sub: str) -> None:
     _roles.pop(sub, None)
 
 
+JWKS_FILE = os.environ.get("RIJEKA_JWKS_FILE", "").strip()
+_jwks_file_logged = False
+
+
+def _jwks_from_file() -> Optional[dict]:
+    """The key set from RIJEKA_JWKS_FILE, re-read when the file changes (stack/keys.py --rotate)."""
+    global _jwks_file_logged
+    try:
+        mtime = os.path.getmtime(JWKS_FILE)
+        if _jwks["keys"] is None or _jwks.get("file_mtime") != mtime:
+            with open(JWKS_FILE, encoding="utf-8") as f:
+                _jwks.update(at=time.time(), keys=json.load(f), file_mtime=mtime)
+            if not _jwks_file_logged:
+                log.warning("auth: verifying tokens against the LOCAL key set %s (RIJEKA_JWKS_FILE); not for production", JWKS_FILE)
+                _jwks_file_logged = True
+    except (OSError, ValueError) as e:
+        log.warning("JWKS file %s unreadable: %s", JWKS_FILE, e)
+    return _jwks["keys"]
+
+
 async def _get_jwks(force: bool = False) -> Optional[dict]:
+    if JWKS_FILE:
+        return _jwks_from_file()
     if not force and _jwks["keys"] is not None and time.time() - _jwks["at"] < JWKS_TTL:
         return _jwks["keys"]
     try:

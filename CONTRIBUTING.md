@@ -36,8 +36,16 @@ python -m pytest -q                                                       # ~700
 cd frontend && npm install && npm run dev
 ```
 
-The backend tests that touch a database are skipped unless `.env.test` points at a Supabase project
-of your own. Never point tests at a shared database: the suite writes rows.
+The API-level integration tests need a local Postgres 16 and nothing else:
+
+```bash
+cd backend && ./stack/up.sh && eval "$(./stack/up.sh --env)"       # schema, seed, keys on postgresql:///rijeka_test
+python -m pytest -q -m integration tests/integration                # 59 tests, every product booked and priced
+```
+
+They are skipped without `RIJEKA_STACK_DATABASE_URL`; CI runs them on a `postgres:16` service
+(`backend/stack/README.md`). The older `.env.test` RLS tests still want a Supabase project of your own.
+Never point tests at a shared database: both suites write rows.
 
 ## Review
 

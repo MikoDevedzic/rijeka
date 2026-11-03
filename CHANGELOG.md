@@ -5,6 +5,13 @@ methodology document carries its own version (v1.2). Commits on `main` are the d
 
 ## 0.6.0 · 2 November 2026 (launch candidate)
 
+- Staging layer: a Docker-free local stack (`backend/stack`: the Supabase pieces stubbed on a plain PostgreSQL 16,
+  the schema and the dated migrations applied statement by statement with a ledger, a seed with two users, a firm and
+  fixed market data of 2026-11-02, a local ES256 key set the API reads through `RIJEKA_JWKS_FILE`); 59 API-level
+  integration tests (every product booked with the app's own bodies and priced, tenancy, XVA for every style, the
+  three reports, the methodology workbooks, confirmation with the `NullBackend`, 401/403) on a `postgres:16` service
+  in CI; `docker-compose.yml` with GoTrue for sign-in as the one-command self-host (unexecuted by its author; CI
+  smoke-tests `db` + `migrate`).
 - Worker tier and asynchronous confirm: a `jobs` table and a `python -m worker` Render service take the counterparty-credit RUN NOW and the risk backfill off the API (routes fall back to in-process threads without the table or the worker); `POST /api/chain/confirm` waits 25 s for the receipt, then answers 202 with the transaction and `chain/pending.py` applies the CONFIRMED transition once the registry has it (`chain_reconcile` every scheduler cycle, `POST /api/chain/reconcile/{trade_id}` polled by the trade window); migration `docs/migrations/2026-11-03_jobs.sql`.
 - Vol along the exposure paths: the surface's ATM term structure drives the simulated spots and an option is valued at
   each date at the forward vol for its remaining life and the smile at its moneyness (sticky-delta), in the ticket's

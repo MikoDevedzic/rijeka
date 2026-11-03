@@ -98,6 +98,29 @@ full account, with the failure modes seen so far, is `docs/ops/deploy.md`. Envir
 `docs/ops/environment.md`. Versions: `CHANGELOG.md`; the API reports its version and commit on
 `/api/ops/health`.
 
+## Local stack and tests
+
+`backend/stack/` builds a Rijeka database on a plain PostgreSQL 16 with no Supabase and no Docker:
+`auth_stub.sql` (the `auth` schema, `auth.uid()` and the roles the policies name, the realtime
+publication), `apply.py` (the auth stub, `docs/schema.sql`, `docs/migrations/*.sql` in date order,
+statement by statement with the file and line on any failure, recorded in `stack_migrations` so a
+second run is a no-op), `seed.py` (two users, one firm, their entities and counterparties, and fixed
+market data of 2026-11-02 for the template user: OIS curves, swaption and cap vol surfaces, FX and
+digital-asset spots, vols and funding, an HW1F calibration), `keys.py` (an ES256 keypair and the
+JWKS) and `token.py` (Supabase-shaped tokens signed with it). `./stack/up.sh` is the one command.
+`RIJEKA_JWKS_FILE` makes `middleware/auth.py` read that JWKS instead of fetching the project's.
+
+`backend/tests/integration/` runs the API against it: every product booked through
+`POST /api/book/trade` with the app's own bodies and priced; the blotter, legs and tenancy (the other
+user sees nothing, 404 by id); the XVA routes for rates, forwards and every option style with the
+documented shape, seeds and vol modes; the risk, P&L and credit reports valuing every trade; the
+methodology workbooks; confirmation with the `NullBackend` and verification; 401 and 403. Skipped
+unless `RIJEKA_STACK_DATABASE_URL` is set. CI runs them on a `postgres:16` service (the `integration
+tests` job) and smoke-tests the compose stack's `db` + `migrate` (the `self-host smoke` job).
+
+`docker-compose.yml` is the self-hosted deployment on the same scripts, with GoTrue for sign-in
+(`SELF-HOSTING.md`).
+
 ## What runs where, honestly
 
 - One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account

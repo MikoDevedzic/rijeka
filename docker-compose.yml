@@ -1,0 +1,134 @@
+# Rijeka, self-hosted in one command:
+#
+#   cp .env.selfhost.example .env.selfhost      # then edit: passwords, the public URL, the signing keys
+#   docker compose up --build
+#
+# Services, in start order:
+#   db       PostgreSQL 16 on a named volume
+#   migrate  one-shot: backend/stack/apply.py (the auth stub, docs/schema.sql, docs/migrations in date order,
+#            recorded in stack_migrations so a restart is a no-op) then stack/seed.py --minimal
+#   auth     Supabase Auth (GoTrue) on the same database, schema `auth`, running its own migrations on top of
+#            the stub's auth.users exactly as it does on a Supabase project's pre-created table; signs ES256
+#            tokens with GOTRUE_JWT_KEYS and publishes the JWKS the API verifies against
+#   api      the FastAPI process (uvicorn), verifying tokens against http://web/auth/v1/.well-known/jwks.json
+#   web      the Vite build served by nginx; /auth/v1 proxied to auth, /api to api
+#
+# Not in this file (see SELF-HOSTING.md): PostgREST and Realtime, which the app's messenger and the live blotter
+# use through supabase-js; on-chain anchoring (set the RIJEKA_CHAIN_* variables in .env.selfhost).
+name: rijeka
+
+x-db-url: &db_url postgresql://${POSTGRES_USER:-rijeka}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.selfhost}@db:5432/${POSTGRES_DB:-rijeka}
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rijeka}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.selfhost}
+      POSTGRES_DB: ${POSTGRES_DB:-rijeka}
+    volumes:
+      - rijeka-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rijeka} -d ${POSTGRES_DB:-rijeka}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    build:
+      context: ./backend
+    image: rijeka-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: *db_url
+      RIJEKA_STACK_DATABASE_URL: *db_url
+      SUPABASE_URL: http://web
+    volumes:
+      - ./docs:/docs:ro            # docs/schema.sql and docs/migrations, read by stack/apply.py at /app/../docs
+    command: ["sh", "-c", "python -m stack.apply && python -m stack.seed --minimal"]
+
+  auth:
+    image: supabase/gotrue:v2.170.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env.selfhost
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      PORT: "9999"
+      GOTRUE_DB_DRIVER: postgres
+      DATABASE_URL: postgres://${POSTGRES_USER:-rijeka}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-rijeka}
+      DB_NAMESPACE: auth
+      API_EXTERNAL_URL: ${RIJEKA_PUBLIC_URL:-http://localhost:8080}/auth/v1
+      GOTRUE_SITE_URL: ${RIJEKA_PUBLIC_URL:-http://localhost:8080}
+      GOTRUE_URI_ALLOW_LIST: ${RIJEKA_PUBLIC_URL:-http://localhost:8080}/*
+      GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET:?set GOTRUE_JWT_SECRET in .env.selfhost}
+      GOTRUE_JWT_KEYS: ${GOTRUE_JWT_KEYS:?set GOTRUE_JWT_KEYS in .env.selfhost (python -m stack.keys writes it)}
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_DISABLE_SIGNUP: ${GOTRUE_DISABLE_SIGNUP:-false}
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: ${GOTRUE_MAILER_AUTOCONFIRM:-true}
+      GOTRUE_SMTP_HOST: ${GOTRUE_SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${GOTRUE_SMTP_PORT:-}
+      GOTRUE_SMTP_USER: ${GOTRUE_SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${GOTRUE_SMTP_PASS:-}
+      GOTRUE_SMTP_ADMIN_EMAIL: ${GOTRUE_SMTP_ADMIN_EMAIL:-}
+      GOTRUE_SMTP_SENDER_NAME: ${GOTRUE_SMTP_SENDER_NAME:-Rijeka}
+      GOTRUE_LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9999/health || curl -fsS http://127.0.0.1:9999/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  api:
+    image: rijeka-api
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env.selfhost
+    environment:
+      DATABASE_URL: *db_url
+      # the key set GoTrue publishes, reached through nginx (the Supabase path shape the API expects)
+      SUPABASE_URL: http://web
+      FRONTEND_URL: ${RIJEKA_PUBLIC_URL:-http://localhost:8080}
+      RIJEKA_DEMO_PROVISION: ${RIJEKA_DEMO_PROVISION:-0}
+      RIJEKA_DEMO_MARKET_DATA: ${RIJEKA_DEMO_MARKET_DATA:-0}
+      RIJEKA_SCHEDULER: ${RIJEKA_SCHEDULER:-1}
+      RIJEKA_PUBLIC_URL: ${RIJEKA_PUBLIC_URL:-http://localhost:8080}
+    ports:
+      - "${RIJEKA_API_PORT:-8000}:8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${RIJEKA_PUBLIC_URL:-http://localhost:8080}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-selfhost-anon}
+        VITE_API_URL: ${RIJEKA_API_URL:-http://localhost:8000}
+        VITE_COMMIT: ${RIJEKA_COMMIT:-selfhost}
+    restart: unless-stopped
+    depends_on:
+      - api
+      - auth
+    ports:
+      - "${RIJEKA_WEB_PORT:-8080}:80"
+
+volumes:
+  rijeka-db:

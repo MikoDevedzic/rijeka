@@ -14,6 +14,13 @@ the repository.
 | `SUPABASE_URL` | `middleware/auth.py` | the hosted project | Where the ES256 public keys are fetched to verify tokens. |
 | `FRONTEND_URL` | `main.py` | empty | Allowed CORS origin for the app. |
 
+### Local stack and tests
+
+| Variable | Read in | Default | Purpose |
+|---|---|---|---|
+| `RIJEKA_JWKS_FILE` | `middleware/auth.py` | empty (fetch from `SUPABASE_URL`) | Opt-in: verify tokens against the ES256 key set in this JSON file instead of the project's published keys. `backend/stack/keys.py` writes it; `stack/token.py` signs with its private half. Logged once at first use. The local stack and CI only; never in `render.yaml`. |
+| `RIJEKA_STACK_DATABASE_URL` | `backend/stack/*.py`, `tests/integration/conftest.py` | empty (the integration tests skip) | The disposable Postgres the stack scripts build and the integration tests truncate and run against. The harness refuses a Supabase host. |
+
 ### Hosted demo
 
 | Variable | Read in | Default | Purpose |
