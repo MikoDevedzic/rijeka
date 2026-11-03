@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: backend } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: { python-version: "3.11", cache: pip, cache-dependency-path: backend/requirements*.txt }
       - run: pip install -r requirements.txt -r requirements-dev.txt
@@ -38,7 +38,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: frontend } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with: { node-version: "20", cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci --no-audit --no-fund
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults: { run: { working-directory: chain } }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { submodules: recursive }   # chain/lib/forge-std (pinned in .gitmodules / foundry.lock)
       - uses: foundry-rs/foundry-toolchain@v1
         with: { version: stable }
@@ -86,7 +86,7 @@ jobs:
       RIJEKA_DEMO_MARKET_DATA: "0"
       RIJEKA_CHAIN_DEV_SEED: ci-stack
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with: { python-version: "3.11", cache: pip, cache-dependency-path: backend/requirements*.txt }
       - run: pip install -r requirements.txt -r requirements-dev.txt
@@ -102,7 +102,7 @@ jobs:
     name: self-host smoke
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: compose config
         # the file parses, every variable resolves, the images are named
         run: cp .env.selfhost.example .env.selfhost && docker compose --env-file .env.selfhost config --quiet
