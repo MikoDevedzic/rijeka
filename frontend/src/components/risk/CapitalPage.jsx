@@ -67,7 +67,9 @@ export default function CapitalPage() {
   const wf = cur ? waterfall(cur.steps, cur.columns, metric) : []
   const geo = bars(wf, 1000, 160)
   const mdef = METRICS.find(x => x[1] === metric) || METRICS[0]
-  const grid = '1fr 6rem 9rem 9rem 9rem 7rem 7rem'
+  const grid = 'minmax(16rem,1fr) 5rem 8.5rem 8.5rem 8.5rem 8rem 8rem'
+  const SHORT = { BASELINE: 'BOOKED', ON_CHAIN_CURRENT: 'ON-CHAIN NOW', ON_CHAIN_FORWARD: 'ON-CHAIN FWD' }
+  const delta = (v) => ({ color: v < -0.5 ? 'var(--accent)' : v > 0.5 ? 'var(--red)' : 'var(--text-dim)' })
 
   return (
     <div className="pnl rk-page">
@@ -106,8 +108,8 @@ export default function CapitalPage() {
           <div className="pnl-tree">
             <div className="pnl-tr head" style={{ gridTemplateColumns: grid }}>
               <span className="pnl-tn">COUNTERPARTY · CSA AS BOOKED</span><span className="pnl-tv">TRADES</span>
-              {COLUMNS.map(col => <span key={col} className={`pnl-tv${col === 'BASELINE' ? ' tot' : ''}`} title={COLUMN_DESC[col]}>{COLUMN_LABEL[col]}</span>)}
-              <span className="pnl-tv">Δ CURRENT</span><span className="pnl-tv">Δ FORWARD</span>
+              {COLUMNS.map(col => <span key={col} className={`pnl-tv${col === 'BASELINE' ? ' tot' : ''}`} title={`${COLUMN_LABEL[col]}: ${COLUMN_DESC[col]}`}>{SHORT[col]}</span>)}
+              <span className="pnl-tv" title="on-chain under current rules, less the CSA as booked">Δ NOW</span><span className="pnl-tv" title="on-chain with the forward states, less the CSA as booked">Δ FWD</span>
             </div>
             {rows.map(r => (
               <div key={r.id} className={`pnl-tr d1 trade${cur && cur.counterparty_id === r.id ? ' on' : ''}`} style={{ gridTemplateColumns: grid }} onClick={() => !r.empty && setSel(r.id)}>
@@ -117,19 +119,19 @@ export default function CapitalPage() {
                   <span className="pnl-tv tot">{fmt(r.values.BASELINE)}</span>
                   <span className="pnl-tv">{fmt(r.values.ON_CHAIN_CURRENT)}</span>
                   <span className="pnl-tv">{fmt(r.values.ON_CHAIN_FORWARD)}</span>
-                  <span className={`pnl-tv ${r.change.ON_CHAIN_CURRENT < -0.5 ? 'pos' : r.change.ON_CHAIN_CURRENT > 0.5 ? 'neg' : ''}`}>{fmtSigned(r.change.ON_CHAIN_CURRENT)}</span>
-                  <span className={`pnl-tv ${r.change.ON_CHAIN_FORWARD < -0.5 ? 'pos' : r.change.ON_CHAIN_FORWARD > 0.5 ? 'neg' : ''}`}>{fmtSigned(r.change.ON_CHAIN_FORWARD)}</span></>}
+                  <span className="pnl-tv" style={delta(r.change.ON_CHAIN_CURRENT)}>{fmtSigned(r.change.ON_CHAIN_CURRENT)}</span>
+                  <span className="pnl-tv" style={delta(r.change.ON_CHAIN_FORWARD)}>{fmtSigned(r.change.ON_CHAIN_FORWARD)}</span></>}
               </div>
             ))}
             {tot && (
               <div className="pnl-tr d0" style={{ gridTemplateColumns: grid, borderTop: '1px solid var(--border)' }}>
-                <span className="pnl-tn"><b>BOOK</b><small>quote vs booked: {COLUMNS.slice(1).map(c => `${COLUMN_LABEL[c].split(' · ')[1]} ${fmtBp(rep.quote?.[c]?.running_bp)} running / ${fmtBp(rep.quote?.[c]?.upfront_bp)} upfront`).join(' · ')}</small></span>
+                <span className="pnl-tn"><b>BOOK</b><small>quote vs booked · now {fmtBp(rep.quote?.ON_CHAIN_CURRENT?.running_bp)} running, {fmtBp(rep.quote?.ON_CHAIN_CURRENT?.upfront_bp)} upfront · forward {fmtBp(rep.quote?.ON_CHAIN_FORWARD?.running_bp)} running, {fmtBp(rep.quote?.ON_CHAIN_FORWARD?.upfront_bp)} upfront</small></span>
                 <span className="pnl-tv" />
                 <span className="pnl-tv tot"><b>{fmt(tot.values.BASELINE)}</b></span>
                 <span className="pnl-tv"><b>{fmt(tot.values.ON_CHAIN_CURRENT)}</b></span>
                 <span className="pnl-tv"><b>{fmt(tot.values.ON_CHAIN_FORWARD)}</b></span>
-                <span className="pnl-tv"><b>{fmtSigned(tot.change.ON_CHAIN_CURRENT)}</b></span>
-                <span className="pnl-tv"><b>{fmtSigned(tot.change.ON_CHAIN_FORWARD)}</b></span>
+                <span className="pnl-tv" style={delta(tot.change.ON_CHAIN_CURRENT)}><b>{fmtSigned(tot.change.ON_CHAIN_CURRENT)}</b></span>
+                <span className="pnl-tv" style={delta(tot.change.ON_CHAIN_FORWARD)}><b>{fmtSigned(tot.change.ON_CHAIN_FORWARD)}</b></span>
               </div>
             )}
             {!rows.length && <div className="pnl-empty">No live trades with a counterparty.</div>}
@@ -157,7 +159,7 @@ export default function CapitalPage() {
                 <div key={s.key} className="pnl-tr d1" style={{ gridTemplateColumns: '14rem 6rem 9rem 1fr' }}>
                   <span className="pnl-tn" style={{ paddingLeft: 8 }}>{s.label}</span>
                   <span className="pnl-tv" style={{ color: COLOR[s.state] }}>{s.state}</span>
-                  <span className={`pnl-tv ${s.delta?.[metric] < -0.5 ? 'pos' : s.delta?.[metric] > 0.5 ? 'neg' : ''}`}>{fmtSigned(s.delta?.[metric])}</span>
+                  <span className="pnl-tv" style={delta(s.delta?.[metric] ?? 0)}>{fmtSigned(s.delta?.[metric])}</span>
                   <span className="pnl-tn" style={{ whiteSpace: 'normal', fontSize: 11, color: 'var(--text-dim)' }}>{s.source}{s.csa ? ` · after: ${s.csa.collateralised ? `VM, thr ${fmt(s.csa.threshold)}, MTA ${fmt(s.csa.mta)}, MPoR ${s.csa.mpor_days}bd` : 'no VM'}${s.csa.im_exchanged ? `, IM ${Math.round(100 * s.csa.im_eligible_fraction)} % eligible` : ''}, received ${Object.keys(s.csa.received).join('/')}, recognised ${Math.round(100 * s.csa.recognised_fraction)} %${s.csa.pickup_bp ? `, pickup ${s.csa.pickup_bp} bp` : ''}` : ''}</span>
                 </div>
               ))}

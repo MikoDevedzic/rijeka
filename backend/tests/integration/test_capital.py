@@ -89,6 +89,12 @@ def test_counterparty_capital_attributes_round_trip(client, auth_a, ids):
     assert j["counterparty_type"] == "BANK" and j["rating_bucket"] == "A" and j["eligible_collateral"] == ["CASH", "GOVT", "STABLECOIN"]
     lst = client.get("/api/counterparties/", headers=auth_a).json()
     assert next(c for c in lst if c["id"] == cp)["posted_composition"] == {"GOVT": 1.0}
+    # the CSA terms themselves are editable through the same route (the page's EDIT TERMS)
+    r = client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 2.5, "csa_mta_k": 250, "im_model": "SIMM"}, headers=auth_a)
+    assert r.status_code == 200 and r.json()["csa_threshold_m"] == 2.5 and r.json()["csa_mta_k"] == 250
+    r = client.put(f"/api/counterparties/{cp}", json={"csa_type": "SOMETHING"}, headers=auth_a)
+    assert r.status_code == 422
+    client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 0, "csa_mta_k": 500}, headers=auth_a)
     r = client.put(f"/api/counterparties/{cp}", json={"rating_bucket": "AAA"}, headers=auth_a)
     assert r.status_code == 422
     r = client.put(f"/api/counterparties/{cp}", json={"eligible_collateral": ["GOLD"]}, headers=auth_a)

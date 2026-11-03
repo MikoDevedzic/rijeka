@@ -3,6 +3,14 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.7.2 · 3 November 2026
+
+- Configurations → Counterparties: EDIT TERMS on every row (ISDA, CSA type, currency, threshold, MTA, discount curve,
+  IM model, type, rating, CVA sector, eligible collateral, enforceability, UMR scope, margin frequency, disputes)
+  through `PUT /api/counterparties/{id}`, which now accepts the CSA terms and validates them; the row shows the
+  terms the credit report and Risk → CAPITAL read. Risk → CAPITAL: shorter column headers that fit, a reduction
+  in green and an increase in red throughout.
+
 ## 0.7.1 · 3 November 2026
 
 - Risk → CAPITAL: the book under collateral regimes (`GET/POST /api/capital/portfolio`, `ccr/capital_report.py`, the

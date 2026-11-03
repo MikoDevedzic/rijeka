@@ -147,7 +147,7 @@ market-risk capital is not a function of any step and is not computed here; the 
 stock are separate ledgers. The forward states are shown in their own column and never summed into the
 current-rules one.
 
-The counterparty record carries `margin_frequency_days` and `mpor_disputed`
+Where the terms are set: Configurations → Counterparties, on creation and through EDIT TERMS on any row (`PUT /api/counterparties/{id}`): ISDA, CSA type, currency, threshold, MTA, discount curve, IM model, the capital attributes and the margin terms. The counterparty record carries `margin_frequency_days` and `mpor_disputed`
 (`docs/migrations/2026-11-04_counterparty_margin_terms.sql`); `ccr.exposure.csa_from_counterparty` reads them,
 so the credit report's MPoR follows the record too (null = daily, undisputed: today's behaviour).
 

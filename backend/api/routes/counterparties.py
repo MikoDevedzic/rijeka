@@ -48,9 +48,14 @@ class CounterpartyCreate(CapitalAttributes):
 class CounterpartyUpdate(CapitalAttributes):
     name: Optional[str] = None
     is_active: Optional[bool] = None
+    isda_agreement: Optional[str] = None
     csa_type: Optional[str] = None
+    csa_currency: Optional[str] = None
     csa_threshold_m: Optional[float] = None
+    csa_mta_k: Optional[float] = None
     discount_curve_id: Optional[str] = None
+    im_model: Optional[str] = None
+    legal_entity_id: Optional[str] = None
 
 
 _CAPITAL_PRESENT: dict[str, bool] = {}
@@ -193,9 +198,18 @@ def update_counterparty(
         raise HTTPException(status_code=404, detail="Counterparty not found")
     patch = body.dict(exclude_none=True)
     validate_capital(patch)
+    if patch.get("csa_type") is not None and str(patch["csa_type"]).upper() not in ("VM_ONLY", "VM_IM", "NO_CSA"):
+        raise HTTPException(status_code=422, detail="csa_type must be VM_ONLY, VM_IM or NO_CSA")
+    if patch.get("legal_entity_id"):
+        try:
+            patch["legal_entity_id"] = uuid.UUID(str(patch["legal_entity_id"]))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="legal_entity_id must be a UUID")
     cap = {k: patch.pop(k) for k in CAPITAL_FIELDS if k in patch}
     for k, v in patch.items():
         setattr(cp, k, v)
+    if str(getattr(cp, "csa_type", "") or "").upper() == "NO_CSA":
+        cp.csa_threshold_m = None; cp.csa_mta_k = None
     write_capital(db, cp.id, cap)
     db.commit()
     return serialize(cp, read_capital(db, [cp.id]).get(str(cp.id)))

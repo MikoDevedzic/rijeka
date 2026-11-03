@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useChatStore } from '../../store/useChatStore'
+import { getSessionMaybe } from '../../lib/session'
+
+const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
 const CSA_DISCOUNT_MAP = {
   USD: 'USD_SOFR',
@@ -104,7 +107,7 @@ function Cell({ children, dim }) {
   )
 }
 
-const COLS = '1fr 140px 80px 52px 120px 65px 160px'
+const COLS = '1fr 130px 80px 48px 110px 1fr 200px'
 
 export default function Counterparties() {
   const [chatErr,      setChatErr]      = useState(null)
@@ -117,6 +120,7 @@ export default function Counterparties() {
   const [saving,       setSaving]       = useState(false)
   const [editId,       setEditId]       = useState(null)
   const [editName,     setEditName]     = useState('')
+  const [editCp,       setEditCp]       = useState(null)      // the counterparty whose terms the form edits (null = a new one)
   const editRef = useRef(null)
 
   useEffect(function() { load() }, [])
@@ -187,6 +191,57 @@ export default function Counterparties() {
     setSaving(false)
   }
 
+  function formFrom(cp) {
+    return Object.assign({}, EMPTY, {
+      legal_entity_id: cp.legal_entity_id || '', name: cp.name || '', isda_agreement: cp.isda_agreement || '',
+      csa_type: cp.csa_type || 'NO_CSA', csa_currency: cp.csa_currency || 'USD',
+      csa_threshold_m: cp.csa_threshold_m != null ? String(cp.csa_threshold_m) : '', csa_mta_k: cp.csa_mta_k != null ? String(cp.csa_mta_k) : '',
+      discount_curve_id: cp.discount_curve_id || 'USD_SOFR', im_model: cp.im_model || 'SIMM',
+      counterparty_type: cp.counterparty_type || '', rating_bucket: cp.rating_bucket || '', cva_sector: cp.cva_sector || '',
+      umr_in_scope: !!cp.umr_in_scope, eligible_collateral: cp.eligible_collateral || ['CASH','GOVT'],
+      netting_enforceable: cp.netting_enforceable !== false,
+      margin_frequency_days: cp.margin_frequency_days ? String(cp.margin_frequency_days) : '', mpor_disputed: !!cp.mpor_disputed
+    })
+  }
+
+  function startEdit(cp) {
+    setEditCp(cp)
+    setForm(formFrom(cp))
+    setShowAdd(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  async function saveEdit() {
+    setSaving(true)
+    var hasCSA = form.csa_type !== 'NO_CSA'
+    var body = {
+      name: form.name.trim().toUpperCase(),
+      isda_agreement: form.isda_agreement.trim() || null,
+      csa_type: form.csa_type,
+      csa_currency: hasCSA ? form.csa_currency : null,
+      csa_threshold_m: hasCSA && form.csa_threshold_m !== '' ? parseFloat(form.csa_threshold_m) : (hasCSA ? null : null),
+      csa_mta_k: hasCSA && form.csa_mta_k !== '' ? parseFloat(form.csa_mta_k) : null,
+      discount_curve_id: hasCSA ? (form.discount_curve_id || null) : null,
+      im_model: form.im_model,
+      // the capital attributes travel explicitly so a cleared field is cleared, not kept
+      counterparty_type: form.counterparty_type || null, rating_bucket: form.rating_bucket || null, cva_sector: form.cva_sector || null,
+      umr_in_scope: !!form.umr_in_scope, eligible_collateral: form.eligible_collateral, netting_enforceable: !!form.netting_enforceable,
+      margin_frequency_days: form.margin_frequency_days ? parseInt(form.margin_frequency_days, 10) : 1, mpor_disputed: !!form.mpor_disputed
+    }
+    try {
+      var session = await getSessionMaybe()
+      var r = await fetch(API + '/api/counterparties/' + editCp.id, { method: 'PUT',
+        headers: { Authorization: 'Bearer ' + (session ? session.access_token : ''), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      var j = await r.json().catch(function() { return {} })
+      if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'save failed (' + r.status + ')')
+      setShowAdd(false); setEditCp(null); setForm(EMPTY)
+      await load()
+    } catch (e) {
+      alert('Save failed: ' + e.message)
+    }
+    setSaving(false)
+  }
+
   async function commitRename(id) {
     var n = editName.trim().toUpperCase()
     setEditId(null)
@@ -251,6 +306,7 @@ export default function Counterparties() {
           )}
           <Btn onClick={function() {
             setShowAdd(function(s) { return !s })
+            setEditCp(null)
             setForm(EMPTY)
           }}>
             {showAdd ? '✕ CANCEL' : '+ ADD COUNTERPARTY'}
@@ -266,7 +322,7 @@ export default function Counterparties() {
         }}>
           <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
               letterSpacing:'0.08em', marginBottom:'16px' }}>
-            NEW COUNTERPARTY
+            {editCp ? 'EDIT TERMS · ' + editCp.name : 'NEW COUNTERPARTY'}
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px' }}>
 
@@ -417,9 +473,12 @@ export default function Counterparties() {
           )}
 
           <div style={{ marginTop:'16px' }}>
-            <Btn size='lg' onClick={save} disabled={saving}>
-              {saving ? 'SAVING...' : 'SAVE COUNTERPARTY'}
+            <Btn size='lg' onClick={editCp ? saveEdit : save} disabled={saving}>
+              {saving ? 'SAVING...' : editCp ? 'SAVE TERMS' : 'SAVE COUNTERPARTY'}
             </Btn>
+            {editCp && <span style={{ marginLeft:'12px', fontSize:'11px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+              the CSA terms feed the credit report and Risk → CAPITAL; the capital attributes need the 4 November migration applied
+            </span>}
           </div>
         </div>
       )}
@@ -442,7 +501,7 @@ export default function Counterparties() {
           <div style={{ display:'grid', gridTemplateColumns:COLS,
               padding:'8px 12px', gap:'8px', background:'var(--panel-2)',
               borderBottom:'1px solid var(--panel-3)' }}>
-            {['NAME','LEGAL ENTITY','CSA TYPE','CCY','DISCOUNT CURVE','IM MODEL','ACTIONS']
+            {['NAME','LEGAL ENTITY','CSA TYPE','CCY','DISCOUNT CURVE','IM · TYPE · TERMS','ACTIONS']
               .map(function(h) {
                 return (
                   <div key={h} style={{ fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
@@ -498,9 +557,12 @@ export default function Counterparties() {
 
                 <Cell dim>{cp.csa_currency}</Cell>
                 <Cell dim>{cp.discount_curve_id}</Cell>
-                <Cell dim>{cp.im_model}{cp.counterparty_type ? ' · ' + cp.counterparty_type + (cp.rating_bucket ? ' ' + cp.rating_bucket : '') : ''}</Cell>
+                <Cell dim>{cp.im_model}{cp.counterparty_type ? ' · ' + cp.counterparty_type + (cp.rating_bucket ? ' ' + cp.rating_bucket : '') : ''}{cp.csa_type && cp.csa_type !== 'NO_CSA' ? ' · thr ' + (cp.csa_threshold_m != null ? cp.csa_threshold_m + 'm' : '0') + ' · mta ' + (cp.csa_mta_k != null ? cp.csa_mta_k + 'k' : '0') + (cp.margin_frequency_days > 1 ? ' · every ' + cp.margin_frequency_days + 'bd' : '') + (cp.mpor_disputed ? ' · disputed' : '') : ''}</Cell>
 
                 <div style={{ display:'flex', gap:'4px' }}>
+                  {cp.is_active && (
+                    <Btn color='var(--text-dim)' onClick={function() { startEdit(cp) }}>EDIT</Btn>
+                  )}
                   {cp.is_active && cp.legal_entity?.lei && (
                     <Btn color='var(--accent)' onClick={function() { openChat(cp) }}>CHAT</Btn>
                   )}
