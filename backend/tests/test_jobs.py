@@ -189,7 +189,7 @@ def test_idle_backoff_doubles_to_ten_seconds_and_resets_after_a_job():
 
 
 def test_kinds_come_from_the_environment_and_unknown_ones_are_dropped(monkeypatch):
-    assert W.kinds() == ["ccr_run", "risk_backfill", "capital_run"]
+    assert W.kinds() == ["ccr_run", "risk_backfill", "capital_run", "ipv_run"]
     monkeypatch.setenv("RIJEKA_WORKER_KINDS", "risk_backfill, nope")
     assert W.kinds() == ["risk_backfill"]
 

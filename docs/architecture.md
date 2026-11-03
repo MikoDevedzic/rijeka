@@ -71,6 +71,15 @@ public tools (IRS pricer, XVA simulator and waterfall, SABR surface, Bermudan tr
 the verifier, terms and privacy. It reads the API's public endpoints (pulse, calendar, the register of
 anchored confirmations).
 
+## Independent price verification
+
+`backend/ipv` (inputs, tolerances, ladder, run, store) and `/api/ipv/*`; `docs/ipv.md`. The inputs list is derived
+from what the trades in scope read; each input is laddered per pillar through the production pricers; an independent
+mark gives each pillar a gap against the firm's tolerance; overrides are market-data events with their first-order
+P&L, the full revaluation on apply gives the second order; the gate and the controller's sign-off write the official
+P&L (`ipv_runs`, `pnl_signoffs` role IPV), which the trading P&L shows beside the flash. Tables in
+`docs/migrations/2026-11-05_ipv.sql`; the run is a worker job (`ipv_run`).
+
 ## Module switches
 
 A firm runs the modules it needs (`backend/modules.py`; `firms.modules`, `firms.modules_preset`, `module_events`;

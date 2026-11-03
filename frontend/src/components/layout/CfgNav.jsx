@@ -158,6 +158,7 @@ const NAV = [
         children: [
           { label: 'BOOKING DEFAULTS',   path: '/configurations/pnl/defaults',              live: true  },
           { label: 'P&L CONVENTIONS',    path: '/configurations/pnl/conventions',           live: true  },
+          { label: 'IPV TOLERANCES',     path: '/configurations/pnl/ipv-tolerances',        live: true  },
         ],
       },
     ],

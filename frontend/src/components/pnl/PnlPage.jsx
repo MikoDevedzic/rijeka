@@ -12,7 +12,9 @@ import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import { productLabel } from '../../lib/labels'
 import { useAuthStore } from '../../store/useAuthStore'
+import PnlNav from './PnlNav'
 import './PnlPage.css'
+import '../risk/RiskPage.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const BUCKET_LABEL = { CARRY: 'CARRY', CASH: 'CASH SETTLED', RATES: 'RATES', FX: 'FX · SPOT & POINTS', VOL: 'VOLATILITY', RESIDUAL: 'RESIDUAL', AMEND: 'AMENDMENTS', NEW: 'NEW TRADES', UNWIND: 'UNWINDS' }
@@ -76,8 +78,14 @@ export default function PnlPage() {
         <button className={`rk-seg${view === 'book' ? ' on' : ''}`} onClick={() => setView('book')}>MY BOOK</button>
         <button className={`rk-seg${view === 'firm' ? ' on' : ''}`} onClick={() => setView('firm')} title="Every book in the firm, with sign-off state (management, controller, CFO, admin)">MANAGEMENT</button>
       </nav>
+      <PnlNav />
       <div className="pnl-bar">
-        <div className="pnl-title">P&amp;L · ATTRIBUTION <span className="pnl-sub">{rep?.reporting_ccy || 'USD'} · {rep?.prev_date ? <>vs {fmtD(rep.prev_date)}</> : 'first mark'}</span></div>
+        <div className="pnl-title">P&amp;L · ATTRIBUTION <span className="pnl-sub">{rep?.reporting_ccy || 'USD'} · {rep?.prev_date ? <>vs {fmtD(rep.prev_date)}</> : 'first mark'}</span>
+          {rep?.official && <span style={{ marginLeft: 12, fontFamily: 'var(--mono)', fontSize: 11 }}>
+            <span className="pnl-chip">FLASH {sgn(rep.official.flash_usd)}</span>{' '}
+            <span className={`pnl-chip ${rep.official.status === 'SIGNED' ? 'ok' : 'amber'}`} title={`IPV ${sgn(rep.official.first_order_usd)} first order, ${rep.official.second_order_usd != null ? sgn(rep.official.second_order_usd) : '—'} second order; XVA ${sgn(rep.official.xva_usd)}; ${rep.official.inputs} inputs`}>OFFICIAL {sgn(rep.official.official_usd)}{rep.official.status === 'SIGNED' ? '' : ' · UNSIGNED'}</span>
+          </span>}
+        </div>
         <div className="pnl-ctl">
           <label>MARKET DATE
             <select value={date || ''} onChange={e => load(e.target.value)} disabled={busy}>

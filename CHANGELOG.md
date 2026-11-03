@@ -3,6 +3,25 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.8.0 · 3 November 2026
+
+- Independent price verification (P&L → IPV, `backend/ipv`, `/api/ipv/*`): the inputs the book is priced on are
+  derived from the trades in scope (every curve, funding level, vol surface and spot they read), each laddered per
+  pillar through the production pricers (one quote bumped, the dependent trades repriced); a curve verifies by
+  pillar, a swaption surface by expiry × tenor point, an FX surface by tenor and quote type, a spot as one cell;
+  an independent mark (a controller's upload, or a self-host's second feed; `ipv_independent_marks`) gives each
+  pillar a gap and a status against the firm's tolerance rules (`ipv_tolerances`, most specific wins, defaults
+  otherwise); an override is a market-data event with author and reason (`ipv_overrides`) and carries its
+  first-order impact (sensitivity × shift); APPLY reprices the book on the overrides and shows the residual as
+  second order; inputs are VERIFIED, OVERRIDDEN, APPROVED, WAIVED (automatically when immaterial at tolerance,
+  or by decision with a reason) or PENDING; the gate (no pending input, no unvalued trade) then the controller's
+  sign-off writes the official P&L (`ipv_runs`, a `pnl_signoffs` row with role IPV), shown as FLASH / OFFICIAL on
+  the trading P&L. Scope GLOBAL / DESK / BOOK. The run goes to the worker (`ipv_run`) or a thread; `live=1` for
+  small books. Migration `docs/migrations/2026-11-05_ipv.sql`.
+- P&L gains its navigation: TRADING P&L | XVA RESERVES (the reserve book: levels per counterparty and component,
+  the day's change, netted against memo per the firm's policy) | IPV; Configurations → P&L & CONTROL → IPV
+  TOLERANCES. The module switches IPV and XVA RESERVES are live.
+
 ## 0.7.3 · 3 November 2026
 
 - Module switches per firm (Configurations → Operations → MODULES, admins; `GET/PUT /api/modules`,

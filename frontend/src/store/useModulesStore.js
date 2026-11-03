@@ -30,6 +30,8 @@ export const useModulesStore = create((set, get) => ({
 // The modules a route needs; a page whose module is off sends the visitor home.
 export const ROUTE_MODULES = {
   '/pnl': ['PNL'],
+  '/pnl/xva': ['PNL', 'XVA_RESERVES'],
+  '/pnl/ipv': ['PNL', 'IPV'],
   '/risk': ['MARKET_RISK'],
   '/risk/ccr': ['COUNTERPARTY_CREDIT'],
   '/risk/capital': ['CAPITAL'],

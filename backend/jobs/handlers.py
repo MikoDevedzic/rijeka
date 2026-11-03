@@ -4,6 +4,7 @@ callable that merges a progress patch into the row; it returns the result stored
     ccr_run        the counterparty-credit run for one account (api/routes/ccr.py POST /run)
     risk_backfill  public-source risk-factor history for the template account (POST /api/risk/history/backfill)
     capital_run    the book's capital under collateral regimes (POST /api/capital/portfolio)
+    ipv_run        the independent price verification run (POST /api/ipv/run)
 
 Neither sends a chain transaction: the relayer nonce belongs to the API process only."""
 from __future__ import annotations
@@ -50,4 +51,14 @@ def capital_run(db, job: dict, report: Callable[[dict], None]) -> dict[str, Any]
     return CR.report(db, p["ctx"], progress=prog, hurdle=float(p.get("hurdle", 0.12)), yield_bp=p.get("yield_bp"), n_paths=p.get("n_paths"))
 
 
-HANDLERS: dict[str, Callable[..., Any]] = {"ccr_run": ccr_run, "risk_backfill": risk_backfill, "capital_run": capital_run}
+def ipv_run(db, job: dict, report: Callable[[dict], None]) -> dict[str, Any]:
+    """The IPV run for one account, date and scope (ipv/run.py); the result is stored on ipv_runs."""
+    from datetime import date as _date
+    from ipv import run as RUN
+    p = job.get("params") or {}
+    prog = Progress(report)
+    r = RUN.build_and_store(db, p["ctx"], _date.fromisoformat(p["date"]), p.get("scope"), progress=prog)
+    return {"date": r["date"], "scope_key": r["scope_key"], "inputs": len(r["inputs"]), "gate": r["gate"], "seconds": r["seconds"]}
+
+
+HANDLERS: dict[str, Callable[..., Any]] = {"ccr_run": ccr_run, "risk_backfill": risk_backfill, "capital_run": capital_run, "ipv_run": ipv_run}

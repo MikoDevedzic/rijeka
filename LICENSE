@@ -6,6 +6,7 @@ meant to be adopted, embedded and forked freely, with an explicit patent grant:
     backend/pricing/        curve bootstrap, pricing, XVA, SIMM, SA-CCR
     backend/risk/           key-rate ladder, VaR, stress, backtesting, limits, vol history
     backend/ccr/            counterparty-credit exposure paths and calibration
+    backend/ipv/            independent price verification: inputs, pillar ladder, tolerances, the run
     backend/pnl/            marks, P&L attribution, XVA P&L
     backend/chain/          canonical trade record, EIP-712 signing, attestation,
                             key resolution, lifecycle guard

@@ -102,7 +102,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.11
       - key: RIJEKA_WORKER_KINDS
-        value: ccr_run,risk_backfill,capital_run
+        value: ccr_run,risk_backfill,capital_run,ipv_run
       - key: RIJEKA_LOG_LEVEL
         value: INFO
       - key: RIJEKA_SCHEDULER

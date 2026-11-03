@@ -23,8 +23,8 @@ MODULES: list[dict[str, Any]] = [
     {"key": "PROMETHEUS", "label": "Prometheus", "effects": "the read-only assistant and the book brief"},
     {"key": "NEWS", "label": "News room", "effects": "the news feed and its summaries"},
     {"key": "COLLATERAL", "label": "Collateral", "effects": "agreements, margin, inventory, regimes", "planned": True},
-    {"key": "XVA_RESERVES", "label": "XVA reserves", "effects": "the reserve book under P&L: levels, explain, sign-off", "planned": True},
-    {"key": "IPV", "label": "Independent price verification", "effects": "the IPV tab under P&L and the flash → official gate", "planned": True},
+    {"key": "XVA_RESERVES", "label": "XVA reserves", "effects": "the reserve book under P&L: levels per counterparty and component, day on day"},
+    {"key": "IPV", "label": "Independent price verification", "effects": "the IPV tab under P&L and the flash → official gate"},
 ]
 KEYS = tuple(m["key"] for m in MODULES)
 PLANNED = tuple(m["key"] for m in MODULES if m.get("planned"))

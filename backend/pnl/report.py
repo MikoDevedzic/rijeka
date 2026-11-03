@@ -69,9 +69,10 @@ def _d(x) -> Optional[date]:
     return x.date() if isinstance(x, datetime) else x
 
 
-def trade_rows(db: Session, user: dict, d0: Optional[date], d1: date) -> tuple[list[dict], dict]:
+def trade_rows(db: Session, user: dict, d0: Optional[date], d1: date, overrides: Optional[dict] = None) -> tuple[list[dict], dict]:
+    """overrides: {curve_id: quotes} laid over today's market (the IPV revaluation on the controller's values)."""
     uid = user["sub"]
-    m1 = Market(db, uid, d1)
+    m1 = Market(db, uid, d1, overrides=overrides)
     m0 = Market(db, uid, d0, cache=m1._cache) if d0 else None
     valuer = Valuer(db, user)
     trades = db.query(Trade).filter(Trade.user_id == uid).all()
@@ -246,7 +247,7 @@ def stored_rows(db: Session, uid: str, d1: date) -> tuple[list[dict], dict]:
                                    "prev_date": recs[0].prev_date.isoformat() if recs[0].prev_date else None}
 
 
-def report(db: Session, user: dict, d1: Optional[date] = None, prefer_stored: bool = False) -> dict:
+def report(db: Session, user: dict, d1: Optional[date] = None, prefer_stored: bool = False, overrides: Optional[dict] = None) -> dict:
     """prefer_stored: open the persisted day when there is one (instant); otherwise, and always when
     False, value every trade on the as-of markets (the live explain)."""
     uid = user["sub"]
@@ -262,7 +263,7 @@ def report(db: Session, user: dict, d1: Optional[date] = None, prefer_stored: bo
         if rows and meta.get("prev_date"):
             d0 = date.fromisoformat(meta["prev_date"])
     if not rows:
-        rows, meta = trade_rows(db, user, d0, d1)
+        rows, meta = trade_rows(db, user, d0, d1, overrides=overrides)
         meta["from_store"] = False
     tree = rollup(rows)
     hist = history(db, uid, d1)
@@ -282,8 +283,17 @@ def report(db: Session, user: dict, d1: Optional[date] = None, prefer_stored: bo
         totals["xva_dod"] = xva["day"]["netted"] if xva.get("day") else None
     except Exception as e:              # noqa: BLE001 — the clean P&L stands on its own
         log.info("pnl: xva section unavailable: %s", e); db.rollback()
+    official = None
+    try:
+        from ipv import store as IPV
+        srun = IPV.get_run(db, uid, d1, "GLOBAL")
+        if srun:
+            official = {"status": srun["status"], "flash_usd": srun["flash_usd"], "first_order_usd": srun["first_order_usd"], "second_order_usd": srun["second_order_usd"],
+                        "xva_usd": srun["xva_usd"], "official_usd": srun["official_usd"], "signed_at": srun["signed_at"], "signed_name": srun["signed_name"], "inputs": len(srun["inputs"])}
+    except Exception as e:              # noqa: BLE001
+        log.debug("pnl: ipv run unavailable: %s", e); db.rollback()
     return {"date": d1.isoformat(), "prev_date": d0.isoformat() if d0 else None, "dates": [d.isoformat() for d in dates[-40:]],
-            "reporting_ccy": REPORTING_CCY, "convention": CONVENTION, "rows": rows, "tree": tree, "buckets": buckets(rows), "totals": totals, "xva": xva,
+            "reporting_ccy": REPORTING_CCY, "convention": CONVENTION, "rows": rows, "tree": tree, "buckets": buckets(rows), "totals": totals, "xva": xva, "official": official,
             "signoffs": signs, "status": status_of(signs), "persisted": tables_present(db) and _persisted(db, uid, d1),
             "from_store": bool(meta.get("from_store")), "stored_at": meta.get("stored_at"),
             "tables": tables_present(db), "meta": meta, "generated_at": datetime.now(timezone.utc).isoformat()}

@@ -31,6 +31,9 @@ const PnlConventions    = named(() => import('./components/pnl/PnlSettings'), 'P
 const RiskPage          = lazy(() => import('./components/risk/RiskPage'))
 const CcrPage           = lazy(() => import('./components/risk/CcrPage'))
 const CapitalPage           = lazy(() => import('./components/risk/CapitalPage'))
+const IpvPage           = lazy(() => import('./components/pnl/IpvPage'))
+const XvaReservesPage           = lazy(() => import('./components/pnl/XvaReservesPage'))
+const IpvTolerances           = lazy(() => import('./components/configurations/IpvTolerances'))
 const LimitsPage        = named(() => import('./components/risk/RiskSettings'), 'LimitsPage')
 const VarSettingsPage   = named(() => import('./components/risk/RiskSettings'), 'VarSettingsPage')
 const StressCatalogue   = named(() => import('./components/risk/RiskSettings'), 'StressCatalogue')
@@ -160,6 +163,8 @@ export default function App() {
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
             <Route path="/pnl"     element={<ModuleGate keys={['PNL']}><PnlPage /></ModuleGate>} />
+            <Route path="/pnl/xva" element={<ModuleGate keys={['PNL', 'XVA_RESERVES']}><XvaReservesPage /></ModuleGate>} />
+            <Route path="/pnl/ipv" element={<ModuleGate keys={['PNL', 'IPV']}><IpvPage /></ModuleGate>} />
             <Route path="/risk"    element={<ModuleGate keys={['MARKET_RISK']}><RiskPage /></ModuleGate>} />
             <Route path="/risk/ccr" element={<ModuleGate keys={['COUNTERPARTY_CREDIT']}><CcrPage /></ModuleGate>} />
             <Route path="/risk/capital" element={<ModuleGate keys={['CAPITAL']}><CapitalPage /></ModuleGate>} />
@@ -175,6 +180,7 @@ export default function App() {
               <Route path="org-hierarchy"      element={<OrgHierarchy />} />
               <Route path="pnl/defaults"       element={<BookingDefaults />} />
               <Route path="pnl/conventions"    element={<PnlConventions />} />
+              <Route path="pnl/ipv-tolerances" element={<IpvTolerances />} />
               <Route path="market-risk/limits" element={<LimitsPage />} />
               <Route path="market-risk/var"    element={<VarSettingsPage />} />
               <Route path="market-risk/stress" element={<StressCatalogue />} />
