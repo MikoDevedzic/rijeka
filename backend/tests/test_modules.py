@@ -37,6 +37,7 @@ def test_before_the_migration_everything_is_on(monkeypatch):
     M._PRESENT.clear()
     db = _DB()
     assert not M.columns_present(db)
+    assert "present" not in M._PRESENT, "a negative answer is not cached: the migration may land while the process runs"
     assert M.for_firm(db, "firm")["source"] == "default" and all(M.for_firm(db, "firm")["modules"].values())
     with pytest.raises(RuntimeError):
         M.set_for_firm(db, "firm", "u", preset="DEALER")

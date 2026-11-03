@@ -48,7 +48,9 @@ def columns_present(db) -> bool:
     if "present" not in _PRESENT:
         try:
             n = db.execute(text("SELECT count(*) FROM information_schema.columns WHERE table_name = 'firms' AND column_name IN ('modules', 'modules_preset')")).scalar()
-            _PRESENT["present"] = int(n or 0) == 2
+            if int(n or 0) != 2:
+                return False                      # re-checked until the migration lands
+            _PRESENT["present"] = True
         except Exception:          # noqa: BLE001
             db.rollback()
             return False

@@ -68,7 +68,9 @@ def capital_columns_present(db: Session) -> bool:
         try:
             n = db.execute(text("SELECT count(*) FROM information_schema.columns WHERE table_name = 'counterparties' AND column_name = ANY(:cols)"),
                            {"cols": list(CAPITAL_FIELDS)}).scalar()
-            _CAPITAL_PRESENT[key] = int(n or 0) == len(CAPITAL_FIELDS)
+            if int(n or 0) != len(CAPITAL_FIELDS):
+                return False                      # a negative answer is re-checked: the migration may be applied while the process runs
+            _CAPITAL_PRESENT[key] = True
         except Exception:          # noqa: BLE001
             db.rollback()
             return False

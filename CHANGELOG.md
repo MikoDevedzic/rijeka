@@ -3,6 +3,13 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.8.2 · 3 November 2026
+
+- The "is the migration applied" checks for the counterparty capital attributes, the module switches and IPV no
+  longer cache a negative answer for the life of the process, so a migration applied while the API runs is seen at
+  the next request. The five pending migrations were applied in production on 3 November (role check, counterparty
+  capital, margin terms, firm modules, IPV); `2026-11-03_jobs.sql` waits for the Render Blueprint sync.
+
 ## 0.8.1 · 3 November 2026
 
 - Hotfix: 0.7.3 shipped two undefined variables that the build does not catch (the app shell's route guard read the

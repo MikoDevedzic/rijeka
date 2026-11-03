@@ -16,7 +16,9 @@ def tables_present(db) -> bool:
     if "present" not in _tables:
         try:
             n = db.execute(text("SELECT count(*) FROM information_schema.tables WHERE table_name IN ('ipv_tolerances', 'ipv_runs', 'ipv_overrides', 'ipv_independent_marks')")).scalar()
-            _tables["present"] = int(n or 0) == 4
+            if int(n or 0) != 4:
+                return False                      # re-checked until the migration lands
+            _tables["present"] = True
         except Exception:          # noqa: BLE001
             db.rollback()
             return False
