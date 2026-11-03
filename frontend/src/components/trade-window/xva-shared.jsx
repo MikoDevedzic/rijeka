@@ -229,7 +229,7 @@ export function RunReadout({ result }) {
   if (!result) return null
   const seed = result.seed ?? 42
   return (
-    <div style={{position:'absolute',left:'12px',bottom:'6px',fontSize:'0.7rem',color:'var(--text-mute)',fontFamily:'var(--mono)',pointerEvents:'none'}}>
+    <div style={{fontSize:'0.7rem',color:'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
       seed {seed}{seed===42?' (repeats exactly)':' (re-rolled)'} · {result.path_steps?.toLocaleString()} path-steps simulated in {result.engine_ms} ms
     </div>
   )
@@ -241,7 +241,7 @@ export function ChartReadout({ result, model, fmt = fmtDollar, children }) {
   if (!result) return null
   const csa = result.csa
   return (
-    <div style={{position:'absolute',bottom:'6px',right:'12px',fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
+    <div style={{marginLeft:'auto',textAlign:'right',fontSize:'0.7rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
       {result.n_paths?.toLocaleString()} paths · {model}
       {csa && (
         <span style={{color:csa.collateralised?'var(--accent)':'var(--red)', marginLeft:'8px'}}>

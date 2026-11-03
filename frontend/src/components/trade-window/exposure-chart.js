@@ -80,6 +80,8 @@ export function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePa
   drawCurve(eeArr, '#0dd4a8',[],   8,2.0,true)
   ctx.fillStyle='#5F6C7B'; ctx.textAlign='center'; ctx.font='10px JetBrains Mono,monospace'
   ;[0,0.25,0.5,0.75,1].forEach(frac => {
-    const i=Math.round(frac*(n-1)); ctx.fillText((i/12).toFixed(0)+'Y', xS(i), H-PAD.b+10)
+    const i=Math.round(frac*(n-1)); const m=i+1
+    const lab = n <= 24 ? m+'M' : (m % 12 === 0 ? (m/12)+'Y' : (m/12).toFixed(1)+'Y')   // months on a short grid, years otherwise
+    ctx.fillText(lab, xS(i), H-PAD.b+10)
   })
 }

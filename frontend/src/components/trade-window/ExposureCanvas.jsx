@@ -48,8 +48,11 @@ export default function ExposureCanvas({ result, height = 230, placeholder = 'EE
     drawExposureChart(canvas, result.ee, result.ene, result.pfe, hl, result.sample_paths)
   }, [result, hl, height, fill, tick])
 
+  // The readouts the tabs pass as children sit in a row UNDER the drawing area, never over it: an
+  // overlay collided with the axis labels and with each other on a narrow window (3 November 2026).
   return (
-    <div style={{ position: 'relative', ...(fill ? {} : { height }), background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 3, overflow: 'hidden', ...style }}>
+    <div style={{ display: 'flex', flexDirection: 'column', ...(fill ? {} : {}), background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 3, overflow: 'hidden', ...style }}>
+    <div style={{ position: 'relative', ...(fill ? { flex: 1, minHeight: 160 } : { height }) }}>
       <canvas ref={ref} style={{ position: 'absolute', inset: 0, display: 'block' }} />
       {!result && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
@@ -66,7 +69,12 @@ export default function ExposureCanvas({ result, height = 230, placeholder = 'EE
           ))}
         </div>
       )}
-      {result && children}
+    </div>
+      {result && children && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '6px 16px', padding: '5px 12px', borderTop: '1px solid var(--border)' }}>
+          {children}
+        </div>
+      )}
     </div>
   )
 }
