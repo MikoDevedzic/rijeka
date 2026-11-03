@@ -217,8 +217,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
 
         {/* RIGHT PANEL */}
         <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <ExposureCanvas result={res} height='fill' highlight={highlightCurve} onHighlight={setHighlightCurve}
-            style={{flex:1,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0,minHeight:'160px'}}>
+          <ExposureCanvas result={res} height={300} highlight={highlightCurve} onHighlight={setHighlightCurve}
+            style={{border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
             <RunReadout result={res} />
             <ChartReadout result={res} fmt={fmt}
               model={<>{res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {res?.steps} monthly steps · {ccy}</>} />

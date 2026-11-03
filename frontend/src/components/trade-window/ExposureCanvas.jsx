@@ -18,10 +18,19 @@ export default function ExposureCanvas({ result, height = 230, placeholder = 'EE
   const setHl = controlled ? onHighlight : setOwnHl
   const fill = height === 'fill'
 
+  // The canvas is absolutely positioned, so its size never feeds back into the container's layout: the
+  // container is sized by its own height, flex or min-height alone. (Until 3 November 2026 the canvas
+  // sat in flow and set its height from the container's, which the canvas itself had set: with a border
+  // in between, each resize-observer tick grew the chart by a pixel, for ever, on the FX option tab.)
   useEffect(() => {
     const canvas = ref.current
     if (!canvas || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => setTick(t => t + 1))
+    let last = ''
+    const ro = new ResizeObserver(() => {
+      const p = canvas.parentElement
+      const key = p ? `${p.clientWidth}x${p.clientHeight}` : ''
+      if (key !== last) { last = key; setTick(t => t + 1) }       // redraw only when the container really changed
+    })
     ro.observe(canvas.parentElement)
     return () => ro.disconnect()
   }, [])
@@ -31,9 +40,9 @@ export default function ExposureCanvas({ result, height = 230, placeholder = 'EE
     if (!result || !canvas) return
     const dpr = window.devicePixelRatio || 2
     const p = canvas.parentElement
-    const w = p.offsetWidth || 600
-    const h = fill ? (p.offsetHeight || 160) : height
-    canvas.width = w * dpr; canvas.height = h * dpr
+    const w = p.clientWidth || 600
+    const h = fill ? (p.clientHeight || 160) : height
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
     canvas.getContext('2d').scale(dpr, dpr)
     drawExposureChart(canvas, result.ee, result.ene, result.pfe, hl, result.sample_paths)
@@ -41,7 +50,7 @@ export default function ExposureCanvas({ result, height = 230, placeholder = 'EE
 
   return (
     <div style={{ position: 'relative', ...(fill ? {} : { height }), background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 3, overflow: 'hidden', ...style }}>
-      <canvas ref={ref} style={{ display: 'block', width: '100%', height: '100%' }} />
+      <canvas ref={ref} style={{ position: 'absolute', inset: 0, display: 'block' }} />
       {!result && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-mute)', letterSpacing: '0.08em', fontFamily: 'var(--mono)' }}>{placeholder}</div>
