@@ -7,6 +7,9 @@
 //   2) bookedTrade.status === 'PENDING'  -> two action buttons
 //        * CONFIRM TRADE  (direct) -> calls onConfirm()
 //        * CANCEL TRADE   (2-click with optional reason) -> calls onCancelTrade(reason|null)
+//      2b) ANCHORING · tx … -> the confirm sent a transaction the block had not taken within the
+//          API's wait (202); useAnchoring polls POST /api/chain/reconcile every 10 s (10 min at
+//          most) and onRemoteConfirmed refreshes the window when the CONFIRMED event lands.
 //   3) Terminal status (CONFIRMED/CANCELLED/LIVE/etc.) -> read-only badge
 //
 // All backend calls live in the parent (trade-window/booking.js confirmTrade
@@ -19,7 +22,7 @@
 
 import { useState } from 'react'
 import { SendForConfirmation } from './SendForConfirmation'
-import { useSendStatus } from './useSendStatus'
+import { useSendStatus, useAnchoring } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
 
 const STATUS_COLORS = {
@@ -181,6 +184,9 @@ export function ConfirmPanel({
   const pendingId = bookedTrade?.status === 'PENDING' ? bookedTrade.id : null
   const send = useSendStatus(pendingId, onRemoteConfirmed)
   const cpOnNetwork = !!send.status?.counterparty?.on_network
+  // A transaction in flight for this trade (a 202 from CONFIRM ON-CHAIN, or found again after a reload).
+  const anchor = useAnchoring(pendingId, confirming, onRemoteConfirmed)
+  const anchoring = !!anchor?.pending
 
   // State 1: no booked trade
   if (!bookedTrade || !bookedTrade.id) {
@@ -302,20 +308,22 @@ export function ConfirmPanel({
           {!cpOnNetwork && (
             <button
               className="tbw-btn tbw-btn-book"
-              disabled={confirming || cancelling}
+              disabled={confirming || cancelling || anchoring}
               onClick={() => onConfirm('chain')}
             >
               {confirming
                 ? '⏳ SIGNING & ANCHORING...'
-                : confirmErr
-                  ? '▶ RETRY CONFIRM'
-                  : '◆ CONFIRM ON-CHAIN'}
+                : anchoring
+                  ? `◆ ANCHORING · tx ${short(anchor.tx_hash)}`
+                  : (confirmErr || anchor?.failed)
+                    ? '▶ RETRY CONFIRM'
+                    : '◆ CONFIRM ON-CHAIN'}
             </button>
           )}
 
           <button
             className="tbw-btn"
-            disabled={confirming || cancelling}
+            disabled={confirming || cancelling || anchoring}
             onClick={() => onConfirm('offchain')}
             title="Status flip only — no signatures, nothing anchored"
           >
@@ -324,12 +332,45 @@ export function ConfirmPanel({
 
           <button
             className="tbw-btn tbw-btn-cancel"
-            disabled={confirming || cancelling}
+            disabled={confirming || cancelling || anchoring}
             onClick={() => setShowCancelDialog(true)}
           >
             ▶ CANCEL TRADE
           </button>
         </div>
+
+        {anchoring && (
+          <div style={{ padding: 12, background: 'var(--panel)', border: '1px solid rgba(240,160,32,0.4)', borderRadius: 2, maxWidth: 560 }}>
+            <div className="tbw-lbl" style={{ color: 'var(--amber)' }}>◆ ANCHORING · TX {short(anchor.tx_hash)}</div>
+            <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 6 }}>
+              Both signatures are made and the transaction is sent; the block has not taken it yet. This tab asks the
+              server every 10 seconds and shows the attestation when it is mined. You can leave the tab or come back
+              later: the server keeps following the transaction either way.
+              {anchor.note ? ` ${anchor.note}.` : ''}
+            </div>
+            {anchor.tx_hash && (
+              <div style={{ marginTop: 8, fontFamily: MONO, fontSize: 12, wordBreak: 'break-all' }}>
+                {anchor.explorer_tx
+                  ? <a href={anchor.explorer_tx} target="_blank" rel="noreferrer" style={{ color: 'var(--blue)' }}>{anchor.tx_hash}</a>
+                  : anchor.tx_hash}
+              </div>
+            )}
+          </div>
+        )}
+
+        {anchor?.failed && !confirmErr && (
+          <div className="tbw-error" style={{ maxWidth: 560 }}>
+            Anchoring failed: {anchor.reason}. The trade stays PENDING; CONFIRM ON-CHAIN sends a new transaction.
+          </div>
+        )}
+
+        {anchor?.timedOut && (
+          <div className="tbw-error" style={{ maxWidth: 560 }}>
+            Still waiting for the block after 10 minutes. The server keeps following the transaction
+            {anchor.explorer_tx ? <> (<a href={anchor.explorer_tx} target="_blank" rel="noreferrer" style={{ color: 'var(--blue)' }}>{short(anchor.tx_hash)}</a>)</> : ''};
+            reopen this tab to check again.
+          </div>
+        )}
 
         {confirmErr && (
           <div className="tbw-error" style={{ maxWidth: 520 }}>

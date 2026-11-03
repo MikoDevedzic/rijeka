@@ -6,7 +6,14 @@ POST /api/chain/confirm/{trade_id}
     canonical trade hash, anchored in TradeConfirmationRegistry when a chain
     is configured. The CONFIRMED event carries the full attestation in its
     payload and the hash in trade_events.confirmation_hash. Atomic with the
-    status flip; if anchoring fails nothing is written.
+    status flip; if anchoring fails nothing is written. When the transaction
+    is sent but not mined within RIJEKA_CHAIN_SYNC_WAIT_S (25 s) the route
+    answers 202 {pending: true, tx_hash, explorer_tx, note, trade, legs} and
+    chain/pending.py applies the same transition once the block arrives.
+
+POST /api/chain/reconcile/{trade_id}
+    Owner only. Checks an anchor in flight for the trade and applies the
+    CONFIRMED transition when it is on the registry; the trade window polls it.
 
 GET  /api/chain/attestation/{trade_id}
     The stored attestation plus the live on-chain record.
@@ -28,6 +35,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi.responses import JSONResponse
 from api.routes._errors import internal
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -50,7 +58,8 @@ from copy import deepcopy
 from datetime import date as _date
 from decimal import Decimal
 from chain.keys import PartyKey, resolve as resolve_key
-from chain.attestation import get_backend
+from chain.attestation import get_backend, AnchorPending
+from chain import pending as P
 
 log = logging.getLogger("rijeka.chain")
 router = APIRouter(prefix="/api/chain", tags=["chain"])
@@ -183,6 +192,45 @@ def _check_chain_quota(db: Session, user_id, kind: str = "confirm") -> None:
 def _eip712_ctx():
     be = get_backend()
     return be, (be.chain_id or 31337), (be.registry or "0x" + "0" * 40)
+
+
+def _pending_response(db: Session, trade: Trade, row: dict):
+    """202: the transaction is sent, the trade is still PENDING; the serialised trade and legs ride along
+    so the window's confirm handler can treat the body like a lifecycle response."""
+    from api.routes.booking import _serialize_trade, _serialize_leg
+    legs = db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).order_by(TradeLeg.leg_seq).all()
+    body = {"pending": True, "trade_id": str(trade.id), "tx_hash": row.get("tx_hash"), "explorer_tx": row.get("explorer_tx"),
+            "note": row.get("reason") or "transaction sent; waiting for the block. Poll POST /api/chain/reconcile/{trade_id}.",
+            "submitted_at": P.public(row)["submitted_at"], "anchor": P.public(row),
+            "trade": _serialize_trade(trade), "legs": [_serialize_leg(l) for l in legs], "event_id": None, "idempotent_replay": False}
+    return JSONResponse(status_code=202, content=body)
+
+
+def anchor_confirmation(db: Session, trade: Trade, user_id, be, h: bytes, party_a: str, party_b: str, sig_own: bytes, sig_cp: bytes,
+                        attestation: dict, idempotency_key: Optional[str], wait: Optional[float] = None):
+    """Send confirm() and finish the confirmation: the CONFIRMED event when the receipt arrives within
+    `wait` seconds (chain/pending.sync_wait: 25 s with the pending_anchors table, the backend's full
+    timeout without it), otherwise a pending_anchors row and a 202. `attestation` is the signed record
+    without its anchor. A transaction already in flight for the trade is reconciled instead of resent."""
+    if P.tables_present(db) and P.open_for_trade(db, trade.id) is not None:
+        out = P.reconcile_trade(db, trade, be)
+        if out.get("applied"):
+            return {k: v for k, v in out.items() if k in ("trade", "legs", "event_id", "idempotent_replay")}
+        if out.get("pending"):
+            return _pending_response(db, trade, P.open_for_trade(db, trade.id) or {})
+        # failed: the row is closed with its reason; a fresh transaction goes below
+    wait = P.sync_wait(db) if wait is None else wait
+    try:
+        receipt = be.confirm(h, party_a, party_b, sig_own, sig_cp, wait=wait)
+    except AnchorPending as pend:
+        row = P.record(db, trade_id=trade.id, user_id=trade.user_id, trade_hash=_hexb(h), attestation=attestation,
+                       idempotency_key=idempotency_key, tx_hash=pend.tx_hash, explorer_tx=pend.explorer_tx, note=pend.note)
+        log.info("on-chain confirm of %s pending: tx %s", trade.trade_ref, pend.tx_hash)
+        return _pending_response(db, trade, row)
+    except Exception as e:
+        log.exception("on-chain confirm failed")
+        raise internal(502, "Chain anchoring failed", e)
+    return P.apply_confirmed(db, trade, {**attestation, "anchor": receipt.to_dict()}, _hexb(h), idempotency_key, user_id=user_id)
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -419,13 +467,7 @@ def confirm_on_chain(
     assert recover(td_own, sig_own) == key_own.address
     assert recover(td_cp,  sig_cp)  == key_cp.address
 
-    # 4. Anchor (or record off-chain when no chain is configured)
-    try:
-        receipt = be.confirm(h, key_own.address, key_cp.address, sig_own, sig_cp)
-    except Exception as e:
-        log.exception("on-chain confirm failed")
-        raise internal(502, "Chain anchoring failed", e)
-
+    # 4. The signed record (its anchor is added when the chain answers)
     attestation = {
         "schema_version": CANONICAL_SCHEMA_VERSION,
         "trade_hash":     _hexb(h),
@@ -435,20 +477,31 @@ def confirm_on_chain(
             "counterparty": {"lei": key_cp.lei,  "address": key_cp.address,  "signature": _hexb(sig_cp),  "key_source": key_cp.source},
         },
         "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": chain_id, "verifying_contract": registry},
-        "anchor": receipt.to_dict(),
         # Both signatures were produced here. Not a bilateral confirmation.
         "bilateral": False,
     }
 
-    # 5. Atomic status flip with the attestation in the event
-    return _apply_lifecycle_transition(
-        db=db, user_id=user_id, trade=trade,
-        event_type="CONFIRMED", new_status="CONFIRMED",
-        payload={"attestation": attestation},
-        idempotency_key=idempotency_key,
-        confirmation_hash=_hexb(h),
-        counterparty_confirmed=True,
-    )
+    # 5. Anchor (or record off-chain when no chain is configured), then the atomic status flip with the
+    #    attestation in the event; or 202 with the transaction when the block has not come in time.
+    return anchor_confirmation(db, trade, user_id, be, h, key_own.address, key_cp.address, sig_own, sig_cp, attestation, idempotency_key)
+
+
+@router.post("/reconcile/{trade_id}")
+def reconcile_anchor(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Where an anchor in flight stands; applies the CONFIRMED transition when the registry has it.
+    {pending: true, tx_hash, explorer_tx, note} while the transaction waits for a block;
+    {pending: false, applied: true, status: CONFIRMED, trade, legs, event_id} once it is written;
+    {pending: false, failed: true, reason} when the transaction reverted or was dropped (the trade stays PENDING);
+    {pending: false, status} when nothing is in flight."""
+    user_id = user.get("sub")
+    trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if trade.status != "PENDING":
+        return {"pending": False, "applied": False, "status": trade.status}
+    if not P.tables_present(db):
+        return {"pending": False, "applied": False, "status": trade.status, "note": "no anchoring in flight"}
+    return P.reconcile_trade(db, trade, get_backend())
 
 
 

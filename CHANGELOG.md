@@ -5,6 +5,7 @@ methodology document carries its own version (v1.2). Commits on `main` are the d
 
 ## 0.6.0 · 2 November 2026 (launch candidate)
 
+- Worker tier and asynchronous confirm: a `jobs` table and a `python -m worker` Render service take the counterparty-credit RUN NOW and the risk backfill off the API (routes fall back to in-process threads without the table or the worker); `POST /api/chain/confirm` waits 25 s for the receipt, then answers 202 with the transaction and `chain/pending.py` applies the CONFIRMED transition once the registry has it (`chain_reconcile` every scheduler cycle, `POST /api/chain/reconcile/{trade_id}` polled by the trade window); migration `docs/migrations/2026-11-03_jobs.sql`.
 - Vol along the exposure paths: the surface's ATM term structure drives the simulated spots and an option is valued at
   each date at the forward vol for its remaining life and the smile at its moneyness (sticky-delta), in the ticket's
   XVA and in the credit engine alike; the credit engine's risk-neutral spot vol comes from the pair's surface instead

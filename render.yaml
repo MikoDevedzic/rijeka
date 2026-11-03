@@ -68,3 +68,42 @@ services:
         sync: false
       - key: RIJEKA_PUBLIC_URL
         value: https://app.rijeka.app
+      # ── worker tier ───────────────────────────────────────────────────
+      - key: RIJEKA_WORKER
+        value: "1"           # RUN NOW and the risk backfill go to the `worker` service below (jobs table required:
+                             # docs/migrations/2026-11-03_jobs.sql); "0" keeps them in this process's threads
+      - key: RIJEKA_CHAIN_SYNC_WAIT_S
+        value: "25"          # confirm waits this long for the receipt, then answers 202 and reconciles (chain/pending.py)
+
+  # The worker: claims background jobs (counterparty-credit RUN NOW, the risk backfill) from the jobs
+  # table and runs them off the API's CPU. Creating it is one click: Render > Blueprints > this repo >
+  # Sync, after the migration above is applied. Same code, same database; no public URL, no
+  # health check path, and NO chain variables: the relayer nonce belongs to the API process, the
+  # worker never sends a transaction. Scale to zero (suspend) and the API falls back to in-process
+  # threads only when RIJEKA_WORKER is "0" or unset; with "1" and no worker running, jobs queue.
+  - type: worker
+    name: rijeka-worker
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m worker
+    region: virginia
+    plan: starter          # 0.5 CPU / 512 MB is enough for one netting-set run at a time; raise with the book
+    autoDeployTrigger: commit
+    buildFilter:
+      ignoredPaths:
+        - frontend/**
+        - netlify_drop/**
+        - docs/**
+        - "**/*.md"
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # the same transaction-pooler URI as rijeka-api (port 6543); paste it at the sync
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: RIJEKA_WORKER_KINDS
+        value: ccr_run,risk_backfill
+      - key: RIJEKA_LOG_LEVEL
+        value: INFO
+      - key: RIJEKA_SCHEDULER
+        value: "0"           # the batches and the release move stay in the API process

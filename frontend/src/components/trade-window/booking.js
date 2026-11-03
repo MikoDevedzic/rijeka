@@ -651,14 +651,38 @@ async function _authed(path, method = 'GET', extraHeaders = {}) {
 }
 
 /** PENDING -> CONFIRMED with both parties' EIP-712 signatures over the
- *  canonical trade hash, anchored on-chain when a chain is configured. */
+ *  canonical trade hash, anchored on-chain when a chain is configured.
+ *  When the transaction is sent but not mined within the API's wait (25 s) the
+ *  route answers 202 and this resolves { pending: true, tx_hash, explorer_tx,
+ *  note, trade, legs }: the trade is still PENDING and ConfirmPanel polls
+ *  reconcileAnchor() until the block arrives. */
 export async function confirmTradeOnChain(tradeId, extras = {}) {
   if (!tradeId) throw new Error('trade_id is required.')
   const idempotencyKey = extras.idempotencyKey || crypto.randomUUID()
-  const { trade, legs, event_id, idempotent_replay } = await _authed(
-    '/api/chain/confirm/' + tradeId, 'POST', { 'Idempotency-Key': idempotencyKey })
-  return { trade, legs, eventId: event_id, idempotentReplay: !!idempotent_replay }
+  const session = await getSession()
+  const res = await fetch(API + '/api/chain/confirm/' + tradeId, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+  })
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}))
+    const err = new Error(e.detail || ('POST /api/chain/confirm failed (HTTP ' + res.status + ')'))
+    err.status = res.status
+    throw err
+  }
+  const body = await res.json()
+  if (res.status === 202 || body.pending) {
+    return { pending: true, tx_hash: body.tx_hash || null, explorer_tx: body.explorer_tx || null, note: body.note || null,
+             submitted_at: body.submitted_at || null, trade: body.trade, legs: body.legs || [], eventId: null, idempotentReplay: false }
+  }
+  const { trade, legs, event_id, idempotent_replay } = body
+  return { pending: false, trade, legs, eventId: event_id, idempotentReplay: !!idempotent_replay }
 }
+
+/** Where an anchor in flight stands (backend chain/pending.py): { pending, tx_hash, explorer_tx, note }
+ *  while the transaction waits for a block; { applied: true, status: 'CONFIRMED', trade, legs } once the
+ *  CONFIRMED event is written; { failed: true, reason } when it reverted or was dropped. */
+export function reconcileAnchor(tradeId) { return _authed('/api/chain/reconcile/' + tradeId, 'POST') }
 
 export function getAttestation(tradeId) { return _authed('/api/chain/attestation/' + tradeId) }
 export function verifyTradeOnChain(tradeId) { return _authed('/api/chain/verify/' + tradeId, 'POST') }

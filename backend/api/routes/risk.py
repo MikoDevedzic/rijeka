@@ -7,6 +7,7 @@ GET  /api/risk/settings · PUT           the firm's VaR settings (risk manager o
 GET  /api/risk/backtest?measure=&days=  yesterday's VaR against today's P&L: exceptions, traffic light, Kupiec
 GET  /api/risk/history                  how much risk-factor history exists
 POST /api/risk/history/backfill         cron or admin: start fetching and storing public history (years=) in the background
+                                        (a worker job when the jobs table exists and a worker is expected, else a thread here)
 POST /api/risk/daily/tick               cron: compute and store today's report for every account
 """
 from __future__ import annotations
@@ -231,13 +232,30 @@ def _run_backfill(tpl, years: float, overwrite: bool) -> None:
         _backfill.update(running=False, finished=_dt.datetime.now(_dt.timezone.utc).isoformat())
 
 
+def _backfill_view(db: Session) -> dict:
+    """The latest backfill: the job row when the table exists (the backfill is one per site, so any user's),
+    the in-memory dict otherwise; when both exist, whichever is in flight, else the more recent."""
+    from jobs import queue as Q
+    row = None
+    if Q.tables_present(db):
+        try:
+            row = Q.as_status(Q.latest(db, None, "risk_backfill"))
+        except Exception:               # noqa: BLE001
+            db.rollback(); row = None
+    if row is None:
+        return _backfill
+    if row["running"] != bool(_backfill.get("running")):
+        return row if row["running"] else _backfill
+    return row if (row.get("started") or "") >= (_backfill.get("started") or "") else _backfill
+
+
 @router.get("/history")
 def history_status(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None), user: Optional[dict] = Depends(optional_token)):
     from risk import history as H
     if not _secret_ok(x_rijeka_cron) and user is None:
         raise HTTPException(status_code=401, detail="Missing auth")
     tpl = R.template_uid(db)
-    return {"template": str(tpl) if tpl else None, "series": H.status(db, tpl) if tpl else {}, "backfill": _backfill}
+    return {"template": str(tpl) if tpl else None, "series": H.status(db, tpl) if tpl else {}, "backfill": _backfill_view(db)}
 
 
 @router.post("/history/backfill")
@@ -251,10 +269,17 @@ def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=
     tpl = R.template_uid(db)
     if tpl is None:
         raise HTTPException(status_code=409, detail="No template account.")
-    if _backfill["running"]:
-        return {"started": False, "reason": "a backfill is already running", "backfill": _backfill}
+    current = _backfill_view(db)
+    if current.get("running"):
+        return {"started": False, "reason": "a backfill is already running", "backfill": current}
+    from jobs import queue as Q
+    years = max(0.1, min(years, 10.0))
+    if Q.worker_expected(db):
+        jid = Q.enqueue(db, user["sub"] if user else tpl, "risk_backfill", {"template": str(tpl), "years": years, "overwrite": overwrite})
+        return {"started": True, "years": years, "job_id": jid, "backfill": _backfill_view(db),
+                "note": "queued for the worker; GET /api/risk/history reports progress and the result"}
     import threading
-    threading.Thread(target=_run_backfill, args=(tpl, max(0.1, min(years, 10.0)), overwrite), daemon=True).start()
+    threading.Thread(target=_run_backfill, args=(tpl, years, overwrite), daemon=True).start()
     return {"started": True, "years": years, "note": "running in the background; GET /api/risk/history reports progress and the result"}
 
 

@@ -14,7 +14,15 @@ RENDER); RIJEKA_SCHEDULER=0 turns it off. Tests set neither, so nothing starts t
 
 Cadence: the half-hourly group every RIJEKA_SCHEDULER_MINUTES (30); the daily group every
 RIJEKA_SCHEDULER_DAILY_HOURS (2), which is what the workflow managed on a good day and keeps
-the risk and credit batches off the single CPU most of the time.
+the risk and credit batches off the single CPU most of the time; the every_cycle group on
+every pass of the loop (a minute): today only chain_reconcile, which follows anchors whose
+transaction was still unmined when the confirm request returned (chain/pending.py) and is a
+single cheap query when nothing is in flight.
+
+The worker tier (worker.py) takes the on-demand runs (a user's RUN NOW, the risk backfill)
+when it is deployed; the daily batches stay here on purpose: they are idempotent for a day and
+already off the request path, and moving them would only add a dependency on the worker being
+up for data the health check watches.
 
 Release sync: the frontend deploys from the `release` branch, which must point at the commit
 the API is serving. When RIJEKA_GITHUB_TOKEN is set (a fine-grained token with Contents:
@@ -51,7 +59,15 @@ def _define_steps() -> list[tuple[str, str, Callable[..., Any]]]:
         ("pnl", "daily", lambda db, s: pnl.eod_tick(db=db, x_rijeka_cron=s)),
         ("risk", "daily", lambda db, s: risk.daily_tick(db=db, x_rijeka_cron=s)),
         ("ccr", "daily", lambda db, s: ccr.daily_tick(db=db, x_rijeka_cron=s)),
+        ("chain_reconcile", "every_cycle", lambda db, s: _reconcile(db)),
     ]
+
+
+def _reconcile(db) -> dict:
+    """Anchors in flight: the registry or the receipt decides, the CONFIRMED event follows (chain/pending.py).
+    The API process owns the relayer, so this runs here and not in the worker."""
+    from chain import pending
+    return pending.reconcile_pending(db)
 
 
 def enabled() -> bool:
@@ -93,7 +109,9 @@ def _record(name: str, ok: bool, detail: str) -> None:
 
 
 def due(group: str, now: Optional[float] = None) -> bool:
-    """Whether a group should run now; the first call for a group is always due."""
+    """Whether a group should run now; the first call for a group is always due; every_cycle always is."""
+    if group == "every_cycle":
+        return True
     now = time.time() if now is None else now
     period = _minutes() * 60 if group == "half_hourly" else _daily_hours() * 3600
     last = _last_group_run.get(group)
@@ -135,7 +153,7 @@ def run_cycle(steps=None, now: Optional[float] = None, session_factory=None) -> 
     now = time.time() if now is None else now
     secret = os.getenv("RIJEKA_CRON_SECRET", "")
     ran: list[str] = []
-    for group in ("half_hourly", "daily"):
+    for group in ("half_hourly", "daily", "every_cycle"):
         if not due(group, now):
             continue
         _last_group_run[group] = now

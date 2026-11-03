@@ -106,3 +106,24 @@ full account, with the failure modes seen so far, is `docs/ops/deploy.md`. Envir
   stored row lands; a deploy mid-run loses the "running" flag, not the data.
 - The hosted demo prices on public-source market data rebuilt daily; synthetic vol surfaces scaled by
   realised vol, labelled as such. A self-hosted desk loads its own.
+
+### The worker and the anchor in flight (3 November 2026)
+
+The deploy chain has a second Render service, **rijeka-worker** (`render.yaml`, `python -m
+worker`, created by a Blueprint sync once `docs/migrations/2026-11-03_jobs.sql` is applied). It
+claims rows from the `jobs` table with `FOR UPDATE SKIP LOCKED` and runs the counterparty-credit RUN
+NOW and the risk-history backfill off the API's CPU; the routes enqueue when the table exists and
+`RIJEKA_WORKER` says a worker is expected, and start the in-process thread otherwise, so the API
+runs unchanged before the migration or without the service. The daily batches and the release move
+stay in the API process. The worker never touches the chain: the relayer nonce is the API's.
+`GET /api/ops/health` reports the worker's last heartbeat and the queue depth under `worker`.
+
+An on-chain confirm sends the transaction from the API and waits `RIJEKA_CHAIN_SYNC_WAIT_S` (25 s)
+for the receipt; past that it stores the signed record and the transaction hash in
+`pending_anchors`, answers 202, and `chain/pending.py` applies the one CONFIRMED transition when the
+registry has the record (the scheduler's `chain_reconcile` step every cycle, and
+`POST /api/chain/reconcile/{trade_id}`, which the trade window polls). A reverted or dropped
+transaction leaves the trade PENDING with the reason recorded. Job state is therefore in the
+database rather than process memory once the migration is applied, and a confirm request no longer
+holds a request thread for three minutes.
+

@@ -2,6 +2,9 @@
 GET  /api/ccr/report                    the latest stored run (fast); ?live=1 computes now; ?date=
 POST /api/ccr/run?counterparty=         compute in the background and store; GET /api/ccr/status for progress
 GET  /api/ccr/status
+    The run goes to the worker (jobs/queue.py, a row the worker claims) when the jobs table exists and a
+    worker is expected (RIJEKA_WORKER, default on under Render); otherwise a thread of this process, as before.
+    Status reads the job row with the in-memory dict as the fallback, in the same shape either way.
 POST /api/ccr/daily/tick                cron: run and store for every account (after end of day)
 Engine: backend/ccr. Exposure and limits are real-world; CVA is risk-neutral; both say so.
 """
@@ -22,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from ccr import report as R
 from db.session import get_db
+from jobs import queue as Q
 from middleware.auth import verify_token
 from api.routes._limits import heavy
 
@@ -52,11 +56,11 @@ def ccr_report(live: bool = Query(default=False), date_: Optional[str] = Query(d
     if not live:
         stored = R.latest_stored(db, user["sub"])
         if stored:
-            stored["job"] = _jobs.get(user["sub"])
+            stored["job"] = _job_view(db, user["sub"])
             return stored
     heavy(user, "counterparty run", 4)          # a live report is the Monte Carlo in the request thread
     rep = R.report(db, _ctx(db, user), _parse(date_))
-    rep["job"] = _jobs.get(user["sub"])
+    rep["job"] = _job_view(db, user["sub"])
     rep["from_store"] = False
     return rep
 
@@ -79,19 +83,41 @@ def _run(ctx: dict, counterparty: Optional[str]) -> None:
         job.update(running=False, finished=_dt.datetime.now(_dt.timezone.utc).isoformat())
 
 
+def _job_view(db: Session, uid: str) -> Optional[dict]:
+    """The user's latest run: the job row when the table exists, the in-memory dict otherwise; when both
+    exist, whichever is in flight, else the more recent."""
+    mem = _jobs.get(uid)
+    row = None
+    if Q.tables_present(db):
+        try:
+            row = Q.as_status(Q.latest(db, uid, "ccr_run"))
+        except Exception:               # noqa: BLE001
+            db.rollback(); row = None
+    if row is None or mem is None:
+        return row or mem
+    if row["running"] != bool(mem.get("running")):
+        return row if row["running"] else mem
+    return row if (row.get("started") or "") >= (mem.get("started") or "") else mem
+
+
 @router.post("/run")
 def run(counterparty: Optional[str] = Query(default=None), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     uid = user["sub"]
     heavy(user, "counterparty run", 4)
-    if _jobs.get(uid, {}).get("running"):
-        return {"started": False, "reason": "a run is already in progress", "job": _jobs[uid]}
+    current = _job_view(db, uid)
+    if current and current.get("running"):
+        return {"started": False, "reason": "a run is already in progress", "job": current}
+    if Q.worker_expected(db):
+        jid = Q.enqueue(db, uid, "ccr_run", {"ctx": _ctx(db, user), "counterparty": counterparty})
+        return {"started": True, "job": Q.as_status(Q.latest(db, uid, "ccr_run")), "job_id": jid,
+                "note": "queued for the worker; GET /api/ccr/status reports progress, GET /api/ccr/report returns the stored result"}
     threading.Thread(target=_run, args=(_ctx(db, user), counterparty), daemon=True).start()
     return {"started": True, "note": "running in the background; GET /api/ccr/status reports progress, GET /api/ccr/report returns the stored result"}
 
 
 @router.get("/status")
-def status(user: dict = Depends(verify_token)):
-    return {"job": _jobs.get(user["sub"]), "tables": None}
+def status(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    return {"job": _job_view(db, user["sub"]), "tables": None, "worker": Q.worker_expected(db)}
 
 
 

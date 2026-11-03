@@ -20,6 +20,11 @@ When a send reverts, times out, or the node reports the nonce already used, the 
 read back: if the hash is recorded (by this relayer or by anyone else, which the contract
 allows), that record is returned as the anchor instead of an error, so the desk writes the
 event once and never retries into the same revert.
+
+A caller may wait for the receipt only briefly (`wait=` seconds): when the transaction is
+accepted by the node but not mined in that time, and the registry has no record yet,
+AnchorPending is raised with the transaction hash, and chain/pending.py follows the
+transaction afterwards. Without `wait=` the full RECEIPT_TIMEOUT applies, as before.
 """
 
 from __future__ import annotations
@@ -64,6 +69,14 @@ def max_fee_wei() -> int:
 class FeeTooHigh(RuntimeError):
     """The network's fee is above the operator's ceiling: nothing was sent."""
 
+
+class AnchorPending(RuntimeError):
+    """The node accepted the transaction but it was not mined within the caller's wait, and the
+    registry has no record yet. Carries what is needed to follow it (chain/pending.py)."""
+    def __init__(self, tx_hash: str, chain_id: int, registry: Optional[str], explorer_tx: Optional[str], note: str):
+        super().__init__(note)
+        self.tx_hash, self.chain_id, self.registry, self.explorer_tx, self.note = tx_hash, chain_id, registry, explorer_tx, note
+
 EXPLORERS = {
     1:        "https://etherscan.io",
     11155111: "https://sepolia.etherscan.io",
@@ -99,10 +112,11 @@ class AttestationBackend(Protocol):
     chain_id: int
     registry: Optional[str]
     anchored: bool
-    def confirm(self, trade_hash: bytes, party_a: str, party_b: str, sig_a: bytes, sig_b: bytes) -> AnchorReceipt: ...
+    def confirm(self, trade_hash: bytes, party_a: str, party_b: str, sig_a: bytes, sig_b: bytes, wait: Optional[float] = None) -> AnchorReceipt: ...
     def amend(self, prev_hash: bytes, new_hash: bytes, sig_a: bytes, sig_b: bytes) -> AnchorReceipt: ...
     def terminate(self, trade_hash: bytes, sig_a: bytes, sig_b: bytes) -> AnchorReceipt: ...
     def get(self, trade_hash: bytes) -> Optional[OnChainRecord]: ...
+    def tx_state(self, tx_hash: str) -> dict: ...
     def confirmation_digest(self, trade_hash: bytes, counterparty: str) -> bytes: ...
     def amendment_digest(self, prev_hash: bytes, new_hash: bytes, counterparty: str) -> bytes: ...
     def termination_digest(self, trade_hash: bytes, counterparty: str) -> bytes: ...
@@ -117,7 +131,7 @@ class NullBackend:
 
     _NOTE = "No chain configured (RIJEKA_CHAIN_RPC unset): attestation stored off-chain only."
 
-    def confirm(self, trade_hash, party_a, party_b, sig_a, sig_b) -> AnchorReceipt:
+    def confirm(self, trade_hash, party_a, party_b, sig_a, sig_b, wait=None) -> AnchorReceipt:
         return AnchorReceipt(False, 0, None, None, None, None, None, note=self._NOTE)
 
     def amend(self, prev_hash, new_hash, sig_a, sig_b) -> AnchorReceipt:
@@ -128,6 +142,9 @@ class NullBackend:
 
     def get(self, trade_hash) -> Optional[OnChainRecord]:
         return None
+
+    def tx_state(self, tx_hash) -> dict:
+        return {"state": "unknown"}
 
     def confirmation_digest(self, trade_hash, counterparty) -> bytes:
         raise RuntimeError("No chain configured")
@@ -238,15 +255,18 @@ class EvmBackend:
                              f"{self.explorer}/address/{self.registry}" if self.explorer else None,
                              note="recorded on the registry by an earlier transaction; no new transaction was mined")
 
-    def _send(self, fn, label: str, reconcile=None) -> AnchorReceipt:
+    def _send(self, fn, label: str, reconcile=None, wait: Optional[float] = None) -> AnchorReceipt:
         """Sign with the relayer, submit, wait for the receipt. One send at a time per process, pending
         nonce, fees under the ceiling. A revert, a timeout or a used nonce is reconciled against the
-        registry before it is reported as a failure; `reconcile()` returns the OnChainRecord for the hash."""
+        registry before it is reported as a failure; `reconcile()` returns the OnChainRecord for the hash.
+        `wait`: seconds to wait for the receipt (default RECEIPT_TIMEOUT); when it runs out and the
+        registry has no record, AnchorPending carries the transaction hash to the caller."""
         with EvmBackend._send_lock:
-            return self._send_locked(fn, label, reconcile)
+            return self._send_locked(fn, label, reconcile, wait)
 
-    def _send_locked(self, fn, label: str, reconcile) -> AnchorReceipt:
+    def _send_locked(self, fn, label: str, reconcile, wait: Optional[float] = None) -> AnchorReceipt:
         fees = self._fees()
+        timeout = float(wait) if wait else RECEIPT_TIMEOUT
         for attempt in (1, 2):
             nonce = self._retry("nonce", lambda: self.w3.eth.get_transaction_count(self.relayer.address, "pending"))
             tx = self._retry("build", lambda: fn.build_transaction({"from": self.relayer.address, "nonce": nonce, "chainId": self.chain_id, **fees}))  # noqa: B023  (called within this iteration only)
@@ -277,11 +297,16 @@ class EvmBackend:
                     continue
                 raise RuntimeError(f"{label}(): the relayer nonce was used by another transaction and the registry has no record")
             try:
-                rcpt = self._retry("receipt", lambda: self.w3.eth.wait_for_transaction_receipt(h, timeout=RECEIPT_TIMEOUT))  # noqa: B023  (called within this iteration only)
-            except Exception:          # noqa: BLE001 — timeout or node gone: the registry is the truth
+                rcpt = self._retry("receipt", lambda: self.w3.eth.wait_for_transaction_receipt(h, timeout=timeout))  # noqa: B023  (called within this iteration only)
+            except Exception as e:     # noqa: BLE001 — timeout or node gone: the registry is the truth
                 done = self._recorded(reconcile, label)
                 if done:
                     return done
+                if wait:
+                    tx_hex = self._hex(h)
+                    log.info("chain: %s tx %s not mined within %.0fs; handed to reconciliation", label, tx_hex, timeout)
+                    raise AnchorPending(tx_hex, self.chain_id, self.registry, self._explorer_tx(tx_hex),
+                                        f"transaction sent, not mined within {timeout:.0f}s ({type(e).__name__}); being followed") from e
                 raise
             if rcpt.status != 1:
                 done = self._recorded(reconcile, label)
@@ -289,15 +314,40 @@ class EvmBackend:
                     return done
                 raise RuntimeError(f"{label}() reverted in tx {h.hex()}")
             blk = self._retry("block", lambda: self.w3.eth.get_block(rcpt.blockNumber))  # noqa: B023  (called within this iteration only)
-            tx_hex = "0x" + h.hex() if not h.hex().startswith("0x") else h.hex()
+            tx_hex = self._hex(h)
             return AnchorReceipt(True, self.chain_id, self.registry, tx_hex,
                                  int(rcpt.blockNumber), int(blk.timestamp), self._explorer_tx(tx_hex))
         raise RuntimeError(f"{label}(): not sent")   # unreachable
 
-    def confirm(self, trade_hash, party_a, party_b, sig_a, sig_b) -> AnchorReceipt:
+    @staticmethod
+    def _hex(h) -> str:
+        s = h.hex() if hasattr(h, "hex") else str(h)
+        return s if s.startswith("0x") else "0x" + s
+
+    def tx_state(self, tx_hash: str) -> dict:
+        """Where a sent transaction stands, for chain/pending.py:
+        {"state": "mined" | "reverted", "block_number", "confirmed_at"} once it has a receipt,
+        {"state": "pending"} while the node still holds it, {"state": "unknown"} when the node does not know it."""
+        from web3.exceptions import TransactionNotFound
+        try:
+            rcpt = self._retry("receipt", lambda: self.w3.eth.get_transaction_receipt(tx_hash))
+        except TransactionNotFound:
+            rcpt = None
+        if rcpt is not None:
+            if int(rcpt.status) != 1:
+                return {"state": "reverted", "block_number": int(rcpt.blockNumber)}
+            blk = self._retry("block", lambda: self.w3.eth.get_block(rcpt.blockNumber))
+            return {"state": "mined", "block_number": int(rcpt.blockNumber), "confirmed_at": int(blk.timestamp)}
+        try:
+            self._retry("tx", lambda: self.w3.eth.get_transaction(tx_hash))
+            return {"state": "pending"}
+        except TransactionNotFound:
+            return {"state": "unknown"}
+
+    def confirm(self, trade_hash, party_a, party_b, sig_a, sig_b, wait=None) -> AnchorReceipt:
         return self._send(self.contract.functions.confirm(
             trade_hash, to_checksum_address(party_a), to_checksum_address(party_b), sig_a, sig_b), "confirm",
-            reconcile=lambda: self.get(trade_hash))
+            reconcile=lambda: self.get(trade_hash), wait=wait)
 
     def amend(self, prev_hash, new_hash, sig_a, sig_b) -> AnchorReceipt:
         """Supersede prev_hash with new_hash. Parties are the pair recorded for prev_hash."""

@@ -4,7 +4,8 @@ Operations: is every scheduled batch current, and what is breaking in browsers?
 GET /api/ops/health is public and carries no account data: for each batch it
 reports the last run and whether that is recent enough, plus the in-process
 scheduler's own record of its last cycle (scheduler.py drives the batches on
-Render; the GitHub cron is the second driver). The workflow's final step calls
+Render; the GitHub cron is the second driver) and the worker tier's last
+heartbeat with the queue depth (`worker`, from the jobs tables when present). The workflow's final step calls
 it and fails the run when anything is stale, so GitHub mails the repository
 owner; the desk's inbox shows the same item to signed-in users, because a
 stale batch is their stale page.
@@ -116,8 +117,19 @@ def ops_health(db: Session = Depends(get_db)):
     import scheduler
     from version import VERSION
     return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]},
-            "scheduler": scheduler.status(), "version": VERSION,
+            "scheduler": scheduler.status(), "worker": worker_status(db), "version": VERSION,
             "commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or None}
+
+
+def worker_status(db: Optional[Session]) -> dict:
+    """The worker tier's last heartbeat and the queue depth (jobs/queue.py); {present: False} before the
+    migration or before a worker has reported. Never raises: the health body must always render."""
+    try:
+        from jobs import queue as Q
+        return Q.worker_status(db)
+    except Exception as e:                # noqa: BLE001
+        log.debug("ops: worker status failed: %s", e)
+        return {"present": False, "reason": type(e).__name__}
 
 
 @router.get("/client-errors")
