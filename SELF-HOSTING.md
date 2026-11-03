@@ -24,12 +24,12 @@ cp .env.selfhost.example .env.selfhost
 # 2. signing key: cd backend && pip install -r requirements.txt && python -m stack.keys
 #    then paste the one line of backend/stack/.local/gotrue_keys.json as GOTRUE_JWT_KEYS
 # 3. RIJEKA_PUBLIC_URL (the web origin) and RIJEKA_API_URL (the API's published port) as people will reach them
-docker compose up --build
+docker compose --env-file .env.selfhost up --build
 ```
 
 Then open `RIJEKA_PUBLIC_URL` (default `http://localhost:8080`), sign up (email confirmation is
 automatic with `GOTRUE_MAILER_AUTOCONFIRM=true`; set the SMTP lines to send real mail), and finish
-the steps under *After first start* below. `docker compose up` again is idempotent: `migrate` records
+the steps under *After first start* below. `docker compose --env-file .env.selfhost up` again is idempotent: `migrate` records
 what it applied in `stack_migrations` and does nothing the second time.
 
 What the compose file does, in order: `db` starts; `migrate` runs `backend/stack/apply.py` (the
@@ -42,7 +42,7 @@ situation as a Supabase project's pre-created table, and publishes the JWKS for 
 serves the build. The details of the stack are in [`backend/stack/README.md`](backend/stack/README.md).
 
 **This compose stack has not been executed by its author** (no Docker on the machine it was written
-on). CI runs `docker compose config` and a smoke `up` of `db` + `migrate` on every pull request (the
+on). CI runs `docker compose --env-file .env.selfhost config` and a smoke `up` of `db` + `migrate` on every pull request (the
 `self-host smoke` job); the `auth`, `api` and `web` services are written from the images'
 documentation and have not been brought up end to end. The GoTrue variables are the ones its
 `example.env` and configuration source name (`GOTRUE_API_HOST`, `PORT`, `GOTRUE_DB_DRIVER`,
