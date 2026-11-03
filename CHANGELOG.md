@@ -3,6 +3,13 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.8.1 · 3 November 2026
+
+- Hotfix: 0.7.3 shipped two undefined variables that the build does not catch (the app shell's route guard read the
+  module store without importing it, so P&L and RISK crashed with "Can't find variable: modules"; the home page read
+  the switches in the wrong component). Fixed; the linter (`npm run lint --quiet`) is now a CI step, so an
+  undefined variable fails the build.
+
 ## 0.8.0 · 3 November 2026
 
 - Independent price verification (P&L → IPV, `backend/ipv`, `/api/ipv/*`): the inputs the book is priced on are

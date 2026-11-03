@@ -25,7 +25,6 @@ const NAV = [
 
 export default function CommandCenter() {
   const navigate  = useNavigate()
-  const modules   = useModulesStore(s => s.modules)
   const location  = useLocation()
   const session   = useAuthStore(s => s.session)
   const profile   = useAuthStore(s => s.profile)
@@ -117,6 +116,7 @@ const BOOT_KEY = 'rijeka.booted'
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 function DeskHome({ demo, navigate }) {
+  const modules = useModulesStore(s => s.modules)          // the P&L tile follows the firm's switches
   const session = useAuthStore(s => s.session)
   const uid = session?.user?.id
   const [d, setD] = useState({ loading: true })

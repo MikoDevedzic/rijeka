@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import PnlNav from './PnlNav'
-import { KIND_LABEL, PILLAR_COLOR, STATE_COLOR, counts, errorMessage, fmt, fmtQuote, fmtShift, fmtSigned, fxGrid, inputRows, pillarRows, sensLabel, surfaceGrid, waterfall } from './ipv-page'
+import { KIND_LABEL, PILLAR_COLOR, STATE_COLOR, counts, errorMessage, fmtQuote, fmtShift, fmtSigned, fxGrid, inputRows, pillarRows, sensLabel, surfaceGrid, waterfall } from './ipv-page'
 import './PnlPage.css'
 import '../risk/RiskPage.css'
 

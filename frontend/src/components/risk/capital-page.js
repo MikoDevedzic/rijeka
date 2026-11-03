@@ -29,7 +29,7 @@ export const STEP_LABEL = {
 }
 
 const SYM = '$'
-export function fmt(v, d = 0) {
+export function fmt(v) {
   if (v == null || isNaN(v)) return '—'
   return SYM + Math.abs(Math.round(Number(v))).toLocaleString('en-US') + (Number(v) < 0 ? ' (−)' : '')
 }
