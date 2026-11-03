@@ -54,4 +54,6 @@ A netting set of a few trades simulates in a second or two (analytic valuation o
 
 A per-counterparty CDS spread and LGD on the record; wrong-way risk; stressed windows for regulatory EEPE; a term structure of PFE limits by tenor set per counterparty.
 
+**Capital (4 November 2026).** The netting set's SA-CCR rows, the counterparty's regime and the capital legs are in `docs/capital.md`; `ccr/report.netting_set_paths` is the shared entry the credit report and the capital route both use.
+
 **Digital-asset options (2 November 2026).** A `CRYPTO_OPTION` is valued on the paths exactly as the FX option (same styles, the asset's funding rate as its base rate, cash-settled the day after expiry); its surface is `{ASSET}USD_VOL`.

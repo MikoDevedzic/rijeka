@@ -136,6 +136,17 @@ class WaterfallResult:
     simm_rw_10d: float              # published (10bd) weight for reference
     mf_0: float                     # SA-CCR maturity factor at t=0
     bridge_noise: Optional[np.ndarray] = None   # the standard normals drawn for the margin-period bridge (n_paths, T)
+    # the capital legs (pricing/capital.py): zero unless `capital` was passed
+    kva_ccr: float = 0.0            # the CCR-capital leg of KVA (today's KVA when no CVA weight is given)
+    kva_cva: float = 0.0            # the BA-CVA capital leg (MAR50.14–50.15) along the path
+    k_cva_0: float = 0.0            # K_CVA at t = 0
+    rwa_0: float = 0.0              # RW × EAD at t = 0
+    addon_0: float = 0.0            # the aggregate SA-CCR add-on at t = 0
+    rc_0: float = 0.0               # the replacement cost at t = 0
+    multiplier_0: float = 1.0
+    v_mean_0: float = 0.0           # mean mark at the first grid point (for the leverage exposure)
+    coll_mean_0: float = 0.0        # mean variation margin held at the first grid point
+    regulatory_margined: bool = False
 
     @property
     def xva_total(self) -> float:
@@ -208,12 +219,24 @@ def run_waterfall(
     params:  WaterfallParams,
     csa:     CSA,
     rng:     Optional[np.random.Generator] = None,
+    *,
+    reg_csa: Optional[CSA] = None,
+    capital=None,
+    saccr: Optional[list] = None,
 ) -> WaterfallResult:
     """
     Exposure profiles and XVA under `csa`. `paths` are MtM from our side
     (positive = counterparty owes us). p0_grid[k] = P(0, k·dt).
+
+    `csa` is the economic CSA (what is exchanged: CVA, DVA, FVA, FBA, MVA). `reg_csa`, when given, is the
+    regulatory CSA (pricing/collateral.py: recognised collateral at its haircut) and drives the SA-CCR branch;
+    None means the two are the same, as before. `saccr` is the netting set as SaccrTrade rows
+    (pricing/sa_ccr.py): the add-on is then the multi-class CRE52 add-on along the grid; None keeps the
+    single-factor interest-rate add-on. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
+    hurdle replace the params' and the BA-CVA capital leg joins KVA; None keeps today's KVA exactly.
     """
     n_paths, T = paths.shape
+    reg = reg_csa if reg_csa is not None else csa
     DT  = params.dt
     N   = params.notional
     M0  = params.maturity_y
@@ -252,12 +275,33 @@ def run_waterfall(
     ee_g = np.mean(np.maximum(paths, 0.0), axis=0)
     ene_g= np.mean(np.minimum(paths, 0.0), axis=0)
     coll_mean  = np.mean(coll, axis=0)
-    resid_mean = np.mean(resid, axis=0)
+
+    # the regulatory view of the collateral: recognised at its haircut, or nothing
+    if reg.sa_ccr_margined and csa.collateralised:
+        coll_reg_mean = coll_mean * (1.0 - reg.collateral_haircut)
+    else:
+        coll_reg_mean = np.zeros_like(coll_mean)
+    v_mean = np.mean(paths, axis=0)
+    resid_reg_mean = v_mean - coll_reg_mean
+    nica_arr = im_arr if reg.im_exchanged else np.zeros_like(im_arr)
+    if saccr is not None:
+        from pricing.sa_ccr import addon_profile
+        grid_t = [(i + 1) * DT for i in range(T)]
+        addon_grid = addon_profile(saccr, reg, grid_t)
+        addon_grid_unm = addon_profile(saccr, CSA.uncollateralised(), grid_t) if reg.sa_ccr_margined else None
+    else:
+        addon_grid = addon_grid_unm = None
 
     # ── Waterfall loop ───────────────────────────────────────────────────────
     lgd, own_lgd = params.lgd, params.own_lgd
     hurdle, wwr  = params.hurdle_rate, params.wwr_multiplier
     rw_cp        = params.counterparty_rw
+    s_c          = 0.0
+    if capital is not None:
+        rw_cp, hurdle, s_c = float(capital.rw), float(capital.hurdle), float(capital.s_c)
+    kva_ccr = kva_cva = 0.0
+    k_cva_0 = rwa_0 = addon_0 = rc_0 = 0.0
+    mult_0 = 1.0
     ftp_flat     = params.ftp_bp / 10000.0
     pickup       = csa.im_yield_pickup_bp / 10000.0
 
@@ -286,16 +330,16 @@ def run_waterfall(
         m_t = max(M0 - t, 0.0)
         if m_t > 0:
             sd_t  = (1.0 - math.exp(-0.05 * m_t)) / 0.05          # supervisory duration
-            mf_t  = csa.sa_ccr_maturity_factor(m_t)
-            addon = SF_IR * N * sd_t * mf_t
-            if csa.sa_ccr_margined:
-                nica = im_arr[i]
-                rc_t = max(float(resid_mean[i]),
-                           csa.threshold_cp + csa.mta - nica, 0.0)
-                v_for_mult = float(resid_mean[i]) - nica
+            mf_t  = reg.sa_ccr_maturity_factor(m_t)
+            addon = addon_grid[i] if addon_grid is not None else SF_IR * N * sd_t * mf_t
+            if reg.sa_ccr_margined:
+                nica = float(nica_arr[i])
+                rc_t = max(float(resid_reg_mean[i]),
+                           reg.threshold_cp + reg.mta - nica, 0.0)
+                v_for_mult = float(resid_reg_mean[i]) - nica
             else:
-                rc_t = max(float(resid_mean[i]), 0.0)
-                v_for_mult = float(resid_mean[i])
+                rc_t = max(float(resid_reg_mean[i]), 0.0)
+                v_for_mult = float(resid_reg_mean[i])
             if addon > 0:
                 # the multiplier is capped at 1, so the exponent can be capped without changing it: an exposure far
                 # above the add-on (a digital's payout against a tiny add-on) must not overflow
@@ -308,10 +352,30 @@ def run_waterfall(
                 ead_t = rc_t + SF_IR * N * mf_t
             else:
                 ead_t = ALPHA * (rc_t + mult * addon)
+                if reg.sa_ccr_margined:
+                    # CRE52.2: a margined netting set's EAD is capped at the same set unmargined (its collateral
+                    # held, the unmargined maturity factor, RC = max(V − C, 0)); a large threshold or MTA floor
+                    # cannot make margining worse than no margining
+                    mf_u = math.sqrt(min(max(m_t, 10.0 / 250.0), 1.0))          # CRE52.48: M floored at ten business days
+                    addon_u = addon_grid_unm[i] if addon_grid_unm is not None else SF_IR * N * sd_t * mf_u
+                    v_u = float(resid_reg_mean[i]) - float(nica_arr[i])
+                    mult_u = min(1.0, 0.05 + 0.95 * math.exp(min(v_u / (1.9 * addon_u), 50.0))) if addon_u > 0 else 1.0
+                    ead_u = ALPHA * (max(v_u, 0.0) + mult_u * addon_u)
+                    if ead_u < ead_t:
+                        ead_t = ead_u
             k_t  = CAP_R * rw_cp * ead_t
-            kva += hurdle * k_t * DT * disc
+            kva_ccr += hurdle * k_t * DT * disc
+            if s_c > 0.0:
+                # MAR50.15: SCVA = (1/α) S_c M EAD DF(M); MAR50.14: one counterparty, K = 0.65 · SCVA
+                df_m = (1.0 - math.exp(-0.05 * m_t)) / (0.05 * m_t)
+                k_cva_t = 0.65 * (1.0 / ALPHA) * s_c * m_t * ead_t * df_m
+                kva_cva += hurdle * k_cva_t * DT * disc
+            else:
+                k_cva_t = 0.0
+            kva += hurdle * (k_t + k_cva_t) * DT * disc
             if i == 0:
                 ead_0, cap_0, mf_0 = ead_t, k_t, mf_t
+                k_cva_0, rwa_0, addon_0, rc_0, mult_0 = k_cva_t, rw_cp * ead_t, addon, rc_t, mult
 
             # IM posted is funded at ftp less any yield the collateral earns
             mva -= im_arr[i] * max(ftp_t - pickup, 0.0) * DT * disc
@@ -327,4 +391,7 @@ def run_waterfall(
         kva=-abs(kva), mva=-abs(mva),
         ead_0=ead_0, capital_0=cap_0, im_0=im_0,
         simm_rw=rw, simm_rw_10d=rw_10d, mf_0=mf_0,
+        kva_ccr=-abs(kva_ccr), kva_cva=-abs(kva_cva), k_cva_0=k_cva_0, rwa_0=rwa_0, addon_0=addon_0, rc_0=rc_0,
+        multiplier_0=mult_0, v_mean_0=float(v_mean[0]) if T else 0.0, coll_mean_0=float(coll_mean[0]) if T else 0.0,
+        regulatory_margined=bool(reg.sa_ccr_margined),
     )

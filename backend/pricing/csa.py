@@ -71,6 +71,9 @@ class CSA:
     im_exchanged:      bool  = False                # SIMM IM posted both ways
     im_yield_pickup_bp: float = 0.0                 # bp of ftp recovered on posted IM (tokenised collateral earning yield)
     settlement:        str   = "bilateral"          # "bilateral" | "on_chain"
+    # Collateral eligibility (pricing/collateral.py derives these; the defaults are today's behaviour):
+    crm_recognised:    bool  = True                 # the collateral counts under CRE22: margined treatment, NICA, C in RC and the multiplier
+    collateral_haircut: float = 0.0                 # fraction of the collateral's value lost to the supervisory haircut (CRE22.49)
 
     # ── Derived ──────────────────────────────────────────────────────────────
 
@@ -85,14 +88,15 @@ class CSA:
 
     @property
     def sa_ccr_margined(self) -> bool:
-        return self.collateralised
+        """Margined for SA-CCR only when variation margin is exchanged in collateral the rules recognise."""
+        return self.collateralised and self.crm_recognised
 
     def sa_ccr_maturity_factor(self, residual_maturity_y: float) -> float:
         """
         Margined: 1.5 × sqrt(MPoR / 250), MPoR floored per settlement type.
         Unmargined: sqrt(min(M, 1)).
         """
-        if self.collateralised:
+        if self.sa_ccr_margined:
             floor = (MPOR_FLOOR_CLEARED_BD if self.settlement == "on_chain"
                      else MPOR_FLOOR_BILATERAL_BD)
             mpor = max(self.mpor_days, floor)
@@ -143,7 +147,8 @@ class CSA:
         else:
             base = cls.uncollateralised()
         for k in ("collateralised", "threshold_cp", "threshold_own", "mta",
-                  "mpor_days", "im_exchanged", "im_yield_pickup_bp", "settlement"):
+                  "mpor_days", "im_exchanged", "im_yield_pickup_bp", "settlement",
+                  "crm_recognised", "collateral_haircut"):
             if d.get(k) is not None:
                 setattr(base, k, d[k])
         if base.mpor_days <= 0:

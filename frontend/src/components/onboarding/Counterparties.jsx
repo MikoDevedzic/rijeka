@@ -14,6 +14,11 @@ const CSA_DISCOUNT_MAP = {
 const CSA_CURRENCIES = ['USD','EUR','GBP','JPY','CHF','AUD','CAD']
 const CSA_TYPES      = ['VM_ONLY','VM_IM','NO_CSA']
 const IM_MODELS      = ['SIMM','GRID','SCHEDULE']
+// capital attributes (pricing/capital.py, pricing/collateral.py); blank = the engine's defaults
+const CP_TYPES       = ['', 'BANK','BROKER_DEALER','CORPORATE','FUND','SOVEREIGN','CRYPTO_NATIVE']
+const RATINGS        = ['', 'AAA_AA','A','BBB','BB_B','BELOW_B','UNRATED']
+const CVA_SECTORS    = ['', 'SOVEREIGN','LOCAL_GOVERNMENT','FINANCIAL','BASIC_MATERIALS','CONSUMER','TECHNOLOGY','HEALTH_UTILITIES','OTHER']
+const COLLATERAL     = ['CASH','GOVT','GOVT_TOKENISED','FUND_SHARES_TOKENISED','STABLECOIN','CRYPTO_2A','CRYPTO_2B']
 
 const CSA_COLOR = {
   VM_ONLY: 'var(--accent)',
@@ -24,7 +29,23 @@ const CSA_COLOR = {
 const EMPTY = {
   legal_entity_id:'', name:'', isda_agreement:'',
   csa_type:'VM_ONLY', csa_currency:'USD', csa_threshold_m:'',
-  csa_mta_k:'', discount_curve_id:'USD_SOFR', im_model:'SIMM'
+  csa_mta_k:'', discount_curve_id:'USD_SOFR', im_model:'SIMM',
+  counterparty_type:'', rating_bucket:'', cva_sector:'', umr_in_scope:false,
+  eligible_collateral:['CASH','GOVT'], netting_enforceable:true
+}
+
+// The capital columns exist once docs/migrations/2026-11-04_counterparty_capital.sql is applied; before
+// that the insert carries none of them so booking a counterparty keeps working.
+function capitalFields(form) {
+  var out = {}
+  if (form.counterparty_type) out.counterparty_type = form.counterparty_type
+  if (form.rating_bucket)     out.rating_bucket     = form.rating_bucket
+  if (form.cva_sector)        out.cva_sector        = form.cva_sector
+  if (form.umr_in_scope)      out.umr_in_scope      = true
+  var defaultElig = form.eligible_collateral.length === 2 && form.eligible_collateral.indexOf('CASH') >= 0 && form.eligible_collateral.indexOf('GOVT') >= 0
+  if (!defaultElig)           out.eligible_collateral = form.eligible_collateral
+  if (!form.netting_enforceable) out.netting_enforceable = false
+  return out
 }
 
 const L = {
@@ -148,6 +169,7 @@ export default function Counterparties() {
         ? parseFloat(form.csa_mta_k) : null,
       discount_curve_id: hasCSA ? (form.discount_curve_id || null) : null,
       im_model:          form.im_model,
+      ...capitalFields(form),
       created_by:        user ? user.id : null,
       // Tenancy key — see LegalEntities.save(). RLS WITH CHECK requires it.
       user_id:           user ? user.id : null
@@ -319,6 +341,58 @@ export default function Counterparties() {
               </select>
             </div>
 
+            <div>
+              <label style={L}>TYPE <span style={{ opacity:.6 }}>(CRE20 risk weight)</span></label>
+              <select style={Object.assign({}, INP, { cursor:'pointer' })}
+                value={form.counterparty_type}
+                onChange={function(e) { f({ counterparty_type: e.target.value }) }}>
+                {CP_TYPES.map(function(t) { return <option key={t} value={t}>{t || '— DEFAULT (CORPORATE) —'}</option> })}
+              </select>
+            </div>
+            <div>
+              <label style={L}>RATING BUCKET</label>
+              <select style={Object.assign({}, INP, { cursor:'pointer' })}
+                value={form.rating_bucket}
+                onChange={function(e) { f({ rating_bucket: e.target.value }) }}>
+                {RATINGS.map(function(t) { return <option key={t} value={t}>{t || '— DEFAULT (UNRATED) —'}</option> })}
+              </select>
+            </div>
+            <div>
+              <label style={L}>CVA SECTOR <span style={{ opacity:.6 }}>(MAR50.16)</span></label>
+              <select style={Object.assign({}, INP, { cursor:'pointer' })}
+                value={form.cva_sector}
+                onChange={function(e) { f({ cva_sector: e.target.value }) }}>
+                {CVA_SECTORS.map(function(t) { return <option key={t} value={t}>{t || '— BY TYPE —'}</option> })}
+              </select>
+            </div>
+            <div style={{ gridColumn:'1 / span 2' }}>
+              <label style={L}>ELIGIBLE COLLATERAL <span style={{ opacity:.6 }}>(the CSA's schedule)</span></label>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                {COLLATERAL.map(function(c) {
+                  var on = form.eligible_collateral.indexOf(c) >= 0
+                  return (
+                    <button key={c} type="button"
+                      onClick={function() { f({ eligible_collateral: on ? form.eligible_collateral.filter(function(x) { return x !== c }) : form.eligible_collateral.concat([c]) }) }}
+                      style={{ background: on ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent', border:'1px solid ' + (on ? 'var(--accent)' : 'var(--panel-3)'),
+                        color: on ? 'var(--accent)' : 'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'10px', padding:'3px 8px', borderRadius:'2px', cursor:'pointer', letterSpacing:'0.05em' }}>
+                      {c}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div>
+              <label style={L}>CLOSE-OUT NETTING · UMR</label>
+              <div style={{ display:'flex', gap:'12px', alignItems:'center', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'11px', color:'var(--text-dim)' }}>
+                <label style={{ display:'flex', gap:'4px', alignItems:'center', cursor:'pointer' }}>
+                  <input type="checkbox" checked={form.netting_enforceable} onChange={function(e) { f({ netting_enforceable: e.target.checked }) }} /> ENFORCEABLE
+                </label>
+                <label style={{ display:'flex', gap:'4px', alignItems:'center', cursor:'pointer' }}>
+                  <input type="checkbox" checked={form.umr_in_scope} onChange={function(e) { f({ umr_in_scope: e.target.checked }) }} /> UMR IN SCOPE
+                </label>
+              </div>
+            </div>
+
           </div>
 
           {!hasCSA && (
@@ -410,7 +484,7 @@ export default function Counterparties() {
 
                 <Cell dim>{cp.csa_currency}</Cell>
                 <Cell dim>{cp.discount_curve_id}</Cell>
-                <Cell dim>{cp.im_model}</Cell>
+                <Cell dim>{cp.im_model}{cp.counterparty_type ? ' · ' + cp.counterparty_type + (cp.rating_bucket ? ' ' + cp.rating_bucket : '') : ''}</Cell>
 
                 <div style={{ display:'flex', gap:'4px' }}>
                   {cp.is_active && cp.legal_entity?.lei && (

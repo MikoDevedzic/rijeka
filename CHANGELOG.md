@@ -1,7 +1,27 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.2). Commits on `main` are the detail.
+methodology document carries its own version (v1.3). Commits on `main` are the detail.
+
+## 0.7.0 · 4 November 2026
+
+- Capital on the ticket (CAPITAL tab, `POST /api/capital/trade`): the trade's SIMM IM, SA-CCR EAD, RWA, CCR and
+  CVA capital, KVA, MVA, CVA, FVA, leverage exposure and the HQLA value of the margin posted under every collateral
+  regime and counterparty type, as the counterparty's netting set with the trade, without it (common random
+  numbers) and the trade alone; a derivation drawer per cell with the formula, the regime's two CSAs, the inputs
+  and the SA-CCR snapshot per trade and hedging set; the regime's cost against the first column in bp.
+- Collateral classes and regimes (`pricing/collateral.py`): cash, government securities, a tokenised sovereign
+  claim, tokenised fund shares, payment stablecoins and cryptoassets with their recognition (CRE22, SCO60.94),
+  haircuts (CRE22.49), margin eligibility (CFTC §23.156), liquidity level (LCR30) and SCO60 group; a regime derives a
+  regulatory CSA and an economic CSA; four presets.
+- SA-CCR by asset class (`pricing/sa_ccr.py`, CRE52): interest rates with maturity buckets, FX, the cryptoasset
+  class (SCO60.98), credit, equity and commodity; supervisory deltas for options; the Basel Committee's five worked
+  examples reproduced unrounded as the reference suite. The waterfall's KVA leg now uses it along the path for
+  every product (before: the interest-rate factor for all) and gains the CVA-capital leg (MAR50.14–50.16) with the
+  counterparty's CRE20 risk weight; defaults reproduce 0.6.0 exactly.
+- Counterparty record: type, rating bucket, risk-weight override, CVA sector, UMR scope, eligible collateral,
+  compositions, enforceability (`docs/migrations/2026-11-04_counterparty_capital.sql`; read and written only once
+  applied). Methodology v1.3 (§16); `docs/capital.md`.
 
 ## 0.6.0 · 2 November 2026 (launch candidate)
 

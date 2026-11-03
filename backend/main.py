@@ -31,6 +31,7 @@ from api.routes import (
     market_data,
     bloomberg,
     xva,
+    capital,
     chain,
     chat,
     trade_cards,
@@ -107,6 +108,7 @@ app.include_router(cashflows.router)
 app.include_router(pricer.router)
 app.include_router(market_data.router)
 app.include_router(xva.router)
+app.include_router(capital.router)
 app.include_router(bloomberg.router, prefix="/api")
 app.include_router(schedules.router)
 app.include_router(chain.router)

@@ -14,7 +14,7 @@
 
 import React, { useState } from 'react'
 
-const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CURVE SCENARIO','◆ CONFIRM']
+const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CAPITAL','CURVE SCENARIO','◆ CONFIRM']
 
 // ── TabBar ─────────────────────────────────────────────────────────────────
 

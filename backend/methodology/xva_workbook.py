@@ -416,7 +416,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBAr": "Waterfall!B9",
                 "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFir": "Waterfall!B15", "CapR": "Waterfall!B16"})
     r0 = 20
-    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM(t)", "MVA_i"]
+    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM(t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)"]
     W.header(ws, r0 - 1, hdr)
     for j in range(1, T + 1):
         r = r0 + j - 1; e = rs + j
@@ -440,11 +440,17 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
         ws.cell(row=r, column=18, value=f"=IF(Coll=1,Exposure!K{e},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=19, value=f"=IF(Coll=1,MAX(Exposure!J{e},THcp+MTA-R{r},0),MAX(Exposure!J{e},0))").number_format = "#,##0.00"
         ws.cell(row=r, column=20, value=f"=IF(Q{r}>0,MIN(1,0.05+0.95*EXP((Exposure!J{e}-R{r})/(1.9*Q{r}))),1)").number_format = "0.0000"
-        ws.cell(row=r, column=21, value=f"=IF(CapModel=\"IMM\",AlphaSA*H{r},IF(CapModel=\"CEM\",S{r}+SFir*Notl*P{r},AlphaSA*(S{r}+T{r}*Q{r})))").number_format = "#,##0.00"
+        ws.cell(row=r, column=21, value=f"=IF(CapModel=\"IMM\",AlphaSA*H{r},IF(CapModel=\"CEM\",S{r}+SFir*Notl*P{r},IF(Coll=1,MIN(AlphaSA*(S{r}+T{r}*Q{r}),AD{r}),AlphaSA*(S{r}+T{r}*Q{r}))))").number_format = "#,##0.00"
         ws.cell(row=r, column=22, value=f"=CapR*RWcp*U{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=23, value=f"=IF(N{r}>0,Hurdle*V{r}*Dt*C{r},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=24, value=f"=Exposure!K{e}").number_format = "#,##0.00"
         ws.cell(row=r, column=25, value=f"=IF(N{r}>0,X{r}*MAX(FTP/10000-Pickup/10000,0)*Dt*C{r},0)").number_format = "#,##0.00"
+        # CRE52.2: the same set unmargined (the collateral held, the unmargined maturity factor, RC = max(V − C, 0)); the EAD is capped at it
+        ws.cell(row=r, column=26, value=f"=SQRT(MIN(MAX(N{r},0.04),1))").number_format = "0.0000"
+        ws.cell(row=r, column=27, value=f"=SFir*Notl*O{r}*Z{r}").number_format = "#,##0.00"
+        ws.cell(row=r, column=28, value=f"=MAX(Exposure!J{e}-R{r},0)").number_format = "#,##0.00"
+        ws.cell(row=r, column=29, value=f"=IF(AA{r}>0,MIN(1,0.05+0.95*EXP((Exposure!J{e}-R{r})/(1.9*AA{r}))),1)").number_format = "0.0000"
+        ws.cell(row=r, column=30, value=f"=AlphaSA*(AB{r}+AC{r}*AA{r})").number_format = "#,##0.00"
     r1 = r0 + T - 1
     rt = r1 + 2
     totals = [("CVA", f"=-SUM(J{r0}:J{r1})"), ("DVA", f"=SUM(K{r0}:K{r1})"), ("FVA", f"=-SUM(L{r0}:L{r1})"), ("FBA", f"=SUM(M{r0}:M{r1})"),
@@ -453,7 +459,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     for i, (label, f) in enumerate(totals):
         ws.cell(row=rt + i, column=1, value=label).font = Font(bold=True)
         ws.cell(row=rt + i, column=2, value=f).number_format = "#,##0.00"
-    W.widths(ws, [34, 9, 11, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 9, 9, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11])
+    W.widths(ws, [34, 9, 11, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 9, 9, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11, 10, 13, 13, 10, 16])
     ws.freeze_panes = "C20"
     return r0, r1, rt
 
@@ -571,7 +577,7 @@ def xva_rates_workbook(mkt):
         ("Q(t)", "exp(−s/LGD·t)", f"Waterfall!D{r0}", "the credit triangle", "0.000000"),
         ("CVA", "−LGD·Σ EE·ΔQ·P(0,t)·WWR", f"Waterfall!B{rt}", "", "#,##0.00"), ("DVA", "+LGD_own·Σ |ENE|·ΔQ_own·P(0,t)", f"Waterfall!B{rt + 1}", "", "#,##0.00"),
         ("FVA, FBA", "−Σ ftp·EE·Δ·P, +Σ ftp·ratio·|ENE|·Δ·P", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
-        ("EAD", "α·[RC + multiplier·add-on], add-on = SF·N·SD(m)·MF", f"Waterfall!U{r0}", "SA-CCR, step 1", "#,##0.00"),
+        ("EAD", "α·[RC + multiplier·add-on], add-on = SF·N·SD(m)·MF; a margined set capped at the same set unmargined (CRE52.2)", f"Waterfall!U{r0}", "SA-CCR, step 1", "#,##0.00"),
         ("KVA", "−hurdle·Σ 8%·RW·EAD·Δ·P", f"Waterfall!B{rt + 4}", "", "#,##0.00"), ("MVA", "−Σ IM(t)·max(ftp − pickup, 0)·Δ·P", f"Waterfall!B{rt + 5}", "", "#,##0.00"),
         ("σ_n (calibration)", "σ·|dS/dr|·√(V(T_e)/T_e), dS/dr = B_M·P_M/A + S·w_dur", f"Calibration!{L(cal['cM'])}{cal['r0']}", "the model's ATM normal swaption vol, closed form", "0.00"),
     ]:

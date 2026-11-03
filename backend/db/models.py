@@ -79,6 +79,9 @@ class Counterparty(Base):
     is_active          = Column(Boolean, default=True)
     created_at         = Column(DateTime(timezone=True), server_default=func.now())
     created_by         = Column(UUID(as_uuid=True), nullable=True)
+    # the capital attributes (docs/migrations/2026-11-04_counterparty_capital.sql) are not ORM columns: a deploy
+    # ahead of the migration must keep booking counterparties, so api/routes/counterparties.py reads and writes
+    # them through SQL only when the columns exist (capital_columns_present)
 
     # Sprint 12 item 4 — tenant isolation key. NOT NULL enforced at DB level.
     user_id            = Column(UUID(as_uuid=True), nullable=False, index=True)

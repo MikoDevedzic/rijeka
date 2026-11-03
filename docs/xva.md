@@ -124,4 +124,4 @@ CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; f
 - One factor for rates (HW1F) and a flat vol for forwards: no smile in the exposure.
 - CVA and DVA use the credit triangle with a flat LGD; no recovery uncertainty, no correlation between credit and market beyond the WWR multiplier.
 - IM amortises linearly with residual maturity; a full SIMM IM profile along the path is on the roadmap.
-- KVA uses supervisory add-ons for interest rate only; FX and digital-asset add-ons follow.
+- KVA's SA-CCR add-on is by asset class since 4 November 2026 (`pricing/sa_ccr.py`: rates, FX, the cryptoasset class, options at their supervisory delta); the CVA-capital leg and the collateral regimes are described in `docs/capital.md`.

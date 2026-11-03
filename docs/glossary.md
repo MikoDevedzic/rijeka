@@ -49,3 +49,13 @@ surface the trade is valued on), AMEND (terms changed in the window), RESIDUAL (
 | CVA, DVA, FVA, FBA, KVA, MVA | The waterfall: credit, debit, funding cost and benefit, capital, margin valuation adjustments; costs negative, benefits positive. |
 | VaR, ES | Historical-simulation loss quantile and the mean loss beyond it, one day, 99 % (95 % secondary). |
 | MPoR | Margin period of risk: 10 business days bilateral, 5 on chain. |
+
+## Capital (docs/capital.md)
+
+- **Collateral regime** — a CSA plus the eligible collateral set, the compositions posted and received, and three labelled switches (close-out enforceability, IM eligibility state, margin period of risk). Derives a regulatory CSA and an economic CSA.
+- **Regulatory CSA / economic CSA** — the collateral the rules recognise at its haircut (feeds SA-CCR, CVA capital, leverage) / what is exchanged (feeds CVA, DVA, FVA, FBA, MVA).
+- **SA-CCR** — Basel CRE52 exposure at default: 1.4 × (RC + multiplier × add-on), the add-on by asset class and hedging set.
+- **K_CCR, K_CVA** — 8 % × RW × EAD; the reduced basic-approach CVA capital (MAR50.14–50.16). Both legs feed KVA.
+- **Leverage exposure** — 1.4 × (RC with only cash VM + add-on), LEV30.
+- **HQLA of IM** — the liquidity value of the margin posted by level (LCR30).
+- **Quote advantage** — a regime's cost against the first column as a running (over the annuity) or upfront spread of notional, bp.

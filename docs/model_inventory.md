@@ -11,6 +11,7 @@ findings carry the `validation` label on GitHub. Updated 2 November 2026.
 | Schedules, day counts, fixings | `pricing/schedule.py`, `pricing/day_count.py`, `pricing/calendars.py` | 3 | in the IRS rows | `irs`, `ois` | QuantLib | #35 (accrual vs payment dates) |
 | IRS, OIS, basis swaps | `pricing/ir_swap.py` | 4 | 44 (IRS) | `irs`, `ois` | Bloomberg SWPM, April 2026 (38 tests); QuantLib | re-validation wanted on period-end discounting |
 | Key-rate ladder | `risk/sensitivities.py` | 14 | 25 | the ticket's IR01 vs the workbook | QuantLib rebootstrap, 0.05 % of DV01 | none |
+| SA-CCR by asset class, collateral regimes, CVA capital | `pricing/sa_ccr.py`, `pricing/collateral.py`, `pricing/capital.py` | 16 | the Basel Committee's five SA-CCR worked examples (exact); MAR50 by hand | none yet (`xva_capital` planned) | the examples are the Committee's own; **validator wanted** on the netting-set mapping | none |
 | European swaption (Bachelier) | `pricing/swaption.py` | 5 | 33 (Swaption) | `swaption` | Bloomberg delta USD 3 on USD 10m 5Y; QuantLib | none |
 | β=0 SABR surface | `pricing/sabr.py` | 5.3 | 11 (FX smile is separate) | none | fit diagnostics only; **validator wanted** | none |
 | Caps, floors, collars | `pricing/cap_floor.py` | 6 | 15 | `cap` | Bloomberg 0.1 % at matched vol; QuantLib | #31 cap vol has no P&L step; #35 cap expiry convention |

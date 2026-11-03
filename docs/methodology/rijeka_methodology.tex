@@ -24,7 +24,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.2 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.3 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -367,6 +367,37 @@ Every trade of a counterparty is valued on the same paths and summed per path an
 $EE(t)$ the mean of $E^+$; $PFE_q(t)$ its $q$-quantile over paths at 95, 97.5 and 99\%; $EPE$ the time average of $EE$ over the first year; the peak $PFE_{95}$ and its date; the largest $PFE_{95}$ in each tenor bucket; current exposure $\max(V_0-C_0,0)$. Credit limits are set on \code{PFE\_PEAK:<cpty>}, \code{PFE:<cpty>:<bucket>}, \code{EPE:<cpty>}, \code{CE:<cpty>} and \code{CVA:<cpty>} with the same utilisation and breach rules as the market-risk limits. The reserves come from the risk-neutral paths through the waterfall of \S\ref{sec:exposure} with the counterparty's spread (a desk default of 85bp and 40\% LGD until the record carries its own).
 
 \textbf{Known limitations.} The bridge noise is drawn independently per step, so the 99\% tail is jagged month to month while the 95\% profile is smooth; one factor per currency, so no curve twist in the exposure; the surface's level does not move along a path (its term structure and smile are applied, \S\ref{sec:fxo}; vol of vol is not simulated); the risk-neutral spot paths of a pair without a surface use a desk default vol, labelled; wrong-way risk and stressed EEPE are on the roadmap.
+
+%--------------------------------------------------------------------
+\section{Collateral regimes and counterparty capital}\label{sec:capital}
+\emph{Modules: \code{pricing/collateral.py}, \code{pricing/sa\_ccr.py}, \code{pricing/capital.py}, \code{ccr/saccr\_map.py}; full description in \code{docs/capital.md}. Built from the public texts named at each formula; no third-party material.}
+
+\subsection{Collateral classes and the two CSAs}
+A CSA (\S\ref{sec:exposure}) says whether collateral is exchanged; a \emph{regime} says what it is and what each rulebook makes of it. A collateral class carries its recognition under the credit-risk-mitigation rules (CRE22.34--22.45; SCO60.94 for tokenised and crypto assets), its supervisory haircut by residual maturity (CRE22.49), its eligibility as initial and variation margin (CFTC \S23.156), its liquidity level (LCR30) and its cryptoasset group (SCO60). A regime is a CSA, an eligible set, the compositions posted and received, and three labelled switches: close-out enforceability, the initial-margin eligibility state of a conditional class, and the margin period of risk (the non-cleared floor or the cleared floor for atomic settlement). From one regime the engine derives two CSAs:
+\begin{align}
+\text{regulatory:}\quad & C_{reg}=C\,\big(1-h\big),\;\; h=1-\textstyle\sum_i w_i\,\mathrm{rec}_i\,(1-h_i),\;\; \text{margined iff recognised VM is exchanged and enforceable},\\
+\text{economic:}\quad & C_{eco}=C \text{ when enforceable, else } 0 \text{ (gross exposure)},
+\end{align}
+with $w_i$ the composition weights, $\mathrm{rec}_i\in\{0,1\}$ the recognition and $h_i$ the haircut. The regulatory CSA feeds SA-CCR, CVA capital and the leverage exposure; the economic CSA feeds CVA, DVA, FVA, FBA and MVA, with the pickup on posted margin the yield of its eligible part. The all-recognised regime reproduces the plain CSA field by field, so every number of \S\ref{sec:exposure} is the cash-and-government-securities column.
+
+\subsection{SA-CCR by asset class (CRE52)}
+\begin{align}
+EAD&=1.4\,(RC+m\cdot AddOn), & m&=\min\!\Big(1,\;0.05+0.95\,e^{(V-C)/(1.9\,AddOn)}\Big),\\
+RC&=\max(V-C,0)\ \text{unmargined},& RC&=\max(V-C,\;TH+MTA-NICA,\;0)\ \text{margined},\\
+d_i&=N_i\,SD_i,\quad SD_i=\tfrac{e^{-0.05S_i}-e^{-0.05E_i}}{0.05}, & MF_i&=\sqrt{\min(M_i,1)}\ \text{or}\ 1.5\sqrt{\delta/250},
+\end{align}
+(CRE52.1, 52.10, 52.18--52.19, 52.23, 52.34, 52.48, 52.52). The supervisory delta is $\pm1$ for linear trades and $\pm\Phi\big(\pm(\ln\frac{P+\lambda}{K+\lambda}+\tfrac12\sigma^2T)/(\sigma\sqrt T)\big)$ for options at the supervisory volatility (CRE52.40; $\lambda$ the rate shift). Interest-rate add-ons are per currency over three maturity buckets, $EN=\sqrt{D_1^2+D_2^2+D_3^2+1.4D_1D_2+1.4D_2D_3+0.6D_1D_3}$ at 0.5\% (CRE52.57); FX per pair $|\sum\delta\,d\,MF|$ at 4\% (CRE52.59); the cryptoasset class per asset--fiat pair at 32\% without supervisory duration (SCO60.98); credit, equity and commodity through the single-factor formula with the Table~2 parameters (CRE52.72). Classes add without diversification (CRE52.25); a margined set is capped at the same set unmargined (CRE52.2). The netting set maps to rows as \code{docs/capital.md} states (a physically settled swaption on the forward par rate, active to the underlying's end; forwards by the foreign leg in USD; options at the supervisory delta of spot and strike). Along the exposure path the KVA leg calls the same functions with the dates shifted, so the snapshot and the profile are one computation; with a single interest-rate trade it equals the $SF\cdot N\cdot SD\cdot MF$ of \S\ref{sec:exposure}.
+
+\textbf{Reference.} The Basel Committee's worked examples of March 2014 (Annex~4a, examples 1--5) are reproduced unrounded in \code{tests/test\_sa\_ccr.py}: EAD 569 (three rate trades, swaption delta $-0.27$), 381 (credit, multiplier 0.965), 5\,406 (commodities, nine-month maturity factor), 936 (combined) and 1\,879 (margined weekly, MPoR 14 days, independent amount 150, RC 0, multiplier 0.958).
+
+\subsection{Capital, CVA capital, leverage}
+$RWA=RW\cdot EAD$ and $K_{CCR}=8\%\,RWA$ with the standardised risk weight by counterparty type and grade (sovereigns CRE20.7, banks CRE20.18, corporates CRE20.42--20.43; broker-dealers as banks when prudentially supervised, else as corporates, CRE20.40; an explicit override on the record, labelled). CVA capital follows the reduced basic approach,
+\begin{equation}
+SCVA_c=\tfrac{1}{1.4}\,RW_c\,M\,EAD\,DF(M),\quad DF(M)=\tfrac{1-e^{-0.05M}}{0.05M},\qquad K_{CVA}=0.65\sqrt{(0.5\textstyle\sum_c SCVA_c)^2+0.75\sum_c SCVA_c^2},
+\end{equation}
+(MAR50.14--50.15) with $RW_c$ by sector and grade (MAR50.16, Table~1). The waterfall's KVA becomes $-\kappa\sum_i\big(K_{CCR}(t_i)+K_{CVA}(t_i)\big)\Delta t\,D_i$ with $M(t)$ the remaining maturity; without a CVA weight it is the KVA of \S\ref{sec:exposure} exactly. The leverage exposure is $1.4\,(\max(V-C_{cash},0)+AddOn)$ with only cash variation margin reducing it (LEV30); the HQLA value of the margin posted uses the Level~1, 2A and 2B haircuts (LCR30). The cost difference between two regimes is quoted as a running spread over the trade's annuity or an upfront spread of notional.
+
+\textbf{Known limitations.} Initial margin is a delta margin per risk class without the cross-class aggregation, vega or curvature; supervisory deltas are held fixed along the path; the leverage and liquidity figures are the trade's stock, not the ratios; the cryptoasset initial-margin weight is a labelled assumption.
 
 %--------------------------------------------------------------------
 \section{On-chain bilateral confirmation}\label{sec:chain}
