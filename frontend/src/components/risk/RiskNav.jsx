@@ -1,9 +1,10 @@
-// risk/RiskNav.jsx — the switch under RISK: MARKET RISK | COUNTERPARTY CREDIT
+// risk/RiskNav.jsx — the switch under RISK: MARKET RISK | COUNTERPARTY CREDIT | CAPITAL
 import { NavLink } from 'react-router-dom'
 
 const TABS = [
   { label: 'MARKET RISK', path: '/risk', title: 'Ladder, VaR, stress, limits' },
   { label: 'COUNTERPARTY CREDIT', path: '/risk/ccr', title: 'Netting sets, PFE, credit limits' },
+  { label: 'CAPITAL', path: '/risk/capital', title: 'The book under collateral regimes: RWA, CVA capital, KVA, leverage, channel by channel' },
 ]
 
 export default function RiskNav() {

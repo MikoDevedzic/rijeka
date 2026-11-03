@@ -115,10 +115,48 @@ The counterparty record carries `counterparty_type`, `rating_bucket`, `risk_weig
 `netting_enforceable` (`docs/migrations/2026-11-04_counterparty_capital.sql`); they are read and
 written only once the migration is applied, so a deploy ahead of it changes nothing.
 
+## 5. The book under regimes (Risk → CAPITAL)
+
+`GET /api/capital/portfolio` (the stored run; `live=1` computes it in the request), `POST /api/capital/portfolio`
+(the worker when one is expected, else a thread; `GET /api/capital/portfolio/status`). Engine
+`ccr/capital_report.py`. Every netting set is simulated once on the risk-neutral paths (seed 7) and
+re-collateralised step by step; each step changes one thing in the previous step's CSA, and the difference it
+makes is that channel's attribution. The steps add up to the columns exactly (`tests/test_capital_report.py`,
+`tests/integration/test_capital.py`).
+
+| Step | State | What changes | Where it says so |
+|---|---|---|---|
+| BASELINE | — | the record: CSA type, threshold, MTA, margin frequency (MPoR 9 + N, floored at 10), disputes (the floor doubled), collateral, enforceability | the counterparty record; CRE52.50–52.51 |
+| THRESHOLD_MTA | current | VM at zero threshold and zero MTA (VM switched on for a NO_CSA record) | CRE52.18–52.19 |
+| MARGIN_FREQUENCY | current | daily margining: MPoR to the floor | CRE52.50 |
+| DISPUTES | current | the doubled floor removed | CRE52.51 |
+| COLLATERAL | current | recognised collateral received, close-out netting enforceable | CRE22.34, SCO60.94, CRE52.18 |
+| IM_ELIGIBILITY | current | eligible IM in the asset held, at its yield; no double funding | CFTC §23.156 |
+| MPOR_RELIEF | forward | the cleared floor for atomic settlement | CRE52.50 as argued; not recognised today |
+| TOKENISED_IM | forward | a tokenised sovereign claim eligible as IM, at the yield given | CFTC §23.156: a state |
+| HQLA_L1 | forward | Level 1 liquidity treatment of the margin posted | BCBS 238 / LCR30: a state |
+
+Columns: CSA AS BOOKED, ON-CHAIN under current rules (after IM_ELIGIBILITY), ON-CHAIN with the forward states.
+Per counterparty and for the book: every metric of §4 plus the cost (−(CVA + FVA + KVA + MVA)), the change
+against the baseline, and the quote line (the cost difference as a running or upfront spread of notional).
+
+What the arithmetic will and will not show, and is tested to: a record already on cash and government
+securities shows zero in the COLLATERAL step (parity, not superiority); a daily, undisputed CSA shows zero in
+MARGIN_FREQUENCY and DISPUTES; SIMM IM moves only with the margin period of risk, never with the collateral;
+market-risk capital is not a function of any step and is not computed here; the P&L charges and the regulatory
+stock are separate ledgers. The forward states are shown in their own column and never summed into the
+current-rules one.
+
+The counterparty record carries `margin_frequency_days` and `mpor_disputed`
+(`docs/migrations/2026-11-04_counterparty_margin_terms.sql`); `ccr.exposure.csa_from_counterparty` reads them,
+so the credit report's MPoR follows the record too (null = daily, undisputed: today's behaviour).
+
 ## Limits, stated
 
 - IM is a delta margin per risk class without the cross-class aggregation (no incremental-IM or
   consolidation arithmetic yet); vega and curvature are not in it.
+- The book's run re-collateralises each netting set on its own; unifying netting sets across counterparties
+  (consolidation) and the FRTB market-risk block are the next steps.
 - SA-CCR deltas are held fixed along the path; the add-on profile moves with the dates only.
 - The leverage exposure and the HQLA value are the stock for the trade, not the ratio; the denominators
   are treasury inputs.

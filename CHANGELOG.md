@@ -3,7 +3,19 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
-## 0.7.0 · 4 November 2026
+## 0.7.1 · 3 November 2026
+
+- Risk → CAPITAL: the book under collateral regimes (`GET/POST /api/capital/portfolio`, `ccr/capital_report.py`, the
+  `capital_run` job on the worker). Every netting set is simulated once and re-collateralised step by step from the
+  CSA as booked to an on-chain CSA under today's rules (zero threshold and MTA, daily margining, no dispute doubling,
+  recognised collateral, eligible IM at its yield), then to the forward-looking states (the cleared-floor margin
+  period of risk, a tokenised sovereign claim as IM, Level 1 liquidity); each step's difference is its channel's
+  attribution and the steps add up to the columns exactly; per counterparty and for the book, every capital
+  metric, the change against the baseline and the quote in bp; the invariants (SIMM IM, market-risk capital) stated
+  on the page. The counterparty record gains margin frequency and dispute state
+  (`docs/migrations/2026-11-04_counterparty_margin_terms.sql`); the credit report's MPoR follows them.
+
+## 0.7.0 · 3 November 2026
 
 - Capital on the ticket (CAPITAL tab, `POST /api/capital/trade`): the trade's SIMM IM, SA-CCR EAD, RWA, CCR and
   CVA capital, KVA, MVA, CVA, FVA, leverage exposure and the HQLA value of the margin posted under every collateral

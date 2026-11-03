@@ -19,16 +19,26 @@ QUANTILES = (95.0, 97.5, 99.0)
 BUCKETS = (("0-1Y", 0.0, 1.0001), ("1-5Y", 1.0001, 5.0001), ("5-10Y", 5.0001, 10.0001), ("10Y+", 10.0001, 1e9))
 
 
+def mpor_from_terms(margin_frequency_days=None, disputed=False) -> float:
+    """CRE52.50: re-margining every N business days gives an MPoR of 9 + N, floored at 10; CRE52.51: more than two
+    margin disputes in two quarters doubles the floor."""
+    n = int(margin_frequency_days or 1)
+    mpor = max(10.0, 9.0 + n)
+    return mpor * (2.0 if disputed else 1.0)
+
+
 def csa_from_counterparty(cp) -> CSA:
-    """The CSA as the counterparty record states it: NO_CSA → uncollateralised; VM or VM_IM → daily
-    variation margin with the record's threshold and MTA, 10bd MPoR, IM when the type says so."""
+    """The CSA as the counterparty record states it: NO_CSA → uncollateralised; VM or VM_IM → variation margin with the
+    record's threshold and MTA, the MPoR from its margin frequency and dispute state (10bd when unset), IM when the
+    type says so."""
     kind = str(getattr(cp, "csa_type", None) or "NO_CSA").upper()
     if kind in ("NO_CSA", "NONE", ""):
         return CSA.uncollateralised()
     thr = float(getattr(cp, "csa_threshold_m", None) or 0.0) * 1e6
     mta = float(getattr(cp, "csa_mta_k", None) or 0.0) * 1e3
     im = "IM" in kind
-    return CSA(preset=kind, collateralised=True, threshold_cp=thr, threshold_own=thr, mta=mta, im_exchanged=im)
+    mpor = mpor_from_terms(getattr(cp, "margin_frequency_days", None), bool(getattr(cp, "mpor_disputed", None) or False))
+    return CSA(preset=kind, collateralised=True, threshold_cp=thr, threshold_own=thr, mta=mta, mpor_days=mpor, im_exchanged=im)
 
 
 def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, im0_usd: float = 0.0, seed: int = 11, flows: Optional[np.ndarray] = None) -> dict[str, Any]:

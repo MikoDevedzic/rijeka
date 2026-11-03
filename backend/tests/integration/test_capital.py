@@ -97,3 +97,40 @@ def test_counterparty_capital_attributes_round_trip(client, auth_a, ids):
     jc = client.post("/api/capital/trade", json={"counterparty_id": cp, "trade": B.swap(ids["a"], "IT-CAP-REC"), "n_paths": 200}, headers=auth_a).json()
     assert jc["types"][0]["key"] == "COUNTERPARTY" and jc["types"][0]["type"] == "BANK"
     client.put(f"/api/counterparties/{cp}", json={"counterparty_type": "CORPORATE", "rating_bucket": "UNRATED", "eligible_collateral": ["CASH", "GOVT"]}, headers=auth_a)
+
+
+# ── the book under regimes ───────────────────────────────────────────────────────────────────────
+
+def test_portfolio_capital_under_regimes(client, auth_a, ids, booked):
+    cp = ids["a"]["counterparty_id"]
+    # a weekly, thresholded, disputed CSA so every current-rules channel has something to remove
+    r = client.put(f"/api/counterparties/{cp}", json={"margin_frequency_days": 5, "mpor_disputed": True}, headers=auth_a)
+    assert r.status_code == 200 and r.json()["margin_frequency_days"] == 5 and r.json()["mpor_disputed"] is True
+    r = client.get("/api/capital/portfolio?live=1&n_paths=200&yield_bp=400", headers=auth_a)
+    assert r.status_code == 200, r.text[:600]
+    j = r.json()
+    assert j["date"] and j["columns"] == ["BASELINE", "ON_CHAIN_CURRENT", "ON_CHAIN_FORWARD"] and j["seed"] == 7
+    good = [c for c in j["counterparties"] if not c.get("empty")]
+    assert good, j["counterparties"]
+    c = next(x for x in good if x["counterparty_id"] == cp)
+    assert c["record"]["margin_frequency_days"] == 5 and c["record"]["mpor_disputed"] and c["record"]["mpor_days"] == 28.0   # (9 + 5) × 2
+    keys = [s["key"] for s in c["steps"]]
+    assert keys == ["BASELINE", "THRESHOLD_MTA", "MARGIN_FREQUENCY", "DISPUTES", "COLLATERAL", "IM_ELIGIBILITY", "MPOR_RELIEF", "TOKENISED_IM", "HQLA_L1"]
+    # the steps add up to the columns, exactly
+    for col, last in (("ON_CHAIN_CURRENT", "IM_ELIGIBILITY"), ("ON_CHAIN_FORWARD", "HQLA_L1")):
+        upto = keys.index(last)
+        for k in ("ead", "rwa", "kva", "cva", "cost", "im"):
+            assert c["columns"]["BASELINE"][k] + sum(s["delta"][k] for s in c["steps"][1:upto + 1]) == pytest.approx(c["columns"][col][k], abs=1e-6), (col, k)
+    by = {s["key"]: s for s in c["steps"]}
+    assert by["MARGIN_FREQUENCY"]["csa"]["mpor_days"] == 20.0 and by["DISPUTES"]["csa"]["mpor_days"] == 10.0 and by["MPOR_RELIEF"]["csa"]["mpor_days"] == 5.0
+    assert by["MARGIN_FREQUENCY"]["delta"]["ead"] <= 0 and by["DISPUTES"]["delta"]["ead"] <= 0 and by["MPOR_RELIEF"]["delta"]["ead"] <= 0
+    assert by["COLLATERAL"]["delta"]["ead"] == pytest.approx(0.0, abs=1e-6)       # cash and government securities already: parity, not superiority
+    assert by["HQLA_L1"]["delta"]["hqla_im"] >= 0 and by["TOKENISED_IM"]["delta"]["mva"] >= -1e-9
+    assert c["columns"]["ON_CHAIN_FORWARD"]["ead"] <= c["columns"]["ON_CHAIN_CURRENT"]["ead"] <= c["columns"]["BASELINE"]["ead"] + 1e-6
+    assert j["totals"]["BASELINE"]["rwa"] >= j["totals"]["ON_CHAIN_CURRENT"]["rwa"] - 1e-6
+    assert set(j["quote"]) == set(j["columns"]) and j["quote"]["BASELINE"]["running_bp"] == 0.0
+    assert any("SIMM" in x for x in j["invariants"])
+    # the stored path: nothing yet, then a run (a thread here: no worker), then the report
+    r = client.get("/api/capital/portfolio", headers=auth_a)
+    assert r.status_code == 200 and "counterparties" in r.json()
+    client.put(f"/api/counterparties/{cp}", json={"margin_frequency_days": 1, "mpor_disputed": False}, headers=auth_a)

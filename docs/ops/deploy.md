@@ -70,7 +70,7 @@ starts; set it to `0` to go back to threads.
 The daily batches and the release move stay in the API process (`scheduler.py`): they are
 idempotent for a day, already off the request path, and the health check watches their output; the
 worker only takes the runs a person starts. The worker never sends a chain transaction: the relayer
-nonce belongs to the API process (`RIJEKA_WORKER_KINDS` on the service lists `ccr_run,risk_backfill`).
+nonce belongs to the API process (`RIJEKA_WORKER_KINDS` on the service lists `ccr_run,risk_backfill,capital_run`; the last is the book's capital under regimes, `POST /api/capital/portfolio`).
 
 ## Confirm is asynchronous beyond 25 s
 

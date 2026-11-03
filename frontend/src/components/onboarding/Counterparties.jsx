@@ -31,7 +31,8 @@ const EMPTY = {
   csa_type:'VM_ONLY', csa_currency:'USD', csa_threshold_m:'',
   csa_mta_k:'', discount_curve_id:'USD_SOFR', im_model:'SIMM',
   counterparty_type:'', rating_bucket:'', cva_sector:'', umr_in_scope:false,
-  eligible_collateral:['CASH','GOVT'], netting_enforceable:true
+  eligible_collateral:['CASH','GOVT'], netting_enforceable:true,
+  margin_frequency_days:'', mpor_disputed:false
 }
 
 // The capital columns exist once docs/migrations/2026-11-04_counterparty_capital.sql is applied; before
@@ -45,6 +46,8 @@ function capitalFields(form) {
   var defaultElig = form.eligible_collateral.length === 2 && form.eligible_collateral.indexOf('CASH') >= 0 && form.eligible_collateral.indexOf('GOVT') >= 0
   if (!defaultElig)           out.eligible_collateral = form.eligible_collateral
   if (!form.netting_enforceable) out.netting_enforceable = false
+  if (form.margin_frequency_days && parseInt(form.margin_frequency_days, 10) > 1) out.margin_frequency_days = parseInt(form.margin_frequency_days, 10)
+  if (form.mpor_disputed) out.mpor_disputed = true
   return out
 }
 
@@ -389,6 +392,17 @@ export default function Counterparties() {
                 </label>
                 <label style={{ display:'flex', gap:'4px', alignItems:'center', cursor:'pointer' }}>
                   <input type="checkbox" checked={form.umr_in_scope} onChange={function(e) { f({ umr_in_scope: e.target.checked }) }} /> UMR IN SCOPE
+                </label>
+              </div>
+            </div>
+            <div>
+              <label style={L}>MARGIN FREQUENCY <span style={{ opacity:.6 }}>(business days; MPoR 9 + N, CRE52.50)</span></label>
+              <div style={{ display:'flex', gap:'12px', alignItems:'center' }}>
+                <input style={Object.assign({}, INP, { width:'70px' })} type="number" min="1" max="60" step="1" placeholder="1"
+                  value={form.margin_frequency_days}
+                  onChange={function(e) { f({ margin_frequency_days: e.target.value }) }} />
+                <label style={{ display:'flex', gap:'4px', alignItems:'center', cursor:'pointer', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'11px', color:'var(--text-dim)' }}>
+                  <input type="checkbox" checked={form.mpor_disputed} onChange={function(e) { f({ mpor_disputed: e.target.checked }) }} /> DISPUTED (floor doubled, CRE52.51)
                 </label>
               </div>
             </div>

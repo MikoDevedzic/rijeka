@@ -12,12 +12,12 @@ the way POST /api/xva/incremental does.
 from __future__ import annotations
 
 import math
+import threading
 import time
 import uuid
 from datetime import date
 from typing import Any, Optional
 
-import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -29,14 +29,12 @@ from middleware.auth import verify_token
 from pricing import capital as CAP
 from pricing import collateral as COL
 from pricing import sa_ccr as SA
+from jobs import queue as Q
 from pricing.csa import CSA
-from pricing.xva_engine import WaterfallParams, run_waterfall
 
 router = APIRouter(prefix="/api/capital", tags=["capital"])
 
-METRICS = ("im", "ead", "rwa", "k_ccr", "k_cva", "kva", "kva_ccr", "kva_cva", "mva", "cva", "dva", "fva", "fba", "xva_total",
-           "leverage", "hqla_im", "addon", "rc", "multiplier")
-COST_KEYS = ("cva", "fva", "kva", "mva")          # the cost the quote carries: negative numbers in the waterfall's convention
+from ccr.capital_report import COST_KEYS, METRICS      # one definition for the ticket's grid and the book's report
 
 
 class CounterpartyType(BaseModel):
@@ -72,33 +70,17 @@ def _type_key(ct: CounterpartyType) -> str:
     return ct.label or f"{ct.type.upper()}·{ct.rating.upper()}"
 
 
-def _metrics(wf, regime: COL.Regime, reg: CSA, cash_vm_fraction: float) -> dict:
-    lev = CAP.leverage_exposure(wf.v_mean_0, wf.coll_mean_0 * cash_vm_fraction, wf.addon_0)
-    hq = regime.hqla_value(wf.im_0, "posted")["total"] if wf.im_0 else 0.0
-    return {"im": wf.im_0, "ead": wf.ead_0, "rwa": wf.rwa_0, "k_ccr": wf.capital_0, "k_cva": wf.k_cva_0,
-            "kva": wf.kva, "kva_ccr": wf.kva_ccr, "kva_cva": wf.kva_cva, "mva": wf.mva, "cva": wf.cva, "dva": wf.dva, "fva": wf.fva, "fba": wf.fba,
-            "xva_total": wf.xva_total, "leverage": lev, "hqla_im": hq, "addon": wf.addon_0, "rc": wf.rc_0, "multiplier": wf.multiplier_0}
-
-
-def _cash_fraction(regime: COL.Regime) -> float:
-    try:
-        return sum(w for c, w in regime._classes(regime.received) if c.code == "CASH")
-    except ValueError:
-        return 0.0
-
-
 def capital_grid(sets: dict[str, Optional[dict]], regimes: list[COL.Regime], types: list[CounterpartyType],
                  cp_cds_bp: float, lgd: float, hurdle: float, seed: int = 43) -> dict[str, Any]:
     """sets: name → {V (paths × T+1, USD), t (T+1 years), p0 (T+2 discount factors), rows (SaccrTrade list), im_10d (IM at a
     10-day MPoR, USD), gross (USD), mtm (today's net mark)} or None for an empty set. Returns, per regime and counterparty
     type, the metrics of every set and the differences; per regime, the SA-CCR snapshot of every set."""
+    from ccr.capital_report import run_set
     out_cells: dict[str, dict[str, dict]] = {}
     snapshots: dict[str, dict[str, Any]] = {}
     regime_info = []
     for rg in regimes:
-        eco, reg = rg.economic_csa(), rg.regulatory_csa()
         regime_info.append({**rg.to_dict(), "explain": rg.explain()})
-        cash_frac = _cash_fraction(rg)
         per_type: dict[str, dict] = {}
         snaps: dict[str, Any] = {}
         for ct in types:
@@ -108,21 +90,10 @@ def capital_grid(sets: dict[str, Optional[dict]], regimes: list[COL.Regime], typ
                 if S is None:
                     cells[name] = None
                     continue
-                V, t, p0 = S["V"], S["t"], S["p0"]
-                n_paths, T1 = V.shape
-                dt = float(t[1] - t[0]) if T1 > 1 else 1 / 12
-                theta = -math.log(max(p0[-1], 1e-9)) / max(float(t[-1]), 1e-6)
-                im_m = (S["im_10d"] * eco.simm_mpor_scale / 1e6) if (S["im_10d"] and eco.im_exchanged) else None
-                params = WaterfallParams(notional=max(S["gross"], 1.0), maturity_y=float(t[-1]), dt=dt, theta=max(theta, 1e-6),
-                                         cp_cds_bp=cp_cds_bp, lgd=lgd, hurdle_rate=hurdle, simm_im_m=im_m)
-                wf = run_waterfall(V[:, 1:], float(V[:, 0].mean()), p0, params, eco, np.random.default_rng(seed),
-                                   reg_csa=reg, capital=ci, saccr=S["rows"] or None)
-                cells[name] = _metrics(wf, rg, reg, cash_frac)
+                m, snap = run_set(S, rg, ci, cp_cds_bp, lgd, hurdle, seed)
+                cells[name] = m
                 if name not in snaps:
-                    V0 = float(S["mtm"])
-                    C0 = (rg.recognised_fraction("received") * max(V0 - eco.threshold_cp, 0.0)) if eco.collateralised else 0.0
-                    nica = wf.im_0 if reg.im_exchanged else 0.0
-                    snaps[name] = SA.ead(S["rows"], reg, V0, C0, nica).to_dict() if S["rows"] else None
+                    snaps[name] = snap
             w1, w0, alone = cells.get("with"), cells.get("without"), cells.get("standalone")
             inc = None
             if w1 is not None:
@@ -201,9 +172,7 @@ def capital_trade(body: CapitalTradeRequest, db: Session = Depends(get_db), user
         raise HTTPException(status_code=422, detail="trade or trade_id is required")
     heavy(user, "counterparty run", 6)
     from api.routes.xva import hypothetical_trade
-    from ccr.report import LIVE, netting_set_paths, settings
-    from ccr.saccr_map import from_netting_set
-    from ccr.simulate import df_fn
+    from ccr.report import LIVE, settings
     from db.models import Counterparty, Trade
     from pnl.market import Market
     from risk.report import firm_of, template_uid
@@ -247,30 +216,16 @@ def capital_trade(body: CapitalTradeRequest, db: Session = Depends(get_db), user
 
     notes: list[str] = []
 
+    from ccr.capital_report import prepare_set
+
     def prepare(trades):
-        if not trades:
-            return None
         try:
-            P = netting_set_paths(db, user, cp, trades, asof, mkt, st, tpl, exposure=False)
+            return prepare_set(db, user, cp, trades, asof, mkt, st, tpl, notes)
         except HTTPException:
             raise
         except Exception as e:          # noqa: BLE001
             db.rollback()
             raise internal(422, "The credit engine could not value this set", e)
-        if P["empty"]:
-            return {"empty": True, "ns": P["ns"], "missing": P.get("missing")}
-        dfs = {c: df_fn(P["curves"][f"RATES:{k}"], asof) for c, k in (("USD", "USD_SOFR"),) if f"RATES:{k}" in P["curves"]}
-        from ccr import calibration as C
-        for c in P["currencies"]:
-            key = f"RATES:{C.CURVE_OF.get(c, c + '_OIS')}"
-            if key in P["curves"]:
-                dfs[c] = df_fn(P["curves"][key], asof)
-        rows, rnotes = from_netting_set(P["ns"], mkt, P["fx"], asof, dfs)
-        notes.extend(rnotes)
-        im_10d = (P["im0"] / P["csa"].simm_mpor_scale if P["csa"].simm_mpor_scale else P["im0"]) + P["im0_fx_10d"]
-        mtm = sum(float(x.get("mtm_usd") or 0.0) for x in P["today"])
-        return {"V": P["V_rn"], "t": P["p_rn"].t, "p0": P["p0"], "rows": rows, "im_10d": im_10d, "gross": P["gross"], "mtm": mtm,
-                "n_paths": P["n_paths"], "months": P["months"], "ns": P["ns"], "today": P["today"], "empty": False}
 
     S_with, S_without, S_alone = prepare(with_trades), prepare(without), prepare(alone)
     if S_with is None or S_with.get("empty"):
@@ -293,3 +248,88 @@ def capital_trade(body: CapitalTradeRequest, db: Session = Depends(get_db), user
             "metrics": METRICS, "cost_keys": COST_KEYS, "quote": quotes, "trades_today": S_with["today"],
             "cp_cds_bp": float(st.get("cp_cds_bp") or 85.0), "lgd": float(st.get("lgd") or 0.4), "hurdle": float(body.hurdle),
             "notes": notes, "seconds": round(time.time() - t0, 1), **grid}
+
+
+# ── the book under regimes: run on the worker (or a thread), poll, read ───────────────────────────────
+
+_jobs: dict[str, dict] = {}          # uid → the in-memory job when there is no jobs table
+
+
+class PortfolioRequest(BaseModel):
+    hurdle: float = Field(default=0.12, ge=0.0, le=1.0)
+    yield_bp: Optional[float] = Field(default=None, ge=0.0, le=2000.0)     # the tokenised sovereign claim's yield in the forward column
+    n_paths: Optional[int] = Field(default=None, ge=200, le=5000)
+
+
+def _ctx(db: Session, user: dict) -> dict:
+    from api.routes.pnl import _marking_ctx
+    return _marking_ctx(db, user)
+
+
+def _run_thread(ctx: dict, body: PortfolioRequest) -> None:
+    import datetime as _dt
+    from ccr import capital_report as CR
+    from db.session import SessionLocal
+    uid = ctx["sub"]
+    job = _jobs.setdefault(uid, {})
+    job.update(running=True, started=_dt.datetime.now(_dt.timezone.utc).isoformat(), finished=None, error=None, current=None, done=0, total=0, result=None)
+    db = SessionLocal()
+    try:
+        job["result"] = CR.report(db, ctx, progress=job, hurdle=body.hurdle, yield_bp=body.yield_bp, n_paths=body.n_paths)
+    except Exception as e:              # noqa: BLE001
+        db.rollback(); job["error"] = str(e)[:300]
+    finally:
+        db.close()
+        job.update(running=False, finished=_dt.datetime.now(_dt.timezone.utc).isoformat())
+
+
+def _job_view(db: Session, uid: str) -> Optional[dict]:
+    mem = _jobs.get(uid)
+    row = None
+    if Q.tables_present(db):
+        try:
+            row = Q.as_status(Q.latest(db, uid, "capital_run"))
+        except Exception:               # noqa: BLE001
+            db.rollback(); row = None
+    if row is None or mem is None:
+        return row or mem
+    if row["running"] != bool(mem.get("running")):
+        return row if row["running"] else mem
+    return row if (row.get("started") or "") >= (mem.get("started") or "") else mem
+
+
+@router.post("/portfolio")
+def portfolio_run(body: PortfolioRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Start the book's run: the worker when one is expected, else a thread; GET /portfolio/status reports progress and
+    GET /portfolio returns the result."""
+    uid = user["sub"]
+    heavy(user, "counterparty run", 4)
+    current = _job_view(db, uid)
+    if current and current.get("running"):
+        return {"started": False, "reason": "a run is already in progress", "job": current}
+    if Q.worker_expected(db):
+        jid = Q.enqueue(db, uid, "capital_run", {"ctx": _ctx(db, user), "hurdle": body.hurdle, "yield_bp": body.yield_bp, "n_paths": body.n_paths})
+        return {"started": True, "job": Q.as_status(Q.latest(db, uid, "capital_run")), "job_id": jid, "note": "queued for the worker"}
+    threading.Thread(target=_run_thread, args=(_ctx(db, user), body), daemon=True).start()
+    return {"started": True, "note": "running in the background"}
+
+
+@router.get("/portfolio/status")
+def portfolio_status(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    return {"job": _job_view(db, user["sub"]), "worker": Q.worker_expected(db)}
+
+
+@router.get("/portfolio")
+def portfolio_report(live: bool = False, hurdle: float = 0.12, yield_bp: Optional[float] = None, n_paths: Optional[int] = None,
+                     db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """The latest run's report; live=1 computes it in the request (small books, tests)."""
+    if live:
+        heavy(user, "counterparty run", 6)
+        from ccr import capital_report as CR
+        rep = CR.report(db, _ctx(db, user), hurdle=hurdle, yield_bp=yield_bp, n_paths=n_paths)
+        rep["from_store"] = False
+        return rep
+    job = _job_view(db, user["sub"])
+    if job and job.get("result"):
+        return {**job["result"], "from_store": True, "job": {k: v for k, v in job.items() if k != "result"}}
+    return {"date": None, "counterparties": [], "job": job, "note": "No run yet: RUN NOW simulates every netting set under the regimes."}

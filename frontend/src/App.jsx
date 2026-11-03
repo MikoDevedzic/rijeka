@@ -30,6 +30,7 @@ const BookingDefaults   = named(() => import('./components/pnl/PnlSettings'), 'B
 const PnlConventions    = named(() => import('./components/pnl/PnlSettings'), 'PnlConventions')
 const RiskPage          = lazy(() => import('./components/risk/RiskPage'))
 const CcrPage           = lazy(() => import('./components/risk/CcrPage'))
+const CapitalPage           = lazy(() => import('./components/risk/CapitalPage'))
 const LimitsPage        = named(() => import('./components/risk/RiskSettings'), 'LimitsPage')
 const VarSettingsPage   = named(() => import('./components/risk/RiskSettings'), 'VarSettingsPage')
 const StressCatalogue   = named(() => import('./components/risk/RiskSettings'), 'StressCatalogue')
@@ -153,6 +154,7 @@ export default function App() {
             <Route path="/pnl"     element={<PnlPage />} />
             <Route path="/risk"    element={<RiskPage />} />
             <Route path="/risk/ccr" element={<CcrPage />} />
+            <Route path="/risk/capital" element={<CapitalPage />} />
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />

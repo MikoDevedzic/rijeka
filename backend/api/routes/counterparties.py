@@ -14,7 +14,8 @@ router = APIRouter()
 
 
 CAPITAL_FIELDS = ("counterparty_type", "rating_bucket", "risk_weight_override", "cva_sector", "umr_in_scope",
-                  "eligible_collateral", "posted_composition", "received_composition", "netting_enforceable")
+                  "eligible_collateral", "posted_composition", "received_composition", "netting_enforceable",
+                  "margin_frequency_days", "mpor_disputed")          # the last two: docs/migrations/2026-11-04_counterparty_margin_terms.sql
 
 
 class CapitalAttributes(BaseModel):
@@ -28,6 +29,8 @@ class CapitalAttributes(BaseModel):
     posted_composition: Optional[dict] = None
     received_composition: Optional[dict] = None
     netting_enforceable: Optional[bool] = None
+    margin_frequency_days: Optional[int] = None
+    mpor_disputed: Optional[bool] = None
 
 
 class CounterpartyCreate(CapitalAttributes):
@@ -126,6 +129,8 @@ def validate_capital(d: dict) -> None:
     for k in ("counterparty_type", "rating_bucket", "cva_sector"):
         if d.get(k) is not None:
             d[k] = str(d[k]).upper()
+    if d.get("margin_frequency_days") is not None and not (1 <= int(d["margin_frequency_days"]) <= 60):
+        raise HTTPException(status_code=422, detail="margin_frequency_days must be between 1 and 60 business days")
 
 
 def serialize(c: Counterparty, attrs: Optional[dict] = None) -> dict:

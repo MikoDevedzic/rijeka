@@ -3,6 +3,7 @@ callable that merges a progress patch into the row; it returns the result stored
 
     ccr_run        the counterparty-credit run for one account (api/routes/ccr.py POST /run)
     risk_backfill  public-source risk-factor history for the template account (POST /api/risk/history/backfill)
+    capital_run    the book's capital under collateral regimes (POST /api/capital/portfolio)
 
 Neither sends a chain transaction: the relayer nonce belongs to the API process only."""
 from __future__ import annotations
@@ -41,4 +42,12 @@ def risk_backfill(db, job: dict, report: Callable[[dict], None]) -> dict[str, An
     return H.backfill(db, p["template"], years=float(p.get("years", 2.0)), overwrite=bool(p.get("overwrite", False)))
 
 
-HANDLERS: dict[str, Callable[..., Any]] = {"ccr_run": ccr_run, "risk_backfill": risk_backfill}
+def capital_run(db, job: dict, report: Callable[[dict], None]) -> dict[str, Any]:
+    """The book's capital under regimes (ccr/capital_report.py): the result is the report itself."""
+    from ccr import capital_report as CR
+    p = job.get("params") or {}
+    prog = Progress(report)
+    return CR.report(db, p["ctx"], progress=prog, hurdle=float(p.get("hurdle", 0.12)), yield_bp=p.get("yield_bp"), n_paths=p.get("n_paths"))
+
+
+HANDLERS: dict[str, Callable[..., Any]] = {"ccr_run": ccr_run, "risk_backfill": risk_backfill, "capital_run": capital_run}
