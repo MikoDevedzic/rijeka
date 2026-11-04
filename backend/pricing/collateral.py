@@ -101,6 +101,9 @@ class Regime:
     mpor_state: str = "FLOOR"                         # FLOOR (the CSA's own MPoR) | ON_CHAIN (the cleared floor, atomic settlement)
     collateral_maturity_y: float = 1.0                # residual maturity of the securities posted, for the haircut row
     yield_override_bp: dict[str, float] = field(default_factory=dict)
+    posted_instruments: dict[str, float] = field(default_factory=dict)      # {instrument code: weight} when derived from a schedule
+    received_instruments: dict[str, float] = field(default_factory=dict)
+    instrument_yields_bp: dict[str, float] = field(default_factory=dict)    # the yield each instrument resolved to
 
     # ── derived ──────────────────────────────────────────────────────────────
 
@@ -203,6 +206,8 @@ class Regime:
         return {"name": self.name, "csa": self.csa.to_dict(), "eligible": list(self.eligible), "posted": dict(self.posted), "received": dict(self.received),
                 "netting_enforceable": self.netting_enforceable, "im_eligibility_state": self.im_eligibility_state, "hqla_state": self.hqla_state,
                 "mpor_state": self.mpor_state, "collateral_maturity_y": self.collateral_maturity_y,
+                "posted_instruments": dict(self.posted_instruments), "received_instruments": dict(self.received_instruments),
+                "instrument_yields_bp": dict(self.instrument_yields_bp),
                 "regulatory_csa": self.regulatory_csa().to_dict(), "economic_csa": self.economic_csa().to_dict(),
                 "recognised_fraction": self.recognised_fraction(), "im_eligible_fraction": self.im_eligible_fraction(), "im_pickup_bp": self.im_pickup_bp()}
 
@@ -268,3 +273,187 @@ def regime_from_counterparty(cp, csa: CSA) -> Regime:
         received = {elig[0]: 1.0}
     enf = getattr(cp, "netting_enforceable", None)
     return Regime("COUNTERPARTY", replace(csa), elig, posted, received, True if enf is None else bool(enf))
+
+
+# ── Instruments: a concrete asset a firm can post ────────────────────────────
+
+YIELD_KINDS = ("CURVE", "FIXED", "NONE")      # CURVE: a curve's short rate plus yield_bp; FIXED: yield_bp; NONE: nothing
+RAILS = ("bilateral", "on_chain")
+
+
+@dataclass(frozen=True)
+class Instrument:
+    """One asset: its regulatory class decides the rules, the instrument carries the economics (currency, issuer,
+    rail, yield source, a negotiated haircut). The seed is public tickers and generic classes; a firm adds its own
+    rows under its own names (collateral_instruments)."""
+    code: str
+    name: str
+    cls: str                          # CATALOGUE code
+    currency: str
+    issuer: str
+    rail: str                         # bilateral | on_chain
+    yield_kind: str                   # CURVE | FIXED | NONE
+    yield_ref: Optional[str] = None   # the curve id for CURVE
+    yield_bp: float = 0.0             # FIXED: the yield; CURVE: the spread over the curve's short rate
+    chain_id: Optional[int] = None
+    token_address: Optional[str] = None
+    csa_haircut_pct: Optional[float] = None   # a negotiated haircut; None → the class's CRE22.49 row
+    active: bool = True
+    firm: bool = False                # a firm's own row, not the seed
+    note: str = ""
+
+    @property
+    def klass(self) -> CollateralClass:
+        return CATALOGUE[self.cls]
+
+    def resolve_yield_bp(self, curve_rate_bp=None) -> float:
+        """The instrument's yield in bp: FIXED as given; CURVE as the curve's short rate (from the callback, by
+        curve id) plus the spread, the spread alone when the curve is not available; NONE is zero."""
+        if self.yield_kind == "FIXED":
+            return float(self.yield_bp)
+        if self.yield_kind == "CURVE":
+            r = curve_rate_bp(self.yield_ref) if curve_rate_bp is not None and self.yield_ref else None
+            return (float(r) if r is not None else 0.0) + float(self.yield_bp)
+        return 0.0
+
+    def to_dict(self) -> dict:
+        return {"code": self.code, "name": self.name, "cls": self.cls, "class_label": self.klass.label, "currency": self.currency, "issuer": self.issuer,
+                "rail": self.rail, "yield_kind": self.yield_kind, "yield_ref": self.yield_ref, "yield_bp": self.yield_bp, "chain_id": self.chain_id,
+                "token_address": self.token_address, "csa_haircut_pct": self.csa_haircut_pct, "active": self.active, "firm": self.firm, "note": self.note,
+                "crm": self.klass.crm, "im_eligible": self.klass.im_eligible, "vm_eligible": self.klass.vm_eligible, "hqla": list(self.klass.hqla),
+                "sco60_group": self.klass.sco60_group}
+
+
+def _seed(code, name, cls, ccy, issuer, rail, yk, yref=None, ybp=0.0, chain=None, token=None, note=""):
+    return Instrument(code, name, cls, ccy, issuer, rail, yk, yref, ybp, chain, token, None, True, False, note)
+
+
+SEED: dict[str, Instrument] = {i.code: i for i in (
+    _seed("USD_CASH", "US dollar cash", "CASH", "USD", "—", "bilateral", "CURVE", "USD_SOFR", 0.0, note="earns the OIS the discounting assumes: zero carry"),
+    _seed("EUR_CASH", "Euro cash", "CASH", "EUR", "—", "bilateral", "CURVE", "EUR_ESTR", 0.0),
+    _seed("GBP_CASH", "Sterling cash", "CASH", "GBP", "—", "bilateral", "CURVE", "GBP_SONIA", 0.0),
+    _seed("UST_BILL", "US Treasury bill", "GOVT", "USD", "US Treasury", "bilateral", "CURVE", "USD_SOFR", 0.0, note="the bill yield is read off the OIS curve until a government curve is loaded"),
+    _seed("UST_NOTE", "US Treasury note", "GOVT", "USD", "US Treasury", "bilateral", "CURVE", "USD_SOFR", 0.0),
+    _seed("BUND", "German Bund", "GOVT", "EUR", "Bundesrepublik Deutschland", "bilateral", "CURVE", "EUR_ESTR", 0.0),
+    _seed("GILT", "UK Gilt", "GOVT", "GBP", "HM Treasury", "bilateral", "CURVE", "GBP_SONIA", 0.0),
+    _seed("USDC", "USD Coin", "STABLECOIN", "USD", "Circle", "on_chain", "NONE", None, 0.0, 1, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "a payment stablecoin: no yield to the holder"),
+    _seed("USDT", "Tether USD", "STABLECOIN", "USD", "Tether", "on_chain", "NONE", None, 0.0, 1, "0xdAC17F958D2ee523a2206206994597C13D831ec7", "a payment stablecoin: no yield to the holder"),
+    _seed("PYUSD", "PayPal USD", "STABLECOIN", "USD", "Paxos for PayPal", "on_chain", "NONE", None, 0.0, 1, None, "token address to be entered by the firm"),
+    _seed("TOKENISED_MMF", "Tokenised money-market fund share (generic)", "FUND_SHARES_TOKENISED", "USD", "the firm names the fund", "on_chain", "CURVE", "USD_SOFR", -10.0, 1, None,
+          "a government money-market fund distributes close to the overnight rate less its expense ratio; the firm overrides with the fund's own yield"),
+    _seed("TOKENISED_TBILL", "Tokenised Treasury bill claim (generic)", "GOVT_TOKENISED", "USD", "the firm names the issuer", "on_chain", "CURVE", "USD_SOFR", 0.0, 1, None,
+          "a perfected, safe-harboured claim on a Treasury bill; the firm records its legal findings"),
+    _seed("BTC", "Bitcoin", "CRYPTO_2A", "USD", "—", "on_chain", "NONE", None, 0.0, None, None, "Group 2a as classified; not recognised collateral"),
+    _seed("ETH", "Ether", "CRYPTO_2A", "USD", "—", "on_chain", "NONE", None, 0.0, 1, None, "Group 2a as classified; not recognised collateral"),
+    _seed("SOL", "Solana", "CRYPTO_2A", "USD", "—", "on_chain", "NONE", None, 0.0, None, None, "Group 2a as classified; not recognised collateral"),
+)}
+
+
+def instrument_from_row(d: dict, firm: bool = True) -> Instrument:
+    """An Instrument from a request body or a database row; validates the class, rail and yield kind."""
+    cls = str(d.get("cls") or d.get("class") or "").upper()
+    if cls not in CATALOGUE:
+        raise ValueError(f"unknown collateral class {cls or '(blank)'}")
+    rail = str(d.get("rail") or CATALOGUE[cls].settlement).lower()
+    if rail not in RAILS:
+        raise ValueError(f"rail must be one of {', '.join(RAILS)}")
+    yk = str(d.get("yield_kind") or "NONE").upper()
+    if yk not in YIELD_KINDS:
+        raise ValueError(f"yield_kind must be one of {', '.join(YIELD_KINDS)}")
+    code = str(d.get("code") or "").strip().upper().replace(" ", "_")
+    if not code or len(code) > 32:
+        raise ValueError("code is required (up to 32 characters)")
+    hc = d.get("csa_haircut_pct")
+    if hc is not None and not (0.0 <= float(hc) <= 100.0):
+        raise ValueError("csa_haircut_pct must be between 0 and 100")
+    return Instrument(code, str(d.get("name") or code), cls, str(d.get("currency") or "USD").upper(), str(d.get("issuer") or "—"), rail, yk,
+                      (str(d["yield_ref"]) if d.get("yield_ref") else None), float(d.get("yield_bp") or 0.0),
+                      (int(d["chain_id"]) if d.get("chain_id") is not None and str(d["chain_id"]) != "" else None), (str(d["token_address"]) if d.get("token_address") else None),
+                      (float(hc) if hc is not None else None), bool(d.get("active", True)), firm, str(d.get("note") or ""))
+
+
+# ── Schedules: the CSA's eligible-collateral annex ──────────────────────────
+
+@dataclass
+class Schedule:
+    """Per counterparty: the admitted instruments (for VM, for IM, at a negotiated haircut and a concentration
+    limit), what is posted and received today by instrument, and the settlement rail. Versioned by effective date."""
+    eligible: list[dict] = field(default_factory=list)       # [{instrument, vm, im, csa_haircut_pct, limit_pct}]
+    posted: dict[str, float] = field(default_factory=dict)   # {instrument: weight}
+    received: dict[str, float] = field(default_factory=dict)
+    rail: str = "bilateral"
+    effective_from: Optional[str] = None
+    note: str = ""
+
+    def to_dict(self) -> dict:
+        return {"eligible": [dict(e) for e in self.eligible], "posted": dict(self.posted), "received": dict(self.received), "rail": self.rail,
+                "effective_from": self.effective_from, "note": self.note}
+
+
+def schedule_from_request(d: Optional[dict], instruments: dict[str, Instrument]) -> Schedule:
+    """Validate a schedule body against the instrument list: every code known, weights non-negative and not all zero,
+    what is posted or received admitted for VM, the rail one of the two."""
+    body = dict(d or {})
+    elig = []
+    seen = set()
+    for e in body.get("eligible") or []:
+        code = str(e.get("instrument") or e.get("code") or "").upper()
+        if code not in instruments:
+            raise ValueError(f"eligible: unknown instrument {code or '(blank)'}")
+        if code in seen:
+            continue
+        seen.add(code)
+        hc = e.get("csa_haircut_pct")
+        lim = e.get("limit_pct")
+        elig.append({"instrument": code, "vm": bool(e.get("vm", True)), "im": bool(e.get("im", True)),
+                     "csa_haircut_pct": (float(hc) if hc is not None and str(hc) != "" else None), "limit_pct": (float(lim) if lim is not None and str(lim) != "" else None)})
+    if not elig:
+        raise ValueError("eligible: at least one instrument")
+
+    def comp(key: str) -> dict[str, float]:
+        raw = body.get(key) or {}
+        out = {}
+        for code, w in raw.items():
+            code = str(code).upper()
+            if code not in seen:
+                raise ValueError(f"{key}: {code} is not on the eligible list")
+            w = float(w)
+            if w < 0:
+                raise ValueError(f"{key}: weights must be non-negative")
+            if w > 0:
+                out[code] = w
+        if not out:
+            out = {elig[0]["instrument"]: 1.0}
+        tot = sum(out.values())
+        return {k: v / tot for k, v in out.items()}
+
+    rail = str(body.get("rail") or "bilateral").lower()
+    if rail not in RAILS:
+        raise ValueError(f"rail must be one of {', '.join(RAILS)}")
+    return Schedule(elig, comp("posted"), comp("received"), rail, (str(body["effective_from"]) if body.get("effective_from") else None), str(body.get("note") or ""))
+
+
+def regime_from_schedule(sched: Schedule, csa: CSA, instruments: dict[str, Instrument], name: str = "COUNTERPARTY",
+                         netting_enforceable: bool = True, curve_rate_bp=None, **kw) -> Regime:
+    """The counterparty's regime from its schedule: eligible classes are the admitted instruments' classes, the
+    compositions aggregate by class, the on-chain rail sets the on-chain MPoR state, and each class's yield is the
+    weighted yield of the instruments posted in it (resolved through the curve callback)."""
+    by_class_posted: dict[str, float] = {}
+    by_class_received: dict[str, float] = {}
+    yields: dict[str, float] = {}
+    for code, w in sched.posted.items():
+        inst = instruments[code]
+        by_class_posted[inst.cls] = by_class_posted.get(inst.cls, 0.0) + w
+        yields[code] = inst.resolve_yield_bp(curve_rate_bp)
+    for code, w in sched.received.items():
+        inst = instruments[code]
+        by_class_received[inst.cls] = by_class_received.get(inst.cls, 0.0) + w
+        yields.setdefault(code, inst.resolve_yield_bp(curve_rate_bp))
+    y_override: dict[str, float] = {}
+    for cls, wc in by_class_posted.items():
+        if wc > 0:
+            y_override[cls] = sum(w * yields[c] for c, w in sched.posted.items() if instruments[c].cls == cls) / wc
+    eligible = sorted({instruments[e["instrument"]].cls for e in sched.eligible} | set(by_class_posted) | set(by_class_received))
+    return Regime(name, replace(csa), eligible, by_class_posted or {eligible[0]: 1.0}, by_class_received or {eligible[0]: 1.0},
+                  netting_enforceable, mpor_state=("ON_CHAIN" if sched.rail == "on_chain" else "FLOOR"), yield_override_bp=y_override,
+                  posted_instruments=dict(sched.posted), received_instruments=dict(sched.received), instrument_yields_bp=yields, **kw)

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useChatStore } from '../../store/useChatStore'
 import { getSessionMaybe } from '../../lib/session'
+import { bodyFromForm, defaultForm, formFromSchedule, problems, rowFor, summary, total, EMPTY_SCHEDULE } from './collateral-schedule'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -21,7 +22,6 @@ const IM_MODELS      = ['SIMM','GRID','SCHEDULE']
 const CP_TYPES       = ['', 'BANK','BROKER_DEALER','CORPORATE','FUND','SOVEREIGN','CRYPTO_NATIVE']
 const RATINGS        = ['', 'AAA_AA','A','BBB','BB_B','BELOW_B','UNRATED']
 const CVA_SECTORS    = ['', 'SOVEREIGN','LOCAL_GOVERNMENT','FINANCIAL','BASIC_MATERIALS','CONSUMER','TECHNOLOGY','HEALTH_UTILITIES','OTHER']
-const COLLATERAL     = ['CASH','GOVT','GOVT_TOKENISED','FUND_SHARES_TOKENISED','STABLECOIN','CRYPTO_2A','CRYPTO_2B']
 
 const CSA_COLOR = {
   VM_ONLY: 'var(--accent)',
@@ -34,7 +34,7 @@ const EMPTY = {
   csa_type:'VM_ONLY', csa_currency:'USD', csa_threshold_m:'',
   csa_mta_k:'', discount_curve_id:'USD_SOFR', im_model:'SIMM',
   counterparty_type:'', rating_bucket:'', cva_sector:'', umr_in_scope:false,
-  eligible_collateral:['CASH','GOVT'], netting_enforceable:true,
+  netting_enforceable:true,
   margin_frequency_days:'', mpor_disputed:false
 }
 
@@ -46,8 +46,6 @@ function capitalFields(form) {
   if (form.rating_bucket)     out.rating_bucket     = form.rating_bucket
   if (form.cva_sector)        out.cva_sector        = form.cva_sector
   if (form.umr_in_scope)      out.umr_in_scope      = true
-  var defaultElig = form.eligible_collateral.length === 2 && form.eligible_collateral.indexOf('CASH') >= 0 && form.eligible_collateral.indexOf('GOVT') >= 0
-  if (!defaultElig)           out.eligible_collateral = form.eligible_collateral
   if (!form.netting_enforceable) out.netting_enforceable = false
   if (form.margin_frequency_days && parseInt(form.margin_frequency_days, 10) > 1) out.margin_frequency_days = parseInt(form.margin_frequency_days, 10)
   if (form.mpor_disputed) out.mpor_disputed = true
@@ -108,6 +106,7 @@ function Cell({ children, dim }) {
 }
 
 const COLS = '1fr 130px 80px 48px 110px 1fr 200px'
+const SCHED_COLS = '9rem 10rem 6rem 5rem 2.2rem 2.2rem 6rem 6rem 6.5rem 1.5rem'
 
 export default function Counterparties() {
   const [chatErr,      setChatErr]      = useState(null)
@@ -122,6 +121,10 @@ export default function Counterparties() {
   const [editName,     setEditName]     = useState('')
   const [editCp,       setEditCp]       = useState(null)      // the counterparty whose terms the form edits (null = a new one)
   const editRef = useRef(null)
+  const [instruments,  setInstruments]  = useState([])      // the firm's collateral instruments (seed plus its own rows)
+  const [schedules,    setSchedules]    = useState({})      // {counterparty id: the schedule in force}, for the list
+  const [sched,        setSched]        = useState(EMPTY_SCHEDULE)   // the editor's schedule for the counterparty in the form
+  const [schedMsg,     setSchedMsg]     = useState(null)
 
   useEffect(function() { load() }, [])
 
@@ -131,6 +134,7 @@ export default function Counterparties() {
     if (mapped) {
       setForm(function(prev) { return Object.assign({}, prev, { discount_curve_id: mapped }) })
     }
+    if (!editCp) setSched(defaultForm(form.csa_currency, instruments))   // a new counterparty: the default schedule follows the CSA currency
   }, [form.csa_currency])
 
   useEffect(function() { if (editRef.current) editRef.current.focus() }, [editId])
@@ -149,6 +153,28 @@ export default function Counterparties() {
     setCps(cpRes.data || [])
     setLes(leRes.data || [])
     setLoading(false)
+    try {
+      var session = await getSessionMaybe()
+      var h = { Authorization: 'Bearer ' + (session ? session.access_token : '') }
+      var [ri, rs] = await Promise.all([fetch(API + '/api/collateral/instruments', { headers: h }), fetch(API + '/api/collateral/schedules', { headers: h })])
+      if (ri.ok) { var ji = await ri.json(); setInstruments(ji.instruments || []) }
+      if (rs.ok) { var js = await rs.json(); setSchedules(js.schedules || {}) }
+    } catch (e) { setSchedMsg('collateral instruments: ' + e.message) }
+  }
+
+  // The schedule travels after the record: a new version for this counterparty, the record's class fields follow it.
+  async function saveSchedule(cpId) {
+    if (form.csa_type === 'NO_CSA' || !sched.rows.length) return
+    try {
+      var session = await getSessionMaybe()
+      var r = await fetch(API + '/api/collateral/schedule/' + cpId, { method: 'PUT',
+        headers: { Authorization: 'Bearer ' + (session ? session.access_token : ''), 'Content-Type': 'application/json' }, body: JSON.stringify(bodyFromForm(sched)) })
+      var j = await r.json().catch(function() { return {} })
+      if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'schedule not saved (' + r.status + ')')
+      setSchedMsg(null)
+    } catch (e) {
+      setSchedMsg('terms saved; the collateral schedule was not: ' + e.message)
+    }
   }
 
   function f(patch) {
@@ -164,7 +190,7 @@ export default function Counterparties() {
     var hasCSA = form.csa_type !== 'NO_CSA'
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { alert('Not signed in — reload and sign in again.'); setSaving(false); return }
-    const { error } = await supabase.from('counterparties').insert({
+    const { data: created, error } = await supabase.from('counterparties').insert({
       legal_entity_id:   form.legal_entity_id || null,
       name:              form.name.trim().toUpperCase(),
       isda_agreement:    form.isda_agreement.trim() || null,
@@ -180,8 +206,9 @@ export default function Counterparties() {
       created_by:        user ? user.id : null,
       // Tenancy key — see LegalEntities.save(). RLS WITH CHECK requires it.
       user_id:           user ? user.id : null
-    })
+    }).select('id').single()
     if (!error) {
+      if (created && created.id) await saveSchedule(created.id)
       setShowAdd(false)
       setForm(EMPTY)
       await load()
@@ -198,16 +225,22 @@ export default function Counterparties() {
       csa_threshold_m: cp.csa_threshold_m != null ? String(cp.csa_threshold_m) : '', csa_mta_k: cp.csa_mta_k != null ? String(cp.csa_mta_k) : '',
       discount_curve_id: cp.discount_curve_id || 'USD_SOFR', im_model: cp.im_model || 'SIMM',
       counterparty_type: cp.counterparty_type || '', rating_bucket: cp.rating_bucket || '', cva_sector: cp.cva_sector || '',
-      umr_in_scope: !!cp.umr_in_scope, eligible_collateral: cp.eligible_collateral || ['CASH','GOVT'],
+      umr_in_scope: !!cp.umr_in_scope,
       netting_enforceable: cp.netting_enforceable !== false,
       margin_frequency_days: cp.margin_frequency_days ? String(cp.margin_frequency_days) : '', mpor_disputed: !!cp.mpor_disputed
     })
   }
 
-  function startEdit(cp) {
+  async function startEdit(cp) {
     setEditCp(cp)
     setForm(formFrom(cp))
     setShowAdd(true)
+    setSched(defaultForm(cp.csa_currency || 'USD', instruments))
+    try {
+      var session = await getSessionMaybe()
+      var r = await fetch(API + '/api/collateral/schedule/' + cp.id, { headers: { Authorization: 'Bearer ' + (session ? session.access_token : '') } })
+      if (r.ok) { var j = await r.json(); if (j.schedule) setSched(formFromSchedule(j.schedule)) }
+    } catch { /* the default stays */ }
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -225,7 +258,7 @@ export default function Counterparties() {
       im_model: form.im_model,
       // the capital attributes travel explicitly so a cleared field is cleared, not kept
       counterparty_type: form.counterparty_type || null, rating_bucket: form.rating_bucket || null, cva_sector: form.cva_sector || null,
-      umr_in_scope: !!form.umr_in_scope, eligible_collateral: form.eligible_collateral, netting_enforceable: !!form.netting_enforceable,
+      umr_in_scope: !!form.umr_in_scope, netting_enforceable: !!form.netting_enforceable,
       margin_frequency_days: form.margin_frequency_days ? parseInt(form.margin_frequency_days, 10) : 1, mpor_disputed: !!form.mpor_disputed
     }
     try {
@@ -234,6 +267,7 @@ export default function Counterparties() {
         headers: { Authorization: 'Bearer ' + (session ? session.access_token : ''), 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       var j = await r.json().catch(function() { return {} })
       if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'save failed (' + r.status + ')')
+      await saveSchedule(editCp.id)
       setShowAdd(false); setEditCp(null); setForm(EMPTY)
       await load()
     } catch (e) {
@@ -308,6 +342,7 @@ export default function Counterparties() {
             setShowAdd(function(s) { return !s })
             setEditCp(null)
             setForm(EMPTY)
+            setSched(defaultForm('USD', instruments))
           }}>
             {showAdd ? '✕ CANCEL' : '+ ADD COUNTERPARTY'}
           </Btn>
@@ -424,22 +459,6 @@ export default function Counterparties() {
                 {CVA_SECTORS.map(function(t) { return <option key={t} value={t}>{t || '— BY TYPE —'}</option> })}
               </select>
             </div>
-            <div style={{ gridColumn:'1 / span 2' }}>
-              <label style={L}>ELIGIBLE COLLATERAL <span style={{ opacity:.6 }}>(the CSA's schedule)</span></label>
-              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
-                {COLLATERAL.map(function(c) {
-                  var on = form.eligible_collateral.indexOf(c) >= 0
-                  return (
-                    <button key={c} type="button"
-                      onClick={function() { f({ eligible_collateral: on ? form.eligible_collateral.filter(function(x) { return x !== c }) : form.eligible_collateral.concat([c]) }) }}
-                      style={{ background: on ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent', border:'1px solid ' + (on ? 'var(--accent)' : 'var(--panel-3)'),
-                        color: on ? 'var(--accent)' : 'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'10px', padding:'3px 8px', borderRadius:'2px', cursor:'pointer', letterSpacing:'0.05em' }}>
-                      {c}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
             <div>
               <label style={L}>CLOSE-OUT NETTING · UMR</label>
               <div style={{ display:'flex', gap:'12px', alignItems:'center', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'11px', color:'var(--text-dim)' }}>
@@ -463,6 +482,67 @@ export default function Counterparties() {
               </div>
             </div>
 
+            {hasCSA && (
+              <div style={{ gridColumn:'1 / span 3', borderTop:'1px solid var(--panel-3)', paddingTop:'12px' }}>
+                <label style={L}>COLLATERAL SCHEDULE <span style={{ opacity:.6 }}>(the CSA's eligible-collateral annex: what is admitted, what is posted and received, the rail · instruments under Configurations → Collateral)</span></label>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'8px' }}>
+                  {instruments.filter(function(i) { return i.active !== false }).map(function(i) {
+                    var on = sched.rows.some(function(r) { return r.instrument === i.code })
+                    return (
+                      <button key={i.code} type="button" title={i.name + ' · ' + i.cls + (i.yield_today_bp != null ? ' · ' + Math.round(i.yield_today_bp) + ' bp' : '')}
+                        onClick={function() { setSched(function(p) { return Object.assign({}, p, { rows: on ? p.rows.filter(function(r) { return r.instrument !== i.code }) : p.rows.concat([rowFor(i.code)]) }) }) }}
+                        style={{ background: on ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent', border:'1px solid ' + (on ? 'var(--accent)' : 'var(--panel-3)'),
+                          color: on ? 'var(--accent)' : 'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'10px', padding:'3px 8px', borderRadius:'2px', cursor:'pointer', letterSpacing:'0.05em' }}>
+                        {i.code}
+                      </button>
+                    )
+                  })}
+                  {!instruments.length && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>no instruments loaded</span>}
+                </div>
+                {sched.rows.length > 0 && (
+                  <div style={{ border:'1px solid var(--panel-3)', borderRadius:'2px', overflow:'hidden' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'5px 8px', background:'var(--panel-2)', fontSize:'10px', letterSpacing:'0.08em', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                      <span>INSTRUMENT</span><span>CLASS</span><span>RAIL</span><span style={{ textAlign:'right' }}>YIELD</span><span>VM</span><span>IM</span><span>HAIRCUT %</span><span>POSTED %</span><span>RECEIVED %</span><span />
+                    </div>
+                    {sched.rows.map(function(r, idx) {
+                      var inst = instruments.find(function(i) { return i.code === r.instrument }) || {}
+                      var set = function(patch) { setSched(function(p) { return Object.assign({}, p, { rows: p.rows.map(function(x, k) { return k === idx ? Object.assign({}, x, patch) : x }) }) }) }
+                      return (
+                        <div key={r.instrument} style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'4px 8px', alignItems:'center', borderTop:'1px solid var(--panel-3)', fontSize:'11px', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                          <span style={{ color:'var(--text)' }}>{r.instrument}</span>
+                          <span style={{ color:'var(--text-dim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={inst.class_label}>{inst.cls || '—'}</span>
+                          <span style={{ color: inst.rail === 'on_chain' ? 'var(--accent)' : 'var(--text-dim)' }}>{inst.rail === 'on_chain' ? 'ON CHAIN' : 'BILATERAL'}</span>
+                          <span style={{ textAlign:'right', color:'var(--text-dim)' }}>{inst.yield_today_bp != null ? Math.round(inst.yield_today_bp) + ' bp' : '—'}</span>
+                          <input type="checkbox" checked={r.vm} onChange={function(e) { set({ vm: e.target.checked }) }} aria-label="admitted for VM" />
+                          <input type="checkbox" checked={r.im} onChange={function(e) { set({ im: e.target.checked }) }} aria-label="admitted for IM" />
+                          <input style={Object.assign({}, INP, { padding:'3px 6px' })} inputMode="decimal" placeholder={inst.csa_haircut_pct != null ? String(inst.csa_haircut_pct) : 'CRE22.49'} value={r.csa_haircut_pct} onChange={function(e) { set({ csa_haircut_pct: e.target.value }) }} />
+                          <input style={Object.assign({}, INP, { padding:'3px 6px' })} inputMode="decimal" placeholder="0" value={r.posted} onChange={function(e) { set({ posted: e.target.value }) }} />
+                          <input style={Object.assign({}, INP, { padding:'3px 6px' })} inputMode="decimal" placeholder="0" value={r.received} onChange={function(e) { set({ received: e.target.value }) }} />
+                          <button type="button" onClick={function() { setSched(function(p) { return Object.assign({}, p, { rows: p.rows.filter(function(x) { return x.instrument !== r.instrument }) }) }) }}
+                            style={{ background:'transparent', border:'none', color:'var(--text-dim)', cursor:'pointer', fontSize:'11px' }} title="remove from the schedule">✕</button>
+                        </div>
+                      )
+                    })}
+                    <div style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'4px 8px', borderTop:'1px solid var(--panel-3)', fontSize:'10px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                      <span style={{ gridColumn:'1 / span 7' }}>weights are normalised on save; blank haircut = the class's CRE22.49 row</span>
+                      <span>Σ {Math.round(total(sched, 'posted'))}</span><span>Σ {Math.round(total(sched, 'received'))}</span><span />
+                    </div>
+                  </div>
+                )}
+                <div style={{ display:'flex', gap:'16px', alignItems:'center', marginTop:'8px', flexWrap:'wrap' }}>
+                  <label style={{ display:'flex', gap:'6px', alignItems:'center', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'11px', color:'var(--text-dim)' }}>
+                    RAIL
+                    <select style={Object.assign({}, INP, { width:'140px', cursor:'pointer' })} value={sched.rail} onChange={function(e) { setSched(function(p) { return Object.assign({}, p, { rail: e.target.value }) }) }}>
+                      <option value="bilateral">BILATERAL</option>
+                      <option value="on_chain">ON CHAIN (atomic settlement, 5bd MPoR)</option>
+                    </select>
+                  </label>
+                  <input style={Object.assign({}, INP, { flex:'1 1 240px' })} placeholder="note (the annex reference, the legal findings)" value={sched.note} onChange={function(e) { setSched(function(p) { return Object.assign({}, p, { note: e.target.value }) }) }} />
+                </div>
+                {problems(sched).map(function(m) { return <div key={m} style={{ marginTop:'4px', fontSize:'11px', color:'var(--amber)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>{m}</div> })}
+              </div>
+            )}
+
           </div>
 
           {!hasCSA && (
@@ -473,11 +553,11 @@ export default function Counterparties() {
           )}
 
           <div style={{ marginTop:'16px' }}>
-            <Btn size='lg' onClick={editCp ? saveEdit : save} disabled={saving}>
+            <Btn size='lg' onClick={editCp ? saveEdit : save} disabled={saving || (hasCSA && sched.rows.length > 0 && problems(sched).length > 0)}>
               {saving ? 'SAVING...' : editCp ? 'SAVE TERMS' : 'SAVE COUNTERPARTY'}
             </Btn>
             {editCp && <span style={{ marginLeft:'12px', fontSize:'11px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
-              the CSA terms feed the credit report and Risk → CAPITAL; the capital attributes need the 4 November migration applied
+              the CSA terms and the collateral schedule feed the credit report, the ticket's XVA and CAPITAL tabs and Risk → CAPITAL
             </span>}
           </div>
         </div>
@@ -557,7 +637,7 @@ export default function Counterparties() {
 
                 <Cell dim>{cp.csa_currency}</Cell>
                 <Cell dim>{cp.discount_curve_id}</Cell>
-                <Cell dim>{cp.im_model}{cp.counterparty_type ? ' · ' + cp.counterparty_type + (cp.rating_bucket ? ' ' + cp.rating_bucket : '') : ''}{cp.csa_type && cp.csa_type !== 'NO_CSA' ? ' · thr ' + (cp.csa_threshold_m != null ? cp.csa_threshold_m + 'm' : '0') + ' · mta ' + (cp.csa_mta_k != null ? cp.csa_mta_k + 'k' : '0') + (cp.margin_frequency_days > 1 ? ' · every ' + cp.margin_frequency_days + 'bd' : '') + (cp.mpor_disputed ? ' · disputed' : '') : ''}</Cell>
+                <Cell dim>{cp.im_model}{cp.counterparty_type ? ' · ' + cp.counterparty_type + (cp.rating_bucket ? ' ' + cp.rating_bucket : '') : ''}{cp.csa_type && cp.csa_type !== 'NO_CSA' ? ' · thr ' + (cp.csa_threshold_m != null ? cp.csa_threshold_m + 'm' : '0') + ' · mta ' + (cp.csa_mta_k != null ? cp.csa_mta_k + 'k' : '0') + (cp.margin_frequency_days > 1 ? ' · every ' + cp.margin_frequency_days + 'bd' : '') + (cp.mpor_disputed ? ' · disputed' : '') : ''}{schedules[cp.id] ? ' · ' + summary(schedules[cp.id]) : ''}</Cell>
 
                 <div style={{ display:'flex', gap:'4px' }}>
                   {cp.is_active && (
@@ -589,6 +669,9 @@ export default function Counterparties() {
         </div>
       )}
 
+      {schedMsg && (
+        <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--amber)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>{schedMsg}</div>
+      )}
       {chatErr && (
         <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--amber)',
             fontFamily:"'IBM Plex Mono',var(--mono)" }}>{chatErr}</div>

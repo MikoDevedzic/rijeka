@@ -16,8 +16,9 @@ upfront spread of notional.
 
 ## 1. Collateral classes and regimes
 
-The catalogue holds asset *classes* with their regulatory attributes (a specific instrument is a row a
-firm adds with its own legal findings; nothing names an issuer):
+The catalogue holds asset *classes* with their regulatory attributes. A specific instrument (USDC, a Treasury
+bill, a named tokenised fund) is a row in the firm's instrument list and a counterparty's schedule says which are
+admitted and what is posted; the regime is derived from the schedule (`docs/collateral.md`):
 
 | Class | Recognised for capital | Haircut row | IM / VM eligible | HQLA | SCO60 |
 |---|---|---|---|---|---|
@@ -105,7 +106,11 @@ waterfall is unchanged to the bit (`test_capital_engine.py::test_defaults_are_th
 the netting set with the trade, without it and the trade alone on the credit engine's risk-neutral paths
 (seed 7), then per regime (the record's own first, then the presets on the record's terms) the two CSAs,
 the waterfall with the CVA-capital leg per counterparty type, the SA-CCR snapshot at the valuation date,
-the HQLA value and the quote line. IM is SIMM's interest-rate delta weight on the set's IR01 plus the FX
+the HQLA value and the quote line. The record's own regime is its collateral schedule when one is recorded
+(instruments, rail, yields from market data), else its class-level fields. The ticket's CAPITAL tab shows the
+regulatory stock only (IM, EAD, RWA, K CCR, K CVA, leverage exposure, HQLA of IM); the lifetime prices of that
+stock (KVA, MVA) and the credit and funding adjustments are valuation adjustments and belong on the XVA tab,
+where they move in the collateral plan's C2. IM is SIMM's interest-rate delta weight on the set's IR01 plus the FX
 delta weight on its spot sensitivity (a labelled assumption for digital assets), scaled by √(MPoR/10);
 nothing is posted where the collateral is not eligible IM. `GET /api/capital/collateral` is the catalogue
 with the tables and sources.
@@ -113,7 +118,8 @@ with the tables and sources.
 The counterparty record carries `counterparty_type`, `rating_bucket`, `risk_weight_override`,
 `cva_sector`, `umr_in_scope`, `eligible_collateral`, `posted_composition`, `received_composition`,
 `netting_enforceable` (`docs/migrations/2026-11-04_counterparty_capital.sql`); they are read and
-written only once the migration is applied, so a deploy ahead of it changes nothing.
+written only once the migration is applied, so a deploy ahead of it changes nothing. The three collateral fields
+are kept in step with the counterparty's schedule when one is saved.
 
 ## 5. The book under regimes (Risk → CAPITAL)
 

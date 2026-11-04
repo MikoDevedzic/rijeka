@@ -143,6 +143,7 @@ const NAV = [
           { label: 'ORG HIERARCHY',      path: '/configurations/org-hierarchy',             live: true  },
           { label: 'LEGAL ENTITIES',     path: '/configurations/legal-entities',            live: true  },
           { label: 'COUNTERPARTIES',     path: '/configurations/counterparties',            live: true  },
+          { label: 'COLLATERAL INSTRUMENTS', path: '/configurations/collateral/instruments',  live: true  },
         ],
       },
     ],

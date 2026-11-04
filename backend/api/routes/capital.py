@@ -130,7 +130,7 @@ def quote_lines(cells: dict, regimes: list[COL.Regime], types: list[Counterparty
 
 # ── the route ────────────────────────────────────────────────────────────────────────────────────────────
 
-def _regimes_for(body: CapitalTradeRequest, cp) -> list[COL.Regime]:
+def _regimes_for(body: CapitalTradeRequest, cp, db=None, uid: Optional[str] = None, mkt=None, asof=None) -> list[COL.Regime]:
     from ccr.exposure import csa_from_counterparty
     own = csa_from_counterparty(cp) if cp else CSA.uncollateralised()
     terms = own if own.collateralised else CSA.bilateral(im_exchanged=True)
@@ -142,7 +142,11 @@ def _regimes_for(body: CapitalTradeRequest, cp) -> list[COL.Regime]:
             except (ValueError, KeyError) as e:
                 raise HTTPException(status_code=422, detail=f"regimes: {e}")
         return out
-    out = [COL.regime_from_counterparty(cp, own)] if cp else []
+    if cp and db is not None:
+        from collateral.regimes import regime_for
+        out = [regime_for(db, uid, cp, own, mkt, asof)]          # the schedule when one is recorded, else the record's class fields
+    else:
+        out = [COL.regime_from_counterparty(cp, own)] if cp else []
     out += [COL.preset(n, terms) for n in COL.PRESET_NAMES]
     return out
 
@@ -199,7 +203,7 @@ def capital_trade(body: CapitalTradeRequest, db: Session = Depends(get_db), user
     cp_id = cp.id if cp else None
     from api.routes.counterparties import read_capital, with_capital
     cp_view = with_capital(cp, read_capital(db, [cp.id]).get(str(cp.id), {})) if cp else None
-    regimes, types = _regimes_for(body, cp_view), _types_for(body, cp_view)
+    regimes, types = _regimes_for(body, cp_view, db, uid, mkt, asof), _types_for(body, cp_view)
     existing = [t for t in db.query(Trade).filter(Trade.user_id == uuid.UUID(uid), Trade.counterparty_id == cp_id).all() if t.status in LIVE]
     if body.trade_id:
         try:

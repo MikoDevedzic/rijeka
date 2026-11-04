@@ -11,7 +11,7 @@ import { getSessionMaybe } from '../../lib/session'
 import { SectionHeader, ModelBadge, ProofExpander, VaFooter } from './xva-shared.jsx'
 import { INP, LBL, LEFT_COL } from './xva-shared.js'
 import { PRESETS, REGIME_LABEL, REGIME_DESC, DEFAULT_TYPES, buildGrid, buildRequest, derivation, disabledReason, errorMessage,
-         fmtBp, fmtCell, mockResponse, quoteCells, regimeNames, typeKeys, FORMULA } from './capital'
+         fmtCell, mockResponse, regimeDesc, regimeNames, typeKeys, FORMULA } from './capital'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const MOCK = false
@@ -71,7 +71,6 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
 
   const names = regimeNames(res).filter(n => n === 'COUNTERPARTY' || regimes.includes(n))
   const grid = buildGrid(res, typeKey, view)
-  const quotes = quoteCells(res, typeKey)
   const drawer = sel ? derivation(res, sel.regime, typeKey, sel.key, view) : []
   const isNew = !tradeId
 
@@ -134,8 +133,9 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
 
           {!res && !busy && (
             <div style={{ ...foot, fontSize: '0.78rem', lineHeight: 1.6, maxWidth: 720 }}>
-              Columns are collateral regimes, rows are the regulatory and valuation quantities of this trade in the counterparty's netting set.
-              The first column is the CSA as booked on the record; the others re-collateralise the same set. Click a cell for its derivation.
+              Columns are collateral regimes, rows are the regulatory quantities of this trade in the counterparty's netting set: margin,
+              exposure at default, risk-weighted assets, capital, leverage exposure, liquid assets. The first column is the counterparty's own
+              collateral schedule as recorded; the others re-collateralise the same set. Click a cell for its derivation.
             </div>
           )}
 
@@ -146,18 +146,18 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
                   <thead>
                     <tr>
                       <th style={{ ...th, textAlign: 'left' }}>{ccy}</th>
-                      {names.map(n => <th key={n} style={th} title={REGIME_DESC[n]}>{REGIME_LABEL[n] || n}</th>)}
+                      {names.map(n => <th key={n} style={th} title={regimeDesc(res, n)}>{REGIME_LABEL[n] || n}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {grid.map(r => (
-                      <tr key={r.key} style={r.key === 'cost' ? { borderTop: '1px solid var(--border)' } : undefined}>
-                        <td style={{ ...td, textAlign: 'left', color: 'var(--text-dim)', fontSize: 11, letterSpacing: '0.12em', fontWeight: r.key === 'cost' ? 700 : 600, cursor: 'help' }} title={FORMULA[r.key]}>{r.label}</td>
+                      <tr key={r.key}>
+                        <td style={{ ...td, textAlign: 'left', color: 'var(--text-dim)', fontSize: 11, letterSpacing: '0.12em', fontWeight: 600, cursor: 'help' }} title={FORMULA[r.key]}>{r.label}</td>
                         {names.map(n => {
                           const on = sel && sel.regime === n && sel.key === r.key
                           return (
                             <td key={n} onClick={() => { setSel({ regime: n, key: r.key }); setOpen(true) }}
-                              style={{ ...td, fontWeight: r.key === 'cost' ? 700 : 400, color: on ? 'var(--accent)' : r.key === 'cost' ? 'var(--accent)' : 'var(--text-hi)',
+                              style={{ ...td, fontWeight: 400, color: on ? 'var(--accent)' : 'var(--text-hi)',
                                 background: on ? 'rgba(13,212,168,0.08)' : 'transparent' }}>
                               {fmtCell(r.cells[n], r.key, ccy)}
                             </td>
@@ -165,13 +165,6 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
                         })}
                       </tr>
                     ))}
-                    <tr>
-                      <td style={{ ...td, textAlign: 'left', color: 'var(--text-dim)', fontSize: 11, letterSpacing: '0.12em', fontWeight: 600, cursor: 'help' }} title="the regime's cost against the first column, amortised over the trade's annuity (running) or at the front (upfront), in bp of notional">QUOTE VS FIRST</td>
-                      {names.map(n => {
-                        const q = quotes[n]
-                        return <td key={n} style={{ ...td, cursor: 'default', color: q && q.running_bp > 0 ? 'var(--accent)' : q && q.running_bp < 0 ? 'var(--red)' : 'var(--text-mute)' }}>{q ? `${fmtBp(q.running_bp)} run · ${fmtBp(q.upfront_bp)} up` : '—'}</td>
-                      })}
-                    </tr>
                   </tbody>
                 </table>
               </div>
@@ -198,7 +191,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
         </div>
       </div>
       <VaFooter>
-        Costs negative, exposures and capital as magnitudes. Every formula names its paragraph: Basel CRE20, CRE22, CRE52, MAR50, SCO60, LCR30; ISDA SIMM; CFTC §23.156. {hasRecordType ? 'The counterparty record sets the first type.' : ''}
+        Regulatory stock at today, as magnitudes in {ccy}; the lifetime cost of this stock (KVA, MVA) and the credit and funding adjustments are on the XVA tab. Every formula names its paragraph: Basel CRE20, CRE22, CRE52, MAR50, SCO60, LCR30; ISDA SIMM; CFTC §23.156. {hasRecordType ? 'The counterparty record sets the first type.' : ''}
       </VaFooter>
     </div>
   )

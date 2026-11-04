@@ -9,7 +9,7 @@ import { disabledReason as xvaDisabledReason, errorMessage as xvaErrorMessage, f
 
 export const PRESETS = ['CASH_GOVT', 'PLUS_STABLECOIN', 'PLUS_TOKENISED_FUND', 'PLUS_TOKENISED_SOVEREIGN']
 export const REGIME_LABEL = {
-  COUNTERPARTY: 'CSA AS BOOKED',
+  COUNTERPARTY: 'AS RECORDED',
   CASH_GOVT: 'CASH + GOVT',
   PLUS_STABLECOIN: '+ STABLECOIN',
   PLUS_TOKENISED_FUND: '+ TOKENISED FUND',
@@ -29,20 +29,18 @@ export const DEFAULT_TYPES = [
 ]
 
 // money: signed, as the XVA rows; ratio: the multiplier; none: hidden from the grid
+// Stock only: regulatory quantities at today, in the reporting currency. The lifetime prices of that stock
+// (KVA, MVA) and the credit and funding adjustments (CVA, FVA) are valuation adjustments and live on the XVA tab.
 export const METRIC_ROWS = [
   ['SIMM IM', 'im', 'money'],
   ['SA-CCR EAD', 'ead', 'money'],
   ['RWA', 'rwa', 'money'],
   ['K CCR', 'k_ccr', 'money'],
   ['K CVA', 'k_cva', 'money'],
-  ['KVA', 'kva', 'money'],
-  ['MVA', 'mva', 'money'],
-  ['CVA', 'cva', 'money'],
-  ['FVA', 'fva', 'money'],
   ['LEVERAGE EXP.', 'leverage', 'money'],
   ['HQLA OF IM', 'hqla_im', 'money'],
 ]
-export const COST_ROW = ['COST (CVA+FVA+KVA+MVA)', 'cost', 'money']
+export const COST_ROW = null
 
 export const FORMULA = {
   im: 'IM = RW_SIMM × |sensitivity| × √(MPoR/10): the IR delta weight on IR01, the FX delta weight on spot01; posted only where the collateral is eligible IM',
@@ -80,6 +78,18 @@ export function fmtCell(v, key, ccy = 'USD') {
 }
 
 // The regime names in the response's order; the counterparty's own first when present.
+// The first column's tooltip: the counterparty's recorded schedule (instruments, rail) when there is one.
+export function regimeDesc(res, name) {
+  const rg = (res?.regimes || []).find(r => r.name === name)
+  const pi = rg?.posted_instruments
+  if (name === 'COUNTERPARTY' && pi && Object.keys(pi).length) {
+    const comp = Object.entries(pi).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${k} ${Math.round(w * 100)} %`).join(', ')
+    const recv = Object.entries(rg.received_instruments || {}).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${k} ${Math.round(w * 100)} %`).join(', ')
+    return `the counterparty's collateral schedule: posts ${comp}; receives ${recv || comp}; ${rg.mpor_state === 'ON_CHAIN' ? 'on-chain rail' : 'bilateral rail'}`
+  }
+  return REGIME_DESC[name] || name
+}
+
 export function regimeNames(res) {
   return (res?.regimes || []).map(r => r.name)
 }
@@ -98,7 +108,7 @@ export function buildGrid(res, typeKey, view = 'INCREMENTAL') {
     if (view === 'STANDALONE') return c.standalone || c.with
     return c.incremental || c.with
   }
-  return [...METRIC_ROWS, COST_ROW].map(([label, key]) => ({
+  return METRIC_ROWS.map(([label, key]) => ({
     key, label, cells: Object.fromEntries(names.map(rg => [rg, cellValue(pick(rg), key)])),
   }))
 }

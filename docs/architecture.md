@@ -45,10 +45,11 @@ blotter, the command centre and the messenger.
 **The API** (`backend/`): one FastAPI process on Render (1 CPU, 2 GB, Virginia, the same AWS region
 as the database). Sync routes run in Starlette's thread pool; pricing is numpy/scipy on the request
 path with curve and trade caches. Routers by area: `api/routes/` (trades, booking, legs, events,
-cashflows, pricer, xva, risk, ccr, pnl, chain, chat, trade cards, market data, demo provisioning,
+cashflows, pricer, xva, risk, ccr, capital, collateral, modules, ipv, pnl, chain, chat, trade cards, market data, demo provisioning,
 methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every product, XVA, SIMM, SA-CCR),
 `risk/` (ladder, VaR, stress, backtest, limits, vol history), `ccr/` (exposure paths, calibration,
-options on the paths), `pnl/` (marks, attribution, XVA P&L), `chain/` (canonical record, EIP-712
+options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the firm's instrument list, the schedule per counterparty, the regime and the
+yields derived from them; `docs/collateral.md`), `chain/` (canonical record, EIP-712
 signing, attestation, keys, lifecycle guard, Telegram), `market_data/` (public-source demo feed, policy
 path, calendar), `news/`, `prometheus/` (read-only assistant and book brief), `methodology/` (Excel
 replications). `scheduler.py` runs the batches in-process (news, summaries and spots every 30 minutes;

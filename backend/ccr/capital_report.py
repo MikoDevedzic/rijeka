@@ -152,7 +152,10 @@ def channel_regimes(base: COL.Regime, yield_bp: Optional[float] = None, disputed
     return out
 
 
-def baseline_regime(cp_view, csa: CSA) -> COL.Regime:
+def baseline_regime(cp_view, csa: CSA, db=None, uid: Optional[str] = None, mkt=None, asof=None) -> COL.Regime:
+    if db is not None and cp_view is not None:
+        from collateral.regimes import regime_for
+        return regime_for(db, uid, cp_view, csa, mkt, asof)      # the schedule when one is recorded, else the record's class fields
     return COL.regime_from_counterparty(cp_view, csa) if cp_view is not None else COL.Regime("COUNTERPARTY", replace(csa), ["CASH", "GOVT"])
 
 
@@ -175,7 +178,7 @@ def counterparty_capital(db, user: dict, cp_view, trades: list, asof: date, mkt,
     ci = CAP.CapitalInputs.for_counterparty(getattr(cp, "counterparty_type", None) or "CORPORATE", getattr(cp, "rating_bucket", None) or "UNRATED",
                                             getattr(cp, "cva_sector", None), hurdle,
                                             float(cp.risk_weight_override) if getattr(cp, "risk_weight_override", None) is not None else None)
-    steps = channel_regimes(baseline_regime(cp, csa), yield_bp, bool(getattr(cp, "mpor_disputed", None) or False))
+    steps = channel_regimes(baseline_regime(cp, csa, db, user["sub"], mkt, asof), yield_bp, bool(getattr(cp, "mpor_disputed", None) or False))
     cp_cds, lgd = float(st.get("cp_cds_bp") or 85.0), float(st.get("lgd") or 0.4)
     rows, snaps = [], {}
     prev = None

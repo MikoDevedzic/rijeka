@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null }))
 
-import { buildGrid, buildRequest, cellValue, clampPaths, derivation, fmtBp, fmtCell, mockResponse, quoteCells, regimeNames, typeKeys, METRIC_ROWS, PRESETS } from './capital'
+import { buildGrid, buildRequest, cellValue, clampPaths, derivation, fmtBp, fmtCell, mockResponse, quoteCells, regimeDesc, regimeNames, typeKeys, METRIC_ROWS, PRESETS } from './capital'
 
 const res = mockResponse()
 
@@ -16,9 +16,9 @@ describe('mockResponse', () => {
 })
 
 describe('buildGrid', () => {
-  it('one row per metric plus the cost row, one cell per regime, for the chosen type and view', () => {
+  it('one row per stock metric (no prices), one cell per regime, for the chosen type and view', () => {
     const g = buildGrid(res, 'BANK·A', 'INCREMENTAL')
-    expect(g.length).toBe(METRIC_ROWS.length + 1)
+    expect(g.length).toBe(METRIC_ROWS.length)
     expect(Object.keys(g[0].cells)).toEqual(PRESETS)
     const ead = g.find(r => r.key === 'ead')
     expect(ead.cells.PLUS_STABLECOIN).toBeGreaterThan(ead.cells.CASH_GOVT)
@@ -90,5 +90,14 @@ describe('clampPaths', () => {
     expect(clampPaths(null)).toBeNull()
     expect(clampPaths('abc')).toBeNull()
     expect(buildRequest({ counterpartyId: 'cp', tradeId: 't', buildTrade: null, regimes: [], types: [], hurdle: '12', paths: '7' }).n_paths).toBe(200)
+  })
+})
+
+describe('regimeDesc', () => {
+  it('describes the recorded schedule on the first column and the preset elsewhere', () => {
+    const res = { regimes: [{ name: 'COUNTERPARTY', posted_instruments: { UST_BILL: 0.6, USDC: 0.4 }, received_instruments: { USD_CASH: 1 }, mpor_state: 'ON_CHAIN' }, { name: 'CASH_GOVT' }] }
+    expect(regimeDesc(res, 'COUNTERPARTY')).toBe("the counterparty's collateral schedule: posts UST_BILL 60 %, USDC 40 %; receives USD_CASH 100 %; on-chain rail")
+    expect(regimeDesc(res, 'CASH_GOVT')).toMatch(/CRE22/)
+    expect(regimeDesc({ regimes: [{ name: 'COUNTERPARTY' }] }, 'COUNTERPARTY')).toMatch(/counterparty record/)
   })
 })

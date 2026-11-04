@@ -3,6 +3,28 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.9.0 · 4 November 2026
+
+- Collateral as a first-class object, phase C1 of `docs/archive/PLAN_collateral_2026-11-04.md` (`docs/collateral.md`):
+  - **Instruments.** A public seed (USD/EUR/GBP cash, Treasury bills and notes, Bunds, Gilts, USDC, USDT, PYUSD, a
+    generic tokenised money-market fund share, a generic tokenised Treasury-bill claim, BTC, ETH, SOL), each with its
+    regulatory class, rail (bilateral or on chain with token address) and yield source (a curve's short rate plus a
+    spread, a fixed rate, or none), resolved from the account's market every time it is read. A firm adds its own rows
+    under Configurations → Collateral Instruments; a firm row with a seed's code replaces that entry for the firm.
+  - **Schedules.** The CSA's eligible-collateral annex per counterparty, versioned by effective date: admitted
+    instruments (for VM, for IM, a negotiated haircut, a concentration limit), what is posted and received by instrument,
+    the rail. Edited on the counterparty page beside the CSA terms; a new counterparty starts from cash and government
+    paper of its CSA currency. The record's class-level fields follow the schedule.
+  - **The regime is derived.** The counterparty's regime (the first column of the ticket's CAPITAL tab, the BASELINE of
+    Risk → CAPITAL) comes from its schedule: classes from the instruments, the on-chain rail setting the on-chain MPoR
+    state, each class's yield the weighted yield of the instruments posted in it. A cash schedule on the bilateral rail
+    reproduces the previous regime field for field.
+  - **CAPITAL tab is stock only:** IM, EAD, RWA, K CCR, K CVA, leverage exposure, HQLA of IM. KVA, MVA, CVA, FVA and the
+    quote line leave the grid; they are prices and move to the XVA tab in C2.
+  - Migration `docs/migrations/2026-11-05_collateral.sql` (two tables); a deploy ahead of it serves the seed and no
+    schedules. Routes under `/api/collateral`. Tests: unit (`tests/test_collateral_instruments.py`) and integration
+    (`tests/integration/test_collateral.py`).
+
 ## 0.8.4 · 4 November 2026
 
 - CAPITAL tab on the ticket: the regime and counterparty-type chips are whole blocks that wrap as a row (they broke

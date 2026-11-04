@@ -53,6 +53,7 @@ const Users             = lazy(() => import('./components/admin/Users'))
 const XVAParametersTab  = lazy(() => import('./components/configurations/XVAParametersTab'))
 const SystemPage        = lazy(() => import('./components/configurations/SystemPage'))
 const ModulesPage        = lazy(() => import('./components/configurations/ModulesPage'))
+const CollateralInstruments = lazy(() => import('./components/configurations/CollateralInstruments'))
 
 function BlotterLayout() {
   return (
@@ -187,6 +188,7 @@ export default function App() {
               <Route path="market-risk/stress" element={<StressCatalogue />} />
               <Route path="legal-entities"     element={<LegalEntities />} />
               <Route path="counterparties"              element={<Counterparties />} />
+              <Route path="collateral/instruments"      element={<CollateralInstruments />} />
               <Route path="market-data/swvol"            element={<SwaptionVolDetail />} />
               <Route path="market-data/capfloor"             element={<CapVolDetail />} />
               <Route path="market-data/crypto"               element={<FxWorkspace />} />
