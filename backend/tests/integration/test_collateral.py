@@ -19,8 +19,8 @@ def test_instruments_seed_and_a_firm_row(client, auth_a, auth_b):
     assert r.status_code == 200, r.text[:300]
     mine = next(i for i in r.json()["instruments"] if i["code"] == "MY_MMF")
     assert mine["firm"] and mine["yield_today_bp"] == 415.0 and mine["csa_haircut_pct"] == 2.0 and mine["im_eligible"] == "YES"
-    # another firm does not see it
-    assert "MY_MMF" not in {i["code"] for i in client.get("/api/collateral/instruments", headers=auth_b).json()["instruments"]}
+    # instruments are the firm's: the stack's two users sit in one firm, so user B sees the same list
+    assert "MY_MMF" in {i["code"] for i in client.get("/api/collateral/instruments", headers=auth_b).json()["instruments"]}
     # validation
     assert client.post("/api/collateral/instruments", json={"code": "X", "cls": "NOPE"}, headers=auth_a).status_code == 422
     assert client.post("/api/collateral/instruments", json={"code": "X", "cls": "CASH", "yield_kind": "GUESS"}, headers=auth_a).status_code == 422
@@ -34,7 +34,8 @@ def test_instruments_seed_and_a_firm_row(client, auth_a, auth_b):
 
 def test_schedule_drives_the_capital_run(client, auth_a, auth_b, ids):
     cp = ids["a"]["counterparty_id"]
-    client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 0, "csa_mta_k": 500, "eligible_collateral": ["CASH", "GOVT"]}, headers=auth_a)
+    client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 0, "csa_mta_k": 500, "eligible_collateral": ["CASH", "GOVT"],
+                                                  "posted_composition": {"CASH": 1.0}, "received_composition": {"CASH": 1.0}}, headers=auth_a)
     j = client.get(f"/api/collateral/schedule/{cp}", headers=auth_a).json()
     assert j["schedule"] is None and j["regime"]["name"] == "COUNTERPARTY" and j["regime"]["posted"] == {"CASH": 1.0} and j["writable"]
 
