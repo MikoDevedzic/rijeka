@@ -3,6 +3,14 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.8.3 · 4 November 2026
+
+- Hotfix: the rates XVA tab crashed with "fit_details.map is not a function" whenever it loaded a stored calibration
+  instead of a fresh one (a new sign-in, or a cleared session). The calibration row stores the fit table inside an
+  object (with converged, iterations and the surface errors) while the calibrate response carries it as a list; the
+  latest-calibration endpoint now returns the response shape, and the tab normalises whichever shape it is given.
+  Tests on both ends.
+
 ## 0.8.2 · 3 November 2026
 
 - The "is the migration applied" checks for the counterparty capital attributes, the module switches and IPV no

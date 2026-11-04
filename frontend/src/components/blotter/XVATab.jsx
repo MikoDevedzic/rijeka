@@ -5,6 +5,7 @@
 // context stay here.
 import { useState, useEffect, useRef } from 'react'
 import ExposureCanvas from '../trade-window/ExposureCanvas'
+import { normaliseCalibration } from './calibration'
 import {
   SectionHeader, TipLabel, PathsWwrSliders, ModelBadge, SimulateButtons, ProofExpander,
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
@@ -23,7 +24,7 @@ const CalibProofPanel = ({ calib }) => {
   const canvasRef = useRef(null)
 
   useEffect(() => {
-    if (!open || !calib?.fit_details || !canvasRef.current) return
+    if (!open || !Array.isArray(calib?.fit_details) || calib.fit_details.length === 0 || !canvasRef.current) return
     const canvas = canvasRef.current
     const dpr    = window.devicePixelRatio || 1
     const W = canvas.offsetWidth, H = 140
@@ -102,7 +103,7 @@ const CalibProofPanel = ({ calib }) => {
     ctx.fillStyle = '#8B98A8'; ctx.fillText('Model', W - 24, 12)
   }, [open, calib])
 
-  if (!calib?.fit_details) return null
+  if (!Array.isArray(calib?.fit_details) || calib.fit_details.length === 0) return null
 
   const errColor = e => {
     if (e == null) return 'var(--text-mute)'
@@ -168,9 +169,10 @@ const CalibProofPanel = ({ calib }) => {
 export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult }) {
   const [tooltip, setTooltip] = useState(null)
   const [calib, setCalibState] = useState(() => {
-    try { const s = sessionStorage.getItem('rijeka_xva_calib'); return s ? JSON.parse(s) : null } catch { return null }
+    try { const s = sessionStorage.getItem('rijeka_xva_calib'); return s ? normaliseCalibration(JSON.parse(s)) : null } catch { return null }
   })
-  const setCalib = (v) => {
+  const setCalib = (raw) => {
+    const v = normaliseCalibration(raw)
     setCalibState(v)
     try { if (v) sessionStorage.setItem('rijeka_xva_calib', JSON.stringify(v)); else sessionStorage.removeItem('rijeka_xva_calib') } catch { /* ignore: sessionStorage unavailable */ }
   }

@@ -390,6 +390,36 @@ def calibrate(
     return result
 
 
+# ── Stored calibration → response shape ──────────────────────────────────────
+
+def stored_calibration_fields(fit_details) -> dict:
+    """The calibrate response carries the per-instrument fit as a list under `fit_details` with converged /
+    iterations / surface_errors alongside; the xva_calibration row stores all of that in one JSON object. This
+    returns the response-shaped fields for a stored row, tolerating the legacy shape (a bare list)."""
+    if isinstance(fit_details, str):
+        try:
+            fit_details = json.loads(fit_details)
+        except ValueError:
+            fit_details = None
+    if isinstance(fit_details, dict):
+        basket = fit_details.get("basket")
+        return {
+            "fit_details":    basket if isinstance(basket, list) else [],
+            "surface_errors": fit_details.get("surface_errors") or [],
+            "converged":      fit_details.get("converged"),
+            "iterations":     fit_details.get("iterations"),
+            "snap_date":      fit_details.get("snap_date"),
+            "curve_source":   fit_details.get("curve_source"),
+            "curve_id":       fit_details.get("curve_id"),
+            "curve_note":     fit_details.get("curve_note"),
+        }
+    return {
+        "fit_details":    fit_details if isinstance(fit_details, list) else [],
+        "surface_errors": [], "converged": None, "iterations": None,
+        "snap_date": None, "curve_source": None, "curve_id": None, "curve_note": None,
+    }
+
+
 # ── Get latest calibration ────────────────────────────────────────────────────
 
 @router.get("/calibration/latest")
@@ -423,8 +453,8 @@ def get_latest_calibration(
         "theta":         row.theta,
         "basket_size":   row.basket_size,
         "fit_rmse_bp":   row.fit_rmse_bp,
-        "fit_details":   row.fit_details,
         "created_at":    row.created_at.isoformat(),
+        **stored_calibration_fields(row.fit_details),
     }
 
 
