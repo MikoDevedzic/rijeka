@@ -21,7 +21,7 @@ def test_modules_read_write_and_audit(client, auth_a, auth_b):
     j = r.json()
     assert j["writable"] and j["firm_id"] and set(j["modules"]) >= {"PNL", "CAPITAL", "MARKET_RISK"}
     assert all(j["modules"].values()) and j["source"] in ("default", "firm")
-    assert "CORPORATE" in j["presets"] and j["planned"] == ["COLLATERAL"]
+    assert "CORPORATE" in j["presets"] and j["planned"] == []
     # a trader may not switch modules
     r = client.put("/api/modules", json={"preset": "CORPORATE"}, headers=auth_a)
     assert r.status_code == 403

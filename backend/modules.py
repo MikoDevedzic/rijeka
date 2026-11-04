@@ -22,7 +22,7 @@ MODULES: list[dict[str, Any]] = [
     {"key": "CAPITAL", "label": "Capital", "effects": "Risk → Capital and the ticket's CAPITAL tab"},
     {"key": "PROMETHEUS", "label": "Prometheus", "effects": "the read-only assistant and the book brief"},
     {"key": "NEWS", "label": "News room", "effects": "the news feed and its summaries"},
-    {"key": "COLLATERAL", "label": "Collateral", "effects": "agreements, margin, inventory, regimes", "planned": True},
+    {"key": "COLLATERAL", "label": "Collateral", "effects": "Risk → Collateral (schedules, requirements, what is held, carry, the book under regimes) and the collateral block on the ticket's XVA tab"},
     {"key": "XVA_RESERVES", "label": "XVA reserves", "effects": "the reserve book under P&L: levels per counterparty and component, day on day"},
     {"key": "IPV", "label": "Independent price verification", "effects": "the IPV tab under P&L and the flash → official gate"},
 ]

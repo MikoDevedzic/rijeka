@@ -39,9 +39,9 @@ from pricing.xva_engine import WaterfallParams, run_waterfall
 
 log = logging.getLogger("rijeka.capital")
 
-METRICS = ("im", "ead", "rwa", "k_ccr", "k_cva", "kva", "kva_ccr", "kva_cva", "mva", "cva", "dva", "fva", "fba", "xva_total",
+METRICS = ("im", "ead", "rwa", "k_ccr", "k_cva", "kva", "kva_ccr", "kva_cva", "mva", "cva", "dva", "fva", "fba", "colva", "xva_total",
            "leverage", "hqla_im", "addon", "rc", "multiplier", "cost")
-COST_KEYS = ("cva", "fva", "kva", "mva")
+COST_KEYS = ("cva", "fva", "kva", "mva", "colva")      # the P&L charge of a regime: the credit, funding, capital and margin costs and the collateral carry
 COLUMNS = ("BASELINE", "ON_CHAIN_CURRENT", "ON_CHAIN_FORWARD")
 STEPS = (
     ("THRESHOLD_MTA", "Zero threshold and MTA", "CURRENT", "CRE52.18–52.19: the replacement cost is floored at TH + MTA − NICA; atomic settlement makes zero credible"),
@@ -94,7 +94,7 @@ def metrics_of(wf, regime: COL.Regime, cash_vm_fraction: float) -> dict:
     lev = CAP.leverage_exposure(wf.v_mean_0, wf.coll_mean_0 * cash_vm_fraction, wf.addon_0)
     hq = regime.hqla_value(wf.im_0, "posted")["total"] if wf.im_0 else 0.0
     m = {"im": wf.im_0, "ead": wf.ead_0, "rwa": wf.rwa_0, "k_ccr": wf.capital_0, "k_cva": wf.k_cva_0,
-         "kva": wf.kva, "kva_ccr": wf.kva_ccr, "kva_cva": wf.kva_cva, "mva": wf.mva, "cva": wf.cva, "dva": wf.dva, "fva": wf.fva, "fba": wf.fba,
+         "kva": wf.kva, "kva_ccr": wf.kva_ccr, "kva_cva": wf.kva_cva, "mva": wf.mva, "cva": wf.cva, "dva": wf.dva, "fva": wf.fva, "fba": wf.fba, "colva": wf.colva,
          "xva_total": wf.xva_total, "leverage": lev, "hqla_im": hq, "addon": wf.addon_0, "rc": wf.rc_0, "multiplier": wf.multiplier_0}
     m["cost"] = -sum(m[k] for k in COST_KEYS)
     return m

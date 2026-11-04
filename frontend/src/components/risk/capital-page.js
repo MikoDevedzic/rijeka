@@ -19,10 +19,40 @@ export const METRICS = [
   ['CVA', 'cva', 'under the economic CSA'],
   ['FVA', 'fva', 'under the economic CSA'],
   ['MVA', 'mva', 'IM funded at the spread less the posted asset’s yield'],
-  ['COST', 'cost', '−(CVA + FVA + KVA + MVA): the P&L charge'],
+  ['ColVA', 'colva', 'the carry of the variation margin against cash at OIS, from what the schedule holds it in'],
+  ['COST', 'cost', '−(CVA + FVA + KVA + MVA + ColVA): the P&L charge'],
   ['LEVERAGE EXP.', 'leverage', '1.4 × (RC with cash VM only + add-on) (LEV30)'],
   ['HQLA OF IM', 'hqla_im', 'the liquidity value of the margin posted (LCR30)'],
 ]
+// Regulatory stock at today, in USD: what Risk → CAPITAL shows for the CSA as booked. Prices (KVA, MVA, CVA, FVA, ColVA)
+// are valuation adjustments and live in the regimes report under Risk → COLLATERAL and on the ticket's XVA tab.
+export const STOCK_METRICS = [
+  ['RWA', 'rwa', 'the counterparty risk weight × SA-CCR EAD (CRE20, CRE52)'],
+  ['K CCR', 'k_ccr', '8 % of RWA'],
+  ['K CVA', 'k_cva', 'the reduced basic-approach CVA capital (MAR50.14–50.15)'],
+  ['SA-CCR EAD', 'ead', '1.4 × (RC + multiplier × add-on) at the valuation date'],
+  ['SIMM IM', 'im', 'initial margin under the record\'s CSA'],
+  ['LEVERAGE EXP.', 'leverage', '1.4 × (RC with cash VM only + add-on) (LEV30)'],
+  ['HQLA OF IM', 'hqla_im', 'the liquidity value of the margin posted (LCR30)'],
+]
+
+// One row per counterparty with the booked column's stock metrics.
+export function stockRows(rep) {
+  if (!rep?.counterparties) return []
+  return rep.counterparties.map(c => {
+    if (c.empty) return { id: c.counterparty_id, name: c.counterparty, empty: true, note: c.error || (c.skipped || []).map(s => `${s.trade_ref}: ${s.reason}`).join(' · ') || 'nothing to simulate', trades: c.trades }
+    const b = c.columns?.BASELINE || {}
+    return { id: c.counterparty_id, name: c.counterparty, empty: false, trades: c.trades, simulated: c.simulated, record: c.record, inputs: c.inputs,
+      values: Object.fromEntries(STOCK_METRICS.map(([, k]) => [k, b[k] ?? null])) }
+  })
+}
+
+export function stockTotals(rep) {
+  const b = rep?.totals?.BASELINE
+  if (!b) return null
+  return Object.fromEntries(STOCK_METRICS.map(([, k]) => [k, b[k] ?? null]))
+}
+
 export const STEP_LABEL = {
   THRESHOLD_MTA: 'Zero threshold & MTA', MARGIN_FREQUENCY: 'Daily margining', DISPUTES: 'No dispute doubling', COLLATERAL: 'Recognised collateral',
   IM_ELIGIBILITY: 'Eligible IM, its yield', MPOR_RELIEF: 'Cleared-floor MPoR', TOKENISED_IM: 'Tokenised sovereign as IM', HQLA_L1: 'Level 1 HQLA',

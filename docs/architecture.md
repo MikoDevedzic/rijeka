@@ -49,7 +49,7 @@ cashflows, pricer, xva, risk, ccr, capital, collateral, modules, ipv, pnl, chain
 methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every product, XVA, SIMM, SA-CCR),
 `risk/` (ladder, VaR, stress, backtest, limits, vol history), `ccr/` (exposure paths, calibration,
 options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the firm's instrument list, the schedule per counterparty, the regime and the
-yields derived from them; `docs/collateral.md`), `chain/` (canonical record, EIP-712
+yields derived from them, the ticket's collateral onto a CSA, the book's collateral page; `docs/collateral.md`), `chain/` (canonical record, EIP-712
 signing, attestation, keys, lifecycle guard, Telegram), `market_data/` (public-source demo feed, policy
 path, calendar), `news/`, `prometheus/` (read-only assistant and book brief), `methodology/` (Excel
 replications). `scheduler.py` runs the batches in-process (news, summaries and spots every 30 minutes;

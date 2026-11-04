@@ -90,5 +90,5 @@ def cva(V_rn: np.ndarray, t: np.ndarray, p0: list[float], csa: CSA, notional_usd
     wf = run_waterfall(V_rn[:, 1:], v0, p0, params, csa)
     f = lambda x: float(x)
     return {"cva_usd": f(wf.cva), "dva_usd": f(wf.dva), "fva_usd": f(wf.fva), "fba_usd": f(wf.fba), "kva_usd": f(wf.kva), "mva_usd": f(wf.mva),
-            "total_usd": f(wf.cva + wf.dva + wf.fva + wf.fba + wf.kva + wf.mva), "cp_cds_bp": cp_cds_bp, "lgd": lgd,
+            "colva_usd": f(wf.colva), "total_usd": f(wf.cva + wf.dva + wf.fva + wf.fba + wf.kva + wf.mva + wf.colva), "cp_cds_bp": cp_cds_bp, "lgd": lgd,
             "ee_rn": [f(x) for x in wf.ee], "pfe95_rn": [f(x) for x in wf.pfe]}

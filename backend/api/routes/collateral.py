@@ -3,6 +3,7 @@
 GET    /api/collateral/instruments            the seed with the firm's rows over it, every yield resolved from today's market
 POST   /api/collateral/instruments            add or replace one of the firm's rows (trader, controller, risk, admin)
 DELETE /api/collateral/instruments/{code}     remove the firm's row (a seed entry is overridden, never removed)
+GET    /api/collateral/book                   the book's collateral: positions, what they are held in, carry, rail (Risk → COLLATERAL)
 GET    /api/collateral/schedules              {counterparty id: the schedule in force} for the account
 GET    /api/collateral/schedule/{cp_id}       the schedule in force, its history, and the regime it derives
 PUT    /api/collateral/schedule/{cp_id}       a new version; the record's class-level fields follow it
@@ -135,6 +136,14 @@ def _schedule_view(db: Session, uid: str, cp, cp_view) -> dict:
     regime = regimes.regime_for(db, uid, cp_view, csa_from_counterparty(cp_view), mkt, asof)
     return {"counterparty_id": str(cp.id), "counterparty": cp.name, "schedule": sched.to_dict() if sched else None, "history": store.history(db, cp.id),
             "regime": regime.to_dict(), "explain": regime.explain(), "writable": store.tables_present(db), "asof": asof.isoformat() if asof else None}
+
+
+@router.get("/book")
+def book(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Risk → COLLATERAL: per counterparty the schedule, today's margin position from the latest stored credit run, what each
+    side is held in at its haircut, the carry per year, the rail; totals by instrument and by class."""
+    from collateral.book import report
+    return report(db, user)
 
 
 @router.get("/schedules")

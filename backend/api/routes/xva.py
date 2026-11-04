@@ -913,7 +913,7 @@ class IncrementalXvaRequest(BaseModel):
     n_paths: Optional[int] = Field(default=None, ge=200, le=5000)
 
 
-XVA_KEYS = ("cva", "dva", "fva", "fba", "kva", "mva")
+XVA_KEYS = ("cva", "dva", "fva", "fba", "kva", "mva", "colva")
 
 
 def hypothetical_trade(d: dict, counterparty_id, user_id: str):

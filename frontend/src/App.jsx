@@ -32,6 +32,7 @@ const PnlConventions    = named(() => import('./components/pnl/PnlSettings'), 'P
 const RiskPage          = lazy(() => import('./components/risk/RiskPage'))
 const CcrPage           = lazy(() => import('./components/risk/CcrPage'))
 const CapitalPage           = lazy(() => import('./components/risk/CapitalPage'))
+const CollateralPage        = lazy(() => import('./components/risk/CollateralPage'))
 const IpvPage           = lazy(() => import('./components/pnl/IpvPage'))
 const XvaReservesPage           = lazy(() => import('./components/pnl/XvaReservesPage'))
 const IpvTolerances           = lazy(() => import('./components/configurations/IpvTolerances'))
@@ -170,6 +171,7 @@ export default function App() {
             <Route path="/risk"    element={<ModuleGate keys={['MARKET_RISK']}><RiskPage /></ModuleGate>} />
             <Route path="/risk/ccr" element={<ModuleGate keys={['COUNTERPARTY_CREDIT']}><CcrPage /></ModuleGate>} />
             <Route path="/risk/capital" element={<ModuleGate keys={['CAPITAL']}><CapitalPage /></ModuleGate>} />
+            <Route path="/risk/collateral" element={<ModuleGate keys={['COLLATERAL']}><CollateralPage /></ModuleGate>} />
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />

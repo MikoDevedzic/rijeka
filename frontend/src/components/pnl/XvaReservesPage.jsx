@@ -17,7 +17,7 @@ const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const fmt = (n) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })
 const sgn = (n) => n == null || isNaN(n) ? '—' : `${n > 0 ? '+' : n < 0 ? '−' : ''}${fmt(Math.abs(n))}`
 const fmtD = (iso) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
-const LABEL = { CVA: 'CVA', DVA: 'DVA', FVA: 'FVA', FBA: 'FBA', KVA: 'KVA', MVA: 'MVA' }
+const LABEL = { CVA: 'CVA', DVA: 'DVA', FVA: 'FVA', FBA: 'FBA', KVA: 'KVA', MVA: 'MVA', COLVA: 'ColVA', cva: 'CVA', dva: 'DVA', fva: 'FVA', fba: 'FBA', kva: 'KVA', mva: 'MVA', colva: 'ColVA' }
 
 export default function XvaReservesPage() {
   const navigate = useNavigate()

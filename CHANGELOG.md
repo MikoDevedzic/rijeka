@@ -3,6 +3,21 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.11.0 · 4 November 2026
+
+- Collateral in the book, phase C3 of `docs/archive/PLAN_collateral_2026-11-04.md`:
+  - **Risk → COLLATERAL:** per counterparty the schedule in force, today's variation-margin position and initial
+    margin from the latest stored credit run, what each side is held in by instrument at its haircut, the carry per
+    year over OIS, the rail; totals by instrument and by class, the on-chain share; the book under regimes (the
+    report that was Risk → CAPITAL) below it. `GET /api/collateral/book`.
+  - **Risk → CAPITAL** is regulatory stock only for the CSA as booked (RWA, K CCR, K CVA, EAD, IM, leverage
+    exposure, HQLA of IM), per counterparty and in total.
+  - **ColVA in the book:** the credit engine's components, the P&L's XVA reserves, the incremental charge and the
+    regimes report's metrics carry it; a regime's cost is −(CVA + FVA + KVA + MVA + ColVA).
+  - The COLLATERAL module switch is real (it was listed as planned): Risk → COLLATERAL and the ticket's collateral
+    block.
+  - Stated as not done: collateral yields as IPV inputs and a realised carry line in P&L (`docs/collateral.md` §6).
+
 ## 0.10.0 · 4 November 2026
 
 - Collateral on the ticket, phase C2 of `docs/archive/PLAN_collateral_2026-11-04.md`:

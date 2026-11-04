@@ -69,3 +69,17 @@ def test_schedule_drives_the_capital_run(client, auth_a, auth_b, ids):
     assert r.status_code == 200 and r.json()["regime"]["mpor_state"] == "FLOOR" and len(r.json()["history"]) == 1    # same effective date: replaced
     client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 0, "csa_mta_k": 500, "eligible_collateral": ["CASH", "GOVT"],
                                                   "posted_composition": {"CASH": 1.0}, "received_composition": {"CASH": 1.0}}, headers=auth_a)
+
+
+def test_collateral_book(client, auth_a, ids):
+    r = client.get("/api/collateral/book", headers=auth_a)
+    assert r.status_code == 200, r.text[:300]
+    j = r.json()
+    assert j["writable"] and j["counterparties"] and j["instruments"]["USD_CASH"]["carry_bp"] == 0.0
+    cp = next(c for c in j["counterparties"] if c["counterparty_id"] == ids["a"]["counterparty_id"])
+    assert cp["rail"] in ("bilateral", "on_chain") and "vm_held_usd" in cp and "carry_per_year_usd" in cp
+    t = j["totals"]
+    assert t["counterparties"] == len(j["counterparties"]) and t["requirement_usd"] >= 0
+    if cp["has_run"]:
+        assert all(l["value_usd"] <= l["face_usd"] + 1e-9 for l in cp["posted"] + cp["held"])
+    assert j["notes"]

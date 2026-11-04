@@ -18,7 +18,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 log = logging.getLogger("rijeka.pnl")
-COMPONENTS = ("cva", "dva", "fva", "fba", "kva", "mva")
+COMPONENTS = ("cva", "dva", "fva", "fba", "kva", "mva", "colva")
 DEFAULT_NETTED = ("CVA", "DVA", "FVA", "FBA")
 
 
@@ -72,13 +72,13 @@ def section(db: Session, user: dict, asof: date, netted: tuple[str, ...] = DEFAU
     def change(base):
         if base is None:
             return None
-        ch = {k: today["total"][k] - base[1][k] for k in COMPONENTS}
+        ch = {k: today["total"].get(k, 0.0) - base[1].get(k, 0.0) for k in COMPONENTS}       # a stored run that predates a component counts it as zero
         return {"from": base[0].isoformat(), "by_component": ch, "netted": sum(v for k, v in ch.items() if k.upper() in netted_keys),
                 "all": sum(ch.values())}
     per_cp = []
     for name, lv in today["by_counterparty"].items():
         pv = (prev[2].get(name) if prev else None)
-        per_cp.append({"counterparty": name, "today": lv, "prev": pv, "change": {k: lv[k] - pv[k] for k in COMPONENTS} if pv else None})
+        per_cp.append({"counterparty": name, "today": lv, "prev": pv, "change": {k: lv.get(k, 0.0) - pv.get(k, 0.0) for k in COMPONENTS} if pv else None})
     return {"measure": "RISK_NEUTRAL", "components": list(COMPONENTS), "netted": list(netted_keys), "levels": today["total"], "levels_date": today["date"],
             "prev_date": prev[0].isoformat() if prev else None, "day": change(prev), "mtd": change(month_base), "ytd": change(year_base),
             "by_counterparty": per_cp, "params": today["params"],

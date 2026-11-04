@@ -35,4 +35,5 @@ export const ROUTE_MODULES = {
   '/risk': ['MARKET_RISK'],
   '/risk/ccr': ['COUNTERPARTY_CREDIT'],
   '/risk/capital': ['CAPITAL'],
+  '/risk/collateral': ['COLLATERAL'],
 }

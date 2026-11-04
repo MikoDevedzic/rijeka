@@ -1,6 +1,6 @@
 // risk/capital-page.test.js — the pure helpers behind Risk → CAPITAL (capital-page.js). Run: npm test.
 import { describe, it, expect } from 'vitest'
-import { COLUMNS, METRICS, bars, fmt, fmtBp, fmtPct, fmtSigned, tableRows, totalsRow, waterfall } from './capital-page'
+import { COLUMNS, METRICS, STOCK_METRICS, bars, fmt, fmtBp, fmtPct, fmtSigned, stockRows, stockTotals, tableRows, totalsRow, waterfall } from './capital-page'
 
 const m = (ead, extra = {}) => ({ im: 100, ead, rwa: ead * 0.3, k_ccr: ead * 0.024, k_cva: 5, kva: -10, cva: -20, fva: -3, mva: -2, cost: 35, leverage: ead * 1.4, hqla_im: 100, ...extra })
 const steps = [
@@ -63,5 +63,19 @@ describe('formats', () => {
     expect(fmtBp(1.26)).toBe('+1.3 bp')
     expect(fmtPct(750, 1000)).toBe('-25 %')
     expect(fmtPct(1, 0)).toBe('—')
+  })
+})
+
+describe('stockRows', () => {
+  it('the booked column\'s stock metrics per counterparty and in total; no prices among them', () => {
+    const rep = { counterparties: [{ counterparty_id: 'a', counterparty: 'A', trades: 2, simulated: 2, columns: { BASELINE: { rwa: 100, k_ccr: 8, k_cva: 3, ead: 50, im: 10, leverage: 60, hqla_im: 9, kva: -4, cva: -2 } } },
+      { counterparty_id: 'b', counterparty: 'B', empty: true, trades: 1 }], totals: { BASELINE: { rwa: 100, k_ccr: 8, k_cva: 3, ead: 50, im: 10, leverage: 60, hqla_im: 9, kva: -4 } } }
+    const rows = stockRows(rep)
+    expect(rows[0].values).toEqual({ rwa: 100, k_ccr: 8, k_cva: 3, ead: 50, im: 10, leverage: 60, hqla_im: 9 })
+    expect(rows[1].empty).toBe(true)
+    expect(Object.keys(stockTotals(rep))).toEqual(STOCK_METRICS.map(m => m[1]))
+    expect(STOCK_METRICS.map(m => m[1])).not.toContain('kva')
+    expect(stockRows(null)).toEqual([])
+    expect(stockTotals({})).toBeNull()
   })
 })

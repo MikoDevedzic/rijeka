@@ -8,7 +8,7 @@ from api.routes.modules import ModulesBody, put_modules
 
 def test_catalogue_and_presets():
     assert set(M.KEYS) >= {"PNL", "XVA", "MARKET_RISK", "COUNTERPARTY_CREDIT", "CAPITAL", "CHAIN_CONFIRM"}
-    assert set(M.PLANNED) == {"COLLATERAL"}
+    assert set(M.PLANNED) == set()          # every module in the catalogue exists
     dealer = M.preset_modules("DEALER")
     assert all(dealer.values())
     corp = M.preset_modules("corporate")

@@ -67,7 +67,7 @@ export function fmtMoney0(v, ccy = 'USD') {
 // the value shown: costs (kva, mva, cva, fva) keep their sign; exposures and capital are magnitudes
 export function cellValue(cell, key) {
   if (!cell) return null
-  if (key === 'cost') return -((cell.cva || 0) + (cell.fva || 0) + (cell.kva || 0) + (cell.mva || 0))
+  if (key === 'cost') return -((cell.cva || 0) + (cell.fva || 0) + (cell.kva || 0) + (cell.mva || 0) + (cell.colva || 0))
   return cell[key] ?? null
 }
 

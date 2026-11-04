@@ -91,8 +91,21 @@ writes answer 409; nothing else changes.
   exposure paths, the incremental charge and the reserves carry the schedule's MPoR, pickup and carries.
 - Both Excel replications carry the two carries as inputs and ColVA as a column; the methodology is v1.4.
 
-## 6. What comes next (C3)
+## 6. The book (C3, done 4 November 2026)
 
-Risk → COLLATERAL (requirements, inventory, carry, settlement status; the regimes report moves there), a
-COLLATERAL CARRY line in P&L, the yields as IPV inputs, the COLLATERAL module switch live, ColVA in the incremental
-charge's components.
+- **Risk → COLLATERAL** (`collateral/book.py`, `GET /api/collateral/book`): per counterparty the schedule in force,
+  today's variation-margin position (held, posted) and initial margin from the latest stored credit run, what each
+  side is held in by instrument at its haircut (the schedule's negotiated haircut, else the instrument's, else the
+  class's CRE22.49 row at one year), the carry per year over OIS, the rail; totals by instrument and by class, the
+  on-chain share of today's requirement. Below it the book under regimes (the report that was Risk → CAPITAL).
+- **Risk → CAPITAL** is stock only for the CSA as booked: RWA, K CCR, K CVA, EAD, IM, leverage exposure, HQLA of IM,
+  per counterparty and in total, from the same stored run.
+- **ColVA in the book:** the credit engine's components (`ccr/exposure.cva`), the P&L's XVA reserves, the incremental
+  charge on the ticket and the regimes report's metrics and cost all carry `colva`; the regime's cost is
+  −(CVA + FVA + KVA + MVA + ColVA).
+- **The COLLATERAL module switch** is real: it gates Risk → COLLATERAL and the collateral block on the ticket.
+
+Not done, stated: the collateral yields as IPV inputs (a FIXED-yield instrument's rate as an input on the ladder with
+a tolerance and a first-order sensitivity through ColVA) and a realised COLLATERAL CARRY line in P&L (it needs a
+ledger of balances actually held, which the margin-call workflow on the roadmap will keep). Settlement of margin
+calls on chain, disputes and reconciliation stay on the roadmap (C4).

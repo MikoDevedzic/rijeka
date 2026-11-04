@@ -28,7 +28,7 @@ describe('buildGrid', () => {
   })
   it('the cost row is minus the sum of the four costs', () => {
     const c = res.cells.CASH_GOVT['CORPORATE·UNRATED'].with
-    expect(cellValue(c, 'cost')).toBeCloseTo(-(c.cva + c.fva + c.kva + c.mva), 6)
+    expect(cellValue(c, 'cost')).toBeCloseTo(-(c.cva + c.fva + c.kva + c.mva + (c.colva || 0)), 6)
     expect(cellValue(null, 'ead')).toBeNull()
   })
   it('standalone falls back to the set with the trade and an empty response gives no rows', () => {

@@ -121,7 +121,7 @@ The counterparty record carries `counterparty_type`, `rating_bucket`, `risk_weig
 written only once the migration is applied, so a deploy ahead of it changes nothing. The three collateral fields
 are kept in step with the counterparty's schedule when one is saved.
 
-## 5. The book under regimes (Risk → CAPITAL)
+## 5. The book under regimes (Risk → COLLATERAL; Risk → CAPITAL shows the booked column's stock)
 
 `GET /api/capital/portfolio` (the stored run; `live=1` computes it in the request), `POST /api/capital/portfolio`
 (the worker when one is expected, else a thread; `GET /api/capital/portfolio/status`). Engine
