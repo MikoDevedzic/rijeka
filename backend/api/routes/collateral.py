@@ -78,7 +78,7 @@ def _instruments_view(db: Session, uid: str) -> dict:
     mkt, asof = _market(db, uid)
     rate_fn = yields.curve_rate_bp_fn(db, uid, mkt, asof) if mkt is not None else None
     ys = yields.resolve_all(inst, rate_fn)
-    rows = [{**i.to_dict(), "yield_today_bp": ys[c]} for c, i in sorted(inst.items())]
+    rows = [{**i.to_dict(), "yield_today_bp": ys[c], "carry_today_bp": i.carry_bp(rate_fn)} for c, i in sorted(inst.items())]
     return {"instruments": rows, "classes": [c.to_dict() for c in COL.CATALOGUE.values()], "rails": list(COL.RAILS), "yield_kinds": list(COL.YIELD_KINDS),
             "writable": store.tables_present(db), "asof": asof.isoformat() if asof else None, "seed": sorted(COL.SEED)}
 

@@ -24,7 +24,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.3 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.4 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -39,11 +39,13 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.2 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.4 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
 \noindent\textbf{How to read this document.} Every formula below is the one implemented in the open-source code, with the module named in the margin of each section. Where the code departs from textbook practice, or where a simplification is in force, it is stated as a \emph{known limitation} rather than hidden. The Methodology tab of the application exports, for each product, an Excel workbook that rebuilds the default trade with live formulas from the user's own market data next to the engine's value; those workbooks are the executable companion to this text.
+
+\noindent\textbf{Changes in 1.4 (4 November 2026).} Collateral as a first-class object: instruments with a yield source, the schedule per counterparty, the regime derived from it, and the carry of the variation margin (ColVA) in the waterfall (\S\ref{sec:capital}). Version 1.3 (3 November 2026) added collateral regimes, SA-CCR by asset class, the capital leg and independent price verification.
 
 \noindent\textbf{Changes in 1.2 (2 November 2026).} FX options in every style and the digital-asset options on the same engine (\S\ref{sec:fxo}); volatility surfaces as risk factors in VaR and stress, and the market-risk and counterparty-credit chapters (\S\ref{sec:mr}, \S\ref{sec:ccr}), which the previous version left to the repository's notes; the open-box replications and the XVA workbook that carries the engine's own Monte Carlo draws (\S\ref{sec:exposure}). Version 1.1 (1 November 2026) added the QuantLib reference suite (\S\ref{sec:quantlib}).
 
@@ -257,9 +259,10 @@ DVA &= -LGD_{own}\sum_i |ENE_i|\,\Delta Q^{own}_i\,D_i,\\
 FVA &= \sum_i s^{ftp}_i\,EE_i\,\Delta t\,D_i, &
 FBA &= -\sum_i s^{fba}\,|ENE_i|\,\Delta t\,D_i,\\
 KVA &= \sum_i \kappa\,K_i\,\Delta t\,D_i, &
-MVA &= -\sum_i IM_i\,\max(s^{ftp}_i-\pi,0)\,\Delta t\,D_i,
+MVA &= -\sum_i IM_i\,\max(s^{ftp}_i-\pi,0)\,\Delta t\,D_i,\\
+ColVA &= \sum_i \big(VM^{post}_i\,s^{post} + VM^{recv}_i\,s^{recv}\big)\,\Delta t\,D_i,
 \end{align}
-where $\omega_i$ is an optional wrong-way-risk multiplier, $\kappa$ the capital hurdle rate, $K_i$ the SA-CCR capital on the exposure path, and $\pi$ a yield pick-up on posted collateral (tokenised collateral that earns a return reduces MVA). Signs follow the convention that costs are positive. The waterfall is reported gross and under the CSA, so the benefit of collateral is visible term by term.
+where $\omega_i$ is an optional wrong-way-risk multiplier, $\kappa$ the capital hurdle rate, $K_i$ the SA-CCR capital on the exposure path, and $\pi$ a yield pick-up on posted collateral (tokenised collateral that earns a return reduces MVA). ColVA is the carry of the variation margin against cash at the OIS the discounting assumes: $VM^{post}_i$ and $VM^{recv}_i$ are the mean margin posted and held at step $i$ (the two sides of $C$ in \S\ref{sec:exposure}), $s^{post}$ and $s^{recv}$ the carries over OIS of what each side is held in (\S\ref{sec:capital}); cash on both sides gives zero, so every figure that predates instruments is unchanged. Signs follow the convention that costs are positive. The waterfall is reported gross and under the CSA, so the benefit of collateral is visible term by term.
 
 
 \textbf{The charge on the ticket.} Every ticket's XVA tab carries, under the trade's stand-alone number, the incremental charge: the counterparty's netting set valued on the credit engine's risk-neutral paths (\S\ref{sec:ccr}) with the trade and without it, the same paths for both runs, the difference per component. That is the number a desk quotes; the stand-alone figure is the trade on its own under a chosen CSA preset. An opened or freshly booked trade shows the marginal form, the set with and without it. The route is \code{POST /api/xva/incremental}; the hypothetical trade is the ticket's booking body with its legs completed as the booking route would store them, so what is charged is what would be booked.
@@ -381,7 +384,10 @@ A CSA (\S\ref{sec:exposure}) says whether collateral is exchanged; a \emph{regim
 \text{regulatory:}\quad & C_{reg}=C\,\big(1-h\big),\;\; h=1-\textstyle\sum_i w_i\,\mathrm{rec}_i\,(1-h_i),\;\; \text{margined iff recognised VM is exchanged and enforceable},\\
 \text{economic:}\quad & C_{eco}=C \text{ when enforceable, else } 0 \text{ (gross exposure)},
 \end{align}
-with $w_i$ the composition weights, $\mathrm{rec}_i\in\{0,1\}$ the recognition and $h_i$ the haircut. The regulatory CSA feeds SA-CCR, CVA capital and the leverage exposure; the economic CSA feeds CVA, DVA, FVA, FBA and MVA, with the pickup on posted margin the yield of its eligible part. The all-recognised regime reproduces the plain CSA field by field, so every number of \S\ref{sec:exposure} is the cash-and-government-securities column.
+with $w_i$ the composition weights, $\mathrm{rec}_i\in\{0,1\}$ the recognition and $h_i$ the haircut. The regulatory CSA feeds SA-CCR, CVA capital and the leverage exposure; the economic CSA feeds CVA, DVA, FVA, FBA, MVA and ColVA, with the pickup on posted margin the yield of its eligible part. The all-recognised regime reproduces the plain CSA field by field, so every number of \S\ref{sec:exposure} is the cash-and-government-securities column.
+
+\subsection{Instruments, schedules and the carry over OIS}
+A class is a rulebook; an \emph{instrument} is the asset: a code, its class, currency and issuer, its settlement rail (bilateral, or on chain with a token address), its yield source and an optional negotiated haircut. The yield source is a curve's short rate plus a spread (cash in a currency on its OIS; government paper on the same curve until a government curve is loaded; a tokenised fund share at OIS less its expense ratio), a fixed rate the firm enters, or none (a payment stablecoin, a cryptoasset). The public seed is cash in three currencies, Treasury bills and notes, Bunds, Gilts, three payment stablecoins, a generic tokenised money-market fund share, a generic tokenised Treasury-bill claim and three cryptoassets; a firm adds its own instruments under its own names. What the engines use is each instrument's \emph{carry over OIS}: a curve instrument on its currency's OIS is its spread, a fixed rate is the rate less the OIS one-year zero of the account's latest market, nothing is minus that OIS. A \emph{schedule} per counterparty (the credit support annex's eligible-collateral list, versioned by effective date) names the admitted instruments, whether each is admitted for variation and for initial margin, a negotiated haircut and a concentration limit, the composition posted and received, and the rail. The regime of \S\ref{sec:capital} is derived from it: the eligible classes are the instruments' classes, the compositions aggregate by class, the on-chain rail sets the on-chain margin period, each class's yield is the weighted carry of the instruments posted in it, and the two CSAs carry the weighted carries of the posted and received compositions, which ColVA integrates. A cash schedule on the bilateral rail reproduces the class-level regime field by field (\code{tests/test\_collateral\_instruments.py}); on the ticket the trader may re-collateralise the same trade in any instrument on the firm's list, and the on-chain comparison runs the same paths under atomic settlement with the chosen collateral, so the difference is the terms alone.
 
 \subsection{SA-CCR by asset class (CRE52)}
 \begin{align}

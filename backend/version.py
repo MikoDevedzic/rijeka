@@ -1,3 +1,3 @@
 """One version for the API: reported on /health and /api/ops/health, written to CHANGELOG.md, tagged
 on the launch commit. The commit itself comes from Render (RENDER_GIT_COMMIT)."""
-VERSION = "0.9.0"
+VERSION = "0.10.0"

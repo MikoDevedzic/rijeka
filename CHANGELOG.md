@@ -3,6 +3,23 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.10.0 · 4 November 2026
+
+- Collateral on the ticket, phase C2 of `docs/archive/PLAN_collateral_2026-11-04.md`:
+  - **ColVA**, the carry of the variation margin against cash at OIS, in the waterfall (`docs/xva.md` §7b): posted
+    margin in an asset earning more than OIS earns the excess, held margin in an asset earning less than the OIS
+    rebate costs the shortfall; cash on both sides is zero, so every figure that predates instruments is unchanged
+    (tests on the closed form). Every instrument enters as its carry over OIS; the IM pickup in MVA comes from the
+    posted side's eligible part instead of a typed number (the field stays as an override).
+  - **SETTLEMENT & COLLATERAL** on the rates, FX and digital-asset XVA panels: what the margin is posted and received
+    in, from the firm's instruments with their carries; the counterparty's schedule is the default when one is
+    recorded; the ColVA cell in the strip; the on-chain comparison on by default with the **saving on chain** in money
+    and in bp of notional, upfront and running.
+  - The three XVA routes take `collateral: {posted, received, im_posted?, rail?}`; the book's credit engine uses the
+    schedule's economic CSA for a counterparty (MPoR, pickup, carries).
+  - Both Excel replications carry the two carries as inputs and ColVA as a column; methodology v1.4 (ColVA, the
+    instruments and schedules subsection).
+
 ## 0.9.0 · 4 November 2026
 
 - Collateral as a first-class object, phase C1 of `docs/archive/PLAN_collateral_2026-11-04.md` (`docs/collateral.md`):

@@ -74,6 +74,12 @@ class CSA:
     # Collateral eligibility (pricing/collateral.py derives these; the defaults are today's behaviour):
     crm_recognised:    bool  = True                 # the collateral counts under CRE22: margined treatment, NICA, C in RC and the multiplier
     collateral_haircut: float = 0.0                 # fraction of the collateral's value lost to the supervisory haircut (CRE22.49)
+    # What the variation margin is held in (collateral/apply.py derives these from the instruments): the carry of the
+    # posted and the received composition as a spread over the OIS the discounting assumes, in bp. Cash at OIS is zero
+    # on both sides, so every number before instruments existed is unchanged. Feeds ColVA.
+    vm_post_carry_bp:  float = 0.0
+    vm_recv_carry_bp:  float = 0.0
+    collateral:        Optional[dict] = None        # the record: instruments, weights, carries, rail (for the response and the derivation)
 
     # ── Derived ──────────────────────────────────────────────────────────────
 
@@ -148,7 +154,7 @@ class CSA:
             base = cls.uncollateralised()
         for k in ("collateralised", "threshold_cp", "threshold_own", "mta",
                   "mpor_days", "im_exchanged", "im_yield_pickup_bp", "settlement",
-                  "crm_recognised", "collateral_haircut"):
+                  "crm_recognised", "collateral_haircut", "vm_post_carry_bp", "vm_recv_carry_bp"):
             if d.get(k) is not None:
                 setattr(base, k, d[k])
         if base.mpor_days <= 0:

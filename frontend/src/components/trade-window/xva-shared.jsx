@@ -150,10 +150,10 @@ export function SpreadCurvesGrid({ spreads, onChange, tip = noop, untip = noop }
 // "SIMM IM exchanged" and "Compare on-chain" toggles. Picking a preset sets IM exchanged
 // on for the collateralised ones, as the rates tab always has.
 export function SettlementBlock({ settlement, setSettlement, imExchanged, setImExchanged, compareOnChain, setCompareOnChain,
-                                  fields = [], tip = noop, untip = noop }) {
+                                  fields = [], tip = noop, untip = noop, collateral = null, setCollateral = null, instruments = [], scheduleCollateral = null }) {
   return (
     <>
-      <SectionHeader>SETTLEMENT</SectionHeader>
+      <SectionHeader>SETTLEMENT & COLLATERAL</SectionHeader>
       <div onMouseEnter={e=>tip('settlement',e)} onMouseLeave={untip}
         style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'3px',marginBottom:'6px'}}>
         {SETTLEMENT_PRESETS.map(([k,label,c])=>(
@@ -187,7 +187,53 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
           </label>
         </>)}
       </div>
+      {setCollateral && settlement!=='UNCOLLATERALISED' && (
+        <CollateralBlock collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} tip={tip} untip={untip} />
+      )}
     </>
+  )
+}
+
+// What the margin is held in: one select per side over the firm's instruments (code · carry over OIS), the
+// counterparty's schedule as the default and a button back to it, the carries the engine will use.
+const carryFmt = (bp) => bp == null ? '' : `${bp >= 0 ? '+' : '−'}${Math.abs(Math.round(bp))} bp`
+function CollateralBlock({ collateral, setCollateral, instruments, scheduleCollateral, tip, untip }) {
+  const sides = [['posted', 'VM posted in'], ['received', 'VM received in']]
+  const value = (v) => (v && typeof v === 'object' && Object.keys(v).length === 1) ? Object.keys(v)[0] : (typeof v === 'string' ? v : (v && Object.keys(v).length > 1 ? '__SCHEDULE__' : ''))
+  const carryOf = (v) => {
+    if (!v) return 0
+    const comp = typeof v === 'string' ? { [v]: 1 } : v
+    const tot = Object.values(comp).reduce((s_, w) => s_ + Number(w), 0) || 1
+    return Object.entries(comp).reduce((s_, [k, w]) => s_ + Number(w) / tot * (instruments.find(i => i.code === k)?.carry_today_bp ?? 0), 0)
+  }
+  const fromSchedule = scheduleCollateral && collateral && collateral.source === 'SCHEDULE'
+  return (
+    <div style={{marginTop:'6px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 150px',gap:'4px 8px',alignItems:'center'}}>
+        {sides.map(([key, label]) => (
+          <div key={key} style={{display:'contents'}}>
+            <TipLabel tipKey='collateral' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>{label}</TipLabel>
+            <select value={value(collateral?.[key])}
+              onChange={e => setCollateral(c => ({ ...(c || {}), [key]: e.target.value === '__SCHEDULE__' ? (scheduleCollateral?.[key] || null) : (e.target.value || null), source: 'TICKET' }))}
+              style={{...INP,textAlign:'right',cursor:'pointer'}} aria-label={label}>
+              <option value=''>cash (CSA currency)</option>
+              {collateral?.[key] && typeof collateral[key] === 'object' && Object.keys(collateral[key]).length > 1 && <option value='__SCHEDULE__'>schedule mix</option>}
+              {instruments.filter(i => i.active !== false).map(i => <option key={i.code} value={i.code}>{i.code} {carryFmt(i.carry_today_bp)}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+      <div style={{display:'flex',gap:'8px',alignItems:'center',marginTop:'4px',fontSize:'0.75rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
+        <span>carry over OIS · posted {carryFmt(carryOf(collateral?.posted))} · received {carryFmt(carryOf(collateral?.received))}</span>
+        {scheduleCollateral && !fromSchedule && (
+          <button onClick={() => setCollateral({ ...scheduleCollateral, source: 'SCHEDULE' })}
+            style={{marginLeft:'auto',background:'transparent',border:'1px solid var(--border)',color:'var(--accent)',fontFamily:'var(--mono)',fontSize:'0.7rem',padding:'2px 6px',borderRadius:'2px',cursor:'pointer'}}>
+            COUNTERPARTY'S SCHEDULE
+          </button>
+        )}
+        {fromSchedule && <span style={{marginLeft:'auto',color:'var(--accent)'}}>from the counterparty's schedule</span>}
+      </div>
+    </div>
   )
 }
 
@@ -263,7 +309,7 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
   const exp = rows.find(r => r.key === expanded)
   return (
     <>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)'}}>
+      <div style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
         {rows.map(row => {
           const isExp = expanded===row.key
           return (
@@ -298,12 +344,22 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
 
 // The ON-CHAIN comparison under the strip: each VA under the on-chain preset against the current
 // run (onChainCompareRows), and the line saying it is the same paths and seed.
-export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar }) {
+export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, saving = null }) {
   if (!rows?.length || !current || !compare) return null
   const preset = current.csa?.preset?.replace('_','-')
+  const bp = (v) => v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} bp`
   return (
     <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:'1px',background:'var(--border)'}}>
+      {saving && (
+        <div style={{display:'flex',gap:'14px',alignItems:'baseline',padding:'6px 14px',borderBottom:'1px solid var(--border)',fontFamily:'var(--mono)'}}>
+          <span style={{fontSize:'0.8rem',letterSpacing:'0.12em',color:'var(--accent)',fontWeight:700}}>SAVING ON CHAIN</span>
+          <span style={{fontSize:'0.9375rem',fontWeight:700,color:saving.money>=0?'var(--accent)':'var(--red)'}}>{fmt(saving.money)}</span>
+          {saving.bpUpfront!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} of notional upfront</span>}
+          {saving.bpRunning!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>· {bp(saving.bpRunning)} running</span>}
+          <span style={{marginLeft:'auto',fontSize:'0.75rem',color:'var(--text-mute)'}}>vs {preset} · same paths, same collateral</span>
+        </div>
+      )}
+      <div style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
         {rows.map(({ key, oc, delta, pct, better }) => (
           <div key={key} style={{background:'var(--bg-deep)',padding:'6px 8px'}}>
             <div style={{fontSize:'0.8rem',letterSpacing:'0.10em',color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'2px'}}>{key==='npv'?'ON-CHAIN':''}</div>

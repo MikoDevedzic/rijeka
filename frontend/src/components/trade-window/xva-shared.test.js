@@ -11,7 +11,7 @@ vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null, getSess
 
 import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, simmImValue, numOrNull,
-  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge,
+  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
 } from './xva-shared'
 
 const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fva: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
@@ -58,9 +58,9 @@ describe('spread curves', () => {
 })
 
 describe('buildVaRows', () => {
-  it('has the eight cells in the strip\'s order', () => {
+  it('has the nine cells in the strip\'s order', () => {
     expect(buildVaRows(null).map(r => r.key)).toEqual(VA_KEYS)
-    expect(VA_KEYS).toEqual(['npv', 'cva', 'dva', 'fva', 'fba', 'kva', 'mva', 'all_in'])
+    expect(VA_KEYS).toEqual(['npv', 'cva', 'dva', 'fva', 'fba', 'kva', 'mva', 'colva', 'all_in'])
   })
   it('rates: bp on rate = VA / IR01, NPV shows the par rate, ALL-IN the all-in rate', () => {
     const rows = buildVaRows(xva, { kind: 'rate', dv01: 5000, parRate: 3.665, allInRate: 3.5389 })
@@ -130,5 +130,27 @@ describe('volBadge', () => {
     expect(volBadge({ vol_pct: 7.5, vol_source: 'demo default (no surface for this pair)', vol_mode: 'flat' }, 'GBPNOK'))
       .toEqual({ kind: 'warn', text: 'DEMO DEFAULT 7.50 % · no surface' })
     expect(volBadge({ vol_pct: 9, vol_source: 'desk input', vol_mode: 'flat' }).kind).toBe('info')
+  })
+})
+
+describe('collateral on the ticket', () => {
+  it('a code becomes weight 1, a composition passes through, blanks mean cash', () => {
+    expect(collateralBody(null)).toBeNull()
+    expect(collateralBody({ posted: '', received: '' })).toBeNull()
+    expect(collateralBody({ posted: 'USDC', received: null })).toEqual({ posted: { USDC: 1 }, received: {} })
+    expect(collateralBody({ posted: { UST_BILL: 0.6, USDC: 0.4 }, received: { USD_CASH: 1 }, rail: 'on_chain', source: 'SCHEDULE' }))
+      .toEqual({ posted: { UST_BILL: 0.6, USDC: 0.4 }, received: { USD_CASH: 1 }, rail: 'on_chain' })
+    expect(collateralLabel(null)).toBe('CASH')
+    expect(collateralLabel('USDC')).toBe('USDC')
+    expect(collateralLabel({ UST_BILL: 0.6, USDC: 0.4 })).toBe('UST_BILL 60 · USDC 40')
+  })
+  it('the saving on chain: the all-in difference, in bp of notional upfront and running over the annuity', () => {
+    const cur = { all_in: 6199, annuity: 4.5 }, oc = { all_in: 8199, annuity: 4.5 }
+    const s = onChainSaving(cur, oc, 10_000_000)
+    expect(s.money).toBe(2000)
+    expect(s.bpUpfront).toBeCloseTo(2.0, 9)
+    expect(s.bpRunning).toBeCloseTo(2.0 / 4.5, 9)
+    expect(onChainSaving(cur, oc, null).bpUpfront).toBeNull()
+    expect(onChainSaving(cur, null, 1)).toBeNull()
   })
 })

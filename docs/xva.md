@@ -71,9 +71,25 @@ Initial margin posted is funded at the funding spread less whatever the collater
 
 The SIMM weights are calibrated to a 10-business-day MPoR; the √(MPoR/10) scaling is the ISDA/BCBS-IOSCO rule for a different one, which is how the on-chain CSA's 5-day MPoR reduces IM.
 
+## 7b. ColVA: what the variation margin is held in
+
+The CSA says how much margin moves; the collateral schedule says what it is held in (`docs/collateral.md`). The
+discounting and the cash rebate assume OIS, so every instrument enters as its *carry over OIS*: cash in the CSA
+currency 0, a Treasury bill on the same curve 0, a tokenised money-market fund share about −10 bp, a payment
+stablecoin that pays its holder nothing −OIS, a fixed-rate fund share its rate less the OIS one-year zero.
+
+    ColVA = Σ_i ( VM_posted(t_i) · s_post + VM_held(t_i) · s_recv ) · Δt · P(0,t_i)
+
+with VM_posted and VM_held the mean of the two sides of C (§2) at each step and s the carries of the posted and
+received compositions. Posted margin in an asset earning more than OIS earns the excess; held margin in an asset
+earning less than the OIS we rebate costs the shortfall. Cash on both sides is zero, so a cash ticket reads exactly
+as before. The posted side's carry is also the MVA pickup (§7), over the part that is eligible as IM. The ticket's
+SETTLEMENT & COLLATERAL block chooses the instruments (the counterparty's schedule by default); the Excel
+replications carry the two carries as inputs and ColVA as a column.
+
 ## 8. What the on-chain CSA changes, quantified
 
-Same trade, same model, three CSAs: uncollateralised, bilateral (10bd MPoR), on-chain (5bd MPoR, continuous VM, no threshold, no MTA). CVA falls with the residual exposure; MVA falls with √(5/10) on the IM; KVA falls through the smaller RC and MF. The ticket's XVA tab shows all three side by side; the difference is the business case for confirming and margining on chain, in the counterparty's own numbers.
+Same trade, same model, three CSAs: uncollateralised, bilateral (10bd MPoR), on-chain (5bd MPoR, continuous VM, no threshold, no MTA). CVA falls with the residual exposure; MVA falls with √(5/10) on the IM; KVA falls through the smaller RC and MF. The ticket's XVA tab runs the on-chain comparison by default on every panel (rates, FX, digital assets): the same paths and the same collateral under atomic settlement, each adjustment side by side, and the saving in money and in bp of notional, upfront and running over the grid's annuity Σ DF·Δt (returned with the XVA block). The difference is the business case for confirming and margining on chain, in the counterparty's own numbers.
 
 ## Excel replication
 

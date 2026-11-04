@@ -70,11 +70,17 @@ def test_regime_from_schedule_aggregates_by_class_and_resolves_yields():
     assert r.name == "COUNTERPARTY" and r.eligible == ["CASH", "GOVT", "STABLECOIN"]
     assert r.posted == {"GOVT": pytest.approx(0.6), "STABLECOIN": pytest.approx(0.4)} and r.received == {"CASH": 1.0}
     assert r.mpor_state == "ON_CHAIN" and r.regulatory_csa().mpor_days == 5.0 and r.regulatory_csa().settlement == "on_chain"
-    assert r.instrument_yields_bp == {"UST_BILL": 400.0, "USDC": 0.0, "USD_CASH": 400.0}
-    assert r.yield_override_bp == {"GOVT": 400.0, "STABLECOIN": 0.0}
-    # the IM pickup counts only the eligible part: the bill, not the stablecoin
-    assert r.im_pickup_bp() == pytest.approx(0.6 * 400.0)
+    assert r.instrument_yields_bp == {"UST_BILL": 400.0, "USDC": 0.0, "USD_CASH": 400.0}          # absolute, for display
+    assert r.instrument_carry_bp == {"UST_BILL": 0.0, "USDC": -400.0, "USD_CASH": 0.0}            # over OIS, what the engines use
+    assert r.yield_override_bp == {"GOVT": 0.0, "STABLECOIN": -400.0}
+    # the IM pickup counts only the eligible part: the bill (at OIS: zero pickup), not the stablecoin
+    assert r.im_pickup_bp() == pytest.approx(0.0)
     assert r.im_eligible_fraction() == pytest.approx(0.6)
+    # the VM carries on the derived CSAs: posted 60 % bill at OIS and 40 % stablecoin at nothing; received cash at OIS
+    eco = r.economic_csa()
+    assert eco.vm_post_carry_bp == pytest.approx(-160.0) and eco.vm_recv_carry_bp == 0.0
+    assert eco.collateral["posted"] == {"UST_BILL": pytest.approx(0.6), "USDC": pytest.approx(0.4)} and eco.collateral["rail"] == "on_chain"
+    assert r.regulatory_csa().vm_post_carry_bp == pytest.approx(-160.0)
     assert r.recognised_fraction("received") == 1.0                       # cash received, fully recognised
     assert r.to_dict()["posted_instruments"] == {"UST_BILL": pytest.approx(0.6), "USDC": pytest.approx(0.4)}
     # the class-level fields the record keeps in step
@@ -94,5 +100,21 @@ def test_cash_schedule_equals_the_class_level_regime():
     legacy = COL.regime_from_counterparty(CP(), csa)
     for k in ("eligible", "posted", "received", "netting_enforceable", "mpor_state"):
         assert getattr(r, k) == getattr(legacy, k), k
-    assert r.regulatory_csa().to_dict() == legacy.regulatory_csa().to_dict()
-    assert r.economic_csa().to_dict() == legacy.economic_csa().to_dict()
+    strip = lambda d: {k: v for k, v in d.items() if k != "collateral"}       # the record of the instruments is the one addition
+    assert strip(r.regulatory_csa().to_dict()) == strip(legacy.regulatory_csa().to_dict())
+    assert strip(r.economic_csa().to_dict()) == strip(legacy.economic_csa().to_dict())
+    assert r.economic_csa().vm_post_carry_bp == 0.0 and r.economic_csa().vm_recv_carry_bp == 0.0
+
+
+def test_carry_over_ois():
+    rate = lambda cid: {"USD_SOFR": 430.0, "EUR_ESTR": 200.0}.get(cid)
+    assert COL.SEED["USD_CASH"].carry_bp(rate) == 0.0 and COL.SEED["UST_BILL"].carry_bp(rate) == 0.0
+    assert COL.SEED["TOKENISED_MMF"].carry_bp(rate) == -10.0
+    assert COL.SEED["USDC"].carry_bp(rate) == -430.0 and COL.SEED["ETH"].carry_bp(rate) == -430.0
+    assert COL.SEED["BUND"].carry_bp(rate) == 0.0
+    fixed = COL.instrument_from_row({"code": "F", "cls": "FUND_SHARES_TOKENISED", "yield_kind": "FIXED", "yield_bp": 445})
+    assert fixed.carry_bp(rate) == pytest.approx(15.0)
+    other = COL.instrument_from_row({"code": "O", "cls": "GOVT", "currency": "USD", "yield_kind": "CURVE", "yield_ref": "EUR_ESTR", "yield_bp": 5})
+    assert other.carry_bp(rate) == pytest.approx(200.0 - 430.0 + 5.0)
+    # no market: a spread stands, a fixed rate and nothing count zero carry rather than a guess
+    assert COL.SEED["TOKENISED_MMF"].carry_bp(None) == -10.0 and fixed.carry_bp(None) == 0.0 and COL.SEED["USDC"].carry_bp(None) == 0.0

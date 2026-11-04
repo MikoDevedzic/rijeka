@@ -302,3 +302,35 @@ class TestCSAFromRequest:
         d = CSA.on_chain().to_dict()
         assert d["simm_mpor_scale"] == pytest.approx(math.sqrt(0.5))
         assert d["mpor_years"] == pytest.approx(5 / 250)
+
+
+# ── ColVA: the carry of the variation margin against cash at OIS ──────────────
+
+def test_colva_is_zero_for_cash_and_the_closed_form_for_a_spread():
+    paths, p0, theta, _T = make_paths(n_paths=1500, seed=3)
+    v0 = 0.0
+    params = default_params(theta, ir01=5000.0)
+    base = CSA.bilateral(threshold_cp=0.0, mta=0.0, im_exchanged=True)
+    wf0 = run_waterfall(paths, v0, p0, params, base, np.random.default_rng(1))
+    assert wf0.colva == 0.0 and wf0.xva_total == wf0.cva + wf0.dva + wf0.fva + wf0.fba + wf0.kva + wf0.mva
+    # the posted VM earns 100 bp over OIS: ColVA = 100 bp · Σ mean(posted) · Δt · DF, a benefit; every other VA is unchanged
+    sp = CSA(**{**base.__dict__, "vm_post_carry_bp": 100.0})
+    wf1 = run_waterfall(paths, v0, p0, params, sp, np.random.default_rng(1))
+    coll = np.array(wf1.collateral_mean)
+    for k in ("cva", "dva", "fva", "fba", "kva", "mva"):
+        assert getattr(wf1, k) == getattr(wf0, k), k
+    assert wf1.colva > 0 and wf1.xva_total == pytest.approx(wf0.xva_total + wf1.colva)
+    # the closed form on the engine's own posted mean: mean(max(−C, 0)) per step
+    rng = np.random.default_rng(1)
+    from pricing.xva_engine import lagged_values
+    v_lag = lagged_values(paths, v0, 1.0 / 12, sp.mpor_years, rng)
+    c = collateral_held(v_lag, sp)
+    post = np.mean(np.maximum(-c, 0.0), axis=0)
+    dt = 1.0 / 12
+    expect = sum(post[i] * 0.01 * dt * p0[i + 1] for i in range(len(post)))
+    assert wf1.colva == pytest.approx(expect, rel=1e-9)
+    assert np.allclose(coll, np.mean(c, axis=0))
+    # received VM in an asset earning nothing while OIS is rebated: a cost on what we hold
+    rc = CSA(**{**base.__dict__, "vm_recv_carry_bp": -400.0})
+    wf2 = run_waterfall(paths, v0, p0, params, rc, np.random.default_rng(1))
+    assert wf2.colva < 0 and wf2.cva == wf0.cva

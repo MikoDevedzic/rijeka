@@ -24,8 +24,9 @@ export const VA_DEFS = {
   fva:    { label:'FVA',    color:'#e05040', desc:'Funding Valuation Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative.', curve:'EE' },
   fba:    { label:'FBA',    color:'#4a9ad4', desc:'Funding Benefit Adjustment = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]. Benefit when counterparty funds your negative MTM. FBA/FTP ratio typically 0.5-0.7.', curve:'ENE' },
   kva:    { label:'KVA',    color:'#e05040', desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
-  mva:    { label:'MVA',    color:'#f0a020', desc:'Margin Valuation Adjustment = -Sum[ IM(t) x FTP(t) x dt x DF(t) ]. Cost of funding SIMM initial margin. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
-  all_in: { label:'ALL-IN', color:'#0dd4a8', desc:'NPV + CVA + DVA + FVA + FBA + KVA + MVA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
+  mva:    { label:'MVA',    color:'#f0a020', desc:'Margin Valuation Adjustment = -Sum[ IM(t) x max(FTP(t) - pickup, 0) x dt x DF(t) ]. Cost of funding initial margin, less what the asset it is posted in earns over OIS. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
+  colva:  { label:'ColVA',  color:'#f0a020', desc:'Collateral Valuation Adjustment = Sum[ (VM posted(t) x s_post + VM held(t) x s_recv) x dt x DF(t) ]: the carry of the variation margin against cash at OIS. s = what the asset the margin is held in earns over OIS (a Treasury bill at OIS: 0; a stablecoin earning nothing: minus OIS). Cash on both sides: zero. Positive = benefit.', curve:'none' },
+  all_in: { label:'ALL-IN', color:'#0dd4a8', desc:'NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
 }
 export const VA_INFO = VA_DEFS
 export const VA_KEYS = Object.keys(VA_DEFS)
@@ -58,17 +59,19 @@ export const TIPS = {
   simmIm: { title: 'SIMM IM ($M)',
     body: 'ISDA SIMM initial margin for the inter-dealer hedge in $M. Linear MVA proxy:\n\nMVA~ = -(IM x $1M) x (FTP/10000) x T/2\n\nAssumes flat IM for T/2 years on average.\n\nOn the roadmap: IM(path, t) computed on each Monte Carlo path using ISDA SIMM delta sensitivities. MVA = -(FTP/10000) x Sum[ IM(t) x dt x DF(t) ].' },
   settlement: { title: 'Settlement / CSA',
-    body: 'How the trade is margined. Every VA is computed on the RESIDUAL exposure after collateral:\n\nE+(t) = max(V(t) − VM(t) − IM_recv, 0)\n\nUNCOLLATERALISED — no variation margin. Full MtM at risk. IM may still be posted (legacy MVA).\n\nBILATERAL — daily VM under a CSA, thresholds and MTA apply, 10 business-day margin period of risk (BCBS-IOSCO floor for non-cleared). SIMM IM exchanged.\n\nON-CHAIN — atomic settlement: continuous VM, zero threshold and MTA, 5bd MPoR (the cleared floor). SIMM risk weights scale by sqrt(5/10) = 0.707, so IM and MVA fall 29.3%; SA-CCR margined maturity factor 1.5·sqrt(MPoR/250) cuts KVA by the same factor.' },
+    body: 'How the trade is margined. Every VA is computed on the RESIDUAL exposure after collateral:\n\nE+(t) = max(V(t) − VM(t) − IM_recv, 0)\n\nUNCOLLATERALISED — no variation margin. Full MtM at risk. IM may still be posted (legacy MVA).\n\nBILATERAL — daily VM under a CSA, thresholds and MTA apply, 10 business-day margin period of risk (BCBS-IOSCO floor for non-cleared). SIMM IM exchanged.\n\nON-CHAIN — atomic settlement: continuous VM, zero threshold and MTA, 5bd MPoR (the cleared floor). SIMM risk weights scale by sqrt(5/10) = 0.707, so IM and MVA fall 29.3%; SA-CCR margined maturity factor 1.5·sqrt(MPoR/250) cuts KVA by the same factor.\n\nWhat the margin is held in is the COLLATERAL block below: it sets the carry in ColVA and the pickup in MVA.' },
+  collateral: { title: 'Collateral: what the margin is held in',
+    body: 'The instrument the variation margin is posted in and received in, from the firm\'s list (Configurations → Collateral Instruments). The counterparty\'s own schedule is the default when a counterparty is selected.\n\nEach instrument carries a yield source; what the engine uses is its carry over the OIS the discounting assumes: a Treasury bill at OIS is 0 bp, a tokenised fund share at OIS less its expense ratio is about −10 bp, a stablecoin that pays its holder nothing is minus the OIS rate. The posted side\'s carry is the IM pickup in MVA too.\n\nColVA = Σ (VM posted × s_post + VM held × s_recv) × dt × DF. Cash on both sides is zero, so a cash ticket reads exactly as before.' },
   mpor: { title: 'Margin period of risk (bd)',
     body: 'Business days between the last collateral call that would be honoured and close-out. VM held at t is what was called against V(t − MPoR); the exposure over that window is the residual.\n\nV(t − MPoR) sits between monthly grid points and is sampled from the Brownian bridge, which preserves the variance of the margin-period move.\n\nSIMM IM scales with sqrt(MPoR / 10). Bilateral floor 10bd; cleared / on-chain floor 5bd.' },
   threshold: { title: 'Threshold ($)',
     body: 'Exposure below which the counterparty posts no collateral. Uncollateralised up to this amount — adds straight back to EE and CVA. Zero under standard on-chain terms.' },
   mtaTip: { title: 'Minimum transfer amount ($)',
     body: 'Collateral calls smaller than this are not made. Modelled as: no VM held while |call| < MTA. Also enters SA-CCR replacement cost as TH + MTA − NICA.' },
-  imYield: { title: 'IM yield pickup (bp)',
-    body: 'Yield earned on posted initial margin, netted against its funding cost: MVA = −Σ IM(t) × (FTP − pickup) × dt × DF(t).\n\nTokenised sovereign collateral (e.g. tokenised T-bills) earns while posted; cash IM at a CCP typically does not. Leave blank for none.' },
+  imYield: { title: 'IM yield pickup override (bp)',
+    body: 'Yield earned on posted initial margin over OIS, netted against its funding cost: MVA = −Σ IM(t) × max(FTP − pickup, 0) × dt × DF(t).\n\nBlank: the pickup is the carry of the instrument chosen in the COLLATERAL block (the posted side). Type a number to override it for a what-if.' },
   compare: { title: 'Compare on-chain',
-    body: 'Runs a second simulation on the SAME paths under the ON-CHAIN preset (continuous VM, 5bd MPoR) and shows each VA side by side with the current settlement. Same seed, so the difference is purely the collateral terms.' },
+    body: 'Runs a second simulation on the SAME paths under the ON-CHAIN preset (continuous VM, zero threshold and MTA, 5bd MPoR) with the same collateral, and shows each VA side by side with the current settlement, with the saving in money and in bp of notional (upfront, and running over the trade\'s annuity). Same seed, so the difference is purely the terms. On by default; the row disappears when the ticket itself is on chain.' },
   capModel: { title: 'Capital model',
     body: 'Regulatory CCR capital framework for KVA.\n\nSA-CCR (current standard): EAD = 1.4 x (RC + AddOn). RC = max(NPV,0). AddOn = Notional x SF x MF. SF(IRS)=0.5%. MF=sqrt(min(M,1)).\n\nCEM (legacy): EAD = max(NPV,0) + Notional x addon%. Addon: 0.5% (1-5Y IRS). Simpler, less risk-sensitive.\n\nIMM: full MC EPE with supervisory approval — on the roadmap.' },
   // FX and digital assets: the forward / option model block
@@ -219,6 +222,44 @@ export function onChainCompareRows(xva, cmpXva) {
     const better = key === 'all_in' ? (delta > 0) : (delta != null && Math.abs(oc) < Math.abs(cur))
     return { key, cur, oc, delta, pct, better }
   })
+}
+
+// The ticket's collateral choice as the routes take it: {posted: {code: w}, received: {code: w}}; null when both sides
+// are blank (cash in the CSA currency, zero carry). A single code becomes weight 1; a schedule's composition passes through.
+export function collateralBody(sel) {
+  if (!sel) return null
+  const side = (v) => {
+    if (!v) return null
+    if (typeof v === 'string') return v ? { [v]: 1 } : null
+    const entries = Object.entries(v).filter(([, w]) => Number(w) > 0)
+    return entries.length ? Object.fromEntries(entries.map(([k, w]) => [k, Number(w)])) : null
+  }
+  const posted = side(sel.posted), received = side(sel.received)
+  if (!posted && !received) return null
+  return { posted: posted || {}, received: received || {}, ...(sel.rail ? { rail: sel.rail } : {}) }
+}
+
+// The label of one side of the collateral choice: the code, or "UST_BILL 60 · USDC 40" for a schedule's composition.
+export function collateralLabel(v) {
+  if (!v) return 'CASH'
+  if (typeof v === 'string') return v
+  const e = Object.entries(v).filter(([, w]) => Number(w) > 0).sort((a, b) => b[1] - a[1])
+  if (!e.length) return 'CASH'
+  if (e.length === 1) return e[0][0]
+  const tot = e.reduce((s_, [, w]) => s_ + Number(w), 0)
+  return e.map(([k, w]) => `${k} ${Math.round(100 * Number(w) / tot)}`).join(' · ')
+}
+
+// The saving on chain: the all-in difference between the on-chain run and the current one, in money and in bp of
+// notional, upfront and running (upfront over the grid's annuity Σ DF·dt, which the routes return with the XVA block).
+export function onChainSaving(xva, cmpXva, notional) {
+  if (!xva || !cmpXva || xva.all_in == null || cmpXva.all_in == null) return null
+  const money = cmpXva.all_in - xva.all_in
+  const n = Number(notional)
+  const bpUpfront = Number.isFinite(n) && n > 0 ? money / (n * 1e-4) : null
+  const ann = Number(cmpXva.annuity ?? xva.annuity)
+  const bpRunning = bpUpfront != null && Number.isFinite(ann) && ann > 0 ? bpUpfront / ann : null
+  return { money, bpUpfront, bpRunning, annuity: Number.isFinite(ann) ? ann : null }
 }
 
 // The FX routes' csa body for a preset: the shape the panel has always sent.

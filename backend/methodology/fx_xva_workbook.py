@@ -9,7 +9,7 @@ waterfall and the vol calibration, cell by cell. The sibling of xva_workbook.py 
     Paths        Z (ENGINE: the values above; LIVE: NORMSINV(RAND())), ΣZ, W, F_t, V
     Exposure     the CSA (a preset, or the terms you set), V lagged by the margin period, the collateral, the
                  residual, EE / ENE / PFE / IM per step; the IM from the spot sensitivity and the pair's weight
-    Waterfall    survival, CVA, DVA, FVA, FBA, SA-CCR EAD, KVA, MVA, step by step, and the totals
+    Waterfall    survival, CVA, DVA, FVA, FBA, SA-CCR EAD, KVA, MVA, ColVA, step by step, and the totals
     Convergence  the running mean of EE at one date against path count, with ±2 standard errors
     Engine       what the engine computed on the same draws, per CSA preset (for the Checks)
 
@@ -310,18 +310,19 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
             ("V(0) (Model sheet)", "=V0", "#,##0.00"),
             (f"IM risk weight per 1 % spot: {case['im_basis']}", eng["rw"], "0.00"),
             (f"{case['delta']}: PV for +1 % spot (Model sheet)", "=Spot01", "#,##0.00"),
-            ("IM₀ = weight·|spot sensitivity| (the engine passes this IM explicitly, so no √(MPoR/10) scaling applies)", "=IF(B10=1,B16*ABS(B17),0)", "#,##0.00")]
+            ("IM₀ = weight·|spot sensitivity| (the engine passes this IM explicitly, so no √(MPoR/10) scaling applies)", "=IF(B10=1,B16*ABS(B17),0)", "#,##0.00"),
+            ("VM carry, posted (bp over OIS: what the margin we post earns above cash)", 0.0, "0.0"), ("VM carry, received (bp over OIS: what the margin we hold earns above the rebate)", 0.0, "0.0")]
     for i, (label, v, fmt) in enumerate(rows, 4):
         ws.cell(row=i, column=1, value=label)
         c = ws.cell(row=i, column=2, value=v); c.number_format = fmt
-        if i in (4, 6, 7, 8, 11, 16):
+        if i in (4, 6, 7, 8, 11, 16, 19, 20):
             c.fill = W.FILL_IN
     W.dropdown(ws, "B4", list(PRESETS))
     _names(wb, {"Preset": "Exposure!B4", "Coll": "Exposure!B5", "THcp": "Exposure!B6", "THown": "Exposure!B7", "MTA": "Exposure!B8", "MPoR": "Exposure!B9",
-                "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "RWim": "Exposure!B16", "IM0": "Exposure!B18"})
-    rs = 21
+                "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "RWim": "Exposure!B16", "IM0": "Exposure!B18", "CarryPost": "Exposure!B19", "CarryRecv": "Exposure!B20"})
+    rs = 23
     ws.cell(row=rs - 1, column=1, value="PER STEP").font = W.F_SECTION
-    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM(t)"])
+    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM(t)", "mean received", "mean posted"])
     top = rs + T + 3
     dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=Paths!{L(c)}{vb[0] + p}-V0" if j == 1 else f"=Paths!{L(c)}{vb[0] + p}-Paths!{L(c - 1)}{vb[0] + p}"), "#,##0", "ΔV = V(t_i) − V(t_{i−1})")
     top = dvb[1] + 3
@@ -345,6 +346,8 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
         ws.cell(row=r, column=8, value=f"=SUMPRODUCT(({vcol}<0)*{vcol})/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=9, value=f"=AVERAGE({ccol})").number_format = "#,##0.00"
         ws.cell(row=r, column=10, value=f"=AVERAGE({res})").number_format = "#,##0.00"
+        ws.cell(row=r, column=12, value=f"=SUMPRODUCT(({ccol}>0)*{ccol})/Npaths").number_format = "#,##0.00"
+        ws.cell(row=r, column=13, value=f"=-SUMPRODUCT(({ccol}<0)*{ccol})/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=11, value=f"=IM0*MAX(Tyrs-B{r},0)/Tyrs").number_format = "#,##0.00"
     W.widths(ws, [64, 10, 14, 14, 14, 14, 14, 14, 16, 16, 14] + [12] * max(T - 10, 0))
     ws.freeze_panes = "B5"
@@ -367,7 +370,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBAr": "Waterfall!B9",
                 "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFsa": "Waterfall!B15", "CapR": "Waterfall!B16"})
     r0 = 20
-    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM(t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)"]
+    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM(t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)", "ColVA_i"]
     W.header(ws, r0 - 1, hdr)
     for j in range(1, T + 1):
         r = r0 + j - 1; e = rs + j
@@ -402,16 +405,18 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
         ws.cell(row=r, column=28, value=f"=MAX(Exposure!J{e}-R{r},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=29, value=f"=IF(AA{r}>0,MIN(1,0.05+0.95*EXP((Exposure!J{e}-R{r})/(1.9*AA{r}))),1)").number_format = "0.0000"
         ws.cell(row=r, column=30, value=f"=AlphaSA*(AB{r}+AC{r}*AA{r})").number_format = "#,##0.00"
+        # ColVA: the carry of the variation margin against cash at OIS; what we posted earns CarryPost, what we hold earns CarryRecv (both over OIS)
+        ws.cell(row=r, column=31, value=f"=(Exposure!M{e}*CarryPost/10000+Exposure!L{e}*CarryRecv/10000)*Dt*C{r}").number_format = "#,##0.00"
     r1 = r0 + T - 1
     rt = r1 + 2
     totals = [("CVA", f"=-SUM(J{r0}:J{r1})"), ("DVA", f"=SUM(K{r0}:K{r1})"), ("FVA", f"=-SUM(L{r0}:L{r1})"), ("FBA", f"=SUM(M{r0}:M{r1})"),
-              ("KVA", f"=-SUM(W{r0}:W{r1})"), ("MVA", f"=-SUM(Y{r0}:Y{r1})"), ("XVA total", f"=SUM(B{rt}:B{rt + 5})"),
+              ("KVA", f"=-SUM(W{r0}:W{r1})"), ("MVA", f"=-SUM(Y{r0}:Y{r1})"), ("ColVA", f"=SUM(AE{r0}:AE{r1})"), ("XVA total", f"=SUM(B{rt}:B{rt + 6})"),
               ("EAD at t = 0", f"=U{r0}"), ("Capital at t = 0", f"=V{r0}"), ("IM₀", "=IM0"), ("Peak EE", f"=MAX(H{r0}:H{r1})"), ("Peak PFE", f"=MAX(Exposure!F{rs + 1}:F{rs + T})")]
     for i, (label, f) in enumerate(totals):
         ws.cell(row=rt + i, column=1, value=label).font = Font(bold=True)
         ws.cell(row=rt + i, column=2, value=f).number_format = "#,##0.00"
     ws.cell(row=rt + len(totals) + 1, column=1, value="The last step lands on settlement itself (m = 0), where the engine books no capital or IM funding; the add-on uses the quote notional N·F₀, the engine's SA-CCR notional for a forward.").font = Font(color=W.MUTED)
-    W.widths(ws, [44, 10, 12, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 10, 10, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11])
+    W.widths(ws, [44, 10, 12, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 10, 10, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11, 11])
     ws.freeze_panes = "C20"
     return r0, r1, rt
 
@@ -422,7 +427,7 @@ def _engine_sheet(wb, case, eng, blocks, rs, rt):
     ws["A1"] = "WHAT THE ENGINE COMPUTED ON THE SAME DRAWS"; ws["A1"].font = W.F_TITLE
     ws["A2"] = "pricing/fx_xva.forward_xva (simulate_paths, then pricing/xva_engine.run_waterfall) under each CSA preset, written at export. The 'selected' column follows the preset chosen on the Exposure sheet and feeds the Checks."; ws["A2"].font = W.F_SUB
     W.header(ws, 4, ["Metric"] + list(PRESETS) + ["selected"])
-    metrics = [("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("XVA total", "xva_total"),
+    metrics = [("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("ColVA", "colva"), ("XVA total", "xva_total"),
                ("EAD at t = 0", "ead_0"), ("Capital at t = 0", "capital_0"), ("IM₀", "im_0"), ("Peak EE", None), ("Peak PFE", None)]
     r = 5
     for label, attr in metrics:
@@ -525,10 +530,10 @@ def _xva_forward_workbook(mkt, case: dict):
     _convergence_sheet(wb, eng, blocks_exp, rs)
     W.live(wb, "Mode")
     W.ticket(wb, "XVA (the ticket's XVA tab)", [("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FVA", f"Waterfall!B{rt + 2}", "#,##0.00", ""),
-                                               ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""),
-                                               ("XVA TOTAL", f"Waterfall!B{rt + 6}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
-                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 7}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 9}", "#,##0.00", case["im_basis"]),
-                                               ("PEAK EE", f"Waterfall!B{rt + 10}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 11}", "#,##0.00", "")])
+                                               ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""), ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the VM held, against cash at OIS"),
+                                               ("XVA TOTAL", f"Waterfall!B{rt + 7}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
+                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", case["im_basis"]),
+                                               ("PEAK EE", f"Waterfall!B{rt + 11}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 12}", "#,##0.00", "")])
     W.ticket(wb, "THE FORWARD AND THE CSA", [("PAIR", "Model!B4", "@", ""), ("NOTIONAL", "Model!B6", "#,##0.####", base), ("DIRECTION", "Model!B7", '"BUY";"SELL";"FLAT"', f"+1 = buy {base}"),
                                              ("SETTLEMENT", "Model!B8", "yyyy-mm-dd", f"T = {inp.t_years:.4f}y"), ("FAIR FORWARD", "Model!B13", case["spot_fmt"], f"{quote} per {base}, from parity"),
                                              ("STRIKE K", "Model!B14", case["spot_fmt"], "the forward: NPV zero on day one"), ("NPV", "Model!B23", "#,##0.00", f"{quote}; V(0)"),
@@ -552,6 +557,7 @@ def _xva_forward_workbook(mkt, case: dict):
         ("FVA, FBA", "−Σ ftp·EE·Δ·P, +Σ ftp·ratio·|ENE|·Δ·P", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
         ("EAD", "α·[RC + multiplier·add-on], add-on = SF·N·F₀·SD(m)·MF", f"Waterfall!U{r0}", "SA-CCR, step 1", "#,##0.00"),
         ("KVA", "−hurdle·Σ 8%·RW·EAD·Δ·P", f"Waterfall!B{rt + 4}", "", "#,##0.00"), ("MVA", "−Σ IM(t)·max(ftp − pickup, 0)·Δ·P", f"Waterfall!B{rt + 5}", "", "#,##0.00"),
+        ("ColVA", "Σ (VM posted·s_post + VM received·s_recv)·Δ·P, the carries over OIS of what the margin is held in", f"Waterfall!B{rt + 6}", "zero for cash", "#,##0.00"),
     ]:
         W.derive(wb, sym, notn, ref, note, fmt)
     return wb, eng["runs"][DEFAULT_PRESET][1].xva_total

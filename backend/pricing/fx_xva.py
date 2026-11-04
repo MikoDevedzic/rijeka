@@ -122,7 +122,7 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
             "step_vols_pct": [round(float(v) * 100, 3) for v in nz["step_vols"]] if inp.pillars else None,
             "im_rw_per_pct": rw, "im_basis": "SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM",
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward at the surface's ATM vol to settlement, same waterfall as rates",
-            "_paths": paths}       # the MtM paths, for the ticket's chart (not serialised as such)
+            "p0_grid": [float(x) for x in p0], "_paths": paths}       # the MtM paths, for the ticket's chart (not serialised as such)
     return wf, meta
 
 
@@ -235,7 +235,7 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
     meta = {"vol_pct": inp.vol * 100.0, "vol_source": inp.vol_source or "the pair's surface at the option's expiry and strike",
             "vol_mode": "ATM term structure for the paths, the smile at each path's moneyness (sticky-delta)" if inp.pillars else "flat (today's vol at the strike, held along the path)",
             "im_rw_per_pct": rw, "im_basis": "SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM",
-            "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "style": spec.style,
+            "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "style": spec.style, "p0_grid": [float(x) for x in p0],
             "model": f"lognormal spot{' with the surface' + chr(39) + 's term structure' if inp.pillars else ' at the option' + chr(39) + 's vol'}; {spec.style.replace('_', ' ').lower()} valued on each path with the style's closed form "
                      f"(the credit engine's model); payoff fixed at expiry, discounted to settlement"
                      + ("; barriers monitored at the grid points" if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else "")

@@ -103,7 +103,9 @@ class Regime:
     yield_override_bp: dict[str, float] = field(default_factory=dict)
     posted_instruments: dict[str, float] = field(default_factory=dict)      # {instrument code: weight} when derived from a schedule
     received_instruments: dict[str, float] = field(default_factory=dict)
-    instrument_yields_bp: dict[str, float] = field(default_factory=dict)    # the yield each instrument resolved to
+    instrument_yields_bp: dict[str, float] = field(default_factory=dict)    # the yield each instrument resolved to (absolute, for display)
+    instrument_carry_bp: dict[str, float] = field(default_factory=dict)     # each instrument's carry over OIS: what the engines use
+    rail: str = "bilateral"
 
     # ── derived ──────────────────────────────────────────────────────────────
 
@@ -139,11 +141,29 @@ class Regime:
         replaced by eligible IM funded separately (the double-funding case), which earns nothing here."""
         return sum(w * self.yield_override_bp.get(c.code, c.yield_bp) for c, w in self._classes(self.posted) if self._im_eligible(c))
 
+    def vm_carry_bp(self, side: str = "posted") -> float:
+        """The carry over OIS of the variation margin composition on one side, from the instruments when the regime
+        was derived from a schedule; zero for a class-level regime (cash at OIS)."""
+        comp = self.posted_instruments if side == "posted" else self.received_instruments
+        if not comp:
+            return 0.0
+        tot = sum(comp.values())
+        return sum(w * self.instrument_carry_bp.get(c, 0.0) for c, w in comp.items()) / tot if tot > 0 else 0.0
+
+    def collateral_record(self) -> dict:
+        return {"posted": dict(self.posted_instruments), "received": dict(self.received_instruments), "carry_bp": dict(self.instrument_carry_bp),
+                "yield_bp": dict(self.instrument_yields_bp), "rail": self.rail, "posted_carry_bp": self.vm_carry_bp("posted"),
+                "received_carry_bp": self.vm_carry_bp("received"), "im_pickup_bp": self.im_pickup_bp()}
+
     def _base_csa(self) -> CSA:
         base = replace(self.csa)
         if self.mpor_state == "ON_CHAIN":
             base.settlement = "on_chain"
             base.mpor_days = MPOR_FLOOR_CLEARED_BD
+        if self.posted_instruments or self.received_instruments:
+            base.vm_post_carry_bp = self.vm_carry_bp("posted")
+            base.vm_recv_carry_bp = self.vm_carry_bp("received")
+            base.collateral = self.collateral_record()
         return base
 
     def regulatory_csa(self) -> CSA:
@@ -207,7 +227,8 @@ class Regime:
                 "netting_enforceable": self.netting_enforceable, "im_eligibility_state": self.im_eligibility_state, "hqla_state": self.hqla_state,
                 "mpor_state": self.mpor_state, "collateral_maturity_y": self.collateral_maturity_y,
                 "posted_instruments": dict(self.posted_instruments), "received_instruments": dict(self.received_instruments),
-                "instrument_yields_bp": dict(self.instrument_yields_bp),
+                "instrument_yields_bp": dict(self.instrument_yields_bp), "instrument_carry_bp": dict(self.instrument_carry_bp), "rail": self.rail,
+                "vm_post_carry_bp": self.vm_carry_bp("posted"), "vm_recv_carry_bp": self.vm_carry_bp("received"),
                 "regulatory_csa": self.regulatory_csa().to_dict(), "economic_csa": self.economic_csa().to_dict(),
                 "recognised_fraction": self.recognised_fraction(), "im_eligible_fraction": self.im_eligible_fraction(), "im_pickup_bp": self.im_pickup_bp()}
 
@@ -279,6 +300,8 @@ def regime_from_counterparty(cp, csa: CSA) -> Regime:
 
 YIELD_KINDS = ("CURVE", "FIXED", "NONE")      # CURVE: a curve's short rate plus yield_bp; FIXED: yield_bp; NONE: nothing
 RAILS = ("bilateral", "on_chain")
+OIS_OF = {"USD": "USD_SOFR", "EUR": "EUR_ESTR", "GBP": "GBP_SONIA", "JPY": "JPY_TONAR", "CHF": "CHF_SARON", "AUD": "AUD_AONIA", "CAD": "CAD_CORRA",
+          "SGD": "SGD_SORA", "SEK": "SEK_SWESTR", "NOK": "NOK_NOWA", "NZD": "NZD_NZIONA"}
 
 
 @dataclass(frozen=True)
@@ -315,6 +338,22 @@ class Instrument:
             r = curve_rate_bp(self.yield_ref) if curve_rate_bp is not None and self.yield_ref else None
             return (float(r) if r is not None else 0.0) + float(self.yield_bp)
         return 0.0
+
+    def carry_bp(self, curve_rate_bp=None) -> float:
+        """What the instrument earns over the OIS of its currency (the rate the discounting and the cash rebate
+        assume), in bp: a CURVE instrument on its OIS is its spread; on another curve the two curves' difference plus
+        the spread; FIXED is the rate less the OIS; NONE is minus the OIS (the holder earns nothing). Without a market
+        the OIS is unknown: a CURVE instrument keeps its spread, FIXED and NONE count zero carry."""
+        ois = OIS_OF.get(self.currency.upper())
+        r_ois = curve_rate_bp(ois) if curve_rate_bp is not None and ois else None
+        if self.yield_kind == "CURVE":
+            if not self.yield_ref or self.yield_ref == ois or r_ois is None:
+                return float(self.yield_bp)
+            r_ref = curve_rate_bp(self.yield_ref) if curve_rate_bp is not None else None
+            return (float(r_ref) - float(r_ois) if r_ref is not None else 0.0) + float(self.yield_bp)
+        if self.yield_kind == "FIXED":
+            return float(self.yield_bp) - float(r_ois) if r_ois is not None else 0.0
+        return -float(r_ois) if r_ois is not None else 0.0
 
     def to_dict(self) -> dict:
         return {"code": self.code, "name": self.name, "cls": self.cls, "class_label": self.klass.label, "currency": self.currency, "issuer": self.issuer,
@@ -441,19 +480,24 @@ def regime_from_schedule(sched: Schedule, csa: CSA, instruments: dict[str, Instr
     by_class_posted: dict[str, float] = {}
     by_class_received: dict[str, float] = {}
     yields: dict[str, float] = {}
+    carry: dict[str, float] = {}
     for code, w in sched.posted.items():
         inst = instruments[code]
         by_class_posted[inst.cls] = by_class_posted.get(inst.cls, 0.0) + w
         yields[code] = inst.resolve_yield_bp(curve_rate_bp)
+        carry[code] = inst.carry_bp(curve_rate_bp)
     for code, w in sched.received.items():
         inst = instruments[code]
         by_class_received[inst.cls] = by_class_received.get(inst.cls, 0.0) + w
         yields.setdefault(code, inst.resolve_yield_bp(curve_rate_bp))
+        carry.setdefault(code, inst.carry_bp(curve_rate_bp))
+    # the class's yield is the pickup's unit: carry over OIS, weighted over the instruments posted in the class
     y_override: dict[str, float] = {}
     for cls, wc in by_class_posted.items():
         if wc > 0:
-            y_override[cls] = sum(w * yields[c] for c, w in sched.posted.items() if instruments[c].cls == cls) / wc
+            y_override[cls] = sum(w * carry[c] for c, w in sched.posted.items() if instruments[c].cls == cls) / wc
     eligible = sorted({instruments[e["instrument"]].cls for e in sched.eligible} | set(by_class_posted) | set(by_class_received))
     return Regime(name, replace(csa), eligible, by_class_posted or {eligible[0]: 1.0}, by_class_received or {eligible[0]: 1.0},
                   netting_enforceable, mpor_state=("ON_CHAIN" if sched.rail == "on_chain" else "FLOOR"), yield_override_bp=y_override,
-                  posted_instruments=dict(sched.posted), received_instruments=dict(sched.received), instrument_yields_bp=yields, **kw)
+                  posted_instruments=dict(sched.posted), received_instruments=dict(sched.received), instrument_yields_bp=yields,
+                  instrument_carry_bp=carry, rail=sched.rail, **kw)

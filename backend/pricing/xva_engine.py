@@ -146,11 +146,12 @@ class WaterfallResult:
     multiplier_0: float = 1.0
     v_mean_0: float = 0.0           # mean mark at the first grid point (for the leverage exposure)
     coll_mean_0: float = 0.0        # mean variation margin held at the first grid point
+    colva: float = 0.0              # carry of the variation margin held, against cash at OIS: + benefit, − cost
     regulatory_margined: bool = False
 
     @property
     def xva_total(self) -> float:
-        return self.cva + self.dva + self.fva + self.fba + self.kva + self.mva
+        return self.cva + self.dva + self.fva + self.fba + self.kva + self.mva + self.colva
 
 
 # ── Collateral ───────────────────────────────────────────────────────────────
@@ -275,6 +276,8 @@ def run_waterfall(
     ee_g = np.mean(np.maximum(paths, 0.0), axis=0)
     ene_g= np.mean(np.minimum(paths, 0.0), axis=0)
     coll_mean  = np.mean(coll, axis=0)
+    recv_mean  = np.mean(np.maximum(coll, 0.0), axis=0)      # their collateral we hold
+    post_mean  = np.mean(np.maximum(-coll, 0.0), axis=0)     # ours they hold
 
     # the regulatory view of the collateral: recognised at its haircut, or nothing
     if reg.sa_ccr_margined and csa.collateralised:
@@ -304,8 +307,10 @@ def run_waterfall(
     mult_0 = 1.0
     ftp_flat     = params.ftp_bp / 10000.0
     pickup       = csa.im_yield_pickup_bp / 10000.0
+    s_post       = float(getattr(csa, "vm_post_carry_bp", 0.0) or 0.0) / 10000.0     # the VM we post earns this over OIS
+    s_recv       = float(getattr(csa, "vm_recv_carry_bp", 0.0) or 0.0) / 10000.0     # the VM we hold earns this over the OIS we rebate
 
-    cva = dva = fva = fba = kva = mva = 0.0
+    cva = dva = fva = fba = kva = mva = colva = 0.0
     qcp = qow = 1.0
     ead_0 = cap_0 = mf_0 = 0.0
 
@@ -321,6 +326,11 @@ def run_waterfall(
         nqcp = math.exp(-(cp_s / lgd)     * t) if lgd     > 0 else 0.0
         nqow = math.exp(-(ow_s / own_lgd) * t) if own_lgd > 0 else 0.0
 
+        # ColVA: the carry of the variation margin against cash at OIS (the discounting's own rate). Posted margin in
+        # an asset yielding more than OIS earns the excess; held margin in an asset yielding less than the OIS rebate
+        # costs the shortfall. Cash on both sides: zero.
+        if s_post != 0.0 or s_recv != 0.0:
+            colva += (post_mean[i] * s_post + recv_mean[i] * s_recv) * DT * disc
         cva += lgd     * ee[i]       * (qcp - nqcp) * disc * wwr
         dva -= own_lgd * abs(ene[i]) * (qow - nqow) * disc
         fva += ftp_t   * ee[i]       * DT * disc
@@ -388,7 +398,7 @@ def run_waterfall(
         collateral_mean=coll_mean.tolist(), im_profile=im_profile,
         exposure_paths=resid, bridge_noise=bridge,
         cva=-abs(cva), dva=abs(dva), fva=-abs(fva), fba=abs(fba),
-        kva=-abs(kva), mva=-abs(mva),
+        kva=-abs(kva), mva=-abs(mva), colva=float(colva),
         ead_0=ead_0, capital_0=cap_0, im_0=im_0,
         simm_rw=rw, simm_rw_10d=rw_10d, mf_0=mf_0,
         kva_ccr=-abs(kva_ccr), kva_cva=-abs(kva_cva), k_cva_0=k_cva_0, rwa_0=rwa_0, addon_0=addon_0, rc_0=rc_0,

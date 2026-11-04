@@ -9,7 +9,7 @@
 // proof. bp here is bp of the quote-currency notional, since an FX trade has no IR01.
 // POST /api/xva/currency and /api/xva/currency-option (backend/pricing/fx_xva.py).
 // ────────────────────────────────────────────────────────────────────────────────────
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
 import ExposureCanvas from './ExposureCanvas'
 import IncrementalXva from './IncrementalXva'
@@ -20,7 +20,7 @@ import {
 } from './xva-shared.jsx'
 import {
   INP, LEFT_COL, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
-  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge,
+  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving,
 } from './xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -101,7 +101,37 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // settlement
   const [settlement, setSettlement] = useState('UNCOLLATERALISED')
   const [imExchanged, setImExchanged] = useState(false)
-  const [compareOnChain, setCompareOnChain] = useState(false)
+  const [compareOnChain, setCompareOnChain] = useState(true)      // the saving on chain is shown by default
+
+  // What the margin is held in: the firm's instruments once, the counterparty's schedule when one is selected.
+  const [collateral, setCollateral] = useState(null)             // {posted, received, rail?, source: 'SCHEDULE'|'TICKET'}; null = cash
+  const [instruments, setInstruments] = useState([])
+  const [scheduleCollateral, setScheduleCollateral] = useState(null)
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const session = await getSessionMaybe()
+        const r = await fetch(API + '/api/collateral/instruments', { headers: { Authorization: 'Bearer ' + (session?.access_token || '') } })
+        if (r.ok) { const j = await r.json(); setInstruments(j.instruments || []) }
+      } catch { /* the selects stay on cash */ }
+    })()
+  }, [])
+  useEffect(() => {
+    if (!counterpartyId) { setScheduleCollateral(null); return }
+    ;(async () => {
+      try {
+        const session = await getSessionMaybe()
+        const r = await fetch(API + '/api/collateral/schedule/' + counterpartyId, { headers: { Authorization: 'Bearer ' + (session?.access_token || '') } })
+        if (!r.ok) return
+        const j = await r.json()
+        if (j.schedule) {
+          const sc = { posted: j.schedule.posted, received: j.schedule.received, rail: j.schedule.rail }
+          setScheduleCollateral(sc)
+          setCollateral({ ...sc, source: 'SCHEDULE' })
+        } else { setScheduleCollateral(null) }
+      } catch { /* no schedule: the ticket's own choice stands */ }
+    })()
+  }, [counterpartyId])
   // assumptions
   const [lgd, setLgd] = useState('40')
   const [fbaRatio, setFbaRatio] = useState('55')
@@ -133,6 +163,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         lgd: Number(lgd) / 100, own_lgd: Number(lgd) / 100, fba_ratio: Number(fbaRatio) / 100, hurdle_rate: Number(hurdle) / 100,
         capital_model: capModel, wwr_multiplier: wwr, simm_im_m: simmImValue(simmIm),
         csa: fxCsaBody(settlement, imExchanged),
+        collateral: collateralBody(collateral),
       }
       const body = isOption
         ? { trade: buildTrade?.(), ...common }
@@ -155,6 +186,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const notionalQ = quoteNotional(quote)
   const vaRows = buildVaRows(xva, { kind: 'notional', notional: notionalQ })
   const cmpRows = onChainCompareRows(xva, cmp?.xva)
+  const saving = onChainSaving(xva, cmp?.xva, notionalQ)
   const badge = volBadge(res?.params, payload?.pair)
   const styleWord = quote?.style ? quote.style.replace(/_/g, ' ').toLowerCase() : 'option'
 
@@ -208,7 +240,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           <SettlementBlock settlement={settlement} setSettlement={setSettlement}
             imExchanged={imExchanged} setImExchanged={setImExchanged}
             compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
-            tip={tip} untip={untip} />
+            tip={tip} untip={untip}
+            collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} />
 
           <AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio}
             hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm}
@@ -226,9 +259,9 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
 
           <div style={{flexShrink:0,overflowY:'auto',maxHeight:'280px'}}>
             <VaStrip rows={vaRows} fmt={fmt} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} />
-            <OnChainCompareRow rows={cmpRows} current={res} compare={cmp} fmt={fmt} />
+            <OnChainCompareRow rows={cmpRows} current={res} compare={cmp} fmt={fmt} saving={saving} />
             <VaFooter>
-              ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA · Click any VA to expand · bp = VA / (notional × 1bp)
+              ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA · Click any VA to expand · bp = VA / (notional × 1bp)
               {notionalQ ? <> · notional {fmt(notionalQ).replace(/^\+/, '')} {ccy}</> : null}
               {res && <> · seed {res.seed ?? seed}</>}
             </VaFooter>

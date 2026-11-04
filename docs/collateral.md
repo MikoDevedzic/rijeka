@@ -74,9 +74,25 @@ regimes report (Risk → CAPITAL, `ccr/capital_report.py`), and, from C2, the XV
 Before `docs/migrations/2026-11-05_collateral.sql` is applied the routes serve the seed and no schedules and the
 writes answer 409; nothing else changes.
 
-## 5. What comes next (the plan's C2 and C3)
+## 5. The ticket (C2, done 4 November 2026)
 
-C2: a ColVA term for variation margin held in a yielding asset, the MVA pickup from the instruments on the
-ticket, the XVA tab's SETTLEMENT & COLLATERAL block and the VS ON-CHAIN strip on every panel, KVA and MVA rows on
-the XVA tab. C3: Risk → COLLATERAL (requirements, inventory, carry, settlement status; the regimes report moves
-there), a COLLATERAL CARRY line in P&L, the yields as IPV inputs, the COLLATERAL module switch live.
+- **Carry over OIS** (`Instrument.carry_bp`): what the engines use. A CURVE instrument on its currency's OIS is its
+  spread; on another curve the two curves' difference plus the spread; FIXED is the rate less the OIS one-year zero
+  of the account's latest market; NONE is minus that OIS. Without a market a spread stands and the rest count zero.
+  The absolute yield (`resolve_yield_bp`) stays for display.
+- **ColVA** in the waterfall (`docs/xva.md` §7b) from the CSA's `vm_post_carry_bp` and `vm_recv_carry_bp`; the
+  schedule-derived regime sets both on its CSAs; `collateral/apply.py` sets them from the ticket's own choice
+  (`collateral: {posted, received, im_posted?, rail?}` on `/api/xva/simulate`, `/currency`, `/currency-option`),
+  with the IM pickup from the posted side's eligible part unless the CSA body overrides it.
+- **The ticket:** SETTLEMENT & COLLATERAL on the rates, FX and digital-asset panels: one select per side over the
+  firm's instruments with their carries, the counterparty's schedule as the default when one is recorded, a button
+  back to it; the ColVA cell in the strip; the on-chain comparison on by default with the saving in money and bp.
+- **The book:** the credit engine's economic CSA for a counterparty is its schedule's (`ccr/report.py`), so the
+  exposure paths, the incremental charge and the reserves carry the schedule's MPoR, pickup and carries.
+- Both Excel replications carry the two carries as inputs and ColVA as a column; the methodology is v1.4.
+
+## 6. What comes next (C3)
+
+Risk → COLLATERAL (requirements, inventory, carry, settlement status; the regimes report moves there), a
+COLLATERAL CARRY line in P&L, the yields as IPV inputs, the COLLATERAL module switch live, ColVA in the incremental
+charge's components.

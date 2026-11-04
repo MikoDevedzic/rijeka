@@ -6,6 +6,7 @@
 import { useState, useEffect, useRef } from 'react'
 import ExposureCanvas from '../trade-window/ExposureCanvas'
 import { normaliseCalibration } from './calibration'
+import { getSessionMaybe } from '../../lib/session'
 import {
   SectionHeader, TipLabel, PathsWwrSliders, ModelBadge, SimulateButtons, ProofExpander,
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
@@ -13,7 +14,7 @@ import {
 } from '../trade-window/xva-shared.jsx'
 import {
   INP, LEFT_COL, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, simmImValue,
-  buildVaRows, onChainCompareRows,
+  buildVaRows, onChainCompareRows, collateralBody, onChainSaving,
 } from '../trade-window/xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -166,7 +167,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult }) {
+export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null }) {
   const [tooltip, setTooltip] = useState(null)
   const [calib, setCalibState] = useState(() => {
     try { const s = sessionStorage.getItem('rijeka_xva_calib'); return s ? normaliseCalibration(JSON.parse(s)) : null } catch { return null }
@@ -207,7 +208,37 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const [mporDays, setMporDays] = useState('')
   const [imExchanged, setImExchanged] = useState(false)
   const [imYieldBp, setImYieldBp] = useState('')
-  const [compareOnChain, setCompareOnChain] = useState(false)
+  const [compareOnChain, setCompareOnChain] = useState(true)      // the saving on chain is shown by default
+
+  // What the margin is held in: the firm's instruments once, the counterparty's schedule when one is selected.
+  const [collateral, setCollateral] = useState(null)             // {posted, received, rail?, source: 'SCHEDULE'|'TICKET'}; null = cash
+  const [instruments, setInstruments] = useState([])
+  const [scheduleCollateral, setScheduleCollateral] = useState(null)
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const session = await getSessionMaybe()
+        const r = await fetch(API + '/api/collateral/instruments', { headers: { Authorization: 'Bearer ' + (session?.access_token || '') } })
+        if (r.ok) { const j = await r.json(); setInstruments(j.instruments || []) }
+      } catch { /* the selects stay on cash */ }
+    })()
+  }, [])
+  useEffect(() => {
+    if (!counterpartyId) { setScheduleCollateral(null); return }
+    ;(async () => {
+      try {
+        const session = await getSessionMaybe()
+        const r = await fetch(API + '/api/collateral/schedule/' + counterpartyId, { headers: { Authorization: 'Bearer ' + (session?.access_token || '') } })
+        if (!r.ok) return
+        const j = await r.json()
+        if (j.schedule) {
+          const sc = { posted: j.schedule.posted, received: j.schedule.received, rail: j.schedule.rail }
+          setScheduleCollateral(sc)
+          setCollateral({ ...sc, source: 'SCHEDULE' })
+        } else { setScheduleCollateral(null) }
+      } catch { /* no schedule: the ticket's own choice stands */ }
+    })()
+  }, [counterpartyId])
   const [compareResult, setCompareResultState] = useState(() => {
     try { const s = sessionStorage.getItem('rijeka_xva_cmp'); return s ? JSON.parse(s) : null } catch { return null }
   })
@@ -286,6 +317,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         capital_model: capModel,
         wwr_multiplier: wwr,
         csa: csaBody(settlement),
+        collateral: collateralBody(collateral),
         // Blank = derive IM from ISDA SIMM (RW x IR01) rather than a guess.
         simm_im_m: simmImValue(simmIm),
         // TV and IR01 from the pricer: XVA is an adjustment to TV, not a
@@ -342,6 +374,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         capital_model: capModel,
         wwr_multiplier: wwr,
         csa: csaBody(settlement),
+        collateral: collateralBody(collateral),
         simm_im_m:    simmImValue(simmIm),
         npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
         ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
@@ -373,6 +406,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const allInRate = parRate + xvaTotalBp/100
   const vaRows = buildVaRows(xva, { kind: 'rate', dv01, parRate, allInRate })
   const cmpRows = onChainCompareRows(xva, compareResult?.xva)
+  const saving = onChainSaving(xva, compareResult?.xva, simResult?.xva?.notional)
 
   const settlementFields = settlement==='BILATERAL' ? [
     {label:'Threshold $',val:thresholdCp,set:setThresholdCp,tk:'threshold',ph:'0'},
@@ -432,7 +466,8 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         <SettlementBlock settlement={settlement} setSettlement={setSettlement}
           imExchanged={imExchanged} setImExchanged={setImExchanged}
           compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
-          fields={settlementFields} tip={tip} untip={untip} />
+          fields={settlementFields} tip={tip} untip={untip}
+          collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} />
 
         <AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio}
           hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm}
@@ -519,8 +554,8 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         {/* Unified XVA waterfall - $ and bp in same cell */}
         <div style={{flexShrink:0,overflowY:'auto',maxHeight:'280px'}}>
           <VaStrip rows={vaRows} fmt={fmtDollar} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} />
-          <OnChainCompareRow rows={cmpRows} current={simResult} compare={compareResult} fmt={fmtDollar} />
-          <VaFooter>ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA~ · Click any VA to expand · bp = VA / IR01</VaFooter>
+          <OnChainCompareRow rows={cmpRows} current={simResult} compare={compareResult} fmt={fmtDollar} saving={saving} />
+          <VaFooter>ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA~ · Click any VA to expand · bp = VA / IR01</VaFooter>
         </div>
       </div>
 

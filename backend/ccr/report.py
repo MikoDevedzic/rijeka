@@ -110,6 +110,10 @@ def netting_set_paths(db: Session, user: dict, cp, trades: list, asof: date, mkt
     fx = {c: (fx_to_usd(mkt, c) or 0.0) for c in set(currencies) | {"USD"}}
     months, n_paths = ns.months, int(st["n_paths"])
     csa = csa_from_counterparty(cp) if cp else csa_from_counterparty(None)
+    if cp is not None:
+        # the schedule when one is recorded (instruments, rail, carries): its economic CSA; else the record's own terms
+        from collateral.regimes import regime_for
+        csa = regime_for(db, user["sub"], cp, csa, mkt, asof).economic_csa()
     # IM for a CSA that exchanges it: SIMM weight on the netting set's IR01 (ladder), MPoR-scaled; the FX part
     # (SIMM's FX delta weight on spot01, a labelled assumption for digital assets) is reported beside it for the
     # capital route and does not enter the credit report's numbers

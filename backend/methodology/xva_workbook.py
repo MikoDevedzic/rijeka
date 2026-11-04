@@ -9,7 +9,7 @@ calibration, cell by cell.
     Paths        Z (ENGINE: the values above; LIVE: NORMSINV(RAND())), x, r, annuity, P(t,T_M), V
     Exposure     the CSA (a preset, or the terms you set), V lagged by the margin period, the
                  collateral, the residual, EE / ENE / PFE / IM per step
-    Waterfall    survival, CVA, DVA, FVA, FBA, SA-CCR EAD, KVA, MVA, step by step, and the totals
+    Waterfall    survival, CVA, DVA, FVA, FBA, SA-CCR EAD, KVA, MVA, ColVA, step by step, and the totals
     Convergence  the running mean of EE at one date against path count, with ±2 standard errors
     Engine       what the engine computed on the same draws, per CSA preset (for the Checks)
 
@@ -347,21 +347,22 @@ def _exposure_sheet(wb, eng, blocks, nrows, grid_r0):
             ("δ = MPoR/250 (years)", f"=B9/{BUSINESS_DAYS_PER_YEAR}", "0.0000"), ("Steps back = δ/Δ (< 1 here)", "=B12/Dt", "0.0000"), ("w = 1 − δ/Δ", "=1-B13", "0.0000"),
             ("V(0): the model's own t = 0 value", eng["v0"], "#,##0.00"),
             ("SIMM weight at this maturity (bp, 10bd)", f"={_simm_formula()}", "0.00"), ("MPoR scaling √(MPoR/10)", f"=SQRT(B9/{SIMM_REFERENCE_MPOR_BD})", "0.0000"),
-            ("IR01 proxy: N·(1 − e^(−θM))/θ·1bp", "=Notl*(1-EXP(-Theta*Nsteps*Dt))/Theta*0.0001", "#,##0.00"), ("IM₀ = weight·scaling·|IR01|", "=IF(B10=1,B16*B17*ABS(B18),0)", "#,##0.00")]
+            ("IR01 proxy: N·(1 − e^(−θM))/θ·1bp", "=Notl*(1-EXP(-Theta*Nsteps*Dt))/Theta*0.0001", "#,##0.00"), ("IM₀ = weight·scaling·|IR01|", "=IF(B10=1,B16*B17*ABS(B18),0)", "#,##0.00"),
+            ("VM carry, posted (bp over OIS: what the margin we post earns above cash)", 0.0, "0.0"), ("VM carry, received (bp over OIS: what the margin we hold earns above the rebate)", 0.0, "0.0")]
     for i, (label, v, fmt) in enumerate(rows, 4):
         ws.cell(row=i, column=1, value=label)
         c = ws.cell(row=i, column=2, value=v); c.number_format = fmt
-        if i in (4, 6, 7, 8, 11):
+        if i in (4, 6, 7, 8, 11, 20, 21):
             c.fill = W.FILL_IN
         if i == 15:
             c.fill = W.FILL_RJ
     W.dropdown(ws, "B4", list(PRESETS))
     _names(wb, {"Preset": "Exposure!B4", "Coll": "Exposure!B5", "THcp": "Exposure!B6", "THown": "Exposure!B7", "MTA": "Exposure!B8", "MPoR": "Exposure!B9",
-                "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "V0": "Exposure!B15", "IM0": "Exposure!B19"})
+                "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "V0": "Exposure!B15", "IM0": "Exposure!B19", "CarryPost": "Exposure!B20", "CarryRecv": "Exposure!B21"})
     # per-step summary
-    rs = 22
+    rs = 24
     ws.cell(row=rs - 1, column=1, value="PER STEP").font = W.F_SECTION
-    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM(t)"])
+    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM(t)", "mean received", "mean posted"])
     # blocks below: ΔV, V lagged, C, residual
     top = rs + T + 3
     dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=Paths!{L(c)}{vb[0] + p}-V0" if j == 1 else f"=Paths!{L(c)}{vb[0] + p}-Paths!{L(c - 1)}{vb[0] + p}"), "#,##0", "ΔV = V(t_i) − V(t_{i−1})")
@@ -386,6 +387,8 @@ def _exposure_sheet(wb, eng, blocks, nrows, grid_r0):
         ws.cell(row=r, column=8, value=f"=SUMPRODUCT(({vcol}<0)*{vcol})/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=9, value=f"=AVERAGE({ccol})").number_format = "#,##0.00"
         ws.cell(row=r, column=10, value=f"=AVERAGE({res})").number_format = "#,##0.00"
+        ws.cell(row=r, column=12, value=f"=SUMPRODUCT(({ccol}>0)*{ccol})/Npaths").number_format = "#,##0.00"
+        ws.cell(row=r, column=13, value=f"=-SUMPRODUCT(({ccol}<0)*{ccol})/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=11, value=f"=IM0*MAX(Nsteps*Dt-B{r},0)/(Nsteps*Dt)").number_format = "#,##0.00"
     W.widths(ws, [40, 10, 14, 14, 14, 14, 14, 14, 16, 16, 14] + [12] * (T - 10))
     ws.freeze_panes = "B5"
@@ -405,7 +408,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     T = eng["T"]
     ws = wb.create_sheet("Waterfall")
     ws["A1"] = "THE WATERFALL"; ws["A1"].font = W.F_TITLE
-    ws["A2"] = "Per step: survival from the credit triangle, then CVA, DVA, FVA, FBA, the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA). Costs negative, benefits positive."; ws["A2"].font = W.F_SUB
+    ws["A2"] = "Per step: survival from the credit triangle, then CVA, DVA, FVA, FBA, the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA), the carry of the variation margin against cash (ColVA). Costs negative, benefits positive."; ws["A2"].font = W.F_SUB
     params = [("Counterparty CDS (bp)", 85.0), ("Own CDS (bp)", 42.0), ("LGD", 0.40), ("Own LGD", 0.40), ("Funding spread ftp (bp)", 55.0), ("FBA ratio", 0.55),
               ("Hurdle rate", 0.12), ("Capital model (SA_CCR / CEM / IMM)", "SA_CCR"), ("Counterparty risk weight", 1.0), ("Wrong-way multiplier", 1.0),
               ("SA-CCR α", ALPHA), ("Supervisory factor, rates", SF_IR), ("Capital ratio", CAP_R)]
@@ -416,7 +419,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBAr": "Waterfall!B9",
                 "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFir": "Waterfall!B15", "CapR": "Waterfall!B16"})
     r0 = 20
-    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM(t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)"]
+    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM(t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)", "ColVA_i"]
     W.header(ws, r0 - 1, hdr)
     for j in range(1, T + 1):
         r = r0 + j - 1; e = rs + j
@@ -451,15 +454,17 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
         ws.cell(row=r, column=28, value=f"=MAX(Exposure!J{e}-R{r},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=29, value=f"=IF(AA{r}>0,MIN(1,0.05+0.95*EXP((Exposure!J{e}-R{r})/(1.9*AA{r}))),1)").number_format = "0.0000"
         ws.cell(row=r, column=30, value=f"=AlphaSA*(AB{r}+AC{r}*AA{r})").number_format = "#,##0.00"
+        # ColVA: the carry of the variation margin against cash at OIS; what we posted earns CarryPost, what we hold earns CarryRecv (both over OIS)
+        ws.cell(row=r, column=31, value=f"=(Exposure!M{e}*CarryPost/10000+Exposure!L{e}*CarryRecv/10000)*Dt*C{r}").number_format = "#,##0.00"
     r1 = r0 + T - 1
     rt = r1 + 2
     totals = [("CVA", f"=-SUM(J{r0}:J{r1})"), ("DVA", f"=SUM(K{r0}:K{r1})"), ("FVA", f"=-SUM(L{r0}:L{r1})"), ("FBA", f"=SUM(M{r0}:M{r1})"),
-              ("KVA", f"=-SUM(W{r0}:W{r1})"), ("MVA", f"=-SUM(Y{r0}:Y{r1})"), ("XVA total", f"=SUM(B{rt}:B{rt + 5})"),
+              ("KVA", f"=-SUM(W{r0}:W{r1})"), ("MVA", f"=-SUM(Y{r0}:Y{r1})"), ("ColVA", f"=SUM(AE{r0}:AE{r1})"), ("XVA total", f"=SUM(B{rt}:B{rt + 6})"),
               ("EAD at t = 0", f"=U{r0}"), ("Capital at t = 0", f"=V{r0}"), ("IM₀", "=IM0"), ("Peak EE", f"=MAX(H{r0}:H{r1})"), ("Peak PFE", f"=MAX(Exposure!F{rs + 1}:F{rs + T})")]
     for i, (label, f) in enumerate(totals):
         ws.cell(row=rt + i, column=1, value=label).font = Font(bold=True)
         ws.cell(row=rt + i, column=2, value=f).number_format = "#,##0.00"
-    W.widths(ws, [34, 9, 11, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 9, 9, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11, 10, 13, 13, 10, 16])
+    W.widths(ws, [34, 9, 11, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 9, 9, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11, 10, 13, 13, 10, 16, 11])
     ws.freeze_panes = "C20"
     return r0, r1, rt
 
@@ -470,7 +475,7 @@ def _engine_sheet(wb, eng, rs, rt, fit):
     ws["A1"] = "WHAT THE ENGINE COMPUTED ON THE SAME DRAWS"; ws["A1"].font = W.F_TITLE
     ws["A2"] = "pricing/xva_engine.run_waterfall under each CSA preset, written at export. The 'selected' column follows the preset chosen on the Exposure sheet and feeds the Checks."; ws["A2"].font = W.F_SUB
     W.header(ws, 4, ["Metric"] + list(PRESETS) + ["selected"])
-    metrics = [("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("XVA total", "xva_total"),
+    metrics = [("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("ColVA", "colva"), ("XVA total", "xva_total"),
                ("EAD at t = 0", "ead_0"), ("Capital at t = 0", "capital_0"), ("IM₀", "im_0"), ("Peak EE", None), ("Peak PFE", None)]
     r = 5
     for label, attr in metrics:
@@ -557,10 +562,10 @@ def xva_rates_workbook(mkt):
     _convergence_sheet(wb, eng, blocks_exp, rs)
     W.live(wb, "Mode")
     W.ticket(wb, "XVA (the ticket's XVA tab)", [("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FVA", f"Waterfall!B{rt + 2}", "#,##0.00", ""),
-                                               ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""),
-                                               ("XVA TOTAL", f"Waterfall!B{rt + 6}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
-                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 7}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 9}", "#,##0.00", "SIMM"),
-                                               ("PEAK EE", f"Waterfall!B{rt + 10}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 11}", "#,##0.00", "")])
+                                               ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""), ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the VM held, against cash at OIS"),
+                                               ("XVA TOTAL", f"Waterfall!B{rt + 7}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
+                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "SIMM"),
+                                               ("PEAK EE", f"Waterfall!B{rt + 11}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 12}", "#,##0.00", "")])
     W.ticket(wb, "MODEL AND CSA", [("a", "Model!B4", "0.0000", "mean reversion"), ("σ", "Model!B5", "0.0000%", "short-rate vol"), ("RMSE OF THE FIT", f"Calibration!B{cal['rs'] + 1}", "0.00", "bp"),
                                    ("CSA PRESET", "Exposure!B4", "@", ""), ("MPoR", "Exposure!B9", "0", "business days"), ("MODE", "Model!B13", "@", "ENGINE or LIVE")])
     for sym, notn, ref, note, fmt in [
@@ -579,6 +584,7 @@ def xva_rates_workbook(mkt):
         ("FVA, FBA", "−Σ ftp·EE·Δ·P, +Σ ftp·ratio·|ENE|·Δ·P", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
         ("EAD", "α·[RC + multiplier·add-on], add-on = SF·N·SD(m)·MF; a margined set capped at the same set unmargined (CRE52.2)", f"Waterfall!U{r0}", "SA-CCR, step 1", "#,##0.00"),
         ("KVA", "−hurdle·Σ 8%·RW·EAD·Δ·P", f"Waterfall!B{rt + 4}", "", "#,##0.00"), ("MVA", "−Σ IM(t)·max(ftp − pickup, 0)·Δ·P", f"Waterfall!B{rt + 5}", "", "#,##0.00"),
+        ("ColVA", "Σ (VM posted·s_post + VM received·s_recv)·Δ·P, the carries over OIS of what the margin is held in", f"Waterfall!B{rt + 6}", "zero for cash", "#,##0.00"),
         ("σ_n (calibration)", "σ·|dS/dr|·√(V(T_e)/T_e), dS/dr = B_M·P_M/A + S·w_dur", f"Calibration!{L(cal['cM'])}{cal['r0']}", "the model's ATM normal swaption vol, closed form", "0.00"),
     ]:
         W.derive(wb, sym, notn, ref, note, fmt)

@@ -10,6 +10,7 @@ from tests.integration import bodies as B
 pytestmark = pytest.mark.integration
 
 SIX = ("cva", "dva", "fva", "fba", "kva", "mva")
+SEVEN = SIX + ("colva",)
 PROFILE = ("sample_paths", "ee", "ene", "pfe", "xva", "capital", "seed", "engine_ms")
 
 
@@ -17,8 +18,9 @@ def _shape(j: dict, n_paths_requested: int | None = None):
     for k in PROFILE:
         assert k in j, k
     assert len(j["ee"]) == len(j["ene"]) == len(j["pfe"]) > 1
-    assert all(isinstance(j["xva"][k], (int, float)) for k in SIX)
-    assert j["xva"]["xva_total"] == pytest.approx(sum(j["xva"][k] for k in SIX), abs=0.05)
+    assert all(isinstance(j["xva"][k], (int, float)) for k in SEVEN)
+    assert j["xva"]["xva_total"] == pytest.approx(sum(j["xva"][k] for k in SEVEN), abs=0.05)
+    assert j["xva"]["annuity"] is None or j["xva"]["annuity"] > 0
     assert j["sample_paths"] and len(j["sample_paths"][0]) == len(j["ee"]) or len(j["sample_paths"][0]) >= len(j["ee"]) - 1
     assert isinstance(j["seed"], int) and j["engine_ms"] >= 0
 
@@ -143,3 +145,42 @@ def test_incremental_xva_for_an_fx_option(client, auth_a, ids, pairs):
     eur = pairs["EURUSD"]
     q = client.post("/api/currency/option/price", json=B.option_price_request("EURUSD", "EUROPEAN", eur["spot"], _settle(), False, 10_000_000), headers=auth_a).json()
     _incremental(client, auth_a, ids, B.fx_option(ids["a"], "IT-INC-FXO", eur, q, "EUROPEAN"))
+
+
+# ── the collateral the margin is held in ─────────────────────────────────────────────────────────
+
+def _rates_body(**kw) -> dict:
+    return {"notional": 10_000_000, "maturity_y": 5.0, "fixed_rate": 0.036, "paths": 400, "seed": 42, "npv": 0.0, "ir01": 4500.0,
+            "csa": {"preset": "BILATERAL", "threshold_cp": 0, "mta": 0, "im_exchanged": True}, **kw}
+
+
+def test_rates_xva_with_collateral_held_in_a_stablecoin(client, auth_a):
+    cash = client.post("/api/xva/simulate", json=_rates_body(), headers=auth_a)
+    assert cash.status_code == 200, cash.text[:300]
+    j0 = cash.json()
+    assert j0["xva"]["colva"] == 0.0 and j0["csa"]["vm_post_carry_bp"] == 0.0
+    # cash named explicitly is the same number: cash in the CSA currency earns the OIS the discounting assumes
+    jc = client.post("/api/xva/simulate", json=_rates_body(collateral={"posted": {"USD_CASH": 1}, "received": {"USD_CASH": 1}}), headers=auth_a).json()
+    assert jc["xva"]["xva_total"] == pytest.approx(j0["xva"]["xva_total"], abs=0.05) and jc["csa"]["collateral"]["posted"] == {"USD_CASH": 1.0}
+    # a payment stablecoin on both sides: what we post earns nothing (we fund it, cash would have earned OIS), what we hold
+    # earns nothing while OIS is rebated: a cost on both sides, every other adjustment unchanged
+    js = client.post("/api/xva/simulate", json=_rates_body(collateral={"posted": {"USDC": 1}, "received": {"USDC": 1}}), headers=auth_a).json()
+    assert js["xva"]["colva"] < 0 and js["csa"]["vm_post_carry_bp"] < -100 and js["csa"]["vm_recv_carry_bp"] < -100
+    for k in ("cva", "dva", "fva", "fba", "kva"):
+        assert js["xva"][k] == pytest.approx(j0["xva"][k], abs=0.05), k
+    assert js["xva"]["mva"] <= j0["xva"]["mva"]                    # the stablecoin is not eligible IM: no pickup, the IM funded in full
+    assert js["xva"]["xva_total"] == pytest.approx(j0["xva"]["xva_total"] + js["xva"]["colva"] + (js["xva"]["mva"] - j0["xva"]["mva"]), abs=0.1)
+    assert js["csa"]["collateral"]["instruments"]["USDC"]["cls"] == "STABLECOIN" and js["csa"]["collateral"]["ois_known"] is True
+    # unknown instrument
+    assert client.post("/api/xva/simulate", json=_rates_body(collateral={"posted": {"NOPE": 1}}), headers=auth_a).status_code == 422
+
+
+def test_currency_xva_with_collateral(client, auth_a):
+    body = {"pair": "EURUSD", "base_notional": 10_000_000, "settlement_date": _settle(182), "direction": "BUY", "paths": 400, "seed": 42,
+            "csa": {"preset": "BILATERAL", "threshold_cp": 0, "mta": 0, "im_exchanged": True}}
+    j0 = client.post("/api/xva/currency", json=body, headers=auth_a).json()
+    js = client.post("/api/xva/currency", json={**body, "collateral": {"posted": {"USDC": 1}, "received": {"USD_CASH": 1}}}, headers=auth_a)
+    assert js.status_code == 200, js.text[:300]
+    js = js.json()
+    assert js["xva"]["colva"] < 0 and js["xva"]["cva"] == pytest.approx(j0["xva"]["cva"], abs=0.05)
+    assert js["xva"]["annuity"] and js["xva"]["annuity"] > 0 and js["csa"]["vm_recv_carry_bp"] == 0.0

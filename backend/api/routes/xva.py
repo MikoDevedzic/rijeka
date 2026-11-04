@@ -175,6 +175,24 @@ class SimulateRequest(BaseModel):
     #   {"preset": "ON_CHAIN"}                       # 5bd MPoR, continuous VM
     #   {"preset": "UNCOLLATERALISED", "im_exchanged": true}
     csa: Optional[dict] = None
+    # What the margin is held in (collateral/apply.py): {posted: {instrument: w}, received: {...}, im_posted?: {...}, rail?}.
+    # Blank = cash in the CSA currency (zero carry): every number before instruments existed.
+    collateral: Optional[dict] = None
+
+
+def _with_collateral(db: Session, uid: str, csa: CSA, body_collateral: Optional[dict]) -> CSA:
+    """The ticket's collateral choice onto the CSA: VM carries and the IM pickup from the instruments' carry over OIS,
+    resolved on the account's latest market; 422 on an unknown instrument."""
+    if not body_collateral:
+        return csa
+    from collateral.apply import apply_collateral
+    from pnl.market import Market
+    dates = Market.dates(db, uid, upto=date.today())
+    mkt = Market(db, uid, dates[-1]) if dates else None
+    try:
+        return apply_collateral(db, uid, csa, body_collateral, mkt, dates[-1] if dates else None)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"collateral: {e}")
 
 
 # ── Calibrate ─────────────────────────────────────────────────────────────────
@@ -573,6 +591,7 @@ def simulate(
         csa = CSA.from_request(body.csa)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"csa: {e}")
+    csa = _with_collateral(db, user["sub"], csa, body.collateral)
 
     v0 = body.npv if body.npv is not None else anchor_v0
     wf = run_waterfall(
@@ -590,14 +609,15 @@ def simulate(
         csa,
     )
     ee, ene, pfe = wf.ee, wf.ene, wf.pfe
-    cva, dva, fva, fba_v, kva, mva = wf.cva, wf.dva, wf.fva, wf.fba, wf.kva, wf.mva
+    cva, dva, fva, fba_v, kva, mva, colva = wf.cva, wf.dva, wf.fva, wf.fba, wf.kva, wf.mva, wf.colva
     ead_0, cap_0, im_0, rw_cp = wf.ead_0, wf.capital_0, wf.im_0, body.counterparty_rw
+    annuity = float(sum(p0_grid[i + 1] for i in range(T)) * DT)          # Σ DF·Δt on the grid: a running-bp equivalent of an upfront amount
 
     # Trade TV comes from the pricer. If the caller did not supply it we
     # return null rather than 0.0 — an all-in that silently ignores the
     # trade's MtM is worse than no number at all.
     npv       = body.npv
-    xva_total = cva + dva + fva + fba_v + kva + mva
+    xva_total = cva + dva + fva + fba_v + kva + mva + colva
     all_in    = (npv + xva_total) if npv is not None else None
 
     # Sample 80 paths for visualisation (evenly spaced)
@@ -629,8 +649,11 @@ def simulate(
             "fba": round(fba_v, 2),
             "kva": round(kva, 2),
             "mva": round(mva, 2),
+            "colva": round(colva, 2),
             "xva_total": round(xva_total, 2),
             "all_in": round(all_in, 2) if all_in is not None else None,
+            "annuity": round(annuity, 6),
+            "notional": N,
         },
         # Vol calibration and market data both age silently. A four-week-old
         # calibration priced against today is a model-validation finding, not a
@@ -697,6 +720,9 @@ class CurrencyXvaRequest(BaseModel):
     own_cds_curve: Optional[list] = None
     ftp_curve: Optional[list] = None
     csa: Optional[dict] = None
+    # What the margin is held in (collateral/apply.py): {posted: {instrument: w}, received: {...}, im_posted?: {...}, rail?}.
+    # Blank = cash in the CSA currency (zero carry): every number before instruments existed.
+    collateral: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
     simm_im_m: Optional[float] = None    # IM in $M for MVA; None = SIMM-style weight on the spot delta
@@ -731,6 +757,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
         csa = CSA.from_request(body.csa)
     except Exception as e:      # noqa: BLE001
         raise HTTPException(status_code=422, detail=f"csa: {e}")
+    csa = _with_collateral(db, user["sub"], csa, body.collateral)
     vol_pct, vol_source = body.vol_pct, ("desk input" if body.vol_pct is not None else None)
     pillars = None
     if vol_pct is None:
@@ -766,8 +793,9 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
         "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
         "quote_currency": q["quote_currency"], "pair": pair,
         "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fva": round(wf.fva, 2),
-                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2),
+                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
+                "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "vol_mode", "step_vols_pct")},
@@ -795,6 +823,9 @@ class CurrencyOptionXvaRequest(BaseModel):
     own_cds_curve: Optional[list] = None
     ftp_curve: Optional[list] = None
     csa: Optional[dict] = None
+    # What the margin is held in (collateral/apply.py): {posted: {instrument: w}, received: {...}, im_posted?: {...}, rail?}.
+    # Blank = cash in the CSA currency (zero carry): every number before instruments existed.
+    collateral: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
     simm_im_m: Optional[float] = None    # IM in $M for MVA; None = SIMM-style weight on the spot delta
@@ -830,6 +861,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
         csa = CSA.from_request(body.csa)
     except Exception as e:      # noqa: BLE001
         raise HTTPException(status_code=422, detail=f"csa: {e}")
+    csa = _with_collateral(db, user["sub"], csa, body.collateral)
     t_s = float(q.get("t_settle") or ((terms["settle"] - val_date).days / 365.0))
     df_q = float(q["df_quote"])
     pillars = None
@@ -863,8 +895,9 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
         "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
         "quote_currency": q["quote_currency"], "pair": pair, "style": spec.style, "expiry_step": None,
         "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fva": round(wf.fva, 2),
-                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2),
+                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
+                "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "style", "vol_mode")},
