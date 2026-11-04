@@ -18,7 +18,8 @@ def scope_of(db, uid: str):
 
 def regime_for(db, uid: str, cp_view, csa: CSA, mkt=None, asof: Optional[date] = None, name: str = "COUNTERPARTY") -> COL.Regime:
     cp_id = getattr(cp_view, "id", None) if cp_view is not None else None
-    sched = store.schedule(db, cp_id, asof) if cp_id is not None else None
+    # the schedule in force today (the market's date, often older, decides only the yields)
+    sched = store.schedule(db, cp_id) if cp_id is not None else None
     if sched is None:
         if cp_view is None:
             return COL.Regime(name, CSA(**{k: getattr(csa, k) for k in csa.__dataclass_fields__}), ["CASH", "GOVT"])
