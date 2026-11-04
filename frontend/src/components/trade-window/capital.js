@@ -116,6 +116,13 @@ export function fmtBp(v) {
 }
 
 // What the RUN button needs; a stored trade goes by id, a new one as its booking body.
+// the route accepts 200–5,000 paths; a blank field means the engine's own default
+export function clampPaths(paths) {
+  const n = Number(paths)
+  if (paths === '' || paths == null || !Number.isFinite(n) || n <= 0) return null
+  return Math.min(5000, Math.max(200, Math.round(n)))
+}
+
 export function buildRequest({ counterpartyId, tradeId, buildTrade, regimes, types, hurdle, paths }) {
   return {
     counterparty_id: counterpartyId || null,
@@ -124,7 +131,7 @@ export function buildRequest({ counterpartyId, tradeId, buildTrade, regimes, typ
     regimes: regimes && regimes.length ? regimes : null,
     counterparty_types: types && types.length ? types.map(t => ({ type: t.type, rating: t.rating, sector: t.sector || null, rw_override: t.rw_override ?? null, label: t.label || null })) : null,
     hurdle: Number.isFinite(Number(hurdle)) ? Number(hurdle) / 100 : 0.12,
-    n_paths: paths ? Number(paths) : null,
+    n_paths: clampPaths(paths),
   }
 }
 

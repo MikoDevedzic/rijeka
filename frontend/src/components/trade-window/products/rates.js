@@ -23,10 +23,14 @@ import { TENOR_Y as TENOR_Y_MAP, FREQ_PER_YEAR, SWAPTION_DEFAULTS, CAPFLOOR_DEFA
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
-const fmtCurrency = v => (v == null) ? '—' :
-  (v >= 0 ? '+' : '−') + '$' + Math.abs(Math.round(v)).toLocaleString()
+// a figure that rounds to zero is "$0": no sign, no colour (never "−$0")
+const fmtCurrency = v => {
+  if (v == null) return '—'
+  const n = Math.round(v)
+  return (n > 0 ? '+' : n < 0 ? '−' : '') + '$' + Math.abs(n).toLocaleString()
+}
 
-const signClass = v => (v == null) ? null : (v >= 0 ? 'positive' : 'negative')
+const signClass = v => (v == null || Math.round(v) === 0) ? null : (v > 0 ? 'positive' : 'negative')
 
 const metricCurrency = (label, value) => ({
   label, value: fmtCurrency(value), format: 'currency', colorBy: signClass(value)

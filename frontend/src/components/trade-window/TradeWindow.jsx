@@ -242,18 +242,19 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     if (!fxQuote) return null
     try { return fxRef.current?.payload?.()?.terms || null } catch { return null }
   }, [fxQuote, viewMode, initialTrade])
+  const n0 = (v) => { const n = Math.round(Number(v) || 0); return (n === 0 ? 0 : n).toLocaleString(undefined, { maximumFractionDigits: 0 }) }   // never "-0"
   const currencyFooter = {
     footer: {
       structureLabel: () => (curInst === 'FX_OPTION' && fxTerms?.style ? fxTerms.style.replace(/_/g, ' ') : (SHAPE_OF[curInst] || 'FORWARD')),
       metrics: (r) => r ? [
-        { label: 'NET NPV ' + r.quote_currency, value: Number(r.npv).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
-        { label: DELTA_LABEL(assetClass === 'CRYPTO'), value: Number(r.spot01 ?? r.delta_quote_per_pct).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: (r.spot01 ?? r.delta_quote_per_pct) >= 0 ? 'pos' : 'neg' },
-        { label: 'IR01', value: Number(r.ir01 ?? (r.rho_base_per_bp + r.rho_quote_per_bp)).toLocaleString(undefined, { maximumFractionDigits: 0 }) },
+        { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
+        { label: DELTA_LABEL(assetClass === 'CRYPTO'), value: n0(r.spot01 ?? r.delta_quote_per_pct), colorBy: (r.spot01 ?? r.delta_quote_per_pct) >= 0 ? 'pos' : 'neg' },
+        { label: 'IR01', value: n0(r.ir01 ?? (r.rho_base_per_bp + r.rho_quote_per_bp)) },
         ...(assetClass === 'CRYPTO'
-          ? [{ label: 'FUND01', value: Number(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 }) }]
-          : [{ label: 'IR01 DISC', value: Number(r.ir01_disc ?? r.rho_quote_per_bp).toLocaleString(undefined, { maximumFractionDigits: 0 }) }]),
-        { label: 'THETA', value: Number(r.theta ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: (r.theta ?? 0) >= 0 ? 'pos' : 'neg' },
-        ...(r.shape === 'OPTION' ? [{ label: 'VEGA / 1pt', value: Number(r.vega ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 }), colorBy: (r.vega ?? 0) >= 0 ? 'pos' : 'neg' }] : []),
+          ? [{ label: 'FUND01', value: n0(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp ?? 0) }]
+          : [{ label: 'IR01 DISC', value: n0(r.ir01_disc ?? r.rho_quote_per_bp) }]),
+        { label: 'THETA', value: n0(r.theta ?? 0), colorBy: (r.theta ?? 0) >= 0 ? 'pos' : 'neg' },
+        ...(r.shape === 'OPTION' ? [{ label: 'VEGA / 1pt', value: n0(r.vega ?? 0), colorBy: (r.vega ?? 0) >= 0 ? 'pos' : 'neg' }] : []),
       ] : [],
     },
   }

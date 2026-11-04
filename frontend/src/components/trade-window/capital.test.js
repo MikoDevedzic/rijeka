@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null }))
 
-import { buildGrid, buildRequest, cellValue, derivation, fmtBp, fmtCell, mockResponse, quoteCells, regimeNames, typeKeys, METRIC_ROWS, PRESETS } from './capital'
+import { buildGrid, buildRequest, cellValue, clampPaths, derivation, fmtBp, fmtCell, mockResponse, quoteCells, regimeNames, typeKeys, METRIC_ROWS, PRESETS } from './capital'
 
 const res = mockResponse()
 
@@ -78,5 +78,17 @@ describe('derivation', () => {
   })
   it('quote cells follow the regimes', () => {
     expect(Object.keys(quoteCells(res, 'BANK·A'))).toEqual(PRESETS)
+  })
+})
+
+describe('clampPaths', () => {
+  it('keeps the route\'s 200–5,000 range and lets a blank field fall to the engine default', () => {
+    expect(clampPaths('2000')).toBe(2000)
+    expect(clampPaths(50)).toBe(200)
+    expect(clampPaths('99999')).toBe(5000)
+    expect(clampPaths('')).toBeNull()
+    expect(clampPaths(null)).toBeNull()
+    expect(clampPaths('abc')).toBeNull()
+    expect(buildRequest({ counterpartyId: 'cp', tradeId: 't', buildTrade: null, regimes: [], types: [], hurdle: '12', paths: '7' }).n_paths).toBe(200)
   })
 })

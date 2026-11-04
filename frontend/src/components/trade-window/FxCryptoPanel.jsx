@@ -196,8 +196,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const dp = rateDp(pair)
   const qc = cur?.quote || 'USD'
   const SYM = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' }
-  const money = (v) => v == null || isNaN(v) ? '—' : (v >= 0 ? '+' : '−') + (SYM[qc] ?? (qc + ' ')) + Math.abs(Math.round(v)).toLocaleString('en-US')
-  const sgn = (v) => v == null || isNaN(v) ? null : (v >= 0 ? 'positive' : 'negative')
+  const money = (v) => { if (v == null || isNaN(v)) return '—'; const n = Math.round(v); return (n > 0 ? '+' : n < 0 ? '−' : '') + (SYM[qc] ?? (qc + ' ')) + Math.abs(n).toLocaleString('en-US') }
+  const sgn = (v) => v == null || isNaN(v) || Math.round(v) === 0 ? null : (v > 0 ? 'positive' : 'negative')
   const spot01 = (r) => r.spot01 ?? r.delta_quote_per_pct
   const ir01 = (r) => r.ir01 ?? (r.rho_base_per_bp + r.rho_quote_per_bp)
   const effDate = (() => { const d = new Date(); let n = crypto ? 0 : 2; while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) n-- } return iso(d) })()

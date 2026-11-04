@@ -20,8 +20,10 @@ const mono = { fontFamily: 'var(--mono)' }
 const th = { ...mono, fontSize: 11, letterSpacing: '0.12em', color: 'var(--text-dim)', fontWeight: 600, textAlign: 'right', padding: '5px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }
 const td = { ...mono, fontSize: '0.8125rem', color: 'var(--text-hi)', textAlign: 'right', padding: '4px 8px', whiteSpace: 'nowrap', cursor: 'pointer' }
 const foot = { ...mono, fontSize: '0.7rem', color: 'var(--text-mute)', lineHeight: 1.5 }
+// a chip is one block that never breaks inside its label; the rows wrap whole chips (flex-wrap)
 const chip = (on) => ({ ...mono, fontSize: '0.7rem', letterSpacing: '0.06em', padding: '3px 7px', borderRadius: 2, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border)'),
-  color: on ? 'var(--accent)' : 'var(--text-dim)', background: on ? 'rgba(13,212,168,0.08)' : 'transparent', marginRight: 4, marginBottom: 4 })
+  color: on ? 'var(--accent)' : 'var(--text-dim)', background: on ? 'rgba(13,212,168,0.08)' : 'transparent', display: 'inline-block', whiteSpace: 'nowrap', lineHeight: 1.3 })
+const chipRow = { display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }
 
 export default function CapitalTab({ counterpartyId, counterpartyName, buildTrade, tradeId, priced, ccy = 'USD', hasRecordType = false }) {
   const [regimes, setRegimes] = useState(PRESETS)
@@ -78,10 +80,10 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: 'var(--bg)' }}>
 
         {/* LEFT PANEL */}
-        <div style={LEFT_COL}>
+        <div style={{ ...LEFT_COL, overflowX: 'hidden' }}>
           <SectionHeader>COLLATERAL REGIMES</SectionHeader>
           <ModelBadge kind="muted">A regime is what the CSA admits and what each rulebook makes of it. The engine derives a regulatory CSA (recognised collateral at its haircut) and an economic CSA (what is exchanged) and runs both.</ModelBadge>
-          <div style={{ marginBottom: 10 }}>
+          <div style={chipRow}>
             {PRESETS.map(r => (
               <span key={r} style={chip(regimes.includes(r))} onClick={() => toggleRegime(r)} title={REGIME_DESC[r]}>{REGIME_LABEL[r]}</span>
             ))}
@@ -89,7 +91,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
 
           <SectionHeader>COUNTERPARTY TYPE</SectionHeader>
           <ModelBadge kind="muted">The risk weight (CRE20) and the CVA weight (MAR50.16) by type and grade; the record's own type leads when it is set.</ModelBadge>
-          <div style={{ marginBottom: 10 }}>
+          <div style={chipRow}>
             {DEFAULT_TYPES.map(t => (
               <span key={t.key} style={chip(types.some(x => x.key === t.key))} onClick={() => toggleType(t)}>{t.key}</span>
             ))}
@@ -100,7 +102,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
             <span style={LBL}>Hurdle %</span>
             <input type="text" inputMode="decimal" value={hurdle} onChange={e => setHurdle(e.target.value)} style={{ ...INP, textAlign: 'right' }} />
             <span style={LBL}>Paths</span>
-            <input type="number" min={200} max={5000} step={100} value={paths} onChange={e => setPaths(e.target.value)} style={{ ...INP, textAlign: 'right' }} />
+            <input type="text" inputMode="numeric" value={paths} onChange={e => setPaths(e.target.value.replace(/[^0-9]/g, ''))} title="200 to 5,000 risk-neutral paths" style={{ ...INP, textAlign: 'right' }} />
           </div>
           <ModelBadge kind="muted">CDS, LGD and the funding spread are the credit engine's settings (Risk → Credit); the exposure paths are its risk-neutral paths, seed 7, so the figures tie to the book's reserves.</ModelBadge>
 
@@ -120,12 +122,12 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
             <div style={{ ...mono, fontSize: 12, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--text)' }}>
               {isNew ? `INCREMENTAL CAPITAL · ${cpLabel}'S NETTING SET` : 'MARGINAL CAPITAL · REMOVING THIS TRADE'}
             </div>
-            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+            <div style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {['INCREMENTAL', 'STANDALONE'].map(v => <span key={v} style={chip(view === v)} onClick={() => setView(v)}>{v}</span>)}
             </div>
           </div>
           {res && (
-            <div style={{ marginBottom: 8 }}>
+            <div style={{ ...chipRow, marginBottom: 8 }}>
               {typeKeys(res).map(k => <span key={k} style={chip(typeKey === k)} onClick={() => setTypeKey(k)}>{k}</span>)}
             </div>
           )}

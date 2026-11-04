@@ -3,6 +3,13 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.8.4 · 4 November 2026
+
+- CAPITAL tab on the ticket: the regime and counterparty-type chips are whole blocks that wrap as a row (they broke
+  mid-label and ran off the column, which also drew a horizontal scrollbar); the paths field is a plain number
+  field clamped to the route's 200–5,000; a footer figure that rounds to zero reads "$0" on every product (rates, FX,
+  crypto) instead of "−$0" or "-0".
+
 ## 0.8.3 · 4 November 2026
 
 - Hotfix: the rates XVA tab crashed with "fit_details.map is not a function" whenever it loaded a stored calibration
