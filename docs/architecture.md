@@ -80,6 +80,29 @@ P&L, the full revaluation on apply gives the second order; the gate and the cont
 P&L (`ipv_runs`, `pnl_signoffs` role IPV), which the trading P&L shows beside the flash. Tables in
 `docs/migrations/2026-11-05_ipv.sql`; the run is a worker job (`ipv_run`).
 
+## Market data and the consensus service (planned)
+
+A market-data service with adapters behind one interface (venue feeds, a CSV/JSON importer, terminal feeds on a
+self-host under the client's licence), time-stamped snapshots with lineage on every mark, data-quality gates on
+the official close, and a second source per input for IPV by configuration. On top of it, the consensus
+valuation service for crypto OTC: contributing desks upload end-of-day marks through the IPV independent-mark
+route, the service computes a blinded trimmed consensus per pillar once a minimum number of contributors exists,
+and each desk receives the consensus as its independent mark and its own deviation, never another desk's number.
+The consensus methodology is published; contributors never pay; the service is described as a consensus
+valuation service for IPV, not a benchmark.
+
+## Supervision (planned)
+
+Two layers. **Examiner mode**, a product feature for the firm: a `SUPERVISOR` role the firm grants to a named
+examiner for a bounded period, read-only, scoped to what the firm chooses, every page view logged, and an exam
+pack exported in one click (limits and breaches with their history, exposure profiles per counterparty, the
+capital stack, IPV runs with overrides and sign-offs, the P&L sign-off trail, the model inventory with validation
+status, the methodology). On a self-host the examiner signs into the firm's own instance. The regulatory reports
+(EMIR, CFTC) stay in the official formats; the examiner view is additive. **A supervisory view across firms**, as
+a pilot with a regulator's innovation arm: participating books valued on one open engine, aggregated by region,
+counterparty type and product with firm names blinded, anchored by confirmed on-chain records a supervisor can
+verify without trusting the operator. Consent and scope are the firm's, always, with an expiry.
+
 ## Module switches
 
 A firm runs the modules it needs (`backend/modules.py`; `firms.modules`, `firms.modules_preset`, `module_events`;

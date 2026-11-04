@@ -11,7 +11,7 @@ const PHASES = [
     ['DONE', 'Hosted demo: sandbox workspace on sign-in, demo counterparty, Excel methodology replications'],
     ['DONE', 'Open-box replications: every workbook with a cover and verdict, the ticket rebuilt in cells with links into the maths, a derivation ledger, a scenario chart and a Checks sheet; SHOW MATH on the ticket annotates each number with its formula'],
     ['DONE', 'XVA replication for rates: the Hull-White Monte Carlo rebuilt in cells from the engine\'s own draws (or re-rolled live), the swaption calibration with an RMSE grid around the fit, the CSA and margin-period bridge, the full waterfall, a convergence sheet'],
-    ['NOW',  'Go-live of the hosted demo (app.rijeka.app) and the first recorded walkthrough'],
+    ['DONE', 'Go-live of the hosted demo (app.rijeka.app); the demo is the first level of the full product, not a throwaway'],
     ['NEXT', 'Shared market-data feed with a factor-model simulator so curves move; P&L and XVA tick on the desk'],
     ['NEXT', 'House dealer: Rijeka quotes mid ± spread so a solo learner always has a counterparty (paper only)'],
     ['NEXT', 'Cohorts and labs for classrooms and graduate programmes: paired firms, limits, a leaderboard'],
@@ -49,6 +49,21 @@ const PHASES = [
     ['NEXT', 'Entitlements and audit: roles per firm, four-eyes on sensitive actions, immutable audit trail'],
     ['PARTIAL', 'End-of-day batch: daily marks and attributed P&L rows stored per account; P&L sign-off. Next: official close, archived snapshots and reports'],
     ['NEXT', 'Public API and Python SDK with the same contracts the UI uses'],
+    ['NOW',  'Seeing what we ship: the compose stack with sign-in on the developer machine, browser end-to-end tests (sign in, book, confirm, P&L sign-off, IPV) in CI beside lint, unit and integration'],
+    ['NEXT', 'Scale: a 10,000-trade benchmark book in CI; the nightly chain as worker jobs by curve rather than by trade; a compiled core (Rust via Python) for the hot pricers once the benchmark names them, the Python kept as the reference the tests hold it to'],
+    ['NEXT', 'A second referee at the XVA level: a bridge to ORE (open source) comparing EE, PFE, CVA, SIMM and SA-CCR row by row in CI, the way QuantLib checks the pricing'],
+    ['NEXT', 'Security: SECURITY.md with a private disclosure path and a bounty; CSP enforced; CodeQL and secret scanning; a penetration test and SOC 2 when a buyer names the standard'],
+    ['NEXT', 'A design pass by a human designer with a point of view: a type and colour system, data-dense tables, the landing site showing the real product'],
+  ]},
+  { title: 'MARKET DATA & CONSENSUS', status: 'PLANNED', items: [
+    ['NEXT', 'A market-data service with adapters behind one interface: Coinbase and Kraken spot, Deribit option marks and surfaces, a CSV/JSON importer, Bloomberg and Refinitiv on a self-host under the client\'s licence; time-stamped snapshots with lineage on every mark; data-quality gates on the official close'],
+    ['NEXT', 'A second source per input for IPV by configuration; the demo stays on daily public data and says so'],
+    ['PLANNED', 'Consensus valuation service for crypto OTC: contributing desks upload end-of-day marks, each receives a blinded trimmed consensus per pillar as its independent mark and its own deviation; minimum contributor count, published methodology, contributors never pay; the IPV upload is the seed'],
+  ]},
+  { title: 'SUPERVISION & REGULATORS', status: 'PLANNED', items: [
+    ['NEXT', 'Examiner mode: a SUPERVISOR role a firm grants to a named examiner for a bounded period, read-only, scoped to what the firm chooses, every view logged; an exam pack in one click (limits and breaches, exposure per counterparty, the capital stack, IPV runs and overrides, sign-off trails, the model inventory, the methodology)'],
+    ['NEXT', 'Regulatory reports in the official formats (EMIR, CFTC trade and valuation reporting) stay the filings; the examiner view is additive'],
+    ['PLANNED', 'A supervisory view across firms as a pilot with a regulator\'s innovation arm: participating books valued on one open engine, aggregated by region, counterparty type and product with firm names blinded, anchored by confirmed on-chain records a supervisor can verify without trusting us'],
   ]},
   { title: 'FX & DIGITAL ASSETS', status: 'LIVE', items: [
     ['DONE', 'FX spot, forwards and NDFs on G10 pairs and non-deliverable forwards on BTC, ETH and SOL on one interest-rate-parity model, each currency on its own curve, a digital asset at its funding rate; public spot feeds; one FX · CRYPTO page; booked and confirmed on chain in the ISDA Digital Asset Derivatives Definitions\' vocabulary; Excel replications for the EURUSD forward and the crypto NDF with the engine\'s NPV, FX01 / CRY01, IR01 and FUND01'],
@@ -65,8 +80,10 @@ const PHASES = [
   ]},
   { title: 'PHASE 3 · EQUITY & COMMODITY', status: 'PLANNED', items: [['NEXT', 'Equity and commodity derivatives on the same pricing and confirmation rails']] },
   { title: 'PHASE 4 · RISK INFRASTRUCTURE', status: 'PLANNED', items: [
-    ['NEXT', 'Firm admin, roles and audit; self-host packaging (docker-compose, migration runner)'],
-    ['NEXT', 'External audit of the registry contract; Ethereum mainnet'],
+    ['DONE', 'Self-host packaging: docker-compose with sign-in, the migration runner with a ledger, a staging stack with 68 API-level integration tests in CI'],
+    ['NEXT', 'Firm admin, entitlements and the immutable audit log across every table that changes state'],
+    ['NEXT', 'External audit of the registry contract; key custody in a KMS or HSM outside the application host; Ethereum mainnet with the Sepolia registry kept for the demo'],
+    ['NEXT', 'Infrastructure as code, dev/staging/production environments, observability and alerts, tested backup and restore, an on-call rota and a stated SLA for the hosted tier'],
     ['NEXT', 'Email confirmations adapter and a confirmations inbox for bank–corporate flow'],
   ]},
   { title: 'PROMETHEUS · AI LAYER', status: 'LIVE', items: [
