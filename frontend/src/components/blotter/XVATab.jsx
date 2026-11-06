@@ -552,7 +552,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         </ExposureCanvas>
 
         {/* Unified XVA waterfall - $ and bp in same cell */}
-        <div style={{flexShrink:0,overflowY:'auto',maxHeight:'280px'}}>
+        <div style={{flexShrink:0}}>
           <VaStrip rows={vaRows} fmt={fmtDollar} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} />
           <OnChainCompareRow rows={cmpRows} current={simResult} compare={compareResult} fmt={fmtDollar} saving={saving} />
           <VaFooter>ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA~ · Click any VA to expand · bp = VA / IR01</VaFooter>

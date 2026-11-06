@@ -257,7 +257,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
               model={<>{res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {res?.steps} monthly steps · {ccy}</>} />
           </ExposureCanvas>
 
-          <div style={{flexShrink:0,overflowY:'auto',maxHeight:'280px'}}>
+          <div style={{flexShrink:0}}>
             <VaStrip rows={vaRows} fmt={fmt} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} />
             <OnChainCompareRow rows={cmpRows} current={res} compare={cmp} fmt={fmt} saving={saving} />
             <VaFooter>

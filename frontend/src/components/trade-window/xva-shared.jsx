@@ -351,28 +351,27 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
   return (
     <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
       {saving && (
-        <div style={{display:'flex',gap:'14px',alignItems:'baseline',padding:'6px 14px',borderBottom:'1px solid var(--border)',fontFamily:'var(--mono)'}}>
+        <div style={{display:'flex',flexWrap:'wrap',columnGap:'12px',rowGap:'2px',alignItems:'baseline',padding:'5px 14px',borderBottom:'1px solid var(--border)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
           <span style={{fontSize:'0.8rem',letterSpacing:'0.12em',color:'var(--accent)',fontWeight:700}}>SAVING ON CHAIN</span>
           <span style={{fontSize:'0.9375rem',fontWeight:700,color:saving.money>=0?'var(--accent)':'var(--red)'}}>{fmt(saving.money)}</span>
-          {saving.bpUpfront!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} of notional upfront</span>}
+          {saving.bpUpfront!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} upfront</span>}
           {saving.bpRunning!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>· {bp(saving.bpRunning)} running</span>}
-          <span style={{marginLeft:'auto',fontSize:'0.75rem',color:'var(--text-mute)'}}>vs {preset} · same paths, same collateral</span>
+          <span style={{marginLeft:'auto',fontSize:'0.75rem',color:'var(--text-mute)'}}>vs {preset} · same paths, same collateral · bp of notional</span>
         </div>
       )}
       <div style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
         {rows.map(({ key, oc, delta, pct, better }) => (
-          <div key={key} style={{background:'var(--bg-deep)',padding:'6px 8px'}}>
-            <div style={{fontSize:'0.8rem',letterSpacing:'0.10em',color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'2px'}}>{key==='npv'?'ON-CHAIN':''}</div>
-            <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'var(--accent)':'var(--text-mute)',fontFamily:'var(--mono)'}}>{fmt(oc)}</div>
+          <div key={key} style={{background:'var(--bg-deep)',padding:'4px 8px',minWidth:0,overflow:'hidden'}}>
+            <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'var(--accent)':'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
+              {key==='npv' && <span style={{fontSize:'0.7rem',letterSpacing:'0.10em',fontWeight:400,marginRight:'6px'}}>ON-CHAIN</span>}{fmt(oc)}
+            </div>
             {pct!=null && key!=='all_in' && (
-              <div style={{fontSize:'0.8rem',color:better?'var(--accent)':'var(--red)',fontFamily:'var(--mono)'}}>
-                {delta>=0?'+':''}{fmt(delta)} · {pct>=0?'+':''}{pct.toFixed(0)}%
+              <div style={{fontSize:'0.72rem',color:better?'var(--accent)':'var(--red)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}} title="on-chain less the current run, and the change in the adjustment's size">
+                {fmt(delta)} · {pct>=0?'+':''}{pct.toFixed(0)}%
               </div>
             )}
             {key==='all_in' && delta!=null && (
-              <div style={{fontSize:'0.8rem',color:delta>=0?'var(--accent)':'var(--red)',fontFamily:'var(--mono)'}}>
-                {delta>=0?'+':''}{fmt(delta)} vs {preset}
-              </div>
+              <div style={{fontSize:'0.72rem',color:delta>=0?'var(--accent)':'var(--red)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fmt(delta)}</div>
             )}
           </div>
         ))}
