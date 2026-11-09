@@ -7,14 +7,23 @@ import { DELTA_LABEL } from './fx-shape'
 //   FxDetailsPanel   — the term sheet as it will be booked, and the market it was priced on
 //   FxCashflowsPanel — the settlement flows (deliverable: two legs; NDF: one net cash amount)
 //   FxScenarioPanel  — the forward curve on a chart that drags, the fixings beside it, and spot and
-//                      rate shocks repriced with the same closed form the engine uses
+//                      rate shocks repriced with the same closed form the engine uses; for an option,
+//                      the pair's vol surface under it (FxVolChart.jsx), moved by the VOL slider
 // A booked trade whose fixing date has been reached (state FIXED or SETTLED) has no quote to
 // reprice: each panel then states the settled facts as the API sent them.
+//
+// The ticket prices itself after every change of its terms. Between a change and the price
+// that answers it the tabs still hold the last quote (`stale`): each then dims its figures
+// and says they are for the terms before the change. The scenario tab asks the API for
+// what follows the quote (the pairs answer, the fixings, the style ladder) only while it
+// is the tab showing (`active`) and the quote is not stale, once per quote (fx-requests.js).
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getSessionSafe } from '../../lib/session'
 import { apiFetch } from '../../lib/api'
 import FxScenarioChart from './FxScenarioChart'
+import FxVolSurface from './FxVolChart'
+import { ladderKey, ladderShown, ladderWanted, marketKey } from './fx-requests'
 import {
   FIXING_DAYS, FX_SPOT_LAG_DAYS, SPOT_BOUND_PCT, applyTenorDrag, carryFactor, carryPoints, chartLevels, chartStrike, curveNodes, daysBetween,
   fixingSeries, fixingTime, interpPoints, latestFixing, reprice, rippleWeights, settledFacts, settledState, settlementAmount, shockedCurve,
@@ -38,6 +47,19 @@ const Empty = ({ what }) => (
     <div className="empty-sub">{what} come from the priced quote: press PRICE on the TRADE tab and come back.</div>
   </div>
 )
+
+// One tab's figures while the ticket reprices: dimmed, under a line that says what they are. The wrapper is
+// always there, so the panel inside keeps its state when the flag turns; the line is in the showing tab only.
+function StaleFrame({ stale, active, children }) {
+  return (<>
+    {stale && active && (
+      <div data-testid="fx-tab-stale" style={{ padding: '8px 16px 0', fontSize: '0.8125rem', color: 'var(--text-mute)', fontFamily: 'var(--sans)' }}>
+        repricing: these figures are for the terms before your last change
+      </div>
+    )}
+    <div data-stale={stale ? 'true' : 'false'} style={{ opacity: stale ? 0.5 : 1, transition: 'opacity 120ms' }}>{children}</div>
+  </>)
+}
 
 function Grid({ items, cols = 3, min }) {
   return (
@@ -129,7 +151,11 @@ function SettledView({ quote, terms, crypto, rows, sources, ready }) {
 }
 
 // ── DETAILS ────────────────────────────────────────────────────────────────────
-export function FxDetailsPanel({ quote, terms, crypto }) {
+export function FxDetailsPanel({ stale = false, active = true, ...rest }) {
+  return <StaleFrame stale={stale && !!rest.quote} active={active}><DetailsBody {...rest} /></StaleFrame>
+}
+
+function DetailsBody({ quote, terms, crypto }) {
   if (!quote) return <Empty what="The terms" />
   const t = terms || {}
   const ndf = quote.shape === 'NDF' || t.settlement_type === 'NON_DELIVERABLE'
@@ -214,7 +240,11 @@ export function FxDetailsPanel({ quote, terms, crypto }) {
 }
 
 // ── CASHFLOWS ──────────────────────────────────────────────────────────────────
-export function FxCashflowsPanel({ quote, crypto }) {
+export function FxCashflowsPanel({ stale = false, active = true, ...rest }) {
+  return <StaleFrame stale={stale && !!rest.quote} active={active}><CashflowsBody {...rest} /></StaleFrame>
+}
+
+function CashflowsBody({ quote, crypto }) {
   if (!quote) return <Empty what="The settlement flows" />
   const done = settledState(quote)
   if (done) {
@@ -336,35 +366,43 @@ function Slider({ label, v, set, min, max, step, unit }) {
   )
 }
 
-function StyleLadder({ crypto,  quote }) {
-  // every style repriced by the engine itself on a grid of spot and vol shocks (POST /api/currency/option/ladder)
-  const [lad, setLad] = useState(null)
-  const [err, setErr] = useState(null)
+function StyleLadder({ crypto, quote, active, stale }) {
+  // every style repriced by the engine itself on a grid of spot and vol shocks (POST /api/currency/option/ladder):
+  // 46 option prices on the server. Asked once per quote, only while this tab is showing and the quote is not
+  // being repriced, and dropped in flight when the quote changes or the tab is left. The last ladder stays, dimmed,
+  // until the next one is back.
+  const [held, setHeld] = useState(null)             // { key, data }: the last ladder that came back, and the request it answers
+  const [failed, setFailed] = useState(null)         // { key, message }: the last request that failed
+  const key = ladderKey(quote)
+  const wanted = ladderWanted({ active, stale, key, heldKey: held?.key, failedKey: failed?.key })
   useEffect(() => {
-    let dead = false
-    setLad(null); setErr(null)
+    if (!wanted) return
+    const stop = new AbortController()
     ;(async () => {
       try {
         const session = await getSessionSafe()
-        const body = { pair: quote.pair, option_type: quote.option_type, base_notional: quote.base_notional, expiry_date: quote.expiry_date, settlement_date: quote.settlement_date,
-                       strike: quote.strike, direction: quote.direction, valuation_date: quote.valuation_date, spot: quote.spot, settlement_type: quote.settlement_type,
-                       style: quote.style, payout: quote.payout, payout_currency: quote.payout_currency, barrier_type: quote.barrier_type, barrier: quote.barrier,
-                       lower: quote.lower, upper: quote.upper, rebate: quote.rebate || 0, touch_type: quote.touch_type, pay_at_hit: !!quote.pay_at_hit }
-        const r = await fetch(`${API}/api/currency/option/ladder`, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        if (stop.signal.aborted) return
+        const r = await fetch(`${API}/api/currency/option/ladder`, { method: 'POST', signal: stop.signal, headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: key })
         const j = await r.json()
         if (!r.ok) throw new Error(j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : `ladder ${r.status}`)
-        if (!dead) setLad(j)
-      } catch (e) { if (!dead) setErr(e.message) }
+        if (!stop.signal.aborted) setHeld({ key, data: j })
+      } catch (e) { if (!stop.signal.aborted) setFailed({ key, message: e.message }) }
     })()
-    return () => { dead = true }
-  }, [quote])
+    return () => stop.abort()
+  }, [wanted, key])
   const dp = rateDp(quote)
-  if (err) return <div style={{ color: 'var(--red)', padding: '16px 0' }}>{err}</div>
+  const { ladder: lad, error, updating } = ladderShown({ key, held, failed, stale })
+  if (error) return <div style={{ color: 'var(--red)', padding: '16px 0' }}>{error}</div>
   if (!lad) return <div style={{ color: 'var(--text-dim)', padding: '16px 0' }}>Repricing the {(quote.style || '').replace('_', ' ').toLowerCase()} on the shock grid…</div>
   const vols = lad.vol_shocks_pts
   return (
-    <div>
-      <div style={secHdr}>NPV {quote.quote_currency} · SPOT SHOCK × VOL SHOCK (points)</div>
+    <div data-testid="fx-ladder" data-current={updating ? 'false' : 'true'}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <div style={secHdr}>NPV {quote.quote_currency} · SPOT SHOCK × VOL SHOCK (points)</div>
+        {updating && <div data-testid="fx-ladder-updating" style={{ fontSize: '0.72rem', color: 'var(--text-mute)' }}>updating…</div>}
+      </div>
+      {/* the whole tab is already dimmed while the quote is stale; the ladder dims itself only while its own request is out */}
+      <div style={{ opacity: updating && !stale ? 0.5 : 1, transition: 'opacity 120ms' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead><tr><th style={th}>SPOT</th><th style={th}>LEVEL</th>{vols.map(v => <th key={v} style={th}>{v > 0 ? '+' : ''}{v} pt</th>)}</tr></thead>
         <tbody>{lad.rows.map(r => (
@@ -374,6 +412,7 @@ function StyleLadder({ crypto,  quote }) {
           </tr>))}</tbody>
       </table>
       <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Base NPV {fmt(lad.base_npv)} at vol {fmt(lad.base_vol_pct, 2)}% · {DELTA_LABEL(crypto)} {fmt(lad.spot01)} · vega {fmt(lad.vega)} per point. A barrier or touch option's value is not smooth near its barrier; read the whole row, not a slope.</div>
+      </div>
     </div>
   )
 }
@@ -391,7 +430,12 @@ function FixingSource({ source, time, date, last, cash, dp }) {
   )
 }
 
-export function FxScenarioPanel({ quote, crypto, terms }) {
+export function FxScenarioPanel({ stale = false, active = true, ...rest }) {
+  const dim = stale && !!rest.quote
+  return <StaleFrame stale={dim} active={active}><ScenarioBody {...rest} stale={dim} active={active} /></StaleFrame>
+}
+
+function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const [spot, setSpot] = useState(0)
   const [qbp, setQbp] = useState(0)
   const [bbp, setBbp] = useState(0)
@@ -399,7 +443,7 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
   const [drags, setDrags] = useState({ pair: null, by: {} })           // tenor → points it has been dragged, for one pair
   const [typed, setTyped] = useState({ pair: null, text: null })       // the scenario fixing as typed; null: it follows the shocked forward
   const [market, setMarket] = useState(null)             // { pair, row, tenorDays }: the pair's spot, points, pip, sources and the API's tenor map
-  const [curveFor, setCurveFor] = useState(null)         // the quote whose pairs request has come back, whatever it answered
+  const [marketFor, setMarketFor] = useState(null)       // the stored market (marketKey) whose pairs request has come back, whatever it answered
   const [stored, setStored] = useState(null)             // { pair, rows }: the pair's recent fixings
   const origin = useRef(null)                            // the shocks as they stood when a drag began
   const pair = quote?.pair
@@ -407,31 +451,36 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
   const option = quote?.shape === 'OPTION'
   const european = !option || !quote.style || quote.style === 'EUROPEAN'
   const done = settledState(quote)
+  const marketId = marketKey(quote)
 
   // a dragged curve and a typed fixing belong to the pair they were made on: another pair starts clean
   const moves = drags.pair === pair ? drags.by : {}
   const fixingText = typed.pair === pair ? typed.text : null
   const setMoves = (by) => setDrags({ pair, by })
   const setFixingText = (text) => setTyped({ pair, text })
-  // the curve the ticket priced on: read again with every priced quote, so the chart's base is the quote's
+  // The curve and the surface the ticket priced on. The pairs answer does not depend on the ticket's terms, so it is
+  // read once for the stored market the quote names (its pair, and the reads of the points and the surface it priced
+  // on), not for every quote, and only while this tab is showing and the quote is not being repriced.
+  const wantsMarket = !!pair && active && !stale && marketFor !== marketId
   useEffect(() => {
-    if (!pair) return
+    if (!wantsMarket) return
     let dead = false
     apiFetch('/api/currency/pairs').then(r => (r.ok ? r.json() : null))
       .then(j => { const row = j?.pairs?.find(p => p.pair === pair); if (!dead && row) setMarket({ pair, row, tenorDays: j.tenor_days }) })
       .catch(() => {})                                   // no curve from the API: the chart draws the quote's own carry
-      .finally(() => { if (!dead) setCurveFor(quote) })
+      .finally(() => { if (!dead) setMarketFor(marketId) })
     return () => { dead = true }
-  }, [pair, quote])
-  // the fixings; when the request fails the chart is drawn without its left side
+  }, [wantsMarket, pair, marketId])
+  // the fixings, once per pair, when the tab is first shown on it; when the request fails the chart is drawn without its left side
+  const wantsFixings = !!pair && active && stored?.pair !== pair
   useEffect(() => {
-    if (!pair) return
+    if (!wantsFixings) return
     let dead = false
     apiFetch(`/api/currency/fixings/${encodeURIComponent(pair)}?days=${FIXING_DAYS}`).then(r => (r.ok ? r.json() : null))
       .then(j => { if (!dead) setStored({ pair, rows: Array.isArray(j?.fixings) ? j.fixings : [] }) })
       .catch(() => { if (!dead) setStored({ pair, rows: [] }) })
     return () => { dead = true }
-  }, [pair])
+  }, [wantsFixings, pair])
 
   // the base curve: the quoted points the ticket priced on, or, without them, its own carry from spot to the forward.
   // Null when the quote does not carry what a curve needs: nothing is drawn in its place.
@@ -457,7 +506,7 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
   if (!quote) return <Empty what="Scenarios" />
   const rows = stored?.pair === pair ? stored.rows : []
   const sources = market?.pair === pair ? market.row?.fixing_sources : null
-  const ready = stored?.pair === pair && curveFor === quote                  // both requests are back: the chart will not move again by itself
+  const ready = stored?.pair === pair && marketFor === marketId               // both requests are back: the chart will not move again by itself
   if (done) return <SettledView quote={quote} terms={terms} crypto={crypto} rows={rows} sources={sources} ready={ready} />
 
   const rq = european ? qbp : 0, rb = european ? bbp : 0                     // the rate sliders exist for the closed form only
@@ -485,10 +534,11 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
   const reset = () => { setSpot(0); setQbp(0); setBbp(0); setVpt(0); setMoves({}); setFixingText(null) }
 
   // the chart reports a drag as a distance in price from where it began; the shocks are worked out here
-  const onDragStart = () => { origin.current = { moves: moved.slice(), spot } }
+  // (not while the ticket reprices: the curve on screen is the one before the last change of terms)
+  const onDragStart = () => { origin.current = stale ? null : { moves: moved.slice(), spot } }
   const onDrag = ({ index, whole, dPrice }) => {
     const o = origin.current
-    if (!o) return
+    if (!o || stale) return
     const k = index - 1                                                      // the chart's first point is spot
     if (whole || k < 0) {
       const ref = k < 0 ? quote.spot : (quote.spot + (nodes[k].points + o.moves[k]) * pip) * carryFactor(rq, rb, nodes[k].x)
@@ -519,7 +569,7 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
   const quotedForward = quote.forward_mode === 'MARKET' && quote.market_points != null
 
   const chart = (
-    <div>
+    <div data-testid="fx-scenario-curve" data-drag={stale ? 'off' : 'on'} style={stale ? { pointerEvents: 'none' } : undefined}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={secHdr}>FORWARD CURVE · {pair}</div>
         <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
@@ -532,16 +582,24 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
         forward={now.forward} dp={dp} moved={anyMove} ready={ready} onDragStart={onDragStart} onDrag={onDrag} onDragEnd={() => { origin.current = null }} />
     </div>
   )
+  // an option's vol surface, under the forward curve: the pair's stored surface as the pairs answer carries it, or one
+  // line saying none is stored. Nothing until that answer is back, and nothing for a forward. The VOL slider exists
+  // for the closed form only, like the rate sliders.
+  const pairRow = market?.pair === pair ? market.row : null
+  const volSurface = option && pairRow && 'vol_surface' in pairRow        // an answer without the field says nothing about a surface
+    ? <FxVolSurface quote={quote} surface={pairRow.vol_surface || null} pair={pair} vpt={european ? vpt : 0} dp={dp} ready={ready} headerStyle={secHdr} />
+    : null
   const forwardTile = ['FORWARD', fmt(now.forward, dp), `base ${fmt(base.forward, dp)}`, 'fx-scenario-forward', now.forward]
   const resetButton = <button onClick={reset} className="btn" data-testid="fx-scenario-reset" style={{ marginTop: 4 }}>RESET</button>
   const banner = { background: 'rgba(240,160,32,0.06)', borderBottom: '1px solid rgba(240,160,32,0.15)', padding: '5px 12px', margin: '0 -16px', fontSize: '0.8125rem', color: 'var(--amber)' }
-  const approximation = <><span aria-hidden="true">⚠ </span><span data-testid="fx-scenario-banner">Scenario: an approximation in the browser (to cents with no shock; a spot shock scales the quoted points with it); nothing is saved.</span></>
+  const approximation = <><span aria-hidden="true">⚠ </span><span data-testid="fx-scenario-banner">Scenario: an approximation in the browser, to cents with no shock; nothing is saved.</span></>
 
   if (!european) {
     return (
       <div className="tbw-no-drag" style={wrap}>
         <div style={banner}>{approximation} <span>The ladder below is the engine's own, repriced on every cell ({quote.method || 'the style\'s own model'}).</span></div>
         {chart}
+        {volSurface}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr)', gap: 20, alignItems: 'start', marginTop: 12 }}>
           <div>
             <Grid cols={1} items={[forwardTile]} />
@@ -554,7 +612,7 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
             <FixingSource source={source} time={fixTime} date={fixDate} last={last} cash={cash} dp={dp} />
           </div>
         </div>
-        <StyleLadder crypto={crypto} quote={quote} />
+        <StyleLadder crypto={crypto} quote={quote} active={active} stale={stale} />
       </div>
     )
   }
@@ -567,6 +625,7 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
     <div className="tbw-no-drag" style={wrap}>
       <div style={banner}>{approximation}</div>
       {chart}
+      {volSurface}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 360px) minmax(0, 1fr)', gap: 20 }}>
         <div>
           <div style={secHdr}>SHOCKS</div>

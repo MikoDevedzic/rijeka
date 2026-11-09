@@ -81,9 +81,9 @@ test('crypto ticket: the vol and the forward name the venue and the time of its 
   await win.getByRole('button', { name: 'CRYPTO', exact: true }).click()
   await win.getByRole('button', { name: /^CRYPTO FORWARD$/i }).click()
   await expect(win).toContainText(`forward from ${AT}`)
-  await expect(win).toContainText('overrides the quoted forward')
+  await expect(win.getByTestId('fx-funding'), 'the funding field says what typing in it does').toHaveAttribute('title', /overrides the quoted forward/)
   await win.getByRole('button', { name: /^CRYPTO OPTION$/i }).click()
-  await expect(win).toContainText(`VOL % · ${AT}`, { ignoreCase: true })
+  await expect(win.getByTestId('fx-vol').locator('xpath=..'), 'the vol on its default names the surface it came from').toContainText(AT, { ignoreCase: true })
   const priced = app.waitForResponse(r => /\/api\/currency\/option\/price$/.test(r.url()) && r.request().method() === 'POST')
   await win.getByRole('button', { name: '▶ PRICE' }).click()
   expect((await priced).status(), 'the option prices').toBe(200)
@@ -129,5 +129,62 @@ test('market data: a desk spot saves on a pair whose forward points come from th
   expect(sent, 'the spot alone, under the desk\'s own label').toEqual({ pair: 'BTCUSD', points: {}, source: 'MANUAL', spot: 70123 })
   await reloaded
   await app.unrouteAll({ behavior: 'ignoreErrors' })       // nothing intercepted is left in flight when the test ends
+  expectClean(problems)
+})
+
+// Miko, 9 November 2026: "our curves tab, there is not vol surface for crypto options." The CURVE SCENARIO tab of an
+// option shows the pair's surface: the term structure with the expiry marked, the smile at the expiry with the strike
+// marked, both moved by the VOL slider. What the browser reads off the surface must be the vol the engine priced at.
+test('crypto option: the scenario tab shows the vol surface, read as the engine reads it, and the VOL slider moves it', async ({ app, problems }) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'CRYPTO', exact: true }).click()
+  await win.getByRole('button', { name: /^CRYPTO OPTION$/i }).click()
+  const priced = app.waitForResponse(r => /\/api\/currency\/option\/price$/.test(r.url()) && r.request().method() === 'POST' && r.ok())
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  const quote = await (await priced).json()
+  expect(quote.vol_pct, 'the option priced at a vol').toBeGreaterThan(0)
+  await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+
+  const block = win.getByTestId('fx-vol-surface')
+  await block.scrollIntoViewIfNeeded()
+  await expect(block, 'both charts have drawn').toHaveAttribute('data-ready', 'true')
+  await expect(win.getByTestId('fx-vol-term')).toBeVisible()
+  await expect(win.getByTestId('fx-vol-smile')).toBeVisible()
+  const strikeVol = win.getByTestId('fx-vol-strike-vol')
+  const num = async (loc, attr) => Number(await loc.getAttribute(attr))
+  expect(await num(strikeVol, 'data-value'), 'the vol the quote priced at').toBeCloseTo(quote.vol_pct, 6)
+  // the browser's own reading of the stored surface at this expiry and strike is the engine's vol
+  expect(Math.abs(await num(strikeVol, 'data-surface') - quote.vol_pct), 'the surface read in the browser against the engine').toBeLessThan(0.05)
+  await expect(win.getByTestId('fx-vol-differs')).toHaveCount(0)
+  const atm = win.getByTestId('fx-vol-expiry-atm')
+  expect(await num(atm, 'data-value')).toBeGreaterThan(0)
+  for (const id of ['fx-vol-term', 'fx-vol-smile']) {
+    const box = await win.getByTestId(id).boundingBox()
+    expect(box.height, `${id} is tall enough to read`).toBeGreaterThanOrEqual(200)
+  }
+  await expectNoHorizontalOverflow(win, 'scenario tab with the vol surface')
+  await app.screenshot({ path: 'e2e/.out/shots/scenario-vol-surface.png' })
+
+  // the VOL slider: +2 points moves the surface shown by 2 points
+  const vol = win.locator('input[type="range"]').filter({ has: app.locator('xpath=preceding-sibling::span[normalize-space()="VOL"]') }).first()
+  const slider = (await vol.count()) ? vol : win.locator('span', { hasText: /^VOL$/ }).locator('xpath=following-sibling::input[@type="range"]').first()
+  await slider.focus()
+  for (let i = 0; i < 8; i++) await app.keyboard.press('ArrowRight')          // eight steps of a quarter point
+  await expect.poll(() => num(atm, 'data-shocked')).toBeCloseTo((await num(atm, 'data-value')) + 2, 6)
+  await expect.poll(() => num(strikeVol, 'data-shocked')).toBeCloseTo(quote.vol_pct + 2, 6)
+  await app.screenshot({ path: 'e2e/.out/shots/scenario-vol-surface-shocked.png' })
+
+  // a forward has no surface block
+  await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+  await win.getByRole('button', { name: /^CRYPTO FORWARD$/i }).click()
+  const pricedF = app.waitForResponse(r => /\/api\/currency\/forward\/price$/.test(r.url()) && r.request().method() === 'POST' && r.ok())
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  await pricedF
+  await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+  await expect(win.getByTestId('fx-scenario-chart')).toBeVisible()
+  await expect(win.getByTestId('fx-vol-surface')).toHaveCount(0)
   expectClean(problems)
 })

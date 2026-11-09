@@ -835,6 +835,11 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
                    "method": x.method, "r_quote": x.r_quote, "r_base": x.r_base}
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except ArithmeticError as e:
+        # the pricers handle their own limits; anything that still leaves the floating range is answered as terms
+        # the pricer cannot value, never as a server error
+        log.warning("option pricing left the floating range (%s): %s %s", type(e).__name__, pair, style_fields)
+        raise HTTPException(status_code=422, detail="these terms are outside what the pricer can value: check the strike, the barrier levels and the vol")
     out.update(style=spec.style, payout=spec.payout, payout_currency=spec.payout_currency, barrier_type=spec.barrier_type, barrier=spec.barrier,
                lower=spec.lower, upper=spec.upper, rebate=spec.rebate, touch_type=spec.touch_type, pay_at_hit=spec.pay_at_hit)
     # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the

@@ -8,12 +8,18 @@
 // closed form along the same paths), with the SURFACE PROOF in the place of the calibration
 // proof. bp here is bp of the quote-currency notional, since an FX trade has no IR01.
 // POST /api/xva/currency and /api/xva/currency-option (backend/pricing/fx_xva.py).
+//
+// The ticket prices itself after every change of its terms. While the quote here is the one
+// before the last change (`stale`), SIMULATE and RE-ROLL wait: a run would take the old
+// notional, date and strike. A result on screen belongs to the terms it was simulated for;
+// when a new quote lands with other terms it is cleared (fx-requests.js xvaResultMatches).
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
 import ExposureCanvas from './ExposureCanvas'
 import IncrementalXva from './IncrementalXva'
 import { settledState } from './fx-scenario'
+import { xvaResultMatches, xvaTermsKey } from './fx-requests'
 import {
   SectionHeader, TipLabel, PathsWwrSliders, ModelBadge, SimulateButtons, ProofExpander,
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
@@ -84,7 +90,7 @@ function SurfaceProof({ result }) {
   )
 }
 
-export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId }) {
+export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId, stale = false }) {
   const payload = quote ? { pair: `${quote.base_currency}${quote.quote_currency}`, base_notional: quote.base_notional,
     settlement_date: quote.settlement_date, forward_rate: quote.forward_rate, direction: quote.direction } : null
   const isOption = quote?.shape === 'OPTION'
@@ -145,6 +151,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // runs
   const [res, setRes] = useState(null)
   const [cmp, setCmp] = useState(null)               // the same run under the ON-CHAIN preset
+  const [resFor, setResFor] = useState(null)         // the terms the result on screen was simulated for (xvaTermsKey)
   const [seed, setSeed] = useState(42)               // 42 repeats exactly; RE-ROLL draws a fresh one
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
@@ -155,8 +162,14 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const tip = (key, e) => setTooltip({ key, ...tipAt(e) })
   const untip = () => setTooltip(null)
 
+  // A result for other terms than the quote's is not shown as this trade's: once a new quote has landed (not while
+  // the last one is still being repriced), a result simulated for different terms is cleared, and so is a run that
+  // comes back after the terms it was started for have gone. State adjusted during the render, not in an effect.
+  if ((res || cmp) && quote && !stale && !xvaResultMatches(resFor, quote)) { setRes(null); setCmp(null); setResFor(null) }
+
   const run = async (useSeed = 42) => {
-    if (!quote || !payload) return
+    if (!quote || !payload || stale) return
+    const termsAtRun = xvaTermsKey(quote)
     setSeed(useSeed)
     setBusy(true); setErr(null)
     try {
@@ -180,7 +193,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         if (!r.ok) throw new Error(j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : `xva ${r.status}`)
         return j
       }
-      setRes(await post(body))
+      const first = await post(body)
+      setResFor(termsAtRun); setRes(first)
       // the same trade, the same seed, under atomic settlement: the difference is the collateral terms alone
       setCmp(compareOnChain && settlement !== 'ON_CHAIN' ? await post({ ...body, csa: fxCsaBody('ON_CHAIN', imExchanged) }) : null)
     } catch (e) { setErr(e.message) } finally { setBusy(false) }
@@ -203,8 +217,9 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // a trade whose fixing date has been reached has no forward left: a run would simulate one that no longer exists
   const fixed = settledState(quote) != null
   const simulateButtons = (<>
-    <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote || fixed} label={quote ? '▶ SIMULATE' : 'PRICE THE TICKET FIRST'}
+    <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote || fixed || stale} label={quote ? '▶ SIMULATE' : 'PRICE THE TICKET FIRST'}
       onSimulate={() => run(42)} onReroll={() => run(1 + Math.floor(Math.random() * 2147483000))} />
+    {stale && !!quote && <div data-testid="xva-stale-note" style={{fontSize:'0.75rem',color:'var(--text-mute)',margin:'-6px 0 12px',lineHeight:1.5}}>repricing: SIMULATE waits for the price of the terms as they now stand</div>}
     {fixed && <div data-testid="xva-fixed-note" style={{fontSize:'0.75rem',color:'var(--text-dim)',margin:'-6px 0 12px',lineHeight:1.5}}>This trade has fixed: there is no exposure left to simulate beyond the settlement amount.</div>}
   </>)
   const simulateError = err && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {err}</div>

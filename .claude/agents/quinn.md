@@ -17,6 +17,8 @@ Learned on 9 November 2026 (0.14.0)
 - Read a list (options, rows) only after waiting for the thing that fills it; a new journey runs twice in the full set before it is trusted.
 - An assertion on what is booked reads the booked record (the response of the booking call), not the caption on the ticket.
 - A booked trade opened from the blotter is a different window from the ticket: press its buttons too (PRICE did nothing there for currency trades until a journey pressed it).
+- Journeys run in one locale. Any field that writes and reads numbers gets a journey in a comma-decimal locale (`test.use({ locale: 'de-DE' })`): on 9 November 2026 a default written as `1,08345` was read back as 108345 and priced.
+- Before a release a new user will see, a fresh agent looks at the screenshots as that user and checks the arithmetic from the screen itself (forward against spot, a strike against the forward, a fixing time against an expiry time). It found ten things no journey or code review had.
 
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.

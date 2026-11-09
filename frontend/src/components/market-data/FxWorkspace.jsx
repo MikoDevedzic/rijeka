@@ -11,6 +11,7 @@ import { InnerTabs, InnerBody, ParamGrid, SectionLabel, DescBox } from './_Detai
 import RateCurveCanvas from './RateCurveCanvas'
 import FixingsPanel from './FixingsPanel'
 import { getSessionMaybe } from '../../lib/session'
+import { surfaceTenors } from '../trade-window/fx-vol'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const FLAG = { USD: '🇺🇸', EUR: '🇪🇺', GBP: '🇬🇧', JPY: '🇯🇵', CHF: '🇨🇭', AUD: '🇦🇺', CAD: '🇨🇦', BTC: '₿', ETH: 'Ξ', SOL: '◎' }
@@ -137,8 +138,11 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const [fund, setFund] = useState('')
   const [flat, setFlat] = useState('')
   const innerTab = useMarketDataStore(s => s.innerTab)
-  // option vols: ATM / 25Δ risk reversal / 25Δ butterfly by tenor, in vol points
-  const VOL_TENORS = ['1W', '1M', '2M', '3M', '6M', '9M', '1Y', '2Y']
+  // option vols: ATM / 25Δ risk reversal / 25Δ butterfly by tenor, in vol points. The rows are the standard eight
+  // tenors and every tenor the stored surface has (a venue's digital-asset surface also quotes 2W and 3W), in time
+  // order. The save sends every row with an ATM, and the saved snapshot holds only what is sent, so a stored tenor
+  // left off the grid would be dropped by a save without the user having touched it.
+  const VOL_TENORS = surfaceTenors(p.vol_surface?.tenors)
   const [vols, setVols] = useState({})
   useEffect(() => { setVols(p.vol_surface?.grid ? JSON.parse(JSON.stringify(p.vol_surface.grid)) : {}) }, [pair, p.vol_surface?.valuation_date])   // eslint-disable-line react-hooks/exhaustive-deps
   const setVol = (tn, k, v) => setVols(g => ({ ...g, [tn]: { ...(g[tn] || {}), [k]: v } }))

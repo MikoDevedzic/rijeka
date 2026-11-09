@@ -471,3 +471,120 @@
   border: 1px solid currentColor;
   background: rgba(255, 255, 255, 0.03);
 }
+
+/* ── Currency ticket (FxCryptoPanel): priced as it is typed ───────────────
+   New classes only, all tbw-fx-*; nothing above is changed by them. */
+
+/* The rows of the ticket. One rule for all of them: a label is one line (cut short with an ellipsis, the whole of
+   it in its title), so the controls of a row start on the same line; a cell never widens its column; six equal
+   columns that do not wrap, so no cell is left alone on a last line. */
+.tbw-fx-grid-6 {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+.tbw-fx-cell { min-width: 0; }
+.tbw-fx-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbw-fx-chips { gap: 4px; margin-bottom: 0; }
+
+/* The last figures while the next price is owed, and the footer's while they are stale. */
+.tbw-fx-dim { opacity: 0.45; transition: opacity 0.12s; }
+.tbw-fx-stale { opacity: 0.45; }
+
+/* A field that shows its default (DefaultedInput): the number in the normal colour, an override in the accent,
+   a dash when there is no number yet; under it a muted line saying where the number is from. */
+.tbw-fx-def { min-width: 0; }
+.tbw-window input.tbw-fx-def-input.is-override { color: var(--accent); border-color: var(--accent); }
+.tbw-window input.tbw-fx-def-input.is-empty { color: var(--text-mute); }
+/* text that cannot be read as a number: kept as typed, in the warning colour, and said so under the field */
+.tbw-window input.tbw-fx-def-input.is-invalid { color: var(--amber); border-color: var(--amber); }
+.tbw-fx-tag-invalid { color: var(--amber); }
+.tbw-fx-tag > span.tbw-fx-tag-invalid { white-space: normal; overflow: visible; }      /* said in full, on two lines if need be */
+.tbw-fx-tag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 16px;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  color: var(--text-mute);
+}
+.tbw-fx-tag > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tbw-fx-tag-wrap { flex-wrap: wrap; row-gap: 0; }
+/* a rule in words, which runs onto a second line before it is cut short */
+.tbw-fx-tag-free > span { white-space: normal; overflow: visible; }
+.tbw-fx-tag-override { color: var(--accent); }
+.tbw-window .tbw-fx-reset {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.tbw-window .tbw-fx-reset:hover { border-color: var(--accent); }
+
+/* SPOT's own action, at the end of the line under the field: "stored spot · 2026-11-02 · ↻ snap". */
+.tbw-fx-tag > .tbw-fx-snap-wrap { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; overflow: visible; }
+.tbw-window .tbw-fx-snap {
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+}
+.tbw-window .tbw-fx-snap:hover:not(:disabled) { text-decoration: underline; }
+.tbw-window .tbw-fx-snap:disabled { color: var(--text-mute); cursor: default; }
+
+/* The forward: read-only, the mono face at the size of an input's text, in a box the height of an input. */
+.tbw-fx-fwd {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: var(--text-hi);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tbw-fx-fwd.is-empty { color: var(--text-mute); }
+
+/* The option's first row: the expiry cell holds a tenor and a date, so it is wider than the other five. */
+.tbw-fx-grid-expiry {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.tbw-fx-pick { display: flex; gap: 6px; min-width: 0; }
+.tbw-window .tbw-fx-pick > select { flex: 0 0 42%; width: auto; min-width: 0; }
+.tbw-window .tbw-fx-pick > input { flex: 1 1 0; width: auto; min-width: 0; }
+
+/* Said once, under the date, when a typed date was brought back to the last one a digital asset prices to. */
+.tbw-fx-limit { margin-top: 3px; font-size: 11px; line-height: 1.35; letter-spacing: 0.04em; color: var(--text-mute); }
+
+/* The valuation: "pricing…" sits over the top right of the analytics block (no line is added or taken away as it
+   comes and goes); why there is no price is a line of its own above the block. */
+.tbw-fx-valuation { position: relative; }
+.tbw-fx-status {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  z-index: 1;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--text-mute);
+  pointer-events: none;
+}
+.tbw-fx-note { padding: 12px 18px 0; font-size: 12px; letter-spacing: 0.05em; color: var(--text-mute); }
+.tbw-fx-note.is-error { color: var(--red); }
+.tbw-fx-note.is-warning { color: var(--amber); }

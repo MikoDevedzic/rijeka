@@ -151,13 +151,54 @@ def _expect_surviving(payoff, S: float, b: float, sigma: float, T: float, lower:
 
 def first_passage_value(S: float, H: float, r: float, b: float, sigma: float, T: float) -> float:
     """E[e^{−rτ}·1{τ ≤ T}] for the first hit τ of the barrier H (Reiner–Rubinstein): the value of one unit
-    of quote currency paid at the hit."""
+    of quote currency paid at the hit.
+
+        (H/S)^{μ+λ}·Φ(ηz) + (H/S)^{μ−λ}·Φ(ηz − 2ηλσ√T),   μ = (b − σ²/2)/σ²,  λ = √(μ² + 2r/σ²),
+        z = ln(H/S)/(σ√T) + λσ√T,  η = +1 for a barrier below spot and −1 above.
+
+    Each term is evaluated as exp(power·ln(H/S) + ln Φ(·)), with ln Φ from its own function. Written as a power
+    times Φ the first term was lost wherever Φ underflowed to zero while the power was large (|b|√T/σ above about
+    3.7: a low vol, a long expiry or a wide rate gap; up to 4.7 % of the payout, found against a quadrature of
+    the hitting density on 9 November 2026), and the powers overflowed at a lower vol still. In logs the product
+    is exact to rounding everywhere."""
     eta = 1.0 if H < S else -1.0
     mu = (b - 0.5 * sigma * sigma) / (sigma * sigma)
-    lam = math.sqrt(mu * mu + 2.0 * r / (sigma * sigma))
+    disc = mu * mu + 2.0 * r / (sigma * sigma)
+    if disc < 0.0:
+        # a discount rate so far below zero that λ is not a real number: the closed form does not apply as
+        # written, and the same expectation is taken by integrating over the time of the hit
+        return _first_passage_by_quadrature(math.log(H / S), r, b - 0.5 * sigma * sigma, sigma, T)
+    lam = math.sqrt(disc)
     sT = sigma * math.sqrt(T)
     z = math.log(H / S) / sT + lam * sT
-    return (H / S) ** (mu + lam) * _N(eta * z) + (H / S) ** (mu - lam) * _N(eta * z - 2.0 * eta * lam * sT)
+    return _first_passage_in_logs(math.log(H / S), mu, lam, eta, z, sT, bound=max(1.0, math.exp(-r * T)))
+
+
+def _first_passage_by_quadrature(k: float, r: float, nu: float, sigma: float, T: float) -> float:
+    """∫₀ᵀ e^{−rt}·f(t) dt with f the density of the first time a Brownian motion with drift ν and vol σ reaches
+    the level k = ln(H/S): f(t) = |k| / (σ√(2πt³)) · exp(−(k − νt)²/(2σ²t)). The definition itself; the closed
+    form is this integral done by hand."""
+    from scipy.integrate import quad
+
+    def integrand(t: float) -> float:
+        if t <= 0.0:
+            return 0.0
+        return math.exp(-r * t - (k - nu * t) ** 2 / (2.0 * sigma * sigma * t)) * abs(k) / (sigma * math.sqrt(2.0 * math.pi * t ** 3))
+    peak = k / nu if nu != 0.0 else None                    # where the drift alone would reach the level
+    v, _ = quad(integrand, 0.0, T, points=[peak] if peak is not None and 0.0 < peak < T else None, limit=400, epsabs=1e-13, epsrel=1e-12)
+    return min(max(float(v), 0.0), max(1.0, math.exp(-r * T)))
+
+
+def _first_passage_in_logs(k: float, mu: float, lam: float, eta: float, z: float, sT: float, bound: float = 1.0) -> float:
+    """The two terms of first_passage_value as exp(power·ln(H/S) + ln Φ(·)). `bound` is the most one unit paid
+    by T can be worth now: 1, or e^{−rT} when the discount rate is negative."""
+    from scipy.special import log_ndtr
+
+    def term(power: float, x: float) -> float:
+        e = power * k + float(log_ndtr(x))
+        return math.exp(e) if e < 700.0 else math.inf
+    v = term(mu + lam, eta * z) + term(mu - lam, eta * z - 2.0 * eta * lam * sT)
+    return min(max(v, 0.0), bound)
 
 
 def vanilla(S: float, K: float, r: float, b: float, sigma: float, T: float, call: bool) -> float:
@@ -183,6 +224,19 @@ def american_tree(S: float, K: float, r: float, b: float, sigma: float, T: float
         a = z / (n + 1.0 / 3.0 + 0.1 / (n + 1.0))
         return 0.5 + math.copysign(0.5, z) * math.sqrt(1.0 - math.exp(-a * a * (n + 1.0 / 6.0)))
     p = h(d2); pp = h(d1)
+    if not (0.0 < p < 1.0 and 0.0 < pp < 1.0):
+        # the strike is about 170 standard deviations or more from the forward: the inversion returns 0 or 1 and
+        # the tree has no step sizes. At that distance the spot's path is its drift, S·e^{bt}, and the option is
+        # worth the best of exercising along it: now, at expiry (the European value), or at the one interior
+        # time where the discounted exercise value peaks, when S·e^{bt*} = K·r/r_b with r_b = r − b.
+        sign = 1.0 if call else -1.0
+        best = max(vanilla(S, K, r, b, sigma, T, call), sign * (S - K), 0.0)
+        rb = r - b
+        if b != 0.0 and r > 0.0 and rb > 0.0:
+            t_star = math.log(K * r / (rb * S)) / b
+            if 0.0 < t_star < T:
+                best = max(best, math.exp(-r * t_star) * sign * (S * math.exp(b * t_star) - K))
+        return best
     g = math.exp(b * dt)
     u = g * pp / p
     d = (g - p * u) / (1.0 - p)

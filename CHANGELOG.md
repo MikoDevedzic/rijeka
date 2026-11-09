@@ -3,6 +3,54 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.7). Commits on `main` are the detail.
 
+## 0.15.0 · 9 November 2026
+
+- **The currency and digital-asset ticket prices itself.** A new ticket opens priced, and reprices 400 ms after
+  the last change to a term, the latest answer only. While it reprices the last figures stay on screen, dimmed.
+  The automatic price never sends terms the API would refuse; a failure is said beside the value, not in the
+  window's title or on BOOK. PRICE remains a forced reprice.
+- **BOOK books what was shown.** A quote travels with the terms it was priced for. Pressed between a change and
+  its price, BOOK reprices, shows the new figures and asks to be pressed again; it never books figures that were
+  not on screen, and never forces a price for terms the ticket has already refused. While a price is awaited the
+  footer and the other tabs mark their figures as belonging to the terms before the change, and XVA cannot be
+  simulated on them.
+- **The forward rate is on the ticket**: the fair forward of the latest quote, its distance from spot and what
+  that is a year.
+- **A field on its default shows the number.** Spot, strike, vol and funding showed a grey hint that vanished on a
+  click and read as an empty field. Each now shows the number the price used, with a few words under it saying
+  where it comes from; typing over it is an override, marked, with a control that puts the default back. An
+  override is disclosed: the booked trade is revalued on the stored market, so its value in the blotter will differ.
+- **Numbers are read one way, whatever the browser's language.** Fields are written with a point for decimals; a
+  comma is read only as a thousands separator in the en-US position (`108,250.5`). Text that cannot be read that
+  way (`1,08345`, `1.2.3`) is kept, marked, and never priced or booked: before this a browser set to German or
+  Croatian wrote `1,08345` into a field and an edit of it was read as 108345.
+- **The tenor tells the truth about the date.** A typed settlement or expiry date left the tenor on its old value.
+  The tenor now shows the standard tenor the date falls on, or CUSTOM with its length. A digital-asset date stops
+  at two years, where the forward points and the vol surface end (a five-year forward was priced at spot plus the
+  two-year points); a currency pair is not limited. The option has a tenor too.
+- **A vol surface on the CURVE SCENARIO tab of an option**: the term structure (ATM and the two 25-delta lines)
+  with the expiry marked, and the smile at the expiry with the strike marked, both moved by the VOL slider. What the
+  browser reads off the surface is pinned to the engine's reading by 148 shared test cases, and the tab says so
+  if the two ever disagree.
+- Option levels are seeded from the option's own vol and expiry, so every style opens as a live trade; a touch no
+  longer sends a strike left over from another style. The option ticket's rows are aligned, its labels are one
+  line each, and the spot snap is an action of the spot field.
+- The scenario tab's heavier requests (the repricing ladder of a non-European option) run only while the tab is
+  showing and the quote is current.
+- **The exotic pricer at its limits.** An American option whose strike is some 170 standard deviations from the
+  forward, and a barrier or touch at a very low vol, raised an arithmetic error and the API answered 500. The tree
+  now returns its limit there (the best of exercising along the drift: now, at expiry, or at the interior time
+  where the discounted exercise value peaks; within 0.2bp of QuantLib either side of that point). Any arithmetic
+  error that still escapes a pricer is answered as terms it cannot value.
+- **A payment at the hit was undervalued at a low vol** (found by Emmy while validating the above; older than this
+  change). The value of one unit paid at the first hit of a barrier, used by a one-touch paid at the hit and by a
+  knock-out's rebate, lost a term where |b|√T/σ is above about 3.7: up to 4.7 % of the payout at a vol of one or
+  two percent, exact at the vols of the pairs quoted here (EURUSD at 7 %, BTC at 55 %). It is now evaluated in
+  logarithms, and checked against a quadrature of the hitting density, also under negative rates. The pinned
+  sample book and the reference table are unchanged.
+- Market data → Volatility shows every tenor a stored surface has (a venue's surface has ten; two were hidden).
+- 0.14.2 read back from production: approved 4, applied 4, problems 0.
+
 ## 0.14.2 · 9 November 2026
 
 - `public.is_admin()` resolves its table in the public schema whatever the caller's session has set
