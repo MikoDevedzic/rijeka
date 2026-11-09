@@ -121,7 +121,22 @@ def test_the_vectors_file_is_what_the_backend_computes():
         VECTORS.parent.mkdir(exist_ok=True)
         VECTORS.write_text(json.dumps(now, indent=2, ensure_ascii=True, allow_nan=False) + "\n", encoding="utf-8")
     assert VECTORS.exists(), "tests/vectors/fx_scenario.json is missing: run with RIJEKA_UPDATE_VECTORS=1"
-    assert json.loads(VECTORS.read_text(encoding="utf-8")) == now, "tests/vectors/fx_scenario.json is out of date: run with RIJEKA_UPDATE_VECTORS=1 and commit it"
+    stored = json.loads(VECTORS.read_text(encoding="utf-8"))
+    # the same shape and words, and every number to 1e-12 relative: the file was written on one machine and is read
+    # on another whose libm rounds erf and exp a unit in the last place differently (CI, 9 November 2026)
+    assert _same(stored, now), "tests/vectors/fx_scenario.json is out of date: run with RIJEKA_UPDATE_VECTORS=1 and commit it"
+
+
+def _same(a, b, rel=1e-12) -> bool:
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return abs(a - b) <= rel * max(1.0, abs(a), abs(b))
+    return a == b
 
 
 def test_the_vectors_cover_the_cases_and_agree_with_figures_worked_by_hand():
