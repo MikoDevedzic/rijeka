@@ -79,7 +79,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', background: 'var(--bg)' }}>
 
         {/* LEFT PANEL */}
-        <div style={{ ...LEFT_COL, overflowX: 'hidden' }}>
+        <div style={{ ...LEFT_COL, overflowX: 'hidden' }} data-testid="capital-left">
           <SectionHeader>COLLATERAL REGIMES</SectionHeader>
           <ModelBadge kind="muted">A regime is what the CSA admits and what each rulebook makes of it. The engine derives a regulatory CSA (recognised collateral at its haircut) and an economic CSA (what is exchanged) and runs both.</ModelBadge>
           <div style={chipRow}>
@@ -142,7 +142,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
           {res && (
             <>
               <div style={{ overflowX: 'auto' }}>
-                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                <table style={{ borderCollapse: 'collapse', width: '100%' }} data-testid="capital-grid">
                   <thead>
                     <tr>
                       <th style={{ ...th, textAlign: 'left' }}>{ccy}</th>

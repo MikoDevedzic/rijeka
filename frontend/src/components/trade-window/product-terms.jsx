@@ -301,7 +301,7 @@ export function SwapTermsBody({ state, update }) {
     // the valuation date or a day count left the old par rate on screen.
   }, [effDate, matDate, ccy, structure, direction, valDate, index,
       fixedPayFreq, fixedDc, fixedBdc, floatResetFreq, floatPayFreq,
-      floatDc, floatBdc, spread, leverage, state.notional, state.rateUserEdited, state.readOnly])
+      floatDc, floatBdc, spread, leverage, state.notional, state.rateUserEdited, state.readOnly, state.parNonce])
 
   // ── Sprint 13 Patch 5 ─ structure-sync effect removed ──
   // Per PRODUCT_TAXONOMY §1.11, embedded optionality is a leg-level feature
@@ -313,7 +313,8 @@ export function SwapTermsBody({ state, update }) {
   // (default VANILLA) regardless of embedded_options content.
   // ── Handlers ─────────────────────────────────────────────────────────────
   const onCouponChange = (val) => update({ coupon: val, rateUserEdited: true })
-  const onParClick     = () => update({ coupon: '', rateUserEdited: false, parError: null })
+  // parNonce: pressing PAR always starts a fresh solve, also when nothing else changed (after a failed one)
+  const onParClick     = () => update({ coupon: '', rateUserEdited: false, parError: null, parNonce: (state.parNonce || 0) + 1 })
 
   // Is the coupon actually at par? Compared against the solved par rate,
   // not assumed. 0.01bp tolerance absorbs display rounding only.

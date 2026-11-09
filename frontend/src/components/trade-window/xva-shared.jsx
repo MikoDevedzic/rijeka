@@ -309,7 +309,7 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
   const exp = rows.find(r => r.key === expanded)
   return (
     <>
-      <div style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
+      <div data-testid="va-strip" style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
         {rows.map(row => {
           const isExp = expanded===row.key
           return (
@@ -351,7 +351,7 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
   return (
     <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
       {saving && (
-        <div style={{display:'flex',flexWrap:'wrap',columnGap:'12px',rowGap:'2px',alignItems:'baseline',padding:'5px 14px',borderBottom:'1px solid var(--border)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
+        <div data-testid="saving-on-chain" style={{display:'flex',flexWrap:'wrap',columnGap:'12px',rowGap:'2px',alignItems:'baseline',padding:'5px 14px',borderBottom:'1px solid var(--border)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
           <span style={{fontSize:'0.8rem',letterSpacing:'0.12em',color:'var(--accent)',fontWeight:700}}>SAVING ON CHAIN</span>
           <span style={{fontSize:'0.9375rem',fontWeight:700,color:saving.money>=0?'var(--accent)':'var(--red)'}}>{fmt(saving.money)}</span>
           {saving.bpUpfront!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} upfront</span>}
@@ -362,9 +362,8 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
       <div style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
         {rows.map(({ key, oc, delta, pct, better }) => (
           <div key={key} style={{background:'var(--bg-deep)',padding:'4px 8px',minWidth:0,overflow:'hidden'}}>
-            <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'var(--accent)':'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
-              {key==='npv' && <span style={{fontSize:'0.7rem',letterSpacing:'0.10em',fontWeight:400,marginRight:'6px'}}>ON-CHAIN</span>}{fmt(oc)}
-            </div>
+            <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'var(--accent)':'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fmt(oc)}</div>
+            {key==='npv' && <div style={{fontSize:'0.7rem',letterSpacing:'0.10em',color:'var(--accent)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>ON-CHAIN</div>}
             {pct!=null && key!=='all_in' && (
               <div style={{fontSize:'0.72rem',color:better?'var(--accent)':'var(--red)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}} title="on-chain less the current run, and the change in the adjustment's size">
                 {fmt(delta)} · {pct>=0?'+':''}{pct.toFixed(0)}%

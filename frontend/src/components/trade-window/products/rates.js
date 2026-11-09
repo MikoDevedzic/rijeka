@@ -143,6 +143,12 @@ registerProduct({
 
   pricing: {
     endpoint: '/price/preview',
+    // The coupon is still blank because the par rate is being solved (product-terms.jsx): pricing now would
+    // strike the fixed leg at 0 % and show a par swap worth millions. The window waits for the solve instead.
+    // Only while a solve can actually be on its way: without the schedule dates none starts, and pricing at once
+    // lets the API say what is missing.
+    awaitsPar: state => state.structure !== 'BASIS' && !state.readOnly && !state.rateUserEdited && !!state.effDate && !!state.matDate
+      && !isFinite(parseFloat(String(state.coupon ?? '').replace(/[^0-9.-]/g, ''))),
     buildPayload: state => {
       const ccy      = state.ccy || 'USD'
       const curveId  = CCY_CURVE[ccy] || 'USD_SOFR'
@@ -151,9 +157,8 @@ registerProduct({
       const isBASIS  = state.structure === 'BASIS'
       const notional = Number(state.notional) || 0
 
-      // Coupon: numeric or string; 'PAR'/non-numeric falls to 0 for now.
-      // Patch 4 will wire the par-rate auto-fetch so 'PAR' resolves to the
-      // par swap rate from the current curve.
+      // Coupon: numeric or string. A blank coupon never reaches here on a fixed-leg structure: the window
+      // waits for the par solve (awaitsPar above); 0 is the basis swap's legs and a typed zero coupon.
       const couponRaw = state.coupon
       const couponNum = typeof couponRaw === 'number'
         ? couponRaw

@@ -252,6 +252,8 @@ async def save_vol_skew(
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
 ):
+    from api.routes._limits import heavy
+    heavy(user, "skew save and SABR calibration", 4)
     """
     Save OTM vol skew spreads (relative to ATM) for all (expiry, tenor) buckets.
     UPSERT on (valuation_date, expiry_label, tenor_label).

@@ -154,3 +154,15 @@ describe('collateral on the ticket', () => {
     expect(onChainSaving(cur, null, 1)).toBeNull()
   })
 })
+
+describe('bp lines', () => {
+  it('a figure that rounds to zero is unsigned, whichever side of zero it came from', () => {
+    const rows = buildVaRows({ npv: 0, cva: -2, dva: 1, fva: 0, fba: 0, kva: -373, mva: -2986, colva: 0, all_in: -3360 }, { kind: 'rate', dv01: 4668, parRate: 3.48, allInRate: 3.47 })
+    const sub = Object.fromEntries(rows.filter(r => r.sub).map(r => [r.key, r.sub.text]))
+    expect(sub.cva).toBe('0.0bp')            // −2 / 4668 rounds to −0.0: no sign, never "+-0.0bp"
+    expect(sub.dva).toBe('0.0bp')
+    expect(sub.kva).toBe('-0.1bp')
+    expect(sub.mva).toBe('-0.6bp')
+    for (const t of Object.values(sub)) expect(t).not.toMatch(/\+-|\+−|--/)
+  })
+})

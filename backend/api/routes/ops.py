@@ -117,8 +117,51 @@ def ops_health(db: Session = Depends(get_db)):
     import scheduler
     from version import VERSION
     return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]},
-            "scheduler": scheduler.status(), "worker": worker_status(db), "version": VERSION,
+            "scheduler": scheduler.status(), "worker": worker_status(db), "schema": schema_status(db), "version": VERSION,
             "commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or None}
+
+
+# The optional migrations: each feature reads its tables through a presence check so a deploy can run ahead of
+# its migration. This is the one place that says which are applied, what each gates, and what shares its file,
+# so a release never has to guess (docs/ops/release.md). No data, only presence.
+OPTIONAL_MIGRATIONS = (
+    ("counterparty_capital", "2026-11-04_counterparty_capital.sql + 2026-11-04_counterparty_margin_terms.sql",
+     "counterparty type, rating, margin terms on the record", "api.routes.counterparties", "capital_columns_present"),
+    ("firm_modules", "2026-11-04_firm_modules.sql", "module switches per firm", "modules", "columns_present"),
+    ("ipv", "2026-11-05_ipv.sql", "IPV tolerances, runs, overrides", "ipv.store", "tables_present"),
+    ("collateral", "2026-11-05_collateral.sql", "a firm's own collateral instruments and the schedule per counterparty (the seed is served without it)",
+     "collateral.store", "tables_present"),
+    ("pending_anchors", "2026-11-03_jobs.sql (the pending_anchors section)",
+     "a confirm that hands a slow block to ANCHORING instead of waiting in the request", "chain.pending", "tables_present"),
+    ("jobs", "2026-11-03_jobs.sql (jobs and worker_heartbeat)",
+     "heavy runs on the worker; apply only when the worker is alive, or runs queue for nobody", "jobs.queue", "tables_present"),
+)
+
+
+_schema_cache: dict = {"at": 0.0, "body": None}
+
+
+def schema_status(db: Optional[Session]) -> dict:
+    """{name: {applied, migration, gates}} for the optional migrations. Never raises. Cached for a minute like the
+    rest of the health body: the endpoint is public and four of the checks re-query the catalogue until their
+    migration lands."""
+    import importlib
+    if _schema_cache["body"] is not None and time.time() - _schema_cache["at"] < CACHE_SECONDS:
+        return _schema_cache["body"]
+    out = {}
+    for name, migration, gates, module, fn in OPTIONAL_MIGRATIONS:
+        try:
+            applied = bool(getattr(importlib.import_module(module), fn)(db))
+        except Exception as e:            # noqa: BLE001
+            log.debug("ops: schema check %s failed: %s", name, e)
+            try:
+                db.rollback()
+            except Exception:             # noqa: BLE001
+                pass
+            applied = None
+        out[name] = {"applied": applied, "migration": migration, "gates": gates}
+    _schema_cache.update(at=time.time(), body=out)
+    return out
 
 
 def worker_status(db: Optional[Session]) -> dict:

@@ -6,6 +6,7 @@
 // API's memory (last 200, 24-hour summary).
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react'
+import { useAuthStore } from '../../store/useAuthStore'
 import '../pnl/PnlPage.css'
 import '../risk/RiskPage.css'
 
@@ -30,10 +31,16 @@ export default function SystemPage() {
   const checks = Object.entries(h?.checks || {})
   const ce = h?.client_errors
   const [u, setU] = useState(null)
+  const role = useAuthStore(s => s.profile?.role)
   useEffect(() => {
+    if (!role) {                                        // the profile has not loaded yet; do not wait for ever
+      const t = setTimeout(() => setU(u0 => u0 || { error: true }), 5000)
+      return () => clearTimeout(t)
+    }
+    if (role !== 'admin') { setU({ error: true }); return }   // the usage figures are an admin view: do not ask for a 403
     import('../../lib/session').then(({ getSessionMaybe }) => getSessionMaybe()).then(s => fetch(`${API}/api/ops/usage`, { headers: { Authorization: `Bearer ${s?.access_token}` } }))
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`usage ${r.status}`))).then(setU).catch(() => setU({ error: true }))
-  }, [])
+  }, [role])
   const umax = Math.max(1, ...((u?.series || []).map(d => Math.max(d.visitors, d.signups, d.trades, d.confirms))))
   return (
     <div className="pnl">

@@ -1,10 +1,12 @@
 # CI — what a pull request must pass before it can merge to main.
-# Three independent jobs: backend tests (no database, no network), frontend
-# build, registry contract tests. Branch protection requires all three.
-# Two more run alongside and are not (yet) required: the API-level integration
-# tests on a postgres:16 service built by backend/stack, and the self-host
-# smoke (docker compose config, then db + migrate up). Making them required is
-# a branch-protection setting, not a change here.
+# Backend tests (no database, no network), frontend build and registry contract
+# tests; branch protection on main requires those three plus the integration
+# tests and the self-host smoke.
+# Three more run alongside: the API-level integration tests on a postgres:16
+# service built by backend/stack (the pinned sample book among them), the
+# browser journeys on the same stack (frontend/e2e), and the self-host smoke
+# (docker compose config, then db + migrate up). Making a job required is a
+# branch-protection setting, not a change here.
 name: ci
 on:
   pull_request:
@@ -98,6 +100,56 @@ jobs:
         run: python -m stack.keys
       - name: pytest -m integration
         run: python -m pytest -q -p no:cacheprovider -m integration tests/integration
+  journeys:
+    name: browser journeys
+    # Quinn (.claude/agents/quinn.md): the built app on the local stack, in a real browser. Every page opens without
+    # an error; the rates, FX and digital-asset tickets are priced, run through XVA with the on-chain comparison,
+    # capital, booking and confirmation; the results fit a laptop screen. frontend/e2e/README.md.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rijeka
+          POSTGRES_PASSWORD: rijeka
+          POSTGRES_DB: rijeka_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U rijeka -d rijeka_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      RIJEKA_STACK_DATABASE_URL: postgresql://rijeka:rijeka@127.0.0.1:5432/rijeka_test
+      PYTHON: python
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip, cache-dependency-path: backend/requirements*.txt }
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - uses: actions/setup-node@v4
+        with: { node-version: "20", cache: npm, cache-dependency-path: frontend/package-lock.json }
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: PostgREST (the reads the app makes through supabase-js, on the stack database)
+        run: |
+          curl -fsSL -o /tmp/postgrest.tar.xz https://github.com/PostgREST/postgrest/releases/download/v16.5/postgrest-v16.5-linux-static-x86-64.tar.xz
+          sudo tar -xJf /tmp/postgrest.tar.xz -C /usr/local/bin postgrest
+          postgrest --version
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: journeys
+        run: npm run e2e
+        working-directory: frontend
+      - name: logs and screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-journeys
+          path: |
+            frontend/e2e/.out/*.log
+            frontend/e2e/.out/results
+            frontend/e2e/.out/report
+          retention-days: 7
   selfhost:
     name: self-host smoke
     runs-on: ubuntu-latest

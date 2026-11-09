@@ -100,6 +100,13 @@ export const SEC_HDR = { fontSize: '12px', fontWeight:700, letterSpacing:'0.18em
 export const LEFT_COL = { width:'320px', minWidth:'320px', borderRight:'1px solid var(--border)',
   overflowY:'auto', padding:'12px', display:'flex', flexDirection:'column' }
 
+// The XVA panels' layout: the chart and the results set the panel's height and are always in view; the inputs
+// column is pinned to that height and scrolls inside itself, however many inputs a settlement shows.
+export const XVA_ROW = { position:'relative', display:'flex', overflow:'hidden', background:'var(--bg)' }
+export const XVA_LEFT = { ...LEFT_COL, position:'absolute', top:0, bottom:0, left:0 }
+export const XVA_RIGHT = { flex:1, marginLeft:LEFT_COL.width, minWidth:0, display:'flex', flexDirection:'column', overflow:'hidden' }
+export const XVA_CHART_HEIGHT = 'clamp(240px, 36vh, 440px)'
+
 export const SETTLEMENT_PRESETS = [
   ['UNCOLLATERALISED', 'NO CSA', 'var(--red)'],
   ['BILATERAL', 'BILATERAL', 'var(--blue)'],
@@ -174,7 +181,8 @@ export function simmImValue(s) {
   return (s === '' || s == null || isNaN(parseFloat(s))) ? null : parseFloat(s)
 }
 
-const signed = (bp) => (parseFloat(bp) >= 0 ? '+' : '') + bp + 'bp'
+// "+0.3bp", "-0.4bp", and a figure that rounds to zero as "0.0bp": never "+-0.0bp"
+const signed = (bp) => { const n = parseFloat(bp); return (n > 0 ? '+' : '') + (n === 0 ? String(bp).replace('-', '') : bp) + 'bp' }
 
 // The eight VA cells. basis.kind:
 //   'rate'     — the rates tab: bp = VA / IR01 (dv01), NPV shows the par rate, ALL-IN the all-in rate

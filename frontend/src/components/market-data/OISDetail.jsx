@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/api'
 import RateCurveCanvas from './RateCurveCanvas';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { INTERP_METHODS, TENOR_TO_YEARS } from '../../data/ratesCurves';
@@ -104,14 +105,14 @@ function OISInstruments({ curve }) {
 
   // Bloomberg
   const fetchBlpStatus = async () => {
-    try { setBlpStatus(await (await fetch('/api/bloomberg/status')).json()); }
+    try { setBlpStatus(await (await apiFetch('/api/bloomberg/status')).json()); }
     catch { setBlpStatus({ connected: false, installed: false, error: 'Could not reach backend' }); }
   };
 
   const fetchBlpTickers = async (curveId) => {
     try {
       const sess = await getSessionMaybe();
-      const data = await (await fetch('/api/bloomberg/tickers/' + curveId, {
+      const data = await (await apiFetch('/api/bloomberg/tickers/' + curveId, {
         headers: { Authorization: 'Bearer ' + sess.access_token },
       })).json();
       setBlpTickers(data.tickers || {});
@@ -128,7 +129,7 @@ function OISInstruments({ curve }) {
   const saveTickerOverrides = async () => {
     try {
       const sess = await getSessionMaybe();
-      await fetch('/api/bloomberg/tickers/override', {
+      await apiFetch('/api/bloomberg/tickers/override', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + sess.access_token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ curve_id: curve.id, overrides: Object.entries(blpTickers).map(([tenor, ticker]) => ({ tenor, ticker })) }),
@@ -156,7 +157,7 @@ function OISInstruments({ curve }) {
         return;
       }
 
-      const res = await fetch('/api/bloomberg/snap', {
+      const res = await apiFetch('/api/bloomberg/snap', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + sess.access_token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ curve_id: curve.id, snap_date: blpSnapDate, tickers: tickerList, mode }),
@@ -199,7 +200,7 @@ function OISInstruments({ curve }) {
     try {
       const sess = await getSessionMaybe();
       const quotes = csvParsed.map(r => ({ tenor: r.tenor, quote_type: 'SWAP', rate: r.rate, ticker: 'CSV_IMPORT', enabled: true }));
-      const res = await fetch('/api/market-data/snapshots', {
+      const res = await apiFetch('/api/market-data/snapshots', {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + sess.access_token, 'Content-Type': 'application/json' },
         body: JSON.stringify({ curve_id: curve.id, valuation_date: blpSnapDate, quotes, source: 'IMPORT' }),
@@ -355,7 +356,7 @@ function OISInstruments({ curve }) {
 
             {blpStatus && !blpStatus.connected && blpStatus.error && (
               <div style={{fontSize:'0.875rem',color:'var(--amber)',marginBottom:'8px',lineHeight:1.5}}>
-                {blpStatus.error}
+                {blpStatus.installed === false ? 'No Bloomberg terminal on this server: Bloomberg snaps are for a self-hosted deployment beside a terminal.' : blpStatus.error}
               </div>
             )}
 

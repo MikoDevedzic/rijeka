@@ -51,7 +51,7 @@ export default function FxWorkspace() {
   const flash = (kind, text) => { setMsg({ kind, text }); setTimeout(() => setMsg(null), 7000) }
   const load = useCallback(async () => {
     const m = await call('/api/currency/pairs'); setMd(m)
-    if (bbg === null) { try { const st = await call('/bloomberg/status'); setBbg({ available: !!st?.connected, error: st?.error || '' }) } catch { setBbg({ available: false }) } }
+    if (bbg === null) { try { const st = await call('/api/bloomberg/status'); setBbg({ available: !!st?.connected, error: st?.error || '' }) } catch { setBbg({ available: false }) } }
   }, [bbg])
   // load() writes state only after its awaits; the lint rule cannot see past the call and flags it anyway.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -177,7 +177,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
     try {
       const tk = await call(`/bloomberg/tickers/${pair}_FWD`)
       const tickers = Object.entries(tk.tickers || {}).map(([tenor, ticker]) => ({ tenor, ticker }))
-      const r = await call('/bloomberg/snap', { method: 'POST', body: JSON.stringify({ curve_id: `${pair}_FWD`, snap_date: iso(new Date()), tickers, mode: 'live' }) })
+      const r = await call('/api/bloomberg/snap', { method: 'POST', body: JSON.stringify({ curve_id: `${pair}_FWD`, snap_date: iso(new Date()), tickers, mode: 'live' }) })
       const got = {}; let spot
       ;(r.quotes || []).forEach(q => { if (q.tenor === 'SPOT') spot = q.rate; else if (q.rate != null) got[q.tenor] = q.rate })
       setPts(got); await save('BLOOMBERG', got, spot)

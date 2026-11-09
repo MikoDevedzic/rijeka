@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/api'
 import RateCurveCanvas from './RateCurveCanvas';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { INTERP_METHODS } from '../../data/ratesCurves';
@@ -128,14 +129,14 @@ function BasisInstruments({ curve }) {
   useEffect(() => { loadLatestSnapshot(curve.id); }, [curve.id]);
 
   const fetchBlpStatus = async () => {
-    try { setBlpStatus(await (await fetch('/api/bloomberg/status')).json()); }
+    try { setBlpStatus(await (await apiFetch('/api/bloomberg/status')).json()); }
     catch { setBlpStatus({ connected:false, installed:false, error:'Could not reach backend' }); }
   };
 
   const fetchBlpTickers = async () => {
     try {
       const sess = await getSessionMaybe();
-      const data = await (await fetch('/api/bloomberg/tickers/' + curve.id, {
+      const data = await (await apiFetch('/api/bloomberg/tickers/' + curve.id, {
         headers:{ Authorization:'Bearer '+sess.access_token },
       })).json();
       setBlpTickers(data.tickers || {});
@@ -150,7 +151,7 @@ function BasisInstruments({ curve }) {
   const saveTickerOverrides = async () => {
     try {
       const sess = await getSessionMaybe();
-      await fetch('/api/bloomberg/tickers/override', {
+      await apiFetch('/api/bloomberg/tickers/override', {
         method:'POST',
         headers:{ Authorization:'Bearer '+sess.access_token, 'Content-Type':'application/json' },
         body:JSON.stringify({ curve_id:curve.id, overrides:Object.entries(blpTickers).map(([tenor,ticker])=>({tenor,ticker})) }),
@@ -165,7 +166,7 @@ function BasisInstruments({ curve }) {
       const sess = await getSessionMaybe();
       const tickerList = Object.entries(blpTickers).map(([tenor,ticker]) => ({ tenor, ticker }));
       if (!tickerList.length) { setBlpSnapError('Tickers not loaded — wait and retry.'); return; }
-      const res = await fetch('/api/bloomberg/snap', {
+      const res = await apiFetch('/api/bloomberg/snap', {
         method:'POST',
         headers:{ Authorization:'Bearer '+sess.access_token, 'Content-Type':'application/json' },
         body:JSON.stringify({ curve_id:curve.id, snap_date:blpSnapDate, tickers:tickerList, mode }),
@@ -301,7 +302,7 @@ function BasisInstruments({ curve }) {
             </div>
             {blpStatus && !blpStatus.connected && blpStatus.error && (
               <div style={{fontSize:'0.875rem', color:'var(--amber)', marginBottom:'8px', lineHeight:1.5}}>
-                {blpStatus.error}
+                {blpStatus.installed === false ? 'No Bloomberg terminal on this server: Bloomberg snaps are for a self-hosted deployment beside a terminal.' : blpStatus.error}
               </div>
             )}
             <div style={{display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px'}}>

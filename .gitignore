@@ -45,3 +45,8 @@ _marketing/
 /HANDOFF_*.md
 /SPRINT*_HANDOFF.md
 /sprint */
+
+# ── Browser journeys (frontend/e2e): build output, logs, screenshots, the minted session ──
+frontend/e2e/.out/
+frontend/test-results/
+frontend/playwright-report/

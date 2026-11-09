@@ -92,6 +92,11 @@ def seed_people(db, minimal: bool) -> dict:
         ON CONFLICT (name) DO UPDATE SET kind = 'DEALER'"""), {"id": firm_id, "name": FIRM_NAME})
     firm_id = db.execute(text("SELECT id FROM firms WHERE name = :n"), {"n": FIRM_NAME}).scalar()
     out["firm"] = str(firm_id)
+    # the platform firm the messenger's support rooms belong to (the hosted database has it from migration 010);
+    # without it every signed-in page's GET /api/chat/rooms is a 500
+    db.execute(text("""
+        INSERT INTO firms (id, name, kind, coverage_tier) VALUES (:id, 'Rijeka', 'PLATFORM', 'FREE')
+        ON CONFLICT (name) DO UPDATE SET kind = 'PLATFORM'"""), {"id": str(uuid.uuid5(NS, "platform-firm"))})
     for uid, email, trader, _role, member_role in USERS:
         db.execute(text("""
             INSERT INTO firm_members (user_id, firm_id, role) VALUES (:u, :f, :r)

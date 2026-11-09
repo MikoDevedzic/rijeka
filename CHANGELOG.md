@@ -3,6 +3,30 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.3). Commits on `main` are the detail.
 
+## 0.11.1 · 8 November 2026
+
+- **Guardrails.** Six named roles with one job each (`CLAUDE.md`, `.claude/agents/`, `docs/ops/release.md`): Quinn the
+  browser tester, Ada the numbers guardian, Vera the independent reviewer, Magnus the security reviewer, Jarvis the
+  release manager, Petra the project manager.
+  - **Browser journeys** (`frontend/e2e`, CI job `browser journeys`): the built app in a real browser on the local
+    stack, signed in with a stack-minted token, PostgREST serving the supabase-js reads. Every page opens clean; the
+    rates, FX and digital-asset tickets go from pricing through XVA, capital, booking and confirmation; the results
+    must be on a laptop screen.
+  - **The pinned sample book** (`tests/integration/test_golden_book.py`): 66 figures on a fixed market, date and
+    seeds; a figure moves only with a dated explanation.
+  - `GET /api/ops/health` reports under `schema` which optional migrations are applied and what each gates.
+- **Found by the first runs and fixed:**
+  - PRICE pressed before the par rate had solved priced the swap's fixed leg at 0 % (a "par" swap worth $1.6m) and
+    the XVA then ran with no IR01. The window now holds the click until the coupon arrives, or says why it cannot.
+  - Twenty-eight calls on the market-data configuration pages used a relative `/api/…` path. On the hosted app that
+    reaches the static host, which answers with the HTML shell, so stored skew, SABR and cap-vol data silently did not
+    load. They go through one helper (`lib/api.js`); a lint rule forbids a relative API path.
+  - The XVA results fell below the fold whenever the inputs column was tall (a bilateral CSA with the collateral
+    block). The chart and the results now set the panel's height and the inputs scroll on their own.
+  - A non-admin's System page asked for the admin usage figures (a 403 on every visit); a rounded-zero bp figure
+    printed "+-0.0bp"; the on-chain NPV cell clipped its value.
+  - The local stack's seed lacked the platform firm, so the messenger's rooms call failed on every page there.
+
 ## 0.11.0 · 4 November 2026
 
 - Collateral in the book, phase C3 of `docs/archive/PLAN_collateral_2026-11-04.md`:

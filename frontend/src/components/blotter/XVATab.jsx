@@ -13,7 +13,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip,
 } from '../trade-window/xva-shared.jsx'
 import {
-  INP, LEFT_COL, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, simmImValue,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, simmImValue,
   buildVaRows, onChainCompareRows, collateralBody, onChainSaving,
 } from '../trade-window/xva-shared'
 
@@ -418,10 +418,10 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   ] : []
 
   return (
-    <div style={{ flex:1, display:'flex', overflow:'hidden', background:'var(--bg)' }}>
+    <div style={XVA_ROW}>
 
       {/* LEFT PANEL */}
-      <div style={LEFT_COL}>
+      <div style={XVA_LEFT} data-testid="xva-left">
 
         <SectionHeader>HW1F MODEL</SectionHeader>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 100px', gap:'4px', marginBottom:'6px' }}>
@@ -475,7 +475,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
       </div>
 
       {/* RIGHT PANEL */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      <div style={XVA_RIGHT}>
 
         {/* Swaption 2-phase EE context */}
         {instrumentType === 'IR_SWAPTION' && (
@@ -539,7 +539,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
 
         {/* Exposure chart */}
         <ExposureCanvas result={simResult} height='fill' highlight={highlightCurve} onHighlight={setHighlightCurve}
-          style={{flex:1,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0,minHeight:'160px'}}>
+          style={{flex:'0 0 auto',height:XVA_CHART_HEIGHT,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
           <RunReadout result={simResult} />
           <ChartReadout result={simResult}
             model={<>HW1F · a={simResult?.params?.a?.toFixed(4)} σ={simResult?.params?.sigma_bp?.toFixed(1)}bp</>}>
@@ -552,7 +552,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         </ExposureCanvas>
 
         {/* Unified XVA waterfall - $ and bp in same cell */}
-        <div style={{flexShrink:0}}>
+        <div style={{flexShrink:0}} data-testid="xva-outputs">
           <VaStrip rows={vaRows} fmt={fmtDollar} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} />
           <OnChainCompareRow rows={cmpRows} current={simResult} compare={compareResult} fmt={fmtDollar} saving={saving} />
           <VaFooter>ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA~ · Click any VA to expand · bp = VA / IR01</VaFooter>

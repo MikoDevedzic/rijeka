@@ -162,6 +162,20 @@ methodology workbooks; confirmation with the `NullBackend` and verification; 401
 unless `RIJEKA_STACK_DATABASE_URL` is set. CI runs them on a `postgres:16` service (the `integration
 tests` job) and smoke-tests the compose stack's `db` + `migrate` (the `self-host smoke` job).
 
+`frontend/e2e/` runs the built app in a real browser on the same stack (`npm run e2e`, the CI job `browser
+journeys`): PostgREST on the stack database serves the reads the app makes through supabase-js, a token minted with
+the stack's key signs the browser in, and the journeys open every page, take the rates, FX and digital-asset tickets
+from pricing through XVA, capital, booking and confirmation, and assert the layout (results on screen, nothing
+clipped). A journey fails on any uncaught error, console error or failed API call (`frontend/e2e/README.md`).
+
+`tests/integration/test_golden_book.py` is the pinned sample book: a fixed book on the stack's fixed market, valued
+with fixed seeds, 66 figures compared with `golden_book.json`; a figure moves only with a dated line in
+`GOLDEN_CHANGES.md`.
+
+Who runs what, and when, is in `CLAUDE.md`: six named roles (browser tester, numbers guardian, independent reviewer,
+security reviewer, release manager, project manager) with their agent definitions in `.claude/agents/` and the release
+checklist in `docs/ops/release.md`.
+
 `docker-compose.yml` is the self-hosted deployment on the same scripts, with GoTrue for sign-in
 (`SELF-HOSTING.md`).
 

@@ -37,14 +37,19 @@ def test_schedule_drives_the_capital_run(client, auth_a, auth_b, ids):
     client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 0, "csa_mta_k": 500, "eligible_collateral": ["CASH", "GOVT"],
                                                   "posted_composition": {"CASH": 1.0}, "received_composition": {"CASH": 1.0}}, headers=auth_a)
     j = client.get(f"/api/collateral/schedule/{cp}", headers=auth_a).json()
-    assert j["schedule"] is None and j["regime"]["name"] == "COUNTERPARTY" and j["regime"]["posted"] == {"CASH": 1.0} and j["writable"]
+    # rerunnable: a fresh database has no schedule yet, a reused one holds the cash schedule this test ends on
+    assert j["regime"]["name"] == "COUNTERPARTY" and j["regime"]["posted"] == {"CASH": 1.0} and j["writable"]
+    assert j["schedule"] is None or j["schedule"]["posted"] == {"USD_CASH": 1.0}
+    versions_before = len(j["history"])
 
     body = {"eligible": [{"instrument": "USD_CASH"}, {"instrument": "UST_BILL", "csa_haircut_pct": 1.0}, {"instrument": "USDC", "im": False}],
             "posted": {"UST_BILL": 60, "USDC": 40}, "received": {"USD_CASH": 100}, "rail": "on_chain", "note": "the annex as signed"}
     r = client.put(f"/api/collateral/schedule/{cp}", json=body, headers=auth_a)
     assert r.status_code == 200, r.text[:400]
     j = r.json()
-    assert j["schedule"]["rail"] == "on_chain" and j["schedule"]["posted"]["UST_BILL"] == 0.6 and len(j["history"]) == 1
+    assert j["schedule"]["rail"] == "on_chain" and j["schedule"]["posted"]["UST_BILL"] == 0.6
+    versions = len(j["history"])
+    assert versions in (versions_before, versions_before + 1) and versions >= 1      # today's version: new, or replacing today's
     rg = j["regime"]
     assert rg["eligible"] == ["CASH", "GOVT", "STABLECOIN"] and rg["posted"]["GOVT"] == 0.6 and rg["mpor_state"] == "ON_CHAIN"
     assert rg["regulatory_csa"]["mpor_days"] == 5.0 and rg["posted_instruments"] == {"UST_BILL": 0.6, "USDC": 0.4}
@@ -66,7 +71,7 @@ def test_schedule_drives_the_capital_run(client, auth_a, auth_b, ids):
     # back to cash on a bilateral rail so the other modules see the record they expect
     r = client.put(f"/api/collateral/schedule/{cp}", json={"eligible": [{"instrument": "USD_CASH"}, {"instrument": "UST_NOTE"}], "posted": {"USD_CASH": 1},
                                                             "received": {"USD_CASH": 1}, "rail": "bilateral"}, headers=auth_a)
-    assert r.status_code == 200 and r.json()["regime"]["mpor_state"] == "FLOOR" and len(r.json()["history"]) == 1    # same effective date: replaced
+    assert r.status_code == 200 and r.json()["regime"]["mpor_state"] == "FLOOR" and len(r.json()["history"]) == versions    # same effective date: replaced, not added
     client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 0, "csa_mta_k": 500, "eligible_collateral": ["CASH", "GOVT"],
                                                   "posted_composition": {"CASH": 1.0}, "received_composition": {"CASH": 1.0}}, headers=auth_a)
 

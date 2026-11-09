@@ -19,7 +19,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip,
 } from './xva-shared.jsx'
 import {
-  INP, LEFT_COL, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving,
 } from './xva-shared'
 
@@ -197,10 +197,10 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
 
   return (
     <div className="tbw-no-drag" style={{ fontFamily: 'var(--sans)' }}>
-      <div style={{ flex:1, display:'flex', overflow:'hidden', background:'var(--bg)' }}>
+      <div style={XVA_ROW}>
 
         {/* LEFT PANEL */}
-        <div style={LEFT_COL}>
+        <div style={XVA_LEFT} data-testid="xva-left">
 
           <SectionHeader>{isOption ? 'OPTION ON THE PATHS' : 'FORWARD MODEL'}</SectionHeader>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 100px', gap:'4px', marginBottom:'6px' }}>
@@ -249,15 +249,15 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         </div>
 
         {/* RIGHT PANEL */}
-        <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-          <ExposureCanvas result={res} height={300} highlight={highlightCurve} onHighlight={setHighlightCurve}
-            style={{border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
+        <div style={XVA_RIGHT}>
+          <ExposureCanvas result={res} height='fill' highlight={highlightCurve} onHighlight={setHighlightCurve}
+            style={{flex:'0 0 auto',height:XVA_CHART_HEIGHT,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
             <RunReadout result={res} />
             <ChartReadout result={res} fmt={fmt}
               model={<>{res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {res?.steps} monthly steps · {ccy}</>} />
           </ExposureCanvas>
 
-          <div style={{flexShrink:0}}>
+          <div style={{flexShrink:0}} data-testid="xva-outputs">
             <VaStrip rows={vaRows} fmt={fmt} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} />
             <OnChainCompareRow rows={cmpRows} current={res} compare={cmp} fmt={fmt} saving={saving} />
             <VaFooter>

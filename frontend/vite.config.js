@@ -12,6 +12,11 @@ export default defineConfig({
       '/auth': 'http://localhost:8000',
     }
   },
+  // The built app calls the API by its address (lib/api.js); a preview never forwards a stray relative path to
+  // whatever happens to listen on :8000 (a developer's API on the shared database).
+  preview: { proxy: {} },
+  // Unit tests are vitest's; the browser journeys in e2e/ are Playwright's (npm run e2e).
+  test: { exclude: ['e2e/**', 'node_modules/**', 'dist/**'] },
   build: {
     rollupOptions: {
       output: {

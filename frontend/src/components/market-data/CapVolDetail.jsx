@@ -7,6 +7,7 @@
 // Pure Black theme — same CSS variables as rest of app.
 
 import { useState, useEffect, useCallback } from 'react';
+import { apiFetch } from '../../lib/api'
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel } from './_DetailShared';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -152,7 +153,7 @@ function CapInstruments() {
     setLoading(true);
     setError(null);
     try {
-      const res  = await fetch(`/api/market-data/cap-vol/${valuationDate}`);
+      const res  = await apiFetch(`/api/market-data/cap-vol/${valuationDate}`);
       if (!res.ok) {
         if (res.status === 404) { setSurface([]); setLoading(false); return; }
         throw new Error((await res.json()).detail || 'Fetch failed');
@@ -176,7 +177,7 @@ function CapInstruments() {
     try {
       const session = await getSessionMaybe();
       if (!session) throw new Error('Not authenticated');
-      const res = await fetch('/api/bloomberg/cap-vol/snap', {
+      const res = await apiFetch('/api/bloomberg/cap-vol/snap', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json',
                    'Authorization': 'Bearer ' + session.access_token },

@@ -4,7 +4,10 @@ from sqlalchemy.orm import sessionmaker
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+# RIJEKA_NO_DOTENV=1: the local stack's API (frontend/e2e/serve.sh) takes its whole environment from the stack, so
+# nothing in a developer's backend/.env (hosted keys, feature switches) can reach it.
+if os.getenv("RIJEKA_NO_DOTENV") != "1":
+    load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:

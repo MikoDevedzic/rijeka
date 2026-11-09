@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { apiFetch } from '../../lib/api'
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { RATES_CURVES } from '../../data/ratesCurves'
@@ -212,7 +213,7 @@ function SnapAllButton({ role }) {
   const { grid, updateVol } = useXVAStore()
   useEffect(() => {
     let on = true
-    fetch('/api/bloomberg/status').then(r => r.json()).then(st => { if (on) setTerminal(!!st?.connected) }).catch(() => {})
+    apiFetch('/api/bloomberg/status').then(r => r.json()).then(st => { if (on) setTerminal(!!st?.connected) }).catch(() => {})
     return () => { on = false }
   }, [])
   if (!['trader','admin'].includes(role) || !terminal) return null
@@ -236,14 +237,14 @@ function SnapAllButton({ role }) {
       setSnap({ status:'running', step:'RATE CURVES', stepIdx:0, total:STEPS.length })
       for (const curveId of SNAPABLE_IDS) {
         try {
-          const tickRes = await fetch('/api/bloomberg/tickers/'+curveId, { headers:h })
+          const tickRes = await apiFetch('/api/bloomberg/tickers/'+curveId, { headers:h })
           if (!tickRes.ok) continue
           const { tickers={} } = await tickRes.json()
           const tickerList = Object.entries(tickers)
             .filter(([,t]) => t?.includes('BGN Curncy') || t?.includes('Index'))
             .map(([tenor,ticker]) => ({ tenor, ticker }))
           if (!tickerList.length) continue
-          const snapRes = await fetch('/api/bloomberg/snap', {
+          const snapRes = await apiFetch('/api/bloomberg/snap', {
             method:'POST', headers:h,
             body:JSON.stringify({ curve_id:curveId, snap_date:today, tickers:tickerList, mode:'live' }),
           })
@@ -267,7 +268,7 @@ function SnapAllButton({ role }) {
         const atmTickers = grid.flatMap(row =>
           row.cells.map(c => ({ expiry:row.expiry, tenor:c.tenor, ticker:c.ticker }))
         )
-        const atmRes = await fetch('/api/bloomberg/snap-swvol', {
+        const atmRes = await apiFetch('/api/bloomberg/snap-swvol', {
           method:'POST', headers:h,
           body:JSON.stringify({ snap_date:today, tickers:atmTickers }),
         })
@@ -298,7 +299,7 @@ function SnapAllButton({ role }) {
             })
           })
         })
-        const otmRes = await fetch('/api/bloomberg/snap-otm-vol', {
+        const otmRes = await apiFetch('/api/bloomberg/snap-otm-vol', {
           method:'POST', headers:h,
           body:JSON.stringify({ snap_date:today, tickers:otmTickers }),
         })
@@ -329,7 +330,7 @@ function SnapAllButton({ role }) {
               })
             })
           })
-          const skewRes = await fetch('/api/market-data/vol-skew', {
+          const skewRes = await apiFetch('/api/market-data/vol-skew', {
             method:'POST', headers:h,
             body:JSON.stringify({ valuation_date:today, cells }),
           })
@@ -340,7 +341,7 @@ function SnapAllButton({ role }) {
       // ── Step 4: Cap/floor surface ─────────────────────────────────────────
       setSnap({ status:'running', step:'CAP/FLOOR', stepIdx:3, total:STEPS.length })
       try {
-        const capRes = await fetch('/api/bloomberg/cap-vol/snap', {
+        const capRes = await apiFetch('/api/bloomberg/cap-vol/snap', {
           method:'POST', headers:h,
           body:JSON.stringify({ valuation_date:today }),
         })

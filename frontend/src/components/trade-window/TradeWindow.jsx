@@ -332,6 +332,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     ? viewProductState(initialTrade, []) : {})
   const [result, setResult]             = useState(null)
   const [pricing, setPricing]           = useState(false)
+  const [awaitingPar, setAwaitingPar]   = useState(null)    // the product whose PRICE click is held while its par rate solves (null: none)
   const [error, setError]               = useState('')
 
   // Sprint 10 Patch 6 — booking state. In view mode the stored trade is the
@@ -483,6 +484,14 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
   const handlePrice = useCallback(async () => {
     if (pricing) return
+    // A fixed leg whose coupon is still blank is waiting for the par solve. Pricing now would strike it at 0 %.
+    // Hold the click until the coupon arrives (the effect below prices then), or say why it cannot.
+    if (!viewMode && !isCurrency && product.pricing.awaitsPar?.(state)) {
+      if (state.parError) { setError(state.parError + ' Type a coupon to price.'); setAwaitingPar(null); return }
+      setError(''); setResult(null); setAwaitingPar(productKey)
+      return
+    }
+    setAwaitingPar(null)
     setPricing(true); setError(''); setResult(null)
 
     abortRef.current?.abort()
@@ -543,6 +552,20 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       setPricing(false)
     }
   }, [pricing, product, productKey, state, viewMode, isCurrency, initialTrade, curveInterp])
+
+  // PRICE was held for the par solve: price the moment the coupon is there; give up with the reason if the solve
+  // fails or does not answer in ten seconds.
+  useEffect(() => {
+    if (!awaitingPar) return
+    // the ticket moved to another product or asset class while the click was held: the hold was for that one
+    if (awaitingPar !== productKey || isCurrency || viewMode) { setAwaitingPar(null); return }
+    // the user took the coupon over: nothing is priced on a half-typed number; PRICE is theirs to press
+    if (state.rateUserEdited) { setAwaitingPar(null); return }
+    if (state.parError) { setAwaitingPar(null); setError(state.parError + ' Type a coupon to price.'); return }
+    if (!product.pricing.awaitsPar?.(state)) { handlePrice(); return }
+    const t = setTimeout(() => { setAwaitingPar(null); setError('The par rate did not solve. Type a coupon, or press PAR to solve again.') }, 10000)
+    return () => clearTimeout(t)
+  }, [awaitingPar, state, product, productKey, isCurrency, viewMode, handlePrice])
 
   // View mode: value the trade as soon as the window opens, so the analytics,
   // the footer and the CASHFLOWS tab show the booked trade without a click.
@@ -1001,7 +1024,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         <AnalyticsBlock
           descriptor={displayProduct}
           result={result}
-          pricing={pricing}
+          pricing={pricing || !!awaitingPar}
           error={error}
           state={state}
         />
@@ -1136,7 +1159,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         descriptor={isCurrency ? currencyFooter : displayProduct}
         result={isCurrency ? fxQuote : result}
         state={state}
-        pricing={pricing}
+        pricing={pricing || !!awaitingPar}
         onPrice={isCurrency ? () => fxRef.current?.price() : handlePrice}
         onBook={isCurrency ? handleBookCurrency : handleBook}
         booking={booking}

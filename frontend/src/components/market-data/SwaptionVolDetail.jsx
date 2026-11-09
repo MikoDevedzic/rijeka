@@ -7,6 +7,7 @@
 // Pure Black theme — same CSS variables as rest of app.
 
 import { useState, useEffect, useRef } from 'react';
+import { apiFetch } from '../../lib/api'
 import useXVAStore from '../../store/useXVAStore';
 import {
   SWAPTION_EXPIRIES, SWAPTION_TENORS,
@@ -111,7 +112,7 @@ function SwvInstruments() {
 
   const fetchBlpStatus = async () => {
     try {
-      const res = await fetch('/api/bloomberg/status');
+      const res = await apiFetch('/api/bloomberg/status');
       setBlpStatus(await res.json());
     } catch {
       setBlpStatus({ connected: false, installed: false, error: 'Could not reach backend' });
@@ -141,7 +142,7 @@ function SwvInstruments() {
         }))
       );
 
-      const res = await fetch('/api/bloomberg/snap-swvol', {
+      const res = await apiFetch('/api/bloomberg/snap-swvol', {
         method: 'POST',
         headers: {
           Authorization:  'Bearer ' + sess.access_token,
@@ -620,7 +621,7 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
 
       if (!params.length) { setSaving(false); return; }
 
-      const res = await fetch('/api/market-data/sabr-params/manual', {
+      const res = await apiFetch('/api/market-data/sabr-params/manual', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer ' + session.access_token,
@@ -1140,7 +1141,7 @@ function SwvOTMSkew({ atmGrid }) {
   const loadLatestSkew = async () => {
     try {
       const session = await getSessionMaybe();
-      const res = await fetch('/api/market-data/vol-skew/latest', {
+      const res = await apiFetch('/api/market-data/vol-skew/latest', {
         headers: { Authorization: 'Bearer ' + session.access_token },
       });
       if (!res.ok) return;
@@ -1165,7 +1166,7 @@ function SwvOTMSkew({ atmGrid }) {
   const loadSabrParams = async () => {
     try {
       const session = await getSessionMaybe();
-      const res = await fetch('/api/market-data/sabr-params/latest', {
+      const res = await apiFetch('/api/market-data/sabr-params/latest', {
         headers: { Authorization: 'Bearer ' + session.access_token },
       });
       if (!res.ok) return;
@@ -1193,7 +1194,7 @@ function SwvOTMSkew({ atmGrid }) {
         });
       });
 
-      const res = await fetch('/api/bloomberg/snap-otm-vol', {
+      const res = await apiFetch('/api/bloomberg/snap-otm-vol', {
         method: 'POST',
         headers: {
           Authorization: 'Bearer ' + session.access_token,
@@ -1279,7 +1280,7 @@ function SwvOTMSkew({ atmGrid }) {
         });
       });
 
-      const res = await fetch('/api/market-data/vol-skew', {
+      const res = await apiFetch('/api/market-data/vol-skew', {
         method: 'POST',
         headers: {
           Authorization:  'Bearer ' + session.access_token,
@@ -1745,7 +1746,7 @@ export default function SwaptionVolDetail() {
       const atmTickers = grid.flatMap(row =>
         row.cells.map(c => ({ expiry: row.expiry, tenor: c.tenor, ticker: c.ticker }))
       );
-      const atmRes = await fetch('/api/bloomberg/snap-swvol', {
+      const atmRes = await apiFetch('/api/bloomberg/snap-swvol', {
         method: 'POST', headers: h,
         body: JSON.stringify({ snap_date: snapDate, tickers: atmTickers }),
       });
@@ -1774,7 +1775,7 @@ export default function SwaptionVolDetail() {
         });
       });
 
-      const otmRes = await fetch('/api/bloomberg/snap-otm-vol', {
+      const otmRes = await apiFetch('/api/bloomberg/snap-otm-vol', {
         method: 'POST', headers: h,
         body: JSON.stringify({ snap_date: snapDate, tickers: otmTickers }),
       });
@@ -1810,7 +1811,7 @@ export default function SwaptionVolDetail() {
       });
 
       // ── Step 4: Save OTM skew + calibrate SABR ─────────────────────────
-      const skewRes = await fetch('/api/market-data/vol-skew', {
+      const skewRes = await apiFetch('/api/market-data/vol-skew', {
         method: 'POST', headers: h,
         body: JSON.stringify({ valuation_date: snapDate, cells }),
       });

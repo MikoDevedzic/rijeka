@@ -11,7 +11,16 @@ from fastapi import HTTPException
 _buckets: dict[str, deque] = {}
 
 
+def _off() -> bool:
+    """The browser journeys click faster than a person: RIJEKA_RATE_LIMITS=0 switches the limits off, and only on
+    the local stack (SUPABASE_URL is the stack's placeholder), so a hosted process can never run without them."""
+    import os
+    return os.getenv("RIJEKA_RATE_LIMITS", "1").strip() == "0" and os.getenv("SUPABASE_URL", "") == "http://stack.local"
+
+
 def heavy(user: dict, key: str, per_minute: int) -> None:
+    if _off():
+        return
     sub = str((user or {}).get("sub") or "anon")
     now = time.time()
     q = _buckets.setdefault(f"{key}:{sub}", deque())

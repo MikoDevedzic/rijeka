@@ -9,8 +9,8 @@ services:
     region: virginia     # same AWS region as the Supabase project (aws-1-us-east-1): ~1 ms to the DB
     plan: 1c-2g          # 1 CPU / 2 GB. Pricing is numpy/scipy on the request path; the 0.5c-512mb
                          # plan is viable for a quiet instance, `free` sleeps and is not for a launch.
-    # Deploy every commit that reaches main. main is protected: nothing lands without the three CI
-    # checks (backend tests, frontend build, registry contract tests), so waiting for them again here
+    # Deploy every commit that reaches main. main is protected: nothing lands without the required CI
+    # checks (backend tests, frontend build, registry contract tests, integration tests, self-host smoke), so waiting for them again here
     # only added a dependency on GitHub's check-suite event, which Render missed on 30 Oct and 2 Nov
     # 2026 (no deploy until a manual one). Changed at Miko's request on 2026-11-02.
     autoDeployTrigger: commit
