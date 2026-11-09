@@ -4,7 +4,8 @@
 // left to right with TODAY marked: to its left the pair's recent fixings, to its
 // right the forward curve by tenor, base (dashed) and shocked (solid). The strike
 // is a horizontal line, the settlement (and expiry) date a vertical one, and the
-// shocked forward at settlement a dot with its value.
+// shocked forward at settlement a dot with its value. Every date is ISO (fx-scenario.js
+// isoDate); the ticks on the left are MM-DD when they share TODAY's year.
 //
 // A tenor point drags vertically; Shift, or the spot point at TODAY, drags the
 // whole curve. The chart only reports the drag (index, whole, dPrice): the panel
@@ -29,20 +30,18 @@
 // the final layout, "false" before.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useRef, useState } from 'react'
-import { chartGeometry, daysBetween, horizonDays, valueRange, FIXING_DAYS } from './fx-scenario'
+import { addDays, axisDates, chartGeometry, daysBetween, horizonDays, isoDate, valueRange, FIXING_DAYS } from './fx-scenario'
 
 const C = {
   bg: '#0C1015', grid: 'rgba(38,48,60,0.9)', axis: '#5F6C7B', label: '#8B98A8', hi: '#F4F7FA',
   curve: '#0dd4a8', curveRgb: '13,212,168', fix: '#4a9ad4', strike: '#F0A020', level: '#E06C75',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const HIT = 16                                           // pixels around a point that count as on it
+const PAST_TICKS = [-30, -20, -10]                       // days before today the left axis is marked at
 
 const fin = (v) => typeof v === 'number' && Number.isFinite(v)
 const num = (v, d) => Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
-const day = (iso, year) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '')); return m ? `${m[3]} ${MON[+m[2] - 1]}${year ? ' ' + m[1].slice(2) : ''}` : '' }
-const addDays = (iso, n) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '')); return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n)).toISOString().slice(0, 10) : '' }
 // the decimals a gridline step needs (0.25 → 2, 500 → 0), never more than the price itself shows
 const stepDp = (step, cap) => { for (let d = 0; d <= cap; d++) { const x = step * 10 ** d; if (Math.abs(x - Math.round(x)) < 1e-6) return d } return cap }
 
@@ -114,11 +113,13 @@ function draw(canvas, p, L, hover) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'top'
   const vline = (x, style, width = 0.5, dash) => { ctx.strokeStyle = style; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.setLineDash([]) }
   if (fix.length || !hasCurve) {
-    for (const d of [-30, -20, -10]) {
+    // dates on the left are ISO; MM-DD when the ticks and today share a year, which is the year TODAY stands in
+    const ticks = axisDates([...PAST_TICKS.map(d => addDays(p.today, d)), p.today])
+    PAST_TICKS.forEach((d, i) => {
       const x = xs(d)
       vline(x, 'rgba(38,48,60,0.6)')
-      ctx.fillStyle = C.label; ctx.fillText(day(addDays(p.today, d)), Math.max(x, left + 16), bottom + 7)
-    }
+      ctx.fillStyle = C.label; ctx.fillText(ticks[i], Math.max(x, left + 16), bottom + 7)
+    })
   }
   let lastX = x0
   pts.slice(1).forEach(c => {
@@ -137,9 +138,9 @@ function draw(canvas, p, L, hover) {
   const onAxis = (x) => fin(x) && (hasCurve ? x > 0 : x >= -FIXING_DAYS)
   const settleOn = !!p.settle && onAxis(p.settle.x)
   const fixAt = hasCurve ? p.fix : p.settled && fin(p.settled.x) && p.settled.x <= 0 ? p.settled : null
-  if (hasCurve && p.expiry && onAxis(p.expiry.x)) marks.push({ x: xs(p.expiry.x), text: `EXPIRY ${day(p.expiry.date, true)}` })
-  if (fixAt && onAxis(fixAt.x) && !(settleOn && fixAt.x === p.settle.x)) marks.push({ x: xs(fixAt.x), text: `FIX ${day(fixAt.date, true)}` })
-  if (settleOn) marks.push({ x: xs(p.settle.x), text: `SETTLE ${day(p.settle.date, true)}` })
+  if (hasCurve && p.expiry && onAxis(p.expiry.x)) marks.push({ x: xs(p.expiry.x), text: `EXPIRY ${isoDate(p.expiry.date)}`.trim() })
+  if (fixAt && onAxis(fixAt.x) && !(settleOn && fixAt.x === p.settle.x)) marks.push({ x: xs(fixAt.x), text: `FIX ${isoDate(fixAt.date)}`.trim() })
+  if (settleOn) marks.push({ x: xs(p.settle.x), text: `SETTLE ${isoDate(p.settle.date)}`.trim() })
   marks.forEach(m => vline(m.x, 'rgba(244,247,250,0.45)', 1, [4, 3]))
   ctx.textBaseline = 'bottom'; ctx.fillStyle = C.hi
   if (marks.length === 2 && Math.abs(marks[0].x - marks[1].x) < ctx.measureText(marks[0].text).width / 2 + ctx.measureText(marks[1].text).width / 2 + 10) {

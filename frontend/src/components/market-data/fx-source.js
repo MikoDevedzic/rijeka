@@ -36,3 +36,25 @@ export function sourceWord(curve) {
   const short = sourceShort(curve)
   return isVenue(curve) ? short.split(' ')[0] : short
 }
+
+// The pill beside a pair's curve pill that says what its forwards are priced from. The account's forward mode
+// (MARKET: spot + quoted points; IMPLIED: parity) is one setting for every pair, but a pair with no stored points
+// has none to price on and falls back to parity whatever the mode (currencies.py: `if fc:`). So the pill reads
+// the two together and never says "quoted points" beside "no forward curve".
+//   crypto  parity for a digital asset is spot carried at its carry rate, not two yield curves
+export function pricedFromWords(mode, curve, crypto = false) {
+  const parity = crypto ? 'priced from the carry rate' : 'priced from yields'
+  if (mode === 'IMPLIED') return curve ? `${parity}; the points are stored, not used` : parity
+  return curve ? 'priced off the quoted points' : `no points stored: ${parity}`
+}
+
+// The digital asset's rate as the pair's header and chips name it, one name with the ticket's IMPLIED <BASE> RATE:
+// where the feed's points are in use the forward carries the rate the points imply; otherwise the saved rate
+// (the desk's setting, 0 when none) carries spot to the forward. Never "funding": that is the XVA spread.
+export function baseRateWords(p, mode) {
+  const base = p?.base || 'asset'
+  const pointsInUse = !!p?.forward_curve && p.forward_curve.in_use !== false && mode !== 'IMPLIED'
+  if (pointsInUse) return `${base} rate implied by the points`
+  const pct = Number(p?.funding_pct)
+  return `saved ${base} rate ${Number.isFinite(pct) ? pct : 0} %`
+}

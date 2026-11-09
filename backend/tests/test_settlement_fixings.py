@@ -993,13 +993,15 @@ def _value(trade, on, spot=104_000.0, fixings=None):
 
 # What pnl/valuation.py returned for these trades before the fixings store and the rule existed (commit 4eac0fa, run on
 # the same market: BTC spot 104,000, funding 3 %, discounting flat 4 %, the vol surface of tests/test_crypto_option.py).
+# crybasis01 = −fund01 everywhere (0.16.0).
+# 0.16.0: a digital asset's spot date is T+0 (one convention across the API); the option's forward carries one more day, which moves ir01, fund01 and theta by a day's carry and leaves npv unchanged (was 11.9406 / −15.2723 / −643.030; on 28 Jan 0.2318 / −0.2547 / theta unchanged). The barrier (ko) rows use the exotic pricer, which carries from the valuation date already: unchanged.
 BEFORE_THE_RULE = {
-    ("fwd", "BUY", date(2026, 11, 2)): dict(npv=42173.42864466559, ir01=24.683802775594813, fund01=-25.73523679364007, spot01=10322.50387418387, theta=-23.6615456630243),
-    ("fwd", "BUY", date(2027, 1, 28)): dict(npv=40096.398491646345, ir01=1.0954095256820437, fund01=-1.1393507602406316, spot01=10396.58138391289, theta=-24.0921494222639),
-    ("opt", "BUY", date(2026, 11, 2)): dict(npv=136671.42092108683, ir01=11.940642560366541, fund01=-15.27233489829814, spot01=6403.759579531441, theta=-643.0296179928409, vega=1939.849432718387),
-    ("opt", "BUY", date(2027, 1, 28)): dict(npv=41752.38171746718, ir01=0.23183037478884216, fund01=-0.2547080078147701, spot01=9557.325579448378, theta=-1704.1725064992643, vega=100.83026597686694),
-    ("ko", "SELL", date(2026, 11, 2)): dict(npv=-15579.620873842141, ir01=-0.2481630272250186, fund01=0.6238784300257976, spot01=250.8999137690098, theta=-203.8800250762597, vega=595.9248887312278),
-    ("ko", "SELL", date(2027, 1, 28)): dict(npv=-41752.383588404446, ir01=-0.24329907199717127, fund01=0.2547377366645378, spot01=-9557.327183782872, theta=1752.3835884044456, vega=-100.82089922705927),
+    ("fwd", "BUY", date(2026, 11, 2)): dict(npv=42173.42864466559, ir01=24.683802775594813, fund01=-25.73523679364007, crybasis01=25.73523679364007, spot01=10322.50387418387, theta=-23.6615456630243),
+    ("fwd", "BUY", date(2027, 1, 28)): dict(npv=40096.398491646345, ir01=1.0954095256820437, fund01=-1.1393507602406316, crybasis01=1.1393507602406316, spot01=10396.58138391289, theta=-24.0921494222639),
+    ("opt", "BUY", date(2026, 11, 2)): dict(npv=136671.42092108683, ir01=12.114207700826228, fund01=-15.445877403952181, crybasis01=15.445877403952181, spot01=6403.759579531441, theta=-642.8323876024806, vega=1939.849432718387),
+    ("opt", "BUY", date(2027, 1, 28)): dict(npv=41752.38171746718, ir01=0.48653927875420777, fund01=-0.5094154971156968, crybasis01=0.5094154971156968, spot01=9557.325579448378, theta=-1704.1725064992643, vega=100.83026597686694),
+    ("ko", "SELL", date(2026, 11, 2)): dict(npv=-15579.620873842141, ir01=-0.2481630272250186, fund01=0.6238784300257976, crybasis01=-0.6238784300257976, spot01=250.8999137690098, theta=-203.8800250762597, vega=595.9248887312278),
+    ("ko", "SELL", date(2027, 1, 28)): dict(npv=-41752.383588404446, ir01=-0.24329907199717127, fund01=0.2547377366645378, crybasis01=-0.2547377366645378, spot01=-9557.327183782872, theta=1752.3835884044456, vega=-100.82089922705927),
 }
 
 

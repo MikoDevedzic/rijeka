@@ -4,7 +4,9 @@ import path from 'node:path'
 import { priceable, priceRequest, styleFields, styleSends, seedLevels, roundLevel, seedVolPct, surfaceAtmPct, yearsTo, annualisedBasis, forwardCaption, ticketToday, isIsoDate,
          tenorDate, tenorOf, tenorLabel, firstDate, lastDate, holdToLast,
          TENORS, MAX_CRYPTO_TENOR, CRYPTO_LIMIT_NOTE, SPOT_HINT, STYLES, MAX_FUNDING_PCT, GATED_STYLES, NOT_A_NUMBER,
-         parseNumber, formatInput, formatRead, readNumbers, unreadable, overrideNote, quoteFor, failureText, createTicketPricer } from './fx-ticket'
+         parseNumber, formatInput, formatRead, readNumbers, unreadable, overrideNote, quoteFor, failureText, createTicketPricer,
+         tenorDates, tenorDateFor, tenorSettlement, closedWhy, isBusinessDay, addBusinessDays, rollDate, rollRule, rolledTag, spotDateFor, spotLagLabel, bookedNotional, dateCap,
+         bookedStrike, apiRoundsStrike, notionalSent, numbersSent, crybasis01, premiumLine, optionSentence, SENS_UNITS } from './fx-ticket'
 
 const TODAY = '2026-11-09'
 // synthetic pair rows in the shape of GET /api/currency/pairs
@@ -340,26 +342,29 @@ describe('the forward and its basis over spot', () => {
   it('nothing when a figure is missing or not positive', () => {
     for (const [f, s, t] of [[null, 1, 1], [1, null, 1], [1, 1, null], [1, 1, 0], [0, 1, 1], [1, -1, 1], [NaN, 1, 1]]) expect(annualisedBasis(f, s, t)).toBeNull()
   })
-  it('a digital asset above spot: the difference in the quote currency, in words, and the basis a year', () => {
-    expect(forwardCaption({ forward: 75781.53, spot: 74747.9, t: 0.25, crypto: true })).toEqual({ points: '1,033.63 over spot', basis: '5.5 % a year' })
-    expect(forwardCaption({ forward: 108216.36, spot: 108000, t: 0.25, crypto: true })).toEqual({ points: '216.36 over spot', basis: '0.8 % a year' })
+  // The head of a crypto derivatives desk, 9 November 2026: a forward is quoted FX-style, as points over spot with a sign.
+  it('a digital asset above spot: the points in the quote currency, signed, and the basis a year', () => {
+    expect(forwardCaption({ forward: 75781.53, spot: 74747.9, t: 0.25, crypto: true })).toEqual({ points: 'points +1,033.63', basis: '5.5 % a year' })
+    expect(forwardCaption({ forward: 108216.36, spot: 108000, t: 0.25, crypto: true })).toEqual({ points: 'points +216.36', basis: '0.8 % a year' })
   })
-  it('below spot it says under, with no minus on the distance', () => {
-    expect(forwardCaption({ forward: 107783.64, spot: 108000, t: 0.25, crypto: true })).toEqual({ points: '216.36 under spot', basis: '−0.8 % a year' })
-    expect(forwardCaption({ forward: 1.08377, spot: 1.085, t: 0.25, crypto: false, pip: 1e-4 })).toEqual({ points: '12.30 pts under spot', basis: '−0.5 % a year' })
+  it('below spot the points carry a minus and say under spot', () => {
+    expect(forwardCaption({ forward: 107783.64, spot: 108000, t: 0.25, crypto: true })).toEqual({ points: 'points −216.36 under spot', basis: '−0.8 % a year' })
+    expect(forwardCaption({ forward: 1.08377, spot: 1.085, t: 0.25, crypto: false, pip: 1e-4 })).toEqual({ points: '−12.3 pips under spot', basis: '−0.5 % a year' })
   })
-  it('a currency pair: forward points in pips, by the pair\'s pip', () => {
-    expect(forwardCaption({ forward: 1.09023, spot: 1.085, t: 0.25, crypto: false, pip: 1e-4 })).toEqual({ points: '52.30 pts over spot', basis: '1.9 % a year' })
-    expect(forwardCaption({ forward: 148.75, spot: 150.25, t: 0.5, crypto: false, pip: 0.01 })).toEqual({ points: '150.00 pts under spot', basis: '−2.0 % a year' })
+  it('a currency pair: forward points in pips to one decimal, by the pair\'s pip', () => {
+    expect(forwardCaption({ forward: 1.09023, spot: 1.085, t: 0.25, crypto: false, pip: 1e-4 })).toEqual({ points: '+52.3 pips', basis: '1.9 % a year' })
+    expect(forwardCaption({ forward: 1.085424, spot: 1.085, t: 0.25, crypto: false, pip: 1e-4 })).toEqual({ points: '+4.2 pips', basis: '0.2 % a year' })
+    expect(forwardCaption({ forward: 148.75, spot: 150.25, t: 0.5, crypto: false, pip: 0.01 })).toEqual({ points: '−150.0 pips under spot', basis: '−2.0 % a year' })
   })
-  it('a forward at spot is over it by nothing; without a time there is no basis; before a price there is no line', () => {
-    expect(forwardCaption({ forward: 74747.9, spot: 74747.9, t: 0.25, crypto: true })).toEqual({ points: '0.00 over spot', basis: '0.0 % a year' })
-    expect(forwardCaption({ forward: 74747.899, spot: 74747.9, t: 0.25, crypto: true }).points, 'a difference that rounds to nothing is not under').toBe('0.00 over spot')
+  it('a forward at spot has no sign; without a time there is no basis; before a price there is no line', () => {
+    expect(forwardCaption({ forward: 74747.9, spot: 74747.9, t: 0.25, crypto: true })).toEqual({ points: 'points 0.00', basis: '0.0 % a year' })
+    expect(forwardCaption({ forward: 74747.899, spot: 74747.9, t: 0.25, crypto: true }).points, 'a difference that rounds to nothing is not under').toBe('points 0.00')
     expect(forwardCaption({ forward: 75000, spot: 74747.9, t: null, crypto: true }).basis).toBeNull()
     expect(forwardCaption({ forward: null, spot: 74747.9, t: 0.25, crypto: true })).toBeNull()
   })
-  it('no sign and no dash in the words', () => {
-    for (const forward of [70000, 74747.9, 80000]) expect(forwardCaption({ forward, spot: 74747.9, t: 0.25, crypto: true }).points).toMatch(/^[\d,.]+ (over|under) spot$/)
+  it('one shape for every forward: points, a sign, under spot only below it', () => {
+    for (const forward of [70000, 74747.9, 80000]) expect(forwardCaption({ forward, spot: 74747.9, t: 0.25, crypto: true }).points).toMatch(/^points [+−]?[\d,.]+( under spot)?$/)
+    for (const forward of [1.08, 1.085, 1.09]) expect(forwardCaption({ forward, spot: 1.085, t: 0.25, crypto: false, pip: 1e-4 }).points).toMatch(/^[+−]?[\d,.]+ pips( under spot)?$/)
   })
 })
 
@@ -400,13 +405,13 @@ describe('the tenor tells the truth about the date', () => {
     expect(tenorOf('2027-02-30', TODAY)).toBeNull()
   })
   it('a date on none is CUSTOM with its length by actual days: days under 60, months under two years, years beyond', () => {
-    expect(tenorLabel('2026-11-10', TODAY)).toBe('CUSTOM · 1D')
-    expect(tenorLabel('2027-01-07', TODAY)).toBe('CUSTOM · 59D')
-    expect(tenorLabel('2027-01-08', TODAY)).toBe('CUSTOM · 2.0M')            // 60 days
-    expect(tenorLabel('2027-02-10', TODAY)).toBe('CUSTOM · 3.1M')            // 93 days
-    expect(tenorLabel('2028-11-07', TODAY)).toBe('CUSTOM · 24.0M')           // 729 days
-    expect(tenorLabel('2028-11-08', TODAY)).toBe('CUSTOM · 2.0Y')            // 730 days
-    expect(tenorLabel('2031-11-09', TODAY)).toBe('CUSTOM · 5.0Y')
+    expect(tenorLabel('2026-11-10', TODAY)).toBe('CUSTOM · 1 day')
+    expect(tenorLabel('2027-01-07', TODAY)).toBe('CUSTOM · 59 days')
+    expect(tenorLabel('2027-01-08', TODAY)).toBe('CUSTOM · 2.0 months')            // 60 days
+    expect(tenorLabel('2027-02-10', TODAY)).toBe('CUSTOM · 3.1 months')            // 93 days
+    expect(tenorLabel('2028-11-07', TODAY)).toBe('CUSTOM · 24.0 months')           // 729 days
+    expect(tenorLabel('2028-11-08', TODAY)).toBe('CUSTOM · 2.0 years')            // 730 days
+    expect(tenorLabel('2031-11-09', TODAY)).toBe('CUSTOM · 5.0 years')
     expect(tenorLabel(TODAY, TODAY)).toBe('CUSTOM')
     expect(tenorLabel('2026-01-01', TODAY)).toBe('CUSTOM')
     expect(tenorLabel('', TODAY)).toBe('CUSTOM')
@@ -456,11 +461,11 @@ describe('the last date a digital asset prices to', () => {
     expect(priceable(opt({ expiry: '2031-11-09' }))).toEqual({ ok: false, why: CRYPTO_LIMIT_NOTE })
     expect(CRYPTO_LIMIT_NOTE).toBe('digital assets price to 2Y: the forward points and the vol surface end there')
   })
-  it('a currency pair is not limited: five years out prices, and reads CUSTOM · 5.0Y', () => {
+  it('a currency pair is not limited: five years out prices, and reads CUSTOM · 5.0 years', () => {
     expect(ok(fxFwd({ settlement: '2031-11-09' }))).toBe(true)
     expect(ok(fxOpt({ expiry: '2031-11-09' }))).toBe(true)
     expect(tenorOf('2031-11-09', TODAY)).toBeNull()
-    expect(tenorLabel('2031-11-09', TODAY)).toBe('CUSTOM · 5.0Y')
+    expect(tenorLabel('2031-11-09', TODAY)).toBe('CUSTOM · 5.0 years')
   })
 })
 
@@ -566,8 +571,8 @@ describe('what the ticket writes does not depend on the browser\'s locale', () =
     expect(formatRead(108250.5, 2)).toBe('108,250.50')
     expect(formatRead(1.08345, 5)).toBe('1.08345')
     expect(formatRead(null)).toBe('—')
-    expect(forwardCaption({ forward: 75781.53, spot: 74747.9, t: 0.25, crypto: true })).toEqual({ points: '1,033.63 over spot', basis: '5.5 % a year' })
-    expect(tenorLabel('2027-02-10', TODAY)).toBe('CUSTOM · 3.1M')
+    expect(forwardCaption({ forward: 75781.53, spot: 74747.9, t: 0.25, crypto: true })).toEqual({ points: 'points +1,033.63', basis: '5.5 % a year' })
+    expect(tenorLabel('2027-02-10', TODAY)).toBe('CUSTOM · 3.1 months')
     expect(roundLevel(82222.69)).toBe('82200')
     expect(seedLevels({ style: 'DOUBLE_BARRIER', spot: 1.085, forward: 1.089, vol: 0.072, years: 0.25 })).toEqual({ lower: '1.03', upper: '1.15' })
   })
@@ -584,10 +589,10 @@ describe('what the ticket writes does not depend on the browser\'s locale', () =
 })
 
 describe('an input of the user\'s own is said to be one', () => {
-  it('spot, vol and funding, each where the ticket uses it', () => {
+  it('spot, vol and the implied rate, each where the ticket uses it', () => {
     expect(overrideNote(fwd())).toBeNull()
     expect(overrideNote(fwd({ spotOv: '74000' }))).toBe('Priced with your own spot: the booked trade is revalued on the stored market, so its value in the blotter will differ.')
-    expect(overrideNote(fwd({ spotOv: '74000', fundOv: '3' }))).toBe('Priced with your own spot and funding: the booked trade is revalued on the stored market, so its value in the blotter will differ.')
+    expect(overrideNote(fwd({ spotOv: '74000', fundOv: '3' }))).toBe('Priced with your own spot and implied rate: the booked trade is revalued on the stored market, so its value in the blotter will differ.')
     expect(overrideNote(opt({ volOv: '60' }))).toMatch(/^Priced with your own vol: /)
     expect(overrideNote(opt({ spotOv: '74000', volOv: '60' }))).toMatch(/^Priced with your own spot and vol: /)
   })
@@ -818,6 +823,23 @@ describe('the ticket\'s pricing: which answer lands, and what BOOK may book', ()
     expect(d.pricedCalls.length).toBe(calls)
     expect(d.tick()).toBe(0)
   })
+  it('terms that only add the default K the quote gave are sent at once, not after the debounce, and the last figures are marked stale meanwhile', async () => {
+    const d = desk()
+    await d.pricedAt('A', QA)
+    d.pricer.setTerms(d.terms('A+K', { refine: true }))
+    expect(d.sent.map(s => s.request.body.key), 'no timer: the request is already out').toEqual(['A', 'A+K'])
+    expect(d.timers.filter(t => t.live)).toEqual([])
+    expect(d.pricedCalls.at(-1)).toEqual([QA, { stale: true }])
+    d.sent.at(-1).resolve(QB); await d.flush()
+    expect(d.pricer.state()).toMatchObject({ quote: QB, quoteKey: 'A+K', pending: false })
+  })
+  it('a refinement the check refuses is not sent either', async () => {
+    const d = desk()
+    await d.pricedAt('A', QA)
+    d.pricer.setTerms(d.terms('A+K', { refine: true, check: () => ({ ok: false, why: 'no' }) }))
+    expect(d.sent.length).toBe(1)
+    expect(d.pricer.state()).toMatchObject({ quote: null, pending: false, note: { kind: 'why', text: 'no' } })
+  })
   it('the default timer is the real one', async () => {
     vi.useFakeTimers()
     try {
@@ -829,5 +851,249 @@ describe('the ticket\'s pricing: which answer lands, and what BOOK may book', ()
       await vi.runAllTimersAsync()
       expect(pricer.held()).toEqual({ quote: QA, key: 'A' })
     } finally { vi.useRealTimers() }
+  })
+})
+
+// ── The head of a crypto derivatives desk walked the ticket (9 November 2026) ──────────────────────────────────────
+// A pairs answer that carries the API's dates: its calendar, its spot date and the dates it settles each tenor on.
+const CAL = { name: 'NEW_YORK', holidays: ['2027-02-15', '2027-01-18'], weekend: ['SAT', 'SUN'] }
+const BTC_DATED = { ...BTC, calendar: CAL, spot_date: '2026-11-09', spot_lag_business_days: 0,
+  tenor_dates: { forward: { '1W': '2026-11-16', '3M': '2027-02-09', '2Y': '2028-11-09' },
+                 option: { '1W': { expiry: '2026-11-16', settlement: '2026-11-17' }, '3M': { expiry: '2027-02-09', settlement: '2027-02-10' }, '2Y': { expiry: '2028-11-09', settlement: '2028-11-10' } } } }
+const EUR_DATED = { ...EUR, calendar: { name: 'TARGET+NEW_YORK', holidays: ['2027-02-15'], weekend: ['SAT', 'SUN'] }, spot_date: '2026-11-11', spot_lag_business_days: 2,
+  tenor_dates: { forward: { '3M': '2027-02-11' }, option: { '3M': { expiry: '2027-02-09', settlement: '2027-02-11' } } } }
+
+describe('the dates come from the API when it gives them', () => {
+  it('the tenor dates of each product, and nothing from an older answer', () => {
+    expect(tenorDates(BTC_DATED, 'FORWARD')).toEqual({ '1W': '2026-11-16', '3M': '2027-02-09', '2Y': '2028-11-09' })
+    expect(tenorDates(BTC_DATED, 'OPTION')).toEqual({ '1W': '2026-11-16', '3M': '2027-02-09', '2Y': '2028-11-09' })
+    expect(tenorDates(BTC, 'FORWARD')).toBeNull()
+    expect(tenorDates(null, 'OPTION')).toBeNull()
+    expect(tenorDates({ tenor_dates: { forward: { '3M': 'soon' } } }, 'FORWARD'), 'a date that is no date is left out').toBeNull()
+    expect(tenorSettlement(BTC_DATED, '3M')).toBe('2027-02-10')
+    expect(tenorSettlement(BTC_DATED, '6M')).toBeNull()
+    expect(tenorSettlement(BTC, '3M')).toBeNull()
+  })
+  it('a tenor\'s date is the API\'s where it gave one, else the calendar\'s; a date is matched against the same', () => {
+    const d = tenorDates(EUR_DATED, 'FORWARD')
+    expect(tenorDateFor('3M', TODAY, d)).toBe('2027-02-11')
+    expect(tenorDateFor('6M', TODAY, d)).toBe(tenorDate('6M', TODAY))
+    expect(tenorDateFor('3M', TODAY, null)).toBe('2027-02-09')
+    expect(tenorOf('2027-02-11', TODAY, d)).toBe('3M')
+    expect(tenorOf('2027-02-09', TODAY, d), 'the calendar\'s 3M is no tenor once the API\'s dates are here').toBeNull()
+    expect(tenorOf('2027-02-09', TODAY)).toBe('3M')
+    expect(lastDate({ crypto: true, today: TODAY, dates: { '2Y': '2028-11-10' } })).toBe('2028-11-10')
+    expect(lastDate({ crypto: true, today: TODAY })).toBe('2028-11-09')
+  })
+  it('the spot date and its lag: the API\'s, else today for a digital asset (T+0) and two weekdays on for a pair', () => {
+    expect(spotDateFor({ cur: BTC_DATED, crypto: true, today: TODAY })).toBe('2026-11-09')
+    expect(spotDateFor({ cur: EUR_DATED, crypto: false, today: TODAY })).toBe('2026-11-11')
+    expect(spotDateFor({ cur: BTC, crypto: true, today: '2026-11-13' })).toBe('2026-11-13')               // a digital asset's quoted spot settles at once
+    expect(spotDateFor({ cur: EUR, crypto: false, today: '2026-11-13' })).toBe('2026-11-17')              // a Friday: two weekdays on is Tuesday
+    expect(spotLagLabel({ cur: BTC_DATED, crypto: true })).toBe('T+0')
+    expect(spotLagLabel({ cur: EUR_DATED, crypto: false })).toBe('T+2')
+    expect(spotLagLabel({ cur: { ...EUR_DATED, spot_lag_business_days: 1 }, crypto: false }), 'USDCAD-style T+1 from the API').toBe('T+1')
+    expect(spotLagLabel({ cur: BTC, crypto: true })).toBe('T+0')
+    expect(spotLagLabel({ cur: EUR, crypto: false })).toBe('T+2')
+  })
+})
+
+describe('a typed date is rolled by the API\'s rule', () => {
+  it('a business day is a weekday that is no holiday on the calendar; no calendar means the weekend alone', () => {
+    expect(closedWhy('2027-02-13', CAL)).toBe('Saturday')
+    expect(closedWhy('2027-02-14', CAL)).toBe('Sunday')
+    expect(closedWhy('2027-02-15', CAL)).toBe('holiday')
+    expect(closedWhy('2027-02-16', CAL)).toBeNull()
+    expect(closedWhy('2027-02-15', null), 'without the calendar a holiday is a business day').toBeNull()
+    expect(closedWhy('2027-02-13', null)).toBe('Saturday')
+    expect(isBusinessDay('2027-02-16', CAL)).toBe(true)
+    expect(isBusinessDay('not a date', CAL)).toBe(false)
+    expect(closedWhy('2027-02-12', { weekend: ['FRI', 'SAT'] }), 'a calendar with its own weekend').toBe('Friday')
+  })
+  it('business days strictly after a date', () => {
+    expect(addBusinessDays('2027-02-12', 1, CAL), 'Friday + 1: the Monday is a holiday, so Tuesday').toBe('2027-02-16')
+    expect(addBusinessDays('2027-02-09', 1, CAL)).toBe('2027-02-10')
+    expect(addBusinessDays('2027-02-11', 2, CAL), 'Thursday + 2 over a weekend and a holiday').toBe('2027-02-16')
+    expect(addBusinessDays('2027-02-12', 1, null), 'without the calendar the holiday counts').toBe('2027-02-15')
+    expect(addBusinessDays('x', 1, CAL)).toBeNull()
+  })
+  it('FOLLOWING rolls on; MODIFIED FOLLOWING rolls back when the next business day is in the next month; NONE leaves it', () => {
+    expect(rollDate('2027-02-13', 'FOLLOWING', CAL)).toEqual({ date: '2027-02-16', rolled: true, from: '2027-02-13', why: 'Saturday' })
+    expect(rollDate('2027-02-15', 'FOLLOWING', CAL)).toEqual({ date: '2027-02-16', rolled: true, from: '2027-02-15', why: 'holiday' })
+    expect(rollDate('2027-02-16', 'FOLLOWING', CAL)).toEqual({ date: '2027-02-16', rolled: false, from: null, why: null })
+    // 31 January 2027 is a Sunday: following is 1 February, modified following the Friday before
+    expect(rollDate('2027-01-31', 'FOLLOWING', CAL).date).toBe('2027-02-01')
+    expect(rollDate('2027-01-31', 'MODIFIED_FOLLOWING', CAL)).toEqual({ date: '2027-01-29', rolled: true, from: '2027-01-31', why: 'Sunday' })
+    expect(rollDate('2027-02-13', 'MODIFIED_FOLLOWING', CAL).date, 'inside the month it is following').toBe('2027-02-16')
+    expect(rollDate('2027-02-13', 'NONE', CAL)).toEqual({ date: '2027-02-13', rolled: false, from: null, why: null })
+    expect(rollDate('', 'FOLLOWING', CAL).rolled).toBe(false)
+  })
+  it('each date of the ticket has its rule: FX modified following, a digital asset settles following and expires on any day', () => {
+    expect(rollRule({ crypto: false, which: 'settlement' })).toBe('MODIFIED_FOLLOWING')
+    expect(rollRule({ crypto: false, which: 'expiry' })).toBe('MODIFIED_FOLLOWING')
+    expect(rollRule({ crypto: true, which: 'settlement' })).toBe('FOLLOWING')
+    expect(rollRule({ crypto: true, which: 'expiry' })).toBe('NONE')
+  })
+  it('the ticket says what it did, under the field', () => {
+    expect(rolledTag(rollDate('2027-02-13', 'FOLLOWING', CAL))).toBe('rolled from 2027-02-13 (Saturday)')
+    expect(rolledTag(rollDate('2027-02-15', 'FOLLOWING', CAL))).toBe('rolled from 2027-02-15 (holiday)')
+    expect(rolledTag(rollDate('2027-02-16', 'FOLLOWING', CAL))).toBeNull()
+    expect(rolledTag(null)).toBeNull()
+  })
+  it('the check holds a digital asset to the API\'s last date when it gave one', () => {
+    expect(ok(fwd({ cur: BTC_DATED, settlement: '2028-11-09' }))).toBe(true)
+    expect(why(fwd({ cur: BTC_DATED, settlement: '2028-11-10' }))).toBe(CRYPTO_LIMIT_NOTE)
+    expect(ok(opt({ cur: { ...BTC_DATED, tenor_dates: { ...BTC_DATED.tenor_dates, option: { '2Y': { expiry: '2028-11-10', settlement: '2028-11-13' } } } }, expiry: '2028-11-10' })), 'the option\'s own last date').toBe(true)
+  })
+})
+
+describe('K is booked as it is shown', () => {
+  it('the forward to the pair\'s decimals, as a number', () => {
+    expect(bookedStrike(75781.5312, 2)).toBe(75781.53)
+    expect(bookedStrike(75781.535, 2)).toBe(75781.54)
+    expect(bookedStrike(1.0852345, 5)).toBe(1.08523)
+    expect(bookedStrike('150.2534', 3)).toBe(150.253)
+    expect(bookedStrike(null, 2)).toBeNull()
+    expect(bookedStrike('—', 2)).toBeNull()
+  })
+  it('a blank K asks the API to strike at the forward rounded to the pair\'s decimals (strike_dp); a typed K sends no such ask', () => {
+    expect(priceRequest(fwd({ strikeDp: 2 })).body).toMatchObject({ strike_dp: 2 })
+    expect('forward_rate' in priceRequest(fwd({ strikeDp: 2 })).body).toBe(false)
+    expect(priceRequest(fxFwd({ strikeDp: 5, strike: '1.10' })).body).toMatchObject({ forward_rate: 1.1 })
+    expect('strike_dp' in priceRequest(fxFwd({ strikeDp: 5, strike: '1.10' })).body).toBe(false)
+    expect(priceRequest(opt({ strikeDp: 2 })).body).toMatchObject({ strike_dp: 2 })
+    expect('strike_dp' in priceRequest(opt({ strikeDp: 2, strike: '70000' })).body).toBe(false)
+    expect('strike_dp' in priceRequest(opt({ strikeDp: 2, style: 'TOUCH' })).body, 'a touch has no strike to round').toBe(false)
+    expect('strike_dp' in priceRequest(fwd({ strikeDp: null })).body).toBe(false)
+    expect('strike_dp' in priceRequest(fwd({ strikeDp: 2.5 })).body).toBe(false)
+    expect(priceRequest(fwd({ strikeDp: 0 })).body.strike_dp, 'zero decimals is an ask too').toBe(0)
+    expect(ok(fwd({ strikeDp: 2 }))).toBe(true)
+  })
+  it('an older API that ignores strike_dp is seen from its answer, and the ticket then sends the rounded forward itself', () => {
+    const sent = { strikeDp: true, defaultK: null }
+    expect(apiRoundsStrike({ shape: 'NDF', forward: 75781.5312, forward_rate: 75781.53 }, sent, 2)).toBe(true)
+    expect(apiRoundsStrike({ shape: 'NDF', forward: 75781.5312, forward_rate: 75781.5312 }, sent, 2)).toBe(false)
+    expect(apiRoundsStrike({ shape: 'OPTION', forward: 75781.5312, strike: 75781.53 }, sent, 2)).toBe(true)
+    expect(apiRoundsStrike({ shape: 'OPTION', forward: 75781.5312, strike: 75781.5312 }, sent, 2)).toBe(false)
+    expect(apiRoundsStrike({ shape: 'NDF', forward: 75781.5312, forward_rate: 75781.5312 }, { strikeDp: false, defaultK: null }, 2), 'a request that did not ask says nothing').toBeNull()
+    expect(apiRoundsStrike({ shape: 'NDF', forward: 75781.5312, forward_rate: 75781.53 }, { strikeDp: true, defaultK: 75781.53 }, 2), 'nor one that sent the K itself').toBeNull()
+    expect(apiRoundsStrike({ shape: 'NDF', forward: 75781.5312 }, sent, 2), 'nor an answer with no K').toBeNull()
+    expect(apiRoundsStrike(null, sent, 2)).toBeNull()
+    // the fallback: the rounded forward as the K, in place of the ask
+    expect(priceRequest(fwd({ strikeDp: 2, defaultK: 75781.53 })).body).toMatchObject({ forward_rate: 75781.53 })
+    expect('strike_dp' in priceRequest(fwd({ strikeDp: 2, defaultK: 75781.53 })).body).toBe(false)
+  })
+  it('the fallback K travels in the request once the forward is known, and a typed K wins over it', () => {
+    expect(priceRequest(fwd()).body.forward_rate, 'before a price: the API strikes at the forward').toBeUndefined()
+    expect(priceRequest(fwd({ defaultK: 75781.53 })).body.forward_rate).toBe(75781.53)
+    expect(priceRequest(fwd({ defaultK: 75781.53, strike: '75000' })).body.forward_rate).toBe(75000)
+    expect(priceRequest(fwd({ defaultK: 0 })).body.forward_rate, 'no K below or at zero').toBeUndefined()
+    expect(priceRequest(opt({ defaultK: 75781.53 })).body.strike).toBe(75781.53)
+    expect(priceRequest(opt({ defaultK: 75781.53, strike: '70000' })).body.strike).toBe(70000)
+    expect('strike' in priceRequest(opt({ defaultK: 75781.53, style: 'TOUCH' })).body, 'a touch has no strike, default or not').toBe(false)
+    expect(ok(fwd({ defaultK: 75781.53 }))).toBe(true)
+  })
+})
+
+describe('a digital or a touch pays an amount: its notional is neither read nor sent, and the payout is booked', () => {
+  it('the notional field is not among the numbers a payout style sends, and the API gets 1', () => {
+    expect(numbersSent(opt({ style: 'DIGITAL' }))).not.toContain('notional')
+    expect(numbersSent(opt({ style: 'TOUCH' }))).not.toContain('notional')
+    expect(numbersSent(opt({ style: 'BARRIER' }))).toContain('notional')
+    expect(notionalSent(opt({ style: 'DIGITAL', notional: '25000000' })), 'the hidden cell\'s number never travels').toBe(1)
+    expect(notionalSent(opt({ style: 'TOUCH', notional: '1,5' })), 'a hidden notional that cannot be read does not stop the price').toBe(1)
+    expect(notionalSent(opt({ style: 'TOUCH', notional: '' }))).toBe(1)
+    expect(notionalSent(opt({ style: 'EUROPEAN', notional: '' }))).toBeNaN()
+    expect(notionalSent(fwd({ notional: '12,500' }))).toBe(12500)
+    expect(unreadable(opt({ style: 'TOUCH', notional: '1,5', barrier: '80000' }))).toBeNull()
+    expect(ok(opt({ style: 'DIGITAL', notional: '', payout: '100000' }))).toBe(true)
+    expect(ok(opt({ style: 'TOUCH', notional: 'abc', payout: '100000', barrier: '80000' })), 'the check does not judge the hidden notional').toBe(true)
+    expect(priceRequest(opt({ style: 'DIGITAL', notional: '25000000' })).body.base_notional).toBe(1)
+    expect(priceRequest(opt({ style: 'TOUCH', notional: '10' })).body.base_notional).toBe(1)
+    expect(why(opt({ notional: '' }))).toBe('enter a notional above zero')
+  })
+  it('the record\'s notional is the payout in its currency for a payout style, the base notional in base otherwise', () => {
+    const ccy = { base: 'EUR', quote: 'USD' }
+    expect(bookedNotional(fxOpt({ style: 'TOUCH', notional: '25000000', payout: '1000000', payoutCcy: 'QUOTE' }), ccy)).toEqual({ amount: 1000000, currency: 'USD', payoutStyle: true })
+    expect(bookedNotional(fxOpt({ style: 'DIGITAL', notional: '25000000', payout: '2', payoutCcy: 'BASE' }), ccy)).toEqual({ amount: 2, currency: 'EUR', payoutStyle: true })
+    expect(bookedNotional(fxOpt({ style: 'EUROPEAN', notional: '25000000', payout: '1000000' }), ccy)).toEqual({ amount: 25000000, currency: 'EUR', payoutStyle: false })
+    expect(bookedNotional(fwd({ notional: '10', payout: '1000000' }), { base: 'BTC', quote: 'USD' })).toEqual({ amount: 10, currency: 'BTC', payoutStyle: false })
+    expect(bookedNotional(fxOpt({ style: 'TOUCH', payout: '1,0' }), ccy).amount, 'a payout that cannot be read is no amount').toBeNaN()
+  })
+})
+
+describe('the cap a typed date is held to', () => {
+  it('a settlement or an expiry to the last tenor; the option\'s own settlement to none', () => {
+    expect(dateCap('settlement', '2028-11-09')).toBe('2028-11-09')
+    expect(dateCap('expiry', '2028-11-09')).toBe('2028-11-09')
+    expect(dateCap('optSettle', '2028-11-09')).toBeNull()
+    expect(dateCap('settlement', null)).toBeNull()
+    expect(holdToLast('2028-11-10', dateCap('optSettle', '2028-11-09'))).toEqual({ date: '2028-11-10', hit: false })
+    expect(holdToLast('2028-11-10', dateCap('settlement', '2028-11-09'))).toEqual({ date: '2028-11-09', hit: true })
+  })
+})
+
+describe('the sensitivities by the desk\'s names', () => {
+  it('CRYBASIS01 is the API\'s field, else the negative of FUND01 (an older API), else nothing', () => {
+    expect(crybasis01({ crybasis01: 12.5, fund01: -12.5 })).toBe(12.5)
+    expect(crybasis01({ fund01: -20.4 })).toBe(20.4)
+    expect(crybasis01({ ir01_base: 20.4 })).toBe(-20.4)
+    expect(crybasis01({ crybasis01: 0, fund01: 5 }), 'a zero from the API is a zero').toBe(0)
+    expect(crybasis01({})).toBeNull()
+    expect(crybasis01(null)).toBeNull()
+  })
+  it('each name has its unit', () => {
+    expect(SENS_UNITS).toEqual({ CRY01: '1 % spot', FX01: '1 % spot', IR01: '1 bp', CRYBASIS01: '1 bp basis', VEGA: '1 pt', THETA: '1 day' })
+  })
+})
+
+describe('the premium of an option, in one line', () => {
+  const Q = { shape: 'OPTION', style: 'EUROPEAN', direction: 'BUY', npv: 12345.678, base_notional: 10, spot: 74747.9, quote_currency: 'USD', base_currency: 'BTC' }
+  it('a vanilla: the amount, paid or received, as a share of the notional at spot and per unit of base', () => {
+    expect(premiumLine(Q, 2)).toBe('Premium 12,345.68 USD paid · 1.65 % of the USD notional at spot · 1,234.57 per BTC')
+    expect(premiumLine({ ...Q, direction: 'SELL', npv: -12345.678 }, 2)).toBe('Premium 12,345.68 USD received · 1.65 % of the USD notional at spot · 1,234.57 per BTC')
+    expect(premiumLine({ ...Q, style: 'AMERICAN' }, 2)).toMatch(/% of the USD notional at spot/)
+    expect(premiumLine({ ...Q, style: 'BARRIER' }, 2)).toMatch(/% of the USD notional at spot/)
+    expect(premiumLine({ ...Q, base_notional: 10_000_000, spot: 1.085, npv: 123456.7, quote_currency: 'USD', base_currency: 'EUR' }, 5)).toBe('Premium 123,456.70 USD paid · 1.14 % of the USD notional at spot · 0.01235 per EUR')
+  })
+  it('a digital or a touch: as a share of the payout (a payout in base, at spot)', () => {
+    expect(premiumLine({ ...Q, style: 'DIGITAL', npv: 41234.5, payout: 100000, payout_currency: 'QUOTE' })).toBe('Premium 41,234.50 USD paid · 41.23 % of the payout')
+    expect(premiumLine({ ...Q, style: 'TOUCH', direction: 'SELL', npv: -41234.5, payout: 100000, payout_currency: 'QUOTE' })).toBe('Premium 41,234.50 USD received · 41.23 % of the payout')
+    expect(premiumLine({ ...Q, style: 'TOUCH', npv: 37373.95, payout: 1, payout_currency: 'BASE' })).toBe('Premium 37,373.95 USD paid · 50.00 % of the payout')
+    expect(premiumLine({ ...Q, style: 'DIGITAL', npv: 100, payout: null }), 'no payout known: the amount alone').toBe('Premium 100.00 USD paid')
+  })
+  it('nothing for a forward or before a price', () => {
+    expect(premiumLine({ shape: 'NDF', npv: 5 })).toBeNull()
+    expect(premiumLine(null)).toBeNull()
+    expect(premiumLine({ ...Q, npv: NaN })).toBeNull()
+  })
+})
+
+describe('what the option is, in one sentence', () => {
+  const base = { direction: 'BUY', optType: 'CALL', base: 'BTC', quote: 'USD', payout: 100000, payoutCcy: 'QUOTE', strike: 75781.53, barrier: 82200, lower: 65000, upper: 85000, expiry: '2027-02-09', fmt: (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+  const say = (over) => optionSentence({ ...base, ...over })
+  it('a touch says what is received, when, and never mentions a call, a put or a notional', () => {
+    expect(say({ style: 'TOUCH', touchType: 'ONE_TOUCH' })).toBe('we receive 100,000 USD if BTC touches 82,200.00 before 2027-02-09')
+    expect(say({ style: 'TOUCH', touchType: 'NO_TOUCH' })).toBe('we receive 100,000 USD if BTC never touches 82,200.00 before 2027-02-09')
+    expect(say({ style: 'TOUCH', touchType: 'DOUBLE_NO_TOUCH' })).toBe('we receive 100,000 USD if BTC stays between 65,000.00 and 85,000.00 before 2027-02-09')
+    expect(say({ style: 'TOUCH', touchType: 'DOUBLE_ONE_TOUCH' })).toBe('we receive 100,000 USD if BTC leaves the range 65,000.00 to 85,000.00 before 2027-02-09')
+    expect(say({ style: 'TOUCH', touchType: 'ONE_TOUCH', direction: 'SELL' })).toBe('we pay 100,000 USD if BTC touches 82,200.00 before 2027-02-09')
+    expect(say({ style: 'TOUCH', touchType: 'ONE_TOUCH', payoutCcy: 'BASE', payout: 2 })).toBe('we receive 2 BTC if BTC touches 82,200.00 before 2027-02-09')
+    expect(say({ style: 'TOUCH', touchType: 'ONE_TOUCH', barrier: NaN })).toBe('we receive 100,000 USD if BTC touches the barrier before 2027-02-09')
+    for (const tt of ['ONE_TOUCH', 'NO_TOUCH', 'DOUBLE_ONE_TOUCH', 'DOUBLE_NO_TOUCH']) expect(say({ style: 'TOUCH', touchType: tt })).not.toMatch(/buy|sell|right|notional/)
+  })
+  it('a digital says above or below the strike at expiry', () => {
+    expect(say({ style: 'DIGITAL' })).toBe('we receive 100,000 USD if BTC is above 75,781.53 at expiry')
+    expect(say({ style: 'DIGITAL', optType: 'PUT', direction: 'SELL' })).toBe('we pay 100,000 USD if BTC is below 75,781.53 at expiry')
+    expect(say({ style: 'DIGITAL', strike: null })).toBe('we receive 100,000 USD if BTC is above the strike at expiry')
+  })
+  it('a vanilla, an American and the barriers', () => {
+    expect(say({ style: 'EUROPEAN' })).toBe('we hold the right to buy BTC against USD')
+    expect(say({ style: 'EUROPEAN', direction: 'SELL', optType: 'PUT' })).toBe('we write the right to sell BTC against USD')
+    expect(say({ style: 'AMERICAN' })).toBe('we hold the right to buy BTC against USD, exercisable any day to 2027-02-09')
+    expect(say({ style: 'BARRIER', barrierType: 'UP_OUT' })).toBe('we hold the right to buy BTC against USD; knocked out if BTC trades above 82,200.00 before expiry')
+    expect(say({ style: 'BARRIER', barrierType: 'DOWN_IN', barrier: 60000 })).toBe('we hold the right to buy BTC against USD; knocked in if BTC trades below 60,000.00 before expiry')
+    expect(say({ style: 'DOUBLE_BARRIER', barrierType: 'KNOCK_OUT' })).toBe('we hold the right to buy BTC against USD; knocked out if BTC trades through 65,000.00 or 85,000.00 before expiry')
+    expect(say({ style: 'DOUBLE_BARRIER', barrierType: 'KNOCK_IN' })).toMatch(/^we hold the right to buy BTC against USD; knocked in if/)
   })
 })

@@ -8,6 +8,7 @@ import {
   rippleWeights, tenorBounds, applyTenorDrag, clampSpotPct, spotPctFromDrag, carryFactor, shockedCurve, reprice, gk,
   settlementAmount, latestFixing, fixingSeries, fixingTime, settledState, settledFacts, styleTerms, provisionalReasons, chartLevels, chartStrike,
   tenorMap, niceStep, valueRange, horizonDays, chartGeometry,
+  isoDate, addDays, axisDates, roundTo, strikeAsBooked, modelWords,
 } from './fx-scenario'
 
 describe('interpPoints: the backend rule (currencies.py interp_points)', () => {
@@ -594,5 +595,82 @@ describe('shared vectors: backend/tests/vectors/fx_scenario.json', () => {
                                      direction: c.direction, notional: c.notional, strike: c.strike, fixing: c.fixing })
       close(got, c.expected)
     }
+  })
+})
+
+describe('one date format: ISO everywhere the tabs print a date', () => {
+  it('cuts a date or a timestamp to YYYY-MM-DD and gives nothing for anything else', () => {
+    expect(isoDate('2027-02-09')).toBe('2027-02-09')
+    expect(isoDate('2027-02-09T08:00:00Z')).toBe('2027-02-09')
+    expect(isoDate('09 Feb 27')).toBe('')
+    expect(isoDate('11/09/2026')).toBe('')
+    expect(isoDate(null)).toBe('')
+    expect(isoDate(undefined)).toBe('')
+  })
+  it('adds whole days across a month and a year end', () => {
+    expect(addDays('2026-11-09', -30)).toBe('2026-10-10')
+    expect(addDays('2026-12-25', 10)).toBe('2027-01-04')
+    expect(addDays('2026-11-09', 0)).toBe('2026-11-09')
+    expect(addDays('not a date', 1)).toBe('')
+    expect(addDays('2026-11-09', NaN)).toBe('')
+  })
+  it('marks a dense axis MM-DD only when every date on it is in one year', () => {
+    expect(axisDates(['2026-10-10', '2026-10-20', '2026-10-30', '2026-11-09'])).toEqual(['10-10', '10-20', '10-30', '11-09'])
+    expect(axisDates(['2026-12-12', '2026-12-22', '2027-01-01', '2027-01-11'])).toEqual(['2026-12-12', '2026-12-22', '2027-01-01', '2027-01-11'])
+    expect(axisDates(['2026-12-12', 'x', '2026-12-22'])).toEqual(['12-12', '', '12-22'])   // a tick that is not a date prints nothing
+    expect(axisDates([])).toEqual([])
+    expect(axisDates(null)).toEqual([])
+  })
+})
+
+describe('strikeAsBooked: K as the ticket will book it', () => {
+  it('rounds to the nearest decimals and refuses what is not a number', () => {
+    expect(roundTo(108466.3649, 2)).toBe(108466.36)
+    expect(roundTo(108466.365, 2)).toBe(108466.37)
+    expect(roundTo(1.0856789, 5)).toBe(1.08568)
+    expect(roundTo(150.12349, 3)).toBe(150.123)
+    expect(roundTo(NaN, 2)).toBe(null)
+    expect(roundTo(1, 1.5)).toBe(null)
+    expect(roundTo(1, -1)).toBe(null)
+  })
+  const fwd = { shape: 'NDF', forward_rate: 108466.3649, forward: 108466.3649 }
+  it('takes the terms\' own level first, as a string, for a forward and for an option', () => {
+    expect(strikeAsBooked(fwd, { forward_price: '108466.36' }, 2)).toBe(108466.36)
+    expect(strikeAsBooked({ shape: 'FORWARD', forward_rate: 1.0856789 }, { forward_rate: '1.08568' }, 5)).toBe(1.08568)
+    expect(strikeAsBooked({ shape: 'OPTION', style: 'EUROPEAN', strike: 110000.004 }, { strike_price: '110000' }, 2)).toBe(110000)
+    expect(strikeAsBooked({ shape: 'OPTION', style: 'BARRIER', strike: 1.1 }, { strike: '1.10000' }, 5)).toBe(1.1)
+  })
+  it('rounds the quote\'s level to the pair\'s decimals when the terms carry none', () => {
+    expect(strikeAsBooked(fwd, null, 2)).toBe(108466.36)
+    expect(strikeAsBooked(fwd, {}, 2)).toBe(108466.36)
+    expect(strikeAsBooked(fwd, { forward_price: null }, 2)).toBe(108466.36)
+    expect(strikeAsBooked(fwd, { forward_price: 'abc' }, 2)).toBe(108466.36)          // an unreadable term is no term
+    expect(strikeAsBooked({ shape: 'FORWARD', forward_rate: 1.0856789 }, null, 5)).toBe(1.08568)
+    expect(strikeAsBooked({ shape: 'FORWARD', forward_rate: 150.12349 }, null, 3)).toBe(150.123)
+    expect(strikeAsBooked({ shape: 'OPTION', style: 'EUROPEAN', strike: 110000.004 }, null, 2)).toBe(110000)
+  })
+  it('does not read a forward\'s field on an option or an option\'s on a forward', () => {
+    expect(strikeAsBooked({ shape: 'OPTION', style: 'EUROPEAN', strike: 2 }, { forward_price: '5' }, 2)).toBe(2)
+    expect(strikeAsBooked(fwd, { strike: '5' }, 2)).toBe(108466.36)
+  })
+  it('has no K for a touch, and none without a quote or a level', () => {
+    expect(strikeAsBooked({ shape: 'OPTION', style: 'TOUCH', barrier: 120000 }, { strike_price: '110000' }, 2)).toBe(null)
+    expect(strikeAsBooked(null, { forward_price: '1' }, 2)).toBe(null)
+    expect(strikeAsBooked({ shape: 'NDF' }, null, 2)).toBe(null)
+  })
+})
+
+describe('modelWords: the engine\'s method, with the forward named once', () => {
+  it('leaves a method alone when it already names a forward', () => {
+    expect(modelWords('Black-76 on the quoted forward (the basis in the points as the carry)')).toBe('Black-76 on the quoted forward (the basis in the points as the carry)')
+    expect(modelWords('Black-76 on the forward to settlement')).toBe('Black-76 on the forward to settlement')
+  })
+  it('adds the forward to settlement to one that does not', () => {
+    expect(modelWords('Garman–Kohlhagen')).toBe('Garman–Kohlhagen on the forward to settlement')
+    expect(modelWords('Leisen–Reimer binomial tree')).toBe('Leisen–Reimer binomial tree on the forward to settlement')
+  })
+  it('falls back when the quote carries no method', () => {
+    expect(modelWords(null)).toBe('Garman–Kohlhagen on the forward to settlement')
+    expect(modelWords('  ', 'Black-76')).toBe('Black-76 on the forward to settlement')
   })
 })

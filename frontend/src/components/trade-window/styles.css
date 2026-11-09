@@ -588,3 +588,16 @@
 .tbw-fx-note { padding: 12px 18px 0; font-size: 12px; letter-spacing: 0.05em; color: var(--text-mute); }
 .tbw-fx-note.is-error { color: var(--red); }
 .tbw-fx-note.is-warning { color: var(--amber); }
+/* the option's premium, one line in the normal colour under the notes and above the tiles */
+.tbw-fx-note.tbw-fx-premium { color: var(--text); font-family: var(--mono); }
+
+/* A sensitivity's unit after its name ("CRY01 · 1 % spot"): smaller, muted, written as it is (no capitals). */
+.tbw-fx-unit { font-size: 0.85em; letter-spacing: 0.02em; color: var(--text-mute); text-transform: none; }
+
+/* A field whose text cannot be read: the words under it run onto a second line, and its controls (the reset, SPOT's
+   snap) go on a line of their own under them instead of being squeezed beside them. */
+.tbw-fx-tag.is-invalid { flex-wrap: wrap; row-gap: 2px; }
+.tbw-fx-tag.is-invalid > span.tbw-fx-tag-invalid { flex: 1 1 100%; }
+
+/* What a barrier or a touch is observed on, said once under the style row. */
+.tbw-fx-barrier-note { margin: -4px 0 10px; font-size: 11px; line-height: 1.4; letter-spacing: 0.04em; color: var(--text-mute); }

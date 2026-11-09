@@ -258,17 +258,35 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   }
   const currencyFooter = {
     footer: {
-      structureLabel: () => (curInst === 'FX_OPTION' && fxTerms?.style ? fxTerms.style.replace(/_/g, ' ') : (SHAPE_OF[curInst] || 'FORWARD')),
-      metrics: (r) => r ? [
-        { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
-        { label: DELTA_LABEL(assetClass === 'CRYPTO'), value: n0(r.spot01 ?? r.delta_quote_per_pct), colorBy: (r.spot01 ?? r.delta_quote_per_pct) >= 0 ? 'pos' : 'neg' },
-        { label: 'IR01', value: n0(r.ir01 ?? (r.rho_base_per_bp + r.rho_quote_per_bp)) },
-        ...(assetClass === 'CRYPTO'
-          ? [{ label: 'FUND01', value: n0(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp ?? 0) }]
-          : [{ label: 'IR01 DISC', value: n0(r.ir01_disc ?? r.rho_quote_per_bp) }]),
-        { label: 'THETA', value: n0(r.theta ?? 0), colorBy: (r.theta ?? 0) >= 0 ? 'pos' : 'neg' },
-        ...(r.shape === 'OPTION' ? [{ label: 'VEGA / 1pt', value: n0(r.vega ?? 0), colorBy: (r.vega ?? 0) >= 0 ? 'pos' : 'neg' }] : []),
-      ] : [],
+      // an option's structure is its style, on a currency pair and on a digital asset alike
+      structureLabel: () => ((curInst === 'FX_OPTION' || curInst === 'CRYPTO_OPTION') && fxTerms?.style ? fxTerms.style.replace(/_/g, ' ') : (SHAPE_OF[curInst] || 'FORWARD')),
+      // The desk's names with their units (the same span as the ticket's tiles, FxCryptoPanel): CRY01 / FX01 for
+      // +1 % spot, IR01 for +1 bp on the discounting curve, CRYBASIS01 for +1 bp a year on a digital asset's forward
+      // basis (a long gains; the API sends it as crybasis01, and older answers only fund01, its negative), VEGA for
+      // +1 vol point, THETA for one day. A currency pair's two rate sensitivities are shown apart: their sum reads as zero.
+      metrics: (r) => {
+        if (!r) return []
+        const unit = (name, u) => <>{name}<span className="tbw-fx-unit"> · {u}</span></>
+        const crypto = assetClass === 'CRYPTO'
+        const crybasis = r.crybasis01 ?? (r.fund01 != null ? -r.fund01 : r.ir01_base != null ? -r.ir01_base : r.rho_base_per_bp != null ? -r.rho_base_per_bp : 0)
+        const spot01 = r.spot01 ?? r.delta_quote_per_pct
+        const option = r.shape === 'OPTION'
+        return [
+          // an option's first figure is its premium, paid or received (the NET NPV tile stays in the analytics block)
+          option
+            ? { label: unit('PREMIUM ' + r.quote_currency, r.direction === 'SELL' ? 'received' : 'paid'), value: n0(Math.abs(r.npv)) }
+            : { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
+          { label: unit(DELTA_LABEL(crypto), '1 % spot'), value: n0(spot01), colorBy: spot01 >= 0 ? 'pos' : 'neg' },
+          ...(crypto
+            ? [{ label: unit('IR01', '1 bp'), value: n0(r.ir01 ?? r.ir01_disc ?? r.rho_quote_per_bp) },
+               { label: unit('CRYBASIS01', '1 bp basis'), value: n0(crybasis) }]
+            // a currency pair: each currency's curve on its own (their sum reads as zero), forward and option alike
+            : [{ label: unit(`${r.quote_currency} IR01`, '1 bp'), value: n0(r.ir01_disc ?? r.rho_quote_per_bp) },
+               { label: unit(`${r.base_currency} IR01`, '1 bp'), value: n0(r.ir01_base ?? r.rho_base_per_bp) }]),
+          { label: unit('THETA', '1 day'), value: n0(r.theta ?? 0), colorBy: (r.theta ?? 0) >= 0 ? 'pos' : 'neg' },
+          ...(r.shape === 'OPTION' ? [{ label: unit('VEGA', '1 pt'), value: n0(r.vega ?? 0), colorBy: (r.vega ?? 0) >= 0 ? 'pos' : 'neg' }] : []),
+        ]
+      },
     },
   }
   if (!product) throw new Error(`Unknown product: ${productKey}`)
@@ -1186,6 +1204,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         booking={booking}
         bookErr={bookErr}
         booked={!!bookedTrade}
+        bookDisabled={!viewMode && (!economics.counterpartyId || !economics.ownEntityId)}
+        bookTitle={!economics.counterpartyId ? 'choose a counterparty first' : 'choose an own entity first'}
         onCancel={onClose}
       />
     </div>

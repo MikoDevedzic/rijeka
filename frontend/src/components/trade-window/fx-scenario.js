@@ -9,7 +9,9 @@
 //   applyTenorDrag   the dragged curve, inside its bounds
 //   reprice          the panel's closed form, with the dragged points added to the forward
 //   settlementAmount what a fixing pays
+//   strikeAsBooked   K as the ticket will book it: the terms' own, else the quote's rounded to the pair's decimals
 //   settledState     a booked trade past its fixing date: nothing here is repriced for it
+//   isoDate / axisDates  the one date format the tabs print (YYYY-MM-DD; MM-DD on a dense axis in one year)
 //   chartGeometry    the chart's scales, shared by the drawing and the hit test
 //
 // One rule for every function: an input it needs that is missing or not finite gives null,
@@ -75,6 +77,44 @@ export function daysBetween(a, b) {
   const utc = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null }
   const x = utc(a), y = utc(b)
   return x == null || y == null ? null : Math.round((y - x) / 86400000)
+}
+
+// ── dates as the tabs print them ─────────────────────────────────────────────────────
+// One format everywhere: ISO YYYY-MM-DD. A value that starts with a date (an ISO timestamp too) is cut to the
+// date; anything else is '' and the caller leaves the words out.
+const ISO = /^(\d{4})-(\d{2})-(\d{2})/
+export const isoDate = (s) => { const m = ISO.exec(String(s ?? '')); return m ? `${m[1]}-${m[2]}-${m[3]}` : '' }
+
+// The date `n` whole days from an ISO date, as ISO; '' when the start is not a date.
+export function addDays(iso, n) {
+  const m = ISO.exec(String(iso ?? ''))
+  return m && finite(n) ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n)).toISOString().slice(0, 10) : ''
+}
+
+// The ticks of a dense time axis: MM-DD when every date on the axis is in one year (the year is said nowhere
+// else, so it must be the same for all of them), else each in full. A tick that is not a date is ''.
+export function axisDates(dates) {
+  const isos = (Array.isArray(dates) ? dates : []).map(isoDate)
+  const years = new Set(isos.filter(Boolean).map(d => d.slice(0, 4)))
+  return isos.map(d => (d && years.size === 1 ? d.slice(5) : d))
+}
+
+// ── the strike as booked ─────────────────────────────────────────────────────────────
+
+// A number to the nearest `dp` decimals (toFixed, so the same digits the tabs print); null for anything else.
+export const roundTo = (x, dp) => (finite(x) && Number.isInteger(dp) && dp >= 0 ? Number(x.toFixed(dp)) : null)
+
+// K as the ticket will book it. The terms a ticket passes carry the level it sends to the record (a forward's
+// forward_price / forward_rate, an option's strike_price / strike, as strings); when they do, that is K. Without
+// one, the quote's level rounded to the pair's decimals, which is what a blank strike books (fx-ticket.js
+// bookedStrike rounds the same way; this one reads the terms first). A touch has no K.
+export function strikeAsBooked(q, terms, dp) {
+  if (!q) return null
+  if (q.shape === 'OPTION' && q.style === 'TOUCH') return null
+  const own = q.shape === 'OPTION' ? [terms?.strike_price, terms?.strike] : [terms?.forward_price, terms?.forward_rate]
+  for (const v of own) { const n = asNumber(v); if (positive(n)) return n }
+  const k = chartStrike(q)
+  return k == null ? null : (roundTo(k, dp) ?? k)
 }
 
 // Points are quoted from the spot date. A digital asset's spot settles at once (lag 0). For a currency pair the
@@ -347,6 +387,13 @@ export function chartLevels(q) {
   if (q.style === 'BARRIER') return level('BARRIER', q.barrier)
   if (q.style === 'DOUBLE_BARRIER') return [...level('BARRIER', q.lower), ...level('BARRIER', q.upper)]
   return []
+}
+
+// The MODEL row of an option's term sheet: the engine's own `method` words, and "on the forward to settlement"
+// only when they do not already name a forward ("Black-76 on the quoted forward" says which forward it is on).
+export function modelWords(method, fallback = 'Garman–Kohlhagen') {
+  const m = typeof method === 'string' && method.trim() ? method.trim() : fallback
+  return /forward/i.test(m) ? m : `${m} on the forward to settlement`
 }
 
 // The strike the chart draws: K of a forward, the strike of an option, nothing for a touch (it has none).

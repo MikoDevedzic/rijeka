@@ -24,7 +24,7 @@ for (const c of CASES) {
     await win.getByRole('button', { name: '▶ PRICE' }).click()
     const quote = await (await priced).json()
     expect(quote.npv, 'the ticket has a value').toEqual(expect.any(Number))
-    await expect(win).toContainText('NET NPV')
+    await expect(win, 'a forward shows its value, an option its premium').toContainText(c.xva.endsWith('option') ? 'PREMIUM' : 'NET NPV')
 
     await win.getByRole('button', { name: 'XVA', exact: true }).click()
     await win.getByRole('button', { name: 'BILATERAL', exact: true }).click()
@@ -81,13 +81,13 @@ test('crypto ticket: the vol and the forward name the venue and the time of its 
   await win.getByRole('button', { name: 'CRYPTO', exact: true }).click()
   await win.getByRole('button', { name: /^CRYPTO FORWARD$/i }).click()
   await expect(win).toContainText(`forward from ${AT}`)
-  await expect(win.getByTestId('fx-funding'), 'the funding field says what typing in it does').toHaveAttribute('title', /overrides the quoted forward/)
+  await expect(win.getByTestId('fx-funding'), 'the funding field says what typing in it does').toHaveAttribute('title', /replaces the quoted forward/)
   await win.getByRole('button', { name: /^CRYPTO OPTION$/i }).click()
   await expect(win.getByTestId('fx-vol').locator('xpath=..'), 'the vol on its default names the surface it came from').toContainText(AT, { ignoreCase: true })
   const priced = app.waitForResponse(r => /\/api\/currency\/option\/price$/.test(r.url()) && r.request().method() === 'POST')
   await win.getByRole('button', { name: '▶ PRICE' }).click()
   expect((await priced).status(), 'the option prices').toBe(200)
-  await expect(win).toContainText('NET NPV')
+  await expect(win).toContainText('PREMIUM')
   await expectNoHorizontalOverflow(win, 'crypto option ticket with the venue captions')
   await app.screenshot({ path: 'e2e/.out/shots/crypto-option-marks.png' })
   await app.unrouteAll({ behavior: 'ignoreErrors' })
@@ -121,7 +121,7 @@ test('market data: a desk spot saves on a pair whose forward points come from th
   await app.locator('.crv-item', { hasText: 'BTCUSD' }).click()
   await expect(app.locator('.crv-item', { hasText: 'BTCUSD' })).toContainText('Deribit · 2 tenors')      // one word in the narrow list
   await expect(app.getByText('Deribit 9 Nov 12:57 UTC points', { exact: true })).toBeVisible()            // the venue and the time of its marks, above the table
-  await app.getByText('Spot & funding', { exact: true }).click()
+  await app.getByText('Spot & BTC rate', { exact: true }).click()
   await app.getByPlaceholder(/desk spot/).fill('70123')
   const reloaded = app.waitForResponse(r => /\/api\/currency\/pairs/.test(r.url()))       // the page reads the pairs again after a save
   await app.getByRole('button', { name: 'SAVE DESK SPOT' }).click()

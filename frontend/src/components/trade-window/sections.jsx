@@ -342,6 +342,7 @@ export function XVASummary() {
 export function TradeFooter({
   descriptor, result, state, pricing, onPrice, onBook, onCancel,
   booking, booked, bookErr,
+  bookDisabled = false, bookTitle = undefined,         // the window's own reason BOOK cannot be pressed yet (no counterparty chosen)
 }) {
   const metrics = result ? (descriptor.footer.metrics(result, state) || []) : []
   const structLabel = descriptor.footer.structureLabel(state)
@@ -370,7 +371,8 @@ export function TradeFooter({
         </button>
         <button
           className="tbw-btn tbw-btn-book"
-          disabled={pricing || booking || booked || !result}
+          disabled={pricing || booking || booked || !result || bookDisabled}
+          title={!booked && bookDisabled ? bookTitle : undefined}
           onClick={onBook}
           style={booked ? { opacity: 0.6, cursor: "default" } : undefined}
         >

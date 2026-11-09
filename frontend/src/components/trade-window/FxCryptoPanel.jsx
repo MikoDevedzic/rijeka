@@ -28,8 +28,14 @@ const iso = (d) => d.toISOString().slice(0, 10)
 import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
 import { settlementOptions, settlementTerms, settlementLabel, settlementNote, defaultFixingDate, clampFixingDate, earliestFixingDate, fixingCaption, MAX_FIXING_GAP_DAYS } from './fx-settlement'
 import { TENORS, CRYPTO_LIMIT_NOTE, priceRequest, priceable, styleFields as styleFieldsOf, styleSends, seedLevels, seedVolPct, yearsTo, forwardCaption, ticketToday,
-         tenorDate, tenorOf, tenorLabel, firstDate, lastDate, holdToLast, formatRead, formatInput, readNumbers, overrideNote, quoteFor, createTicketPricer } from './fx-ticket'
+         tenorDate, tenorOf, tenorLabel, firstDate, lastDate, holdToLast, formatRead, formatInput, readNumbers, unreadable, overrideNote, quoteFor, createTicketPricer,
+         tenorDates, tenorDateFor, tenorSettlement, rollDate, rollRule, rolledTag, spotDateFor, spotLagLabel, bookedNotional, dateCap, closedWhy,
+         bookedStrike, apiRoundsStrike, notionalSent, payoutStyle, SENS_UNITS, crybasis01, premiumLine, optionSentence } from './fx-ticket'
 import DefaultedInput, { NumberInput } from './DefaultedInput'
+
+// A sensitivity's name with its unit after it, smaller and muted: "CRY01 · 1 % spot" (the footer in TradeWindow
+// writes the same span).
+const sensLabel = (name, unit = SENS_UNITS[name]) => <>{name}{unit ? <span className="tbw-fx-unit"> · {unit}</span> : null}</>
 
 async function call(path, opts = {}) {
   const session = await getSessionSafe()
@@ -67,8 +73,19 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // whether a price is owed, why there is none, and whether BOOK has to be pressed again (fx-ticket.js).
   const [priced, setPriced] = useState({ quote: null, quoteKey: null, quoteIdent: null, pending: false, note: null, review: false })
   const [limitHit, setLimitHit] = useState('')            // 'settlement' | 'expiry': a typed date was brought back to the last one
+  // a typed date that was rolled to a business day when its field was left, per field (rollDate's answer), until it is typed again
+  const [rolled, setRolled] = useState({})
   const [busy, setBusy] = useState('')
   const seedRef = useRef({})                              // the pair, and the levels this panel filled in for it
+  // per price key: the terms the forward depends on, whether the request asked the API to round a blank K (strike_dp)
+  // and the default K it sent itself, if any
+  const sentRef = useRef(new Map())
+  // Does the API round a blank K to the pair's decimals when asked (strike_dp)? Assumed until an answer says otherwise;
+  // an older API strikes at the forward with every decimal, and the ticket then sends the rounded forward itself.
+  const apiRounds = useRef(true)
+  // the default K known for the forward terms on screen, for that older API: { fwdKey, K }. Kept apart from the quote,
+  // so a failed price (no quote) does not take the K out of the request and so send the terms again by itself
+  const knownK = useRef(null)
   const cbRef = useRef({ onPriced, onError })
   const [pricer] = useState(() => createTicketPricer({
     send: (request, signal) => call(request.path, { method: 'POST', body: JSON.stringify(request.body), signal }),
@@ -98,22 +115,14 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const [settleSrc, setSettleSrc] = useState('')
   // the fixing date of a digital-asset forward as the user typed it; '' = not edited, the default for the source and the settlement date
   const [fixEdit, setFixEdit] = useState('')
-  // every term the price depends on, as fx-ticket.js reads them
-  const ticket = { option, shape, crypto, pair, notional, direction, settlement, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv,
-                   style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit }
-  const styleFields = () => styleFieldsOf(ticket)
-  const nums = readNumbers(ticket)                        // every number of the form, read once by the ticket's one parser
   const todayIso = iso(new Date())
-  // a settlement or an expiry is after today, and on a digital asset no later than the last tenor its market data carries
-  const minDate = firstDate(todayIso)
-  const maxDate = lastDate({ crypto, today: todayIso })
 
   useEffect(() => { cbRef.current = { onPriced, onError } })
   useEffect(() => {
     setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? '10' : '10000000'); setCashSettled(crypto); setPayout(crypto ? '100000' : '1000000'); setSettleSrc('')
     // a date carried over from a currency pair is held to the digital asset's last tenor
     const last = lastDate({ crypto, today: iso(new Date()) })
-    setSettlement(d => holdToLast(d, last).date); setExpiry(d => holdToLast(d, last).date); setLimitHit('')
+    setSettlement(d => holdToLast(d, last).date); setExpiry(d => holdToLast(d, last).date); setLimitHit(''); setRolled({})
   }, [crypto])
   // an edited fixing date belongs to one product, pair and settlement date: a change of any of them puts the default back
   useEffect(() => { setFixEdit('') }, [inst, pair, settlement])
@@ -127,9 +136,43 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   useEffect(() => { load() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const cur = useMemo(() => pairs.find(p => p.pair === pair), [pairs, pair])
+  // The dates as the API gives them (fx-ticket.js tenorDates): the forward's settlement and the option's expiry per
+  // tenor, already on business days, and the calendar they were rolled on. An older API gives none: the tenors are
+  // then made on the calendar (tenorDate) and no date is rolled, as before.
+  const fwdDates = tenorDates(cur, 'FORWARD'), optDates = tenorDates(cur, 'OPTION')
+  const dates = option ? optDates : fwdDates
+  const calendar = cur?.calendar && typeof cur.calendar === 'object' ? cur.calendar : null
+  // a settlement or an expiry is after today, and on a digital asset no later than the last tenor its market data carries
+  const minDate = firstDate(todayIso)
+  const maxDate = lastDate({ crypto, today: todayIso, dates })
+  // A date set from a tenor before the pairs arrived (or for another pair) is the calendar's; once the API's dates are
+  // here it moves to the API's date for that tenor, so the tenor select still reads 3M and the date is a business day.
+  useEffect(() => {
+    const snap = (date, set, d) => { const t = d && tenorOf(date, todayIso, null); if (t && d[t] && d[t] !== date) set(d[t]) }
+    snap(settlement, setSettlement, fwdDates); snap(expiry, setExpiry, optDates)
+  }, [cur])   // eslint-disable-line react-hooks/exhaustive-deps
   // the quote on screen is the last one that came back, for as long as the ticket is the product and pair it priced
   const ident = `${ac}|${inst}|${pair}`
   const quote = priced.quoteIdent === ident ? priced.quote : null
+  const dp = cur?.dp ?? rateDp(pair)                      // the pair's decimals: what K is shown and booked to
+  // ── the default K: shown and booked to the pair's decimals, and struck there by the API ────────────────────
+  // A blank K asks the API to strike at the fair forward rounded to the pair's decimals (strike_dp in the request),
+  // so the quote's K, premium and NPV are the booked trade's. An older API ignores strike_dp (apiRoundsStrike reads
+  // that off its first answer): the ticket then sends the rounded forward itself once it knows it. The terms the
+  // fair forward depends on say when it knows it: the quote on screen priced for the same terms has the forward the
+  // API would strike at (the first request after a change of these terms sends no K; the next sends it).
+  const fwdKey = JSON.stringify([ac, pair, option ? [expiry, optSettle] : [shape, settlement], spotOv, fundOv,
+                                 cur ? [cur.spot, cur.spot_as_of, cur.funding_pct, cur.forward_curve?.valuation_date, cur.forward_curve?.in_use] : null])
+  const onScreen = quote ? sentRef.current.get(priced.quoteKey) : null
+  if (apiRounds.current && apiRoundsStrike(quote, onScreen, dp) === false) apiRounds.current = false
+  if (onScreen && onScreen.fwdKey === fwdKey) knownK.current = { fwdKey, K: onScreen.defaultK ?? bookedStrike(quote.forward, dp) }
+  const strikeTyped = readNumbers({ strike }).strike.given
+  const defaultK = !apiRounds.current && !strikeTyped && knownK.current && knownK.current.fwdKey === fwdKey ? knownK.current.K : null
+  // every term the price depends on, as fx-ticket.js reads them
+  const ticket = { option, shape, crypto, pair, notional, direction, settlement, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv,
+                   style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit, strikeDp: dp, defaultK }
+  const styleFields = () => styleFieldsOf(ticket)
+  const nums = readNumbers(ticket)                        // every number of the form, read once by the ticket's one parser
   // Digital assets only: the sources the pair settles on (absent in an older API answer: no choice, the default as before).
   // A source picked for one pair is not a source of another, so settlementTerms falls back to the new pair's default.
   const settleOptions = crypto ? settlementOptions(cur) : []
@@ -159,9 +202,15 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const market = cur ? [cur.spot, cur.spot_as_of, cur.funding_pct, cur.funding_as_of, cur.forward_curve?.valuation_date, cur.forward_curve?.label,
                         cur.forward_curve?.in_use, cur.vol_surface?.valuation_date, cur.vol_surface?.label] : null
   const priceKey = JSON.stringify([ac, inst, req, market])
+  // the same terms without the default K: when the quote on screen is of exactly these, the request only adds the K
+  // the quote itself gave (an older API), and goes without the debounce (nobody is typing)
+  const bareKey = JSON.stringify([ac, inst, priceRequest({ ...ticket, defaultK: null }), market])
+  sentRef.current.set(priceKey, { fwdKey, bareKey, defaultK, strikeDp: 'strike_dp' in req.body })
+  if (sentRef.current.size > 200) sentRef.current.delete(sentRef.current.keys().next().value)
+  const refine = !!onScreen && onScreen.bareKey === bareKey && onScreen.defaultK == null && defaultK != null
   // The terms on screen, as the pricer takes them. check() is asked when the debounce runs out (and by BOOK): the
   // API's own rules, mirrored (priceable), with the vol of the quote on screen for the reach in standard deviations.
-  const termsNow = { key: priceKey, ident, ready: !!cur, request: req,
+  const termsNow = { key: priceKey, ident, ready: !!cur, request: req, refine,
                      check: () => priceable({ ...ticket, cur, today: ticketToday(), volHint: pricer.state().quote?.vol_pct }) }
   // Priced on open and on every change of a term or of the market, 400 ms after the last one.
   useEffect(() => { pricer.setTerms(termsNow) }, [priceKey, ident])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -211,13 +260,17 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const build = (q) => {
     const str = (v) => v == null ? null : String(v)
     const typedStrike = nums.strike.given && !nums.strike.invalid ? nums.strike.value : null
-    const N = nums.notional.value                     // the notional as a number: a quote exists only for one that could be read
+    const N = notionalSent(ticket)                    // what the price request sent: the base notional, 1 for a payout style (fx-ticket.js notionalSent)
+    // the record's notional: the payout in its currency for a digital or a touch (the hidden base notional is nobody's), else N in base
+    const booked = bookedNotional(ticket, { base: cur?.base, quote: cur?.quote })
     const premium = q ? String(Math.abs(Math.round(q.npv * 100) / 100)) : null
     const styleTerms = Object.fromEntries(Object.entries(styleFields()).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v]))
     const barrierTerms = style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}
     const sends = styleSends(style, touchType)          // the same list the price request reads (fx-ticket.js)
     if (option) {
-      const K = q ? q.strike : typedStrike
+      // K as shown: a typed strike as typed, a default one to the pair's decimals (the quote's own strike, once the
+      // ticket has sent it; rounded here too, so the record never carries a decimal the screen did not show)
+      const K = typedStrike != null ? typedStrike : (q ? bookedStrike(q.strike, dp) : null)
       const expiryDate = q ? q.expiry_date : expiry
       const settleDate = q ? q.settlement_date : (optSettle || null)
       const premiumDate = q ? q.valuation_date : null
@@ -228,9 +281,9 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         // Definitions vocabulary) plus the style's terms; cash-settled against the settlement price source
         return {
           asset_class: 'CRYPTO', instrument_type: 'CRYPTO_OPTION', structure: style,
-          notional: N, notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
+          notional: booked.amount, notional_ccy: booked.currency, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
           terms: {
-            direction, digital_asset: cur?.base, notional_amount: String(N), option_type: optType,
+            direction, digital_asset: cur?.base, notional_amount: String(N), notional_currency: booked.currency, option_type: optType,
             exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
             ...(sends.strike ? { strike_price: str(K), strike_currency: 'USD' } : {}),
             ...styleTerms,
@@ -250,11 +303,13 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       const ndo = cashSettled
       return {
         asset_class: 'FX', instrument_type: 'FX_OPTION', structure: style,
-        notional: N, notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
+        notional: booked.amount, notional_ccy: booked.currency, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
         terms: {
           direction, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
           option_type: optType, exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
-          base_notional: String(N), ...(sends.strike ? { strike: str(K), quote_notional: K == null ? null : String(N * K) } : {}),
+          base_notional: String(N), notional_currency: booked.currency,
+          // a payout style has no quote notional: N·K would be the price of one unit
+          ...(sends.strike ? { strike: str(K), ...(booked.payoutStyle ? {} : { quote_notional: K == null ? null : String(N * K) }) } : {}),
           ...styleTerms,
           ...barrierTerms,
           expiry_date: expiryDate, expiry_time: '10:00 New York', settlement_date: settleDate,
@@ -265,7 +320,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         },
       }
     }
-    const K = typedStrike != null ? typedStrike : (q ? q.forward : null)
+    // K as shown: a typed K as typed, a default one the fair forward to the pair's decimals (the quote's own K once sent)
+    const K = typedStrike != null ? typedStrike : (q ? bookedStrike(q.forward_rate ?? q.forward, dp) : null)
     const settleDate = q ? q.settlement_date : (shape === 'SPOT' ? null : settlement)
     if (crypto) return {
       asset_class: 'CRYPTO', instrument_type: 'CRYPTO_FORWARD', structure: 'VANILLA',
@@ -319,14 +375,17 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   }))
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────
-  const dp = rateDp(pair)
   const qc = cur?.quote || 'USD'
   const SYM = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' }
   const money = (v) => { if (v == null || isNaN(v)) return '—'; const n = Math.round(v); return (n > 0 ? '+' : n < 0 ? '−' : '') + (SYM[qc] ?? (qc + ' ')) + Math.abs(n).toLocaleString('en-US') }
   const sgn = (v) => v == null || isNaN(v) || Math.round(v) === 0 ? null : (v > 0 ? 'positive' : 'negative')
   const spot01 = (r) => r.spot01 ?? r.delta_quote_per_pct
   const ir01 = (r) => r.ir01 ?? (r.rho_base_per_bp + r.rho_quote_per_bp)
-  const effDate = (() => { const d = new Date(); let n = crypto ? 0 : 2; while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() !== 0 && d.getDay() !== 6) n-- } return iso(d) })()
+  // the two currencies' rate sensitivities of a currency pair, apart: a sum reads as zero when they offset
+  const ir01Disc = (r) => r.ir01_disc ?? r.rho_quote_per_bp
+  const ir01Base = (r) => r.ir01_base ?? r.rho_base_per_bp
+  // the spot date: the API's, else tomorrow for a digital asset and two weekdays on for a currency pair
+  const spotDate = spotDateFor({ cur, crypto, today: todayIso })
   const ndf = shape === 'NDF'
   const pct = (v, d = 2) => v == null || isNaN(v) ? '—' : `${(Number(v) * 100).toFixed(d)}%`
   // SHOW MATH: the formula behind each card, with this quote's own numbers (the Excel replication's Derivation sheet, live)
@@ -339,7 +398,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       spot01: `NPV(F·1.01) − NPV\nthe forward moves one for one with spot; the discounting does not`,
       vega: `NPV(σ + 1pt) − NPV\nrepriced at ${fmt(r.vol_pct + 1, 2)}%`,
       ir01: crypto ? `NPV(DF_${qc}·e^(−1bp·T), F·e^(+1bp·T)) − NPV\nthe ${qc} curve alone: the forward up by the carry, DF down` : `IR01 ${qc} + IR01 ${r.base_currency}\n+1bp on each curve, repriced`,
-      fund01: `NPV(F·e^(−1bp·T)) − NPV\n+1bp on the funding rate: the forward down by the carry`,
+      crybasis01: `NPV(F·e^(+1bp·T)) − NPV\n+1bp a year on the forward basis: the forward up by the carry (−FUND01)`,
       theta: `NPV(T − 1/365) − NPV\nsame spot, curves and vol, one calendar day later`,
     }
   }
@@ -347,11 +406,15 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     metrics: (r) => { const m = mathOf(r); return [
       { label: 'OPTION NPV', value: money(r.npv), colorBy: sgn(r.npv), math: m.npv },
       { label: 'DELTA', value: `${fmt(r.delta_base_units, 0)} ${r.base_currency}`, colorBy: sgn(r.delta_base_units), math: m.delta },
-      { label: DELTA_LABEL(crypto), value: money(r.spot01), colorBy: sgn(r.spot01), math: m.spot01 },
-      { label: 'VEGA / 1pt', value: money(r.vega), colorBy: sgn(r.vega), math: m.vega },
-      { label: crypto ? 'IR01 (DISC)' : 'IR01', value: money(r.ir01), colorBy: sgn(r.ir01), math: m.ir01 },
-      ...(crypto ? [{ label: 'FUND01', value: money(r.fund01 ?? r.ir01_base), colorBy: sgn(r.fund01 ?? r.ir01_base), math: m.fund01 }] : []),
-      { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta), math: m.theta },
+      { label: sensLabel(DELTA_LABEL(crypto)), value: money(r.spot01), colorBy: sgn(r.spot01), math: m.spot01 },
+      { label: sensLabel('VEGA'), value: money(r.vega), colorBy: sgn(r.vega), math: m.vega },
+      ...(crypto
+        ? [{ label: sensLabel('IR01'), value: money(r.ir01), colorBy: sgn(r.ir01), math: m.ir01 },
+           { label: sensLabel('CRYBASIS01'), value: money(crybasis01(r)), colorBy: sgn(crybasis01(r)), math: m.crybasis01 }]
+        // a currency pair: each currency's curve on its own, as the forward shows them
+        : [{ label: sensLabel(`${qc} IR01`, SENS_UNITS.IR01), value: money(r.ir01_disc), colorBy: sgn(r.ir01_disc), math: `NPV with +1bp on the ${qc} curve − NPV` },
+           { label: sensLabel(`${r.base_currency} IR01`, SENS_UNITS.IR01), value: money(r.ir01_base), colorBy: sgn(r.ir01_base), math: `NPV with +1bp on the ${r.base_currency} curve − NPV` }]),
+      { label: sensLabel('THETA'), value: money(r.theta), colorBy: sgn(r.theta), math: m.theta },
     ] },
     breakdown: (r) => ({ kind: 'market', columns: ['ITEM', 'VALUE', 'NOTE'], rows: [
       ['SPOT', fmt(r.spot, dp), r.spot_source || ''],
@@ -362,7 +425,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       ...(r.intrinsic != null ? [['INTRINSIC / TIME VALUE', `${money(r.intrinsic * r.df_quote)} / ${money(r.time_value)}`, 'on the forward, discounted']] : []),
       ...(r.style && r.style !== 'EUROPEAN' ? [['STYLE', r.style.replace('_', ' '), [r.barrier_type, r.barrier && `barrier ${fmt(r.barrier, dp)}`, r.lower && `[${fmt(r.lower, dp)}, ${fmt(r.upper, dp)}]`, r.touch_type, r.payout && `pays ${fmt(r.payout, 0)} ${r.payout_currency === 'BASE' ? r.base_currency : qc}`, r.pay_at_hit ? 'paid at hit' : null, r.rebate ? `rebate ${r.rebate}` : null].filter(Boolean).join(' · ')]] : []),
       ['GAMMA', money(r.gamma_1pct), `change in ${DELTA_LABEL(crypto)} for a further +1% spot`],
-      [crypto ? `IR01 ${qc} / FUND01` : `IR01 ${qc} / ${r.base_currency}`, `${money(r.ir01_disc)} / ${money(r.ir01_base)}`, crypto ? '+1 bp on the USD curve (IR01) / on the funding rate (FUND01)' : '+1 bp on each curve'],
+      [crypto ? `IR01 ${qc} / CRYBASIS01` : `IR01 ${qc} / ${r.base_currency}`, `${money(r.ir01_disc)} / ${money(crypto ? crybasis01(r) : r.ir01_base)}`, crypto ? '+1 bp on the USD curve (IR01) / +1 bp a year on the forward basis (CRYBASIS01)' : '+1 bp on each curve'],
       [`DF ${qc}`, fmt(r.df_quote, 6), `to settlement · T_exp ${fmt(r.t_expiry, 4)}y · T_settle ${fmt(r.t_settle, 4)}y`],
       ['MODEL', r.method || 'Garman–Kohlhagen', r.model || ''],
     ] }),
@@ -370,20 +433,23 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const forwardDescriptor = { analytics: {
     metrics: (r) => [
       { label: 'NET NPV', value: money(r.npv), colorBy: sgn(r.npv), math: `±N·(F − K)·DF_${qc}\nF = S·DF_${r.base_currency}/DF_${qc} = ${fmt(r.forward, dp)} · K ${fmt(r.forward_rate, dp)} · DF ${fmt(r.df_quote, 6)}` },
-      { label: DELTA_LABEL(crypto), value: money(spot01(r)), colorBy: sgn(spot01(r)), math: `N·S·DF_${r.base_currency}·1%\nexact: a forward is linear in spot` },
-      { label: crypto ? 'IR01 (DISC)' : 'IR01', value: money(ir01(r)), colorBy: sgn(ir01(r)), math: crypto ? `−N·K·[DF_${qc}·e^(−1bp·T) − DF_${qc}]\nthe discounting curve alone` : `IR01 ${qc} + IR01 ${r.base_currency}\n−N·K·ΔDF_${qc} + N·S·ΔDF_${r.base_currency}` },
-      ...(crypto ? [{ label: 'FUND01', value: money(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp), colorBy: sgn(r.fund01 ?? r.ir01_base ?? r.rho_base_per_bp), math: `N·S·[DF_${r.base_currency}·e^(−1bp·T) − DF_${r.base_currency}]\n+1bp on the funding rate` }]
-                 : [{ label: 'IR01 DISC', value: money(r.ir01_disc ?? r.rho_quote_per_bp), colorBy: sgn(r.ir01_disc ?? r.rho_quote_per_bp), math: `−N·K·[DF_${qc}·e^(−1bp·T) − DF_${qc}]\nthe ${qc} curve alone` }]),
-      { label: 'THETA', value: money(r.theta), colorBy: sgn(r.theta), math: `NPV one calendar day later, same market` },
+      { label: sensLabel(DELTA_LABEL(crypto)), value: money(spot01(r)), colorBy: sgn(spot01(r)), math: `N·S·DF_${r.base_currency}·1%\nexact: a forward is linear in spot` },
+      ...(crypto
+        ? [{ label: sensLabel('IR01'), value: money(ir01(r)), colorBy: sgn(ir01(r)), math: `−N·K·[DF_${qc}·e^(−1bp·T) − DF_${qc}]\nthe ${qc} discounting curve alone` },
+           { label: sensLabel('CRYBASIS01'), value: money(crybasis01(r)), colorBy: sgn(crybasis01(r)), math: `N·S·[DF_${r.base_currency}·e^(+1bp·T) − DF_${r.base_currency}]\n+1bp a year on the forward basis: the forward up by the carry (−FUND01)` }]
+        // a currency pair: each currency's curve on its own (their sum reads as zero when the two offset)
+        : [{ label: sensLabel(`${qc} IR01`, SENS_UNITS.IR01), value: money(ir01Disc(r)), colorBy: sgn(ir01Disc(r)), math: `−N·K·[DF_${qc}·e^(−1bp·T) − DF_${qc}]\nthe ${qc} curve alone` },
+           { label: sensLabel(`${r.base_currency} IR01`, SENS_UNITS.IR01), value: money(ir01Base(r)), colorBy: sgn(ir01Base(r)), math: `N·S·[DF_${r.base_currency}·e^(−1bp·T) − DF_${r.base_currency}]\nthe ${r.base_currency} curve alone` }]),
+      { label: sensLabel('THETA'), value: money(r.theta), colorBy: sgn(r.theta), math: `NPV one calendar day later, same market` },
     ],
     breakdown: (r) => ({ kind: 'market', columns: ['ITEM', 'VALUE', 'NOTE'], rows: [
       ['SPOT', fmt(r.spot, dp), r.spot_source || ''],
-      ['FAIR FORWARD', fmt(r.forward, dp), `${fmt(r.forward_points, crypto ? 2 : 1)} ${crypto ? qc : 'pts'} · ${r.forward_mode === 'MARKET' && r.market_points != null ? 'quoted points' : crypto ? 'implied from funding' : 'implied from yields'}${r.forward_source ? ' · ' + r.forward_source : ''}`],
-      ['PARITY FORWARD', fmt(r.implied_forward, dp), r.basis_points != null ? `basis ${fmt(r.basis_points, crypto ? 2 : 1)} ${crypto ? qc : 'pts'} vs quoted` : 'no quoted points'],
+      ['FAIR FORWARD', fmt(r.forward, dp), `points ${fmt(r.forward_points, crypto ? 2 : 1)} ${crypto ? qc : 'pips'} · ${r.forward_mode === 'MARKET' && r.market_points != null ? 'quoted points' : crypto ? 'implied from the saved rate' : 'implied from yields'}${r.forward_source ? ' · ' + r.forward_source : ''}`],
+      ['PARITY FORWARD', fmt(r.implied_forward, dp), r.basis_points != null ? `basis ${fmt(r.basis_points, crypto ? 2 : 1)} ${crypto ? qc : 'pips'} vs quoted` : 'no quoted points'],
       [`DF ${qc} / ${r.base_currency}`, `${fmt(r.df_quote, 5)} / ${fmt(r.df_base, 5)}`, `T = ${fmt(r.t, 4)}y · ${r.base_discounting || ''}`],
-      [`ZEROS ${qc} / ${r.base_currency}`, `${fmt(r.quote_rate * 100)}% / ${fmt(r.base_rate * 100)}%`, 'continuous to T'],
+      [`ZEROS ${qc} / ${r.base_currency}`, `${fmt(r.quote_rate * 100)}% / ${fmt(r.base_rate * 100)}%`, crypto ? `continuous to T · the ${r.base_currency} rate is the one the forward points imply` : 'continuous to T'],
       ['IMPLIED CARRY', `${fmt(r.implied_carry * 100)}%`, 'annualised'],
-      [crypto ? 'FUND01' : `IR01 BASE (${r.base_currency})`, money(r.ir01_base ?? r.rho_base_per_bp), crypto ? '+1 bp on the funding rate' : `+1 bp on the ${r.base_currency} curve`],
+      [crypto ? 'CRYBASIS01' : `IR01 BASE (${r.base_currency})`, money(crypto ? crybasis01(r) : (r.ir01_base ?? r.rho_base_per_bp)), crypto ? '+1 bp a year on the forward basis, a long gains' : `+1 bp on the ${r.base_currency} curve`],
       ['MODEL', crypto ? 'F = S·e^(−r·T) / DF_quote' : 'F = S·DF_base / DF_quote', `NPV = ±N·(F − K)·DF_quote · ACT/365 · ${ndf || crypto ? 'cash-settled' : 'deliverable'}`],
     ] }),
   } }
@@ -394,10 +460,18 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // never both: the forward section stays mounted, hidden, under an option.
   const settlesShown = live?.settlement_date || settlement          // the form's own date while a price is owed: the fixing date follows at once
   const fixingShown = hasFixingDate ? ownOrDefaultFixing(settlesShown) : null
+  // an American exercises on any day: it fixes at exercise, or at expiry if never exercised (fx-settlement.js writes the European's line)
+  const optionFixing = fixingCaption({ product: 'OPTION', expiryDate: live?.expiry_date || expiry, time: settle.time })
+  const optionFixingLine = style === 'AMERICAN' ? optionFixing.replace('fixes at expiry', 'fixes at exercise or at expiry') : optionFixing
+  // a settlement rolled to Monday puts the day-before fixing on Sunday: the digital-asset benchmarks the ticket lists
+  // (CME CF BRR, the venues) publish every calendar day, and the caption says so when the fixing falls on a weekend
+  const forwardFixing = fixingCaption({ product: 'FORWARD', fixingDate: fixingShown, settlementDate: settlesShown, time: settle.time })
+  const fixingDay = fixingShown ? closedWhy(fixingShown, null) : null
+  const forwardFixingLine = fixingDay ? forwardFixing.replace(`fixes on ${fixingShown}`, `fixes on ${fixingShown} (a ${fixingDay}: this benchmark publishes every day)`) : forwardFixing
   const settlesOn = settleOptions.length > 0 && (
     <div className="tbw-fx-row" data-fx-row="settles-on" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start', marginTop: 10 }}>
       <div className="tbw-fx-cell" style={{ flex: '0 1 300px' }}>
-        <div className="tbw-lbl tbw-fx-lbl">SETTLES ON</div>
+        <div className="tbw-lbl tbw-fx-lbl">FIXING SOURCE</div>
         <select data-testid="settles-on" value={settle.source} onChange={e => setSettleSrc(e.target.value)}>
           {settleOptions.map(s => <option key={s.source} value={s.source}>{settlementLabel(s)}</option>)}
         </select>
@@ -414,8 +488,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       )}
       <div className="tbw-mut" style={{ flex: '1 1 240px', minWidth: 0, paddingTop: 22, lineHeight: 1.5 }}>
         <div>{settlementNote(settleShown)}</div>
-        <div>{fixingCaption(option ? { product: 'OPTION', expiryDate: live?.expiry_date || expiry, time: settle.time }
-                                   : { product: 'FORWARD', fixingDate: fixingShown, settlementDate: settlesShown, time: settle.time })}</div>
+        <div>{option ? optionFixingLine : forwardFixingLine}</div>
       </div>
     </div>
   )
@@ -426,7 +499,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const rate = (n) => formatInput(n, dp)
   const two = (n) => formatInput(n, 2)
   const base = cur?.base || 'base'
-  const perUnit = `${qc} per ${base}`
+  const perUnit = `${qc}/${base}`
   // SPOT: the stored spot as the field's value, and its own action at the end of the line under it
   const snapButton = (testId) => (
     <span className="tbw-fx-snap-wrap">·
@@ -443,9 +516,15 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // The fair forward of the latest quote, first in the terms row: to the settlement date on a forward, to the
   // option's own settlement on an option, with how far it is from spot and what that is a year (ln(F/S)/T, T the
   // time the forward runs over: the forward quote's t, the option quote's t_settle).
-  const fwdTenor = shape === 'SPOT' ? null : tenorOf(settlement, todayIso)
-  const expTenor = tenorOf(expiry, todayIso)
-  const forwardWhen = option ? `to ${quote?.settlement_date || optSettle || 'settlement'}` : shape === 'SPOT' ? (live?.settlement_date || 'spot date') : (fwdTenor || settlement)
+  const fwdTenor = shape === 'SPOT' ? null : tenorOf(settlement, todayIso, fwdDates)
+  const expTenor = tenorOf(expiry, todayIso, optDates)
+  // The option's settlement when none is typed: the API's own date for an expiry on a tenor, else the settlement_date
+  // of the quote of these terms (a dash while a price is owed: the last quote's date was another expiry's), else nothing yet. Never a date computed here:
+  // the API counts the spot lag in the non-USD centre and then rolls until both are open, which the one joint
+  // calendar it sends cannot mirror (139 differences over three years: Vera, 0.16.0).
+  const optSettleDefault = (expTenor && tenorSettlement(cur, expTenor)) || live?.settlement_date || null
+  const optSettleShown = optSettle || optSettleDefault || ''
+  const forwardWhen = option ? `to ${optSettleShown || 'settlement'}` : shape === 'SPOT' ? (live?.settlement_date || spotDate || 'spot date') : (fwdTenor || settlement)
   const fwdYears = quote ? (quote.shape === 'OPTION' ? (quote.t_settle ?? quote.t) : quote.t) : null
   const fwdLine = quote ? forwardCaption({ forward: quote.forward, spot: quote.spot, t: fwdYears, crypto, pip: cur?.pip }) : null
   const fwdEmpty = option ? 'to settlement, once priced' : 'the fair forward, once priced'
@@ -459,43 +538,81 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     </Cell>
   )
   // The tenor says what the date is: the standard tenor the date falls on, or CUSTOM with its length when it falls
-  // on none. Choosing a tenor sets the date; typing a date moves the tenor.
+  // on none. Choosing a tenor sets the date (the API's date for the tenor when it gave them); typing a date moves the tenor.
   const tenorSelect = (date, tenor, setDate, label) => (
-    <select data-testid="fx-tenor" aria-label={label} value={tenor || 'CUSTOM'} onChange={e => { if (TENORS.includes(e.target.value)) setDate(tenorDate(e.target.value, todayIso)) }}>
+    <select data-testid="fx-tenor" aria-label={label} value={tenor || 'CUSTOM'} onChange={e => { if (TENORS.includes(e.target.value)) setDate(tenorDateFor(e.target.value, todayIso, dates)) }}>
       {TENORS.map(t => <option key={t} value={t}>{t}</option>)}
       {!tenor && <option value="CUSTOM">{tenorLabel(date, todayIso)}</option>}
     </select>
   )
-  const setSettlementDate = (d) => { setSettlement(d); setLimitHit(h => (h === 'settlement' ? '' : h)) }
-  const setExpiryDate = (d) => { setExpiry(d); setLimitHit(h => (h === 'expiry' ? '' : h)) }
-  // a date typed beyond the last one is brought back to it when the field is left, and the ticket says so once
-  const holdDate = (which, date, setDate) => { const held = holdToLast(date, maxDate); if (held.hit) { setDate(held.date); setLimitHit(which) } }
+  const unroll = (which) => setRolled(r => (r[which] ? { ...r, [which]: null } : r))
+  const setSettlementDate = (d) => { setSettlement(d); setLimitHit(h => (h === 'settlement' ? '' : h)); unroll('settlement') }
+  const setExpiryDate = (d) => { setExpiry(d); setLimitHit(h => (h === 'expiry' ? '' : h)); unroll('expiry') }
+  const setOptSettleDate = (d) => { setOptSettle(d); unroll('optSettle') }
+  // When a date field is left: a date beyond the last one is brought back to it (said once under the field), and
+  // a typed date on no business day is rolled by the API's rule for that date (fx-ticket.js rollRule), said under
+  // the field until the date is typed again. Nothing is rolled without the API's calendar.
+  const leaveDate = (which, date, setDate) => {
+    const held = holdToLast(date, dateCap(which, maxDate))          // the option's own settlement has no cap (dateCap)
+    if (held.hit) setLimitHit(which)
+    const r = calendar ? rollDate(held.date, rollRule({ crypto, which: which === 'expiry' ? 'expiry' : 'settlement' }), calendar) : null
+    const next = r && r.rolled ? r.date : held.date
+    if (next !== date) setDate(next)
+    setRolled(prev => ({ ...prev, [which]: r && r.rolled ? r : null }))
+  }
   const limitNote = (which) => limitHit === which && <div className="tbw-fx-limit" data-testid="fx-tenor-limit">{CRYPTO_LIMIT_NOTE}</div>
+  const rolledNote = (which) => rolledTag(rolled[which]) && <div className="tbw-fx-limit" data-testid="fx-date-rolled">{rolledTag(rolled[which])}</div>
+  // the quote's own word on its dates, should the API ever answer with a settlement that is no business day
+  const dateWarning = quote && (quote.settlement_business_day === false || (Array.isArray(quote.date_notes) && quote.date_notes.length) || (typeof quote.date_notes === 'string' && quote.date_notes))
+    ? (Array.isArray(quote.date_notes) ? quote.date_notes.join(' · ') : quote.date_notes || 'the settlement date is not a business day') : null
+  // a number the ticket cannot read is said under its field: the line beside the valuation does not say it again
+  const fieldSaysIt = !!unreadable(ticket)
   // VOL %: where the vol on its default comes from, in the pair's own words (the venue and the time of its marks,
   // or the source and date of the surface), with the full sentence in the title
   const volTag = (quote?.shape === 'OPTION' && quote.vol_tier === 'DEFAULT') || !cur?.vol_surface ? 'default level'
     : isVenue(cur.vol_surface) ? cur.vol_surface.label : `${sourceShort(cur.vol_surface)} surface ${cur.vol_surface.valuation_date}`
   const volTitle = (quote?.shape === 'OPTION' && quote.vol_source) || cur?.vol_surface?.source || 'no surface for this pair: the desk default level'
-  // FUNDING %: on quoted points the rate is the one the forward implies, and a typed rate replaces the quoted forward
-  const fundTag = (quote && quote.shape !== 'OPTION' ? quote.forward_mode === 'MARKET' && quote.market_points != null : quoted) ? 'implied by the forward' : cur?.funding_pct != null ? 'saved rate' : 'default rate'
+  // IMPLIED <BASE> RATE %: the rate behind the forward points. On quoted points it is the base zero the forward
+  // implies; without them the saved rate; a typed rate replaces the quoted forward with spot carried at that rate.
+  // ("Funding" is the desk's own spread, on the XVA tab: this field is not it.)
+  const fundTag = (quote && quote.shape !== 'OPTION' ? quote.forward_mode === 'MARKET' && quote.market_points != null : quoted) ? 'implied by the forward points' : cur?.funding_pct != null ? 'saved rate' : 'default rate'
   const ownInputs = overrideNote(ticket)
-  const fundTitle = quoted ? 'A rate typed here overrides the quoted forward: the forward is then spot carried at this rate' : cur?.funding_pct != null ? `${cur.funding_pct}% saved for ${base}` : `no rate saved for ${base}: 0%`
+  const fundTitle = 'the rate behind the forward points: typing one replaces the quoted forward with spot carried at this rate'
+  // what the option is, in one sentence (fx-ticket.js optionSentence): the strike and the levels as the ticket will book them
+  const sentence = optionSentence({ style, direction, optType, base, quote: qc, touchType, barrierType, payout: nums.payout.value, payoutCcy,
+                                    strike: nums.strike.given ? nums.strike.value : (quote?.shape === 'OPTION' ? bookedStrike(quote.strike ?? quote.forward, dp) : null),
+                                    barrier: nums.barrier.value, lower: nums.lowerB.value, upper: nums.upperB.value, expiry, fmt: (v) => fmt(v, dp) })
+  const barrierStyle = style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH'
+  // The model, in one line: a digital asset's European is Black-76 on the venue's quoted forward when the quote was
+  // priced on one (its forward_mode), on the carry forward otherwise; every other style names its method and the
+  // forward it is priced on. One place, so the words are not doubled.
+  const onQuoted = quote?.shape === 'OPTION' ? quote.forward_mode === 'MARKET' && quote.market_points != null : quoted
+  const methodLine = style === 'EUROPEAN'
+    ? (crypto ? `Black-76 on the ${onQuoted ? 'quoted' : 'carry'} forward to settlement` : 'Garman–Kohlhagen on the forward to settlement')
+    : `${style === 'AMERICAN' ? 'Leisen–Reimer binomial tree, early exercise at every node' : style === 'DIGITAL' ? 'Reiner–Rubinstein cash-or-nothing / asset-or-nothing' : style === 'TOUCH' ? 'first-passage and survival probabilities, continuous monitoring' : 'survival-density integral, continuous monitoring'} on the forward to settlement`
+  const premium = premiumLine(quote, dp)
 
   return (
     <>
       <div className="tbw-sec">
         <div className="tbw-lbl">PRIMARY ECONOMICS</div>
-        <div className={`tbw-fx-row ${option ? 'tbw-fx-grid-expiry' : 'tbw-fx-grid-6'}`} data-fx-row="primary">
+        {/* the option's row: the expiry cell (a tenor and a date) is the wide one, wherever it falls once a payout style
+            has hidden the notional and a touch the type (the template follows the cells that are there) */}
+        <div className={`tbw-fx-row ${option ? 'tbw-fx-grid-expiry' : 'tbw-fx-grid-6'}`} data-fx-row="primary"
+             style={option ? { gridTemplateColumns: `repeat(${(payoutStyle(style) ? 0 : 1) + (style === 'TOUCH' ? 0 : 1) + 2}, minmax(0, 1fr)) minmax(0, 1.6fr) minmax(0, 1fr)` } : undefined}>
           <Cell label="PAIR">
             <select value={pair} onChange={e => { setPair(e.target.value); setSettleSrc('') }}>
               {list.map(p => <option key={p.pair} value={p.pair}>{p.pair}</option>)}
             </select>
           </Cell>
-          <Cell label="NOTIONAL" sub={cur?.base || 'BASE'}>
-            {/* as typed; a large amount is read back grouped under the field, where a slip of a digit shows */}
-            <NumberInput testId="fx-notional" value={notional} onChange={setNotional} placeholder={crypto ? '10' : '10000000'}
-                         tag={nums.notional.value >= 10000 ? `${nums.notional.value.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${cur?.base || ''}` : null} />
-          </Cell>
+          {/* a digital or a touch pays an amount (PAYOUT): it has no notional, and the cell is hidden with its state kept */}
+          {!(option && payoutStyle(style)) && (
+            <Cell label="NOTIONAL" sub={cur?.base || 'BASE'}>
+              {/* as typed; a large amount is read back grouped under the field, where a slip of a digit shows */}
+              <NumberInput testId="fx-notional" value={notional} onChange={setNotional} placeholder={crypto ? '10' : '10000000'}
+                           tag={nums.notional.value >= 10000 ? `${nums.notional.value.toLocaleString('en-US', { maximumFractionDigits: 8 })} ${cur?.base || ''}` : null} />
+            </Cell>
+          )}
           {/* what is bought or sold is in the label (SIDE of the option, DIRECTION in the base currency) and in each
               button's name; the buttons themselves are two short words that stay on one line at any width */}
           <Cell label={option ? 'SIDE' : 'DIRECTION'} sub={option ? undefined : (cur?.base || undefined)}>
@@ -507,13 +624,16 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             </div>
           </Cell>
           {option ? (
-            <Cell label="TYPE" sub={`on ${base}`}>
-              <div className="tbw-chip-row tbw-fx-chips">
-                {['CALL', 'PUT'].map(d => (
-                  <button key={d} className={`tbw-chip ${optType === d ? 'is-on' : ''}`} onClick={() => setOptType(d)}>{d}</button>
-                ))}
-              </div>
-            </Cell>
+            // a touch has no call or put: the cell is hidden with its state kept (a digital keeps it: above or below)
+            style !== 'TOUCH' && (
+              <Cell label="TYPE" sub={`on ${base}`}>
+                <div className="tbw-chip-row tbw-fx-chips">
+                  {['CALL', 'PUT'].map(d => (
+                    <button key={d} className={`tbw-chip ${optType === d ? 'is-on' : ''}`} onClick={() => setOptType(d)}>{d}</button>
+                  ))}
+                </div>
+              </Cell>
+            )
           ) : (
             <Cell label="TENOR">
               {shape === 'SPOT'
@@ -526,26 +646,35 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
               <div className="tbw-fx-pick">
                 {tenorSelect(expiry, expTenor, setExpiryDate, 'Expiry tenor')}
                 <input type="date" data-testid="fx-expiry" value={expiry} min={minDate || undefined} max={maxDate || undefined}
-                       onChange={e => setExpiryDate(e.target.value)} onBlur={() => holdDate('expiry', expiry, setExpiry)} />
+                       onChange={e => setExpiryDate(e.target.value)} onBlur={() => leaveDate('expiry', expiry, setExpiry)} />
               </div>
               {limitNote('expiry')}
+              {rolledNote('expiry')}
             </Cell>
           ) : (
-            <Cell label="EFF DATE" sub={crypto ? 'T+0' : 'SPOT T+2'}>
-              <input type="date" value={effDate} readOnly />
+            <Cell label="SPOT DATE" sub={spotLagLabel({ cur, crypto })}>
+              <input type="date" value={spotDate || ''} readOnly />
             </Cell>
           )}
           {option ? (
-            <Cell label="SETTLEMENT">
-              <input type="date" value={optSettle || live?.settlement_date || ''} min={expiry || undefined} onChange={e => setOptSettle(e.target.value)} />
-              <div className="tbw-fx-tag tbw-fx-tag-free" title="Leave the date blank and the settlement date is set from the expiry"><span>{crypto ? 'blank = expiry + 1 day' : 'blank = expiry + 2 business days'}</span></div>
+            <Cell label="SETTLEMENT DATE">
+              {/* blank = the API's default (the tenor's date, else the quote's); a dash until a quote says it; a typed date is rolled when the field is left */}
+              {optSettleShown
+                ? <input type="date" data-testid="fx-opt-settlement" value={optSettleShown} min={expiry || undefined}
+                         onChange={e => setOptSettleDate(e.target.value)} onBlur={() => { if (optSettle) leaveDate('optSettle', optSettle, setOptSettle) }} />
+                : <input type="text" className="tbw-mono tbw-fx-def-input is-empty" data-testid="fx-opt-settlement" value="—" readOnly aria-label="Settlement date, from the quote" />}
+              <div className="tbw-fx-tag tbw-fx-tag-free" title="Leave the date blank and the settlement date is set from the expiry">
+                <span>{!optSettleShown ? 'from the quote' : crypto ? 'blank = the next New York business day after expiry' : "blank = the market's delivery date for this expiry"}</span>
+              </div>
+              {rolledNote('optSettle')}
             </Cell>
           ) : (
-            <Cell label="MAT DATE" sub={shape === 'SPOT' ? 'VALUE' : ndf || crypto ? 'SETTLEMENT' : 'VALUE'}>
-              <input type="date" data-testid="fx-maturity" value={shape === 'SPOT' ? (live?.settlement_date || effDate) : settlement} disabled={shape === 'SPOT'}
+            <Cell label={shape === 'SPOT' || (!crypto && !ndf) ? 'VALUE DATE' : 'SETTLEMENT DATE'}>
+              <input type="date" data-testid="fx-maturity" value={shape === 'SPOT' ? (live?.settlement_date || spotDate || '') : settlement} disabled={shape === 'SPOT'}
                      min={shape === 'SPOT' ? undefined : minDate || undefined} max={shape === 'SPOT' ? undefined : maxDate || undefined}
-                     onChange={e => setSettlementDate(e.target.value)} onBlur={() => { if (shape !== 'SPOT') holdDate('settlement', settlement, setSettlement) }} />
+                     onChange={e => setSettlementDate(e.target.value)} onBlur={() => { if (shape !== 'SPOT') leaveDate('settlement', settlement, setSettlement) }} />
               {limitNote('settlement')}
+              {rolledNote('settlement')}
             </Cell>
           )}
         </div>
@@ -555,7 +684,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         <div className="tbw-sec">
           <div className="tbw-terms-header">
             <span className="tbw-lbl">OPTION TERMS</span>
-            <span className="tbw-helper-badge">→ {direction === 'BUY' ? 'we hold' : 'we write'} the right to {optType === 'CALL' ? 'buy' : 'sell'} {cur?.base || 'base'} against {qc} · {cashSettled ? `cash-settled in ${qc}${crypto ? ' against ' + (settle.source || 'the settlement price source') : ''}` : 'deliverable'}</span>
+            <span className="tbw-helper-badge" data-testid="fx-option-sentence">→ {sentence} · {cashSettled ? `cash-settled in ${qc}${crypto ? ' against ' + (settle.source || 'the settlement price source') : ''}` : 'deliverable'}</span>
           </div>
           <div className="tbw-chip-row" style={{ gap: 4, marginBottom: 10 }}>
             {[['EUROPEAN', 'EUROPEAN'], ['AMERICAN', 'AMERICAN'], ['DIGITAL', 'DIGITAL'], ['BARRIER', 'BARRIER'], ['DOUBLE_BARRIER', 'DOUBLE BARRIER'], ['TOUCH', 'TOUCH']].map(([k, l]) => (
@@ -625,12 +754,15 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
               </>)}
             </div>
           )}
+          {barrierStyle && (
+            <div className="tbw-fx-barrier-note" data-testid="fx-barrier-note">barrier observed continuously on the pair's spot in the model; the record names no observation source or determination agent</div>
+          )}
           <div className="tbw-fx-row tbw-fx-grid-6" data-fx-row="option-terms">
             {forwardCell(true)}
             {style !== 'TOUCH' && (
               <Cell label="STRIKE" sub={perUnit}>
                 {/* on its default the strike is the forward of the latest quote: the API strikes a blank one there, and again when the market moves */}
-                <DefaultedInput testId="fx-strike" value={strike} onChange={setStrike} fallback={quote?.forward} format={rate} tag="at the forward" dim={dim} />
+                <DefaultedInput testId="fx-strike" value={strike} onChange={setStrike} fallback={quote?.strike ?? quote?.forward} format={rate} tag="at the forward" dim={dim} />
               </Cell>
             )}
             <Cell label="VOL %">
@@ -638,7 +770,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
               <DefaultedInput testId="fx-vol" value={volOv} onChange={setVolOv} format={two} dim={dim} title={volTitle} tag={volTag}
                               fallback={quote && quote.shape === 'OPTION' && quote.vol_tier !== 'OVERRIDE' ? quote.vol_pct : null} />
             </Cell>
-            <Cell label="SETTLEMENT">
+            <Cell label="SETTLEMENT TYPE">
               <div className="tbw-chip-row tbw-fx-chips">
                 {!crypto && <button className={`tbw-chip ${!cashSettled ? 'is-on' : ''}`} onClick={() => setCashSettled(false)}>DELIVER</button>}
                 <button className={`tbw-chip ${cashSettled ? 'is-on' : ''}`} onClick={() => setCashSettled(true)}>{crypto ? `CASH ${qc} · NDO` : `CASH ${qc}`}</button>
@@ -651,7 +783,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
           </div>
           {settlesOn}
           <div className="tbw-helper-text" style={{ marginTop: 10 }}>
-            {style === 'EUROPEAN' ? (crypto ? (quoted ? 'Black-76 on the quoted forward' : 'Black-76, the funding rate as the carry') : 'Garman–Kohlhagen') : style === 'AMERICAN' ? 'Leisen–Reimer binomial tree, early exercise at every node' : style === 'DIGITAL' ? 'Reiner–Rubinstein cash-or-nothing / asset-or-nothing' : style === 'TOUCH' ? 'first-passage and survival probabilities, continuous monitoring' : 'survival-density integral, continuous monitoring'} on the forward to settlement · σ from the pair's ATM / 25Δ RR / 25Δ BF surface at the strike (Market data › FX › Volatility) · premium in {qc} on the trade date · ACT/365
+            {methodLine} · σ from the pair's ATM / 25Δ RR / 25Δ BF surface at the strike (Market data › FX › Volatility) · premium in {qc} on the trade date · ACT/365
           </div>
         </div>
       )}
@@ -659,19 +791,19 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       <div className="tbw-sec" style={option ? { display: 'none' } : undefined}>
         <div className="tbw-terms-header">
           <span className="tbw-lbl">FORWARD TERMS</span>
-          <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · ${quoted ? `forward from ${cur.forward_curve.label || 'quoted points'}` : 'funding is a desk input'}` : ndf ? `non-deliverable · cash-settled in ${qc}` : shape === 'SPOT' ? 'spot · T+2 delivery' : 'deliverable · both principals exchange'}</span>
+          <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · ${quoted ? `forward from ${cur.forward_curve.label || 'quoted points'}` : 'the implied rate is a desk input'}` : ndf ? `non-deliverable · cash-settled in ${qc}` : shape === 'SPOT' ? `spot · ${spotLagLabel({ cur, crypto })} delivery` : 'deliverable · both principals exchange'}</span>
         </div>
         {/* five cells on the six columns the rows above use, so the columns of the ticket line up */}
         <div className="tbw-fx-row tbw-fx-grid-6" data-fx-row="forward-terms">
           {forwardCell(!option)}
-          <Cell label={crypto ? 'PRICE K' : 'RATE K'} sub={perUnit}>
-            {/* on its default K is the fair forward of the latest quote: a blank K is struck there by the API, and again when the market moves */}
-            <DefaultedInput testId={option ? undefined : 'fx-strike'} value={strike} onChange={setStrike} fallback={quote?.forward} format={rate} tag="fair forward" dim={dim} />
+          <Cell label={crypto ? 'FORWARD PRICE K' : 'FORWARD RATE K'} sub={perUnit}>
+            {/* on its default K is the fair forward of the latest quote to the pair's decimals, the K that is booked: a blank K is struck there, and again when the market moves */}
+            <DefaultedInput testId={option ? undefined : 'fx-strike'} value={strike} onChange={setStrike} fallback={quote?.forward_rate ?? quote?.forward} format={rate} tag="fair forward, rounded" dim={dim} />
           </Cell>
           {spotField(!option)}
           {crypto ? (
-            <Cell label={`${cur?.base || 'ASSET'} FUNDING %`}>
-              {/* the funding rate the latest quote used: the base zero the quoted forward implies, or the saved rate (the quote's own number, base_rate) */}
+            <Cell label={`IMPLIED ${cur?.base || 'ASSET'} RATE %`}>
+              {/* the rate behind the forward points the latest quote used: the base zero the quoted forward implies, or the saved rate (the quote's own number, base_rate) */}
               <DefaultedInput testId={option ? undefined : 'fx-funding'} value={fundOv} onChange={setFundOv} signed format={two} dim={dim} title={fundTitle} tag={fundTag}
                               fallback={quote && quote.base_rate != null && quote.base_discounting !== 'request' ? quote.base_rate * 100 : null} />
             </Cell>
@@ -694,17 +826,21 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
           cannot be had says why here, not in the window's title or on BOOK. */}
       <div className="tbw-fx-valuation">
         {repricing && <div className="tbw-fx-status" data-testid="fx-pricing" role="status">pricing…</div>}
-        {!repricing && note && (
+        {/* why there is no price; not said again here when a field already says it under itself (a number it cannot read) */}
+        {!repricing && note && !(note.kind === 'why' && fieldSaysIt) && (
           <div className={`tbw-fx-note${note.kind === 'error' ? ' is-error' : ''}`} data-testid={note.kind === 'error' ? 'fx-price-error' : 'fx-price-why'} role={note.kind === 'error' ? 'alert' : 'status'}>
             {note.kind === 'error' ? `Not priced: ${note.text}` : note.text}
           </div>
         )}
+        {dateWarning && <div className="tbw-fx-note is-warning" data-testid="fx-date-warning" role="note">{dateWarning}</div>}
         {/* BOOK repriced (or waited for a price that was owed): the figures are new, so it does not book in the same press */}
         {!repricing && priced.review && live && (
           <div className="tbw-fx-note" data-testid="fx-book-repriced" role="status">repriced: check the value and press BOOK again</div>
         )}
         {/* a market input of the user's own is not kept on the trade: the blotter will value it on the stored market */}
         {ownInputs && <div className="tbw-fx-note is-warning" data-testid="fx-override-note" role="note">{ownInputs}</div>}
+        {/* the option's premium: what is paid or received, as a share of the notional at spot (of the payout for a digital or a touch) */}
+        {premium && <div className={`tbw-fx-note tbw-fx-premium${dim ? ' tbw-fx-dim' : ''}`} data-testid="fx-premium">{premium}</div>}
         <div className={dim ? 'tbw-fx-dim' : undefined}>
           <AnalyticsBlock descriptor={descriptor} result={quote ? { ...quote, curve_id: cur?.quote_curve } : null} pricing={repricing} />
         </div>

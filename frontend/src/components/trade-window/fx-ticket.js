@@ -82,7 +82,7 @@ export function parseNumber(text, { signed = false } = {}) {
 }
 
 // The ticket's numeric fields: what each is called in a sentence, and whether it takes a minus.
-const NUMBERS = { notional: ['the notional', false], strike: ['the strike', false], spotOv: ['the spot', false], fundOv: ['the funding rate', true], volOv: ['the vol', false],
+const NUMBERS = { notional: ['the notional', false], strike: ['the strike', false], spotOv: ['the spot', false], fundOv: ['the implied rate', true], volOv: ['the vol', false],
                   payout: ['the payout', false], barrier: ['the barrier', false], lowerB: ['the lower level', false], upperB: ['the upper level', false], rebate: ['the rebate', false] }
 // Every numeric field of the form, read once: { given, value, invalid }. `value` is NaN for a number that cannot be read.
 export function readNumbers(t) {
@@ -97,7 +97,8 @@ export function readNumbers(t) {
 export function numbersSent(t) {
   if (!t.option) return ['notional', 'strike', 'spotOv', ...(t.crypto ? ['fundOv'] : [])]
   const sends = styleSends(t.style, t.touchType)
-  return ['notional', 'spotOv', 'volOv', ...(sends.strike ? ['strike'] : []), ...(sends.payout ? ['payout'] : []), ...(sends.barrier ? ['barrier'] : []),
+  // a digital or a touch hides its notional cell: what is hidden is not read (notionalSent sends what the API wants)
+  return [...(payoutStyle(t.style) ? [] : ['notional']), 'spotOv', 'volOv', ...(sends.strike ? ['strike'] : []), ...(sends.payout ? ['payout'] : []), ...(sends.barrier ? ['barrier'] : []),
           ...(sends.rebate ? ['rebate'] : []), ...(sends.levels ? ['lowerB', 'upperB'] : [])]
 }
 // The first number the ticket sends that cannot be read: { field, why }, or null. Nothing is priced or booked on one.
@@ -134,21 +135,112 @@ export function tenorDate(tenor, today) {
   return d.toISOString().slice(0, 10)
 }
 
-// The standard tenor whose date, by tenorDate, is exactly `date`; null when the date is on none of them.
-export function tenorOf(date, today, tenors = TENORS) {
+// The standard tenor whose date is exactly `date`: the pairs answer's date for the tenor (`dates`, tenorDates
+// below) when the API gave them, else tenorDate's; null when the date is on none of them.
+export function tenorOf(date, today, dates = null, tenors = TENORS) {
   if (!isIsoDate(date) || !isIsoDate(today)) return null
-  return tenors.find(t => tenorDate(t, today) === date) || null
+  return tenors.find(t => tenorDateFor(t, today, dates) === date) || null
+}
+
+// ── the dates as the API gives them, and its rolling rules ───────────────────────────────────────────────────
+// The pairs answer carries, per pair, the dates the API itself would settle each tenor on (`tenor_dates`: the
+// forward's settlement per tenor, the option's expiry and settlement per tenor), its spot date and lag, and the
+// calendar it rolled them on (`calendar: { name, holidays: [ISO], weekend: ['SAT', 'SUN'] }`). An older API gives
+// none of these, and the ticket then makes its dates on the calendar as it always did (tenorDate) and rolls nothing.
+export const DEFAULT_WEEKEND = ['SAT', 'SUN']
+const WEEKDAY = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+const DAY_NAME = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const shiftDays = (date, n) => new Date(utcDay(date).getTime() + n * DAY_MS).toISOString().slice(0, 10)
+
+// The tenor dates of a product as the pairs answer gives them: { TENOR: ISO date } (the forward's settlement, the
+// option's expiry), or null when the answer has none (an older API).
+export function tenorDates(cur, product) {
+  const td = cur?.tenor_dates
+  if (!td || typeof td !== 'object') return null
+  const block = product === 'OPTION' ? td.option : td.forward
+  if (!block || typeof block !== 'object') return null
+  const out = {}
+  for (const [tenor, v] of Object.entries(block)) {
+    const date = v && typeof v === 'object' ? v.expiry : v
+    if (isIsoDate(date)) out[tenor] = date
+  }
+  return Object.keys(out).length ? out : null
+}
+// The settlement date the API gives for an option expiring on a tenor; null when it gave none.
+export function tenorSettlement(cur, tenor) {
+  const v = cur?.tenor_dates?.option?.[tenor]
+  return v && typeof v === 'object' && isIsoDate(v.settlement) ? v.settlement : null
+}
+// The date of a tenor: the API's when it gave one for the tenor, else tenorDate's.
+export function tenorDateFor(tenor, today, dates = null) {
+  return dates && isIsoDate(dates[tenor]) ? dates[tenor] : tenorDate(tenor, today)
+}
+
+// Why a date is no business day on the calendar: 'Saturday' | 'Sunday' | 'holiday' | null. No calendar means the
+// weekend alone. (A holiday is named 'holiday': the API's calendar lists dates, not names.)
+export function closedWhy(date, calendar) {
+  if (!isIsoDate(date)) return null
+  const weekend = Array.isArray(calendar?.weekend) && calendar.weekend.length ? calendar.weekend.map(d => String(d).toUpperCase().slice(0, 3)) : DEFAULT_WEEKEND
+  const dow = utcDay(date).getUTCDay()
+  if (weekend.includes(WEEKDAY[dow])) return DAY_NAME[dow]
+  if (Array.isArray(calendar?.holidays) && calendar.holidays.includes(date)) return 'holiday'
+  return null
+}
+export const isBusinessDay = (date, calendar) => isIsoDate(date) && closedWhy(date, calendar) === null
+// `n` business days strictly after `date` (n = 1: the next business day after it).
+export function addBusinessDays(date, n, calendar) {
+  if (!isIsoDate(date)) return null
+  let d = date, k = 0
+  while (k < n) { d = shiftDays(d, 1); if (isBusinessDay(d, calendar)) k++ }
+  return d
+}
+// A date rolled by a rule: { date, rolled, from, why }. FOLLOWING: the next business day; MODIFIED_FOLLOWING: the
+// same unless that is in the next month, then the business day before; NONE: as typed.
+export function rollDate(date, rule, calendar) {
+  const same = { date, rolled: false, from: null, why: null }
+  if (!isIsoDate(date) || !rule || rule === 'NONE') return same
+  const why = closedWhy(date, calendar)
+  if (!why) return same
+  let d = date
+  while (!isBusinessDay(d, calendar)) d = shiftDays(d, 1)
+  if (rule === 'MODIFIED_FOLLOWING' && d.slice(0, 7) !== date.slice(0, 7)) { d = date; while (!isBusinessDay(d, calendar)) d = shiftDays(d, -1) }
+  return { date: d, rolled: true, from: date, why }
+}
+// The API's rule for each date of the ticket: FX settlement and expiry modified following; a digital asset settles on
+// the next New York business day (following) and its expiry is not rolled (the venue fixes on any day).
+export function rollRule({ crypto, which }) {
+  if (crypto) return which === 'expiry' ? 'NONE' : 'FOLLOWING'
+  return 'MODIFIED_FOLLOWING'
+}
+// What the ticket says under a date it rolled: 'rolled from 2027-02-13 (Saturday)'. null for one it did not.
+export function rolledTag(r) {
+  return r && r.rolled ? `rolled from ${r.from} (${r.why})` : null
+}
+// (The option's default settlement is not computed here: the API's spot-lag rule counts the lag in the non-USD
+// centre and then rolls until both are open, which one joint calendar cannot mirror. The ticket shows the API's
+// date for a tenor, else the quote's settlement_date, else nothing.)
+// The spot date of a pair: the API's when it gave one, else a digital asset today (its quoted spot settles at once,
+// T+0, as the methodology states and the API's spot_date has it) and a currency pair two weekdays on.
+export function spotDateFor({ cur, crypto, today }) {
+  if (isIsoDate(cur?.spot_date)) return cur.spot_date
+  if (!isIsoDate(today)) return null
+  return crypto ? today : addBusinessDays(today, 2, null)
+}
+export function spotLagLabel({ cur, crypto }) {
+  const lag = Number(cur?.spot_lag_business_days)
+  return `T+${cur?.spot_lag_business_days != null && finite(lag) && lag >= 0 ? Math.round(lag) : crypto ? 0 : 2}`
 }
 
 // What the select says for a date on no standard tenor, by actual days from today: days under 60, months
-// (of 365.25/12 days) under two years, years beyond. "CUSTOM" alone for a date that is not after today.
+// (of 365.25/12 days) under two years, years beyond, each in words ("3.1 years": "3.1Y" read as three years and a
+// month). "CUSTOM" alone for a date that is not after today.
 export function tenorLabel(date, today) {
   if (!isIsoDate(date) || !isIsoDate(today)) return 'CUSTOM'
   const days = Math.round((utcDay(date) - utcDay(today)) / DAY_MS)
   if (days <= 0) return 'CUSTOM'
-  if (days < 60) return `CUSTOM · ${days}D`
-  if (days < 730) return `CUSTOM · ${(days / (365.25 / 12)).toFixed(1)}M`
-  return `CUSTOM · ${(days / 365.25).toFixed(1)}Y`
+  if (days < 60) return `CUSTOM · ${days} ${days === 1 ? 'day' : 'days'}`
+  if (days < 730) return `CUSTOM · ${(days / (365.25 / 12)).toFixed(1)} months`
+  return `CUSTOM · ${(days / 365.25).toFixed(1)} years`
 }
 
 // The first and the last date a settlement or an expiry may be: after today, and for a digital asset no later
@@ -157,8 +249,53 @@ export function firstDate(today) {
   if (!isIsoDate(today)) return null
   return new Date(utcDay(today).getTime() + DAY_MS).toISOString().slice(0, 10)
 }
-export function lastDate({ crypto, today }) {
-  return crypto ? tenorDate(MAX_CRYPTO_TENOR, today) : null
+export function lastDate({ crypto, today, dates = null }) {
+  return crypto ? tenorDateFor(MAX_CRYPTO_TENOR, today, dates) : null
+}
+
+// K as it is shown and booked: the forward to the pair's decimals, as a number. What the screen says is what the
+// record carries (a default K booked with every decimal of the forward settled four cents off the screen, found
+// 2026-11-09). null without a forward.
+export function bookedStrike(forward, dp) {
+  const F = Number(forward)
+  return forward == null || !Number.isFinite(F) ? null : Number(F.toFixed(dp))
+}
+
+// Did the API strike a blank K at the forward rounded to `dp` (it read strike_dp)? Judged on a quote whose request
+// sent strike_dp and no K: true when its K is the rounded forward, false when it is the forward with every decimal
+// (an older API), null when the answer cannot say (no such request, or no K in it). A false sticks: the ticket then
+// sends the rounded forward itself.
+export function apiRoundsStrike(quote, sent, dp) {
+  if (!quote || !sent || !sent.strikeDp || sent.defaultK != null) return null
+  const K = quote.shape === 'OPTION' ? quote.strike : quote.forward_rate
+  const F = bookedStrike(quote.forward, dp)
+  if (K == null || F == null || !finite(Number(K))) return null
+  return Number(K) === F
+}
+
+// A digital or a touch pays an amount: its notional cell is hidden and its number is neither read nor sent. The API
+// still wants a base_notional above zero and does not scale a payout by it (pricing/fx_exotic.py, scale 1.0), so 1
+// goes. (The hidden cell's number went before, and a touch booked a notional nobody saw: Vera, 0.16.0.)
+export const payoutStyle = (style) => style === 'DIGITAL' || style === 'TOUCH'
+export function notionalSent(t) {
+  if (t.option && payoutStyle(t.style)) return 1
+  const n = parseNumber(t.notional, {})
+  return n.state === 'ok' ? n.value : NaN
+}
+// What the record carries as the trade's notional: the base notional in base for a forward or a vanilla-type option,
+// the PAYOUT in the currency it is paid in for a digital or a touch. { amount, currency, payoutStyle }.
+export function bookedNotional(t, { base, quote } = {}) {
+  if (t.option && payoutStyle(t.style)) {
+    const p = parseNumber(t.payout, {})
+    return { amount: p.state === 'ok' ? p.value : NaN, currency: t.payoutCcy === 'BASE' ? base : quote, payoutStyle: true }
+  }
+  return { amount: notionalSent(t), currency: base, payoutStyle: false }
+}
+// The last date a typed date is held to, by field: a settlement or an expiry to the digital asset's last tenor; an
+// option's own settlement has no cap beyond "not before the expiry" (held to the expiry's cap, a 2Y settlement typed
+// as the default was pulled back onto the expiry: Vera, 0.16.0). null = no cap.
+export function dateCap(which, maxDate) {
+  return which === 'optSettle' ? null : (maxDate || null)
 }
 
 // A date typed beyond the last one, brought back to it: { date, hit }.
@@ -216,23 +353,30 @@ export function styleFields(t) {
   return f
 }
 
-// The request that prices the ticket: { path, body }. An override is sent, a default is not: a blank strike is
-// struck at the forward by the API, a blank spot is the stored spot, a blank vol is the surface's.
+// The request that prices the ticket: { path, body }. An override is sent, a default is not: a blank spot is the
+// stored spot, a blank vol is the surface's. K is shown and booked to the pair's decimals, so a blank K asks the API
+// to strike at the fair forward rounded to them (`strike_dp`, from `t.strikeDp`): the quote's own strike, premium
+// and NPV are then those of the trade that will be booked. An older API that does not read strike_dp strikes at the
+// forward with every decimal; apiRoundsStrike() sees that from its answer, and the ticket then sends the rounded
+// forward itself once it knows it (`defaultK`, bookedStrike of the quote on screen for the same forward terms).
 // (A number that cannot be read stands as NaN here; unreadable() says so first, and such a request is never sent.)
 export function priceRequest(t) {
   const n = readNumbers(t)
+  const defaultK = finite(Number(t.defaultK)) && Number(t.defaultK) > 0 ? Number(t.defaultK) : null
+  const strikeDp = Number.isInteger(t.strikeDp) && t.strikeDp >= 0 ? t.strikeDp : null
+  const blankK = (body, name) => { if (defaultK != null) body[name] = defaultK; else if (strikeDp != null) body.strike_dp = strikeDp }
   if (t.option) {
-    const body = { pair: t.pair, option_type: t.optType, base_notional: n.notional.value, expiry_date: t.expiry, direction: t.direction,
+    const body = { pair: t.pair, option_type: t.optType, base_notional: notionalSent(t), expiry_date: t.expiry, direction: t.direction,
                    settlement_type: t.cashSettled ? 'NON_DELIVERABLE' : 'DELIVERABLE', ...styleFields(t) }
     if (t.optSettle) body.settlement_date = t.optSettle
-    if (n.strike.given && styleSends(t.style, t.touchType).strike) body.strike = n.strike.value
+    if (styleSends(t.style, t.touchType).strike) { if (n.strike.given) body.strike = n.strike.value; else blankK(body, 'strike') }
     if (n.spotOv.given) body.spot = n.spotOv.value
     if (n.volOv.given) body.vol_pct = n.volOv.value
     return { path: '/api/currency/option/price', body }
   }
-  const body = { pair: t.pair, shape: t.shape, base_notional: n.notional.value, direction: t.direction }
+  const body = { pair: t.pair, shape: t.shape, base_notional: notionalSent(t), direction: t.direction }
   if (t.shape !== 'SPOT') body.settlement_date = t.settlement
-  if (n.strike.given) body.forward_rate = n.strike.value
+  if (n.strike.given) body.forward_rate = n.strike.value; else blankK(body, 'forward_rate')
   if (n.spotOv.given) body.spot = n.spotOv.value
   if (n.fundOv.given && t.crypto) body.base_rate_pct = n.fundOv.value
   return { path: '/api/currency/forward/price', body }
@@ -258,15 +402,17 @@ export function priceable(t) {
   const spot = spotGiven ? n.spotOv.value : (cur.spot == null ? NaN : Number(cur.spot))
   if (spotGiven && !positive(spot)) return no('the spot must be a number above zero')
   if (!positive(spot)) return no(SPOT_HINT)
-  // base_notional gt=0 on both requests; currency_forward: "base_notional must be positive"
-  const notional = n.notional.given ? n.notional.value : NaN
+  // base_notional gt=0 on both requests; currency_forward: "base_notional must be positive" (a payout style sends
+  // the one it holds or 1: notionalSent)
+  const notional = notionalSent(t)
   if (!positive(notional)) return no('enter a notional above zero')
   if (notional > MAX_NOTIONAL) return no('the notional is too large to price as you type: press PRICE')
   // currency_forward / fx_option: "direction must be BUY or SELL"
   if (t.direction !== 'BUY' && t.direction !== 'SELL') return no('choose a direction')
   const last = horizon(today)
-  // this file's own: a digital asset is not priced beyond its last tenor (see MAX_CRYPTO_TENOR)
-  const cryptoLast = lastDate({ crypto: !!t.crypto, today })
+  // this file's own: a digital asset is not priced beyond its last tenor (see MAX_CRYPTO_TENOR), the API's date for
+  // it when the pairs answer carries the tenor dates
+  const cryptoLast = lastDate({ crypto: !!t.crypto, today, dates: tenorDates(cur, t.option ? 'OPTION' : 'FORWARD') })
   const level = (v) => positive(v) && v >= spot * LEVEL_RANGE[0] && v <= spot * LEVEL_RANGE[1]
 
   if (!t.option) {
@@ -283,7 +429,7 @@ export function priceable(t) {
     if (t.crypto && n.fundOv.given) {
       const f = n.fundOv.value
       // currency_forward: "discount factors must be positive" (a rate large enough to take e^(−r·T) to zero)
-      if (Math.abs(f) > MAX_FUNDING_PCT) return no(`a funding rate beyond ${MAX_FUNDING_PCT} % is not priced as you type: press PRICE`)
+      if (Math.abs(f) > MAX_FUNDING_PCT) return no(`an implied rate beyond ${MAX_FUNDING_PCT} % is not priced as you type: press PRICE`)
     }
     return { ok: true, why: '' }
   }
@@ -443,28 +589,88 @@ export function annualisedBasis(forward, spot, t) {
 
 const amount = (n, dp) => Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
 
-// The second line under the forward: how far it is from spot, in words, and what that is a year.
-// { points: '1,033.63 over spot', basis: '5.5 % a year' } above spot, '12.30 pts under spot' and '−2.0 % a year'
-// below it; a digital asset in the quote currency, a currency pair in forward points (pips). null before a price.
-// `t` is the time the forward runs over: the forward quote's `t`, the option quote's `t_settle`.
+// The second line under the forward, FX-style: the forward points, signed, and what they are a year.
+// { points: 'points +1,033.63', basis: '5.5 % a year' } on a digital asset (the points in the quote currency),
+// { points: '+42.4 pips', basis: '1.5 % a year' } on a currency pair (by the pair's pip, one decimal); below spot
+// the points carry a minus and say so: 'points −216.36 under spot', '−12.3 pips under spot', '−0.8 % a year'.
+// null before a price. `t` is the time the forward runs over: the forward quote's `t`, the option quote's `t_settle`.
 export function forwardCaption({ forward, spot, t, crypto, pip }) {
   const F = Number(forward), S = Number(spot)
   if (forward == null || spot == null || !positive(F) || !positive(S)) return null
   const diff = crypto ? F - S : (F - S) / (positive(Number(pip)) ? Number(pip) : 1e-4)
-  const under = diff < 0 && Number(Math.abs(diff).toFixed(2)) !== 0
-  const points = `${amount(diff, 2)}${crypto ? '' : ' pts'} ${under ? 'under' : 'over'} spot`
+  const dp = crypto ? 2 : 1
+  const shown = Number(Math.abs(diff).toFixed(dp))
+  const under = diff < 0 && shown !== 0
+  const sign = shown === 0 ? '' : under ? '−' : '+'
+  const points = crypto ? `points ${sign}${amount(diff, dp)}${under ? ' under spot' : ''}` : `${sign}${amount(diff, dp)} pips${under ? ' under spot' : ''}`
   const b = annualisedBasis(F, S, t)
   const pct = b == null ? null : b * 100
   return { points, basis: pct == null ? null : `${pct < 0 && Number(Math.abs(pct).toFixed(1)) !== 0 ? '−' : ''}${amount(pct, 1)} % a year` }
 }
 
-// The line under the valuation when the price used a market input the user typed: a spot or funding override is
+// ── the sensitivities, by the desk's names ───────────────────────────────────────────────────────────────────
+// CRY01 / FX01: the value of +1 % on spot. IR01: +1 bp on the quote currency's discounting (USD on a digital
+// asset). CRYBASIS01: +1 bp a year on the forward basis of a digital asset, so a long gains (the API sends it as
+// crybasis01 beside fund01, +1 bp on the implied rate, which is its negative). VEGA: +1 vol point. THETA: one day.
+export const SENS_UNITS = { CRY01: '1 % spot', FX01: '1 % spot', IR01: '1 bp', CRYBASIS01: '1 bp basis', VEGA: '1 pt', THETA: '1 day' }
+// the quote's CRYBASIS01: the field when the API sends it, else the negative of fund01 (an older API), else of
+// ir01_base (the oldest answers named the funding sensitivity so); null when none is there
+export function crybasis01(q) {
+  if (!q) return null
+  if (finite(Number(q.crybasis01)) && q.crybasis01 != null) return Number(q.crybasis01)
+  const f = q.fund01 ?? q.ir01_base ?? q.rho_base_per_bp
+  return f == null || !finite(Number(f)) ? null : -Number(f)
+}
+
+// The premium of an option, in one line under the valuation: the amount (|NPV|, in the quote currency), paid or
+// received by direction, as a share of the quote-currency value of the notional at spot and per unit of base for a
+// vanilla, an American or a barrier; as a share of the payout (at spot, for one paid in base) for a digital or a touch. null for no quote.
+export function premiumLine(q, dp = 2) {
+  if (!q || q.shape !== 'OPTION' || !finite(Number(q.npv))) return null
+  const amt = Math.abs(Number(q.npv)), ccy = q.quote_currency || '', dir = q.direction === 'SELL' ? 'received' : 'paid'
+  const head = `Premium ${amount(amt, 2)} ${ccy} ${dir}`
+  if (payoutStyle(q.style)) {
+    const pay = positive(Number(q.payout)) ? (q.payout_currency === 'BASE' ? (positive(Number(q.spot)) ? Number(q.payout) * Number(q.spot) : null) : Number(q.payout)) : null
+    return pay == null ? head : `${head} · ${amount(amt / pay * 100, 2)} % of the payout`
+  }
+  const N = Number(q.base_notional), S = Number(q.spot)
+  if (!positive(N)) return head
+  // the premium is in the quote currency and the notional in base: the share is of the notional's value at spot
+  const pct = positive(S) ? ` · ${amount(amt / (N * S) * 100, 2)} % of the ${ccy} notional at spot` : ''
+  return `${head}${pct} · ${amount(amt / N, dp)} per ${q.base_currency || 'unit'}`
+}
+
+// What the option is, in one sentence for the helper badge, by style. `levels` are the strike and the barriers as
+// numbers (a blank one is named in words), `fmt` writes a level to the pair's decimals.
+export function optionSentence({ style, direction, optType, base, quote, touchType, barrierType, payout, payoutCcy, strike, barrier, lower, upper, expiry, fmt = (v) => String(v) }) {
+  const we = direction === 'SELL'
+  const level = (v, name) => (positive(Number(v)) ? fmt(Number(v)) : name)
+  const pay = `${we ? 'we pay' : 'we receive'} ${positive(Number(payout)) ? amount(Number(payout), 0) : 'the payout'} ${payoutCcy === 'BASE' ? base : quote}`
+  if (style === 'TOUCH') {
+    const tt = String(touchType || 'ONE_TOUCH'), before = `before ${expiry || 'expiry'}`
+    if (tt === 'NO_TOUCH') return `${pay} if ${base} never touches ${level(barrier, 'the barrier')} ${before}`
+    if (tt === 'DOUBLE_NO_TOUCH') return `${pay} if ${base} stays between ${level(lower, 'the lower level')} and ${level(upper, 'the upper level')} ${before}`
+    if (tt === 'DOUBLE_ONE_TOUCH') return `${pay} if ${base} leaves the range ${level(lower, 'the lower level')} to ${level(upper, 'the upper level')} ${before}`
+    return `${pay} if ${base} touches ${level(barrier, 'the barrier')} ${before}`
+  }
+  if (style === 'DIGITAL') return `${pay} if ${base} is ${optType === 'PUT' ? 'below' : 'above'} ${level(strike, 'the strike')} at expiry`
+  const vanilla = `${we ? 'we write' : 'we hold'} the right to ${optType === 'PUT' ? 'sell' : 'buy'} ${base} against ${quote}`
+  if (style === 'AMERICAN') return `${vanilla}, exercisable any day to ${expiry || 'expiry'}`
+  if (style === 'BARRIER') {
+    const bt = String(barrierType || 'UP_OUT')
+    return `${vanilla}; knocked ${bt.endsWith('IN') ? 'in' : 'out'} if ${base} trades ${bt.startsWith('DOWN') ? 'below' : bt.startsWith('UP') ? 'above' : 'through'} ${level(barrier, 'the barrier')} before expiry`
+  }
+  if (style === 'DOUBLE_BARRIER') return `${vanilla}; knocked ${String(barrierType || '').endsWith('IN') ? 'in' : 'out'} if ${base} trades through ${level(lower, 'the lower level')} or ${level(upper, 'the upper level')} before expiry`
+  return vanilla
+}
+
+// The line under the valuation when the price used a market input the user typed: a spot or implied-rate override is
 // stored nowhere on the trade and a vol override is not used on revaluation, so the booked trade is valued on the
 // stored market from the first revaluation on. null when the ticket is on the stored market.
 export function overrideNote(t) {
   const n = readNumbers(t)
   const own = [n.spotOv.given && !n.spotOv.invalid ? 'spot' : null, t.option && n.volOv.given && !n.volOv.invalid ? 'vol' : null,
-               !t.option && t.crypto && n.fundOv.given && !n.fundOv.invalid ? 'funding' : null].filter(Boolean)
+               !t.option && t.crypto && n.fundOv.given && !n.fundOv.invalid ? 'implied rate' : null].filter(Boolean)
   if (!own.length) return null
   const list = own.length === 1 ? own[0] : `${own.slice(0, -1).join(', ')} and ${own[own.length - 1]}`
   return `Priced with your own ${list}: the booked trade is revalued on the stored market, so its value in the blotter will differ.`
@@ -489,12 +695,14 @@ export function failureText(e) {
 // on screen (onChange) and what the window should hold (onPriced). No React, no fetch of its own: `send(request,
 // signal)` is given to it and answers with the quote or rejects with the API's words.
 //
-//   terms  { key, ident, ready, check, request }
+//   terms  { key, ident, ready, check, request, refine }
 //          key      the request and the market it would be priced on, as one string: the quote of these terms
 //          ident    product and pair: a quote of another ident is not shown at all
 //          ready    false while there is nothing to price on (the pairs have not arrived)
 //          check()  priceable() of these terms: { ok, why, unreadable }
 //          request  what send() is given
+//          refine   true when these terms differ from the quote on screen only by the default K the quote itself
+//                   gave (priceRequest): nobody is typing, so the request goes at once, not after the debounce
 //   state  { quote, quoteKey, quoteIdent, pending, note, review }
 //          quote/quoteKey  the last quote that came back and the key it was priced for: they travel together
 //          pending         a price is owed (the debounce) or in flight
@@ -558,13 +766,14 @@ export function createTicketPricer({ send, onChange = () => {}, onPriced = () =>
       emit({ ...(other ? { quote: null, quoteKey: null, quoteIdent: null } : {}), pending: true, note: null, review: false })
       // the window keeps the last quote, marked stale, so its tabs do not empty at every keystroke
       if (state.quote) onPriced(state.quote, { stale: true }); else onPriced(null)
-      timer = setTimer(() => {
+      const go = () => {
         if (mine !== seq) return
         timer = null
         const check = t.check()
         if (!check.ok) { land(null, { kind: 'why', text: check.why }, t); return }
         dispatch(mine, t)
-      }, debounceMs)
+      }
+      if (t.refine) go(); else timer = setTimer(go, debounceMs)
     },
     // PRICE: the terms as they stand, whatever check() thinks of them, unless a number on the ticket cannot be read.
     // A refusal is reported through onError as well as beside the valuation.

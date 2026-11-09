@@ -39,7 +39,7 @@ test('crypto forward: priced on open, the forward rate shown, defaults shown as 
   const fwd = win.getByTestId('fx-forward-rate')
   expect(await num(fwd)).toBeCloseTo(quote.forward, 6)
   await expectFullyInView(fwd, 'the forward rate')
-  await expect(fwd.locator('xpath=..')).toContainText(/over spot|under spot/)
+  await expect(fwd.locator('xpath=..'), 'the forward points, FX-style').toContainText(/points [+\-−]?[\d,.]+/)
   await expect(fwd.locator('xpath=..')).toContainText(/% a year/)
 
   // spot: a real value in the field, still there when the field is clicked
@@ -89,7 +89,7 @@ test('crypto forward: the tenor follows the date, and a digital asset prices to 
   await mat.fill(odd)
   await mat.blur()
   await expect(tenor).toHaveValue('CUSTOM')
-  await expect(tenor.locator('option:checked')).toHaveText(/^CUSTOM · 3\.\dM$/)
+  await expect(tenor.locator('option:checked')).toHaveText(/^CUSTOM · 3\.\d months$/)
   await settled(win)
   // the fixing date followed the new settlement date
   await expect(win).toContainText(new RegExp(`settles ${odd}`))
@@ -119,7 +119,8 @@ test('crypto forward: the tenor follows the date, and a digital asset prices to 
 test('crypto option: every style prices on open with its levels seeded, and the vol and the forward are shown', async ({ app, problems }) => {
   const win = await open(app, 'CRYPTO', /^CRYPTO OPTION$/i)
   await settled(win)
-  await expect(win).toContainText('NET NPV')
+  await expect(win, 'an option shows its premium, paid or received').toContainText(/PREMIUM USD · (paid|received)/)
+  await expect(win.getByTestId('fx-premium')).toContainText(/Premium [\d,]+\.\d\d USD (paid|received) · [\d.]+ % of the USD notional at spot · [\d,.]+ per BTC/)
   await expect(win.getByTestId('fx-vol')).toHaveValue(/\d/)
   await expect(win.getByTestId('fx-tenor')).toBeVisible()
   await expect(win.getByTestId('fx-vol').locator('xpath=..'), 'the vol on its default says where it comes from').toContainText(/surface|level|\d{4}/i)
@@ -154,11 +155,19 @@ test('FX forward and FX option: priced on open, defaults as numbers, a custom da
   await expect(win.getByTestId('fx-spot')).toHaveValue(/\d/)
   await expect(win.getByTestId('fx-strike')).toHaveValue(/\d/)
   const mat = win.getByTestId('fx-maturity')
-  const far = iso(Date.now() + 3 * 365 * DAY + 40 * DAY)
+  // a Saturday three years out: not held to two years, and rolled by the market's rule (modified following: the
+  // Monday, or the Friday before when the Monday is in the next month), which the ticket says
+  let t = Date.now() + 3 * 365 * DAY + 40 * DAY
+  while (new Date(t).getUTCDay() !== 6) t += DAY
+  const far = iso(t)
   await mat.fill(far)
   await mat.blur()
-  await expect(mat, 'a currency pair is not held to two years').toHaveValue(far)
-  await expect(win.getByTestId('fx-tenor').locator('option:checked')).toHaveText(/^CUSTOM · 3\.\dY$/)
+  const landed = await mat.inputValue()
+  const monday = iso(t + 2 * DAY), friday = iso(t - DAY)
+  expect([monday, friday], 'a Saturday rolls to the Monday, or back to the Friday across a month end').toContain(landed)
+  if (landed === monday) expect(monday.slice(0, 7)).toBe(far.slice(0, 7))
+  await expect(win.getByTestId('fx-date-rolled')).toContainText(`rolled from ${far}`)
+  await expect(win.getByTestId('fx-tenor').locator('option:checked')).toHaveText(/^CUSTOM · 3\.\d years$/)
   await expect(win.getByTestId('fx-tenor-limit')).toHaveCount(0)
   await settled(win)
   await expectNoHorizontalOverflow(win, 'FX forward ticket')

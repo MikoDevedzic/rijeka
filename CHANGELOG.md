@@ -1,7 +1,35 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.7). Commits on `main` are the detail.
+methodology document carries its own version (v1.8). Commits on `main` are the detail.
+
+## 0.16.0 · 9 November 2026
+
+What a desk head sees on the ticket: the findings of a first-time-user pass, and three names the owner decided.
+
+- **Dates by market convention.** A tenor's value date was today plus N months with no calendar: a 3M EURUSD
+  forward got a value date three months from the trade date instead of the spot date, and a 6M BTC forward
+  settled USD on a Sunday. The API now gives each pair its calendar (the joint holidays of both currencies for
+  three years), its spot date and the dates of every tenor: FX from the spot date, modified following; a digital
+  asset from the trade date, on a New York business day; an option's expiry the latest date whose spot date is
+  its delivery. A typed date rolls the same way and says so. Found on the way and fixed: five of the seven holiday
+  calendars lacked their regional days (a USDCHF spot date could fall on Good Friday); USDCAD spot is one day; a
+  digital asset's spot date is now T+0 everywhere. All seven calendars match QuantLib over three years.
+- **CRYBASIS01, forward points, the implied BTC rate.** The digital-asset forward's sensitivities are CRY01 (1 %
+  spot), IR01 (USD discounting) and CRYBASIS01 (+1 bp a year on the forward basis, a long forward positive; the API
+  reports it beside FUND01, its negative). The field once called BTC funding is the implied BTC rate behind the
+  forward points, and the forward shows its points FX-style. "Funding" now means only the desk's spread on the XVA
+  tab. Every sensitivity on the ticket says its unit; an FX forward shows the two currencies' IR01 apart.
+- **A strike booked as displayed.** A default strike is rounded to the pair's decimals by the API (`strike_dp`),
+  so the premium shown, the strike booked and a settlement amount agree to the cent. At the fair forward the NPV
+  is then the rounding, said so under the strike: cents on BTC (two decimals), up to about 50 USD on a 10m EURUSD
+  forward (five decimals), where it was exactly zero before. A typed strike is never rounded.
+- **What a touch or a digital pays**, in a sentence (`we receive 100,000 USD if BTC touches 144,000 before
+  2027-02-09`), with the call/put and notional controls hidden where they mean nothing; the premium of an option
+  shown as a premium (amount, % of notional, per unit); a barrier says how it is observed; BOOK is disabled until a
+  counterparty is chosen; one date format on the tabs; colour only for the sign of a number; wording throughout
+  (fixing source, settlement date, value date, spot date).
+- Methodology v1.8.
 
 ## 0.15.0 · 9 November 2026
 

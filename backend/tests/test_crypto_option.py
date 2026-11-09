@@ -14,7 +14,8 @@ from pricing.fx_vol import quotes_from_grid
 from tests.test_fx_option import FakeMarket, USD, VAL
 
 EXP = date(2027, 1, 29)
-SET = EXP + timedelta(days=1)
+SET = EXP + timedelta(days=1)                   # a booked record's Saturday settlement: still valued
+SET_DEFAULT = date(2027, 2, 1)                  # the route's default: the first New York business day after the expiry
 BTC_VOL = quotes_from_grid({"1M": {"ATM": 55.0, "RR25": 2.0, "BF25": 3.0}, "3M": {"ATM": 58.0, "RR25": 2.5, "BF25": 3.2}, "1Y": {"ATM": 62.0, "RR25": 3.0, "BF25": 3.5}})
 
 
@@ -54,14 +55,14 @@ def test_route_prices_a_bitcoin_option_with_the_fx_engine_and_the_desk_taxonomy(
         main.app.dependency_overrides.clear()
     assert r.status_code == 200, r.text
     b = r.json()
-    assert b["crypto"] is True and b["settlement_type"] == "NON_DELIVERABLE" and b["settlement_date"] == SET.isoformat()
+    assert b["crypto"] is True and b["settlement_type"] == "NON_DELIVERABLE" and b["settlement_date"] == SET_DEFAULT.isoformat()
     assert b["vol_tier"] == "SURFACE" and 0.5 < b["vol"] < 0.65 and b["quote_currency"] == "USD" and b["strike"] == pytest.approx(b["forward"])
     assert b["ir01"] == pytest.approx(b["ir01_disc"]) and b["fund01"] == pytest.approx(b["ir01_base"])      # IR01 is discounting; funding is FUND01
     assert "Black-76" in b["method"]
     # the same numbers from the engine directly: the funding rate is the base rate of the forward
     T_s = (SET - VAL).days / 365.0  # noqa: F841  launch audit: assigned, never used
     e = price_fx_option(base_currency="BTC", quote_currency="USD", base_notional=10, option_type="CALL", strike=b["strike"], spot=65000.0, forward=b["forward"],
-                        df_quote=b["df_quote"], valuation_date=VAL, expiry_date=EXP, settlement_date=SET, vol=b["vol"], direction="BUY", spot_date=VAL + timedelta(days=1))
+                        df_quote=b["df_quote"], valuation_date=VAL, expiry_date=EXP, settlement_date=SET_DEFAULT, vol=b["vol"], direction="BUY", spot_date=VAL)
     assert b["npv"] == pytest.approx(e.npv) and b["vega"] == pytest.approx(e.vega) and b["spot01"] == pytest.approx(e.spot01)
     assert t.status_code == 200 and 0 < t.json()["npv"] < 100000 and t.json()["style"] == "TOUCH"
     assert lad.status_code == 200 and lad.json()["style"] == "BARRIER" and len(lad.json()["rows"]) == 9
@@ -161,9 +162,9 @@ def test_quoted_forwards_replace_the_flat_funding_rate_and_a_funding_rate_on_the
             mkt = c.post("/api/currency/forward/price", json=body).json()
             own = c.post("/api/currency/forward/price", json={**body, "base_rate_pct": 1.0}).json()
             opt = c.post("/api/currency/option/price", json={"pair": "BTCUSD", "option_type": "PUT", "base_notional": 10, "expiry_date": EXP.isoformat(),
-                                                              "valuation_date": VAL.isoformat()}).json()
+                                                              "settlement_date": SET.isoformat(), "valuation_date": VAL.isoformat()}).json()
             flat = c.post("/api/currency/option/price", json={"pair": "BTCUSD", "option_type": "PUT", "base_notional": 10, "expiry_date": EXP.isoformat(),
-                                                               "valuation_date": VAL.isoformat(), "vol_pct": 40}).json()
+                                                               "settlement_date": SET.isoformat(), "valuation_date": VAL.isoformat(), "vol_pct": 40}).json()
             state = currencies.pair_state(db, "u", "BTCUSD")
     finally:
         main.app.dependency_overrides.clear()

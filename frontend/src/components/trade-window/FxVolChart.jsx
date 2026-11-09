@@ -27,7 +27,7 @@
 // the panel's requests have settled and both plots have drawn.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useRef } from 'react'
-import { valueRange } from './fx-scenario'
+import { isoDate, valueRange } from './fx-scenario'
 import { deltaRange, pillars, shockedVol, smileCurve, smileVol, surfaceReading, termCurve, volGeometry } from './fx-vol'
 
 const C = {
@@ -35,12 +35,10 @@ const C = {
   curve: '#0dd4a8', curveRgb: '13,212,168', call: '#4a9ad4', put: '#E06C75', strike: '#F0A020',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const HEIGHT = 220
 
 const fin = (v) => typeof v === 'number' && Number.isFinite(v)
 const num = (v, d) => Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })
-const day = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '')); return m ? `${m[3]} ${MON[+m[2] - 1]} ${m[1].slice(2)}` : '' }
 const stepDp = (step, cap) => { for (let d = 0; d <= cap; d++) { const x = step * 10 ** d; if (Math.abs(x - Math.round(x)) < 1e-6) return d } return cap }
 const pct = (v) => v * 100                               // the charts and the words are in vol points; fx-vol.js is in decimals
 
@@ -128,7 +126,7 @@ function drawTerm(ctx, W, H, { reading, vpt, expiryDate }) {
   // the option's expiry, named above the plot
   const xe = xs(T)
   vline(ctx, geo, xe, 'rgba(244,247,250,0.45)', 1, [4, 3])
-  const text = `EXPIRY ${day(expiryDate)}`.trim()
+  const text = `EXPIRY ${isoDate(expiryDate)}`.trim()        // ISO, like every date the tabs print
   ctx.textBaseline = 'bottom'; ctx.fillStyle = C.hi; ctx.fillText(text, inX(geo, xe, ctx.measureText(text).width), top - 6)
 
   clip(ctx, geo)

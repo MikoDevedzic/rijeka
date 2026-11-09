@@ -298,6 +298,9 @@ def _taxonomy(v: dict[str, Any], crypto: bool) -> dict[str, Any]:
     rate's sensitivity is FUND01; on a currency pair both legs are rate curves and IR01 is their sum."""
     if crypto and v.get("ir01_disc") is not None:
         v["fund01"] = v.get("ir01_base") if v.get("ir01_base") is not None else (v["ir01"] - v["ir01_disc"] if v.get("ir01") is not None else None)
+        # CRYBASIS01: +1 bp a year on the forward basis (forward over spot, annualised) at a fixed spot and USD curve,
+        # which is −1 bp on the funding rate: −FUND01 (a long forward is positive)
+        v["crybasis01"] = None if v["fund01"] is None else 0.0 - float(v["fund01"])
         v["ir01"] = v["ir01_disc"]
     return v
 

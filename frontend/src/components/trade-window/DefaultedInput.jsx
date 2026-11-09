@@ -4,6 +4,7 @@
 // cannot be read as a number is kept, in the warning colour, and says so. The states and the text are in
 // defaulted-input.js; this is the input. NumberInput is the same reading for a field with no default.
 import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { fieldView, overrideFrom, groupForDisplay, INVALID_TAG } from './defaulted-input'
 import { parseNumber } from './fx-ticket'
 
@@ -25,12 +26,15 @@ export default function DefaultedInput({ value, fallback, format, tag, onChange,
     <div className="tbw-fx-def">
       <input ref={input} className={`tbw-mono tbw-fx-def-input is-${view.state}${dim && !typed ? ' tbw-fx-dim' : ''}`}
              type="text" inputMode="decimal" data-testid={testId} data-state={view.state} aria-invalid={view.state === 'invalid' || undefined} value={shown} title={title}
-             // selected on focus, and once more after the click that gave the focus has placed its caret (and after
-             // the text has changed from its grouped to its typed writing)
-             onFocus={e => { const el = e.target; setFocused(true); el.select(); setTimeout(() => { if (document.activeElement === el) el.select() }, 0) }}
+             // Selected on focus: the text goes from its grouped to its typed writing in the same breath (flushSync), and
+             // is selected after that, so a key or a paste that follows replaces the number instead of being added to it
+             // (a selection made before the focus is lost when the text changes under it). Once more after the click
+             // that gave the focus has placed its caret.
+             onFocus={e => { const el = e.target; flushSync(() => setFocused(true)); el.select(); setTimeout(() => { if (document.activeElement === el) el.select() }, 0) }}
              onBlur={() => setFocused(false)}
              onChange={e => onChange(overrideFrom(e.target.value))} />
-      <div className="tbw-fx-tag" title={title || view.tag}>
+      {/* invalid: the words run on and the controls drop under them (styles.css), so neither hides the other */}
+      <div className={`tbw-fx-tag${view.state === 'invalid' ? ' is-invalid' : ''}`} title={title || view.tag}>
         <span className={view.state === 'override' ? 'tbw-fx-tag-override' : view.state === 'invalid' ? 'tbw-fx-tag-invalid' : undefined}>{view.tag}</span>
         {typed && (
           <button type="button" className="tbw-fx-reset" aria-label="Back to the default" title="Back to the default" data-testid={testId ? `${testId}-reset` : undefined}
@@ -51,8 +55,12 @@ export function NumberInput({ value, onChange, signed = false, testId, placehold
   const shown = focused || invalid ? value : groupForDisplay(value)
   return (
     <div className="tbw-fx-def">
+      {/* selected on focus as the fields with a default are: the text goes to its typed writing first (flushSync), then
+          is selected, so what follows replaces the number instead of being added to it */}
       <input className={`tbw-mono tbw-fx-def-input${invalid ? ' is-invalid' : ''}`} type="text" inputMode="decimal" data-testid={testId} data-state={invalid ? 'invalid' : 'ok'}
-             aria-invalid={invalid || undefined} placeholder={placeholder} value={shown} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+             aria-invalid={invalid || undefined} placeholder={placeholder} value={shown}
+             onFocus={e => { const el = e.target; flushSync(() => setFocused(true)); el.select(); setTimeout(() => { if (document.activeElement === el) el.select() }, 0) }}
+             onBlur={() => setFocused(false)}
              onChange={e => onChange(e.target.value)} />
       {/* the grouped read-back is for while the number is being typed ungrouped; at rest the field itself is grouped */}
       {(invalid || (tag && focused)) && (

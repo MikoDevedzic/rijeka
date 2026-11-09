@@ -73,7 +73,8 @@ test('crypto ticket: the settlement source is a choice, and says who fixes it', 
   const fixing = win.getByTestId('fixing-date')
   await expect(fixing).toBeVisible()
   const dates = async () => {
-    const m = /fixes on (\d{4}-\d{2}-\d{2}) at ([^,]+), settles (\d{4}-\d{2}-\d{2})/.exec(await win.innerText())
+    // a fixing on a weekend carries a note in brackets (the benchmark publishes every day)
+    const m = /fixes on (\d{4}-\d{2}-\d{2})(?: \([^)]*\))? at ([^,]+), settles (\d{4}-\d{2}-\d{2})/.exec(await win.innerText())
     expect(m, 'the ticket says when the forward fixes and when it settles').not.toBeNull()
     return { fixes: m[1], time: m[2], settles: m[3] }
   }

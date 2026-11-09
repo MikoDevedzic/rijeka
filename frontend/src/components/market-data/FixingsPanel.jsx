@@ -59,8 +59,8 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
     <div style={{ maxWidth: 1040 }}>
       <DescBox>
         A fixing is the price a cash-settled trade settles on: the value its settlement price source publishes on the trade's valuation date.
-        A trade settles only on the source it names, never on another source's price. Until that fixing is stored, an expired trade is valued on the stored spot of the day and marked provisional.
-        {sources.length > 0 && <> {pair} settles on {sources.length === 1 ? 'one source' : `${sources.length} sources`}: {sources.map((s, i) => (
+        A trade settles on the fixing of the one source its record names. Until that fixing is stored, an expired trade is valued on the stored spot of the day and marked provisional.
+        {sources.length > 0 && <> {sources.length === 1 ? `The source for ${pair}` : `The ${sources.length} sources for ${pair}`}: {sources.map((s, i) => (
           <span key={s.source}>{i ? '; ' : ''}<b>{s.source}</b>{s.time ? ` (${s.time})` : ''}, {s.auto ? 'stored automatically each day' : 'entered by your desk'}</span>
         ))}.</>}
       </DescBox>
@@ -73,8 +73,9 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
               {desk.map(s => <option key={s.source} value={s.source}>{s.time ? `${s.source} · ${s.time}` : s.source}</option>)}
             </select>
           </label>
-          {/* the day is the UTC day, as the API counts it: the default, and the last date offered */}
-          <label style={{ display: 'block' }}><span className="lbl">DATE (UTC)</span>
+          {/* the fixing's own date, as the source publishes it (a London benchmark's day is London's, not UTC); the
+              default and the last date offered are today as the API counts it */}
+          <label style={{ display: 'block' }}><span className="lbl">DATE</span>
             <input className="inp" data-testid="fixing-date" type="date" style={{ width: 150 }} value={date} max={utcToday()} onChange={e => setDate(e.target.value)} />
           </label>
           <label style={{ display: 'block' }}><span className="lbl">VALUE · {p.quote} per 1 {p.base}</span>

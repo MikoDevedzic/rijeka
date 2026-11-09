@@ -77,8 +77,12 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
         spot01[asset_of(sc.replace("_SPOT", ""))[0]] = float(base["spot01"])
     return {"trade_id": str(trade.id), "trade_ref": trade.trade_ref, "instrument": trade.instrument_type, "desk": trade.desk or "UNASSIGNED",
             "book": trade.book or "UNASSIGNED", "ccy": base["ccy"], "npv": base["npv"], "kr01": kr01, "spot01": spot01, "vega": vega, "fund01": fund01,
+            # CRYBASIS01: +1 bp a year on the forward basis at a fixed spot and USD curve is −1 bp on the funding rate,
+            # so each bucket is the negative of its FUND01 bucket (the FUND01 rows themselves are unchanged)
+            "crybasis01": {cid: {b: 0.0 - v for b, v in buckets.items()} for cid, buckets in fund01.items()},
             "ir01": sum(sum(b.values()) for b in kr01.values()), "vega_total": sum(sum(b.values()) for b in vega.values()),
             "fund01_total": sum(sum(b.values()) for b in fund01.values()),
+            "crybasis01_total": 0.0 - sum(sum(b.values()) for b in fund01.values()),
             "theta": base.get("theta"), "fallback": base.get("fallback", [])}
 
 
@@ -126,4 +130,5 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx) -> di
     return {"rows": rows, "ladder": ladder, "spot01": spot01, "npv_usd": npv_usd, "ir01_usd": ir01_usd, "valuations": valuer.calls,
             "vega": vega_ladder, "vega_usd": vega_usd, "vol_bump": "1 vol point (FX) · 1bp normal vol (swaptions)",
             "fund01": by_fund, "fund01_usd": fund01_usd,
+            "crybasis01": {cid: 0.0 - v for cid, v in by_fund.items()}, "crybasis01_usd": 0.0 - fund01_usd,
             "problems": problems, "unconverted": sorted(unconverted), "bump_bp": BUMP_BP, "buckets": [b[0] for b in BUCKETS]}

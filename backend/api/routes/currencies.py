@@ -53,6 +53,11 @@ PAIRS = FX_PAIRS + CRYPTO_PAIRS
 CURVE_FOR = {"USD": "USD_SOFR", "EUR": "EUR_ESTR", "GBP": "GBP_SONIA", "JPY": "JPY_TONAR",
              "CHF": "CHF_SARON", "AUD": "AUD_AONIA", "CAD": "CAD_CORRA"}
 PIP = {"USDJPY": 0.01}
+# FX spot lag in business days per pair: T+2 except USDCAD at T+1 (the market's; pricing/bootstrap.CCY_SPOT_LAG agrees on
+# CAD = 1 but is the OIS swap lag, where GBP and AUD are T+0 while their FX spot is T+2, so the two tables stay apart).
+# A digital asset's quoted spot settles at once: lag 0, the spot date is the valuation date.
+FX_SPOT_LAG = {"USDCAD": 1}
+FX_SPOT_LAG_DEFAULT = 2
 FX_FEED_URL = "https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP,JPY,CHF,AUD,CAD"
 FX_FEED_NAME = "ECB reference rates (frankfurter.dev, public)"
 # When an account has no OIS curve for a currency (the hosted demo copies only
@@ -267,15 +272,28 @@ def pair_state(db: Session, user_id, pair: str, settlement: bool = True) -> dict
     return out
 
 
+def pair_dates(pair: str, today: date) -> dict[str, Any]:
+    """The pair's dates by market convention (pricing/tenor_dates.py): the calendar its cash moves on with its
+    holidays for three years, the spot date and lag, and the ticket's tenors as forward and option dates."""
+    from pricing import tenor_dates as TD
+    return {"calendar": TD.calendar_block(pair, today), "spot_date": TD.spot(pair, today).isoformat(),
+            "spot_lag_business_days": spot_lag(pair),                        # 0 for a digital asset: its spot settles at once
+            "tenor_dates": {"forward": {t: d.isoformat() for t, d in TD.forward_dates(pair, today).items()},
+                            "option": {t: {k: (v.isoformat() if isinstance(v, date) else v) for k, v in o.items()}
+                                       for t, o in TD.option_dates(pair, today).items()}}}
+
+
 @router.get("/pairs")
 def pairs(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     mode = forward_mode(db, user["sub"])
-    out = [pair_state(db, user["sub"], p) for p in PAIRS]
+    today = date.today()
+    out = [{**pair_state(db, user["sub"], p), **pair_dates(p, today)} for p in PAIRS]
     for p in out:
         if p.get("forward_curve"):
             p["forward_curve"]["in_use"] = mode == "MARKET"          # on IMPLIED the points are stored and not priced on
-    return {"pairs": out, "forward_mode": mode,
-            "forward_tenors": list(FWD_TENORS), "tenor_days": dict(TENOR_DAYS),
+    from pricing.tenor_dates import TENORS as TICKET_TENORS
+    return {"pairs": out, "forward_mode": mode, "today": today.isoformat(),
+            "forward_tenors": list(FWD_TENORS), "tenor_days": dict(TENOR_DAYS), "ticket_tenors": list(TICKET_TENORS),
             "feeds": {"fx": FX_FEED_NAME, "crypto": "Coinbase spot (public)"}}
 
 
@@ -627,12 +645,13 @@ class CurrencyPriceRequest(BaseModel):
     pair: str = Field(..., examples=["EURUSD"])
     shape: str = Field("FORWARD", description="SPOT | FORWARD | NDF")
     base_notional: float = Field(..., gt=0)
-    settlement_date: Optional[date] = Field(None, description="omitted for SPOT: T+2 (T+0 for a digital asset)")
+    settlement_date: Optional[date] = Field(None, description="SPOT: the spot date (T+2, USDCAD T+1); omitted on a digital asset: the first New York business day after today, said in date_notes")
     valuation_date: Optional[date] = None
     forward_rate: Optional[float] = Field(None, description="contract rate K; omitted = at the fair forward")
     direction: str = "BUY"
     spot: Optional[float] = Field(None, gt=0)
     base_rate_pct: Optional[float] = Field(None, description="digital asset only: funding override, % p.a.")
+    strike_dp: Optional[int] = Field(None, ge=0, le=8, description="with no forward_rate: the fair forward rounded to this many decimals is the contract rate (the strike the ticket books)")
 
 
 def _curve(db: Session, user_id: str, curve_id: str, val_date: date):
@@ -643,17 +662,28 @@ def _curve(db: Session, user_id: str, curve_id: str, val_date: date):
         raise HTTPException(status_code=422, detail=f"{curve_id}: {e}")
 
 
+def spot_lag(pair: str) -> int:
+    """The pair's spot lag in business days: 0 for a digital asset, FX_SPOT_LAG or 2."""
+    p = str(pair or "").upper()
+    return 0 if is_crypto(p[:-3]) else FX_SPOT_LAG.get(p, FX_SPOT_LAG_DEFAULT)
+
+
 def spot_date(val_date: date, crypto: bool, base: Optional[str] = None, quote: Optional[str] = None) -> date:
-    """T+1 for a digital asset; T+2 for an FX pair, counted in business days of both currencies when
-    they are given (a Tokyo holiday moves USDJPY spot), weekdays otherwise."""
+    """The valuation date for a digital asset (its quoted spot settles at once: T+0, as the methodology states); for
+    an FX pair the market rule when both currencies are given, weekdays otherwise. USD pair: the pair's lag (T+2,
+    USDCAD T+1) counted in business days of the other currency's centre (a USD holiday on T+1 is ignored: Veterans
+    Day on T+1 leaves EURUSD spot at T+2), then the spot date itself must be open in both, so it moves forward over
+    a USD holiday (a Tokyo holiday moves USDJPY spot). A cross without USD: each intermediate day must be open in
+    both centres, i.e. the lag in business days of the joint calendar."""
     if crypto:
-        return val_date + timedelta(days=1)
+        return val_date
     if base and quote:
-        from pricing.calendars import add_business_days, ccy_to_calendar
-        cals = sorted({ccy_to_calendar(base), ccy_to_calendar(quote)})
-        return add_business_days(val_date, 2, "+".join(cals))
+        from pricing.calendars import add_business_days, ccy_to_calendar, joint, next_business_day
+        both = joint(ccy_to_calendar(base), ccy_to_calendar(quote))
+        inter = joint(*[ccy_to_calendar(c) for c in (base, quote) if c.upper() != "USD"]) if "USD" in (base.upper(), quote.upper()) else both
+        return next_business_day(add_business_days(val_date, spot_lag(f"{base}{quote}"), inter), both)
     d, n = val_date, 0
-    while n < 2:
+    while n < FX_SPOT_LAG_DEFAULT:
         d += timedelta(days=1)
         if d.weekday() < 5:
             n += 1
@@ -662,15 +692,30 @@ def spot_date(val_date: date, crypto: bool, base: Optional[str] = None, quote: O
 
 def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: float, settlement: Optional[date],
            val_date: date, K: Optional[float], direction: str, spot_override: Optional[float],
-           base_rate_pct: Optional[float]) -> dict:
+           base_rate_pct: Optional[float], strike_dp: Optional[int] = None) -> dict:
+    """`strike_dp`: with no K, the fair forward rounded to that many decimals is the contract rate, so one request
+    prices the strike the ticket books; `forward` stays the unrounded fair forward."""
+    if K is None and strike_dp is not None:
+        fair = _price(db, user_id, pair, shape=shape, base_notional=base_notional, settlement=settlement, val_date=val_date, K=None,
+                      direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct)
+        return _price(db, user_id, pair, shape=shape, base_notional=base_notional, settlement=settlement, val_date=val_date,
+                      K=round(float(fair["forward"]), int(strike_dp)), direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct)
     st = pair_state(db, user_id, pair, settlement=False)
     base, quote, crypto = st["base"], st["quote"], st["crypto"]
     shape = (shape or "FORWARD").upper()
     if shape not in ("SPOT", "FORWARD", "NDF"):
         raise HTTPException(status_code=422, detail="shape must be SPOT, FORWARD or NDF")
-    settle = settlement or spot_date(val_date, crypto, base, quote)
-    if shape == "SPOT":
-        settle = spot_date(val_date, crypto, base, quote)
+    defaulted = None
+    if crypto and (settlement is None or shape == "SPOT"):
+        # a digital asset's spot settles at once (the spot date is the valuation date), so a forward without a date
+        # settles on the first New York business day strictly after today, as the option's default does, and the
+        # response says so (before 0.16.0 the default was T+1, any day)
+        from pricing.calendars import next_business_day
+        settle = defaulted = next_business_day(val_date + timedelta(days=1), "NEW_YORK")
+    else:
+        settle = settlement or spot_date(val_date, crypto, base, quote)
+        if shape == "SPOT":
+            settle = spot_date(val_date, crypto, base, quote)
     if spot_override is not None:
         S, s_src = float(spot_override), "request"
     elif st["spot"] is not None:
@@ -741,9 +786,34 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     # funding rate's is FUND01; on a currency pair both legs are rate curves and IR01 is their sum
     out["crypto"] = crypto
     out["fund01"] = out.get("ir01_base") if crypto else None
+    out["crybasis01"] = crybasis01(out["fund01"])
     if crypto and out.get("ir01_disc") is not None:
         out["ir01"] = out["ir01_disc"]
+    out.update(date_check(pair, settle))
+    if defaulted is not None:
+        out["date_notes"].append(f"settlement date defaulted to {defaulted.isoformat()}")
     return out
+
+
+def crybasis01(fund01: Optional[float]) -> Optional[float]:
+    """CRYBASIS01: the change in value for +1 bp a year on the forward basis (forward over spot, annualised), spot
+    and the USD curve unchanged; a long forward is positive. Under both the quoted points and the parity forward,
+    +1 bp of basis is −1 bp of the base (funding) rate at a fixed USD rate, so it is −FUND01 (owner, 9 Nov 2026)."""
+    return None if fund01 is None else 0.0 - float(fund01)
+
+
+def date_check(pair: str, settle: date, expiry: Optional[date] = None) -> dict[str, Any]:
+    """`settlement_business_day` (the joint calendar for an FX pair, New York for a digital asset) and `date_notes`,
+    plain words, empty when all is well. An FX expiry on a closed day is noted too; a digital asset's expiry may
+    fall on any day. Booking is not touched by this: older records and mirrors still book."""
+    from pricing import tenor_dates as TD
+    ok, note = TD.settlement_note(pair, settle, "settlement")
+    notes = [note] if note else []
+    if expiry is not None and not is_crypto(split_pair(pair)[0]):
+        _, n = TD.settlement_note(pair, expiry, "expiry")
+        if n:
+            notes.append(n)
+    return {"settlement_business_day": ok, "date_notes": notes}
 
 
 @router.post("/forward/price")
@@ -753,7 +823,7 @@ def price_forward(req: CurrencyPriceRequest, db: Session = Depends(get_db), user
     val_date = req.valuation_date or date.today()
     return _price(db, user["sub"], pair, shape=req.shape, base_notional=req.base_notional, settlement=req.settlement_date,
                   val_date=val_date, K=req.forward_rate, direction=req.direction, spot_override=req.spot,
-                  base_rate_pct=req.base_rate_pct)
+                  base_rate_pct=req.base_rate_pct, strike_dp=req.strike_dp)
 
 
 class CurrencyOptionRequest(BaseModel):
@@ -761,13 +831,14 @@ class CurrencyOptionRequest(BaseModel):
     option_type: str = Field(..., description="CALL | PUT on the base currency")
     base_notional: float = Field(..., gt=0)
     expiry_date: date
-    settlement_date: Optional[date] = Field(None, description="omitted: two business days after expiry")
+    settlement_date: Optional[date] = Field(None, description="omitted: the spot lag after expiry (FX); the first New York business day after expiry (digital asset)")
     strike: Optional[float] = Field(None, gt=0, description="omitted = at the forward")
     direction: str = Field("BUY", description="BUY | SELL of the option")
     valuation_date: Optional[date] = None
     vol_pct: Optional[float] = Field(None, gt=0, description="override, vol points; omitted = the pair's surface")
     spot: Optional[float] = Field(None, gt=0)
     settlement_type: str = Field("DELIVERABLE", description="DELIVERABLE | NON_DELIVERABLE (cash in the quote currency)")
+    strike_dp: Optional[int] = Field(None, ge=0, le=8, description="with no strike: the forward rounded to this many decimals is the strike (the one the ticket books)")
     # styles beyond the European vanilla (pricing/fx_exotic.py)
     style: str = Field("EUROPEAN", description="EUROPEAN | AMERICAN | DIGITAL | BARRIER | DOUBLE_BARRIER | TOUCH")
     payout: Optional[float] = Field(None, gt=0, description="DIGITAL / TOUCH: the amount paid")
@@ -794,16 +865,23 @@ def spec_from(fields: dict, option_type: str, strike: Optional[float]) -> Exotic
 
 def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, base_notional: float, expiry: date, settlement: Optional[date],
                   strike: Optional[float], direction: str, val_date: date, vol_pct: Optional[float], spot_override: Optional[float],
-                  settlement_type: str = "DELIVERABLE", style_fields: Optional[dict] = None) -> dict:
+                  settlement_type: str = "DELIVERABLE", style_fields: Optional[dict] = None, strike_dp: Optional[int] = None) -> dict:
     """An FX option on the pair's market: the forward to settlement from the forward engine (so the account's
-    forward mode, quoted points or parity, applies), the vol from the pair's surface, Garman–Kohlhagen on top."""
+    forward mode, quoted points or parity, applies), the vol from the pair's surface, Garman–Kohlhagen on top.
+    `strike_dp`: with no strike, the forward rounded to that many decimals is the strike (the one the ticket books)."""
     base, quote = split_pair(pair)
     crypto = is_crypto(base)                      # a digital asset: the same model, the funding rate as the base rate, cash-settled
     if crypto:
         settlement_type = "NON_DELIVERABLE"
     if expiry <= val_date:
         raise HTTPException(status_code=422, detail="expiry_date must be after the valuation date")
-    settle = settlement or spot_date(expiry, crypto, base, quote)
+    if settlement is not None:
+        settle = settlement
+    elif crypto:
+        from pricing.calendars import next_business_day
+        settle = next_business_day(expiry + timedelta(days=1), "NEW_YORK")       # the first New York business day after the fixing (tenor_dates)
+    else:
+        settle = spot_date(expiry, crypto, base, quote)                           # delivery the spot lag after expiry
     if settle < expiry:
         raise HTTPException(status_code=422, detail="settlement_date must be on or after the expiry date")
     fwd = _price(db, user_id, pair, shape="FORWARD", base_notional=base_notional, settlement=settle, val_date=val_date, K=None,
@@ -812,7 +890,7 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
     T_e = (expiry - val_date).days / 365.0
     spec = spec_from(style_fields or {}, option_type, float(strike) if strike is not None else None)
     if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER", "DIGITAL") and spec.strike is None:
-        spec.strike = F
+        spec.strike = round(F, int(strike_dp)) if strike_dp is not None else F
     K = spec.strike if spec.strike is not None else F
     vs = latest_snapshot(db, user_id, f"{pair}_VOL")
     vol, tier, vol_note = lookup_vol(vs.quotes if vs else None, pair, T_e, F, K, vol_pct)
@@ -845,9 +923,11 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
     # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the
     # funding rate's is FUND01; on a currency pair both curves are rates and IR01 is their sum
     out["fund01"] = out["ir01_base"] if crypto else None
+    out["crybasis01"] = crybasis01(out["fund01"])
     if crypto:
         out["ir01"] = out["ir01_disc"]
     out["crypto"] = crypto
+    out.update(date_check(pair, settle, expiry))
     out.update(pair=pair, shape="OPTION", valuation_date=val_date.isoformat(), expiry_date=expiry.isoformat(), settlement_date=settle.isoformat(),
                settlement_type=str(settlement_type or "DELIVERABLE").upper(), vol_pct=round(vol * 100, 4), vol_tier=tier, vol_source=vol_note,
                vol_snapshot=vs.valuation_date.isoformat() if vs else None, vol_marks=marks_label(vs.source) if vs and tier != "OVERRIDE" and is_venue(vs.source) else None,
@@ -879,7 +959,7 @@ def price_option(req: CurrencyOptionRequest, db: Session = Depends(get_db), user
     val_date = req.valuation_date or date.today()
     return _price_option(db, user["sub"], pair, option_type=req.option_type, base_notional=req.base_notional, expiry=req.expiry_date,
                          settlement=req.settlement_date, strike=req.strike, direction=req.direction, val_date=val_date, vol_pct=req.vol_pct,
-                         spot_override=req.spot, settlement_type=req.settlement_type,
+                         spot_override=req.spot, settlement_type=req.settlement_type, strike_dp=req.strike_dp,
                          style_fields={k: getattr(req, k) for k in ("style", "payout", "payout_currency", "barrier_type", "barrier", "lower", "upper",
                                                                     "rebate", "touch_type", "pay_at_hit")})
 
@@ -1032,7 +1112,8 @@ def _booked_fixed(trade: Trade, db: Session, user: dict, val_date: date, mkt, fi
            "valuation_date": val_date.isoformat(), "settlement_date": t["settle"].isoformat(), "settled": settled, "npv": z(v["npv"]),
            "fixing_date": fix["fixing_date"].isoformat(), "fixing_source": fix["source"] or None,
            **{f: v.get(f) for f in ("fixing", "settlement_amount", "settlement_price", "provisional", "provisional_reason", "provisional_basis")},
-           "ir01": z(v.get("ir01") or 0.0), "ir01_disc": z(v.get("ir01_disc") or 0.0), "fund01": z(v.get("fund01") or 0.0), "theta": z(v.get("theta") or 0.0),
+           "ir01": z(v.get("ir01") or 0.0), "ir01_disc": z(v.get("ir01_disc") or 0.0), "fund01": z(v.get("fund01") or 0.0),
+           "crybasis01": z(v.get("crybasis01") if v.get("crybasis01") is not None else 0.0 - (v.get("fund01") or 0.0)), "theta": z(v.get("theta") or 0.0),
            "model": v.get("model") or ("settled: the mark is zero from the settlement date; the amount is reported beside it" if settled else None),
            **{f: None for f in QUOTE_ONLY}}
     if "settlement_amount_if_touched" in v:             # only while the knock state of a barrier or touch is not recorded

@@ -170,7 +170,7 @@ The spread schedules live in one place, `backend/market_data/demo_feed.py`, and 
 
 ## Documentation
 
-- `docs/methodology/rijeka_methodology.pdf` (v1.7, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
+- `docs/methodology/rijeka_methodology.pdf` (v1.8, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
 - `docs/VALIDATION.md` — the validation charter, what is validated against what, and the open findings
 - `docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md` — the per-module notes behind the methodology chapters
 - `docs/ops/deploy.md` — the deploy chain (API first on Render, then the app from the `release` branch)
