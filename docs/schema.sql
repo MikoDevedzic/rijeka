@@ -131,6 +131,7 @@ $$;
 
 CREATE FUNCTION public.is_admin() RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
     AS $$
   SELECT EXISTS (
     SELECT 1 FROM profiles

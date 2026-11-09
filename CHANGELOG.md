@@ -3,6 +3,13 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.7). Commits on `main` are the detail.
 
+## 0.14.2 · 9 November 2026
+
+- `public.is_admin()` resolves its table in the public schema whatever the caller's session has set
+  (`docs/migrations/2026-11-09_is_admin_search_path.sql`, on the approved list; found and reviewed by Edgar on a
+  scratch database: the function's body, owner and grants are unchanged, the Users page works as before).
+- 0.14.1 read back from production: approved 3, applied 3, problems 0.
+
 ## 0.14.1 · 9 November 2026
 
 - The profiles policies of 31 October (`docs/migrations/2026-10-31_profiles_policies.sql`: a user updates their
