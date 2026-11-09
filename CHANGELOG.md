@@ -27,9 +27,11 @@ methodology document carries its own version (v1.5). Commits on `main` are the d
     health check `crypto_marks` reads the time the marks carried (not when a row was written), for the template
     account, and turns red two hours after the oldest of the three assets; it is absent where the feed is off.
   - **Accounts.** The marks are written for the template account and pushed to every demo account in one statement.
-    An account's own entry for a curve, the template owner's included, stays in force until that account replaces
-    it; only rows a feed wrote are copied or replaced. Saving a desk spot on a pair whose points come from the feed
-    saves the spot alone.
+    An account's own entry for a digital-asset vol or forward curve, the template owner's included, stays in force
+    until that account replaces it: the marks tick copies and replaces only rows a feed wrote, and the daily copy
+    does not lay a venue's row over an own entry. (The older writers keep their rules for the curves they build;
+    `docs/architecture.md` lists each writer and what it replaces.) Saving a desk spot on a pair whose points come
+    from the feed saves the spot alone.
   - **Risk.** FUND01 on the ladder is unchanged in meaning: on quoted points +1bp of funding moves the points it
     implies. A built history row never replaces a venue row, and the vol history before the venue's first surface is
     rebuilt from it so the series has no step; that takes effect when the history backfill is next run, and until
@@ -40,12 +42,13 @@ methodology document carries its own version (v1.5). Commits on `main` are the d
     vol. The vol part is attributed to the vol step of the P&L explain; the forward part has no previous day's points
     to difference against and lands in "Cross & unattributed" that once. The pinned sample book is unchanged (the
     local stack has no venue).
-  - **Switch.** `RIJEKA_DERIBIT=0` stops the requests; the deployed process then removes the venue's rows from the
-    template and demo accounts at the next daily rebuild (a developer's shell on the shared database cannot), after
-    which the history backfill rebuilds the vol series. `RIJEKA_SCHEDULER_MARKS_MINUTES` sets the period.
+  - **Switch.** `RIJEKA_DERIBIT=0` stops the requests; the process that runs the batches then removes the venue's
+    rows from the template and demo accounts at the next daily rebuild (a developer's shell on the shared database
+    cannot). Run the history backfill afterwards to rebuild the vol series. `RIJEKA_SCHEDULER_MARKS_MINUTES` sets the period.
   - Methodology v1.5; `docs/architecture.md` gains a market-data table, source by source, and the venue in the diagram.
-  - Reviewed by Vera (one blocking finding: the desk-spot save; ten others) and Magnus (two medium, six low); all
-    fixed or answered in this change. Tests: the builder against chains generated from a known smile (no venue data
+  - Reviewed by Vera (one blocking finding: the desk-spot save; ten others), Magnus (two medium, six low) and
+    Nikola, the architect, a seventh role added with this change (the map claimed more than the code did in a dozen
+    places, most of them older than this change); all fixed or answered here. Tests: the builder against chains generated from a known smile (no venue data
     in the repository), hostile and malformed responses, the routes, the scheduler group, the health check, the
     history guard and anchor, FUND01 on quoted points, an integration test on the local stack, and a browser journey
     for the ticket's captions (33 journeys).

@@ -20,7 +20,7 @@ flowchart LR
     AUTH[Auth<br/>ES256 JWTs]
   end
   CHAIN[(Sepolia<br/>TradeConfirmationRegistry)]
-  PUB[Public data<br/>NY Fed, UST, ECB, BoE, SNB, MoF, news feeds<br/>Coinbase spot]
+  PUB[Public data<br/>NY Fed, UST, ECB, BoE, SNB, MoF, news feeds<br/>FX spot via frankfurter.dev, Coinbase spot]
   VENUE[Deribit public API<br/>option marks and forwards<br/>BTC, ETH, SOL]
   ANTH[Anthropic API<br/>Prometheus, news summaries, book brief]
   TG[Telegram<br/>mirror of trade cards]
@@ -78,23 +78,43 @@ anchored confirmations).
 
 ## Market data, source by source
 
-Every stored quote is a row of `market_data_snapshots` keyed by account, curve id and date, with a `source`
-that says where it came from; the pricers read the latest row and print that source on the ticket.
+Curves, spots, forward points and the FX and digital-asset vol surfaces are rows of `market_data_snapshots`, keyed by
+account, curve id and date, each with a `source` that says where it came from. The swaption skew, the SABR parameters
+and the cap vols have their own tables (`swaption_vol_skew`, `sabr_params`, `cap_vol_surface`). The pricers read an
+account's latest row; the ticket prints the source of the forward points and of a venue's vol surface, and the date of
+the spot and of the discount curve.
+
+The table describes the template account, the one the feeds write to.
 
 | What | Curve ids | From | How often | When the source is silent |
 |---|---|---|---|---|
-| OIS curves | `USD_SOFR`, `EUR_ESTR`, `GBP_SONIA`, `CHF_SARON`, `JPY_TONAR` | central banks and treasuries, an indicative spread over government par (`market_data/demo_feed.py`) | daily | the curve keeps its last date; health reports it |
-| FX and digital-asset spot | `{PAIR}_SPOT` | ECB reference rates, Coinbase | 30 minutes; digital assets with the marks, every 10 | the last spot stands |
-| Digital-asset vols | `BTCUSD_VOL`, `ETHUSD_VOL`, `SOLUSD_VOL` | Deribit option marks, read at 25 and 50 delta per expiry (`market_data/deribit.py`) | 10 minutes | the last good surface stands, its own time in the source; health check `crypto_marks` reads that time and turns red after two hours |
-| Digital-asset forwards | `{PAIR}_FWD` | the same chain: the forward of each expiry over the index, checked against the spot | 10 minutes | as above; a funding rate typed on the ticket wins over them for that price |
-| Rates and FX vols | `USD_SWVOL_ATM`, skew, caps, `{PAIR}_VOL` for G10 | parametric, level scaled by realised vol (`risk/vols.py`) | daily | n/a: built, and labelled synthetic |
+| OIS curves | `USD_SOFR`, `EUR_ESTR`, `GBP_SONIA`, `CHF_SARON`, `JPY_TONAR` | central banks and treasuries, an indicative spread over government par (`market_data/demo_feed.py`) | rebuilt every 2 hours, one row a day | the curve is skipped and keeps its last date. Health (`market_data`) watches `USD_SOFR` only; the others are named in the tick's `failed_sources` |
+| FX and digital-asset spot | `{PAIR}_SPOT` | ECB reference rates through `api.frankfurter.dev`; Coinbase | 30 minutes; digital assets also with the marks, every 10 | the last spot stands. Health (`spots`) is green while any spot is being written, so it does not see an FX outage on its own |
+| Digital-asset vols | `BTCUSD_VOL`, `ETHUSD_VOL`, `SOLUSD_VOL` | Deribit option marks, read at 25 and 50 delta per expiry (`market_data/deribit.py`) | 10 minutes | the last good surface stands, its own time in the source. Health (`crypto_marks`) reads that time and is red when the oldest of the three is over two hours old, or when an asset's current surface is not the venue's |
+| Digital-asset forwards | `{PAIR}_FWD` | the same chain: the forward of each expiry over the index | 10 minutes, with the vols | as above. The index is checked against the spot fetched in the same run (5 %), or the last stored one (25 %); with no spot at all it is stored unchecked. A funding rate typed on the ticket wins over the points for that price |
+| Rates vols | `USD_SWVOL_ATM`; skew and cap tables | parametric (`market_data/demo_feed.py`); the ATM grid's level scaled by realised vol (`risk/vols.py`), skew and caps as built | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
+| G10 FX vols | `{PAIR}_VOL` for six pairs | parametric, level scaled by realised vol | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
 
-The template account receives every feed; a demo account is a copy of it. The daily rebuild copies a day's rows once and
-never overwrites; the digital-asset marks are pushed on every run and replace only rows that came from a feed. An
-account's own entry for a curve (the template owner's too) stays in force until the account replaces it.
-`RIJEKA_DERIBIT=0` switches the venue off: the deployed process removes its rows from the template and demo accounts
-at the next daily rebuild, the parametric surfaces and the flat funding rate return, and the history backfill rebuilds
-the vol series. What the venue sends is treated as untrusted: capped, bounded, checked against the spot, and never echoed. `GET /api/market-data/demo/sources` lists all of this publicly.
+A run of the marks makes three requests to the venue and three for the spot. Every writer and what it may replace:
+
+| Writer | Writes for | Replaces |
+|---|---|---|
+| Marks tick (`refresh_crypto`) | the template, then every demo account in one statement | only rows a feed wrote. An account's own entry for a digital-asset vol or forward curve, the template owner's too, stays in force until that account replaces it, whatever its date |
+| Daily rebuild (`refresh`) | the template | the template's row of the day for every curve it builds, whoever wrote it; a venue's surface is carried instead of the parametric one |
+| Spot ticks (`currencies.tick`, and the marks tick) | the template | the template's spot of the day |
+| Daily copy (`demo._copy_market_data`) | each demo account, and a new account at sign-up | nothing: it adds the template's latest row per curve when the account has none of that date, so for curves other than the venue's it supersedes an older own entry. A venue's row is not copied over an account's own entry. Terminal-sourced rows are never copied; hand-typed template rows are |
+
+So a demo account's curves, FX spot and G10 vols are the day's first copy; only the digital-asset vols, forwards and
+spot follow the template through the day.
+
+`RIJEKA_DERIBIT=0` switches the venue off. The process that runs the batches (the scheduler is on) then removes the
+venue's rows from the template and demo accounts at the next daily rebuild, and the parametric surfaces and the flat
+funding rate return; a process that runs no batches, such as a developer's shell on the shared database, removes
+nothing. The vol history then has gaps until the history backfill is run (`POST /api/risk/history/backfill` or the
+`risk-backfill` workflow; it is not a scheduled step). What the venue sends is treated as untrusted: capped, bounded,
+checked against the spot, and its text never repeated in a response. `GET /api/market-data/demo/sources` is public and
+lists the providers of the curves and of the venue's surfaces with the latest date of each; it does not list the spot
+providers.
 
 ## Independent price verification
 
@@ -141,7 +161,7 @@ listed and not switchable until they exist.
 
 ## Data flow of a trade
 
-1. **Price.** The ticket posts terms to `/price` (rates) or `/api/currencies/price` (FX and digital
+1. **Price.** The ticket posts terms to `/price` (rates) or `/api/currency/forward/price` and `/api/currency/option/price` (FX and digital
    assets); the pricer bootstraps the account's latest snapshot (cached per curve, date and quotes)
    and returns NPV, the sensitivities in the desk's taxonomy (IR01, IR01 DISC, FX01 / CRY01, FUND01,
    vega, theta, gamma) and the cashflows.
@@ -209,8 +229,9 @@ checklist in `docs/ops/release.md`.
   (`api/routes/_limits.py`). A larger book moves these to a worker without changing the engines.
 - Job state for background runs (counterparty credit, the risk backfill) is in process memory until the
   stored row lands; a deploy mid-run loses the "running" flag, not the data.
-- The hosted demo prices on public-source market data rebuilt daily; synthetic vol surfaces scaled by
-  realised vol, labelled as such. A self-hosted desk loads its own.
+- The hosted demo prices on public-source market data rebuilt daily and, for digital assets, on a venue's option
+  marks refreshed every ten minutes; rates and G10 FX vol surfaces are synthetic, scaled by realised vol, and
+  labelled as such. A self-hosted desk loads its own (and switches the feeds off: `docs/ops/environment.md`).
 
 ### The worker and the anchor in flight (3 November 2026)
 

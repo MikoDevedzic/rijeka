@@ -35,9 +35,10 @@ waited for Render would never finish.
 
 ## Batches
 
-The same scheduler runs every batch in-process on Render: news, summaries and spot every
-30 minutes; the demo market data rebuild, end-of-day P&L, market risk and counterparty credit
-every 2 hours (`RIJEKA_SCHEDULER_MINUTES`, `RIJEKA_SCHEDULER_DAILY_HOURS`). It is on whenever
+The same scheduler runs every batch in-process on Render: digital-asset spot, option vols and
+forwards every 10 minutes; news, summaries and spot every 30 minutes; the demo market data rebuild,
+end-of-day P&L, market risk and counterparty credit every 2 hours (`RIJEKA_SCHEDULER_MARKS_MINUTES`,
+`RIJEKA_SCHEDULER_MINUTES`, `RIJEKA_SCHEDULER_DAILY_HOURS`). It is on whenever
 `RENDER` is set, or with `RIJEKA_SCHEDULER=1`; `RIJEKA_SCHEDULER=0` turns it off. It needs
 `RIJEKA_CRON_SECRET`, the same value the workflow sends. `.github/workflows/news-tick.yml`
 remains the second driver and the alarm: its last step fails the run when a batch is stale,

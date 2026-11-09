@@ -120,8 +120,10 @@ def _demo_user_ids(db: Session, template) -> list:
 
 MARKS_LIKE = deribit.SOURCE_PREFIX + "%"
 
-# Which stored rows a feed may replace: one a feed wrote (DEMO …), or a spot labelled IMPORT, which is a fetched
-# public price. A row an account typed (MANUAL) or took from a terminal is never replaced, the template's included.
+# Which stored rows the marks tick may replace: one a feed wrote (DEMO …), or a spot labelled IMPORT, which is a fetched
+# public price. A row an account typed (MANUAL) or took from a terminal is not replaced by this tick, the template's
+# included. (The older writers have their own, older rules: the daily rebuild rewrites the template's row of the day for
+# every curve it builds, and the spot ticks the template's spot of the day; docs/architecture.md says which does what.)
 FEED_ROW = "{t}.source LIKE 'DEMO%' OR ({t}.source = 'IMPORT' AND right({t}.curve_id, 5) = '_SPOT')"
 # An account's own entry stays in force until the account replaces it: when the latest row it holds for a curve,
 # whatever its date, is one it entered itself, the feed writes nothing for that curve (as before the feed existed).
@@ -130,7 +132,7 @@ OWN_ENTRY_STANDS = ("COALESCE((SELECT " + FEED_ROW.format(t="o") + " FROM market
 SPOT_TOLERANCE = (0.05, 0.25)      # the venue's index against a spot fetched now, and against the last one stored
 
 # A demo account takes the template's row for the day, and only a row a feed wrote for the template: what the
-# template's owner entered by hand or from a licensed source is not copied to anyone.
+# template's owner entered by hand or from a licensed source is not pushed by this statement.
 PUSH_SQL = """
     INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by, user_id)
     SELECT s.curve_id, s.valuation_date, s.quotes, s.source, u.user_id, u.user_id
@@ -142,7 +144,7 @@ PUSH_SQL = """
     ON CONFLICT (user_id, curve_id, valuation_date) DO UPDATE
       SET quotes = EXCLUDED.quotes, source = EXCLUDED.source, created_at = NOW()
       WHERE (""" + FEED_ROW.format(t="market_data_snapshots") + """)
-        AND market_data_snapshots.quotes IS DISTINCT FROM EXCLUDED.quotes
+        AND (market_data_snapshots.quotes, market_data_snapshots.source) IS DISTINCT FROM (EXCLUDED.quotes, EXCLUDED.source)
 """
 
 MARKS_UPSERT_SQL = """
@@ -170,9 +172,11 @@ def kept_marks(db: Session, uid) -> dict[str, dict]:
 
 def purge_allowed() -> bool:
     """Whether this process may delete the venue's rows when the source is off. Local development shares the hosted
-    database, so a flag in a developer's shell must not be able to; the deployed process (Render sets RENDER) may,
-    and a self-hosted one says so with RIJEKA_DERIBIT_PURGE=1."""
-    return bool(os.getenv("RENDER")) or os.getenv("RIJEKA_DERIBIT_PURGE", "").strip().lower() in ("1", "true", "yes", "on")
+    database, so a flag in a developer's shell must not be able to. The process that runs the batches may: the
+    scheduler is on (on Render by default, on a self-hosted instance by RIJEKA_SCHEDULER=1), or RIJEKA_DERIBIT_PURGE=1
+    says so for an instance driven by an outside cron."""
+    import scheduler
+    return scheduler.enabled() or os.getenv("RIJEKA_DERIBIT_PURGE", "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def purge_marks(db: Session, template) -> int:

@@ -5,6 +5,7 @@ a known smile (tests/test_deribit.py). Every row written here is removed at the 
 reads the latest forward curve, is valued on the seed's market as before."""
 from __future__ import annotations
 
+import uuid
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -55,6 +56,11 @@ def test_marks_are_stored_pushed_priced_on_and_removed(client, auth_a, auth_b):
             assert a[cid].source.startswith("DEMO · Deribit") and "2026-11-09 11:59 UTC" in a[cid].source
             assert b[cid].quotes == a[cid].quotes and b[cid].source == a[cid].source
         assert "ETHUSD_FWD" not in b and a["ETHUSD_FWD"].source.startswith("DEMO · Deribit forwards")       # nothing written over B's own curve of yesterday
+        # the daily copy has the same rule for a venue's row (Nikola, 2026-11-09: without it the copy undid the push within two hours)
+        from api.routes import demo
+        demo._copy_market_data(db, uuid.UUID(USER_A), uuid.UUID(USER_B))
+        db.commit()
+        assert "ETHUSD_FWD" not in _rows(db, USER_B, "ETHUSD\\_FWD") and _rows(db, USER_B, "BTCUSD\\_FWD")["BTCUSD_FWD"].source.startswith("DEMO · Deribit")
         assert "SOLUSD_FWD" not in a and out["pushed_rows"] >= 3
         # a second run replaces its own rows in both accounts (a later mark), never duplicates them
         with patch.object(deribit, "collect", return_value={"ok": {"BTC": {**built["BTC"], "vol": [{**q, "rate": q["rate"] + 1} for q in built["BTC"]["vol"]]}}, "failed": {}}), \

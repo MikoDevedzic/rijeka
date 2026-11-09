@@ -1,5 +1,5 @@
-# Drives every batch from the outside: news, summaries, FX and crypto spot, the demo market data
-# rebuild, end-of-day P&L, market risk, counterparty credit; then checks that all of them are
+# Drives every batch from the outside: news, summaries, FX and crypto spot, the digital-asset marks
+# (venue option vols and forwards), the demo market data rebuild, end-of-day P&L, market risk, counterparty credit; then checks that all of them are
 # current and fails the run (which mails the owner) when one is stale.
 # The API runs the same sequence in-process on Render (backend/scheduler.py), on time; GitHub's
 # schedule is best-effort (three runs on 2026-10-30 instead of 48), so this is the second driver

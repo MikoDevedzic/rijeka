@@ -297,7 +297,8 @@ def test_crypto_tick_writes_the_marks_with_their_time_and_pushes_them_to_demo_ac
     assert push[0]["ids"] == ["BTCUSD_VOL", "BTCUSD_FWD", "SOLUSD_VOL", "SOLUSD_FWD", "BTCUSD_SPOT", "ETHUSD_SPOT", "SOLUSD_SPOT"]
     # an account's own entries stand, the template's included: only a feed's rows are copied, and only a feed's rows replaced
     # (the statements' behaviour is tested on a real database in tests/integration/test_crypto_marks.py; here, that they are the guarded ones)
-    assert "AND (s.source LIKE 'DEMO%' OR (s.source = 'IMPORT' AND right(s.curve_id, 5) = '_SPOT'))" in r.PUSH_SQL and "IS DISTINCT FROM EXCLUDED.quotes" in r.PUSH_SQL
+    assert "AND (s.source LIKE 'DEMO%' OR (s.source = 'IMPORT' AND right(s.curve_id, 5) = '_SPOT'))" in r.PUSH_SQL
+    assert "(market_data_snapshots.quotes, market_data_snapshots.source) IS DISTINCT FROM (EXCLUDED.quotes, EXCLUDED.source)" in r.PUSH_SQL
     assert all(s == r.MARKS_UPSERT_SQL for s, _ in calls if "INSERT INTO market_data_snapshots" in s and "CROSS JOIN" not in s)
     assert "ORDER BY o.valuation_date DESC LIMIT 1), true)" in r.MARKS_UPSERT_SQL and "ORDER BY o.valuation_date DESC LIMIT 1), true)" in r.PUSH_SQL
     assert db.begin_nested.call_count == 2
@@ -344,6 +345,7 @@ def test_switching_the_venue_off_removes_its_rows_at_the_daily_rebuild_and_the_p
     main.app.dependency_overrides.clear()
     assert resp.status_code == 200, resp.text
     assert resp.json()["curves"]["BTCUSD_VOL"]["source"] == "DEMO · synthetic surface"
+    monkeypatch.delenv("RENDER", raising=False); monkeypatch.delenv("RIJEKA_SCHEDULER", raising=False); monkeypatch.delenv("RIJEKA_DERIBIT_PURGE", raising=False)
     deletes = [c.args[1] for c in db.execute.call_args_list if "DELETE FROM market_data_snapshots WHERE source LIKE" in str(c.args[0])]
     assert deletes == []                                                   # a developer's shell on the shared database deletes nothing
     monkeypatch.setenv("RENDER", "true")
@@ -357,9 +359,14 @@ def test_switching_the_venue_off_removes_its_rows_at_the_daily_rebuild_and_the_p
     assert len(deletes) == 1 and deletes[0][1] == {"m": "DEMO · Deribit%", "t": "tmpl", "p": "DEMO%"}      # the deployed process, once, not on the dry run
     assert "user_id = :t OR user_id IN" in str(deletes[0][0]) and "lei LIKE :p AND is_own_entity" in str(deletes[0][0])
     monkeypatch.delenv("RENDER")
+    monkeypatch.delenv("RIJEKA_SCHEDULER", raising=False)
+    assert not r.purge_allowed()                                           # a shell that runs no batches
+    monkeypatch.setenv("RIJEKA_SCHEDULER", "1")
+    assert r.purge_allowed()                                               # a self-hosted instance that runs its own batches
+    monkeypatch.setenv("RIJEKA_SCHEDULER", "0")
     assert not r.purge_allowed()
     monkeypatch.setenv("RIJEKA_DERIBIT_PURGE", "1")
-    assert r.purge_allowed()
+    assert r.purge_allowed()                                               # driven by an outside cron, and says so
     assert not any("Deribit" in s["provider"] for s in listed)
 
 

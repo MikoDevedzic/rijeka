@@ -107,7 +107,12 @@ What is not in the compose file:
    cd backend && pip install -r requirements.txt && uvicorn main:app --port 8000
    ```
    Set `RIJEKA_DEMO_PROVISION=0` unless you want every sign-in to get a sandbox
-   workspace the way the hosted demo does.
+   workspace the way the hosted demo does. Set `RIJEKA_DEMO_MARKET_DATA=0` to run on your
+   own marks: with it on (the default) and the scheduler running, the public-source curves and
+   the digital-asset vols and forwards from Deribit's public API (`RIJEKA_DERIBIT`, also on by
+   default) are written to the template account, which is `RIJEKA_DEMO_TEMPLATE_EMAIL` or,
+   when that is empty, the earliest admin of a dealer firm, and they replace that account's
+   rows of the day for the curves they build.
 3. **Frontend.** Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`,
    then `cd frontend && npm install && npm run build` and serve `dist/`.
 4. Steps 4 to 6 above.
@@ -121,7 +126,9 @@ What is not in the compose file:
   the superuser in the compose stack) and enforces tenant isolation in application code; the RLS
   policies protect direct Supabase client access. Review `api/routes/*` before exposing it to firms
   that compete.
-- Market data is whatever you load. Nothing ships with a live feed.
+- Market data is whatever you load once `RIJEKA_DEMO_MARKET_DATA=0`. The feeds that ship are the demo's:
+  public-source curves rebuilt daily, public spot, and Deribit's public option marks for BTC, ETH and SOL;
+  using a venue's data on your own instance is under that venue's terms and your responsibility.
 - The registry contract has not had an external audit.
 
 ## What the hosted demo stores

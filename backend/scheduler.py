@@ -13,7 +13,7 @@ Enabled by RIJEKA_SCHEDULER=1, or by default when the process runs on Render (Re
 RENDER); RIJEKA_SCHEDULER=0 turns it off. Tests set neither, so nothing starts there.
 
 Cadence: the marks group every RIJEKA_SCHEDULER_MARKS_MINUTES (10): digital-asset spot, option
-vols and forwards, three small public requests; the half-hourly group every RIJEKA_SCHEDULER_MINUTES (30); the daily group every
+vols and forwards, three public requests to the venue and three for the spot; the half-hourly group every RIJEKA_SCHEDULER_MINUTES (30); the daily group every
 RIJEKA_SCHEDULER_DAILY_HOURS (2), which is what the workflow managed on a good day and keeps
 the risk and credit batches off the single CPU most of the time; the every_cycle group on
 every pass of the loop (a minute): today only chain_reconcile, which follows anchors whose

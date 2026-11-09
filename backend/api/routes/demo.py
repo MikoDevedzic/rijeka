@@ -126,7 +126,13 @@ def _copy_market_data(db: Session, src: uuid.UUID, dst: uuid.UUID) -> dict[str, 
         latest = (f"SELECT * FROM (SELECT *, max(valuation_date) {over} AS _mx "
                   f"FROM {table} WHERE user_id = :src AND valuation_date <= current_date {no_test} {licensed}) s "
                   f"WHERE valuation_date = _mx")
-        sql = (f"INSERT INTO {table} ({', '.join(cols)}) SELECT {', '.join(sel)} FROM ({latest}) t "
+        # A venue's row (market_data/deribit.py) is not laid over an account's own entry for that curve: when the latest
+        # row the account holds for it, whatever its date, is one it entered itself, the venue's row of today is not
+        # copied. The marks push (demo_market_data.PUSH_SQL) has the same rule; without it here this copy would undo it.
+        guard = ("WHERE (t.source NOT LIKE 'DEMO · Deribit%' OR COALESCE((SELECT o.source LIKE 'DEMO%' FROM market_data_snapshots o "
+                 "WHERE o.user_id = :dst AND o.curve_id = t.curve_id ORDER BY o.valuation_date DESC LIMIT 1), true)) "
+                 if table == "market_data_snapshots" else "")
+        sql = (f"INSERT INTO {table} ({', '.join(cols)}) SELECT {', '.join(sel)} FROM ({latest}) t {guard}"
                f"ON CONFLICT DO NOTHING")
         res = db.execute(text(sql), {"src": src, "dst": dst})
         out[table] = res.rowcount or 0

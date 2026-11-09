@@ -27,10 +27,10 @@ the repository.
 |---|---|---|---|
 | `CORS_ORIGINS` | `main.py` | empty | Extra allowed origins, comma-separated (the landing site). |
 | `RIJEKA_DEMO_PROVISION` | `api/routes/demo.py`, `public.py` | `1` | Every sign-in gets a sandbox workspace (own entity, demo counterparty, market data, trader role). `0` on a self-hosted desk. |
-| `RIJEKA_DEMO_TEMPLATE_EMAIL` | `api/routes/demo.py` | empty | The account whose market data new visitors get a copy of. |
-| `RIJEKA_DEMO_MARKET_DATA` | `api/routes/demo_market_data.py` | `1` | The daily rebuild from public sources. `0` to run on your own marks. |
-| `RIJEKA_DERIBIT` | `market_data/deribit.py` | `1` | Digital-asset vols and forwards from Deribit's public marks. `0` stops the requests; the deployed process (Render) then removes the venue's rows from the template and demo accounts at the next daily rebuild and the parametric surfaces return. Run the risk history backfill afterwards to rebuild the vol series. |
-| `RIJEKA_DERIBIT_PURGE` | `api/routes/demo_market_data.py` | unset | `1` lets a process that is not on Render do that removal (a self-hosted instance). Never set it in a shell that points at a shared database. |
+| `RIJEKA_DEMO_TEMPLATE_EMAIL` | `api/routes/demo.py` | empty | The account whose market data new visitors get a copy of, and the one the feeds write to. Empty: the earliest admin of a dealer firm. |
+| `RIJEKA_DEMO_MARKET_DATA` | `api/routes/demo_market_data.py`, `api/routes/ops.py` | `1` | The daily rebuild from public sources, the digital-asset marks tick and its health check. `0` to run on your own marks. (The spot tick is not gated by it.) |
+| `RIJEKA_DERIBIT` | `market_data/deribit.py` | `1` | Digital-asset vols and forwards from Deribit's public marks. `0` stops the requests and drops the `crypto_marks` health check. A process that runs the batches (the scheduler is on) then removes the venue's rows from the template and demo accounts at the next daily rebuild, and the parametric surfaces and the flat funding rate return; where the rows are not removed they keep being priced on. Run the risk history backfill afterwards to rebuild the vol series; it is not automatic. |
+| `RIJEKA_DERIBIT_PURGE` | `api/routes/demo_market_data.py` | unset | `1` lets a process whose scheduler is off do that removal (an instance driven only by an outside cron). Never set it in a shell that points at a shared database, which is why it is not in `.env.example`. |
 | `RIJEKA_USAGE_SALT` | `api/routes/usage.py` | empty (a process-local secret) | Salt for the daily-rotating visitor id of the usage beacon. |
 | `RIJEKA_LOG_LEVEL` | `main.py` | `INFO` | Root log level. |
 
@@ -41,12 +41,12 @@ the repository.
 | `RIJEKA_CRON_SECRET` | `scheduler.py`, the tick routes | empty (the ticks cannot be called) | Shared secret in the `X-Rijeka-Cron` header; the same value in the GitHub secret for the workflows. |
 | `RIJEKA_SCHEDULER` | `scheduler.py` | `auto` (on when `RENDER` is set) | `1` / `0` to force the in-process scheduler on or off. |
 | `RIJEKA_SCHEDULER_MINUTES` | `scheduler.py` | `30` | Period of the half-hourly group (news, summaries, spots). |
-| `RIJEKA_SCHEDULER_MARKS_MINUTES` | `scheduler.py` | `10` | Period of the digital-asset marks (three public requests per run). |
+| `RIJEKA_SCHEDULER_MARKS_MINUTES` | `scheduler.py` | `10` | Period of the digital-asset marks (three requests to the venue and three for the spot per run). |
 | `RIJEKA_SCHEDULER_DAILY_HOURS` | `scheduler.py` | `2` | Period of the daily group (demo market data, P&L, risk, counterparty credit); accounts already stored for the latest market date are skipped. |
 | `RIJEKA_GITHUB_TOKEN` | `scheduler.py` | empty (the release move is left to the workflow) | Fine-grained PAT, Contents read/write on the repository only; moves `release` after a deploy. |
 | `RIJEKA_GITHUB_REPO` | `scheduler.py` | `MikoDevedzic/rijeka` | Repository the release move targets. |
 | `RIJEKA_PUBLIC_API_URL` | `scheduler.py` | `RENDER_EXTERNAL_URL` | The public URL the API checks before moving `release`. |
-| `RENDER`, `RENDER_GIT_COMMIT`, `RENDER_EXTERNAL_URL` | `scheduler.py`, `api/routes/ops.py`, `prometheus/agent.py` | set by Render | Platform facts: the scheduler switch, the commit reported on `/api/ops/health`, the source links Prometheus cites. `GIT_COMMIT` is the fallback elsewhere. |
+| `RENDER`, `RENDER_GIT_COMMIT`, `RENDER_EXTERNAL_URL` | `scheduler.py` (and through it `api/routes/demo_market_data.py`), `jobs/queue.py`, `api/routes/ops.py`, `prometheus/agent.py` | set by Render | Platform facts: the scheduler switch, the commit reported on `/api/ops/health`, the source links Prometheus cites. `GIT_COMMIT` is the fallback elsewhere. |
 
 ### On-chain confirmation
 
