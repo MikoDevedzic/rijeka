@@ -3,6 +3,16 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.7). Commits on `main` are the detail.
 
+## 0.14.1 · 9 November 2026
+
+- The profiles policies of 31 October (`docs/migrations/2026-10-31_profiles_policies.sql`: a user updates their
+  own profile row but not their role; an admin updates any row) are on the approved list, so the runner applies
+  them wherever they were not. Reviewed by Edgar on a scratch database: role changes through the Supabase client
+  are refused for a non-admin, the Users page still works for an admin, the file is safe to run again.
+- 0.14.0 read back from production: both approved migrations applied by the runner on its first start
+  (approved 2, applied 2, problems 0), the fixings table present.
+- This change's lessons are in the role definitions (Vera, Magnus, Quinn, Nikola).
+
 ## 0.14.0 · 9 November 2026
 
 - **Fixings for digital assets.** A cash-settled trade's record has always named a settlement price source; nothing
@@ -59,6 +69,11 @@ methodology document carries its own version (v1.7). Commits on `main` are the d
   accepted only when named with `--database-url`, never for `--reset` or the seed, and its password is not
   printed.
 - PRICE on a booked currency or digital-asset trade revalues it as booked; the button did nothing there before.
+- **Security, found by Edgar and Magnus on this change and older than it.** An account with no profile row (the
+  sign-up function swallows its own errors, so a failed insert leaves none) was given the role its token claimed,
+  and the client writes that claim. The role of a request is now read from the profile only: no row, or a row that
+  cannot be read just then, is a viewer. With `docs/migrations/2026-11-09_signup_role.sql`, applied in production
+  by the runner in this release, a new account cannot ask to be an admin by either route.
 - Methodology v1.7; the map (`docs/architecture.md`) gains "Fixings and settlement", "Migrations in production"
   and the new writers.
 
@@ -92,6 +107,10 @@ methodology document carries its own version (v1.7). Commits on `main` are the d
   - Also: the RISK item in the top bar counts Collateral and opens the first risk page that is on; the home page,
     the top bar and the Risk and P&L sub-navigation read one list of which page needs which module.
 - **Security, found by Magnus on this change and older than it.**
+  - The sign-up trigger took a new account's role from the metadata the client sends, and the role check admits
+    `admin`: a sign-up made straight against the auth API could ask to be an admin. Fixed by
+    `docs/migrations/2026-11-09_signup_role.sql` (a new account is a viewer; provisioning raises it to trader),
+    **which takes effect only once it is applied to the hosted database**.
   - Provisioning looked a new account's firm up by a name built from its email and joined it as the firm's admin
     if one existed. It now always creates a new firm of one.
   - Module switching by a firm's own admin is limited to a firm of one, the note on a switch is bounded, and the
@@ -118,7 +137,7 @@ methodology document carries its own version (v1.7). Commits on `main` are the d
   - A digital-asset option on a quoted forward no longer says "the funding rate as the carry".
 - Two more roles since 0.12.0: Nikola (architect, consulted before this build as well as after) and Emmy (model
   validator); what each role missed on the Deribit feed is written into its definition. Reviewed by Vera (no
-  blocking finding, five to fix), Magnus (one high, older than this change; one medium), Nikola (the map
+  blocking finding, five to fix), Magnus (two high, both older than this change; one medium), Nikola (the map
   against the code) and Emmy; all fixed here or stated above.
 
 ## 0.12.0 · 9 November 2026

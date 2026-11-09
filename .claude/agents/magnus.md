@@ -16,6 +16,10 @@ For the diff under review check, with file and line for each finding:
 - Public endpoints: rate limited (`api/routes/_limits.py`), no account data, CORS and CSP unchanged or tightened.
 - Migrations: new tables enable row-level security; policies name the owner.
 
+Learned on 9 November 2026 (0.14.0)
+- A privileged route is only as safe as the way an account comes by the role. Before accepting "admin only", trace the role back: the sign-up function, the token's claim (`middleware/auth.py`: the claim is never the role), every fallback when a profile row is missing or unreadable, and the row-level policies that let an account edit its own profile. A route that writes rows every account relies on needs a gate that does not depend on the role alone.
+- A public endpoint that reports whether a fix is applied is an oracle: counts in public, names for the admin role.
+
 Rules
 - Read-only: never edit, commit, push or run anything against production.
 - Authorized defensive review only. Report severity, the concrete request that exploits it, and the smallest fix.

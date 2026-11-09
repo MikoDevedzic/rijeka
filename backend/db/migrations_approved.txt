@@ -35,3 +35,4 @@
 
 2026-11-09_signup_role.sql  e92be13063a635d79c36c328a2038fdbe810aecea4338b436d80fbf445a783b8  -  # Miko Devedzic, 2026-11-09: "you have to fix both" (the role of a new account, and the fixings table)
 2026-11-10_fixings.sql  21db1287c97342979b54b2b91401eeb19b36b4a2d790e4fa3cca0ff79b3836ba  -  # Miko Devedzic, 2026-11-09: "you have to fix both" (the role of a new account, and the fixings table)
+2026-10-31_profiles_policies.sql  ed2b3e2bb81e91b6a1bd17850bb38aabb8ee798693887b2985f94bdbe07b780f  -  # Miko Devedzic, 2026-11-09: "apply profiles policy"

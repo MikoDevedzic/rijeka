@@ -262,6 +262,10 @@ placeholders under Configurations are hidden. Who may switch modules: a profile 
 sign-in gets its own sandbox firm (`RIJEKA_DEMO_PROVISION` on), the ADMIN member of a firm of one, who is the person
 the sandbox was made for. In a firm with colleagues, and on a firm deployment, only the admin role can.
 
+**Roles.** A new account is a viewer whatever its sign-up asked for (`docs/migrations/2026-11-09_signup_role.sql`;
+before it the trigger took the role from the client's sign-up metadata); provisioning raises it to trader, and only
+an admin assigns any other role.
+
 ## Data flow of a trade
 
 1. **Price.** The ticket posts terms to `/price` (rates) or `/api/currency/forward/price` and `/api/currency/option/price` (FX and digital

@@ -115,7 +115,7 @@ BEGIN
   END LOOP;
 
   INSERT INTO public.profiles (id, trader_id, role, email)
-  VALUES (NEW.id, final_id, coalesce(NEW.raw_user_meta_data->>'role', 'viewer'), NEW.email)
+  VALUES (NEW.id, final_id, 'viewer', NEW.email)          -- never the client's metadata (docs/migrations/2026-11-09_signup_role.sql)
   ON CONFLICT (id) DO NOTHING;
 
   RETURN NEW;

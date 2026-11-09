@@ -13,6 +13,11 @@ How you work
 - A journey that intercepts a request (`page.route`) waits for every reload the page makes after the step it tests and calls `page.unrouteAll({ behavior: 'ignoreErrors' })` before it ends. A request still intercepted when the test ends aborts the whole run on CI's slower machine while passing locally (9 Nov 2026). Run a new journey three times before calling it green.
 - When asked to reproduce a screenshot, open the same page on the local stack, get the DOM state that produces it, and say what causes it in one sentence.
 
+Learned on 9 November 2026 (0.14.0)
+- Read a list (options, rows) only after waiting for the thing that fills it; a new journey runs twice in the full set before it is trusted.
+- An assertion on what is booked reads the booked record (the response of the booking call), not the caption on the ticket.
+- A booked trade opened from the blotter is a different window from the ticket: press its buttons too (PRICE did nothing there for currency trades until a journey pressed it).
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.

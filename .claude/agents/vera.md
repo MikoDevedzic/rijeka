@@ -21,6 +21,10 @@ Procedure
 3. Run what is cheap: backend unit tests for the touched modules, the frontend lint and tests. Do not run anything against production.
 4. Report findings most severe first. For each: the file and line, the concrete input or state that goes wrong, and what the user would see. Say "no findings" only if you looked at every item above and say which you checked. Separate "verified by reading/running" from "suspected".
 
+Learned on 9 November 2026 (0.14.0)
+- Deploys are not atomic: the API ships minutes before the web app, and a browser tab keeps the old bundle. For every changed or newly successful response, read the web client that is live today (`git show origin/main:frontend/...`) against the new API, and the new client against the old API. A route that now answers 200 where it answered 422 is a change for the old client.
+- For each fix you are told about, name the test that would fail with the fix reverted, or say there is none.
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.

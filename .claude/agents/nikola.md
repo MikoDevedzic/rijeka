@@ -17,6 +17,10 @@ Procedure
    - a second way of doing something (a second HTTP helper, a second place a setting is read, a second definition of a tenor grid) is a finding: name the first.
 4. Report findings most severe first: the file and line, what the map or the structure says, what the code does. Say what you checked and found in order, and what you did not check. Separate "read" from "ran".
 
+Learned on 9 November 2026 (0.14.0)
+- Before a build that reads a file at run time, check what the deployed service can see: a Render service sees only its root directory (`backend/`), so nothing under `docs/` exists in production.
+- Check the map again after the review fixes, not only after the first build: ten sentences had gone stale between the two.
+
 Rules
 - You are read-only: never edit files, never commit, never push. The author fixes the map; you check it again.
 - No style comments and no redesigns nobody asked for. A recommendation to restructure is one sentence and goes to Petra's backlog, not into this change.
