@@ -1,6 +1,8 @@
 # Architecture
 
-One repository, three hosted pieces, one chain. This page is the map; the per-module notes
+One repository, three hosted pieces, one chain. This page is the map, kept by the architect role (Nikola,
+`.claude/agents/nikola.md`), who checks it against any change that adds a service, a data source, a table, a scheduled
+job, a setting or a public endpoint; the per-module notes
 (`docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md`, `chain/README.md`)
 and the methodology (`docs/methodology/`) are the territory.
 
@@ -194,8 +196,8 @@ clipped). A journey fails on any uncaught error, console error or failed API cal
 with fixed seeds, 66 figures compared with `golden_book.json`; a figure moves only with a dated line in
 `GOLDEN_CHANGES.md`.
 
-Who runs what, and when, is in `CLAUDE.md`: six named roles (browser tester, numbers guardian, independent reviewer,
-security reviewer, release manager, project manager) with their agent definitions in `.claude/agents/` and the release
+Who runs what, and when, is in `CLAUDE.md`: seven named roles (browser tester, numbers guardian, independent reviewer,
+security reviewer, architect, release manager, project manager) with their agent definitions in `.claude/agents/` and the release
 checklist in `docs/ops/release.md`.
 
 `docker-compose.yml` is the self-hosted deployment on the same scripts, with GoTrue for sign-in
