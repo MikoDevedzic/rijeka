@@ -31,7 +31,7 @@ flowchart LR
   API -- "verifies tokens by public key" --> AUTH
   API -- "relayer (anchor, amend, terminate)" --> CHAIN
   API -- "daily rebuild, spots, news" --> PUB
-  API -- "three requests every 10 minutes" --> VENUE
+  API -- "three requests every 10 minutes, delivery prices once a day" --> VENUE
   API -- "read-only tools" --> ANTH
   API <--> TG
   LAND -- "pulse, calendar, register" --> API
@@ -61,7 +61,9 @@ summaries and spots every 30 minutes; demo market data, end-of-day P&L, market r
 credit every 2 hours) and moves the `release` branch after a deploy.
 
 **The database**: a Supabase project. Auth issues ES256 tokens; the API verifies them against the
-project's published keys (no shared secret) and then reads the caller's role from `profiles.role`.
+project's published keys (no shared secret) and then reads the caller's role from `profiles.role`: an account
+with no profile row, or whose row cannot be read just then, is a viewer for that request; the role a token claims
+for itself is never used.
 Every business table carries `user_id` and row-level security; the API scopes every query by the
 caller and, for firm views, by `firm_members`. The API connects through the transaction pooler
 (port 6543). Schema: `docs/schema.sql` plus `docs/migrations/` in date order (see `SELF-HOSTING.md`).
@@ -92,7 +94,7 @@ The table describes the template account, the one the feeds write to.
 | FX and digital-asset spot | `{PAIR}_SPOT` | ECB reference rates through `api.frankfurter.dev`; Coinbase | 30 minutes; digital assets also with the marks, every 10 | the last spot stands. Health (`spots`) is green while any spot is being written, so it does not see an FX outage on its own |
 | Digital-asset vols | `BTCUSD_VOL`, `ETHUSD_VOL`, `SOLUSD_VOL` | Deribit option marks, read at 25 and 50 delta per expiry (`market_data/deribit.py`) | 10 minutes | the last good surface stands, its own time in the source. Health (`crypto_marks`) reads that time and is red when the oldest of the three is over two hours old, or when an asset's current surface is not the venue's |
 | Digital-asset forwards | `{PAIR}_FWD` | the same chain: the forward of each expiry over the index | 10 minutes, with the vols | as above. The index is checked against the spot fetched in the same run (5 %), or the last stored one (25 %); with no spot at all it is stored unchecked. A funding rate typed on the ticket wins over the points for that price |
-| Digital-asset fixings | table `fixings` (not a snapshot curve): pair, date, source, value | Deribit's daily delivery price at 08:00 UTC (`market_data/deribit.py`), shared by every account; a desk's own entry for a licensed benchmark (`POST /api/currency/fixings`), its own only | every 30 minutes until the day's three are stored, then nothing until the next day; `?count=N` on the tick backfills | a published fixing is never overwritten; health (`crypto_fixings`) is red when the oldest of the three is more than 36 hours behind. Before the table exists nothing is stored and an expired trade is valued on the stored spot, marked provisional |
+| Digital-asset fixings | table `fixings` (not a snapshot curve): pair, date, source, value | Deribit's daily delivery price at 08:00 UTC (`market_data/deribit.py`), shared by every account; a desk's own entry for a benchmark (`POST /api/currency/fixings`), its own only | every 30 minutes while a date among the last ten is missing: every pass for six hours after 08:10 UTC for the day's own, then, as for an older hole, every third hour; nothing once every date is stored. `?force=1&count=N` on the tick backfills | a price is stored only within 15 % of the template's stored spot for that date (the day before or after where it has none), and only for dates the venue can have published; a stored fixing is never overwritten by the feed: a re-read that differs stores nothing and marks the date disputed. Health (`crypto_fixings`) is red when the latest is more than 36 hours behind, when any of the seven dates before it is missing, or while a date is disputed. An administrator fills or corrects a date (`POST /api/currency/fixings/correct`). Before the table exists nothing is stored and an expired trade is valued on the stored spot, marked provisional |
 | Rates vols | `USD_SWVOL_ATM`; skew and cap tables | parametric (`market_data/demo_feed.py`); the ATM grid's level scaled by realised vol (`risk/vols.py`), skew and caps as built | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
 | G10 FX vols | `{PAIR}_VOL` for six pairs | parametric, level scaled by realised vol | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
 
@@ -105,7 +107,8 @@ A run of the marks makes three requests to the venue and three for the spot. Eve
 | Spot ticks (`currencies.tick`, and the marks tick) | the template | the template's spot of the day |
 | Daily copy (`demo._copy_market_data`) | each demo account, and a new account at sign-up | nothing: it adds the template's latest row per curve when the account has none of that date, so for curves other than the venue's it supersedes an older own entry. A venue's row is not copied over an account's own entry. Terminal-sourced rows are never copied; hand-typed template rows are |
 | Hand-back (`POST /api/currency/forward-curve/use-feed`) | the caller's account; for the template, also the demo accounts still on a copy of its own curve | nothing is deleted: today's row for a digital-asset pair's forward points is written with the account's current points under a feed label, which the next marks run replaces with the venue's; rows of earlier dates stay. Refused where the feed does not write to the account, or has no forwards for the pair yet |
-| Fixings tick (`refresh_fixings`) | shared rows (`user_id` null), insert only | nothing: a differing re-read is logged, not written |
+| Fixings tick (`refresh_fixings`) | shared rows (`user_id` null), insert only | nothing: a differing re-read writes no value and sets `disputed_at` on the stored row; an agreeing re-read clears it |
+| Fixing correction (`POST /api/currency/fixings/correct`, the admin role) | a shared row of origin CORRECTION, with its author and reason | the live shared row for that pair, date and source, which is kept and marked superseded: the one writer that replaces a shared fixing. It passes the feed's own checks unless `override_band` is sent (the band and the stored spot are skipped, the reason is at least 30 characters and is noted on the row); it answers 409 until `2026-11-09_signup_role.sql` is applied |
 | Desk fixing (`POST /api/currency/fixings`) | the caller's own row | the caller's previous entry for the same pair, date and source, which is kept and marked superseded; never a shared row, and never a source the feed owns |
 
 So a demo account's curves, FX spot and G10 vols are the day's first copy; only the digital-asset vols, forwards and
@@ -126,24 +129,78 @@ A digital-asset forward or option is cash-settled against the settlement price s
 (`settlement_price_source`, hashed as typed in the canonical record; `chain/canonical.py` is not involved in any of
 this). `backend/settlement/store.py` holds fixings in one table: a shared row per pair, date and source written by
 the feed, and a desk's own rows over them. `backend/settlement/rule.py` is the one rule, used by the booked
-valuation (`pnl/valuation.py`) and the ticket's view of a booked trade (`currencies.price_booked`):
+valuation (`pnl/valuation.py`); the ticket's view of a booked trade (`currencies.price_booked`) answers from that
+valuation from the fixing date on:
 
 - the fixing of a trade is the stored row for its pair, its fixing date (a forward's valuation date, an option's
   expiration date) and exactly its named source, the caller's own row first; never another source's price;
-- from the fixing date a forward is worth sign × N × (fixing − K), discounted to the settlement date; an option's
-  expired payoff uses the fixing; from the settlement date the value is zero and the amount is reported as settled;
-- with no fixing stored it is today's behaviour (the stored spot of the day), marked `provisional`.
+- a booked valuation carries `state`: `LIVE` before the fixing date, `FIXED` from it (a forward is worth
+  sign × N × (fixing − K), an option its payoff on the fixing, discounted to the settlement date), `SETTLED` from
+  the settlement date (the mark is zero and the amount is reported);
+- the amount is `provisional` with a reason: no fixing stored (the stored spot of the fixing date is used, as
+  before the store existed), or a barrier or touch option whose knock state is not recorded and which the fixing
+  does not itself decide (the amount is the one that holds if the barrier was never touched).
 
-Each pair offers two sources (`SETTLEMENT_SOURCES`): the venue's delivery price, stored automatically, and a
-licensed benchmark, which a desk enters itself. The default is the automatic one wherever the feed runs and the
-benchmark elsewhere; the fixing time written on the record always follows the source. Not done yet: a settled trade
-keeps its status, and no settlement event is written (the P&L explain shows the amount leaving as carry, with no
-cash line); that is a separate change because it writes into every account each day.
+A forward's fixing date is a field on the ticket (the record's `valuation_date`): the settlement date for the
+venue's morning price, one day earlier for a benchmark, editable from tomorrow, and no earlier than seven days
+before settlement, to the settlement date (before its fixing date a forward is priced to the settlement date, an
+error that grows with the gap). An option fixes at its expiry. Booking checks the pairing
+(`settlement/sources.check_booked`, called by both booking routes and when a trade's terms are edited): trade
+date < fixing date ≤ settlement date, at most seven days before it; a source the pair lists is booked with that
+source's time; a name that reads like the venue's is refused for a desk's own source.
+
+Each pair has two sources (`settlement/sources.py`): the venue's delivery price, stored automatically, and a
+benchmark, which a desk enters itself. The venue's is offered on a ticket only where the feed is delivering that
+pair; a record that names it is accepted anywhere. With either feed switch off the tick answers `enabled: false`,
+the health check goes, stored fixings stay, tickets offer the benchmark, and a trade that names the venue's
+source stays provisional until an administrator stores its fixing. The pairs answer names the one a ticket books when nobody chooses as
+`settlement_default {source, time}`: the venue's where the feed is delivering that pair (both switches on, the
+table present, a shared fixing within three days: `store.feed_delivering`, the one test), the benchmark
+elsewhere. `fixing_default` stays the benchmark for older web clients. Not done yet: a settled trade keeps its
+status, and no settlement event is written (the P&L explain shows the amount leaving as carry, with no cash line);
+that is a separate change because it writes into every account each day.
 
 The CURVE SCENARIO tab of a currency or digital-asset ticket (`trade-window/FxScenarioChart.jsx`,
 `fx-scenario.js`) draws the pair's recent fixings and its forward curve, lets the curve be dragged by tenor or as a
 whole, and reprices in the browser with the pricer's own closed form and the backend's interpolation of forward
-points; a scenario fixing shows the settlement amount by the rule above. Nothing it shows is saved.
+points: an approximation, exact with no shock, labelled as one, and pinned to the backend by shared vectors
+(`backend/tests/vectors/fx_scenario.json`, read by a test on each side). A scenario fixing shows the settlement
+amount by the rule above. A trade that is `FIXED` or `SETTLED` has no forward to shock: the tab shows the fixing
+used, the amount and both dates as the API returned them. The API gives that answer only to a client that asks
+for it (`states` on `POST /price`); a web client from before it is answered as it always was. Nothing the tab
+shows is saved.
+
+## Migrations in production
+
+`docs/migrations/` holds every migration, one feature per file; the local stack and a self-hosted deployment apply
+all of them (`backend/stack/apply.py`). The hosted database is changed by the deployed API itself, and only from an
+approved list (`backend/db/migrate.py`):
+
+- `backend/db/migrations_approved.txt` has one line per approved migration: file name, the sha256 of its bytes,
+  flags, and who approved it, when, in their own words. `backend/db/approved/` holds a byte-identical copy of each
+  approved file, made at approval (`python -m db.migrate --stage <file>`): the service's root directory is
+  `backend/`, so nothing under `docs/` exists where it runs.
+- at start-up, before anything asks whether a table is there, the API applies each approved file not yet in the
+  ledger table `schema_migrations`, in file-name order, each in one transaction with its ledger row, under a
+  transaction-scoped advisory lock taken without waiting, with a lock timeout of 5 s and a statement timeout of
+  60 s. It stops at the first file that is missing, does not hash to its line, is refused or fails; later entries
+  stay blocked. Nothing it does can fail the start; it can delay it (2 s for the ledger, 5 s per lock wait, 60 s
+  per statement).
+- a content guard refuses a file that drops, truncates, deletes or grants to the anonymous role unless its line
+  carries the `destructive` flag, and refuses transaction control and session-wide settings always. It reads the
+  text; it does not see inside function bodies or built-up statements, which is what the review of each entry is for.
+- it runs only where `RIJEKA_MIGRATE` is on, or unset on Render, and outside Render it refuses a hosted database
+  whatever the setting. A developer's shell, the worker and the tests never apply anything to the hosted
+  database, although the local `.env` names it; the runner's own integration tests apply to `rijeka_test` only.
+  (`stack/apply.py` is a rule, not a guard, for a hosted database named on its command line: that is how a
+  self-hosted project is built.)
+- `GET /api/ops/health` → `migrations` carries counts only (enabled, approved, applied, pending, problems,
+  last_run); names and reasons are on `GET /api/ops/migrations`, admin only, with whether the sign-up role
+  function is installed. `schema` still reports each optional migration from the catalogue itself.
+- two ledgers exist and neither reads the other: `public.schema_migrations` (this runner) and
+  `public.stack_migrations` (`stack/apply.py`, which builds a local or self-hosted database from every file). On
+  a database built by `stack/apply.py`, turning the runner on runs the approved files again, which is harmless
+  because each is safe to run twice, but it would replace a customised `handle_new_user`.
 
 ## Independent price verification
 
@@ -262,8 +319,8 @@ clipped). A journey fails on any uncaught error, console error or failed API cal
 with fixed seeds, 66 figures compared with `golden_book.json`; a figure moves only with a dated line in
 `GOLDEN_CHANGES.md`.
 
-Who runs what, and when, is in `CLAUDE.md`: eight named roles (browser tester, numbers guardian, model validator, independent
-reviewer, security reviewer, architect, release manager, project manager) with their agent definitions in `.claude/agents/` and the release
+Who runs what, and when, is in `CLAUDE.md`: nine named roles (browser tester, numbers guardian, model validator, independent
+reviewer, security reviewer, architect, database keeper, release manager, project manager) with their agent definitions in `.claude/agents/` and the release
 checklist in `docs/ops/release.md`.
 
 `docker-compose.yml` is the self-hosted deployment on the same scripts, with GoTrue for sign-in

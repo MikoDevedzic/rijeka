@@ -18,16 +18,22 @@
 // split axis with the past on it, an axis that holds still during a drag, and
 // geometry shared with pointer handling.
 //
+// A trade whose fixing date has passed has no curve to shock: with `settled` and
+// no `curve` the chart is the fixings, the strike and the fixing the trade
+// settled on, and nothing drags.
+//
 // For the browser journeys the wrapper carries data-spot-x, data-spot-y (the
 // canvas coordinates of the spot point at TODAY) and data-px-per-unit (vertical
-// pixels per one unit of price), kept current on every draw.
+// pixels per one unit of price), kept current on every draw, and data-ready:
+// "true" once the panel's requests have settled and those attributes describe
+// the final layout, "false" before.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useRef, useState } from 'react'
 import { chartGeometry, daysBetween, horizonDays, valueRange, FIXING_DAYS } from './fx-scenario'
 
 const C = {
   bg: '#0C1015', grid: 'rgba(38,48,60,0.9)', axis: '#5F6C7B', label: '#8B98A8', hi: '#F4F7FA',
-  curve: '#0dd4a8', curveRgb: '13,212,168', fix: '#4a9ad4', strike: '#F0A020',
+  curve: '#0dd4a8', curveRgb: '13,212,168', fix: '#4a9ad4', strike: '#F0A020', level: '#E06C75',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -40,21 +46,42 @@ const addDays = (iso, n) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(i
 // the decimals a gridline step needs (0.25 → 2, 500 → 0), never more than the price itself shows
 const stepDp = (step, cap) => { for (let d = 0; d <= cap; d++) { const x = step * 10 ** d; if (Math.abs(x - Math.round(x)) < 1e-6) return d } return cap }
 
-// a strike far from spot would flatten the curve: it is named in the legend and left off the axis
-const strikeOnScale = (strike, spot) => fin(strike) && fin(spot) && strike > 0.4 * spot && strike < 1.6 * spot
+// a strike or barrier far from the market would flatten the chart: it is named in the legend and left off the axis
+const onScale = (level, ref) => fin(level) && fin(ref) && level > 0.4 * ref && level < 1.6 * ref
+// the level "far" is measured from: spot beside a curve; without one, the price the trade fixed at, the last
+// fixing drawn, or the strike itself
+const refLevel = (p) => {
+  const spot = p.curve?.[0]?.base
+  if (fin(spot)) return spot
+  if (fin(p.settled?.value)) return p.settled.value
+  const rows = p.fixings?.rows
+  if (rows?.length && fin(rows[rows.length - 1].value)) return rows[rows.length - 1].value
+  return fin(p.strike) ? p.strike : NaN
+}
 
 // Everything the drawing and the hit test share: which points are on the chart, and the scales.
 function layout(W, H, p, frozen) {
+  if (!W || !H) return null
   const vis = (p.curve || []).map((c, index) => ({ ...c, index })).filter(c => fin(c.base) && fin(c.shocked) && fin(c.x))
-  if (!W || !H || !vis.length || vis[0].x !== 0) return null
-  const maxDays = horizonDays(vis, Math.max(p.settle?.x || 0, p.expiry?.x || 0))
-  const pts = vis.filter(c => c.x <= maxDays)
+  const hasCurve = vis.length > 0 && vis[0].x === 0
+  if (!hasCurve && !p.settled) return null
+  const ahead = Math.max(0, ...[p.settle?.x, p.expiry?.x].filter(fin))
+  // without a curve the right side only has to reach a settlement date still ahead; one day stands for "none"
+  const maxDays = hasCurve ? horizonDays(vis, ahead) : Math.max(ahead * 1.05, 1)
+  if (!(maxDays > 0)) return null
+  const pts = hasCurve ? vis.filter(c => c.x <= maxDays) : []
   const fix = (p.fixings?.rows || []).map(r => ({ d: daysBetween(p.today, r.date), v: r.value, date: r.date }))
     .filter(f => f.d != null && f.d <= 0 && f.d >= -FIXING_DAYS && fin(f.v))
-  const strikeOn = strikeOnScale(p.strike, pts[0].base)
-  const range = frozen || valueRange([...pts.flatMap(c => [c.base, c.shocked]), ...fix.map(f => f.v), p.forward, strikeOn ? p.strike : NaN])
-  const geo = chartGeometry({ width: W, height: H, hasLeft: fix.length > 0, maxDays, vMin: range.vMin, vMax: range.vMax })
-  return { pts, fix, range, geo, maxDays, strikeOn }
+  const used = p.settled && fin(p.settled.value) && fin(p.settled.x) && p.settled.x <= 0 && p.settled.x >= -FIXING_DAYS ? p.settled : null
+  const ref = refLevel(p)
+  const strikeOn = onScale(p.strike, ref)
+  const levels = (p.levels || []).filter(l => onScale(l.value, ref))
+  const range = frozen || valueRange([...pts.flatMap(c => [c.base, c.shocked]), ...fix.map(f => f.v), hasCurve ? p.forward : NaN,
+    strikeOn ? p.strike : NaN, ...levels.map(l => l.value), used ? used.value : NaN])
+  if (!range) return null
+  const geo = chartGeometry({ width: W, height: H, hasLeft: fix.length > 0, leftShare: hasCurve ? undefined : 0.86, maxDays, vMin: range.vMin, vMax: range.vMax })
+  if (!geo) return null
+  return { pts, fix, range, geo, maxDays, strikeOn, levels, used, hasCurve }
 }
 
 function draw(canvas, p, L, hover) {
@@ -66,9 +93,9 @@ function draw(canvas, p, L, hover) {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H)
   ctx.font = FONT
-  if (!L) { ctx.fillStyle = C.label; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('No forward curve to draw', W / 2, H / 2); return }
+  if (!L) { ctx.fillStyle = C.label; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(p.settled ? 'No fixings to draw' : 'No forward curve to draw', W / 2, H / 2); return }
 
-  const { pts, fix, range, geo, strikeOn } = L
+  const { pts, fix, range, geo, strikeOn, levels, used, hasCurve } = L
   const { xs, ys, left, right, top, bottom, x0 } = geo
   const dp = p.dp ?? 2
   const axisDp = stepDp(range.step, dp)
@@ -86,7 +113,7 @@ function draw(canvas, p, L, hover) {
   // time axis: dates to the left of today, tenors to the right
   ctx.textAlign = 'center'; ctx.textBaseline = 'top'
   const vline = (x, style, width = 0.5, dash) => { ctx.strokeStyle = style; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke(); ctx.setLineDash([]) }
-  if (fix.length) {
+  if (fix.length || !hasCurve) {
     for (const d of [-30, -20, -10]) {
       const x = xs(d)
       vline(x, 'rgba(38,48,60,0.6)')
@@ -104,10 +131,15 @@ function draw(canvas, p, L, hover) {
   vline(x0, 'rgba(244,247,250,0.55)', 1)
   ctx.fillStyle = C.hi; ctx.fillText('TODAY', x0, bottom + 7)
 
-  // settlement and expiry: vertical markers, named above the plot
+  // vertical markers, named above the plot: an option's expiry and its settlement; a forward's settlement, with
+  // its fixing date beside it when the two differ (FIX, then SETTLE); once fixed, the same two dates in the past
   const marks = []
-  if (p.expiry && fin(p.expiry.x) && p.expiry.x > 0) marks.push({ x: xs(p.expiry.x), text: `EXPIRY ${day(p.expiry.date, true)}` })
-  if (p.settle && fin(p.settle.x) && p.settle.x > 0) marks.push({ x: xs(p.settle.x), text: `SETTLE ${day(p.settle.date, true)}` })
+  const onAxis = (x) => fin(x) && (hasCurve ? x > 0 : x >= -FIXING_DAYS)
+  const settleOn = !!p.settle && onAxis(p.settle.x)
+  const fixAt = hasCurve ? p.fix : p.settled && fin(p.settled.x) && p.settled.x <= 0 ? p.settled : null
+  if (hasCurve && p.expiry && onAxis(p.expiry.x)) marks.push({ x: xs(p.expiry.x), text: `EXPIRY ${day(p.expiry.date, true)}` })
+  if (fixAt && onAxis(fixAt.x) && !(settleOn && fixAt.x === p.settle.x)) marks.push({ x: xs(fixAt.x), text: `FIX ${day(fixAt.date, true)}` })
+  if (settleOn) marks.push({ x: xs(p.settle.x), text: `SETTLE ${day(p.settle.date, true)}` })
   marks.forEach(m => vline(m.x, 'rgba(244,247,250,0.45)', 1, [4, 3]))
   ctx.textBaseline = 'bottom'; ctx.fillStyle = C.hi
   if (marks.length === 2 && Math.abs(marks[0].x - marks[1].x) < ctx.measureText(marks[0].text).width / 2 + ctx.measureText(marks[1].text).width / 2 + 10) {
@@ -128,6 +160,14 @@ function draw(canvas, p, L, hover) {
     ctx.fillStyle = C.strike; ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'
     ctx.fillText(`K ${num(p.strike, dp)}`, left + 6, y - 3)
   }
+  // the levels of the option's style: a touch level, a barrier, or the two of a double
+  levels.forEach(l => {
+    const y = ys(l.value)
+    ctx.strokeStyle = C.level; ctx.lineWidth = 1; ctx.setLineDash([2, 3])
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke(); ctx.setLineDash([])
+    ctx.fillStyle = C.level; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'
+    ctx.fillText(`${l.label} ${num(l.value, dp)}`, right - 6, y - 3)
+  })
 
   // fixings: a line with dots, left of today
   if (fix.length) {
@@ -139,10 +179,12 @@ function draw(canvas, p, L, hover) {
   // the forward curve: base dashed; shocked solid once anything has moved
   const path = (key) => { ctx.beginPath(); pts.forEach((c, i) => i === 0 ? ctx.moveTo(xs(c.x), ys(c[key])) : ctx.lineTo(xs(c.x), ys(c[key]))) }
   ctx.lineJoin = 'round'; ctx.lineCap = 'round'
-  ctx.setLineDash([5, 4])
-  path('base'); ctx.strokeStyle = p.moved ? C.label : C.curve; ctx.lineWidth = p.moved ? 1.2 : 1.8; ctx.stroke()
-  ctx.setLineDash([])
-  if (p.moved) {
+  if (hasCurve) {
+    ctx.setLineDash([5, 4])
+    path('base'); ctx.strokeStyle = p.moved ? C.label : C.curve; ctx.lineWidth = p.moved ? 1.2 : 1.8; ctx.stroke()
+    ctx.setLineDash([])
+  }
+  if (hasCurve && p.moved) {
     pts.forEach(c => { ctx.beginPath(); ctx.arc(xs(c.x), ys(c.base), 1.8, 0, Math.PI * 2); ctx.fillStyle = C.label; ctx.fill() })
     path('shocked'); ctx.strokeStyle = `rgba(${C.curveRgb},0.18)`; ctx.lineWidth = 6; ctx.stroke()
     path('shocked'); ctx.strokeStyle = C.curve; ctx.lineWidth = 1.8; ctx.stroke()
@@ -155,17 +197,20 @@ function draw(canvas, p, L, hover) {
   })
   ctx.restore()
 
-  // the shocked forward at settlement: a dot and its value
-  if (p.settle && fin(p.settle.x) && fin(p.forward)) {
-    const x = xs(p.settle.x), y = Math.max(top, Math.min(bottom, ys(p.forward)))
-    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fillStyle = C.hi; ctx.fill()
-    ctx.strokeStyle = C.curve; ctx.lineWidth = 2; ctx.stroke()
-    const text = num(p.forward, dp), w = ctx.measureText(text).width
+  // a dot and its value: the shocked forward at settlement, or, once fixed, the price the trade settled on
+  // (hollow when that price is an estimate and not a fixing)
+  const dot = (x, value, stroke, hollow) => {
+    const y = Math.max(top, Math.min(bottom, ys(value)))
+    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, Math.PI * 2); ctx.fillStyle = hollow ? C.bg : C.hi; ctx.fill()
+    ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke()
+    const text = num(value, dp), w = ctx.measureText(text).width
     const tx = x + 9 + w > right ? x - 9 - w : x + 9
     const ty = y - 16 < top ? y + 6 : y - 16
     ctx.fillStyle = 'rgba(12,16,21,0.85)'; ctx.fillRect(tx - 3, ty - 1, w + 6, 13)
     ctx.fillStyle = C.hi; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(text, tx, ty + 1)
   }
+  if (hasCurve && p.settle && fin(p.settle.x) && fin(p.forward)) dot(xs(p.settle.x), p.forward, C.curve, false)
+  if (!hasCurve && used) dot(xs(used.x), used.value, C.fix, !!used.estimate)
 
   // the point under the cursor: its tenor, its value, and how far it has moved
   const h = pts.find(c => c.index === hover)
@@ -184,7 +229,8 @@ function draw(canvas, p, L, hover) {
 const sw = (style) => <span aria-hidden="true" style={{ display: 'inline-block', width: 18, height: 0, verticalAlign: 'middle', marginRight: 6, ...style }} />
 
 export default function FxScenarioChart(props) {
-  const { height = 260, fixings, moved, strike, dp = 2, tradeSource } = props
+  const { height = 260, fixings, moved, strike, dp = 2, tradeSource, levels, settled } = props
+  const curved = !!props.curve
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
   const live = useRef(props)                                 // the latest props, for the observers and listeners
@@ -202,13 +248,15 @@ export default function FxScenarioChart(props) {
     const L = layout(canvas.clientWidth, canvas.clientHeight, p, drag.current?.range)
     lay.current = L
     draw(canvas, p, L, drag.current ? drag.current.index : hoverRef.current)
-    if (L) {
+    if (L && L.pts.length) {
       wrap.dataset.spotX = L.geo.xs(0).toFixed(2)
       wrap.dataset.spotY = L.geo.ys(L.pts[0].shocked).toFixed(2)
       wrap.dataset.pxPerUnit = String(L.geo.pxPerUnit)
     } else {
       delete wrap.dataset.spotX; delete wrap.dataset.spotY; delete wrap.dataset.pxPerUnit
     }
+    // written after the geometry, in the same pass: a reader that sees "true" sees the layout it describes
+    wrap.dataset.ready = String(!!(p.ready && L))
   }
 
   useEffect(() => { live.current = props; hoverRef.current = hover; redraw() })   // every render: the curve, the hover, the end of a drag
@@ -259,7 +307,7 @@ export default function FxScenarioChart(props) {
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ border: '1px solid var(--border)', borderRadius: 2, background: C.bg, overflow: 'hidden' }}>
-        <div ref={wrapRef} data-testid="fx-scenario-chart" style={{ position: 'relative', width: '100%', height, minWidth: 0 }}>
+        <div ref={wrapRef} data-testid="fx-scenario-chart" data-ready="false" style={{ position: 'relative', width: '100%', height, minWidth: 0 }}>
           <canvas ref={canvasRef} onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseLeave={() => { if (!drag.current) setHover(-1) }}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
         </div>
@@ -270,12 +318,22 @@ export default function FxScenarioChart(props) {
             {fixings.spot ? 'stored spot' : `FIXINGS · ${fixings.label}`}{!fixings.spot && tradeSource && !fixings.ownSource ? ' (not the source this trade settles on)' : ''}
           </span>
         )}
-        <span style={legend}>{sw({ borderTop: `2px dashed ${moved ? C.label : C.curve}` })}BASE FORWARD</span>
-        {moved && <span style={legend}>{sw({ borderTop: `2px solid ${C.curve}` })}SHOCKED</span>}
-        {fin(strike) && <span style={legend}>{sw({ borderTop: `2px dashed ${C.strike}` })}K {num(strike, dp)}{strikeOnScale(strike, props.curve?.[0]?.base) ? '' : ' (off the scale)'}</span>}
-        <span style={{ ...legend, whiteSpace: 'normal', color: 'var(--text-mute)', fontFamily: 'var(--sans)' }}>
-          Drag a tenor point up or down to move it. Hold Shift, or drag the spot point at TODAY, to move the whole curve.
-        </span>
+        {curved && <span style={legend}>{sw({ borderTop: `2px dashed ${moved ? C.label : C.curve}` })}BASE FORWARD</span>}
+        {curved && moved && <span style={legend}>{sw({ borderTop: `2px solid ${C.curve}` })}SHOCKED</span>}
+        {fin(strike) && <span style={legend}>{sw({ borderTop: `2px dashed ${C.strike}` })}K {num(strike, dp)}{onScale(strike, refLevel(props)) ? '' : ' (off the scale)'}</span>}
+        {(levels || []).filter(l => fin(l.value)).map((l, i) => (
+          <span key={i} style={legend}>{sw({ borderTop: `2px dotted ${C.level}` })}{l.label} {num(l.value, dp)}{onScale(l.value, refLevel(props)) ? '' : ' (off the scale)'}</span>
+        ))}
+        {!curved && settled && fin(settled.value) && (
+          <span style={legend}>{sw({ width: 8, height: 8, borderRadius: 8, border: `2px solid ${C.fix}`, background: settled.estimate ? 'transparent' : C.hi })}
+            {settled.estimate ? 'ESTIMATE ON THE STORED SPOT' : 'FIXING USED'}
+          </span>
+        )}
+        {curved && (
+          <span style={{ ...legend, whiteSpace: 'normal', color: 'var(--text-mute)', fontFamily: 'var(--sans)' }}>
+            Drag a tenor point up or down to move it. Hold Shift, or drag the spot point at TODAY, to move the whole curve.
+          </span>
+        )}
       </div>
     </div>
   )

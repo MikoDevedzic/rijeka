@@ -233,6 +233,14 @@ class BookingRequest(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def settlement_source_is_bookable(self):
+        """A digital-asset trade names its pair's feed source or a desk source, at that source's time
+        (settlement/sources.check_booked, shared with POST /api/trades). New trades only."""
+        from settlement.sources import check_booked
+        check_booked(self.instrument_type, self.terms, self.trade_date, self.maturity_date)
+        return self
+
+    @model_validator(mode="after")
     def validate_structure_leg_consistency(self):
         """
         Sprint 13 Patch 5 — PRODUCT_TAXONOMY §1.11.

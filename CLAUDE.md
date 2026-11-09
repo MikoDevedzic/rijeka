@@ -16,6 +16,7 @@ Every change goes through the same gates. Each gate has a name and an agent defi
 | **Vera** | Independent reviewer | anything larger than a one-line hotfix | a fresh agent has read `git diff main...HEAD` cold and its findings are fixed or answered |
 | **Magnus** | Security reviewer | sign-in, roles, tenancy, keys, payments, public endpoints, user-supplied text | no finding left open |
 | **Nikola** | Architect | any change that adds or removes a service, an outside dependency or data source, a table, a scheduled job, a setting or a public endpoint | `docs/architecture.md` and `docs/ops/environment.md` match the code, checked by a fresh agent against the diff; the new piece follows the pattern the system already has for its kind |
+| **Edgar** | Database keeper | any change that adds or alters a table, column, function, trigger, policy or grant, writes to the database in a new way, or touches the migration runner or its approved list | migrations are one feature each, safe to re-run, locked down and tolerated when absent; `docs/schema.sql` agrees with them; nothing is on the approved list that the owner did not approve in his own words |
 | **Jarvis** | Release manager | every deploy | `docs/ops/release.md` followed; the commit read back from production |
 | **Petra** | Project manager | every proposal and decision | recorded in `_docs/BACKLOG.md` (local only) with its status |
 
@@ -25,8 +26,11 @@ A one-line hotfix asked for by name may skip Vera; it never skips lint, tests an
 
 - **Production is shared.** The local `.env` points at the production database. A script that writes is a
   production write. Production writes happen only when the user asks for that write in their own words; show
-  the exact statements first. Tests and journeys run on the local stack (`backend/stack/README.md`), never on
-  the hosted database.
+  the exact statements first. A migration reaches production through the runner (`backend/db/migrate.py`): the
+  deployed API applies what is on `backend/db/migrations_approved.txt`, and a line goes on that list only with
+  the user's words quoted beside it. An agent never reads or writes the hosted database from a shell, by any
+  route (`backend/scripts/export_schema.sh` is the owner's to run). Tests
+  and journeys run on the local stack (`backend/stack/README.md`), never on the hosted database.
 - **Secrets.** Never print tokens, keys, connection strings or `.env` contents. Never enter credentials on a
   hosted site.
 - **Git.** Work on a branch, stage by explicit path (never `git add -A`; another session shares this checkout),

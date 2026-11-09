@@ -67,15 +67,21 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
 
       {desk.length > 0 && (<>
         <SectionLabel sub="a source your desk supplies; a second entry for the same date and source replaces the first">ENTER A FIXING</SectionLabel>
-        <div className="row" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          <select className="inp" data-testid="fixing-source" style={{ width: 240 }} value={picked} onChange={e => setSource(e.target.value)} aria-label="Fixing source">
-            {desk.map(s => <option key={s.source} value={s.source}>{s.time ? `${s.source} · ${s.time}` : s.source}</option>)}
-          </select>
-          <input className="inp" data-testid="fixing-date" type="date" style={{ width: 150 }} value={date} max={utcToday()} onChange={e => setDate(e.target.value)} aria-label="Fixing date" />
-          <input className="inp" data-testid="fixing-value" type="text" inputMode="decimal" style={{ width: 150, textAlign: 'right' }} placeholder={p.spot != null ? `e.g. ${fmt(p.spot, decimals)}` : 'value'} value={value}
-                 onChange={e => setValue(e.target.value.replace(/[^0-9.,]/g, ''))} onKeyDown={e => { if (e.key === 'Enter' && !busy) save() }} aria-label={`Fixing value, ${p.quote} per ${p.base}`} />
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
+          <label style={{ display: 'block' }}><span className="lbl">SOURCE</span>
+            <select className="inp" data-testid="fixing-source" style={{ width: 240 }} value={picked} onChange={e => setSource(e.target.value)}>
+              {desk.map(s => <option key={s.source} value={s.source}>{s.time ? `${s.source} · ${s.time}` : s.source}</option>)}
+            </select>
+          </label>
+          {/* the day is the UTC day, as the API counts it: the default, and the last date offered */}
+          <label style={{ display: 'block' }}><span className="lbl">DATE (UTC)</span>
+            <input className="inp" data-testid="fixing-date" type="date" style={{ width: 150 }} value={date} max={utcToday()} onChange={e => setDate(e.target.value)} />
+          </label>
+          <label style={{ display: 'block' }}><span className="lbl">VALUE · {p.quote} per 1 {p.base}</span>
+            <input className="inp" data-testid="fixing-value" type="text" inputMode="decimal" style={{ width: 170, textAlign: 'right' }} placeholder={p.spot != null ? `e.g. ${fmt(p.spot, decimals)}` : 'value'} value={value}
+                   onChange={e => setValue(e.target.value.replace(/[^0-9.,]/g, ''))} onKeyDown={e => { if (e.key === 'Enter' && !busy) save() }} />
+          </label>
           <button className="btn primary" data-testid="fixing-save" onClick={save} disabled={busy || !value}>{busy ? 'SAVING…' : 'SAVE FIXING'}</button>
-          <span className="lbl" style={{ margin: 0 }}>{p.quote} per 1 {p.base}</span>
         </div>
       </>)}
 

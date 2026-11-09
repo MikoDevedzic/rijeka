@@ -4,8 +4,7 @@ assets. The market is handed over explicitly (as-of quotes), never read as 'late
 from __future__ import annotations
 
 import logging
-import math
-from datetime import date, timedelta
+from datetime import date
 from types import SimpleNamespace
 from typing import Any, Optional
 
@@ -57,16 +56,16 @@ def spot_curve(trade) -> Optional[str]:
 def _currency_terms(trade) -> tuple[str, dict]:
     t = dict(trade.terms or {})
     itype = str(trade.instrument_type or "").upper()
-    if itype == "CRYPTO_FORWARD":
-        pair = f"{str(t['digital_asset']).upper()}USD"
-        terms = {"notional": float(t.get("notional_amount") or trade.notional), "K": float(t["forward_price"]) if t.get("forward_price") not in (None, "") else None,
-                 "settle": date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)), "shape": "NDF"}
-    elif itype == "CRYPTO_OPTION":
-        pair = f"{str(t['digital_asset']).upper()}USD"
-        terms = {"notional": float(t.get("notional_amount") or trade.notional), "K": float(t["strike_price"]) if t.get("strike_price") not in (None, "") else None,
-                 "shape": "OPTION", "option_type": str(t.get("option_type") or "CALL").upper(), "expiry": date.fromisoformat(str(t["expiration_date"])),
-                 "settle": date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)),
-                 "settlement_type": "NON_DELIVERABLE", "style_fields": dict(t)}
+    from settlement import rule
+    if itype in rule.INSTRUMENTS:
+        # a digital asset's terms are read in one place, the one the settlement rule reads them in
+        k = rule.parse(trade)
+        pair = k["pair"]
+        if k["shape"] == "FORWARD":
+            terms = {"notional": k["notional"], "K": k["strike"], "settle": k["settle"], "shape": "NDF"}
+        else:
+            terms = {"notional": k["notional"], "K": k["strike"], "shape": "OPTION", "option_type": k["option_type"], "expiry": k["expiry"],
+                     "settle": k["settle"], "settlement_type": "NON_DELIVERABLE", "style_fields": k["style_fields"]}
     elif itype == "FX_OPTION":
         pair = str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper()
         terms = {"notional": float(t.get("base_notional") or trade.notional), "K": float(t["strike"]) if t.get("strike") not in (None, "") else None,
@@ -228,28 +227,29 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
     # spot flagged provisional (settlement/rule.py, the one rule; None before the fixing date, and nothing changes).
     fix = None
     if crypto:
-        from settlement.rule import settlement
-        fix = settlement(db, user["sub"], trade, val_date, spot=S, cache=getattr(mkt, "_cache", None))
+        from settlement import rule
+        fix = rule.settlement(db, user["sub"], trade, val_date, spot=S, cache=getattr(mkt, "_cache", None))
     if settle <= val_date or (t["shape"] == "OPTION" and t["expiry"] <= val_date and settle <= val_date):
         out = {"npv": 0.0, "ccy": quote, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0, "asof": {}, "fallback": fallback, "settled": True}
         if fix is not None:
             # the mark is zero once the settlement date is reached (the cash has left it, which is what P&L means by
             # the mark); the amount that settled is reported beside it, undiscounted
-            out.update(_settlement_fields(fix, _settled_amount(t, fix)))
+            fix = _with_amount(t, fix)
+            out.update(rule.report(fix))
+            if fix.get("paid_at_hit"):
+                out["model"] = f"settled; {rule.PAID_AT_HIT}"
         return out
     pip = PIP.get(pair, 1.0 if crypto else 1e-4)
-    if fix is not None and fix["fixing"] and t["shape"] != "OPTION" and fix["settlement_amount"] is not None:
-        # fixed, not yet paid: a known amount in the quote currency on the settlement date. No spot or funding
-        # sensitivity is left; the discounting curve's is that of one cash flow
-        amount, df = float(fix["settlement_amount"]), float(q_curve.df(settle))
-        npv = amount * df
-        d1 = val_date + timedelta(days=1)
-        theta = amount * df / max(float(q_curve.df(d1)), 1e-12) - npv if settle > d1 else -npv
-        ir01 = npv * (math.exp(-1e-4 * (settle - val_date).days / 365.0) - 1.0)
-        return _taxonomy({"npv": npv, "ccy": quote, "ir01": ir01, "ir01_disc": ir01, "ir01_base": 0.0, "spot01": 0.0, "theta": theta,
+    if fix is not None and t["shape"] != "OPTION" and fix["settlement_amount"] is not None:
+        # From the fixing date on the trade is one amount in the quote currency on the settlement date (rule.fixed_cash):
+        # the fixing against the contract price, or, while no fixing is stored, the stored spot of the fixing date
+        # against it, flagged provisional. Never a forward on today's spot: the amount reported and the value are the
+        # same cash flow (until 2026-11-10 a provisional forward kept the live value beside an amount on another spot).
+        on = (f"fixed {fix['fixing_date']} at {fix['fixing']['value']:g} ({fix['source']})" if fix["fixing"] else
+              f"fixing date {fix['fixing_date']} reached, no {fix['source'] or 'named source'} fixing stored: provisional on the {fix['provisional_basis']}")
+        return _taxonomy({**rule.fixed_cash(fix["settlement_amount"], val_date, settle, q_curve.df), "ccy": quote,
                           "asof": {qid: mkt.snapshot_date(qid)}, "fallback": fallback, "settled": False,
-                          "model": f"fixed {fix['fixing_date']} at {fix['fixing']['value']:g} ({fix['source']}): the settlement amount, paid {settle}",
-                          **_settlement_fields(fix, amount)}, crypto)
+                          "model": f"{on}: the settlement amount, paid {settle}", **rule.report(fix)}, crypto)
     fx_spot = None if crypto else spot_date(val_date, False, base, quote)   # an FX spot quote settles T+2; the forward carries from there
     r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,
                                valuation_date=val_date, settlement_date=settle, quote_curve=q_curve, direction=t["direction"], pip=pip,
@@ -273,53 +273,24 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
     out = {"npv": float(r.npv), "ccy": quote, "ir01": getattr(r, "ir01", None), "ir01_disc": getattr(r, "ir01_disc", None),
            "ir01_base": getattr(r, "ir01_base", None), "spot01": getattr(r, "spot01", None), "theta": getattr(r, "theta", None),
            "asof": {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT")}, "fallback": fallback}
-    if fix is not None:               # the fixing date is reached and no fixing is stored: the value above, flagged
-        out.update(settled=False, **_settlement_fields(fix, fix["settlement_amount"]))
+    if fix is not None:               # the fixing date is reached and the terms carry no contract price to fix against: the value above, flagged
+        from settlement import rule
+        out.update(settled=False, **rule.report(fix))
     return _taxonomy(out, crypto)
 
 
-def _settlement_fields(fix: dict, amount: Optional[float]) -> dict[str, Any]:
-    """What a valuation reports once the fixing date is reached: the fixing (None when none is stored, and then
-    `provisional`), and the amount that settles, undiscounted (on the stored spot while provisional)."""
-    return {"fixing": fix["fixing"], "provisional": fix["provisional"], "settlement_amount": amount,
-            "fixing_date": fix["fixing_date"].isoformat(), "fixing_source": fix["source"] or None}
-
-
-def _settled_amount(t: dict, fix: dict) -> Optional[float]:
-    """The undiscounted amount of a trade whose fixing date is reached: the rule's for a forward, the expired payoff
-    on the rule's price for an option (None when the terms carry no strike to measure it against)."""
+def _with_amount(t: dict, fix: dict) -> dict:
+    """The rule's answer with the amount of a trade whose settlement date is reached: a forward's is there already;
+    an option's is its expired payoff on the rule's price (None when the terms carry no strike to measure it against)."""
     if t["shape"] != "OPTION":
-        return fix["settlement_amount"]
+        return fix
     from api.routes.currencies import spec_from
+    from settlement import rule
     try:
         spec = spec_from(t.get("style_fields") or {}, t["option_type"], t["K"])
-        if fix["price"] is None or (spec.strike is None and spec.style != "TOUCH"):
-            return None
-        return _expired_amount(t, spec, spec.strike, float(fix["price"]))
+        return rule.with_option_amount(fix, t, spec, spec.strike)
     except (TypeError, ValueError, AttributeError):
-        return None
-
-
-def _expired_amount(t: dict, spec, K: Optional[float], s_exp: float) -> float:
-    """An expired option's fixed payoff on the price `s_exp`, undiscounted, in the quote currency, from our side. A
-    barrier or touch option's knock status is the desk's record (terms.knocked); without one it is read from the
-    price alone, which the valuation says."""
-    from pricing.fx_exotic import ExoticSpec, _expired
-    sign = 1.0 if str(t["direction"]).upper() == "BUY" else -1.0
-    sf = t.get("style_fields") or {}
-    if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") and sf.get("knocked") is not None:
-        knocked = bool(sf["knocked"])
-        if spec.style == "TOUCH":
-            hit_pays = spec.touch_type in ("ONE_TOUCH", "DOUBLE_ONE_TOUCH")
-            unit = spec.payout if (knocked == hit_pays) else 0.0
-        else:
-            alive_pays = spec.barrier_type.endswith("OUT")
-            unit = (_expired(ExoticSpec("EUROPEAN", spec.option_type, strike=K), s_exp, 1.0) if (knocked != alive_pays) else spec.rebate)
-        scale = t["notional"] if spec.style != "TOUCH" else 1.0
-    else:
-        unit = _expired(spec, s_exp, 1.0)
-        scale = t["notional"] if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else 1.0
-    return sign * scale * unit
+        return fix
 
 
 def _taxonomy(v: dict[str, Any], crypto: bool) -> dict[str, Any]:
@@ -351,23 +322,32 @@ def _value_fx_option(t: dict, pair: str, base: str, quote: str, S: float, fwd, v
     vol_cid = f"{pair}_VOL"
     asof = {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT"), vol_cid: mkt.snapshot_date(vol_cid)}
     if expiry <= val_date:
-        # expired, not yet settled: the fixing is the spot of the expiry date (the market as of expiry), or for a
-        # digital asset the rule's price (the stored fixing, else that same spot). A barrier or touch option's knock
-        # status is the desk's record (terms.knocked); without one it is read from that price alone, which the
-        # valuation says
+        from settlement import rule
         if fix is not None and fix["price"] is not None:
-            s_exp = float(fix["price"])
-        else:
-            s_exp = Market(mkt.db, mkt.user_id, expiry).spot(pair) if hasattr(mkt, "db") else S
-            s_exp = s_exp or S
-        amount = _expired_amount(t, spec, K, s_exp)
-        npv = amount * float(fwd.df_quote)
-        fixed_on = f" on the {fix['source']} fixing" if fix is not None and fix["fixing"] else ""
-        out = {"npv": npv, "ccy": quote, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0, "vega": 0.0, "asof": asof,
-               "fallback": fallback, "model": f"expired {expiry}: fixed payoff{fixed_on}, paid {settle}" + ("" if spec.style in ("EUROPEAN", "AMERICAN", "DIGITAL") or (t.get("style_fields") or {}).get("knocked") is not None else "; knock status not recorded, read from the " + ("fixing" if fixed_on else "expiry spot"))}
-        if fix is not None:
-            out.update(settled=False, **_settlement_fields(fix, amount))
-        return out
+            # a digital asset, expired and not yet settled: the payoff on the rule's price (the stored fixing of the
+            # source its terms name, else the stored spot of the expiry date, provisional), a barrier's or a touch's
+            # final only when its knock state is known. Either way it is one cash flow on the settlement date, valued
+            # as a fixed forward's is (rule.fixed_cash)
+            fix = rule.with_option_amount(fix, t, spec, K)
+            amount = float(fix["settlement_amount"])
+            if q_curve is not None:
+                figures = rule.fixed_cash(amount, val_date, settle, q_curve.df)
+            else:
+                figures = {"npv": amount * float(fwd.df_quote) + 0.0, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0}
+            on = f" on the {fix['source']} fixing" if fix["fixing"] else f" on the {fix['provisional_basis']}, provisional" if fix.get("provisional_basis") else ""
+            knock = {"price": "; the price at expiry is at or beyond the barrier", "unknown": "; knock state not recorded: the amount if the barrier was never touched"}.get(fix["knock"], "")
+            if fix.get("paid_at_hit"):
+                knock = f"; {rule.PAID_AT_HIT}"
+            return {**figures, "ccy": quote, "vega": 0.0, "asof": asof, "fallback": fallback, "settled": False,
+                    "model": f"expired {expiry}: fixed payoff{on}, paid {settle}{knock}", **rule.report(fix)}
+        # expired, not yet settled: the fixing is the spot of the expiry date (the market as of expiry). A barrier
+        # or touch option's knock status is the desk's record (terms.knocked); without one it is read from the
+        # expiry spot alone, which the valuation says
+        s_exp = Market(mkt.db, mkt.user_id, expiry).spot(pair) if hasattr(mkt, "db") else S
+        s_exp = s_exp or S
+        npv = rule.option_amount(t, spec, K, s_exp) * float(fwd.df_quote)
+        return {"npv": npv, "ccy": quote, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0, "vega": 0.0, "asof": asof,
+                "fallback": fallback, "model": f"expired {expiry}: fixed payoff, paid {settle}" + ("" if spec.style in ("EUROPEAN", "AMERICAN", "DIGITAL") or (t.get("style_fields") or {}).get("knocked") is not None else "; knock status not recorded, read from the expiry spot")}
     T_e = (expiry - val_date).days / 365.0
     vol, tier, note = lookup_vol(mkt.quotes(vol_cid), pair, T_e, float(fwd.forward), K, None)
     if tier == "DEFAULT":

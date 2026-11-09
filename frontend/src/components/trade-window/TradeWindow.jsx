@@ -243,8 +243,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const fxTerms = (() => {
     if (viewMode) return initialTrade.terms || null       // the term sheet as booked
     if (!fxQuote) return null
-    try { return fxRef.current?.payload?.()?.terms || null } catch { return null }
+    try { return fxRef.current?.terms?.() || fxRef.current?.payload?.()?.terms || null } catch { return null }
   })()
+  // one more render after the quote changes: the panel's handle (and its terms) is replaced after the render the quote arrives in
+  const [, setFxTermsTick] = useState(0); useEffect(() => { setFxTermsTick(n => n + 1) }, [fxQuote])
   const n0 = (v) => { const n = Math.round(Number(v) || 0); return (n === 0 ? 0 : n).toLocaleString(undefined, { maximumFractionDigits: 0 }) }   // never "-0"
   const currencyFooter = {
     footer: {
@@ -530,7 +532,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         // (a currency trade returns through currencies.price_booked). A
         // swaption's option analytics come from its pricer on the booked
         // terms; the booked legs supply the cashflows.
-        const booked = await post('/price', { trade_id: initialTrade.id, valuation_date: state.valDate, curves })
+        const booked = await post('/price', { trade_id: initialTrade.id, valuation_date: state.valDate, curves, states: true })
         if (isCurrency) { setFxQuote(booked); return }
         let data = booked
         if (productKey === 'IR_SWAPTION' && state.effDate && state.matDate) {
@@ -1163,7 +1165,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         result={isCurrency ? fxQuote : result}
         state={state}
         pricing={pricing || !!awaitingPar}
-        onPrice={isCurrency ? () => fxRef.current?.price() : handlePrice}
+        onPrice={isCurrency && !viewMode ? () => fxRef.current?.price() : handlePrice}   // a booked currency trade has no ticket panel: PRICE revalues it as booked
         onBook={isCurrency ? handleBookCurrency : handleBook}
         booking={booking}
         bookErr={bookErr}

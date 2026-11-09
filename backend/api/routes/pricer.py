@@ -155,6 +155,9 @@ class PriceRequest(BaseModel):
     trade_id: str
     valuation_date: Optional[date] = None
     curves: List[CurveInput]
+    # the caller reads `state` in the answer: a digital-asset trade from its fixing date on is then answered as a
+    # FIXED or SETTLED view (currencies.price_booked) instead of the 422 or live quote an older client expects
+    states: bool = False
 
 
 class CashflowGenRequest(BaseModel):
@@ -590,7 +593,7 @@ def price_trade(
         # priced from trade.terms on one model (api/routes/currencies.py)
         from api.routes.currencies import CURRENCY_INSTRUMENTS, price_booked as _price_currency
         if str(trade.instrument_type or "").upper() in CURRENCY_INSTRUMENTS:
-            return _price_currency(trade, db, user, val_date)
+            return _price_currency(trade, db, user, val_date, states=bool(getattr(request, "states", False)))
 
         orm_legs = (
             db.query(TradeLeg)

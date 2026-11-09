@@ -39,7 +39,7 @@ import json
 import uuid
 from datetime import date
 
-from stack.apply import database_url
+from stack.apply import database_url, shown
 
 VALUATION_DATE = date(2026, 11, 2)
 SOURCE = f"DEMO · stack seed, fixed quotes · as of {VALUATION_DATE.isoformat()}"
@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--database-url", default=None)
     ap.add_argument("--minimal", action="store_true", help="people and counterparties only, no market data")
     args = ap.parse_args(argv)
-    url = database_url(args.database_url)
+    url = database_url(args.database_url, destructive=True)      # test people and market data: never a hosted database
     os.environ["DATABASE_URL"] = url                 # db/session.py reads it at import; set before load_dotenv could
     os.environ.setdefault("SUPABASE_URL", "http://stack.local")
     from db.session import SessionLocal
@@ -188,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         people = seed_people(db, args.minimal)
         db.commit()
-        print(f"seed: {url}")
+        print(f"seed: {shown(url)}")
         for email, u in people["users"].items():
             print(f"  {email}  id={u['id']}  own entity {u['own_lei']}  counterparty {u['counterparty_id']}")
         print(f"  firm {FIRM_NAME} {people['firm']}")

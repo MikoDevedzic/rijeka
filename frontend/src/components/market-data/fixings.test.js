@@ -67,9 +67,13 @@ describe('the entry form of a desk\'s own fixing', () => {
     expect(checkFixing({ ...ok, source: 'x'.repeat(81) }, '2026-01-06').ok).toBe(false)
     expect(checkFixing({ ...ok, source: 'x'.repeat(80) }, '2026-01-06').ok).toBe(true)
   })
-  it('says plainly that a 409 is the instance, and passes the API\'s text on otherwise', () => {
-    expect(saveErrorText({ status: 409, message: 'fixings table missing' })).toMatch(/cannot store fixings yet/)
+  it('shows the API\'s own text for a failed save, whatever the status, and its own sentence only when the API gave none', () => {
+    expect(saveErrorText({ status: 409, message: 'The fixings store is not set up on this instance' })).toBe('The fixings store is not set up on this instance')
+    expect(saveErrorText({ status: 409, message: 'A newer entry for this date and source exists' })).toBe('A newer entry for this date and source exists')
     expect(saveErrorText({ status: 422, message: 'fixing_date is in the future' })).toBe('fixing_date is in the future')
+    expect(saveErrorText({ status: 409, message: '409' })).toBe('This instance cannot store fixings yet. Nothing was saved.')
+    expect(saveErrorText({ status: 409 })).toBe('This instance cannot store fixings yet. Nothing was saved.')
+    expect(saveErrorText({ status: 500, message: '500' })).toBe('The fixing was not saved (500)')
     expect(saveErrorText(undefined)).toBe('The fixing was not saved')
   })
 })

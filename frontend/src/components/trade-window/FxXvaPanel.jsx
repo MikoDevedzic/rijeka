@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
 import ExposureCanvas from './ExposureCanvas'
 import IncrementalXva from './IncrementalXva'
+import { settledState } from './fx-scenario'
 import {
   SectionHeader, TipLabel, PathsWwrSliders, ModelBadge, SimulateButtons, ProofExpander,
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
@@ -199,10 +200,13 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   )
 
   // The three pieces both views show; the simple view puts settlement first.
-  const simulateButtons = (
-    <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote} label={quote ? '▶ SIMULATE' : 'PRICE THE TICKET FIRST'}
+  // a trade whose fixing date has been reached has no forward left: a run would simulate one that no longer exists
+  const fixed = settledState(quote) != null
+  const simulateButtons = (<>
+    <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote || fixed} label={quote ? '▶ SIMULATE' : 'PRICE THE TICKET FIRST'}
       onSimulate={() => run(42)} onReroll={() => run(1 + Math.floor(Math.random() * 2147483000))} />
-  )
+    {fixed && <div data-testid="xva-fixed-note" style={{fontSize:'0.75rem',color:'var(--text-dim)',margin:'-6px 0 12px',lineHeight:1.5}}>This trade has fixed: there is no exposure left to simulate beyond the settlement amount.</div>}
+  </>)
   const simulateError = err && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {err}</div>
   const settlementBlock = (
     <SettlementBlock settlement={settlement} setSettlement={setSettlement}

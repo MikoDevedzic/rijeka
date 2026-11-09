@@ -8,14 +8,17 @@ import { DELTA_LABEL } from './fx-shape'
 //   FxCashflowsPanel — the settlement flows (deliverable: two legs; NDF: one net cash amount)
 //   FxScenarioPanel  — the forward curve on a chart that drags, the fixings beside it, and spot and
 //                      rate shocks repriced with the same closed form the engine uses
+// A booked trade whose fixing date has been reached (state FIXED or SETTLED) has no quote to
+// reprice: each panel then states the settled facts as the API sent them.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getSessionSafe } from '../../lib/session'
 import { apiFetch } from '../../lib/api'
 import FxScenarioChart from './FxScenarioChart'
 import {
-  FIXING_DAYS, SPOT_BOUND_PCT, applyTenorDrag, carryFactor, carryPoints, curveNodes, daysBetween, fixingSeries, interpPoints,
-  latestFixing, reprice, rippleWeights, settlementAmount, shockedCurve, spotLagDays, spotPctFromDrag, tenorBounds,
+  FIXING_DAYS, FX_SPOT_LAG_DAYS, SPOT_BOUND_PCT, applyTenorDrag, carryFactor, carryPoints, chartLevels, chartStrike, curveNodes, daysBetween,
+  fixingSeries, fixingTime, interpPoints, latestFixing, reprice, rippleWeights, settledFacts, settledState, settlementAmount, shockedCurve,
+  spotLagDays, spotPctFromDrag, styleTerms, tenorBounds, tenorMap,
 } from './fx-scenario'
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -36,9 +39,9 @@ const Empty = ({ what }) => (
   </div>
 )
 
-function Grid({ items, cols = 3 }) {
+function Grid({ items, cols = 3, min }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: min ? `repeat(auto-fit, minmax(min(100%, ${min}px), 1fr))` : `repeat(${cols}, 1fr)`, gap: 8 }}>
       {items.map(([k, v, s, testId, raw]) => (
         <div key={k} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '7px 9px', background: 'var(--bg-deep)' }}>
           <div style={{ ...lbl, fontSize: '0.76rem', marginBottom: 2 }}>{k}</div>
@@ -50,60 +53,151 @@ function Grid({ items, cols = 3 }) {
   )
 }
 
+// ── A FIXED OR SETTLED TRADE ───────────────────────────────────────────────────
+// A booked digital-asset trade whose fixing date has been reached comes back from the API with a state
+// (FIXED: not yet settled; SETTLED), the fixing it settled on, the settlement amount, and nulls where a live
+// quote has its pricing fields. The three tabs then state those facts as the API sent them. Nothing below is
+// computed here: no forward, no payoff, no discounting.
+const dot = (...parts) => parts.filter(p => p != null && p !== '').join(' · ')
+const signed = (n, d = 2) => (n == null ? '—' : `${n > 0 ? '+' : ''}${fmt(n, d)}`)
+const signedDelta = (x, base) => (x == null || base == null ? '—' : `${x - base >= 0 ? '+' : ''}${fmt(x - base)}`)
+const ORIGIN = { FEED: 'from the feed', MANUAL: 'entered by the desk' }
+
+// Why the figures are provisional, in plain words. When the amount hangs on a knock state nobody recorded, the
+// API sends the amount for each case and both are stated.
+function ProvisionalNotes({ facts, ccy, ids }) {
+  const { reasons, amount, ifTouched } = facts
+  if (!reasons.length) return null
+  return (
+    <div data-provisional="true" style={{ marginTop: 10, padding: '6px 10px', border: '1px solid rgba(240,160,32,0.3)', borderRadius: 4, background: 'rgba(240,160,32,0.06)', color: 'var(--amber)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+      {reasons.map((r, i) => (
+        <div key={i}>
+          {r.kind === 'NO_FIXING' ? `No fixing is stored for ${r.source || 'the named source'}${r.date ? ` on ${r.date}` : ''}: this is an estimate on the stored spot`
+            : r.kind === 'BARRIER' ? (
+              ifTouched != null && amount != null
+                ? <>Knock state not recorded: {signed(amount)} {ccy} if the barrier was never touched, <span data-testid={ids ? 'fx-settled-if-touched' : undefined} data-value={ifTouched}>{signed(ifTouched)}</span> {ccy} if it was. The figures here take it as never touched.</>
+                : 'The barrier\'s knock state is not recorded: this assumes it was never touched')
+            : r.text ? `Provisional: ${r.text}` : 'These figures are provisional'}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// The fixing used, the settlement amount as the API returned it, the two dates, and the trade they belong to.
+function SettledFacts({ quote, terms, sources, crypto, ids }) {
+  const f = settledFacts(quote, terms, sources)
+  const dp = rateDp(quote)
+  const option = quote.shape === 'OPTION'
+  const ccy = quote.quote_currency || ''
+  return (
+    <div>
+      <Grid min={200} items={[
+        ['FIXING USED', f.fx ? fmt(f.fixing, dp) : '—',
+          <>{f.fx ? dot(f.fx.source, f.fx.date, f.time, ORIGIN[f.fx.origin]) : `none stored for ${f.source || 'the named source'}${f.fixDate ? ` on ${f.fixDate}` : ''}`}
+            {f.disputed && <div data-testid={ids ? 'fx-settled-disputed' : undefined} style={{ color: 'var(--amber)' }}>disputed: a later read of the venue differs</div>}</>,
+          ids ? 'fx-settled-fixing' : undefined, f.fx ? f.fixing : undefined],
+        ...(!f.fx && f.price != null ? [['PRICE USED', fmt(f.price, dp), 'the stored spot of the fixing date, not a fixing']] : []),
+        ['SETTLEMENT AMOUNT', f.amount == null ? '—' : `${signed(f.amount)} ${ccy}`, f.amountNote, ids ? 'fx-settled-amount' : undefined, f.amount ?? undefined],
+        ['FIXING DATE', f.fixDate || '—', f.time || ''],
+        ['SETTLEMENT DATE', f.settlementDate || '—', f.state === 'SETTLED' ? 'settled' : 'fixed, not yet settled'],
+        ['TRADE', `${dot(quote.direction, option ? quote.option_type : null).replace(' · ', ' ') || '—'} ${fmt(f.notional, crypto ? 4 : 0)} ${quote.base_currency || ''}`,
+          f.strike != null ? `K ${fmt(f.strike, dp)}` : quote.style === 'TOUCH' ? 'a touch has no strike' : 'strike not reported'],
+      ]} />
+      <ProvisionalNotes facts={f} ccy={ccy} ids={ids} />
+    </div>
+  )
+}
+
+// The CURVE SCENARIO tab of a fixed or settled trade: the fixings and the strike on the chart, and the facts.
+function SettledView({ quote, terms, crypto, rows, sources, ready }) {
+  const f = settledFacts(quote, terms, sources)
+  const at = (d) => daysBetween(quote.valuation_date, d)       // where a date sits on the chart's time axis
+  return (
+    <div className="tbw-no-drag" style={wrap} data-testid="fx-settled-view" data-state={f.state}>
+      <div style={{ padding: '8px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+        {f.state === 'SETTLED' ? 'This trade has settled' : 'This trade has fixed and is not yet settled'}: there is no forward left to shock. Every figure here is as the API returned it.
+      </div>
+      <div style={secHdr}>FIXINGS · {quote.pair}</div>
+      <FxScenarioChart today={quote.valuation_date} curve={null} fixings={fixingSeries(rows, f.source)} tradeSource={f.source} strike={f.strike} levels={chartLevels(quote)}
+        settle={{ x: at(quote.settlement_date), date: quote.settlement_date }}
+        settled={{ x: at(f.fixDate), date: f.fixDate, value: f.priceUsed, estimate: !f.priceIsFixing }} dp={rateDp(quote)} ready={ready} />
+      <div style={secHdr}>{f.state === 'SETTLED' ? 'SETTLED' : 'FIXED, NOT YET SETTLED'}</div>
+      <SettledFacts quote={quote} terms={terms} sources={sources} crypto={crypto} ids />
+    </div>
+  )
+}
+
 // ── DETAILS ────────────────────────────────────────────────────────────────────
 export function FxDetailsPanel({ quote, terms, crypto }) {
   if (!quote) return <Empty what="The terms" />
   const t = terms || {}
   const ndf = quote.shape === 'NDF' || t.settlement_type === 'NON_DELIVERABLE'
   const dp = rateDp(quote)
+  const done = settledState(quote)                 // FIXED or SETTLED: the body has the settled facts and no pricing fields
+  const sheet = done ? 'TERM SHEET · AS BOOKED' : 'TERM SHEET · AS IT WILL BE BOOKED'
+  const settledBlock = done && (<>
+    <div style={secHdr}>{done === 'SETTLED' ? 'SETTLEMENT' : 'FIXING · NOT YET SETTLED'}</div>
+    <SettledFacts quote={quote} terms={t} crypto={crypto} />
+  </>)
+  // a notional at the strike the body does not carry is left out, not printed around a dash
+  const atStrike = quote.quote_notional == null ? '' : `${fmt(quote.quote_notional)} ${quote.quote_currency} at the strike`
   if (quote.shape === 'OPTION') {
     const cash = (t.settlement_type || quote.settlement_type) === 'NON_DELIVERABLE'
+    const st = styleTerms(quote)                   // each null when the body does not carry it: the row or the words are left out
+    const pays = st.payout ? `pays ${fmt(st.payout.amount, 0)} ${st.payout.currency || ''}`.trim() : null
     return (
       <div className="tbw-no-drag" style={wrap}>
-        <div style={secHdr}>TERM SHEET · AS IT WILL BE BOOKED</div>
+        <div style={secHdr}>{sheet}</div>
         <Grid items={[
           ['INSTRUMENT', crypto ? 'DIGITAL-ASSET OPTION (NDO)' : cash ? 'FX NON-DELIVERABLE OPTION' : 'FX OPTION', `${quote.pair} · canonical record v2 · ${crypto ? 'ISDA Digital Asset Derivatives Definitions' : 'ISDA FX and Currency Option Definitions'}`],
-          ['OPTION', quote.style === 'TOUCH' ? (quote.touch_type || '').replace(/_/g, ' ') : quote.style === 'DIGITAL' ? `${quote.base_currency} ${quote.option_type} DIGITAL` : `${quote.base_currency} ${quote.option_type}${quote.style && quote.style !== 'EUROPEAN' ? ' · ' + quote.style.replace('_', ' ') : ''}`,
-            quote.style === 'TOUCH' ? `pays ${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} ${quote.pay_at_hit ? 'at the hit' : 'at expiry'}` : quote.style === 'DIGITAL' ? `pays ${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} if ${quote.option_type === 'CALL' ? 'above' : 'below'} the strike` : `the right to ${quote.option_type === 'CALL' ? 'buy' : 'sell'} ${quote.base_currency} against ${quote.quote_currency}${quote.style === 'AMERICAN' ? ', any day to expiry' : ''}`],
-          ...(quote.style === 'BARRIER' ? [['BARRIER', `${(quote.barrier_type || '').replace('_', '-AND-')} at ${fmt(quote.barrier, dp)}`, `continuous monitoring${quote.rebate ? ` · rebate ${quote.rebate} ${quote.quote_currency} per ${quote.base_currency}` : ''}`]] : []),
-          ...(quote.style === 'DOUBLE_BARRIER' || (quote.style === 'TOUCH' && (quote.touch_type || '').startsWith('DOUBLE')) ? [['BARRIERS', `${fmt(quote.lower, dp)} – ${fmt(quote.upper, dp)}`, `${(quote.barrier_type || quote.touch_type || '').replace(/_/g, ' ')} · continuous monitoring`]] : []),
-          ...(quote.style === 'TOUCH' && !(quote.touch_type || '').startsWith('DOUBLE') ? [['BARRIER', fmt(quote.barrier, dp), 'continuous monitoring']] : []),
+          ['OPTION', quote.style === 'TOUCH' ? ((quote.touch_type || '').replace(/_/g, ' ') || 'TOUCH') : quote.style === 'DIGITAL' ? `${quote.base_currency} ${quote.option_type} DIGITAL` : `${quote.base_currency} ${quote.option_type}${quote.style && quote.style !== 'EUROPEAN' ? ' · ' + quote.style.replace('_', ' ') : ''}`,
+            quote.style === 'TOUCH' ? [pays || (st.when ? 'pays' : null), st.when].filter(Boolean).join(' ')
+              : quote.style === 'DIGITAL' ? (pays ? `${pays} if ${quote.option_type === 'CALL' ? 'above' : 'below'} the strike` : '')
+              : `the right to ${quote.option_type === 'CALL' ? 'buy' : 'sell'} ${quote.base_currency} against ${quote.quote_currency}${quote.style === 'AMERICAN' ? ', any day to expiry' : ''}`],
+          ...(quote.style === 'BARRIER' && st.barrier != null ? [['BARRIER', `${quote.barrier_type ? quote.barrier_type.replace('_', '-AND-') + ' ' : ''}at ${fmt(st.barrier, dp)}`, `continuous monitoring${quote.rebate ? ` · rebate ${quote.rebate} ${quote.quote_currency} per ${quote.base_currency}` : ''}`]] : []),
+          ...(st.range ? [['BARRIERS', `${fmt(st.range.lower, dp)} – ${fmt(st.range.upper, dp)}`, dot((quote.barrier_type || quote.touch_type || '').replace(/_/g, ' '), 'continuous monitoring')]] : []),
+          ...(quote.style === 'TOUCH' && st.barrier != null ? [['BARRIER', fmt(st.barrier, dp), 'continuous monitoring']] : []),
           ['SIDE', `${quote.direction} the option`, quote.direction === 'BUY' ? 'we pay the premium and hold the right' : 'we receive the premium and are exercised against'],
-          ['NOTIONAL', `${fmt(quote.base_notional, 0)} ${quote.base_currency}`, `${fmt(quote.quote_notional)} ${quote.quote_currency} at the strike`],
-          ...(quote.style !== 'TOUCH' ? [['STRIKE', fmt(quote.strike, dp), quote.strike === quote.forward ? 'at the forward' : `forward ${fmt(quote.forward, dp)}`]] : []),
-          ['EXPIRY', quote.expiry_date, `${t.expiration_time || t.expiry_time || (crypto ? '08:00 UTC' : '10:00 New York')} · ${quote.style === 'AMERICAN' ? 'American' : 'European'} · T = ${fmt(quote.t_expiry, 4)}y`],
+          ['NOTIONAL', `${fmt(quote.base_notional, 0)} ${quote.base_currency}`, atStrike],
+          ...(quote.style !== 'TOUCH' ? [['STRIKE', fmt(quote.strike, dp), done ? '' : quote.strike === quote.forward ? 'at the forward' : `forward ${fmt(quote.forward, dp)}`]] : []),
+          ['EXPIRY', quote.expiry_date, `${t.expiration_time || t.expiry_time || (crypto ? '08:00 UTC' : '10:00 New York')} · ${quote.style === 'AMERICAN' ? 'American' : 'European'} · ${done ? 'expired' : `T = ${fmt(quote.t_expiry, 4)}y`}`],
           ['SETTLEMENT DATE', quote.settlement_date, cash ? `cash in ${quote.quote_currency}${crypto ? ' against the settlement price' : ''}` : 'delivery of both currencies'],
-          ['PREMIUM', `${fmt(Math.abs(quote.npv))} ${quote.quote_currency}`, `${quote.direction === 'BUY' ? 'paid' : 'received'} on ${quote.valuation_date} · ${fmt(Math.abs(quote.npv) / quote.base_notional / quote.spot * 100, 3)}% of ${quote.base_currency} notional`],
-          [cash ? (crypto ? 'SETTLEMENT PRICE SOURCE' : 'FIXING SOURCE') : 'FIXING', cash ? (t.settlement_price_source || t.fixing_source || '—') : 'none (deliverable)', cash ? `on ${quote.expiry_date}` : ''],
+          // the premium is today's value of a ticket being priced; a fixed or settled trade's body does not carry what was paid
+          ...(done ? [] : [['PREMIUM', `${fmt(Math.abs(quote.npv))} ${quote.quote_currency}`, `${quote.direction === 'BUY' ? 'paid' : 'received'} on ${quote.valuation_date} · ${fmt(Math.abs(quote.npv) / quote.base_notional / quote.spot * 100, 3)}% of ${quote.base_currency} notional`]]),
+          [cash ? (crypto ? 'SETTLEMENT PRICE SOURCE' : 'FIXING SOURCE') : 'FIXING', cash ? (t.settlement_price_source || t.fixing_source || quote.fixing_source || '—') : 'none (deliverable)', cash ? `on ${quote.expiry_date}` : ''],
           ['CALCULATION AGENT', t.calculation_agent || 'none named', 'automatic exercise'],
         ]} />
+        {settledBlock || (<>
         <div style={secHdr}>MARKET IT WAS PRICED ON</div>
         <Grid items={[
           ['SPOT', fmt(quote.spot, dp), quote.spot_source || ''],
           ['FORWARD TO SETTLEMENT', fmt(quote.forward, dp), quote.forward_mode === 'MARKET' && quote.market_points != null ? 'quoted points' : 'implied from yields'],
-          ['VOL', `${fmt(quote.vol_pct, 3)}%`, `${quote.vol_tier} · ${quote.vol_source}${quote.vol_marks ? ' · ' + quote.vol_marks : ''}`],
+          ['VOL', quote.vol_pct == null ? '—' : `${fmt(quote.vol_pct, 3)}%`, dot(quote.vol_tier, quote.vol_source, quote.vol_marks) || 'no vol on this quote'],
           ...(quote.forward_delta != null ? [['FORWARD DELTA', `${fmt(quote.forward_delta * 100, 1)}%`, `d1 ${fmt(quote.d1, 4)} · d2 ${fmt(quote.d2, 4)}`]] : [['DELTA', `${fmt(quote.delta_base_units, 0)} ${quote.base_currency}`, 'by repricing, ±1% spot']]),
           [`${quote.quote_currency} CURVE`, quote.quote_curve || '—', `DF ${fmt(quote.df_quote, 6)} to settlement${quote.quote_curve_snapshot ? ' · ' + quote.quote_curve_snapshot : ''}`],
           ['MODEL', quote.method || (crypto ? 'Black-76 on the carry forward' : 'Garman–Kohlhagen'), quote.style && quote.style !== 'EUROPEAN' ? 'same lognormal dynamics; σ from the ATM/RR/BF surface at the strike, held flat for the barrier' : crypto ? 'the FX option engine with the funding rate as the base rate; σ from the ATM/RR/BF surface' : 'Black–Scholes with the base currency as the dividend-paying asset; σ from the ATM/RR/BF surface'],
         ]} />
+        </>)}
         <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Terms are edited on the TRADE tab; this is the record the counterparty will sign.</div>
       </div>
     )
   }
   return (
     <div className="tbw-no-drag" style={wrap}>
-      <div style={secHdr}>TERM SHEET · AS IT WILL BE BOOKED</div>
+      <div style={secHdr}>{sheet}</div>
       <Grid items={[
         ['INSTRUMENT', crypto ? 'CRYPTO FORWARD' : ndf ? 'FX NDF' : quote.shape === 'SPOT' ? 'FX SPOT' : 'FX FORWARD', `${quote.pair} · canonical record v2`],
         ['DIRECTION', `${quote.direction} ${quote.base_currency}`, `${quote.direction === 'BUY' ? 'receive' : 'deliver'} ${quote.base_currency}, ${quote.direction === 'BUY' ? 'pay' : 'receive'} ${quote.quote_currency}`],
-        ['NOTIONAL', `${fmt(quote.base_notional, crypto ? 4 : 0)} ${quote.base_currency}`, `${fmt(quote.quote_notional)} ${quote.quote_currency} at the strike`],
-        [crypto ? 'FORWARD PRICE (K)' : 'FORWARD RATE (K)', fmt(quote.forward_rate, dp), quote.forward_rate === quote.forward ? 'struck at the fair forward' : `fair ${fmt(quote.forward, dp)}`],
-        ['TRADE DATE', quote.valuation_date, ''],
-        [crypto || ndf ? 'SETTLEMENT DATE' : 'VALUE DATE', quote.settlement_date, `T = ${fmt(quote.t, 4)}y · ACT/365`],
+        ['NOTIONAL', `${fmt(quote.base_notional, crypto ? 4 : 0)} ${quote.base_currency}`, atStrike],
+        [crypto ? 'FORWARD PRICE (K)' : 'FORWARD RATE (K)', fmt(quote.forward_rate, dp), done ? '' : quote.forward_rate === quote.forward ? 'struck at the fair forward' : `fair ${fmt(quote.forward, dp)}`],
+        [done ? 'VALUED ON' : 'TRADE DATE', quote.valuation_date, ''],
+        [crypto || ndf ? 'SETTLEMENT DATE' : 'VALUE DATE', quote.settlement_date, done ? (done === 'SETTLED' ? 'settled' : 'fixed, not yet settled') : `T = ${fmt(quote.t, 4)}y · ACT/365`],
         ['SETTLEMENT', crypto || ndf ? `CASH · ${quote.quote_currency}` : 'PHYSICAL · both currencies', crypto || ndf ? `net of (fixing − K) × ${fmt(quote.base_notional, crypto ? 4 : 0)} ${quote.base_currency}` : 'full exchange of principals'],
-        [crypto || ndf ? 'FIXING SOURCE' : 'FIXING', crypto || ndf ? (t.settlement_price_source || t.fixing_source || '—') : 'none (deliverable)', crypto || ndf ? `on ${t.fixing_date || t.valuation_date || quote.settlement_date}${t.valuation_time ? ' · ' + t.valuation_time : ''}` : ''],
+        [crypto || ndf ? 'FIXING SOURCE' : 'FIXING', crypto || ndf ? (t.settlement_price_source || t.fixing_source || quote.fixing_source || '—') : 'none (deliverable)', crypto || ndf ? `on ${t.fixing_date || t.valuation_date || quote.settlement_date}${t.valuation_time ? ' · ' + t.valuation_time : ''}` : ''],
         ['CALCULATION AGENT', t.calculation_agent || 'none named', crypto ? (t.disruption_fallback || '') : ''],
       ]} />
+      {settledBlock || (<>
       <div style={secHdr}>MARKET IT WAS PRICED ON</div>
       <Grid items={[
         ['SPOT', fmt(quote.spot, dp), `${quote.spot_source || ''}`],
@@ -113,6 +207,7 @@ export function FxDetailsPanel({ quote, terms, crypto }) {
         [crypto ? `${quote.base_currency} FUNDING` : `${quote.base_currency} CURVE`, quote.base_discounting || '—', `DF ${fmt(quote.df_base, 6)} · ${crypto ? 'rate' : 'zero'} ${fmt(quote.base_rate * 100, 3)}%`],
         ['MODEL', crypto ? 'F = S·e^(−r_fund·T)/DF_quote' : 'F = S·DF_base/DF_quote', 'NPV = ±N·(F − K)·DF_quote'],
       ]} />
+      </>)}
       <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Terms are edited on the TRADE tab; this is the record the counterparty will sign.</div>
     </div>
   )
@@ -121,6 +216,33 @@ export function FxDetailsPanel({ quote, terms, crypto }) {
 // ── CASHFLOWS ──────────────────────────────────────────────────────────────────
 export function FxCashflowsPanel({ quote, crypto }) {
   if (!quote) return <Empty what="The settlement flows" />
+  const done = settledState(quote)
+  if (done) {
+    // one flow, as the API settled it: the amount is its figure, not (F − K) × N worked out here
+    const f = settledFacts(quote, null)
+    return (
+      <div className="tbw-no-drag" style={wrap}>
+        <div style={secHdr}>SETTLEMENT · {quote.settlement_date || '—'}</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={{ ...th, textAlign: 'left' }}>FLOW</th><th style={th}>DATE</th><th style={th}>{f.priceIsFixing ? 'FIXING' : 'PRICE USED'}</th><th style={th}>AMOUNT</th></tr></thead>
+          <tbody>
+            <tr>
+              <td style={{ ...tdL, borderBottom: 'none' }}>NET CASH SETTLEMENT · {quote.quote_currency}
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{f.fx ? `against ${dot(f.fx.source, f.fx.date, f.time)}` : `no fixing stored for ${f.source || 'the named source'}${f.fixDate ? ` on ${f.fixDate}` : ''}`}</div></td>
+              <td style={{ ...td, borderBottom: 'none' }}>{f.settlementDate || '—'}</td>
+              <td style={{ ...td, borderBottom: 'none' }}>{fmt(f.priceUsed, rateDp(quote))}</td>
+              <td style={{ ...td, borderBottom: 'none', fontWeight: 700, color: f.amount == null ? 'var(--text-dim)' : f.amount >= 0 ? 'var(--green)' : 'var(--red)' }}>{f.amount == null ? '—' : `${signed(f.amount)} ${quote.quote_currency}`}</td>
+            </tr>
+          </tbody>
+        </table>
+        <ProvisionalNotes facts={f} ccy={quote.quote_currency || ''} />
+        <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10, lineHeight: 1.5 }}>
+          {f.model ? `${f.model}. ` : ''}{done === 'SETTLED' ? 'Settled: the amount fell due on the settlement date and the trade no longer carries a value.' : 'Fixed, not yet settled: the amount falls due on the settlement date.'}
+          {f.amount == null ? ' The API reported no settlement amount for this trade.' : ''} These figures are the API's; nothing is repriced here.
+        </div>
+      </div>
+    )
+  }
   const ndf = crypto || quote.shape === 'NDF'
   const sign = quote.direction === 'BUY' ? 1 : -1
   const dp = rateDp(quote)
@@ -198,8 +320,11 @@ export function FxCashflowsPanel({ quote, crypto }) {
 // The engine's closed form, repriced here (fx-scenario.js): NPV = ±N·(F' − K)·DF_q', with
 // DF' = DF·exp(−Δr·T) for a parallel shift on that curve, and F' the forward read off the
 // curve on the chart: spot plus the points interpolated to the settlement date, after the
-// spot shock, the rate shocks and whatever was dragged. Exact for a forward, so no round
-// trip is needed and the chart, the tiles and the ladders move together.
+// spot shock, the rate shocks and whatever was dragged. An approximation, so no round trip
+// is needed and the chart, the tiles and the ladders move together: with no shock it agrees
+// with the engine to cents (an option's Φ here is a polynomial), a spot shock scales the
+// quoted points with spot, and on quoted points the pricer would not move the forward with
+// the rate sliders. The banner and the caption under the sliders say so.
 function Slider({ label, v, set, min, max, step, unit }) {
   const shown = Number(v.toFixed(2))            // a dragged curve leaves the spot shock between the slider's steps
   return (
@@ -273,13 +398,15 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
   const [vpt, setVpt] = useState(0)
   const [drags, setDrags] = useState({ pair: null, by: {} })           // tenor → points it has been dragged, for one pair
   const [typed, setTyped] = useState({ pair: null, text: null })       // the scenario fixing as typed; null: it follows the shocked forward
-  const [market, setMarket] = useState(null)             // { pair, row }: the pair's spot, points and pip
+  const [market, setMarket] = useState(null)             // { pair, row, tenorDays }: the pair's spot, points, pip, sources and the API's tenor map
+  const [curveFor, setCurveFor] = useState(null)         // the quote whose pairs request has come back, whatever it answered
   const [stored, setStored] = useState(null)             // { pair, rows }: the pair's recent fixings
   const origin = useRef(null)                            // the shocks as they stood when a drag began
   const pair = quote?.pair
   const dp = rateDp(quote)
   const option = quote?.shape === 'OPTION'
   const european = !option || !quote.style || quote.style === 'EUROPEAN'
+  const done = settledState(quote)
 
   // a dragged curve and a typed fixing belong to the pair they were made on: another pair starts clean
   const moves = drags.pair === pair ? drags.by : {}
@@ -291,8 +418,9 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
     if (!pair) return
     let dead = false
     apiFetch('/api/currency/pairs').then(r => (r.ok ? r.json() : null))
-      .then(j => { const row = j?.pairs?.find(p => p.pair === pair); if (!dead && row) setMarket({ pair, row }) })
+      .then(j => { const row = j?.pairs?.find(p => p.pair === pair); if (!dead && row) setMarket({ pair, row, tenorDays: j.tenor_days }) })
       .catch(() => {})                                   // no curve from the API: the chart draws the quote's own carry
+      .finally(() => { if (!dead) setCurveFor(quote) })
     return () => { dead = true }
   }, [pair, quote])
   // the fixings; when the request fails the chart is drawn without its left side
@@ -305,28 +433,52 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
     return () => { dead = true }
   }, [pair])
 
-  // the base curve: the quoted points the ticket priced on, or, without them, its own carry from spot to the forward
+  // the base curve: the quoted points the ticket priced on, or, without them, its own carry from spot to the forward.
+  // Null when the quote does not carry what a curve needs: nothing is drawn in its place.
   const model = useMemo(() => {
-    if (!quote) return null
-    const row = market?.pair === pair ? market.row : null
+    if (!quote || done) return null
+    const mine = market?.pair === pair ? market : null
+    const row = mine?.row || null
+    const tenorDays = tenorMap(mine?.tenorDays)          // the backend's own map; this module's copy for an older answer
+    // the pair's pip; before the pairs answer arrives, the convention (it cancels out of a curve read from the quote's carry)
     const pip = row?.pip > 0 ? row.pip : crypto ? 1 : /JPY$/.test(pair || '') ? 0.01 : 1e-4
-    const settleX = daysBetween(quote.valuation_date, quote.settlement_date) ?? Math.round((option ? quote.t_settle : quote.t) * 365)
+    const t = option ? quote.t_settle : quote.t
+    const settleX = daysBetween(quote.valuation_date, quote.settlement_date) ?? (Number.isFinite(t) ? Math.round(t * 365) : null)
+    if (settleX == null) return null
     const quoted = quote.forward_mode === 'MARKET' && quote.market_points != null && !!row?.forward_points && Object.keys(row.forward_points).length > 0
-    const lag = spotLagDays({ points: quoted ? row.forward_points : null, settleDays: settleX, marketPoints: quote.market_points, crypto })
-    const days = Math.max(settleX - lag, 0)              // points are quoted from the spot date
-    const nodes = curveNodes(quoted ? row.forward_points : carryPoints({ spot: quote.spot, forward: quote.forward, days, pip }), lag)
-    return { pip, settleX, quoted, days, nodes, label: quoted ? row.forward_curve?.label : null }
-  }, [quote, crypto, market, pair, option])
+    // points are quoted from the spot date: the lag the quote itself implies, else the market's convention
+    const lag = spotLagDays({ points: quoted ? row.forward_points : null, settleDays: settleX, marketPoints: quote.market_points, crypto, tenorDays }) ?? (crypto ? 0 : FX_SPOT_LAG_DAYS)
+    const days = Math.max(settleX - lag, 0)
+    const nodes = curveNodes(quoted ? row.forward_points : carryPoints({ spot: quote.spot, forward: quote.forward, days, pip, tenorDays }), lag, tenorDays)
+    if (!nodes) return null
+    return { pip, settleX, quoted, days, nodes, tenorDays, label: quoted ? row.forward_curve?.label : null }
+  }, [quote, done, crypto, market, pair, option])
 
   if (!quote) return <Empty what="Scenarios" />
-  const { pip, settleX, nodes, days } = model
+  const rows = stored?.pair === pair ? stored.rows : []
+  const sources = market?.pair === pair ? market.row?.fixing_sources : null
+  const ready = stored?.pair === pair && curveFor === quote                  // both requests are back: the chart will not move again by itself
+  if (done) return <SettledView quote={quote} terms={terms} crypto={crypto} rows={rows} sources={sources} ready={ready} />
+
   const rq = european ? qbp : 0, rb = european ? bbp : 0                     // the rate sliders exist for the closed form only
+  const nodes = model?.nodes || []
+  const pip = model?.pip
   const moved = nodes.map(n => moves[n.tenor] || 0)
-  const dPoints = interpPoints(Object.fromEntries(nodes.map((n, i) => [n.tenor, moved[i]])), days)
-  const at = (o = {}) => reprice(quote, { spotPct: spot, quoteBp: rq, baseBp: rb, volPts: vpt, dPoints, pip, ...o })
-  const base = reprice(quote)
-  const now = at()
-  const curve = shockedCurve({ spot: quote.spot, pip, nodes, moves: moved, spotPct: spot, quoteBp: rq, baseBp: rb })
+  const dPoints = model ? interpPoints(Object.fromEntries(nodes.map((n, i) => [n.tenor, moved[i]])), model.days, model.tenorDays) : null
+  const at = (o = {}) => (dPoints == null ? null : reprice(quote, { spotPct: spot, quoteBp: rq, baseBp: rb, volPts: vpt, dPoints, pip, ...o }))
+  const base = model ? reprice(quote) : null
+  const now = base ? at() : null
+  const curve = model ? shockedCurve({ spot: quote.spot, pip, nodes, moves: moved, spotPct: spot, quoteBp: rq, baseBp: rb }) : null
+  if (!base || !now || !curve) {
+    return (
+      <div className="empty-state" style={{ padding: '40px 24px' }} data-testid="fx-scenario-unavailable">
+        <div className="empty-icon">◇</div>
+        <div className="empty-title">No scenario for this quote</div>
+        <div className="empty-sub">It does not carry what the closed form needs (a forward, a discount factor and the time to settlement), and nothing is put in their place.</div>
+      </div>
+    )
+  }
+  const { settleX } = model
   const tenorsMoved = moved.some(m => m !== 0)
   const anyMove = spot !== 0 || rq !== 0 || rb !== 0 || tenorsMoved
   const d = (x) => x - base.npv
@@ -340,28 +492,31 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
     const k = index - 1                                                      // the chart's first point is spot
     if (whole || k < 0) {
       const ref = k < 0 ? quote.spot : (quote.spot + (nodes[k].points + o.moves[k]) * pip) * carryFactor(rq, rb, nodes[k].x)
-      setSpot(spotPctFromDrag({ originPct: o.spot, dPrice, ref }))
+      const pct = spotPctFromDrag({ originPct: o.spot, dPrice, ref })
+      if (pct != null) setSpot(pct)
     } else {
       const perPoint = pip * (1 + o.spot / 100) * carryFactor(rq, rb, nodes[k].x)     // so the point stays under the cursor
       const next = applyTenorDrag({ origin: o.moves, weights: rippleWeights(nodes, k), move: dPrice / perPoint, bounds: tenorBounds(nodes, { spot: quote.spot, pip }) })
-      setMoves(Object.fromEntries(nodes.map((n, i) => [n.tenor, next[i]])))
+      if (next) setMoves(Object.fromEntries(nodes.map((n, i) => [n.tenor, next[i]])))
     }
   }
 
   // the fixing the trade would settle on, and what it pays
   const cash = crypto || quote.shape === 'NDF' || (option && (terms?.settlement_type || quote.settlement_type) === 'NON_DELIVERABLE')
   const source = terms?.settlement_price_source || terms?.fixing_source || null
-  const fixTime = option ? (terms?.expiration_time || terms?.expiry_time || terms?.valuation_time) : terms?.valuation_time
-  const fixDate = option ? quote.expiry_date : (terms?.fixing_date || terms?.valuation_date || quote.settlement_date)
-  const rows = stored?.pair === pair ? stored.rows : []
+  const fixTime = fixingTime(sources, source) ?? terms?.valuation_time ?? null          // the source's own time, not the option's expiration time
+  // an option fixes at expiry; a forward on the date its terms name, which may be before it settles
+  const fixDate = option ? quote.expiry_date : (quote.fixing_date || terms?.fixing_date || terms?.valuation_date || quote.settlement_date)
+  const fixesEarly = !option && cash && !!fixDate && fixDate !== quote.settlement_date
   const last = latestFixing(rows, source)
-  const strike = option ? quote.strike : quote.forward_rate
-  const fixingShown = fixingText ?? (Number.isFinite(now.forward) ? now.forward.toFixed(dp) : '')
+  const strike = chartStrike(quote)
+  const fixingShown = fixingText ?? now.forward.toFixed(dp)
   const fixing = parseFloat(String(fixingShown).replace(/,/g, ''))
   const amount = settlementAmount({ shape: option ? 'OPTION' : 'FORWARD', optionType: quote.option_type, direction: quote.direction, notional: quote.base_notional, strike, fixing })
   const sgn = quote.direction === 'BUY' ? '+' : '−'
   const formula = option ? `${sgn}N × max(${quote.option_type === 'CALL' ? 'fixing − K' : 'K − fixing'}, 0)` : `${sgn}N × (fixing − K)`
   const nDp = crypto ? 4 : 0
+  const quotedForward = quote.forward_mode === 'MARKET' && quote.market_points != null
 
   const chart = (
     <div>
@@ -371,19 +526,21 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
           {model.quoted ? `Spot plus the quoted points${model.label ? ` (${model.label})` : ''}` : 'No quoted points on this ticket: the curve is its own carry from spot to the forward'}
         </div>
       </div>
-      <FxScenarioChart today={quote.valuation_date} curve={curve} fixings={fixingSeries(rows, source)} tradeSource={source} strike={strike}
+      <FxScenarioChart today={quote.valuation_date} curve={curve} fixings={fixingSeries(rows, source)} tradeSource={source} strike={strike} levels={chartLevels(quote)}
         settle={{ x: settleX, date: quote.settlement_date }} expiry={option ? { x: daysBetween(quote.valuation_date, quote.expiry_date), date: quote.expiry_date } : null}
-        forward={now.forward} dp={dp} moved={anyMove} onDragStart={onDragStart} onDrag={onDrag} onDragEnd={() => { origin.current = null }} />
+        fix={fixesEarly ? { x: daysBetween(quote.valuation_date, fixDate), date: fixDate } : null}
+        forward={now.forward} dp={dp} moved={anyMove} ready={ready} onDragStart={onDragStart} onDrag={onDrag} onDragEnd={() => { origin.current = null }} />
     </div>
   )
   const forwardTile = ['FORWARD', fmt(now.forward, dp), `base ${fmt(base.forward, dp)}`, 'fx-scenario-forward', now.forward]
   const resetButton = <button onClick={reset} className="btn" data-testid="fx-scenario-reset" style={{ marginTop: 4 }}>RESET</button>
   const banner = { background: 'rgba(240,160,32,0.06)', borderBottom: '1px solid rgba(240,160,32,0.15)', padding: '5px 12px', margin: '0 -16px', fontSize: '0.8125rem', color: 'var(--amber)' }
+  const approximation = <><span aria-hidden="true">⚠ </span><span data-testid="fx-scenario-banner">Scenario: an approximation in the browser (to cents with no shock; a spot shock scales the quoted points with it); nothing is saved.</span></>
 
   if (!european) {
     return (
       <div className="tbw-no-drag" style={wrap}>
-        <div style={banner}>⚠ Scenario: the engine repriced on every cell of the ladder ({quote.method}); for analysis only, nothing is saved.</div>
+        <div style={banner}>{approximation} <span>The ladder below is the engine's own, repriced on every cell ({quote.method || 'the style\'s own model'}).</span></div>
         {chart}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr)', gap: 20, alignItems: 'start', marginTop: 12 }}>
           <div>
@@ -405,11 +562,10 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
   const spotLadder = [-10, -5, -2, -1, 0, 1, 2, 5, 10]
   const rateLadder = [-100, -50, -25, 0, 25, 50, 100]
   const firstOrder = spot * (quote.spot01 ?? 0) + qbp * (quote.ir01_disc ?? 0) + bbp * (quote.ir01_base ?? 0) + vpt * (quote.vega ?? 0)
+  const none = { forward: null, npv: null }                                  // a ladder cell that cannot be priced shows a dash
   return (
     <div className="tbw-no-drag" style={wrap}>
-      <div style={banner}>
-        ⚠ Scenario — repriced with the engine's closed form; for analysis only, nothing is saved.
-      </div>
+      <div style={banner}>{approximation}</div>
       {chart}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 360px) minmax(0, 1fr)', gap: 20 }}>
         <div>
@@ -417,6 +573,7 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
           <Slider label="SPOT" v={spot} set={setSpot} min={-SPOT_BOUND_PCT} max={SPOT_BOUND_PCT} step={0.5} unit="%" />
           <Slider label={`${quote.quote_currency} CURVE`} v={qbp} set={setQbp} min={-200} max={200} step={5} unit="bp" />
           <Slider label={crypto ? `${quote.base_currency} FUNDING` : `${quote.base_currency} CURVE`} v={bbp} set={setBbp} min={-200} max={200} step={5} unit="bp" />
+          {quotedForward && <div data-testid="fx-scenario-quoted-note" style={{ fontSize: '0.7rem', color: 'var(--text-dim)', margin: '-2px 0 8px' }}>on quoted points the pricer holds the forward; these sliders show the carry effect only</div>}
           {option && <Slider label="VOL" v={vpt} set={setVpt} min={-5} max={5} step={0.25} unit="pt" />}
           {resetButton}
         </div>
@@ -431,7 +588,7 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
             ]} />
           </div>
           <div>
-            <div style={secHdr}>FIXING AT EXPIRY</div>
+            <div style={secHdr}>{option ? 'FIXING AT EXPIRY' : 'FIXING'}</div>
             <div style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '8px 10px', background: 'var(--bg-deep)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ ...lbl, fontSize: '0.76rem' }}>SCENARIO FIXING</span>
@@ -448,6 +605,9 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
               <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 4 }}>
                 {formula}, with N {fmt(quote.base_notional, nDp)} {quote.base_currency} and K {fmt(strike, dp)}, in {quote.quote_currency}
               </div>
+              {cash && fixDate && quote.settlement_date && (
+                <div data-testid="fx-scenario-dates" style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 2 }}>fixes on {fixDate}, settles {quote.settlement_date}</div>
+              )}
             </div>
             <FixingSource source={source} time={fixTime} date={fixDate} last={last} cash={cash} dp={dp} />
           </div>
@@ -458,11 +618,11 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
           <div style={secHdr}>SPOT LADDER · {quote.quote_currency}</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={th}>SPOT</th><th style={th}>LEVEL</th><th style={th}>FORWARD</th><th style={th}>NPV</th><th style={th}>ΔNPV</th></tr></thead>
-            <tbody>{spotLadder.map(s => { const r = at({ spotPct: s }); return (
+            <tbody>{spotLadder.map(s => { const r = at({ spotPct: s }) || none; return (
               <tr key={s} style={{ background: s === 0 ? 'var(--accent-glow)' : 'transparent' }}>
                 <td style={td}>{s > 0 ? '+' : ''}{s}%</td><td style={td}>{fmt(quote.spot * (1 + s / 100), dp)}</td><td style={td}>{fmt(r.forward, dp)}</td>
                 <td style={{ ...td, color: r.npv >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(r.npv)}</td>
-                <td style={{ ...td, color: d(r.npv) >= 0 ? 'var(--green)' : 'var(--red)' }}>{d(r.npv) >= 0 ? '+' : ''}{fmt(d(r.npv))}</td>
+                <td style={{ ...td, color: d(r.npv) >= 0 ? 'var(--green)' : 'var(--red)' }}>{signedDelta(r.npv, base.npv)}</td>
               </tr>) })}</tbody>
           </table>
         </div>
@@ -470,12 +630,12 @@ export function FxScenarioPanel({ quote, crypto, terms }) {
           <div style={secHdr}>RATE LADDER · PARALLEL, BOTH CURVES</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={th}>SHIFT</th><th style={th}>FORWARD</th><th style={th}>NPV</th><th style={th}>ΔNPV</th><th style={th}>{quote.quote_currency} ONLY</th><th style={th}>{crypto ? 'FUNDING' : quote.base_currency} ONLY</th></tr></thead>
-            <tbody>{rateLadder.map(b => { const r = at({ quoteBp: b, baseBp: b }); const q = at({ quoteBp: b, baseBp: 0 }); const bb = at({ quoteBp: 0, baseBp: b }); return (
+            <tbody>{rateLadder.map(b => { const r = at({ quoteBp: b, baseBp: b }) || none; const q = at({ quoteBp: b, baseBp: 0 }) || none; const bb = at({ quoteBp: 0, baseBp: b }) || none; return (
               <tr key={b} style={{ background: b === 0 ? 'var(--accent-glow)' : 'transparent' }}>
                 <td style={td}>{b > 0 ? '+' : ''}{b}bp</td><td style={td}>{fmt(r.forward, dp)}</td>
                 <td style={{ ...td, color: r.npv >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(r.npv)}</td>
-                <td style={{ ...td, color: d(r.npv) >= 0 ? 'var(--green)' : 'var(--red)' }}>{d(r.npv) >= 0 ? '+' : ''}{fmt(d(r.npv))}</td>
-                <td style={td}>{d(q.npv) >= 0 ? '+' : ''}{fmt(d(q.npv))}</td><td style={td}>{d(bb.npv) >= 0 ? '+' : ''}{fmt(d(bb.npv))}</td>
+                <td style={{ ...td, color: d(r.npv) >= 0 ? 'var(--green)' : 'var(--red)' }}>{signedDelta(r.npv, base.npv)}</td>
+                <td style={td}>{signedDelta(q.npv, base.npv)}</td><td style={td}>{signedDelta(bb.npv, base.npv)}</td>
               </tr>) })}</tbody>
           </table>
         </div>

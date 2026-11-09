@@ -9,20 +9,37 @@ methodology document carries its own version (v1.7). Commits on `main` are the d
   stored a fixing, so an expired trade was valued on the stored spot of the day and then read zero.
   - **The store** (`backend/settlement/`, table `fixings`, `docs/migrations/2026-11-10_fixings.sql`): the venue's
     daily delivery price for BTC, ETH and SOL (Deribit, 08:00 UTC), read once a day, shared by every account and
-    never overwritten; a desk's own entry for a licensed benchmark, its own only, a later entry superseding the
-    earlier one. `GET /api/currency/fixings/{pair}`, `POST /api/currency/fixings`, a cron-gated tick with a
-    backfill count, a scheduler step and a health check `crypto_fixings`. Until the migration is applied nothing
-    is stored and everything behaves as before.
+    never overwritten by the feed; a desk's own entry for a benchmark, its own only, a later entry superseding the
+    earlier one. `GET /api/currency/fixings/{pair}`, `POST /api/currency/fixings`, a cron-gated tick, a scheduler
+    step and a health check `crypto_fixings`. Until the migration is applied nothing is stored and everything
+    behaves as before.
+  - **What the feed's price has to pass.** A date the venue can have published; a value within 15 % of the template
+    account's stored spot for that date (the day beside it where there is none), else it is not stored. A re-read
+    that differs from a stored fixing stores nothing and marks the date disputed. The tick fills holes among the
+    last ten dates; health is red on a hole in the last week or a disputed date. An administrator fills or
+    corrects a date with a reason (`POST /api/currency/fixings/correct`; `override_band` with a longer reason
+    stores a genuine fixing outside the band); the old row is kept. A desk cannot store a fixing under the
+    venue's name or one that reads like it. The venue's source is offered on a ticket only where the feed is
+    delivering that pair.
   - **Settlement** (`settlement/rule.py`, one rule for the booked valuation and the ticket): from its fixing date a
     trade is valued on the fixing of exactly the source it names, a forward at sign × N × (fixing − K) discounted to
     the settlement date, an option at its payoff on the fixing; another source's price is never used. With no
-    fixing stored the value is today's (the stored spot), marked provisional. A booked digital-asset trade opened
-    on or after its settlement date now shows that view instead of an error. Not in this change: the trade's status
-    does not change and no settlement event is written.
+    fixing stored the value is today's (the stored spot), marked provisional. A barrier or touch option whose
+    knock state is not recorded, and which the fixing does not decide, is provisional too: the amount shown is the
+    one that holds if the barrier was never touched. The answer for a booked trade names its `state` (`LIVE`,
+    `FIXED`, `SETTLED`); a booked digital-asset trade opened on or after its fixing date shows the fixing used,
+    the amount and both dates instead of an error or a scenario. Not in this change: the trade's status does not
+    change and no settlement event is written.
   - **On the ticket:** SETTLES ON, a choice between the venue's price (fixed automatically) and the benchmark (the
-    desk enters it). The default is the automatic source wherever the feed runs, which is the hosted demo, and the
-    benchmark elsewhere; the fixing time on the record always follows the source. Trades already booked keep the
-    source they name.
+    desk enters it). The default is the automatic source wherever the feed is delivering that pair's fixing, which
+    is the hosted demo once the table is there, and the benchmark elsewhere (`settlement_default` in the pairs
+    answer; `fixing_default` is unchanged for older web clients). The fixing time on the record always follows the
+    source, and booking checks it. Trades already booked keep the source they name.
+  - **FIXING DATE** on the forward: the settlement date for the venue's morning price, one day earlier for a
+    benchmark, editable from tomorrow, and no earlier than seven days before settlement, to the settlement date;
+    the record's valuation date, checked at booking. Before its fixing date a forward is priced to the settlement
+    date (1.4bp of notional per day of gap at a 5 % basis), which is why the gap is limited. An option fixes at
+    its expiry, and the ticket says so.
   - **Market data → FX · Crypto → Fixings:** the last thirty days per source, and the entry form.
 - **The CURVE SCENARIO tab of currency and digital-asset tickets, redrawn.** A chart of the pair: recent fixings to
   the left of today, the forward curve to the right, the strike and the settlement date marked. The curve is
@@ -31,7 +48,19 @@ methodology document carries its own version (v1.7). Commits on `main` are the d
   FIXING AT EXPIRY takes a scenario fixing and shows the settlement amount. The sliders and ladders remain below.
 - Fixed on the way: the tabs of a priced currency ticket could be handed the terms of the moment before the quote
   arrived (none), which the new tab showed as "no settlement price source".
-- Methodology v1.7; the map (`docs/architecture.md`) gains "Fixings and settlement" and the new writers.
+- **Migrations reach production through the API.** The deployed API applies, when it starts, the migrations on
+  an approved list (`backend/db/migrations_approved.txt`, copies in `backend/db/approved/`): each line carries the
+  file's sha256 and the owner's approval in his own words. One transaction per file with its ledger row, a guard
+  against destructive statements, off everywhere but the deployed API (`RIJEKA_MIGRATE`; a hosted database is
+  refused outside it); `GET /api/ops/health` → `migrations` counts what was applied and what is pending, and
+  `GET /api/ops/migrations` names them for the admin role. A ninth role, Edgar the database keeper, reviews every
+  entry (`.claude/agents/edgar.md`).
+- `backend/stack/apply.py` and the seed no longer follow the shell's `DATABASE_URL` to a hosted database: one is
+  accepted only when named with `--database-url`, never for `--reset` or the seed, and its password is not
+  printed.
+- PRICE on a booked currency or digital-asset trade revalues it as booked; the button did nothing there before.
+- Methodology v1.7; the map (`docs/architecture.md`) gains "Fixings and settlement", "Migrations in production"
+  and the new writers.
 
 ## 0.13.0 · 9 November 2026
 

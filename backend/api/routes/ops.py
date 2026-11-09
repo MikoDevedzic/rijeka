@@ -64,13 +64,12 @@ def active_checks(db: Optional[Session] = None) -> list:
     account only; the fixings' check reads the latest shared delivery price, and is there only once the fixings
     table is (a deploy ahead of its migration stores none, and must not read as a stale batch)."""
     from api.routes import demo_market_data
-    from market_data import deribit
-    if not (deribit.enabled() and demo_market_data.enabled()):       # an instance on its own marks never runs the tick
+    from settlement import store
+    if not store.feed_enabled():                    # an instance on its own marks never runs the tick
         return CHECKS
     last_marks_at = demo_market_data.last_marks_at
     out = CHECKS + [("crypto_marks", last_marks_at, ("hours", 2), "digital-asset vols and forwards")]
     if db is not None:
-        from settlement import store
         if store.tables_present(db):
             # a day's price is published at 08:00 UTC: stale when the latest stored one is older than a day and a half
             out = out + [("crypto_fixings", demo_market_data.last_fixing_at, ("hours", 36), "digital-asset fixings")]
@@ -134,9 +133,12 @@ def ops_health(db: Session = Depends(get_db)):
     body (anyone can post it); it is served to signed-in users by /client-errors."""
     import os
     import scheduler
+    from db import migrate
     from version import VERSION
     return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]},
-            "scheduler": scheduler.status(), "worker": worker_status(db), "schema": schema_status(db), "version": VERSION,
+            "scheduler": scheduler.status(), "worker": worker_status(db), "schema": schema_status(db),
+            "migrations": migrate.public_summary(),  # counts only on this public body; names and reasons are GET /api/ops/migrations (admin)
+            "version": VERSION,
             "commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or None}
 
 
@@ -157,6 +159,14 @@ OPTIONAL_MIGRATIONS = (
     ("fixings", "2026-11-10_fixings.sql", "stored fixings for digital assets; without it an expired trade is valued on the stored spot, flagged provisional",
      "settlement.store", "tables_present"),
 )
+
+
+def signup_role_applied(db: Session) -> bool:
+    """True when the sign-up function is the one docs/migrations/2026-11-09_signup_role.sql installs: its body
+    writes the role itself. Read from the catalogue each time; nothing is cached."""
+    src = db.execute(text("""SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                             WHERE n.nspname = 'public' AND p.proname = 'handle_new_user'""")).scalar()
+    return bool(src) and "raw_user_meta_data" not in src
 
 
 _schema_cache: dict = {"at": 0.0, "body": None}
@@ -194,6 +204,21 @@ def worker_status(db: Optional[Session]) -> dict:
     except Exception as e:                # noqa: BLE001
         log.debug("ops: worker status failed: %s", e)
         return {"present": False, "reason": type(e).__name__}
+
+
+@router.get("/migrations")
+def ops_migrations(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """What the runner did at start-up, by name, with the reason for anything not applied (db/migrate.py), and the
+    checks that are not for a public page. The admin role only: the public health body carries counts."""
+    from api.routes._roles import require_admin
+    from db import migrate
+    require_admin(db, user)
+    try:
+        signup = signup_role_applied(db)
+    except Exception:                     # noqa: BLE001
+        db.rollback()
+        signup = None
+    return {"migrations": migrate.status(), "signup_role": {"applied": signup, "migration": "2026-11-09_signup_role.sql"}}
 
 
 @router.get("/client-errors")

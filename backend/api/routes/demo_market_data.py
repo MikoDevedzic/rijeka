@@ -281,58 +281,138 @@ def refresh_crypto(db: Session, dry_run: bool = False, now: Optional[datetime] =
 
 # ── Digital assets: the venue's daily delivery prices, into the fixings store ──
 
-FIXING_HOUR_UTC = 8               # the venue publishes a day's delivery price at 08:00 UTC
+FIXING_HOUR_UTC = deribit.PUBLISH_HOUR     # the venue publishes a day's delivery price at 08:00 UTC
 FIXING_KEYS = [(deribit.pair(a), deribit.delivery_source(a)) for a in deribit.ASSETS]
+FIXING_LOOKBACK = 10            # the tick fills holes among the last ten expected dates
+FIXING_HEALTH_DAYS = 7          # health is red while any of the seven dates before the latest expected one is missing
+FIXING_SPOT_BAND = 0.15         # a delivery price stands within 15 % of the template's stored spot of the same date
+FIXING_FRESH_HOURS = 6          # a date missing for less than this is asked for on every pass
+FIXING_RETRY_HOURS = 3          # after that, in the first half hour of every third hour (UTC)
 
 
 def expected_fixing_date(now: Optional[datetime] = None) -> date:
-    """The latest date the venue has published a delivery price for: today (UTC) from 08:00 UTC, yesterday before."""
-    now = now or datetime.now(timezone.utc)
-    return now.date() if now.hour >= FIXING_HOUR_UTC else now.date() - timedelta(days=1)
+    """The latest date the venue has published a delivery price for (market_data/deribit.py: today from 08:10 UTC)."""
+    return deribit.expected_delivery_date(now)
 
 
-def fixings_current(db: Session, now: Optional[datetime] = None) -> bool:
-    """Whether the latest published delivery price of every asset is already stored: the scheduler then asks the
-    venue nothing until the next one is due."""
-    latest = fixing_store.latest_shared(db, FIXING_KEYS)
-    due = expected_fixing_date(now)
-    return len(latest) == len(FIXING_KEYS) and all(d >= due for d in latest.values())
+def fixings_missing(db: Session, now: Optional[datetime] = None, days: int = FIXING_LOOKBACK) -> dict[str, list[date]]:
+    """{asset: the dates among the last `days` expected ones that have no live shared fixing, oldest first}."""
+    last = expected_fixing_date(now)
+    wanted = [last - timedelta(days=i) for i in range(days)]
+    have = fixing_store.shared_dates(db, FIXING_KEYS, wanted[-1])
+    return {a: sorted(d for d in wanted if d not in have[(deribit.pair(a), deribit.delivery_source(a))]) for a in deribit.ASSETS}
 
 
-def last_fixing_at(db: Session) -> Optional[datetime]:
-    """08:00 UTC on the oldest, across the three assets, of the latest shared fixing dates: what the health check
-    watches. Shared rows only, so an account's own entry cannot make a silent feed look alive. None when an asset
-    has no stored delivery price."""
-    latest = fixing_store.latest_shared(db, FIXING_KEYS)
-    if len(latest) != len(FIXING_KEYS):
+def fixings_to_ask(missing: dict[str, list[date]], now: datetime, count: int = 3, force: bool = False, days: int = FIXING_LOOKBACK) -> dict[str, int]:
+    """{asset: how many of the venue's latest days to ask for}: only the assets with a date missing, each deep
+    enough to reach its oldest missing date. An asset whose newest date has been missing for longer than
+    FIXING_FRESH_HOURS (the venue did not publish, or its price failed the checks), or that has only older holes,
+    is asked in the first half hour of every FIXING_RETRY_HOURS-th hour instead of on every pass; an empty store
+    is asked at once. `force` asks every asset, now, at least `count` deep (a backfill)."""
+    last = expected_fixing_date(now)
+    published = datetime.combine(last, clock(FIXING_HOUR_UTC), tzinfo=timezone.utc) + deribit.PUBLISH_MARGIN
+    fresh = now - published <= timedelta(hours=FIXING_FRESH_HOURS)
+    slot = now.hour % FIXING_RETRY_HOURS == 0 and now.minute < 30
+    empty = all(len(m) >= days for m in missing.values())
+    out: dict[str, int] = {}
+    for asset, gone in missing.items():
+        depth = min(max(int(count), (last - gone[0]).days + 2 if gone else 0), deribit.MAX_DELIVERY_ROWS)
+        if force or (gone and (empty or slot or (fresh and gone[-1] == last))):
+            out[asset] = depth
+    return out
+
+
+def template_spots(db: Session, pair: str, dates: list[date]) -> dict[date, float]:
+    """{date: the template account's stored spot for that date}: the independent price a delivery price is checked
+    against (a daily close where the history was backfilled, the last tick of the day where it was live). A date
+    the template has no spot for takes the spot of the day before, else of the day after: one day the account did
+    not snap must not leave a fixing unstored for good, and the band is wide enough for a day's move."""
+    from .crypto import _quote
+    template = demo._template_user_id(db)
+    if template is None or not dates:
+        return {}
+    day = timedelta(days=1)
+    near = sorted({d + k * day for d in dates for k in (-1, 0, 1)})
+    rows = db.execute(text("""
+        SELECT DISTINCT ON (valuation_date) valuation_date, quotes FROM market_data_snapshots
+        WHERE user_id = :u AND curve_id = :c AND valuation_date = ANY(:d) ORDER BY valuation_date, created_at DESC"""),
+        {"u": template, "c": f"{pair}_SPOT", "d": near}).all()
+    have = {}
+    for r in rows:
+        px = _quote(r, "SPOT")
+        if px and px > 0:
+            have[r.valuation_date] = float(px)
+    out = {}
+    for d in dates:
+        px = have.get(d) or have.get(d - day) or have.get(d + day)
+        if px:
+            out[d] = px
+    return out
+
+
+def spot_verdict(value: float, spot: Optional[float]) -> str:
+    """"ok" within FIXING_SPOT_BAND of the independent spot, "refused" outside it, "unchecked" when there is none."""
+    if spot is None:
+        return "unchecked"
+    return "ok" if abs(float(value) / spot - 1.0) <= FIXING_SPOT_BAND else "refused"
+
+
+def last_fixing_at(db: Session, now: Optional[datetime] = None) -> Optional[datetime]:
+    """What the health check watches: 08:00 UTC on the oldest, across the three assets, of the latest shared fixing
+    dates. None (the check is red) when an asset has none, when any of the FIXING_HEALTH_DAYS dates before the
+    latest expected one is missing for any asset (a hole after an outage is not silent), and while any stored date
+    is disputed (the venue's re-read differs and no administrator has corrected it). The latest expected date
+    itself is left to the check's own rule (within 36 hours), so the minutes between publication and the next pass
+    are not an alarm. Shared rows only: an account's own entry cannot make a silent feed look alive."""
+    if fixing_store.disputed(db, FIXING_KEYS):
         return None
-    return datetime.combine(min(latest.values()), clock(FIXING_HOUR_UTC), tzinfo=timezone.utc)
+    last = expected_fixing_date(now)
+    need = [last - timedelta(days=i) for i in range(1, FIXING_HEALTH_DAYS + 1)]
+    have = fixing_store.shared_dates(db, FIXING_KEYS, need[-1])
+    if any(not have[k] or any(d not in have[k] for d in need) for k in FIXING_KEYS):
+        return None
+    return datetime.combine(min(max(have[k]) for k in FIXING_KEYS), clock(FIXING_HOUR_UTC), tzinfo=timezone.utc)
 
 
-def refresh_fixings(db: Session, count: int = 3, dry_run: bool = False) -> dict:
-    """The venue's latest `count` delivery prices per asset, stored as shared fixings. A date already stored is
-    never overwritten; an asset the venue did not answer for keeps what it has. The summary carries counts and
-    dates, never the venue's text."""
-    got = deribit.collect_delivery(count=count)          # the network first: no database transaction is open while it waits
-    summary: dict = {"stored": True, "dry_run": dry_run, "failed": dict(got["failed"]),
-                     "assets": {a: {"read": len(rows), "latest": rows[-1]["fixing_date"].isoformat()} for a, rows in got["ok"].items()}}
-    if dry_run:
-        summary["preview"] = {a: [{"date": r["fixing_date"].isoformat(), "value": r["value"]} for r in rows] for a, rows in got["ok"].items()}
+def refresh_fixings(db: Session, count: int = 3, dry_run: bool = False, now: Optional[datetime] = None, force: bool = False) -> dict:
+    """The venue's delivery prices into the fixings store, for both drivers (the scheduler and the cron route).
+
+    What is missing among the last FIXING_LOOKBACK expected dates decides what is asked (fixings_to_ask): nothing
+    when every date is stored. A new date is stored only when its price is within FIXING_SPOT_BAND of the template's
+    stored spot of that date; without a spot to check against it is not stored (`unchecked`), outside the band
+    neither (`refused`). When a re-read of a stored date differs, nothing of that asset's batch is stored and the
+    date is disputed (settlement/store.put_shared). An asset the venue did not answer for keeps what it has.
+    The summary carries counts and dates, never the venue's text."""
+    now = now or datetime.now(timezone.utc)
+    missing = fixings_missing(db, now)
+    ask = fixings_to_ask(missing, now, count=count, force=force)
+    summary: dict = {"stored": True, "dry_run": dry_run, "current": not any(missing.values()), "asked": sorted(ask),
+                     "waiting": sorted(a for a, gone in missing.items() if gone and a not in ask), "failed": {}, "assets": {}}
+    if not ask:
         return summary
-    written = known = differs = 0
+    db.rollback()                               # the reads above are closed: no database transaction is open while the network waits
+    got = deribit.collect_delivery(count=ask, assets=tuple(a for a in deribit.ASSETS if a in ask), now=now)
+    summary["failed"] = dict(got["failed"])
+    totals = {k: 0 for k in ("written", "known", "differs", "unchecked", "refused", "held")}
     for asset, rows in got["ok"].items():
         try:
+            spots = template_spots(db, deribit.pair(asset), [r["fixing_date"] for r in rows])
+            verdicts = {r["fixing_date"]: spot_verdict(r["value"], spots.get(r["fixing_date"])) for r in rows}
             with db.begin_nested():             # one asset's rows together, and one asset's failure its own
-                res = fixing_store.put_shared(db, rows)
-            summary["assets"][asset].update(written=res["written"], differs=res["differs"])
-            written, known, differs = written + res["written"], known + res["known"], differs + res["differs"]
+                res = fixing_store.put_shared(db, rows, verdicts, write=not dry_run)
         except Exception as e:      # noqa: BLE001 — the asset keeps the rows it has
             log.warning("fixings for %s not stored: %s: %s", asset, type(e).__name__, str(e)[:300])
-            summary["assets"].pop(asset, None)
             summary["failed"][asset] = f"not stored ({type(e).__name__})"
-    db.commit()
-    summary.update(written=written, known=known, differs=differs)
-    log.info("crypto fixings: %s", {a: v["latest"] for a, v in summary["assets"].items()} or summary["failed"])
+            continue
+        summary["assets"][asset] = {"read": len(rows), "latest": rows[-1]["fixing_date"].isoformat(), **res}
+        if res["differs"]:
+            summary["failed"][asset] = "a re-read differs from a stored fixing: nothing stored, the date is disputed"
+        for k in totals:
+            totals[k] += res[k]
+    if not dry_run:
+        db.commit()
+    summary.update(totals)
+    log.info("crypto fixings: %s", {a: (v["latest"], v["written"]) for a, v in summary["assets"].items()} or summary["failed"])
     return summary
 
 
@@ -420,15 +500,16 @@ def crypto_tick(dry_run: bool = Query(default=False), db: Session = Depends(get_
 
 @router.post("/fixings/tick")
 def fixings_tick(count: int = Query(default=3, ge=1, le=deribit.MAX_DELIVERY_ROWS), dry_run: bool = Query(default=False),
-                 db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None)):
+                 force: bool = Query(default=False), db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None)):
+    """The feed's tick. Asks the venue only for what is missing; `force=1` with `count=N` re-reads the last N days
+    of every asset (a backfill beyond the ten days the tick looks after)."""
     if not _secret_ok(x_rijeka_cron):
         raise HTTPException(status_code=403, detail="bad cron secret")
-    if not enabled() or not deribit.enabled():
+    if not fixing_store.feed_enabled():
         return {"enabled": False}
     if not fixing_store.tables_present(db):           # a deploy ahead of the migration: nothing to store into, so nothing is asked
         return {"stored": False}
-    db.rollback()                                     # the presence read is closed before the network is waited on
-    return refresh_fixings(db, count=count, dry_run=dry_run)
+    return refresh_fixings(db, count=count, dry_run=dry_run, force=force)
 
 
 @router.get("/sources")
@@ -444,7 +525,7 @@ def sources(db: Session = Depends(get_db)):
         latest = {r.curve_id: {"valuation_date": r.valuation_date.isoformat(), "source": r.source} for r in rows}
     venue = [{"curve": f"{deribit.pair(a)}_{kind}", "provider": f"{deribit.PROVIDER} {what} (public API, unauthenticated)", "kind": "public", "url": deribit.URL}
              for a in deribit.ASSETS for kind, what in (("VOL", "option marks"), ("FWD", "forwards by expiry"))] if deribit.enabled() else []
-    if deribit.enabled() and enabled() and fixing_store.tables_present(db):        # listed where the feed stores them, not before
+    if fixing_store.feed_enabled() and fixing_store.tables_present(db):        # listed where the feed stores them, not before
         venue += [{"curve": f"{deribit.pair(a)}_FIXING", "provider": f"{deribit.delivery_source(a)}, daily at {deribit.DELIVERY_TIME} (public API, unauthenticated)",
                    "kind": "public", "url": deribit.DELIVERY_URL} for a in deribit.ASSETS]
     return {"enabled": enabled(), "sources": demo_feed.SOURCES + venue, "latest": latest,

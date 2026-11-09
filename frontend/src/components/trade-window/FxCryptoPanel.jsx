@@ -20,7 +20,7 @@ const tenorDate = (t) => { const d = new Date(); const n = parseInt(t); if (t.en
 const fmtAmt = (v, crypto) => { const n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? '' : n.toLocaleString('en-US', { maximumFractionDigits: crypto ? 8 : 0 }) }
 const parseAmt = (v) => { const n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? '' : n }
 import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
-import { settlementOptions, settlementTerms, settlementLabel, settlementNote } from './fx-settlement'
+import { settlementOptions, settlementTerms, settlementLabel, settlementNote, defaultFixingDate, clampFixingDate, earliestFixingDate, fixingCaption, MAX_FIXING_GAP_DAYS } from './fx-settlement'
 const plusMonths = (m) => { const d = new Date(); d.setMonth(d.getMonth() + m); return iso(d) }
 
 async function call(path, opts = {}) {
@@ -70,6 +70,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const [payAtHit, setPayAtHit] = useState(false)
   // the settlement price source picked in SETTLES ON; '' = the pair's default. The booked valuation time is the booked source's own
   const [settleSrc, setSettleSrc] = useState('')
+  // the fixing date of a digital-asset forward as the user typed it; '' = not edited, the default for the source and the settlement date
+  const [fixEdit, setFixEdit] = useState('')
   const styleFields = () => {
     const f = { style }
     if (style === 'DIGITAL' || style === 'TOUCH') { f.payout = Number(payout); f.payout_currency = payoutCcy }
@@ -81,6 +83,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
 
   useEffect(() => { setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? 10 : 10_000_000); setCashSettled(crypto); setPayout(crypto ? '100000' : '1000000'); setSettleSrc(''); setQuote(null) }, [crypto])
   useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, tenor, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit])
+  // an edited fixing date belongs to one product, pair and settlement date: a change of any of them puts the default back
+  useEffect(() => { setFixEdit('') }, [inst, pair, settlement])
   useEffect(() => { if (style === 'DOUBLE_BARRIER') setBarrierType(b => b.startsWith('KNOCK') ? b : 'KNOCK_OUT'); if (style === 'BARRIER') setBarrierType(b => b.startsWith('KNOCK') ? 'UP_OUT' : b) }, [style])
 
   const load = async () => {
@@ -94,6 +98,16 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const settleOptions = crypto ? settlementOptions(cur) : []
   const settle = settlementTerms(cur, crypto ? settleSrc : '', option ? 'OPTION' : 'FORWARD')
   const settleShown = settleOptions.find(s => s.source === settle.source)
+  // The fixing date of a digital-asset forward (the record's valuation_date), given the date it settles: the user's own
+  // date held inside its limits (tomorrow or seven days before settlement, whichever is later, to settlement), else the default for the source. Without listed sources (an older API
+  // answer) there is no field and the trade fixes on its settlement date, as it always did.
+  const todayIso = iso(new Date())
+  const hasFixingDate = crypto && !option && settleOptions.length > 0
+  // null when no fixing date is possible (the trade settles today or earlier)
+  const ownOrDefaultFixing = (settles) => (fixEdit ? clampFixingDate({ date: fixEdit, settlementDate: settles, today: todayIso }) : null)
+    || defaultFixingDate({ settlementDate: settles, source: settle, today: todayIso })
+  // what is booked: with no possible fixing date the settlement date goes, as before, and the API says why it refuses it
+  const fixingDateFor = (settles) => hasFixingDate ? (ownOrDefaultFixing(settles) || settles) : settles
   const quoted = !!cur?.forward_curve && cur.forward_curve.in_use !== false      // the account prices on quoted points (not on IMPLIED)
   const list = pairs.filter(p => !!p.crypto === crypto)
 
@@ -125,61 +139,71 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     } catch (e) { onError?.(e.message); return null } finally { setBusy('') }
   }
 
-  // The trade POST body minus what the window owns (parties, dates, desk, book).
-  const payload = () => {
-    if (!quote || !cur) throw new Error('Price it first')
-    if (option && crypto) {
-      // a digital-asset option: the CRYPTO_OPTION (NDO) record's fields (ISDA Digital Asset Derivatives
-      // Definitions vocabulary) plus the style's terms; cash-settled against the settlement price source
-      const premiumDate = quote.valuation_date
-      return {
-        asset_class: 'CRYPTO', instrument_type: 'CRYPTO_OPTION', structure: style,
-        notional: Number(notional), notional_ccy: cur.base, maturity_date: quote.settlement_date, discount_curve_id: cur.quote_curve,
-        terms: {
-          direction, digital_asset: cur.base, notional_amount: String(notional), option_type: optType,
-          exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
-          ...(style !== 'TOUCH' ? { strike_price: String(quote.strike), strike_currency: 'USD' } : {}),
-          ...Object.fromEntries(Object.entries(styleFields()).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])),
-          ...(style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}),
-          expiration_date: quote.expiry_date, expiration_time: '08:00 UTC', valuation_date: quote.expiry_date, valuation_time: settle.time,
-          settlement_date: quote.settlement_date, settlement_currency: 'USD', settlement_price_source: settle.source,
-          premium_amount: String(Math.abs(Math.round(quote.npv * 100) / 100)), premium_currency: 'USD', premium_payment_date: premiumDate,
-          vol_pct: quote.vol_pct, vol_tier: quote.vol_tier, automatic_exercise: true, calculation_agent: null,
-          disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
-        },
-      }
-    }
+  // The trade body from what the ticket holds. With a quote `q` and the pair loaded it is the body that is booked
+  // (payload()); with neither it is the same block from the form alone, for the tabs that read the terms before
+  // or between pricings (terms()): what only a quote knows is null there, and a blank strike is null.
+  const build = (q) => {
+    const str = (v) => v == null ? null : String(v)
+    const typedStrike = strike !== '' ? Number(strike) : null
+    const premium = q ? String(Math.abs(Math.round(q.npv * 100) / 100)) : null
+    const styleTerms = Object.fromEntries(Object.entries(styleFields()).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v]))
+    const barrierTerms = style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}
     if (option) {
+      const K = q ? q.strike : typedStrike
+      const expiryDate = q ? q.expiry_date : expiry
+      const settleDate = q ? q.settlement_date : (optSettle || null)
+      const premiumDate = q ? q.valuation_date : null
+      const volPct = q ? q.vol_pct : (volOv !== '' ? Number(volOv) : null)
+      const volTier = q ? q.vol_tier : null
+      if (crypto) {
+        // a digital-asset option: the CRYPTO_OPTION (NDO) record's fields (ISDA Digital Asset Derivatives
+        // Definitions vocabulary) plus the style's terms; cash-settled against the settlement price source
+        return {
+          asset_class: 'CRYPTO', instrument_type: 'CRYPTO_OPTION', structure: style,
+          notional: Number(notional), notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
+          terms: {
+            direction, digital_asset: cur?.base, notional_amount: String(notional), option_type: optType,
+            exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
+            ...(style !== 'TOUCH' ? { strike_price: str(K), strike_currency: 'USD' } : {}),
+            ...styleTerms,
+            ...barrierTerms,
+            expiration_date: expiryDate, expiration_time: '08:00 UTC', valuation_date: expiryDate, valuation_time: settle.time,
+            settlement_date: settleDate, settlement_currency: 'USD', settlement_price_source: settle.source,
+            premium_amount: premium, premium_currency: 'USD', premium_payment_date: premiumDate,
+            vol_pct: volPct, vol_tier: volTier, automatic_exercise: true, calculation_agent: null,
+            disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
+          },
+        }
+      }
       // the option's terms as the canonical record names them (chain/canonical.py, FX_OPTION):
       // buyer and seller of the option, the strike, expiry and settlement, the premium as a cash flow.
       // The trade's structure is the style, so the blotter tells a digital from a barrier.
       const ndo = cashSettled
-      const premiumDate = quote.valuation_date
       return {
         asset_class: 'FX', instrument_type: 'FX_OPTION', structure: style,
-        notional: Number(notional), notional_ccy: cur.base, maturity_date: quote.settlement_date, discount_curve_id: cur.quote_curve,
+        notional: Number(notional), notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
         terms: {
-          direction, currency_pair: pair, base_currency: cur.base, quote_currency: cur.quote,
+          direction, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
           option_type: optType, exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
-          base_notional: String(notional), ...(style !== 'TOUCH' ? { strike: String(quote.strike), quote_notional: String(Number(notional) * quote.strike) } : {}),
-          ...Object.fromEntries(Object.entries(styleFields()).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])),
-          ...(style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}),
-          expiry_date: quote.expiry_date, expiry_time: '10:00 New York', settlement_date: quote.settlement_date,
+          base_notional: String(notional), ...(style !== 'TOUCH' ? { strike: str(K), quote_notional: K == null ? null : String(Number(notional) * K) } : {}),
+          ...styleTerms,
+          ...barrierTerms,
+          expiry_date: expiryDate, expiry_time: '10:00 New York', settlement_date: settleDate,
           settlement_type: ndo ? 'NON_DELIVERABLE' : 'DELIVERABLE',
-          ...(ndo ? { settlement_currency: cur.quote, fixing_source: cur.fixing_default } : {}),
-          premium_amount: String(Math.abs(Math.round(quote.npv * 100) / 100)), premium_currency: cur.quote, premium_payment_date: premiumDate,
-          vol_pct: quote.vol_pct, vol_tier: quote.vol_tier, automatic_exercise: true, calculation_agent: null,
+          ...(ndo ? { settlement_currency: cur?.quote, fixing_source: cur?.fixing_default } : {}),
+          premium_amount: premium, premium_currency: cur?.quote, premium_payment_date: premiumDate,
+          vol_pct: volPct, vol_tier: volTier, automatic_exercise: true, calculation_agent: null,
         },
       }
     }
-    const K = strike !== '' ? Number(strike) : quote.forward
-    const settleDate = quote.settlement_date
+    const K = typedStrike != null ? typedStrike : (q ? q.forward : null)
+    const settleDate = q ? q.settlement_date : (shape === 'SPOT' ? null : settlement)
     if (crypto) return {
       asset_class: 'CRYPTO', instrument_type: 'CRYPTO_FORWARD', structure: 'VANILLA',
-      notional: Number(notional), notional_ccy: cur.base, maturity_date: settleDate, discount_curve_id: cur.quote_curve,
+      notional: Number(notional), notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
       terms: {
-        digital_asset: cur.base, notional_amount: String(notional), direction, forward_price: String(K), price_currency: 'USD',
-        valuation_date: settleDate, valuation_time: settle.time, settlement_date: settleDate, settlement_currency: 'USD',
+        digital_asset: cur?.base, notional_amount: String(notional), direction, forward_price: str(K), price_currency: 'USD',
+        valuation_date: fixingDateFor(settleDate), valuation_time: settle.time, settlement_date: settleDate, settlement_currency: 'USD',
         settlement_price_source: settle.source, calculation_agent: null,
         disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
       },
@@ -187,20 +211,27 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     const ndf = shape === 'NDF'
     return {
       asset_class: 'FX', instrument_type: inst, structure: 'VANILLA',
-      notional: Number(notional), notional_ccy: cur.base, maturity_date: settleDate, discount_curve_id: cur.quote_curve,
+      notional: Number(notional), notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
       terms: {
-        direction, currency_pair: pair, base_currency: cur.base, quote_currency: cur.quote,
-        base_notional: String(notional), forward_rate: String(K), value_date: settleDate,
+        direction, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
+        base_notional: String(notional), forward_rate: str(K), value_date: settleDate,
         settlement_type: ndf ? 'NON_DELIVERABLE' : 'DELIVERABLE',
-        ...(ndf ? { settlement_currency: 'USD', fixing_source: cur.fixing_default, fixing_date: settleDate } : {}),
+        ...(ndf ? { settlement_currency: 'USD', fixing_source: cur?.fixing_default, fixing_date: settleDate } : {}),
         calculation_agent: null,
       },
     }
   }
+  // The trade POST body minus what the window owns (parties, dates, desk, book).
+  const payload = () => {
+    if (!quote || !cur) throw new Error('Price it first')
+    return build(quote)
+  }
+  // The terms block of that body from whatever the form holds now, priced or not: never throws, null if it cannot be built.
+  const terms = () => { try { return build(quote).terms } catch { return null } }
   // The trade POST body as TradeWindow sends it, minus the parties, desk and book: what the
   // incremental XVA run values as the hypothetical trade (POST /api/xva/incremental).
   const bookBody = () => { const today = iso(new Date()); return { ...payload(), trade_date: today, effective_date: today } }
-  useImperativeHandle(ref, () => ({ price, payload, bookBody, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit, settleSrc])
+  useImperativeHandle(ref, () => ({ price, payload, terms, bookBody, quote: () => quote, busy: () => busy }), [ac, quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit, settleSrc, fixEdit])
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────
   const dp = rateDp(pair)
@@ -273,15 +304,34 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   } }
   const descriptor = option ? optionDescriptor : forwardDescriptor
   // SETTLES ON: the settlement price source of a digital-asset trade, on its own row under the terms grid (the
-  // six columns are taken, and a long source name must not widen the ticket). One of the two terms sections
-  // renders it, never both: the forward section stays mounted, hidden, under an option.
+  // six columns are taken, and a long source name must not widen the ticket), with the forward's FIXING DATE and
+  // the note beside it; the row wraps before it would widen the ticket. One of the two terms sections renders it,
+  // never both: the forward section stays mounted, hidden, under an option.
+  const settlesShown = quote?.settlement_date || settlement
+  const fixingShown = hasFixingDate ? ownOrDefaultFixing(settlesShown) : null
   const settlesOn = settleOptions.length > 0 && (
-    <div style={{ marginTop: 10, maxWidth: 340, minWidth: 0 }}>
-      <div className="tbw-lbl">SETTLES ON</div>
-      <select data-testid="settles-on" value={settle.source} onChange={e => setSettleSrc(e.target.value)}>
-        {settleOptions.map(s => <option key={s.source} value={s.source}>{settlementLabel(s)}</option>)}
-      </select>
-      <div className="tbw-mut" style={{ marginTop: 4 }}>{settlementNote(settleShown)}</div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start', marginTop: 10 }}>
+      <div style={{ flex: '0 1 300px', minWidth: 0 }}>
+        <div className="tbw-lbl">SETTLES ON</div>
+        <select data-testid="settles-on" value={settle.source} onChange={e => setSettleSrc(e.target.value)}>
+          {settleOptions.map(s => <option key={s.source} value={s.source}>{settlementLabel(s)}</option>)}
+        </select>
+      </div>
+      {hasFixingDate && (
+        <div style={{ flex: '0 1 150px', minWidth: 0 }}>
+          <div className="tbw-lbl">FIXING DATE</div>
+          {/* bound to the date that will be booked: a typed date is held inside its limits as it is typed, and again on blur */}
+          <input type="date" data-testid="fixing-date" value={fixingShown || ''} min={earliestFixingDate({ settlementDate: settlesShown, today: todayIso }) || undefined} max={settlesShown || undefined}
+                 title={`at most ${MAX_FIXING_GAP_DAYS} days before the settlement date`}
+                 onChange={e => setFixEdit(clampFixingDate({ date: e.target.value, settlementDate: settlesShown, today: todayIso }) || '')}
+                 onBlur={() => { if (fixEdit) setFixEdit(clampFixingDate({ date: fixEdit, settlementDate: settlesShown, today: todayIso }) || '') }} />
+        </div>
+      )}
+      <div className="tbw-mut" style={{ flex: '1 1 240px', minWidth: 0, paddingTop: 22, lineHeight: 1.5 }}>
+        <div>{settlementNote(settleShown)}</div>
+        <div>{fixingCaption(option ? { product: 'OPTION', expiryDate: quote?.expiry_date || expiry, time: settle.time }
+                                   : { product: 'FORWARD', fixingDate: fixingShown, settlementDate: settlesShown, time: settle.time })}</div>
+      </div>
     </div>
   )
 

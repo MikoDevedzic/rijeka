@@ -51,8 +51,13 @@ export function checkFixing({ pair, source, date, value }, today) {
   return { ok: true, body: { pair, fixing_date: d, source: src, value: v } }
 }
 
-// What to say when the save fails. A 409 is the instance, not the entry: its database has no fixings store yet.
+// What to say when the save fails: the API's own text. The page's request helper puts the API's `detail` in the
+// error's message, or the bare status when the answer had none; only then is a sentence written here. A 409
+// without a reason is the instance, not the entry (the API answers 409 for more than one reason and says which).
 export function saveErrorText(err) {
-  if (err?.status === 409) return 'This instance cannot store fixings yet: its database has no fixings table. Nothing was saved.'
-  return err?.message || 'The fixing was not saved'
+  const said = String(err?.message || '').trim()
+  const bare = !said || said === String(err?.status ?? '')
+  if (!bare) return said
+  if (err?.status === 409) return 'This instance cannot store fixings yet. Nothing was saved.'
+  return said ? `The fixing was not saved (${said})` : 'The fixing was not saved'
 }

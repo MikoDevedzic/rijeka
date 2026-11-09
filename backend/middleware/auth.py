@@ -15,8 +15,8 @@ Roles: the token's user_metadata.role is written by the client at sign-up and ca
 rewritten by the client, so it is not trusted on its own. After verification the caller's
 profiles.role is read from the database (one primary-key query, cached 30 s per user) and
 placed into the user dict, both as user["role"] and over user_metadata.role, so every
-route that reads the role reads the database's answer. The claim is used only when no
-profile row exists."""
+route that reads the role reads the database's answer. The claim is never used: an account
+with no profile row, or whose row cannot be read just now, is a viewer."""
 from __future__ import annotations
 
 import json
@@ -39,7 +39,8 @@ _roles: dict[str, tuple[float, Optional[str]]] = {}
 
 
 def db_role_for(sub: str) -> Optional[str]:
-    """profiles.role for a user id, cached briefly; None when there is no row or the DB is unreachable."""
+    """profiles.role for a user id, cached briefly; None when there is no row or the DB is unreachable.
+    A lookup that failed is not cached: the next request asks again."""
     hit = _roles.get(sub)
     now = time.time()
     if hit and now - hit[0] < ROLE_TTL:
@@ -54,8 +55,9 @@ def db_role_for(sub: str) -> Optional[str]:
             role = str(r).lower() if r else None
         finally:
             db.close()
-    except Exception as e:                  # noqa: BLE001 — the claim is the fallback, the failure is logged
+    except Exception as e:                  # noqa: BLE001 — a viewer for this request, the failure is logged
         log.warning("role lookup failed: %s", type(e).__name__)
+        return None
     if len(_roles) > 5000:
         _roles.clear()
     _roles[sub] = (now, role)
@@ -141,7 +143,7 @@ async def verify_token(authorization: Optional[str] = Header(None)) -> dict:
         log.info("token rejected: %s", type(e).__name__)
         raise HTTPException(status_code=401, detail="Invalid token")
     meta = dict(payload.get("user_metadata") or {})
-    role = db_role_for(str(payload["sub"])) or (str(meta.get("role") or "viewer").lower())
+    role = db_role_for(str(payload["sub"])) or "viewer"       # never the token's own claim: the client writes it
     meta["role"] = role
     payload["user_metadata"] = meta
     payload["role"] = role

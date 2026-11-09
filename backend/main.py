@@ -137,6 +137,21 @@ app.include_router(usage.router)
 app.include_router(csp.router)
 
 @app.on_event("startup")
+def _apply_approved_migrations():
+    # First of the start-up functions, before anything asks whether a table is there: the migrations the owner
+    # approved in db/migrations_approved.txt are applied by this process (db/migrate.py), on Render or where
+    # RIJEKA_MIGRATE is on, never from a developer's shell. Nothing here can stop the start: a migration that
+    # does not apply stays pending: GET /api/ops/health counts it under `migrations`, GET /api/ops/migrations (admin) says why.
+    try:
+        from db import migrate
+        if migrate.enabled():
+            from db.session import engine
+            migrate.run(engine)
+    except Exception as e:           # noqa: BLE001 — the class only: a driver's message can name the host
+        logging.getLogger("rijeka.migrate").error("migrations: the start-up hook failed (%s)", type(e).__name__)
+
+
+@app.on_event("startup")
 def _warm_public_pulse():
     try:
         public.warm()

@@ -52,8 +52,32 @@ _TOLERATED = [
 ]
 
 
-def database_url(cli: str | None) -> str:
-    return cli or os.environ.get("RIJEKA_STACK_DATABASE_URL") or os.environ.get("DATABASE_URL") or DEFAULT_URL
+def hosted(url: str) -> bool:
+    """A Supabase host: the same test as tests/integration/conftest.py."""
+    u = url.lower()
+    return "supabase.co" in u or "pooler.supabase" in u
+
+
+def shown(url: str) -> str:
+    """The database address without its password, for printing: a URL's (with or without a user name, or as a
+    ?password= parameter) and a keyword string's."""
+    out = re.sub(r"(://[^:/@]*):[^@]*@", r"\1:***@", url)
+    return re.sub(r"(?i)(password\s*=\s*)('[^']*'|[^\s&]+)", r"\1***", out)
+
+
+def database_url(cli: str | None, *, destructive: bool = False) -> str:
+    """The database to work on: --database-url, else RIJEKA_STACK_DATABASE_URL, else DATABASE_URL, else the local
+    test database. A hosted database is accepted only when it is named on the command line, and never for a
+    destructive run (--reset, the seed): a developer's shell exports the hosted DATABASE_URL, and this script
+    must not follow it there by default."""
+    url = cli or os.environ.get("RIJEKA_STACK_DATABASE_URL") or os.environ.get("DATABASE_URL") or DEFAULT_URL
+    if hosted(url):
+        if destructive:
+            raise SystemExit("refused: this would reset or seed a hosted database. It runs only on a local or disposable one.")
+        if not cli:
+            raise SystemExit("refused: the environment names a hosted database. Pass --database-url to apply the schema "
+                             "to a project of your own; the local stack is RIJEKA_STACK_DATABASE_URL or the default.")
+    return url
 
 
 def split_statements(sql: str) -> list[tuple[int, str]]:
@@ -233,8 +257,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--reset", action="store_true", help="drop and recreate the public (and stub auth) schema first")
     ap.add_argument("--auth", choices=("stub", "gotrue"), default="stub")
     args = ap.parse_args(argv)
-    url = database_url(args.database_url)
-    print(f"apply: {url}")
+    url = database_url(args.database_url, destructive=args.reset)
+    print(f"apply: {shown(url)}")
     if args.reset:
         reset(url)
     conn = connect(url)

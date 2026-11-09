@@ -167,6 +167,14 @@ class TradeCreate(BaseModel):
         self.structure = validated_structure(self.instrument_type, self.structure, self.terms)
         return self
 
+    @model_validator(mode="after")
+    def settlement_source_is_bookable(self):
+        """A digital-asset trade names its pair's feed source or a desk source, at that source's time
+        (settlement/sources.check_booked, shared with the booking route). New trades only."""
+        from settlement.sources import check_booked
+        check_booked(self.instrument_type, self.terms, self.trade_date, self.maturity_date)
+        return self
+
 class TradeUpdate(BaseModel):
     status: Optional[str] = None
     store: Optional[str] = None
@@ -309,6 +317,16 @@ def update_trade(trade_id: uuid.UUID, body: TradeUpdate, db: Session = Depends(g
         # anchored, both signatures exist for the change.
         from chain.lifecycle import refuse_offchain_mutation
         refuse_offchain_mutation(db, t, f"Setting status to {updates['status']} via PUT")
+    if "terms" in updates:
+        # the fields the settlement rule reads are held to the booking rule when an edit changes them; an edit that
+        # leaves them as they are is not a re-validation of an older record
+        from settlement.sources import INSTRUMENTS, SETTLEMENT_FIELDS, check_booked
+        was = dict(t.terms or {})
+        if str(t.instrument_type or "").upper() in INSTRUMENTS and any(was.get(f) != (updates["terms"] or {}).get(f) for f in SETTLEMENT_FIELDS):
+            try:
+                check_booked(t.instrument_type, updates["terms"], t.trade_date, t.maturity_date)
+            except ValueError as e:
+                raise HTTPException(status_code=422, detail=str(e))
     for k, v in updates.items():
         setattr(t, k, v)
     t.last_modified_by = uuid.UUID(user["sub"])

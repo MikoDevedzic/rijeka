@@ -49,9 +49,15 @@ own contracts settle on:
 
 parse_delivery turns the response into fixings ({pair, fixing_date, fixing_time, source, value}) for the
 fixings store (settlement/store.py): a trade whose terms name "Deribit BTC delivery price" settles on
-that row. The same safeguards: the read is capped and deadlined, a date must be a plain ISO date not in
-the future, a price a positive finite number within DELIVERY_BAND of the median of the days around it,
-and at most MAX_DELIVERY_ROWS rows are taken. The caller stores a date once and never overwrites it.
+that row, in every account, and the row is never overwritten. So the response is read as hostile: the
+read is capped and deadlined; a date must be a plain ISO date inside [today − count, the latest date the
+venue can have published] (today only from PUBLISH_MARGIN after 08:00 UTC, so nothing can be stored for
+a day before its price exists); a price must be a finite number inside the asset's absolute bounds; the
+same date twice refuses the whole response; and at most `count` rows are used. This module compares
+nothing with itself: whether a price is the day's price is decided by the caller against an independent
+spot (api/routes/demo_market_data.refresh_fixings), and a date it cannot check is not stored. (A test of
+each price against the median of its neighbours stood here in the first version; it accepted any batch
+that was wrong as a whole and is removed.)
 
 RIJEKA_DERIBIT=0 turns the source off (the daily rebuild then removes its rows and the parametric
 surfaces return). The venue's API usage policy allows unauthenticated public data at a low frequency;
@@ -110,9 +116,11 @@ DELIVERY_API = "https://www.deribit.com/api/v2/public/get_delivery_prices"
 DELIVERY_URL = "https://docs.deribit.com/#public-get_delivery_prices"
 DELIVERY_INDEX = {"BTC": "btc_usd", "ETH": "eth_usd", "SOL": "sol_usd"}       # each answered on 2026-11-09
 DELIVERY_TIME = "08:00 UTC"
+PUBLISH_HOUR = 8
+PUBLISH_MARGIN = timedelta(minutes=10)     # a day's price is taken from 08:10 UTC, not at the stroke of the hour
 MAX_DELIVERY_ROWS = 120   # a backfill of four months; a day's run asks for three
-DELIVERY_BAND = 0.60      # a price more than 60 % from the median of the five days around it is not that day's price
-DELIVERY_WINDOW = 5
+# absolute bounds in USD per unit, a net under the caller's check against the spot: no price outside them is one
+DELIVERY_BOUNDS = {"BTC": (100.0, 1e8), "ETH": (1.0, 1e7), "SOL": (0.01, 1e6)}
 ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
@@ -139,7 +147,10 @@ def _num(v) -> Optional[float]:
     """A finite float from the venue's number, or None (a string, a bool, NaN and Infinity are not numbers here)."""
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return None
-    f = float(v)
+    try:
+        f = float(v)
+    except OverflowError:              # an integer too large for a float (JSON has no bound on digits)
+        return None
     return f if math.isfinite(f) else None
 
 
@@ -351,41 +362,49 @@ def delivery_source(asset: str) -> str:
     return f"{PROVIDER} {asset} delivery price"
 
 
-def parse_delivery(payload, asset: str, today: Optional[date] = None) -> list[dict]:
-    """[{pair, fixing_date, fixing_time, source, value}], ascending by date, from the venue's
-    {"result": {"data": [{"date": "2026-11-09", "delivery_price": 73906.34}, ...]}}.
+def expected_delivery_date(now: Optional[datetime] = None) -> date:
+    """The latest date the venue has published a delivery price for: today (UTC) once it is PUBLISH_MARGIN past
+    08:00 UTC, yesterday before."""
+    now = now or datetime.now(timezone.utc)
+    published = datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=PUBLISH_HOUR) + PUBLISH_MARGIN
+    return now.date() if now >= published else now.date() - timedelta(days=1)
 
-    Only the first MAX_DELIVERY_ROWS rows are read. A row is kept when its date is a plain ISO date (ASCII digits,
-    a real calendar day) not after `today` (UTC), its price a positive finite number, and the date not already
-    taken (the first row for a date stands). Then a price more than DELIVERY_BAND from the median of the
-    DELIVERY_WINDOW days around it (itself included; at an end, the nearest ones) is dropped: one bad row among
-    its neighbours goes, and a batch of one or two rows has no neighbours to be judged by, so two rows that
-    disagree that far both go. Anything else in the payload is ignored; junk gives an empty list, never an error."""
-    today = today or datetime.now(timezone.utc).date()
+
+def parse_delivery(payload, asset: str, now: Optional[datetime] = None, count: int = 3) -> list[dict]:
+    """[{pair, fixing_date, fixing_time, source, value}], ascending by date, at most `count` rows (the latest), from
+    the venue's {"result": {"data": [{"date": "2026-11-09", "delivery_price": 73906.34}, ...]}}.
+
+    Only the first MAX_DELIVERY_ROWS rows are read. A row is used when its date is a plain ISO date (ASCII
+    digits, a real calendar day) inside [today − count, expected_delivery_date(now)] and its price a finite number
+    inside DELIVERY_BOUNDS for the asset. The same date twice in one response is not a response this module reads:
+    Unusable, and nothing of it is used. Anything else is ignored; junk gives an empty list."""
+    now = now or datetime.now(timezone.utc)
+    count = max(1, min(int(count), MAX_DELIVERY_ROWS))
+    first, last = now.date() - timedelta(days=count), expected_delivery_date(now)
+    low, high = DELIVERY_BOUNDS[asset]
     result = payload.get("result") if isinstance(payload, dict) else None
     data = result.get("data") if isinstance(result, dict) else None
+    seen: set[date] = set()
     by: dict[date, float] = {}
     for o in (data if isinstance(data, list) else [])[:MAX_DELIVERY_ROWS]:
         if not isinstance(o, dict):
             continue
-        d, v = o.get("date"), _num(o.get("delivery_price"))
-        if not isinstance(d, str) or not ISO_DATE.fullmatch(d) or v is None or v <= 0:
+        d = o.get("date")
+        if not isinstance(d, str) or not ISO_DATE.fullmatch(d):
             continue
         try:
             day = date(int(d[:4]), int(d[5:7]), int(d[8:]))
         except ValueError:
             continue
-        if day > today or day in by:
+        if day in seen:
+            raise Unusable("the same date twice in one response")
+        seen.add(day)
+        v = _num(o.get("delivery_price"))
+        if v is None or not (low <= v <= high) or not (first <= day <= last):
             continue
         by[day] = v
-    days = sorted(by)
-    kept = []
-    for i, day in enumerate(days):
-        lo = max(0, min(i - DELIVERY_WINDOW // 2, len(days) - DELIVERY_WINDOW))
-        mid = median(by[x] for x in days[lo:lo + DELIVERY_WINDOW])
-        if abs(by[day] / mid - 1.0) <= DELIVERY_BAND:
-            kept.append(day)
-    return [{"pair": pair(asset), "fixing_date": day, "fixing_time": DELIVERY_TIME, "source": delivery_source(asset), "value": by[day]} for day in kept]
+    return [{"pair": pair(asset), "fixing_date": day, "fixing_time": DELIVERY_TIME, "source": delivery_source(asset), "value": by[day]}
+            for day in sorted(by)[-count:]]
 
 
 # ── Network ────────────────────────────────────────────────────────────────────
@@ -430,8 +449,10 @@ def fetch_delivery(asset: str, client: httpx.Client, count: int = 3) -> dict:
 
 def _client() -> httpx.Client:
     from version import VERSION
+    # Accept-Encoding is pinned: MAX_BYTES counts decoded bytes, and the cap must not depend on which decoders happen
+    # to be installed (gzip is the standard library's)
     return httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0), follow_redirects=False,
-                        headers={"User-Agent": f"rijeka/{VERSION} (+https://rijeka.app)"})
+                        headers={"User-Agent": f"rijeka/{VERSION} (+https://rijeka.app)", "Accept-Encoding": "gzip"})
 
 
 def _each(assets, pause: float, what: str, read) -> dict:
@@ -463,10 +484,12 @@ def collect(now: Optional[datetime] = None, assets=ASSETS, pause: float = 0.5) -
     return _each(assets, pause, "marks", read)
 
 
-def collect_delivery(count: int = 3, assets=ASSETS, today: Optional[date] = None, pause: float = 0.5) -> dict:
-    """{ok: {asset: [fixing rows, ascending by date]}, failed: {asset: why}} from the venue's delivery prices."""
+def collect_delivery(count=3, assets=ASSETS, now: Optional[datetime] = None, pause: float = 0.5) -> dict:
+    """{ok: {asset: [fixing rows, ascending by date]}, failed: {asset: why}} from the venue's delivery prices.
+    `count` is a number of days, or {asset: days} when the assets need different depths."""
     def read(asset: str, c: httpx.Client) -> list[dict]:
-        rows = parse_delivery(fetch_delivery(asset, c, count), asset, today)
+        n = count.get(asset, 3) if isinstance(count, dict) else count
+        rows = parse_delivery(fetch_delivery(asset, c, n), asset, now, n)
         if not rows:
             raise Unusable("no usable delivery price")
         return rows

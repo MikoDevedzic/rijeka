@@ -1,0 +1,37 @@
+# The approved migrations: what the deployed API may apply to its database when it starts (db/migrate.py).
+#
+# One migration per line:
+#
+#   <file name>  <sha256 of that file's bytes>  <flags or ->  # <who approved, date, their words>
+#
+#   file name   YYYY-MM-DD_name.sql, lower case, no path. It names db/approved/<file name>: a byte-identical
+#               copy of docs/migrations/<file name>, made at approval. The runner reads the SQL only from
+#               db/approved/ (nothing outside backend/ exists on the deployed service), never from docs/.
+#               Entries are applied in file-name order.
+#   sha256      64 lower-case hex characters. The approval is for these exact bytes: a copy that does not
+#               hash to it is not applied (`mismatch`), and a migration already applied with another hash is
+#               never applied again (`changed`). A correction is a new file, never an edit.
+#   flags       `-` for none, or `destructive`: the owner has approved a file the content guard would refuse
+#               (DROP TABLE, DROP COLUMN, TRUNCATE, DELETE FROM, a GRANT or a policy for anon, a CREATE TABLE
+#               without row-level security ...; the list is in db/migrate.py). Some things no flag allows:
+#               COMMIT, a session-level SET, a temporary table that outlives the transaction.
+#   approval    required: who approved, the date, and their own words. Written by a person, never by a tool.
+#
+# To add one (from backend/):
+#   python -m db.migrate --stage 2026-11-10_fixings.sql    copies the file to db/approved/ and prints its line
+#   add that line here with the approval after the #
+#   python -m db.migrate --check                           the manifest, the copies and their originals agree
+#
+# Blank lines and lines starting with # are comments. One line that does not parse rejects the whole file and
+# nothing is applied. --check and the unit tests fail when a copy differs from its original in docs/migrations,
+# when a file in db/approved/ has no line here, or when a line here has no file. No tool here touches a database.
+#
+# This file and the copies live under backend/ on purpose: the deploy's build filter ignores docs/, and the
+# service sees nothing outside backend/. Only the API process applies migrations, and only where RIJEKA_MIGRATE
+# is on, or unset on Render; a developer's shell never does. GET /api/ops/health reports the outcome under
+# `migrations`.
+#
+# Each entry is added after review (Edgar, Magnus), with the owner's approval.
+
+2026-11-09_signup_role.sql  e92be13063a635d79c36c328a2038fdbe810aecea4338b436d80fbf445a783b8  -  # Miko Devedzic, 2026-11-09: "you have to fix both" (the role of a new account, and the fixings table)
+2026-11-10_fixings.sql  21db1287c97342979b54b2b91401eeb19b36b4a2d790e4fa3cca0ff79b3836ba  -  # Miko Devedzic, 2026-11-09: "you have to fix both" (the role of a new account, and the fixings table)

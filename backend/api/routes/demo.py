@@ -262,6 +262,8 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
     # 5. Role
     role_changed = _grant_write_role(db, uid, trader, user.get("email") or "")
     db.commit()
+    from middleware.auth import forget_role
+    forget_role(str(uid))             # the next request reads the role just written, not the one cached before it
 
     return {
         "enabled": True,

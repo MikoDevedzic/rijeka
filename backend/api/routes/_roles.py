@@ -1,5 +1,6 @@
-"""Who may see platform-wide numbers: the admin role from profiles.role (the JWT claim as the
-fallback when the table is unreachable), the same lookup the admin page edits."""
+"""Who may see platform-wide numbers: the admin role from profiles.role, the same lookup the admin page edits.
+When that read fails, the role verify_token placed in the user dict stands: it is the database's own answer of a
+moment ago or `viewer`, never the claim the client wrote into its token (middleware/auth.py)."""
 from __future__ import annotations
 
 from fastapi import HTTPException

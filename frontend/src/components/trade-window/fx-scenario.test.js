@@ -1,10 +1,13 @@
 // The arithmetic of the CURVE SCENARIO tab (fx-scenario.js). Every expected figure here is worked by hand from
 // the rule in the comment beside it; the data is made up for the test.
 import { describe, it, expect } from 'vitest'
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import {
   TENOR_DAYS, SPOT_BOUND_PCT, FORWARD_FLOOR, interpPoints, daysBetween, spotLagDays, carryPoints, curveNodes,
-  rippleWeights, tenorBounds, applyTenorDrag, clampSpotPct, spotPctFromDrag, shockedCurve, reprice, gk,
-  settlementAmount, latestFixing, fixingSeries, valueRange, horizonDays, chartGeometry,
+  rippleWeights, tenorBounds, applyTenorDrag, clampSpotPct, spotPctFromDrag, carryFactor, shockedCurve, reprice, gk,
+  settlementAmount, latestFixing, fixingSeries, fixingTime, settledState, settledFacts, styleTerms, provisionalReasons, chartLevels, chartStrike,
+  tenorMap, niceStep, valueRange, horizonDays, chartGeometry,
 } from './fx-scenario'
 
 describe('interpPoints: the backend rule (currencies.py interp_points)', () => {
@@ -30,10 +33,21 @@ describe('interpPoints: the backend rule (currencies.py interp_points)', () => {
   it('negative points', () => {
     expect(interpPoints({ '1M': -30, '2M': -61 }, 46)).toBeCloseTo(-46, 10)     // −30 + (−31)·16/31
   })
-  it('no points: zero; an unknown tenor is not a point', () => {
+  it('an empty curve is zero points, as the backend has it; an unknown tenor is not a point', () => {
     expect(interpPoints({}, 30)).toBe(0)
-    expect(interpPoints(null, 30)).toBe(0)
     expect(interpPoints({ '1M': 30, '5Y': 999 }, 400)).toBe(30)
+  })
+  it('a missing curve, a missing day count or a tenor without a number: null, not zero', () => {
+    expect(interpPoints(null, 30)).toBe(null)
+    expect(interpPoints(undefined, 30)).toBe(null)
+    expect(interpPoints({ '1M': 30 }, NaN)).toBe(null)
+    expect(interpPoints({ '1M': 30 }, null)).toBe(null)
+    expect(interpPoints({ '1M': 30, '3M': null }, 45)).toBe(null)
+    expect(interpPoints({ '1M': 30, '3M': 'abc' }, 45)).toBe(null)
+  })
+  it('reads the tenor map it is given (the API\'s tenor_days)', () => {
+    expect(interpPoints({ '1M': 30 }, 16, { '1M': 32 })).toBeCloseTo(15, 10)        // 30·16/32
+    expect(interpPoints({ '1M': 30 }, 16)).toBeCloseTo(16, 10)                      // 30·16/30 on this module's copy
   })
   it('the order of the keys does not matter', () => {
     expect(interpPoints({ '3M': 182, '1W': 14, '1M': 60 }, 14)).toBeCloseTo(28, 10)
@@ -54,9 +68,12 @@ describe('dates and the spot lag', () => {
     expect(spotLagDays({ points, settleDays: 47, marketPoints: 45, crypto: false })).toBe(2)
     expect(spotLagDays({ points, settleDays: 47, marketPoints: 46, crypto: false })).toBe(1)
   })
-  it('two days when nothing tells the lags apart', () => {
-    expect(spotLagDays({ points: { '1M': 0, '2M': 0 }, settleDays: 47, marketPoints: 0, crypto: false })).toBe(2)
-    expect(spotLagDays({ points: null, settleDays: 47, marketPoints: null, crypto: false })).toBe(2)
+  it('null, not a guessed lag, when nothing tells the lags apart or an input is missing', () => {
+    expect(spotLagDays({ points: { '1M': 0, '2M': 0 }, settleDays: 47, marketPoints: 0, crypto: false })).toBe(null)
+    expect(spotLagDays({ points: null, settleDays: 47, marketPoints: 45, crypto: false })).toBe(null)
+    expect(spotLagDays({ points: { '1M': 30 }, settleDays: 47, marketPoints: null, crypto: false })).toBe(null)
+    expect(spotLagDays({ points: { '1M': 30 }, settleDays: null, marketPoints: 45, crypto: false })).toBe(null)
+    expect(spotLagDays()).toBe(null)
   })
 })
 
@@ -69,6 +86,25 @@ describe('the curve without quoted points', () => {
   })
   it('is flat when the trade settles at spot', () => {
     expect(carryPoints({ spot: 100, forward: 100, days: 0, pip: 1 })['1Y']).toBe(0)
+  })
+  it('no curve without a spot, a forward, a pip and a day count', () => {
+    expect(carryPoints({ spot: 100, forward: null, days: 30, pip: 1 })).toBe(null)       // a settled trade's body: forward null
+    expect(carryPoints({ spot: null, forward: 110, days: 30, pip: 1 })).toBe(null)
+    expect(carryPoints({ spot: 100, forward: 110, days: NaN, pip: 1 })).toBe(null)
+    expect(carryPoints({ spot: 100, forward: 110, days: 30 })).toBe(null)
+    expect(carryPoints()).toBe(null)
+    expect(curveNodes(null)).toBe(null)
+    expect(curveNodes({ '1M': null })).toBe(null)
+    expect(curveNodes({ '1M': 5 }, NaN)).toBe(null)
+  })
+  it('the API\'s tenor map is used when it is whole; this module\'s copy stands in for an older answer', () => {
+    const api = { ON: 1, '1W': 7, '1M': 31 }
+    expect(tenorMap(api)).toEqual(api)
+    expect(tenorMap(undefined)).toBe(TENOR_DAYS)
+    expect(tenorMap({})).toBe(TENOR_DAYS)
+    expect(tenorMap({ '1M': 'thirty' })).toBe(TENOR_DAYS)
+    expect(curveNodes({ '1M': 5 }, 0, api)).toEqual([{ tenor: '1M', days: 31, x: 31, points: 5 }])
+    expect(Object.keys(carryPoints({ spot: 100, forward: 110, days: 31, pip: 1, tenorDays: api }))).toEqual(['ON', '1W', '1M'])
   })
   it('curveNodes orders the tenors and draws them from the spot date', () => {
     expect(curveNodes({ '1M': 5, '1W': 1 }, 2)).toEqual([
@@ -91,6 +127,11 @@ describe('the ripple', () => {
   })
   it('a wider sigma carries further', () => {
     expect(rippleWeights(nodes, 1, 0.5)[3]).toBeGreaterThan(w[3])
+  })
+  it('no weights without the dragged tenor or the curve', () => {
+    expect(rippleWeights(nodes, 9)).toBe(null)
+    expect(rippleWeights(null, 0)).toBe(null)
+    expect(rippleWeights(nodes, 1, 0)).toBe(null)
   })
 })
 
@@ -116,10 +157,26 @@ describe('the bounds', () => {
     const curve = shockedCurve({ spot: 100, pip: 1, nodes, moves, spotPct: -SPOT_BOUND_PCT, quoteBp: -200, baseBp: 200 })
     curve.forEach(c => expect(c.shocked).toBeGreaterThan(0))
   })
+  it('missing inputs give null, never a bound or a zero', () => {
+    expect(tenorBounds(nodes, { spot: null, pip: 1 })).toBe(null)
+    expect(tenorBounds(nodes, { spot: 100 })).toBe(null)
+    expect(tenorBounds(null, { spot: 100, pip: 1 })).toBe(null)
+    expect(applyTenorDrag({ origin: [0, 0], weights: [1, 0.5], move: NaN, bounds })).toBe(null)
+    expect(applyTenorDrag({ origin: [0, 0], weights: [1], move: 1, bounds })).toBe(null)
+    expect(applyTenorDrag({ origin: [0, NaN], weights: [1, 0.5], move: 1, bounds })).toBe(null)
+    expect(applyTenorDrag()).toBe(null)
+    expect(clampSpotPct(NaN)).toBe(null)
+    expect(clampSpotPct(undefined)).toBe(null)
+    expect(spotPctFromDrag({ originPct: 0, dPrice: 5, ref: 0 })).toBe(null)
+    expect(spotPctFromDrag({ originPct: 0, dPrice: NaN, ref: 100 })).toBe(null)
+    expect(spotPctFromDrag({ originPct: null, dPrice: 5, ref: 100 })).toBe(null)
+    expect(carryFactor(10, 0, null)).toBe(null)
+    expect(carryFactor(NaN, 0, 30)).toBe(null)
+    expect(carryFactor(0, 0, 30)).toBe(1)
+  })
   it('the spot shock is held to its range', () => {
     expect(clampSpotPct(73)).toBe(50)
     expect(clampSpotPct(-73)).toBe(-50)
-    expect(clampSpotPct(NaN)).toBe(0)
     expect(spotPctFromDrag({ originPct: 0, dPrice: 5, ref: 100 })).toBe(5)       // 5 on a spot of 100
     expect(spotPctFromDrag({ originPct: 2, dPrice: -1, ref: 50 })).toBe(0)
     expect(spotPctFromDrag({ originPct: 40, dPrice: 30, ref: 100 })).toBe(50)
@@ -138,6 +195,14 @@ describe('the shocked curve', () => {
     expect(c[1].shocked).toBeCloseTo(115.5, 10)                       // (100 + 2 + 3)·1.1
     expect(c[2].shocked).toBeCloseTo(121, 10)
     expect(c[1].base).toBe(102)
+  })
+  it('no curve without a spot, a pip, or a move for every tenor', () => {
+    expect(shockedCurve({ spot: null, pip: 1, nodes, moves: [0, 0] })).toBe(null)
+    expect(shockedCurve({ spot: 100, pip: null, nodes, moves: [0, 0] })).toBe(null)
+    expect(shockedCurve({ spot: 100, pip: 1, nodes, moves: [0] })).toBe(null)
+    expect(shockedCurve({ spot: 100, pip: 1, nodes })).toBe(null)
+    expect(shockedCurve({ spot: 100, pip: 1, nodes, moves: [0, 0], spotPct: NaN })).toBe(null)
+    expect(shockedCurve({ spot: 100, pip: 1, nodes: null, moves: [] })).toBe(null)
   })
   it('the rate shocks tilt it: exp((Δquote − Δbase)·T)', () => {
     const c = shockedCurve({ spot: 100, pip: 1, nodes, moves: [0, 0], quoteBp: 100, baseBp: 0 })
@@ -188,6 +253,31 @@ describe('reprice: the closed form', () => {
     expect(r.forward).toBeCloseTo(FORWARD_FLOOR * 100, 10)
     expect(r.forward).toBeGreaterThan(0)
   })
+  it('the floor holds a finite shocked forward up; it never stands in for a forward that could not be worked out', () => {
+    // the body of a fixed or settled trade as the API sends it: the pricing fields are null
+    const settled = { ...fwd, forward: null, df_quote: null, df_base: null, t: null }
+    expect(reprice(settled)).toBe(null)
+    expect(reprice(settled, { spotPct: 5 })).toBe(null)
+    for (const key of ['spot', 'forward', 'forward_rate', 'df_quote', 'df_base', 't', 'base_notional', 'direction']) {
+      expect(reprice({ ...fwd, [key]: null }), key).toBe(null)
+      expect(reprice({ ...fwd, [key]: undefined }), key).toBe(null)
+    }
+    expect(reprice({ ...fwd, t: NaN })).toBe(null)
+    expect(reprice(null)).toBe(null)
+    expect(reprice(fwd, { dPoints: NaN })).toBe(null)
+    expect(reprice(fwd, { spotPct: null })).toBe(null)
+    expect(reprice(fwd, { pip: 0 })).toBe(null)
+  })
+  it('an option without its strike, vol, times or type: null', () => {
+    const opt = { shape: 'OPTION', direction: 'BUY', option_type: 'CALL', base_notional: 2, spot: 100, forward: 100, strike: 100,
+                  df_quote: 1, t_settle: 1, t_expiry: 1, vol_pct: 20 }
+    expect(reprice(opt)).not.toBe(null)
+    for (const key of ['strike', 't_settle', 't_expiry', 'vol_pct', 'option_type', 'df_quote', 'forward', 'spot']) expect(reprice({ ...opt, [key]: null }), key).toBe(null)
+    expect(gk(null, 100, 1, 0.2, true, 1)).toBe(null)
+    expect(gk(100, 100, null, 0.2, true, 1)).toBe(null)
+    expect(gk(100, 100, 1, 0.2, undefined, 1)).toBe(null)
+    expect(gk(105, 100, 0, 0.2, true, 0.5)).toBeCloseTo(2.5, 10)                // at expiry: the discounted intrinsic
+  })
   it('a European option: Black-76 on the moved forward', () => {
     const opt = { shape: 'OPTION', direction: 'BUY', option_type: 'CALL', base_notional: 2, spot: 100, forward: 100, strike: 100,
                   df_quote: 1, t_settle: 1, t_expiry: 1, vol_pct: 20 }
@@ -222,6 +312,14 @@ describe('the settlement amount', () => {
     expect(settlementAmount({ ...f, direction: 'BUY', fixing: NaN })).toBe(null)
     expect(settlementAmount({ ...f, direction: 'BUY', fixing: 0 })).toBe(null)
     expect(settlementAmount({ ...f, direction: 'BUY', fixing: -5 })).toBe(null)
+  })
+  it('no amount without a direction, a strike, a notional, a shape, or an option\'s type', () => {
+    expect(settlementAmount({ ...f, fixing: 75000 })).toBe(null)
+    expect(settlementAmount({ ...f, direction: 'BUY', fixing: 75000, strike: null })).toBe(null)
+    expect(settlementAmount({ ...f, direction: 'BUY', fixing: 75000, notional: undefined })).toBe(null)
+    expect(settlementAmount({ notional: 2, strike: 74000, direction: 'BUY', fixing: 75000 })).toBe(null)
+    expect(settlementAmount({ shape: 'OPTION', notional: 2, strike: 74000, direction: 'BUY', fixing: 75000 })).toBe(null)
+    expect(settlementAmount()).toBe(null)
   })
 })
 
@@ -278,7 +376,24 @@ describe('the chart scales', () => {
     expect(horizonDays(curve, 30)).toBe(61)            // 60 days at least
     expect(horizonDays(curve, 91)).toBe(182)           // 91·1.3 = 118.3
     expect(horizonDays(curve, 1000)).toBe(1050)        // past the last tenor: the settlement date still fits
-    expect(horizonDays([], 0)).toBe(1)
+  })
+  it('no scale from nothing: null, not a default axis', () => {
+    expect(horizonDays([], 0)).toBe(null)
+    expect(horizonDays(null, 30)).toBe(null)
+    expect(horizonDays([{ x: 0 }, { x: 30 }], null)).toBe(null)
+    expect(valueRange([])).toBe(null)
+    expect(valueRange([NaN, undefined, null])).toBe(null)
+    expect(niceStep(0)).toBe(null)
+    expect(niceStep(NaN)).toBe(null)
+    const g = { width: 870, height: 260, hasLeft: true, maxDays: 91, vMin: 90, vMax: 110 }
+    for (const key of ['width', 'height', 'maxDays', 'vMin', 'vMax']) expect(chartGeometry({ ...g, [key]: null }), key).toBe(null)
+    expect(chartGeometry({ ...g, vMax: 90 })).toBe(null)
+    expect(chartGeometry()).toBe(null)
+  })
+  it('without a curve the past takes most of the width', () => {
+    const g = chartGeometry({ width: 870, height: 260, leftShare: 0.86, maxDays: 1, vMin: 90, vMax: 110 })
+    expect(g.xs(0)).toBeCloseTo(70 + 0.86 * 782, 6)
+    expect(g.xs(-30)).toBeCloseTo(70, 6)
   })
   it('today, the tenors and a price land where the journeys expect them', () => {
     const g = chartGeometry({ width: 870, height: 260, hasLeft: true, maxDays: 91, vMin: 90, vMax: 110 })
@@ -294,5 +409,190 @@ describe('the chart scales', () => {
   it('without fixings today sits near the left edge', () => {
     const g = chartGeometry({ width: 870, height: 260, hasLeft: false, maxDays: 91, vMin: 90, vMax: 110 })
     expect(g.xs(0)).toBeCloseTo(70 + 0.05 * 782, 6)
+  })
+})
+
+describe('a fixed or settled trade', () => {
+  it('the API names the state; nothing else is a settled trade', () => {
+    expect(settledState({ state: 'FIXED' })).toBe('FIXED')
+    expect(settledState({ state: 'SETTLED' })).toBe('SETTLED')
+    expect(settledState({ state: 'LIVE', settled: true })).toBe(null)
+    expect(settledState({ forward: 100, df_quote: 0.99 })).toBe(null)             // a ticket being priced
+    expect(settledState(null)).toBe(null)
+  })
+  it('an answer without a state is read from the fields it has always carried', () => {
+    expect(settledState({ settled: true })).toBe('SETTLED')
+    expect(settledState({ settled: false, fixing_date: '2026-11-06', df_quote: null })).toBe('FIXED')
+    expect(settledState({ settled: false, fixing_date: '2026-11-06' })).toBe('FIXED')
+    expect(settledState({ settled: false, fixing_date: '2026-11-06', df_quote: 0.99 })).toBe(null)
+  })
+  it('why a figure is provisional', () => {
+    expect(provisionalReasons({ provisional: false, fixing: null }, 'Source A')).toEqual([])
+    expect(provisionalReasons({ provisional: true, fixing: null, fixing_date: '2026-11-06' }, 'Source A')).toEqual([{ kind: 'NO_FIXING', source: 'Source A', date: '2026-11-06' }])
+    expect(provisionalReasons({ provisional: true, fixing: null, fixing_date: '2026-11-06', fixing_source: 'Source B' }, null)[0].source).toBe('Source B')
+    expect(provisionalReasons({ provisional: true, fixing: { value: 1 }, provisional_reason: 'BARRIER_STATE_UNKNOWN' }, 'Source A')).toEqual([{ kind: 'BARRIER', ifTouched: null }])
+    expect(provisionalReasons({ provisional: true, fixing: null, provisional_basis: 'knock state not recorded' }, 'Source A').map(r => r.kind)).toEqual(['NO_FIXING', 'BARRIER'])
+    // the words settlement/rule.py uses today
+    expect(provisionalReasons({ provisional: true, fixing: { value: 1 }, provisional_reason: 'knock state not recorded', provisional_basis: 'the barrier taken as never touched' }, 'Source A')).toEqual([{ kind: 'BARRIER', ifTouched: null }])
+    expect(provisionalReasons({ provisional: true, fixing: null, fixing_date: '2026-11-06', provisional_reason: 'no fixing stored', provisional_basis: 'stored spot of 2026-11-06' }, 'Source A')).toEqual([{ kind: 'NO_FIXING', source: 'Source A', date: '2026-11-06' }])
+    expect(provisionalReasons({ provisional: true, fixing: { value: 1 }, provisional_reason: 'holiday calendar pending' }, 'Source A')).toEqual([{ kind: 'OTHER', text: 'holiday calendar pending' }])
+    expect(provisionalReasons({ provisional: true, fixing: { value: 1 } }, 'Source A')).toEqual([{ kind: 'OTHER', text: null }])
+    expect(provisionalReasons(null)).toEqual([])
+  })
+  it('a source fixes at its own time', () => {
+    const sources = [{ source: 'Source A', time: '16:00 London', auto: false }, { source: 'Source B', time: '08:00 UTC', auto: true }]
+    expect(fixingTime(sources, 'Source B')).toBe('08:00 UTC')
+    expect(fixingTime(sources, 'Source A')).toBe('16:00 London')
+    expect(fixingTime(sources, 'Source C')).toBe(null)
+    expect(fixingTime(null, 'Source A')).toBe(null)
+    expect(fixingTime(sources, null)).toBe(null)
+  })
+})
+
+// What DETAILS, CASHFLOWS and the settled view of CURVE SCENARIO print for a trade past its fixing date. The bodies
+// are shaped as the API sends them (state, the facts, nulls for the pricing fields); the figures are made up.
+describe('settledFacts: a fixed or settled trade as the API reported it', () => {
+  const body = { state: 'FIXED', shape: 'NDF', pair: 'BTCUSD', direction: 'BUY', base_notional: 10, forward_rate: 100000, quote_currency: 'USD',
+                 valuation_date: '2026-11-09', fixing_date: '2026-11-08', settlement_date: '2026-11-10', fixing_source: 'Source A',
+                 forward: null, df_quote: null, t: null, provisional: false, provisional_reason: null, provisional_basis: null, model: null }
+  const fixing = { source: 'Source A', date: '2026-11-08', time: '16:00 London', value: 107500.5, origin: 'MANUAL' }
+
+  it('a live quote or a ticket has no settled facts', () => {
+    expect(settledFacts({ state: 'LIVE', forward: 100 })).toBe(null)
+    expect(settledFacts({ forward: 100, df_quote: 0.99 })).toBe(null)
+    expect(settledFacts(null)).toBe(null)
+  })
+  it('a FIXED forward: the fixing, the amount as sent, both dates', () => {
+    const f = settledFacts({ ...body, fixing, settlement_amount: 75005, settlement_price: 107500.5 })
+    expect(f).toMatchObject({ state: 'FIXED', fixing: 107500.5, source: 'Source A', fixDate: '2026-11-08', time: '16:00 London', settlementDate: '2026-11-10',
+                              amount: 75005, priceUsed: 107500.5, priceIsFixing: true, provisional: false, disputed: false, ifTouched: null,
+                              strike: 100000, notional: 10, amountNote: 'due on the settlement date', reasons: [] })
+  })
+  it('the amount is the API\'s figure, not N × (fixing − K) worked out again', () => {
+    // 10 × (107,500.5 − 100,000) is 75,005; the body says otherwise and the body is what is shown
+    expect(settledFacts({ ...body, fixing, settlement_amount: 12345.67, settlement_price: 107500.5 }).amount).toBe(12345.67)
+    expect(settledFacts({ ...body, fixing, settlement_amount: null, settlement_price: 107500.5 }).amount).toBe(null)
+    expect(settledFacts({ ...body, fixing, settlement_amount: null }).amountNote).toBe('not reported for this trade')
+  })
+  it('a FIXED provisional forward with no fixing: the stored spot is the price used, and is not called a fixing', () => {
+    const f = settledFacts({ ...body, fixing: null, settlement_amount: 82500, settlement_price: 108250, provisional: true,
+                             provisional_reason: 'no fixing stored', provisional_basis: 'stored spot of 2026-11-08' })
+    expect(f).toMatchObject({ fx: null, fixing: null, priceUsed: 108250, priceIsFixing: false, price: 108250, amount: 82500, provisional: true,
+                              fixDate: '2026-11-08', source: 'Source A', amountNote: 'provisional: see below' })
+    expect(f.reasons).toEqual([{ kind: 'NO_FIXING', source: 'Source A', date: '2026-11-08' }])
+  })
+  it('the source falls back to the terms, and its time to the pair\'s list, then the terms', () => {
+    const terms = { settlement_price_source: 'Source B', valuation_time: '12:00 Tokyo' }
+    const f = settledFacts({ ...body, fixing_source: null, fixing: null, provisional: true }, terms, [{ source: 'Source B', time: '08:00 UTC' }])
+    expect(f.source).toBe('Source B')
+    expect(f.time).toBe('08:00 UTC')
+    expect(settledFacts({ ...body, fixing_source: null, fixing: null }, terms, []).time).toBe('12:00 Tokyo')
+    expect(settledFacts({ ...body, fixing }, terms, [{ source: 'Source A', time: '08:00 UTC' }]).time).toBe('16:00 London')     // the fixing's own time first
+  })
+  it('a SETTLED option: the model words stand under the amount', () => {
+    const q = { ...body, state: 'SETTLED', shape: 'OPTION', option_type: 'CALL', strike: 100000, style: 'EUROPEAN', forward_rate: undefined, expiry_date: '2026-11-08',
+                fixing, settlement_amount: 75005, settlement_price: 107500.5, model: 'settled: the mark is zero from the settlement date; the amount is reported beside it' }
+    const f = settledFacts(q)
+    expect(f).toMatchObject({ state: 'SETTLED', strike: 100000, amount: 75005, model: q.model, amountNote: q.model })
+    expect(settledFacts({ ...q, model: null }).amountNote).toBe('settled')
+    expect(settledFacts({ ...q, model: '   ' }).amountNote).toBe('settled')
+    expect(settledFacts({ ...q, model: 'paid at the hit: nothing is outstanding at expiry', settlement_amount: null }).amountNote).toBe('paid at the hit: nothing is outstanding at expiry')
+  })
+  it('a barrier whose knock state is not recorded: both amounts, as sent', () => {
+    const q = { ...body, shape: 'OPTION', option_type: 'CALL', strike: 100000, style: 'BARRIER', fixing, settlement_amount: 75005, settlement_amount_if_touched: 0,
+                provisional: true, provisional_reason: 'knock state not recorded', provisional_basis: 'the barrier taken as never touched' }
+    const f = settledFacts(q)
+    expect(f.ifTouched).toBe(0)                                       // zero is an amount, not a missing one
+    expect(f.amount).toBe(75005)
+    expect(f.reasons).toEqual([{ kind: 'BARRIER', ifTouched: 0 }])
+    // the field alone says it, whatever the words
+    expect(settledFacts({ ...q, provisional_reason: null, provisional_basis: null, settlement_amount_if_touched: 1500 }).reasons).toEqual([{ kind: 'BARRIER', ifTouched: 1500 }])
+    expect(settledFacts({ ...body, fixing, settlement_amount: 75005 }).ifTouched).toBe(null)
+  })
+  it('a disputed fixing is flagged; anything but true is not', () => {
+    expect(settledFacts({ ...body, fixing: { ...fixing, disputed: true }, settlement_amount: 75005 }).disputed).toBe(true)
+    expect(settledFacts({ ...body, fixing: { ...fixing, disputed: false }, settlement_amount: 75005 }).disputed).toBe(false)
+    expect(settledFacts({ ...body, fixing, settlement_amount: 75005 }).disputed).toBe(false)
+    expect(settledFacts({ ...body, fixing: null, provisional: true }).disputed).toBe(false)
+  })
+  it('a fixing without a value is not a fixing', () => {
+    const f = settledFacts({ ...body, fixing: { source: 'Source A', date: '2026-11-08', value: null }, settlement_price: 108250 })
+    expect(f.fx).toBe(null)
+    expect(f.priceIsFixing).toBe(false)
+    expect(f.priceUsed).toBe(108250)
+  })
+})
+
+describe('styleTerms: the style rows of the term sheet', () => {
+  const o = { shape: 'OPTION', base_currency: 'BTC', quote_currency: 'USD' }
+  it('a touch: what it pays and when, and its level', () => {
+    expect(styleTerms({ ...o, style: 'TOUCH', touch_type: 'ONE_TOUCH', payout: 50000, payout_currency: 'QUOTE', pay_at_hit: true, barrier: 120000 }))
+      .toEqual({ payout: { amount: 50000, currency: 'USD' }, when: 'at the hit', barrier: 120000, range: null })
+    expect(styleTerms({ ...o, style: 'TOUCH', touch_type: 'NO_TOUCH', payout: 2, payout_currency: 'BASE', pay_at_hit: false, barrier: 90000 }))
+      .toEqual({ payout: { amount: 2, currency: 'BTC' }, when: 'at expiry', barrier: 90000, range: null })
+  })
+  it('what the body does not carry is null, so the row or the words are left out', () => {
+    expect(styleTerms({ ...o, style: 'TOUCH', touch_type: 'ONE_TOUCH', payout: null, pay_at_hit: null, barrier: null })).toEqual({ payout: null, when: null, barrier: null, range: null })
+    expect(styleTerms({ ...o, style: 'BARRIER', barrier: null }).barrier).toBe(null)
+    expect(styleTerms({ ...o, style: 'DOUBLE_BARRIER', lower: 80000, upper: null }).range).toBe(null)
+    expect(styleTerms({ ...o, style: 'DIGITAL', payout: undefined }).payout).toBe(null)
+  })
+  it('a double has a range and no single level; a vanilla has neither', () => {
+    expect(styleTerms({ ...o, style: 'DOUBLE_BARRIER', lower: 80000, upper: 120000, barrier: 99 })).toMatchObject({ barrier: null, range: { lower: 80000, upper: 120000 } })
+    expect(styleTerms({ ...o, style: 'TOUCH', touch_type: 'DOUBLE_NO_TOUCH', lower: 80000, upper: 120000, pay_at_hit: false })).toMatchObject({ barrier: null, range: { lower: 80000, upper: 120000 }, when: 'at expiry' })
+    expect(styleTerms({ ...o, style: 'BARRIER', barrier: 120000, payout: 5 })).toEqual({ payout: null, when: null, barrier: 120000, range: null })
+    expect(styleTerms({ ...o, style: 'EUROPEAN', barrier: 120000 })).toEqual({ payout: null, when: null, barrier: null, range: null })
+    expect(styleTerms({ shape: 'NDF' })).toEqual({ payout: null, when: null, barrier: null, range: null })
+    expect(styleTerms({ ...o, style: 'DIGITAL', payout: 1000, payout_currency: 'QUOTE' }).payout).toEqual({ amount: 1000, currency: 'USD' })
+  })
+})
+
+describe('the levels on the chart', () => {
+  const o = { shape: 'OPTION', strike: 100, forward: 100 }
+  it('a touch has no strike: its level is drawn instead', () => {
+    expect(chartStrike({ ...o, style: 'TOUCH', barrier: 120 })).toBe(null)
+    expect(chartLevels({ ...o, style: 'TOUCH', touch_type: 'ONE_TOUCH', barrier: 120 })).toEqual([{ label: 'TOUCH', value: 120 }])
+    expect(chartLevels({ ...o, style: 'TOUCH', touch_type: 'DOUBLE_NO_TOUCH', lower: 80, upper: 120 })).toEqual([{ label: 'TOUCH', value: 80 }, { label: 'TOUCH', value: 120 }])
+  })
+  it('a barrier option: K and its barrier or barriers', () => {
+    expect(chartStrike({ ...o, style: 'BARRIER', barrier: 120 })).toBe(100)
+    expect(chartLevels({ ...o, style: 'BARRIER', barrier: 120 })).toEqual([{ label: 'BARRIER', value: 120 }])
+    expect(chartLevels({ ...o, style: 'DOUBLE_BARRIER', lower: 80, upper: 120 })).toEqual([{ label: 'BARRIER', value: 80 }, { label: 'BARRIER', value: 120 }])
+  })
+  it('a vanilla option and a forward: K alone; a level the body does not carry is not drawn', () => {
+    expect(chartLevels({ ...o, style: 'EUROPEAN' })).toEqual([])
+    expect(chartLevels({ shape: 'NDF', forward_rate: 101 })).toEqual([])
+    expect(chartStrike({ shape: 'NDF', forward_rate: 101 })).toBe(101)
+    expect(chartLevels({ ...o, style: 'BARRIER', barrier: null })).toEqual([])
+    expect(chartStrike({ shape: 'NDF', forward_rate: null })).toBe(null)
+    expect(chartStrike(null)).toBe(null)
+  })
+})
+
+// The backend writes these cases from its own functions (interp_points in api/routes/currencies.py and the
+// settlement rule in settlement/rule.py): the browser must give the same numbers.
+describe('shared vectors: backend/tests/vectors/fx_scenario.json', () => {
+  const file = fileURLToPath(new URL('../../../../backend/tests/vectors/fx_scenario.json', import.meta.url))
+  const vectors = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null
+  const close = (got, want) => {
+    if (want == null) return expect(got).toBe(null)
+    expect(got).not.toBe(null)
+    expect(Math.abs(got - want)).toBeLessThanOrEqual(1e-9 * Math.max(1, Math.abs(want)))
+  }
+  it.skipIf(vectors)('SKIPPED: backend/tests/vectors/fx_scenario.json is absent, so the browser is not checked against the backend here', () => {})
+  it.skipIf(!vectors)('the file has cases of both kinds', () => {
+    expect(vectors.interp_points.length).toBeGreaterThan(0)
+    expect(vectors.settlement_amount.length).toBeGreaterThan(0)
+  })
+  it.skipIf(!vectors)('interpPoints gives the backend\'s interp_points on every case', () => {
+    const tenorDays = vectors.tenor_days ? tenorMap(vectors.tenor_days) : TENOR_DAYS
+    for (const c of vectors.interp_points) close(interpPoints(c.points, c.days, tenorDays), c.expected)
+  })
+  it.skipIf(!vectors)('settlementAmount gives the backend rule\'s amount on every case', () => {
+    for (const c of vectors.settlement_amount) {
+      const got = settlementAmount({ shape: c.kind === 'FORWARD' ? 'FORWARD' : 'OPTION', optionType: c.kind === 'FORWARD' ? undefined : c.kind,
+                                     direction: c.direction, notional: c.notional, strike: c.strike, fixing: c.fixing })
+      close(got, c.expected)
+    }
   })
 })

@@ -109,8 +109,8 @@ What is not in the compose file:
    Set `RIJEKA_DEMO_PROVISION=0` unless you want every sign-in to get a sandbox
    workspace the way the hosted demo does. Set `RIJEKA_DEMO_MARKET_DATA=0` to run on your
    own marks: with it on (the default) and the scheduler running, the public-source curves and
-   the digital-asset vols and forwards from Deribit's public API (`RIJEKA_DERIBIT`, also on by
-   default) are written to the template account, which is `RIJEKA_DEMO_TEMPLATE_EMAIL` or,
+   the digital-asset vols, forwards and daily delivery prices (fixings) from Deribit's public API
+   (`RIJEKA_DERIBIT`, also on by default) are written to the template account, which is `RIJEKA_DEMO_TEMPLATE_EMAIL` or,
    when that is empty, the earliest admin of a dealer firm, and they replace that account's
    rows of the day for the curves they build.
    With provisioning on, a new workspace starts on the launch set of modules (`RIJEKA_SIGNUP_PRESET`,
@@ -122,8 +122,10 @@ What is not in the compose file:
 
 ## What is not there yet
 
-- No admin screen for firms. The migration runner is `backend/stack/apply.py` (schema plus the dated
-  files, with a ledger); `backend/scripts/export_schema.sh` regenerates `docs/schema.sql` from a
+- No admin screen for firms. The schema builder is `backend/stack/apply.py` (schema plus the dated
+  files, with a ledger; it refuses a hosted database unless it is named with `--database-url`, never resets
+  one, and the seed never writes to one). `backend/db/migrate.py` is something else: the hosted demo's
+  start-up runner for an approved list, off unless `RIJEKA_MIGRATE=1`, and not needed here; `backend/scripts/export_schema.sh` regenerates `docs/schema.sql` from a
   database that has them applied.
 - The backend connects with a role that bypasses row-level security (the Postgres owner on Supabase,
   the superuser in the compose stack) and enforces tenant isolation in application code; the RLS
