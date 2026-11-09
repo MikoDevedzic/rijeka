@@ -85,6 +85,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   useEffect(() => { load() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const cur = useMemo(() => pairs.find(p => p.pair === pair), [pairs, pair])
+  const quoted = !!cur?.forward_curve && cur.forward_curve.in_use !== false      // the account prices on quoted points (not on IMPLIED)
   const list = pairs.filter(p => !!p.crypto === crypto)
 
   const snap = async () => {
@@ -428,7 +429,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       <div className="tbw-sec" style={option ? { display: 'none' } : undefined}>
         <div className="tbw-terms-header">
           <span className="tbw-lbl">FORWARD TERMS</span>
-          <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · ${cur?.forward_curve ? `forward from ${cur.forward_curve.label || 'quoted points'}` : 'funding is a desk input'}` : ndf ? `non-deliverable · cash-settled in ${qc}` : shape === 'SPOT' ? 'spot · T+2 delivery' : 'deliverable · both principals exchange'}</span>
+          <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · ${quoted ? `forward from ${cur.forward_curve.label || 'quoted points'}` : 'funding is a desk input'}` : ndf ? `non-deliverable · cash-settled in ${qc}` : shape === 'SPOT' ? 'spot · T+2 delivery' : 'deliverable · both principals exchange'}</span>
         </div>
         <div className="tbw-grid-6">
           <div><div className="tbw-lbl">{crypto ? 'PRICE K' : 'RATE K'} <span className="tbw-mut">· {qc} per {cur?.base || 'base'}</span></div>
@@ -438,8 +439,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.spot ? fmt(cur.spot, dp) : 'snap first'} value={spotOv} onChange={e => setSpotOv(e.target.value.replace(/[^0-9.]/g, ''))} />
           </div>
           {crypto ? (
-            <div><div className="tbw-lbl">{cur?.base || 'ASSET'} FUNDING % <span className="tbw-mut">· {cur?.forward_curve ? 'overrides the quoted forward' : cur?.funding_pct != null ? `${cur.funding_pct}% saved` : '0% default'}</span></div>
-              <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.forward_curve ? 'from the forward' : 'saved rate'} value={fundOv} onChange={e => setFundOv(e.target.value.replace(/[^0-9.-]/g, ''))} />
+            <div><div className="tbw-lbl">{cur?.base || 'ASSET'} FUNDING % <span className="tbw-mut">· {quoted ? 'overrides the quoted forward' : cur?.funding_pct != null ? `${cur.funding_pct}% saved` : '0% default'}</span></div>
+              <input className="tbw-mono" type="text" inputMode="decimal" placeholder={quoted ? 'from the forward' : 'saved rate'} value={fundOv} onChange={e => setFundOv(e.target.value.replace(/[^0-9.-]/g, ''))} />
             </div>
           ) : (
             <div><div className="tbw-lbl">{cur?.base || 'BASE'} DISCOUNTING</div>

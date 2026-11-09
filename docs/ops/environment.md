@@ -29,7 +29,8 @@ the repository.
 | `RIJEKA_DEMO_PROVISION` | `api/routes/demo.py`, `public.py` | `1` | Every sign-in gets a sandbox workspace (own entity, demo counterparty, market data, trader role). `0` on a self-hosted desk. |
 | `RIJEKA_DEMO_TEMPLATE_EMAIL` | `api/routes/demo.py` | empty | The account whose market data new visitors get a copy of. |
 | `RIJEKA_DEMO_MARKET_DATA` | `api/routes/demo_market_data.py` | `1` | The daily rebuild from public sources. `0` to run on your own marks. |
-| `RIJEKA_DERIBIT` | `market_data/deribit.py` | `1` | Digital-asset vols and forwards from Deribit's public marks. `0` stops the requests; the next daily rebuild removes the rows it stored and the parametric surfaces return. |
+| `RIJEKA_DERIBIT` | `market_data/deribit.py` | `1` | Digital-asset vols and forwards from Deribit's public marks. `0` stops the requests; the deployed process (Render) then removes the venue's rows from the template and demo accounts at the next daily rebuild and the parametric surfaces return. Run the risk history backfill afterwards to rebuild the vol series. |
+| `RIJEKA_DERIBIT_PURGE` | `api/routes/demo_market_data.py` | unset | `1` lets a process that is not on Render do that removal (a self-hosted instance). Never set it in a shell that points at a shared database. |
 | `RIJEKA_USAGE_SALT` | `api/routes/usage.py` | empty (a process-local secret) | Salt for the daily-rotating visitor id of the usage beacon. |
 | `RIJEKA_LOG_LEVEL` | `main.py` | `INFO` | Root log level. |
 

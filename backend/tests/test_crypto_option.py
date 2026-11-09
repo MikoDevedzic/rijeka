@@ -181,9 +181,11 @@ def test_quoted_forwards_replace_the_flat_funding_rate_and_a_funding_rate_on_the
     # the option sits on the quoted forward and prints where its vol came from
     assert opt["forward"] == pytest.approx(mkt["forward"]) and opt["vol_marks"] == "Deribit option marks · 2026-11-09 12:57 UTC · listed to 24SEP27, flat beyond"
     assert flat["vol_tier"] == "OVERRIDE" and flat["vol_marks"] is None
+    assert not currencies.is_venue("DEMO · synthetic surface") and not currencies.is_venue("MANUAL") and currencies.is_venue(MARKS)     # only a venue's row prints its marks
     # the field captions on the ticket
     assert state["vol_surface"]["label"] == "Deribit 9 Nov 12:57 UTC" and state["forward_curve"]["label"] == "Deribit 9 Nov 12:57 UTC"
     assert currencies.short_label("DEMO · Deribit option marks · not a time UTC · x", "2026-11-09", "surface").endswith("surface 2026-11-09")
+    assert currencies.short_label("DEMO ·  · 2026-11-09 12:46 UTC", "2026-11-09", "surface").endswith("surface 2026-11-09")              # a label that only looks like one
     assert currencies.short_label("MANUAL", "2026-11-02", "surface") == "MANUAL surface 2026-11-02"
     assert currencies.short_label("DEMO · synthetic surface", "2026-11-02", "surface") == "DEMO · synthetic surface surface 2026-11-02"
     assert currencies.marks_label("DEMO · synthetic surface") == "synthetic surface" and currencies.marks_label(None) is None
@@ -232,3 +234,28 @@ def test_the_vol_history_before_the_venue_is_the_venue_surface_carried_back_so_t
     eth = {(q["tenor"], q["quote_type"]): q["rate"] for q in out["ETHUSD_VOL"][on]}
     from market_data import demo_feed
     assert eth[("1M", "RR25")] == next(q["rate"] for q in demo_feed.build_fx_vols("ETHUSD") if q["tenor"] == "1M" and q["quote_type"] == "RR25")
+
+
+def test_fund01_on_the_ladder_is_the_same_whether_the_forward_is_carried_or_quoted():
+    """Vera, 2026-11-09: on quoted points the stored funding rate does not enter the value, so bumping it alone
+    read FUND01 = 0 on the ladder while the ticket still showed one. The bump now moves the points it implies."""
+    import math
+    from pnl.explain import Valuer
+    from risk.sensitivities import trade_ladder
+    flat = _market()
+    # points that say exactly what the flat 3 % funding says: the two markets value the trade alike
+    carry = lambda days: 65000.0 * (math.exp((0.04 - 0.03) * days / 365) - 1)
+    pts = [{"tenor": t, "rate": carry(d)} for t, d in (("1M", 30), ("3M", 91), ("6M", 182), ("1Y", 365))]
+    quoted = flat.override("BTCUSD_FWD", pts)
+    fwd = SimpleNamespace(id=uuid4(), trade_ref="TRD-FWD", instrument_type="CRYPTO_FORWARD", status="LIVE", notional=10, notional_ccy="BTC",
+                          discount_curve_id="USD_SOFR", forecast_curve_id=None, trade_date=VAL, effective_date=VAL, maturity_date=SET, counterparty_id=None,
+                          user_id="u", desk="DIGITAL", book="CRYPTO", asset_class="CRYPTO", structure=None, uti="Y" * 52,
+                          terms={"digital_asset": "BTC", "notional_amount": 10, "forward_price": 65000.0, "settlement_date": SET.isoformat(), "direction": "BUY"})
+    with patch("api.routes.pricer._build_curve", side_effect=lambda ci, vd, db, uid: Curve(VAL, flat_rate=0.04)):
+        for trade in (fwd, _trade()):
+            a = trade_ladder(None, {"sub": "u"}, trade, VAL, flat, Valuer(None, {"sub": "u"}))
+            b = trade_ladder(None, {"sub": "u"}, trade, VAL, quoted, Valuer(None, {"sub": "u"}))
+            assert a["npv"] == pytest.approx(b["npv"], rel=2e-3, abs=5.0)
+            assert a["fund01_total"] != 0 and b["fund01_total"] == pytest.approx(a["fund01_total"], rel=0.03), trade.instrument_type
+            assert b["ir01"] == pytest.approx(a["ir01"], rel=0.03, abs=0.5)                    # the discounting ladder is untouched
+    assert b["fund01"].keys() == {"BTC_FUNDING"}

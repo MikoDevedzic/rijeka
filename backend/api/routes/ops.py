@@ -59,12 +59,14 @@ CHECKS = [
 
 
 def active_checks() -> list:
-    """CHECKS, and the digital-asset marks when that source is on (market_data/deribit.py)."""
+    """CHECKS, and the digital-asset marks when that source is on (market_data/deribit.py). That one is a function
+    of the session, not a statement: it reads the time the venue's marks carried, for the template account only."""
+    from api.routes import demo_market_data
     from market_data import deribit
-    if not deribit.enabled():
+    if not (deribit.enabled() and demo_market_data.enabled()):       # an instance on its own marks never runs the tick
         return CHECKS
-    return CHECKS + [("crypto_marks", f"SELECT max(created_at) FROM market_data_snapshots WHERE source LIKE '{deribit.SOURCE_PREFIX}%'",
-                      ("hours", 2), "digital-asset vols and forwards")]
+    last_marks_at = demo_market_data.last_marks_at
+    return CHECKS + [("crypto_marks", last_marks_at, ("hours", 2), "digital-asset vols and forwards")]
 
 
 def _as_utc(v) -> Optional[datetime]:
@@ -79,7 +81,7 @@ def evaluate(db: Session, now: Optional[datetime] = None) -> dict:
     checks: dict[str, dict] = {}
     for name, sql, rule, feeds in active_checks():
         try:
-            last = db.execute(text(sql)).scalar()
+            last = sql(db) if callable(sql) else db.execute(text(sql)).scalar()
         except Exception as e:            # noqa: BLE001 — a missing table is a stale batch, not a crash
             log.debug("ops: %s failed: %s", name, e)
             db.rollback()

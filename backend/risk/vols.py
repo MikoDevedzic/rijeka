@@ -33,7 +33,7 @@ from market_data import demo_feed as feed
 from risk import history as H
 
 SOURCE = "DEMO · synthetic surface, level scaled by trailing realised vol of the public series (RR/BF fixed)"
-WINDOW = {"1W": 5, "1M": 21, "2M": 42, "3M": 63, "6M": 126, "9M": 189, "1Y": 252, "2Y": 252}
+WINDOW = {"1W": 5, "2W": 10, "3W": 15, "1M": 21, "2M": 42, "3M": 63, "6M": 126, "9M": 189, "1Y": 252, "2Y": 252}
 SWVOL_WINDOW, SWVOL_TENOR = 63, "5Y"
 MIN_REF = 60
 LOOKBACK_DAYS = 420          # calendar days of series read before the first date built, for the longest window

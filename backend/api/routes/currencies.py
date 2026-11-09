@@ -156,6 +156,12 @@ def marks_label(source: Optional[str]) -> Optional[str]:
     return (s[len("DEMO · "):] if s.startswith("DEMO · ") else s) or None
 
 
+def is_venue(source: Optional[str]) -> bool:
+    """A row read from a venue's marks (market_data/deribit.py), which carries the time of the marks in its source."""
+    from market_data import deribit
+    return deribit.marks_time(source) is not None
+
+
 def short_label(source: Optional[str], as_of: str, kind: str) -> str:
     """A field's caption: 'Deribit 9 Nov 12:57 UTC' for a venue's marks (the venue and the time, both from the
     source; short enough for one line over an input), otherwise the source, what it is and its date, as before."""
@@ -164,7 +170,7 @@ def short_label(source: Optional[str], as_of: str, kind: str) -> str:
         try:
             at = datetime.strptime(parts[2], "%Y-%m-%d %H:%M UTC")
             return f"{parts[1].split()[0]} {at.day} {at:%b %H:%M} UTC"
-        except ValueError:
+        except (ValueError, IndexError):        # a label that only looks like a venue's: caption it as any other source
             pass
     return f"{source} {kind} {as_of}"
 
@@ -213,7 +219,12 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
 
 @router.get("/pairs")
 def pairs(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return {"pairs": [pair_state(db, user["sub"], p) for p in PAIRS], "forward_mode": forward_mode(db, user["sub"]),
+    mode = forward_mode(db, user["sub"])
+    out = [pair_state(db, user["sub"], p) for p in PAIRS]
+    for p in out:
+        if p.get("forward_curve"):
+            p["forward_curve"]["in_use"] = mode == "MARKET"          # on IMPLIED the points are stored and not priced on
+    return {"pairs": out, "forward_mode": mode,
             "forward_tenors": list(FWD_TENORS),
             "feeds": {"fx": FX_FEED_NAME, "crypto": "Coinbase spot (public)"}}
 
@@ -221,7 +232,7 @@ def pairs(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
 class ForwardCurveIn(BaseModel):
     pair: str
     valuation_date: Optional[date] = None
-    points: dict[str, float] = Field(..., description="tenor -> forward points in pips (Bloomberg convention)")
+    points: dict[str, float] = Field(default_factory=dict, description="tenor -> forward points in pips (Bloomberg convention); empty with a spot saves the spot alone")
     spot: Optional[float] = Field(None, description="outright spot to save alongside, if the snap carried one")
     source: str = "MANUAL"
 
@@ -234,12 +245,13 @@ def save_forward_curve(req: ForwardCurveIn, db: Session = Depends(get_db), user:
     if req.source.upper() not in ("MANUAL", "BLOOMBERG", "IMPORT"):
         raise HTTPException(status_code=422, detail="source must be MANUAL, BLOOMBERG or IMPORT")
     pts = {t.upper(): float(v) for t, v in req.points.items() if t.upper() in TENOR_DAYS and v is not None}
-    if len(pts) < 2:
+    spot_only = not pts and req.spot is not None        # a desk spot on a pair whose points come from a feed: the points are not the desk's to re-save
+    if len(pts) < 2 and not spot_only:
         raise HTTPException(status_code=422, detail="give at least two tenors")
     from sqlalchemy import text
     uid, today = uuid.UUID(user["sub"]), req.valuation_date or date.today()
     quotes = [{"tenor": t, "quote_type": "FWD_POINTS", "rate": v, "enabled": True} for t, v in sorted(pts.items(), key=lambda kv: TENOR_DAYS[kv[0]])]
-    for cid, q in ((f"{pair}_FWD", quotes), (f"{pair}_SPOT", [{"tenor": "SPOT", "quote_type": "SPOT", "rate": float(req.spot), "enabled": True}] if req.spot else None)):
+    for cid, q in ((f"{pair}_FWD", None if spot_only else quotes), (f"{pair}_SPOT", [{"tenor": "SPOT", "quote_type": "SPOT", "rate": float(req.spot), "enabled": True}] if req.spot else None)):
         if q is None:
             continue
         db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u AND curve_id = :c AND valuation_date = :d"), {"u": uid, "c": cid, "d": today})
@@ -548,7 +560,7 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
     out["crypto"] = crypto
     out.update(pair=pair, shape="OPTION", valuation_date=val_date.isoformat(), expiry_date=expiry.isoformat(), settlement_date=settle.isoformat(),
                settlement_type=str(settlement_type or "DELIVERABLE").upper(), vol_pct=round(vol * 100, 4), vol_tier=tier, vol_source=vol_note,
-               vol_snapshot=vs.valuation_date.isoformat() if vs else None, vol_marks=marks_label(vs.source) if vs and tier != "OVERRIDE" else None,
+               vol_snapshot=vs.valuation_date.isoformat() if vs else None, vol_marks=marks_label(vs.source) if vs and tier != "OVERRIDE" and is_venue(vs.source) else None,
                spot_source=fwd["spot_source"], base_discounting=fwd["base_discounting"], quote_curve=fwd["quote_curve"],
                quote_curve_snapshot=fwd["quote_curve_snapshot"], forward_mode=fwd["forward_mode"], forward_source=fwd["forward_source"],
                implied_forward=fwd["implied_forward"], market_points=fwd["market_points"], basis_points=fwd["basis_points"],

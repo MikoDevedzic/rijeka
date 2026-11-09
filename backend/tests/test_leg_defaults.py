@@ -88,15 +88,17 @@ def test_previous_business_day_skips_weekends():
     assert ops.previous_business_day(date(2026, 10, 29)) == date(2026, 10, 28)
 
 
-def test_health_rules_hours_and_business_day():
+def test_health_rules_hours_and_business_day(monkeypatch):
+    monkeypatch.delenv("RIJEKA_DERIBIT", raising=False); monkeypatch.delenv("RIJEKA_DEMO_MARKET_DATA", raising=False)
     now = datetime(2026, 11, 2, 9, 0, tzinfo=timezone.utc)   # Monday morning
     db = _DB([now - timedelta(hours=1),            # news: fresh
               now - timedelta(hours=5),            # spots: stale (>3h)
               date(2026, 10, 30),                  # market data: Friday → ok on Monday
               date(2026, 10, 29),                  # pnl: Thursday → stale
               RuntimeError("relation does not exist"),  # risk: missing table → stale, rolled back
-              datetime(2026, 10, 30, 23, 0, tzinfo=timezone.utc),   # ccr: Friday datetime → ok
-              now - timedelta(hours=3)])           # digital-asset marks: stale (>2h), the last good surface is still served
+              datetime(2026, 10, 30, 23, 0, tzinfo=timezone.utc)])  # ccr: Friday datetime → ok
+    from api.routes import demo_market_data
+    monkeypatch.setattr(demo_market_data, "last_marks_at", lambda db: now - timedelta(hours=3))   # digital-asset marks: stale (>2h)
     out = ops.evaluate(db, now=now)
     c = out["checks"]
     assert not c["crypto_marks"]["ok"] and c["crypto_marks"]["rule"] == "within 2h" and c["crypto_marks"]["feeds"] == "digital-asset vols and forwards"
@@ -106,7 +108,12 @@ def test_health_rules_hours_and_business_day():
     assert c["pnl"]["rule"] == "on or after 2026-10-30" and c["risk"]["last"] is None
 
 
-def test_health_all_green():
+def test_health_all_green(monkeypatch):
+    monkeypatch.delenv("RIJEKA_DERIBIT", raising=False); monkeypatch.delenv("RIJEKA_DEMO_MARKET_DATA", raising=False)
     now = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
-    db = _DB([now, now, date(2026, 10, 29), date(2026, 10, 28), date(2026, 10, 28), date(2026, 10, 28), now - timedelta(minutes=10)])
+    db = _DB([now, now, date(2026, 10, 29), date(2026, 10, 28), date(2026, 10, 28), date(2026, 10, 28)])
+    from api.routes import demo_market_data
+    monkeypatch.setattr(demo_market_data, "last_marks_at", lambda db: now - timedelta(minutes=10))
     assert ops.evaluate(db, now=now)["ok"] is True
+    monkeypatch.setattr(demo_market_data, "last_marks_at", lambda db: None)       # an asset with no venue surface
+    assert ops.evaluate(_DB([now, now, date(2026, 10, 29), date(2026, 10, 28), date(2026, 10, 28), date(2026, 10, 28)]), now=now)["ok"] is False

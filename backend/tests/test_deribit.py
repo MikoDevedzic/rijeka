@@ -35,7 +35,7 @@ def chain(pillars=PILLARS, prefix="BTC", base="BTC", index=INDEX, deltas=None, o
             k = fwd * math.exp(-NormalDist().inv_cdf(d) * v * math.sqrt(max(t, 1e-9)) + 0.5 * v * v * t)
             for cp in "CP":
                 rows.append({"instrument_name": f"{prefix}-{code}-{k:.6f}-{cp}", "mark_iv": round(v * 100, 4), "underlying_price": fwd,
-                             "open_interest": oi, "creation_timestamp": STAMP, "estimated_delivery_price": index, "base_currency": base})
+                             "open_interest": oi, "creation_timestamp": int(now.timestamp() * 1000) - 4000, "estimated_delivery_price": index, "base_currency": base})
     return rows
 
 
@@ -68,6 +68,7 @@ def test_surface_interpolates_in_variance_and_time_and_is_flat_beyond_the_last_e
     assert -5.8 < g["1W"]["RR25"] < -5.3 and g["3M"]["RR25"] == pytest.approx(-3.0, abs=0.15)
     # nothing is listed past September 2027: the 1Y and 2Y rows repeat the last expiry, and the source says so
     assert g["1Y"] == g["2Y"] == {"ATM": pytest.approx(40.3, abs=0.02), "RR25": pytest.approx(-2.0, abs=0.02), "BF25": pytest.approx(1.1, abs=0.02)}
+    assert g["3W"]["ATM"] == pytest.approx(38.5, abs=0.15) and g["2W"]["ATM"] == pytest.approx(39.1, abs=0.3)      # 27 and 20 November, near enough
     assert D.source("option marks", b) == "DEMO · Deribit option marks · 2026-11-09 11:59 UTC · listed to 24SEP27, flat beyond"
     assert D.source("option marks", b).startswith(D.SOURCE_PREFIX)
 
@@ -97,7 +98,9 @@ def test_forward_points_carry_the_basis_and_hold_the_rate_flat_beyond_the_last_e
     from market_data import demo_feed
     from pricing.fx_vol import TENOR_YEARS
     assert D.FWD_TENOR_DAYS == {t: currencies.TENOR_DAYS[t] for t in currencies.FWD_TENORS}
-    assert list(D.VOL_TENORS) == demo_feed.FX_VOL_TENORS
+    assert [t for t in D.VOL_TENORS if t not in ("2W", "3W")] == demo_feed.FX_VOL_TENORS      # the FX grid plus two tenors inside the first month
+    from risk import vols
+    assert set(D.VOL_TENORS) <= set(vols.WINDOW)                                              # every tenor has a realised-vol window for the history
     assert all(D.VOL_TENOR_DAYS[t] == pytest.approx(TENOR_YEARS[t] * 365) for t in D.VOL_TENORS)
 
 
@@ -140,7 +143,8 @@ def test_collect_reports_a_failed_asset_and_keeps_the_others(monkeypatch):
     with patch.object(D, "fetch_chain", side_effect=fetch):
         got = D.collect(assets=("BTC", "ETH", "SOL"), pause=0)
     assert set(got["ok"]) == {"BTC"} and got["ok"]["BTC"]["vol"]
-    assert got["failed"]["ETH"].startswith("RuntimeError") and "usable expiries" in got["failed"]["SOL"]
+    # what is reported is written here: the class of an unexpected error, never its message (it may quote the venue)
+    assert got["failed"] == {"ETH": "RuntimeError", "SOL": "1 usable expiries"}
 
 
 def _shifted(pillars):
@@ -154,7 +158,131 @@ def _shifted(pillars):
 
 
 def test_the_switch(monkeypatch):
+    monkeypatch.delenv("RIJEKA_DERIBIT", raising=False)
     assert D.enabled()
     monkeypatch.setenv("RIJEKA_DERIBIT", "0")
     assert not D.enabled()
     assert D.pair("BTC") == "BTCUSD" and set(D.ASSETS) == {"BTC", "ETH", "SOL"}
+
+
+# ── the response is someone else's data (Magnus, 2026-11-09) ──────────────────
+
+def test_stale_or_future_marks_and_a_missing_index_give_no_surface():
+    rows = chain(PILLARS[2:6])
+    assert D.build(rows, "BTC", NOW)["vol"]
+    late = D.build(rows, "BTC", NOW + timedelta(minutes=45))            # the chain's own time is 45 minutes old
+    assert late["vol"] is None and late["forward"] is None and late["why"] == "marks dated 45 minutes from now"
+    ahead = D.build([{**r, "creation_timestamp": 253_402_300_000_000} for r in rows], "BTC", NOW)       # year 9999
+    assert ahead["vol"] is None and ahead["why"] == "marks carry no time"
+    assert D.build([{**r, "creation_timestamp": int((NOW + timedelta(hours=3)).timestamp() * 1000)} for r in rows], "BTC", NOW)["vol"] is None
+    none = D.build([{k: v for k, v in r.items() if k != "estimated_delivery_price"} for r in rows], "BTC", NOW)
+    assert none["vol"] is None and none["why"] == "no index price"
+
+
+def test_a_forward_or_an_index_that_cannot_be_a_market_is_refused():
+    rows = chain(PILLARS[2:6])
+    for factor in (0.5, 2.0, 1000.0):                  # the index against unchanged forwards: an implied basis no market has
+        b = D.build([{**r, "estimated_delivery_price": INDEX * factor} for r in rows], "BTC", NOW)
+        assert b["vol"] is None and b["forward"] is None, factor
+        assert set(b["dropped"].values()) == {"forward too far from the index"}
+    # ten per cent out is refused at the short expiries here; the longer ones are caught by the caller's check against the spot
+    near = D.build([{**r, "estimated_delivery_price": INDEX * 1.10} for r in rows], "BTC", NOW)
+    assert near["dropped"]["20NOV26"] == "forward too far from the index" and near["vol"] is not None
+    # a real basis passes: 6 % a year at five months, and the short end's few basis points
+    assert D.expiry_quote({"days": 150.0, "t": 150 / 365, "forward": INDEX * 1.025, "oi": 1.0, "marks": []}, INDEX)[1] != "forward too far from the index"
+    assert D.expiry_quote({"days": 3.0, "t": 3 / 365, "forward": INDEX * 1.02, "oi": 1.0, "marks": []}, INDEX)[1] == "forward too far from the index"
+
+
+def test_non_finite_numbers_strings_and_malformed_names_never_reach_a_quote():
+    import json as _json
+    import math as _math
+    rows = chain(PILLARS[2:6])
+    junk = [{**rows[0], "mark_iv": float("nan")}, {**rows[1], "underlying_price": float("inf")}, {**rows[2], "mark_iv": "40"},
+            {**rows[3], "open_interest": "<script>"}, {**rows[4], "estimated_delivery_price": float("nan")}, {**rows[5], "creation_timestamp": "now"},
+            {**rows[6], "instrument_name": "BTC-\n 24SEP27-80000-C"}, {**rows[7], "instrument_name": "BTC-+13NOV26-80000-C"},
+            {**rows[8], "instrument_name": "BTC-" + "0" * 3000 + "24SEP27-80000-C"}, {**rows[9], "instrument_name": "BTC-1_3NOV26-80000-C"},
+            {**rows[10], "instrument_name": "BTC-13nov26-80000-C"}, {**rows[11], "instrument_name": "BTC-27NOV26-1e400-C"},
+            {**rows[12], "instrument_name": "BTC-27NOV26-nan-C"}, {**rows[13], "instrument_name": 7}, "not a row", None, {**rows[14], "base_currency": 5}]
+    b = D.build(rows + junk, "BTC", NOW)
+    clean = D.build(rows, "BTC", NOW)
+    assert b["vol"] == clean["vol"] and b["forward"] == clean["forward"] and set(b["dropped"]) == set(clean["dropped"])
+    _json.dumps(b["vol"] + b["forward"], allow_nan=False)                      # every stored number is finite
+    assert all(_math.isfinite(q["rate"]) for q in b["vol"] + b["forward"]) and len(D.source("option marks", b)) < 90
+    for bad in ("\n 24SEP27", " 13NOV26", "+13NOV26", "1_3NOV26", "13nov26", "٢٤SEP27", "0" * 50 + "1NOV26"):
+        with pytest.raises(ValueError):
+            D.parse_expiry(bad)
+    # more expiries than any venue lists: the extra ones are ignored, not accumulated
+    many = [{**rows[0], "instrument_name": f"BTC-{d}{m}{y}-80000-C"} for y in (27, 28, 29) for m in D.MONTHS for d in range(1, 28)]
+    assert len(D.parse_chain(many, "BTC", NOW)["expiries"]) == D.MAX_EXPIRIES
+
+
+class _Stream:
+    def __init__(self, chunks, status=200): self.chunks, self.status_code = chunks, status
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def iter_bytes(self): yield from self.chunks
+
+
+class _Client:
+    def __init__(self, stream): self._s = stream
+    def stream(self, method, url, params=None): self.asked = (method, url, params); return self._s
+
+
+def test_the_read_has_a_size_cap_a_row_cap_and_reports_in_its_own_words(monkeypatch):
+    import json as _json
+    ok = _Client(_Stream([_json.dumps({"result": [{"instrument_name": "BTC-27NOV26-80000-C"}]}).encode()]))
+    assert D.fetch_chain("SOL", ok) == [{"instrument_name": "BTC-27NOV26-80000-C"}] and ok.asked == ("GET", D.API, {"currency": "USDC", "kind": "option"})
+    for stream, why in ((_Stream([b"x" * 1_000_000] * 9), "response over the size cap"), (_Stream([b"<html>busy</html>"]), "response is not the expected JSON"),
+                        (_Stream([b'{"result": {"a": 1}}']), "response is not a list of instruments within the row cap"), (_Stream([b""], status=503), "HTTP 503"),
+                        (_Stream([_json.dumps({"result": [0] * (D.MAX_ROWS + 1)}).encode()]), "response is not a list of instruments within the row cap")):
+        with pytest.raises(D.Unusable, match=why):
+            D.fetch_chain("BTC", _Client(stream))
+    monkeypatch.setattr(D, "DEADLINE", -1.0)
+    with pytest.raises(D.Unusable, match="response over the deadline"):
+        D.fetch_chain("BTC", _Client(_Stream([b"{}"])))
+
+
+def test_the_time_of_the_marks_is_read_back_from_a_stored_label():
+    b = D.build(chain(PILLARS[2:6]), "BTC", NOW)
+    assert D.marks_time(D.source("option marks", b)) == b["asof"].replace(second=0, microsecond=0)
+    for not_ours in (None, "", "MANUAL", "DEMO · synthetic surface", "DEMO · Deribit x", "DEMO · Deribit option marks · soon UTC · x", "DEMO ·  · 2026-11-09 12:46 UTC"):
+        assert D.marks_time(not_ours) is None
+
+
+# ── Vera, 2026-11-09: what the pricer returns between tenors, and a stale mark ──
+
+def test_on_a_steep_front_end_the_pricer_is_close_to_the_marks_from_two_weeks_out():
+    """The November term structure (44 % at four days, 38.5 % at eighteen): the pricer is linear in vol between the
+    surface's tenors, so the 2W and 3W tenors are what keep a listed two- or three-week expiry near its mark."""
+    b = D.build(chain(), "BTC", NOW)
+    surface = parse_surface(b["vol"])
+    by = {e["code"]: e for e in b["expiries"]}
+    for code, tol in (("20NOV26", 0.006), ("27NOV26", 0.004), ("25DEC26", 0.003), ("26MAR27", 0.003), ("24SEP27", 0.003)):
+        e = by[code]
+        t = e["days"] / 365
+        atm_strike = e["forward"] * math.exp(0.5 * (e["atm"] / 100) ** 2 * t)          # the 50-delta-forward strike
+        assert vol_at(surface, t, e["forward"], atm_strike) == pytest.approx(e["atm"] / 100, abs=tol), code
+    # inside one week the pricer holds the one-week level: stated, not hidden (the 13 November mark is 43.4 %)
+    e = by["13NOV26"]
+    assert vol_at(surface, e["days"] / 365, e["forward"], e["forward"]) < e["atm"] / 100 - 0.015
+
+
+def test_a_stale_mark_on_the_wing_does_not_move_the_smile():
+    clean = chain([("25DEC26", 75_290.0, 0.385, -0.034, 0.012), ("26MAR27", 76_340.0, 0.394, -0.028, 0.012)])
+    want = D.build(clean, "BTC", NOW)["expiries"][0]
+    stale = [dict(r) for r in clean]
+    calls = sorted((r for r in stale if "-25DEC26-" in r["instrument_name"] and r["instrument_name"].endswith("-C")),
+                   key=lambda r: float(r["instrument_name"].split("-")[2]))
+    hit = min(calls, key=lambda r: abs(float(r["instrument_name"].split("-")[2]) - 86_000))     # a call near the 25-delta strike
+    strike = hit["instrument_name"].split("-")[2]
+    for r in stale:
+        if f"-25DEC26-{strike}-" in r["instrument_name"]:
+            r["mark_iv"] = 80.0                                                                 # last traded in another market
+    got = D.build(stale, "BTC", NOW)["expiries"][0]
+    assert got["rr25"] == pytest.approx(want["rr25"], abs=0.15) and got["bf25"] == pytest.approx(want["bf25"], abs=0.15) and got["atm"] == pytest.approx(want["atm"], abs=0.05)
+    # a smile that is simply steep is kept: the filter is about one mark against its neighbours
+    steep = D.build(chain([("25DEC26", 75_290.0, 0.60, -0.20, 0.06), ("26MAR27", 76_340.0, 0.60, -0.15, 0.05)]), "BTC", NOW)
+    assert [e["code"] for e in steep["expiries"]] == ["25DEC26", "26MAR27"] and steep["expiries"][0]["rr25"] == pytest.approx(-20.0, abs=0.1)
+    # and bounds an honest smile never meets
+    assert D.expiry_quote({"days": 46.0, "t": 46 / 365, "forward": 100.0, "oi": 1.0,
+                           "marks": [(k, 0.4 + (0.9 if k > 100 else 0.0)) for k in (60, 70, 80, 90, 95, 100, 105, 110, 120, 130, 150, 200)]})[0] is None

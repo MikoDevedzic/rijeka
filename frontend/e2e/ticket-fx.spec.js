@@ -92,3 +92,37 @@ test('crypto ticket: the vol and the forward name the venue and the time of its 
   await app.screenshot({ path: 'e2e/.out/shots/crypto-option-marks.png' })
   expectClean(problems)
 })
+
+// Vera, 2026-11-09: with the feed's points on a digital-asset pair, SAVE DESK SPOT sent the feed's label as the source
+// and the API refused it. The desk's spot now goes alone, as MANUAL, and the feed's points are not re-saved as the desk's.
+// The save itself is answered here (it is tested on the database in tests/integration/test_crypto_marks.py) so the
+// stack's spot, which the pinned book reads, is not changed by a journey.
+test('market data: a desk spot saves on a pair whose forward points come from the feed', async ({ app, problems }) => {
+  const FEED = 'DEMO · Deribit forwards · 2026-11-09 12:57 UTC · listed to 24SEP27, flat beyond'
+  let pairs = null
+  await app.route(/\/api\/currency\/pairs(\?.*)?$/, async route => {
+    const res = await route.fetch()
+    const body = await res.json()
+    for (const p of body.pairs) {
+      if (p.pair !== 'BTCUSD') continue
+      p.forward_curve = { valuation_date: '2026-11-09', source: FEED, label: 'Deribit 9 Nov 12:57 UTC', tenors: ['1M', '3M'], in_use: true }
+      p.forward_points = { '1M': 348.27, '3M': 1011.65 }
+    }
+    pairs = body.pairs
+    await route.fulfill({ response: res, json: body })
+  })
+  let sent = null
+  await app.route(/\/api\/currency\/forward-curve$/, async route => {
+    sent = route.request().postDataJSON()
+    await route.fulfill({ json: { ...pairs.find(p => p.pair === 'BTCUSD'), spot: sent.spot } })
+  })
+  await app.goto('/configurations/market-data/crypto')
+  await app.locator('.crv-item', { hasText: 'BTCUSD' }).click()
+  await expect(app.locator('.crv-item', { hasText: 'BTCUSD' })).toContainText('Deribit 9 Nov 12:57 UTC · 2 tenors')
+  await app.getByText('Spot & funding', { exact: true }).click()
+  await app.getByPlaceholder(/desk spot/).fill('70123')
+  await app.getByRole('button', { name: 'SAVE DESK SPOT' }).click()
+  await expect(app.getByText('BTCUSD desk spot saved')).toBeVisible()
+  expect(sent, 'the spot alone, under the desk\'s own label').toEqual({ pair: 'BTCUSD', points: {}, source: 'MANUAL', spot: 70123 })
+  expectClean(problems)
+})

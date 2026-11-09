@@ -83,14 +83,16 @@ that says where it came from; the pricers read the latest row and print that sou
 |---|---|---|---|---|
 | OIS curves | `USD_SOFR`, `EUR_ESTR`, `GBP_SONIA`, `CHF_SARON`, `JPY_TONAR` | central banks and treasuries, an indicative spread over government par (`market_data/demo_feed.py`) | daily | the curve keeps its last date; health reports it |
 | FX and digital-asset spot | `{PAIR}_SPOT` | ECB reference rates, Coinbase | 30 minutes; digital assets with the marks, every 10 | the last spot stands |
-| Digital-asset vols | `BTCUSD_VOL`, `ETHUSD_VOL`, `SOLUSD_VOL` | Deribit option marks, read at 25 and 50 delta per expiry (`market_data/deribit.py`) | 10 minutes | the last good surface stands, its own time in the source; health check `crypto_marks` turns red after two hours |
-| Digital-asset forwards | `{PAIR}_FWD` | the same chain: the forward of each expiry over the index | 10 minutes | as above; a funding rate typed on the ticket always wins over them |
+| Digital-asset vols | `BTCUSD_VOL`, `ETHUSD_VOL`, `SOLUSD_VOL` | Deribit option marks, read at 25 and 50 delta per expiry (`market_data/deribit.py`) | 10 minutes | the last good surface stands, its own time in the source; health check `crypto_marks` reads that time and turns red after two hours |
+| Digital-asset forwards | `{PAIR}_FWD` | the same chain: the forward of each expiry over the index, checked against the spot | 10 minutes | as above; a funding rate typed on the ticket wins over them for that price |
 | Rates and FX vols | `USD_SWVOL_ATM`, skew, caps, `{PAIR}_VOL` for G10 | parametric, level scaled by realised vol (`risk/vols.py`) | daily | n/a: built, and labelled synthetic |
 
 The template account receives every feed; a demo account is a copy of it. The daily rebuild copies a day's rows once and
-never overwrites; the digital-asset marks are pushed on every run and replace only rows that came from a feed, never
-a row the account entered itself. `RIJEKA_DERIBIT=0` switches the venue off: the next daily rebuild removes its rows
-and the parametric surfaces and the flat funding rate return. `GET /api/market-data/demo/sources` lists all of this publicly.
+never overwrites; the digital-asset marks are pushed on every run and replace only rows that came from a feed. An
+account's own entry for a curve (the template owner's too) stays in force until the account replaces it.
+`RIJEKA_DERIBIT=0` switches the venue off: the deployed process removes its rows from the template and demo accounts
+at the next daily rebuild, the parametric surfaces and the flat funding rate return, and the history backfill rebuilds
+the vol series. What the venue sends is treated as untrusted: capped, bounded, checked against the spot, and never echoed. `GET /api/market-data/demo/sources` lists all of this publicly.
 
 ## Independent price verification
 

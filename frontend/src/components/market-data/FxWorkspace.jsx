@@ -86,7 +86,7 @@ export default function FxWorkspace() {
                   {items.map(p => (
                     <div key={p.pair} className={`crv-item${sel === p.pair ? ' sel' : ''}`} style={{ borderLeftColor: sel === p.pair ? (p.crypto ? 'var(--chain)' : 'var(--accent)') : 'transparent' }} onClick={() => setSel(p.pair)}>
                       <span className={`type-badge ${p.forward_curve ? (p.crypto ? 'tb-funding' : 'tb-ois') : 'tb-basis'}`}>{p.forward_curve ? 'FWD' : 'SPOT'}</span>
-                      <div className="ci-body"><div className="ci-name">{p.pair}</div><div className="ci-sub">{p.forward_curve ? `${p.forward_curve.source} · ${p.forward_curve.tenors.length} tenors` : p.crypto ? `funding ${p.funding_pct ?? 0}% · no forward curve` : 'no forward curve'}</div></div>
+                      <div className="ci-body"><div className="ci-name">{p.pair}</div><div className="ci-sub">{p.forward_curve ? `${p.forward_curve.label || p.forward_curve.source} · ${p.forward_curve.tenors.length} tenors` : p.crypto ? `funding ${p.funding_pct ?? 0}% · no forward curve` : 'no forward curve'}</div></div>
                       <div className={`ci-val ${p.crypto ? 'am' : 'ac'}`}>{fmt(p.spot, dp(p.pair))}</div>
                     </div>))}
                 </div>
@@ -206,7 +206,15 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
     const v = parseFloat(spotIn); if (isNaN(v) || v <= 0) return flash('err', 'Enter a spot')
     const clean = {}; Object.entries(pts).forEach(([t, x]) => { const n = parseFloat(x); if (!isNaN(n)) clean[t] = n })
     if (Object.keys(clean).length < 2) { Object.assign(clean, { '1M': 0, '3M': 0 }) }
-    await save(p.forward_curve?.source || 'MANUAL', clean, v)
+    const src = String(p.forward_curve?.source || 'MANUAL').toUpperCase()
+    if (!['MANUAL', 'BLOOMBERG', 'IMPORT'].includes(src)) {
+      // the points come from a feed: the desk's spot is saved on its own, and the feed's points are not re-saved as the desk's
+      setBusy('save')
+      try { await call('/api/currency/forward-curve', { method: 'POST', body: JSON.stringify({ pair, points: {}, source: 'MANUAL', spot: v }) }); flash('ok', `${pair} desk spot saved`); await reload() }
+      catch (e) { flash('err', e.message) } finally { setBusy('') }
+      return
+    }
+    await save(src, clean, v)
   }
 
   const tabs = [{ id: 'points', label: p.crypto ? 'Forward points (USD)' : 'Forward points', badge: p.forward_curve?.tenors?.length },
@@ -338,7 +346,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
           <span className={`pill ${p.crypto ? 'p-amber' : 'p-green'}`}>{p.crypto ? 'NDF' : 'FX SPOT · FWD · NDF'}</span>
           <span className="pill p-blue">{p.quote_curve}</span>
           <span className={`pill ${p.crypto ? 'p-amber' : p.base_curve_available ? 'p-blue' : 'p-amber'}`}>{p.crypto ? `${p.base} funding ${p.funding_pct ?? 0}%` : p.base_curve_available ? p.base_curve : `${p.base} flat (no curve)`}</span>
-          <span className={`pill ${p.forward_curve ? 'p-purple' : 'p-dim'}`}>{p.forward_curve ? `${p.forward_curve.source} points · ${p.forward_curve.valuation_date}` : 'no forward curve'}</span>
+          <span className={`pill ${p.forward_curve ? 'p-purple' : 'p-dim'}`}>{p.forward_curve ? (p.forward_curve.label ? `${p.forward_curve.label} points` : `${p.forward_curve.source} points · ${p.forward_curve.valuation_date}`) : 'no forward curve'}</span>
           <span className="pill p-dim">{mode === 'MARKET' ? 'quoted points' : 'implied from yields'}</span>
           <span className="pill p-dim">pip {p.pip}</span>
         </div>

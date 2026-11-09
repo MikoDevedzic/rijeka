@@ -10,33 +10,45 @@ methodology document carries its own version (v1.5). Commits on `main` are the d
   surface and the flat funding rate. On 9 November the old BTC surface stood some fourteen vol points above the
   market with the risk reversal on the wrong side.
   - **The reading.** Per listed expiry the marks are read at 25 and 50 forward delta, the convention of the pricer's
-    smile, so the surface returns the venue's marks at those points; across expiries ATM is linear in total variance.
-    The forward of each expiry over the index is stored as forward points; on the market forward mode the ticket's
-    forward is spot plus those points. Three unauthenticated requests per run.
+    smile; across expiries ATM is linear in total variance, onto ten tenors (the FX grid plus 2W and 3W, where the
+    listed term structure is steepest). The pricer is linear in vol between tenors, so it returns the venue's mark at
+    a tenor and close to it between tenors from two weeks out; inside one week it holds the one-week level, which a
+    steep front end can miss by points. The forward of each expiry over the index is stored as forward points; on
+    the market forward mode the ticket's forward is spot plus those points. Three unauthenticated requests per run.
   - **On the ticket.** The vol and the forward name the venue and the time of the marks. A funding rate typed on a
-    digital-asset ticket still wins: the forward is then the carry at that rate and the response says so (before
-    this change quoted points would have silently overridden it; no account had any for a digital asset).
-  - **Safeguards.** An expiry inside two days, with fewer than six usable marks, with no open interest, or that does
-    not reach the 25-delta points is left out; a surface needs two expiries. When the venue does not answer nothing
-    is written: the last good surface stands with its own time, the daily rebuild carries it instead of writing the
-    parametric one, and the new health check `crypto_marks` turns red after two hours. Tenors beyond the last
-    listed expiry are held flat and the source says through which expiry it is listed.
-  - **Accounts.** The marks are written for the template account and pushed to every demo account in one statement;
-    a row an account entered itself is never replaced.
-  - **Risk history.** A built history row never replaces a venue row. The dates before the venue's first surface are
-    rebuilt from it (carried back by the ratio of realised-vol scales) so the vol series has no step on the day the
-    source changed. This takes effect when the history backfill is next run; until then a VaR window containing
-    9 November samples the change of source as one day's fall in vol (`docs/market_risk.md`).
-  - **Switch.** `RIJEKA_DERIBIT=0` stops the requests; the next daily rebuild removes the stored rows.
-    `RIJEKA_SCHEDULER_MARKS_MINUTES` sets the period.
-  - **What moves.** A booked digital-asset forward or option now revalues on the venue's forward and vol: a one-off
-    change in its value on the first day, attributed to the points and vol steps of the P&L explain. The pinned sample
-    book is unchanged (the local stack has no venue). Not changed: the counterparty-credit paths still drift a digital
-    asset at the stored flat funding rate.
+    digital-asset ticket still wins on that price: the forward is then the carry at that rate and the response says
+    so. (As before, a typed rate is not stored with the trade: the booked trade and the XVA tab value on the market.)
+  - **Safeguards.** The venue's response is treated as someone else's data: a size cap and a deadline on the read,
+    finite numbers and well-formed expiry codes only, marks dated within thirty minutes, a forward within bounds of
+    the index, the index within 5 % of the spot fetched in the same run. Within an expiry a mark that stands off its
+    neighbours is left out; an expiry inside two days, with fewer than six usable marks, with no open interest, or
+    that does not reach the 25-delta points is left out; a surface needs two expiries. When the venue does not
+    answer nothing is written: the last good surface stands with its own time and the daily rebuild carries it. The
+    health check `crypto_marks` reads the time the marks carried (not when a row was written), for the template
+    account, and turns red two hours after the oldest of the three assets; it is absent where the feed is off.
+  - **Accounts.** The marks are written for the template account and pushed to every demo account in one statement.
+    An account's own entry for a curve, the template owner's included, stays in force until that account replaces
+    it; only rows a feed wrote are copied or replaced. Saving a desk spot on a pair whose points come from the feed
+    saves the spot alone.
+  - **Risk.** FUND01 on the ladder is unchanged in meaning: on quoted points +1bp of funding moves the points it
+    implies. A built history row never replaces a venue row, and the vol history before the venue's first surface is
+    rebuilt from it so the series has no step; that takes effect when the history backfill is next run, and until
+    then a VaR window containing 9 November samples the change of source as one day's fall in vol
+    (`docs/market_risk.md`). Not yet a risk factor: the forward points themselves, so the basis has no VaR; the
+    counterparty-credit paths still drift a digital asset at the stored flat funding rate.
+  - **What moves on the first day.** A booked digital-asset forward or option revalues on the venue's forward and
+    vol. The vol part is attributed to the vol step of the P&L explain; the forward part has no previous day's points
+    to difference against and lands in "Cross & unattributed" that once. The pinned sample book is unchanged (the
+    local stack has no venue).
+  - **Switch.** `RIJEKA_DERIBIT=0` stops the requests; the deployed process then removes the venue's rows from the
+    template and demo accounts at the next daily rebuild (a developer's shell on the shared database cannot), after
+    which the history backfill rebuilds the vol series. `RIJEKA_SCHEDULER_MARKS_MINUTES` sets the period.
   - Methodology v1.5; `docs/architecture.md` gains a market-data table, source by source, and the venue in the diagram.
-  - Tests: the builder against chains generated from a known smile (no venue data in the repository), the routes,
-    the scheduler group, the health check, the history guard and anchor, an integration test on the local stack, and a
-    browser journey for the ticket's captions (33 journeys).
+  - Reviewed by Vera (one blocking finding: the desk-spot save; ten others) and Magnus (two medium, six low); all
+    fixed or answered in this change. Tests: the builder against chains generated from a known smile (no venue data
+    in the repository), hostile and malformed responses, the routes, the scheduler group, the health check, the
+    history guard and anchor, FUND01 on quoted points, an integration test on the local stack, and a browser journey
+    for the ticket's captions (33 journeys).
 
 ## 0.11.1 · 8 November 2026
 

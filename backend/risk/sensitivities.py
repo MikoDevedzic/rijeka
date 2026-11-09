@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from pnl.explain import BUCKETS, LIVE, Valuer, _bucket_quotes
 from pnl.market import Market, is_vol_surface
-from pnl.valuation import spot_curve, trade_curves
+from pnl.valuation import points_curve, spot_curve, trade_curves
 
 log = logging.getLogger("rijeka.risk")
 BUMP_BP = 1.0
@@ -27,6 +27,22 @@ VOL_BUMP = 100.0        # in the bump unit (bp/100): one volatility point on a {
 def _bumped(quotes: list[dict], lo: float, hi: float, bp: float) -> list[dict]:
     target = [{**q, "rate": float(q["rate"]) + bp / 100.0} for q in quotes]
     return _bucket_quotes(quotes, target, lo, hi)
+
+
+def _carry_points(trade, mkt: Market, bumped: Market, bp: float) -> Market:
+    """FUND01 when the forward is quoted: on a pair priced on forward points the stored funding rate does not enter
+    the value, the rate the points imply does. +1bp on the funding rate is then +1bp on that implied rate at every
+    tenor, which lowers each outright by F·T·1bp: the points are moved by that, so the ladder's FUND01 is the
+    ticket's whichever way the forward is built. Without points the bumped market is returned as it is."""
+    pc = points_curve(trade)
+    pts = mkt.quotes(pc) if pc else None
+    spot = mkt.spot(pc[: -len("_FWD")]) if pts else None
+    if not pts or not spot:
+        return bumped
+    from api.routes.currencies import TENOR_DAYS
+    moved = [{**q, "rate": float(q["rate"]) - (spot + float(q["rate"])) * TENOR_DAYS[q["tenor"]] / 365.0 * bp * 1e-4}
+             if q.get("tenor") in TENOR_DAYS and q.get("rate") is not None else q for q in pts]
+    return bumped.override(pc, moved)
 
 
 def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: Valuer) -> dict[str, Any]:
@@ -42,6 +58,8 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
         target, bump = (vega, VOL_BUMP) if is_vol else (fund01, BUMP_BP) if cid.endswith("_FUNDING") else (kr01, BUMP_BP)
         if len(q) <= 1:                                 # a flat rate or funding level: one bucket
             m = mkt.override(cid, _bumped(q, 0.0, 1e9, bump))
+            if target is fund01:
+                m = _carry_points(trade, mkt, m, bump)
             target.setdefault(cid, {})["FLAT"] = valuer(trade, d, m)["npv"] - base["npv"]
             continue
         for name, lo, hi in BUCKETS:

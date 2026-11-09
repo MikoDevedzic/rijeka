@@ -120,18 +120,38 @@ def _demo_user_ids(db: Session, template) -> list:
 
 MARKS_LIKE = deribit.SOURCE_PREFIX + "%"
 
-# A demo account takes the template's row for the day. Its own entries stand: a row it typed or imported
-# is never replaced, except a fetched spot (source IMPORT), which is the same public price a few minutes older.
+# Which stored rows a feed may replace: one a feed wrote (DEMO …), or a spot labelled IMPORT, which is a fetched
+# public price. A row an account typed (MANUAL) or took from a terminal is never replaced, the template's included.
+FEED_ROW = "{t}.source LIKE 'DEMO%' OR ({t}.source = 'IMPORT' AND right({t}.curve_id, 5) = '_SPOT')"
+# An account's own entry stays in force until the account replaces it: when the latest row it holds for a curve,
+# whatever its date, is one it entered itself, the feed writes nothing for that curve (as before the feed existed).
+OWN_ENTRY_STANDS = ("COALESCE((SELECT " + FEED_ROW.format(t="o") + " FROM market_data_snapshots o "
+                    "WHERE o.user_id = {u} AND o.curve_id = {c} ORDER BY o.valuation_date DESC LIMIT 1), true)")
+SPOT_TOLERANCE = (0.05, 0.25)      # the venue's index against a spot fetched now, and against the last one stored
+
+# A demo account takes the template's row for the day, and only a row a feed wrote for the template: what the
+# template's owner entered by hand or from a licensed source is not copied to anyone.
 PUSH_SQL = """
     INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by, user_id)
     SELECT s.curve_id, s.valuation_date, s.quotes, s.source, u.user_id, u.user_id
     FROM market_data_snapshots s
     CROSS JOIN (SELECT DISTINCT user_id FROM legal_entities WHERE lei LIKE :p AND is_own_entity AND user_id <> :t) u
     WHERE s.user_id = :t AND s.valuation_date = :d AND s.curve_id = ANY(:ids)
+      AND (""" + FEED_ROW.format(t="s") + """)
+      AND """ + OWN_ENTRY_STANDS.format(u="u.user_id", c="s.curve_id") + """
     ON CONFLICT (user_id, curve_id, valuation_date) DO UPDATE
       SET quotes = EXCLUDED.quotes, source = EXCLUDED.source, created_at = NOW()
+      WHERE (""" + FEED_ROW.format(t="market_data_snapshots") + """)
+        AND market_data_snapshots.quotes IS DISTINCT FROM EXCLUDED.quotes
+"""
+
+MARKS_UPSERT_SQL = """
+    INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by, user_id)
+    SELECT CAST(:c AS text), CAST(:d AS date), cast(:q as jsonb), CAST(:s AS text), CAST(:u AS uuid), CAST(:u AS uuid)
+    WHERE """ + OWN_ENTRY_STANDS.format(u="CAST(:u AS uuid)", c="CAST(:c AS text)") + """
+    ON CONFLICT (user_id, curve_id, valuation_date) DO UPDATE
+      SET quotes = EXCLUDED.quotes, source = EXCLUDED.source, created_at = NOW(), created_by = EXCLUDED.created_by
       WHERE market_data_snapshots.source LIKE 'DEMO%'
-         OR (market_data_snapshots.source = 'IMPORT' AND right(market_data_snapshots.curve_id, 5) = '_SPOT')
 """
 
 
@@ -148,49 +168,103 @@ def kept_marks(db: Session, uid) -> dict[str, dict]:
     return {r.curve_id: {"quotes": r.quotes, "source": r.source} for r in rows}
 
 
-def purge_marks(db: Session) -> int:
-    """The source switched off (RIJEKA_DERIBIT=0): its rows go, on every account, and the parametric surfaces return."""
-    n = db.execute(text("DELETE FROM market_data_snapshots WHERE source LIKE :m"), {"m": MARKS_LIKE}).rowcount or 0
+def purge_allowed() -> bool:
+    """Whether this process may delete the venue's rows when the source is off. Local development shares the hosted
+    database, so a flag in a developer's shell must not be able to; the deployed process (Render sets RENDER) may,
+    and a self-hosted one says so with RIJEKA_DERIBIT_PURGE=1."""
+    return bool(os.getenv("RENDER")) or os.getenv("RIJEKA_DERIBIT_PURGE", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def purge_marks(db: Session, template) -> int:
+    """The source switched off (RIJEKA_DERIBIT=0): its rows go from the template and the demo accounts, and the
+    parametric surfaces and the flat funding rate return. A row in any other account is that account's own."""
+    n = db.execute(text("""
+        DELETE FROM market_data_snapshots WHERE source LIKE :m AND (user_id = :t OR user_id IN (
+            SELECT user_id FROM legal_entities WHERE lei LIKE :p AND is_own_entity))"""),
+        {"m": MARKS_LIKE, "t": template, "p": demo.DEMO_LEI_PREFIX + "%"}).rowcount or 0
     if n:
         log.warning("deribit is switched off: %d rows removed", n)
     return n
 
 
+def last_marks_at(db: Session) -> Optional[datetime]:
+    """The oldest, across the three assets, of the times of the marks behind the template's current surfaces: what
+    the health check watches. It reads the time the venue's marks carried (kept in the source when a surface is
+    carried forward), not when a row was last written, and only the template's rows, so neither the daily rebuild
+    nor a row in someone's own account can make a silent venue look alive. None when an asset has no surface."""
+    template = demo._template_user_id(db)
+    if template is None:
+        return None
+    rows = db.execute(text("""
+        SELECT DISTINCT ON (curve_id) curve_id, source FROM market_data_snapshots
+        WHERE user_id = :u AND curve_id = ANY(:ids) ORDER BY curve_id, valuation_date DESC"""),
+        {"u": template, "ids": [f"{deribit.pair(a)}_VOL" for a in deribit.ASSETS]}).all()
+    times = [deribit.marks_time(r.source) for r in rows]
+    return min(times) if len(times) == len(deribit.ASSETS) and all(times) else None
+
+
+def _reference_spots(db: Session, template) -> tuple[dict[str, float], dict[str, float]]:
+    """(fetched now, last stored) digital-asset spots by pair: what the venue's index is checked against."""
+    from .crypto import _quote, fetch_spot, latest_snapshot
+    try:
+        fresh = {deribit.pair(a): float(px) for a, px in fetch_spot(deribit.ASSETS).items()}
+    except Exception as e:      # noqa: BLE001 — the half-hourly spot tick stands
+        log.warning("crypto spot not fetched with the marks: %s", type(e).__name__)
+        fresh = {}
+    stored = {}
+    for a in deribit.ASSETS:
+        px = _quote(latest_snapshot(db, template, f"{deribit.pair(a)}_SPOT"), "SPOT")
+        if px:
+            stored[deribit.pair(a)] = float(px)
+    return fresh, stored
+
+
 def refresh_crypto(db: Session, dry_run: bool = False, now: Optional[datetime] = None) -> dict:
     """Digital-asset spot (Coinbase), option vols and forwards (Deribit) for the template and every demo account.
-    An asset the venue did not answer for keeps the rows it has; nothing is written for it."""
+    An asset the venue did not answer for, or whose index disagrees with the spot, keeps the rows it has."""
+    now = now or datetime.now(timezone.utc)
+    got = deribit.collect(now)                  # the network first: no database transaction is open while it waits
     template = demo._template_user_id(db)
     if template is None:
         raise HTTPException(status_code=503, detail="no template user (RIJEKA_DEMO_TEMPLATE_EMAIL)")
-    now = now or datetime.now(timezone.utc)
     today = date.today()
-    got = deribit.collect(now)
-    summary: dict = {"as_of": now.isoformat(timespec="seconds"), "assets": {}, "failed": got["failed"], "dry_run": dry_run}
+    fresh, stored = _reference_spots(db, template)
+    summary: dict = {"as_of": now.isoformat(timespec="seconds"), "assets": {}, "failed": dict(got["failed"]), "dry_run": dry_run}
     ids: list[str] = []
     for asset, b in got["ok"].items():
         pair = deribit.pair(asset)
-        summary["assets"][asset] = {"marks_at": b["asof"].isoformat(timespec="seconds"), "index": b["index"], "expiries": len(b["expiries"]),
-                                    "dropped": b["dropped"], "last_expiry": b["last_expiry"]}
-        if dry_run:
-            summary["assets"][asset].update(vol=b["vol"], forward=b["forward"], by_expiry=b["expiries"])
+        ref, tol = (fresh[pair], SPOT_TOLERANCE[0]) if pair in fresh else (stored.get(pair), SPOT_TOLERANCE[1])
+        if ref and abs(b["index"] / ref - 1.0) > tol:
+            summary["failed"][asset] = f"index {abs(b['index'] / ref - 1.0):.0%} from the spot"
             continue
-        _upsert_snapshot(db, template, f"{pair}_VOL", today, b["vol"], deribit.source("option marks", b))
-        _upsert_snapshot(db, template, f"{pair}_FWD", today, b["forward"], deribit.source("forwards", b))
-        ids += [f"{pair}_VOL", f"{pair}_FWD"]
+        summary["assets"][asset] = {"marks_at": b["asof"].isoformat(timespec="seconds"), "index": b["index"], "expiries": len(b["expiries"]),
+                                    "dropped": len(b["dropped"]), "last_expiry": b["last_expiry"]}
+        if dry_run:
+            summary["assets"][asset].update(vol=b["vol"], forward=b["forward"], by_expiry=b["expiries"], dropped=b["dropped"])
+            continue
+        try:
+            with db.begin_nested():             # one asset's rows together, and one asset's failure its own
+                for cid, quotes, kind in ((f"{pair}_VOL", b["vol"], "option marks"), (f"{pair}_FWD", b["forward"], "forwards")):
+                    db.execute(text(MARKS_UPSERT_SQL), {"c": cid, "d": today, "q": json.dumps(quotes, allow_nan=False),
+                                                         "s": deribit.source(kind, b), "u": template})
+            ids += [f"{pair}_VOL", f"{pair}_FWD"]
+        except Exception as e:      # noqa: BLE001 — the asset keeps the rows it has
+            log.warning("crypto marks for %s not stored: %s: %s", asset, type(e).__name__, str(e)[:300])
+            summary["assets"].pop(asset, None)
+            summary["failed"][asset] = f"not stored ({type(e).__name__})"
     if dry_run:
         return summary
     db.commit()
-    try:        # the spot the points sit on, taken in the same minute
-        from .crypto import fetch_spot
+    summary["spot"] = fresh or None
+    if fresh:                   # the spot the points sit on, taken in the same minute
         from .currencies import _save_pairs
-        spots = {deribit.pair(a): px for a, px in fetch_spot(deribit.ASSETS).items()}
-        _save_pairs(db, template, spots)
-        ids += [f"{p}_SPOT" for p in spots]
-        summary["spot"] = spots
-    except Exception as e:      # noqa: BLE001 — the half-hourly spot tick stands
-        db.rollback()
-        log.warning("crypto spot not refreshed with the marks: %s", e)
-        summary["spot"] = None
+        try:
+            _save_pairs(db, template, fresh)
+            ids += [f"{p}_SPOT" for p in fresh]
+        except Exception as e:      # noqa: BLE001
+            db.rollback()
+            log.warning("crypto spot not stored with the marks: %s", type(e).__name__)
+            summary["spot"] = None
     if ids:
         res = db.execute(text(PUSH_SQL), {"p": demo.DEMO_LEI_PREFIX + "%", "t": template, "d": today, "ids": ids})
         summary["pushed_rows"] = res.rowcount or 0
@@ -209,8 +283,8 @@ def refresh(db: Session, valuation_date: Optional[date] = None, dry_run: bool = 
     built = demo_feed.assemble(demo_feed.collect(valuation_date), valuation_date)
     if deribit.enabled():
         built["curves"].update(kept_marks(db, template))        # the venue's marks stand over the parametric surface
-    elif not dry_run:
-        purge_marks(db)
+    elif not dry_run and purge_allowed():
+        purge_marks(db, template)
     summary: dict = {
         "valuation_date": valuation_date.isoformat(),
         "curves": {cid: {"quotes": len(cv["quotes"]), "source": cv["source"]} for cid, cv in built["curves"].items()},

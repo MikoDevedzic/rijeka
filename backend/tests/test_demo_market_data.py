@@ -256,10 +256,13 @@ def test_assemble_builds_jpy_when_both_feeds_answer():
 
 # ── digital-asset marks (market_data/deribit.py) ───────────────────────────────
 
-def _built(asset, when=None):
+SPOT = {"BTC": 74_790.0, "ETH": 2121.0, "SOL": 86.7}
+
+
+def _built(asset, when=None, index=None):
     from datetime import datetime, timezone
     when = when or datetime(2026, 11, 9, 12, 57, tzinfo=timezone.utc)
-    return {"asset": asset, "asof": when, "index": 74_800.0, "last_expiry": "24SEP27", "dropped": {"10NOV26": "inside two days"},
+    return {"asset": asset, "asof": when, "index": index or SPOT[asset] * 1.0002, "last_expiry": "24SEP27", "dropped": {"10NOV26": "inside two days"},
             "vol": [{"tenor": "1M", "quote_type": "ATM", "rate": 38.5, "enabled": True}, {"tenor": "3M", "quote_type": "ATM", "rate": 38.9, "enabled": True}],
             "forward": [{"tenor": "1M", "quote_type": "FWD_POINTS", "rate": 348.3, "enabled": True}, {"tenor": "3M", "quote_type": "FWD_POINTS", "rate": 1011.7, "enabled": True}],
             "expiries": [{"code": "27NOV26"}, {"code": "24SEP27"}]}
@@ -281,6 +284,7 @@ def test_crypto_tick_writes_the_marks_with_their_time_and_pushes_them_to_demo_ac
     assert resp.status_code == 200, resp.text
     b = resp.json()
     assert set(b["assets"]) == {"BTC", "SOL"} and b["failed"] == {"ETH": "HTTPStatusError: 503"} and b["pushed_rows"] == 12
+    assert b["assets"]["BTC"]["dropped"] == 1                              # a count on the stored summary; the codes only on a dry run
     assert b["assets"]["BTC"]["marks_at"].startswith("2026-11-09T12:57")
     calls = [(str(c.args[0]), c.args[1]) for c in db.execute.call_args_list]
     upserts = [p for s, p in calls if "INSERT INTO market_data_snapshots" in s and "CROSS JOIN" not in s]
@@ -291,8 +295,12 @@ def test_crypto_tick_writes_the_marks_with_their_time_and_pushes_them_to_demo_ac
     push = [p for s, p in calls if "CROSS JOIN" in s]
     assert len(push) == 1 and push[0]["t"] == "tmpl" and push[0]["p"] == "DEMO%"
     assert push[0]["ids"] == ["BTCUSD_VOL", "BTCUSD_FWD", "SOLUSD_VOL", "SOLUSD_FWD", "BTCUSD_SPOT", "ETHUSD_SPOT", "SOLUSD_SPOT"]
-    # a demo account's own entries stand: only DEMO rows and a fetched spot are replaced
-    assert "source LIKE 'DEMO%'" in r.PUSH_SQL and "source = 'IMPORT' AND right(market_data_snapshots.curve_id, 5) = '_SPOT'" in r.PUSH_SQL
+    # an account's own entries stand, the template's included: only a feed's rows are copied, and only a feed's rows replaced
+    # (the statements' behaviour is tested on a real database in tests/integration/test_crypto_marks.py; here, that they are the guarded ones)
+    assert "AND (s.source LIKE 'DEMO%' OR (s.source = 'IMPORT' AND right(s.curve_id, 5) = '_SPOT'))" in r.PUSH_SQL and "IS DISTINCT FROM EXCLUDED.quotes" in r.PUSH_SQL
+    assert all(s == r.MARKS_UPSERT_SQL for s, _ in calls if "INSERT INTO market_data_snapshots" in s and "CROSS JOIN" not in s)
+    assert "ORDER BY o.valuation_date DESC LIMIT 1), true)" in r.MARKS_UPSERT_SQL and "ORDER BY o.valuation_date DESC LIMIT 1), true)" in r.PUSH_SQL
+    assert db.begin_nested.call_count == 2
 
 
 def test_crypto_tick_writes_nothing_when_the_venue_does_not_answer_or_on_a_dry_run(monkeypatch):
@@ -309,13 +317,15 @@ def test_crypto_tick_writes_nothing_when_the_venue_does_not_answer_or_on_a_dry_r
     assert down.status_code == 200 and down.json()["assets"] == {} and down.json()["spot"] is None and len(down.json()["failed"]) == 3
     assert not save.called and not any("INSERT" in str(c_.args[0]) for c_ in db.execute.call_args_list)       # the last good rows stand
     db.reset_mock()
-    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.deribit, "collect", return_value={"ok": {"BTC": _built("BTC")}, "failed": {}}):
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.deribit, "collect", return_value={"ok": {"BTC": _built("BTC")}, "failed": {}}), \
+         patch.object(crypto, "fetch_spot", return_value=SPOT):
         dry = c.post("/api/market-data/demo/crypto/tick?dry_run=1", headers={"X-Rijeka-Cron": "s3cret"})
         assert c.post("/api/market-data/demo/crypto/tick", headers={"X-Rijeka-Cron": "nope"}).status_code == 403
         monkeypatch.setenv("RIJEKA_DERIBIT", "0")
         assert c.post("/api/market-data/demo/crypto/tick", headers={"X-Rijeka-Cron": "s3cret"}).json() == {"enabled": False}
     main.app.dependency_overrides.clear()
-    assert dry.status_code == 200 and dry.json()["assets"]["BTC"]["vol"][0]["rate"] == 38.5 and not db.execute.called
+    assert dry.status_code == 200 and dry.json()["assets"]["BTC"]["vol"][0]["rate"] == 38.5 and dry.json()["assets"]["BTC"]["dropped"] == {"10NOV26": "inside two days"}
+    assert all(str(c_.args[0]).lstrip().startswith("SELECT") for c_ in db.execute.call_args_list) and not db.commit.called      # a dry run reads and writes nothing
 
 
 def test_switching_the_venue_off_removes_its_rows_at_the_daily_rebuild_and_the_public_list(monkeypatch):
@@ -334,8 +344,22 @@ def test_switching_the_venue_off_removes_its_rows_at_the_daily_rebuild_and_the_p
     main.app.dependency_overrides.clear()
     assert resp.status_code == 200, resp.text
     assert resp.json()["curves"]["BTCUSD_VOL"]["source"] == "DEMO · synthetic surface"
-    deletes = [c.args[1] for c in db.execute.call_args_list if str(c.args[0]).startswith("DELETE FROM market_data_snapshots WHERE source LIKE")]
-    assert deletes == [{"m": "DEMO · Deribit%"}]
+    deletes = [c.args[1] for c in db.execute.call_args_list if "DELETE FROM market_data_snapshots WHERE source LIKE" in str(c.args[0])]
+    assert deletes == []                                                   # a developer's shell on the shared database deletes nothing
+    monkeypatch.setenv("RENDER", "true")
+    db.reset_mock()
+    main.app.dependency_overrides[r.get_db] = lambda: db
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.demo_feed, "collect", return_value=collected):
+        assert TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"}).status_code == 200
+        assert TestClient(main.app).post("/api/market-data/demo/tick?dry_run=1", headers={"X-Rijeka-Cron": "s3cret"}).status_code == 200
+    main.app.dependency_overrides.clear()
+    deletes = [c.args for c in db.execute.call_args_list if "DELETE FROM market_data_snapshots WHERE source LIKE" in str(c.args[0])]
+    assert len(deletes) == 1 and deletes[0][1] == {"m": "DEMO · Deribit%", "t": "tmpl", "p": "DEMO%"}      # the deployed process, once, not on the dry run
+    assert "user_id = :t OR user_id IN" in str(deletes[0][0]) and "lei LIKE :p AND is_own_entity" in str(deletes[0][0])
+    monkeypatch.delenv("RENDER")
+    assert not r.purge_allowed()
+    monkeypatch.setenv("RIJEKA_DERIBIT_PURGE", "1")
+    assert r.purge_allowed()
     assert not any("Deribit" in s["provider"] for s in listed)
 
 
@@ -351,6 +375,62 @@ def test_the_public_sources_name_the_venue_and_health_watches_its_marks(monkeypa
     venue = {s["curve"]: s for s in listed if "Deribit" in s["provider"]}
     assert set(venue) == {f"{a}USD_{k}" for a in ("BTC", "ETH", "SOL") for k in ("VOL", "FWD")} and all(s["kind"] == "public" for s in venue.values())
     names = [c[0] for c in ops.active_checks()]
-    assert names[-1] == "crypto_marks" and ops.active_checks()[-1][2] == ("hours", 2) and "DEMO · Deribit%" in ops.active_checks()[-1][1]
+    assert names[-1] == "crypto_marks" and ops.active_checks()[-1][2] == ("hours", 2) and ops.active_checks()[-1][1] is r.last_marks_at
     monkeypatch.setenv("RIJEKA_DERIBIT", "0")
     assert "crypto_marks" not in [c[0] for c in ops.active_checks()] and ops.active_checks() == ops.CHECKS
+    monkeypatch.delenv("RIJEKA_DERIBIT")
+    monkeypatch.setenv("RIJEKA_DEMO_MARKET_DATA", "0")           # an instance on its own marks never runs the tick: nothing to watch
+    assert ops.active_checks() == ops.CHECKS
+
+
+def test_an_index_that_disagrees_with_the_spot_is_not_stored(monkeypatch):
+    from api.routes import crypto, currencies, demo_market_data as r
+    db = MagicMock()
+    db.execute.return_value.rowcount = 0
+    got = {"ok": {"BTC": _built("BTC", index=SPOT["BTC"] * 1.08), "ETH": _built("ETH"), "SOL": _built("SOL", index=SPOT["SOL"] * 1000)}, "failed": {}}
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.deribit, "collect", return_value=got), \
+         patch.object(crypto, "fetch_spot", return_value=SPOT), patch.object(currencies, "_save_pairs", return_value=3):
+        out = r.refresh_crypto(db)
+    assert set(out["assets"]) == {"ETH"} and out["failed"] == {"BTC": "index 8% from the spot", "SOL": "index 99900% from the spot"}
+    written = [c.args[1]["c"] for c in db.execute.call_args_list if "INSERT INTO market_data_snapshots" in str(c.args[0]) and "CROSS JOIN" not in str(c.args[0])]
+    assert written == ["ETHUSD_VOL", "ETHUSD_FWD"]
+    # no fresh spot: the last stored one is the reference, with a wider band (it may be hours old)
+    db.reset_mock()
+    got = {"ok": {"BTC": _built("BTC", index=SPOT["BTC"] * 1.08), "ETH": _built("ETH", index=SPOT["ETH"] * 1.4)}, "failed": {}}
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.deribit, "collect", return_value=got), \
+         patch.object(r, "_reference_spots", return_value=({}, {"BTCUSD": SPOT["BTC"], "ETHUSD": SPOT["ETH"]})):
+        out = r.refresh_crypto(db)
+    assert set(out["assets"]) == {"BTC"} and out["failed"] == {"ETH": "index 40% from the spot"} and out["spot"] is None
+
+
+def test_one_asset_that_cannot_be_stored_does_not_take_the_others_with_it():
+    from api.routes import crypto, currencies, demo_market_data as r
+    db = MagicMock()
+    db.execute.return_value.rowcount = 0
+    bad = _built("BTC")
+    bad["forward"] = [{"tenor": "1M", "quote_type": "FWD_POINTS", "rate": float("nan"), "enabled": True}]
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.deribit, "collect", return_value={"ok": {"BTC": bad, "ETH": _built("ETH")}, "failed": {}}), \
+         patch.object(crypto, "fetch_spot", return_value=SPOT), patch.object(currencies, "_save_pairs", return_value=3):
+        out = r.refresh_crypto(db)
+    assert set(out["assets"]) == {"ETH"} and out["failed"] == {"BTC": "not stored (ValueError)"}       # NaN is refused before the database sees it
+    push = [c.args[1] for c in db.execute.call_args_list if "CROSS JOIN" in str(c.args[0])]
+    assert push[0]["ids"][:2] == ["ETHUSD_VOL", "ETHUSD_FWD"] and "BTCUSD_FWD" not in push[0]["ids"]
+
+
+def test_health_reads_the_time_the_marks_carried_for_the_template_only():
+    from datetime import datetime, timezone
+    from api.routes import demo_market_data as r
+    label = "DEMO · Deribit option marks · 2026-11-09 {} UTC · listed to 24SEP27, flat beyond"
+    def db_with(sources):
+        db = MagicMock()
+        db.execute.return_value.all.return_value = [MagicMock(curve_id=c, source=s) for c, s in sources.items()]
+        return db
+    three = {"BTCUSD_VOL": label.format("12:57"), "ETHUSD_VOL": label.format("12:47"), "SOLUSD_VOL": label.format("09:10")}
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"):
+        db = db_with(three)
+        assert r.last_marks_at(db) == datetime(2026, 11, 9, 9, 10, tzinfo=timezone.utc)                  # the oldest asset decides
+        assert db.execute.call_args.args[1] == {"u": "tmpl", "ids": ["BTCUSD_VOL", "ETHUSD_VOL", "SOLUSD_VOL"]}
+        assert r.last_marks_at(db_with({**three, "SOLUSD_VOL": "DEMO · synthetic surface"})) is None      # an asset back on the parametric surface
+        assert r.last_marks_at(db_with({k: v for k, v in three.items() if k != "ETHUSD_VOL"})) is None    # an asset with no surface
+    with patch.object(r.demo, "_template_user_id", return_value=None):
+        assert r.last_marks_at(MagicMock()) is None

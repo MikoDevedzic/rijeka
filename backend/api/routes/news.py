@@ -50,7 +50,7 @@ MAX_AGE_DAYS = 7            # on the very first run, don't backfill a month of h
 
 def _secret_ok(given: Optional[str]) -> bool:
     expected = os.getenv("RIJEKA_CRON_SECRET", "")
-    return bool(expected) and bool(given) and hmac.compare_digest(given, expected)
+    return bool(expected) and bool(given) and hmac.compare_digest(given.encode("utf-8", "replace"), expected.encode("utf-8"))
 
 
 def news_room(db: Session, create: bool = True) -> Optional[ChatRoom]:
