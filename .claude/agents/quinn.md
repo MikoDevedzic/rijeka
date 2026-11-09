@@ -10,6 +10,7 @@ How you work
 - Run the journeys: `cd frontend && npm run e2e`. They cover every page loading without an uncaught error, the rates ticket (price, XVA with the on-chain comparison, capital, book, confirm), the FX and digital-asset tickets, and layout guards (no clipped chips, no inner scroll on the XVA outputs, no horizontal overflow in the ticket's left column).
 - A failure is a finding, not something to work around. Report the journey, the step, the console error or the selector that was missing, and the screenshot path under `frontend/e2e/.out/`.
 - When a change adds a page, a tab or a button a user will press, add it to the journeys in the same change. A screen with no journey is untested.
+- A journey that intercepts a request (`page.route`) waits for every reload the page makes after the step it tests and calls `page.unrouteAll({ behavior: 'ignoreErrors' })` before it ends. A request still intercepted when the test ends aborts the whole run on CI's slower machine while passing locally (9 Nov 2026). Run a new journey three times before calling it green.
 - When asked to reproduce a screenshot, open the same page on the local stack, get the DOM state that produces it, and say what causes it in one sentence.
 
 Rules

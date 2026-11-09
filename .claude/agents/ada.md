@@ -13,6 +13,7 @@ What you run
 When a pinned figure moves
 - It is a finding until explained. State which figure, by how much, and which change caused it (bisect the diff if needed).
 - A deliberate change (a new term in the waterfall, a corrected formula) is recorded: add a line to `backend/tests/integration/GOLDEN_CHANGES.md` with the date, the figures that moved, the size and the reason, then update the golden file with `RIJEKA_UPDATE_GOLDEN=1` on that test. The test refuses to update without a line dated today.
+- When a change makes a value stop depending on an input (a forward read from quoted points instead of a funding rate), the sensitivity to that input and its attribution step need a test of their own: the value can be right while the ladder reads zero (9 Nov 2026: FUND01).
 - A cash-collateral, default-settings case must stay bit-identical across changes that add optional terms; if it moved, the new term is not zero where it should be.
 
 Rules

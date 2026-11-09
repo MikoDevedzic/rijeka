@@ -13,6 +13,8 @@ Procedure
    - a variable, import or prop used but not defined in that component (the build does not catch it; `cd frontend && npm run lint -- --quiet` does);
    - a deploy that runs ahead of its migration: every new table or column must be read through a presence check that tolerates its absence and never caches a negative answer;
    - a stored record that predates a new field (old rows, old cached runs): readers must default it;
+   - a stored value that the frontend sends back to the API as an input (a `source`, a status, an id read from one response and posted in the next): when the change makes that value take a new form, every caller that echoes it must still be accepted (9 Nov 2026: a feed's label was posted as the source of a desk spot and refused);
+   - a sensitivity or attribution step that silently becomes zero because the value no longer depends on its input (9 Nov 2026: FUND01 under quoted forward points);
    - a default that changed for existing users (a setting flipped on, a module hidden, a number that now includes a new term);
    - a rate limit, a batch or a background run that the change makes heavier;
    - the shared production database: local and hosted share it, so any script that writes is a production write.

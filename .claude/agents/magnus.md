@@ -11,6 +11,8 @@ For the diff under review check, with file and line for each finding:
 - Roles: writes that need a role check the role from `profiles.role` on the server (`api/routes/_roles.py`), not only hide a button; module switches and plan limits are enforced on the route, not just in navigation.
 - Keys and secrets: nothing logged, returned or committed; the relayer budget still applies to any new path that sends a transaction; a counterparty's registered wallet can never be signed for by the dev key.
 - Input: SQL only through bound parameters; no user string reaches `text()` unbound, a shell, a file path or `dangerouslySetInnerHTML`; uploads and URLs validated.
+- Outside data (a venue, a feed, a webhook body): read under a size cap and a wall-clock deadline with redirects off; only finite numbers and strictly parsed strings are used; every figure that will be stored for more than one account is bounded and cross-checked against an independent source; a recency rule rejects stale or future-dated data; the sender's text is never repeated in a response, a public health body or a label; one bad item fails alone (9 Nov 2026: unbounded venue forwards pushed to every demo account).
+- A health or freshness check reads a value only the watched job can write, for the account that job writes to; a row count or `created_at` any account or any other job can touch is not evidence (9 Nov 2026).
 - Public endpoints: rate limited (`api/routes/_limits.py`), no account data, CORS and CSP unchanged or tightened.
 - Migrations: new tables enable row-level security; policies name the owner.
 
