@@ -20,7 +20,7 @@ import {
 } from './xva-shared.jsx'
 import {
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
-  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords,
+  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS,
 } from './xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -97,7 +97,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const [volPct, setVolPct] = useState('')
   const [volMode, setVolMode] = useState('SURFACE') // SURFACE: term structure (and smile) along the paths; FLAT: one vol held
   const [paths, setPaths] = useState(2000)
-  const [wwr, setWwr] = useState(1.0)
+  const [wwr, setWwr] = useState(HIDDEN_INPUT_DEFAULTS.wwr)
   // spread curves: the cells commit on blur, as on the rates tab
   const [spreads, setSpreads] = useState(defaultSpreads)
   const setSpread = (g, t, v) => setSpreads(s => ({ ...s, [g]: { ...s[g], [t]: v } }))
@@ -136,11 +136,11 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
     })()
   }, [counterpartyId])
   // assumptions
-  const [lgd, setLgd] = useState('40')
-  const [fbaRatio, setFbaRatio] = useState('55')
-  const [hurdle, setHurdle] = useState('12')
-  const [simmIm, setSimmIm] = useState('')          // blank = SIMM-style weight on the spot delta, server-side
-  const [capModel, setCapModel] = useState('sa_ccr')
+  const [lgd, setLgd] = useState(HIDDEN_INPUT_DEFAULTS.lgd)
+  const [fbaRatio, setFbaRatio] = useState(HIDDEN_INPUT_DEFAULTS.fbaRatio)
+  const [hurdle, setHurdle] = useState(HIDDEN_INPUT_DEFAULTS.hurdle)
+  const [simmIm, setSimmIm] = useState(HIDDEN_INPUT_DEFAULTS.simmIm)          // blank = SIMM-style weight on the spot delta, server-side
+  const [capModel, setCapModel] = useState(HIDDEN_INPUT_DEFAULTS.capModel)
   // runs
   const [res, setRes] = useState(null)
   const [cmp, setCmp] = useState(null)               // the same run under the ON-CHAIN preset
@@ -227,7 +227,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             <div style={{marginTop:'12px'}}>{simulateButtons}</div>
             {simulateError}
             <RunAssumes>
-              {runAssumesLine({ paths, model: fxModelWords({ volPct, volMode }), spreads,
+              {runAssumesLine({ paths, model: fxModelWords({ volPct, volMode, params: res?.params }), spreads,
                 assumptions: { wwr, lgd, fbaRatio, hurdle, simmIm, capModel } })}
             </RunAssumes>
           </>) : (<>

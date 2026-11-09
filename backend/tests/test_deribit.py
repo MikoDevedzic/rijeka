@@ -288,27 +288,58 @@ def test_a_stale_mark_on_the_wing_does_not_move_the_smile():
                            "marks": [(k, 0.4 + (0.9 if k > 100 else 0.0)) for k in (60, 70, 80, 90, 95, 100, 105, 110, 120, 130, 150, 200)]})[0] is None
 
 
-def test_one_stale_mark_costs_one_mark_also_on_a_sparse_strike_grid():
-    """Emmy, 2026-11-09: the first filter also removed the stale mark's two neighbours (their own "line" ran through
-    it), which on a 5,000-wide strike grid moved RR25 by 1.6 points and ATM by 0.4."""
+def _svi_chain(step, stale=(), code="25DEC26", fwd=75_300.0):
+    """A smile that is not the pricer's quadratic (an SVI in log-moneyness), on a strike grid of the given width,
+    with chosen strikes overwritten by a stale mark. Two expiries, so a surface exists."""
+    def svi(k):
+        x = math.log(k / fwd)
+        return math.sqrt(0.16 + 0.10 * (-0.35 * (x - 0.02) + math.sqrt((x - 0.02) ** 2 + 0.04)))
+    rows = []
+    for c, f in ((code, fwd), ("26MAR27", fwd * 1.014)):
+        for k in range(40_000, 130_001, step):
+            v = dict(stale).get(k, svi(k * fwd / f)) if c == code else svi(k * fwd / f)
+            for cp in "CP":
+                rows.append({"instrument_name": f"BTC-{c}-{k}-{cp}", "mark_iv": round(v * 100, 4), "underlying_price": f, "open_interest": 5.0,
+                             "creation_timestamp": int(NOW.timestamp() * 1000) - 4000, "estimated_delivery_price": INDEX, "base_currency": "BTC"})
+    return rows
+
+
+def _read(rows, code="25DEC26"):
+    e = next(x for x in D.build(rows, "BTC", NOW)["expiries"] if x["code"] == code)
+    return e["atm"], e["rr25"], e["bf25"]
+
+
+def test_stale_marks_cost_only_themselves_on_dense_and_sparse_strike_grids():
+    """Emmy, 9 November 2026, three rounds. The reading with stale marks in the chain must be the reading of the
+    same chain with those strikes absent: one stale mark, two side by side, and one at the end of the chain."""
+    def absent(rows, strikes):
+        return [r for r in rows if not any(f"-25DEC26-{k}-" in r["instrument_name"] for k in strikes)]
+    for step in (1_000, 2_000, 5_000):
+        clean = _svi_chain(step)
+        one = _svi_chain(step, stale={85_000: 0.80}.items())
+        assert _read(one) == _read(absent(clean, [85_000])), step                       # round one: the neighbours stay
+        assert _read(one)[1] == pytest.approx(_read(clean)[1], abs=0.5), step            # and the skew is still the smile's
+    # round two: two stale marks side by side on the sparse grid were both kept and their good neighbours removed (RR25 +24)
+    pair = _svi_chain(5_000, stale={85_000: 0.80, 90_000: 0.80}.items())
+    assert _read(pair) == _read(absent(_svi_chain(5_000), [85_000, 90_000]))
+    assert _read(pair)[1] < 0
+    low = _svi_chain(2_000, stale={74_000: 0.15, 76_000: 0.15}.items())                   # a pair at the money, marked far too low
+    assert _read(low) == _read(absent(_svi_chain(2_000), [74_000, 76_000]))
+    # round three: a stale mark at the end of a chain that stops just past 25 delta convicted its neighbours
+    short = [r for r in _svi_chain(2_000) if not ("-25DEC26-" in r["instrument_name"] and int(r["instrument_name"].split("-")[2]) > 88_000)]
+    bad_end = [dict(r, mark_iv=15.0) if "-25DEC26-88000-" in r["instrument_name"] else r for r in short]
+    assert _read(bad_end) == _read(absent(short, [88_000]))
+
+
+def test_an_honest_smile_keeps_its_marks():
     marks = [(k, 0.40 + 0.000002 * abs(k - 75_000)) for k in range(50_000, 105_000, 5_000)]          # a gentle V, eleven strikes
-    bad = [(k, 0.80 if k == 85_000 else v) for k, v in marks]
     assert D._without_stale(marks) == marks
-    assert D._without_stale(bad) == [m for m in marks if m[0] != 85_000]                              # the one bad mark, nothing else
-    two = [(k, 0.80 if k in (60_000, 90_000) else v) for k, v in marks]
-    assert [k for k, _ in D._without_stale(two)] == [k for k, _ in marks if k not in (60_000, 90_000)]
-    assert D._without_stale(marks[:2]) == marks[:2]                                                   # nothing to compare against
-    # through the builder, on a sparse chain: the smile read with the stale mark is the smile read without it
-    sparse = [i / 14 for i in range(1, 14)]                                                           # thirteen strikes, wide delta gaps
-    clean = chain([("25DEC26", 75_290.0, 0.385, -0.034, 0.012), ("26MAR27", 76_340.0, 0.394, -0.028, 0.012)], deltas=sparse)
-    want = D.build(clean, "BTC", NOW)["expiries"][0]
-    stale = [dict(r) for r in clean]
-    strikes = sorted({float(r["instrument_name"].split("-")[2]) for r in stale if "-25DEC26-" in r["instrument_name"]})
-    hit = f"{strikes[-4]:.6f}"                                                                         # a call wing strike near 25 delta
-    for r in stale:
-        if f"-25DEC26-{hit}-" in r["instrument_name"]:
-            r["mark_iv"] = 80.0
-    got = D.build(stale, "BTC", NOW)["expiries"][0]
-    without = D.build([r for r in clean if f"-25DEC26-{hit}-" not in r["instrument_name"]], "BTC", NOW)["expiries"][0]
-    assert (got["atm"], got["rr25"], got["bf25"]) == (without["atm"], without["rr25"], without["bf25"])
-    assert got["atm"] == pytest.approx(want["atm"], abs=0.2)
+    steep = [(k, 0.45 + 0.000012 * abs(k - 75_000)) for k in range(50_000, 105_000, 5_000)]           # 45 at the money, 75 on the wings
+    assert D._without_stale(steep) == steep
+    wing = [(k, 0.35 + 0.000006 * max(75_000 - k, 0)) for k in range(40_000, 100_000, 5_000)]         # a put skew that keeps rising
+    assert D._without_stale(wing) == wing
+    assert D._without_stale(marks[:4]) == marks[:4]                                                   # fewer than five: nothing to judge by
+    for step in (1_000, 2_000, 5_000):                                                                # the SVI itself, untouched
+        rows = _svi_chain(step)
+        chain_marks = D.parse_chain(rows, "BTC", NOW)["expiries"][0]["marks"]
+        assert D._without_stale(chain_marks) == chain_marks, step

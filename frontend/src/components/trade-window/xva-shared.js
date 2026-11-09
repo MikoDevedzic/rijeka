@@ -313,9 +313,10 @@ export function volBadge(params, pair) {
 export const XVA_VIEW_KEY = 'rijeka.xva.view'
 const XVA_VIEWS = ['simple', 'advanced']
 
-// A firm on the LAUNCH preset (a new sign-up) opens the tab in the simple view; every other firm in the whole one.
-export function defaultXvaView(preset) {
-  return preset === 'LAUNCH' ? 'simple' : 'advanced'
+// A launch workspace (a new sign-up; the store's `launch`, whatever its preset is called now) opens the tab in the
+// simple view; every other firm in the whole one.
+export function defaultXvaView(launch) {
+  return launch === true ? 'simple' : 'advanced'
 }
 
 // The user's own choice from an earlier visit, or null when there is none (or no storage to read).
@@ -328,18 +329,19 @@ export function storedXvaView() {
 
 // [view, setView] for both tabs: the user's own choice when they have made one, else the firm's default.
 export function useXvaView() {
-  const preset = useModulesStore(s => s.preset)
+  const launch = useModulesStore(s => s.launch)
   const [choice, setChoice] = useState(storedXvaView)
   const setView = (v) => {
     if (!XVA_VIEWS.includes(v)) return
     setChoice(v)
     try { localStorage.setItem(XVA_VIEW_KEY, v) } catch { /* no storage: the choice lasts while the tab is open */ }
   }
-  return [choice || defaultXvaView(preset), setView]
+  return [choice || defaultXvaView(launch), setView]
 }
 
-// What the inputs the simple view hides start at on both tabs (their initial state), for the line's "default".
-export const HIDDEN_INPUT_DEFAULTS = { wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', simmIm: '', capModel: 'sa_ccr' }
+// What the inputs the simple view hides start at, the same on both tabs: each tab's state is initialised from this,
+// and the line's "default" is measured against it.
+export const HIDDEN_INPUT_DEFAULTS = Object.freeze({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', simmIm: '', capModel: 'sa_ccr' })
 
 // The spread grid still produces the desk's default curves (a blank cell is 0, as in toCurve).
 export function spreadsAreDefault(spreads) {
@@ -354,21 +356,34 @@ export function assumptionsAreDefault({ wwr, lgd, fbaRatio, hurdle, simmIm, capM
     && parseFloat(hurdle) === parseFloat(D.hurdle) && simmImValue(simmIm) == null && capModel === D.capModel
 }
 
-// Where the rates model's parameters come from: typed on the tab, else the calibration the server has stored.
-export function ratesModelWords({ aOverride, sigOverride } = {}) {
-  return (aOverride || sigOverride) ? 'your own model parameters' : 'the stored model calibration'
-}
+// A model parameter box holds a number the request will carry (a blank or a non-number is sent as nothing).
+const typedNumber = (v) => !!v && Number.isFinite(parseFloat(v))
 
-// Where the FX and digital-asset vol comes from: typed on the tab, else the pair's surface in the chosen mode.
-export function fxModelWords({ volPct, volMode } = {}) {
+// Where the rates model's parameters come from, as the server reads the request: both a and σ typed are used as
+// typed; with one or none typed it takes the stored calibration (a lone value is not used), and with no stored
+// calibration it has nothing to run on: null, and the line says so (NO_CALIBRATION_LINE).
+export function ratesModelWords({ aOverride, sigOverride, hasCalibration = true } = {}) {
+  const a = typedNumber(aOverride), sig = typedNumber(sigOverride)
+  if (a && sig) return 'your own model parameters'
+  if (!hasCalibration) return null
+  return (a || sig) ? 'the stored model calibration, since only one model parameter is typed' : 'the stored model calibration'
+}
+export const NO_CALIBRATION_LINE = 'No stored model calibration: calibrate under Configurations, or show the model inputs and type both parameters'
+
+// Where the FX and digital-asset vol comes from: typed on the tab; else, when the last run found no surface for the
+// pair (the badge's own test, on the run's params), the desk default; else the pair's surface in the chosen mode.
+export function fxModelWords({ volPct, volMode, params = null } = {}) {
   const v = numOrNull(volPct)
   if (v != null) return `your own vol of ${v}%`
+  if (volBadge(params)?.kind === 'warn') return 'the desk default vol (no surface saved for this pair)'
   return volMode === 'FLAT' ? "one flat vol from the pair's surface" : "the pair's vol surface"
 }
 
 // The simple view's line on what a run assumes, from the current values of the inputs it hides:
-// "2,000 paths on the stored model calibration and default credit and funding spreads".
+// "2,000 paths on the stored model calibration and default credit and funding spreads". With no model to run on
+// (rates without a stored calibration) it is the line that says so.
 export function runAssumesLine({ paths, model, spreads, assumptions }) {
+  if (!model) return NO_CALIBRATION_LINE
   const parts = [model, `${spreadsAreDefault(spreads) ? 'default' : 'your own'} credit and funding spreads`]
   if (assumptions && !assumptionsAreDefault(assumptions)) parts.push('your own assumptions')
   const last = parts.pop()

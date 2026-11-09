@@ -24,9 +24,10 @@ the 50-delta-forward vol, not the vol at the forward strike; at these vol levels
 Across expiries. ATM is interpolated linearly in total variance, RR25 and BF25 linearly in time, to the
 surface's tenors. Beyond the last listed expiry all three are held flat, and the row says so in the
 source label through the last expiry it names. The pricer then interpolates linearly in vol between
-tenors and is flat inside one week, so it returns the venue's mark exactly at a tenor and close to it
-between tenors (within a few tenths of a vol point from two weeks out on the term structures seen so
-far); an option inside one week is priced at the one-week level, which a steep front end can miss by points. Forwards: the annualised basis ln(F/S)/T is interpolated
+tenors and is flat inside one week, so it returns the venue's mark at a tenor and not exactly between
+tenors (within 0.3 of a vol point on the term structure of 9 November 2026, up to about 1.3 on steep or
+event-shaped ones); an option inside one week is priced at the one-week level, which a steep front end
+misses by points (2.5 to 10 at four days on the shapes tested). Forwards: the annualised basis ln(F/S)/T is interpolated
 linearly in time and held flat beyond the last expiry; points = S·(e^{bT} − 1) on the venue's index.
 
 Safeguards. The venue's response is someone else's data: it is read under a size cap and a deadline,
@@ -34,8 +35,8 @@ every number must be finite and every expiry code well formed, and the marks mus
 MAX_AGE of now. An expiry is dropped when it is inside MIN_DAYS, has fewer than MIN_STRIKES usable
 marks, has no open interest, does not bracket the 25-delta points, gives a vol level outside sanity
 bounds, or a forward further from the index than MAX_BASIS allows; within an expiry a mark that
-stands off the line between its neighbours (the worst first, so its neighbours stay), or whose delta
-breaks the order of the strikes, is left out. A surface needs MIN_EXPIRIES good
+stands more than a quarter off the median of the five marks around it (the worst first), or whose
+delta breaks the order of the strikes, is left out. A surface needs MIN_EXPIRIES good
 expiries or none is produced, and the caller keeps the last good one; the caller also checks the index
 against an independent spot before it stores anything. Nothing here writes; the caller stamps the
 source and the time of the marks on every row it saves. What a failure reports is written here, never
@@ -89,7 +90,8 @@ MAX_EXPIRIES = 60
 DEADLINE = 20.0           # seconds for one chain, whatever the per-read timeout allows
 EXPIRY_CODE = re.compile(r"[0-9]{1,2}[A-Z]{3}[0-9]{2}")
 STRIKE = re.compile(r"[0-9]{1,9}(?:[.d][0-9]{1,8})?")
-MAX_JUMP = 0.25           # a mark more than a quarter away from the line between its neighbours is not part of the smile
+MAX_JUMP = 0.25           # a mark more than a quarter away from the median of the marks around it is not part of the smile
+STALE_WINDOW = 5
 
 
 class Unusable(ValueError):
@@ -185,20 +187,26 @@ def _at_delta(points: list[tuple[float, float]], target: float) -> Optional[floa
     return None
 
 
-def _off_the_line(a: tuple[float, float], m: tuple[float, float], b: tuple[float, float]) -> float:
-    """How far a mark stands from the line between its neighbours, as a fraction of that line."""
-    (ka, va), (k, v), (kb, vb) = a, m, b
-    line = va + (k - ka) / (kb - ka) * (vb - va) if kb > ka else 0.5 * (va + vb)
-    return abs(v - line) / line if line > 0 else 0.0
+def _off_its_neighbours(marks: list[tuple[float, float]], i: int) -> float:
+    """How far mark i stands from the median vol of the five marks around it (itself included; at an end of the
+    chain, the five nearest), as a fraction of that median. A median of five is unmoved by one bad mark or by two
+    side by side, and a mark at the end of the chain is judged like any other instead of anchoring its neighbour."""
+    lo = max(0, min(i - STALE_WINDOW // 2, len(marks) - STALE_WINDOW))
+    mid = median(v for _, v in marks[lo:lo + STALE_WINDOW])
+    return abs(marks[i][1] - mid) / mid if mid > 0 else 0.0
 
 
 def _without_stale(marks: list[tuple[float, float]]) -> list[tuple[float, float]]:
-    """The marks by strike with stale ones left out: a mark more than MAX_JUMP from the line between its neighbours.
-    One at a time, the worst first: a stale mark also pulls its two neighbours off their own lines, and taking all
-    three out at once would cost two good marks next to the one bad one (Emmy, 9 November 2026)."""
+    """The marks by strike with stale ones left out: a mark more than MAX_JUMP from the median of the five around
+    it, the worst first, re-read after each removal. History of this function (Emmy, 9 November 2026): comparing a
+    mark with the line between its two neighbours also convicted the neighbours of a stale mark; taking the worst
+    first fixed one stale mark and failed on two side by side and on one at the end of a short chain. What it
+    still cannot see: three stale marks side by side (the expiry then usually fails the bounds), and it can drop
+    an honest mark where neighbouring strikes differ by a third in vol (a four-day smile on a very sparse grid);
+    an expiry left without marks around 25 delta is dropped, not misread."""
     kept = list(marks)
-    while len(kept) >= 3:
-        worst, i = max((_off_the_line(kept[j - 1], kept[j], kept[j + 1]), j) for j in range(1, len(kept) - 1))
+    while len(kept) >= STALE_WINDOW:
+        worst, i = max((_off_its_neighbours(kept, j), j) for j in range(len(kept)))
         if worst <= MAX_JUMP:
             break
         del kept[i]

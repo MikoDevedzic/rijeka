@@ -14,7 +14,7 @@ import {
 } from '../trade-window/xva-shared.jsx'
 import {
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, simmImValue,
-  buildVaRows, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords,
+  buildVaRows, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
 } from '../trade-window/xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -196,14 +196,14 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   // The spread tenor grids; the cells commit on blur, before any SIMULATE click lands.
   const [spreads, setSpreads] = useState(defaultSpreads)
   const setSpread = (g, t, v) => setSpreads(s => ({ ...s, [g]: { ...s[g], [t]: v } }))
-  const [lgd, setLgd] = useState('40')
-  const [fbaRatio, setFbaRatio] = useState('55')
-  const [hurdle, setHurdle] = useState('12')
-  const [capModel, setCapModel] = useState('sa_ccr')
-  const [wwr, setWwr] = useState(1.0)
+  const [lgd, setLgd] = useState(HIDDEN_INPUT_DEFAULTS.lgd)
+  const [fbaRatio, setFbaRatio] = useState(HIDDEN_INPUT_DEFAULTS.fbaRatio)
+  const [hurdle, setHurdle] = useState(HIDDEN_INPUT_DEFAULTS.hurdle)
+  const [capModel, setCapModel] = useState(HIDDEN_INPUT_DEFAULTS.capModel)
+  const [wwr, setWwr] = useState(HIDDEN_INPUT_DEFAULTS.wwr)
   // Blank => derive from ISDA SIMM (RW x IR01) server-side. A hardcoded
   // 0.85 was ~3x this trade's actual IM and flowed straight into MVA.
-  const [simmIm, setSimmIm] = useState('')
+  const [simmIm, setSimmIm] = useState(HIDDEN_INPUT_DEFAULTS.simmIm)
   // Settlement / CSA. Default keeps the legacy numbers: no VM, IM posted.
   const [settlement, setSettlement] = useState('UNCOLLATERALISED')
   const [thresholdCp, setThresholdCp] = useState('')
@@ -420,7 +420,16 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     {label:'IM yield bp',val:imYieldBp,set:setImYieldBp,tk:'imYield',ph:'0'},
   ] : []
 
-  // The three pieces both views show; the simple view puts settlement first.
+  // The pieces both views show; the simple view puts settlement first, and shows the calibration hint only when
+  // there is no model to run on (no stored calibration and not both parameters typed).
+  const modelWords = ratesModelWords({ aOverride, sigOverride, hasCalibration: !!calib })
+  const calibrationBadge = calib ? (
+    <ModelBadge kind='ok' tipKey='rmse' tip={tip} untip={untip}>
+      ✔ CALIBRATED {calib.valuation_date} · RMSE {calib.fit_rmse_bp?.toFixed(2)}bp · {calib.basket_size} instruments
+    </ModelBadge>
+  ) : (
+    <ModelBadge kind='muted'>No master calibration — go to Configurations → XVA Parameters to calibrate.</ModelBadge>
+  )
   const simulateButtons = (
     <SimulateButtons simulating={simulating} hasResult={!!simResult}
       onSimulate={()=>handleSimulate(42)} onReroll={()=>handleSimulate(1+Math.floor(Math.random()*2147483000))} />
@@ -447,8 +456,9 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           {settlementBlock}
           <div style={{marginTop:'12px'}}>{simulateButtons}</div>
           {simulateError}
+          {modelWords == null && calibrationBadge}
           <RunAssumes>
-            {runAssumesLine({ paths, model: ratesModelWords({ aOverride, sigOverride }), spreads,
+            {runAssumesLine({ paths, model: modelWords, spreads,
               assumptions: { wwr, lgd, fbaRatio, hurdle, simmIm, capModel } })}
           </RunAssumes>
         </>) : (<>
@@ -478,13 +488,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
 
         <PathsWwrSliders paths={paths} setPaths={setPaths} wwr={wwr} setWwr={setWwr} tip={tip} untip={untip} />
 
-        {calib ? (
-          <ModelBadge kind='ok' tipKey='rmse' tip={tip} untip={untip}>
-            ✔ CALIBRATED {calib.valuation_date} · RMSE {calib.fit_rmse_bp?.toFixed(2)}bp · {calib.basket_size} instruments
-          </ModelBadge>
-        ) : (
-          <ModelBadge kind='muted'>No master calibration — go to Configurations → XVA Parameters to calibrate.</ModelBadge>
-        )}
+        {calibrationBadge}
         {calibErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {calibErr}</div>}
         </div>
 

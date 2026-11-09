@@ -1,7 +1,9 @@
 // layout/useVisibleNav.js — the top-level navigation a firm sees, following its module switches. One list for
 // the top bar (AppBar) and the home page (CommandCenter). An item that fronts gated pages (P&L, RISK) is shown
-// when at least one of them is on, and opens the first one that is: store/useModulesStore ROUTE_MODULES is the
-// only place that says which module a page needs, and its order is the order the pages are tried in.
+// when at least one of them is on, and opens the first one that is, tried in the order of store/useModulesStore
+// ROUTE_MODULES. That map says which modules a routed page needs, for the route gates (App.jsx), this list and
+// the tabs under RISK and P&L (risk/RiskNav, pnl/PnlNav). It is not the only gating list: the ticket's tabs
+// (trade-window/sections.jsx TAB_MODULE) and the Configurations items (layout/CfgNav `module`) name their own.
 import { useMemo } from 'react'
 import { useModulesStore, ROUTE_MODULES } from '../../store/useModulesStore'
 

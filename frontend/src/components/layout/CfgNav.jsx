@@ -15,7 +15,7 @@ import {
 import { getSessionMaybe } from '../../lib/session'
 
 // An item may name the module it belongs to (`module`: a key, or an array of keys that must all be on); it is
-// hidden when the firm switched that module off, the way risk/RiskNav and pnl/PnlNav hide their tabs.
+// hidden when the firm switched that module off. These pages are not in ROUTE_MODULES: only the navigation hides them.
 // `roles` narrows an item to those roles; `orCanEdit` also shows it to whoever may switch the firm's modules.
 const NAV = [
   {
@@ -455,11 +455,11 @@ export default function CfgNav() {
   const role = profile?.role || 'viewer'
   const modules = useModulesStore(s => s.modules)
   const canEdit = useModulesStore(s => s.canEdit)
-  const launch  = useModulesStore(s => s.preset) === 'LAUNCH'
+  const launch  = useModulesStore(s => s.launch)        // a launch workspace, whatever its preset is called now
   const [collapsed, setCollapsed] = useState({})
   const toggle = id => setCollapsed(s => ({ ...s, [id]: !s[id] }))
 
-  // What this user sees: the role, then the firm's module switches; a firm on the launch set is also spared
+  // What this user sees: the role, then the firm's module switches; a launch workspace is also spared
   // the roadmap placeholders (live: false). A group or a section left with nothing in it is not drawn.
   const shows = item =>
     (!item.roles || item.roles.includes(role) || (item.orCanEdit && canEdit)) &&

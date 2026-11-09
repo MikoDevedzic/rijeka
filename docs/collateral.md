@@ -103,7 +103,7 @@ writes answer 409; nothing else changes.
 - **ColVA in the book:** the credit engine's components (`ccr/exposure.cva`), the P&L's XVA reserves, the incremental
   charge on the ticket and the regimes report's metrics and cost all carry `colva`; the regime's cost is
   −(CVA + FVA + KVA + MVA + ColVA).
-- **The COLLATERAL module switch** is real: it gates Risk → COLLATERAL and the collateral block on the ticket.
+- **The COLLATERAL module switch** is real: it gates Risk → COLLATERAL and the collateral instruments under Configurations. The collateral block on the ticket's XVA tab is part of XVA and stays.
 
 Not done, stated: the collateral yields as IPV inputs (a FIXED-yield instrument's rate as an input on the ladder with
 a tolerance and a first-order sensitivity through ColVA) and a realised COLLATERAL CARRY line in P&L (it needs a

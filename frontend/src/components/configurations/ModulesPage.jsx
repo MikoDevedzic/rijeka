@@ -25,7 +25,7 @@ async function api(path, opts = {}) {
 
 export default function ModulesPage() {
   const apply = useModulesStore(s => s.apply)
-  const preset = useModulesStore(s => s.preset)
+  const launch = useModulesStore(s => s.launch)
   const [view, setView] = useState(null)
   const [draft, setDraft] = useState(null)
   const [note, setNote] = useState('')
@@ -52,7 +52,7 @@ export default function ModulesPage() {
           {view && <span className={`pnl-chip ${view.writable ? 'ok' : 'red'}`}>{view.writable ? (view.source === 'firm' ? `PRESET ${view.preset || 'CUSTOM'}` : 'DEFAULT · EVERYTHING ON') : 'MIGRATION PENDING'}</span>}
         </div>
       </div>
-      {preset === 'LAUNCH' && <div className="pnl-empty" style={{ padding: 0, maxWidth: 980 }}>This workspace is on the launch set. Switch a module on below and its pages appear; nothing is deleted when you switch one off.</div>}
+      {launch && <div className="pnl-empty" style={{ padding: 0, maxWidth: 980 }}>This workspace is on the launch view. Switch a module on below and its pages appear; nothing is deleted when you switch one off. Choosing a full preset such as Dealer also brings back the full home page and the model inputs on the XVA tab.</div>}
       {err && <div className="pnl-err">{err}</div>}
       {!view && !err && <div className="pnl-empty">Loading…</div>}
       {view && (<>

@@ -209,7 +209,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
     setBusy('feed')
     try {
       const r = await call('/api/currency/forward-curve/use-feed', { method: 'POST', body: JSON.stringify({ pair }) })
-      flash('ok', `${pair}: ${r.removed} saved curve${r.removed === 1 ? '' : 's'} removed. The venue's forwards arrive with the next refresh, within ten minutes`)
+      flash('ok', r.handed_back ? `${pair} is back on the feed. The venue's forwards replace your saved points at the next refresh, within ten minutes` : `${pair} was already on the feed`)
       setAskFeed(false); await reload()
     } catch (e) { flash('err', e.message) } finally { setBusy('') }
   }
@@ -304,9 +304,9 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
           </span>
           {askFeed
             ? <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: '0.8125rem' }}>Remove the saved {pair} points? This cannot be undone.</span>
-                <button className="btn" onClick={() => setAskFeed(false)} disabled={!!busy}>KEEP THEM</button>
-                <button className="btn primary" onClick={backToFeed} disabled={!!busy}>{busy === 'feed' ? 'REMOVING…' : 'REMOVE AND USE THE FEED'}</button>
+                <span style={{ fontSize: '0.8125rem' }}>Hand {pair} back to the feed? Your saved points stay in the history; the venue's forwards replace them from the next refresh.</span>
+                <button className="btn" onClick={() => setAskFeed(false)} disabled={!!busy}>KEEP MINE</button>
+                <button className="btn primary" onClick={backToFeed} disabled={!!busy}>{busy === 'feed' ? 'SWITCHING…' : 'USE THE FEED'}</button>
               </span>
             : <button className="btn" onClick={() => setAskFeed(true)} disabled={!!busy}>USE THE FEED'S FORWARDS</button>}
         </div>

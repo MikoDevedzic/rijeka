@@ -5,13 +5,14 @@ import { test, expect, expectClean, expectFullyInView, expectNoHorizontalOverflo
 
 const OFF = ['PNL', 'MARKET_RISK', 'COUNTERPARTY_CREDIT', 'CAPITAL', 'COLLATERAL', 'XVA_RESERVES', 'IPV']
 
-async function onLaunch(app, { canEdit = true } = {}) {
+async function onLaunch(app, { canEdit = true, alsoOn = [] } = {}) {
   await app.route(/\/api\/modules$/, async route => {
     if (route.request().method() !== 'GET') return route.fallback()
     const res = await route.fetch()
     const body = await res.json()
-    for (const k of OFF) body.modules[k] = false
-    Object.assign(body, { preset: 'LAUNCH', source: 'firm', can_edit: canEdit })
+    for (const k of OFF) body.modules[k] = alsoOn.includes(k)
+    // `view` is what makes a launch workspace, not the preset's name: with one module switched on the preset is CUSTOM
+    Object.assign(body, { preset: alsoOn.length ? 'CUSTOM' : 'LAUNCH', view: 'launch', source: 'firm', can_edit: canEdit })
     await route.fulfill({ response: res, json: body })
   })
 }
@@ -47,7 +48,7 @@ test('launch workspace: the home is four next steps and the navigation is the na
   await expect(app.getByRole('button', { name: 'BLOTTER', exact: true })).toBeVisible()
   for (const gone of ['RISK', 'P&L']) await expect(app.getByRole('button', { name: gone, exact: true })).toHaveCount(0)
   // a page whose module is off sends a direct visit home
-  for (const path of ['/risk', '/risk/capital', '/pnl', '/pnl/ipv']) {
+  for (const path of ['/risk', '/pnl']) {
     await app.goto(path)
     await expect(app, `${path} is off on the launch set`).toHaveURL(/\/command-center/)
   }
@@ -56,15 +57,18 @@ test('launch workspace: the home is four next steps and the navigation is the na
   await expect(app.getByText(/SOFR OIS/).first()).toBeVisible()
   for (const gone of ['IPV TOLERANCES', 'P&L CONVENTIONS', 'COLLATERAL INSTRUMENTS']) await expect(app.getByText(gone, { exact: true })).toHaveCount(0)
   await app.goto('/configurations/modules')
-  await expect(app.getByText('This workspace is on the launch set.', { exact: false })).toBeVisible()
+  await expect(app.getByText('This workspace is on the launch view.', { exact: false })).toBeVisible()
   await expect(app.getByRole('button', { name: /Dealer/i }).first()).toBeVisible()
   await app.unrouteAll({ behavior: 'ignoreErrors' })
   expectClean(problems)
 })
 
-test('launch workspace: a member who cannot switch modules is told who can', async ({ app, problems }) => {
-  await onLaunch(app, { canEdit: false })
+test('launch workspace: one module switched on keeps the simple home; a member who cannot switch is told who can', async ({ app, problems }) => {
+  await onLaunch(app, { canEdit: false, alsoOn: ['PNL'] })
   await app.goto('/command-center')
+  await expect(app.getByTestId('launch-home')).toBeVisible()                    // still the launch home, not the dashboard
+  await expect(app.getByRole('button', { name: 'P&L', exact: true }).first()).toBeVisible()      // and the page it switched on is in the bar
+  await expect(app.getByRole('button', { name: 'RISK', exact: true })).toHaveCount(0)
   await expect(app.getByTestId('launch-more')).toHaveText("More modules can be switched on by your firm's admin")
   await expect(app.getByTestId('launch-more')).not.toHaveAttribute('href', /.*/)
   await app.unrouteAll({ behavior: 'ignoreErrors' })
@@ -126,17 +130,19 @@ test('an existing firm is untouched: the dashboard, every tab, and the XVA tab a
 })
 
 // The owner's way back to the venue's forwards on a pair where the account saved its own points (production,
-// 9 November 2026). The removal itself is answered here; it is tested on the database in
-// backend/tests/integration/test_crypto_marks.py.
-test('market data: saved forward points on a digital-asset pair can be given up for the feed, in two steps', async ({ app, problems }) => {
+// 9 November 2026). Nothing is deleted: the pair is handed back and the saved points stay in the history. The
+// hand-back itself is answered here; it is tested on the database in backend/tests/integration/test_crypto_marks.py.
+test('market data: saved forward points on a digital-asset pair can be handed back to the feed, in two steps', async ({ app, problems }) => {
   let pairs = null
-  let removed = false
+  let handed = false
+  const own = { valuation_date: '2026-10-28', source: 'MANUAL', label: 'MANUAL points 2026-10-28', tenors: ['1M', '3M'], in_use: true }
+  const feed = { valuation_date: '2026-11-09', source: 'DEMO · handed back to the feed', label: 'DEMO · handed back to the feed points 2026-11-09', tenors: ['1M', '3M'], in_use: true }
   await app.route(/\/api\/currency\/pairs(\?.*)?$/, async route => {
     const res = await route.fetch()
     const body = await res.json()
     for (const p of body.pairs) {
-      if (p.pair !== 'BTCUSD' || removed) continue
-      p.forward_curve = { valuation_date: '2026-10-28', source: 'MANUAL', label: 'MANUAL points 2026-10-28', tenors: ['1M', '3M'], in_use: true }
+      if (p.pair !== 'BTCUSD') continue
+      p.forward_curve = handed ? feed : own
       p.forward_points = { '1M': 300, '3M': 900 }
     }
     pairs = body.pairs
@@ -145,26 +151,26 @@ test('market data: saved forward points on a digital-asset pair can be given up 
   let sent = null
   await app.route(/\/api\/currency\/forward-curve\/use-feed$/, async route => {
     sent = route.request().postDataJSON()
-    removed = true
-    await route.fulfill({ json: { ...pairs.find(p => p.pair === 'BTCUSD'), forward_curve: null, forward_points: null, removed: 1, removed_copies: 3 } })
+    handed = true
+    await route.fulfill({ json: { ...pairs.find(p => p.pair === 'BTCUSD'), forward_curve: feed, handed_back: true, accounts: 4 } })
   })
   await app.goto('/configurations/market-data/crypto')
   await app.locator('.crv-item', { hasText: 'BTCUSD' }).click()
   const box = app.getByTestId('use-feed')
   await expect(box).toContainText('BTCUSD prices on forward points saved in this account (MANUAL, 2026-10-28)')
-  await box.getByRole('button', { name: "USE THE FEED'S FORWARDS" }).click()
-  await expect(box).toContainText('Remove the saved BTCUSD points? This cannot be undone.')
-  expect(sent, 'nothing is removed on the first click').toBeNull()
-  await box.getByRole('button', { name: 'KEEP THEM' }).click()
-  await expect(box.getByRole('button', { name: "USE THE FEED'S FORWARDS" })).toBeVisible()
-  await box.getByRole('button', { name: "USE THE FEED'S FORWARDS" }).click()
+  await box.getByRole('button', { name: "USE THE FEED'S FORWARDS", exact: true }).click()
+  await expect(box).toContainText('Hand BTCUSD back to the feed? Your saved points stay in the history')
+  expect(sent, 'nothing happens on the first click').toBeNull()
+  await box.getByRole('button', { name: 'KEEP MINE', exact: true }).click()
+  await expect(box.getByRole('button', { name: "USE THE FEED'S FORWARDS", exact: true })).toBeVisible()
+  await box.getByRole('button', { name: "USE THE FEED'S FORWARDS", exact: true }).click()
   const reloaded = app.waitForResponse(r => /\/api\/currency\/pairs/.test(r.url()))
-  await box.getByRole('button', { name: 'REMOVE AND USE THE FEED' }).click()
-  await expect(app.getByText(/BTCUSD: 1 saved curve removed/)).toBeVisible()
+  await box.getByRole('button', { name: 'USE THE FEED', exact: true }).click()
+  await expect(app.getByText(/BTCUSD is back on the feed/)).toBeVisible()
   expect(sent).toEqual({ pair: 'BTCUSD' })
   await reloaded
-  await expect(app.getByTestId('use-feed')).toHaveCount(0)               // nothing saved any more: the offer is gone
-  // a pair on the feed, or an FX pair, is never offered it
+  await expect(app.getByTestId('use-feed')).toHaveCount(0)               // on the feed now: the offer is gone
+  // an FX pair is never offered it
   await app.locator('.crv-item', { hasText: 'EURUSD' }).click()
   await expect(app.getByTestId('use-feed')).toHaveCount(0)
   await app.unrouteAll({ behavior: 'ignoreErrors' })

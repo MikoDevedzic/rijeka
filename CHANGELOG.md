@@ -5,41 +5,57 @@ methodology document carries its own version (v1.6). Commits on `main` are the d
 
 ## 0.13.0 · 9 November 2026
 
-- **The launch view.** Two people shown the app found it overwhelming. A new sign-up's workspace now starts on the
-  `LAUNCH` set of modules: book, value, the XVA charge and its saving on chain, confirm.
-  - **What a new workspace shows.** A home page of four next steps and one button; a top bar of five items; a ticket
-    without the CAPITAL tab; no P&L or RISK pages; Configurations without the items of switched-off modules or the
-    roadmap placeholders. Nothing is removed from the product: the owner switches modules on under Configurations →
-    Modules, one at a time or by preset, and everything else returns.
+- **The launch view.** Two people shown the app found it overwhelming. A workspace provisioned for a new sign-in
+  now starts on the `LAUNCH` set of modules: book, value, the XVA charge and its saving on chain, confirm.
+  - **What a launch workspace shows.** A home page of four next steps and one button; a top bar of five items; a
+    ticket without the CAPITAL tab; no P&L or RISK pages; Configurations without the items of switched-off modules
+    or the roadmap placeholders. Nothing is removed from the product: the owner switches modules on under
+    Configurations → Modules. Switching single modules on keeps the launch view; choosing a full preset such as
+    Dealer brings back the dashboard home and the full XVA tab (`GET /api/modules` → `view`).
   - **Existing firms are not touched.** The preset is written only where a firm is created. A firm with nothing
-    chosen keeps every module on, the dashboard home and the XVA tab as it was.
-  - **Simple XVA view.** On a launch workspace the XVA tab opens with settlement and collateral, SIMULATE, one line
-    saying what the run assumes, and the results. The model inputs are behind SHOW MODEL INPUTS; the choice is
-    remembered on the machine. The request sent is the same in both views (a browser journey compares them).
-  - **Who switches modules.** A profile admin anywhere; and, where every sign-in gets its own sandbox firm, that
-    firm's own admin member. Before this nobody on the hosted demo could. A switch hides and skips; it is not an
-    entitlement, and a module's API routes still answer when it is off.
+    chosen keeps every module on and the dashboard home; its XVA tab is as it was, plus the one toggle. (A sign-in
+    that never had a firm gets one, on the launch set, as any new sign-in does.)
+  - **Simple XVA view.** On a launch workspace the XVA tab opens with the counterparty, settlement and collateral,
+    SIMULATE, one line saying what the run assumes, and the results. The model inputs are behind SHOW MODEL INPUTS;
+    the choice is remembered in the browser. The request sent is the same in both views (a browser journey compares
+    them on a rates ticket at default inputs). The line says so when there is no stored calibration or no vol
+    surface, instead of naming one.
+  - **Who switches modules.** A profile admin anywhere; and, where every sign-in gets its own sandbox firm, the
+    owner of a firm of one. Before this only a profile admin could, which on the hosted demo meant nobody a
+    visitor could ask. A switch hides and skips; it is not an entitlement, and a module's API routes still answer
+    when it is off. A launch workspace's P&L, risk and credit batches are off from its first day.
   - `RIJEKA_SIGNUP_PRESET` (default `LAUNCH`; `NONE` for every module on, as before).
-  - Also: the RISK item in the top bar counts Collateral and opens the first risk page that is on; the home page and
-    the top bar share one navigation list; the home page asks for the module switches itself.
+  - Also: the RISK item in the top bar counts Collateral and opens the first risk page that is on; the home page,
+    the top bar and the Risk and P&L sub-navigation read one list of which page needs which module.
+- **Security, found by Magnus on this change and older than it.**
+  - Provisioning looked a new account's firm up by a name built from its email and joined it as the firm's admin
+    if one existed. It now always creates a new firm of one.
+  - Module switching by a firm's own admin is limited to a firm of one, the note on a switch is bounded, and the
+    two new write routes are rate limited.
 - **Back to the venue's forwards.** In production the template account held its own saved BTC, ETH and SOL forward
   curves, so the feed, which never replaces an account's own entry, stored vols and no forwards. Market data →
   FX · Crypto → a digital-asset pair now offers USE THE FEED'S FORWARDS, in two steps, to an account pricing on its
-  own saved points: it removes that account's own rows for the pair (and, for the template, the identical copies
-  demo accounts were given), and the venue's forwards arrive with the next refresh.
-- **Emmy's first run, on the venue surface** (the model validator, added today). No figure was wrong against the
-  documented formula; the supports and several claims were.
-  - The stale-mark filter also removed the bad mark's two neighbours. It now removes the worst mark first and
-    re-reads, so one stale mark costs one mark on a sparse strike grid too.
+  own saved points. Nothing is deleted: today's row is written with the same points under a feed label, the next
+  marks run replaces it with the venue's, and the saved rows of earlier dates stay, so a past day re-runs as it
+  did. For the template, the demo accounts still on a copy of its curve are handed back with it. It is refused
+  where the feed does not write to the account or has no forwards for the pair yet.
+- **Emmy's first two runs, on the venue surface** (the model validator, added today). No figure was wrong against
+  the documented formula; the supports and several claims were.
+  - The stale-mark filter went through three versions in a day: comparing a mark with the line between its
+    neighbours also removed the neighbours; taking the worst first fixed one stale mark and failed on two side by
+    side and on one at the end of a short chain. It now compares a mark with the median of the five around it.
+    Three stale marks side by side are still not seen by it and are left to the bounds.
   - Stated with measured sizes in the methodology (v1.6) and the model inventory, which gains a row for the surface:
-    a three-point smile is an extrapolation outside the 25-delta strikes (2 to 3 vol points low at 10 delta on the
-    skew side of test smiles); a listed expiry between tenors can be up to about a point off, not "a few tenths";
-    ATM is the 50-delta-forward vol, 0.2 to 0.8 points from the vol at the forward strike at these levels; FUND01
-    under quoted points is exact to two years and a third low at three; the built vol history never scales its
-    one-week row. None of the new calculations has a QuantLib row or a workbook yet; the inventory says so.
+    a three-point smile is an extrapolation outside the 25-delta strikes (2 to 3 vol points low at 10 delta and 5 to
+    9 at 5 delta on the skew side of test smiles); a listed expiry between tenors can be up to 1.3 points off, not
+    "a few tenths"; ATM is the 50-delta-forward vol, 0.1 to 0.8 points from the vol at the forward strike at these
+    levels; FUND01 under quoted points is exact to two years and a third low at three; the built vol history never
+    scales its one-week row. None of the new calculations has a QuantLib row or a workbook yet; the inventory says so.
   - A digital-asset option on a quoted forward no longer says "the funding rate as the carry".
 - Two more roles since 0.12.0: Nikola (architect, consulted before this build as well as after) and Emmy (model
-  validator); what each role missed on the Deribit feed is written into its definition.
+  validator); what each role missed on the Deribit feed is written into its definition. Reviewed by Vera (no
+  blocking finding, five to fix), Magnus (one high, older than this change; one medium), Nikola (the map
+  against the code) and Emmy; all fixed here or stated above.
 
 ## 0.12.0 · 9 November 2026
 

@@ -113,6 +113,9 @@ What is not in the compose file:
    default) are written to the template account, which is `RIJEKA_DEMO_TEMPLATE_EMAIL` or,
    when that is empty, the earliest admin of a dealer firm, and they replace that account's
    rows of the day for the curves they build.
+   With provisioning on, a new workspace starts on the launch set of modules (`RIJEKA_SIGNUP_PRESET`,
+   `NONE` for everything) and its owner switches the rest on under Configurations → Modules; with
+   provisioning off, only the admin role switches modules.
 3. **Frontend.** Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`,
    then `cd frontend && npm install && npm run build` and serve `dist/`.
 4. Steps 4 to 6 above.

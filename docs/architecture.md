@@ -99,10 +99,11 @@ A run of the marks makes three requests to the venue and three for the spot. Eve
 
 | Writer | Writes for | Replaces |
 |---|---|---|
-| Marks tick (`refresh_crypto`) | the template, then every demo account in one statement | only rows a feed wrote. An account's own entry for a digital-asset vol or forward curve, the template owner's too, stays in force until that account replaces it, whatever its date |
+| Marks tick (`refresh_crypto`) | the template, then every demo account in one statement | only rows a feed wrote. An account's own entry for a digital-asset vol or forward curve, the template owner's too, stays in force until that account replaces it or hands the pair back to the feed, whatever its date |
 | Daily rebuild (`refresh`) | the template | the template's row of the day for every curve it builds, whoever wrote it; a venue's surface is carried instead of the parametric one |
 | Spot ticks (`currencies.tick`, and the marks tick) | the template | the template's spot of the day |
 | Daily copy (`demo._copy_market_data`) | each demo account, and a new account at sign-up | nothing: it adds the template's latest row per curve when the account has none of that date, so for curves other than the venue's it supersedes an older own entry. A venue's row is not copied over an account's own entry. Terminal-sourced rows are never copied; hand-typed template rows are |
+| Hand-back (`POST /api/currency/forward-curve/use-feed`) | the caller's account; for the template, also the demo accounts still on a copy of its own curve | nothing is deleted: today's row for a digital-asset pair's forward points is written with the account's current points under a feed label, which the next marks run replaces with the venue's; rows of earlier dates stay. Refused where the feed does not write to the account, or has no forwards for the pair yet |
 
 So a demo account's curves, FX spot and G10 vols are the day's first copy; only the digital-asset vols, forwards and
 spot follow the template through the day.
@@ -152,23 +153,29 @@ verify without trusting the operator. Consent and scope are the firm's, always, 
 
 A firm runs the modules it needs (`backend/modules.py`; `firms.modules`, `firms.modules_preset`, `module_events`;
 `GET/PUT /api/modules`, the MODULES page under Configurations → Operations). A switch hides the module's pages,
-tabs and Configurations items, sends a direct visit to its route home, and makes the nightly batches skip the
-firm's accounts (`pnl.eod_tick`, `risk.daily_tick`, `ccr.daily_tick`). It is not an entitlement: the module's API
-routes stay callable, the data stays, and switching back on resumes with history intact. Null, or the columns
-missing, means every module on, which is what every firm created before 9 November 2026 has.
+tabs and Configurations items, sends a direct visit to one of its pages (`/pnl…`, `/risk…`) home, and makes the
+nightly batches skip the firm's accounts (`pnl.eod_tick`, `risk.daily_tick`, `ccr.daily_tick`). It is not an
+entitlement: the module's API routes stay callable, and its Configurations pages are hidden from the navigation
+but still open by URL. Nothing is deleted, and switching back on resumes; what a batch did not compute while the
+module was off is not backfilled, so a module's history starts when it is first on. Null, or the columns missing,
+means every module on, which is what every firm created before 9 November 2026 has.
 
 Presets: LAUNCH (book, value, the XVA charge and its saving on chain, confirm; P&L, the risk pages, capital,
 collateral, reserves and IPV off), DEALER (everything), CORPORATE (book, confirm, P&L, the ticket's XVA), FUND
 (everything but capital), CLASSROOM (everything; the chain's network is a deployment setting). All eleven modules
 exist; none is a placeholder.
 
-**The launch view.** A workspace provisioned for a new sign-in starts on LAUNCH (`RIJEKA_SIGNUP_PRESET`, set where
-the firm is created in `api/routes/demo.py` and nowhere else, so an existing firm is never changed). On LAUNCH the
-home page is four next steps instead of the dashboard, the XVA tab opens in its simple view (settlement and
-collateral, SIMULATE, the results; the model inputs one click away, and the request sent is the same in both
-views), and the roadmap placeholders under Configurations are hidden. Who may switch modules: a profile admin
-anywhere; and, where every sign-in gets its own sandbox firm (`RIJEKA_DEMO_PROVISION` on), that firm's ADMIN
-member, who is the person the sandbox was made for. On a firm deployment only the admin role can.
+**The launch view.** A workspace provisioned for a sign-in that has no firm yet starts on LAUNCH
+(`RIJEKA_SIGNUP_PRESET`, set where the firm is created in `api/routes/demo.py` and nowhere else, so an existing
+firm is never changed; its P&L, risk and credit batches are therefore off from its first day). Provisioning always
+creates a new firm of one and never joins an existing firm by name. `GET /api/modules` returns `view`: `launch`
+while the last preset the firm chose is LAUNCH, `full` otherwise; switching single modules on (the preset is then
+CUSTOM by name) does not end the launch view, choosing a full preset does. On the launch view the home page is four
+next steps instead of the dashboard, the XVA tab opens in its simple view (settlement and collateral, SIMULATE, the
+results; the model inputs one click away, and the request sent is the same in both views), and the roadmap
+placeholders under Configurations are hidden. Who may switch modules: a profile admin anywhere; and, where every
+sign-in gets its own sandbox firm (`RIJEKA_DEMO_PROVISION` on), the ADMIN member of a firm of one, who is the person
+the sandbox was made for. In a firm with colleagues, and on a firm deployment, only the admin role can.
 
 ## Data flow of a trade
 
@@ -227,8 +234,8 @@ clipped). A journey fails on any uncaught error, console error or failed API cal
 with fixed seeds, 66 figures compared with `golden_book.json`; a figure moves only with a dated line in
 `GOLDEN_CHANGES.md`.
 
-Who runs what, and when, is in `CLAUDE.md`: seven named roles (browser tester, numbers guardian, independent reviewer,
-security reviewer, architect, release manager, project manager) with their agent definitions in `.claude/agents/` and the release
+Who runs what, and when, is in `CLAUDE.md`: eight named roles (browser tester, numbers guardian, model validator, independent
+reviewer, security reviewer, architect, release manager, project manager) with their agent definitions in `.claude/agents/` and the release
 checklist in `docs/ops/release.md`.
 
 `docker-compose.yml` is the self-hosted deployment on the same scripts, with GoTrue for sign-in

@@ -42,7 +42,9 @@ def test_who_may_switch_modules(monkeypatch):
         monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "1")
         db.execute.return_value.first.return_value = (1,)
         assert M.may_edit(db, user)                                                # a sandbox firm's own ADMIN member
-        assert "role = 'ADMIN'" in str(db.execute.call_args.args[0]) and db.execute.call_args.args[1] == {"u": "u-1"}
+        sql = str(db.execute.call_args.args[0])
+        assert "m.role = 'ADMIN'" in sql and "WHERE o.firm_id = m.firm_id) = 1" in sql      # ADMIN of a firm of one: a firm with colleagues is not a sandbox
+        assert db.execute.call_args.args[1] == {"u": "u-1"}
         db.execute.return_value.first.return_value = None
         assert not M.may_edit(db, user)                                            # a member who is not its admin
         db.execute.side_effect = RuntimeError("no such table")
@@ -97,3 +99,29 @@ def test_route_validation(monkeypatch):
     with pytest.raises(HTTPException) as e:
         put_modules(ModulesBody(preset="DEALER"), db=None, user={"sub": "u"})
     assert e.value.status_code == 422
+
+
+def test_the_launch_view_follows_the_last_preset_chosen_not_the_name_of_the_current_one(monkeypatch):
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(M, "columns_present", lambda db: True)
+    db = MagicMock()
+    for last_named, want in (("LAUNCH", "launch"), ("DEALER", "full"), ("CORPORATE", "full"), (None, "full")):
+        db.execute.return_value.first.return_value = (last_named,) if last_named else None
+        assert M.view_for_firm(db, "firm") == want, last_named
+    assert "preset <> 'CUSTOM' ORDER BY at DESC LIMIT 1" in str(db.execute.call_args.args[0])       # one module switched on (CUSTOM) does not end the launch view
+    assert M.view_for_firm(db, None) == "full"
+    db.execute.side_effect = RuntimeError("no such table")
+    assert M.view_for_firm(db, "firm") == "full" and db.rollback.called
+    monkeypatch.setattr(M, "columns_present", lambda db: False)
+    assert M.view_for_firm(MagicMock(), "firm") == "full"
+
+
+def test_the_frontend_and_the_backend_name_the_same_modules():
+    """Two lists of the module keys exist (backend/modules.py and the frontend store); nothing else ties them (Nikola)."""
+    import re
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[2] / "frontend" / "src" / "store" / "useModulesStore.js").read_text()
+    keys = re.findall(r"'([A-Z_]+)'", re.search(r"MODULE_KEYS = \[(.*?)\]", js, re.S).group(1))
+    assert keys == list(M.KEYS)
+    routes = dict(re.findall(r"'(/[a-z/]+)': \[([^\]]*)\]", js))
+    assert routes and all(set(re.findall(r"'([A-Z_]+)'", v)) <= set(M.KEYS) for v in routes.values())

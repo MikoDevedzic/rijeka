@@ -217,18 +217,24 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
     # 3. A firm of one, claiming the demo LEI, so rooms and trade cards work
     member = db.query(FirmMember).filter(FirmMember.user_id == uid).first()
     if member is None:
+        # Always a new firm of one. An existing firm is never joined by its name: the name comes from the account's
+        # own email, so a look-up by name made the caller ADMIN of somebody else's firm (Magnus, 9 November 2026).
         name = f"{trader} (DEMO)"
-        firm = db.query(Firm).filter(Firm.name == name).first()
-        if firm is None:
-            firm = Firm(name=name, kind="OTHER", coverage_tier="FREE")
-            db.add(firm); db.flush()
-            # A new workspace starts on the launch set (book, value, XVA, confirm); its owner switches the rest on
-            # under Configurations. Only here, where the firm is created: an existing firm is never touched.
-            import modules as M
-            preset = M.signup_preset()
-            if preset and M.columns_present(db):
-                M.set_for_firm(db, firm.id, str(uid), preset=preset, note="new workspace")
+        if db.query(Firm).filter(Firm.name == name).first() is not None:
+            name = f"{trader} (DEMO {uid.hex[:6].upper()})"
+        firm = Firm(name=name, kind="OTHER", coverage_tier="FREE")
+        db.add(firm); db.flush()
+        # A new workspace starts on the launch set (book, value, XVA, confirm); its owner switches the rest on
+        # under Configurations. Only here, where the firm is created: an existing firm is never touched.
+        import modules as M
+        preset = M.signup_preset()
+        if preset and M.columns_present(db):
+            try:
+                with db.begin_nested():         # the workspace matters more than the set it starts on: a failure here is its own
+                    M.set_for_firm(db, firm.id, str(uid), preset=preset, note="new workspace")
                 created["modules_preset"] = preset
+            except Exception as e:      # noqa: BLE001 — the firm stands with nothing chosen (every module on), as before 0.13.0
+                log.warning("new workspace not put on %s: %s: %s", preset, type(e).__name__, str(e)[:200])
         db.add(FirmMember(user_id=uid, firm_id=firm.id, role="ADMIN"))
         if db.get(FirmLei, my_lei) is None:
             db.add(FirmLei(lei=my_lei, firm_id=firm.id, verified=False))

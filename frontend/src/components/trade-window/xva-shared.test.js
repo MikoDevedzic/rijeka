@@ -13,7 +13,7 @@ import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, simmImValue, numOrNull,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
-  ratesModelWords, fxModelWords, runAssumesLine,
+  ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE,
 } from './xva-shared'
 
 const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fva: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
@@ -170,9 +170,9 @@ describe('bp lines', () => {
 })
 
 describe('the simple view', () => {
-  it('is the default for a firm on the LAUNCH preset and for no other', () => {
-    expect(defaultXvaView('LAUNCH')).toBe('simple')
-    for (const p of [null, undefined, '', 'FULL', 'launch']) expect(defaultXvaView(p)).toBe('advanced')
+  it('is the default for a launch workspace (the store\'s launch flag) and for no other, whatever the preset is called', () => {
+    expect(defaultXvaView(true)).toBe('simple')
+    for (const v of [false, null, undefined, '', 'LAUNCH', 'CUSTOM', 1]) expect(defaultXvaView(v)).toBe('advanced')
   })
   it('reads the user\'s own choice from storage, and nothing it does not know or cannot read', () => {
     const stub = (get) => vi.stubGlobal('localStorage', { getItem: get })
@@ -195,6 +195,9 @@ describe('the simple view', () => {
     expect(spreadsAreDefault(null)).toBe(false)
   })
   it('knows the hidden assumptions as the tab opened from a changed one', () => {
+    // the values both tabs open with (their state is initialised from this), pinned: a change here changes what a run sends
+    expect(HIDDEN_INPUT_DEFAULTS).toEqual({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', simmIm: '', capModel: 'sa_ccr' })
+    expect(Object.isFrozen(HIDDEN_INPUT_DEFAULTS)).toBe(true)
     expect(assumptionsAreDefault(HIDDEN_INPUT_DEFAULTS)).toBe(true)
     expect(assumptionsAreDefault({ ...HIDDEN_INPUT_DEFAULTS, lgd: '40.0' })).toBe(true)
     for (const changed of [{ wwr: 1.5 }, { lgd: '60' }, { fbaRatio: '70' }, { hurdle: '' }, { simmIm: '0.85' }, { capModel: 'cem' }]) {
@@ -202,12 +205,40 @@ describe('the simple view', () => {
     }
   })
   it('names where the model comes from', () => {
-    expect(ratesModelWords({ aOverride: '', sigOverride: '' })).toBe('the stored model calibration')
-    expect(ratesModelWords({ aOverride: '0.03', sigOverride: '' })).toBe('your own model parameters')
-    expect(ratesModelWords({ aOverride: '', sigOverride: '85' })).toBe('your own model parameters')
+    expect(ratesModelWords({ aOverride: '', sigOverride: '', hasCalibration: true })).toBe('the stored model calibration')
+    expect(ratesModelWords({ aOverride: '0.03', sigOverride: '85', hasCalibration: true })).toBe('your own model parameters')
     expect(fxModelWords({ volPct: '', volMode: 'SURFACE' })).toBe("the pair's vol surface")
     expect(fxModelWords({ volPct: '', volMode: 'FLAT' })).toBe("one flat vol from the pair's surface")
     expect(fxModelWords({ volPct: '12.5', volMode: 'SURFACE' })).toBe('your own vol of 12.5%')
+  })
+  it('rates with no stored calibration: says there is none, unless both parameters are typed', () => {
+    expect(ratesModelWords({ aOverride: '', sigOverride: '', hasCalibration: false })).toBeNull()
+    expect(ratesModelWords({ aOverride: '0.03', sigOverride: '', hasCalibration: false })).toBeNull()
+    expect(ratesModelWords({ aOverride: '0.03', sigOverride: '85', hasCalibration: false })).toBe('your own model parameters')
+    const line = runAssumesLine({ paths: 2000, model: null, spreads: defaultSpreads(), assumptions: HIDDEN_INPUT_DEFAULTS })
+    expect(line).toBe(NO_CALIBRATION_LINE)
+    expect(line).toBe('No stored model calibration: calibrate under Configurations, or show the model inputs and type both parameters')
+    expect(line).not.toMatch(/the stored model calibration|SIMULATE|—/)
+  })
+  it('rates with only one of a and σ typed: the stored calibration is what runs, as the server discards a lone value', () => {
+    const one = 'the stored model calibration, since only one model parameter is typed'
+    expect(ratesModelWords({ aOverride: '0.03', sigOverride: '', hasCalibration: true })).toBe(one)
+    expect(ratesModelWords({ aOverride: '', sigOverride: '85', hasCalibration: true })).toBe(one)
+    // a box holding something that is not a number is sent as nothing
+    expect(ratesModelWords({ aOverride: '0.03', sigOverride: 'abc', hasCalibration: true })).toBe(one)
+    expect(ratesModelWords({ aOverride: '—', sigOverride: '', hasCalibration: true })).toBe('the stored model calibration')
+  })
+  it('FX pair with no saved surface: the desk default vol, from the last run\'s params as the badge reads them', () => {
+    const none = { vol_pct: 10, vol_source: 'demo default (no surface for this pair)', vol_mode: 'flat' }
+    expect(volBadge(none, 'USDTRY').kind).toBe('warn')
+    expect(fxModelWords({ volPct: '', volMode: 'SURFACE', params: none })).toBe('the desk default vol (no surface saved for this pair)')
+    expect(fxModelWords({ volPct: '', volMode: 'FLAT', params: none })).toBe('the desk default vol (no surface saved for this pair)')
+    // a typed vol wins; a pair with a surface, or no run yet, reads as before
+    expect(fxModelWords({ volPct: '14', volMode: 'SURFACE', params: none })).toBe('your own vol of 14%')
+    expect(fxModelWords({ volPct: '', volMode: 'SURFACE', params: { vol_pct: 7.4, vol_source: 'EURUSD_VOL surface', vol_mode: 'term structure' } })).toBe("the pair's vol surface")
+    expect(fxModelWords({ volPct: '', volMode: 'SURFACE', params: null })).toBe("the pair's vol surface")
+    expect(runAssumesLine({ paths: 2000, model: fxModelWords({ volPct: '', volMode: 'SURFACE', params: none }), spreads: defaultSpreads(), assumptions: HIDDEN_INPUT_DEFAULTS }))
+      .toBe('2,000 paths on the desk default vol (no surface saved for this pair) and default credit and funding spreads')
   })
   it('says what a run assumes from the current values', () => {
     const base = { paths: 2000, model: 'the stored model calibration', spreads: defaultSpreads(), assumptions: HIDDEN_INPUT_DEFAULTS }

@@ -105,22 +105,31 @@ function useCountUp(target, ms = 700) {
 }
 
 const BOOT_KEY = 'rijeka.booted'
-const MODULES_WAIT_MS = 4000       // how long the home waits for the firm's module switches before drawing the desk
+const MODULES_WAIT_MS = 4000       // how long the home waits to learn which home to draw before drawing the desk
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 function DeskHome({ demo, navigate }) {
   const modules = useModulesStore(s => s.modules)          // the P&L tile follows the firm's switches
-  const launch  = useModulesStore(s => s.preset) === 'LAUNCH'   // a firm on the launch set gets the next-step home
+  const launch  = useModulesStore(s => s.launch)           // a launch workspace gets the next-step home, whatever its preset is called now
   const canEdit = useModulesStore(s => s.canEdit)
-  const modulesLoaded = useModulesStore(s => s.loaded)
+  const firmKnown = useModulesStore(s => !!s.catalogue?.firm_id)
   const loadModules = useModulesStore(s => s.load)
+  const provisioned = demo != null                         // POST /api/demo/provision has answered (also when provisioning is off)
   // The home has no top bar to ask for the switches, and must not lean on sign-up provisioning to do it (an instance
-  // without provisioning would wait out the whole timeout on every visit): it asks itself.
-  useEffect(() => { loadModules() }, [loadModules])
-  // Which home to draw is known once the switches are read. The auth store reads them after the workspace is
-  // provisioned (store/useAuthStore provision), which is also when a new sign-up's launch set exists; until that
-  // answer, or MODULES_WAIT_MS without one (every module then stays on, as before), the page below the bar is
-  // empty, so a launch firm never sees the desk flash by and its P&L tile never asks for a summary.
+  // without provisioning would wait out the whole timeout on every visit): it asks itself, on arrival and once more
+  // when provisioning answers.
+  const [askedAfter, setAskedAfter] = useState(false)      // the switches were read after provisioning answered
+  useEffect(() => {
+    let alive = true
+    loadModules().then(() => { if (alive && provisioned) setAskedAfter(true) })
+    return () => { alive = false }
+  }, [provisioned, loadModules])
+  // Which home to draw is known only when the answer is about this user's firm. A brand-new sign-up has none
+  // until provisioning makes it, and until then the API answers "no firm, every module on", which would draw the
+  // desk. So the page below the bar stays empty until the answer names a firm, or the switches have been read
+  // again after provisioning answered (a user with no firm then gets the desk), or MODULES_WAIT_MS has passed
+  // (every module then stays on, as before). Only provisioning that outlasts the wait can still show a launch
+  // workspace the desk, and its P&L tile, first.
   const [waited, setWaited] = useState(false)
   useEffect(() => { const id = setTimeout(() => setWaited(true), MODULES_WAIT_MS); return () => clearTimeout(id) }, [])
   const session = useAuthStore(s => s.session)
@@ -164,7 +173,7 @@ function DeskHome({ demo, navigate }) {
   const showPath = !d.loading && confirmed === 0
   const footer = <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · RATES ONLY IN PHASE 1 · <a href="/terms" target="_blank" rel="noopener noreferrer">TERMS</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">PRIVACY</a> · miko@rijeka.app</div>
 
-  if (!modulesLoaded && !waited) return <div className="dh" />
+  if (!firmKnown && !askedAfter && !waited) return <div className="dh" />
 
   // The launch home: the next step and nothing else. The four steps stand where the desk has START HERE.
   if (launch) return (

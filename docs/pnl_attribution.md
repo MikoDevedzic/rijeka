@@ -44,7 +44,7 @@ Which components net into the signed figure is the firm's policy (`Configuration
 
 ## End of day, sign-off, management
 
-`POST /api/pnl/eod` (and the daily cron, after the market data rebuild, for every account) stores one mark per trade per date (`eod_marks`) and one attributed row per trade per date (`pnl_daily`). A rerun replaces the day.
+`POST /api/pnl/eod` (and the daily cron, after the market data rebuild, for every account whose firm has the P&L module on; a launch workspace has it off from its first day, so its P&L history starts when the module is switched on) stores one mark per trade per date (`eod_marks`) and one attributed row per trade per date (`pnl_daily`). A rerun replaces the day.
 
 Sign-off (`pnl_signoffs`): the trader reviews the attribution and signs with a comment; then the P&L controller or desk CFO signs (the `controller`, `cfo`, `admin`, `management` or `risk` role, or a firm admin). Signing stores the day first, so what is signed is what is kept. A day with both signatures is FINAL and appears in the management view (`GET /api/pnl/firm`), every book in the firm with its status and comments.
 

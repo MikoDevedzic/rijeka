@@ -52,7 +52,8 @@ def signup_preset() -> Optional[str]:
 
 def may_edit(db, user: dict) -> bool:
     """Who may switch a firm's modules: a profile admin anywhere; and, where every sign-in gets its own sandbox firm
-    (demo provisioning on), the ADMIN member of that firm, who is the person the sandbox was made for."""
+    (demo provisioning on), the ADMIN member of a firm of one, who is the person the sandbox was made for. A firm
+    with colleagues in it is not a sandbox: there only the admin role switches modules for everyone."""
     from api.routes._roles import role_of
     if role_of(db, user) == "admin":
         return True
@@ -60,7 +61,9 @@ def may_edit(db, user: dict) -> bool:
     if not demo_enabled():
         return False
     try:
-        return db.execute(text("SELECT 1 FROM firm_members WHERE user_id = :u AND role = 'ADMIN' LIMIT 1"), {"u": str(user["sub"])}).first() is not None
+        return db.execute(text("""
+            SELECT 1 FROM firm_members m WHERE m.user_id = :u AND m.role = 'ADMIN'
+              AND (SELECT count(*) FROM firm_members o WHERE o.firm_id = m.firm_id) = 1 LIMIT 1"""), {"u": str(user["sub"])}).first() is not None
     except Exception:          # noqa: BLE001
         db.rollback()
         return False
@@ -109,6 +112,20 @@ def for_firm(db, firm_id) -> dict[str, Any]:
         return {"modules": all_on(), "preset": row[1] if row else None, "source": "default"}
     mods = row[0] if isinstance(row[0], dict) else json.loads(row[0])
     return {"modules": normalise(mods), "preset": row[1], "source": "firm"}
+
+
+def view_for_firm(db, firm_id) -> str:
+    """'launch' or 'full': which shape of the app the firm sees (the home, the XVA tab's default, the roadmap
+    placeholders). It follows the last PRESET the firm chose, not the current switches: a launch workspace that
+    switches one module on is CUSTOM by name and still a launch workspace, until its owner picks a full preset."""
+    if firm_id is None or not columns_present(db):
+        return "full"
+    try:
+        row = db.execute(text("SELECT preset FROM module_events WHERE firm_id = :f AND preset <> 'CUSTOM' ORDER BY at DESC LIMIT 1"), {"f": str(firm_id)}).first()
+    except Exception:          # noqa: BLE001
+        db.rollback()
+        return "full"
+    return "launch" if row and row[0] == "LAUNCH" else "full"
 
 
 def firm_of_user(db, uid: str):
