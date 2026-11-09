@@ -5,6 +5,7 @@
 // conventions. Points are saved as {PAIR}_FWD snapshots: manual, Bloomberg
 // snap, or import, like any rates curve.
 import { useCallback, useEffect, useState } from 'react'
+import { sourceKind, sourceShort } from './fx-source'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel, DescBox } from './_DetailShared'
 import RateCurveCanvas from './RateCurveCanvas'
@@ -32,9 +33,11 @@ async function call(path, opts = {}) {
   return body
 }
 
+// One word in the cell (the whole source wrapped to four lines and stretched every row); the whole source on hover.
 function SourceBadge({ src }) {
   const map = { BLOOMBERG: 'p-blue', IMPORT: 'p-purple', MANUAL: 'p-dim', FEED: 'p-green', PARITY: 'p-amber' }
-  return <span className={`pill ${map[src] || 'p-dim'}`}>{src || '—'}</span>
+  const kind = src === 'PARITY' ? 'PARITY' : sourceKind(src)
+  return <span className={`pill ${map[kind] || 'p-dim'}`} style={{ whiteSpace: 'nowrap' }} title={src || ''}>{kind}</span>
 }
 
 export default function FxWorkspace() {
@@ -86,7 +89,7 @@ export default function FxWorkspace() {
                   {items.map(p => (
                     <div key={p.pair} className={`crv-item${sel === p.pair ? ' sel' : ''}`} style={{ borderLeftColor: sel === p.pair ? (p.crypto ? 'var(--chain)' : 'var(--accent)') : 'transparent' }} onClick={() => setSel(p.pair)}>
                       <span className={`type-badge ${p.forward_curve ? (p.crypto ? 'tb-funding' : 'tb-ois') : 'tb-basis'}`}>{p.forward_curve ? 'FWD' : 'SPOT'}</span>
-                      <div className="ci-body"><div className="ci-name">{p.pair}</div><div className="ci-sub">{p.forward_curve ? `${p.forward_curve.label || p.forward_curve.source} · ${p.forward_curve.tenors.length} tenors` : p.crypto ? `funding ${p.funding_pct ?? 0}% · no forward curve` : 'no forward curve'}</div></div>
+                      <div className="ci-body"><div className="ci-name">{p.pair}</div><div className="ci-sub">{p.forward_curve ? `${sourceShort(p.forward_curve)} · ${p.forward_curve.tenors.length} tenors` : p.crypto ? `funding ${p.funding_pct ?? 0}% · no forward curve` : 'no forward curve'}</div></div>
                       <div className={`ci-val ${p.crypto ? 'am' : 'ac'}`}>{fmt(p.spot, dp(p.pair))}</div>
                     </div>))}
                 </div>
@@ -275,7 +278,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
         {' '}<button className="btn" style={{ marginLeft: 8 }} disabled={!!busy} onClick={() => setMode(mode === 'MARKET' ? 'IMPLIED' : 'MARKET')}>{mode === 'MARKET' ? 'SWITCH TO IMPLIED FROM YIELDS' : 'SWITCH TO QUOTED POINTS'}</button>
       </DescBox>
       <FxForwardChart p={p} tenors={tenors} pts={pts} parity={parity} />
-      <div style={{ display: 'grid', gridTemplateColumns: '70px 60px 1fr 1fr 1fr 1fr 1fr 90px', minWidth: 620 }}>
+      <div data-testid="fwd-table" style={{ display: 'grid', gridTemplateColumns: '70px 60px 1fr 1fr 1fr 1fr 1fr 90px', minWidth: 620, maxWidth: 1040 }}>
         <div style={thL}>TENOR</div><div style={thR}>DAYS</div><div style={thR}>POINTS (PIPS)</div><div style={thR}>OUTRIGHT</div><div style={thR}>PARITY PTS</div><div style={thR}>PARITY FWD</div><div style={thR}>BASIS</div><div style={thL}>SRC</div>
         {tenors.map(t => {
           const q = parity[t]; const v = pts[t]; const n = parseFloat(v)
@@ -371,7 +374,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
           <span className={`pill ${p.crypto ? 'p-amber' : 'p-green'}`}>{p.crypto ? 'NDF' : 'FX SPOT · FWD · NDF'}</span>
           <span className="pill p-blue">{p.quote_curve}</span>
           <span className={`pill ${p.crypto ? 'p-amber' : p.base_curve_available ? 'p-blue' : 'p-amber'}`}>{p.crypto ? `${p.base} funding ${p.funding_pct ?? 0}%` : p.base_curve_available ? p.base_curve : `${p.base} flat (no curve)`}</span>
-          <span className={`pill ${p.forward_curve ? 'p-purple' : 'p-dim'}`}>{p.forward_curve ? (p.forward_curve.label ? `${p.forward_curve.label} points` : `${p.forward_curve.source} points · ${p.forward_curve.valuation_date}`) : 'no forward curve'}</span>
+          <span className={`pill ${p.forward_curve ? 'p-purple' : 'p-dim'}`}>{p.forward_curve ? `${sourceShort(p.forward_curve)} points · ${p.forward_curve.valuation_date}` : 'no forward curve'}</span>
           <span className="pill p-dim">{mode === 'MARKET' ? 'quoted points' : 'implied from yields'}</span>
           <span className="pill p-dim">pip {p.pip}</span>
         </div>

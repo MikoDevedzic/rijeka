@@ -156,6 +156,10 @@ test('market data: saved forward points on a digital-asset pair can be handed ba
   })
   await app.goto('/configurations/market-data/crypto')
   await app.locator('.crv-item', { hasText: 'BTCUSD' }).click()
+  // the source is a word in the list and in the table, never the whole label (it wrapped and stretched every row)
+  await expect(app.locator('.crv-item', { hasText: 'BTCUSD' })).toContainText('MANUAL · 2 tenors')
+  const table = app.getByTestId('fwd-table')
+  await expect(table.getByText('MANUAL', { exact: true }).first()).toBeVisible()
   const box = app.getByTestId('use-feed')
   await expect(box).toContainText('BTCUSD prices on forward points saved in this account (MANUAL, 2026-10-28)')
   await box.getByRole('button', { name: "USE THE FEED'S FORWARDS", exact: true }).click()
@@ -170,6 +174,13 @@ test('market data: saved forward points on a digital-asset pair can be handed ba
   expect(sent).toEqual({ pair: 'BTCUSD' })
   await reloaded
   await expect(app.getByTestId('use-feed')).toHaveCount(0)               // on the feed now: the offer is gone
+  await expect(app.locator('.crv-item', { hasText: 'BTCUSD' })).toContainText('feed (pending) · 2 tenors')
+  await expect(table.getByText('FEED', { exact: true }).first()).toBeVisible()
+  await expect(table).not.toContainText('handed back')
+  const size = await table.boundingBox()
+  expect(size.height, 'ten rows of one line each, not rows stretched by a wrapped label').toBeLessThan(460)
+  expect(size.width, 'a table, not columns spread across the screen').toBeLessThanOrEqual(1040)
+  await app.screenshot({ path: 'e2e/.out/shots/forward-points.png', fullPage: true })
   // an FX pair is never offered it
   await app.locator('.crv-item', { hasText: 'EURUSD' }).click()
   await expect(app.getByTestId('use-feed')).toHaveCount(0)

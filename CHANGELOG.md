@@ -5,6 +5,11 @@ methodology document carries its own version (v1.6). Commits on `main` are the d
 
 ## 0.13.0 · 9 November 2026
 
+- *Same day, frontend only:* on Market data → FX · Crypto the source of a pair's forward points is one word in
+  the table (FEED, MANUAL, BLOOMBERG; the whole label on hover) and a few words in the list. Printed whole, a
+  feed's label wrapped to four lines and stretched every row of the table; the list rows had grown the same way
+  earlier in the day. The table no longer spreads across a wide screen.
+
 - **The launch view.** Two people shown the app found it overwhelming. A workspace provisioned for a new sign-in
   now starts on the `LAUNCH` set of modules: book, value, the XVA charge and its saving on chain, confirm.
   - **What a launch workspace shows.** A home page of four next steps and one button; a top bar of five items; a
