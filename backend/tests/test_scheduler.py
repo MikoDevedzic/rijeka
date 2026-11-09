@@ -21,6 +21,14 @@ def test_groups_are_due_on_their_own_cadence(monkeypatch):
     assert S.due("half_hourly", now=1000 + 30 * 60)
     assert not S.due("daily", now=1000 + 119 * 60)
     assert S.due("daily", now=1000 + 120 * 60)
+    # digital-asset marks: every ten minutes, between the half-hourly group and the daily one
+    assert S.due("marks", now=1000)
+    S._last_group_run.update(marks=1000)
+    assert not S.due("marks", now=1000 + 9 * 60) and S.due("marks", now=1000 + 10 * 60)
+    monkeypatch.setenv("RIJEKA_SCHEDULER_MARKS_MINUTES", "15")
+    assert not S.due("marks", now=1000 + 14 * 60) and S.due("marks", now=1000 + 15 * 60)
+    assert S.GROUPS == ("half_hourly", "marks", "daily", "every_cycle")
+    assert ("crypto_marks", "marks") in [(n, g) for n, g, _ in S._define_steps()]
 
 
 class _Db:

@@ -95,9 +95,11 @@ def test_health_rules_hours_and_business_day():
               date(2026, 10, 30),                  # market data: Friday → ok on Monday
               date(2026, 10, 29),                  # pnl: Thursday → stale
               RuntimeError("relation does not exist"),  # risk: missing table → stale, rolled back
-              datetime(2026, 10, 30, 23, 0, tzinfo=timezone.utc)])  # ccr: Friday datetime → ok
+              datetime(2026, 10, 30, 23, 0, tzinfo=timezone.utc),   # ccr: Friday datetime → ok
+              now - timedelta(hours=3)])           # digital-asset marks: stale (>2h), the last good surface is still served
     out = ops.evaluate(db, now=now)
     c = out["checks"]
+    assert not c["crypto_marks"]["ok"] and c["crypto_marks"]["rule"] == "within 2h" and c["crypto_marks"]["feeds"] == "digital-asset vols and forwards"
     assert c["news"]["ok"] and not c["spots"]["ok"] and c["market_data"]["ok"]
     assert not c["pnl"]["ok"] and not c["risk"]["ok"] and c["ccr"]["ok"]
     assert out["ok"] is False and db.rolled_back == 1
@@ -106,5 +108,5 @@ def test_health_rules_hours_and_business_day():
 
 def test_health_all_green():
     now = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
-    db = _DB([now, now, date(2026, 10, 29), date(2026, 10, 28), date(2026, 10, 28), date(2026, 10, 28)])
+    db = _DB([now, now, date(2026, 10, 29), date(2026, 10, 28), date(2026, 10, 28), date(2026, 10, 28), now - timedelta(minutes=10)])
     assert ops.evaluate(db, now=now)["ok"] is True

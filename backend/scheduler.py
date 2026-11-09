@@ -12,7 +12,8 @@ not correctness.
 Enabled by RIJEKA_SCHEDULER=1, or by default when the process runs on Render (Render sets
 RENDER); RIJEKA_SCHEDULER=0 turns it off. Tests set neither, so nothing starts there.
 
-Cadence: the half-hourly group every RIJEKA_SCHEDULER_MINUTES (30); the daily group every
+Cadence: the marks group every RIJEKA_SCHEDULER_MARKS_MINUTES (10): digital-asset spot, option
+vols and forwards, three small public requests; the half-hourly group every RIJEKA_SCHEDULER_MINUTES (30); the daily group every
 RIJEKA_SCHEDULER_DAILY_HOURS (2), which is what the workflow managed on a good day and keeps
 the risk and credit batches off the single CPU most of the time; the every_cycle group on
 every pass of the loop (a minute): today only chain_reconcile, which follows anchors whose
@@ -43,6 +44,8 @@ log = logging.getLogger(__name__)
 
 STEP_TIMEOUT_NOTE = "steps run in sequence; a failing one is recorded and the next runs"
 
+GROUPS = ("half_hourly", "marks", "daily", "every_cycle")      # the order groups run in when several are due
+
 # name, group, how to run it with (db, secret)
 STEPS: list[tuple[str, str, Callable[..., Any]]] = []
 
@@ -55,6 +58,7 @@ def _define_steps() -> list[tuple[str, str, Callable[..., Any]]]:
         ("news", "half_hourly", lambda db, s: news.tick(db=db, x_rijeka_cron=s)),
         ("summaries", "half_hourly", lambda db, s: news.summarize(limit=12, db=db, x_rijeka_cron=s)),
         ("spots", "half_hourly", lambda db, s: currencies.tick(db=db, x_rijeka_cron=s)),
+        ("crypto_marks", "marks", lambda db, s: demo_market_data.crypto_tick(dry_run=False, db=db, x_rijeka_cron=s)),
         ("market_data", "daily", lambda db, s: demo_market_data.tick(dry_run=False, db=db, x_rijeka_cron=s)),
         ("pnl", "daily", lambda db, s: pnl.eod_tick(db=db, x_rijeka_cron=s)),
         ("risk", "daily", lambda db, s: risk.daily_tick(db=db, x_rijeka_cron=s)),
@@ -81,6 +85,10 @@ def enabled() -> bool:
 
 def _minutes() -> float:
     return float(os.getenv("RIJEKA_SCHEDULER_MINUTES", "30"))
+
+
+def _marks_minutes() -> float:
+    return float(os.getenv("RIJEKA_SCHEDULER_MARKS_MINUTES", "10"))
 
 
 def _daily_hours() -> float:
@@ -113,7 +121,7 @@ def due(group: str, now: Optional[float] = None) -> bool:
     if group == "every_cycle":
         return True
     now = time.time() if now is None else now
-    period = _minutes() * 60 if group == "half_hourly" else _daily_hours() * 3600
+    period = {"marks": _marks_minutes() * 60, "half_hourly": _minutes() * 60}.get(group, _daily_hours() * 3600)
     last = _last_group_run.get(group)
     return last is None or now - last >= period - 5
 
@@ -153,7 +161,7 @@ def run_cycle(steps=None, now: Optional[float] = None, session_factory=None) -> 
     now = time.time() if now is None else now
     secret = os.getenv("RIJEKA_CRON_SECRET", "")
     ran: list[str] = []
-    for group in ("half_hourly", "daily", "every_cycle"):
+    for group in GROUPS:
         if not due(group, now):
             continue
         _last_group_run[group] = now

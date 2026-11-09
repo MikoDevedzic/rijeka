@@ -30,6 +30,10 @@ jobs:
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/currency/spot/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 60)
           cat /tmp/out; echo; test "$code" = "200"
+      - name: digital-asset marks (venue option vols and forwards; the in-process scheduler runs this every ten minutes)
+        run: |
+          code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/market-data/demo/crypto/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 120)
+          echo "marks: $code $(head -c 400 /tmp/out)"
       - name: demo market data (public sources, daily rebuild)
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/market-data/demo/tick" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 240)

@@ -231,7 +231,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       ['SPOT', fmt(r.spot, dp), r.spot_source || ''],
       ['FORWARD TO SETTLEMENT', fmt(r.forward, dp), `${r.forward_mode === 'MARKET' && r.market_points != null ? 'quoted points' : 'implied from yields'}${r.forward_source ? ' · ' + r.forward_source : ''}`],
       ['STRIKE', fmt(r.strike, dp), strike === '' ? 'at the forward' : `${fmt((r.strike / r.forward - 1) * 100, 2)}% from the forward`],
-      ['VOL', `${fmt(r.vol_pct, 3)}%`, `${r.vol_tier} · ${r.vol_source}${r.vol_snapshot ? ' · ' + r.vol_snapshot : ''}`],
+      ['VOL', `${fmt(r.vol_pct, 3)}%`, `${r.vol_tier} · ${r.vol_source}${r.vol_marks ? ' · ' + r.vol_marks : r.vol_snapshot ? ' · ' + r.vol_snapshot : ''}`],
       ...(r.forward_delta != null ? [['FORWARD DELTA', pct(r.forward_delta, 1), `d1 ${fmt(r.d1, 4)} · d2 ${fmt(r.d2, 4)} · premium-excluded`]] : []),
       ...(r.intrinsic != null ? [['INTRINSIC / TIME VALUE', `${money(r.intrinsic * r.df_quote)} / ${money(r.time_value)}`, 'on the forward, discounted']] : []),
       ...(r.style && r.style !== 'EUROPEAN' ? [['STYLE', r.style.replace('_', ' '), [r.barrier_type, r.barrier && `barrier ${fmt(r.barrier, dp)}`, r.lower && `[${fmt(r.lower, dp)}, ${fmt(r.upper, dp)}]`, r.touch_type, r.payout && `pays ${fmt(r.payout, 0)} ${r.payout_currency === 'BASE' ? r.base_currency : qc}`, r.pay_at_hit ? 'paid at hit' : null, r.rebate ? `rebate ${r.rebate}` : null].filter(Boolean).join(' · ')]] : []),
@@ -400,7 +400,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
                 <input className="tbw-mono" type="text" inputMode="decimal" placeholder="at the forward" value={strike} onChange={e => setStrike(e.target.value.replace(/[^0-9.]/g, ''))} />
               </div>
             )}
-            <div><div className="tbw-lbl">VOL % <span className="tbw-mut">· {cur?.vol_surface ? `${cur.vol_surface.source} surface ${cur.vol_surface.valuation_date}` : 'no surface: desk default'}</span></div>
+            <div><div className="tbw-lbl">VOL % <span className="tbw-mut">· {cur?.vol_surface ? (cur.vol_surface.label || `${cur.vol_surface.source} surface ${cur.vol_surface.valuation_date}`) : 'no surface: desk default'}</span></div>
               <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.vol_surface ? 'from the surface' : 'default level'} value={volOv} onChange={e => setVolOv(e.target.value.replace(/[^0-9.]/g, ''))} />
             </div>
             <div><div className="tbw-lbl">SETTLEMENT</div>
@@ -428,7 +428,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       <div className="tbw-sec" style={option ? { display: 'none' } : undefined}>
         <div className="tbw-terms-header">
           <span className="tbw-lbl">FORWARD TERMS</span>
-          <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · funding is a desk input` : ndf ? `non-deliverable · cash-settled in ${qc}` : shape === 'SPOT' ? 'spot · T+2 delivery' : 'deliverable · both principals exchange'}</span>
+          <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · ${cur?.forward_curve ? `forward from ${cur.forward_curve.label || 'quoted points'}` : 'funding is a desk input'}` : ndf ? `non-deliverable · cash-settled in ${qc}` : shape === 'SPOT' ? 'spot · T+2 delivery' : 'deliverable · both principals exchange'}</span>
         </div>
         <div className="tbw-grid-6">
           <div><div className="tbw-lbl">{crypto ? 'PRICE K' : 'RATE K'} <span className="tbw-mut">· {qc} per {cur?.base || 'base'}</span></div>
@@ -438,8 +438,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.spot ? fmt(cur.spot, dp) : 'snap first'} value={spotOv} onChange={e => setSpotOv(e.target.value.replace(/[^0-9.]/g, ''))} />
           </div>
           {crypto ? (
-            <div><div className="tbw-lbl">{cur?.base || 'ASSET'} FUNDING % <span className="tbw-mut">· {cur?.funding_pct != null ? `${cur.funding_pct}% saved` : '0% default'}</span></div>
-              <input className="tbw-mono" type="text" inputMode="decimal" placeholder="saved rate" value={fundOv} onChange={e => setFundOv(e.target.value.replace(/[^0-9.-]/g, ''))} />
+            <div><div className="tbw-lbl">{cur?.base || 'ASSET'} FUNDING % <span className="tbw-mut">· {cur?.forward_curve ? 'overrides the quoted forward' : cur?.funding_pct != null ? `${cur.funding_pct}% saved` : '0% default'}</span></div>
+              <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.forward_curve ? 'from the forward' : 'saved rate'} value={fundOv} onChange={e => setFundOv(e.target.value.replace(/[^0-9.-]/g, ''))} />
             </div>
           ) : (
             <div><div className="tbw-lbl">{cur?.base || 'BASE'} DISCOUNTING</div>

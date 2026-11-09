@@ -1,7 +1,42 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.3). Commits on `main` are the detail.
+methodology document carries its own version (v1.5). Commits on `main` are the detail.
+
+## 0.12.0 · 9 November 2026
+
+- **Live digital-asset market data.** BTC, ETH and SOL option vols and forwards come from Deribit's public option
+  marks (`market_data/deribit.py`), refreshed every ten minutes together with the spot, in place of the parametric
+  surface and the flat funding rate. On 9 November the old BTC surface stood some fourteen vol points above the
+  market with the risk reversal on the wrong side.
+  - **The reading.** Per listed expiry the marks are read at 25 and 50 forward delta, the convention of the pricer's
+    smile, so the surface returns the venue's marks at those points; across expiries ATM is linear in total variance.
+    The forward of each expiry over the index is stored as forward points; on the market forward mode the ticket's
+    forward is spot plus those points. Three unauthenticated requests per run.
+  - **On the ticket.** The vol and the forward name the venue and the time of the marks. A funding rate typed on a
+    digital-asset ticket still wins: the forward is then the carry at that rate and the response says so (before
+    this change quoted points would have silently overridden it; no account had any for a digital asset).
+  - **Safeguards.** An expiry inside two days, with fewer than six usable marks, with no open interest, or that does
+    not reach the 25-delta points is left out; a surface needs two expiries. When the venue does not answer nothing
+    is written: the last good surface stands with its own time, the daily rebuild carries it instead of writing the
+    parametric one, and the new health check `crypto_marks` turns red after two hours. Tenors beyond the last
+    listed expiry are held flat and the source says through which expiry it is listed.
+  - **Accounts.** The marks are written for the template account and pushed to every demo account in one statement;
+    a row an account entered itself is never replaced.
+  - **Risk history.** A built history row never replaces a venue row. The dates before the venue's first surface are
+    rebuilt from it (carried back by the ratio of realised-vol scales) so the vol series has no step on the day the
+    source changed. This takes effect when the history backfill is next run; until then a VaR window containing
+    9 November samples the change of source as one day's fall in vol (`docs/market_risk.md`).
+  - **Switch.** `RIJEKA_DERIBIT=0` stops the requests; the next daily rebuild removes the stored rows.
+    `RIJEKA_SCHEDULER_MARKS_MINUTES` sets the period.
+  - **What moves.** A booked digital-asset forward or option now revalues on the venue's forward and vol: a one-off
+    change in its value on the first day, attributed to the points and vol steps of the P&L explain. The pinned sample
+    book is unchanged (the local stack has no venue). Not changed: the counterparty-credit paths still drift a digital
+    asset at the stored flat funding rate.
+  - Methodology v1.5; `docs/architecture.md` gains a market-data table, source by source, and the venue in the diagram.
+  - Tests: the builder against chains generated from a known smile (no venue data in the repository), the routes,
+    the scheduler group, the health check, the history guard and anchor, an integration test on the local stack, and a
+    browser journey for the ticket's captions (33 journeys).
 
 ## 0.11.1 · 8 November 2026
 

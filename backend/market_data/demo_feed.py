@@ -362,8 +362,8 @@ FX_VOL_LEVELS = {   # pair: (ATM 1W, ATM 2Y, RR25, BF25)
 
 # Digital assets: the same shape at crypto levels (ATM 55–90 %, calls bid in a bull market so the
 # risk reversal is positive, fat wings), scaled day by day by realised vol like the FX surfaces
-# (risk/vols.py). No public source quotes crypto implied vols the demo can rely on; Deribit's are
-# the next step and the methodology says so.
+# (risk/vols.py). This is the fallback: when Deribit's public marks answer (market_data/deribit.py)
+# the venue's surface is stored instead and these levels are never read for that day.
 CRYPTO_VOL_LEVELS = {"BTCUSD": (52.0, 60.0, 2.0, 3.0), "ETHUSD": (62.0, 70.0, 3.0, 3.5), "SOLUSD": (82.0, 90.0, 4.0, 4.5)}
 VOL_LEVELS = {**FX_VOL_LEVELS, **CRYPTO_VOL_LEVELS}
 

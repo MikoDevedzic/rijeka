@@ -18,7 +18,8 @@ flowchart LR
     AUTH[Auth<br/>ES256 JWTs]
   end
   CHAIN[(Sepolia<br/>TradeConfirmationRegistry)]
-  PUB[Public data<br/>NY Fed, UST, ECB, BoE, SNB, MoF, Coinbase, news feeds]
+  PUB[Public data<br/>NY Fed, UST, ECB, BoE, SNB, MoF, news feeds<br/>Coinbase spot]
+  VENUE[Deribit public API<br/>option marks and forwards<br/>BTC, ETH, SOL]
   ANTH[Anthropic API<br/>Prometheus, news summaries, book brief]
   TG[Telegram<br/>mirror of trade cards]
   APP -- "HTTPS, Bearer JWT" --> API
@@ -28,6 +29,7 @@ flowchart LR
   API -- "verifies tokens by public key" --> AUTH
   API -- "relayer (anchor, amend, terminate)" --> CHAIN
   API -- "daily rebuild, spots, news" --> PUB
+  API -- "three requests every 10 minutes" --> VENUE
   API -- "read-only tools" --> ANTH
   API <--> TG
   LAND -- "pulse, calendar, register" --> API
@@ -50,11 +52,11 @@ methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every produc
 `risk/` (ladder, VaR, stress, backtest, limits, vol history), `ccr/` (exposure paths, calibration,
 options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the firm's instrument list, the schedule per counterparty, the regime and the
 yields derived from them, the ticket's collateral onto a CSA, the book's collateral page; `docs/collateral.md`), `chain/` (canonical record, EIP-712
-signing, attestation, keys, lifecycle guard, Telegram), `market_data/` (public-source demo feed, policy
-path, calendar), `news/`, `prometheus/` (read-only assistant and book brief), `methodology/` (Excel
-replications). `scheduler.py` runs the batches in-process (news, summaries and spots every 30 minutes;
-demo market data, end-of-day P&L, market risk and counterparty credit every 2 hours) and moves the
-`release` branch after a deploy.
+signing, attestation, keys, lifecycle guard, Telegram), `market_data/` (public-source demo feed, the venue adapter
+`deribit.py` for digital-asset vols and forwards, policy path, calendar), `news/`, `prometheus/` (read-only assistant and book brief), `methodology/` (Excel
+replications). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; news,
+summaries and spots every 30 minutes; demo market data, end-of-day P&L, market risk and counterparty
+credit every 2 hours) and moves the `release` branch after a deploy.
 
 **The database**: a Supabase project. Auth issues ES256 tokens; the API verifies them against the
 project's published keys (no shared secret) and then reads the caller's role from `profiles.role`.
@@ -71,6 +73,24 @@ is a static page that reads the registry directly; nothing in it trusts Rijeka's
 public tools (IRS pricer, XVA simulator and waterfall, SABR surface, Bermudan tree, attribution, SIMM),
 the verifier, terms and privacy. It reads the API's public endpoints (pulse, calendar, the register of
 anchored confirmations).
+
+## Market data, source by source
+
+Every stored quote is a row of `market_data_snapshots` keyed by account, curve id and date, with a `source`
+that says where it came from; the pricers read the latest row and print that source on the ticket.
+
+| What | Curve ids | From | How often | When the source is silent |
+|---|---|---|---|---|
+| OIS curves | `USD_SOFR`, `EUR_ESTR`, `GBP_SONIA`, `CHF_SARON`, `JPY_TONAR` | central banks and treasuries, an indicative spread over government par (`market_data/demo_feed.py`) | daily | the curve keeps its last date; health reports it |
+| FX and digital-asset spot | `{PAIR}_SPOT` | ECB reference rates, Coinbase | 30 minutes; digital assets with the marks, every 10 | the last spot stands |
+| Digital-asset vols | `BTCUSD_VOL`, `ETHUSD_VOL`, `SOLUSD_VOL` | Deribit option marks, read at 25 and 50 delta per expiry (`market_data/deribit.py`) | 10 minutes | the last good surface stands, its own time in the source; health check `crypto_marks` turns red after two hours |
+| Digital-asset forwards | `{PAIR}_FWD` | the same chain: the forward of each expiry over the index | 10 minutes | as above; a funding rate typed on the ticket always wins over them |
+| Rates and FX vols | `USD_SWVOL_ATM`, skew, caps, `{PAIR}_VOL` for G10 | parametric, level scaled by realised vol (`risk/vols.py`) | daily | n/a: built, and labelled synthetic |
+
+The template account receives every feed; a demo account is a copy of it. The daily rebuild copies a day's rows once and
+never overwrites; the digital-asset marks are pushed on every run and replace only rows that came from a feed, never
+a row the account entered itself. `RIJEKA_DERIBIT=0` switches the venue off: the next daily rebuild removes its rows
+and the parametric surfaces and the flat funding rate return. `GET /api/market-data/demo/sources` lists all of this publicly.
 
 ## Independent price verification
 

@@ -1,8 +1,9 @@
 """
 demo_market_data.py — the hosted demo's market data, rebuilt daily from public sources.
 
-POST /api/market-data/demo/tick      cron (X-Rijeka-Cron): fetch, build, write, copy
-GET  /api/market-data/demo/sources   public: what the demo prices on, and how fresh
+POST /api/market-data/demo/tick          cron (X-Rijeka-Cron): fetch, build, write, copy
+POST /api/market-data/demo/crypto/tick   cron: digital-asset spot, option vols and forwards (market_data/deribit.py)
+GET  /api/market-data/demo/sources       public: what the demo prices on, and how fresh
 
 The tick writes the template user's rows (the account every new sign-up is
 copied from, see demo.py) and then runs the same copy for every existing demo
@@ -19,7 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -28,7 +29,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db.session import get_db
-from market_data import demo_feed
+from market_data import demo_feed, deribit
 from . import demo
 from .news import _secret_ok
 
@@ -115,6 +116,89 @@ def _demo_user_ids(db: Session, template) -> list:
     return [r[0] for r in rows]
 
 
+# ── Digital assets: the venue's marks, several times an hour ───────────────────
+
+MARKS_LIKE = deribit.SOURCE_PREFIX + "%"
+
+# A demo account takes the template's row for the day. Its own entries stand: a row it typed or imported
+# is never replaced, except a fetched spot (source IMPORT), which is the same public price a few minutes older.
+PUSH_SQL = """
+    INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, created_by, user_id)
+    SELECT s.curve_id, s.valuation_date, s.quotes, s.source, u.user_id, u.user_id
+    FROM market_data_snapshots s
+    CROSS JOIN (SELECT DISTINCT user_id FROM legal_entities WHERE lei LIKE :p AND is_own_entity AND user_id <> :t) u
+    WHERE s.user_id = :t AND s.valuation_date = :d AND s.curve_id = ANY(:ids)
+    ON CONFLICT (user_id, curve_id, valuation_date) DO UPDATE
+      SET quotes = EXCLUDED.quotes, source = EXCLUDED.source, created_at = NOW()
+      WHERE market_data_snapshots.source LIKE 'DEMO%'
+         OR (market_data_snapshots.source = 'IMPORT' AND right(market_data_snapshots.curve_id, 5) = '_SPOT')
+"""
+
+
+def kept_marks(db: Session, uid) -> dict[str, dict]:
+    """{curve_id: {quotes, source}}: the template's latest vol surface from the venue per pair. The daily rebuild
+    writes these instead of the parametric surface, so a day the venue did not answer carries the last good
+    marks, with their own time still in the source."""
+    if not deribit.enabled():
+        return {}
+    rows = db.execute(text("""
+        SELECT DISTINCT ON (curve_id) curve_id, quotes, source FROM market_data_snapshots
+        WHERE user_id = :u AND source LIKE :m AND right(curve_id, 4) = '_VOL'
+        ORDER BY curve_id, valuation_date DESC"""), {"u": uid, "m": MARKS_LIKE}).all()
+    return {r.curve_id: {"quotes": r.quotes, "source": r.source} for r in rows}
+
+
+def purge_marks(db: Session) -> int:
+    """The source switched off (RIJEKA_DERIBIT=0): its rows go, on every account, and the parametric surfaces return."""
+    n = db.execute(text("DELETE FROM market_data_snapshots WHERE source LIKE :m"), {"m": MARKS_LIKE}).rowcount or 0
+    if n:
+        log.warning("deribit is switched off: %d rows removed", n)
+    return n
+
+
+def refresh_crypto(db: Session, dry_run: bool = False, now: Optional[datetime] = None) -> dict:
+    """Digital-asset spot (Coinbase), option vols and forwards (Deribit) for the template and every demo account.
+    An asset the venue did not answer for keeps the rows it has; nothing is written for it."""
+    template = demo._template_user_id(db)
+    if template is None:
+        raise HTTPException(status_code=503, detail="no template user (RIJEKA_DEMO_TEMPLATE_EMAIL)")
+    now = now or datetime.now(timezone.utc)
+    today = date.today()
+    got = deribit.collect(now)
+    summary: dict = {"as_of": now.isoformat(timespec="seconds"), "assets": {}, "failed": got["failed"], "dry_run": dry_run}
+    ids: list[str] = []
+    for asset, b in got["ok"].items():
+        pair = deribit.pair(asset)
+        summary["assets"][asset] = {"marks_at": b["asof"].isoformat(timespec="seconds"), "index": b["index"], "expiries": len(b["expiries"]),
+                                    "dropped": b["dropped"], "last_expiry": b["last_expiry"]}
+        if dry_run:
+            summary["assets"][asset].update(vol=b["vol"], forward=b["forward"], by_expiry=b["expiries"])
+            continue
+        _upsert_snapshot(db, template, f"{pair}_VOL", today, b["vol"], deribit.source("option marks", b))
+        _upsert_snapshot(db, template, f"{pair}_FWD", today, b["forward"], deribit.source("forwards", b))
+        ids += [f"{pair}_VOL", f"{pair}_FWD"]
+    if dry_run:
+        return summary
+    db.commit()
+    try:        # the spot the points sit on, taken in the same minute
+        from .crypto import fetch_spot
+        from .currencies import _save_pairs
+        spots = {deribit.pair(a): px for a, px in fetch_spot(deribit.ASSETS).items()}
+        _save_pairs(db, template, spots)
+        ids += [f"{p}_SPOT" for p in spots]
+        summary["spot"] = spots
+    except Exception as e:      # noqa: BLE001 — the half-hourly spot tick stands
+        db.rollback()
+        log.warning("crypto spot not refreshed with the marks: %s", e)
+        summary["spot"] = None
+    if ids:
+        res = db.execute(text(PUSH_SQL), {"p": demo.DEMO_LEI_PREFIX + "%", "t": template, "d": today, "ids": ids})
+        summary["pushed_rows"] = res.rowcount or 0
+        db.commit()
+    log.info("crypto marks: %s", {a: v["marks_at"] for a, v in summary["assets"].items()} or summary["failed"])
+    return summary
+
+
 def refresh(db: Session, valuation_date: Optional[date] = None, dry_run: bool = False) -> dict:
     """Fetch, build and (unless dry_run) write the demo market data. Returns a summary."""
     valuation_date = valuation_date or date.today()
@@ -123,6 +207,10 @@ def refresh(db: Session, valuation_date: Optional[date] = None, dry_run: bool = 
         raise HTTPException(status_code=503, detail="no template user (RIJEKA_DEMO_TEMPLATE_EMAIL)")
 
     built = demo_feed.assemble(demo_feed.collect(valuation_date), valuation_date)
+    if deribit.enabled():
+        built["curves"].update(kept_marks(db, template))        # the venue's marks stand over the parametric surface
+    elif not dry_run:
+        purge_marks(db)
     summary: dict = {
         "valuation_date": valuation_date.isoformat(),
         "curves": {cid: {"quotes": len(cv["quotes"]), "source": cv["source"]} for cid, cv in built["curves"].items()},
@@ -183,6 +271,16 @@ def tick(dry_run: bool = Query(default=False), db: Session = Depends(get_db),
     return refresh(db, dry_run=dry_run)
 
 
+@router.post("/crypto/tick")
+def crypto_tick(dry_run: bool = Query(default=False), db: Session = Depends(get_db),
+                x_rijeka_cron: Optional[str] = Header(None)):
+    if not _secret_ok(x_rijeka_cron):
+        raise HTTPException(status_code=403, detail="bad cron secret")
+    if not enabled() or not deribit.enabled():
+        return {"enabled": False}
+    return refresh_crypto(db, dry_run=dry_run)
+
+
 @router.get("/sources")
 def sources(db: Session = Depends(get_db)):
     """Public on purpose: the provenance of the demo's market data and the latest date per curve is part
@@ -194,7 +292,9 @@ def sources(db: Session = Depends(get_db)):
             SELECT DISTINCT ON (curve_id) curve_id, valuation_date, source FROM market_data_snapshots
             WHERE user_id = :u AND source LIKE 'DEMO%' ORDER BY curve_id, valuation_date DESC"""), {"u": template}).all()
         latest = {r.curve_id: {"valuation_date": r.valuation_date.isoformat(), "source": r.source} for r in rows}
-    return {"enabled": enabled(), "sources": demo_feed.SOURCES, "latest": latest,
+    venue = [{"curve": f"{deribit.pair(a)}_{kind}", "provider": f"{deribit.PROVIDER} {what} (public API, unauthenticated)", "kind": "public", "url": deribit.URL}
+             for a in deribit.ASSETS for kind, what in (("VOL", "option marks"), ("FWD", "forwards by expiry"))] if deribit.enabled() else []
+    return {"enabled": enabled(), "sources": demo_feed.SOURCES + venue, "latest": latest,
             "assumptions": {"USD_OIS_MINUS_UST_bp": demo_feed.USD_OIS_MINUS_UST,
                             "EUR_OIS_MINUS_AAA_bp": demo_feed.EUR_OIS_MINUS_AAA,
                             "GBP_OIS_MINUS_GILT_bp": demo_feed.GBP_OIS_MINUS_GILT}}

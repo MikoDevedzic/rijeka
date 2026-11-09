@@ -134,3 +134,101 @@ def test_booking_structure_follows_the_style_for_digital_assets():
     assert TradeCreate(**base, terms={"style": "TOUCH"}).structure == "TOUCH"
     assert TradeCreate(**base, terms={}).structure == "EUROPEAN"
     assert display_structure(SimpleNamespace(instrument_type="CRYPTO_OPTION", structure=None, terms={"style": "DIGITAL"})) == "DIGITAL"
+
+
+# ── the venue's marks (market_data/deribit.py): forwards by expiry and the surface, with their time on the ticket ──
+
+MARKS = "DEMO · Deribit option marks · 2026-11-09 12:57 UTC · listed to 24SEP27, flat beyond"
+FWDS = "DEMO · Deribit forwards · 2026-11-09 12:57 UTC · listed to 24SEP27, flat beyond"
+
+
+def test_quoted_forwards_replace_the_flat_funding_rate_and_a_funding_rate_on_the_ticket_still_wins():
+    import main
+    db = _mock_db()
+    rows = {"BTCUSD_FWD": MagicMock(valuation_date=VAL, source=FWDS, quotes=[{"tenor": "1M", "rate": 300.0}, {"tenor": "3M", "rate": 900.0}, {"tenor": "1Y", "rate": 3700.0}]),
+            "BTCUSD_VOL": MagicMock(valuation_date=VAL, quotes=BTC_VOL, source=MARKS)}
+    inner = db.execute.side_effect
+    def execute(sql, params=None):
+        hit = rows.get((params or {}).get("c", ""))
+        if hit is None:
+            return inner(sql, params)
+        r = MagicMock(); r.first.return_value = hit; return r
+    db.execute.side_effect = execute
+    c, currencies = _client(db)
+    body = {"pair": "BTCUSD", "base_notional": 10, "settlement_date": SET.isoformat(), "valuation_date": VAL.isoformat()}
+    try:
+        with patch.object(currencies, "_curve", side_effect=lambda db, uid, cid, vd: Curve(VAL, flat_rate=0.04)):
+            mkt = c.post("/api/currency/forward/price", json=body).json()
+            own = c.post("/api/currency/forward/price", json={**body, "base_rate_pct": 1.0}).json()
+            opt = c.post("/api/currency/option/price", json={"pair": "BTCUSD", "option_type": "PUT", "base_notional": 10, "expiry_date": EXP.isoformat(),
+                                                              "valuation_date": VAL.isoformat()}).json()
+            flat = c.post("/api/currency/option/price", json={"pair": "BTCUSD", "option_type": "PUT", "base_notional": 10, "expiry_date": EXP.isoformat(),
+                                                               "valuation_date": VAL.isoformat(), "vol_pct": 40}).json()
+            state = currencies.pair_state(db, "u", "BTCUSD")
+    finally:
+        main.app.dependency_overrides.clear()
+    days = (SET - VAL).days
+    pts = currencies.interp_points({"1M": 300.0, "3M": 900.0, "1Y": 3700.0}, days)
+    # the forward is spot plus the venue's points, and the ticket names the venue and the time of the marks
+    assert mkt["forward_mode"] == "MARKET" and mkt["forward"] == pytest.approx(65000.0 + pts) and mkt["market_points"] == pytest.approx(pts)
+    assert mkt["forward_source"].startswith("market points (BTCUSD_FWD") and "Deribit forwards · 2026-11-09 12:57 UTC" in mkt["forward_source"] and "DEMO" not in mkt["forward_source"]
+    # a funding rate typed on the ticket is the desk's own carry: parity at that rate, and the response says which applied
+    T = days / 365.0
+    import math
+    assert own["forward_mode"] == "IMPLIED" and own["base_discounting"] == "request" and own["forward_source"] == "spot carried at the funding rate (request)"
+    assert own["forward"] == pytest.approx(65000.0 * math.exp(-0.01 * T) / Curve(VAL, flat_rate=0.04).df(SET), rel=1e-9)
+    assert own["market_points"] == pytest.approx(pts)                     # still reported, as the basis against the desk's rate
+    # the option sits on the quoted forward and prints where its vol came from
+    assert opt["forward"] == pytest.approx(mkt["forward"]) and opt["vol_marks"] == "Deribit option marks · 2026-11-09 12:57 UTC · listed to 24SEP27, flat beyond"
+    assert flat["vol_tier"] == "OVERRIDE" and flat["vol_marks"] is None
+    # the field captions on the ticket
+    assert state["vol_surface"]["label"] == "Deribit 9 Nov 12:57 UTC" and state["forward_curve"]["label"] == "Deribit 9 Nov 12:57 UTC"
+    assert currencies.short_label("DEMO · Deribit option marks · not a time UTC · x", "2026-11-09", "surface").endswith("surface 2026-11-09")
+    assert currencies.short_label("MANUAL", "2026-11-02", "surface") == "MANUAL surface 2026-11-02"
+    assert currencies.short_label("DEMO · synthetic surface", "2026-11-02", "surface") == "DEMO · synthetic surface surface 2026-11-02"
+    assert currencies.marks_label("DEMO · synthetic surface") == "synthetic surface" and currencies.marks_label(None) is None
+
+
+def test_a_built_history_row_never_replaces_a_venue_row():
+    from risk import history as H
+    db = MagicMock()
+    db.execute.return_value.rowcount = 0
+    H.store(db, "tmpl", {"BTCUSD_VOL": {date(2026, 11, 9): BTC_VOL}}, overwrite=True, source="DEMO · synthetic surface, level scaled")
+    sql, params = str(db.execute.call_args.args[0]), db.execute.call_args.args[1]
+    assert "DO UPDATE SET quotes = EXCLUDED.quotes, source = EXCLUDED.source WHERE market_data_snapshots.source NOT LIKE :keep" in sql
+    assert params["keep"] == "DEMO · Deribit%"
+    from market_data import deribit
+    assert H.MARKET_LIKE == deribit.SOURCE_PREFIX + "%"
+    db.reset_mock()
+    H.store(db, "tmpl", {"BTCUSD_VOL": {date(2026, 11, 9): BTC_VOL}})
+    assert "DO NOTHING" in str(db.execute.call_args.args[0]) and "keep" not in db.execute.call_args.args[1]
+
+
+def test_the_vol_history_before_the_venue_is_the_venue_surface_carried_back_so_the_series_has_no_step():
+    import math
+    import random
+    from unittest.mock import patch as _patch
+    from risk import vols
+    rng = random.Random(11)
+    px = [60_000.0]
+    for i in range(330):
+        px.append(px[-1] * math.exp(rng.gauss(0, (0.35 if i < 300 else 0.80) / math.sqrt(252))))     # a calm year, then a wild month
+    days = [date(2025, 12, 1) + timedelta(days=i) for i in range(len(px))]
+    on = days[-1]
+    venue = quotes_from_grid({"1M": {"ATM": 38.5, "RR25": -4.2, "BF25": 1.4}, "1Y": {"ATM": 40.3, "RR25": -2.0, "BF25": 1.1}})
+    # on the anchor's own date the rebuilt surface is the venue's, quote for quote
+    assert vols.fx_surface("BTCUSD", px, (venue, px)) == [{**q, "rate": round(q["rate"], 3)} for q in venue]
+    # a month earlier the level follows realised vol from there: the wild month had lifted the 1M point, so before it the point is lower
+    before = {(q["tenor"], q["quote_type"]): q["rate"] for q in vols.fx_surface("BTCUSD", px[:300], (venue, px))}
+    assert before[("1M", "ATM")] == pytest.approx(38.5 * vols.scale(px[:300], 21) / vols.scale(px, 21), abs=1e-3) and before[("1M", "ATM")] < 38.5
+    assert before[("1M", "RR25")] == -4.2 and before[("1Y", "BF25")] == 1.1                      # the smile is the venue's throughout
+    # the builder: an anchored pair is carried back, a pair without one keeps the parametric level
+    series = {"BTCUSD_SPOT": [(d, {"SPOT": p}) for d, p in zip(days, px)], "ETHUSD_SPOT": [(d, {"SPOT": p / 30}) for d, p in zip(days, px)]}
+    with _patch.object(vols.H, "series", side_effect=lambda db, uid, cid, a, b, **kw: [(d, q) for d, q in series.get(cid, []) if a <= d <= b]), \
+         _patch.object(vols, "venue_anchors", return_value={"BTCUSD_VOL": (on, venue)}):
+        out = vols.history_days(None, "tmpl", days[-3], on)
+    btc = {d: {(q["tenor"], q["quote_type"]): q["rate"] for q in qs} for d, qs in out["BTCUSD_VOL"].items()}
+    assert btc[on][("1M", "ATM")] == 38.5 and abs(btc[days[-2]][("1M", "ATM")] - 38.5) < 2.5       # a day's move, not the 14 points between the two sources
+    eth = {(q["tenor"], q["quote_type"]): q["rate"] for q in out["ETHUSD_VOL"][on]}
+    from market_data import demo_feed
+    assert eth[("1M", "RR25")] == next(q["rate"] for q in demo_feed.build_fx_vols("ETHUSD") if q["tenor"] == "1M" and q["quote_type"] == "RR25")

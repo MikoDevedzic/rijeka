@@ -72,7 +72,8 @@ const PHASES = [
     ['DONE', 'Digital-asset options on BTC, ETH and SOL: European, American, digital, barrier, double barrier and touch on the FX option engine with the funding rate as the carry, cash-settled (NDO); CRY01, IR01 (discounting) and FUND01; vol surfaces, VOL step, VaR, stress, exposure paths, canonical record, Excel replications'],
     ['DONE', 'XVA replication for FX and digital assets: the lognormal forward rebuilt in cells from the engine\'s draws (or re-rolled live), the pair\'s surface interpolated to the forward\'s tenor with the smile fixed point at the forward, the CSA and margin-period bridge, IM from the spot sensitivity, the full waterfall, a convergence sheet'],
     ['NEXT', 'XVA replication for the real-world counterparty-credit paths (historical blocks)'],
-    ['NEXT', 'Implied crypto vol surfaces from a venue (Deribit DVOL and chain marks) in place of the realised-vol-scaled synthetic ones; venue adapters for crypto OTC desks'],
+    ['DONE', 'Digital-asset vols and forwards from a venue: Deribit\'s public option marks every ten minutes as ATM, 25Δ risk reversal and butterfly per tenor, the forward of each listed expiry in place of a flat funding rate, the time of the marks on every ticket, the last good surface kept when the venue is silent'],
+    ['NEXT', 'A second venue beside the first and adapters for crypto OTC desks\' own marks; listed expiries beyond one year as they appear'],
   ]},
   { title: 'PHASE 2 · FX & CREDIT', status: 'PARTIAL', items: [
     ['DONE', 'FX options: European, American, digital, barrier, double barrier and touch, each against its QuantLib engine; FX vol surfaces (ATM, 25Δ risk reversal and butterfly per tenor, Malz smile in delta); vega on the ladder, VOL step in the P&L explain, vol in VaR and stress, on the exposure paths and in the canonical record; Excel replications for every style but American'],

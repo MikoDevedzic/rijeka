@@ -51,3 +51,44 @@ for (const c of CASES) {
     expectClean(problems)
   })
 }
+
+// A venue's marks (market_data/deribit.py) reach the ticket as captions: where the vol and the forward came from and when.
+// The stack has no venue, so the two responses are given the fields the API adds when it has one; the rest is the real app.
+test('crypto ticket: the vol and the forward name the venue and the time of its marks', async ({ app, problems }) => {
+  const AT = 'Deribit 9 Nov 12:57 UTC'              // the caption: short enough for one line over an input
+  const MARKS = 'Deribit option marks · 2026-11-09 12:57 UTC'
+  const FWDS = 'Deribit forwards · 2026-11-09 12:57 UTC'
+  await app.route(/\/api\/currency\/pairs(\?.*)?$/, async route => {
+    const res = await route.fetch()
+    const body = await res.json()
+    for (const p of body.pairs) {
+      if (!p.crypto) continue
+      if (p.vol_surface) p.vol_surface.label = AT
+      p.forward_curve = { valuation_date: '2026-11-09', source: `DEMO · ${FWDS} · listed to 24SEP27, flat beyond`, label: AT, tenors: ['1M', '3M'] }
+    }
+    await route.fulfill({ response: res, json: body })
+  })
+  await app.route(/\/api\/currency\/option\/price$/, async route => {
+    const res = await route.fetch()
+    const body = await res.json()
+    if (res.ok()) body.vol_marks = `${MARKS} · listed to 24SEP27, flat beyond`
+    await route.fulfill({ response: res, json: body })
+  })
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'CRYPTO', exact: true }).click()
+  await win.getByRole('button', { name: /^CRYPTO FORWARD$/i }).click()
+  await expect(win).toContainText(`forward from ${AT}`)
+  await expect(win).toContainText('overrides the quoted forward')
+  await win.getByRole('button', { name: /^CRYPTO OPTION$/i }).click()
+  await expect(win).toContainText(`VOL % · ${AT}`, { ignoreCase: true })
+  const priced = app.waitForResponse(r => /\/api\/currency\/option\/price$/.test(r.url()) && r.request().method() === 'POST')
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  expect((await priced).status(), 'the option prices').toBe(200)
+  await expect(win).toContainText('NET NPV')
+  await expectNoHorizontalOverflow(win, 'crypto option ticket with the venue captions')
+  await app.screenshot({ path: 'e2e/.out/shots/crypto-option-marks.png' })
+  expectClean(problems)
+})

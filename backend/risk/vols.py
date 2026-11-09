@@ -10,7 +10,17 @@ vega P&L has something to explain. Every row is labelled as such.
     RV_ref = the same over every observation on file up to d (at least 60; otherwise the ratio is 1)
 
 The swaption ATM grid is scaled the same way with the 3-month realised vol of the 5Y par rate in bp
-against its long-run value. Risk reversals and butterflies are left as quoted."""
+against its long-run value. Risk reversals and butterflies are left as quoted.
+
+Digital assets have a venue's surface from the day market_data/deribit.py first stored one (the anchor).
+From then on the stored rows are the venue's and nothing here replaces them (history.store). The dates
+before it are rebuilt from the anchor instead of from the parametric levels, so the series has no step
+on the day the source changed:
+
+    ATM_pair(t, d) = ATM_venue(t, anchor) · scale(t, d) / scale(t, anchor)       d < anchor
+
+with the anchor's risk reversals and butterflies. A backfill run after the first venue surface rewrites
+the earlier dates this way; until it is run they keep the parametric level and the series steps once."""
 from __future__ import annotations
 
 import math
@@ -51,14 +61,27 @@ def scale(values: list[float], window: int, log_returns: bool = True) -> float:
     return min(2.0, max(0.5, math.sqrt(rv / ref)))
 
 
-def fx_surface(pair: str, spots: list[float]) -> list[dict]:
-    """Today's synthetic surface for the pair, its ATM levels scaled by the spot's realised vol."""
+def fx_surface(pair: str, spots: list[float], anchor: Optional[tuple[list[dict], list[float]]] = None) -> list[dict]:
+    """The pair's surface on the last date of `spots`: the parametric surface with its ATM levels scaled by the
+    spot's realised vol or, given an anchor (a venue's quotes and the spot series up to their date), that
+    surface carried back by the ratio of the two scales."""
+    quotes, anchor_spots = anchor if anchor else (feed.build_fx_vols(pair), None)
     out = []
-    for q in feed.build_fx_vols(pair):
-        if q["quote_type"] == "ATM":
-            q = {**q, "rate": round(q["rate"] * scale(spots, WINDOW[q["tenor"]]), 3)}
+    for q in quotes:
+        if q["quote_type"] == "ATM" and q.get("tenor") in WINDOW:
+            k = scale(spots, WINDOW[q["tenor"]]) / (scale(anchor_spots, WINDOW[q["tenor"]]) if anchor_spots else 1.0)
+            q = {**q, "rate": round(q["rate"] * k, 3)}
         out.append(q)
     return out
+
+
+def venue_anchors(db: Session, user_id) -> dict[str, tuple[date, list[dict]]]:
+    """{surface id: (date, quotes)}: the first surface a venue's marks gave each pair."""
+    from sqlalchemy import text
+    rows = db.execute(text("SELECT DISTINCT ON (curve_id) curve_id, valuation_date, quotes FROM market_data_snapshots "
+                           "WHERE user_id = :u AND source LIKE :m AND right(curve_id, 4) = '_VOL' ORDER BY curve_id, valuation_date"),
+                      {"u": str(user_id), "m": H.MARKET_LIKE}).all()
+    return {r.curve_id: (r.valuation_date, list(r.quotes or [])) for r in rows}
 
 
 def swvol_surface(par_5y_pct: list[float]) -> list[dict]:
@@ -70,12 +93,16 @@ def history_days(db: Session, user_id, start: date, end: date) -> dict[str, dict
     """{surface id: {date: quotes}} for every date in [start, end] the underlying series has."""
     out: dict[str, dict[date, list[dict]]] = {}
     since = start - timedelta(days=LOOKBACK_DAYS)
+    anchors = venue_anchors(db, user_id)
     for pair in feed.VOL_LEVELS:                                   # G10 pairs and the digital assets alike
         ser = [(d, q["SPOT"]) for d, q in H.series(db, user_id, f"{pair}_SPOT", since, end) if q.get("SPOT")]
         prices = [p for _, p in ser]
+        on, venue = anchors.get(f"{pair}_VOL", (None, None))
+        upto = [p for d, p in ser if on and d <= on]
+        anchor = (venue, upto) if venue and len(upto) > MIN_REF else None      # too little series at the anchor: the parametric level stands
         for i, (d, _) in enumerate(ser):
             if start <= d <= end:
-                out.setdefault(f"{pair}_VOL", {})[d] = fx_surface(pair, prices[: i + 1])
+                out.setdefault(f"{pair}_VOL", {})[d] = fx_surface(pair, prices[: i + 1], anchor)
     ser = [(d, q[SWVOL_TENOR]) for d, q in H.series(db, user_id, "USD_SOFR", since, end) if q.get(SWVOL_TENOR) is not None]
     rates = [r for _, r in ser]
     for i, (d, _) in enumerate(ser):
@@ -85,6 +112,7 @@ def history_days(db: Session, user_id, start: date, end: date) -> dict[str, dict
 
 
 def refresh(db: Session, user_id, d: date) -> dict[str, int]:
-    """Replace the day's parametric surfaces with the history-scaled ones (the daily rebuild's last step)."""
+    """Replace the day's parametric surfaces with the history-scaled ones (the daily rebuild's last step).
+    A surface read from a venue that day stands (history.store keeps it)."""
     days = history_days(db, user_id, d, d)
     return H.store(db, user_id, days, overwrite=True, source=SOURCE)

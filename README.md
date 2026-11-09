@@ -160,7 +160,8 @@ The hosted demo prices on **demo market data rebuilt daily from public sources**
 | GBP SONIA OIS | Bank of England SONIA fixing + gilt par yields (5Y, 10Y, 20Y) | SONIA-OIS below gilts: −15 bp at 1Y to −75 bp at 30Y |
 | CHF SARON | SNB SARON monthly average | flat at the fixing: the SNB's Confederation-bond cubes stopped in mid-2025 and no other free CHF curve exists |
 | JPY TONA OIS | TONA (end of month, via the SNB money-market cube) + Japan MoF daily JGB yields | TONA-OIS below JGBs: −5 bp at 1Y to −45 bp at 30Y |
-| Swaption ATM vols, skew, cap vols | **synthetic** parametric normal-vol surface | not market; shaped like one so SABR, XVA and scenarios work |
+| BTC, ETH, SOL option vols and forwards | Deribit's public option marks, every 10 minutes: ATM, 25Δ risk reversal and butterfly per tenor; the forward of each listed expiry | read at 25 and 50 forward delta per expiry, variance-linear in time, flat beyond the last listed expiry; the time of the marks is on every ticket |
+| Swaption ATM vols, skew, cap vols, G10 FX vols | **synthetic** parametric surface | not market; shaped like one so SABR, XVA and scenarios work |
 
 The spread schedules live in one place, `backend/market_data/demo_feed.py`, and the tick that rebuilds the set (`POST /api/market-data/demo/tick`) runs from the scheduled workflow. `GET /api/market-data/demo/sources` is public and lists the providers, the assumptions and the latest date per curve. A self-hosted instance turns the tick off with `RIJEKA_DEMO_MARKET_DATA=0` and runs on its own marks or its own Bloomberg seat (`pricing/bloomberg_client.py`, tickers already mapped).
 
@@ -168,7 +169,7 @@ The spread schedules live in one place, `backend/market_data/demo_feed.py`, and 
 
 ## Documentation
 
-- `docs/methodology/rijeka_methodology.pdf` (v1.3, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
+- `docs/methodology/rijeka_methodology.pdf` (v1.5, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
 - `docs/VALIDATION.md` — the validation charter, what is validated against what, and the open findings
 - `docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md` — the per-module notes behind the methodology chapters
 - `docs/ops/deploy.md` — the deploy chain (API first on Render, then the app from the `release` branch)

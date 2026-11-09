@@ -7,6 +7,13 @@ from fastapi.testclient import TestClient
 
 from market_data import demo_feed as f
 
+
+@pytest.fixture(autouse=True)
+def _feeds_on(monkeypatch):
+    """The integration suite switches the demo feed off for its process; these tests are about the feed being on."""
+    monkeypatch.delenv("RIJEKA_DEMO_MARKET_DATA", raising=False)
+    monkeypatch.delenv("RIJEKA_DERIBIT", raising=False)
+
 SOFR_JSON = '{ "refRates": [ { "effectiveDate": "2026-10-28", "type": "SOFR" ,"percentRate": 3.94 } ] }'
 UST_XML = """<feed><entry><m:properties><d:NEW_DATE m:type="Edm.DateTime">2026-10-27T00:00:00</d:NEW_DATE>
 <d:BC_1MONTH m:type="Edm.Double">4.05</d:BC_1MONTH><d:BC_2MONTH m:type="Edm.Double">4.10</d:BC_2MONTH>
@@ -147,7 +154,8 @@ def test_tick_dry_run_builds_without_writing(monkeypatch):
     b = resp.json()
     assert b["dry_run"] is True and b["curves"]["USD_SOFR"]["quotes"] == 33 and b["failed_sources"] == {"boe": "down"}
     assert b["preview"]["USD_SOFR"][0]["tenor"] == "ON"
-    db.execute.assert_not_called()
+    # a dry run reads (the venue's surfaces it would keep) and writes nothing
+    assert all(str(c.args[0]).lstrip().startswith("SELECT") for c in db.execute.call_args_list) and not db.commit.called
 
 
 def test_tick_writes_template_rows_then_copies_to_demo_accounts(monkeypatch):
@@ -158,13 +166,19 @@ def test_tick_writes_template_rows_then_copies_to_demo_accounts(monkeypatch):
     db.execute.return_value.all.return_value = [("visitor-1",), ("visitor-2",)]
     main.app.dependency_overrides[r.get_db] = lambda: db
     collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)}, "failed": {}}
+    venue = {"BTCUSD_VOL": {"quotes": [{"tenor": "1M", "quote_type": "ATM", "rate": 38.5, "enabled": True}],
+                            "source": "DEMO · Deribit option marks · 2026-10-28 23:50 UTC · listed to 24SEP27, flat beyond"}}
     with patch.object(r.demo, "_template_user_id", return_value="tmpl"), \
          patch.object(r.demo_feed, "collect", return_value=collected), \
+         patch.object(r, "kept_marks", return_value=venue), \
          patch.object(r.demo, "_copy_market_data", return_value={"market_data_snapshots": 2}) as copy:
         resp = TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"})
     main.app.dependency_overrides.clear()
     assert resp.status_code == 200, resp.text
     b = resp.json()
+    # the venue's last surface is written for the day in place of the parametric one, its own time still in the source
+    assert b["curves"]["BTCUSD_VOL"] == {"quotes": 1, "source": venue["BTCUSD_VOL"]["source"]}
+    assert b["curves"]["ETHUSD_VOL"]["source"] == "DEMO · synthetic surface"
     assert b["skew_saved"] == 15 and b["sabr_fitted"] == 15 and b["caps_saved"] == 54 and b["copied_to"] == 2
     assert copy.call_count == 2 and copy.call_args_list[0].args[1:] == ("tmpl", "visitor-1")
     sqls = [str(c.args[0]) for c in db.execute.call_args_list]
@@ -201,7 +215,7 @@ def test_tick_explains_a_source_whitelist_that_predates_demo_data(monkeypatch):
     db.execute.side_effect = IntegrityError("INSERT …", {}, Orig('violates check constraint "market_data_snapshots_source_check"'))
     main.app.dependency_overrides[r.get_db] = lambda: db
     collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)}, "failed": {}}
-    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), \
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r, "kept_marks", return_value={}), \
          patch.object(r.demo_feed, "collect", return_value=collected):
         resp = TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"})
     main.app.dependency_overrides.clear()
@@ -238,3 +252,105 @@ def test_assemble_builds_jpy_when_both_feeds_answer():
     collected = {"ok": {"tona": (date(2026, 9, 1), 1.226), "jgb": (d, jgb)}, "failed": {}}
     built = f.assemble(collected, date(2026, 10, 29))
     assert "JPY_TONAR" in built["curves"] and "TONA 2026-09" in built["curves"]["JPY_TONAR"]["source"]
+
+
+# ── digital-asset marks (market_data/deribit.py) ───────────────────────────────
+
+def _built(asset, when=None):
+    from datetime import datetime, timezone
+    when = when or datetime(2026, 11, 9, 12, 57, tzinfo=timezone.utc)
+    return {"asset": asset, "asof": when, "index": 74_800.0, "last_expiry": "24SEP27", "dropped": {"10NOV26": "inside two days"},
+            "vol": [{"tenor": "1M", "quote_type": "ATM", "rate": 38.5, "enabled": True}, {"tenor": "3M", "quote_type": "ATM", "rate": 38.9, "enabled": True}],
+            "forward": [{"tenor": "1M", "quote_type": "FWD_POINTS", "rate": 348.3, "enabled": True}, {"tenor": "3M", "quote_type": "FWD_POINTS", "rate": 1011.7, "enabled": True}],
+            "expiries": [{"code": "27NOV26"}, {"code": "24SEP27"}]}
+
+
+def test_crypto_tick_writes_the_marks_with_their_time_and_pushes_them_to_demo_accounts(monkeypatch):
+    import main
+    from api.routes import crypto, currencies, demo_market_data as r
+    monkeypatch.setenv("RIJEKA_CRON_SECRET", "s3cret")
+    db = MagicMock()
+    db.execute.return_value.rowcount = 12
+    main.app.dependency_overrides[r.get_db] = lambda: db
+    got = {"ok": {"BTC": _built("BTC"), "SOL": _built("SOL")}, "failed": {"ETH": "HTTPStatusError: 503"}}
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.deribit, "collect", return_value=got), \
+         patch.object(crypto, "fetch_spot", return_value={"BTC": 74_790.0, "ETH": 2121.0, "SOL": 86.7}), \
+         patch.object(currencies, "_save_pairs", return_value=3) as save:
+        resp = TestClient(main.app).post("/api/market-data/demo/crypto/tick", headers={"X-Rijeka-Cron": "s3cret"})
+    main.app.dependency_overrides.clear()
+    assert resp.status_code == 200, resp.text
+    b = resp.json()
+    assert set(b["assets"]) == {"BTC", "SOL"} and b["failed"] == {"ETH": "HTTPStatusError: 503"} and b["pushed_rows"] == 12
+    assert b["assets"]["BTC"]["marks_at"].startswith("2026-11-09T12:57")
+    calls = [(str(c.args[0]), c.args[1]) for c in db.execute.call_args_list]
+    upserts = [p for s, p in calls if "INSERT INTO market_data_snapshots" in s and "CROSS JOIN" not in s]
+    assert [p["c"] for p in upserts] == ["BTCUSD_VOL", "BTCUSD_FWD", "SOLUSD_VOL", "SOLUSD_FWD"]            # ETH keeps the rows it has
+    assert upserts[0]["s"] == "DEMO · Deribit option marks · 2026-11-09 12:57 UTC · listed to 24SEP27, flat beyond"
+    assert upserts[1]["s"].startswith("DEMO · Deribit forwards · 2026-11-09 12:57 UTC")
+    assert save.call_args.args[1:] == ("tmpl", {"BTCUSD": 74_790.0, "ETHUSD": 2121.0, "SOLUSD": 86.7})
+    push = [p for s, p in calls if "CROSS JOIN" in s]
+    assert len(push) == 1 and push[0]["t"] == "tmpl" and push[0]["p"] == "DEMO%"
+    assert push[0]["ids"] == ["BTCUSD_VOL", "BTCUSD_FWD", "SOLUSD_VOL", "SOLUSD_FWD", "BTCUSD_SPOT", "ETHUSD_SPOT", "SOLUSD_SPOT"]
+    # a demo account's own entries stand: only DEMO rows and a fetched spot are replaced
+    assert "source LIKE 'DEMO%'" in r.PUSH_SQL and "source = 'IMPORT' AND right(market_data_snapshots.curve_id, 5) = '_SPOT'" in r.PUSH_SQL
+
+
+def test_crypto_tick_writes_nothing_when_the_venue_does_not_answer_or_on_a_dry_run(monkeypatch):
+    import main
+    from api.routes import crypto, currencies, demo_market_data as r
+    monkeypatch.setenv("RIJEKA_CRON_SECRET", "s3cret")
+    db = MagicMock()
+    main.app.dependency_overrides[r.get_db] = lambda: db
+    c = TestClient(main.app)
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), \
+         patch.object(r.deribit, "collect", return_value={"ok": {}, "failed": {a: "ConnectTimeout" for a in ("BTC", "ETH", "SOL")}}), \
+         patch.object(crypto, "fetch_spot", side_effect=RuntimeError("no spot")), patch.object(currencies, "_save_pairs") as save:
+        down = c.post("/api/market-data/demo/crypto/tick", headers={"X-Rijeka-Cron": "s3cret"})
+    assert down.status_code == 200 and down.json()["assets"] == {} and down.json()["spot"] is None and len(down.json()["failed"]) == 3
+    assert not save.called and not any("INSERT" in str(c_.args[0]) for c_ in db.execute.call_args_list)       # the last good rows stand
+    db.reset_mock()
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.deribit, "collect", return_value={"ok": {"BTC": _built("BTC")}, "failed": {}}):
+        dry = c.post("/api/market-data/demo/crypto/tick?dry_run=1", headers={"X-Rijeka-Cron": "s3cret"})
+        assert c.post("/api/market-data/demo/crypto/tick", headers={"X-Rijeka-Cron": "nope"}).status_code == 403
+        monkeypatch.setenv("RIJEKA_DERIBIT", "0")
+        assert c.post("/api/market-data/demo/crypto/tick", headers={"X-Rijeka-Cron": "s3cret"}).json() == {"enabled": False}
+    main.app.dependency_overrides.clear()
+    assert dry.status_code == 200 and dry.json()["assets"]["BTC"]["vol"][0]["rate"] == 38.5 and not db.execute.called
+
+
+def test_switching_the_venue_off_removes_its_rows_at_the_daily_rebuild_and_the_public_list(monkeypatch):
+    import main
+    from api.routes import demo_market_data as r
+    monkeypatch.setenv("RIJEKA_CRON_SECRET", "s3cret")
+    monkeypatch.setenv("RIJEKA_DERIBIT", "0")
+    db = MagicMock()
+    db.execute.return_value.all.return_value = []
+    db.execute.return_value.rowcount = 7
+    main.app.dependency_overrides[r.get_db] = lambda: db
+    collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)}, "failed": {}}
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.demo_feed, "collect", return_value=collected):
+        resp = TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"})
+        listed = TestClient(main.app).get("/api/market-data/demo/sources").json()["sources"]
+    main.app.dependency_overrides.clear()
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["curves"]["BTCUSD_VOL"]["source"] == "DEMO · synthetic surface"
+    deletes = [c.args[1] for c in db.execute.call_args_list if str(c.args[0]).startswith("DELETE FROM market_data_snapshots WHERE source LIKE")]
+    assert deletes == [{"m": "DEMO · Deribit%"}]
+    assert not any("Deribit" in s["provider"] for s in listed)
+
+
+def test_the_public_sources_name_the_venue_and_health_watches_its_marks(monkeypatch):
+    import main
+    from api.routes import demo_market_data as r, ops
+    db = MagicMock()
+    db.execute.return_value.all.return_value = []
+    main.app.dependency_overrides[r.get_db] = lambda: db
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"):
+        listed = TestClient(main.app).get("/api/market-data/demo/sources").json()["sources"]
+    main.app.dependency_overrides.clear()
+    venue = {s["curve"]: s for s in listed if "Deribit" in s["provider"]}
+    assert set(venue) == {f"{a}USD_{k}" for a in ("BTC", "ETH", "SOL") for k in ("VOL", "FWD")} and all(s["kind"] == "public" for s in venue.values())
+    names = [c[0] for c in ops.active_checks()]
+    assert names[-1] == "crypto_marks" and ops.active_checks()[-1][2] == ("hours", 2) and "DEMO · Deribit%" in ops.active_checks()[-1][1]
+    monkeypatch.setenv("RIJEKA_DERIBIT", "0")
+    assert "crypto_marks" not in [c[0] for c in ops.active_checks()] and ops.active_checks() == ops.CHECKS

@@ -32,6 +32,7 @@ COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{asset}-USD/candl
 CRYPTO = ("BTC", "ETH", "SOL")
 RATE_CURVES = ("USD_SOFR", "EUR_ESTR", "GBP_SONIA")
 SOURCE = "DEMO · history backfill (public sources)"
+MARKET_LIKE = "DEMO · Deribit%"          # deribit.SOURCE_PREFIX: observed marks, not built history
 
 
 def _get(url: str, attempts: int = 3) -> str:
@@ -182,15 +183,17 @@ def build_days(start: date, end: date) -> dict[str, dict[date, list[dict]]]:
 
 
 def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwrite: bool = False, source: str = SOURCE) -> dict[str, int]:
-    """Upsert as the template user's snapshots. Existing rows (the daily rebuild's) win unless overwrite."""
+    """Upsert as the template user's snapshots. Existing rows (the daily rebuild's) win unless overwrite; a row
+    read from a venue (market_data/deribit.py) is never replaced by a built one."""
     n: dict[str, int] = {}
     for cid, by_date in days.items():
         for d, quotes in by_date.items():
             res = db.execute(text(
                 "INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
                 "VALUES (:c, :d, CAST(:q AS jsonb), :s, :u, :u) ON CONFLICT (user_id, curve_id, valuation_date) "
-                + ("DO UPDATE SET quotes = EXCLUDED.quotes, source = EXCLUDED.source" if overwrite else "DO NOTHING")),
-                {"c": cid, "d": d, "q": json.dumps(quotes), "s": source, "u": str(user_id)})
+                + ("DO UPDATE SET quotes = EXCLUDED.quotes, source = EXCLUDED.source WHERE market_data_snapshots.source NOT LIKE :keep"
+                   if overwrite else "DO NOTHING")),
+                {"c": cid, "d": d, "q": json.dumps(quotes), "s": source, "u": str(user_id), **({"keep": MARKET_LIKE} if overwrite else {})})
             n[cid] = n.get(cid, 0) + (res.rowcount or 0)
     db.commit()
     return n

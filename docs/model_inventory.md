@@ -29,6 +29,6 @@ findings carry the `validation` label on GitHub. Updated 2 November 2026.
 | Counterparty credit: real-world paths, historical sampling, netting, PFE | `ccr/simulate.py`, `ccr/valuation.py`, `ccr/options.py` | 15 | 31 (CCR paths) | none yet (next after the rates XVA book) | QuantLib for the options on the paths; **validator wanted** | #33 |
 | Canonical record, EIP-712, registry | `chain/canonical.py`, `chain/signing.py`, `chain/src/` | 16 | 16 Foundry tests | the public verifier | no external audit yet | #34 option trades booked before 2 Nov 2026 carry no option terms |
 
-Demo market data (the public-source curves, synthetic vol surfaces scaled by realised vol, the policy
+Demo market data (the public-source curves, digital-asset vols and forwards from a venue's public marks, synthetic rates and FX vol surfaces scaled by realised vol, the policy
 path) is described in `docs/market_risk.md` and the README's market-data table; it is data, not a
 model, and is labelled on every screen.

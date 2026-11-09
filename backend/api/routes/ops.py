@@ -58,6 +58,15 @@ CHECKS = [
 ]
 
 
+def active_checks() -> list:
+    """CHECKS, and the digital-asset marks when that source is on (market_data/deribit.py)."""
+    from market_data import deribit
+    if not deribit.enabled():
+        return CHECKS
+    return CHECKS + [("crypto_marks", f"SELECT max(created_at) FROM market_data_snapshots WHERE source LIKE '{deribit.SOURCE_PREFIX}%'",
+                      ("hours", 2), "digital-asset vols and forwards")]
+
+
 def _as_utc(v) -> Optional[datetime]:
     if isinstance(v, datetime):
         return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
@@ -68,7 +77,7 @@ def evaluate(db: Session, now: Optional[datetime] = None) -> dict:
     now = now or datetime.now(timezone.utc)
     floor = previous_business_day(now.date())
     checks: dict[str, dict] = {}
-    for name, sql, rule, feeds in CHECKS:
+    for name, sql, rule, feeds in active_checks():
         try:
             last = db.execute(text(sql)).scalar()
         except Exception as e:            # noqa: BLE001 — a missing table is a stale batch, not a crash

@@ -19,7 +19,7 @@ import json
 import logging
 import os
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 import httpx
@@ -150,6 +150,25 @@ def interp_points(points: dict[str, float], days: int) -> float:
     return xs[-1][1]
 
 
+def marks_label(source: Optional[str]) -> Optional[str]:
+    """A snapshot's source as the ticket prints it: who quoted it and when, without the storage prefix."""
+    s = str(source or "").strip()
+    return (s[len("DEMO · "):] if s.startswith("DEMO · ") else s) or None
+
+
+def short_label(source: Optional[str], as_of: str, kind: str) -> str:
+    """A field's caption: 'Deribit 9 Nov 12:57 UTC' for a venue's marks (the venue and the time, both from the
+    source; short enough for one line over an input), otherwise the source, what it is and its date, as before."""
+    parts = str(source or "").split(" · ")
+    if len(parts) >= 3 and parts[0] == "DEMO" and parts[2].endswith(" UTC"):
+        try:
+            at = datetime.strptime(parts[2], "%Y-%m-%d %H:%M UTC")
+            return f"{parts[1].split()[0]} {at.day} {at:%b %H:%M} UTC"
+        except ValueError:
+            pass
+    return f"{source} {kind} {as_of}"
+
+
 def forward_mode(db: Session, user_id) -> str:
     row = latest_snapshot(db, user_id, "FX_FORWARD_MODE")
     v = _quote(row, "MODE")
@@ -164,7 +183,8 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
            "quote_curve": CURVE_FOR.get(quote), "pip": PIP.get(pair, 1.0 if is_crypto(base) else 1e-4),
            "fixing_default": FIXING_DEFAULT.get(pair, "WM/Reuters 4pm London")}
     fc = forward_curve(db, user_id, pair)
-    out.update(forward_curve=fc and {"valuation_date": fc["valuation_date"], "source": fc["source"], "tenors": sorted(fc["points"], key=TENOR_DAYS.get)},
+    out.update(forward_curve=fc and {"valuation_date": fc["valuation_date"], "source": fc["source"], "label": short_label(fc["source"], fc["valuation_date"], "points"),
+                                     "tenors": sorted(fc["points"], key=TENOR_DAYS.get)},
                forward_points=fc["points"] if fc else None)
     vs = latest_snapshot(db, user_id, f"{pair}_VOL")
     if vs:
@@ -173,6 +193,7 @@ def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
             if q.get("rate") is not None and q.get("enabled", True):
                 grid.setdefault(str(q.get("tenor")).upper(), {})[str(q.get("quote_type", "ATM")).upper()] = float(q["rate"])
         out["vol_surface"] = {"valuation_date": vs.valuation_date.isoformat(), "source": vs.source,
+                              "label": short_label(vs.source, vs.valuation_date.isoformat(), "surface"),
                               "tenors": sorted(grid, key=lambda k: VOL_TENORS.get(k, 99)), "grid": grid}
     else:
         out["vol_surface"] = None
@@ -393,8 +414,11 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     mode = forward_mode(db, user_id)          # digital assets too: futures / forward prices by expiry are a quoted curve
+    if crypto and base_rate_pct is not None:
+        mode = "IMPLIED"                      # a funding rate named on the ticket is the desk's own carry: it wins over quoted points
     fc = st.get("forward_points")
-    r, f_src, basis_pts = implied, "implied from the two OIS curves (interest-rate parity)", None
+    r, basis_pts = implied, None
+    f_src = (f"spot carried at the funding rate ({b_src})" if crypto else "implied from the two OIS curves (interest-rate parity)")
     mkt_pts = None
     if fc:
         days = (settle - (fx_spot or val_date)).days          # forward points are quoted from the spot date
@@ -410,7 +434,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                                        forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
                                        quote_curve=q_curve, direction=direction, pip=st["pip"], spot_date=fx_spot,
                                        base_rate=rate_b)
-            f_src = f"market points ({pair}_FWD {st['forward_curve']['valuation_date']}, {st['forward_curve']['source']}), basis {basis_pts:+.1f} pts vs parity"
+            f_src = f"market points ({pair}_FWD {st['forward_curve']['valuation_date']}, {marks_label(st['forward_curve']['source'])}), basis {basis_pts:+.1f} pts vs parity"
     out = r.__dict__.copy()
     out.update(pair=pair, shape=shape, valuation_date=val_date.isoformat(), settlement_date=settle.isoformat(),
                spot_source=s_src, base_discounting=b_src, quote_curve=st["quote_curve"],
@@ -524,7 +548,7 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
     out["crypto"] = crypto
     out.update(pair=pair, shape="OPTION", valuation_date=val_date.isoformat(), expiry_date=expiry.isoformat(), settlement_date=settle.isoformat(),
                settlement_type=str(settlement_type or "DELIVERABLE").upper(), vol_pct=round(vol * 100, 4), vol_tier=tier, vol_source=vol_note,
-               vol_snapshot=vs.valuation_date.isoformat() if vs else None,
+               vol_snapshot=vs.valuation_date.isoformat() if vs else None, vol_marks=marks_label(vs.source) if vs and tier != "OVERRIDE" else None,
                spot_source=fwd["spot_source"], base_discounting=fwd["base_discounting"], quote_curve=fwd["quote_curve"],
                quote_curve_snapshot=fwd["quote_curve_snapshot"], forward_mode=fwd["forward_mode"], forward_source=fwd["forward_source"],
                implied_forward=fwd["implied_forward"], market_points=fwd["market_points"], basis_points=fwd["basis_points"],
