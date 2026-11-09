@@ -129,3 +129,19 @@ def user_a_headers(user_a_auth) -> dict:
 @pytest.fixture
 def user_b_headers(user_b_auth) -> dict:
     return {"Authorization": f"Bearer {user_b_auth['token']}"}
+
+
+@pytest.fixture(autouse=True)
+def _fixings_presence_is_not_carried_between_unit_tests(request):
+    """settlement/store.py caches a positive presence answer for the process. In a full run the integration tests
+    (a real database, the table present) come first, and a unit test's stand-in session would then be read as a
+    database with the fixings table. Unit tests start from 'not asked yet'; the integration tests keep the cache."""
+    if request.node.get_closest_marker("integration") is not None:
+        yield
+        return
+    from settlement import store
+    saved = dict(store._tables)
+    store._tables.clear()
+    yield
+    store._tables.clear()
+    store._tables.update(saved)

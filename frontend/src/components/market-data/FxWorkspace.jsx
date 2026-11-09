@@ -9,6 +9,7 @@ import { sourceKind, sourceShort, sourceWord, isVenue } from './fx-source'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { InnerTabs, InnerBody, ParamGrid, SectionLabel, DescBox } from './_DetailShared'
 import RateCurveCanvas from './RateCurveCanvas'
+import FixingsPanel from './FixingsPanel'
 import { getSessionMaybe } from '../../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -29,7 +30,8 @@ async function call(path, opts = {}) {
   const session = await getSessionMaybe()
   const r = await fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json', ...(opts.headers || {}) } })
   const body = await r.json().catch(() => ({}))
-  if (!r.ok) throw new Error(body?.detail ? (typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)) : `${r.status}`)
+  // the status goes with the error: a caller may need to tell a 409 (the instance cannot do it yet) from a refused entry
+  if (!r.ok) throw Object.assign(new Error(body?.detail ? (typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail)) : `${r.status}`), { status: r.status })
   return body
 }
 
@@ -134,6 +136,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const [askFeed, setAskFeed] = useState(false)     // the second step of USE THE FEED'S FORWARDS
   const [fund, setFund] = useState('')
   const [flat, setFlat] = useState('')
+  const innerTab = useMarketDataStore(s => s.innerTab)
   // option vols: ATM / 25Δ risk reversal / 25Δ butterfly by tenor, in vol points
   const VOL_TENORS = ['1W', '1M', '2M', '3M', '6M', '9M', '1Y', '2Y']
   const [vols, setVols] = useState({})
@@ -234,6 +237,9 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const tabs = [{ id: 'points', label: p.crypto ? 'Forward points (USD)' : 'Forward points', badge: p.forward_curve?.tenors?.length },
                 { id: 'vols', label: 'Volatility', badge: p.vol_surface?.tenors?.length },
                 { id: 'spot', label: p.crypto ? 'Spot & funding' : 'Spot' }, { id: 'conv', label: 'Conventions' }]
+  // Fixings: digital assets only, and only when the API lists the pair's settlement sources (an older API has no fixings route)
+  const hasFixings = !!p.crypto && Array.isArray(p.fixing_sources)
+  if (hasFixings) tabs.splice(3, 0, { id: 'fixings', label: 'Fixings' })
   const mode = md?.forward_mode || 'MARKET'
   const thL = { fontSize: '0.78rem', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 6px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
   const thR = { ...thL, textAlign: 'right' }
@@ -380,7 +386,8 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
         </div>
       </div>
       <InnerTabs tabs={tabs} />
-      <InnerBody tabs={tabs} panels={{ points: pointsPanel, vols: volsPanel, spot: spotPanel, conv: convPanel }} />
+      <InnerBody tabs={tabs} panels={{ points: pointsPanel, vols: volsPanel, spot: spotPanel, conv: convPanel,
+                                    ...(hasFixings ? { fixings: <FixingsPanel key={pair} p={p} call={call} flash={flash} active={innerTab === 'fixings'} decimals={dp(pair)} /> } : {}) }} />
     </div>
   )
 }

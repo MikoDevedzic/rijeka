@@ -20,6 +20,7 @@ const tenorDate = (t) => { const d = new Date(); const n = parseInt(t); if (t.en
 const fmtAmt = (v, crypto) => { const n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? '' : n.toLocaleString('en-US', { maximumFractionDigits: crypto ? 8 : 0 }) }
 const parseAmt = (v) => { const n = Number(String(v).replace(/,/g, '')); return isNaN(n) ? '' : n }
 import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
+import { settlementOptions, settlementTerms, settlementLabel, settlementNote } from './fx-settlement'
 const plusMonths = (m) => { const d = new Date(); d.setMonth(d.getMonth() + m); return iso(d) }
 
 async function call(path, opts = {}) {
@@ -67,6 +68,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const [rebate, setRebate] = useState('')
   const [touchType, setTouchType] = useState('ONE_TOUCH')
   const [payAtHit, setPayAtHit] = useState(false)
+  // the settlement price source picked in SETTLES ON; '' = the pair's default. The booked valuation time is the booked source's own
+  const [settleSrc, setSettleSrc] = useState('')
   const styleFields = () => {
     const f = { style }
     if (style === 'DIGITAL' || style === 'TOUCH') { f.payout = Number(payout); f.payout_currency = payoutCcy }
@@ -76,7 +79,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     return f
   }
 
-  useEffect(() => { setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? 10 : 10_000_000); setCashSettled(crypto); setPayout(crypto ? '100000' : '1000000'); setQuote(null) }, [crypto])
+  useEffect(() => { setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? 10 : 10_000_000); setCashSettled(crypto); setPayout(crypto ? '100000' : '1000000'); setSettleSrc(''); setQuote(null) }, [crypto])
   useEffect(() => { setQuote(null) }, [inst, pair, direction, notional, settlement, tenor, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit])
   useEffect(() => { if (style === 'DOUBLE_BARRIER') setBarrierType(b => b.startsWith('KNOCK') ? b : 'KNOCK_OUT'); if (style === 'BARRIER') setBarrierType(b => b.startsWith('KNOCK') ? 'UP_OUT' : b) }, [style])
 
@@ -86,6 +89,11 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   useEffect(() => { load() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const cur = useMemo(() => pairs.find(p => p.pair === pair), [pairs, pair])
+  // Digital assets only: the sources the pair settles on (absent in an older API answer: no choice, the default as before).
+  // A source picked for one pair is not a source of another, so settlementTerms falls back to the new pair's default.
+  const settleOptions = crypto ? settlementOptions(cur) : []
+  const settle = settlementTerms(cur, crypto ? settleSrc : '', option ? 'OPTION' : 'FORWARD')
+  const settleShown = settleOptions.find(s => s.source === settle.source)
   const quoted = !!cur?.forward_curve && cur.forward_curve.in_use !== false      // the account prices on quoted points (not on IMPLIED)
   const list = pairs.filter(p => !!p.crypto === crypto)
 
@@ -133,8 +141,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
           ...(style !== 'TOUCH' ? { strike_price: String(quote.strike), strike_currency: 'USD' } : {}),
           ...Object.fromEntries(Object.entries(styleFields()).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])),
           ...(style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}),
-          expiration_date: quote.expiry_date, expiration_time: '08:00 UTC', valuation_date: quote.expiry_date, valuation_time: '08:00 UTC',
-          settlement_date: quote.settlement_date, settlement_currency: 'USD', settlement_price_source: cur.fixing_default,
+          expiration_date: quote.expiry_date, expiration_time: '08:00 UTC', valuation_date: quote.expiry_date, valuation_time: settle.time,
+          settlement_date: quote.settlement_date, settlement_currency: 'USD', settlement_price_source: settle.source,
           premium_amount: String(Math.abs(Math.round(quote.npv * 100) / 100)), premium_currency: 'USD', premium_payment_date: premiumDate,
           vol_pct: quote.vol_pct, vol_tier: quote.vol_tier, automatic_exercise: true, calculation_agent: null,
           disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
@@ -165,26 +173,26 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       }
     }
     const K = strike !== '' ? Number(strike) : quote.forward
-    const settle = quote.settlement_date
+    const settleDate = quote.settlement_date
     if (crypto) return {
       asset_class: 'CRYPTO', instrument_type: 'CRYPTO_FORWARD', structure: 'VANILLA',
-      notional: Number(notional), notional_ccy: cur.base, maturity_date: settle, discount_curve_id: cur.quote_curve,
+      notional: Number(notional), notional_ccy: cur.base, maturity_date: settleDate, discount_curve_id: cur.quote_curve,
       terms: {
         digital_asset: cur.base, notional_amount: String(notional), direction, forward_price: String(K), price_currency: 'USD',
-        valuation_date: settle, valuation_time: '16:00 London', settlement_date: settle, settlement_currency: 'USD',
-        settlement_price_source: cur.fixing_default, calculation_agent: null,
+        valuation_date: settleDate, valuation_time: settle.time, settlement_date: settleDate, settlement_currency: 'USD',
+        settlement_price_source: settle.source, calculation_agent: null,
         disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
       },
     }
     const ndf = shape === 'NDF'
     return {
       asset_class: 'FX', instrument_type: inst, structure: 'VANILLA',
-      notional: Number(notional), notional_ccy: cur.base, maturity_date: settle, discount_curve_id: cur.quote_curve,
+      notional: Number(notional), notional_ccy: cur.base, maturity_date: settleDate, discount_curve_id: cur.quote_curve,
       terms: {
         direction, currency_pair: pair, base_currency: cur.base, quote_currency: cur.quote,
-        base_notional: String(notional), forward_rate: String(K), value_date: settle,
+        base_notional: String(notional), forward_rate: String(K), value_date: settleDate,
         settlement_type: ndf ? 'NON_DELIVERABLE' : 'DELIVERABLE',
-        ...(ndf ? { settlement_currency: 'USD', fixing_source: cur.fixing_default, fixing_date: settle } : {}),
+        ...(ndf ? { settlement_currency: 'USD', fixing_source: cur.fixing_default, fixing_date: settleDate } : {}),
         calculation_agent: null,
       },
     }
@@ -192,7 +200,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // The trade POST body as TradeWindow sends it, minus the parties, desk and book: what the
   // incremental XVA run values as the hypothetical trade (POST /api/xva/incremental).
   const bookBody = () => { const today = iso(new Date()); return { ...payload(), trade_date: today, effective_date: today } }
-  useImperativeHandle(ref, () => ({ price, payload, bookBody, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit])
+  useImperativeHandle(ref, () => ({ price, payload, bookBody, quote: () => quote, busy: () => busy }), [quote, busy, pair, notional, settlement, direction, strike, spotOv, fundOv, cur, inst, optType, expiry, optSettle, cashSettled, volOv, style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit, settleSrc])
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────
   const dp = rateDp(pair)
@@ -264,6 +272,18 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     ] }),
   } }
   const descriptor = option ? optionDescriptor : forwardDescriptor
+  // SETTLES ON: the settlement price source of a digital-asset trade, on its own row under the terms grid (the
+  // six columns are taken, and a long source name must not widen the ticket). One of the two terms sections
+  // renders it, never both: the forward section stays mounted, hidden, under an option.
+  const settlesOn = settleOptions.length > 0 && (
+    <div style={{ marginTop: 10, maxWidth: 340, minWidth: 0 }}>
+      <div className="tbw-lbl">SETTLES ON</div>
+      <select data-testid="settles-on" value={settle.source} onChange={e => setSettleSrc(e.target.value)}>
+        {settleOptions.map(s => <option key={s.source} value={s.source}>{settlementLabel(s)}</option>)}
+      </select>
+      <div className="tbw-mut" style={{ marginTop: 4 }}>{settlementNote(settleShown)}</div>
+    </div>
+  )
 
   return (
     <>
@@ -271,7 +291,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         <div className="tbw-lbl">PRIMARY ECONOMICS</div>
         <div className="tbw-grid-6">
           <div><div className="tbw-lbl">PAIR</div>
-            <select value={pair} onChange={e => setPair(e.target.value)}>
+            <select value={pair} onChange={e => { setPair(e.target.value); setSettleSrc('') }}>
               {list.map(p => <option key={p.pair} value={p.pair}>{p.pair}</option>)}
             </select>
           </div>
@@ -326,7 +346,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         <div className="tbw-sec">
           <div className="tbw-terms-header">
             <span className="tbw-lbl">OPTION TERMS</span>
-            <span className="tbw-helper-badge">→ {direction === 'BUY' ? 'we hold' : 'we write'} the right to {optType === 'CALL' ? 'buy' : 'sell'} {cur?.base || 'base'} against {qc} · {cashSettled ? `cash-settled in ${qc}${crypto ? ' against ' + (cur?.fixing_default || 'the settlement price source') : ''}` : 'deliverable'}</span>
+            <span className="tbw-helper-badge">→ {direction === 'BUY' ? 'we hold' : 'we write'} the right to {optType === 'CALL' ? 'buy' : 'sell'} {cur?.base || 'base'} against {qc} · {cashSettled ? `cash-settled in ${qc}${crypto ? ' against ' + (settle.source || 'the settlement price source') : ''}` : 'deliverable'}</span>
           </div>
           <div className="tbw-chip-row" style={{ gap: 4, marginBottom: 10 }}>
             {[['EUROPEAN', 'EUROPEAN'], ['AMERICAN', 'AMERICAN'], ['DIGITAL', 'DIGITAL'], ['BARRIER', 'BARRIER'], ['DOUBLE_BARRIER', 'DOUBLE BARRIER'], ['TOUCH', 'TOUCH']].map(([k, l]) => (
@@ -421,6 +441,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
               <button className="tbw-chip" style={{ width: '100%' }} onClick={snap} disabled={!!busy}>{busy === 'snap' ? 'SNAPPING…' : '● SNAP SPOT'}</button>
             </div>
           </div>
+          {settlesOn}
           <div className="tbw-helper-text" style={{ marginTop: 10 }}>
             {style === 'EUROPEAN' ? (crypto ? (quoted ? 'Black-76 on the quoted forward' : 'Black-76, the funding rate as the carry') : 'Garman–Kohlhagen') : style === 'AMERICAN' ? 'Leisen–Reimer binomial tree, early exercise at every node' : style === 'DIGITAL' ? 'Reiner–Rubinstein cash-or-nothing / asset-or-nothing' : style === 'TOUCH' ? 'first-passage and survival probabilities, continuous monitoring' : 'survival-density integral, continuous monitoring'} on the forward to settlement · σ from the pair's ATM / 25Δ RR / 25Δ BF surface at the strike (Market data › FX › Volatility) · premium in {qc} on the trade date · ACT/365
           </div>
@@ -455,6 +476,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
             <button className="tbw-chip" style={{ width: '100%' }} onClick={snap} disabled={!!busy}>{busy === 'snap' ? 'SNAPPING…' : '● SNAP SPOT'}</button>
           </div>
         </div>
+        {!option && settlesOn}
         <div className="tbw-helper-text" style={{ marginTop: 10 }}>
           {crypto ? `Spot: ${feeds?.crypto || 'Coinbase (public)'}` : `Spot: ${feeds?.fx || 'ECB reference rates (public)'}`} · F = S·DF<sub>base</sub>/DF<sub>quote</sub> or S + quoted points · NPV = ±N·(F − K)·DF<sub>quote</sub> · ACT/365
         </div>

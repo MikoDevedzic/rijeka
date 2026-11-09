@@ -1,7 +1,37 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.6). Commits on `main` are the detail.
+methodology document carries its own version (v1.7). Commits on `main` are the detail.
+
+## 0.14.0 · 9 November 2026
+
+- **Fixings for digital assets.** A cash-settled trade's record has always named a settlement price source; nothing
+  stored a fixing, so an expired trade was valued on the stored spot of the day and then read zero.
+  - **The store** (`backend/settlement/`, table `fixings`, `docs/migrations/2026-11-10_fixings.sql`): the venue's
+    daily delivery price for BTC, ETH and SOL (Deribit, 08:00 UTC), read once a day, shared by every account and
+    never overwritten; a desk's own entry for a licensed benchmark, its own only, a later entry superseding the
+    earlier one. `GET /api/currency/fixings/{pair}`, `POST /api/currency/fixings`, a cron-gated tick with a
+    backfill count, a scheduler step and a health check `crypto_fixings`. Until the migration is applied nothing
+    is stored and everything behaves as before.
+  - **Settlement** (`settlement/rule.py`, one rule for the booked valuation and the ticket): from its fixing date a
+    trade is valued on the fixing of exactly the source it names, a forward at sign × N × (fixing − K) discounted to
+    the settlement date, an option at its payoff on the fixing; another source's price is never used. With no
+    fixing stored the value is today's (the stored spot), marked provisional. A booked digital-asset trade opened
+    on or after its settlement date now shows that view instead of an error. Not in this change: the trade's status
+    does not change and no settlement event is written.
+  - **On the ticket:** SETTLES ON, a choice between the venue's price (fixed automatically) and the benchmark (the
+    desk enters it). The default is the automatic source wherever the feed runs, which is the hosted demo, and the
+    benchmark elsewhere; the fixing time on the record always follows the source. Trades already booked keep the
+    source they name.
+  - **Market data → FX · Crypto → Fixings:** the last thirty days per source, and the entry form.
+- **The CURVE SCENARIO tab of currency and digital-asset tickets, redrawn.** A chart of the pair: recent fixings to
+  the left of today, the forward curve to the right, the strike and the settlement date marked. The curve is
+  dragged by tenor (with a ripple to its neighbours) or as a whole, and the forward, the value and the ladders
+  follow, repriced in the browser with the pricer's closed form and the backend's interpolation of forward points.
+  FIXING AT EXPIRY takes a scenario fixing and shows the settlement amount. The sliders and ladders remain below.
+- Fixed on the way: the tabs of a priced currency ticket could be handed the terms of the moment before the quote
+  arrived (none), which the new tab showed as "no settlement price source".
+- Methodology v1.7; the map (`docs/architecture.md`) gains "Fixings and settlement" and the new writers.
 
 ## 0.13.0 · 9 November 2026
 

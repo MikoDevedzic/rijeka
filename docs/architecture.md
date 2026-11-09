@@ -21,7 +21,7 @@ flowchart LR
   end
   CHAIN[(Sepolia<br/>TradeConfirmationRegistry)]
   PUB[Public data<br/>NY Fed, UST, ECB, BoE, SNB, MoF, news feeds<br/>FX spot via frankfurter.dev, Coinbase spot]
-  VENUE[Deribit public API<br/>option marks and forwards<br/>BTC, ETH, SOL]
+  VENUE[Deribit public API<br/>option marks, forwards, daily delivery prices<br/>BTC, ETH, SOL]
   ANTH[Anthropic API<br/>Prometheus, news summaries, book brief]
   TG[Telegram<br/>mirror of trade cards]
   APP -- "HTTPS, Bearer JWT" --> API
@@ -54,9 +54,9 @@ methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every produc
 `risk/` (ladder, VaR, stress, backtest, limits, vol history), `ccr/` (exposure paths, calibration,
 options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the firm's instrument list, the schedule per counterparty, the regime and the
 yields derived from them, the ticket's collateral onto a CSA, the book's collateral page; `docs/collateral.md`), `chain/` (canonical record, EIP-712
-signing, attestation, keys, lifecycle guard, Telegram), `market_data/` (public-source demo feed, the venue adapter
+signing, attestation, keys, lifecycle guard, Telegram), `settlement/` (the fixings store and the one settlement rule), `market_data/` (public-source demo feed, the venue adapter
 `deribit.py` for digital-asset vols and forwards, policy path, calendar), `news/`, `prometheus/` (read-only assistant and book brief), `methodology/` (Excel
-replications). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; news,
+replications). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; digital-asset fixings, news,
 summaries and spots every 30 minutes; demo market data, end-of-day P&L, market risk and counterparty
 credit every 2 hours) and moves the `release` branch after a deploy.
 
@@ -92,6 +92,7 @@ The table describes the template account, the one the feeds write to.
 | FX and digital-asset spot | `{PAIR}_SPOT` | ECB reference rates through `api.frankfurter.dev`; Coinbase | 30 minutes; digital assets also with the marks, every 10 | the last spot stands. Health (`spots`) is green while any spot is being written, so it does not see an FX outage on its own |
 | Digital-asset vols | `BTCUSD_VOL`, `ETHUSD_VOL`, `SOLUSD_VOL` | Deribit option marks, read at 25 and 50 delta per expiry (`market_data/deribit.py`) | 10 minutes | the last good surface stands, its own time in the source. Health (`crypto_marks`) reads that time and is red when the oldest of the three is over two hours old, or when an asset's current surface is not the venue's |
 | Digital-asset forwards | `{PAIR}_FWD` | the same chain: the forward of each expiry over the index | 10 minutes, with the vols | as above. The index is checked against the spot fetched in the same run (5 %), or the last stored one (25 %); with no spot at all it is stored unchecked. A funding rate typed on the ticket wins over the points for that price |
+| Digital-asset fixings | table `fixings` (not a snapshot curve): pair, date, source, value | Deribit's daily delivery price at 08:00 UTC (`market_data/deribit.py`), shared by every account; a desk's own entry for a licensed benchmark (`POST /api/currency/fixings`), its own only | every 30 minutes until the day's three are stored, then nothing until the next day; `?count=N` on the tick backfills | a published fixing is never overwritten; health (`crypto_fixings`) is red when the oldest of the three is more than 36 hours behind. Before the table exists nothing is stored and an expired trade is valued on the stored spot, marked provisional |
 | Rates vols | `USD_SWVOL_ATM`; skew and cap tables | parametric (`market_data/demo_feed.py`); the ATM grid's level scaled by realised vol (`risk/vols.py`), skew and caps as built | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
 | G10 FX vols | `{PAIR}_VOL` for six pairs | parametric, level scaled by realised vol | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
 
@@ -104,6 +105,8 @@ A run of the marks makes three requests to the venue and three for the spot. Eve
 | Spot ticks (`currencies.tick`, and the marks tick) | the template | the template's spot of the day |
 | Daily copy (`demo._copy_market_data`) | each demo account, and a new account at sign-up | nothing: it adds the template's latest row per curve when the account has none of that date, so for curves other than the venue's it supersedes an older own entry. A venue's row is not copied over an account's own entry. Terminal-sourced rows are never copied; hand-typed template rows are |
 | Hand-back (`POST /api/currency/forward-curve/use-feed`) | the caller's account; for the template, also the demo accounts still on a copy of its own curve | nothing is deleted: today's row for a digital-asset pair's forward points is written with the account's current points under a feed label, which the next marks run replaces with the venue's; rows of earlier dates stay. Refused where the feed does not write to the account, or has no forwards for the pair yet |
+| Fixings tick (`refresh_fixings`) | shared rows (`user_id` null), insert only | nothing: a differing re-read is logged, not written |
+| Desk fixing (`POST /api/currency/fixings`) | the caller's own row | the caller's previous entry for the same pair, date and source, which is kept and marked superseded; never a shared row, and never a source the feed owns |
 
 So a demo account's curves, FX spot and G10 vols are the day's first copy; only the digital-asset vols, forwards and
 spot follow the template through the day.
@@ -116,6 +119,31 @@ nothing. The vol history then has gaps until the history backfill is run (`POST 
 checked against the spot, and its text never repeated in a response. `GET /api/market-data/demo/sources` is public and
 lists the providers of the curves and of the venue's surfaces with the latest date of each; it does not list the spot
 providers.
+
+## Fixings and settlement of digital-asset trades
+
+A digital-asset forward or option is cash-settled against the settlement price source its record names
+(`settlement_price_source`, hashed as typed in the canonical record; `chain/canonical.py` is not involved in any of
+this). `backend/settlement/store.py` holds fixings in one table: a shared row per pair, date and source written by
+the feed, and a desk's own rows over them. `backend/settlement/rule.py` is the one rule, used by the booked
+valuation (`pnl/valuation.py`) and the ticket's view of a booked trade (`currencies.price_booked`):
+
+- the fixing of a trade is the stored row for its pair, its fixing date (a forward's valuation date, an option's
+  expiration date) and exactly its named source, the caller's own row first; never another source's price;
+- from the fixing date a forward is worth sign × N × (fixing − K), discounted to the settlement date; an option's
+  expired payoff uses the fixing; from the settlement date the value is zero and the amount is reported as settled;
+- with no fixing stored it is today's behaviour (the stored spot of the day), marked `provisional`.
+
+Each pair offers two sources (`SETTLEMENT_SOURCES`): the venue's delivery price, stored automatically, and a
+licensed benchmark, which a desk enters itself. The default is the automatic one wherever the feed runs and the
+benchmark elsewhere; the fixing time written on the record always follows the source. Not done yet: a settled trade
+keeps its status, and no settlement event is written (the P&L explain shows the amount leaving as carry, with no
+cash line); that is a separate change because it writes into every account each day.
+
+The CURVE SCENARIO tab of a currency or digital-asset ticket (`trade-window/FxScenarioChart.jsx`,
+`fx-scenario.js`) draws the pair's recent fixings and its forward curve, lets the curve be dragged by tenor or as a
+whole, and reprices in the browser with the pricer's own closed form and the backend's interpolation of forward
+points; a scenario fixing shows the settlement amount by the rule above. Nothing it shows is saved.
 
 ## Independent price verification
 

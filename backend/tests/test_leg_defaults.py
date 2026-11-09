@@ -98,6 +98,7 @@ def test_health_rules_hours_and_business_day(monkeypatch):
               RuntimeError("relation does not exist"),  # risk: missing table → stale, rolled back
               datetime(2026, 10, 30, 23, 0, tzinfo=timezone.utc)])  # ccr: Friday datetime → ok
     from api.routes import demo_market_data
+    monkeypatch.setattr("settlement.store.tables_present", lambda db: False)      # no fixings table: no fixings check, and no question to this session
     monkeypatch.setattr(demo_market_data, "last_marks_at", lambda db: now - timedelta(hours=3))   # digital-asset marks: stale (>2h)
     out = ops.evaluate(db, now=now)
     c = out["checks"]
@@ -113,6 +114,7 @@ def test_health_all_green(monkeypatch):
     now = datetime(2026, 10, 29, 12, 0, tzinfo=timezone.utc)
     db = _DB([now, now, date(2026, 10, 29), date(2026, 10, 28), date(2026, 10, 28), date(2026, 10, 28)])
     from api.routes import demo_market_data
+    monkeypatch.setattr("settlement.store.tables_present", lambda db: False)
     monkeypatch.setattr(demo_market_data, "last_marks_at", lambda db: now - timedelta(minutes=10))
     assert ops.evaluate(db, now=now)["ok"] is True
     monkeypatch.setattr(demo_market_data, "last_marks_at", lambda db: None)       # an asset with no venue surface

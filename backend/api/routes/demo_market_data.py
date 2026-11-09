@@ -3,6 +3,7 @@ demo_market_data.py — the hosted demo's market data, rebuilt daily from public
 
 POST /api/market-data/demo/tick          cron (X-Rijeka-Cron): fetch, build, write, copy
 POST /api/market-data/demo/crypto/tick   cron: digital-asset spot, option vols and forwards (market_data/deribit.py)
+POST /api/market-data/demo/fixings/tick  cron: the venue's daily delivery prices into the fixings store (?count=N backfills)
 GET  /api/market-data/demo/sources       public: what the demo prices on, and how fresh
 
 The tick writes the template user's rows (the account every new sign-up is
@@ -20,7 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time as clock, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -30,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from db.session import get_db
 from market_data import demo_feed, deribit
+from settlement import store as fixing_store
 from . import demo
 from .news import _secret_ok
 
@@ -277,6 +279,63 @@ def refresh_crypto(db: Session, dry_run: bool = False, now: Optional[datetime] =
     return summary
 
 
+# ── Digital assets: the venue's daily delivery prices, into the fixings store ──
+
+FIXING_HOUR_UTC = 8               # the venue publishes a day's delivery price at 08:00 UTC
+FIXING_KEYS = [(deribit.pair(a), deribit.delivery_source(a)) for a in deribit.ASSETS]
+
+
+def expected_fixing_date(now: Optional[datetime] = None) -> date:
+    """The latest date the venue has published a delivery price for: today (UTC) from 08:00 UTC, yesterday before."""
+    now = now or datetime.now(timezone.utc)
+    return now.date() if now.hour >= FIXING_HOUR_UTC else now.date() - timedelta(days=1)
+
+
+def fixings_current(db: Session, now: Optional[datetime] = None) -> bool:
+    """Whether the latest published delivery price of every asset is already stored: the scheduler then asks the
+    venue nothing until the next one is due."""
+    latest = fixing_store.latest_shared(db, FIXING_KEYS)
+    due = expected_fixing_date(now)
+    return len(latest) == len(FIXING_KEYS) and all(d >= due for d in latest.values())
+
+
+def last_fixing_at(db: Session) -> Optional[datetime]:
+    """08:00 UTC on the oldest, across the three assets, of the latest shared fixing dates: what the health check
+    watches. Shared rows only, so an account's own entry cannot make a silent feed look alive. None when an asset
+    has no stored delivery price."""
+    latest = fixing_store.latest_shared(db, FIXING_KEYS)
+    if len(latest) != len(FIXING_KEYS):
+        return None
+    return datetime.combine(min(latest.values()), clock(FIXING_HOUR_UTC), tzinfo=timezone.utc)
+
+
+def refresh_fixings(db: Session, count: int = 3, dry_run: bool = False) -> dict:
+    """The venue's latest `count` delivery prices per asset, stored as shared fixings. A date already stored is
+    never overwritten; an asset the venue did not answer for keeps what it has. The summary carries counts and
+    dates, never the venue's text."""
+    got = deribit.collect_delivery(count=count)          # the network first: no database transaction is open while it waits
+    summary: dict = {"stored": True, "dry_run": dry_run, "failed": dict(got["failed"]),
+                     "assets": {a: {"read": len(rows), "latest": rows[-1]["fixing_date"].isoformat()} for a, rows in got["ok"].items()}}
+    if dry_run:
+        summary["preview"] = {a: [{"date": r["fixing_date"].isoformat(), "value": r["value"]} for r in rows] for a, rows in got["ok"].items()}
+        return summary
+    written = known = differs = 0
+    for asset, rows in got["ok"].items():
+        try:
+            with db.begin_nested():             # one asset's rows together, and one asset's failure its own
+                res = fixing_store.put_shared(db, rows)
+            summary["assets"][asset].update(written=res["written"], differs=res["differs"])
+            written, known, differs = written + res["written"], known + res["known"], differs + res["differs"]
+        except Exception as e:      # noqa: BLE001 — the asset keeps the rows it has
+            log.warning("fixings for %s not stored: %s: %s", asset, type(e).__name__, str(e)[:300])
+            summary["assets"].pop(asset, None)
+            summary["failed"][asset] = f"not stored ({type(e).__name__})"
+    db.commit()
+    summary.update(written=written, known=known, differs=differs)
+    log.info("crypto fixings: %s", {a: v["latest"] for a, v in summary["assets"].items()} or summary["failed"])
+    return summary
+
+
 def refresh(db: Session, valuation_date: Optional[date] = None, dry_run: bool = False) -> dict:
     """Fetch, build and (unless dry_run) write the demo market data. Returns a summary."""
     valuation_date = valuation_date or date.today()
@@ -359,6 +418,19 @@ def crypto_tick(dry_run: bool = Query(default=False), db: Session = Depends(get_
     return refresh_crypto(db, dry_run=dry_run)
 
 
+@router.post("/fixings/tick")
+def fixings_tick(count: int = Query(default=3, ge=1, le=deribit.MAX_DELIVERY_ROWS), dry_run: bool = Query(default=False),
+                 db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None)):
+    if not _secret_ok(x_rijeka_cron):
+        raise HTTPException(status_code=403, detail="bad cron secret")
+    if not enabled() or not deribit.enabled():
+        return {"enabled": False}
+    if not fixing_store.tables_present(db):           # a deploy ahead of the migration: nothing to store into, so nothing is asked
+        return {"stored": False}
+    db.rollback()                                     # the presence read is closed before the network is waited on
+    return refresh_fixings(db, count=count, dry_run=dry_run)
+
+
 @router.get("/sources")
 def sources(db: Session = Depends(get_db)):
     """Public on purpose: the provenance of the demo's market data and the latest date per curve is part
@@ -372,6 +444,9 @@ def sources(db: Session = Depends(get_db)):
         latest = {r.curve_id: {"valuation_date": r.valuation_date.isoformat(), "source": r.source} for r in rows}
     venue = [{"curve": f"{deribit.pair(a)}_{kind}", "provider": f"{deribit.PROVIDER} {what} (public API, unauthenticated)", "kind": "public", "url": deribit.URL}
              for a in deribit.ASSETS for kind, what in (("VOL", "option marks"), ("FWD", "forwards by expiry"))] if deribit.enabled() else []
+    if deribit.enabled() and enabled() and fixing_store.tables_present(db):        # listed where the feed stores them, not before
+        venue += [{"curve": f"{deribit.pair(a)}_FIXING", "provider": f"{deribit.delivery_source(a)}, daily at {deribit.DELIVERY_TIME} (public API, unauthenticated)",
+                   "kind": "public", "url": deribit.DELIVERY_URL} for a in deribit.ASSETS]
     return {"enabled": enabled(), "sources": demo_feed.SOURCES + venue, "latest": latest,
             "assumptions": {"USD_OIS_MINUS_UST_bp": demo_feed.USD_OIS_MINUS_UST,
                             "EUR_OIS_MINUS_AAA_bp": demo_feed.EUR_OIS_MINUS_AAA,

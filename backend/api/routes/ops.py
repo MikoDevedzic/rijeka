@@ -58,15 +58,23 @@ CHECKS = [
 ]
 
 
-def active_checks() -> list:
-    """CHECKS, and the digital-asset marks when that source is on (market_data/deribit.py). That one is a function
-    of the session, not a statement: it reads the time the venue's marks carried, for the template account only."""
+def active_checks(db: Optional[Session] = None) -> list:
+    """CHECKS, and the digital-asset feeds when that source is on (market_data/deribit.py). Those are functions of
+    the session, not statements: the marks' check reads the time the venue's marks carried, for the template
+    account only; the fixings' check reads the latest shared delivery price, and is there only once the fixings
+    table is (a deploy ahead of its migration stores none, and must not read as a stale batch)."""
     from api.routes import demo_market_data
     from market_data import deribit
     if not (deribit.enabled() and demo_market_data.enabled()):       # an instance on its own marks never runs the tick
         return CHECKS
     last_marks_at = demo_market_data.last_marks_at
-    return CHECKS + [("crypto_marks", last_marks_at, ("hours", 2), "digital-asset vols and forwards")]
+    out = CHECKS + [("crypto_marks", last_marks_at, ("hours", 2), "digital-asset vols and forwards")]
+    if db is not None:
+        from settlement import store
+        if store.tables_present(db):
+            # a day's price is published at 08:00 UTC: stale when the latest stored one is older than a day and a half
+            out = out + [("crypto_fixings", demo_market_data.last_fixing_at, ("hours", 36), "digital-asset fixings")]
+    return out
 
 
 def _as_utc(v) -> Optional[datetime]:
@@ -79,7 +87,7 @@ def evaluate(db: Session, now: Optional[datetime] = None) -> dict:
     now = now or datetime.now(timezone.utc)
     floor = previous_business_day(now.date())
     checks: dict[str, dict] = {}
-    for name, sql, rule, feeds in active_checks():
+    for name, sql, rule, feeds in active_checks(db):
         try:
             last = sql(db) if callable(sql) else db.execute(text(sql)).scalar()
         except Exception as e:            # noqa: BLE001 — a missing table is a stale batch, not a crash
@@ -146,6 +154,8 @@ OPTIONAL_MIGRATIONS = (
      "a confirm that hands a slow block to ANCHORING instead of waiting in the request", "chain.pending", "tables_present"),
     ("jobs", "2026-11-03_jobs.sql (jobs and worker_heartbeat)",
      "heavy runs on the worker; apply only when the worker is alive, or runs queue for nobody", "jobs.queue", "tables_present"),
+    ("fixings", "2026-11-10_fixings.sql", "stored fixings for digital assets; without it an expired trade is valued on the stored spot, flagged provisional",
+     "settlement.store", "tables_present"),
 )
 
 

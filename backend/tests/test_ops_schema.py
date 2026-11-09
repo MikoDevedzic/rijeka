@@ -24,7 +24,8 @@ def fresh_presence_caches():
     from collateral import store as cstore
     from ipv import store as istore
     from jobs import queue
-    dicts = (modules._PRESENT, counterparties._CAPITAL_PRESENT, cstore._tables, istore._tables)
+    from settlement import store as fstore
+    dicts = (modules._PRESENT, counterparties._CAPITAL_PRESENT, cstore._tables, istore._tables, fstore._tables)
     timed = (pending._table, queue._table)
     saved = [dict(d) for d in dicts + timed]
     for d in dicts:
@@ -40,7 +41,7 @@ def fresh_presence_caches():
 
 def test_schema_status_lists_every_optional_migration_and_never_raises(fresh_presence_caches):
     out = ops.schema_status(_DB())
-    assert set(out) == {m[0] for m in ops.OPTIONAL_MIGRATIONS} >= {"collateral", "pending_anchors", "jobs", "ipv", "firm_modules"}
+    assert set(out) == {m[0] for m in ops.OPTIONAL_MIGRATIONS} >= {"collateral", "pending_anchors", "jobs", "ipv", "firm_modules", "fixings"}
     for name, v in out.items():
         assert v["applied"] in (False, None), name          # nothing is present on the empty session
         assert v["migration"].endswith(")") or v["migration"].endswith(".sql"), name

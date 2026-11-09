@@ -237,11 +237,14 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     FX:     [{ key: 'FX_SPOT', label: 'FX spot' }, { key: 'FX_FORWARD', label: 'FX forward' }, { key: 'NDF', label: 'NDF' }, { key: 'FX_SWAP', label: 'FX swap', live: false }, { key: 'FX_OPTION', label: 'FX option' }],
     CRYPTO: [{ key: 'CRYPTO_FORWARD', label: 'Crypto forward' }, { key: 'CRYPTO_OPTION', label: 'Crypto option' }],
   }
-  const fxTerms = useMemo(() => {
+  // Read at every render, not memoised on the quote: the panel's handle is replaced after the render in which the
+  // quote arrives, so a value remembered at that moment came from the handle before it (no quote yet, no terms),
+  // and the tabs then showed a priced ticket with no terms (the scenario tab: "no settlement price source").
+  const fxTerms = (() => {
     if (viewMode) return initialTrade.terms || null       // the term sheet as booked
     if (!fxQuote) return null
     try { return fxRef.current?.payload?.()?.terms || null } catch { return null }
-  }, [fxQuote, viewMode, initialTrade])
+  })()
   const n0 = (v) => { const n = Math.round(Number(v) || 0); return (n === 0 ? 0 : n).toLocaleString(undefined, { maximumFractionDigits: 0 }) }   // never "-0"
   const currencyFooter = {
     footer: {
@@ -1062,7 +1065,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       )}
       {tabsVisited['CURVE SCENARIO'] && isCurrency && (
         <div style={{ display: activeTab === 'CURVE SCENARIO' ? 'block' : 'none' }}>
-          <FxScenarioPanel quote={fxQuote} crypto={assetClass === 'CRYPTO'} />
+          <FxScenarioPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} />
         </div>
       )}
       {tabsVisited['XVA'] && isCurrency && (

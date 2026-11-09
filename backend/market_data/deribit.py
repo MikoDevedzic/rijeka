@@ -42,9 +42,21 @@ against an independent spot before it stores anything. Nothing here writes; the 
 source and the time of the marks on every row it saves. What a failure reports is written here, never
 copied from the response.
 
+Delivery prices. The venue publishes one delivery price per index a day, at 08:00 UTC, the price its
+own contracts settle on:
+
+    GET /api/v2/public/get_delivery_prices?index_name=btc_usd&count=3
+
+parse_delivery turns the response into fixings ({pair, fixing_date, fixing_time, source, value}) for the
+fixings store (settlement/store.py): a trade whose terms name "Deribit BTC delivery price" settles on
+that row. The same safeguards: the read is capped and deadlined, a date must be a plain ISO date not in
+the future, a price a positive finite number within DELIVERY_BAND of the median of the days around it,
+and at most MAX_DELIVERY_ROWS rows are taken. The caller stores a date once and never overwrites it.
+
 RIJEKA_DERIBIT=0 turns the source off (the daily rebuild then removes its rows and the parametric
 surfaces return). The venue's API usage policy allows unauthenticated public data at a low frequency;
-this module makes three requests per run.
+this module makes three requests per marks run, and three per delivery-price run until the day's
+prices are stored.
 """
 from __future__ import annotations
 
@@ -54,7 +66,7 @@ import math
 import os
 import re
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from statistics import median
 from typing import Optional
 
@@ -92,6 +104,16 @@ EXPIRY_CODE = re.compile(r"[0-9]{1,2}[A-Z]{3}[0-9]{2}")
 STRIKE = re.compile(r"[0-9]{1,9}(?:[.d][0-9]{1,8})?")
 MAX_JUMP = 0.25           # a mark more than a quarter away from the median of the marks around it is not part of the smile
 STALE_WINDOW = 5
+
+# the daily delivery prices (the venue's own settlement prices): one row per index and day
+DELIVERY_API = "https://www.deribit.com/api/v2/public/get_delivery_prices"
+DELIVERY_URL = "https://docs.deribit.com/#public-get_delivery_prices"
+DELIVERY_INDEX = {"BTC": "btc_usd", "ETH": "eth_usd", "SOL": "sol_usd"}       # each answered on 2026-11-09
+DELIVERY_TIME = "08:00 UTC"
+MAX_DELIVERY_ROWS = 120   # a backfill of four months; a day's run asks for three
+DELIVERY_BAND = 0.60      # a price more than 60 % from the median of the five days around it is not that day's price
+DELIVERY_WINDOW = 5
+ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 class Unusable(ValueError):
@@ -322,14 +344,59 @@ def source(kind: str, built: dict) -> str:
     return f"{SOURCE_PREFIX} {kind} · {built['asof']:%Y-%m-%d %H:%M} UTC · listed to {built['last_expiry']}, flat beyond"
 
 
+# ── Pure: delivery prices to fixings ───────────────────────────────────────────
+
+def delivery_source(asset: str) -> str:
+    """'Deribit BTC delivery price': the settlement price source a trade's terms name, and the stored row's source."""
+    return f"{PROVIDER} {asset} delivery price"
+
+
+def parse_delivery(payload, asset: str, today: Optional[date] = None) -> list[dict]:
+    """[{pair, fixing_date, fixing_time, source, value}], ascending by date, from the venue's
+    {"result": {"data": [{"date": "2026-11-09", "delivery_price": 73906.34}, ...]}}.
+
+    Only the first MAX_DELIVERY_ROWS rows are read. A row is kept when its date is a plain ISO date (ASCII digits,
+    a real calendar day) not after `today` (UTC), its price a positive finite number, and the date not already
+    taken (the first row for a date stands). Then a price more than DELIVERY_BAND from the median of the
+    DELIVERY_WINDOW days around it (itself included; at an end, the nearest ones) is dropped: one bad row among
+    its neighbours goes, and a batch of one or two rows has no neighbours to be judged by, so two rows that
+    disagree that far both go. Anything else in the payload is ignored; junk gives an empty list, never an error."""
+    today = today or datetime.now(timezone.utc).date()
+    result = payload.get("result") if isinstance(payload, dict) else None
+    data = result.get("data") if isinstance(result, dict) else None
+    by: dict[date, float] = {}
+    for o in (data if isinstance(data, list) else [])[:MAX_DELIVERY_ROWS]:
+        if not isinstance(o, dict):
+            continue
+        d, v = o.get("date"), _num(o.get("delivery_price"))
+        if not isinstance(d, str) or not ISO_DATE.fullmatch(d) or v is None or v <= 0:
+            continue
+        try:
+            day = date(int(d[:4]), int(d[5:7]), int(d[8:]))
+        except ValueError:
+            continue
+        if day > today or day in by:
+            continue
+        by[day] = v
+    days = sorted(by)
+    kept = []
+    for i, day in enumerate(days):
+        lo = max(0, min(i - DELIVERY_WINDOW // 2, len(days) - DELIVERY_WINDOW))
+        mid = median(by[x] for x in days[lo:lo + DELIVERY_WINDOW])
+        if abs(by[day] / mid - 1.0) <= DELIVERY_BAND:
+            kept.append(day)
+    return [{"pair": pair(asset), "fixing_date": day, "fixing_time": DELIVERY_TIME, "source": delivery_source(asset), "value": by[day]} for day in kept]
+
+
 # ── Network ────────────────────────────────────────────────────────────────────
 
-def fetch_chain(asset: str, client: httpx.Client) -> list:
-    """The chain's rows, read under a byte cap and a wall-clock deadline (the client's timeout is per read)."""
+def _read_result(client: httpx.Client, url: str, params: dict):
+    """The `result` of one of the venue's public methods, read under a byte cap and a wall-clock deadline (the
+    client's timeout is per read). Every failure is an Unusable in this module's own words."""
     started, body = time.monotonic(), bytearray()
-    with client.stream("GET", API, params={"currency": CHAIN_CURRENCY[asset], "kind": "option"}) as r:
+    with client.stream("GET", url, params=params) as r:
         if r.status_code != 200:
-            raise Unusable(f"HTTP {r.status_code}")
+            raise Unusable(f"HTTP {int(r.status_code)}")
         for chunk in r.iter_bytes():
             body += chunk
             if len(body) > MAX_BYTES:
@@ -337,35 +404,73 @@ def fetch_chain(asset: str, client: httpx.Client) -> list:
             if time.monotonic() - started > DEADLINE:
                 raise Unusable("response over the deadline")
     try:
-        rows = json.loads(body)["result"]
+        return json.loads(body)["result"]
     except (ValueError, KeyError, TypeError):
         raise Unusable("response is not the expected JSON") from None
+
+
+def fetch_chain(asset: str, client: httpx.Client) -> list:
+    """The chain's rows (capped and deadlined by _read_result), within the row cap."""
+    rows = _read_result(client, API, {"currency": CHAIN_CURRENCY[asset], "kind": "option"})
     if not isinstance(rows, list) or len(rows) > MAX_ROWS:
         raise Unusable("response is not a list of instruments within the row cap")
     return rows
 
 
-def collect(now: Optional[datetime] = None, assets=ASSETS, pause: float = 0.5) -> dict:
-    """{ok: {asset: built}, failed: {asset: why}}. An asset whose chain cannot be read or gives no surface is reported, not fatal."""
+def fetch_delivery(asset: str, client: httpx.Client, count: int = 3) -> dict:
+    """The venue's latest `count` daily delivery prices for the asset's index, as the payload parse_delivery
+    reads ({"result": {"data": [...]}}), read like a chain and within the row cap."""
+    count = max(1, min(int(count), MAX_DELIVERY_ROWS))
+    result = _read_result(client, DELIVERY_API, {"index_name": DELIVERY_INDEX[asset], "count": count})
+    data = result.get("data") if isinstance(result, dict) else None
+    if not isinstance(data, list) or len(data) > MAX_DELIVERY_ROWS:
+        raise Unusable("response is not a list of delivery prices within the row cap")
+    return {"result": {"data": data}}
+
+
+def _client() -> httpx.Client:
     from version import VERSION
+    return httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0), follow_redirects=False,
+                        headers={"User-Agent": f"rijeka/{VERSION} (+https://rijeka.app)"})
+
+
+def _each(assets, pause: float, what: str, read) -> dict:
+    """{ok: {asset: read(asset, client)}, failed: {asset: why}} over one client. An asset that cannot be read is
+    reported, not fatal; what is reported is written here, never copied from the response."""
     out: dict = {"ok": {}, "failed": {}}
-    with httpx.Client(timeout=httpx.Timeout(10.0, connect=5.0), follow_redirects=False,
-                      headers={"User-Agent": f"rijeka/{VERSION} (+https://rijeka.app)"}) as c:
+    with _client() as c:
         for i, asset in enumerate(assets):
             if i:
                 time.sleep(pause)
             try:
-                b = build(fetch_chain(asset, c), asset, now)
-                if b["vol"] is None:
-                    raise Unusable(b["why"] or "no surface")
-                out["ok"][asset] = b
+                out["ok"][asset] = read(asset, c)
             except Unusable as e:       # our own words: safe on the public health page
-                log.warning("deribit %s unusable: %s", asset, e)
+                log.warning("deribit %s %s unusable: %s", what, asset, e)
                 out["failed"][asset] = str(e)
-            except Exception as e:      # noqa: BLE001 — one asset must not stop the others; the last good surface stands
-                log.warning("deribit %s failed: %s: %r", asset, type(e).__name__, str(e)[:200])
+            except Exception as e:      # noqa: BLE001 — one asset must not stop the others; what is stored stands
+                log.warning("deribit %s %s failed: %s: %r", what, asset, type(e).__name__, str(e)[:200])
                 out["failed"][asset] = type(e).__name__          # the message may quote the venue: it stays in the log
     return out
+
+
+def collect(now: Optional[datetime] = None, assets=ASSETS, pause: float = 0.5) -> dict:
+    """{ok: {asset: built}, failed: {asset: why}}. An asset whose chain cannot be read or gives no surface is reported, not fatal."""
+    def read(asset: str, c: httpx.Client) -> dict:
+        b = build(fetch_chain(asset, c), asset, now)
+        if b["vol"] is None:
+            raise Unusable(b["why"] or "no surface")
+        return b
+    return _each(assets, pause, "marks", read)
+
+
+def collect_delivery(count: int = 3, assets=ASSETS, today: Optional[date] = None, pause: float = 0.5) -> dict:
+    """{ok: {asset: [fixing rows, ascending by date]}, failed: {asset: why}} from the venue's delivery prices."""
+    def read(asset: str, c: httpx.Client) -> list[dict]:
+        rows = parse_delivery(fetch_delivery(asset, c, count), asset, today)
+        if not rows:
+            raise Unusable("no usable delivery price")
+        return rows
+    return _each(assets, pause, "delivery prices", read)
 
 
 def marks_time(source: Optional[str]) -> Optional[datetime]:

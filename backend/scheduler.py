@@ -13,7 +13,10 @@ Enabled by RIJEKA_SCHEDULER=1, or by default when the process runs on Render (Re
 RENDER); RIJEKA_SCHEDULER=0 turns it off. Tests set neither, so nothing starts there.
 
 Cadence: the marks group every RIJEKA_SCHEDULER_MARKS_MINUTES (10): digital-asset spot, option
-vols and forwards, three public requests to the venue and three for the spot; the half-hourly group every RIJEKA_SCHEDULER_MINUTES (30); the daily group every
+vols and forwards, three public requests to the venue and three for the spot; the half-hourly group every RIJEKA_SCHEDULER_MINUTES (30),
+which also carries crypto_fixings: the venue's daily delivery prices (published at 08:00 UTC) into the fixings
+store, three public requests a pass until the latest published day is stored for all three assets and none after
+that until the next is due; the daily group every
 RIJEKA_SCHEDULER_DAILY_HOURS (2), which is what the workflow managed on a good day and keeps
 the risk and credit batches off the single CPU most of the time; the every_cycle group on
 every pass of the loop (a minute): today only chain_reconcile, which follows anchors whose
@@ -58,6 +61,7 @@ def _define_steps() -> list[tuple[str, str, Callable[..., Any]]]:
         ("news", "half_hourly", lambda db, s: news.tick(db=db, x_rijeka_cron=s)),
         ("summaries", "half_hourly", lambda db, s: news.summarize(limit=12, db=db, x_rijeka_cron=s)),
         ("spots", "half_hourly", lambda db, s: currencies.tick(db=db, x_rijeka_cron=s)),
+        ("crypto_fixings", "half_hourly", _fixings),
         ("crypto_marks", "marks", lambda db, s: demo_market_data.crypto_tick(dry_run=False, db=db, x_rijeka_cron=s)),
         ("market_data", "daily", lambda db, s: demo_market_data.tick(dry_run=False, db=db, x_rijeka_cron=s)),
         ("pnl", "daily", lambda db, s: pnl.eod_tick(db=db, x_rijeka_cron=s)),
@@ -65,6 +69,16 @@ def _define_steps() -> list[tuple[str, str, Callable[..., Any]]]:
         ("ccr", "daily", lambda db, s: ccr.daily_tick(db=db, x_rijeka_cron=s)),
         ("chain_reconcile", "every_cycle", lambda db, s: _reconcile(db)),
     ]
+
+
+def _fixings(db, secret: str) -> dict:
+    """The venue's delivery prices into the fixings store (demo_market_data.fixings_tick). One price per asset a
+    day: once the latest published day is stored for all three, the step returns without asking the venue."""
+    from api.routes import demo_market_data
+    from market_data import deribit
+    if demo_market_data.enabled() and deribit.enabled() and demo_market_data.fixings_current(db):
+        return {"current": True}
+    return demo_market_data.fixings_tick(count=3, dry_run=False, db=db, x_rijeka_cron=secret)
 
 
 def _reconcile(db) -> dict:

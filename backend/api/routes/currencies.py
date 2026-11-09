@@ -5,6 +5,8 @@ Currencies — FX and digital assets on one model (pricing/currency_forward.py).
     POST /api/currency/spot/snap         FX reference rates (ECB via frankfurter.dev) + crypto spot (Coinbase), saved as snapshots
     POST /api/currency/spot/tick         same for the demo template account (X-Rijeka-Cron)
     POST /api/currency/forward/price     spot / forward / NDF on any pair, from parameters
+    GET  /api/currency/fixings/{pair}    stored fixings of a digital-asset pair (the stored spots before the migration)
+    POST /api/currency/fixings           a desk's own fixing for a source the feed does not store
 
 Snapshots: {PAIR}_SPOT with quotes [{"tenor": "SPOT", "rate": quote per base}], source IMPORT.
 Discounting: each currency's OIS curve (USD_SOFR, EUR_ESTR, GBP_SONIA, …) through the
@@ -12,18 +14,22 @@ pricer's own loader; a digital asset discounts at its funding rate ({ASSET}_FUND
 
 Booked FX_SPOT / FX_FORWARD / NDF / CRYPTO_FORWARD trades are priced from trade.terms by
 price_booked() when POST /price meets one. The crypto routes under /api/crypto remain.
+A digital-asset trade whose fixing date is reached is answered from the settlement rule
+(settlement/rule.py): its stored fixing, or the stored spot flagged provisional.
 """
 from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import re
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -59,6 +65,53 @@ FWD_TENORS = ("1W", "2W", "1M", "2M", "3M", "6M", "9M", "1Y", "2Y")
 TENOR_DAYS = {"ON": 1, "1W": 7, "2W": 14, "1M": 30, "2M": 61, "3M": 91, "6M": 182, "9M": 273, "1Y": 365, "2Y": 730}
 MODES = ("MARKET", "IMPLIED")     # MARKET: outright = spot + quoted points; IMPLIED: parity on the two OIS curves
 FIXING_DEFAULT = {"USDJPY": "WM/Reuters 4pm London", "BTCUSD": "CME CF BRR", "ETHUSD": "CME CF ETHUSD_RR", "SOLUSD": "Coinbase SOL-USD"}
+# The settlement price sources a digital-asset trade may name, with the time each is published. `auto`: the feed
+# stores it (market_data/deribit.py, shared rows); the others are a desk's own entry (POST /api/currency/fixings).
+# The order carries no meaning: which one a new ticket starts on is fixing_default() below.
+SETTLEMENT_SOURCES = {
+    "BTCUSD": [{"source": "CME CF BRR", "time": "16:00 London", "auto": False},
+               {"source": "Deribit BTC delivery price", "time": "08:00 UTC", "auto": True}],
+    "ETHUSD": [{"source": "CME CF ETHUSD_RR", "time": "16:00 London", "auto": False},
+               {"source": "Deribit ETH delivery price", "time": "08:00 UTC", "auto": True}],
+    "SOLUSD": [{"source": "Coinbase SOL-USD", "time": "16:00 London", "auto": False},
+               {"source": "Deribit SOL delivery price", "time": "08:00 UTC", "auto": True}],
+}
+FIXING_SOURCE_MAX = 80
+FIXING_SOURCE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9 ._/:()&+-]{0,78}[A-Za-z0-9.)])?")      # plain ASCII, no markup, no control characters
+FIXING_VALUE_MAX = 1e12
+FIXING_DAYS_MAX = 366
+SPOT_AS_FIXING = "stored spot (no fixing stored)"
+
+
+def _same_source(a: str, b: str) -> bool:
+    return " ".join(str(a).split()).casefold() == " ".join(str(b).split()).casefold()
+
+
+def feed_owns(source: str) -> bool:
+    """A source the feed stores (any pair's `auto` source, however it is spaced or cased): never a desk's to enter."""
+    return any(_same_source(source, s["source"]) for srcs in SETTLEMENT_SOURCES.values() for s in srcs if s["auto"])
+
+
+def fixings_feed_runs() -> bool:
+    """Whether this instance stores the venue's delivery prices: both switches of the feed are on."""
+    from api.routes import demo_market_data
+    from market_data import deribit
+    return deribit.enabled() and demo_market_data.enabled()
+
+
+def fixing_default(pair: str) -> tuple[str, Optional[str]]:
+    """(source, time) a new ticket on the pair starts on. A digital asset: the venue's delivery price where the feed
+    runs on this instance (the fixing is then stored every day without anyone entering it), and the licensed
+    benchmark where it does not, because there a delivery price would never be stored. An FX pair: as before, and
+    no time (its record carries none)."""
+    benchmark = FIXING_DEFAULT.get(pair, "WM/Reuters 4pm London")
+    listed = SETTLEMENT_SOURCES.get(pair)
+    if not listed:
+        return benchmark, None
+    auto = next((s for s in listed if s["auto"]), None)
+    if auto is not None and fixings_feed_runs():
+        return auto["source"], auto["time"]
+    return benchmark, next((s["time"] for s in listed if s["source"] == benchmark), None)
 
 
 def split_pair(pair: str) -> tuple[str, str]:
@@ -184,10 +237,13 @@ def forward_mode(db: Session, user_id) -> str:
 def pair_state(db: Session, user_id, pair: str) -> dict[str, Any]:
     base, quote = split_pair(pair)
     s = latest_snapshot(db, user_id, f"{pair}_SPOT")
+    default_source, default_time = fixing_default(pair)
     out = {"pair": pair, "base": base, "quote": quote, "crypto": is_crypto(base),
            "spot": _quote(s, "SPOT"), "spot_as_of": s.valuation_date.isoformat() if s else None,
            "quote_curve": CURVE_FOR.get(quote), "pip": PIP.get(pair, 1.0 if is_crypto(base) else 1e-4),
-           "fixing_default": FIXING_DEFAULT.get(pair, "WM/Reuters 4pm London")}
+           "fixing_default": default_source, "fixing_default_time": default_time}
+    if is_crypto(base):
+        out["fixing_sources"] = [dict(x) for x in SETTLEMENT_SOURCES.get(pair, [])]
     fc = forward_curve(db, user_id, pair)
     out.update(forward_curve=fc and {"valuation_date": fc["valuation_date"], "source": fc["source"], "label": short_label(fc["source"], fc["valuation_date"], "points"),
                                      "tenors": sorted(fc["points"], key=TENOR_DAYS.get)},
@@ -401,6 +457,82 @@ def tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(No
     except Exception as e:
         raise internal(502, "spot feeds unavailable", e)
     return {"saved": _save_pairs(db, uid, prices), "prices": prices}
+
+
+# ── fixings ────────────────────────────────────────────────────────────────
+
+def fixings_view(db: Session, user_id, pair: str, days: int = 30) -> dict:
+    """{pair, stored, sources, fixings}: the account's own and the shared fixings of the last `days`, ascending by
+    date. Before the fixings table exists (`stored` false) the account's stored spots stand in, one per date, each
+    marked origin SPOT: what an expired trade is valued on until a fixing is stored."""
+    from sqlalchemy import text
+    from settlement import store
+    days = max(1, min(int(days), FIXING_DAYS_MAX))
+    out = {"pair": pair, "stored": store.tables_present(db), "sources": [dict(x) for x in SETTLEMENT_SOURCES.get(pair, [])]}
+    if pair not in SETTLEMENT_SOURCES:
+        return {**out, "fixings": []}
+    if out["stored"]:
+        return {**out, "fixings": store.recent(db, pair, days, user_id)}
+    rows = db.execute(text("SELECT DISTINCT ON (valuation_date) valuation_date, quotes, source FROM market_data_snapshots "
+                           "WHERE user_id = :u AND curve_id = :c AND valuation_date >= :d ORDER BY valuation_date, created_at DESC"),
+                      {"u": user_id, "c": f"{pair}_SPOT", "d": date.today() - timedelta(days=days)}).all()
+    spots = [(r.valuation_date, _quote(r, "SPOT")) for r in rows]
+    return {**out, "fixings": [{"date": d.isoformat(), "source": SPOT_AS_FIXING, "time": None, "value": float(v), "origin": "SPOT", "own": False}
+                               for d, v in spots if v is not None]}
+
+
+@router.get("/fixings/{pair}")
+def get_fixings(pair: str, days: int = Query(30), db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    pair = pair.upper()
+    split_pair(pair)
+    return fixings_view(db, user["sub"], pair, days)
+
+
+class FixingIn(BaseModel):
+    pair: str = Field(..., max_length=12)
+    fixing_date: date
+    source: str = Field(..., max_length=400, description="the settlement price source as a trade's terms name it; at most 80 characters once trimmed")
+    value: float
+
+
+@router.post("/fixings")
+def save_fixing(req: FixingIn, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """A desk's own fixing for a pair, date and source. A second entry for the same key supersedes the first, which
+    is kept. A source the feed stores is refused: those rows are shared and published, not anyone's to enter."""
+    _require_trader(user)
+    from api.routes._limits import heavy
+    heavy(user, "fixing entry", 30)
+    from sqlalchemy.exc import IntegrityError
+    from settlement import store
+    pair = str(req.pair).upper()
+    base, _ = split_pair(pair)
+    if not is_crypto(base) or pair not in SETTLEMENT_SOURCES:
+        raise HTTPException(status_code=422, detail="fixings are stored for digital-asset pairs")
+    source = str(req.source).strip()
+    if len(source) > FIXING_SOURCE_MAX:
+        raise HTTPException(status_code=422, detail=f"source is at most {FIXING_SOURCE_MAX} characters")
+    if not FIXING_SOURCE.fullmatch(source):
+        raise HTTPException(status_code=422, detail="source: letters, digits, spaces and . _ / : ( ) & + - only")
+    if feed_owns(source):
+        raise HTTPException(status_code=422, detail="this source is stored by the feed and cannot be entered by hand")
+    value = float(req.value)
+    if not math.isfinite(value) or value <= 0 or value > FIXING_VALUE_MAX:
+        raise HTTPException(status_code=422, detail="value must be a positive, finite number")
+    today = max(date.today(), datetime.now(timezone.utc).date())      # a date that has begun anywhere the server could be
+    if req.fixing_date > today:
+        raise HTTPException(status_code=422, detail="fixing_date cannot be in the future")
+    if not store.tables_present(db):
+        raise HTTPException(status_code=409, detail="fixings are not stored on this instance yet (the fixings migration is not applied)")
+    when = next((x["time"] for x in SETTLEMENT_SOURCES[pair] if x["source"] == source), None)
+    uid = uuid.UUID(user["sub"])
+    try:
+        store.put_own(db, uid, pair, req.fixing_date, source, value, when)
+        db.commit()
+    except IntegrityError:
+        db.rollback()                 # two entries for the same key at the same moment: one stands
+        raise HTTPException(status_code=409, detail="another entry for this fixing was stored at the same moment; send it again")
+    log.info("fixing entered for %s %s by %s", pair, req.fixing_date, str(uid)[:8])
+    return fixings_view(db, user["sub"], pair, max(30, (date.today() - req.fixing_date).days + 1))
 
 
 # ── pricing ────────────────────────────────────────────────────────────────
@@ -726,6 +858,16 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date) -> dict:
     """A booked currency trade, from trade.terms (the canonical record's fields)."""
     t = dict(trade.terms or {})
     itype = str(trade.instrument_type or "").upper()
+    fix = mkt = None
+    if itype in ("CRYPTO_FORWARD", "CRYPTO_OPTION"):
+        # from the fixing date on, a digital-asset trade is answered from the settlement rule (settlement/rule.py,
+        # the same call the booked valuation makes); before it `fix` is None and nothing below changes
+        from pnl.market import Market
+        from settlement.rule import settlement
+        mkt = Market(db, user["sub"], val_date)
+        fix = settlement(db, user["sub"], trade, val_date, cache=mkt._cache)
+    if fix is not None and (itype == "CRYPTO_OPTION" or _booked_settle(t, trade) <= val_date):
+        return _booked_fixed(trade, db, user, val_date, mkt, fix)
     if itype in OPTION_INSTRUMENTS:
         try:
             a = _booked_option_args(t, trade)
@@ -756,4 +898,73 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date) -> dict:
                  spot_override=None, base_rate_pct=None)
     out.update(trade_id=str(trade.id), trade_ref=trade.trade_ref, instrument_type=itype, npv_ccy=out["quote_currency"],
                legs=[], shape=shape)
+    if fix is not None:
+        # the fixing date is reached and the settlement date is not. With the fixing stored the trade is a known
+        # amount on the settlement date, discounted on the curve this response already names; without one the
+        # response is the one above, flagged provisional
+        out.update(fixing=fix["fixing"], provisional=fix["provisional"], settlement_amount=fix["settlement_amount"], settled=False,
+                   settlement_price=fix["price"], fixing_date=fix["fixing_date"].isoformat(), fixing_source=fix["source"] or None)
+        if fix["fixing"] and fix["settlement_amount"] is not None:
+            npv = float(fix["settlement_amount"]) * float(out["df_quote"])
+            disc01 = npv * (math.exp(-1e-4 * float(out["t"])) - 1.0)
+            out.update(npv=npv, ir01=disc01, ir01_disc=disc01, ir01_base=0.0, fund01=0.0, spot01=0.0, delta_quote_per_pct=0.0, delta_base_units=0.0,
+                       rho_base_per_bp=0.0, rho_quote_per_bp=disc01, theta=_fixed_theta(db, user["sub"], out, val_date, settle, npv),
+                       model=f"fixed {fix['fixing_date']} at {fix['fixing']['value']:g} ({fix['source']}): NPV_quote = ±N_base·(fixing−K)·DF_quote; ACT/365")
+    return out
+
+
+def _booked_settle(t: dict, trade: Trade) -> date:
+    try:
+        return date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)[:10])
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
+
+
+def _fixed_theta(db: Session, user_id: str, out: dict, val_date: date, settle: date, npv: float) -> float:
+    """One day's carry of a known amount on the settlement date: the mark a day later (zero once that day is the
+    settlement date, as the forward pricer has it) less today's."""
+    d1 = val_date + timedelta(days=1)
+    if settle <= d1:
+        return -npv
+    try:
+        return npv / max(float(_curve(db, user_id, out["quote_curve"], val_date).df(d1)), 1e-12) - npv
+    except HTTPException:
+        return 0.0
+
+
+def _booked_fixed(trade: Trade, db: Session, user: dict, val_date: date, mkt, fix: dict) -> dict:
+    """A digital-asset option from its expiry on, and a forward from its settlement date on: the booked valuation
+    (pnl/valuation.py, which applies the settlement rule) in the shape of a pricing response. Before this existed
+    these dates answered 422 ("must be after the valuation date")."""
+    from pnl.valuation import _currency_terms, value
+    itype = str(trade.instrument_type or "").upper()
+    try:
+        pair, t = _currency_terms(trade)
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
+    base, quote = split_pair(pair)
+    try:
+        v = value(db, user, trade, val_date, mkt)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    option = t["shape"] == "OPTION"
+    K, notional, price = t["K"], float(t["notional"]), fix["price"]
+    out = {"trade_id": str(trade.id), "trade_ref": trade.trade_ref, "instrument_type": itype, "npv_ccy": quote, "legs": [],
+           "pair": pair, "shape": "OPTION" if option else "NDF", "crypto": True, "base_currency": base, "quote_currency": quote,
+           "direction": str(t["direction"]).upper(), "base_notional": notional, "quote_notional": notional * K if K is not None else None,
+           "valuation_date": val_date.isoformat(), "settlement_date": t["settle"].isoformat(), "spot": mkt.spot(pair), "forward": price, "settlement_price": price,
+           "npv": float(v["npv"]), "settled": bool(v.get("settled")), "fixing": v.get("fixing"), "provisional": bool(v.get("provisional")),
+           "settlement_amount": v.get("settlement_amount"), "fixing_date": fix["fixing_date"].isoformat(), "fixing_source": fix["source"] or None,
+           "ir01": v.get("ir01") or 0.0, "ir01_disc": v.get("ir01_disc") or 0.0, "ir01_base": 0.0, "fund01": 0.0, "spot01": 0.0, "theta": v.get("theta") or 0.0,
+           "quote_curve": CURVE_FOR.get(quote), "forward_mode": None, "market_points": None, "basis_points": None,
+           "spot_source": f"snapshot on or before {val_date.isoformat()}",
+           "forward_source": (f"{fix['source']} fixing of {fix['fixing_date']}" if fix["fixing"] else f"stored spot of {fix['fixing_date']}: no {fix['source'] or 'named source'} fixing is stored"),
+           "model": v.get("model") or ("settled: the mark is zero from the settlement date, the amount is reported beside it" if v.get("settled") else None)}
+    if option:
+        sf = t.get("style_fields") or {}
+        out.update(option_type=t["option_type"], strike=K, expiry_date=t["expiry"].isoformat(), settlement_type="NON_DELIVERABLE",
+                   style=str(sf.get("style") or "EUROPEAN").upper(), vega=0.0, gamma_1pct=0.0, delta_base_units=0.0, vol=None, vol_pct=None,
+                   vol_tier=None, vol_source=None, intrinsic=None, time_value=None, method=out["model"])
+    else:
+        out.update(forward_rate=K, forward_points=0.0, delta_quote_per_pct=0.0, delta_base_units=0.0)
     return out
