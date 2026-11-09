@@ -61,6 +61,7 @@ export default function XvaPanel({
 
       // The counterparty, for its collateral schedule as the default
       counterpartyId={counterpartyId}
+      counterpartyName={counterpartyName}
 
       // Solved par rate. XVATab must not have to read rateRef for this — that
       // input is unmounted while the XVA tab is showing.

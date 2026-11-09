@@ -18,6 +18,37 @@ def test_catalogue_and_presets():
     assert [m["key"] for m in cat["definitions"]] == list(M.KEYS) and set(cat["presets"]) == set(M.PRESETS)
 
 
+def test_the_launch_set_is_booking_valuation_xva_and_confirm(monkeypatch):
+    launch = M.preset_modules("LAUNCH")
+    assert {k for k, on in launch.items() if on} == {"CHAIN_CONFIRM", "XVA", "PROMETHEUS", "NEWS"}
+    assert list(M.PRESETS)[0] == "LAUNCH" and "DEALER" in M.PRESETS                 # one click to it, one click back to everything
+    # what a new workspace starts on: LAUNCH unless the instance says otherwise; nonsense means "as before" (nothing chosen)
+    monkeypatch.delenv("RIJEKA_SIGNUP_PRESET", raising=False)
+    assert M.signup_preset() == "LAUNCH"
+    for value, want in (("dealer", "DEALER"), ("", None), ("none", None), ("EVERYTHING", None), (" fund ", "FUND")):
+        monkeypatch.setenv("RIJEKA_SIGNUP_PRESET", value)
+        assert M.signup_preset() == want, value
+
+
+def test_who_may_switch_modules(monkeypatch):
+    from unittest.mock import MagicMock, patch
+    user = {"sub": "u-1"}
+    db = MagicMock()
+    with patch("api.routes._roles.role_of", return_value="admin"):
+        assert M.may_edit(db, user)                                                # a profile admin, anywhere
+    with patch("api.routes._roles.role_of", return_value="trader"):
+        monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "0")
+        assert not M.may_edit(db, user) and not db.execute.called                  # a firm deployment: the admin role only
+        monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "1")
+        db.execute.return_value.first.return_value = (1,)
+        assert M.may_edit(db, user)                                                # a sandbox firm's own ADMIN member
+        assert "role = 'ADMIN'" in str(db.execute.call_args.args[0]) and db.execute.call_args.args[1] == {"u": "u-1"}
+        db.execute.return_value.first.return_value = None
+        assert not M.may_edit(db, user)                                            # a member who is not its admin
+        db.execute.side_effect = RuntimeError("no such table")
+        assert not M.may_edit(db, user) and db.rollback.called
+
+
 def test_normalise_ignores_unknown_keys_and_defaults_the_rest():
     n = M.normalise({"PNL": False, "NOPE": False, "XVA": 0})
     assert not n["PNL"] and not n["XVA"] and n["MARKET_RISK"] and "NOPE" not in n
@@ -46,7 +77,11 @@ def test_before_the_migration_everything_is_on(monkeypatch):
 
 def test_route_validation(monkeypatch):
     import api.routes.modules as route
-    monkeypatch.setattr(route, "require_admin", lambda db, user: None)
+    monkeypatch.setattr(M, "may_edit", lambda db, user: False)
+    with pytest.raises(HTTPException) as e:
+        put_modules(ModulesBody(preset="DEALER"), db=None, user={"sub": "u"})
+    assert e.value.status_code == 403 and route.put_modules is put_modules      # refused before anything is read or written
+    monkeypatch.setattr(M, "may_edit", lambda db, user: True)
     monkeypatch.setattr(M, "firm_of_user", lambda db, uid: "firm")
     monkeypatch.setattr(M, "columns_present", lambda db: True)
     with pytest.raises(HTTPException) as e:

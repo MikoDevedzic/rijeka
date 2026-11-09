@@ -34,7 +34,8 @@ every number must be finite and every expiry code well formed, and the marks mus
 MAX_AGE of now. An expiry is dropped when it is inside MIN_DAYS, has fewer than MIN_STRIKES usable
 marks, has no open interest, does not bracket the 25-delta points, gives a vol level outside sanity
 bounds, or a forward further from the index than MAX_BASIS allows; within an expiry a mark that
-stands off the line between its neighbours, or whose delta breaks the order of the strikes, is left out. A surface needs MIN_EXPIRIES good
+stands off the line between its neighbours (the worst first, so its neighbours stay), or whose delta
+breaks the order of the strikes, is left out. A surface needs MIN_EXPIRIES good
 expiries or none is produced, and the caller keeps the last good one; the caller also checks the index
 against an independent spot before it stores anything. Nothing here writes; the caller stamps the
 source and the time of the marks on every row it saves. What a failure reports is written here, never
@@ -184,10 +185,24 @@ def _at_delta(points: list[tuple[float, float]], target: float) -> Optional[floa
     return None
 
 
-def _off_the_line(a: tuple[float, float], m: tuple[float, float], b: tuple[float, float]) -> bool:
+def _off_the_line(a: tuple[float, float], m: tuple[float, float], b: tuple[float, float]) -> float:
+    """How far a mark stands from the line between its neighbours, as a fraction of that line."""
     (ka, va), (k, v), (kb, vb) = a, m, b
     line = va + (k - ka) / (kb - ka) * (vb - va) if kb > ka else 0.5 * (va + vb)
-    return abs(v - line) > MAX_JUMP * line
+    return abs(v - line) / line if line > 0 else 0.0
+
+
+def _without_stale(marks: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """The marks by strike with stale ones left out: a mark more than MAX_JUMP from the line between its neighbours.
+    One at a time, the worst first: a stale mark also pulls its two neighbours off their own lines, and taking all
+    three out at once would cost two good marks next to the one bad one (Emmy, 9 November 2026)."""
+    kept = list(marks)
+    while len(kept) >= 3:
+        worst, i = max((_off_the_line(kept[j - 1], kept[j], kept[j + 1]), j) for j in range(1, len(kept) - 1))
+        if worst <= MAX_JUMP:
+            break
+        del kept[i]
+    return kept
 
 
 def expiry_quote(e: dict, index: Optional[float] = None) -> tuple[Optional[dict], Optional[str]]:
@@ -202,8 +217,7 @@ def expiry_quote(e: dict, index: Optional[float] = None) -> tuple[Optional[dict]
         if gap > MAX_GAP or gap / t > MAX_BASIS:
             return None, "forward too far from the index"
     marks = [(k, v) for k, v in e["marks"] if v and v > 0 and k > 0]          # by strike, rising
-    # a stale mark stands off the smile: one more than MAX_JUMP from the line between its neighbours is left out
-    smooth = [m for i, m in enumerate(marks) if not (0 < i < len(marks) - 1 and _off_the_line(marks[i - 1], m, marks[i + 1]))]
+    smooth = _without_stale(marks)
     # and the call delta must fall as the strike rises: a mark that breaks the order is left out
     mono: list[tuple[float, float]] = []
     for k, v in smooth:

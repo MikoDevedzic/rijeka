@@ -128,6 +128,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const [pts, setPts] = useState({})
   const [parity, setParity] = useState({})     // tenor -> {implied_points, forward, implied_forward, basis_points}
   const [spotIn, setSpotIn] = useState('')
+  const [askFeed, setAskFeed] = useState(false)     // the second step of USE THE FEED'S FORWARDS
   const [fund, setFund] = useState('')
   const [flat, setFlat] = useState('')
   // option vols: ATM / 25Δ risk reversal / 25Δ butterfly by tenor, in vol points
@@ -150,7 +151,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   }
   const tenors = md?.forward_tenors || Object.keys(TENOR_DAYS)
 
-  useEffect(() => { setPts(p.forward_points ? { ...p.forward_points } : {}); setSpotIn(''); setFund(p.funding_pct ?? ''); setFlat(p.base_flat_pct ?? '') }, [pair, p.forward_curve?.valuation_date, p.spot_as_of])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPts(p.forward_points ? { ...p.forward_points } : {}); setSpotIn(''); setAskFeed(false); setFund(p.funding_pct ?? ''); setFlat(p.base_flat_pct ?? '') }, [pair, p.forward_curve?.valuation_date, p.spot_as_of])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // parity points per tenor from the pricer (one call per tenor, in parallel)
   useEffect(() => {
@@ -201,6 +202,16 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
     const v = parseFloat(flat); if (isNaN(v)) return flash('err', 'Enter a flat rate in % p.a.')
     setBusy('flat')
     try { await call('/api/currency/flat', { method: 'POST', body: JSON.stringify({ currency: p.base, rate_pct: v }) }); flash('ok', `${p.base} fallback rate set to ${v}%`); await reload() } catch (e) { flash('err', e.message) } finally { setBusy('') }
+  }
+  // A digital-asset pair whose forward points are this account's own entry, not a feed's: the way back to the feed.
+  const ownPoints = p.crypto && p.forward_curve && !String(p.forward_curve.source || '').startsWith('DEMO')
+  const backToFeed = async () => {
+    setBusy('feed')
+    try {
+      const r = await call('/api/currency/forward-curve/use-feed', { method: 'POST', body: JSON.stringify({ pair }) })
+      flash('ok', `${pair}: ${r.removed} saved curve${r.removed === 1 ? '' : 's'} removed. The venue's forwards arrive with the next refresh, within ten minutes`)
+      setAskFeed(false); await reload()
+    } catch (e) { flash('err', e.message) } finally { setBusy('') }
   }
   const saveSpotManual = async () => {
     const v = parseFloat(spotIn); if (isNaN(v) || v <= 0) return flash('err', 'Enter a spot')
@@ -286,6 +297,20 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
         <button className="btn" onClick={snapBbg} disabled={!!busy || !bbg?.available} title={bbg?.available ? 'Spot and points from the Bloomberg Desktop API (self-host)' : 'Self-host only: no Bloomberg Desktop API on this server (self-host only)'}>{busy === 'bbg' ? 'SNAPPING…' : '▶ SNAP BLOOMBERG'}</button>
         <button className="btn primary" onClick={() => save('MANUAL')} disabled={!!busy}>{busy === 'save' ? 'SAVING…' : '▶ SAVE TO DB (MANUAL)'}</button>
       </div>
+      {ownPoints && (
+        <div data-testid="use-feed" style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
+            {pair} prices on forward points saved in this account ({p.forward_curve.source}, {p.forward_curve.valuation_date}), not on the venue's forwards, which refresh every ten minutes.
+          </span>
+          {askFeed
+            ? <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <span style={{ fontSize: '0.8125rem' }}>Remove the saved {pair} points? This cannot be undone.</span>
+                <button className="btn" onClick={() => setAskFeed(false)} disabled={!!busy}>KEEP THEM</button>
+                <button className="btn primary" onClick={backToFeed} disabled={!!busy}>{busy === 'feed' ? 'REMOVING…' : 'REMOVE AND USE THE FEED'}</button>
+              </span>
+            : <button className="btn" onClick={() => setAskFeed(true)} disabled={!!busy}>USE THE FEED'S FORWARDS</button>}
+        </div>
+      )}
     </div>
   )
 

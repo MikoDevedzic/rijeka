@@ -22,7 +22,7 @@ MODULES: list[dict[str, Any]] = [
     {"key": "CAPITAL", "label": "Capital", "effects": "Risk → Capital and the ticket's CAPITAL tab"},
     {"key": "PROMETHEUS", "label": "Prometheus", "effects": "the read-only assistant and the book brief"},
     {"key": "NEWS", "label": "News room", "effects": "the news feed and its summaries"},
-    {"key": "COLLATERAL", "label": "Collateral", "effects": "Risk → Collateral (schedules, requirements, what is held, carry, the book under regimes) and the collateral block on the ticket's XVA tab"},
+    {"key": "COLLATERAL", "label": "Collateral", "effects": "Risk → Collateral (schedules, requirements, what is held, carry, the book under regimes) and the firm's collateral instruments under Configurations (the collateral block on the ticket's XVA tab is part of XVA and stays)"},
     {"key": "XVA_RESERVES", "label": "XVA reserves", "effects": "the reserve book under P&L: levels per counterparty and component, day on day"},
     {"key": "IPV", "label": "Independent price verification", "effects": "the IPV tab under P&L and the flash → official gate"},
 ]
@@ -30,6 +30,8 @@ KEYS = tuple(m["key"] for m in MODULES)
 PLANNED = tuple(m["key"] for m in MODULES if m.get("planned"))
 
 PRESETS: dict[str, dict[str, Any]] = {
+    "LAUNCH":    {"label": "Launch", "desc": "book, value, the XVA charge and its saving on chain, confirm; everything else is one switch away",
+                  "off": ("PNL", "MARKET_RISK", "COUNTERPARTY_CREDIT", "CAPITAL", "COLLATERAL", "XVA_RESERVES", "IPV")},
     "DEALER":    {"label": "Dealer", "desc": "everything on", "off": ()},
     "CORPORATE": {"label": "Corporate treasury", "desc": "book, confirm, P&L, the charge on the ticket; no risk desk, no capital",
                   "off": ("MARKET_RISK", "COUNTERPARTY_CREDIT", "CAPITAL", "COLLATERAL", "IPV", "XVA_RESERVES")},
@@ -38,6 +40,30 @@ PRESETS: dict[str, dict[str, Any]] = {
 }
 
 _PRESENT: dict[str, bool] = {}
+
+
+def signup_preset() -> Optional[str]:
+    """The preset a newly provisioned workspace starts on: RIJEKA_SIGNUP_PRESET, LAUNCH by default. Empty, NONE or
+    an unknown name leaves a new firm as every firm was before: nothing chosen, every module on."""
+    import os
+    name = os.getenv("RIJEKA_SIGNUP_PRESET", "LAUNCH").strip().upper()
+    return name if name in PRESETS else None
+
+
+def may_edit(db, user: dict) -> bool:
+    """Who may switch a firm's modules: a profile admin anywhere; and, where every sign-in gets its own sandbox firm
+    (demo provisioning on), the ADMIN member of that firm, who is the person the sandbox was made for."""
+    from api.routes._roles import role_of
+    if role_of(db, user) == "admin":
+        return True
+    from api.routes.demo import enabled as demo_enabled
+    if not demo_enabled():
+        return False
+    try:
+        return db.execute(text("SELECT 1 FROM firm_members WHERE user_id = :u AND role = 'ADMIN' LIMIT 1"), {"u": str(user["sub"])}).first() is not None
+    except Exception:          # noqa: BLE001
+        db.rollback()
+        return False
 
 
 def all_on() -> dict[str, bool]:

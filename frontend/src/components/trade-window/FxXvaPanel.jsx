@@ -16,11 +16,11 @@ import IncrementalXva from './IncrementalXva'
 import {
   SectionHeader, TipLabel, PathsWwrSliders, ModelBadge, SimulateButtons, ProofExpander,
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
-  VaStrip, OnChainCompareRow, VaFooter, FloatingTip,
+  VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from './xva-shared.jsx'
 import {
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
-  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving,
+  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords,
 } from './xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -90,6 +90,9 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const ccy = quote?.quote_currency || 'USD'
   const fmt = (v) => fmtMoney(v, ccy)
 
+  // 'simple' shows settlement, SIMULATE and a line on what the run assumes; 'advanced' is the whole tab. Every input's
+  // state lives here in both, so hiding an input never changes what SIMULATE sends.
+  const [view, setView] = useXvaView()
   // model block
   const [volPct, setVolPct] = useState('')
   const [volMode, setVolMode] = useState('SURFACE') // SURFACE: term structure (and smile) along the paths; FLAT: one vol held
@@ -195,6 +198,20 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
       tradeId={tradeId} priced={!!quote} ccy={ccy} />
   )
 
+  // The three pieces both views show; the simple view puts settlement first.
+  const simulateButtons = (
+    <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote} label={quote ? '▶ SIMULATE' : 'PRICE THE TICKET FIRST'}
+      onSimulate={() => run(42)} onReroll={() => run(1 + Math.floor(Math.random() * 2147483000))} />
+  )
+  const simulateError = err && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {err}</div>
+  const settlementBlock = (
+    <SettlementBlock settlement={settlement} setSettlement={setSettlement}
+      imExchanged={imExchanged} setImExchanged={setImExchanged}
+      compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
+      tip={tip} untip={untip}
+      collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} />
+  )
+
   return (
     <div className="tbw-no-drag" style={{ fontFamily: 'var(--sans)' }}>
       <div style={XVA_ROW}>
@@ -202,6 +219,20 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         {/* LEFT PANEL */}
         <div style={XVA_LEFT} data-testid="xva-left">
 
+          <XvaViewToggle view={view} setView={setView} />
+
+          {view === 'simple' ? (<>
+            <CounterpartyLine name={counterpartyName} />
+            {settlementBlock}
+            <div style={{marginTop:'12px'}}>{simulateButtons}</div>
+            {simulateError}
+            <RunAssumes>
+              {runAssumesLine({ paths, model: fxModelWords({ volPct, volMode }), spreads,
+                assumptions: { wwr, lgd, fbaRatio, hurdle, simmIm, capModel } })}
+            </RunAssumes>
+          </>) : (<>
+
+          <div data-testid="xva-advanced" style={{display:'flex',flexDirection:'column',flexShrink:0}}>
           <SectionHeader>{isOption ? 'OPTION ON THE PATHS' : 'FORWARD MODEL'}</SectionHeader>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 100px', gap:'4px', marginBottom:'6px' }}>
             <TipLabel tipKey='fxVol' tip={tip} untip={untip} style={{ alignSelf:'center' }}>Vol % override</TipLabel>
@@ -229,23 +260,20 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
               ? <>Lognormal spot at the option's vol; on every path the {styleWord} is valued with its closed form, the credit engine's model: before expiry the holder's value with the time left (barriers and touches carry which paths have knocked, monitored at the grid points; an American as its European, a lower bound), after it the payoff fixed and discounted to settlement. Bought: one-sided exposure after the premium. Vol from the pair's surface at the option's expiry and strike; type a number to override.</>
               : <>Lognormal forward, exposure ±N·(F<sub>t</sub> − K)·DF. Vol is the pair's surface at the forward's tenor (ATM); type a number to override. A pair without a surface uses the demo default, and the run says so.</>}
           </div>
+          </div>
 
-          <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote} label={quote ? '▶ SIMULATE' : 'PRICE THE TICKET FIRST'}
-            onSimulate={() => run(42)} onReroll={() => run(1 + Math.floor(Math.random() * 2147483000))} />
+          {simulateButtons}
           <SurfaceProof result={res} />
-          {err && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {err}</div>}
+          {simulateError}
 
           <SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} />
 
-          <SettlementBlock settlement={settlement} setSettlement={setSettlement}
-            imExchanged={imExchanged} setImExchanged={setImExchanged}
-            compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
-            tip={tip} untip={untip}
-            collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} />
+          {settlementBlock}
 
           <AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio}
             hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm}
             capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} simmTip='fxSimmIm' tip={tip} untip={untip} />
+          </>)}
         </div>
 
         {/* RIGHT PANEL */}

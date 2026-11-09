@@ -8,20 +8,11 @@ import PnlTile from './home/PnlTile'
 import { useModulesStore } from '../store/useModulesStore'
 import WeekAhead from './home/WeekAhead'
 import RoleSwitch from './layout/RoleSwitch'
+import { useVisibleNav } from './layout/useVisibleNav'
 import { getSessionMaybe } from '../lib/session'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import './CommandCenter.css'
-
-const NAV = [
-  { label: 'HOME',           path: '/command-center' },
-  { label: 'BLOTTER',        path: '/blotter' },
-  { label: 'P&L',            path: '/pnl' },
-  { label: 'RISK',           path: '/risk' },
-  { label: 'CONFIGURATIONS', path: '/configurations/market-data/curves' },
-  { label: 'METHODOLOGY',    path: '/methodology' },
-  { label: 'ROADMAP',        path: '/roadmap' },
-]
 
 export default function CommandCenter() {
   const navigate  = useNavigate()
@@ -29,6 +20,7 @@ export default function CommandCenter() {
   const session   = useAuthStore(s => s.session)
   const profile   = useAuthStore(s => s.profile)
   const demo      = useAuthStore(s => s.demo)
+  const nav       = useVisibleNav()                 // the same items as the top bar, following the module switches
 
   const displayName = profile?.handle
     || session?.user?.user_metadata?.handle
@@ -40,11 +32,11 @@ export default function CommandCenter() {
       <div className="cc-bar">
         <span className="cc-logo">RIJEKA</span>
         <nav className="cc-nav">
-          {NAV.map(n => (
+          {nav.map(n => (
             <button
               key={n.path}
               className={`cc-nav-btn${location.pathname === n.path ? ' active' : ''}`}
-              onClick={() => navigate(n.path)}
+              onClick={() => navigate(n.to)}
             >
               {n.label}
             </button>
@@ -113,10 +105,24 @@ function useCountUp(target, ms = 700) {
 }
 
 const BOOT_KEY = 'rijeka.booted'
+const MODULES_WAIT_MS = 4000       // how long the home waits for the firm's module switches before drawing the desk
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 function DeskHome({ demo, navigate }) {
   const modules = useModulesStore(s => s.modules)          // the P&L tile follows the firm's switches
+  const launch  = useModulesStore(s => s.preset) === 'LAUNCH'   // a firm on the launch set gets the next-step home
+  const canEdit = useModulesStore(s => s.canEdit)
+  const modulesLoaded = useModulesStore(s => s.loaded)
+  const loadModules = useModulesStore(s => s.load)
+  // The home has no top bar to ask for the switches, and must not lean on sign-up provisioning to do it (an instance
+  // without provisioning would wait out the whole timeout on every visit): it asks itself.
+  useEffect(() => { loadModules() }, [loadModules])
+  // Which home to draw is known once the switches are read. The auth store reads them after the workspace is
+  // provisioned (store/useAuthStore provision), which is also when a new sign-up's launch set exists; until that
+  // answer, or MODULES_WAIT_MS without one (every module then stays on, as before), the page below the bar is
+  // empty, so a launch firm never sees the desk flash by and its P&L tile never asks for a summary.
+  const [waited, setWaited] = useState(false)
+  useEffect(() => { const id = setTimeout(() => setWaited(true), MODULES_WAIT_MS); return () => clearTimeout(id) }, [])
   const session = useAuthStore(s => s.session)
   const uid = session?.user?.id
   const [d, setD] = useState({ loading: true })
@@ -156,6 +162,37 @@ function DeskHome({ demo, navigate }) {
   const asOf = d.sofr?.valuation_date
   const stale = daysOld(asOf)
   const showPath = !d.loading && confirmed === 0
+  const footer = <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · RATES ONLY IN PHASE 1 · <a href="/terms" target="_blank" rel="noopener noreferrer">TERMS</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">PRIVACY</a> · miko@rijeka.app</div>
+
+  if (!modulesLoaded && !waited) return <div className="dh" />
+
+  // The launch home: the next step and nothing else. The four steps stand where the desk has START HERE.
+  if (launch) return (
+    <div className="dh" data-testid="launch-home">
+      <div className="lh">
+        <span className="dh-path-k">START HERE</span>
+        <h1 className="lh-h">Book one trade and follow it through</h1>
+        <div className="dh-path">
+          <Step n="1" done={trades.length > 0} text="Book a trade" onClick={() => navigate('/blotter')} />
+          <Step n="2" done={false} text="Price it" onClick={() => navigate('/blotter')} />
+          <Step n="3" done={false} text="See the XVA charge and what settling on chain saves" onClick={() => navigate('/blotter')} />
+          <Step n="4" done={confirmed > 0} text="Confirm it on chain" onClick={() => navigate('/blotter')} />
+        </div>
+        <button className="lh-go" data-testid="launch-book" onClick={() => navigate('/blotter')}>BOOK A TRADE</button>
+        {trades.length > 0 && (
+          <div className="dh-kpis">
+            <Kpi label="TRADES" value={trades.length} />
+            <Kpi label="PENDING" value={pending} tone={pending ? 'amber' : ''} />
+            <Kpi label="CONFIRMED" value={confirmed} tone={confirmed ? 'accent' : ''} />
+          </div>
+        )}
+        {canEdit
+          ? <Link className="lh-more" data-testid="launch-more" to="/configurations/modules">{'Switch on P&L, risk, capital and more'}</Link>
+          : <span className="lh-more" data-testid="launch-more">{"More modules can be switched on by your firm's admin"}</span>}
+      </div>
+      {footer}
+    </div>
+  )
 
   return (
     <div className="dh">
@@ -232,7 +269,7 @@ function DeskHome({ demo, navigate }) {
         </section>
       </div>
 
-      <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · RATES ONLY IN PHASE 1 · <a href="/terms" target="_blank" rel="noopener noreferrer">TERMS</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">PRIVACY</a> · miko@rijeka.app</div>
+      {footer}
     </div>
   )
 }

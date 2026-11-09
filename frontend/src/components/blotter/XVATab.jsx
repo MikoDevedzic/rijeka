@@ -10,11 +10,11 @@ import { getSessionMaybe } from '../../lib/session'
 import {
   SectionHeader, TipLabel, PathsWwrSliders, ModelBadge, SimulateButtons, ProofExpander,
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
-  VaStrip, OnChainCompareRow, VaFooter, FloatingTip,
+  VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from '../trade-window/xva-shared.jsx'
 import {
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, simmImValue,
-  buildVaRows, onChainCompareRows, collateralBody, onChainSaving,
+  buildVaRows, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords,
 } from '../trade-window/xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -167,7 +167,10 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null }) {
+export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null, counterpartyName = null }) {
+  // 'simple' shows settlement, SIMULATE and a line on what the run assumes; 'advanced' is the whole tab. Every input's
+  // state lives here in both, so hiding an input never changes what SIMULATE sends.
+  const [view, setView] = useXvaView()
   const [tooltip, setTooltip] = useState(null)
   const [calib, setCalibState] = useState(() => {
     try { const s = sessionStorage.getItem('rijeka_xva_calib'); return s ? normaliseCalibration(JSON.parse(s)) : null } catch { return null }
@@ -417,12 +420,40 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
     {label:'IM yield bp',val:imYieldBp,set:setImYieldBp,tk:'imYield',ph:'0'},
   ] : []
 
+  // The three pieces both views show; the simple view puts settlement first.
+  const simulateButtons = (
+    <SimulateButtons simulating={simulating} hasResult={!!simResult}
+      onSimulate={()=>handleSimulate(42)} onReroll={()=>handleSimulate(1+Math.floor(Math.random()*2147483000))} />
+  )
+  const simulateError = simErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {simErr}</div>
+  const settlementBlock = (
+    <SettlementBlock settlement={settlement} setSettlement={setSettlement}
+      imExchanged={imExchanged} setImExchanged={setImExchanged}
+      compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
+      fields={settlementFields} tip={tip} untip={untip}
+      collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} />
+  )
+
   return (
     <div style={XVA_ROW}>
 
       {/* LEFT PANEL */}
       <div style={XVA_LEFT} data-testid="xva-left">
 
+        <XvaViewToggle view={view} setView={setView} />
+
+        {view === 'simple' ? (<>
+          <CounterpartyLine name={counterpartyName} />
+          {settlementBlock}
+          <div style={{marginTop:'12px'}}>{simulateButtons}</div>
+          {simulateError}
+          <RunAssumes>
+            {runAssumesLine({ paths, model: ratesModelWords({ aOverride, sigOverride }), spreads,
+              assumptions: { wwr, lgd, fbaRatio, hurdle, simmIm, capModel } })}
+          </RunAssumes>
+        </>) : (<>
+
+        <div data-testid="xva-advanced" style={{display:'flex',flexDirection:'column',flexShrink:0}}>
         <SectionHeader>HW1F MODEL</SectionHeader>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 100px', gap:'4px', marginBottom:'6px' }}>
           {[
@@ -455,23 +486,20 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           <ModelBadge kind='muted'>No master calibration — go to Configurations → XVA Parameters to calibrate.</ModelBadge>
         )}
         {calibErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {calibErr}</div>}
+        </div>
 
-        <SimulateButtons simulating={simulating} hasResult={!!simResult}
-          onSimulate={()=>handleSimulate(42)} onReroll={()=>handleSimulate(1+Math.floor(Math.random()*2147483000))} />
+        {simulateButtons}
         <CalibProofPanel calib={calib}/>
-        {simErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {simErr}</div>}
+        {simulateError}
 
         <SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} />
 
-        <SettlementBlock settlement={settlement} setSettlement={setSettlement}
-          imExchanged={imExchanged} setImExchanged={setImExchanged}
-          compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
-          fields={settlementFields} tip={tip} untip={untip}
-          collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} />
+        {settlementBlock}
 
         <AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio}
           hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm}
           capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} />
+        </>)}
       </div>
 
       {/* RIGHT PANEL */}

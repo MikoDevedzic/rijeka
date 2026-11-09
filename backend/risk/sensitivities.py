@@ -33,7 +33,9 @@ def _carry_points(trade, mkt: Market, bumped: Market, bp: float) -> Market:
     """FUND01 when the forward is quoted: on a pair priced on forward points the stored funding rate does not enter
     the value, the rate the points imply does. +1bp on the funding rate is then +1bp on that implied rate at every
     tenor, which lowers each outright by F·T·1bp: the points are moved by that, so the ladder's FUND01 is the
-    ticket's whichever way the forward is built. Without points the bumped market is returned as it is."""
+    ticket's out to the last points tenor (two years). Beyond it the pricer holds the points flat, so a longer
+    trade's FUND01 stops growing with its maturity and reads low (a third low at three years; Emmy, 9 Nov 2026).
+    Without points the bumped market is returned as it is."""
     pc = points_curve(trade)
     pts = mkt.quotes(pc) if pc else None
     spot = mkt.spot(pc[: -len("_FWD")]) if pts else None

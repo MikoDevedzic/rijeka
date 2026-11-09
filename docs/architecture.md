@@ -151,13 +151,24 @@ verify without trusting the operator. Consent and scope are the firm's, always, 
 ## Module switches
 
 A firm runs the modules it needs (`backend/modules.py`; `firms.modules`, `firms.modules_preset`, `module_events`;
-`GET/PUT /api/modules`, the admin's MODULES page under Configurations → Operations). A switch hides the module's
-pages and tabs, sends a direct visit to its route home, and makes the nightly batches skip the firm's accounts
-(`pnl.eod_tick`, `risk.daily_tick`, `ccr.daily_tick`); the routes stay callable, the data stays, and switching
-back on resumes with history intact. Null, or the columns missing, means every module on. Presets: DEALER
-(everything), CORPORATE (book, confirm, P&L, the ticket's XVA), FUND (everything but capital), CLASSROOM
-(everything; the chain's network is a deployment setting). Planned modules (collateral, XVA reserves, IPV) are
-listed and not switchable until they exist.
+`GET/PUT /api/modules`, the MODULES page under Configurations → Operations). A switch hides the module's pages,
+tabs and Configurations items, sends a direct visit to its route home, and makes the nightly batches skip the
+firm's accounts (`pnl.eod_tick`, `risk.daily_tick`, `ccr.daily_tick`). It is not an entitlement: the module's API
+routes stay callable, the data stays, and switching back on resumes with history intact. Null, or the columns
+missing, means every module on, which is what every firm created before 9 November 2026 has.
+
+Presets: LAUNCH (book, value, the XVA charge and its saving on chain, confirm; P&L, the risk pages, capital,
+collateral, reserves and IPV off), DEALER (everything), CORPORATE (book, confirm, P&L, the ticket's XVA), FUND
+(everything but capital), CLASSROOM (everything; the chain's network is a deployment setting). All eleven modules
+exist; none is a placeholder.
+
+**The launch view.** A workspace provisioned for a new sign-in starts on LAUNCH (`RIJEKA_SIGNUP_PRESET`, set where
+the firm is created in `api/routes/demo.py` and nowhere else, so an existing firm is never changed). On LAUNCH the
+home page is four next steps instead of the dashboard, the XVA tab opens in its simple view (settlement and
+collateral, SIMULATE, the results; the model inputs one click away, and the request sent is the same in both
+views), and the roadmap placeholders under Configurations are hidden. Who may switch modules: a profile admin
+anywhere; and, where every sign-in gets its own sandbox firm (`RIJEKA_DEMO_PROVISION` on), that firm's ADMIN
+member, who is the person the sandbox was made for. On a firm deployment only the admin role can.
 
 ## Data flow of a trade
 

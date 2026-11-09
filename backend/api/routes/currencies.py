@@ -261,6 +261,45 @@ def save_forward_curve(req: ForwardCurveIn, db: Session = Depends(get_db), user:
     return pair_state(db, uid, pair)
 
 
+class UseFeedIn(BaseModel):
+    pair: str
+
+
+@router.post("/forward-curve/use-feed")
+def use_feed_forwards(req: UseFeedIn, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Go back to the venue's forwards on a digital-asset pair: remove the caller's own saved forward points for it.
+
+    An account's own entry for a curve stays in force until the account replaces it, so a desk that once saved
+    points keeps pricing on them; this is how it lets go of them. Only the caller's rows, and only rows it entered
+    (never a feed's). When the caller is the template account, the copies of those same rows that the daily copy
+    gave demo accounts go too (same curve, date, quotes and source: a copy, not somebody's own entry), or those
+    accounts would keep the template's old curve for good. The venue's forwards arrive with the next marks run."""
+    _require_trader(user)
+    pair = req.pair.upper(); base, _ = split_pair(pair)
+    if not is_crypto(base):
+        raise HTTPException(status_code=422, detail="only a digital-asset pair has a feed for forward points")
+    from market_data import deribit
+    if not deribit.enabled():
+        raise HTTPException(status_code=409, detail="the venue feed is off on this instance")
+    from sqlalchemy import text
+    from api.routes import demo
+    uid, cid = uuid.UUID(user["sub"]), f"{pair}_FWD"
+    copies = 0
+    if str(demo._template_user_id(db)) == str(uid):
+        copies = db.execute(text("""
+            DELETE FROM market_data_snapshots d USING market_data_snapshots t
+            WHERE t.user_id = :u AND t.curve_id = :c AND t.source NOT LIKE 'DEMO%'
+              AND d.user_id <> t.user_id AND d.curve_id = t.curve_id AND d.valuation_date = t.valuation_date
+              AND d.quotes = t.quotes AND d.source = t.source
+              AND d.user_id IN (SELECT user_id FROM legal_entities WHERE lei LIKE :p AND is_own_entity)"""),
+            {"u": uid, "c": cid, "p": demo.DEMO_LEI_PREFIX + "%"}).rowcount or 0
+    own = db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u AND curve_id = :c AND source NOT LIKE 'DEMO%'"),
+                     {"u": uid, "c": cid}).rowcount or 0
+    db.commit()
+    log.info("forward points for %s back on the feed: %d own rows removed, %d copies in demo accounts", pair, own, copies)
+    return {**pair_state(db, uid, pair), "removed": own, "removed_copies": copies}
+
+
 class VolSurfaceIn(BaseModel):
     pair: str
     valuation_date: Optional[date] = None
@@ -539,7 +578,9 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
                                 spot=S, forward=F, df_quote=df_q, valuation_date=val_date, expiry_date=expiry, settlement_date=settle, vol=vol,
                                 direction=direction, spot_date=spot_date(val_date, crypto, base, quote))
             out = r.__dict__.copy()
-            out["method"] = "Black-76 on the forward (the funding rate as the carry)" if crypto else "Garman–Kohlhagen"
+            quoted = crypto and fwd["forward_mode"] == "MARKET" and fwd["market_points"] is not None
+            out["method"] = ("Black-76 on the quoted forward (the venue's basis as the carry)" if quoted
+                             else "Black-76 on the forward (the funding rate as the carry)" if crypto else "Garman–Kohlhagen")
         else:
             x = price_exotic(spec, base_notional=base_notional, spot=S, forward=F, df_quote=df_q, t_expiry=T_e, vol=vol, direction=direction)
             out = {"base_currency": base, "quote_currency": quote, "option_type": spec.option_type, "direction": str(direction).upper(),

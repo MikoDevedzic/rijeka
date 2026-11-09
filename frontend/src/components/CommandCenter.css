@@ -317,3 +317,13 @@
 /* the policy path plot yields height to the decisions row and the footnote when the hero row is fixed */
 .dh-curve { min-height:0; }
 .dh-curve .dh-plot { flex:1 1 0; min-height:9rem; }
+
+/* ── Launch home: a firm on the launch set sees the next step, not the desk ── */
+.lh { flex:1; width:min(42rem, 100%); margin:0 auto; padding:3.5rem 0 1.5rem; display:flex; flex-direction:column; align-items:flex-start; gap:1.3rem; }
+.lh-h { margin:0; font-family:'IBM Plex Sans',system-ui,sans-serif; font-size:1.7rem; font-weight:600; line-height:1.25; color:var(--text-hi); }
+.lh .dh-path { flex-direction:column; align-items:stretch; align-self:stretch; gap:0.5rem; padding:0; }
+.lh .dh-step { font-size:1rem; padding:0.7rem 0.9rem 0.7rem 0.7rem; text-align:left; }
+.lh-go { background:var(--accent); border:1px solid var(--accent); color:var(--bg); font-family:var(--mono); font-size:0.95rem; font-weight:700; letter-spacing:0.14em; padding:0.7rem 1.4rem; border-radius:2px; cursor:pointer; transition:filter .15s; }
+.lh-go:hover { filter:brightness(1.12); }
+.lh-more { margin-top:0.6rem; font-size:0.86rem; color:var(--text-dim); text-decoration:none; }
+a.lh-more:hover { color:var(--accent); text-decoration:underline; }

@@ -3,9 +3,12 @@
 // The pure parts of the XVA tab that rates (blotter/XVATab.jsx) and the FX / digital-asset
 // panel (FxXvaPanel.jsx) share: the VA definitions and tooltips, the styles, the money
 // format, the spread-curve payload, the VA strip rows (bp on rate for rates, bp of notional
-// for FX), the on-chain comparison rows and the FX CSA body. No React; the components that
-// render these live in xva-shared.jsx. Tested in xva-shared.test.js.
+// for FX), the on-chain comparison rows and the FX CSA body. No React but for one hook, the
+// tab's view (useXvaView: simple or advanced); the components that render these live in
+// xva-shared.jsx. Tested in xva-shared.test.js.
 // ────────────────────────────────────────────────────────────────────────────────────
+import { useState } from 'react'
+import { useModulesStore } from '../../store/useModulesStore'
 
 export const TENORS_6 = ['1Y', '2Y', '3Y', '5Y', '7Y', '10Y']
 export const TENOR_YEARS = { '1Y': 1, '2Y': 2, '3Y': 3, '5Y': 5, '7Y': 7, '10Y': 10 }
@@ -302,4 +305,72 @@ export function volBadge(params, pair) {
   const name = (src.match(/[A-Z0-9]+_VOL/) || [])[0] || (pair ? pair + '_VOL' : 'surface')
   const steps = Array.isArray(params.step_vols_pct) ? params.step_vols_pct.length : 0
   return { kind: 'ok', text: `✔ ${name} · ${vol}${steps ? ` · ${steps} step vols` : ''} · ${modeWord}` }
+}
+
+// ── the simple view ──────────────────────────────────────────────────────────────
+// The tab has two views. 'advanced' is the whole tab. 'simple' shows the settlement block, SIMULATE and one line
+// on what the run assumes; it hides inputs and changes none of them, so the request is the same in both.
+export const XVA_VIEW_KEY = 'rijeka.xva.view'
+const XVA_VIEWS = ['simple', 'advanced']
+
+// A firm on the LAUNCH preset (a new sign-up) opens the tab in the simple view; every other firm in the whole one.
+export function defaultXvaView(preset) {
+  return preset === 'LAUNCH' ? 'simple' : 'advanced'
+}
+
+// The user's own choice from an earlier visit, or null when there is none (or no storage to read).
+export function storedXvaView() {
+  try {
+    const v = localStorage.getItem(XVA_VIEW_KEY)
+    return XVA_VIEWS.includes(v) ? v : null
+  } catch { return null }
+}
+
+// [view, setView] for both tabs: the user's own choice when they have made one, else the firm's default.
+export function useXvaView() {
+  const preset = useModulesStore(s => s.preset)
+  const [choice, setChoice] = useState(storedXvaView)
+  const setView = (v) => {
+    if (!XVA_VIEWS.includes(v)) return
+    setChoice(v)
+    try { localStorage.setItem(XVA_VIEW_KEY, v) } catch { /* no storage: the choice lasts while the tab is open */ }
+  }
+  return [choice || defaultXvaView(preset), setView]
+}
+
+// What the inputs the simple view hides start at on both tabs (their initial state), for the line's "default".
+export const HIDDEN_INPUT_DEFAULTS = { wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', simmIm: '', capModel: 'sa_ccr' }
+
+// The spread grid still produces the desk's default curves (a blank cell is 0, as in toCurve).
+export function spreadsAreDefault(spreads) {
+  const n = (v) => parseFloat(v) || 0
+  return Object.keys(SPREAD_DEFAULTS).every(g => TENORS_6.every(t => n(spreads?.[g]?.[t]) === n(SPREAD_DEFAULTS[g][t])))
+}
+
+// WWR, LGD, the FBA ratio, the hurdle, the SIMM IM and the capital model are all as the tab opened.
+export function assumptionsAreDefault({ wwr, lgd, fbaRatio, hurdle, simmIm, capModel } = {}) {
+  const D = HIDDEN_INPUT_DEFAULTS
+  return Number(wwr) === D.wwr && parseFloat(lgd) === parseFloat(D.lgd) && parseFloat(fbaRatio) === parseFloat(D.fbaRatio)
+    && parseFloat(hurdle) === parseFloat(D.hurdle) && simmImValue(simmIm) == null && capModel === D.capModel
+}
+
+// Where the rates model's parameters come from: typed on the tab, else the calibration the server has stored.
+export function ratesModelWords({ aOverride, sigOverride } = {}) {
+  return (aOverride || sigOverride) ? 'your own model parameters' : 'the stored model calibration'
+}
+
+// Where the FX and digital-asset vol comes from: typed on the tab, else the pair's surface in the chosen mode.
+export function fxModelWords({ volPct, volMode } = {}) {
+  const v = numOrNull(volPct)
+  if (v != null) return `your own vol of ${v}%`
+  return volMode === 'FLAT' ? "one flat vol from the pair's surface" : "the pair's vol surface"
+}
+
+// The simple view's line on what a run assumes, from the current values of the inputs it hides:
+// "2,000 paths on the stored model calibration and default credit and funding spreads".
+export function runAssumesLine({ paths, model, spreads, assumptions }) {
+  const parts = [model, `${spreadsAreDefault(spreads) ? 'default' : 'your own'} credit and funding spreads`]
+  if (assumptions && !assumptionsAreDefault(assumptions)) parts.push('your own assumptions')
+  const last = parts.pop()
+  return `${Number(paths).toLocaleString('en-US')} paths on ${parts.join(', ')} and ${last}`
 }

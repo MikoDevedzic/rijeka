@@ -6,7 +6,8 @@
 // spread-curve tenor grid, the SETTLEMENT and ASSUMPTIONS blocks, the chart readouts, the
 // VA strip with its bp line and tooltips, the ON-CHAIN comparison row, the footer and the
 // floating tooltip. Only the model block differs per product and stays in each tab.
-// Pure helpers and constants live in xva-shared.js.
+// Pure helpers and constants live in xva-shared.js. The simple view's three pieces are here
+// too: the toggle, the counterparty line and the line on what a run assumes.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar } from './xva-shared'
 
@@ -20,6 +21,37 @@ export function SectionHeader({ children, style }) {
 export function TipLabel({ tipKey, tip = noop, untip = noop, style, children }) {
   return (
     <div onMouseEnter={e => tip(tipKey, e)} onMouseLeave={untip} style={{ ...LBL, ...style }}>{children}</div>
+  )
+}
+
+// The switch between the tab's two views (useXvaView), at the top of the left column in both.
+export function XvaViewToggle({ view, setView }) {
+  const simple = view === 'simple'
+  return (
+    <button data-testid="xva-view-toggle" aria-expanded={!simple} onClick={() => setView(simple ? 'advanced' : 'simple')}
+      style={{alignSelf:'flex-end',flexShrink:0,background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',fontFamily:'var(--mono)',fontSize:'0.7rem',fontWeight:700,letterSpacing:'0.08em',padding:'2px 6px',borderRadius:'2px',cursor:'pointer'}}>
+      {simple ? 'SHOW MODEL INPUTS' : 'HIDE MODEL INPUTS'}
+    </button>
+  )
+}
+
+// The simple view's first line: who the trade faces, when the tab was given the name.
+export function CounterpartyLine({ name }) {
+  if (!name) return null
+  return (
+    <div style={{display:'flex',alignItems:'baseline',gap:'8px',marginTop:'10px',fontSize:'0.8125rem',fontFamily:'var(--sans)'}}>
+      <span style={{color:'var(--text-mute)',flexShrink:0}}>Counterparty</span>
+      <span style={{marginLeft:'auto',minWidth:0,color:'var(--text-hi)',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</span>
+    </div>
+  )
+}
+
+// The simple view's muted line under SIMULATE: what the run assumes (runAssumesLine).
+export function RunAssumes({ children }) {
+  return (
+    <div data-testid="xva-run-assumes" style={{fontSize:'0.75rem',color:'var(--text-mute)',lineHeight:1.5,fontFamily:'var(--sans)'}}>
+      {children}
+    </div>
   )
 }
 

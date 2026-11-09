@@ -12,6 +12,8 @@ vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null, getSess
 import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, simmImValue, numOrNull,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
+  XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
+  ratesModelWords, fxModelWords, runAssumesLine,
 } from './xva-shared'
 
 const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fva: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
@@ -164,5 +166,56 @@ describe('bp lines', () => {
     expect(sub.kva).toBe('-0.1bp')
     expect(sub.mva).toBe('-0.6bp')
     for (const t of Object.values(sub)) expect(t).not.toMatch(/\+-|\+−|--/)
+  })
+})
+
+describe('the simple view', () => {
+  it('is the default for a firm on the LAUNCH preset and for no other', () => {
+    expect(defaultXvaView('LAUNCH')).toBe('simple')
+    for (const p of [null, undefined, '', 'FULL', 'launch']) expect(defaultXvaView(p)).toBe('advanced')
+  })
+  it('reads the user\'s own choice from storage, and nothing it does not know or cannot read', () => {
+    const stub = (get) => vi.stubGlobal('localStorage', { getItem: get })
+    try {
+      stub(k => (k === XVA_VIEW_KEY ? 'simple' : null)); expect(storedXvaView()).toBe('simple')
+      stub(() => 'advanced'); expect(storedXvaView()).toBe('advanced')
+      stub(() => 'expert'); expect(storedXvaView()).toBeNull()
+      stub(() => null); expect(storedXvaView()).toBeNull()
+      stub(() => { throw new Error('blocked') }); expect(storedXvaView()).toBeNull()
+    } finally { vi.unstubAllGlobals() }
+    expect(XVA_VIEW_KEY).toBe('rijeka.xva.view')
+  })
+  it('knows the desk default spreads from an edited grid, a blank cell being 0', () => {
+    expect(spreadsAreDefault(defaultSpreads())).toBe(true)
+    const s = defaultSpreads(); s.own['3Y'] = '44.0'
+    expect(spreadsAreDefault(s)).toBe(true)
+    s.cp['5Y'] = '120'; expect(spreadsAreDefault(s)).toBe(false)
+    const blank = defaultSpreads(); blank.ftp['10Y'] = ''
+    expect(spreadsAreDefault(blank)).toBe(false)
+    expect(spreadsAreDefault(null)).toBe(false)
+  })
+  it('knows the hidden assumptions as the tab opened from a changed one', () => {
+    expect(assumptionsAreDefault(HIDDEN_INPUT_DEFAULTS)).toBe(true)
+    expect(assumptionsAreDefault({ ...HIDDEN_INPUT_DEFAULTS, lgd: '40.0' })).toBe(true)
+    for (const changed of [{ wwr: 1.5 }, { lgd: '60' }, { fbaRatio: '70' }, { hurdle: '' }, { simmIm: '0.85' }, { capModel: 'cem' }]) {
+      expect(assumptionsAreDefault({ ...HIDDEN_INPUT_DEFAULTS, ...changed })).toBe(false)
+    }
+  })
+  it('names where the model comes from', () => {
+    expect(ratesModelWords({ aOverride: '', sigOverride: '' })).toBe('the stored model calibration')
+    expect(ratesModelWords({ aOverride: '0.03', sigOverride: '' })).toBe('your own model parameters')
+    expect(ratesModelWords({ aOverride: '', sigOverride: '85' })).toBe('your own model parameters')
+    expect(fxModelWords({ volPct: '', volMode: 'SURFACE' })).toBe("the pair's vol surface")
+    expect(fxModelWords({ volPct: '', volMode: 'FLAT' })).toBe("one flat vol from the pair's surface")
+    expect(fxModelWords({ volPct: '12.5', volMode: 'SURFACE' })).toBe('your own vol of 12.5%')
+  })
+  it('says what a run assumes from the current values', () => {
+    const base = { paths: 2000, model: 'the stored model calibration', spreads: defaultSpreads(), assumptions: HIDDEN_INPUT_DEFAULTS }
+    expect(runAssumesLine(base)).toBe('2,000 paths on the stored model calibration and default credit and funding spreads')
+    const own = defaultSpreads(); own.cp['5Y'] = '150'
+    expect(runAssumesLine({ ...base, paths: 500, spreads: own })).toBe('500 paths on the stored model calibration and your own credit and funding spreads')
+    expect(runAssumesLine({ ...base, paths: 5000, model: "the pair's vol surface", assumptions: { ...HIDDEN_INPUT_DEFAULTS, wwr: 1.3 } }))
+      .toBe("5,000 paths on the pair's vol surface, default credit and funding spreads and your own assumptions")
+    expect(runAssumesLine(base)).not.toMatch(/SIMULATE|—/)
   })
 })

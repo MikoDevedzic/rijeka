@@ -122,3 +122,57 @@ def test_marks_are_stored_pushed_priced_on_and_removed(client, auth_a, auth_b):
     assert after["market_points"] is None and after["forward"] == pytest.approx(before["forward"])
     back = client.post("/api/currency/option/price", json=opt, headers=auth_a).json()
     assert back["vol_marks"] is None and back["vol_snapshot"] == ASOF                    # the seed's surface again, captioned by its date as before
+
+
+def test_an_account_lets_go_of_its_saved_forward_points_and_the_feed_takes_over(client, auth_a, auth_b):
+    """Production, 9 November 2026: the template held its own saved BTC, ETH and SOL forward curves, so the feed
+    (which never replaces an own entry) wrote vols and no forwards. The owner's way back is this action."""
+    from api.routes import crypto, demo_market_data as r
+    from db.session import SessionLocal
+    from market_data import deribit
+    from stack.seed import SPOTS
+    from tests.test_deribit import INDEX
+    spot = SPOTS["SOLUSD"]
+    built = deribit.build(chain([(c, f * spot / INDEX, a, rr, bf) for c, f, a, rr, bf in PILLARS], prefix="SOL_USDC", base="SOL", index=spot), "SOL", NOW)
+    saved = [{"tenor": "1M", "quote_type": "FWD_POINTS", "rate": 0.5, "enabled": True}, {"tenor": "3M", "quote_type": "FWD_POINTS", "rate": 1.5, "enabled": True}]
+    old = date.today() - timedelta(days=5)
+    db = SessionLocal()
+    try:
+        for uid in (USER_A, USER_B):                                  # the template's own curve, and the copy the daily copy gave B
+            r._upsert_snapshot(db, uid, "SOLUSD_FWD", old, saved, "MANUAL")
+        mine = [{**q, "rate": q["rate"] + 9} for q in saved]
+        r._upsert_snapshot(db, USER_B, "SOLUSD_FWD", old - timedelta(days=1), mine, "MANUAL")      # and a curve B really entered itself
+        db.commit()
+
+        def tick():
+            with patch.object(deribit, "collect", return_value={"ok": {"SOL": built}, "failed": {}}), patch.object(crypto, "fetch_spot", side_effect=RuntimeError("not here")):
+                return r.refresh_crypto(db, now=NOW)
+        tick()
+        assert "SOLUSD_FWD" not in _rows(db, USER_A, "SOLUSD\\_FWD") and _rows(db, USER_A, "SOLUSD\\_VOL")["SOLUSD_VOL"].source.startswith("DEMO · Deribit")   # vols, no forwards: what production showed
+        state = client.get("/api/currency/pairs", headers=auth_a).json()["pairs"]
+        assert next(p for p in state if p["pair"] == "SOLUSD")["forward_curve"]["source"] == "MANUAL"
+
+        # only a digital-asset pair, only the caller's own rows
+        assert client.post("/api/currency/forward-curve/use-feed", json={"pair": "EURUSD"}, headers=auth_a).status_code == 422
+        out = client.post("/api/currency/forward-curve/use-feed", json={"pair": "SOLUSD"}, headers=auth_a)
+        assert out.status_code == 200, out.text
+        out = out.json()
+        assert out["removed"] == 1 and out["removed_copies"] == 1 and out["forward_curve"] is None
+        left = db.execute(text("SELECT user_id::text, valuation_date, source FROM market_data_snapshots WHERE curve_id = 'SOLUSD_FWD' ORDER BY 1, 2")).all()
+        assert [(u, s) for u, _, s in left] == [(USER_B, "MANUAL")] and left[0][1] == old - timedelta(days=1)          # B's own curve is B's
+        # the next marks run writes the venue's forwards for the template; B keeps pricing on its own curve until it lets go too
+        tick()
+        assert _rows(db, USER_A, "SOLUSD\\_FWD")["SOLUSD_FWD"].source.startswith("DEMO · Deribit forwards") and "SOLUSD_FWD" not in _rows(db, USER_B, "SOLUSD\\_FWD")
+        b = client.post("/api/currency/forward-curve/use-feed", json={"pair": "SOLUSD"}, headers=auth_b).json()
+        assert b["removed"] == 1 and b["removed_copies"] == 0                                                         # not the template: nobody else's rows
+        tick()
+        assert _rows(db, USER_B, "SOLUSD\\_FWD")["SOLUSD_FWD"].source.startswith("DEMO · Deribit forwards")
+        # nothing to remove is not an error, and a feed's row is never removed by it
+        again = client.post("/api/currency/forward-curve/use-feed", json={"pair": "SOLUSD"}, headers=auth_a).json()
+        assert again["removed"] == 0 and "Deribit" in again["forward_curve"]["source"]
+    finally:
+        db.rollback()
+        r.purge_marks(db, USER_A)
+        db.execute(text("DELETE FROM market_data_snapshots WHERE curve_id = 'SOLUSD_FWD' AND source = 'MANUAL' AND user_id IN (:a, :b)"), {"a": USER_A, "b": USER_B})
+        db.commit()
+        db.close()

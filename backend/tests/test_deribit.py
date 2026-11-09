@@ -286,3 +286,29 @@ def test_a_stale_mark_on_the_wing_does_not_move_the_smile():
     # and bounds an honest smile never meets
     assert D.expiry_quote({"days": 46.0, "t": 46 / 365, "forward": 100.0, "oi": 1.0,
                            "marks": [(k, 0.4 + (0.9 if k > 100 else 0.0)) for k in (60, 70, 80, 90, 95, 100, 105, 110, 120, 130, 150, 200)]})[0] is None
+
+
+def test_one_stale_mark_costs_one_mark_also_on_a_sparse_strike_grid():
+    """Emmy, 2026-11-09: the first filter also removed the stale mark's two neighbours (their own "line" ran through
+    it), which on a 5,000-wide strike grid moved RR25 by 1.6 points and ATM by 0.4."""
+    marks = [(k, 0.40 + 0.000002 * abs(k - 75_000)) for k in range(50_000, 105_000, 5_000)]          # a gentle V, eleven strikes
+    bad = [(k, 0.80 if k == 85_000 else v) for k, v in marks]
+    assert D._without_stale(marks) == marks
+    assert D._without_stale(bad) == [m for m in marks if m[0] != 85_000]                              # the one bad mark, nothing else
+    two = [(k, 0.80 if k in (60_000, 90_000) else v) for k, v in marks]
+    assert [k for k, _ in D._without_stale(two)] == [k for k, _ in marks if k not in (60_000, 90_000)]
+    assert D._without_stale(marks[:2]) == marks[:2]                                                   # nothing to compare against
+    # through the builder, on a sparse chain: the smile read with the stale mark is the smile read without it
+    sparse = [i / 14 for i in range(1, 14)]                                                           # thirteen strikes, wide delta gaps
+    clean = chain([("25DEC26", 75_290.0, 0.385, -0.034, 0.012), ("26MAR27", 76_340.0, 0.394, -0.028, 0.012)], deltas=sparse)
+    want = D.build(clean, "BTC", NOW)["expiries"][0]
+    stale = [dict(r) for r in clean]
+    strikes = sorted({float(r["instrument_name"].split("-")[2]) for r in stale if "-25DEC26-" in r["instrument_name"]})
+    hit = f"{strikes[-4]:.6f}"                                                                         # a call wing strike near 25 delta
+    for r in stale:
+        if f"-25DEC26-{hit}-" in r["instrument_name"]:
+            r["mark_iv"] = 80.0
+    got = D.build(stale, "BTC", NOW)["expiries"][0]
+    without = D.build([r for r in clean if f"-25DEC26-{hit}-" not in r["instrument_name"]], "BTC", NOW)["expiries"][0]
+    assert (got["atm"], got["rr25"], got["bf25"]) == (without["atm"], without["rr25"], without["bf25"])
+    assert got["atm"] == pytest.approx(want["atm"], abs=0.2)

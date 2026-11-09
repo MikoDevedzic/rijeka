@@ -2,7 +2,9 @@
 // ────────────────────────────────────────────────────────────────────────────────────
 // MODULES: which parts of the desk this firm runs. A switch hides the module's pages and
 // tabs, skips its batches and relaxes its gates; it never deletes anything. Presets for
-// the usual shapes of a firm; every change is an audit row. GET/PUT /api/modules (admin).
+// the usual shapes of a firm; every change is an audit row. GET /api/modules; PUT for whoever may
+// switch (an admin, or the owner of a sandbox workspace: can_edit in the answer). The route in App.jsx
+// lets the same people in; nothing here looks at the role.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
@@ -23,6 +25,7 @@ async function api(path, opts = {}) {
 
 export default function ModulesPage() {
   const apply = useModulesStore(s => s.apply)
+  const preset = useModulesStore(s => s.preset)
   const [view, setView] = useState(null)
   const [draft, setDraft] = useState(null)
   const [note, setNote] = useState('')
@@ -49,6 +52,7 @@ export default function ModulesPage() {
           {view && <span className={`pnl-chip ${view.writable ? 'ok' : 'red'}`}>{view.writable ? (view.source === 'firm' ? `PRESET ${view.preset || 'CUSTOM'}` : 'DEFAULT · EVERYTHING ON') : 'MIGRATION PENDING'}</span>}
         </div>
       </div>
+      {preset === 'LAUNCH' && <div className="pnl-empty" style={{ padding: 0, maxWidth: 980 }}>This workspace is on the launch set. Switch a module on below and its pages appear; nothing is deleted when you switch one off.</div>}
       {err && <div className="pnl-err">{err}</div>}
       {!view && !err && <div className="pnl-empty">Loading…</div>}
       {view && (<>

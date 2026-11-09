@@ -1,7 +1,45 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.5). Commits on `main` are the detail.
+methodology document carries its own version (v1.6). Commits on `main` are the detail.
+
+## 0.13.0 · 9 November 2026
+
+- **The launch view.** Two people shown the app found it overwhelming. A new sign-up's workspace now starts on the
+  `LAUNCH` set of modules: book, value, the XVA charge and its saving on chain, confirm.
+  - **What a new workspace shows.** A home page of four next steps and one button; a top bar of five items; a ticket
+    without the CAPITAL tab; no P&L or RISK pages; Configurations without the items of switched-off modules or the
+    roadmap placeholders. Nothing is removed from the product: the owner switches modules on under Configurations →
+    Modules, one at a time or by preset, and everything else returns.
+  - **Existing firms are not touched.** The preset is written only where a firm is created. A firm with nothing
+    chosen keeps every module on, the dashboard home and the XVA tab as it was.
+  - **Simple XVA view.** On a launch workspace the XVA tab opens with settlement and collateral, SIMULATE, one line
+    saying what the run assumes, and the results. The model inputs are behind SHOW MODEL INPUTS; the choice is
+    remembered on the machine. The request sent is the same in both views (a browser journey compares them).
+  - **Who switches modules.** A profile admin anywhere; and, where every sign-in gets its own sandbox firm, that
+    firm's own admin member. Before this nobody on the hosted demo could. A switch hides and skips; it is not an
+    entitlement, and a module's API routes still answer when it is off.
+  - `RIJEKA_SIGNUP_PRESET` (default `LAUNCH`; `NONE` for every module on, as before).
+  - Also: the RISK item in the top bar counts Collateral and opens the first risk page that is on; the home page and
+    the top bar share one navigation list; the home page asks for the module switches itself.
+- **Back to the venue's forwards.** In production the template account held its own saved BTC, ETH and SOL forward
+  curves, so the feed, which never replaces an account's own entry, stored vols and no forwards. Market data →
+  FX · Crypto → a digital-asset pair now offers USE THE FEED'S FORWARDS, in two steps, to an account pricing on its
+  own saved points: it removes that account's own rows for the pair (and, for the template, the identical copies
+  demo accounts were given), and the venue's forwards arrive with the next refresh.
+- **Emmy's first run, on the venue surface** (the model validator, added today). No figure was wrong against the
+  documented formula; the supports and several claims were.
+  - The stale-mark filter also removed the bad mark's two neighbours. It now removes the worst mark first and
+    re-reads, so one stale mark costs one mark on a sparse strike grid too.
+  - Stated with measured sizes in the methodology (v1.6) and the model inventory, which gains a row for the surface:
+    a three-point smile is an extrapolation outside the 25-delta strikes (2 to 3 vol points low at 10 delta on the
+    skew side of test smiles); a listed expiry between tenors can be up to about a point off, not "a few tenths";
+    ATM is the 50-delta-forward vol, 0.2 to 0.8 points from the vol at the forward strike at these levels; FUND01
+    under quoted points is exact to two years and a third low at three; the built vol history never scales its
+    one-week row. None of the new calculations has a QuantLib row or a workbook yet; the inventory says so.
+  - A digital-asset option on a quoted forward no longer says "the funding rate as the carry".
+- Two more roles since 0.12.0: Nikola (architect, consulted before this build as well as after) and Emmy (model
+  validator); what each role missed on the Deribit feed is written into its definition.
 
 ## 0.12.0 · 9 November 2026
 

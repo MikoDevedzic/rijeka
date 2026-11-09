@@ -13,7 +13,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 import modules as M
-from api.routes._roles import require_admin
 from db.session import get_db
 from middleware.auth import verify_token
 
@@ -26,21 +25,23 @@ class ModulesBody(BaseModel):
     note: Optional[str] = None
 
 
-def _view(db: Session, uid: str) -> dict:
+def _view(db: Session, uid: str, user: Optional[dict] = None) -> dict:
     firm_id = M.firm_of_user(db, uid)
     cur = M.for_firm(db, firm_id)
-    return {**cur, "firm_id": str(firm_id) if firm_id else None, "writable": M.columns_present(db), **M.catalogue(),
+    return {**cur, "firm_id": str(firm_id) if firm_id else None, "writable": M.columns_present(db),
+            "can_edit": bool(user and firm_id and M.may_edit(db, user)), **M.catalogue(),
             "events": M.events(db, firm_id), "planned": list(M.PLANNED)}
 
 
 @router.get("")
 def get_modules(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return _view(db, user["sub"])
+    return _view(db, user["sub"], user)
 
 
 @router.put("")
 def put_modules(body: ModulesBody, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    require_admin(db, user)
+    if not M.may_edit(db, user):
+        raise HTTPException(status_code=403, detail="Switching modules needs the admin role.")
     uid = user["sub"]
     firm_id = M.firm_of_user(db, uid)
     if firm_id is None:
@@ -58,4 +59,4 @@ def put_modules(body: ModulesBody, db: Session = Depends(get_db), user: dict = D
             raise HTTPException(status_code=422, detail=f"unknown module {', '.join(bad)}")
     M.set_for_firm(db, firm_id, uid, body.modules, body.preset, body.note)
     db.commit()
-    return _view(db, uid)
+    return _view(db, uid, user)

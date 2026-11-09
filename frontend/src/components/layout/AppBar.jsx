@@ -3,18 +3,9 @@ import { useEffect } from 'react'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useModulesStore } from '../../store/useModulesStore'
 import RoleSwitch from './RoleSwitch'
+import { useVisibleNav } from './useVisibleNav'
 import { openAppWindow } from '../../lib/windows'
 import './AppBar.css'
-
-const MODULES = [
-  { label: 'HOME',           path: '/command-center', exact: true  },
-  { label: 'BLOTTER',        path: '/blotter',        exact: false },
-  { label: 'P&L',            path: '/pnl',            exact: true  },
-  { label: 'RISK',           path: '/risk',           exact: false },
-  { label: 'CONFIGURATIONS', path: '/configurations', exact: false },
-  { label: 'METHODOLOGY',    path: '/methodology',    exact: true  },
-  { label: 'ROADMAP',        path: '/roadmap',        exact: true  },
-]
 
 export default function AppBar() {
   const navigate  = useNavigate()
@@ -22,12 +13,9 @@ export default function AppBar() {
   const user      = useAuthStore(s => s.session?.user)
   const signOut   = useAuthStore(s => s.signOut)
   const demo      = useAuthStore(s => s.demo)
-  const modules   = useModulesStore(s => s.modules)
   const loadModules = useModulesStore(s => s.load)
   useEffect(() => { if (user) loadModules() }, [user, loadModules])
-  const shown = MODULES.filter(m =>
-    m.path === '/pnl' ? modules.PNL !== false :
-    m.path === '/risk' ? (modules.MARKET_RISK !== false || modules.COUNTERPARTY_CREDIT !== false || modules.CAPITAL !== false) : true)
+  const shown = useVisibleNav()          // the items this firm's modules leave, each with the page it opens (`to`)
 
   const displayName = user?.email?.split('@')[0]?.toUpperCase()
     || user?.user_metadata?.full_name?.toUpperCase()
@@ -53,11 +41,11 @@ export default function AppBar() {
       <nav style={{display:'flex',alignItems:'stretch',height:'100%'}}>
         {shown.map(mod=>{
           // The active tab pops out exactly the page you're on; others open at their start.
-          const target = isActive(mod) ? location.pathname + location.search : mod.path
+          const target = isActive(mod) ? location.pathname + location.search : mod.to
           const popOut = () => openAppWindow(target, 'rijeka' + mod.path.replace(/\//g, '-'))
           return (
           <span key={mod.path} className="ab-nav">
-          <button onClick={e => (e.metaKey || e.ctrlKey || e.shiftKey) ? popOut() : navigate(mod.path)}
+          <button onClick={e => (e.metaKey || e.ctrlKey || e.shiftKey) ? popOut() : navigate(mod.to)}
                   title={mod.label + ' — ⌘/Ctrl-click to open in its own window'} style={{
             background:'none', border:'none',
             borderBottom: isActive(mod)?'2px solid var(--accent)':'2px solid transparent',

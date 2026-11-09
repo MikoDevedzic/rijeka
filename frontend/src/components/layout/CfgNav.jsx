@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { apiFetch } from '../../lib/api'
 import { NavLink } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useModulesStore } from '../../store/useModulesStore'
 import { RATES_CURVES } from '../../data/ratesCurves'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import useXVAStore        from '../../store/useXVAStore'
@@ -13,6 +14,9 @@ import {
 } from '../../data/swaptionVols'
 import { getSessionMaybe } from '../../lib/session'
 
+// An item may name the module it belongs to (`module`: a key, or an array of keys that must all be on); it is
+// hidden when the firm switched that module off, the way risk/RiskNav and pnl/PnlNav hide their tabs.
+// `roles` narrows an item to those roles; `orCanEdit` also shows it to whoever may switch the firm's modules.
 const NAV = [
   {
     id: 'market-data',
@@ -103,9 +107,9 @@ const NAV = [
         id: 'mr-items',
         label: null,
         children: [
-          { label: 'LIMITS',             path: '/configurations/market-risk/limits',        live: true  },
-          { label: 'VAR SETTINGS',       path: '/configurations/market-risk/var',           live: true  },
-          { label: 'STRESS SCENARIOS',   path: '/configurations/market-risk/stress',        live: true  },
+          { label: 'LIMITS',             path: '/configurations/market-risk/limits',        live: true, module: 'MARKET_RISK' },
+          { label: 'VAR SETTINGS',       path: '/configurations/market-risk/var',           live: true, module: 'MARKET_RISK' },
+          { label: 'STRESS SCENARIOS',   path: '/configurations/market-risk/stress',        live: true, module: 'MARKET_RISK' },
         ],
       },
     ],
@@ -144,7 +148,7 @@ const NAV = [
           { label: 'ORG HIERARCHY',      path: '/configurations/org-hierarchy',             live: true  },
           { label: 'LEGAL ENTITIES',     path: '/configurations/legal-entities',            live: true  },
           { label: 'COUNTERPARTIES',     path: '/configurations/counterparties',            live: true  },
-          { label: 'COLLATERAL INSTRUMENTS', path: '/configurations/collateral/instruments',  live: true  },
+          { label: 'COLLATERAL INSTRUMENTS', path: '/configurations/collateral/instruments',  live: true, module: 'COLLATERAL' },
         ],
       },
     ],
@@ -159,8 +163,8 @@ const NAV = [
         label: null,
         children: [
           { label: 'BOOKING DEFAULTS',   path: '/configurations/pnl/defaults',              live: true  },
-          { label: 'P&L CONVENTIONS',    path: '/configurations/pnl/conventions',           live: true  },
-          { label: 'IPV TOLERANCES',     path: '/configurations/pnl/ipv-tolerances',        live: true  },
+          { label: 'P&L CONVENTIONS',    path: '/configurations/pnl/conventions',           live: true, module: 'PNL' },
+          { label: 'IPV TOLERANCES',     path: '/configurations/pnl/ipv-tolerances',        live: true, module: ['PNL', 'IPV'] },
         ],
       },
     ],
@@ -175,7 +179,7 @@ const NAV = [
         label: null,
         children: [
           { label: 'SYSTEM',             path: '/configurations/system',                    live: true  },
-          { label: 'MODULES',            path: '/configurations/modules',                   live: true, roles: ['admin'] },
+          { label: 'MODULES',            path: '/configurations/modules',                   live: true, roles: ['admin'], orCanEdit: true },
         ],
       },
     ],
@@ -449,12 +453,25 @@ const S = {
 export default function CfgNav() {
   const { profile } = useAuthStore()
   const role = profile?.role || 'viewer'
+  const modules = useModulesStore(s => s.modules)
+  const canEdit = useModulesStore(s => s.canEdit)
+  const launch  = useModulesStore(s => s.preset) === 'LAUNCH'
   const [collapsed, setCollapsed] = useState({})
   const toggle = id => setCollapsed(s => ({ ...s, [id]: !s[id] }))
 
+  // What this user sees: the role, then the firm's module switches; a firm on the launch set is also spared
+  // the roadmap placeholders (live: false). A group or a section left with nothing in it is not drawn.
+  const shows = item =>
+    (!item.roles || item.roles.includes(role) || (item.orCanEdit && canEdit)) &&
+    [].concat(item.module || []).every(k => modules[k] !== false) &&
+    (item.live || !launch)
+  const sections = NAV.filter(sec => sec.roles.includes(role))
+    .map(sec => ({ ...sec, children: sec.children.map(g => ({ ...g, children: g.children.filter(shows) })).filter(g => g.children.length) }))
+    .filter(sec => sec.children.length)
+
   return (
     <nav style={S.nav}>
-      {NAV.filter(sec => sec.roles.includes(role)).map(sec => {
+      {sections.map(sec => {
         const isOpen = !collapsed[sec.id]
         return (
           <div key={sec.id} style={S.sectionWrap}>
@@ -476,7 +493,7 @@ export default function CfgNav() {
                 {group.label && (
                   <span style={S.groupLabel}>{group.label}</span>
                 )}
-                {group.children.filter(item => !item.roles || item.roles.includes(role)).map(item => (
+                {group.children.map(item => (
                   <NavLink
                     key={item.path}
                     to={item.live ? item.path : '#'}

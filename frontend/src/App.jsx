@@ -4,7 +4,7 @@ import ErrorBoundary    from './components/ErrorBoundary'
 import Loading          from './components/common/Loading'
 import NewVersionBar from './components/common/NewVersionBar'
 import { hit } from './lib/usage'
-import { useModulesStore } from './store/useModulesStore'
+import { useModulesStore, ROUTE_MODULES } from './store/useModulesStore'
 import { useAuthStore } from './store/useAuthStore'
 import AuthGuard        from './components/auth/AuthGuard'
 import LoginPage        from './components/auth/LoginPage'
@@ -117,18 +117,32 @@ function PersistentBookingWindow() {
   )
 }
 
-// A page whose module the firm switched off sends the visitor home (store/useModulesStore ROUTE_MODULES).
-function ModuleGate({ keys, children }) {
+// A page whose module the firm switched off sends the visitor home. Which modules a page needs is said once,
+// in store/useModulesStore ROUTE_MODULES; `gated` makes the route for one of its paths.
+function ModuleGate({ path, children }) {
   const modules = useModulesStore(s => s.modules)
-  if (keys.some(k => modules[k] === false)) return <Navigate to="/command-center" replace />
+  if ((ROUTE_MODULES[path] || []).some(k => modules[k] === false)) return <Navigate to="/command-center" replace />
   return children
 }
+const gated = (path, page) => <Route path={path} element={<ModuleGate path={path}>{page}</ModuleGate>} />
 
 // The Users page is for admins; everyone else lands on the configurations home.
 function AdminOnly({ children }) {
   const { profile } = useAuthStore()
   if ((profile?.role || 'viewer') !== 'admin') return <Navigate to="/configurations" replace />
   return children
+}
+
+// The Modules page is for whoever may switch the firm's modules: an admin, or the user GET /api/modules marks
+// can_edit (the owner of a sandbox workspace). On a reload the answer is still on its way, so wait for it
+// rather than send away someone who is allowed in.
+function ModuleEditors({ children }) {
+  const { profile } = useAuthStore()
+  const canEdit = useModulesStore(s => s.canEdit)
+  const loaded  = useModulesStore(s => s.loaded)
+  if (canEdit || profile?.role === 'admin') return children
+  if (!loaded) return <Loading />
+  return <Navigate to="/configurations" replace />
 }
 
 // A routed page that throws shows the error card; navigating elsewhere heals it.
@@ -165,13 +179,13 @@ export default function App() {
           <Route path="/messenger" element={<MessengerPage />} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
-            <Route path="/pnl"     element={<ModuleGate keys={['PNL']}><PnlPage /></ModuleGate>} />
-            <Route path="/pnl/xva" element={<ModuleGate keys={['PNL', 'XVA_RESERVES']}><XvaReservesPage /></ModuleGate>} />
-            <Route path="/pnl/ipv" element={<ModuleGate keys={['PNL', 'IPV']}><IpvPage /></ModuleGate>} />
-            <Route path="/risk"    element={<ModuleGate keys={['MARKET_RISK']}><RiskPage /></ModuleGate>} />
-            <Route path="/risk/ccr" element={<ModuleGate keys={['COUNTERPARTY_CREDIT']}><CcrPage /></ModuleGate>} />
-            <Route path="/risk/capital" element={<ModuleGate keys={['CAPITAL']}><CapitalPage /></ModuleGate>} />
-            <Route path="/risk/collateral" element={<ModuleGate keys={['COLLATERAL']}><CollateralPage /></ModuleGate>} />
+            {gated('/pnl',             <PnlPage />)}
+            {gated('/pnl/xva',         <XvaReservesPage />)}
+            {gated('/pnl/ipv',         <IpvPage />)}
+            {gated('/risk',            <RiskPage />)}
+            {gated('/risk/ccr',        <CcrPage />)}
+            {gated('/risk/capital',    <CapitalPage />)}
+            {gated('/risk/collateral', <CollateralPage />)}
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />
@@ -197,7 +211,7 @@ export default function App() {
               <Route path="xva-parameters/hw1f"          element={<XVAParametersTab />} />
               <Route path="users"              element={<AdminOnly><Users /></AdminOnly>} />
               <Route path="system"             element={<SystemPage />} />
-              <Route path="modules"            element={<AdminOnly><ModulesPage /></AdminOnly>} />
+              <Route path="modules"            element={<ModuleEditors><ModulesPage /></ModuleEditors>} />
             </Route>
           </Route>
         </Route>

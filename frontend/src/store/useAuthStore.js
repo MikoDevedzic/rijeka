@@ -56,6 +56,9 @@ export const useAuthStore = create((set, get) => ({
         const m   = await import('../lib/demo')
         const out = await m.provisionDemo(session)
         if (out) set({ demo: out })
+        // the firm (and the set of modules a new workspace starts on) exists only now: read the switches again
+        const { useModulesStore } = await import('./useModulesStore')
+        useModulesStore.getState().load()
       } catch (e) { console.warn('[demo] provisioning failed', e?.message) }
     }, 0)
   },

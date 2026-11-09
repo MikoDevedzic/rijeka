@@ -11,6 +11,7 @@ export const useModulesStore = create((set, get) => ({
   modules: ALL_ON,
   preset: null,
   source: 'default',
+  canEdit: false,          // this user may switch the firm's modules (GET /api/modules → can_edit)
   catalogue: null,
   loaded: false,
   isOn: (key) => get().modules[key] !== false,
@@ -19,12 +20,12 @@ export const useModulesStore = create((set, get) => ({
       const s = await getSessionMaybe()
       if (!s?.access_token) return
       const r = await fetch(`${API}/api/modules`, { headers: { Authorization: `Bearer ${s.access_token}` } })
-      if (!r.ok) return
+      if (!r.ok) { set({ loaded: true }); return }       // answered, with nothing chosen: every module stays on, and nobody waits on `loaded` for good
       const j = await r.json()
-      set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', catalogue: j, loaded: true })
-    } catch { /* every module stays on */ }
+      set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, catalogue: j, loaded: true })
+    } catch { set({ loaded: true }) /* every module stays on */ }
   },
-  apply: (j) => set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', catalogue: j, loaded: true }),
+  apply: (j) => set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, catalogue: j, loaded: true }),
 }))
 
 // The modules a route needs; a page whose module is off sends the visitor home.
