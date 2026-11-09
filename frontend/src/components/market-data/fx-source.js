@@ -18,7 +18,21 @@ export function sourceShort(curve) {
   if (s.startsWith('DEMO')) {
     const label = String(curve?.label || '')
     // the API's label for a venue row is "<Venue> <day> <Mon> <HH:MM> UTC"; anything longer is the fallback sentence
-    return label && label.length <= 28 && !label.startsWith('DEMO') ? label : 'feed'
+    if (label && label.length <= 28 && !label.startsWith('DEMO')) return label
+    return /synthetic/i.test(s) ? 'synthetic' : /backfill/i.test(s) ? 'backfill' : 'feed'
   }
   return s
+}
+
+// True for a row that carries its own time (a venue's marks): its short form needs no date beside it.
+export function isVenue(curve) {
+  const s = String(curve?.source || '')
+  return s.startsWith('DEMO') && sourceShort(curve) === String(curve?.label || '')
+}
+
+// One word for the narrow pair list: the venue's name, "feed", or the source as saved. When the marks were
+// taken is in the pill above the table, where there is room for it.
+export function sourceWord(curve) {
+  const short = sourceShort(curve)
+  return isVenue(curve) ? short.split(' ')[0] : short
 }

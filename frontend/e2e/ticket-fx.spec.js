@@ -119,7 +119,8 @@ test('market data: a desk spot saves on a pair whose forward points come from th
   })
   await app.goto('/configurations/market-data/crypto')
   await app.locator('.crv-item', { hasText: 'BTCUSD' }).click()
-  await expect(app.locator('.crv-item', { hasText: 'BTCUSD' })).toContainText('Deribit 9 Nov 12:57 UTC · 2 tenors')
+  await expect(app.locator('.crv-item', { hasText: 'BTCUSD' })).toContainText('Deribit · 2 tenors')      // one word in the narrow list
+  await expect(app.getByText('Deribit 9 Nov 12:57 UTC points', { exact: true })).toBeVisible()            // the venue and the time of its marks, above the table
   await app.getByText('Spot & funding', { exact: true }).click()
   await app.getByPlaceholder(/desk spot/).fill('70123')
   const reloaded = app.waitForResponse(r => /\/api\/currency\/pairs/.test(r.url()))       // the page reads the pairs again after a save

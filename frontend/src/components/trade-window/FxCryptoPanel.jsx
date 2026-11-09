@@ -6,6 +6,7 @@
 // counterparty, book and footer buttons; it calls price() and payload() on this
 // panel through a ref.
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useState } from 'react'
+import { sourceShort, isVenue } from '../market-data/fx-source'
 import { getSessionSafe } from '../../lib/session'
 import { AnalyticsBlock } from './sections'
 
@@ -401,7 +402,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
                 <input className="tbw-mono" type="text" inputMode="decimal" placeholder="at the forward" value={strike} onChange={e => setStrike(e.target.value.replace(/[^0-9.]/g, ''))} />
               </div>
             )}
-            <div><div className="tbw-lbl">VOL % <span className="tbw-mut">· {cur?.vol_surface ? (cur.vol_surface.label || `${cur.vol_surface.source} surface ${cur.vol_surface.valuation_date}`) : 'no surface: desk default'}</span></div>
+            <div><div className="tbw-lbl">VOL % <span className="tbw-mut">· {cur?.vol_surface ? (isVenue(cur.vol_surface) ? cur.vol_surface.label : `${sourceShort(cur.vol_surface)} surface ${cur.vol_surface.valuation_date}`) : 'no surface: desk default'}</span></div>
               <input className="tbw-mono" type="text" inputMode="decimal" placeholder={cur?.vol_surface ? 'from the surface' : 'default level'} value={volOv} onChange={e => setVolOv(e.target.value.replace(/[^0-9.]/g, ''))} />
             </div>
             <div><div className="tbw-lbl">SETTLEMENT</div>
