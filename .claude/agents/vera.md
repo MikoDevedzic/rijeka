@@ -38,6 +38,12 @@ Learned on 9 November 2026 (CI failed a branch every local suite had passed)
 - The range is `origin/main...HEAD` after a `git fetch`, whatever the brief says: the deploy chain moves `origin/main` by pushing a commit to it, so the local `main` can be weeks behind and `main...HEAD` is then the whole history (9 November 2026: 434 files instead of 14).
 - When a working tree gains uncommitted edits while you read, review the commit: export it (`git archive`) and run the suites there, and say which is which.
 
+Learned on 10 November 2026 (the ticket, easier to read)
+- The checkout is shared with other sessions and with the author: never `git checkout`, `git switch`, `git stash` or `git reset` in it, not even to put it back afterwards. Read a commit with `git show <sha>:<path>` and `git diff origin/main...<sha>`; if a tree is needed, `git archive <sha>` into a scratch folder. (A review detached HEAD in the working copy while the author was about to commit.)
+- A table of figures is read for the widest value it can hold, not the one in the picture: seven and eight digit amounts, a currency printed as a code, a narrow window. A figure that is cut with an ellipsis reads as a smaller number and nothing says so.
+- When a caption moves from each cell to a row's name, check every cell of that row is in the row's unit (a par rate under "BP ON RATE").
+- A mode that writes hidden text out (notes on, show math) is read in the narrowest cell that text can land in.
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.
