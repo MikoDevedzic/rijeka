@@ -1,6 +1,7 @@
-// trade-window/fx-legs.js — a forward as a package of legs (the DETAILS tab of a currency or digital-asset
-// forward). The first leg is the ticket itself, set on the TRADE tab; every further leg is the same pair and
-// the same kind of settlement with its own side, size, date and strike. A strip is a forward for each month.
+// trade-window/fx-legs.js — a currency or digital-asset trade as a package of legs (the DETAILS tab). The first leg
+// is the ticket itself, set on the TRADE tab; every further leg is on the same pair and is a forward, a call, a put
+// or a touch with its own side, size, date, strike and, for an option, style. A strip is one leg for each month; a
+// collar, a risk reversal, a straddle and a calendar are two options.
 //
 // A package books as one trade per leg (each a forward the desk already prices, fixes, settles and confirms),
 // tied by a tag in the trade's `strategy` field, which is the booking firm's own and is never shown to the
@@ -21,39 +22,115 @@ export function addMonths(iso, months) {
   return new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), Math.min(d, last))).toISOString().slice(0, 10)
 }
 
-// A further leg, as the table holds it. `strike` null is "the fair forward for that date", worked out by the API.
+// A leg, as the table holds it. `kind` is what it is: FWD a forward, CALL or PUT an option, TOUCH a touch (which
+// has no strike). `date` is the settlement date of a forward and the expiry of an option. `strike` null is "the
+// fair forward for that date", worked out by the API. An option carries its `style` (EUROPEAN, AMERICAN, DIGITAL,
+// BARRIER, DOUBLE_BARRIER) and that style's terms; they are the fields of the standalone option ticket.
+export const LEG_KINDS = ['FWD', 'CALL', 'PUT', 'TOUCH']
+export const LEG_STYLES = ['EUROPEAN', 'AMERICAN', 'DIGITAL', 'BARRIER', 'DOUBLE_BARRIER']
+const STYLE_DEFAULTS = { style: 'EUROPEAN', barrierType: 'UP_OUT', barrier: null, lowerB: null, upperB: null, payout: null, touchType: 'ONE_TOUCH' }
+export const isOption = (l) => l.kind === 'CALL' || l.kind === 'PUT' || l.kind === 'TOUCH'
+// the style a leg is priced and booked as: a touch is its own style, a forward has none
+export const styleOf = (l) => (l.kind === 'TOUCH' ? 'TOUCH' : isOption(l) ? (LEG_STYLES.includes(l.style) ? l.style : 'EUROPEAN') : null)
 export function newLeg(from, over = {}) {
-  return { id: legId(), direction: from.direction === 'SELL' ? 'SELL' : 'BUY', notional: finite(from.notional) && from.notional > 0 ? from.notional : 1,
-           settlement: ISO.test(String(from.settlement)) ? from.settlement : '', strike: null, ...over }
+  const kind = LEG_KINDS.includes(from.kind) ? from.kind : 'FWD'
+  const date = ISO.test(String(from.date ?? from.settlement)) ? (from.date ?? from.settlement) : ''
+  return { ...STYLE_DEFAULTS, ...Object.fromEntries(Object.keys(STYLE_DEFAULTS).filter(k => from[k] != null).map(k => [k, from[k]])),
+           id: legId(), kind, direction: from.direction === 'SELL' ? 'SELL' : 'BUY', notional: finite(from.notional) && from.notional > 0 ? from.notional : 1,
+           date, strike: null, ...over }
 }
 
-// The leg after the last one: the same side and size, a month later, at the fair forward.
+// The levels a style starts with, around the fair forward `f` (rounded to `dp` decimals): a barrier 15 % away on the
+// side its kind names, a range 15 % either side, the pair's usual payout. Only what the style uses and the leg lacks.
+export function seedStyle(l, f, { dp = 2, payout = 100000 } = {}) {
+  const r = (x) => Number(x.toFixed(dp)), st = styleOf(l), out = {}
+  if (!finite(f) || f <= 0) return out
+  const down = String(l.barrierType || '').startsWith('DOWN')
+  if ((st === 'BARRIER' || (st === 'TOUCH' && !String(l.touchType || '').startsWith('DOUBLE'))) && !(l.barrier > 0)) out.barrier = r(f * (down ? 0.85 : 1.15))
+  if (st === 'DOUBLE_BARRIER' && !(l.lowerB > 0 && l.upperB > 0)) { out.lowerB = r(f * 0.85); out.upperB = r(f * 1.15); if (!String(l.barrierType || '').startsWith('KNOCK')) out.barrierType = 'KNOCK_OUT' }
+  if (st === 'BARRIER' && String(l.barrierType || '').startsWith('KNOCK')) out.barrierType = 'UP_OUT'
+  if ((st === 'DIGITAL' || st === 'TOUCH') && !(l.payout > 0)) out.payout = payout
+  return out
+}
+
+// The leg after the last one: the same kind, style, side and size, a month later, at the fair forward.
 export function nextLeg(first, legs) {
   const last = legs.length ? legs[legs.length - 1] : first
-  return newLeg(last, { settlement: addMonths(last.settlement, 1), strike: null })
+  return newLeg(last, { date: addMonths(last.date, 1), strike: null })
 }
 
 // A strip of `n` legs in all from the ticket's own: the further n − 1, a month apart, each at its own fair forward.
 export function stripLegs(first, n) {
   const out = []
-  for (let i = 1; i < n; i++) out.push(newLeg(first, { settlement: addMonths(first.settlement, i), strike: null }))
+  for (let i = 1; i < n; i++) out.push(newLeg(first, { date: addMonths(first.date, i), strike: null }))
   return out
 }
 
-// What a set of legs is called: an outright (the ticket alone), a strip (every leg the ticket's side and size, a
-// month apart, in order), or custom.
+// The second leg of a two-option structure built on the ticket's own option (`f` its fair forward, `k` its strike):
+//   OTHER      the other of call and put, the other side, the same date and size, its strike as far from the
+//              forward on the other side (a collar when the put is the one bought, a risk reversal when the call is)
+//   STRADDLE   the other of call and put, the same side, strike, date and size
+//   CALENDAR   the same option a month later, the other side
+// null when the ticket's leg is not a call or a put.
+export function pairedLeg(first, what, { f = null, k = null, dp = 2 } = {}) {
+  if (first.kind !== 'CALL' && first.kind !== 'PUT') return null
+  const other = first.kind === 'CALL' ? 'PUT' : 'CALL', flip = first.direction === 'BUY' ? 'SELL' : 'BUY'
+  const strike = first.strike ?? (finite(k) ? k : null)
+  if (what === 'STRADDLE') return newLeg(first, { kind: other, strike })
+  if (what === 'CALENDAR') return newLeg(first, { direction: flip, date: addMonths(first.date, 1), strike })
+  const mirrored = finite(f) && finite(strike) && Math.abs(strike / f - 1) > 0.005 ? 2 * f - strike : finite(f) ? f * (other === 'CALL' ? 1.1 : 0.9) : null
+  return newLeg(first, { kind: other, direction: flip, strike: mirrored == null ? null : Number(mirrored.toFixed(dp)) })
+}
+
+// What a set of legs is called. An outright is the ticket alone; a strip is the ticket's own kind, style, side and
+// size a month apart, in order; two vanilla options on one date and of one size are a straddle (a call and a put,
+// one side, one strike), a collar (a put bought, a call sold) or a risk reversal (a put sold, a call bought); one
+// option bought and sold on two dates at one strike is a calendar. Anything else is custom.
 export function structureOf(first, legs) {
   if (!legs.length) return 'OUTRIGHT'
-  const strip = legs.every((l, i) => l.direction === first.direction && l.notional === first.notional && l.settlement === addMonths(first.settlement, i + 1))
-  return strip ? 'STRIP' : 'CUSTOM'
+  const same = (a, b, keys) => keys.every(k => a[k] === b[k])
+  if (legs.every((l, i) => same(l, first, ['kind', 'direction', 'notional']) && styleOf(l) === styleOf(first) && l.date === addMonths(first.date, i + 1))) return 'STRIP'
+  if (legs.length === 1) {
+    const [a, b] = [first, legs[0]]
+    const vanilla = (l) => (l.kind === 'CALL' || l.kind === 'PUT') && (styleOf(l) === 'EUROPEAN' || styleOf(l) === 'AMERICAN')
+    if (vanilla(a) && vanilla(b) && a.notional === b.notional) {
+      if (a.date === b.date && a.kind !== b.kind) {
+        if (a.direction === b.direction) return a.strike != null && a.strike === b.strike ? 'STRADDLE' : 'CUSTOM'
+        const put = a.kind === 'PUT' ? a : b
+        return put.direction === 'BUY' ? 'COLLAR' : 'RISK REVERSAL'
+      }
+      if (a.kind === b.kind && a.date !== b.date && a.direction !== b.direction && a.strike != null && a.strike === b.strike) return 'CALENDAR'
+    }
+  }
+  return 'CUSTOM'
 }
 
 // Why a leg cannot be priced as it stands, in words, or null.
 export function legProblem(l) {
-  if (!finite(l.notional) || l.notional <= 0) return 'a size above zero'
-  if (!ISO.test(String(l.settlement))) return 'a settlement date'
-  if (l.strike != null && !(finite(l.strike) && l.strike > 0)) return 'a strike above zero, or none for the fair forward'
+  if (!LEG_KINDS.includes(l.kind)) return 'a type'
+  const st = styleOf(l), payoutStyle = st === 'DIGITAL' || st === 'TOUCH'
+  if (!payoutStyle && (!finite(l.notional) || l.notional <= 0)) return 'a size above zero'
+  if (!ISO.test(String(l.date))) return isOption(l) ? 'an expiry date' : 'a settlement date'
+  if (l.kind !== 'TOUCH' && l.strike != null && !(finite(l.strike) && l.strike > 0)) return 'a strike above zero, or none for the fair forward'
+  if ((st === 'BARRIER' || (st === 'TOUCH' && !String(l.touchType || '').startsWith('DOUBLE'))) && !(finite(l.barrier) && l.barrier > 0)) return 'a barrier level'
+  if (st === 'DOUBLE_BARRIER' && !(finite(l.lowerB) && finite(l.upperB) && l.lowerB > 0 && l.upperB > l.lowerB)) return 'a lower and an upper barrier, in that order'
+  if (payoutStyle && !(finite(l.payout) && l.payout > 0)) return 'a payout above zero'
   return null
+}
+
+// What one unit of a leg pays at expiry with the underlying at `x`, before its side: a forward x − K, a call or a put
+// its intrinsic value, a digital or a touch its payout. In this picture a barrier is read at the expiry alone (a knock
+// that happens on the way and comes back is not seen), which the chart says. `k` is the strike the leg is priced at.
+export function legPayoff(l, x, k, f = null) {
+  const N = finite(l.notional) ? l.notional : 0, st = styleOf(l)
+  if (!isOption(l)) return N * (x - k)
+  if (st === 'TOUCH') { const up = finite(f) ? l.barrier >= f : true; const past = up ? x >= l.barrier : x <= l.barrier; return (l.touchType === 'NO_TOUCH' ? !past : past) ? l.payout : 0 }
+  const call = l.kind === 'CALL'
+  if (st === 'DIGITAL') return (call ? x > k : x < k) ? l.payout : 0
+  let v = N * Math.max(call ? x - k : k - x, 0)
+  if (st === 'BARRIER') { const past = String(l.barrierType).startsWith('UP') ? x >= l.barrier : x <= l.barrier; if (String(l.barrierType).endsWith('OUT') ? past : !past) v = 0 }
+  if (st === 'DOUBLE_BARRIER') { const out = x <= l.lowerB || x >= l.upperB; if (l.barrierType === 'KNOCK_IN' ? !out : out) v = 0 }
+  return v
 }
 
 // The package's totals over the quotes that are in: the value and each sensitivity add across the legs.
@@ -63,7 +140,8 @@ export function packageTotals(rows) {
   return {
     n: rows.length, priced: rows.filter(r => r.quote).length,
     npv: sum(r => r.quote?.npv), spot01: sum(r => r.quote?.spot01 ?? r.quote?.delta_quote_per_pct), ir01: sum(r => r.quote?.ir01),
-    netNotional: sum(r => (finite(r.notional) ? (r.direction === 'SELL' ? -r.notional : r.notional) : null)),
+    vega: sum(r => r.quote?.vega),
+    netNotional: sum(r => (finite(r.notional) && !isOption(r) ? (r.direction === 'SELL' ? -r.notional : r.notional) : null)),
   }
 }
 

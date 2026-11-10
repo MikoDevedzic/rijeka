@@ -172,7 +172,6 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // every term the price depends on, as fx-ticket.js reads them
   const ticket = { option, shape, crypto, pair, notional, direction, settlement, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv,
                    style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit, strikeDp: dp, defaultK }
-  const styleFields = () => styleFieldsOf(ticket)
   const nums = readNumbers(ticket)                        // every number of the form, read once by the ticket's one parser
   // Digital assets only: the sources the pair settles on (absent in an older API answer: no choice, the default as before).
   // A source picked for one pair is not a source of another, so settlementTerms falls back to the new pair's default.
@@ -258,42 +257,49 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // The trade body from what the ticket holds. With a quote `q` and the pair loaded it is the body that is booked
   // (payload()); with neither it is the same block from the form alone, for the tabs that read the terms before
   // or between pricings (terms()): what only a quote knows is null there, and a blank strike is null.
-  const build = (q, leg = null) => {
+  // `T` is the terms the body is built from, in the shape of `ticket`: the ticket's own (the default) or a further
+  // leg's (legTicket). Everything the body says is read from T and from the quote of T, so a leg never takes a term
+  // from the ticket; only the pair, its sources and the settlement source the ticket picked are shared.
+  const build = (q, T = ticket) => {
     const str = (v) => v == null ? null : String(v)
-    // a further leg of a package (fx-legs.js) is the same forward with its own side, size and strike
-    const typedStrike = leg ? leg.strike : (nums.strike.given && !nums.strike.invalid ? nums.strike.value : null)
-    const side = leg ? leg.direction : direction
-    const N = leg ? leg.notional : notionalSent(ticket)                    // what the price request sent: the base notional, 1 for a payout style (fx-ticket.js notionalSent)
+    const own = T === ticket
+    const isOpt = !!T.option
+    const tn = own ? nums : readNumbers(T)
+    const typedStrike = tn.strike.given && !tn.strike.invalid ? tn.strike.value : null
+    const side = T.direction
+    const N = notionalSent(T)                    // what the price request sent: the base notional, 1 for a payout style (fx-ticket.js notionalSent)
     // the record's notional: the payout in its currency for a digital or a touch (the hidden base notional is nobody's), else N in base
-    const booked = bookedNotional(ticket, { base: cur?.base, quote: cur?.quote })
+    const booked = bookedNotional(T, { base: cur?.base, quote: cur?.quote })
     const premium = q ? String(Math.abs(Math.round(q.npv * 100) / 100)) : null
-    const styleTerms = Object.fromEntries(Object.entries(styleFields()).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v]))
-    const barrierTerms = style === 'BARRIER' || style === 'DOUBLE_BARRIER' || style === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}
-    const sends = styleSends(style, touchType)          // the same list the price request reads (fx-ticket.js)
-    if (option) {
+    const tStyle = T.style
+    const styleTerms = Object.fromEntries(Object.entries(styleFieldsOf(T)).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v]))
+    const barrierTerms = tStyle === 'BARRIER' || tStyle === 'DOUBLE_BARRIER' || tStyle === 'TOUCH' ? { barrier_monitoring: 'CONTINUOUS', barrier_determination_agent: null } : {}
+    const sends = styleSends(tStyle, T.touchType)          // the same list the price request reads (fx-ticket.js)
+    // the source and time it settles on: the ticket's choice of source, for the kind of trade this is
+    const tSettle = own ? settle : settlementTerms(cur, crypto ? settleSrc : '', isOpt ? 'OPTION' : 'FORWARD')
+    if (isOpt) {
       // K as shown: a typed strike as typed, a default one to the pair's decimals (the quote's own strike, once the
       // ticket has sent it; rounded here too, so the record never carries a decimal the screen did not show)
       const K = typedStrike != null ? typedStrike : (q ? bookedStrike(q.strike, dp) : null)
-      const expiryDate = q ? q.expiry_date : expiry
-      const settleDate = q ? q.settlement_date : (optSettle || null)
+      const expiryDate = q ? q.expiry_date : T.expiry
+      const settleDate = q ? q.settlement_date : (T.optSettle || null)
       const premiumDate = q ? q.valuation_date : null
-      const volPct = q ? q.vol_pct : (nums.volOv.given && !nums.volOv.invalid ? nums.volOv.value : null)
+      const volPct = q ? q.vol_pct : (tn.volOv.given && !tn.volOv.invalid ? tn.volOv.value : null)
       const volTier = q ? q.vol_tier : null
       if (crypto) {
         // a digital-asset option: the CRYPTO_OPTION (NDO) record's fields (ISDA Digital Asset Derivatives
         // Definitions vocabulary) plus the style's terms; cash-settled against the settlement price source
         return {
-          asset_class: 'CRYPTO', instrument_type: 'CRYPTO_OPTION', structure: style,
+          asset_class: 'CRYPTO', instrument_type: 'CRYPTO_OPTION', structure: tStyle,
           notional: booked.amount, notional_ccy: booked.currency, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
           terms: {
-            direction, digital_asset: cur?.base, notional_amount: String(N), notional_currency: booked.currency, option_type: optType,
-            exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
+            direction: side, digital_asset: cur?.base, notional_amount: String(N), notional_currency: booked.currency, option_type: T.optType,
+            exercise_style: tStyle === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
             ...(sends.strike ? { strike_price: str(K), strike_currency: 'USD' } : {}),
             ...styleTerms,
             ...barrierTerms,
-            expiration_date: expiryDate, expiration_time: settle.time || '08:00 UTC', valuation_date: expiryDate, valuation_time: settle.time,   // one cut: the option expires at the time its settlement price is fixed
-           
-            settlement_date: settleDate, settlement_currency: 'USD', settlement_price_source: settle.source,
+            expiration_date: expiryDate, expiration_time: tSettle.time || '08:00 UTC', valuation_date: expiryDate, valuation_time: tSettle.time,   // one cut: the option expires at the time its settlement price is fixed
+            settlement_date: settleDate, settlement_currency: 'USD', settlement_price_source: tSettle.source,
             premium_amount: premium, premium_currency: 'USD', premium_payment_date: premiumDate,
             vol_pct: volPct, vol_tier: volTier, automatic_exercise: true, calculation_agent: null,
             disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
@@ -303,13 +309,13 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       // the option's terms as the canonical record names them (chain/canonical.py, FX_OPTION):
       // buyer and seller of the option, the strike, expiry and settlement, the premium as a cash flow.
       // The trade's structure is the style, so the blotter tells a digital from a barrier.
-      const ndo = cashSettled
+      const ndo = !!T.cashSettled
       return {
-        asset_class: 'FX', instrument_type: 'FX_OPTION', structure: style,
+        asset_class: 'FX', instrument_type: 'FX_OPTION', structure: tStyle,
         notional: booked.amount, notional_ccy: booked.currency, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
         terms: {
-          direction, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
-          option_type: optType, exercise_style: style === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
+          direction: side, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
+          option_type: T.optType, exercise_style: tStyle === 'AMERICAN' ? 'AMERICAN' : 'EUROPEAN',
           base_notional: String(N), notional_currency: booked.currency,
           // a payout style has no quote notional: N·K would be the price of one unit
           ...(sends.strike ? { strike: str(K), ...(booked.payoutStyle ? {} : { quote_notional: K == null ? null : String(N * K) }) } : {}),
@@ -325,20 +331,22 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     }
     // K as shown: a typed K as typed, a default one the fair forward to the pair's decimals (the quote's own K once sent)
     const K = typedStrike != null ? typedStrike : (q ? bookedStrike(q.forward_rate ?? q.forward, dp) : null)
-    const settleDate = q ? q.settlement_date : (shape === 'SPOT' ? null : settlement)
+    const settleDate = q ? q.settlement_date : (T.shape === 'SPOT' ? null : T.settlement)
     if (crypto) return {
       asset_class: 'CRYPTO', instrument_type: 'CRYPTO_FORWARD', structure: 'VANILLA',
       notional: N, notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
       terms: {
         digital_asset: cur?.base, notional_amount: String(N), direction: side, forward_price: str(K), price_currency: 'USD',
-        valuation_date: fixingDateFor(settleDate), valuation_time: settle.time, settlement_date: settleDate, settlement_currency: 'USD',
-        settlement_price_source: settle.source, calculation_agent: null,
+        // the ticket's own forward fixes on the date its field shows; a further leg on the source's default for its own date
+        valuation_date: own ? fixingDateFor(settleDate) : (settleOptions.length > 0 ? (defaultFixingDate({ settlementDate: settleDate, source: tSettle, today: todayIso }) || settleDate) : settleDate),
+        valuation_time: tSettle.time, settlement_date: settleDate, settlement_currency: 'USD',
+        settlement_price_source: tSettle.source, calculation_agent: null,
         disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
       },
     }
-    const ndf = shape === 'NDF'
+    const ndf = T.shape === 'NDF'
     return {
-      asset_class: 'FX', instrument_type: inst, structure: 'VANILLA',
+      asset_class: 'FX', instrument_type: own ? inst : (ndf ? 'NDF' : 'FX_FORWARD'), structure: 'VANILLA',
       notional: N, notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
       terms: {
         direction: side, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
@@ -348,6 +356,18 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         calculation_agent: null,
       },
     }
+  }
+  // A further leg of a package (fx-legs.js) as terms in the shape of `ticket`: the ticket's pair, market overrides
+  // and kind of settlement, with the leg's own type, side, size, date, strike and style. A forward leg on an option
+  // ticket is the pair's usual forward (cash-settled on a digital asset, deliverable on a currency pair).
+  const legTicket = (leg) => {
+    const opt = leg.kind !== 'FWD'
+    const text = (v) => (v == null ? '' : String(v))
+    return { ...ticket, option: opt, shape: opt ? 'OPTION' : (crypto ? 'NDF' : shape === 'NDF' ? 'NDF' : 'FORWARD'),
+      direction: leg.direction, notional: text(leg.notional), settlement: leg.date, expiry: leg.date, optSettle: '', strike: text(leg.strike),
+      optType: leg.kind === 'PUT' ? 'PUT' : 'CALL', style: leg.kind === 'TOUCH' ? 'TOUCH' : opt ? (leg.style || 'EUROPEAN') : 'EUROPEAN',
+      payout: text(leg.payout), payoutCcy: 'QUOTE', barrierType: leg.barrierType || 'UP_OUT', barrier: text(leg.barrier), lowerB: text(leg.lowerB), upperB: text(leg.upperB),
+      rebate: '', touchType: leg.touchType || 'ONE_TOUCH', payAtHit: false, volOv: '', cashSettled: crypto ? true : !!cashSettled, defaultK: null }
   }
   // The trade POST body minus what the window owns (parties, dates, desk, book).
   // Never from the quote of other terms. Called bare it is the quote of the terms on screen; BOOK hands back the
@@ -375,12 +395,18 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     settled: withTerms(() => pricer.settled().then(h => (h ? h.quote : null))),
     quote: withTerms(() => pricer.held()?.quote ?? null),
     payload, terms, bookBody, busy: () => busy,
-    // A further leg of a package (the DETAILS tab; forwards only): the price request for the ticket's pair, kind of
-    // settlement and typed market, with the leg's own side, size, date and strike (none: the fair forward, rounded
-    // by the API), and the trade body for the quote that came back. null where the ticket is not a forward.
-    legRequest: (leg) => (option || !cur || shape === 'SPOT' ? null : priceRequest({ ...ticket, direction: leg.direction, notional: String(leg.notional), settlement: leg.settlement, strike: leg.strike == null ? '' : String(leg.strike), defaultK: null })),
-    legBody: (q, leg) => { if (option || !cur || !q) return null; const today = iso(new Date()); return { ...build(q, leg), trade_date: today, effective_date: today } },
-    firstLeg: () => (option || !cur || shape === 'SPOT' ? null : { direction, notional: notionalSent(ticket), settlement }),
+    // A package of legs (the DETAILS tab, fx-legs.js). firstLeg: the ticket itself as a leg. legRequest: the price
+    // request of a further leg, through the ticket's own builder with the leg's terms. legBody: the trade body for
+    // the quote that came back. null where there is no pair yet or the ticket is a spot trade.
+    firstLeg: () => {
+      if (!cur || shape === 'SPOT') return null
+      const num = (x) => (x.given && !x.invalid ? x.value : null)
+      return { kind: !option ? 'FWD' : style === 'TOUCH' ? 'TOUCH' : optType, direction, notional: notionalSent(ticket), date: option ? expiry : settlement, strike: num(nums.strike),
+               style: option && style !== 'TOUCH' ? style : 'EUROPEAN', barrierType, barrier: num(nums.barrier), lowerB: num(nums.lowerB), upperB: num(nums.upperB), payout: num(nums.payout), touchType }
+    },
+    legRequest: (leg) => (!cur || shape === 'SPOT' ? null : priceRequest(legTicket(leg))),
+    legBody: (q, leg) => { if (!cur || !q) return null; const today = iso(new Date()); return { ...build(q, legTicket(leg)), trade_date: today, effective_date: today } },
+    legDefaults: () => ({ dp, payout: crypto ? 100000 : 1000000 }),
   }))
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────

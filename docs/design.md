@@ -76,8 +76,9 @@ quieter colour, and the selected one is the lighter panel with the brass rule at
 
 ## Legs
 
-DETAILS of a forward is a table of legs (`trade-window/FxLegs.jsx`, `fx-legs.js`): one row per leg, the first the
-ticket itself and read-only here; a further leg's fields are typed in place and a typed strike carries the brass
+DETAILS of a currency or digital-asset trade is a table of legs (`trade-window/FxLegs.jsx`, `fx-legs.js`): one row
+per leg, the first the ticket itself and read-only here; an option's style terms sit in a row under it, on the
+deeper ground, with a sentence saying what they mean; a further leg's fields are typed in place and a typed strike carries the brass
 rule, as a field typed over its default does. A leg whose price is not yet of the terms it shows is dimmed. The
 PACKAGE row is set as the figures above it and adds them.
 

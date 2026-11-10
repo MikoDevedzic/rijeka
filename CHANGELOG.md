@@ -3,6 +3,28 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## Legs, step 2: every option style as a leg; collar, risk reversal, straddle, calendar · 10 November 2026 (frontend only)
+
+- **A leg can be a forward, a call, a put or a touch**, on a forward ticket and on an option ticket alike (every
+  currency and digital-asset product but spot). A call or a put carries its style: European, American, digital,
+  barrier or double barrier; a touch is a type of its own, with no strike. Choosing a style opens its terms in a
+  row under the leg (the barrier and whether it knocks in or out, the two levels, the payout), started around the
+  forward, with a sentence saying what they mean. They are the fields of the standalone option ticket.
+- **Each leg is priced and booked by the code that prices and books it as a ticket of its own.** The ticket's
+  builder of the price request and of the trade's record now takes any leg's terms; the ticket's own trade goes
+  through the same code, unchanged. A booked option leg is a CRYPTO_OPTION or FX_OPTION trade with its style as
+  its structure, as a standalone one is.
+- **The two-option structures are one press on an option ticket:** a collar or a risk reversal (the other of call
+  and put on the other side, as far from the forward), a straddle (the other at the same strike and side), a
+  calendar (the same option a month later, the other side). A strip works for options as for forwards. The
+  package is named for what it is (and CUSTOM once it is changed), by the strike the ticket is priced at.
+- **The picture:** legs on one date draw what the package pays at expiry, less the options' premium, with each
+  strike and barrier marked (a barrier is read at the expiry alone, and the note says so); legs on several dates
+  draw the strikes against the fair forwards, as before.
+- **The blotter** shows an option leg's style beside its place (TOUCH · CUSTOM 2/2).
+- **Not in this step:** the other tabs and the footer over the whole package (they show the first leg); one
+  confirmation and one XVA run for the package; a rebate on a barrier, a payout in the base currency and a
+  double touch on a leg (the standalone ticket has them); pasting or importing legs from Excel.
 ## 0.16.4 · 10 November 2026
 
 **Two bookings in one second no longer ask for the same reference.**

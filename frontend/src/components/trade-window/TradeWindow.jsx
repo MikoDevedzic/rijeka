@@ -259,19 +259,21 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const [bookedLegs, setBookedLegs]    = useState(null)
   const legQuotesRef = useRef({})                       // the prices as they stand, for the pricing loop to read between its requests
   useEffect(() => { legQuotesRef.current = legQuotes })
-  const legsFor = ['CRYPTO_FORWARD', 'FX_FORWARD', 'NDF'].includes(curInst) && (assetClass === 'CRYPTO' || assetClass === 'FX')
-  // The legs are of one pair and one kind of forward: a size and a strike typed for BTCUSD mean nothing on ETHUSD.
+  const legsFor = ['CRYPTO_FORWARD', 'CRYPTO_OPTION', 'FX_FORWARD', 'NDF', 'FX_OPTION'].includes(curInst) && (assetClass === 'CRYPTO' || assetClass === 'FX')
+  // The legs are of one pair and one kind of first leg: a size and a strike typed for BTCUSD mean nothing on ETHUSD.
   // While the ticket has no quote (between prices) they are kept; on another pair there are none.
   const legsOn = fxQuote ? `${fxQuote.pair}|${fxQuote.shape}` : legsHeld.on
   const fxLegs = legsHeld.on === legsOn ? legsHeld.legs : NO_LEGS
   const setFxLegs = (legs) => setLegsHeld({ on: legsOn, legs })
   // Price every further leg whose terms (or whose ticket: the pair, the market typed over) have changed since its last
   // price. The request is the ticket's own with the leg's side, size, date and strike (FxCryptoPanel legRequest).
-  const legsKey = JSON.stringify(fxLegs.map(l => [l.id, l.direction, l.notional, l.settlement, l.strike]))
+  // every term of a leg that its price or its record depends on
+  const legTerms = (l) => [l.kind, l.direction, l.notional, l.date, l.strike, l.style, l.barrierType, l.barrier, l.lowerB, l.upperB, l.payout, l.touchType]
+  const legsKey = JSON.stringify(fxLegs.map(l => [l.id, ...legTerms(l)]))
   // what a leg's price depends on beyond its own terms: the ticket's pair, kind of settlement and market (a typed spot or carry shows in the quote)
   const fxQuoteId = fxQuote ? `${fxQuote.pair}|${fxQuote.shape}|${fxQuote.valuation_date}|${fxQuote.spot}|${fxQuote.base_rate}|${fxQuote.forward_mode}` : ''
   // a leg's price is the price of exactly these: its own terms and that market. BOOK checks the same key.
-  const legKey = (l) => JSON.stringify([l.direction, l.notional, l.settlement, l.strike, fxQuoteId])
+  const legKey = (l) => JSON.stringify([...legTerms(l), fxQuoteId])
   useEffect(() => {
     if (!legsFor || viewMode || bookedLegs || !fxLegs.length || !fxQuoteId) return
     let dead = false
@@ -296,6 +298,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }, 350)
     return () => { dead = true; clearTimeout(timer) }
   }, [legsKey, fxQuoteId, legsFor, viewMode, bookedLegs])      // eslint-disable-line react-hooks/exhaustive-deps
+  // the ticket as a leg, with the strike it was priced at where none was typed (what the package is named by)
+  const firstPriced = (f, q) => (f && f.strike == null && f.kind !== 'TOUCH' && q ? { ...f, strike: Number(f.kind === 'FWD' ? q.forward_rate : q.strike) } : f)
   // What the table shows for each leg: its price, and whether that price is of the terms it now shows. A leg just
   // changed is waiting from that moment, not from when its request goes out.
   const legView = Object.fromEntries(fxLegs.map(l => { const q = legQuotes[l.id], mine = !!q && q.key === legKey(l); return [l.id, { quote: q?.quote || null, error: mine ? q.error : null, pending: !mine || !!q.pending }] }))
@@ -801,7 +805,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         return { l, b }
       })
       const n = priced.length + 1
-      const pkg = priced.length ? { ref: packageRef(), structure: structureOf(fxRef.current.firstLeg(), legs) } : null
+      const pkg = priced.length ? { ref: packageRef(), structure: structureOf(firstPriced(fxRef.current.firstLeg(), decision.quote), legs) } : null
       const t = await post(body, pkg ? packageTag(pkg.structure, pkg.ref, 1, n) : null)
       if (pkg) {
         const refs = { first: t.trade_ref }
@@ -1242,7 +1246,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         <div style={{ display: activeTab === 'DETAILS' ? 'block' : 'none' }}>
           {legsFor && !viewMode && fxQuote && (
             <div className="tbw-no-drag">
-              <FxLegs first={fxRef.current?.firstLeg?.() || null} quote={fxQuote} legs={fxLegs} setLegs={setFxLegs} quotes={legView} crypto={assetClass === 'CRYPTO'}
+              <FxLegs first={fxRef.current?.firstLeg?.() || null} quote={fxQuote} legs={fxLegs} setLegs={setFxLegs} quotes={legView} crypto={assetClass === 'CRYPTO'} defaults={fxRef.current?.legDefaults?.() || {}}
                 dp={assetClass === 'CRYPTO' ? 2 : fxQuote.pair === 'USDJPY' ? 3 : 5} locked={!!bookedTrade} booked={bookedLegs} stale={fxStale} onBookRest={handleBookRest} busy={booking} />
             </div>
           )}

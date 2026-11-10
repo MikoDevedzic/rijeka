@@ -157,3 +157,120 @@ test('a package that stops part of the way says what stands, and the rest is boo
   // the refused booking is the one problem the browser reports, and it is the one this journey made
   expect(problems.filter(x => !/500|trades\//.test(x)), `other problems:\n${problems.join('\n')}`).toEqual([])
 })
+
+// Step 2: a leg can be an option of any style the ticket books on its own, and the two-option structures are one press.
+const openTicket = async (app, asset, product) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  if (asset) { await win.getByRole('button', { name: asset, exact: true }).click(); await win.getByRole('button', { name: product }).click() }
+  await selectDemoBank(app, win)
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value')), { timeout: 30_000 }).toBeGreaterThan(0)
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  return win
+}
+const settled = async (rows, i) => { await expect(rows.nth(i)).toHaveAttribute('data-pending', 'false'); await expect(rows.nth(i).getByTestId('fx-leg-says')).toHaveCount(0) }
+
+test('an option ticket: a risk reversal, a straddle and a calendar in one press; a leg made a barrier, then a touch; booked', async ({ app, problems }) => {
+  const win = await openTicket(app, 'CRYPTO', /^CRYPTO OPTION$/i)
+  const legs = win.getByTestId('fx-legs'), rows = win.getByTestId('fx-leg')
+  await expect(win.getByTestId('fx-leg-first')).toHaveAttribute('data-kind', 'CALL')
+  await expect(legs).toHaveAttribute('data-structure', 'OUTRIGHT')
+
+  // a call bought: the other side is a put sold, as far below the forward: a risk reversal, drawn as what it pays at expiry
+  await expect(win.getByTestId('fx-legs-other')).toHaveText('RISK REVERSAL')
+  await win.getByTestId('fx-legs-other').click()
+  await expect(rows).toHaveCount(1)
+  await expect(rows.nth(0)).toHaveAttribute('data-kind', 'PUT')
+  await expect(rows.nth(0).getByRole('button', { name: 'Side of leg 2' })).toHaveText('SELL')
+  await expect(legs).toHaveAttribute('data-structure', 'RISK REVERSAL')
+  await settled(rows, 0)
+  const npv = (i) => rows.nth(i).getByTestId('fx-leg-npv').getAttribute('data-value')
+  expect(Number(await npv(0)), 'a put sold is worth less than nothing to us').toBeLessThan(0)
+  await expect(win.getByTestId('fx-legs-payoff')).toBeVisible()
+  await expect(win.getByRole('button', { name: /BOOK 2 LEGS/ })).toBeVisible()
+  await app.screenshot({ path: 'e2e/.out/shots/legs-risk-reversal.png' })
+
+  await win.getByTestId('fx-legs-straddle').click()
+  await expect(legs).toHaveAttribute('data-structure', 'STRADDLE')
+  await expect(rows.nth(0).getByRole('button', { name: 'Side of leg 2' })).toHaveText('BUY')
+  await win.getByTestId('fx-legs-calendar').click()
+  await expect(legs).toHaveAttribute('data-structure', 'CALENDAR')
+  await settled(rows, 0)
+  await expect(win.getByTestId('fx-legs-chart'), 'two dates: the strikes against the forwards').toBeVisible()
+
+  // the second leg made a barrier: its terms open under it with a level to start from, and it is priced as a barrier
+  await rows.nth(0).getByLabel('Style of leg 2').selectOption('BARRIER')
+  const terms = win.getByTestId('fx-leg-terms')
+  await expect(terms).toHaveCount(1)
+  await expect(terms.getByLabel('Barrier of leg 2')).toHaveValue(/\d/)
+  await expect(terms.getByTestId('fx-leg-sentence')).toContainText(/dies if spot rises to/)
+  await expect(legs).toHaveAttribute('data-structure', 'CUSTOM')
+  await settled(rows, 0)
+  expect(await npv(0)).not.toBe('')
+  await terms.getByLabel('Barrier kind of leg 2').selectOption('DOWN_IN')
+  await expect(terms.getByTestId('fx-leg-sentence')).toContainText(/comes alive if spot falls to/)
+  // a level that is not a number goes back to what it was
+  const level = await terms.getByLabel('Barrier of leg 2').inputValue()
+  await terms.getByLabel('Barrier of leg 2').fill('abc'); await terms.getByLabel('Barrier of leg 2').blur()
+  await expect(terms.getByLabel('Barrier of leg 2')).toHaveValue(level)
+
+  // then a touch: no strike, no size, a payout
+  await rows.nth(0).getByLabel('Type of leg 2').selectOption('TOUCH')
+  await expect(rows.nth(0)).toHaveAttribute('data-style', 'TOUCH')
+  await expect(rows.nth(0).getByLabel('Strike of leg 2')).toHaveCount(0)
+  await expect(terms.getByLabel('Payout of leg 2')).toHaveValue('100,000')
+  await settled(rows, 0)
+  expect(Number(await npv(0))).not.toBe(0)
+  await app.screenshot({ path: 'e2e/.out/shots/legs-touch.png' })
+
+  const sent = []
+  app.on('request', r => { if (r.url() === API + '/api/trades/' && r.method() === 'POST') sent.push(r.postDataJSON()) })
+  await win.getByRole('button', { name: /BOOK 2 LEGS/ }).click()
+  await expect(win.getByTestId('fx-legs-package')).toBeVisible({ timeout: 30_000 })
+  await expect(win.getByTestId('fx-legs-failed')).toHaveCount(0)
+  await expect.poll(() => sent.length).toBe(2)
+  expect(sent.map(b => [b.instrument_type, b.structure])).toEqual([['CRYPTO_OPTION', 'EUROPEAN'], ['CRYPTO_OPTION', 'TOUCH']])
+  expect(sent[1].terms).toMatchObject({ direction: 'SELL', touch_type: 'ONE_TOUCH', payout: '100000', barrier_monitoring: 'CONTINUOUS' })
+  expect(sent[1].terms.strike_price, 'a touch books no strike').toBeUndefined()
+  expect(sent.map(b => b.strategy.replace(/PKG-\w+/, 'PKG'))).toEqual(['CUSTOM PKG 1/2', 'CUSTOM PKG 2/2'])
+  await win.locator('.tbw-light-r').click()
+  await app.getByPlaceholder(/Search/).fill(sent[0].strategy.match(/PKG-\w+/)[0])
+  expect((await app.getByTestId('bl-pkg').allInnerTexts()).map(x => x.trim()).sort()).toEqual(['EUROPEAN · CUSTOM 1/2', 'TOUCH · CUSTOM 2/2'])
+  expectClean(problems)
+})
+
+test('a forward with an option leg: a put added to a forward, made a digital, booked; an FX forward prices a call leg', async ({ app, problems }) => {
+  const win = await openTicket(app)
+  const rows = win.getByTestId('fx-leg')
+  await win.getByTestId('fx-legs-add').click()
+  await rows.nth(0).getByLabel('Type of leg 2').selectOption('PUT')
+  await expect(rows.nth(0)).toHaveAttribute('data-style', 'EUROPEAN')
+  await settled(rows, 0)
+  expect(Number(await rows.nth(0).getByTestId('fx-leg-npv').getAttribute('data-value')), 'a put bought is worth its premium').toBeGreaterThan(0)
+  await rows.nth(0).getByLabel('Style of leg 2').selectOption('DIGITAL')
+  const terms = win.getByTestId('fx-leg-terms')
+  await expect(terms.getByLabel('Payout of leg 2')).toHaveValue('100,000')
+  await expect(rows.nth(0).getByLabel('Notional of leg 2'), 'a payout has no size').toHaveCount(0)
+  await settled(rows, 0)
+  const sent = []
+  app.on('request', r => { if (r.url() === API + '/api/trades/' && r.method() === 'POST') sent.push(r.postDataJSON()) })
+  await win.getByRole('button', { name: /BOOK 2 LEGS/ }).click()
+  await expect(win.getByTestId('fx-legs-package')).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => sent.length).toBe(2)
+  expect(sent.map(b => [b.instrument_type, b.structure])).toEqual([['CRYPTO_FORWARD', 'VANILLA'], ['CRYPTO_OPTION', 'DIGITAL']])
+  expect(sent[1].terms).toMatchObject({ option_type: 'PUT', direction: 'BUY', payout: '100000', digital_asset: 'BTC' })
+  expect(sent[1].notional, 'the record carries the payout').toBe(100000)
+  await win.locator('.tbw-light-r').click()
+
+  // a currency pair: a call leg on an FX forward is priced by the FX option route
+  const fx = await openTicket(app, 'FX', /^FX FORWARD$/i)
+  const fxRows = fx.getByTestId('fx-leg')
+  await fx.getByTestId('fx-legs-add').click()
+  await fxRows.nth(0).getByLabel('Type of leg 2').selectOption('CALL')
+  await settled(fxRows, 0)
+  expect(Number(await fxRows.nth(0).getByTestId('fx-leg-npv').getAttribute('data-value'))).toBeGreaterThan(0)
+  await expect(fx.getByRole('button', { name: /BOOK 2 LEGS/ })).toBeVisible()
+  expectClean(problems)
+})
