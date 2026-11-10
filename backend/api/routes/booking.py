@@ -63,7 +63,7 @@ from db.models import Trade, TradeLeg, TradeEvent, IdempotencyKey
 from middleware.auth import verify_token
 from api.routes._errors import internal
 from api.routes._leg_defaults import complete_leg
-from api.routes._trade_ref import insert_trade
+from api.routes._trade_ref import insert_trade, free_package_id, leg_ref
 
 router = APIRouter(prefix="/api/book", tags=["booking"])
 log = logging.getLogger(__name__)
@@ -643,3 +643,97 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
         db.rollback()
         log.exception("Booking failed")
         raise internal(500, "Booking failed", e)
+
+
+# ── A package of legs: one trade ID, a leg ID for each leg, one transaction ──────────────────────
+
+PACKAGE_STRUCTURES = ("STRIP", "COLLAR", "RISK REVERSAL", "STRADDLE", "CALENDAR", "CUSTOM")
+PACKAGE_MAX_LEGS = 24
+
+
+class PackageRequest(BaseModel):
+    """A package (a strip, a collar, a forward with an option): the booking body of each leg, in the order of the
+    ticket. The server names the package and its legs; a leg's own trade_ref or strategy is not taken."""
+    structure: str = "CUSTOM"
+    legs: List[BookingRequest]
+
+
+def package_tag(structure: str, trade_id: str, i: int, n: int) -> str:
+    """What ties a leg to its package, in the trade's `strategy` (the booking firm's own field, never shown to the
+    counterparty): the structure, the package's trade ID, the leg's place. The frontend reads it (fx-legs.js)."""
+    return f"{structure} {trade_id} {i}/{n}"
+
+
+@router.post("/package", status_code=201)
+def book_package_atomic(
+    body: PackageRequest,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """
+    Book every leg of a package in ONE transaction: all of them or none. The package gets a trade ID
+    (TRD-12345678) and each leg, a trade of its own, a leg ID under it (TRD-12345678-1, -2, ...), with the
+    package and its place in `strategy`. Idempotent by (user_id, Idempotency-Key).
+    """
+    role = (user.get("user_metadata") or {}).get("role", "viewer").lower()
+    if role not in WRITE_ROLES:
+        raise HTTPException(status_code=403, detail="Booking requires Trader or Admin role.")
+    return book_package(db, uuid.UUID(user["sub"]), body, idempotency_key)
+
+
+def book_package(db: Session, user_id: UUID, body: PackageRequest, idempotency_key: Optional[str] = None) -> dict:
+    n = len(body.legs)
+    if n < 2:
+        raise HTTPException(status_code=422, detail="A package has at least two legs; book one leg as a trade.")
+    if n > PACKAGE_MAX_LEGS:
+        raise HTTPException(status_code=422, detail=f"A package has at most {PACKAGE_MAX_LEGS} legs.")
+    structure = str(body.structure or "CUSTOM").strip().upper()
+    if structure not in PACKAGE_STRUCTURES:
+        raise HTTPException(status_code=422, detail=f"structure must be one of {', '.join(PACKAGE_STRUCTURES)}")
+    first = body.legs[0]
+    for i, leg in enumerate(body.legs, start=1):
+        if leg.trade_ref:
+            raise HTTPException(status_code=422, detail=f"leg {i}: a leg of a package is named by the package (leave trade_ref out)")
+        if (leg.counterparty_id, leg.own_legal_entity_id) != (first.counterparty_id, first.own_legal_entity_id):
+            raise HTTPException(status_code=422, detail=f"leg {i}: every leg of a package is between the same two parties")
+    if idempotency_key:
+        try:
+            uuid.UUID(idempotency_key)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Idempotency-Key must be a UUID")
+        cached = db.query(IdempotencyKey).filter(IdempotencyKey.user_id == user_id, IdempotencyKey.key == idempotency_key).first()
+        if cached:
+            return {**cached.result, "idempotent_replay": True}
+    try:
+        trade_id = free_package_id(db, user_id)
+        trades, legs = [], []
+        for i, leg in enumerate(body.legs, start=1):
+            named = leg.model_copy(update={"trade_ref": leg_ref(trade_id, i), "strategy": package_tag(structure, trade_id, i, n)})
+            try:
+                r = book_trade(db, user_id, named, None, commit=False)      # rolls the whole transaction back on any error
+            except HTTPException as e:
+                raise HTTPException(status_code=e.status_code, detail=f"leg {i} of {n}: {e.detail}. Nothing was booked.")
+            trades.append(r["trade"])
+            legs.append(r["legs"])
+        result = {"package": {"trade_id": trade_id, "structure": structure, "legs": n}, "trades": trades, "trade_legs": legs, "idempotent_replay": False}
+        if idempotency_key:
+            db.add(IdempotencyKey(key=idempotency_key, user_id=user_id, result=result))
+        db.commit()
+        return result
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as e:
+        db.rollback()
+        msg = str(e.orig) if e.orig else str(e)
+        if idempotency_key and ("idempotency_keys" in msg or "pk_idempotency_keys" in msg):
+            cached = db.query(IdempotencyKey).filter(IdempotencyKey.user_id == user_id, IdempotencyKey.key == idempotency_key).first()
+            if cached:
+                return {**cached.result, "idempotent_replay": True}
+        log.exception("Package booking integrity error")
+        raise HTTPException(status_code=409, detail="The package conflicts with an existing record. Nothing was booked; book it again.")
+    except Exception as e:      # noqa: BLE001
+        db.rollback()
+        log.exception("Package booking failed")
+        raise internal(500, "Package booking failed", e)

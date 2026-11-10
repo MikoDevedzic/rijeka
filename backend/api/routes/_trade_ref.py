@@ -52,6 +52,46 @@ def _candidates():
         yield generated_ref(random.randrange(10**8))
 
 
+# ── A package: one trade ID, and a leg ID under it for each leg ──────────────────────────────────
+# A package of legs (a strip, a collar) is one trade to the desk: it has a trade ID of the usual shape,
+# `TRD-12345678`, and each leg, a trade row of its own, is `TRD-12345678-1`, `-2`, ... . No row carries the bare
+# ID, so the name is taken by a look, inside the booking's transaction, that nothing of this user's is called it
+# or starts with it; the legs' own uniqueness then holds it. The clock proposes here too, half the number space
+# away from the single trades of the same second, so a trade and a package booked together do not reach for one
+# name; and a single trade is never given a name a package's legs already stand under (package_holds).
+PACKAGE_OFFSET = 50_000_000
+
+
+def package_candidates():
+    base = int(time.time()) + PACKAGE_OFFSET
+    for k in range(IN_A_ROW):
+        yield generated_ref(base + k)
+    for _ in range(ATTEMPTS - IN_A_ROW):
+        yield generated_ref(random.randrange(10**8))
+
+
+def leg_ref(trade_id: str, i: int) -> str:
+    return f"{trade_id}-{i}"
+
+
+def package_holds(db: Session, user_id, ref: str) -> bool:
+    """A package of this user's has legs under `ref` (TRD-12345678-1, ...)."""
+    from sqlalchemy import text
+    return db.execute(text("SELECT 1 FROM trades WHERE user_id = :u AND trade_ref LIKE :p LIMIT 1"),
+                      {"u": str(user_id), "p": ref + "-%"}).first() is not None
+
+
+def free_package_id(db: Session, user_id) -> str:
+    """A trade ID no trade of this user's has and none starts with."""
+    from sqlalchemy import text
+    for ref in package_candidates():
+        taken = db.execute(text("SELECT 1 FROM trades WHERE user_id = :u AND (trade_ref = :r OR trade_ref LIKE :p) LIMIT 1"),
+                           {"u": str(user_id), "r": ref, "p": ref + "-%"}).first()
+        if taken is None:
+            return ref
+    raise HTTPException(status_code=503, detail="No free trade ID was found for the package; book again.")
+
+
 def insert_trade(db: Session, row: Callable[[str], object], supplied: Optional[str]):
     """Add and flush the trade row `row(trade_ref)` builds; returns it, with the reference it was given.
 
@@ -66,6 +106,8 @@ def insert_trade(db: Session, row: Callable[[str], object], supplied: Optional[s
         return trade
     for ref in _candidates():
         trade = row(ref)
+        if package_holds(db, getattr(trade, "user_id", None), ref):
+            continue                    # a package's trade ID: its legs stand under this name
         try:
             with db.begin_nested():
                 db.add(trade)

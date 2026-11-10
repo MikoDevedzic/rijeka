@@ -201,3 +201,93 @@ def test_two_bookings_in_flight_at_once(stack, auth_e, at_second):
         assert out == {"ref": "TRD-00000701"}, out
     finally:
         one.rollback(); one.close(); two.close()
+
+
+# ── a package: one trade ID, a leg ID for each leg, one transaction ─────────────────────────────
+
+def _legs(n: int) -> list[dict]:
+    return [_body() for _ in range(n)]
+
+
+def test_a_package_is_booked_whole_under_one_trade_id_with_a_leg_id_each(client, auth_e, at_second):
+    from api.routes import _trade_ref as R
+    at_second(1_795_100_000)
+    r = client.post("/api/book/package", json={"structure": "strip", "legs": _legs(3)}, headers=auth_e)
+    assert r.status_code == 201, r.text[:400]
+    j = r.json()
+    pid = j["package"]["trade_id"]
+    assert SHAPE.match(pid) and pid == R.generated_ref(1_795_100_000 + R.PACKAGE_OFFSET)
+    assert j["package"] == {"trade_id": pid, "structure": "STRIP", "legs": 3}
+    assert [t["trade_ref"] for t in j["trades"]] == [f"{pid}-1", f"{pid}-2", f"{pid}-3"]
+    assert [t["strategy"] for t in j["trades"]] == [f"STRIP {pid} 1/3", f"STRIP {pid} 2/3", f"STRIP {pid} 3/3"]
+    assert len({t["id"] for t in j["trades"]}) == 3 and all(t["status"] == "PENDING" for t in j["trades"])
+    for t in j["trades"]:
+        row, ev = _stored(t["id"])
+        assert row == ev == t["trade_ref"], "the BOOKED event names the leg as its row does"
+    # no row carries the bare trade ID, and a single trade booked later is not given it
+    eng = sa.create_engine(os.environ["DATABASE_URL"])
+    try:
+        with eng.connect() as c:
+            assert c.execute(sa.text("SELECT count(*) FROM trades WHERE user_id = :u AND trade_ref = :r"), {"u": USER_E, "r": pid}).scalar() == 0
+    finally:
+        eng.dispose()
+    at_second(1_795_100_000 + R.PACKAGE_OFFSET)          # the second whose single-trade name is the package's ID
+    single = client.post("/api/book/trade", json=_body(), headers=auth_e)
+    assert single.status_code == 201 and single.json()["trade"]["trade_ref"] not in (pid,) and not single.json()["trade"]["trade_ref"].startswith(pid + "-")
+    # the next package in the first second takes the next name
+    at_second(1_795_100_000)
+    again = client.post("/api/book/package", json={"structure": "CUSTOM", "legs": _legs(2)}, headers=auth_e).json()
+    assert again["package"]["trade_id"] not in (pid, single.json()["trade"]["trade_ref"])
+
+
+def test_a_package_with_one_bad_leg_books_nothing(client, auth_e, at_second, monkeypatch):
+    from fastapi import HTTPException
+    from api.routes import booking
+    at_second(1_795_200_000)
+    eng = sa.create_engine(os.environ["DATABASE_URL"])
+
+    def count() -> int:
+        with eng.connect() as c:
+            return c.execute(sa.text("SELECT count(*) FROM trades WHERE user_id = :u"), {"u": USER_E}).scalar()
+    try:
+        before = count()
+        # the third leg is refused inside the transaction, after two legs were written to it
+        real, calls = booking.book_trade, []
+
+        def third_refused(db, user_id, body, key=None, **kw):
+            calls.append(body.trade_ref)
+            if len(calls) == 3:
+                raise HTTPException(status_code=422, detail="refused by the test")
+            return real(db, user_id, body, key, **kw)
+        monkeypatch.setattr(booking, "book_trade", third_refused)
+        r = client.post("/api/book/package", json={"structure": "CUSTOM", "legs": _legs(3)}, headers=auth_e)
+        monkeypatch.setattr(booking, "book_trade", real)
+        assert r.status_code == 422 and "leg 3 of 3" in r.text and "Nothing was booked" in r.text, r.text[:300]
+        assert len(calls) == 3 and calls[0].endswith("-1") and calls[1].endswith("-2")
+        assert count() == before, "all or nothing: the two legs written before the refusal are gone"
+        # a leg the booking itself refuses, named
+        mixed = _body()
+        mixed["counterparty_id"] = str(uuid.uuid4())
+        r = client.post("/api/book/package", json={"structure": "CUSTOM", "legs": [_body(), _body(), mixed]}, headers=auth_e)
+        assert r.status_code == 422 and "leg 3" in r.text and "between the same two parties" in r.text
+        # shape rules, before anything is written
+        assert client.post("/api/book/package", json={"structure": "CUSTOM", "legs": _legs(1)}, headers=auth_e).status_code == 422
+        assert client.post("/api/book/package", json={"structure": "CUSTOM", "legs": _legs(25)}, headers=auth_e).status_code == 422
+        assert client.post("/api/book/package", json={"structure": "BUTTERFLY", "legs": _legs(2)}, headers=auth_e).status_code == 422
+        named = _body("MINE-1")
+        assert client.post("/api/book/package", json={"structure": "CUSTOM", "legs": [named, _body()]}, headers=auth_e).status_code == 422
+        assert count() == before
+    finally:
+        eng.dispose()
+
+
+def test_a_double_press_books_the_package_once(client, auth_e, at_second):
+    at_second(1_795_300_000)
+    key = str(uuid.uuid4())
+    body = {"structure": "COLLAR", "legs": _legs(2)}
+    a = client.post("/api/book/package", json=body, headers={**auth_e, "Idempotency-Key": key})
+    b = client.post("/api/book/package", json=body, headers={**auth_e, "Idempotency-Key": key})
+    assert a.status_code == 201 and b.status_code == 201
+    assert b.json()["idempotent_replay"] is True and b.json()["package"] == a.json()["package"]
+    assert [t["id"] for t in b.json()["trades"]] == [t["id"] for t in a.json()["trades"]]
+    assert client.post("/api/book/package", json=body, headers={**auth_e, "Idempotency-Key": "not-a-uuid"}).status_code == 400

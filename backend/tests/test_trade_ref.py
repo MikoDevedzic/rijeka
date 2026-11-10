@@ -10,6 +10,7 @@ tests/integration/test_trade_ref.py.
 """
 import contextlib
 import re
+import uuid
 import types
 from datetime import date
 from decimal import Decimal
@@ -80,6 +81,15 @@ class Book:
 
     def query(self, model): return _Query(self.legs if model is TradeLeg else [])
     def commit(self): self.flush()
+
+    def execute(self, stmt, params=None):
+        # The two looks the reference code takes at the trades table: is a name taken (:r), does anything
+        # stand under it (:p, the name followed by a dash and anything).
+        q = params or {}
+        mine = {ref for (u, ref) in self.taken if str(u) == str(q.get("u"))}
+        under = str(q["p"])[:-1] if "p" in q else None
+        hit = (q.get("r") in mine) or (under is not None and any(ref.startswith(under) for ref in mine))
+        return _Query([1] if hit else [])
     def rollback(self): self.rollbacks += 1; self.pending = []
     def refresh(self, obj): pass
 
@@ -262,3 +272,46 @@ def test_neither_route_builds_a_reference_from_the_clock_itself():
         src = inspect.getsource(mod)
         assert "time.time()" not in src and 'f"TRD-' not in src, mod.__name__
         assert "insert_trade(" in src, mod.__name__
+
+
+# ── a package: one trade ID, a leg ID under it for each leg ───────────────────────────────────────
+
+def test_a_package_gets_a_trade_id_no_trade_has_and_its_legs_stand_under_it(monkeypatch):
+    from api.routes import _trade_ref as R
+    monkeypatch.setattr(R.time, "time", lambda: SECOND)
+    db = Book()
+    pid = R.free_package_id(db, USER_A)
+    assert SHAPE.match(pid) and pid == R.generated_ref(SECOND + R.PACKAGE_OFFSET), "the clock proposes, half the number space from a single trade's name"
+    assert pid != R.generated_ref(SECOND), "a trade and a package booked in one second do not reach for one name"
+    assert [R.leg_ref(pid, i) for i in (1, 2, 3)] == [f"{pid}-1", f"{pid}-2", f"{pid}-3"]
+    # the legs are booked: the name is held by them, for a package and for a single trade alike
+    db.taken |= {(USER_A, f"{pid}-1"), (USER_A, f"{pid}-2")}
+    assert R.package_holds(db, USER_A, pid) and not R.package_holds(db, USER_B, pid), "one user's names"
+    nxt = R.free_package_id(db, USER_A)
+    assert nxt != pid and nxt == R.generated_ref(SECOND + R.PACKAGE_OFFSET + 1)
+    # a single trade already called that: not a free trade ID either
+    db.taken.add((USER_A, nxt))
+    assert R.free_package_id(db, USER_A) == R.generated_ref(SECOND + R.PACKAGE_OFFSET + 2)
+    # an older package (its first leg the bare name, the others -2, -3): the bare name and what stands under it are both seen
+    old = R.generated_ref(SECOND + R.PACKAGE_OFFSET + 3)
+    db.taken |= {(USER_A, old), (USER_A, f"{old}-2"), (USER_A, R.generated_ref(SECOND + R.PACKAGE_OFFSET + 2) + "-1")}
+    assert R.free_package_id(db, USER_A) == R.generated_ref(SECOND + R.PACKAGE_OFFSET + 4)
+
+
+def test_a_single_trade_is_never_given_a_name_a_packages_legs_stand_under(monkeypatch):
+    from api.routes import _trade_ref as R
+    monkeypatch.setattr(R.time, "time", lambda: SECOND)
+    db = Book()
+    held = R.generated_ref(SECOND)                       # what the clock would propose for a single trade
+    db.taken |= {(USER_A, f"{held}-1"), (USER_A, f"{held}-2")}
+
+    def row(ref):
+        return Trade(id=uuid.uuid4(), user_id=USER_A, trade_ref=ref)
+    t = R.insert_trade(db, row, None)
+    assert t.trade_ref == R.generated_ref(SECOND + 1) and held not in {ref for (_u, ref) in db.taken}
+    # another user's package does not hold the name for this one
+    db2 = Book()
+    db2.taken |= {(USER_B, f"{held}-1")}
+    assert R.insert_trade(db2, row, None).trade_ref == held
+    # a reference the client supplies is still used as it is
+    assert R.insert_trade(Book(), row, "MY-REF").trade_ref == "MY-REF"
