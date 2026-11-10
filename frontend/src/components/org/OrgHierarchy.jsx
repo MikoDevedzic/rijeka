@@ -324,7 +324,7 @@ export default function OrgHierarchy() {
         {inactiveCount > 0 && (
           <button onClick={() => setShowInactive(v => !v)}
             style={{
-              marginLeft: 'auto', background: showInactive ? 'rgba(240,147,130,0.12)' : 'none',
+              marginLeft: 'auto', background: showInactive ? 'rgba(240,130,140,0.12)' : 'none',
               border: '1px solid ' + (showInactive ? 'var(--red)' : 'var(--border)'),
               borderRadius: '2px', color: showInactive ? 'var(--red)' : 'var(--text-dim)',
               fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '12px', padding: '2px 8px', cursor: 'pointer',
@@ -338,7 +338,7 @@ export default function OrgHierarchy() {
       {/* Scrollable body */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
         {error && (
-          <div style={{ padding: '8px 12px', background: 'rgba(240,147,130,0.12)', border: '1px solid var(--red)', borderRadius: '3px', color: 'var(--red)', fontSize: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ padding: '8px 12px', background: 'rgba(240,130,140,0.12)', border: '1px solid var(--red)', borderRadius: '3px', color: 'var(--red)', fontSize: '12px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
             {error}
             <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer' }}>✕</button>
           </div>

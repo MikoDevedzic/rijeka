@@ -63,12 +63,15 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   )
   const vr = verifyResult
   const vOk = vr && !vr.error && vr.hash_matches && vr.signatures_valid_for_current_state !== false && (!anchored || vr.on_chain_confirmed)
+  // "Both sides" only where the record says so in as many words: a record without the field is read as not bilateral,
+  // as the API reads it. A signed record with no anchor may never have one (no chain configured), so not "yet".
   const title = terminated ? 'The record is closed on chain'
-    : anchored ? (att.bilateral === false ? 'The terms are signed and anchored' : 'Both sides signed the same terms')
-    : 'The terms are signed, not yet anchored'
+    : anchored ? (att.bilateral === true ? 'Both sides signed the same terms' : 'The terms are signed and anchored')
+    : 'The terms are signed, not anchored'
   return (
     <div className="cert" data-testid="confirm-certificate" style={{ marginTop: 18 }}>
-      <Seal hash={att.trade_hash} complete={anchored && !terminated} ink={anchored && !terminated ? '#2a3b98' : '#868ca4'} ink2={anchored && !terminated ? '#bf261d' : '#868ca4'} />
+      {/* the paper's stamp blue and red (styles.css .cert) for a record that stands on chain; grey, and without its centre point, for one that is not anchored or is closed */}
+      <Seal hash={att.trade_hash} complete={anchored && !terminated} ink={anchored && !terminated ? '#2a3b98' : '#646b88'} ink2={anchored && !terminated ? '#bf261d' : '#646b88'} />
       <div className="cert-body">
       <p className="cert-caps">Certificate of confirmation</p>
       <h5 className="cert-title">{title}</h5>

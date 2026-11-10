@@ -57,7 +57,7 @@ const CalibProofPanel = ({ calib }) => {
       const y = pad.t + (H - pad.t - pad.b) * (i / ticks)
       ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke()
       const val = maxV * (1 - i / ticks)
-      ctx.fillStyle = '#6f877d'
+      ctx.fillStyle = '#7b9388'
       ctx.font='10px JetBrains Mono,monospace'
       ctx.textAlign = 'right'
       ctx.fillText(val.toFixed(0), pad.l - 3, y + 3)
@@ -88,7 +88,7 @@ const CalibProofPanel = ({ calib }) => {
       ctx.shadowBlur = 0
 
       // x label
-      ctx.fillStyle = '#6f877d'
+      ctx.fillStyle = '#7b9388'
       ctx.font='10px JetBrains Mono,monospace'
       ctx.textAlign = 'center'
       const label = row.ticker ? row.ticker.replace('USD', '').replace(' ICPL Curncy','') : (row.expiry_y + 'Y×' + row.tenor_y + 'Y')

@@ -123,7 +123,7 @@ export default function IpvPage() {
                 <span className="pnl-tv dim" style={{ textAlign: 'left' }}>{r.desk}</span>
                 <span className="pnl-tv dim" style={{ textAlign: 'left' }}>{r.independent}</span>
                 <span className="pnl-tv" style={{ textAlign: 'left', color: STATE_COLOR[r.state] }}>{r.state}{r.decision ? <small className="pnl-note"> · {r.decision.by}</small> : null}</span>
-                <span className="pnl-tv" style={{ color: r.impact < -0.5 ? 'var(--red)' : r.impact > 0.5 ? 'var(--accent)' : 'var(--text-mute)' }}>{r.impact ? fmtSigned(r.impact) : '—'}</span>
+                <span className="pnl-tv" style={{ color: r.impact < -0.5 ? 'var(--down)' : r.impact > 0.5 ? 'var(--up)' : 'var(--text-mute)' }}>{r.impact ? fmtSigned(r.impact) : '—'}</span>
               </div>
             ))}
           </div>
@@ -160,7 +160,7 @@ export default function IpvPage() {
                 {wf.map(w => (
                   <div key={w.key} className="pnl-tr d1" style={{ gridTemplateColumns: '1fr 8rem', fontWeight: w.kind === 'level' ? 700 : 400 }}>
                     <span className="pnl-tn" style={{ color: w.key === 'OFFICIAL' ? 'var(--accent)' : undefined }}>{w.label}<small>{w.sub}</small></span>
-                    <span className="pnl-tv" style={{ color: w.value == null ? 'var(--text-mute)' : w.kind === 'level' ? (w.key === 'OFFICIAL' ? 'var(--accent)' : 'var(--text)') : w.value < 0 ? 'var(--red)' : w.value > 0 ? 'var(--accent)' : 'var(--text-mute)' }}>{w.value == null ? '—' : fmtSigned(w.value)}</span>
+                    <span className="pnl-tv" style={{ color: w.value == null ? 'var(--text-mute)' : w.kind === 'level' ? (w.key === 'OFFICIAL' ? 'var(--accent)' : 'var(--text)') : w.value < 0 ? 'var(--down)' : w.value > 0 ? 'var(--up)' : 'var(--text-mute)' }}>{w.value == null ? '—' : fmtSigned(w.value)}</span>
                   </div>
                 ))}
               </div>
@@ -235,7 +235,7 @@ function PillarTable({ input, drafts, setDrafts, onOverride, onWithdraw, signed 
           </span>
           <span className="pnl-tv" style={{ color: p.shift == null ? 'var(--text-mute)' : 'var(--amber)' }}>{p.shift == null ? '—' : fmtShift(p.shift, input.unit)}</span>
           <span className="pnl-tv dim">{fmtSigned(p.sensitivity)}</span>
-          <span className="pnl-tv" style={{ color: p.impact < -0.5 ? 'var(--red)' : p.impact > 0.5 ? 'var(--accent)' : 'var(--text-mute)' }}>{p.impact ? fmtSigned(p.impact) : '—'}</span>
+          <span className="pnl-tv" style={{ color: p.impact < -0.5 ? 'var(--red)' : p.impact > 0.5 ? 'var(--up)' : 'var(--text-mute)' }}>{p.impact ? fmtSigned(p.impact) : '—'}</span>
           <span className="pnl-tv dim" title={p.tolSource}>{p.tol}{p.material ? '' : ' ·'}</span>
           <span className="pnl-tv" style={{ textAlign: 'left', color: PILLAR_COLOR[p.status], fontSize: 10 }}>{p.status}{p.material ? '' : <small className="pnl-note"> immaterial</small>}</span>
         </div>
@@ -246,7 +246,7 @@ function PillarTable({ input, drafts, setDrafts, onOverride, onWithdraw, signed 
 
 function Cell({ c, input, drafts, setDrafts, onOverride, signed }) {
   if (!c) return <div style={{ padding: 6, color: 'var(--text-mute)', ...mono, fontSize: 11 }}>—</div>
-  const bg = c.status === 'OVERRIDDEN' ? 'rgba(224,179,65,0.08)' : c.status === 'REVIEW' ? 'rgba(240,147,130,0.08)' : 'var(--bg)'
+  const bg = c.status === 'OVERRIDDEN' ? 'rgba(224,179,65,0.08)' : c.status === 'REVIEW' ? 'rgba(240,130,140,0.08)' : 'var(--bg)'
   return (
     <div style={{ background: bg, border: `1px solid ${PILLAR_COLOR[c.status] || 'var(--border)'}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 2, ...mono }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>{fmtQuote(c.desk, input.kind)}</span><span style={{ color: PILLAR_COLOR[c.status], fontSize: 10 }}>{c.gap != null ? fmtShift(c.gap, input.unit) : c.status === 'UNVERIFIED' ? 'no indep.' : ''}</span></div>

@@ -348,15 +348,15 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
               onClick={()=>setExpanded(isExp?null:row.key)}
               onMouseEnter={()=>row.curve!=='none'&&onHighlight(row.curve)}
               onMouseLeave={()=>onHighlight(null)}
-              style={{background:'var(--panel)',padding:'9px 10px 7px',cursor:'pointer',minWidth:0,
+              style={{background:'var(--panel)',padding:'9px 8px 7px',cursor:'pointer',minWidth:0,overflow:'hidden',
                 boxShadow:isExp?'inset 0 2px 0 '+row.color:'none'}}>
               <div style={{fontSize:'0.72rem',fontWeight:500,letterSpacing:'0.09em',color:'var(--text-mute)',fontFamily:'var(--sans)',marginBottom:'5px'}}>{row.label}</div>
-              <div style={{fontSize:'1rem',fontWeight:500,color:row.value!=null?row.color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px',whiteSpace:'nowrap'}}>
+              <div style={{fontSize:'0.9375rem',fontWeight:500,color:row.value!=null?row.color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px',whiteSpace:'nowrap'}}>
                 {fmt(row.value)}
               </div>
               <div>
-                {row.sub && <div style={{fontSize:'0.75rem',fontWeight:400,color:row.sub.color,fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{row.sub.text}</div>}
-                {row.sub && <div style={{fontSize:'0.72rem',color:row.sub.captionColor,fontFamily:'var(--sans)',whiteSpace:'nowrap'}}>{row.sub.caption}</div>}
+                {row.sub && <div style={{fontSize:'0.75rem',fontWeight:row.sub.weight,color:row.sub.color,fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{row.sub.text}</div>}
+                {row.sub && <div title={row.sub.caption} style={{fontSize:'0.72rem',color:row.sub.captionColor,fontFamily:'var(--sans)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{row.sub.caption}</div>}
               </div>
             </div>
           )

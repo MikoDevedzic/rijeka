@@ -12,7 +12,7 @@
 import { useEffect, useRef } from 'react'
 
 const C = {
-  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#6f877d', label: '#8a9f94', hi: '#f6f1e4',
+  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#7b9388', label: '#8a9f94', hi: '#f6f1e4',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
 const X_TICKS = [0.25, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50]

@@ -158,7 +158,7 @@ function Card({ label, big, sub, neg }) {
 function Profile({ c }) {
   const t = c.t || []
   const mk = (arr, label, color, dash) => ({ label, color, dash, points: arr.map((v, i) => ({ t: t[i], v })) })
-  const series = [mk(c.exposure.pfe['99'], 'PFE 99', '#f09382', [2, 3]), mk(c.exposure.pfe['97.5'], 'PFE 97.5', '#e9975a', [4, 3]), mk(c.exposure.pfe['95'], 'PFE 95', '#e9975a'),
+  const series = [mk(c.exposure.pfe['99'], 'PFE 99', '#f0828c', [2, 3]), mk(c.exposure.pfe['97.5'], 'PFE 97.5', '#e9975a', [4, 3]), mk(c.exposure.pfe['95'], 'PFE 95', '#e9975a'),
                   mk(c.exposure.ee, 'EE', '#d9b25c')]
   return <RateCurveCanvas series={series} unit="" decimals={0} height={240} />
 }

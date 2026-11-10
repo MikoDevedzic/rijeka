@@ -33,8 +33,8 @@ import { useEffect, useRef, useState } from 'react'
 import { addDays, axisDates, chartGeometry, daysBetween, horizonDays, isoDate, valueRange, FIXING_DAYS } from './fx-scenario'
 
 const C = {
-  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#6f877d', label: '#8a9f94', hi: '#f6f1e4',
-  curve: '#d9b25c', curveRgb: '13,212,168', fix: '#8fc1e6', strike: '#e9975a', level: '#E06C75',
+  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#7b9388', label: '#8a9f94', hi: '#f6f1e4',
+  curve: '#d9b25c', curveRgb: '217,178,92', fix: '#8fc1e6', strike: '#e9975a', level: '#E06C75',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
 const HIT = 16                                           // pixels around a point that count as on it

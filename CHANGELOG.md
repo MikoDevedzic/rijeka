@@ -5,28 +5,37 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
 
 ## The look: Harbour · 10 November 2026 (frontend only; the API stays 0.16.2)
 
-One colour system, one pair of typefaces, and the screens a new user meets rebuilt on them (`docs/design.md`).
+One colour system, one pair of typefaces, and the first screens a new user meets rebuilt on them (`docs/design.md`).
 
-- **Colour means something.** Deep green surfaces, limestone type. Brass is the action of the view, the selected
-  tab's rule and what is sealed on chain, and nothing else; the accent it replaces (teal) was also the colour of
-  labels, typed values, selected chips, positive numbers and most buttons. A number takes the colour of its sign (green, coral); a selected
-  chip is a lighter panel; a status has a colour only when it says something.
+- **Colour means something, on the screens rebuilt here** (the ticket's TRADE, XVA and CONFIRM tabs, the blotter,
+  the top bar). Deep green surfaces, limestone type. Brass is the action of the view, the selected tab's rule and
+  what is sealed on chain. A number takes the colour of its sign (green, rose); a selected chip is a lighter
+  panel; a status has a colour only when it says something. The teal accent brass replaces was also the colour of
+  labels, typed values, selected chips and positive numbers, and on the pages not yet read (the CURVE SCENARIO and
+  DETAILS tabs, market data, configurations) brass still stands where teal did: about four hundred uses.
 - **Type.** Instrument Sans for the interface and DM Mono for numbers replace Space Grotesk and JetBrains Mono;
   a number is never heavier than the 500 cut.
-- **The ticket.** Quiet tabs with a brass rule under the open one, softer corners, PRICE as a quiet button and
-  BOOK TRADE as the one brass button; pay and receive are tinted by sign.
-- **The blotter.** Denser rows, columns sized for what they hold (a reference and a counterparty are no longer cut
-  short), neutral class badges; CONFIRMED is brass, PENDING a hollow dot.
+- **The ticket.** The open tab is the full text colour with a brass rule under it and the others are muted;
+  softer corners; PRICE is a quiet button and BOOK TRADE the one brass button, its label now dark on brass (it
+  was pale on the accent, under 2:1: a reset rule outranked every class colour in the ticket, and no longer
+  does). The paying or selling side is tinted rose; the other is the neutral selected chip.
+- **The blotter.** Denser rows and columns sized for what they hold: at 1440 wide every column is shown whole; narrower than that the table
+  scrolls sideways instead of cutting every column short. Neutral class badges; CONFIRMED is brass, LIVE green, PENDING a hollow dot, in the rows and in the rail.
 - **The XVA tab.** The exposure chart draws EE in limestone, ENE in blue and PFE 95 % in amber over the simulated
-  paths; the saving on chain is the one brass figure; model
-  inputs are limestone, not brass. No figure is added or changed.
+  paths; the saving on chain is the tab's brass figure; model inputs are limestone. No figure is added or
+  changed.
 - **The confirmation.** The signed record is a certificate on paper with a serif heading and a seal drawn from the
-  trade's hash (the same hash always draws the same seal; grey and without its centre point until the record is
-  anchored). The rows, the three actions and what VERIFY answers are as they were.
+  trade's hash: the same hash always draws the same seal, in the stamp's blue and red with its centre point only
+  for a record that stands on chain, grey without it for one that is not anchored or is closed. It is drawn when
+  the tab is looked at, so a confirmation that lands while another tab is open is not left blank. The heading says
+  "Both sides signed the same terms" only where the record says it is bilateral. The rows, the three actions and
+  what VERIFY answers are as they were.
 - **The home page** keeps its layout and its news; it takes the palette and the type.
 - **Not in this change:** the lineage tree on a figure, the mark of where each number came from on the rates
-  ticket, EPE on the XVA tab (it needs its reference check first), and the pages not listed here beyond the
-  palette. On a laptop-height screen the policy path's axis labels still run into the line under them, as before.
+  ticket, EPE on the XVA tab (it needs its reference check first), the three-dimensional vol surface, and the
+  pages not listed here beyond the palette. Where two warm colours mark two categories side by side (the
+  messenger, the limit bar, EE against PFE on Risk → Counterparty credit) they are closer than they were. On a
+  laptop-height screen the policy path's axis labels still run into the line under them, as before.
 
 ## 0.16.2 · 9 November 2026
 

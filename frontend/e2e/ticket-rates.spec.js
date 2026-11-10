@@ -38,6 +38,14 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   const footer = win.locator('text=NET NPV').last().locator('xpath=ancestor::div[2]')
   await expect(footer).toContainText(/IR01\s*[+−-]\$[1-9]/)
 
+  // a field reached by keyboard shows where the focus is: the app's ring, which the ticket's own styles leave alone
+  await win.locator('.tbw-sec input').first().focus()
+  await app.keyboard.press('Tab')
+  const ring = await app.evaluate(() => { const e = document.activeElement, c = getComputedStyle(e); return { tag: e.tagName, inTicket: !!e.closest('.tbw-window'), style: c.outlineStyle, width: parseFloat(c.outlineWidth) } })
+  expect(ring.inTicket, 'Tab moved to another control of the ticket').toBe(true)
+  expect(ring.style, `keyboard focus on a ${ring.tag} is visible`).not.toBe('none')
+  expect(ring.width).toBeGreaterThan(0)
+
   // XVA: bilateral, simulate; the comparison under atomic settlement runs by default
   await win.getByRole('button', { name: 'XVA', exact: true }).click()
   await win.getByRole('button', { name: 'BILATERAL', exact: true }).click()
@@ -100,10 +108,26 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   await expect(win).toContainText('PENDING')
   const confirmed = app.waitForResponse(r => r.url().includes('/api/chain/confirm/'), { timeout: 60_000 })
   await win.getByRole('button', { name: /CONFIRM ON-CHAIN/ }).click()
+  // the answer lands while another tab is open: the ticket keeps CONFIRM mounted and hidden, where a canvas has no size
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
   expect([201, 202]).toContain((await confirmed).status())
   await expect(win).toContainText('CONFIRMED', { timeout: 60_000 })
   await expect(win).toContainText('TRADE HASH')
   await expect(win).toContainText('demo, not bilateral')
+  // the certificate: the heading says what the record is (the stack has no chain, and one side's key is Rijeka's),
+  // and the seal is drawn from the hash once the tab is looked at again
+  await win.getByRole('button', { name: '◆ CONFIRM' }).click()
+  const cert = win.getByTestId('confirm-certificate')
+  await expect(cert).toContainText('Certificate of confirmation')
+  await expect(cert).toContainText('The terms are signed, not anchored')
+  await expect(cert).not.toContainText('Both sides signed')
+  const inked = () => win.getByTestId('confirm-seal').evaluate(cv => {
+    const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data
+    let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++
+    return n
+  })
+  await expect.poll(inked, { message: 'the seal is drawn after the tab comes back into view', timeout: 15_000 }).toBeGreaterThan(5000)
+  await expectNoHorizontalOverflow(cert, 'the certificate')
   await app.screenshot({ path: 'e2e/.out/shots/rates-confirmed.png' })
 
   expectClean(problems)

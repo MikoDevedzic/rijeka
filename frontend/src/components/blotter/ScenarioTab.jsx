@@ -665,7 +665,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       const y=yS(r); if(y<PAD.t-2||y>H-PAD.b+2)continue
       ctx.strokeStyle='rgba(67,84,74,0.9)'; ctx.lineWidth=0.6
       ctx.beginPath(); ctx.moveTo(PAD.l,y); ctx.lineTo(W-PAD.r,y); ctx.stroke()
-      ctx.fillStyle='#6f877d'; ctx.textAlign='right'; ctx.textBaseline='middle'
+      ctx.fillStyle='#7b9388'; ctx.textAlign='right'; ctx.textBaseline='middle'
       ctx.fillText(r.toFixed(2)+'%',PAD.l-8,y)
     }
     // X axis + labels
@@ -679,8 +679,8 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
     })
 
     const avgSh=sh.reduce((a,b)=>a+b,0)/sh.length
-    const shClr=avgSh<=0?'#8fc1e6':'#f09382'
-    const shClrRgb=avgSh<=0?'74,154,212':'224,80,64'
+    const shClr=avgSh<=0?'#8fc1e6':'#f0828c'
+    const shClrRgb=avgSh<=0?'143,193,230':'240,130,140'
     const anyShift=sh.some(s=>Math.abs(s)>0.05)
 
     // Base fill + glow + line
@@ -708,7 +708,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       ctx.beginPath()
       TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
       ;[...TENORS].reverse().forEach(t=>{const i=TENORS.indexOf(t);ctx.lineTo(xS(TENOR_Y[t]),yS(shockRts[i]))})
-      ctx.closePath(); ctx.fillStyle=avgSh>0?'rgba(240,147,130,0.06)':'rgba(143,193,230,0.06)'; ctx.fill()
+      ctx.closePath(); ctx.fillStyle=avgSh>0?'rgba(240,130,140,0.06)':'rgba(143,193,230,0.06)'; ctx.fill()
       ctx.setLineDash([5,3])
       ctx.beginPath()
       TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(shockRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
@@ -735,7 +735,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       ctx.beginPath(); ctx.moveTo(PAD.l+66,PAD.t-14); ctx.lineTo(PAD.l+86,PAD.t-14); ctx.stroke(); ctx.setLineDash([])
       ctx.fillStyle=shClr; ctx.fillText('SHOCKED',PAD.l+90,PAD.t-14)
       const avgBp=Math.round(avgSh)
-      ctx.fillStyle=avgBp>0?'#f09382':'#8fc1e6'; ctx.textAlign='right'
+      ctx.fillStyle=avgBp>0?'#f0828c':'#8fc1e6'; ctx.textAlign='right'
       ctx.fillText((avgBp>0?'+':'')+avgBp+'bp AVG',W-PAD.r,PAD.t-14)
     }
   }
@@ -982,7 +982,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               )}
               {scenarioError&&(
                 <div style={{fontSize:'0.75rem',color:'var(--red)',fontFamily:'var(--sans)',
-                  background:'rgba(240,147,130,0.06)',border:'1px solid rgba(240,147,130,0.25)',
+                  background:'rgba(240,130,140,0.06)',border:'1px solid rgba(240,130,140,0.25)',
                   borderRadius:'3px',padding:'4px 8px'}}>
                   {scenarioError}
                 </div>
@@ -1162,7 +1162,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
             <canvas ref={canvasRef} style={{display:'block',cursor:'crosshair'}}/>
             {dragTip&&(
               <div style={{position:'absolute',left:dragTip.x,top:dragTip.y,pointerEvents:'none',zIndex:10,
-                background:'var(--panel)',border:'1px solid '+(dragTip.bp>=0?'rgba(240,147,130,0.7)':'rgba(143,193,230,0.7)'),
+                background:'var(--panel)',border:'1px solid '+(dragTip.bp>=0?'rgba(240,130,140,0.7)':'rgba(143,193,230,0.7)'),
                 borderRadius:'3px',padding:'5px 12px',fontSize:'0.875rem',fontFamily:'var(--mono)',
                 fontWeight:700,color:dragTip.bp>=0?'var(--red)':'var(--blue)',whiteSpace:'nowrap',
                 boxShadow:'0 4px 16px rgba(0,0,0,0.9)'}}>

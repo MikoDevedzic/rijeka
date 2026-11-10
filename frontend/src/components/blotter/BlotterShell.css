@@ -75,14 +75,14 @@
 .bl-count { font-size: 0.8125rem; color: var(--text-mute); white-space: nowrap; letter-spacing: 0.04em; font-family: var(--mono); }
 
 .bl-grid { flex: 1; overflow: auto; }
-.bl-table { width: 100%; min-width: 1180px; border-collapse: collapse;
+.bl-table { width: 100%; min-width: 1230px; border-collapse: collapse;
   font-size: 12.5px; font-family: var(--sans);
   table-layout: fixed; }
 .bl-table thead { position: sticky; top: 0; z-index: 2; background: var(--panel); }
-.bl-table th { padding: 9px 10px 8px; text-align: left;
+.bl-table th { padding: 9px 8px 8px; text-align: left;
   font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
   color: var(--text-mute); border-bottom: 1px solid var(--border-hi);
-  white-space: nowrap; cursor: pointer; user-select: none; }
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; user-select: none; }
 .bl-table th:hover { color: var(--text); }
 .th-sort { color: var(--text-hi) !important; }
 
@@ -93,7 +93,7 @@
 }
 .bl-row:hover { background: var(--panel); }
 .bl-row-selected { background: rgb(var(--accent-rgb) / 0.06) !important; }
-.bl-table td { height: 32px; padding: 0 10px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bl-table td { height: 32px; padding: 0 8px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bl-td-ref { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text-hi); }
 .bl-td-dim         { color: var(--text-dim) !important; }
 .bl-td-num { text-align: right; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }

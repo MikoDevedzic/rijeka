@@ -27,7 +27,7 @@ const isBasket = (e, t) => BASKET_KEYS.has(e + '|' + t);
 function SourceBadge({ src }) {
   const map = {
     BLOOMBERG: { bg:'rgba(143,193,230,0.12)', bd:'rgba(143,193,230,0.3)', c:'#8fc1e6' },
-    MANUAL:    { bg:'rgba(111,135,125,0.12)', bd:'rgba(111,135,125,0.3)', c:'var(--text-dim)' },
+    MANUAL:    { bg:'rgba(123,147,136,0.12)', bd:'rgba(123,147,136,0.3)', c:'var(--text-dim)' },
     IMPORT:    { bg:'rgba(233,151,90,0.12)', bd:'rgba(233,151,90,0.3)', c:'#e9975a' },
   };
   const s = map[src] || map.MANUAL;
@@ -388,7 +388,7 @@ function SwvInstruments() {
             )}
             {blpSnapError && (
               <div style={{ fontSize:'0.875rem', color:'var(--red)',
-                background:'rgba(240,147,130,0.05)', border:'1px solid rgba(240,147,130,0.2)',
+                background:'rgba(240,130,140,0.05)', border:'1px solid rgba(240,130,140,0.2)',
                 padding:'5px 7px', borderRadius:'2px' }}>
                 ✘ {blpSnapError}
               </div>
@@ -860,7 +860,7 @@ function alphaFromAtm(atmVol, T, rho, nu) {
 // ── Vol Smile Canvas Chart ────────────────────────────────────────────────────
 const TENOR_COLORS = {   // canvas strokes: literal palette (index.css tokens), not var()
   '1Y': '#d9b25c', '2Y': '#8fc1e6', '3Y': '#e9975a',
-  '5Y': '#f09382', '7Y': '#c0a5ee', '9Y': '#8fe0ae',
+  '5Y': '#f0828c', '7Y': '#c0a5ee', '9Y': '#8fe0ae',
 };
 
 function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
@@ -912,7 +912,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
       });
     });
     if (!allVols.length) {
-      ctx.fillStyle = '#6f877d';
+      ctx.fillStyle = '#7b9388';
       ctx.font = `11px 'JetBrains Mono', monospace`;
       ctx.textAlign = 'center';
       ctx.fillText('SNAP OR SAVE SKEW TO VIEW THE SMILE', W/2, H/2);
@@ -931,7 +931,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
       const y = yMin + (yMax - yMin) * i / yTicks;
       const cy = yToCanvas(y);
       ctx.beginPath(); ctx.moveTo(PAD.left, cy); ctx.lineTo(PAD.left + cW, cy); ctx.stroke();
-      ctx.fillStyle = '#6f877d';
+      ctx.fillStyle = '#7b9388';
       ctx.font = `10px 'JetBrains Mono', monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(y.toFixed(1), PAD.left - 5, cy + 3);
@@ -952,7 +952,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
     // X axis labels
     [-200, -100, 0, 100, 200].forEach(off => {
       const cx = xToCanvas(off);
-      ctx.fillStyle = off === 0 ? '#8a9f94' : off < 0 ? '#e0504099' : '#0dd4a899';
+      ctx.fillStyle = off === 0 ? '#8a9f94' : off < 0 ? '#f0828c99' : '#8fe0ae99';
       ctx.font = `10px 'JetBrains Mono', monospace`;
       ctx.textAlign = 'center';
       ctx.fillText((off > 0 ? '+' : '') + off, cx, PAD.top + cH + 22);
@@ -962,7 +962,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
     ctx.save();
     ctx.translate(11, PAD.top + cH/2);
     ctx.rotate(-Math.PI/2);
-    ctx.fillStyle = '#6f877d';
+    ctx.fillStyle = '#7b9388';
     ctx.font = `10px 'JetBrains Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.fillText('Vol (bp)', 0, 0);
@@ -1539,7 +1539,7 @@ function SwvOTMSkew({ atmGrid }) {
                           padding:'1px 5px', borderRadius:'2px',
                           background: q.level==='good' ? 'rgba(217,178,92,0.08)'
                                     : q.level==='ok'   ? 'rgba(233,151,90,0.08)'
-                                    : q.level==='partial' ? 'rgba(240,147,130,0.08)'
+                                    : q.level==='partial' ? 'rgba(240,130,140,0.08)'
                                     : 'transparent',
                           border: `1px solid ${q.color}33`,
                         }}>

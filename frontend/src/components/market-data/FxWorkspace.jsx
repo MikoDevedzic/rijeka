@@ -102,7 +102,7 @@ export default function FxWorkspace() {
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {msg && <div style={{ margin: '8px 14px 0', padding: '7px 10px', borderRadius: 4, fontSize: '0.84rem', border: '1px solid', color: msg.kind === 'ok' ? 'var(--accent)' : 'var(--red)', borderColor: msg.kind === 'ok' ? 'var(--accent-dim)' : 'rgba(240,147,130,.4)', background: msg.kind === 'ok' ? 'var(--accent-glow)' : 'rgba(240,147,130,.08)' }}>{msg.text}</div>}
+        {msg && <div style={{ margin: '8px 14px 0', padding: '7px 10px', borderRadius: 4, fontSize: '0.84rem', border: '1px solid', color: msg.kind === 'ok' ? 'var(--accent)' : 'var(--red)', borderColor: msg.kind === 'ok' ? 'var(--accent-dim)' : 'rgba(240,130,140,.4)', background: msg.kind === 'ok' ? 'var(--accent-glow)' : 'rgba(240,130,140,.08)' }}>{msg.text}</div>}
         {cur ? <PairDetail p={cur} md={md} reload={load} flash={flash} busy={busy} setBusy={setBusy} bbg={bbg} />
              : <div className="empty-state"><div className="empty-icon">⟨/⟩</div><div className="empty-title">Select a pair</div><div className="empty-sub">{pairs.length} pairs — 6 G10 · 3 digital assets</div></div>}
       </div>

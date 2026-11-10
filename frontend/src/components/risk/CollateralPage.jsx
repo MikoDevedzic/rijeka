@@ -68,7 +68,7 @@ export default function CollateralPage() {
                 <span className="pnl-tv">{r.has_run ? fmt(r.im_usd) : '—'}</span>
                 <span className="pnl-tn" style={{ whiteSpace: 'normal', fontSize: 11, color: 'var(--text-dim)' }}>{legs(r.posted)}</span>
                 <span className="pnl-tn" style={{ whiteSpace: 'normal', fontSize: 11, color: 'var(--text-dim)' }}>{legs(r.held)}</span>
-                <span className="pnl-tv" style={{ color: r.carry_per_year_usd > 0.5 ? 'var(--accent)' : r.carry_per_year_usd < -0.5 ? 'var(--red)' : 'var(--text-dim)' }}>{fmtSigned(r.carry_per_year_usd)}</span>
+                <span className="pnl-tv" style={{ color: r.carry_per_year_usd > 0.5 ? 'var(--up)' : r.carry_per_year_usd < -0.5 ? 'var(--down)' : 'var(--text-dim)' }}>{fmtSigned(r.carry_per_year_usd)}</span>
                 <span className="pnl-tv"><span className={`pnl-chip ${r.rail === 'on_chain' ? 'ok' : ''}`}>{r.rail === 'on_chain' ? 'ON CHAIN' : 'BILATERAL'}</span></span>
               </div>
             ))}

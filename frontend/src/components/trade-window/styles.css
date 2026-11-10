@@ -34,7 +34,9 @@
 
 /* Weakened reset — only inherit color/font. Leave border/background/padding
    to specific classes so they can render properly (Patch 10). */
-.tbw-window button {
+/* :where keeps this reset at the weight of an element, so a single class (a tab, a chip, the BOOK button) sets
+   its own colour; written as `.tbw-window button` it outranked every one of them. */
+:where(.tbw-window) button {
   color: inherit;
   font-family: inherit;
   cursor: pointer;
@@ -55,8 +57,7 @@
 
 .tbw-window input:hover:not(:disabled),
 .tbw-window select:hover:not(:disabled) { border-color: var(--border-hi); }
-.tbw-window input:focus,
-.tbw-window select:focus { outline: none; border-color: var(--accent-dim); }
+/* focus is the app's own ring (index.css :focus-visible); nothing here takes it away */
 
 .tbw-window input.tbw-mono,
 .tbw-window .tbw-mono {
@@ -204,7 +205,7 @@
   font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   font-size: 12px;
   padding: 6px 8px;
-  background: rgba(240,147,130, 0.05);
+  background: rgba(240,130,140, 0.05);
   border-left: 2px solid var(--red);
 }
 
@@ -625,7 +626,7 @@
    buttons of the attestation take them without naming a colour: ink for text, the blue of a stamp for what is
    sealed and for links, red for the serial point and for anything that ends the record. */
 .cert {
-  --text-hi: #141936; --text: #1c2240; --text-dim: #4b5273; --text-mute: #6c7390; --text-faint: #868ca4;
+  --text-hi: #141936; --text: #1c2240; --text-dim: #4b5273; --text-mute: #5d6482; --text-faint: #646b88;
   --accent: #2a3b98; --accent-hi: #1f2d7a; --accent-dim: #8e98c8; --accent-ink: #fafbf7;
   --blue: #2a3b98; --amber: #96560f; --red: #bf261d; --down: #bf261d; --green: #1c6b45; --up: #1c6b45;
   --border: rgba(20, 25, 54, 0.15); --border-hi: rgba(20, 25, 54, 0.36); --border-glow: rgba(20, 25, 54, 0.5);
@@ -633,13 +634,14 @@
   display: flex; gap: 26px; align-items: flex-start;
   max-width: 940px; padding: 26px 28px;
   background: #fafbf7; color: var(--text);
-  border-radius: var(--r-1);
+  border-radius: 2px;
   box-shadow: 0 0 0 1px rgba(20, 25, 54, 0.12), 0 18px 44px rgba(0, 0, 0, 0.35);
 }
 .cert-body { min-width: 0; flex: 1; }
 .cert-caps { margin: 0; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-faint); }
 .cert-title { margin: 4px 0 12px; font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 30px; line-height: 1.08; letter-spacing: 0; color: var(--text-hi); text-wrap: balance; }
 .cert .tbw-mut { color: var(--text-mute); }
+.cert a { text-decoration: underline; text-underline-offset: 2px; }
 .cert .tbw-btn { color: var(--text-hi); border-color: var(--border-hi); border-radius: 2px; font-weight: 600; letter-spacing: 0.1em; }
 .cert .tbw-btn:hover:not(:disabled) { color: var(--text-hi); border-color: var(--text-hi); background: rgba(20, 25, 54, 0.04); }
 .cert .tbw-btn.cert-go { background: var(--text-hi); border-color: var(--text-hi); color: #fafbf7; }

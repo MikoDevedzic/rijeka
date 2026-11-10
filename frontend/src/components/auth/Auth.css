@@ -95,7 +95,7 @@
 .au-handle span { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.2em; color:var(--text-dim); }
 .au-handle b { font-family:var(--mono); font-weight:600; font-size:14px; color:var(--accent); letter-spacing:0.05em; text-shadow:0 0 16px rgba(217,178,92,0.45); }
 .au-handle b .caret { animation:auBlink .6s step-end infinite; }
-.au-error { font-size:12px; color:var(--red); border:1px solid rgba(240,147,130,0.35); border-radius:5px; padding:8px 10px; background:rgba(240,147,130,0.07); animation:auShake .3s ease; }
+.au-error { font-size:12px; color:var(--red); border:1px solid rgba(240,130,140,0.35); border-radius:5px; padding:8px 10px; background:rgba(240,130,140,0.07); animation:auShake .3s ease; }
 .au-btn { margin-top:4px; width:100%; padding:12px 14px; border:none; border-radius:6px; cursor:pointer; font-family:var(--mono); font-size:0.86rem; font-weight:600;
   letter-spacing:0.22em; background:var(--accent); color:#1b1403; transition:background .2s, box-shadow .2s, transform .1s; }
 .au-btn:hover:not(:disabled) { background:#f1d488; box-shadow:0 0 0 3px var(--accent-glow), 0 6px 22px rgba(217,178,92,0.3); }

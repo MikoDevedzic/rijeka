@@ -90,7 +90,7 @@ export default function BlotterShell() {
           >
             {s === 'ALL' ? 'ALL STATUS' : s}
             {s !== 'ALL' && ST[s] && (
-              <span className="bl-filter-dot" style={{ background: ST[s].c }} />
+              <span className="bl-filter-dot" style={ST[s].hollow ? { border: `1px solid ${ST[s].c}`, boxSizing: 'border-box' } : { background: ST[s].c }} />
             )}
           </button>
         ))}
@@ -126,11 +126,11 @@ export default function BlotterShell() {
           </div>
           <div className="bl-sum-row">
             <span className="bl-sum-lbl">LIVE</span>
-            <span className="bl-sum-val" style={{ color: 'var(--accent)' }}>{live}</span>
+            <span className="bl-sum-val" style={{ color: live ? 'var(--up)' : undefined }}>{live}</span>
           </div>
           <div className="bl-sum-row">
             <span className="bl-sum-lbl">PENDING</span>
-            <span className="bl-sum-val" style={{ color: 'var(--amber)' }}>{pending}</span>
+            <span className="bl-sum-val">{pending}</span>
           </div>
         </div>
 
@@ -171,7 +171,7 @@ export default function BlotterShell() {
             <table className="bl-table">
               {/* widths for what each column holds; the counterparty takes what is left */}
               <colgroup>
-                {[32, 124, 62, 128, 96, null, 72, 128, 50, 92, 108, 86, 104].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
+                {[30, 114, 60, 124, 92, null, 82, 118, 62, 92, 108, 88, 100].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
               </colgroup>
               <thead>
                 <tr>
@@ -201,7 +201,7 @@ export default function BlotterShell() {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={12} className="bl-empty">
+                  <tr><td colSpan={13} className="bl-empty">
                     {trades.length === 0 ? 'NO TRADES — CLICK + NEW TRADE TO BEGIN' : 'NO TRADES MATCH FILTERS'}
                   </td></tr>
                 ) : rows.map(t => {

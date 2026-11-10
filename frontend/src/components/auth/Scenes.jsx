@@ -55,7 +55,7 @@ function BootstrapScene({ quotes, active }) {
       const Y = r => TOP + (hi - r) / (hi - lo) * (BOT - TOP)
       const YD = d => TOP + (1 - d) / (1 - Math.min(...df) + 0.02) * (BOT - TOP)
       ctx.clearRect(0, 0, W, H)
-      ctx.font = `${10 * dpr}px "JetBrains Mono", monospace`; ctx.fillStyle = 'rgba(111,135,125,0.9)'; ctx.textAlign = 'center'
+      ctx.font = `${10 * dpr}px "JetBrains Mono", monospace`; ctx.fillStyle = 'rgba(123,147,136,0.9)'; ctx.textAlign = 'center'
       for (const n of [1, 2, 5, 10, 20, 30]) if (n <= T) ctx.fillText(`${n}Y`, X(n), H - 8 * dpr)
       ctx.textAlign = 'right'; for (const r of [lo + 0.25, (lo + hi) / 2, hi - 0.25]) ctx.fillText(`${r.toFixed(2)}%`, L - 6 * dpr, Y(r) + 3 * dpr)
       ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = dpr

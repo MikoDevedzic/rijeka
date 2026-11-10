@@ -19,7 +19,7 @@ function SourceBadge({ src }) {
   const map = {
     BLOOMBERG: { bg:'rgba(143,193,230,0.12)', bd:'rgba(143,193,230,0.3)', c:'#8fc1e6' },
     FED:       { bg:'rgba(192,165,238,0.12)', bd:'rgba(192,165,238,0.3)', c:'#c0a5ee' },
-    MANUAL:    { bg:'rgba(111,135,125,0.12)', bd:'rgba(111,135,125,0.3)', c:'var(--text-dim)' },
+    MANUAL:    { bg:'rgba(123,147,136,0.12)', bd:'rgba(123,147,136,0.3)', c:'var(--text-dim)' },
     IMPORT:    { bg:'rgba(233,151,90,0.12)', bd:'rgba(233,151,90,0.3)', c:'#e9975a' },
   };
   const s = map[src] || map.MANUAL;
@@ -334,7 +334,7 @@ function BasisInstruments({ curve }) {
             )}
             {blpSnapError && (
               <div style={{fontSize:'0.875rem', color:'var(--red)', marginBottom:'6px',
-                background:'rgba(240,147,130,0.05)', border:'1px solid rgba(240,147,130,0.2)',
+                background:'rgba(240,130,140,0.05)', border:'1px solid rgba(240,130,140,0.2)',
                 padding:'5px 7px', borderRadius:'2px'}}>✗ {blpSnapError}</div>
             )}
             {Object.keys(blpTickers).length > 0 && (

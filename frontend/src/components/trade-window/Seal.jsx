@@ -42,16 +42,30 @@ export default function Seal({ hash, ink = '#2a3b98', ink2 = '#bf261d', complete
     const cv = ref.current
     if (!cv || !hash) return
     const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (still) { draw(cv, hash, ink, ink2, complete, 1); return }
-    let raf = 0
-    const t0 = performance.now(), ms = 1400
-    const step = (t) => {
-      const k = Math.min(1, (t - t0) / ms)
-      draw(cv, hash, ink, ink2, complete, k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2)
-      if (k < 1) raf = requestAnimationFrame(step)
+    let raf = 0, shown = false
+    // The ticket keeps a visited tab mounted and hidden, and the record can arrive (or change: anchored,
+    // terminated) while CONFIRM is not the open tab. A hidden canvas has no size and cannot be drawn, so the seal
+    // is drawn when the canvas first has a size, and again from the start whenever it comes back into view.
+    const play = () => {
+      cancelAnimationFrame(raf)
+      if (still) { draw(cv, hash, ink, ink2, complete, 1); return }
+      const t0 = performance.now(), ms = 1400
+      const step = (t) => {
+        const k = Math.min(1, (t - t0) / ms)
+        draw(cv, hash, ink, ink2, complete, k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2)
+        if (k < 1) raf = requestAnimationFrame(step)
+      }
+      raf = requestAnimationFrame(step)
     }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
+    const seen = () => {
+      const visible = cv.clientWidth > 0 && cv.clientHeight > 0
+      if (visible && !shown) play()
+      shown = visible
+    }
+    seen()
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(seen) : null
+    ro?.observe(cv)
+    return () => { cancelAnimationFrame(raf); ro?.disconnect() }
   }, [hash, ink, ink2, complete])
   return <canvas ref={ref} data-testid="confirm-seal" aria-label="The seal drawn from this trade's hash" role="img" style={{ width: size, height: size, flexShrink: 0 }} />
 }

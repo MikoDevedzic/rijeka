@@ -42,13 +42,14 @@
   --border-hi:    #43544a;
   --border-glow:  #5f7165;
 
-  /* Type: limestone on water. --text-mute is 5.6:1 on --bg, --text-faint (captions only) 4.4:1 */
+  /* Type: limestone on water. Contrast on --bg / --panel: --text-mute 6.2 / 5.6, --text-faint 5.3 / 4.8
+     (it drops to 4.1 on --panel-2, so it is not used there) */
   --text:         #e9e3d3;
   --text-hi:      #f6f1e4;
   --text-dim:     #a9b9ae;
   --text-mute:    #8a9f94;
   --text-muted:   #8a9f94;   /* legacy name used by the auth pages */
-  --text-faint:   #6f877d;
+  --text-faint:   #7b9388;
 
   /* Brass: the action, the selected thing, the seal */
   --accent:       #d9b25c;
@@ -61,10 +62,10 @@
   /* The sign of a number */
   --up:           #8fe0ae;
   --up-rgb:       143 224 174;
-  --down:         #f09382;
-  --down-rgb:     240 147 130;
+  --down:         #f0828c;
+  --down-rgb:     240 130 140;
   --green:        #8fe0ae;
-  --red:          #f09382;
+  --red:          #f0828c;
   --red-dim:      #6b3a31;
 
   /* Caution, provisional */
@@ -516,7 +517,7 @@ button, input, select, textarea { font-family: inherit; }
 .auth-handle-preview{background:var(--bg-deep);border:1px solid var(--accent);border-left:3px solid var(--accent);padding:0.5rem 0.75rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;width:100%;box-sizing:border-box}
 .auth-handle-label{font-family: var(--sans);font-size:12px;letter-spacing:0.12em;color:var(--text-muted);flex-shrink:0}
 .auth-handle-value{font-family: var(--sans);font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.05em}
-.auth-error{font-family: var(--sans);font-size:12px;color:var(--red);border:1px solid var(--red);padding:0.5rem 0.75rem;background:rgba(217,80,64,0.08)}
+.auth-error{font-family: var(--sans);font-size:12px;color:var(--red);border:1px solid var(--red);padding:0.5rem 0.75rem;background:rgba(240,130,140,0.08)}
 .auth-btn{background:var(--accent);color:#1b1403;border:none;border-radius:4px;font-family: var(--sans);font-size:12px;font-weight:700;letter-spacing:0.15em;padding:0.75rem 1rem;cursor:pointer;transition:opacity 0.15s;width:100%;margin-top:0.25rem}
 .auth-btn:hover:not(:disabled){background:#f1d488;box-shadow:0 0 0 3px var(--accent-glow),0 4px 16px rgba(217,178,92,.25)}
 .auth-btn:disabled{opacity:0.5;cursor:not-allowed}
@@ -582,12 +583,12 @@ button, input, select, textarea { font-family: inherit; }
   transition: border-color 0.13s, background 0.13s, color 0.13s;
 }
 .structure-btn:hover {
-  background: rgba(14,201,160,0.05);
-  border-color: rgba(14,201,160,0.3);
+  background: rgba(217,178,92,0.05);
+  border-color: rgba(217,178,92,0.3);
   color: #a8bfcc;
 }
 .structure-btn--active {
-  background: rgba(14,201,160,0.09);
+  background: rgba(217,178,92,0.09);
   border-color: var(--accent, #d9b25c);
   color: var(--accent, #d9b25c);
 }
@@ -608,8 +609,8 @@ button, input, select, textarea { font-family: inherit; }
 }
 /* blotter STRUCTURE column badge */
 .structure-badge {
-  background: rgba(14,201,160,0.08);
-  border: 1px solid rgba(14,201,160,0.25);
+  background: rgba(217,178,92,0.08);
+  border: 1px solid rgba(217,178,92,0.25);
   border-radius: 3px;
   color: var(--accent, #d9b25c);
   font-family: var(--mono, 'IBM Plex Mono', monospace, monospace);
@@ -620,8 +621,8 @@ button, input, select, textarea { font-family: inherit; }
   white-space: nowrap;
 }
 .structure-badge--inflation {
-  background: rgba(61,139,200,0.08);
-  border-color: rgba(61,139,200,0.3);
+  background: rgba(143,193,230,0.08);
+  border-color: rgba(143,193,230,0.3);
   color: var(--blue, #8fc1e6);
 }
 /* ── end Sprint 4A ─────────────────────────────────────────── */

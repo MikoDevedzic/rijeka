@@ -31,8 +31,8 @@ import { isoDate, valueRange } from './fx-scenario'
 import { deltaRange, pillars, shockedVol, smileCurve, smileVol, surfaceReading, termCurve, volGeometry } from './fx-vol'
 
 const C = {
-  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#6f877d', label: '#8a9f94', hi: '#f6f1e4',
-  curve: '#d9b25c', curveRgb: '13,212,168', call: '#8fc1e6', put: '#E06C75', strike: '#e9975a',
+  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#7b9388', label: '#8a9f94', hi: '#f6f1e4',
+  curve: '#d9b25c', curveRgb: '217,178,92', call: '#8fc1e6', put: '#E06C75', strike: '#e9975a',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
 const HEIGHT = 220

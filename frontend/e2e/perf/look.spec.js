@@ -26,7 +26,7 @@ test('the pages behind the top bar', async ({ app }) => {
   for (const [name, path, wait] of [
     ['home', '/command-center', 1500], ['blotter', '/blotter', 800], ['pnl', '/pnl', 800], ['risk', '/risk', 800],
     ['risk-collateral', '/risk/collateral', 800], ['configurations-curves', '/configurations/market-data/curves', 1200],
-    ['configurations-modules', '/configurations/modules', 800], ['counterparties', '/configurations/counterparties', 800],
+    ['counterparties', '/configurations/counterparties', 800],
     ['methodology', '/methodology', 800], ['roadmap', '/roadmap', 500],
   ]) {
     await app.goto(path)

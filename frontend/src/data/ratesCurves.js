@@ -302,7 +302,7 @@ export const RATES_CURVES = [
     calendar: 'Switzerland()', settlementDays: 2, bdc: 'ModifiedFollowing',
     payFreq: 'Annual', payLag: 2, telescopic: true,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#f09382', liquidityHorizon: '30Y',
+    color: '#f0828c', liquidityHorizon: '30Y',
     instruments: [
       { en: true, type: 'OISDeposit', tenor: 'ON',  ticker: 'SARON Index',         quote: 0.420, unit: '%' },
       { en: true, type: 'OIS',        tenor: '1W',  ticker: 'SFSNT1Z BGN Curncy',  quote: 0.410, unit: '%' },
