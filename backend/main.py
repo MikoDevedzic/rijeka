@@ -1,8 +1,16 @@
 """Rijeka: the FastAPI application. Routers, CORS, the unhandled-error envelope, the in-process scheduler."""
 import logging
 import os
+import time
 
-os.environ["TZ"] = "America/New_York"          # the desk's clock, before anything reads the time
+# The desk's clock. Setting TZ alone changes nothing on Linux: glibc reads TZ once, and `import time` (which
+# `import logging` above already did, as has any server or test runner that imports this) is that read. The
+# process kept the host's zone, UTC on Render, until something called tzset() for it (the first strptime does),
+# and date.today() changed under a running process between 19:00 and midnight New York. tzset() here makes it
+# New York from this line on.
+os.environ["TZ"] = "America/New_York"
+if hasattr(time, "tzset"):                      # not on Windows, where TZ is read by the C runtime at start
+    time.tzset()
 
 # Under uvicorn the root logger has no handler at INFO, so every log.info in the batches and the
 # auth layer was dropped on Render. One configuration, env-driven; uvicorn keeps its own loggers.

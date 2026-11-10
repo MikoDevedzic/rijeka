@@ -131,6 +131,24 @@ def _bearer(uid: str, email: str, role: str = "trader", **kw) -> dict:
     return {"Authorization": f"Bearer {mint(uid, email, role, **kw)}"}
 
 
+def set_role(uid: str, role: str) -> None:
+    """profiles.role for a stack user, and the API's copy of it dropped in the same step.
+
+    The auth layer keeps each user's role for 30 s. A test that changed the row alone left the cache to the clock:
+    test_ipv holds user A as a controller for most of a minute, the cache re-read "controller" inside that window,
+    and the first trader-only request within 30 s of it (a later test's POST /price) was refused with 403. Whether
+    that happened depended on how fast the machine ran the suite (CI, 10 November 2026)."""
+    import sqlalchemy as sa
+    from middleware.auth import forget_role
+    eng = sa.create_engine(os.environ["DATABASE_URL"])
+    try:
+        with eng.begin() as c:
+            c.execute(sa.text("UPDATE profiles SET role = :r WHERE id = :id"), {"r": role, "id": uid})
+    finally:
+        eng.dispose()
+        forget_role(uid)
+
+
 @pytest.fixture(scope="session")
 def auth_a(stack) -> dict:
     return _bearer(USER_A, EMAIL_A)

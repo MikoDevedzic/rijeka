@@ -5,14 +5,11 @@ import os
 
 import sqlalchemy as sa
 
-from tests.integration.conftest import USER_A
+from tests.integration.conftest import USER_A, set_role
 
 
 def _set_role(role: str) -> None:
-    eng = sa.create_engine(os.environ["DATABASE_URL"])
-    with eng.begin() as c:
-        c.execute(sa.text("UPDATE profiles SET role = :r WHERE id = :id"), {"r": role, "id": USER_A})
-    eng.dispose()
+    set_role(USER_A, role)               # the row and the API's cached copy of it, together
 
 
 def test_modules_read_write_and_audit(client, auth_a, auth_b):

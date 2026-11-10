@@ -51,3 +51,19 @@ def test_the_profile_decides_and_a_new_role_is_read_once_the_cache_is_dropped(cl
             c.execute(sa.text("DELETE FROM auth.users WHERE id = :id"), {"id": uid})
         eng.dispose()
         forget_role(uid)
+
+
+def test_set_role_changes_the_row_and_the_copy_the_api_holds(client, auth_a):
+    """The helper the other tests use to change a role. With its forget_role removed the 403 assertion fails:
+    the auth layer still holds "trader" from the request before it (Vera, 9 November 2026)."""
+    from tests.integration.conftest import USER_A, set_role
+    nothing = {"trade_id": str(uuid.uuid4()), "curves": [{"curve_id": "USD_SOFR"}]}      # no such trade: only the role check is of interest
+    try:
+        set_role(USER_A, "trader")
+        assert client.post("/price", json=nothing, headers=auth_a).status_code != 403     # and the copy now says trader
+        set_role(USER_A, "viewer")
+        assert client.post("/price", json=nothing, headers=auth_a).status_code == 403     # at once, not 30 s later
+        set_role(USER_A, "trader")
+        assert client.post("/price", json=nothing, headers=auth_a).status_code != 403
+    finally:
+        set_role(USER_A, "trader")

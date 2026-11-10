@@ -162,7 +162,9 @@ def _install_signals() -> None:
 
 def main() -> None:
     logging.basicConfig(level=os.getenv("RIJEKA_LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    os.environ.setdefault("TZ", "America/New_York")
+    os.environ["TZ"] = "America/New_York"          # the desk's clock, as main.py sets it: the API and the worker agree on today
+    if hasattr(time, "tzset"):
+        time.tzset()                     # glibc reads TZ once, at `import time`: setting the variable is not enough
     _install_signals()
     loop()
 

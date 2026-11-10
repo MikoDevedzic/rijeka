@@ -86,7 +86,15 @@ the repository.
 | `TELEGRAM_WEBHOOK_SECRET` | `chain/telegram.py` | empty | Secret the webhook must carry. |
 | `RIJEKA_PUBLIC_URL` | `chain/telegram.py` | empty | Where deep links in mirrored cards point. |
 
-`TZ` is set to `America/New_York` by `main.py` itself: the desk's clock.
+`TZ` is set to `America/New_York` by `main.py` itself, which then calls `time.tzset()`: the desk's clock, from the
+moment `main` is imported, whatever zone the host is in. The call matters: the C library on Linux reads `TZ` once,
+when Python imports `time`, so the variable alone left the process on the host's zone (UTC on Render) until the first
+timestamp was parsed. `worker.py` sets the same zone the same way, so the API and the worker agree on today; a `TZ`
+set on the host is overridden by both. The database keeps its own clock: `current_date` and a `::date` cast in a
+query are in the server's zone (UTC in CI and by default on Supabase), a day ahead of the desk's between 19:00 and
+midnight New York. `api/routes/public.py` and `api/routes/demo.py` ask for rows dated up to `current_date`, which is
+never behind the desk's date; `api/routes/usage.py` groups sign-ups, trades and confirmations by the database's day
+and lays them on the desk's, so an evening event is counted under the next day.
 
 ## App (frontend)
 

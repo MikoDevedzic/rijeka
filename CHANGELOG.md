@@ -26,6 +26,19 @@ pointer.
   writes in a three-second drag). It now moves as one transform a frame and is rendered once, on release; a press
   that does not travel changes nothing. The blotter's row highlight no longer fades behind a moving pointer. The
   footer sits on the bottom edge when a tab is shorter than the window, and the schedule headers stay on one line.
+- **The desk's clock is New York from the first line.** `main.py` set `TZ` and nothing else. The C library on Linux
+  reads `TZ` once, when Python imports `time`, so the API stayed on the host's zone (UTC on Render) until the first
+  timestamp was parsed, and today's date changed under it: between 19:00 and midnight New York the same process
+  could store a mark under one date and look for it under another. `main.py` and the worker now call
+  `time.tzset()`, and the worker sets the zone outright as the API does. Found by CI, which ran this branch at
+  00:24 UTC; `backend/tests/test_desk_clock.py` holds both processes. That it happened on Render is read from how
+  CPython and glibc work, not observed there.
+- **Tests that change a role drop the API's copy of it.** The auth layer keeps a user's role for 30 seconds. Two
+  integration tests set a role in the table directly and left the cache to the clock, so whether a later
+  trader-only call was refused depended on how fast the machine ran the suite: it passed on the Mac and on two
+  slower CI runs and failed on one in between. `tests/integration/conftest.py::set_role` does both, and a test in
+  `test_roles.py` fails if it stops. Known and not changed here: the admin's Users screen writes a role straight to
+  the table, so the API honours that change up to 30 seconds late.
 - Journeys: a drag of the rates and the crypto ticket rewrites nothing inside it; a price landing while a booking is
   out; the term sheet and captions in a browser that writes decimals with a comma. The smoothness profile
   (`frontend/e2e/perf`, its own config) is a local measurement, not a gate.
