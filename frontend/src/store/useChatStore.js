@@ -105,7 +105,10 @@ export const useChatStore = create((set, get) => ({
 
   refreshRooms: async () => {
     const rooms = await chatApi('/rooms')
-    set({ rooms })
+    // Only a list is the rooms. A 200 whose body could not be read comes back from `api` as {} (a request cut off
+    // while its body was arriving); taken as the rooms, it crashed every page that shows the unread count
+    // ("rooms.reduce is not a function", caught by the page's boundary). The rooms it has stay until a list arrives.
+    if (Array.isArray(rooms)) set({ rooms })
   },
 
   subscribe: () => {
@@ -295,7 +298,7 @@ function roomOrder(a, b) {
 }
 
 export const selectUnreadTotal = s =>
-  s.rooms.reduce((n, r) => n + (r.my_access === 'INVITED' ? 1 : r.unread || 0), 0)
+  (Array.isArray(s.rooms) ? s.rooms : []).reduce((n, r) => n + (r.my_access === 'INVITED' ? 1 : r.unread || 0), 0)
 
 // Who can read a conversation, in words, for headers and the composer.
 export function audience(room, me) {

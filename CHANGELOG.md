@@ -31,6 +31,10 @@ first leg alone on these three.
 - **Fixed on the way:** a leg whose type had just been changed drew its strike as not-a-number on the DETAILS
   chart until its new price arrived (console errors, no wrong figure). The note on DETAILS that said the other
   tabs show the first leg now says what they show.
+- **Chat: a rooms answer that could not be read no longer crashes the page.** A 200 whose body was cut off was
+  taken as the list of rooms and every page showing the unread count fell to its error boundary ("rooms.reduce is
+  not a function"). Found by CI: a journey's page recorded it once and the SYSTEM page's journey, which lists
+  browser errors, failed on it. What cut the answer off in that run was not established.
 - **Evidence and what is missing:** the package's scenario is held to the single-trade closed form leg by leg,
   and one figure was derived independently of the code (agreement to 1e-10). There is no comparison with the
   engine or an outside reference for a package, no Excel replication of the sum and no methodology section
