@@ -40,7 +40,7 @@ const S = {
   toolbar:{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' },
   toolBtn:(color)=>({ fontSize:'12px', color:color||C.accent, background:color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.08)`:'rgba(13,212,168,0.08)', border:`1px solid ${color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.25)`:'rgba(13,212,168,0.2)'}`, borderRadius:'2px', padding:'3px 10px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em' }),
   tbl:{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' },
-  th:{ fontSize:'12px', color:C.dim, letterSpacing:'0.07em', padding:'4px 4px', textAlign:'left', borderBottom:'1px solid '+C.border, fontWeight:400 },
+  th:{ fontSize:'12px', color:C.dim, letterSpacing:'0.07em', padding:'4px 4px', textAlign:'left', borderBottom:'1px solid '+C.border, fontWeight:400, whiteSpace:'nowrap' },   // a header on two lines pushes its leg's rows below the other leg's
   td:{ padding:'2px 3px', borderBottom:'1px solid var(--border)' },
   cell:{ fontSize: '12px', fontFamily:'var(--mono)', background:C.panel2, border:'1px solid '+C.border, borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', outline:'none', color:C.text, WebkitAppearance:'none', MozAppearance:'textfield', appearance:'textfield' },
   cellRo:{ fontSize: '12px', fontFamily:'var(--mono)', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', color:C.muted, userSelect:'none' },
@@ -367,11 +367,11 @@ export default function LegDetailsTab({
                 {!loading && (
                   <table style={S.tbl}>
                     <thead><tr>
-                      <th style={{...S.th,width:'19%'}}>ACCR START</th>
-                      <th style={{...S.th,width:'19%'}}>ACCR END</th>
-                      <th style={{...S.th,width:'19%'}}>PAY DATE</th>
+                      <th style={{...S.th,width:'17%'}}>ACCR START</th>
+                      <th style={{...S.th,width:'17%'}}>ACCR END</th>
+                      <th style={{...S.th,width:'17%'}}>PAY DATE</th>
                       <th style={{...S.th,width:'20%'}}>NOTIONAL</th>
-                      <th style={{...S.th,width:'17%'}}>COUPON %</th>
+                      <th style={{...S.th,width:'23%'}}>COUPON %</th>
                       <th style={{...S.th,width:'6%'}}></th>
                     </tr></thead>
                     <tbody>
@@ -450,14 +450,14 @@ export default function LegDetailsTab({
                 {!loading && (
                   <table style={S.tbl}>
                     <thead><tr>
-                      <th style={{...S.th,width:isEmbedded?'16%':'19%'}}>ACCR START</th>
-                      <th style={{...S.th,width:isEmbedded?'16%':'19%'}}>ACCR END</th>
-                      <th style={{...S.th,width:isEmbedded?'16%':'19%'}}>PAY DATE</th>
+                      <th style={{...S.th,width:isEmbedded?'15%':'17%'}}>ACCR START</th>
+                      <th style={{...S.th,width:isEmbedded?'15%':'17%'}}>ACCR END</th>
+                      <th style={{...S.th,width:isEmbedded?'15%':'17%'}}>PAY DATE</th>
                       <th style={{...S.th,width:isEmbedded?'15%':'17%'}}>NOTIONAL</th>
                       <th style={{...S.th,width:isEmbedded?'11%':'13%'}}>INDEX</th>
-                      <th style={{...S.th,width:isEmbedded?'9%':'10%'}}>SPRD BP</th>
-                      {isEmbedded && <th style={{...S.th,width:'14%', color:C.amber}}>{isCapped ? 'CAP K %' : 'FLR K %'}</th>}
-                      <th style={{...S.th,width:'3%'}}></th>
+                      <th style={{...S.th,width:isEmbedded?'12%':'14%'}}>SPRD BP</th>
+                      {isEmbedded && <th style={{...S.th,width:'13%', color:C.amber}}>{isCapped ? 'CAP K %' : 'FLR K %'}</th>}
+                      <th style={{...S.th,width:isEmbedded?'4%':'5%'}}></th>
                     </tr></thead>
                     <tbody>
                       {floatRows.length===0&&<tr><td colSpan={isEmbedded?8:7} style={S.td}><div style={S.emptyRow}>Price the trade first or drag/paste a schedule.</div></td></tr>}

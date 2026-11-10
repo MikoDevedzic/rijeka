@@ -781,7 +781,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                quote_curve_snapshot=str(getattr(q_curve, "snapshot_date", "") or ""),
                forward_mode=mode, forward_source=f_src, implied_forward=implied.forward, implied_points=implied.forward_points,
                market_points=mkt_pts, basis_points=basis_pts,
-               model="F = S·DF_base/DF_quote (parity) or S + quoted points (market); NPV_quote = ±N_base·(F−K)·DF_quote; ACT/365")
+               model="F = S·DF_base/DF_quote from the spot date (parity) or S + quoted points (market); NPV_quote = ±N_base·(F−K)·DF_quote; ACT/365")
     # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the
     # funding rate's is FUND01; on a currency pair both legs are rate curves and IR01 is their sum
     out["crypto"] = crypto
@@ -935,7 +935,7 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
                quote_curve_snapshot=fwd["quote_curve_snapshot"], forward_mode=fwd["forward_mode"], forward_source=fwd["forward_source"],
                implied_forward=fwd["implied_forward"], market_points=fwd["market_points"], basis_points=fwd["basis_points"],
                forward_points=fwd["forward_points"], df_base=fwd["df_base"], quote_rate=fwd["quote_rate"], base_rate=fwd["base_rate"],
-               t=fwd["t"], quote_notional=base_notional * K,
+               t=fwd["t"], t_spot=fwd.get("t_spot", 0.0), quote_notional=base_notional * K,
                model=f"{out.get('method', 'Garman–Kohlhagen')} on the forward to settlement; σ from the pair's ATM/RR25/BF25 surface (Malz smile in delta); ACT/365")
     return out
 

@@ -28,7 +28,7 @@ import { NOT_A_NUMBER, crybasis01, formatRead, parseNumber } from './fx-ticket'
 import {
   FIXING_DAYS, FX_SPOT_LAG_DAYS, SPOT_BOUND_PCT, applyTenorDrag, carryFactor, carryPoints, chartLevels, curveNodes, daysBetween,
   fixingSeries, fixingTime, interpPoints, latestFixing, modelWords, reprice, rippleWeights, settledFacts, settledState, settlementAmount, shockedCurve,
-  spotLagDays, spotPctFromDrag, strikeAsBooked, styleTerms, tenorBounds, tenorMap,
+  signedChange, spotLagDays, spotPctFromDrag, strikeAsBooked, styleTerms, tenorBounds, tenorMap,
 } from './fx-scenario'
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 // The window's footer is sticky at its bottom (styles.css .tbw-footer: 10px padding above and below a 12px label,
@@ -36,7 +36,12 @@ const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 // never under the footer.
 const FOOTER_H = 56
 
-const fmt = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d })
+// A figure that rounds to nothing at the precision it is shown at is nothing: no minus sign in front of the
+// zero and no colour. An at-the-money trade is worth 0, not a red -0.
+const shown = (n, d = 0) => { const r = Number(n); return Math.abs(r) < 0.5 * 10 ** -d ? 0 : r }
+// en-US whatever the browser's language, like the fields and the footer: one tab never mixes 12.345 and 12,345
+const fmt = (n, d = 0) => n == null || isNaN(n) ? '—' : shown(n, d).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d })
+const tone = (n, d = 0) => { if (n == null || isNaN(n)) return 'var(--text-dim)'; const r = shown(n, d); return r > 0 ? 'var(--green)' : r < 0 ? 'var(--red)' : 'var(--text)' }
 const rateDp = (q) => q?.base_currency && ['BTC', 'ETH', 'SOL'].includes(q.base_currency) ? 2 : q?.pair === 'USDJPY' ? 3 : 5
 const secHdr = { fontSize: 12, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--text)', fontFamily: 'var(--sans)', paddingLeft: 10, borderLeft: '3px solid var(--accent)', lineHeight: 1.2, margin: '14px 0 10px' }
 const lbl = { fontSize: '0.8rem', letterSpacing: '0.12em', color: 'var(--text-dim)', fontFamily: 'var(--mono)' }
@@ -86,8 +91,8 @@ function Grid({ items, cols = 3, min }) {
 // quote has its pricing fields. The three tabs then state those facts as the API sent them. Nothing below is
 // computed here: no forward, no payoff, no discounting.
 const dot = (...parts) => parts.filter(p => p != null && p !== '').join(' · ')
-const signed = (n, d = 2) => (n == null ? '—' : `${n > 0 ? '+' : ''}${fmt(n, d)}`)
-const signedDelta = (x, base) => (x == null || base == null ? '—' : `${x - base >= 0 ? '+' : ''}${fmt(x - base)}`)
+const signed = (n, d = 2) => (n == null ? '—' : `${shown(n, d) > 0 ? '+' : ''}${fmt(n, d)}`)
+const signedDelta = (x, base) => (x == null || base == null ? '—' : `${shown(x - base) > 0 ? '+' : ''}${fmt(x - base)}`)
 const ORIGIN = { FEED: 'from the feed', MANUAL: 'entered by the desk' }
 
 // Why the figures are provisional, in plain words. When the amount hangs on a knock state nobody recorded, the
@@ -161,13 +166,16 @@ export function FxDetailsPanel({ stale = false, active = true, ...rest }) {
   return <StaleFrame stale={stale && !!rest.quote} active={active}><DetailsBody {...rest} /></StaleFrame>
 }
 
-function DetailsBody({ quote, terms, crypto }) {
+function DetailsBody({ quote, terms, crypto, booked = false }) {
   if (!quote) return <Empty what="The terms" />
   const t = terms || {}
   const ndf = quote.shape === 'NDF' || t.settlement_type === 'NON_DELIVERABLE'
   const dp = rateDp(quote)
   const done = settledState(quote)                 // FIXED or SETTLED: the body has the settled facts and no pricing fields
-  const sheet = done ? 'TERM SHEET · AS BOOKED' : 'TERM SHEET · AS IT WILL BE BOOKED'
+  // AS BOOKED once there is a trade behind these terms: settled, opened from the blotter, or just booked from this quote
+  const sheet = (done || booked) ? 'TERM SHEET · AS BOOKED' : 'TERM SHEET · AS IT WILL BE BOOKED'
+  // a digital asset's spot settles today, so its discount factors already run from where the forward is carried from
+  const fromToday = crypto ? '' : ' from today'
   const settledBlock = done && (<>
     <div style={secHdr}>{done === 'SETTLED' ? 'SETTLEMENT' : 'FIXING · NOT YET SETTLED'}</div>
     <SettledFacts quote={quote} terms={t} crypto={crypto} />
@@ -236,10 +244,12 @@ function DetailsBody({ quote, terms, crypto }) {
         ['SPOT', fmt(quote.spot, dp), `${quote.spot_source || ''}`],
         ['FAIR FORWARD', fmt(quote.forward, dp), `${fmt(quote.forward_points, crypto ? 2 : 1)} ${crypto ? quote.quote_currency : 'pts'} · ${quote.forward_mode === 'MARKET' && quote.market_points != null ? 'quoted points' : crypto ? 'implied from the carry rate' : 'implied from yields'}`],
         ['PARITY FORWARD', fmt(quote.implied_forward, dp), quote.basis_points != null ? `basis ${fmt(quote.basis_points, crypto ? 2 : 1)} vs quoted` : 'no quoted points'],
-        [`${quote.quote_currency} CURVE`, quote.quote_curve || '—', `DF ${fmt(quote.df_quote, 6)} · zero ${fmt(quote.quote_rate * 100, 3)}%${quote.quote_curve_snapshot ? ' · ' + quote.quote_curve_snapshot : ''}`],
+        [`${quote.quote_currency} CURVE`, quote.quote_curve || '—', `DF ${fmt(quote.df_quote, 6)}${fromToday} · zero ${fmt(quote.quote_rate * 100, 3)}%${quote.quote_curve_snapshot ? ' · ' + quote.quote_curve_snapshot : ''}`],
         // "funding" is the desk's spread on the XVA tab; the rate that carries a digital asset to its forward is its carry rate
-        [crypto ? `${quote.base_currency} CARRY RATE` : `${quote.base_currency} CURVE`, quote.base_discounting || '—', `DF ${fmt(quote.df_base, 6)} · ${crypto ? 'rate' : 'zero'} ${fmt(quote.base_rate * 100, 3)}%`],
-        ['MODEL', crypto ? 'F = S·e^(−r_carry·T)/DF_quote' : 'F = S·DF_base/DF_quote', 'NPV = ±N·(F − K)·DF_quote'],
+        [crypto ? `${quote.base_currency} CARRY RATE` : `${quote.base_currency} CURVE`, quote.base_discounting || '—', `DF ${fmt(quote.df_base, 6)}${fromToday} · ${crypto ? 'rate' : 'zero'} ${fmt(quote.base_rate * 100, 3)}%`],
+        // an FX spot settles on its spot date and the forward carries from there. The two discount factors above run from
+        // today and say so: spot times their ratio is not the forward shown (1.6 pips apart on a 3M EURUSD)
+        ['MODEL', crypto ? 'F = S·e^(−r_carry·T)/DF_quote' : 'F = S·DF_base/DF_quote, both from the spot date', crypto ? 'NPV = ±N·(F − K)·DF_quote' : 'NPV = ±N·(F − K)·DF_quote, from today'],
       ]} />
       </>)}
       <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Terms are edited on the TRADE tab; this is the record the counterparty will sign.</div>
@@ -269,7 +279,7 @@ function CashflowsBody({ quote, crypto }) {
                 <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{f.fx ? `against ${dot(f.fx.source, f.fx.date, f.time)}` : `no fixing stored for ${f.source || 'the named source'}${f.fixDate ? ` on ${f.fixDate}` : ''}`}</div></td>
               <td style={{ ...td, borderBottom: 'none' }}>{f.settlementDate || '—'}</td>
               <td style={{ ...td, borderBottom: 'none' }}>{fmt(f.priceUsed, rateDp(quote))}</td>
-              <td style={{ ...td, borderBottom: 'none', fontWeight: 700, color: f.amount == null ? 'var(--text-dim)' : f.amount >= 0 ? 'var(--green)' : 'var(--red)' }}>{f.amount == null ? '—' : `${signed(f.amount)} ${quote.quote_currency}`}</td>
+              <td style={{ ...td, borderBottom: 'none', fontWeight: 700, color: tone(f.amount, 2) }}>{f.amount == null ? '—' : `${signed(f.amount)} ${quote.quote_currency}`}</td>
             </tr>
           </tbody>
         </table>
@@ -297,11 +307,11 @@ function CashflowsBody({ quote, crypto }) {
           <thead><tr><th style={{ ...th, textAlign: 'left' }}>FLOW</th><th style={th}>DATE</th><th style={th}>AMOUNT</th><th style={th}>DF</th><th style={th}>PV {quote.quote_currency}</th></tr></thead>
           <tbody>
             <tr><td style={tdL}>PREMIUM<div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{sign > 0 ? 'paid' : 'received'} on the trade date; not part of the value after it is paid</div></td>
-              <td style={td}>{quote.valuation_date}</td><td style={{ ...td, color: premium >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(premium)} {quote.quote_currency}</td><td style={td}>1.000000</td><td style={td}>{fmt(premium)}</td></tr>
+              <td style={td}>{quote.valuation_date}</td><td style={{ ...td, color: tone(premium) }}>{fmt(premium)} {quote.quote_currency}</td><td style={td}>1.000000</td><td style={td}>{fmt(premium)}</td></tr>
             <tr><td style={tdL}>{payoutStyle ? 'PAYOUT' : 'PAYOFF AT EXPIRY'}<div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{quote.style === 'TOUCH' ? `${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} ${quote.pay_at_hit ? 'when the barrier is hit' : 'at expiry if ' + ((quote.touch_type || '').includes('NO') ? 'never touched' : 'touched')}; at today's forward the barrier is not reached` : quote.style === 'DIGITAL' ? `${fmt(quote.payout, 0)} ${quote.payout_currency === 'BASE' ? quote.base_currency : quote.quote_currency} if the fixing is ${call ? 'above' : 'below'} ${fmt(quote.strike, dp)}; shown at today's forward` : `max(${call ? 'S − K' : 'K − S'}, 0) × N, at today's forward; the fixing on ${quote.expiry_date} decides${quote.style === 'BARRIER' || quote.style === 'DOUBLE_BARRIER' ? ' and the barrier must not have knocked it out' : ''}`}</div></td>
-              <td style={td}>{quote.settlement_date}</td><td style={{ ...td, color: intrinsic >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(intrinsic)} {quote.quote_currency}</td><td style={td}>{fmt(quote.df_quote, 6)}</td><td style={td}>{fmt(intrinsic * quote.df_quote)}</td></tr>
+              <td style={td}>{quote.settlement_date}</td><td style={{ ...td, color: tone(intrinsic) }}>{fmt(intrinsic)} {quote.quote_currency}</td><td style={td}>{fmt(quote.df_quote, 6)}</td><td style={td}>{fmt(intrinsic * quote.df_quote)}</td></tr>
             <tr><td style={{ ...tdL, fontWeight: 700, borderBottom: 'none' }}>OPTION VALUE</td><td style={{ ...td, borderBottom: 'none' }} colSpan={3}>{quote.time_value != null ? `intrinsic ${fmt(intrinsic * quote.df_quote)} + time value ${fmt(sign * quote.time_value)}` : `${quote.method || ''}`}</td>
-              <td style={{ ...td, fontWeight: 700, borderBottom: 'none', color: quote.npv >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(quote.npv)}</td></tr>
+              <td style={{ ...td, fontWeight: 700, borderBottom: 'none', color: tone(quote.npv) }}>{fmt(quote.npv)}</td></tr>
           </tbody>
         </table>
         <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10, lineHeight: 1.5 }}>
@@ -333,15 +343,15 @@ function CashflowsBody({ quote, crypto }) {
             <tr key={r.leg}>
               <td style={tdL}>{r.leg}<div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{r.note}</div></td>
               <td style={td}>{r.date}</td>
-              <td style={{ ...td, color: r.amount >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(r.amount, crypto && r.ccy !== 'USD' ? 4 : 0)} {r.ccy}</td>
+              <td style={{ ...td, color: tone(r.amount, crypto && r.ccy !== 'USD' ? 4 : 0) }}>{fmt(r.amount, crypto && r.ccy !== 'USD' ? 4 : 0)} {r.ccy}</td>
               {!ndf && <td style={td}>{fmt(r.inQuote)}</td>}
               <td style={td}>{fmt(r.df, 6)}</td>
-              <td style={{ ...td, color: (r.inQuote ?? r.amount) * r.df >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt((r.inQuote ?? r.amount) * r.df)}</td>
+              <td style={{ ...td, color: tone((r.inQuote ?? r.amount) * r.df) }}>{fmt((r.inQuote ?? r.amount) * r.df)}</td>
             </tr>
           ))}
           <tr>
             <td style={{ ...tdL, fontWeight: 700, borderBottom: 'none' }}>NPV</td><td style={{ ...td, borderBottom: 'none' }} colSpan={ndf ? 3 : 4}></td>
-            <td style={{ ...td, fontWeight: 700, borderBottom: 'none', color: pv >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(pv)}</td>
+            <td style={{ ...td, fontWeight: 700, borderBottom: 'none', color: tone(pv) }}>{fmt(pv)}</td>
           </tr>
         </tbody>
       </table>
@@ -417,7 +427,7 @@ function StyleLadder({ crypto, quote, active, stale }) {
         <tbody>{lad.rows.map(r => (
           <tr key={r.spot_pct} style={{ background: r.spot_pct === 0 ? 'var(--accent-glow)' : 'transparent' }}>
             <td style={td}>{r.spot_pct > 0 ? '+' : ''}{r.spot_pct}%</td><td style={td}>{fmt(r.spot, dp)}</td>
-            {vols.map(v => { const x = r.npv[String(v)]; return <td key={v} style={{ ...td, color: x == null ? 'var(--text-mute)' : x >= 0 ? 'var(--green)' : 'var(--red)' }}>{x == null ? '—' : fmt(x)}</td> })}
+            {vols.map(v => { const x = r.npv[String(v)]; return <td key={v} style={{ ...td, color: x == null ? 'var(--text-mute)' : tone(x) }}>{x == null ? '—' : fmt(x)}</td> })}
           </tr>))}</tbody>
       </table>
       <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>At the stored spot, not the dragged one: the engine's own repricing. Base NPV {fmt(lad.base_npv)} at vol {fmt(lad.base_vol_pct, 2)}% · {DELTA_LABEL(crypto)} · 1 % spot {fmt(lad.spot01)} · VEGA · 1 pt {fmt(lad.vega)}. A barrier or touch option's value is not smooth near its barrier; read the whole row, not a slope.</div>
@@ -512,7 +522,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     if (settleX == null) return null
     const quoted = quote.forward_mode === 'MARKET' && quote.market_points != null && !!row?.forward_points && Object.keys(row.forward_points).length > 0
     // points are quoted from the spot date: the lag the quote itself implies, else the market's convention
-    const lag = spotLagDays({ points: quoted ? row.forward_points : null, settleDays: settleX, marketPoints: quote.market_points, crypto, tenorDays }) ?? (crypto ? 0 : FX_SPOT_LAG_DAYS)
+    const lag = spotLagDays({ points: quoted ? row.forward_points : null, settleDays: settleX, marketPoints: quote.market_points, crypto, tSpot: quote.t_spot, tenorDays }) ?? (crypto ? 0 : FX_SPOT_LAG_DAYS)
     const days = Math.max(settleX - lag, 0)
     const nodes = curveNodes(quoted ? row.forward_points : carryPoints({ spot: quote.spot, forward: quote.forward, days, pip, tenorDays }), lag, tenorDays)
     if (!nodes) return null
@@ -559,11 +569,11 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     if (!o || stale) return
     const k = index - 1                                                      // the chart's first point is spot
     if (whole || k < 0) {
-      const ref = k < 0 ? quote.spot : (quote.spot + (nodes[k].points + o.moves[k]) * pip) * carryFactor(rq, rb, nodes[k].x)
+      const ref = k < 0 ? quote.spot : (quote.spot + (nodes[k].points + o.moves[k]) * pip) * carryFactor(rq, rb, nodes[k].days)
       const pct = spotPctFromDrag({ originPct: o.spot, dPrice, ref })
       if (pct != null) setSpot(pct)
     } else {
-      const perPoint = pip * (1 + o.spot / 100) * carryFactor(rq, rb, nodes[k].x)     // so the point stays under the cursor
+      const perPoint = pip * (1 + o.spot / 100) * carryFactor(rq, rb, nodes[k].days)     // so the point stays under the cursor
       const next = applyTenorDrag({ origin: o.moves, weights: rippleWeights(nodes, k), move: dPrice / perPoint, bounds: tenorBounds(nodes, { spot: quote.spot, pip }) })
       if (next) setMoves(Object.fromEntries(nodes.map((n, i) => [n.tenor, next[i]])))
     }
@@ -657,7 +667,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
           <Slider label="SPOT" v={spot} set={setSpot} min={-SPOT_BOUND_PCT} max={SPOT_BOUND_PCT} step={0.5} unit="%" />
           <Slider label={`${quote.quote_currency} CURVE`} v={qbp} set={setQbp} min={-200} max={200} step={5} unit="bp" />
           <Slider label={crypto ? `BASIS (${quote.quote_currency} − ${quote.base_currency}) · 1 bp up = forward up` : `${quote.base_currency} CURVE`} v={bbp} set={setBbp} min={-200} max={200} step={5} unit="bp" />
-          {quotedForward && <div data-testid="fx-scenario-quoted-note" style={{ fontSize: '0.7rem', color: 'var(--text-dim)', margin: '-2px 0 8px' }}>on quoted points the pricer holds the forward; these sliders show the carry effect only</div>}
+          {quotedForward && <div data-testid="fx-scenario-quoted-note" style={{ fontSize: '0.7rem', color: 'var(--text-dim)', margin: '-2px 0 8px' }}>on quoted points the pricer holds the forward when a curve moves: the two curve sliders show the carry effect only, and a spot shock scales the points with spot</div>}
           {option && <Slider label="VOL" v={vpt} set={setVpt} min={-5} max={5} step={0.25} unit="pt" />}
           {resetButton}
         </div>
@@ -667,8 +677,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
             <Grid cols={2} items={[
               forwardTile,
               [`NPV ${quote.quote_currency}`, fmt(now.npv), `base ${fmt(base.npv)}`],
-              ['ΔNPV', (d(now.npv) >= 0 ? '+' : '') + fmt(d(now.npv)), 'vs base'],
-              ['FIRST ORDER', (firstOrder >= 0 ? '+' : '') + fmt(firstOrder), `${DELTA_LABEL(crypto)}·Δspot + ${crypto ? 'IR01·Δbp + CRYBASIS01·Δbp' : 'IR01s·Δbp'}${option ? ' + VEGA·Δvol' : ''}${tenorsMoved ? ' · without the dragged tenors' : ''}`],
+              ['ΔNPV', signedChange(d(now.npv)), 'vs base'],
+              ['FIRST ORDER', signedChange(firstOrder), `${DELTA_LABEL(crypto)}·Δspot + ${crypto ? 'IR01·Δbp + CRYBASIS01·Δbp' : 'IR01s·Δbp'}${option ? ' + VEGA·Δvol' : ''}${tenorsMoved ? ' · without the dragged tenors' : ''}`],
             ]} />
           </div>
           <div>
@@ -682,8 +692,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 <span style={{ ...lbl, fontSize: '0.76rem' }}>SETTLEMENT AMOUNT</span>
-                <span data-testid="fx-scenario-settlement" data-value={amount ?? ''} style={{ fontFamily: 'var(--mono)', fontSize: '0.9375rem', color: amount == null ? 'var(--text-dim)' : amount >= 0 ? 'var(--green)' : 'var(--red)' }}>
-                  {amount == null ? '—' : `${amount > 0 ? '+' : ''}${fmt(amount, 2)} ${quote.quote_currency}`}
+                <span data-testid="fx-scenario-settlement" data-value={amount ?? ''} style={{ fontFamily: 'var(--mono)', fontSize: '0.9375rem', color: tone(amount, 2) }}>
+                  {amount == null ? '—' : `${signed(amount)} ${quote.quote_currency}`}
                 </span>
               </div>
               {fixingBad && <div data-testid="fx-scenario-fixing-invalid" style={{ fontSize: '0.7rem', color: 'var(--amber)', marginTop: 4 }}>the fixing is {NOT_A_NUMBER}</div>}
@@ -701,10 +711,11 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr><th style={th}>SPOT</th><th style={th}>LEVEL</th><th style={th}>FORWARD</th><th style={th}>NPV</th><th style={th}>ΔNPV</th></tr></thead>
             <tbody>{spotLadder.map(s => { const r = at({ spotPct: s }) || none; return (
-              <tr key={s} style={{ background: s === 0 ? 'var(--accent-glow)' : 'transparent' }}>
+              <tr key={s} data-testid={s === 0 ? 'fx-scenario-base' : undefined} data-forward={s === 0 ? r.forward ?? '' : undefined} data-npv={s === 0 ? r.npv ?? '' : undefined}
+                  style={{ background: s === 0 ? 'var(--accent-glow)' : 'transparent' }}>
                 <td style={td}>{s > 0 ? '+' : ''}{s}%</td><td style={td}>{fmt(quote.spot * (1 + s / 100), dp)}</td><td style={td}>{fmt(r.forward, dp)}</td>
-                <td style={{ ...td, color: r.npv >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(r.npv)}</td>
-                <td style={{ ...td, color: d(r.npv) >= 0 ? 'var(--green)' : 'var(--red)' }}>{signedDelta(r.npv, base.npv)}</td>
+                <td style={{ ...td, color: tone(r.npv) }}>{fmt(r.npv)}</td>
+                <td style={{ ...td, color: tone(d(r.npv)) }}>{signedDelta(r.npv, base.npv)}</td>
               </tr>) })}</tbody>
           </table>
           <div data-testid="fx-spot-ladder-note" style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 6 }}>at the stored spot, not the dragged one: each row is the closed form at that spot; the rate ladder keeps the dragged spot</div>
@@ -716,8 +727,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
             <tbody>{rateLadder.map(b => { const bb0 = crypto ? -b : b; const r = at({ quoteBp: b, baseBp: bb0 }) || none; const q = at({ quoteBp: b, baseBp: 0 }) || none; const bb = at({ quoteBp: 0, baseBp: bb0 }) || none; return (
               <tr key={b} style={{ background: b === 0 ? 'var(--accent-glow)' : 'transparent' }}>
                 <td style={td}>{b > 0 ? '+' : ''}{b}bp</td><td style={td}>{fmt(r.forward, dp)}</td>
-                <td style={{ ...td, color: r.npv >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(r.npv)}</td>
-                <td style={{ ...td, color: d(r.npv) >= 0 ? 'var(--green)' : 'var(--red)' }}>{signedDelta(r.npv, base.npv)}</td>
+                <td style={{ ...td, color: tone(r.npv) }}>{fmt(r.npv)}</td>
+                <td style={{ ...td, color: tone(d(r.npv)) }}>{signedDelta(r.npv, base.npv)}</td>
                 <td style={td}>{signedDelta(q.npv, base.npv)}</td><td style={td}>{signedDelta(bb.npv, base.npv)}</td>
               </tr>) })}</tbody>
           </table>

@@ -20,6 +20,13 @@ Learned on 9 November 2026 (0.14.0)
 - Journeys run in one locale. Any field that writes and reads numbers gets a journey in a comma-decimal locale (`test.use({ locale: 'de-DE' })`): on 9 November 2026 a default written as `1,08345` was read back as 108345 and priced.
 - Before a release a new user will see, a fresh agent looks at the screenshots as that user and checks the arithmetic from the screen itself (forward against spot, a strike against the forward, a fixing time against an expiry time). It found ten things no journey or code review had.
 
+Learned on 9 November 2026 (the scenario tab and the as-booked label)
+- "Every screen was tested" is a list: the product, each tab opened, and what was read on it. On 9 November 2026 the ticket had shipped twice before anyone opened DETAILS, CASHFLOWS, XVA, CURVE SCENARIO and CONFIRM for each product in one pass; the pass found a scenario base that disagreed with the price beside it.
+- A precondition a journey states ("this pair prices by parity") is asserted in the journey from the answer the page received, and checked against the default the code has, not the one the author remembers.
+- A label that claims a state ("AS BOOKED") gets a journey that takes the state away again: change a term, press NEW TRADE, and read the label each time.
+- A fix for a race gets a journey that holds the request open and changes the screen meanwhile, and that journey is run once against the old behaviour to see it fail. A journey that never failed has shown nothing.
+- A number format is read in a browser set to another language (`locale: 'de-DE'`) on every tab, not only in the fields.
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.

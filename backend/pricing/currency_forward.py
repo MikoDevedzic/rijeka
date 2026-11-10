@@ -68,6 +68,7 @@ class CurrencyForwardResult:
     ir01_base: float = 0.0          # +1 bp on the base-currency curve (crypto: the funding rate, FUND01)
     spot01: float = 0.0             # dNPV for +1 % spot: FX01 for a pair, CRY01 for a digital asset (SIMM delta convention)
     theta: float = 0.0              # one day's carry: NPV one day later, same spot and curves
+    t_spot: float = 0.0             # T_s: valuation date to the spot date the forward is carried from; 0 when spot settles at once
 
 
 def year_fraction(valuation_date: date, settlement_date: date) -> float:
@@ -165,5 +166,5 @@ def price_currency_forward(
         base_rate=_zero(df_b, t), quote_rate=_zero(df_q, t), implied_carry=(F / spot - 1.0) / t,
         delta_quote_per_pct=sign * base_notional * df_q * F * 0.01,
         delta_base_units=sign * base_notional * df_q * F / spot,
-        rho_base_per_bp=npv_b - npv, rho_quote_per_bp=npv_q - npv,
+        rho_base_per_bp=npv_b - npv, rho_quote_per_bp=npv_q - npv, t_spot=t_s,
     )

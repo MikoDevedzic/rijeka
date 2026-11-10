@@ -398,7 +398,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       spot01: `NPV(F·1.01) − NPV\nthe forward moves one for one with spot; the discounting does not`,
       vega: `NPV(σ + 1pt) − NPV\nrepriced at ${fmt(r.vol_pct + 1, 2)}%`,
       ir01: crypto ? `NPV(DF_${qc}·e^(−1bp·T), F·e^(+1bp·T)) − NPV\nthe ${qc} curve alone: the forward up by the carry, DF down` : `IR01 ${qc} + IR01 ${r.base_currency}\n+1bp on each curve, repriced`,
-      crybasis01: `NPV(F·e^(+1bp·T)) − NPV\n+1bp a year on the forward basis: the forward up by the carry (−FUND01)`,
+      crybasis01: `NPV − NPV(F·e^(−1bp·T))\n+1bp a year on the forward basis: −1bp on the carry rate, the ${qc} curve held (−FUND01)`,
       theta: `NPV(T − 1/365) − NPV\nsame spot, curves and vol, one calendar day later`,
     }
   }
@@ -430,27 +430,29 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       ['MODEL', r.method || 'Garman–Kohlhagen', r.model || ''],
     ] }),
   } }
+  // each caption is the engine's own expression (backend/pricing/currency_forward.py) with its sign: ± is + for a
+  // BUY and − for a SELL, so the formula beside a negative tile is not a positive one
   const forwardDescriptor = { analytics: {
     metrics: (r) => [
-      { label: 'NET NPV', value: money(r.npv), colorBy: sgn(r.npv), math: `±N·(F − K)·DF_${qc}\nF = S·DF_${r.base_currency}/DF_${qc} = ${fmt(r.forward, dp)} · K ${fmt(r.forward_rate, dp)} · DF ${fmt(r.df_quote, 6)}` },
-      { label: sensLabel(DELTA_LABEL(crypto)), value: money(spot01(r)), colorBy: sgn(spot01(r)), math: `N·S·DF_${r.base_currency}·1%\nexact: a forward is linear in spot` },
+      { label: 'NET NPV', value: money(r.npv), colorBy: sgn(r.npv), math: `±N·(F − K)·DF_${qc}\nF = S·DF_${r.base_currency}/DF_${qc}${crypto ? '' : ' (spot date to settlement)'} = ${fmt(r.forward, dp)} · K ${fmt(r.forward_rate, dp)} · DF_${qc} ${fmt(r.df_quote, 6)}${crypto ? '' : ' from today'}` },
+      { label: sensLabel(DELTA_LABEL(crypto)), value: money(spot01(r)), colorBy: sgn(spot01(r)), math: `±N·F·DF_${qc}·1%\nexact: a forward is linear in spot` },
       ...(crypto
-        ? [{ label: sensLabel('IR01'), value: money(ir01(r)), colorBy: sgn(ir01(r)), math: `−N·K·[DF_${qc}·e^(−1bp·T) − DF_${qc}]\nthe ${qc} discounting curve alone` },
-           { label: sensLabel('CRYBASIS01'), value: money(crybasis01(r)), colorBy: sgn(crybasis01(r)), math: `N·S·[DF_${r.base_currency}·e^(+1bp·T) − DF_${r.base_currency}]\n+1bp a year on the forward basis: the forward up by the carry (−FUND01)` }]
+        ? [{ label: sensLabel('IR01'), value: money(ir01(r)), colorBy: sgn(ir01(r)), math: `±N·K·DF_${qc}·[1 − e^(−1bp·T)]\nthe ${qc} discounting curve alone` },
+           { label: sensLabel('CRYBASIS01'), value: money(crybasis01(r)), colorBy: sgn(crybasis01(r)), math: `±N·F·DF_${qc}·[1 − e^(−1bp·T)]\n+1bp a year on the forward basis: −1bp on the carry rate, the ${qc} curve held (−FUND01)` }]
         // a currency pair: each currency's curve on its own (their sum reads as zero when the two offset)
-        : [{ label: sensLabel(`${qc} IR01`, SENS_UNITS.IR01), value: money(ir01Disc(r)), colorBy: sgn(ir01Disc(r)), math: `−N·K·[DF_${qc}·e^(−1bp·T) − DF_${qc}]\nthe ${qc} curve alone` },
-           { label: sensLabel(`${r.base_currency} IR01`, SENS_UNITS.IR01), value: money(ir01Base(r)), colorBy: sgn(ir01Base(r)), math: `N·S·[DF_${r.base_currency}·e^(−1bp·T) − DF_${r.base_currency}]\nthe ${r.base_currency} curve alone` }]),
+        : [{ label: sensLabel(`${qc} IR01`, SENS_UNITS.IR01), value: money(ir01Disc(r)), colorBy: sgn(ir01Disc(r)), math: `±N·[(F·e^(+1bp·τ) − K)·DF_${qc}·e^(−1bp·T) − (F − K)·DF_${qc}]\nthe ${qc} curve alone · τ spot date to settlement, T today to settlement` },
+           { label: sensLabel(`${r.base_currency} IR01`, SENS_UNITS.IR01), value: money(ir01Base(r)), colorBy: sgn(ir01Base(r)), math: `±N·F·[e^(−1bp·τ) − 1]·DF_${qc}\nthe ${r.base_currency} curve alone · τ spot date to settlement` }]),
       { label: sensLabel('THETA'), value: money(r.theta), colorBy: sgn(r.theta), math: `NPV one calendar day later, same market` },
     ],
     breakdown: (r) => ({ kind: 'market', columns: ['ITEM', 'VALUE', 'NOTE'], rows: [
       ['SPOT', fmt(r.spot, dp), r.spot_source || ''],
       ['FAIR FORWARD', fmt(r.forward, dp), `points ${fmt(r.forward_points, crypto ? 2 : 1)} ${crypto ? qc : 'pips'} · ${r.forward_mode === 'MARKET' && r.market_points != null ? 'quoted points' : crypto ? 'implied from the saved rate' : 'implied from yields'}${r.forward_source ? ' · ' + r.forward_source : ''}`],
       ['PARITY FORWARD', fmt(r.implied_forward, dp), r.basis_points != null ? `basis ${fmt(r.basis_points, crypto ? 2 : 1)} ${crypto ? qc : 'pips'} vs quoted` : 'no quoted points'],
-      [`DF ${qc} / ${r.base_currency}`, `${fmt(r.df_quote, 5)} / ${fmt(r.df_base, 5)}`, `T = ${fmt(r.t, 4)}y · ${r.base_discounting || ''}`],
+      [`DF ${qc} / ${r.base_currency}`, `${fmt(r.df_quote, 5)} / ${fmt(r.df_base, 5)}`, `${crypto ? '' : 'from today · '}T = ${fmt(r.t, 4)}y · ${r.base_discounting || ''}`],
       [`ZEROS ${qc} / ${r.base_currency}`, `${fmt(r.quote_rate * 100)}% / ${fmt(r.base_rate * 100)}%`, crypto ? `continuous to T · the ${r.base_currency} rate is the one the forward points imply` : 'continuous to T'],
       ['IMPLIED CARRY', `${fmt(r.implied_carry * 100)}%`, 'annualised'],
       [crypto ? 'CRYBASIS01' : `IR01 BASE (${r.base_currency})`, money(crypto ? crybasis01(r) : (r.ir01_base ?? r.rho_base_per_bp)), crypto ? '+1 bp a year on the forward basis, a long gains' : `+1 bp on the ${r.base_currency} curve`],
-      ['MODEL', crypto ? 'F = S·e^(−r·T) / DF_quote' : 'F = S·DF_base / DF_quote', `NPV = ±N·(F − K)·DF_quote · ACT/365 · ${ndf || crypto ? 'cash-settled' : 'deliverable'}`],
+      ['MODEL', crypto ? 'F = S·e^(−r·T) / DF_quote' : 'F = S·DF_base / DF_quote, both from the spot date', `NPV = ±N·(F − K)·DF_quote · ACT/365 · ${ndf || crypto ? 'cash-settled' : 'deliverable'}`],
     ] }),
   } }
   const descriptor = option ? optionDescriptor : forwardDescriptor
@@ -818,7 +820,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         </div>
         {!option && settlesOn}
         <div className="tbw-helper-text" style={{ marginTop: 10 }}>
-          {crypto ? `Spot: ${feeds?.crypto || 'Coinbase (public)'}` : `Spot: ${feeds?.fx || 'ECB reference rates (public)'}`} · F = S·DF<sub>base</sub>/DF<sub>quote</sub> or S + quoted points · NPV = ±N·(F − K)·DF<sub>quote</sub> · ACT/365
+          {crypto ? `Spot: ${feeds?.crypto || 'Coinbase (public)'}` : `Spot: ${feeds?.fx || 'ECB reference rates (public)'}`} · F = S·DF<sub>base</sub>/DF<sub>quote</sub>{crypto ? '' : ' from the spot date'} or S + quoted points · NPV = ±N·(F − K)·DF<sub>quote</sub> · ACT/365
         </div>
       </div>
 

@@ -17,6 +17,8 @@
   overflow-x: hidden;
   height: auto;            /* sized by its content up to max-height; a manual resize is
                               cleared when the instrument changes (TradeWindow.jsx) */
+  display: flex;           /* a column, so the footer sits on the bottom edge when a tab is shorter */
+  flex-direction: column;  /* than the window (a two-line cashflow table, or after a manual resize) */
   resize: both;            /* native browser resize handle bottom-right */
   z-index: 1000;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95);
@@ -274,8 +276,11 @@
 
 /* ── Footer ────────────────────────────────────────────────────────────── */
 
+/* The window's children keep their own height: it is the window that scrolls, not a squeezed panel. */
+.tbw-window > * { flex: 0 0 auto; }
+
 .tbw-footer {
-  position: sticky; bottom: 0; z-index: 2; border-top: 1px solid var(--border);
+  position: sticky; bottom: 0; z-index: 2; margin-top: auto;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;

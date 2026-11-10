@@ -239,6 +239,85 @@ test('BOOK pressed straight after a change does not book unseen figures: it repr
   expectClean(problems)
 })
 
+// Vera, 2026-11-09: the DETAILS sheet is headed AS BOOKED only while the figures on screen are the ones that were sent.
+// A term changed after the booking, or NEW TRADE, puts it back to AS IT WILL BE BOOKED: the trade in the blotter is
+// not what is on screen any more.
+test('the term sheet says AS BOOKED only for the quote that was booked: a changed term or NEW TRADE takes it back', async ({ app, problems }) => {
+  const win = await open(app, 'CRYPTO', /^CRYPTO FORWARD$/i)
+  await counterparty(app, win)
+  await settled(win)
+  const tab = name => win.getByRole('button', { name, exact: true }).click()
+  const will = win.getByText('TERM SHEET · AS IT WILL BE BOOKED', { exact: true })
+  const done = win.getByText('TERM SHEET · AS BOOKED', { exact: true })
+
+  await tab('DETAILS')
+  await expect(will, 'before a booking the sheet is a proposal').toBeVisible()
+  await expect(done).toHaveCount(0)
+
+  await tab('TRADE')
+  const booking = app.waitForResponse(r => /\/api\/trades\/$/.test(r.url()) && r.request().method() === 'POST')
+  await win.getByRole('button', { name: /BOOK TRADE/ }).click()
+  expect((await booking).status(), 'the trade books').toBeLessThan(300)
+  await tab('DETAILS')
+  await expect(done, 'the sheet of the quote that was sent').toBeVisible()
+  await expect(will).toHaveCount(0)
+  await app.screenshot({ path: 'e2e/.out/shots/ticket-details-as-booked.png' })
+
+  // a term changed after the booking: what is on screen is no longer the trade
+  await tab('TRADE')
+  await win.getByTestId('fx-notional').fill('25')
+  await settled(win)
+  await expect(win.getByTestId('fx-footer-stale')).toHaveCount(0)
+  await tab('DETAILS')
+  await expect(will, 'a changed term is a proposal again').toBeVisible()
+  await expect(done).toHaveCount(0)
+
+  // and back to the booked terms is still not the booked quote unless the same figures come back; NEW TRADE clears it either way
+  await win.getByRole('button', { name: 'NEW TRADE', exact: true }).click()
+  await expect(will, 'a new trade is a proposal').toBeVisible()
+  await expect(done).toHaveCount(0)
+  expectClean(problems)
+})
+
+// Vera, 2026-11-09 (second pass): the quote that is marked as booked is the one that was sent. A price that lands
+// while the booking is still out is on screen when the answer comes back, and it is not the trade.
+test('a price that lands while the booking is out is not headed AS BOOKED: the sheet names the quote that was sent', async ({ app, problems }) => {
+  const win = await open(app, 'FX', /^FX FORWARD$/i)
+  await counterparty(app, win)
+  await settled(win)
+  const tab = name => win.getByRole('button', { name, exact: true }).click()
+  const sent = []
+  // the booking is held for two and a half seconds: long enough for a changed notional to be priced and shown
+  await app.route(/\/api\/trades\/$/, async route => {
+    if (route.request().method() !== 'POST') return route.continue()
+    sent.push(route.request().postDataJSON())
+    await new Promise(r => setTimeout(r, 2500))
+    try { await route.continue() } catch { /* the page had gone */ }
+  })
+  const notional = win.getByTestId('fx-notional')
+  const first = await notional.inputValue()
+  const booking = app.waitForResponse(r => /\/api\/trades\/$/.test(r.url()) && r.request().method() === 'POST')
+  await win.getByRole('button', { name: /BOOK TRADE/ }).click()
+  await expect.poll(() => sent.length, { message: 'the booking is out' }).toBe(1)
+
+  // while it is out: another notional, priced and on screen before the booking answers
+  const repriced = app.waitForResponse(r => /\/api\/currency\/forward\/price$/.test(r.url()) && r.ok())
+  await notional.fill('7000000')
+  await repriced
+  await settled(win)
+  const res = await booking
+  expect(res.status(), 'the trade books').toBeLessThan(300)
+  const trade = await res.json()
+  expect(Number(trade.notional), 'the trade is the one that was sent, not the one typed afterwards').toBe(plain(first))
+  expect(plain(first)).not.toBe(7000000)
+
+  await tab('DETAILS')
+  await expect(win.getByText('TERM SHEET · AS IT WILL BE BOOKED', { exact: true }), 'what is on screen is a proposal: it is not the trade that was booked').toBeVisible()
+  await expect(win.getByText('TERM SHEET · AS BOOKED', { exact: true })).toHaveCount(0)
+  await app.unrouteAll({ behavior: 'ignoreErrors' })
+  expectClean(problems)
+})
+
 test('an older price that arrives after a newer one does not replace it, and the footer is marked while a price is awaited', async ({ app, problems }) => {
   const win = await open(app, 'CRYPTO', /^CRYPTO FORWARD$/i)
   await settled(win)
@@ -299,6 +378,17 @@ test.describe('in a browser that writes decimals with a comma', () => {
     const stored = Number(text)
     expect(stored).toBeGreaterThan(0.5)
     expect(stored).toBeLessThan(2.5)                                         // EURUSD
+
+    // the term sheet and the captions group thousands as the fields and the footer do: one tab never mixes 10.000.000 and 10,000,000
+    await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+    await expect(win).toContainText('10,000,000 EUR')
+    await expect(win, 'the term sheet is not written in the browser\'s language').not.toContainText('10.000.000')
+    await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+    // each caption is the engine's own expression, with its sign
+    await win.getByText('Σ MATH').click()
+    await expect(win).toContainText('±N·F·DF_USD·1%')
+    await expect(win).toContainText('±N·F·[e^(−1bp·τ) − 1]·DF_USD')
+    await win.getByText('Σ MATH').click()
 
     // change the last digit: the override is the number typed, not a hundred thousand times it
     const edited = text.slice(0, -1) + (text.endsWith('7') ? '3' : '7')

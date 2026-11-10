@@ -25,6 +25,12 @@ Learned on 9 November 2026 (0.14.0)
 - Deploys are not atomic: the API ships minutes before the web app, and a browser tab keeps the old bundle. For every changed or newly successful response, read the web client that is live today (`git show origin/main:frontend/...`) against the new API, and the new client against the old API. A route that now answers 200 where it answered 422 is a change for the old client.
 - For each fix you are told about, name the test that would fail with the fix reverted, or say there is none.
 
+Learned on 9 November 2026 (the scenario tab)
+- A formula printed beside numbers must be the one those numbers satisfy: put the figures on the screen into the printed formula and see that it closes. A caption that says F = S·P_b/P_q over a forward carried from the spot date is a finding.
+- A caption is read against the engine's expression term by term, its sign included (a SELL is not a BUY's caption), and a discount factor says from which date it runs.
+- A label that says "as booked" is tied to the object that was sent, not to whatever the window holds when the answer comes back. Ask what arrives between the click and the response.
+- When a change says the browser "agrees with the engine", ask in which pricing mode and for which products the tests show it, and name the ones they do not.
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.

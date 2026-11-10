@@ -1,7 +1,34 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.8). Commits on `main` are the detail.
+methodology document carries its own version (v1.9). Commits on `main` are the detail.
+
+## 0.16.1 · 9 November 2026
+
+Every tab of the currency and digital-asset ticket read as a first-time user reads it, and the ticket under a moving
+pointer.
+
+- **The scenario tab moves the forward over the right time.** A rate shock moved the forward over the whole time to
+  settlement; the engine carries it from the spot date, so a +1 bp shock on a 3M EURUSD disagreed with the ticket's
+  own IR01 by the days of spot lag. The price answers (forward and option) now carry `t_spot`, and the scenario
+  reprices with F' = F·(1+s)·exp((Δq − Δb)·(T − t_spot)); a digital asset's lag is zero. The scenario vectors the
+  browser and the engine both read (`backend/tests/vectors/fx_scenario.json`) cover it; methodology v1.9 writes it down.
+- **AS BOOKED means the quote that was booked.** The term sheet was headed AS BOOKED whenever a trade had been booked
+  in the window, also after a term changed, after NEW TRADE, or when a newer price landed while the booking was on
+  its way. It now says so only while the quote on screen is the one that was sent.
+- **Captions that are the engine's expression.** Each sensitivity's caption carries its sign (± for BUY and SELL) and
+  the engine's own formula (CRYBASIS01 and a digital asset's IR01 were captioned with a different one); discount
+  factors that run from today say so beside a forward that is carried from the spot date.
+- **One number format on a tab.** The term sheet, cashflows and scenario tabs followed the browser's language while
+  the fields and the footer were en-US: a German browser showed 10.000.000 beside 10,000,000. A figure that rounds to
+  zero is +$0 and takes no colour, never −$0 in red. The footer strip is plain; the tiles carry the sign and colour.
+- **A ticket that follows the pointer.** Dragging the ticket re-rendered it for every pixel of travel (1,700 attribute
+  writes in a three-second drag). It now moves as one transform a frame and is rendered once, on release; a press
+  that does not travel changes nothing. The blotter's row highlight no longer fades behind a moving pointer. The
+  footer sits on the bottom edge when a tab is shorter than the window, and the schedule headers stay on one line.
+- Journeys: a drag of the rates and the crypto ticket rewrites nothing inside it; a price landing while a booking is
+  out; the term sheet and captions in a browser that writes decimals with a comma. The smoothness profile
+  (`frontend/e2e/perf`, its own config) is a local measurement, not a gate.
 
 ## 0.16.0 · 9 November 2026
 

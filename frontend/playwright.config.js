@@ -7,6 +7,7 @@ export const REST = 'http://127.0.0.1:3010'
 
 export default defineConfig({
   testDir: './e2e',
+  testIgnore: 'perf/**',                 // the smoothness profile is a measurement with its own config, not a journey
   outputDir: './e2e/.out/results',
   timeout: 240_000,
   expect: { timeout: 20_000 },

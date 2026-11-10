@@ -19,7 +19,7 @@
 //     passes it back via onChange. Keeps migration simple.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
 import './styles.css'
 
 import { getProduct, listProductsByAssetClass, listAssetClasses } from './registry'
@@ -233,6 +233,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     if (el) { el.style.height = ''; el.style.width = '' }
   }, [assetClass, curInst, productKey])
   const [fxQuote, setFxQuote]          = useState(null)
+  // the quote a trade was booked from in this window: the term sheet reads AS BOOKED only while it is still the one shown
+  const [bookedFxQuote, setBookedFxQuote] = useState(null)
   // The currency ticket reprices as its terms are typed. Between a change and the price that answers it the panel
   // hands back the last quote marked stale: the tabs keep it (they would empty at every keystroke otherwise) and
   // the footer shows its figures dimmed. Terms that cannot be priced, or a failed price, hand back null.
@@ -264,6 +266,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       // +1 % spot, IR01 for +1 bp on the discounting curve, CRYBASIS01 for +1 bp a year on a digital asset's forward
       // basis (a long gains; the API sends it as crybasis01, and older answers only fund01, its negative), VEGA for
       // +1 vol point, THETA for one day. A currency pair's two rate sensitivities are shown apart: their sum reads as zero.
+      // The strip is plain: no figure is coloured by its sign (the tiles above carry the sign and the colour).
       metrics: (r) => {
         if (!r) return []
         const unit = (name, u) => <>{name}<span className="tbw-fx-unit"> · {u}</span></>
@@ -275,16 +278,16 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           // an option's first figure is its premium, paid or received (the NET NPV tile stays in the analytics block)
           option
             ? { label: unit('PREMIUM ' + r.quote_currency, r.direction === 'SELL' ? 'received' : 'paid'), value: n0(Math.abs(r.npv)) }
-            : { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv), colorBy: r.npv >= 0 ? 'pos' : 'neg' },
-          { label: unit(DELTA_LABEL(crypto), '1 % spot'), value: n0(spot01), colorBy: spot01 >= 0 ? 'pos' : 'neg' },
+            : { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv) },
+          { label: unit(DELTA_LABEL(crypto), '1 % spot'), value: n0(spot01) },
           ...(crypto
             ? [{ label: unit('IR01', '1 bp'), value: n0(r.ir01 ?? r.ir01_disc ?? r.rho_quote_per_bp) },
                { label: unit('CRYBASIS01', '1 bp basis'), value: n0(crybasis) }]
             // a currency pair: each currency's curve on its own (their sum reads as zero), forward and option alike
             : [{ label: unit(`${r.quote_currency} IR01`, '1 bp'), value: n0(r.ir01_disc ?? r.rho_quote_per_bp) },
                { label: unit(`${r.base_currency} IR01`, '1 bp'), value: n0(r.ir01_base ?? r.rho_base_per_bp) }]),
-          { label: unit('THETA', '1 day'), value: n0(r.theta ?? 0), colorBy: (r.theta ?? 0) >= 0 ? 'pos' : 'neg' },
-          ...(r.shape === 'OPTION' ? [{ label: unit('VEGA', '1 pt'), value: n0(r.vega ?? 0), colorBy: (r.vega ?? 0) >= 0 ? 'pos' : 'neg' }] : []),
+          { label: unit('THETA', '1 day'), value: n0(r.theta ?? 0) },
+          ...(r.shape === 'OPTION' ? [{ label: unit('VEGA', '1 pt'), value: n0(r.vega ?? 0) }] : []),
         ]
       },
     },
@@ -406,10 +409,17 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     x: Math.max(10, (typeof window !== 'undefined' ? window.innerWidth : 1400) - 1287) / 2,
     y: 30,
   }))
-  const [dragging, setDragging] = useState(false)
-  const dragStartRef = useRef(null)
+  const dragEndRef = useRef(null)       // ends a drag in progress; called when the ticket closes mid-drag
 
+  // Drag-to-move. Pressing the body of the window starts nothing in React: the listeners are attached here, and
+  // once the pointer has travelled three pixels the window follows it as a transform written straight to the
+  // element, once a frame. The browser moves a layer it has already drawn and the ticket is not rendered again
+  // for every pixel of travel (it used to be: 1,700 attribute writes in a three-second drag). The resting
+  // position (left/top, in state) is set once, on release. The top edge stays on the screen and a strip of the
+  // window stays inside it, so the header can always be reached. A press that does not travel changes nothing,
+  // so a tooltip open inside the window stays where it is (a transformed ancestor would re-anchor it).
   const handleWindowMouseDown = (e) => {
+    if (e.button !== 0) return             // a right-press opens the context menu, which swallows the mouseup
     // Skip drag if the user is interacting with a form control or button.
     // Uses .closest() so we catch clicks on nested spans/icons too.
     if (e.target.closest(
@@ -421,17 +431,48 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     // .tbw-window element itself (no separate child node), so e.target
     // alone can't distinguish resize-grab from window-body click. 20px
     // gives a comfortable hit zone without false positives elsewhere.
-    const rect = e.currentTarget.getBoundingClientRect()
+    const el = e.currentTarget
+    const rect = el.getBoundingClientRect()
     if (
       e.clientX >= rect.right - 20 &&
       e.clientY >= rect.bottom - 20
     ) return
-    dragStartRef.current = {
-      px: pos.x, py: pos.y,
-      mx: e.clientX, my: e.clientY,
+    dragEndRef.current?.()
+    const s = { px: pos.x, py: pos.y, mx: e.clientX, my: e.clientY }
+    const w = el.offsetWidth
+    let raf = 0, dx = 0, dy = 0, moving = false
+    const paint = () => { raf = 0; el.style.transform = `translate3d(${dx}px, ${dy}px, 0)` }
+    const stop = () => {
+      cancelAnimationFrame(raf); raf = 0     // a frame still waiting would put the transform back after release
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      dragEndRef.current = null
     }
-    setDragging(true)
+    function onUp() {
+      stop()
+      if (!moving) return
+      el.style.willChange = ''
+      if (dx || dy) setPos({ x: s.px + dx, y: s.py + dy })     // the layout effect below takes the transform off in the same commit
+      else el.style.transform = ''
+    }
+    function onMove(ev) {
+      if (!ev.buttons) return onUp()         // the button came up where no mouseup reached this window
+      if (!moving) {
+        if (Math.abs(ev.clientX - s.mx) < 3 && Math.abs(ev.clientY - s.my) < 3) return
+        moving = true
+        el.style.willChange = 'transform'
+      }
+      dx = Math.min(window.innerWidth - 80, Math.max(80 - w, s.px + ev.clientX - s.mx)) - s.px
+      dy = Math.min(window.innerHeight - 40, Math.max(0, s.py + ev.clientY - s.my)) - s.py
+      if (!raf) raf = requestAnimationFrame(paint)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    dragEndRef.current = () => { stop(); el.style.willChange = ''; el.style.transform = '' }
   }
+  useEffect(() => () => dragEndRef.current?.(), [])
+  // The transform comes off in the same commit that moves left/top, before the browser paints: no jump on release.
+  useLayoutEffect(() => { if (winRef.current) winRef.current.style.transform = '' }, [pos])
 
   // Reset state when product changes — each product owns its own state shape.
   // Not on mount: the initial state is already the product's (and, in view
@@ -685,6 +726,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       const t = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(typeof t.detail === 'string' ? t.detail : (t.detail ? JSON.stringify(t.detail) : 'Booking failed'))
       setBookedTrade(t)
+      // the quote that was sent, not whatever the window holds by now: a price that landed while the POST was out is not the booked one
+      setBookedFxQuote(decision.quote)
       try { useTradesStore.getState().fetchTrades?.() } catch { /* ignore: blotter refresh is best effort */ }
       onBook?.({ productKey: body.instrument_type, trade: t })
     } catch (e) {
@@ -836,7 +879,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   }, [bookedTrade, confirming, cancelling, productKey, onBook])
 
   const handleNewTrade = () => {
-    setBookedTrade(null); setResult(null); setError(''); setBookErr('')
+    setBookedTrade(null); setBookedFxQuote(null); setResult(null); setError(''); setBookErr('')
     // Sprint 12 item 3 — also clear lifecycle state
     setConfirmErr(''); setCancelErr('')
     setConfirming(false); setCancelling(false)
@@ -887,26 +930,6 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }, 20000)
     return () => clearTimeout(t)
   }, [cancelling])
-
-  // Drag-to-move: mousemove updates pos, mouseup ends drag (Patch 8).
-  useEffect(() => {
-    if (!dragging) return
-    const onMove = (e) => {
-      const s = dragStartRef.current
-      if (!s) return
-      setPos({
-        x: s.px + e.clientX - s.mx,
-        y: s.py + e.clientY - s.my,
-      })
-    }
-    const onUp = () => setDragging(false)
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-  }, [dragging])
 
   // A stored cap, floor or collar is revalued through /price, which returns
   // the swap-shaped valuation of its OPT-1 leg (NPV, IR01, theta, the leg's
@@ -1054,7 +1077,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         {isCurrency && viewMode && (<>
           {error && <div className="tbw-sec"><div className="tbw-error">{error}</div></div>}
           {!fxQuote && pricing && <div className="tbw-sec tbw-mut">valuing…</div>}
-          <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} />
+          <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} booked />
           <XVASummary result={fxQuote} />
         </>)}
 
@@ -1090,7 +1113,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
       {tabsVisited['DETAILS'] && isCurrency && (
         <div style={{ display: activeTab === 'DETAILS' ? 'block' : 'none' }}>
-          <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} active={activeTab === 'DETAILS'} stale={fxStale} />
+          <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} active={activeTab === 'DETAILS'} stale={fxStale}
+            booked={viewMode || (!!bookedTrade && !!fxQuote && bookedFxQuote === fxQuote && !fxStale)} />
         </div>
       )}
       {tabsVisited['CASHFLOWS'] && isCurrency && (

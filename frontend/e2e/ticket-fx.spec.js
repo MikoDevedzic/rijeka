@@ -94,6 +94,40 @@ test('crypto ticket: the vol and the forward name the venue and the time of its 
   expectClean(problems)
 })
 
+// Found by opening every tab, 2026-11-09: on an FX pair the scenario tab rebuilt the forward as S·DF_base/DF_quote
+// from today's discount factors, while the engine carries spot from the spot date, so the unshocked scenario showed a
+// forward and an NPV that were not the ticket's (1.3 pips and 1,300 USD on ten million EURUSD at the fair forward, on the local stack's curves).
+// The unshocked row of the scenario is the ticket's own forward and NPV, on a pair that has a spot lag.
+test('FX forward: the scenario tab with no shock shows the forward and the NPV the ticket priced', async ({ app, problems }) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'FX', exact: true }).click()
+  await win.getByRole('button', { name: /^FX FORWARD$/i }).click()
+  const priced = app.waitForResponse(r => /\/api\/currency\/forward\/price$/.test(r.url()) && r.request().method() === 'POST' && r.ok())
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  const quote = await (await priced).json()
+  // parity is the mode in which the scenario is the engine's own arithmetic; on quoted points the tab says what differs
+  expect(quote.forward_mode === 'MARKET' && quote.market_points != null, 'the stack prices this pair by parity, not on quoted points').toBe(false)
+  expect(quote.t_spot, 'the answer names the spot lag the scenario carries from').toBeGreaterThan(0)
+  // the case is worth running only if the two readings of the forward differ: the pair settles spot after today
+  const fromToday = quote.spot * quote.df_base / quote.df_quote
+  expect(Math.abs(fromToday - quote.forward) / quote.forward, 'the pair has a spot lag the old arithmetic would miss').toBeGreaterThan(1e-6)
+
+  await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+  await expect(win.getByTestId('fx-scenario-chart')).toBeVisible()
+  const base = win.getByTestId('fx-scenario-base')
+  await expect(base).toBeVisible()
+  await expect(win.getByTestId('fx-scenario-quoted-note')).toHaveCount(0)
+  const forward = Number(await base.getAttribute('data-forward'))
+  const npv = Number(await base.getAttribute('data-npv'))
+  expect(Math.abs(forward - quote.forward) / quote.forward, 'the unshocked forward is the engine\'s').toBeLessThan(1e-12)
+  expect(Math.abs(npv - quote.npv), 'the unshocked NPV is the engine\'s, to a cent').toBeLessThan(0.01)
+  await app.screenshot({ path: 'e2e/.out/shots/fx-forward-scenario-base.png' })
+  expectClean(problems)
+})
+
 // Vera, 2026-11-09: with the feed's points on a digital-asset pair, SAVE DESK SPOT sent the feed's label as the source
 // and the API refused it. The desk's spot now goes alone, as MANUAL, and the feed's points are not re-saved as the desk's.
 // The save itself is answered here (it is tested on the database in tests/integration/test_crypto_marks.py) so the

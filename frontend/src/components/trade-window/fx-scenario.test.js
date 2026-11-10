@@ -8,7 +8,7 @@ import {
   rippleWeights, tenorBounds, applyTenorDrag, clampSpotPct, spotPctFromDrag, carryFactor, shockedCurve, reprice, gk,
   settlementAmount, latestFixing, fixingSeries, fixingTime, settledState, settledFacts, styleTerms, provisionalReasons, chartLevels, chartStrike,
   tenorMap, niceStep, valueRange, horizonDays, chartGeometry,
-  isoDate, addDays, axisDates, roundTo, strikeAsBooked, modelWords,
+  isoDate, addDays, axisDates, roundTo, signedChange, strikeAsBooked, modelWords,
 } from './fx-scenario'
 
 describe('interpPoints: the backend rule (currencies.py interp_points)', () => {
@@ -75,6 +75,14 @@ describe('dates and the spot lag', () => {
     expect(spotLagDays({ points: { '1M': 30 }, settleDays: 47, marketPoints: null, crypto: false })).toBe(null)
     expect(spotLagDays({ points: { '1M': 30 }, settleDays: null, marketPoints: 45, crypto: false })).toBe(null)
     expect(spotLagDays()).toBe(null)
+  })
+  it('the engine\'s own lag, when its answer names it, stands before anything read back from the points', () => {
+    const points = { '1M': 30, '2M': 61 }
+    expect(spotLagDays({ points, settleDays: 47, marketPoints: 45, crypto: false, tSpot: 4 / 365 })).toBe(4)
+    expect(spotLagDays({ points: null, settleDays: 47, marketPoints: null, crypto: false, tSpot: 3 / 365 })).toBe(3)
+    expect(spotLagDays({ points: null, settleDays: 47, marketPoints: null, crypto: false, tSpot: 0 })).toBe(0)
+    expect(spotLagDays({ points, settleDays: 47, marketPoints: 45, crypto: false, tSpot: null })).toBe(2)
+    expect(spotLagDays({ points, settleDays: 47, marketPoints: 45, crypto: false, tSpot: -1 })).toBe(2)
   })
 })
 
@@ -205,10 +213,17 @@ describe('the shocked curve', () => {
     expect(shockedCurve({ spot: 100, pip: 1, nodes, moves: [0, 0], spotPct: NaN })).toBe(null)
     expect(shockedCurve({ spot: 100, pip: 1, nodes: null, moves: [] })).toBe(null)
   })
-  it('the rate shocks tilt it: exp((Δquote − Δbase)·T)', () => {
+  it('the rate shocks tilt it: exp((Δquote − Δbase)·τ)', () => {
     const c = shockedCurve({ spot: 100, pip: 1, nodes, moves: [0, 0], quoteBp: 100, baseBp: 0 })
     expect(c[0].shocked).toBe(100)
     expect(c[2].shocked).toBeCloseTo(110 * Math.exp(0.01), 10)        // one year at +100bp
+  })
+  it('the carry runs from the spot date: a tenor drawn three days later is tilted over its own days, not three more', () => {
+    const lagged = curveNodes({ '1M': 2, '1Y': 10 }, 3)
+    const c = shockedCurve({ spot: 100, pip: 1, nodes: lagged, moves: [0, 0], quoteBp: 100, baseBp: 0 })
+    expect(c[2].x).toBe(368)
+    expect(c[2].shocked).toBeCloseTo(110 * Math.exp(0.01), 12)        // 365 days of carry, drawn at day 368
+    expect(c[1].shocked).toBeCloseTo(102 * Math.exp(0.01 * 30 / 365), 12)
   })
 })
 
@@ -238,6 +253,16 @@ describe('reprice: the closed form', () => {
     const r = reprice(q, { ...shocks, dPoints: interpPoints({ '1M': 3, '3M': 1 }, 30), pip: 1 })
     expect(r.forward).toBeCloseTo(curve[1].shocked, 9)
   })
+  it('agrees with the chart on a pair whose spot settles in three days: both carry the rate shocks from the spot date', () => {
+    const q = { ...fwd, t: 33 / 365, t_spot: 3 / 365 }
+    const nodes = curveNodes({ '1M': 2, '3M': 6 }, 3)
+    const shocks = { spotPct: 4, quoteBp: 100, baseBp: -50 }
+    const curve = shockedCurve({ spot: 100, pip: 1, nodes, moves: [3, 1], ...shocks })
+    const r = reprice(q, { ...shocks, dPoints: interpPoints({ '1M': 3, '3M': 1 }, 30), pip: 1 })
+    expect(curve[1].x).toBe(33)
+    expect(r.forward).toBeCloseTo(curve[1].shocked, 9)
+    expect(r.forward).toBeCloseTo((102 + 3) * 1.04 * Math.exp(0.015 * 30 / 365), 12)
+  })
   it('pips: one point is one pip of price', () => {
     const q = { ...fwd, spot: 1.1, forward: 1.102, forward_rate: 1.1, market_points: 20 }
     expect(reprice(q, { dPoints: 10, pip: 1e-4 }).forward).toBeCloseTo(1.103, 10)
@@ -248,6 +273,36 @@ describe('reprice: the closed form', () => {
     const dfq = 0.98 * Math.exp(-0.005)
     expect(r.forward).toBeCloseTo(100 / dfq, 10)                      // S·DF_base'/DF_quote'
     expect(r.npv).toBeCloseTo(10 * (100 / dfq - 101) * dfq, 10)
+  })
+  it('an FX pair in parity mode: with no shock the forward and NPV are the engine\'s, not S·DF_base/DF_quote from today', () => {
+    // the engine carries spot from the spot date, so its forward is not the ratio of the two today-to-settlement
+    // discount factors the quote names: 1.0850 · 0.99200/0.98800 = 1.08939, the engine says 1.08928
+    const q = { shape: 'FORWARD', direction: 'BUY', base_notional: 10_000_000, spot: 1.0850, forward: 1.08928, forward_rate: 1.08928,
+                df_quote: 0.98800, df_base: 0.99200, t: 0.25, forward_mode: 'IMPLIED', market_points: null }
+    expect(q.spot * q.df_base / q.df_quote).toBeCloseTo(1.08939, 5)
+    const r = reprice(q)
+    expect(r.forward).toBe(1.08928)
+    expect(r.npv).toBe(0)                                             // struck at the fair forward: nothing, not about 1,100
+    expect(reprice({ ...q, forward_rate: 1.08900 }).npv).toBeCloseTo(10_000_000 * 0.00028 * 0.98800, 6)
+    // a shock moves that forward: +1 % spot is +1 % forward, +100 bp on the quote curve is exp(+0.01·τ), with τ
+    // the time from the spot date to settlement; an answer that does not name its spot lag is carried from today
+    expect(reprice(q, { spotPct: 1 }).forward).toBeCloseTo(1.08928 * 1.01, 12)
+    expect(reprice(q, { quoteBp: 100 }).forward).toBeCloseTo(1.08928 * Math.exp(0.0025), 12)
+    expect(reprice(q, { baseBp: 100 }).forward).toBeCloseTo(1.08928 * Math.exp(-0.0025), 12)
+    const lagged = { ...q, t_spot: 3 / 365 }
+    expect(reprice(lagged, { quoteBp: 100 }).forward).toBeCloseTo(1.08928 * Math.exp(0.01 * (0.25 - 3 / 365)), 14)
+    expect(reprice(lagged, { baseBp: 100 }).forward).toBeCloseTo(1.08928 * Math.exp(-0.01 * (0.25 - 3 / 365)), 14)
+    // the discount factor still runs from today: +100 bp on the quote curve takes exp(−0.01·T) off it
+    const k = 1.08900, up = reprice({ ...lagged, forward_rate: k }, { quoteBp: 100 })
+    expect(up.npv).toBeCloseTo(10_000_000 * (up.forward - k) * 0.98800 * Math.exp(-0.0025), 6)
+  })
+  it('an option\'s forward moves as a forward\'s does: the same carry from the spot date under the same shocks', () => {
+    const o = { shape: 'OPTION', direction: 'BUY', base_notional: 1_000_000, spot: 1.0850, forward: 1.08928, strike: 1.09, option_type: 'CALL',
+                df_quote: 0.98800, t_settle: 0.25, t_expiry: 0.2445, vol_pct: 7.5, t_spot: 3 / 365 }
+    const f = { shape: 'FORWARD', direction: 'BUY', base_notional: 1_000_000, spot: 1.0850, forward: 1.08928, forward_rate: 1.09,
+                df_quote: 0.98800, df_base: 0.99200, t: 0.25, t_spot: 3 / 365 }
+    for (const shocks of [{}, { spotPct: 5 }, { quoteBp: 100 }, { baseBp: -75 }, { spotPct: -3, quoteBp: 40, baseBp: 15, dPoints: 2, pip: 1e-4 }])
+      expect(reprice(o, shocks).forward).toBe(reprice(f, shocks).forward)
   })
   it('never a forward at or below zero', () => {
     const r = reprice(fwd, { dPoints: -1000, pip: 1 })
@@ -596,6 +651,46 @@ describe('shared vectors: backend/tests/vectors/fx_scenario.json', () => {
       close(got, c.expected)
     }
   })
+  // The engine prices a forward, then prices it again with the spot or the curves moved; `reprice` has the first
+  // answer alone. In parity mode, which every case in the file is, it must give the engine's figures: with no
+  // shock, under a spot shock and under a parallel rate shock (an FX spot settles on the spot date, and the
+  // engine's answer says how far off that is: four of the six cases have that lag, of three and four days).
+  it.skipIf(!vectors)('reprice with no shock is the engine\'s forward and NPV, spot lag or none', () => {
+    expect(vectors.reprice.length).toBe(6)
+    expect(vectors.reprice.filter(c => c.t_spot > 0).length).toBe(4)
+    for (const c of vectors.reprice) {
+      const r = reprice(c.quote, { pip: c.pip })
+      close(r.forward, c.quote.forward)
+      expect(Math.abs(r.npv - c.npv), c.name).toBeLessThanOrEqual(1e-9 * Math.max(1, Math.abs(c.npv)))
+    }
+  })
+  it.skipIf(!vectors)('reprice under a spot shock is the engine priced again at the moved spot', () => {
+    for (const c of vectors.reprice) for (const s of c.spot_shocks) {
+      const r = reprice(c.quote, { spotPct: s.spot_pct, pip: c.pip })
+      close(r.forward, s.forward)
+      // the NPV is a small difference of large numbers at the fair forward: to a millionth of a unit of the notional's value
+      expect(Math.abs(r.npv - s.npv), `${c.name} ${s.spot_pct}%`).toBeLessThanOrEqual(1e-9 * c.quote.base_notional * c.quote.forward)
+    }
+  })
+  it.skipIf(!vectors)('reprice under a rate shock is the engine priced again on the moved curves, spot lag or none', () => {
+    for (const c of vectors.reprice) {
+      expect(c.quote.t_spot, c.name).toBe(c.t_spot)                   // the lag is in the engine's answer, where the tab reads it
+      for (const s of c.rate_shocks) {
+        const r = reprice(c.quote, { quoteBp: s.quote_bp, baseBp: s.base_bp, pip: c.pip })
+        close(r.forward, s.forward)
+        expect(Math.abs(r.npv - s.npv), `${c.name} ${s.quote_bp}/${s.base_bp}`).toBeLessThanOrEqual(1e-9 * c.quote.base_notional * c.quote.forward)
+      }
+    }
+  })
+  it.skipIf(!vectors)('without the lag the same shock is off by the carry over it: the answer\'s t_spot is what makes it exact', () => {
+    const c = vectors.reprice.find(v => v.name === 'EURUSD 3M, spot in three days, at the fair forward')
+    const s = c.rate_shocks.find(v => v.quote_bp === 100 && v.base_bp === 0)
+    const blind = reprice({ ...c.quote, t_spot: undefined }, { quoteBp: 100, pip: c.pip })
+    // exp(0.01 · 3/365) − 1 = 0.0000822 of the forward: 0.9 pips, and about 887 USD on 10 million
+    expect(blind.forward / s.forward - 1).toBeCloseTo(Math.expm1(0.01 * 3 / 365), 12)
+    expect(blind.npv - s.npv).toBeGreaterThan(880)
+    expect(blind.npv - s.npv).toBeLessThan(895)
+  })
 })
 
 describe('one date format: ISO everywhere the tabs print a date', () => {
@@ -620,6 +715,26 @@ describe('one date format: ISO everywhere the tabs print a date', () => {
     expect(axisDates(['2026-12-12', 'x', '2026-12-22'])).toEqual(['12-12', '', '12-22'])   // a tick that is not a date prints nothing
     expect(axisDates([])).toEqual([])
     expect(axisDates(null)).toEqual([])
+  })
+})
+
+describe('signedChange: a change with its sign, and no sign on nothing', () => {
+  it('signs a gain and a loss and groups thousands', () => {
+    expect(signedChange(1234.4)).toBe('+1,234')
+    expect(signedChange(-56.5)).toBe('-57')
+    expect(signedChange(0.0312, 2)).toBe('+0.03')
+  })
+  it('prints a change that rounds to nothing as a plain zero, from either side', () => {
+    expect(signedChange(0)).toBe('0')
+    expect(signedChange(-0)).toBe('0')
+    expect(signedChange(0.4)).toBe('0')
+    expect(signedChange(-0.4)).toBe('0')
+    expect(signedChange(-0.004, 2)).toBe('0.00')
+  })
+  it('a dash for what is not a number', () => {
+    expect(signedChange(null)).toBe('—')
+    expect(signedChange(NaN)).toBe('—')
+    expect(signedChange(undefined)).toBe('—')
   })
 })
 

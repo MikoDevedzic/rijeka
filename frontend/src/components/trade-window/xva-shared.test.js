@@ -23,6 +23,9 @@ describe('fmtMoney', () => {
     expect(fmtDollar(1234.6)).toBe('+$1,235')
     expect(fmtDollar(-1234.4)).toBe('-$1,234')
     expect(fmtDollar(0)).toBe('+$0')
+    expect(fmtDollar(-0.4)).toBe('+$0')          // a figure that rounds to nothing has no minus sign
+    expect(fmtDollar(-0.5)).toBe('+$0')
+    expect(fmtDollar(-0.6)).toBe('-$1')
     expect(fmtDollar(null)).toBe('—')
   })
   it('switches the symbol with the quote currency and prefixes an unknown code', () => {

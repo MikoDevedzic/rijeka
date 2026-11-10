@@ -131,8 +131,8 @@ const SYM = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' }
 // +$1,234 · -$1,234 · +$0 · — for nothing. Other currencies prefix their code.
 export function fmtMoney(v, ccy = 'USD') {
   if (v == null || isNaN(v)) return '—'
-  const sign = v >= 0 ? '+' : '-'
-  return sign + (SYM[ccy] ?? (ccy + ' ')) + Math.abs(Math.round(v)).toLocaleString('en-US')
+  const n = Math.round(v)                      // the sign is the rounded figure's: -0.4 is +$0, never -$0
+  return (n < 0 ? '-' : '+') + (SYM[ccy] ?? (ccy + ' ')) + Math.abs(n).toLocaleString('en-US')
 }
 export function fmtDollar(v) { return fmtMoney(v, 'USD') }
 

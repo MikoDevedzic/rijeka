@@ -102,6 +102,14 @@ export function axisDates(dates) {
 // ── the strike as booked ─────────────────────────────────────────────────────────────
 
 // A number to the nearest `dp` decimals (toFixed, so the same digits the tabs print); null for anything else.
+// A change with its sign, at the decimals shown: "+1,234", "-56", and a plain "0" for one that rounds to nothing (a
+// zero is neither a gain nor a loss). en-US like the rest of the ticket, whatever the browser's locale.
+export function signedChange(x, dp = 0) {
+  if (!finite(x)) return '—'
+  const r = Number(x.toFixed(dp))
+  const body = Math.abs(r).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
+  return r > 0 ? '+' + body : r < 0 ? '-' + body : body
+}
 export const roundTo = (x, dp) => (finite(x) && Number.isInteger(dp) && dp >= 0 ? Number(x.toFixed(dp)) : null)
 
 // K as the ticket will book it. The terms a ticket passes carry the level it sends to the record (a forward's
@@ -117,12 +125,14 @@ export function strikeAsBooked(q, terms, dp) {
   return k == null ? null : (roundTo(k, dp) ?? k)
 }
 
-// Points are quoted from the spot date. A digital asset's spot settles at once (lag 0). For a currency pair the
-// quote does not carry its spot date, so the lag is the one at which the stored points give back the quote's
-// own market points. Null when the inputs are missing or no single lag stands out: the caller then says which
-// convention it falls back on (FX_SPOT_LAG_DAYS).
-export function spotLagDays({ points, settleDays, marketPoints, crypto, tenorDays = TENOR_DAYS } = {}) {
+// Points are quoted from the spot date. A digital asset's spot settles at once (lag 0). The engine's answer names
+// the lag it carried the forward over (`tSpot`, in years, ACT/365): when it does, that is the lag. An older answer
+// does not, and the lag is then the one at which the stored points give back the quote's own market points. Null
+// when the inputs are missing or no single lag stands out: the caller then says which convention it falls back
+// on (FX_SPOT_LAG_DAYS).
+export function spotLagDays({ points, settleDays, marketPoints, crypto, tSpot, tenorDays = TENOR_DAYS } = {}) {
   if (crypto === true) return 0
+  if (finite(tSpot) && tSpot >= 0) return Math.round(tSpot * 365)
   if (!finite(marketPoints) || !finite(settleDays)) return null
   const errs = []
   for (let lag = 0; lag <= 7; lag++) {
@@ -190,12 +200,13 @@ export const clampSpotPct = (pct) => finite(pct) ? clamp(pct, -SPOT_BOUND_PCT, S
 export const spotPctFromDrag = ({ originPct, dPrice, ref } = {}) =>
   finite(originPct) && finite(dPrice) && positive(ref) ? clampSpotPct(originPct + 100 * dPrice / ref) : null
 
-// The carry factor of the two rate shocks over `days`: a forward moves by exp((Δr_quote − Δr_base)·T).
+// The carry factor of the two rate shocks over `days`: a forward moves by exp((Δr_quote − Δr_base)·τ), τ the time
+// its carry runs over: from the spot date to the tenor (a node's `days`), as in the engine, not from today.
 export const carryFactor = (quoteBp, baseBp, days) =>
   finite(quoteBp) && finite(baseBp) && finite(days) ? Math.exp((quoteBp - baseBp) / 10000 * days / 365) : null
 
 // The curve the chart draws: spot at today, then each tenor, base and shocked.
-// shocked = (spot + (points + move)·pip) · (1 + spot shock) · carry factor to that tenor.
+// shocked = (spot + (points + move)·pip) · (1 + spot shock) · carry factor from the spot date to that tenor.
 export function shockedCurve({ spot, pip, nodes, moves, spotPct = 0, quoteBp = 0, baseBp = 0 } = {}) {
   if (!positive(spot) || !positive(pip) || !validNodes(nodes) || !finite(spotPct) || !finite(quoteBp) || !finite(baseBp)) return null
   if (!Array.isArray(moves) || moves.length !== nodes.length || !moves.every(finite)) return null
@@ -205,7 +216,7 @@ export function shockedCurve({ spot, pip, nodes, moves, spotPct = 0, quoteBp = 0
     ...nodes.map((n, i) => ({
       tenor: n.tenor, x: n.x,
       base: spot + n.points * pip,
-      shocked: (spot + (n.points + moves[i]) * pip) * k * carryFactor(quoteBp, baseBp, n.x),
+      shocked: (spot + (n.points + moves[i]) * pip) * k * carryFactor(quoteBp, baseBp, n.days),
     })),
   ]
 }
@@ -224,8 +235,15 @@ export function gk(F, K, T, sigma, call, df) {
 // The engine's closed form under the panel's shocks. With no dragged points this is the arithmetic the panel
 // has always used; `dPoints` is the change in forward points at the trade's settlement date (the dragged curve
 // interpolated there), which rides the spot and rate shocks like the rest of the forward:
-//   F' = F(spot, rates) + dPoints · pip · (1 + spot shock) · exp((Δr_quote − Δr_base)·T)
+//   F' = F · (1 + spot shock) · exp((Δr_quote − Δr_base)·τ) + dPoints · pip · (1 + spot shock) · exp((Δr_quote − Δr_base)·τ)
+//   DF_quote' = DF_quote · exp(−Δr_quote·T)
 //   forward: NPV = ±N · (F' − K) · DF_quote'        option: NPV = ±N · Black-76(F', K, T_expiry, σ', DF_quote')
+// F is the engine's own forward. T runs from today to settlement and τ = T − T_spot from the spot date to
+// settlement: the engine carries a quoted FX spot from its spot date (pricing/currency_forward.py) and says how
+// far that is from today in `t_spot` (0 for a digital asset, and for an answer that does not name it). So a
+// parity-mode forward under a spot or a parallel rate shock is the engine's own figure, not an approximation of
+// it. Under quoted points the engine holds the forward against the curves and adds the same points to a moved
+// spot; here the points scale with spot and the sliders show the carry effect (the panel says so).
 // Null when the quote does not carry what the form needs (a settled trade's body has no discount factor and no
 // time to settlement): there is then no forward to show, and none is made up.
 export function reprice(q, { spotPct = 0, quoteBp = 0, baseBp = 0, volPts = 0, dPoints = 0, pip = 1 } = {}) {
@@ -239,15 +257,16 @@ export function reprice(q, { spotPct = 0, quoteBp = 0, baseBp = 0, volPts = 0, d
   const sign = q.direction === 'BUY' ? 1 : -1
   const k = 1 + spotPct / 100
   const S = q.spot * k
+  const tSpot = finite(q.t_spot) && q.t_spot > 0 ? q.t_spot : 0
+  const carry = Math.exp((quoteBp - baseBp) / 10000 * Math.max(T - tSpot, 0))
   const dfq = q.df_quote * Math.exp(-quoteBp / 10000 * T)
-  let F
-  if (option) {
-    F = q.forward * (S / q.spot) * Math.exp((quoteBp - baseBp) / 10000 * T)
-  } else {
-    const dfb = q.df_base * Math.exp(-baseBp / 10000 * T)
-    F = q.forward_mode === 'MARKET' && q.market_points != null ? q.forward * (S / q.spot) * (dfb / q.df_base) / (dfq / q.df_quote) : S * dfb / dfq
-  }
-  if (dPoints) F += dPoints * pip * k * Math.exp((quoteBp - baseBp) / 10000 * T)
+  // The engine's own forward, moved by the shocks, in both forward modes and for an option as for a forward. It is
+  // never rebuilt here as S·DF_base/DF_quote: the two discount factors the quote names run from today, so on a
+  // pair whose spot settles later that product is off by the carry over the spot lag (1.6 pips of forward on a
+  // three-month EURUSD at 3.9% against 2.1%, three days to spot) and the unshocked scenario would not be the
+  // ticket's NPV.
+  let F = q.forward * k * carry
+  if (dPoints) F += dPoints * pip * k * carry
   if (!finite(F)) return null
   F = Math.max(F, FORWARD_FLOOR * S)                               // a shocked forward is never zero or negative
   const unit = option ? gk(F, q.strike, q.t_expiry, Math.max(q.vol_pct / 100 + volPts / 100, 0.0001), q.option_type === 'CALL', dfq)

@@ -105,7 +105,8 @@
 
 .bl-row {
   border-bottom: 1px solid var(--panel-2);
-  cursor: pointer; transition: background 0.1s;
+  cursor: pointer;   /* no fade on the highlight: it lands in the same frame as the pointer; a 0.1 s fade left a trail
+                        of half-lit rows behind a moving pointer and four times the painting */
 }
 .bl-row:hover      { background: var(--panel-2); }
 .bl-row-selected   { background: rgba(13,212,168,0.04) !important; }

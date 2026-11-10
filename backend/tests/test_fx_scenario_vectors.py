@@ -1,7 +1,8 @@
-"""Shared test vectors for the browser's copies of three calculations: forward points between quoted tenors
+"""Shared test vectors for the browser's copies of four calculations: forward points between quoted tenors
 (api/routes/currencies.interp_points), the settlement amount of a forward, a call and a put
-(settlement/rule.settlement_amount), and the vol read off a pair's ATM/RR25/BF25 surface (pricing/fx_vol:
-parse_surface, _interp, smile_vol, vol_at, with pricing/fx_option.forward_delta inside the fixed point).
+(settlement/rule.settlement_amount), the vol read off a pair's ATM/RR25/BF25 surface (pricing/fx_vol:
+parse_surface, _interp, smile_vol, vol_at, with pricing/fx_option.forward_delta inside the fixed point), and a
+forward's value from the engine's own answer with the spot or the curves moved (pricing/currency_forward).
 tests/vectors/fx_scenario.json is generated FROM those functions; this test regenerates it and fails when the
 file is out of date, and the frontend reads the same file in its own tests (fx-scenario.test.js, fx-vol.test.js),
 so the two implementations cannot drift apart unnoticed.
@@ -13,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import date as _d
 from pathlib import Path
 
 import pytest
@@ -78,6 +80,38 @@ DELTAS = [  # forward, strike, years to expiry, vol (decimal): the forward delta
     (152.4, 152.4, 1.0, 0.0001), (152.4, 150.0, 0.0, 0.1), (152.4, 155.0, 0.0, 0.1), (152.4, 150.0, 0.5, 0.0),
 ]
 
+# A forward as the engine prices it (pricing/currency_forward.price_currency_forward), then again with the spot or one
+# flat curve moved: what the scenario tab's `reprice` must give back from the first answer alone.
+# name, base, quote, pip, direction, notional, spot, valuation, spot date (None: settles at once), settlement,
+# quote rate, base rate, contract rate (None: the fair forward rounded to `dp`), dp
+REPRICE = [
+    ("EURUSD 3M, spot in three days, at the fair forward", "EUR", "USD", 1e-4, "BUY", 10_000_000, 1.0850, _d(2026, 11, 9), _d(2026, 11, 12), _d(2027, 2, 12), 0.0390, 0.0210, None, 5),
+    ("EURUSD 3M, sold away from the market", "EUR", "USD", 1e-4, "SELL", 10_000_000, 1.0850, _d(2026, 11, 9), _d(2026, 11, 12), _d(2027, 2, 12), 0.0390, 0.0210, 1.0800, 5),
+    ("EURUSD 1W, spot over a weekend", "EUR", "USD", 1e-4, "BUY", 5_000_000, 1.0850, _d(2026, 11, 12), _d(2026, 11, 16), _d(2026, 11, 23), 0.0390, 0.0210, 1.0845, 5),
+    ("USDJPY 1Y, the base rate above the quote's", "USD", "JPY", 1e-2, "BUY", 1_000_000, 152.40, _d(2026, 11, 9), _d(2026, 11, 12), _d(2027, 11, 12), 0.0050, 0.0390, 147.00, 3),
+    ("BTCUSD 3M, spot settles at once", "BTC", "USD", 1.0, "BUY", 10, 104_250.0, _d(2026, 11, 9), None, _d(2027, 2, 9), 0.0390, -0.0450, None, 2),
+    ("BTCUSD 3M, sold", "BTC", "USD", 1.0, "SELL", 2.5, 104_250.0, _d(2026, 11, 9), None, _d(2027, 2, 9), 0.0390, -0.0450, 101_000.0, 2),
+]
+REPRICE_SPOT_PCT = [0.0, 5.0, -12.5]
+REPRICE_RATE_BP = [(100.0, 0.0), (0.0, 100.0), (-50.0, 25.0)]      # quote curve, base curve
+
+
+def _reprice_case(name, base, quote, pip, direction, n, spot, val, sd, settle, rq, rb, k, dp) -> dict:
+    from pricing.curve import Curve
+    from pricing.currency_forward import price_currency_forward, year_fraction
+
+    def price(spot_=spot, rq_=rq, rb_=rb, k_=k):
+        return price_currency_forward(base_currency=base, quote_currency=quote, base_notional=n, forward_rate=k_, spot=spot_, valuation_date=val,
+                                      settlement_date=settle, quote_curve=Curve(valuation_date=val, flat_rate=rq_), base_rate=rb_,
+                                      direction=direction, pip=pip, spot_date=sd)
+    K = k if k is not None else round(price().forward, dp)
+    r = price(k_=K)
+    q = {"shape": "FORWARD", "direction": r.direction, "base_notional": r.base_notional, "spot": r.spot, "forward": r.forward, "forward_rate": r.forward_rate,
+         "df_quote": r.df_quote, "df_base": r.df_base, "t": r.t, "t_spot": r.t_spot, "forward_mode": "IMPLIED", "market_points": None}
+    spot_shocks = [{"spot_pct": p, "forward": s.forward, "npv": s.npv} for p in REPRICE_SPOT_PCT for s in [price(spot_=spot * (1 + p / 100), k_=K)]]
+    rate_shocks = [{"quote_bp": a, "base_bp": b, "forward": s.forward, "npv": s.npv} for a, b in REPRICE_RATE_BP for s in [price(rq_=rq + a / 1e4, rb_=rb + b / 1e4, k_=K)]]
+    return {"name": name, "pip": pip, "quote": q, "t_spot": year_fraction(val, sd) if sd else 0.0, "npv": r.npv, "spot_shocks": spot_shocks, "rate_shocks": rate_shocks}
+
 
 def _quotes(grid: dict) -> list[dict]:
     """A grid as the snapshot rows it is stored as: what the pairs route reads back into vol_surface.grid."""
@@ -112,6 +146,16 @@ def build() -> dict:
                       for a, r, b in ((0.072, -0.0035, 0.002), (0.505, 0.019, 0.0175), (0.1, 0.0, 0.0)) for d in (0.1, 0.25, 0.5, 0.75, 0.9)],
         "forward_delta": [{"forward": F, "strike": K, "t": T, "vol": sig, "expected": forward_delta(F, K, T, sig, call=True)} for F, K, T, sig in DELTAS],
         "vol_at": [{"surface": name, "t": T, "forward": F, "strike": K, "expected": vol_at(pillars[name], T, F, K)} for name, T, F, K in VOL_AT],
+        "about_reprice": "Generated by the same test from pricing/currency_forward.price_currency_forward on flat curves. `quote` holds the fields of the "
+                         "engine's answer the scenario tab reads, `t_spot` among them (the ACT/365 time from the valuation date to the spot date the "
+                         "forward is carried from; 0 when spot settles at once); `npv` and each shock's forward and npv are the engine priced again with "
+                         "the spot moved, or with a parallel shift on the quote curve, the base rate, or both. Every case is in parity mode "
+                         "(forward_mode IMPLIED), and in that mode the browser's reprice must give the engine's figures with no shock, under a spot "
+                         "shock and under a rate shock: it moves the forward over spot to settlement (t - t_spot) and the quote discount factor over "
+                         "today to settlement (t), as the engine does. There is no case on quoted points (forward_mode MARKET), where the engine holds "
+                         "the forward against the curves and adds unchanged points to a moved spot while the browser scales the points with spot, and "
+                         "none for an NDF or a trade settling at spot, which the engine values by the same formula.",
+        "reprice": [_reprice_case(*c) for c in REPRICE],
     }
 
 
@@ -240,6 +284,46 @@ def test_the_vol_vectors_cover_the_cases_and_agree_with_figures_worked_by_hand()
     # strike at the forward
     low, mid, high = (at[("eight tenors", 1.5, 1.085, round(1.085 * m, 6))] for m in (0.9, 1.0, 1.1))
     assert low > high and low > mid
+
+
+def test_the_reprice_vectors_cover_a_spot_lag_and_agree_with_figures_worked_by_hand():
+    """The scenario tab's base figure (fx-scenario.js reprice): the engine's forward is carried from the spot date, so it is not
+    the ratio of the two today-to-settlement discount factors the quote names. Before 9 November 2026 the browser rebuilt it
+    from those and an unshocked EURUSD scenario showed 1,298 USD on a ticket whose NPV was -28 (the local stack's curves; at this
+    file's rates the same error is 1.6 pips and 1,634 USD)."""
+    import math
+    v = build()
+    cases = {c["name"]: c for c in v["reprice"]}
+    assert len(cases) == len(v["reprice"]) == 6 and all(len(c["spot_shocks"]) == 3 and len(c["rate_shocks"]) == 3 for c in cases.values())
+    assert sum(1 for c in cases.values() if c["t_spot"] > 0) == 4 and sum(1 for c in cases.values() if c["t_spot"] == 0) == 2
+    # EURUSD 3M by hand: spot 2026-11-12, settlement 2027-02-12, 92 days; F = 1.0850·exp((0.0390 − 0.0210)·92/365) = 1.089934
+    e = cases["EURUSD 3M, spot in three days, at the fair forward"]
+    q = e["quote"]
+    assert q["forward"] == pytest.approx(1.0850 * math.exp(0.018 * 92 / 365), rel=1e-12) and q["forward"] == pytest.approx(1.089934, abs=5e-7)
+    assert q["forward_rate"] == 1.08993 and e["t_spot"] == 3 / 365 and q["t"] == 95 / 365
+    # the two discount factors run from today (95 days): their ratio carries three days more, 1.6 pips on this pair
+    from_today = q["spot"] * q["df_base"] / q["df_quote"]
+    assert from_today == pytest.approx(1.0850 * math.exp(0.018 * 95 / 365), rel=1e-12) and (from_today - q["forward"]) * 1e4 == pytest.approx(1.61, abs=0.01)
+    # NPV = N·(F − K)·DF_quote = 10,000,000 · (1.08993381 − 1.08993) · exp(−0.039·95/365) = 10,000,000 · 0.00000381 · 0.98990 = 37.75 USD:
+    # not the 1,634 the ratio would show (10,000,000 · (1.09009508 − 1.08993) · 0.98990)
+    assert q["forward"] == pytest.approx(1.08993381, abs=5e-9) and from_today == pytest.approx(1.09009508, abs=5e-9)
+    assert e["npv"] == pytest.approx(10_000_000 * (q["forward"] - 1.08993) * math.exp(-0.039 * 95 / 365), rel=1e-12) and e["npv"] == pytest.approx(37.75, abs=0.01)
+    assert 10_000_000 * (from_today - 1.08993) * q["df_quote"] == pytest.approx(1634.0, abs=0.5)
+    # the answer names the lag it carried over: three days of 365
+    assert q["t_spot"] == e["t_spot"] == 3 / 365
+    # a spot shock scales the forward; the contract rate stays
+    up = next(s for s in e["spot_shocks"] if s["spot_pct"] == 5.0)
+    assert up["forward"] == pytest.approx(q["forward"] * 1.05, rel=1e-12) and up["npv"] == pytest.approx(10_000_000 * (q["forward"] * 1.05 - 1.08993) * q["df_quote"], rel=1e-12)
+    # +100 bp on the quote curve: the engine's forward grows over spot to settlement (92 days), the discount factor falls over 95
+    r = next(s for s in e["rate_shocks"] if (s["quote_bp"], s["base_bp"]) == (100.0, 0.0))
+    assert r["forward"] == pytest.approx(q["forward"] * math.exp(0.01 * 92 / 365), rel=1e-12)
+    assert r["npv"] == pytest.approx(10_000_000 * (r["forward"] - 1.08993) * q["df_quote"] * math.exp(-0.01 * 95 / 365), rel=1e-12)
+    # a digital asset: no lag, and the forward IS the ratio
+    b = cases["BTCUSD 3M, spot settles at once"]["quote"]
+    assert b["spot"] * b["df_base"] / b["df_quote"] == pytest.approx(b["forward"], rel=1e-14)
+    # sold: the sign turns
+    s = cases["EURUSD 3M, sold away from the market"]
+    assert s["npv"] == pytest.approx(-10_000_000 * (s["quote"]["forward"] - 1.0800) * s["quote"]["df_quote"], rel=1e-12) and s["npv"] < 0
 
 
 def test_vol_at_gives_back_the_quotes_at_their_own_strikes():

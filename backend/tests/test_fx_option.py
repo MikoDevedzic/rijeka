@@ -111,6 +111,9 @@ def test_option_route_prices_from_snapshots_and_names_the_vol_tier():
     assert b["shape"] == "OPTION" and b["vol_tier"] == "SURFACE" and b["strike"] == pytest.approx(b["forward"])      # at the forward
     assert b["settlement_date"] == "2027-02-02" and b["npv"] > 0 and b["vega"] > 0 and b["quote_currency"] == "USD"
     assert o.status_code == 200 and o.json()["vol_tier"] == "OVERRIDE" and o.json()["npv"] < 0 and o.json()["vol_pct"] == 9.0
+    # the answer carries the spot lag its forward was carried over (Friday 30 Oct 2026, EURUSD spot Tuesday 3 Nov: four
+    # days of 365): the scenario tab moves the forward over T − t_spot, and reads zero lag when the field is missing
+    assert b["t_spot"] == pytest.approx(4 / 365, rel=1e-12) and o.json()["t_spot"] == b["t_spot"] and b["t"] > b["t_spot"]
 
 
 def _trade(side="BUY", **terms):

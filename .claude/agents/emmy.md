@@ -17,6 +17,11 @@ Procedure
 4. Check the statements made about the calculation (changelog, methodology, README, on-screen labels) against what you found: an accuracy claimed, a tolerance, "matches the market at X".
 5. Report, most severe first: what is computed, which supports are missing or weaker than claimed, your independent figure, and what a user relying on the number should know. Separate "ran" from "read". Say what you did not check.
 
+Learned on 9 November 2026 (the scenario tab)
+- A calculation done in the browser is a model too. Re-derive it on a product with a spot lag and under a rate shock, not only at rest: on 9 November 2026 the scenario's forward was carried from today while the engine's is carried from the spot date (1.6 pips on 3M EURUSD), and its rate shock ran over T where the engine's runs over T minus the lag.
+- A figure worked by hand and written into a test is pinned tightly enough to catch its own error: a hand value of 1.09009506 passed a loose tolerance while the true value was 1.09009508.
+- A version line and a change note in the methodology move with the formula in the same change.
+
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
 - Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.
