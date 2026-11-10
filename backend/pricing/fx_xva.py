@@ -22,7 +22,7 @@ from typing import Optional
 import numpy as np
 
 from pricing.csa import CSA
-from pricing.xva_engine import WaterfallParams, WaterfallResult, run_waterfall
+from pricing.xva_engine import WaterfallParams, WaterfallResult, hazard_beta, run_waterfall
 
 # Flat annualised vols by pair, percent: desk inputs for the demo, not market data.
 DEFAULT_VOL_PCT = {
@@ -113,6 +113,25 @@ def _forward_values(inp: ForwardXvaInput, steps: int, dt: float, m: np.ndarray) 
     return paths, v0, {"f_t": f_t, "df_t_T": df_t_T, "p0": p0}
 
 
+def wwr_of(x: np.ndarray, cp_hazard_if_halves: float, own_hazard_if_halves: float) -> Optional[dict]:
+    """The waterfall's wrong-way input from the desk's two numbers (the multiple each party's default intensity
+    takes when the asset halves against its forward); None when both are 1, default independent of the asset."""
+    b_cp, b_ow = hazard_beta(cp_hazard_if_halves), hazard_beta(own_hazard_if_halves)
+    if b_cp == 0.0 and b_ow == 0.0:
+        return None
+    return {"x": x, "beta_cp": b_cp, "beta_own": b_ow}
+
+
+def wwr_meta(wf: WaterfallResult, cp_hazard_if_halves: float, own_hazard_if_halves: float) -> Optional[dict]:
+    if wf.cva_independent is None and wf.dva_independent is None:
+        return None
+    return {"cp_hazard_if_halves": float(cp_hazard_if_halves), "own_hazard_if_halves": float(own_hazard_if_halves),
+            "cva_independent": wf.cva_independent if wf.cva_independent is not None else wf.cva,
+            "dva_independent": wf.dva_independent if wf.dva_independent is not None else wf.dva,
+            "model": "default intensity h = c(t)·(asset / its forward)^b on each path, c(t) solved so the mean survival is the "
+                     "credit curve's (Hull and White 2012); b = −log2 of the multiple typed"}
+
+
 def simulate_paths(inp: ForwardXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
     """MtM paths from our side on the monthly grid, P(0, k·dt) on the quote curve, and V0.
     noise_out, when given, receives the standard normals drawn (z, n_paths × steps) and the forward paths (f_t),
@@ -131,8 +150,10 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
                 own_lgd: float = 0.40, hurdle_rate: float = 0.12, capital_model: str = "sa_ccr",
                 counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None, own_cds_curve=None,
                 ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
-                simm_im_m: Optional[float] = None) -> tuple[WaterfallResult, dict]:
+                simm_im_m: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0) -> tuple[WaterfallResult, dict]:
+    noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0 = simulate_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
+    wwr = wwr_of(np.log(noise_out["f_t"] / inp.forward), cp_hazard_if_halves, own_hazard_if_halves)
     steps, dt = monthly_grid(inp.t_years)
     rw = im_risk_weight(inp.pair)
     im_m = simm_im_m if simm_im_m is not None else (abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None)
@@ -143,7 +164,7 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         ir01=None, simm_im_m=im_m,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     nz = {}
     if inp.pillars:
         _, _, _ = simulate_paths(inp, n_paths=2, seed=seed, noise_out=nz)      # the step vols, for the record
@@ -153,7 +174,8 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
             "step_vols_pct": [round(float(v) * 100, 3) for v in nz["step_vols"]] if inp.pillars else None,
             "im_rw_per_pct": rw, "im_basis": "SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM",
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward at the surface's ATM vol to settlement, same waterfall as rates",
-            "p0_grid": [float(x) for x in p0], "_paths": paths}       # the MtM paths, for the ticket's chart (not serialised as such)
+            "p0_grid": [float(x) for x in p0], "_paths": paths,       # the MtM paths, for the ticket's chart (not serialised as such)
+            "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
     return wf, meta
 
 
@@ -252,8 +274,10 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
                ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
                capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
                own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
-               simm_im_m: Optional[float] = None) -> tuple[WaterfallResult, dict]:
+               simm_im_m: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0) -> tuple[WaterfallResult, dict]:
+    noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0 = simulate_option_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
+    wwr = wwr_of(np.log(noise_out["f_t"] / inp.forward), cp_hazard_if_halves, own_hazard_if_halves)
     steps, dt = monthly_grid(inp.t_settle)
     rw = im_risk_weight(inp.pair)
     im_m = simm_im_m if simm_im_m is not None else (abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None)
@@ -266,7 +290,7 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         ir01=None, simm_im_m=im_m,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     meta = {"vol_pct": inp.vol * 100.0, "vol_source": inp.vol_source or "the pair's surface at the option's expiry and strike",
             "vol_mode": "ATM term structure for the paths, the smile at each path's moneyness (sticky-delta)" if inp.pillars else "flat (today's vol at the strike, held along the path)",
             "im_rw_per_pct": rw, "im_basis": "SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM",
@@ -275,7 +299,7 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
                      f"(the credit engine's model); payoff fixed at expiry, discounted to settlement"
                      + ("; barriers monitored at the grid points" if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else "")
                      + ("; American valued as European on the paths (a lower bound)" if spec.style == "AMERICAN" else ""),
-            "_paths": paths}
+            "_paths": paths, "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
     return wf, meta
 
 
@@ -380,11 +404,13 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
                 ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
                 capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
                 own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
-                simm_im_m: Optional[float] = None) -> tuple[WaterfallResult, dict]:
+                simm_im_m: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0) -> tuple[WaterfallResult, dict]:
     """XVA of a package of legs on one pair as one netting set: the summed paths through the same waterfall.
     Initial margin on the NET spot sensitivity of the legs still alive (package_im; a figure typed by the desk is
     used as typed, amortised to the longest settlement); the capital add-on as package_addons."""
+    noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0, rows = simulate_package_paths(legs, n_paths=n_paths, seed=seed, noise_out=noise_out)
+    wwr = wwr_of(np.log(noise_out["m"]), cp_hazard_if_halves, own_hazard_if_halves)
     longest = max(legs, key=_horizon)
     steps, dt = monthly_grid(_horizon(longest))
     rw = im_risk_weight(longest.pair)
@@ -398,7 +424,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
         ir01=None, simm_im_m=im_m,
     )
     wf = run_waterfall(paths, v0, p0, params, csa, addon_profiles=package_addons(legs, csa, steps, dt),
-                       im_schedule=package_im(legs, rw, steps, dt) if simm_im_m is None else None,
+                       im_schedule=package_im(legs, rw, steps, dt) if simm_im_m is None else None, wrong_way=wwr,
                        **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     pillars = next((l.pillars for l in legs if l.pillars), None)
     sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)
@@ -409,6 +435,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
                         else "flat (the longest leg's vol for the paths" + ("; each option at its own vol" if styles else "") + ")",
             "im_rw_per_pct": rw, "im_basis": ("SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM") + ", on the net spot sensitivity of the legs still alive",
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "p0_grid": [float(x) for x in p0], "_paths": paths, "_legs": rows,
+            "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves),
             "model": f"{len(legs)} legs on one set of paths: every forward of the pair is its own forward times one lognormal driver, "
                      "so the legs net path by path; each leg valued as on its own (a forward's mark, an option's style in closed form); "
                      "a leg stays to the first grid date at or after its settlement and is nothing after; the capital add-on is the sum of the legs' add-ons"

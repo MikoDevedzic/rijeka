@@ -327,3 +327,41 @@ test('XVA of a package: a strip on a digital asset runs as one netting set, and 
   expect((await single).status()).toBe(200)
   expectClean(problems)
 })
+
+test('wrong-way risk: a sold forward to a counterparty whose credit worsens as the coin falls is charged more, and says so', async ({ app, problems }) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await selectDemoBank(app, win)
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)
+  // sell the coin forward: we are owed when it has fallen
+  await win.getByRole('button', { name: /^Sell / }).first().click()
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()
+  const toggle = win.getByRole('button', { name: /MODEL INPUTS/ })
+  await expect(toggle).toBeVisible()
+  if (!/HIDE/.test(await toggle.innerText())) await toggle.click()
+  await expect(win.getByTestId('xva-credit-link')).toBeVisible()
+
+  // independent first: no wrong-way line
+  const first = app.waitForResponse(r => r.url().endsWith('/api/xva/currency') && r.request().method() === 'POST', { timeout: 90_000 })
+  await win.getByRole('button', { name: /SIMULATE$/ }).click()
+  const plain = await (await first).json()
+  expect(plain.wwr).toBe(null)
+  await expect(win.getByTestId('xva-wwr')).toHaveCount(0)
+
+  // the counterparty's intensity × 3 when the coin halves: the same paths, a larger charge
+  await win.getByTestId('xva-link-cp').selectOption('3')
+  const second = app.waitForResponse(r => r.url().endsWith('/api/xva/currency') && r.request().method() === 'POST' && r.request().postDataJSON().cp_hazard_if_halves === 3, { timeout: 90_000 })
+  await win.getByRole('button', { name: /SIMULATE$/ }).click()
+  const linked = await (await second).json()
+  expect(linked.wwr.cva_independent).toBe(plain.xva.cva)
+  expect(linked.xva.cva).toBeLessThan(plain.xva.cva)
+  const line = win.getByTestId('xva-wwr')
+  await expect(line).toContainText('WRONG-WAY RISK')
+  expect(Number(await line.getAttribute('data-cva'))).toBeLessThan(Number(await line.getAttribute('data-independent')))
+  await expectNoHorizontalOverflow(win, 'XVA with a credit link')
+  await app.screenshot({ path: 'e2e/.out/shots/xva-wrong-way.png' })
+  expectClean(problems)
+})

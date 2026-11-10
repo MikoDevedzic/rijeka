@@ -353,6 +353,20 @@ export function useXvaView() {
 // and the line's "default" is measured against it.
 export const HIDDEN_INPUT_DEFAULTS = Object.freeze({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', simmIm: '', capModel: 'sa_ccr' })
 
+// Wrong-way risk on a currency or digital-asset ticket: the multiple a party's default intensity takes when the
+// asset halves against its forward (the request's cp_hazard_if_halves / own_hazard_if_halves). 1 is independence.
+export const CREDIT_LINKS = Object.freeze([
+  ['1', 'independent'], ['1.5', '× 1.5 when it halves'], ['2', '× 2 when it halves'], ['3', '× 3 when it halves'], ['5', '× 5 when it halves'],
+  ['0.5', '× 0.5 when it halves (worsens as it rises)'],
+])
+// What the link did to CVA, for the line under the results: null when the run had no link.
+export function wrongWayLine(res) {
+  const w = res?.wwr, cva = Number(res?.xva?.cva)
+  if (!w || !Number.isFinite(cva) || Number(w.cp_hazard_if_halves) === 1) return null
+  const ind = Number(w.cva_independent)
+  return { cva, independent: ind, k: Number(w.cp_hazard_if_halves), wrong: cva < ind, change: cva - ind }
+}
+
 // The spread grid still produces the desk's default curves (a blank cell is 0, as in toCurve).
 export function spreadsAreDefault(spreads) {
   const n = (v) => parseFloat(v) || 0
@@ -360,9 +374,9 @@ export function spreadsAreDefault(spreads) {
 }
 
 // WWR, LGD, the FBA ratio, the hurdle, the SIMM IM and the capital model are all as the tab opened.
-export function assumptionsAreDefault({ wwr, lgd, fbaRatio, hurdle, simmIm, capModel } = {}) {
+export function assumptionsAreDefault({ wwr, lgd, fbaRatio, hurdle, simmIm, capModel, cpLink, ownLink } = {}) {
   const D = HIDDEN_INPUT_DEFAULTS
-  return Number(wwr) === D.wwr && parseFloat(lgd) === parseFloat(D.lgd) && parseFloat(fbaRatio) === parseFloat(D.fbaRatio)
+  return Number(wwr) === D.wwr && Number(cpLink ?? 1) === 1 && Number(ownLink ?? 1) === 1 && parseFloat(lgd) === parseFloat(D.lgd) && parseFloat(fbaRatio) === parseFloat(D.fbaRatio)
     && parseFloat(hurdle) === parseFloat(D.hurdle) && simmImValue(simmIm) == null && capModel === D.capModel
 }
 

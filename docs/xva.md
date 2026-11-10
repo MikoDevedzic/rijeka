@@ -148,6 +148,28 @@ a calendar spread's exposure to the SHAPE of the forward curve or of the vol ter
 simulated; an expiry or a settlement between two grid dates is read at the later one, so a leg can stand up to
 a month longer than its contract (on its own grid a leg's settlement is the last date).
 
+**Wrong-way risk** (`pricing/xva_engine.path_survival`, 10 November 2026). On a currency or digital-asset
+ticket a party's default can be tied to the asset. Following Hull and White ("CVA and Wrong-Way Risk", Financial
+Analysts Journal 68(5), 2012), the default intensity on path p at grid date i is
+h_i(p) = c_i · (asset / its forward)^b = c_i · exp(b · ln M_i(p)), and survival is
+q_i(p) = q_{i−1}(p) · exp(−h_i(p) · Δt). c_i is solved date by date (Newton) so that the MEAN survival across
+paths is the credit curve's at that date: the curve is repriced exactly, and b only moves default probability
+between paths. CVA is then LGD · Σ_i E[exposure_i(p) · (q_{i−1}(p) − q_i(p))] · DF_i, with the exposure after
+collateral and margin as before; DVA likewise with our own default. The desk's input is not b but its meaning:
+the multiple the intensity takes when the asset halves against its forward (`cp_hazard_if_halves`,
+`own_hazard_if_halves`; b = −log2 of it; 1 = independent, the default, which is the calculation before this
+existed, number for number). A counterparty that is long the asset worsens as it falls: being owed when it has
+fallen (a sold forward, a bought put) is the wrong way and CVA rises; being owed when it has risen is the right
+way and it falls. The answer carries `wwr`: the two inputs and CVA and DVA as they would be with independence, and
+the tab shows both. Checked in `tests/test_wrong_way_risk.py`: the mean survival equals the curve at every date;
+on two states the solved intensities satisfy the definition; the Monte Carlo agrees with a Gauss–Hermite
+quadrature of the same definition that shares no code with it (bought and sold, three multiples); with the link
+off every component is unchanged. Limits: the multiple is the desk's judgement, not calibrated to anything (a
+crypto counterparty has no traded credit curve to regress on); one link per party for the whole life; the link
+is to the asset of the ticket only; funding, capital and margin terms do not see it; the netting-set charge
+(`/api/xva/incremental`, the credit engine) does not model it yet; a rates ticket keeps the multiplier
+(`wwr_multiplier`), which currency tickets no longer show.
+
 **Vol along the paths.** Both stand-alone engines and the credit engine use the surface, not one number held:
 the spot steps with the piecewise forward vols of the pair's ATM term structure (`fx_vol.step_vols`), so its
 log-variance at every grid date is the surface's ATM variance there; an option is valued at each date at the

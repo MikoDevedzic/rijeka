@@ -3,6 +3,27 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## 0.17.0 · 10 November 2026
+
+**Wrong-way risk is modelled on currency and digital-asset tickets.**
+
+- **A party's default can be tied to the asset.** On the XVA tab, CREDIT AND BTC (or the pair's base) takes, for
+  the counterparty and for ourselves, the multiple its default intensity takes when the asset halves against its
+  forward. On every simulated path the intensity then moves with the asset, and it is solved date by date so the
+  credit curve is repriced exactly (Hull and White, 2012). CVA is the exposure on each path times the default
+  probability on that path.
+- **The tab shows both figures:** CVA with the link and CVA if default were independent, named WRONG-WAY RISK or
+  RIGHT-WAY RISK by which way it went. Sold the coin to a counterparty that worsens as it falls: the charge
+  rises. Bought it from the same counterparty: it falls.
+- **Independent is the default and changes nothing:** every component is what it was, number for number (the
+  reference suite, the Excel replications and the pinned book are unchanged).
+- **The multiplier (WWR ×) is gone from currency and digital-asset tickets**, where the link replaces it; a rates
+  ticket keeps it.
+- **Checked** against a quadrature of the same definition that shares no code with the simulation, and against
+  the definition itself. **Limits, in `docs/xva.md` and the model inventory:** the multiple is the desk's
+  judgement of the counterparty, not calibrated; one link for the life of the trade; the netting-set charge and
+  the funding, capital and margin terms do not see it; no methodology section yet.
+
 ## 0.16.5 · 10 November 2026
 
 **Legs, step 3, first part: the XVA of a package is one run.**

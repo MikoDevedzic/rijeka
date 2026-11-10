@@ -60,7 +60,9 @@ export function RunAssumes({ children }) {
 }
 
 // PATHS and WWR × sliders with their readouts.
-export function PathsWwrSliders({ paths, setPaths, wwr, setWwr, tip, untip, pathsTip = 'paths' }) {
+// `multiplier` false leaves the wrong-way multiplier out: a currency or digital-asset ticket models the link
+// instead (CREDIT AND THE ASSET in FxXvaPanel), and sends the multiplier as 1.
+export function PathsWwrSliders({ paths, setPaths, wwr, setWwr, tip, untip, pathsTip = 'paths', multiplier = true }) {
   return (
     <>
       <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
@@ -68,11 +70,11 @@ export function PathsWwrSliders({ paths, setPaths, wwr, setWwr, tip, untip, path
         <input type='range' min='500' max='5000' step='500' value={paths} onChange={e=>setPaths(parseInt(e.target.value))} style={{flex:1,accentColor:'var(--text-dim)'}}/>
         <span style={{fontSize:'0.8125rem',color:'var(--text-hi)',fontFamily:'var(--mono)',minWidth:'40px',textAlign:'right'}}>{paths.toLocaleString()}</span>
       </div>
-      <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
+      {multiplier && <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
         <TipLabel tipKey='wwr' tip={tip} untip={untip} style={{ whiteSpace:'nowrap', marginBottom:0 }}>WWR ×</TipLabel>
         <input type='range' min='1.0' max='2.0' step='0.1' value={wwr} onChange={e=>setWwr(parseFloat(e.target.value))} style={{flex:1,accentColor:'var(--text-dim)'}}/>
         <span style={{fontSize:'0.8125rem',color:'var(--text-hi)',fontFamily:'var(--mono)',minWidth:'30px',textAlign:'right'}}>{wwr.toFixed(1)}</span>
-      </div>
+      </div>}
     </>
   )
 }

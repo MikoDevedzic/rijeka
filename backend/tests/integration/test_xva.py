@@ -181,6 +181,33 @@ def test_a_package_run_is_bounded_by_what_one_run_may_cost(client, auth_a, ids, 
     assert ok.status_code == 200, ok.text[:300]
 
 
+# ── wrong-way risk: a party's default intensity tied to the asset ─────────────────────────────────
+
+def test_wrong_way_risk_on_the_three_currency_routes(client, auth_a, ids, pairs):
+    btc = pairs["BTCUSD"]
+    q = _fwd_quote(client, auth_a, "BTCUSD", 10, 182)
+    sold = {"pair": "BTCUSD", "base_notional": 10, "settlement_date": q["settlement_date"], "forward_rate": q["forward"], "direction": "SELL", "paths": 1000}
+    plain = client.post("/api/xva/currency", json=sold, headers=auth_a).json()
+    linked = client.post("/api/xva/currency", json={**sold, "cp_hazard_if_halves": 3.0}, headers=auth_a).json()
+    assert plain["wwr"] is None and linked["wwr"]["cp_hazard_if_halves"] == 3.0
+    # sold the coin to a counterparty whose credit worsens as it falls: owed when it has fallen, the wrong way
+    assert linked["xva"]["cva"] < plain["xva"]["cva"] < 0
+    assert linked["wwr"]["cva_independent"] == plain["xva"]["cva"], "the figure with independence is the run without the link"
+    for k in ("fva", "fba", "kva", "mva", "colva", "dva"):
+        assert linked["xva"][k] == plain["xva"][k], k
+    assert linked["xva"]["xva_total"] == pytest.approx(sum(linked["xva"][k] for k in SEVEN), abs=0.05)
+    # an option, and a package
+    oq = client.post("/api/currency/option/price", json=B.option_price_request("BTCUSD", "EUROPEAN", btc["spot"], _settle(93), True, 10), headers=auth_a).json()
+    opt = B.crypto_option(ids["a"], "WWR-O", btc, oq, "EUROPEAN")
+    r = client.post("/api/xva/currency-option", json={"trade": opt, "paths": 400, "cp_hazard_if_halves": 2.0, "own_hazard_if_halves": 2.0}, headers=auth_a)
+    assert r.status_code == 200 and r.json()["wwr"]["own_hazard_if_halves"] == 2.0, r.text[:300]
+    leg = B.crypto_forward(ids["a"], "WWR-P", btc, q)
+    r = client.post("/api/xva/currency-package", json={"trades": [leg, opt], "paths": 400, "cp_hazard_if_halves": 2.0}, headers=auth_a)
+    assert r.status_code == 200 and r.json()["wwr"]["cva_independent"] <= 0, r.text[:300]
+    for bad in (0, -1, 50):
+        assert client.post("/api/xva/currency", json={**sold, "cp_hazard_if_halves": bad}, headers=auth_a).status_code == 422
+
+
 # ── incremental: the counterparty's netting set with and without the trade ──────────────────────
 
 def _incremental(client, auth_a, ids, trade: dict) -> dict:

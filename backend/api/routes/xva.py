@@ -726,6 +726,10 @@ class CurrencyXvaRequest(BaseModel):
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
     simm_im_m: Optional[float] = None    # IM in $M for MVA; None = SIMM-style weight on the spot delta
+    # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
+    # halves against its forward. 1 = default independent of the asset (the numbers before this existed)
+    cp_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
+    own_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
 
 
 def surface_vol_pct(db, user_id: str, pair: str, t_years: float, forward: float, snapshot=None, lookup=None):
@@ -740,6 +744,15 @@ def surface_vol_pct(db, user_id: str, pair: str, t_years: float, forward: float,
         return None, None
     v, tier, note = lookup(vs.quotes, pair, t_years, forward, forward, None)
     return float(v) * 100.0, f"{pair}_VOL surface, ATM at {t_years:.2f}y ({tier}; {getattr(vs, 'valuation_date', '')})"
+
+
+def wwr_block(m: Optional[dict]) -> Optional[dict]:
+    """The wrong-way block of a currency XVA answer: the two inputs, CVA and DVA as they would be with default
+    independent of the asset, the model in a sentence. None when the run had no link."""
+    if not m:
+        return None
+    return {"cp_hazard_if_halves": m["cp_hazard_if_halves"], "own_hazard_if_halves": m["own_hazard_if_halves"],
+            "cva_independent": round(float(m["cva_independent"]), 2), "dva_independent": round(float(m["dva_independent"]), 2), "model": m["model"]}
 
 
 def _surface_pillars(db, uid: str, pair: str):
@@ -796,7 +809,8 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                                   ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd,
                                   hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
                                   counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m)
+                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m,
+                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(q["npv"])
     # a fan of simulated MtM paths behind the profiles, as the rates tab draws: residual paths under a CSA, gross without
@@ -817,6 +831,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
+        "wwr": wwr_block(meta.get("wwr")),
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "vol_mode", "step_vols_pct")},
     }
 
@@ -848,6 +863,10 @@ class CurrencyOptionXvaRequest(BaseModel):
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
     simm_im_m: Optional[float] = None    # IM in $M for MVA; None = SIMM-style weight on the spot delta
+    # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
+    # halves against its forward. 1 = default independent of the asset (the numbers before this existed)
+    cp_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
+    own_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
 
 
 def currency_terms_of(d: dict) -> tuple[str, dict]:
@@ -906,7 +925,8 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
     wf, meta = fx_xva.option_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
                                  ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                  capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-                                 cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m)
+                                 cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m,
+                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(q["npv"])
     raw = wf.exposure_paths if csa.collateralised else meta["_paths"]
@@ -925,6 +945,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
+        "wwr": wwr_block(meta.get("wwr")),
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "style", "vol_mode")},
     }
 
@@ -961,6 +982,10 @@ class CurrencyPackageXvaRequest(BaseModel):
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"
     simm_im_m: Optional[float] = None
+    # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
+    # halves against its forward. 1 = default independent of the asset (the numbers before this existed)
+    cp_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
+    own_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
 
 
 def package_inputs(db, uid: str, trades: list[dict], *, val_date: date, vol_pct: Optional[float], vol_mode: str) -> tuple[list, list[dict], str]:
@@ -1010,7 +1035,8 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     wf, meta = fx_xva.package_xva(inputs, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
                                   ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                   capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m)
+                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m,
+                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(sum(float(q["npv"]) for q in quotes))
     raw = wf.exposure_paths if csa.collateralised else meta["_paths"]
@@ -1032,6 +1058,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
+        "wwr": wwr_block(meta.get("wwr")),
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "vol_mode")},
     }
 

@@ -27,7 +27,7 @@ import {
 } from './xva-shared.jsx'
 import {
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
-  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS,
+  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine,
 } from './xva-shared'
 import { Note } from '../common/Note'
 
@@ -112,6 +112,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const [volMode, setVolMode] = useState('SURFACE') // SURFACE: term structure (and smile) along the paths; FLAT: one vol held
   const [paths, setPaths] = useState(2000)
   const [wwr, setWwr] = useState(HIDDEN_INPUT_DEFAULTS.wwr)
+  const [cpLink, setCpLink] = useState('1')        // wrong-way risk: the counterparty's default intensity × this when the asset halves
+  const [ownLink, setOwnLink] = useState('1')      // and our own
   // spread curves: the cells commit on blur, as on the rates tab
   const [spreads, setSpreads] = useState(defaultSpreads)
   const setSpread = (g, t, v) => setSpreads(s => ({ ...s, [g]: { ...s[g], [t]: v } }))
@@ -186,6 +188,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         ...spreadCurvePayload(spreads.cp, spreads.own, spreads.ftp),
         lgd: Number(lgd) / 100, own_lgd: Number(lgd) / 100, fba_ratio: Number(fbaRatio) / 100, hurdle_rate: Number(hurdle) / 100,
         capital_model: capModel, wwr_multiplier: wwr, simm_im_m: simmImValue(simmIm),
+        cp_hazard_if_halves: Number(cpLink) || 1, own_hazard_if_halves: Number(ownLink) || 1,
         csa: fxCsaBody(settlement, imExchanged),
         collateral: collateralBody(collateral),
       }
@@ -214,6 +217,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // bp against the notional: the ticket's, or in a package the sum of every leg's
   const notionalQ = pkg && pkg.ready ? [quote, ...pkg.quotes].reduce((a, q) => a + (quoteNotional(q) || 0), 0) : quoteNotional(quote)
   const nLegs = pkg ? pkg.count + 1 : 1
+  const ww = wrongWayLine(res)
   // what netting is worth: the package's peak expected exposure against its legs' peaks added up
   const legPeaks = res?.package && Array.isArray(res.legs) ? res.legs.reduce((a, l) => a + (Number(l.ee_gross_peak) || 0), 0) : null
   const netPeak = res?.package && Array.isArray(res.ee_gross) && res.ee_gross.length ? Math.max(...res.ee_gross.map(Number)) : null
@@ -266,7 +270,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             {simulateError}
             <RunAssumes>
               {runAssumesLine({ paths, model: fxModelWords({ volPct, volMode, params: res?.params }), spreads,
-                assumptions: { wwr, lgd, fbaRatio, hurdle, simmIm, capModel } })}
+                assumptions: { wwr, lgd, fbaRatio, hurdle, simmIm, capModel, cpLink, ownLink } })}
             </RunAssumes>
           </>) : (<>
 
@@ -292,7 +296,22 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             ))}
           </div>
 
-          <PathsWwrSliders paths={paths} setPaths={setPaths} wwr={wwr} setWwr={setWwr} tip={tip} untip={untip} pathsTip='fxPaths' />
+          <PathsWwrSliders paths={paths} setPaths={setPaths} wwr={wwr} setWwr={setWwr} tip={tip} untip={untip} pathsTip='fxPaths' multiplier={false} />
+
+          <div data-testid="xva-credit-link" style={{ marginBottom: '10px' }}>
+            <SectionHeader>CREDIT AND {quote?.base_currency || 'THE ASSET'}<Note inline>
+              Wrong-way risk. A party's default intensity is tied to {quote?.base_currency || 'the asset'} on every path: the multiple chosen when it halves against its forward, one over it when it doubles, and solved date by date so the credit curve above is repriced exactly (Hull and White, 2012). A counterparty that is long the asset (a miner, a long-biased fund) worsens as it falls, so being owed money when it has fallen is the wrong way and the charge rises; being owed when it has risen is the right way and it falls. The multiple is the desk's judgement of the counterparty; independent is the calculation without it.
+            </Note></SectionHeader>
+            {[['Counterparty', cpLink, setCpLink, 'xva-link-cp'], ['Our own', ownLink, setOwnLink, 'xva-link-own']].map(([label, v, set, id]) => (
+              <div key={id} style={{ display: 'grid', gridTemplateColumns: '1fr 170px', gap: '4px', marginBottom: '4px', alignItems: 'center' }}>
+                <label htmlFor={id} style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>{label}</label>
+                <select id={id} data-testid={id} value={v} onChange={e => set(e.target.value)}
+                  style={{ ...INP, color: v === '1' ? 'var(--text-dim)' : 'var(--text-hi)', borderColor: v === '1' ? 'var(--border)' : 'var(--border-hi)' }}>
+                  {CREDIT_LINKS.map(([k, words]) => <option key={k} value={k}>{words}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
 
           {badge ? (
             <ModelBadge kind={badge.kind} tipKey='fxSurface' tip={tip} untip={untip}>{badge.text}</ModelBadge>
@@ -326,6 +345,13 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
               {notionalQ ? <> · notional {fmt(notionalQ).replace(/^\+/, '')} {ccy}</> : null}
               {res && <> · seed {res.seed ?? seed}</>}
             </VaFooter>
+            {ww && (
+              <div data-testid="xva-wwr" data-cva={Math.round(ww.cva)} data-independent={Math.round(ww.independent)} style={{ padding: '6px 16px 2px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>{ww.wrong ? 'WRONG-WAY RISK' : 'RIGHT-WAY RISK'}</span>
+                {' '}CVA <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(ww.cva)}</span> with the counterparty's credit tied to {quote?.base_currency || 'the asset'} (× {ww.k} when it halves),
+                {' '}<span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(ww.independent)}</span> if independent
+              </div>
+            )}
             {legPeaks != null && netPeak != null && legPeaks > 0 && (
               <div data-testid="xva-netting" data-net={Math.round(netPeak)} data-gross={Math.round(legPeaks)} style={{ padding: '6px 16px 10px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
                 <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>NETTING</span>

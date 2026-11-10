@@ -148,10 +148,65 @@ class WaterfallResult:
     coll_mean_0: float = 0.0        # mean variation margin held at the first grid point
     colva: float = 0.0              # carry of the variation margin held, against cash at OIS: + benefit, − cost
     regulatory_margined: bool = False
+    # wrong-way risk (path_survival): what CVA and DVA would be with default independent of the market; None when
+    # the run had no link, so cva and dva ARE the independent figures
+    cva_independent: Optional[float] = None
+    dva_independent: Optional[float] = None
 
     @property
     def xva_total(self) -> float:
         return self.cva + self.dva + self.fva + self.fba + self.kva + self.mva + self.colva
+
+
+# ── Wrong-way risk ───────────────────────────────────────────────────────────
+
+def hazard_beta(hazard_if_halves: float) -> float:
+    """The exponent b of h ∝ exp(b·x), x = ln(market variable / its forward), from the desk's input: the multiple
+    the default intensity takes when the variable halves. 1 = independent (b = 0); 2 = the intensity doubles when
+    it halves (b = −1) and halves when it doubles; below 1 = the intensity falls with the variable."""
+    k = float(hazard_if_halves)
+    if not (k > 0 and math.isfinite(k)):
+        raise ValueError("the hazard multiple must be a positive number")
+    return -math.log(k) / math.log(2.0)
+
+
+def path_survival(x: np.ndarray, beta: float, q_mkt: List[float], dt: float) -> np.ndarray:
+    """
+    Survival to every grid date on every path when the default intensity moves with a market variable:
+    Hull and White, "CVA and Wrong-Way Risk", Financial Analysts Journal 68(5), 2012.
+
+        h_i(p) = c_i · exp(beta · x_i(p)),      q_i(p) = q_{i−1}(p) · exp(−h_i(p) · dt)
+
+    x is (n_paths, T): the variable on the grid (here ln of the driver, the asset against its forward). c_i is
+    solved date by date so that the MEAN survival across paths is the market's, q_mkt[i]: the credit curve is
+    repriced exactly and beta only moves default probability between paths. Returns (n_paths, T + 1), column 0
+    all ones. beta = 0 gives q_mkt on every path. Where the market curve implies no default in a step (its
+    survival does not fall), no path defaults in it.
+    """
+    n, T = x.shape
+    w = np.exp(np.clip(beta * np.asarray(x, dtype=float), -60.0, 60.0)) * dt
+    q = np.ones((n, T + 1))
+    for i in range(T):
+        prev = q[:, i]
+        base = float(prev.mean())
+        target = float(q_mkt[i])
+        if target <= 0.0:
+            q[:, i + 1] = 0.0
+            continue
+        if target >= base - 1e-15:
+            q[:, i + 1] = prev
+            continue
+        wi = w[:, i]
+        c = max(-math.log(target / base) / max(float(np.dot(prev, wi)) / (base * n), 1e-300), 0.0)     # first-order start
+        for _ in range(80):                   # Newton on f(c) = mean(prev · exp(−c·w)) − target: decreasing and convex
+            e = prev * np.exp(-c * wi)
+            f = float(e.mean()) - target
+            if abs(f) < 1e-15:
+                break
+            step = f / float((e * wi).mean())
+            c = c + step if c + step > 0 else c / 2.0
+        q[:, i + 1] = prev * np.exp(-c * wi)
+    return q
 
 
 # ── Collateral ───────────────────────────────────────────────────────────────
@@ -226,6 +281,7 @@ def run_waterfall(
     saccr: Optional[list] = None,
     addon_profiles: Optional[tuple] = None,
     im_schedule: Optional[tuple] = None,
+    wrong_way: Optional[dict] = None,
 ) -> WaterfallResult:
     """
     Exposure profiles and XVA under `csa`. `paths` are MtM from our side
@@ -239,7 +295,11 @@ def run_waterfall(
     the CEM add-on per grid step or None), worked out by the caller: a package of legs hands in the sum of its
     legs' single-factor add-ons (pricing/fx_xva.package_xva); ignored when `saccr` is given. `im_schedule` is
     (IM today, IM per grid step), also the caller's: a package's margin follows its legs as they settle; None
-    keeps the margin of params amortised in a line to the maturity. Used only when the CSA exchanges IM. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
+    keeps the margin of params amortised in a line to the maturity. Used only when the CSA exchanges IM. `wrong_way` is wrong-way risk:
+    {"x": (n_paths, T) the market variable on the grid, "beta_cp": b, "beta_own": b} (hazard_beta, path_survival).
+    CVA is then LGD · Σ E[exposure_i · default probability in step i ON THAT PATH] and DVA likewise with our own
+    default; the result also carries both with default independent of the market. None, or both betas zero, is
+    today's calculation exactly. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
     hurdle replace the params' and the BA-CVA capital leg joins KVA; None keeps today's KVA exactly.
     """
     n_paths, T = paths.shape
@@ -325,6 +385,24 @@ def run_waterfall(
     s_recv       = float(getattr(csa, "vm_recv_carry_bp", 0.0) or 0.0) / 10000.0     # the VM we hold earns this over the OIS we rebate
 
     cva = dva = fva = fba = kva = mva = colva = 0.0
+    # wrong-way risk: default probability per step on each path, the credit curves repriced on average
+    b_cp = float((wrong_way or {}).get("beta_cp") or 0.0)
+    b_ow = float((wrong_way or {}).get("beta_own") or 0.0)
+    dpd_cp = dpd_ow = None
+    cva_ind = dva_ind = 0.0
+    if wrong_way is not None and (b_cp != 0.0 or b_ow != 0.0):
+        x_w = np.asarray(wrong_way["x"], dtype=float)
+        if x_w.shape != paths.shape:
+            raise ValueError(f"wrong_way x is {x_w.shape}, the paths are {paths.shape}")
+
+        def _mkt(curve, flat, l):
+            return [math.exp(-(interp_spread(curve, flat, (k + 1) * DT) / l) * (k + 1) * DT) if l > 0 else 0.0 for k in range(T)]
+        if b_cp != 0.0:
+            s = path_survival(x_w, b_cp, _mkt(params.cp_cds_curve, params.cp_cds_bp, lgd), DT)
+            dpd_cp = s[:, :-1] - s[:, 1:]
+        if b_ow != 0.0:
+            s = path_survival(x_w, b_ow, _mkt(params.own_cds_curve, params.own_cds_bp, own_lgd), DT)
+            dpd_ow = s[:, :-1] - s[:, 1:]
     qcp = qow = 1.0
     ead_0 = cap_0 = mf_0 = 0.0
 
@@ -345,8 +423,10 @@ def run_waterfall(
         # costs the shortfall. Cash on both sides: zero.
         if s_post != 0.0 or s_recv != 0.0:
             colva += (post_mean[i] * s_post + recv_mean[i] * s_recv) * DT * disc
-        cva += lgd     * ee[i]       * (qcp - nqcp) * disc * wwr
-        dva -= own_lgd * abs(ene[i]) * (qow - nqow) * disc
+        cva_ind += lgd     * ee[i]       * (qcp - nqcp) * disc * wwr
+        dva_ind -= own_lgd * abs(ene[i]) * (qow - nqow) * disc
+        cva += (lgd * float(np.mean(e_pos[:, i] * dpd_cp[:, i])) * disc * wwr) if dpd_cp is not None else (lgd * ee[i] * (qcp - nqcp) * disc * wwr)
+        dva -= (own_lgd * float(np.mean(np.abs(e_neg[:, i]) * dpd_ow[:, i])) * disc) if dpd_ow is not None else (own_lgd * abs(ene[i]) * (qow - nqow) * disc)
         fva += ftp_t   * ee[i]       * DT * disc
         fba -= fba_s   * abs(ene[i]) * DT * disc
 
@@ -418,4 +498,6 @@ def run_waterfall(
         kva_ccr=-abs(kva_ccr), kva_cva=-abs(kva_cva), k_cva_0=k_cva_0, rwa_0=rwa_0, addon_0=addon_0, rc_0=rc_0,
         multiplier_0=mult_0, v_mean_0=float(v_mean[0]) if T else 0.0, coll_mean_0=float(coll_mean[0]) if T else 0.0,
         regulatory_margined=bool(reg.sa_ccr_margined),
+        cva_independent=(-abs(cva_ind) if dpd_cp is not None else None),
+        dva_independent=(abs(dva_ind) if dpd_ow is not None else None),
     )
