@@ -104,6 +104,8 @@
 .bl-td-sm { font-family: var(--mono); font-size: 12px !important; }
 .bl-ccy { font-size: 11px; color: var(--text-mute); margin-left: 2px; font-weight: 400; }
 .bl-ac-badge { display: inline-block; padding: 1px 6px; border-radius: var(--r-1); font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em; border: 1px solid var(--border-hi); color: var(--text-dim); }
+/* a leg of a package: its place in it, in the bright text colour */
+.bl-pkg { color: var(--text-hi) !important; border-bottom: 1px dotted var(--border-glow); cursor: help; }
 .bl-structure-badge { color: var(--text-dim); font-size: 11px; font-weight: 500; letter-spacing: 0.05em; }
 .bl-status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: middle; box-sizing: border-box; }
 .bl-status-txt { font-size: 11px; font-weight: 500; letter-spacing: 0.07em; vertical-align: middle; }

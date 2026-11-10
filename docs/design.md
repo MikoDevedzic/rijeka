@@ -74,6 +74,13 @@ brass rule. In a rail of filters (the blotter's left pane) a section's heading i
 reads as their heading by weight, the bright text colour and a rule above it; the choices sit a step in, in the
 quieter colour, and the selected one is the lighter panel with the brass rule at its edge.
 
+## Legs
+
+DETAILS of a forward is a table of legs (`trade-window/FxLegs.jsx`, `fx-legs.js`): one row per leg, the first the
+ticket itself and read-only here; a further leg's fields are typed in place and a typed strike carries the brass
+rule, as a field typed over its default does. A leg whose price is not yet of the terms it shows is dimmed. The
+PACKAGE row is set as the figures above it and adds them.
+
 ## The right-click menu
 
 The desk's own menu (`components/common/ContextMenu.jsx`, `.rj-menu`) is put only on things that have actions of

@@ -8,6 +8,7 @@ import { ariaKey } from '../../lib/shortcuts'
 import { ASSET_FACTOR, RISK_FACTORS } from '../../lib/risk-factors'
 import ContextMenu from '../common/ContextMenu'
 import { rowMenu } from './row-menu'
+import { readPackageTag } from '../trade-window/fx-legs'
 
 const TH = ({ col, label, sortCol, sortDir, onSort }) => (
   <th className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)}>
@@ -187,7 +188,7 @@ export default function BlotterShell() {
             <table className="bl-table">
               {/* widths for what each column holds; the counterparty takes what is left */}
               <colgroup>
-                {[30, 114, 74, 124, 92, null, 80, 118, 62, 92, 106, 86, 100].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
+                {[30, 130, 74, 124, 92, null, 80, 118, 62, 92, 106, 86, 100].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
               </colgroup>
               <thead>
                 <tr>
@@ -254,7 +255,9 @@ export default function BlotterShell() {
                       </td>
                       <td className="bl-td-dim">{productLabel(t.instrument_type)}</td>
                       <td>
-                        {t.structure
+                        {readPackageTag(t.strategy)
+                          ? (() => { const k = readPackageTag(t.strategy); return <span className="bl-structure-badge bl-pkg" data-testid="bl-pkg" title={`Leg ${k.i} of ${k.n} of the package ${k.ref}. Search the blotter for ${k.ref} to see them together.`}>{k.structure} {k.i}/{k.n}</span> })()
+                          : t.structure
                           ? <span className="bl-structure-badge">{t.structure.replace(/_/g, ' ')}</span>
                           : <span className="bl-td-dim" style={{ opacity: 0.3 }}>—</span>
                         }
