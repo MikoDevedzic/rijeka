@@ -32,7 +32,7 @@ export const DEFAULT_TYPES = [
 // Stock only: regulatory quantities at today, in the reporting currency. The lifetime prices of that stock
 // (KVA, MVA) and the credit and funding adjustments (CVA, FVA) are valuation adjustments and live on the XVA tab.
 export const METRIC_ROWS = [
-  ['SIMM IM', 'im', 'money'],
+  ['Initial margin', 'im', 'money'],
   ['SA-CCR EAD', 'ead', 'money'],
   ['RWA', 'rwa', 'money'],
   ['K CCR', 'k_ccr', 'money'],
@@ -43,7 +43,7 @@ export const METRIC_ROWS = [
 export const COST_ROW = null
 
 export const FORMULA = {
-  im: 'IM = RW_SIMM × |sensitivity| × √(MPoR/10): the IR delta weight on IR01, the FX delta weight on spot01; posted only where the collateral is eligible IM',
+  im: 'IM = the engine\'s own estimate: the 99th percentile move of the set\'s value over the margin period, at the first date (not ISDA SIMM, which is licensed and is not computed here); posted only where the collateral is eligible IM',
   ead: 'EAD = 1.4 × (RC + multiplier × AddOn)  (CRE52.1); RC margined max(V − C, TH + MTA − NICA, 0), unmargined max(V − C, 0); AddOn by asset class and hedging set (CRE52.57, 52.59, SCO60.98)',
   rwa: 'RWA = RW × EAD, the counterparty risk weight from CRE20',
   k_ccr: 'K_CCR = 8 % × RW × EAD',

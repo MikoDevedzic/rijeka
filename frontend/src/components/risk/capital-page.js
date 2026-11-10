@@ -14,7 +14,7 @@ export const METRICS = [
   ['K CCR', 'k_ccr', '8 % of RWA'],
   ['K CVA', 'k_cva', 'the reduced basic-approach CVA capital (MAR50.14–50.15)'],
   ['SA-CCR EAD', 'ead', '1.4 × (RC + multiplier × add-on) at the valuation date'],
-  ['SIMM IM', 'im', 'invariant to the collateral; moves only with the margin period of risk'],
+  ['Initial margin', 'im', 'the engine\'s estimate (not ISDA SIMM): invariant to the collateral, moves only with the margin period of risk'],
   ['KVA', 'kva', 'the capital legs along the exposure path, at the hurdle'],
   ['CVA', 'cva', 'under the economic CSA'],
   ['FVA', 'fva', 'under the economic CSA'],
@@ -31,7 +31,7 @@ export const STOCK_METRICS = [
   ['K CCR', 'k_ccr', '8 % of RWA'],
   ['K CVA', 'k_cva', 'the reduced basic-approach CVA capital (MAR50.14–50.15)'],
   ['SA-CCR EAD', 'ead', '1.4 × (RC + multiplier × add-on) at the valuation date'],
-  ['SIMM IM', 'im', 'initial margin under the record\'s CSA'],
+  ['Initial margin', 'im', 'the engine\'s estimate under the record\'s CSA (not ISDA SIMM)'],
   ['LEVERAGE EXP.', 'leverage', '1.4 × (RC with cash VM only + add-on) (LEV30)'],
   ['HQLA OF IM', 'hqla_im', 'the liquidity value of the margin posted (LCR30)'],
 ]

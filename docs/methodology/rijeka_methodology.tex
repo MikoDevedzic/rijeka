@@ -24,7 +24,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.9 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.10 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -61,12 +61,12 @@
 
 %--------------------------------------------------------------------
 \section{Scope and principles}
-Rijeka is a front-to-back desk for over-the-counter derivatives: booking, pricing, cashflows, risk, XVA under a credit support annex, ISDA SIMM initial margin, and bilateral confirmation anchored to Ethereum. Phase~1 covers interest-rate products on overnight-index curves (USD SOFR, EUR €STR, GBP SONIA and others) and non-deliverable digital-asset forwards and options.
+Rijeka is a front-to-back desk for over-the-counter derivatives: booking, pricing, cashflows, risk, XVA under a credit support annex with initial margin, and bilateral confirmation anchored to Ethereum. Phase~1 covers interest-rate products on overnight-index curves (USD SOFR, EUR €STR, GBP SONIA and others) and non-deliverable digital-asset forwards and options.
 
 Three principles govern the implementation.
 \begin{enumerate}[leftmargin=1.4em]
 \item \textbf{No black boxes.} Each number is traceable to a formula in this document and a function in the repository; the Excel replications reproduce it outside the system.
-\item \textbf{Risk taxonomy follows ISDA SIMM.} Sensitivities are \code{IR01} (all curves bumped), \code{IR01_DISC} (discount curves only), \code{THETA}, \code{GAMMA}, \code{VEGA}; the terms PV01 and DV01 are not used.
+\item \textbf{One risk taxonomy.} Rate sensitivities are per basis point and spot sensitivities per 1\%. Sensitivities are \code{IR01} (all curves bumped), \code{IR01_DISC} (discount curves only), \code{THETA}, \code{GAMMA}, \code{VEGA}; the terms PV01 and DV01 are not used.
 \item \textbf{Market data is dated and sourced.} Every snapshot carries a valuation date and a source. Pricing off a stale snapshot is permitted but is always flagged with the snapshot date; it is never silent.
 \end{enumerate}
 
@@ -233,7 +233,14 @@ V(t-\delta)\,\big|\,V(t-\Delta t),V(t)\;\sim\;\N\!\big(V(t-\Delta t)+w\,\Delta V
 with $s^2$ the cross-path variance of $\Delta V$. This preserves the variance of the move over the margin period; linear interpolation would understate it by a factor $\delta/\Delta t$.
 
 \subsection{Initial margin}
-Initial margin follows ISDA SIMM interest-rate delta: $IM = RW(\text{tenor})\times|\code{IR01}|$ with the published risk weights for regular-volatility currencies (109bp at two weeks falling to 61bp at 5--20 years and 64bp at 30 years). The weights are calibrated to a 10-business-day margin period; for another period they scale by $\sqrt{\delta/10\mathrm{bd}}$. Margin is assumed exchanged symmetrically and amortises with residual maturity. Received IM reduces exposure; posted IM is funded and drives MVA.
+Initial margin is one of two things. \textbf{An amount the desk sets}, in the trade's currency, exchanged each way and held for the life of the trade. Or \textbf{the engine's own estimate} from the simulated paths: at each grid date $t_i$, with $\Delta_i = V(t_i)-V(t_i-\delta)$ the change in the set's value over the margin period (the lagged value of the bridge above) and $\bar\Delta_i$ its mean across paths,
+\begin{equation}
+IM_{recv}(t_i) = \max\big(q_{0.99}(\Delta_i-\bar\Delta_i),\,0\big),\qquad
+IM_{post}(t_i) = \max\big(q_{0.99}(\bar\Delta_i-\Delta_i),\,0\big),
+\end{equation}
+the 99th percentile rise (the margin we call) and fall (the margin we post). The confidence is the one the margin rules for non-centrally cleared derivatives name (BCBS--IOSCO: a one-tailed 99 per cent interval over the margin horizon). The mean is removed because what every path does over the period (a scheduled payment, the passage of time) is not a risk. The estimate is at the model's current volatility, not one calibrated to a period of stress, so it can read lower than a regulatory margin model; it is a cross-section of the paths at each date, not a margin recomputed on each path. Received IM reduces exposure; posted IM is funded and drives MVA. \emph{Function \code{model_im}.}
+
+\textbf{Rijeka does not compute ISDA SIMM.} SIMM is ISDA's licensed methodology and its risk weights are not in this engine. A firm with a SIMM licence enters its own figure as the amount.
 
 \subsection{Residual exposure}
 \begin{equation}
@@ -246,15 +253,18 @@ Expected exposure $EE(t)=\E[E^+(t)]$, expected negative exposure $ENE(t)=\E[E^-(
 \begin{tabularx}{\textwidth}{@{}lX@{}}
 \toprule
 \textbf{Uncollateralised} & no variation or initial margin. \\
-\textbf{Bilateral} & daily VM, 10-business-day margin period (the BCBS--IOSCO floor for non-cleared trades), SIMM IM, thresholds and MTA from the CSA. \\
-\textbf{On-chain} & atomic settlement: continuous VM, zero threshold and MTA, 5-business-day margin period (the cleared floor), SIMM IM scaled by $\sqrt{5/10}$. \\
+\textbf{Bilateral} & daily VM, 10-business-day margin period (the BCBS--IOSCO floor for non-cleared trades), initial margin, thresholds and MTA from the CSA. \\
+\textbf{On-chain} & atomic settlement: continuous VM, zero threshold and MTA, 5-business-day margin period (the cleared floor), initial margin over that shorter period. \\
 \bottomrule
 \end{tabularx}
 
-The on-chain preset is the quantitative claim behind the confirmation layer: with continuous settlement the margin period halves, SIMM initial margin falls by $1-\sqrt{1/2}\approx29\%$, and the SA-CCR maturity factor falls in the same proportion.
+The on-chain preset is the quantitative claim behind the confirmation layer: with continuous settlement the margin period halves, the initial margin estimate falls by about $1-\sqrt{1/2}\approx29\%$ (a diffusion's move over half the period), and the SA-CCR maturity factor falls in the same proportion.
 
 \subsection{SA-CCR}
 For margined netting sets the maturity factor is $MF=1.5\sqrt{\max(\delta,\text{floor})/250}$ and replacement cost $RC=\max(V-C,\;TH+MTA-NICA,\;0)$ with $NICA$ the IM received; unmargined sets use $MF=\sqrt{\min(M,1)}$ and $RC=\max(V,0)$. The interest-rate supervisory factor is 0.5\% and $\alpha=1.4$. Capital is 8\% of risk-weighted exposure and feeds KVA.
+
+\subsection{The add-on of a currency or digital-asset ticket}
+A currency or digital-asset ticket takes the add-on of its own asset class (\code{pricing/fx_xva.py}, \code{capital_inputs}; \code{pricing/sa_ccr.py}). \textbf{A currency pair}: the foreign-exchange class, supervisory factor 4\% on the notional of the foreign leg in the domestic currency at spot, one hedging set per pair (CRE52.35, CRE52.72). \textbf{A Group~2a cryptoasset}: SA-CCR with a cryptoasset class in the structure of the foreign-exchange class, a hedging set per pair, supervisory factor 32\% and supervisory option volatility 120\% (SCO60.98). \textbf{A Group~2b cryptoasset}: exposure $=\alpha\,(RC+PFE)$ with the $PFE$ 50\% of the gross notional of each transaction, no hedging set and no multiplier (SCO60.99). A forward enters at $\delta=\pm1$ and an option at the supervisory delta of its strike (CRE52.40); the legs of one ticket net inside the hedging set, except under Group~2b. A cryptoasset is Group~2b unless the bank has shown its supervisor the hedging recognition criteria of SCO60.55 (a regulated derivative or exchange-traded product, USD~10bn of average market capitalisation, USD~50m of trimmed mean daily volume, a year of price observations); the engine's default is Group~2a for BTC and ETH and Group~2b otherwise, and the desk sets the group on the ticket. A style whose size is a payout enters at its payout: the rules name no notional for it, and that is this engine's reading.
 
 %--------------------------------------------------------------------
 \section{The XVA waterfall}
@@ -274,6 +284,20 @@ where $\omega_i$ is an optional wrong-way-risk multiplier, $\kappa$ the capital 
 
 
 \textbf{The charge on the ticket.} Every ticket's XVA tab carries, under the trade's stand-alone number, the incremental charge: the counterparty's netting set valued on the credit engine's risk-neutral paths (\S\ref{sec:ccr}) with the trade and without it, the same paths for both runs, the difference per component. That is the number a desk quotes; the stand-alone figure is the trade on its own under a chosen CSA preset. An opened or freshly booked trade shows the marginal form, the set with and without it. The route is \code{POST /api/xva/incremental}; the hypothetical trade is the ticket's booking body with its legs completed as the booking route would store them, so what is charged is what would be booked.
+
+\subsection{Wrong-way risk}
+On a currency or digital-asset ticket a party's default can be tied to the asset, in the manner of Hull and White (2012): an intensity that is a function of a simulated variable, with a time-dependent level calibrated to the credit curve. The variable (the asset against its forward, not the value of the portfolio) and the form (exponential) are this engine's, so the direction is the desk's input and is not derived from the trade. On path $p$ at grid date $t_i$, with $M_i(p)$ the driver (the asset's forward to settlement over that forward today),
+\begin{equation}
+h_i(p) = c_i\,M_i(p)^{\,b},\qquad q_i(p) = q_{i-1}(p)\,e^{-h_i(p)\,\Delta t},\qquad \E_p\big[q_i(p)\big] = Q(t_i),
+\end{equation}
+where $c_i$ is solved date by date so that the mean survival is the credit curve's: the curve is repriced exactly and $b$ only moves default probability between paths. Then
+\begin{equation}
+CVA = LGD_{cp}\sum_i \E_p\big[E^+_i(p)\,\big(q_{i-1}(p)-q_i(p)\big)\big]\,D_i ,
+\end{equation}
+and DVA likewise with our own default. The desk's input is the multiple $k$ the intensity takes when the asset halves against its forward, $b=-\log_2 k$; $k=1$ is independence and is the calculation above, number for number. The answer carries both figures. The multiple is the desk's judgement of the counterparty and is not calibrated; one constant link per party; funding, capital and margin terms do not see it. \emph{Functions \code{hazard_beta}, \code{path_survival}.}
+
+\subsection{A package of legs as one netting set}
+A ticket with several legs on one pair (a strip, a collar, a forward with an option) is simulated as one set (\code{pricing/fx_xva.py}, \code{package_xva}). Every forward of the pair is its own forward today times one driftless lognormal driver, $F_j(t)=F_j(0)\,M_t$: one factor, carry deterministic, so each leg starts at its own price and the legs move together. A forward leg is marked $\pm N(F_j(t)-K)\,D(t,T_j)$ and an option leg is valued in its style's closed form; a leg stays to the first grid date at or after its settlement and is nothing after. The summed paths go through the same waterfall, so exposure nets path by path before any charge is taken, the initial margin estimate follows the legs as they settle, and the add-on is the one above on the legs together. A package of one leg is that leg's own run, draw for draw. One factor means the shape of the forward curve or of the vol term structure moving is not simulated.
 
 %--------------------------------------------------------------------
 \section{P\&L attribution}\label{sec:pnl}
@@ -384,7 +408,7 @@ $EE(t)$ the mean of $E^+$; $PFE_q(t)$ its $q$-quantile over paths at 95, 97.5 an
 
 %--------------------------------------------------------------------
 \section{Collateral regimes and counterparty capital}\label{sec:capital}
-\emph{Modules: \code{pricing/collateral.py}, \code{pricing/sa\_ccr.py}, \code{pricing/capital.py}, \code{ccr/saccr\_map.py}; full description in \code{docs/capital.md}. Built from the public texts named at each formula; no third-party material.}
+\emph{Modules: \code{pricing/collateral.py}, \code{pricing/sa_ccr.py}, \code{pricing/capital.py}, \code{ccr/saccr\_map.py}; full description in \code{docs/capital.md}. Built from the public texts named at each formula; no third-party material.}
 
 \subsection{Collateral classes and the two CSAs}
 A CSA (\S\ref{sec:exposure}) says whether collateral is exchanged; a \emph{regime} says what it is and what each rulebook makes of it. A collateral class carries its recognition under the credit-risk-mitigation rules (CRE22.34--22.45; SCO60.94 for tokenised and crypto assets), its supervisory haircut by residual maturity (CRE22.49), its eligibility as initial and variation margin (CFTC \S23.156), its liquidity level (LCR30) and its cryptoasset group (SCO60). A regime is a CSA, an eligible set, the compositions posted and received, and three labelled switches: close-out enforceability, the initial-margin eligibility state of a conditional class, and the margin period of risk (the non-cleared floor or the cleared floor for atomic settlement). From one regime the engine derives two CSAs:
@@ -415,7 +439,7 @@ SCVA_c=\tfrac{1}{1.4}\,RW_c\,M\,EAD\,DF(M),\quad DF(M)=\tfrac{1-e^{-0.05M}}{0.05
 (MAR50.14--50.15) with $RW_c$ by sector and grade (MAR50.16, Table~1). The waterfall's KVA becomes $-\kappa\sum_i\big(K_{CCR}(t_i)+K_{CVA}(t_i)\big)\Delta t\,D_i$ with $M(t)$ the remaining maturity; without a CVA weight it is the KVA of \S\ref{sec:exposure} exactly. The leverage exposure is $1.4\,(\max(V-C_{cash},0)+AddOn)$ with only cash variation margin reducing it (LEV30); the HQLA value of the margin posted uses the Level~1, 2A and 2B haircuts (LCR30). The cost difference between two regimes is quoted as a running spread over the trade's annuity or an upfront spread of notional.
 
 \subsection{The book under regimes: attribution by channel}
-Every netting set is simulated once on the risk-neutral paths and re-collateralised step by step from the CSA as booked to an on-chain CSA under today's rules (zero threshold and MTA, CRE52.18--52.19; daily margining, CRE52.50; the dispute doubling removed, CRE52.51; recognised collateral and enforceable netting, CRE22.34 and SCO60.94; eligible initial margin in the asset held at its yield, CFTC \S23.156), then to the forward-looking states (the cleared-floor margin period of risk; a tokenised sovereign claim eligible as initial margin; Level~1 liquidity). Each step changes one thing in the previous step's CSA and the difference it makes is that channel's attribution, sequential as the P\&L explain of \S\ref{sec:pnl}; the steps sum to the columns exactly. The record's margin period of risk is $9+N$ business days for re-margining every $N$ days, floored at 10 and doubled while disputed. A record already on cash and government securities shows zero in the collateral step (parity, not superiority); SIMM initial margin moves only with the margin period of risk; market-risk capital is not a function of any step. \emph{Module: \code{ccr/capital\_report.py}; route \code{/api/capital/portfolio}.}
+Every netting set is simulated once on the risk-neutral paths and re-collateralised step by step from the CSA as booked to an on-chain CSA under today's rules (zero threshold and MTA, CRE52.18--52.19; daily margining, CRE52.50; the dispute doubling removed, CRE52.51; recognised collateral and enforceable netting, CRE22.34 and SCO60.94; eligible initial margin in the asset held at its yield, CFTC \S23.156), then to the forward-looking states (the cleared-floor margin period of risk; a tokenised sovereign claim eligible as initial margin; Level~1 liquidity). Each step changes one thing in the previous step's CSA and the difference it makes is that channel's attribution, sequential as the P\&L explain of \S\ref{sec:pnl}; the steps sum to the columns exactly. The record's margin period of risk is $9+N$ business days for re-margining every $N$ days, floored at 10 and doubled while disputed. A record already on cash and government securities shows zero in the collateral step (parity, not superiority); the initial margin estimate moves only with the margin period of risk; market-risk capital is not a function of any step. \emph{Module: \code{ccr/capital\_report.py}; route \code{/api/capital/portfolio}.}
 
 \textbf{Known limitations.} Initial margin is a delta margin per risk class without the cross-class aggregation, vega or curvature; supervisory deltas are held fixed along the path; the leverage and liquidity figures are the trade's stock, not the ratios; the cryptoasset initial-margin weight is a labelled assumption.
 
@@ -532,9 +556,9 @@ Key-rate ladder & ladder total (par +1bp) vs ticket IR01 (zero +1bp) & 5 & -2.14
 \section{Model governance and known limitations}
 \begin{itemize}[leftmargin=1.4em]
 \item \textbf{Validation.} Versioned validation reports live in \code{model_validation/}; v0.4.2 covers IRS and OIS (38 tests against Bloomberg), later versions swaptions (delta of \$3 on a \$10m 5Y), caps (0.1\% at matched volatility), SABR and the scenario engine.
-\item \textbf{Replications.} The Excel workbooks in the Methodology tab are regenerated on request from the user's own snapshot. Every book has the same shape: a cover with the trade and the checks' verdict; the ticket as the trader saw it, rebuilt in cells, every number a link into the sheet that derives it; the derivation, line by line, each quantity with its live value and its cell; the inputs, the curve and the product's own sheets; a scenario chart for the options; and a Checks sheet with every formula against the engine's value, a tolerance and a PASS or FAIL that the cover sums up. Plain spreadsheet features only, so the file opens clean in Excel, Numbers and Google Sheets. The XVA book (\S\ref{sec:exposure}, \code{methodology/xva\_workbook.py}) goes further: it carries the engine's own random draws, rebuilds every Hull--White path, the bond reconstitution, the margin-period bridge, the collateral and the waterfall in cells, shows the swaption calibration with the model's closed-form vol per basket point and an RMSE grid around the fit, and has a LIVE mode that re-rolls the simulation in the spreadsheet with a convergence sheet for the Monte Carlo error. The FX and digital-asset XVA books (\code{methodology/fx\_xva\_workbook.py}) do the same for a forward: the lognormal paths from the engine's draws, the pair's surface interpolated to the forward's tenor with the smile fixed point at $K=F$ shown iteration by iteration, the initial margin from the spot sensitivity and the pair's weight, and the same CSA, bridge, waterfall and LIVE mode.
+\item \textbf{Replications.} The Excel workbooks in the Methodology tab are regenerated on request from the user's own snapshot. Every book has the same shape: a cover with the trade and the checks' verdict; the ticket as the trader saw it, rebuilt in cells, every number a link into the sheet that derives it; the derivation, line by line, each quantity with its live value and its cell; the inputs, the curve and the product's own sheets; a scenario chart for the options; and a Checks sheet with every formula against the engine's value, a tolerance and a PASS or FAIL that the cover sums up. Plain spreadsheet features only, so the file opens clean in Excel, Numbers and Google Sheets. The XVA book (\S\ref{sec:exposure}, \code{methodology/xva\_workbook.py}) goes further: it carries the engine's own random draws, rebuilds every Hull--White path, the bond reconstitution, the margin-period bridge, the collateral and the waterfall in cells, shows the swaption calibration with the model's closed-form vol per basket point and an RMSE grid around the fit, and has a LIVE mode that re-rolls the simulation in the spreadsheet with a convergence sheet for the Monte Carlo error. The FX and digital-asset XVA books (\code{methodology/fx\_xva\_workbook.py}) do the same for a forward: the lognormal paths from the engine's draws, the pair's surface interpolated to the forward's tenor with the smile fixed point at $K=F$ shown iteration by iteration, the initial margin as the percentile move over the margin period, the add-on of the pair's own class, and the same CSA, bridge, waterfall and LIVE mode.
 \item \textbf{Independent reference.} Every product is repriced in QuantLib on every commit (\S\ref{sec:quantlib}); a difference that grows past its stated tolerance fails the build.
-\item \textbf{Open items, stated plainly.} Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. SIMM covers interest-rate delta; vega and other risk classes are on the roadmap.
+\item \textbf{Open items, stated plainly.} Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. Initial margin is the desk's amount or the engine's estimate at current volatility; ISDA SIMM is licensed and is not implemented.
 \item \textbf{Change control.} Every change to a pricing module is a commit in a public repository with its tests; this document is versioned with the code.
 \end{itemize}
 
@@ -548,7 +572,9 @@ Key-rate ladder & ladder total (par +1bp) vs ticket IR01 (zero +1bp) & 5 & -2.14
 \item Green, A.\ (2015). \emph{XVA: Credit, Funding and Capital Valuation Adjustments}. Wiley.
 \item BCBS (2014). \emph{The standardised approach for measuring counterparty credit risk exposures} (SA-CCR).
 \item BCBS--IOSCO (2015). \emph{Margin requirements for non-centrally cleared derivatives}.
-\item ISDA (2024). \emph{ISDA SIMM Methodology}, version 2.6; ISDA (2023). \emph{Digital Asset Derivatives Definitions}.
+\item ISDA (2023). \emph{Digital Asset Derivatives Definitions}.
+\item BCBS (2022, in force 2026). \emph{Prudential treatment of cryptoasset exposures}, Basel Framework SCO60.
+\item Hull, J. and White, A. (2012). CVA and wrong-way risk. \emph{Financial Analysts Journal} 68(5).
 \item Ethereum Improvement Proposal 712: Typed structured data hashing and signing.
 \end{itemize}
 

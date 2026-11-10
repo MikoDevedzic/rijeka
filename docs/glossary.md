@@ -1,6 +1,6 @@
 # Glossary: the names on every screen
 
-One set of names, SIMM-aligned, used by the ticket, the ladder, the P&L explain, the limits
+One set of names (rates per basis point, spot per 1 %), used by the ticket, the ladder, the P&L explain, the limits
 catalogue, the methodology and the Excel replications. Keys are what the API returns; labels are
 what the app shows.
 

@@ -55,11 +55,13 @@ def test_irs_reference_is_the_engine_value():
 
 def test_products_list_covers_crypto_and_post_trade():
     ids = {p["id"] for p in rep.PRODUCTS}
-    assert {"irs", "ois", "swaption", "cap", "fx_forward", "fx_option", "fx_option_styles", "crypto_ndf", "crypto_ndo", "crypto_option_styles", "xva", "simm", "confirm"} <= ids
+    assert {"irs", "ois", "swaption", "cap", "fx_forward", "fx_option", "fx_option_styles", "crypto_ndf", "crypto_ndo", "crypto_option_styles", "xva", "confirm"} <= ids
     for p in rep.PRODUCTS:
         assert p["replication"] in ("xlsx", "doc", "xlsx-static", "verifier")
         if p["replication"] == "xlsx":
             assert p["id"] in rep.BUILDERS
+    # Rijeka does not compute ISDA SIMM (it is licensed): there is no SIMM replication to list
+    assert "simm" not in ids
 
 
 def test_route_rejects_unknown_product(monkeypatch):

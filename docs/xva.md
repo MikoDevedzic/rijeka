@@ -20,7 +20,7 @@ Variation margin held against the lagged MtM, from our side (+ = we hold theirs)
     E⁻(t) = min(V − C + IM, 0)        ENE(t) = mean over paths
     PFE(t) = 95th percentile of V − C
 
-Presets: UNCOLLATERALISED (no VM, no IM); BILATERAL (daily VM, 10 business-day MPoR, SIMM IM, thresholds and MTA from the request); ON_CHAIN (continuous VM, zero threshold and MTA, 5 business-day MPoR, SIMM IM scaled √(5/10)). The CSA is the single object that distinguishes the three; everything below is a function of E⁺, E⁻ and δ.
+Presets: UNCOLLATERALISED (no VM, no IM); BILATERAL (daily VM, 10 business-day MPoR, initial margin, thresholds and MTA from the request); ON_CHAIN (continuous VM, zero threshold and MTA, 5 business-day MPoR, initial margin over that shorter period). The CSA is the single object that distinguishes the three; everything below is a function of E⁺, E⁻ and δ.
 
 ## 3. CVA
 
@@ -66,10 +66,40 @@ Capital held over the life, charged at the hurdle rate. Exposure at default by t
 
 Initial margin posted is funded at the funding spread less whatever the collateral earns:
 
-    IM₀ = RW_SIMM(tenor) · √(MPoR/10) · |IR01|          (rates; FX: SIMM FX delta weight · |FX01|; digital assets: an assumed weight, labelled)
-    MVA = − Σ_i IM(t_i) · max(ftp(t_i) − pickup, 0) · Δt · P(0,t_i)
+    IM_post(t_i) = max( q₀.₉₉( mean(Δ_i) − Δ_i ), 0 ),   IM_recv(t_i) = max( q₀.₉₉( Δ_i − mean(Δ_i) ), 0 ),   Δ_i = V(t_i) − V(t_i − δ)
+    MVA = − Σ_i IM_post(t_i) · max(ftp(t_i) − pickup, 0) · Δt · P(0,t_i)
 
-The SIMM weights are calibrated to a 10-business-day MPoR; the √(MPoR/10) scaling is the ISDA/BCBS-IOSCO rule for a different one, which is how the on-chain CSA's 5-day MPoR reduces IM.
+**Initial margin (10 November 2026).** Rijeka does not compute ISDA SIMM: SIMM is ISDA's licensed methodology,
+and its risk weights are not in this code. Initial margin is one of two things. An amount the desk sets (`im_usd`
+on every XVA route; `simm_im_m`, in millions, is the old name of the same input and is still read): exchanged
+each way and held for the life, so MVA is that amount funded at the spread, step by step. A firm with a SIMM
+licence enters its own SIMM figure there. Or the engine's own estimate (`pricing/xva_engine.model_im`): at each
+grid date the 99th percentile rise (the margin we call, which stands between us and their default) and fall (the
+margin we post, which MVA funds) of the set's value over the margin period ending at that date, about its mean,
+from the lagged value the variation margin already uses. The confidence is the one the BCBS-IOSCO margin rules
+for non-centrally cleared derivatives name (one-tailed, 99 per cent, over the margin horizon). The mean is taken
+out because what every path does over the period (a coupon, the passage of time) is not a risk. A shorter margin
+period gives a smaller estimate, by about √(5/10) from bilateral to on chain. Limits: the estimate is at the
+model's current volatility, not one calibrated to a period of stress, so it reads lower than a stressed
+regulatory figure (about half of a SIMM-weighted figure on the pinned 5-year swap); it is a cross-section of the
+paths at each date, not a margin recomputed on each path; one confidence for every asset class. The answer names
+which of the two it used (`capital.im_basis`) and carries the note (`capital.im_note`).
+
+**The capital add-on of a currency or digital-asset ticket (10 November 2026)** is SA-CCR's for its asset class
+(`pricing/fx_xva.capital_inputs`, `saccr_rows`; `pricing/sa_ccr.py`), read from the Basel text. A currency pair:
+the foreign-exchange class, 4 % of the foreign leg's notional in the domestic currency at spot × the maturity
+factor, one hedging set per pair (CRE52.35, CRE52.72). A Group 2a cryptoasset: SA-CCR with a cryptoasset class in
+the FX class's structure, a hedging set per pair, supervisory factor 32 %, supervisory option volatility 120 %
+(SCO60.98). A Group 2b cryptoasset: exposure = α × (RC + PFE) with the PFE 50 % of each transaction's gross
+notional, no hedging set, no multiplier (SCO60.99). A forward enters at δ = ±1, an option at the supervisory delta
+of its strike (CRE52.40); the legs of a package net inside the hedging set (a bought and a sold forward of the
+same terms carry no add-on), except under Group 2b, where each trade's half-notional stands. A cryptoasset is
+Group 2b unless the bank has shown its supervisor SCO60.55's hedging recognition criteria; the engine's default
+is 2a for BTC and ETH and 2b otherwise, and `crypto_group` on the request (the Basel group selector on the tab)
+sets it. Before this the engine applied the interest-rate factor (0.5 % × supervisory duration) to everything,
+which made a digital asset's KVA a rounding. Limits: a style whose size is a payout (a digital, a touch) enters
+at its payout, which the rules do not name; a barrier enters at its vanilla delta; the counterparty's risk weight
+is the ticket's input; the older CEM and internal-model choices are unchanged.
 
 ## 7b. ColVA: what the variation margin is held in
 
@@ -95,7 +125,7 @@ Same trade, same model, three CSAs: uncollateralised, bilateral (10bd MPoR), on-
 
 `xva_rates` in the Methodology tab (`backend/methodology/xva_workbook.py`): the same simulation on a 2-year pay-fixed swap at 200 paths, with the engine's random draws as values (ENGINE mode reproduces every EE, ENE, PFE and XVA to rounding; the Checks sheet says so) or Excel's own draws (LIVE mode, with a Convergence sheet). Sheets: Model (the exact-fit step, the grid, α(t)), Calibration (the basket, the closed-form model vol per point, the objective and RMSE, an RMSE grid around the fit), Bonds, Normals, Paths, Exposure (CSA preset or your terms, the Brownian-bridge lag, collateral, residuals), Waterfall, Engine, Convergence. The grid and calibration dates are written as values on the engine's own day count (valuation + round(t·365), the instruments at 365.25), so every discount factor matches the engine to the day; evaluated with a spreadsheet engine, all 86 checks pass at 6e-13 relative in ENGINE mode.
 
-`xva_fx` and `xva_crypto` (`backend/methodology/fx_xva_workbook.py`, one builder for both): the forward engine on a 6-month EURUSD forward (buy EUR 10m) and a 6-month BTCUSD NDF (buy 10 BTC), struck at the fair forward from the same parity formulas as the forward books, 200 paths with the engine's draws (ENGINE) or Excel's (LIVE). Sheets: Model (the forward, DF_q(T) and the quote zero from the curve, the monthly grid with DF_q(t,T) on the flat quote zero as the engine has it, V(0)), Calibration (the pair's surface as quoted; ATM, RR25 and BF25 interpolated to the forward's tenor and the Malz smile fixed point at K = F laid out iteration by iteration, exactly as `fx_vol.vol_at` does it; the engine's default, labelled, when the account has no surface for the pair), Normals, Paths (ΣZ, W, F_t, V), Exposure (the same presets and margin-period bridge; IM = the pair's weight on FX01 / CRY01, SIMM's FX delta weight for a G10 pair and a labelled assumption for a digital asset, passed to the waterfall unscaled as the engine does), Waterfall (the IR supervisory factor, as the engine applies it for now), Engine, Convergence. Evaluated with a spreadsheet engine, all 50 checks pass in each book under every preset, with or without a surface, at 3e-12 relative or better.
+`xva_fx` and `xva_crypto` (`backend/methodology/fx_xva_workbook.py`, one builder for both): the forward engine on a 6-month EURUSD forward (buy EUR 10m) and a 6-month BTCUSD NDF (buy 10 BTC), struck at the fair forward from the same parity formulas as the forward books, 200 paths with the engine's draws (ENGINE) or Excel's (LIVE). Sheets: Model (the forward, DF_q(T) and the quote zero from the curve, the monthly grid with DF_q(t,T) on the flat quote zero as the engine has it, V(0)), Calibration (the pair's surface as quoted; ATM, RR25 and BF25 interpolated to the forward's tenor and the Malz smile fixed point at K = F laid out iteration by iteration, exactly as `fx_vol.vol_at` does it; the engine's default, labelled, when the account has no surface for the pair), Normals, Paths (ΣZ, W, F_t, V), Exposure (the same presets and margin-period bridge; the move over the margin period per path, and the initial margin as its 99th percentile rise and fall about the mean, each way), Waterfall (the add-on of the pair's own class: 4 % for the currency pair, 32 % for the Group 2a digital asset, on the notional at spot), Engine, Convergence. Evaluated with a spreadsheet engine on 10 November 2026 after the margin and capital change, all 51 checks pass in each book and all 87 in the rates book, under every preset.
 
 ## Incremental XVA on the ticket
 
@@ -133,12 +163,11 @@ its settled amount, and is nothing after: a settlement between two grid dates is
 never dropped. The summed paths go through the same
 waterfall, so exposure nets path by path before any charge is taken. The driver's vol is the surface's ATM term
 structure (each option at the smile of each path's moneyness), or in flat mode the longest leg's vol with each
-option at its own. Initial margin is the weight on the NET spot sensitivity of the legs still alive, each leg's
-own running off in a line to its settlement (`package_im`): a calendar spread posts little while both legs stand
-and the far leg's margin once the near one has settled; a margin typed by the desk is used as typed. The capital
-add-on is the sum of each leg's own single-factor add-on while it is alive, under SA-CCR and under the older CEM
-alike: there is no offset between legs in the add-on, so KVA of a bought and a sold forward of the same terms is
-not zero although every other component is. One run takes up to 24 legs, settlements up to ten years out, and
+option at its own. Initial margin is the desk's amount or the engine's estimate from the package's own paths, so
+it follows the legs as they settle: a calendar spread posts little while both legs stand and the far leg's margin
+once the near one has settled. The capital add-on is SA-CCR's on the legs together (below): inside one hedging
+set a bought and a sold forward of the same terms carry none; under the older CEM choice each leg's add-on is
+added while it is alive. One run takes up to 24 legs, settlements up to ten years out, and
 legs × paths × monthly steps up to four million (the route says how many paths fit).
 A package of one leg is that leg's own run, draw for draw (`tests/test_package_xva.py`). The answer has the shape
 of the single-trade routes plus a row per leg (its value, when it settles, its own peak expected exposure), which
@@ -197,5 +226,5 @@ CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; f
 
 - One factor for rates (HW1F) and a flat vol for forwards: no smile in the exposure.
 - CVA and DVA use the credit triangle with a flat LGD; no recovery uncertainty, no correlation between credit and market beyond the WWR multiplier.
-- IM amortises linearly with residual maturity; a full SIMM IM profile along the path is on the roadmap.
+- Initial margin is the desk's amount or the engine's estimate at current volatility (above); ISDA SIMM is licensed and is not implemented.
 - KVA's SA-CCR add-on is by asset class since 4 November 2026 (`pricing/sa_ccr.py`: rates, FX, the cryptoasset class, options at their supervisory delta); the CVA-capital leg and the collateral regimes are described in `docs/capital.md`.

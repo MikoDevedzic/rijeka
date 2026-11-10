@@ -91,7 +91,7 @@ purpose.
 | FX option styles (American, digital, barrier, double barrier, touch) | `pricing/fx_exotic.py` | each against its QuantLib engine (QD+ and Leisen–Reimer, analytic digital, barrier, double barrier, digital-American and double-barrier-binary); Excel replications for every style but American; open findings [#32](https://github.com/MikoDevedzic/rijeka/issues/32) flat smile vol across the barrier, [#33](https://github.com/MikoDevedzic/rijeka/issues/33) grid monitoring on the exposure paths |
 | Crypto option (BTC/ETH/SOL, every style) | `pricing/fx_option.py`, `pricing/fx_exotic.py` | the FX option engine with the funding rate as the carry; QuantLib rows at crypto parameters (vanilla, cash digital, up-and-out with rebate, one-touch, double no-touch); Excel replications (European with the engine's values; the styles); **validator wanted** |
 | Market risk: VaR, stress, backtest | `risk/var_full.py`, `risk/stress.py` | historical simulation by full revaluation; vol surfaces as factors since 2 Nov 2026 ([#30](https://github.com/MikoDevedzic/rijeka/issues/30) closed); backtest reads the stored series; **validator wanted** |
-| SIMM IM / SA-CCR | `pricing/xva_engine.py` | trace workbook; **validator wanted** |
+| Initial margin estimate / SA-CCR | `pricing/xva_engine.py` | trace workbook; **validator wanted** |
 | Crypto NDF / NDO | `methodology/replicate.py` | formulas only; **validator wanted** |
 | Registry contract | `chain/src/TradeConfirmationRegistry.sol` | 16 Foundry tests, Sourcify-verified; **external audit wanted before mainnet** |
 

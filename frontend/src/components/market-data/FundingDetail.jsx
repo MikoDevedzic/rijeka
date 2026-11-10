@@ -29,7 +29,7 @@ function FundingDef({ curve }) {
       <ParamGrid items={[
         { label: 'FVA',  value: 'E[exposure] × (funding_curve − OIS)', cls: 'bl' },
         { label: 'ColVA',value: 'E[exposure] × (col_curve − OIS)',     cls: 'bl' },
-        { label: 'MVA',  value: 'E[SIMM_IM] × (funding_curve − OIS)', cls: 'bl' },
+        { label: 'MVA',  value: 'E[IM] × (funding_curve − OIS)', cls: 'bl' },
         { label: 'DVA',  value: 'Uses own credit curve (separate)',    cls: 'bl' },
       ]} />
       <SectionLabel>Future Connectivity</SectionLabel>

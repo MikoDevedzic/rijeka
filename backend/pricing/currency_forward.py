@@ -66,7 +66,7 @@ class CurrencyForwardResult:
     ir01: float = 0.0               # +1 bp on every rate curve = ir01_disc + ir01_base
     ir01_disc: float = 0.0          # +1 bp on the discount (quote / settlement) curve only
     ir01_base: float = 0.0          # +1 bp on the base-currency curve (crypto: the funding rate, FUND01)
-    spot01: float = 0.0             # dNPV for +1 % spot: FX01 for a pair, CRY01 for a digital asset (SIMM delta convention)
+    spot01: float = 0.0             # dNPV for +1 % spot: FX01 for a pair, CRY01 for a digital asset
     theta: float = 0.0              # one day's carry: NPV one day later, same spot and curves
     t_spot: float = 0.0             # T_s: valuation date to the spot date the forward is carried from; 0 when spot settles at once
 

@@ -110,8 +110,8 @@ the HQLA value and the quote line. The record's own regime is its collateral sch
 (instruments, rail, yields from market data), else its class-level fields. The ticket's CAPITAL tab shows the
 regulatory stock only (IM, EAD, RWA, K CCR, K CVA, leverage exposure, HQLA of IM); the lifetime prices of that
 stock (KVA, MVA) and the credit and funding adjustments are valuation adjustments and belong on the XVA tab,
-where they move in the collateral plan's C2. IM is SIMM's interest-rate delta weight on the set's IR01 plus the FX
-delta weight on its spot sensitivity (a labelled assumption for digital assets), scaled by √(MPoR/10);
+where they move in the collateral plan's C2. IM is the engine's own estimate, the 99th percentile move of the set's value over the regime's margin period
+(`pricing/xva_engine.model_im`; Rijeka does not compute ISDA SIMM, which is licensed);
 nothing is posted where the collateral is not eligible IM. `GET /api/capital/collateral` is the catalogue
 with the tables and sources.
 
@@ -148,7 +148,7 @@ against the baseline, and the quote line (the cost difference as a running or up
 
 What the arithmetic will and will not show, and is tested to: a record already on cash and government
 securities shows zero in the COLLATERAL step (parity, not superiority); a daily, undisputed CSA shows zero in
-MARGIN_FREQUENCY and DISPUTES; SIMM IM moves only with the margin period of risk, never with the collateral;
+MARGIN_FREQUENCY and DISPUTES; the initial margin estimate moves only with the margin period of risk, never with the collateral;
 market-risk capital is not a function of any step and is not computed here; the P&L charges and the regulatory
 stock are separate ledgers. The forward states are shown in their own column and never summed into the
 current-rules one.

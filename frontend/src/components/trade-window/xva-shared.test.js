@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null, getSessionSafe: async () => null }))
 
 import {
-  VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, simmImValue, numOrNull,
+  VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
   ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS,
@@ -56,9 +56,22 @@ describe('spread curves', () => {
     expect(p.own_cds_curve.map(x => x.spread_bp)).toEqual([38, 41, 44, 48, 51, 55])
     expect(p.cp_cds_bp).toBe(91); expect(p.own_cds_bp).toBe(48); expect(p.ftp_bp).toBe(55)
   })
-  it('SIMM IM: blank or junk is null (derive server-side), a number pins it', () => {
-    expect(simmImValue('')).toBeNull(); expect(simmImValue('x')).toBeNull(); expect(simmImValue('0.85')).toBe(0.85)
+  it('initial margin: blank or junk is no amount (the engine estimates it), a dollar amount pins it', () => {
+    for (const none of ['', '  ', 'x', '-5', '1e6', '1,2.5x', null, undefined]) expect(imUsdValue(none)).toBeNull()
+    expect(imUsdValue('250000')).toBe(250000)
+    expect(imUsdValue('250,000')).toBe(250000)
+    expect(imUsdValue('250k')).toBe(250000)
+    expect(imUsdValue('0.25m')).toBe(250000)
+    expect(imUsdValue(' 2 M ')).toBe(2000000)
+    expect(imUsdValue('0')).toBe(0)
     expect(numOrNull('1,250.5')).toBe(1250.5); expect(numOrNull('')).toBeNull()
+  })
+  it('nothing the tabs say about margin claims SIMM: the note says it is licensed and not computed', () => {
+    expect(RATES_MVA_NOTE).toBe(IM_NOTE)
+    expect(FX_MVA_NOTE).toBe(IM_NOTE)
+    expect(IM_NOTE).toMatch(/does not compute ISDA SIMM/)
+    expect(IM_NOTE).toMatch(/licensed/)
+    expect(CRYPTO_GROUPS.map(([k]) => k)).toEqual(['', '2a', '2b'])
   })
 })
 
@@ -199,11 +212,11 @@ describe('the simple view', () => {
   })
   it('knows the hidden assumptions as the tab opened from a changed one', () => {
     // the values both tabs open with (their state is initialised from this), pinned: a change here changes what a run sends
-    expect(HIDDEN_INPUT_DEFAULTS).toEqual({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', simmIm: '', capModel: 'sa_ccr' })
+    expect(HIDDEN_INPUT_DEFAULTS).toEqual({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', imUsd: '', capModel: 'sa_ccr' })
     expect(Object.isFrozen(HIDDEN_INPUT_DEFAULTS)).toBe(true)
     expect(assumptionsAreDefault(HIDDEN_INPUT_DEFAULTS)).toBe(true)
     expect(assumptionsAreDefault({ ...HIDDEN_INPUT_DEFAULTS, lgd: '40.0' })).toBe(true)
-    for (const changed of [{ wwr: 1.5 }, { lgd: '60' }, { fbaRatio: '70' }, { hurdle: '' }, { simmIm: '0.85' }, { capModel: 'cem' }]) {
+    for (const changed of [{ wwr: 1.5 }, { lgd: '60' }, { fbaRatio: '70' }, { hurdle: '' }, { imUsd: '250k' }, { capModel: 'cem' }, { cryptoGroup: '2b' }]) {
       expect(assumptionsAreDefault({ ...HIDDEN_INPUT_DEFAULTS, ...changed })).toBe(false)
     }
   })

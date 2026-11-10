@@ -1,7 +1,7 @@
 // risk/CapitalPage.jsx
 // ────────────────────────────────────────────────────────────────────────────────────
 // CAPITAL: the regulatory stock for the CSA as booked, by counterparty and in total: RWA,
-// the CCR and CVA capital, SA-CCR EAD, SIMM IM, the leverage exposure, the liquidity value
+// the CCR and CVA capital, SA-CCR EAD, the initial margin estimate, the leverage exposure, the liquidity value
 // of the margin. Stock only, at today, in USD; the prices of that stock (KVA, MVA) and the
 // book under other collateral regimes are under Risk → COLLATERAL and on the ticket's XVA
 // tab. The numbers come from the same stored run (GET /api/capital/portfolio).

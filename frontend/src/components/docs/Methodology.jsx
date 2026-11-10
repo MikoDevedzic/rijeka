@@ -48,7 +48,7 @@ export default function Methodology() {
         <div>
           <h2>THE METHODOLOGY DOCUMENT</h2>
           <p>Curve construction, schedules, linear products, swaptions and SABR, caps, Hull–White (trees and calibration), exposure under a CSA
-             with margin period of risk, the XVA waterfall, SIMM and SA-CCR, P&amp;L attribution, digital-asset NDF/NDO, and on-chain confirmation.
+             with margin period of risk, the XVA waterfall, initial margin and SA-CCR, P&amp;L attribution, digital-asset NDF/NDO, and on-chain confirmation.
              Every formula is the one in the code, with the module named, and the known limitations are listed rather than hidden.
              Written in LaTeX, versioned with the code.</p>
         </div>

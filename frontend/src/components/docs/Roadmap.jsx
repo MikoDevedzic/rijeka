@@ -6,7 +6,7 @@ const PHASES = [
   { title: 'PHASE 1 · RATES', status: 'LIVE', items: [
     ['DONE', 'OIS bootstrap, IRS / OIS / basis pricing, cashflows, IR01'],
     ['DONE', 'European swaptions and caps/floors (Bachelier), SABR β=0 surface, Bermudans (HW1F trinomial)'],
-    ['DONE', 'XVA Monte Carlo on HW1F calibrated to the surface; CSA presets with margin period of risk; SIMM IM'],
+    ['DONE', 'XVA Monte Carlo on HW1F calibrated to the surface; CSA presets with margin period of risk; initial margin as an amount the desk sets or the engine\'s own estimate (ISDA SIMM is licensed and is not implemented)'],
     ['DONE', 'On-chain bilateral confirmation: canonical record v2 → EIP-712 → registry on Sepolia; amend and terminate; public verifier'],
     ['DONE', 'Messenger: firms, rooms, trade cards, wallet countersigning; Telegram mirror; Market News room'],
     ['DONE', 'Hosted demo: sandbox workspace on sign-in, demo counterparty, Excel methodology replications'],
@@ -25,9 +25,9 @@ const PHASES = [
     ['DONE', 'IPV: the market data the book is priced on verified by pillar and surface point against an independent mark, overrides with their first- and second-order P&L, the gate, the controller\'s sign-off; FLASH and OFFICIAL on the trading P&L; XVA RESERVES as the reserve book'],
     ['NEXT', 'IPV next: the sequential explain of the reserve change, a second market-data feed on self-host as the independent mark, the monthly IPV report'],
     ['DONE', 'Greeks and bump-and-reprice ladders; exposure profiles (EE, ENE, PFE) and SA-CCR EAD inside the XVA module'],
-    ['DONE', 'CAPITAL tab on every ticket: SIMM IM, SA-CCR EAD by asset class (CRE52, SCO60.98), RWA, CCR and CVA capital (MAR50), KVA, MVA, leverage exposure and HQLA under collateral regimes (cash and government securities, stablecoin, tokenised fund shares, tokenised sovereign) and counterparty types; the Basel worked examples as the reference suite', 'CAPITAL'],
+    ['DONE', 'CAPITAL tab on every ticket: initial margin, SA-CCR EAD by asset class (CRE52, SCO60.98), RWA, CCR and CVA capital (MAR50), KVA, MVA, leverage exposure and HQLA under collateral regimes (cash and government securities, stablecoin, tokenised fund shares, tokenised sovereign) and counterparty types; the Basel worked examples as the reference suite', 'CAPITAL'],
     ['DONE', 'Risk → CAPITAL: the book under collateral regimes, every netting set re-collateralised channel by channel from the CSA as booked to on-chain under current rules and to the forward states, the attribution per step with its paragraph, the invariants stated', 'CAPITAL'],
-    ['NEXT', 'Capital next: FRTB sensitivities-based market-risk capital from the ladder, SIMM across risk classes with incremental IM and netting-set consolidation, a CSV import for a client book, an Excel replication'],
+    ['NEXT', 'Capital next: FRTB sensitivities-based market-risk capital from the ladder, initial margin across risk classes with incremental IM and netting-set consolidation (ISDA SIMM itself only under a licence), a CSV import for a client book, an Excel replication'],
     ['DONE', 'MARKET RISK tab: key-rate IR01 ladder by bump-and-reprice, historical-simulation VaR by full revaluation (every trade repriced on each of two years of observed days, the ladder VaR alongside as the linear comparison), named stress by full revaluation, limits on any reported number with utilisation and breaches'],
     ['DONE', 'VaR backtesting: yesterday\'s VaR against today\'s clean, hypothetical or dirty P&L; exceptions, the Basel traffic light from the binomial, Kupiec\'s test; the 95% and ladder VaR alongside'],
     ['DONE', 'VaR: volatility surfaces as risk factors (every quote of an FX surface, the swaption grid point by point, repriced in full; a surface is secondary to the curves and spots and the page says its coverage); VOL stress scenarios; the ladder VaR carries vega; the demo\'s surfaces scaled day by day by realised vol, labelled'],
@@ -54,7 +54,7 @@ const PHASES = [
     ['DONE', 'Seeing what we ship: browser journeys in CI on the local stack (every page; the rates, FX and digital-asset tickets from pricing through XVA, capital, booking and confirmation; the results on a laptop screen) and a pinned sample book of 66 figures that moves only with a dated explanation'],
     ['NEXT', 'The sign-in form and the P&L sign-off and IPV flows in the browser journeys (GoTrue in the test stack)'],
     ['NEXT', 'Scale: a 10,000-trade benchmark book in CI; the nightly chain as worker jobs by curve rather than by trade; a compiled core (Rust via Python) for the hot pricers once the benchmark names them, the Python kept as the reference the tests hold it to'],
-    ['NEXT', 'A second referee at the XVA level: a bridge to ORE (open source) comparing EE, PFE, CVA, SIMM and SA-CCR row by row in CI, the way QuantLib checks the pricing'],
+    ['NEXT', 'A second referee at the XVA level: a bridge to ORE (open source) comparing EE, PFE, CVA, initial margin and SA-CCR row by row in CI, the way QuantLib checks the pricing'],
     ['NEXT', 'Security: SECURITY.md with a private disclosure path and a bounty; CSP enforced; CodeQL and secret scanning; a penetration test and SOC 2 when a buyer names the standard'],
     ['NEXT', 'A design pass by a human designer with a point of view: a type and colour system, data-dense tables, the landing site showing the real product'],
   ]},
@@ -123,7 +123,7 @@ export default function Roadmap() {
         <p>Specific asks get answers. Write to <a href="mailto:miko@rijeka.app">miko@rijeka.app</a> with the word in the subject, or start from the link. Nothing here is an offer of employment or equity.</p>
         <div className="wwu-grid">
           {[
-            ['VALIDATE', 'Rebuild a product independently and be named on its report. SABR, the Hull–White tree, XVA, SIMM and the crypto products are waiting for a first validator. USD 250 for a confirmed S1/S2 pricing finding.', 'https://github.com/MikoDevedzic/rijeka/blob/main/docs/VALIDATION.md', 'THE CHARTER ↗'],
+            ['VALIDATE', 'Rebuild a product independently and be named on its report. SABR, the Hull–White tree, XVA, the initial margin estimate and the crypto products are waiting for a first validator. USD 250 for a confirmed S1/S2 pricing finding.', 'https://github.com/MikoDevedzic/rijeka/blob/main/docs/VALIDATION.md', 'THE CHARTER ↗'],
             ['AUDIT', 'A Solidity reviewer for the registry contract before anyone says the word mainnet. 16 Foundry tests and Sourcify verification are the starting point, not the finish.', 'https://github.com/MikoDevedzic/rijeka/tree/main/chain', 'THE CONTRACT ↗'],
             ['CONTRIBUTE', 'Code or docs with a DCO sign-off; engine and standard are Apache-2.0, the platform is BSL 1.1. Pricing changes come with a test, a before/after number and the methodology updated in the same pull request.', 'https://github.com/MikoDevedzic/rijeka/blob/main/CONTRIBUTING.md', 'CONTRIBUTING ↗'],
             ['PILOT', 'A bank, asset manager or corporate treasury willing to run the confirmation flow with a real counterparty on Sepolia, then mainnet.', 'mailto:miko@rijeka.app?subject=PILOT', 'WRITE TO US'],

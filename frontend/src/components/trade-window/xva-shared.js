@@ -60,10 +60,10 @@ export const TIPS = {
     body: 'Fraction of funding benefit you recognise.\n\nFBA = FTP x ratio x Sum[ |ENE(t)| x dt x DF(t) ]\n\n1.0 = full benefit. 0.5 = conservative. Most desks use 0.5-0.7.\n\nRationale for < 1: if the counterparty defaults while out of the money, you lose the benefit. Conservative booking discounts it.' },
   hurdle: { title: 'Hurdle rate (%)',
     body: 'Required return on regulatory capital.\n\nKVA = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]\nCapital(t) = SA-CCR EAD(t) x 8% (Basel III RWA)\n\nTypical: 10-15% for investment banks. At 12% hurdle, a 5Y $10M IRS generates ~$70-80K KVA. KVA is often larger than CVA for vanilla rates trades.' },
-  simmIm: { title: 'SIMM IM ($M)',
-    body: 'ISDA SIMM initial margin for the inter-dealer hedge in $M. Linear MVA proxy:\n\nMVA~ = -(IM x $1M) x (FTP/10000) x T/2\n\nAssumes flat IM for T/2 years on average.\n\nOn the roadmap: IM(path, t) computed on each Monte Carlo path using ISDA SIMM delta sensitivities. MVA = -(FTP/10000) x Sum[ IM(t) x dt x DF(t) ].' },
+  imUsd: { title: 'Initial margin (USD)',
+    body: 'Initial margin, each way, in dollars. Type the amount (250000, 250k or 0.25m): it is held for the life of the trade and MVA is its funding cost, −Σ IM × max(FTP − pickup, 0) × dt × DF.\n\nBlank = the engine\'s own estimate from the simulated paths: at each date the 99th percentile rise (what we call) and fall (what we post) of the value over the margin period, about its mean. It is at today\'s volatility, not a stressed one, so it can read lower than a regulatory figure.\n\nRijeka does not compute ISDA SIMM. SIMM is ISDA\'s licensed methodology: a firm with a licence enters its own SIMM figure here.' },
   settlement: { title: 'Settlement / CSA',
-    body: 'How the trade is margined. Every VA is computed on the RESIDUAL exposure after collateral:\n\nE+(t) = max(V(t) − VM(t) − IM_recv, 0)\n\nUNCOLLATERALISED — no variation margin. Full MtM at risk. IM may still be posted (legacy MVA).\n\nBILATERAL — daily VM under a CSA, thresholds and MTA apply, 10 business-day margin period of risk (BCBS-IOSCO floor for non-cleared). SIMM IM exchanged.\n\nON-CHAIN — atomic settlement: continuous VM, zero threshold and MTA, 5bd MPoR (the cleared floor). SIMM risk weights scale by sqrt(5/10) = 0.707, so IM and MVA fall 29.3%; SA-CCR margined maturity factor 1.5·sqrt(MPoR/250) cuts KVA by the same factor.\n\nWhat the margin is held in is the COLLATERAL block below: it sets the carry in ColVA and the pickup in MVA.' },
+    body: 'How the trade is margined. Every VA is computed on the RESIDUAL exposure after collateral:\n\nE+(t) = max(V(t) − VM(t) − IM_recv, 0)\n\nUNCOLLATERALISED — no variation margin. Full MtM at risk. IM may still be posted (legacy MVA).\n\nBILATERAL — daily VM under a CSA, thresholds and MTA apply, 10 business-day margin period of risk (BCBS-IOSCO floor for non-cleared). Initial margin exchanged.\n\nON-CHAIN — atomic settlement: continuous VM, zero threshold and MTA, 5bd MPoR (the cleared floor). Half the margin period: the initial margin estimate, and MVA with it, fall by about sqrt(5/10) = 0.707; SA-CCR margined maturity factor 1.5·sqrt(MPoR/250) cuts KVA by the same factor.\n\nWhat the margin is held in is the COLLATERAL block below: it sets the carry in ColVA and the pickup in MVA.' },
   collateral: { title: 'Collateral: what the margin is held in',
     body: 'The instrument the variation margin is posted in and received in, from the firm\'s list (Configurations → Collateral Instruments). The counterparty\'s own schedule is the default when a counterparty is selected.\n\nEach instrument carries a yield source; what the engine uses is its carry over the OIS the discounting assumes: a Treasury bill at OIS is 0 bp, a tokenised fund share at OIS less its expense ratio is about −10 bp, a stablecoin that pays its holder nothing is minus the OIS rate. The posted side\'s carry is the IM pickup in MVA too.\n\nColVA = Σ (VM posted × s_post + VM held × s_recv) × dt × DF. Cash on both sides is zero, so a cash ticket reads exactly as before.' },
   mpor: { title: 'Margin period of risk (bd)',
@@ -87,8 +87,6 @@ export const TIPS = {
     body: 'Where the vol came from on the last run: the surface (or the demo default or a desk input), the mode, the vol used and, in SURFACE mode on a forward, the step vols the paths were drawn with.' },
   fxPaths: { title: 'Monte Carlo paths',
     body: 'Number of simulated spot scenarios, monthly time steps to settlement.\n\nEE(t) = (1/N) x Sum[ max(V_i(t), 0) ], ENE(t) likewise on the negative side; PFE 95th percentile needs ~2,000 paths for a stable tail.\n\nSIMULATE uses seed 42, so it repeats exactly; RE-ROLL draws a fresh seed and the numbers move within the Monte Carlo error.' },
-  fxSimmIm: { title: 'SIMM IM ($M)',
-    body: 'Initial margin for the hedge in $M, funding cost into MVA.\n\nBlank = a SIMM-style FX risk weight applied to the ticket\'s spot delta (RW × spot01), amortising to settlement. Type a number to pin it.' },
 }
 
 // ── styles every XVA tab uses ────────────────────────────────────────────────────
@@ -127,12 +125,14 @@ export const SETTLEMENT_PRESETS = [
 ]
 export const SETTLEMENT_DESC = {
   UNCOLLATERALISED: 'No variation margin — full MtM at risk.',
-  BILATERAL: 'Daily VM under CSA · 10bd MPoR floor · SIMM IM exchanged.',
-  ON_CHAIN: 'Atomic settlement · continuous VM · zero TH/MTA · 5bd MPoR · SIMM IM × 0.707.',
+  BILATERAL: 'Daily VM under CSA · 10bd MPoR floor · initial margin exchanged.',
+  ON_CHAIN: 'Atomic settlement · continuous VM · zero TH/MTA · 5bd MPoR · initial margin over half the period.',
 }
 
-export const RATES_MVA_NOTE = 'MVA = −Σ IM(t) × FTP(t) × dt × DF(t) · IM from ISDA SIMM IR delta (RW × IR01), amortising to maturity'
-export const FX_MVA_NOTE = 'MVA = −Σ IM(t) × FTP(t) × dt × DF(t) · IM from a SIMM-style FX weight on the spot delta (RW × spot01), amortising to settlement'
+// One note for every ticket: where the margin comes from, and that it is not SIMM.
+export const IM_NOTE = 'MVA = −Σ IM(t) × FTP(t) × dt × DF(t). IM is the amount typed (held for the life), else the engine\'s estimate: the 99th percentile move of the value over the margin period. Rijeka does not compute ISDA SIMM, which is licensed: a firm with a licence enters its own figure.'
+export const RATES_MVA_NOTE = IM_NOTE
+export const FX_MVA_NOTE = IM_NOTE
 
 // ── helpers ──────────────────────────────────────────────────────────────────────
 const SYM = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' }
@@ -189,10 +189,19 @@ export function spreadCurvePayload(cp, own, ftp) {
   }
 }
 
-// Blank = let the server derive IM (SIMM RW × sensitivity); a number pins it, in $M.
-export function simmImValue(s) {
-  return (s === '' || s == null || isNaN(parseFloat(s))) ? null : parseFloat(s)
+// The initial margin the desk typed, in dollars, or null for the engine's estimate: "250000", "250,000", "250k",
+// "0.25m". Anything else (and a negative) is no amount.
+export function imUsdValue(s) {
+  const m = String(s ?? '').trim().replace(/,/g, '').match(/^(\d+(?:\.\d+)?|\.\d+)\s*([kKmM]?)$/)
+  if (!m) return null
+  const v = parseFloat(m[1]) * (m[2] === '' ? 1 : /k/i.test(m[2]) ? 1e3 : 1e6)
+  return Number.isFinite(v) ? v : null
 }
+
+// The Basel group a digital asset's capital add-on is run under ('' = the engine's default for the asset).
+export const CRYPTO_GROUPS = Object.freeze([
+  ['', 'default for the asset'], ['2a', 'Group 2a · SA-CCR, 32 %'], ['2b', 'Group 2b · 50 % of notional'],
+])
 
 // "+0.3bp", "-0.4bp", and a figure that rounds to zero as "0.0bp": never "+-0.0bp"
 const signed = (bp) => { const n = parseFloat(bp); return (n > 0 ? '+' : '') + (n === 0 ? String(bp).replace('-', '') : bp) + 'bp' }
@@ -351,7 +360,7 @@ export function useXvaView() {
 
 // What the inputs the simple view hides start at, the same on both tabs: each tab's state is initialised from this,
 // and the line's "default" is measured against it.
-export const HIDDEN_INPUT_DEFAULTS = Object.freeze({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', simmIm: '', capModel: 'sa_ccr' })
+export const HIDDEN_INPUT_DEFAULTS = Object.freeze({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', imUsd: '', capModel: 'sa_ccr' })
 
 // Wrong-way risk on a currency or digital-asset ticket: the multiple a party's default intensity takes when the
 // asset halves against its forward (the request's cp_hazard_if_halves / own_hazard_if_halves). 1 is independence.
@@ -378,11 +387,11 @@ export function spreadsAreDefault(spreads) {
   return Object.keys(SPREAD_DEFAULTS).every(g => TENORS_6.every(t => n(spreads?.[g]?.[t]) === n(SPREAD_DEFAULTS[g][t])))
 }
 
-// WWR, LGD, the FBA ratio, the hurdle, the SIMM IM and the capital model are all as the tab opened.
-export function assumptionsAreDefault({ wwr, lgd, fbaRatio, hurdle, simmIm, capModel, cpLink, ownLink } = {}) {
+// WWR, LGD, the FBA ratio, the hurdle, the initial margin, the capital model and group are all as the tab opened.
+export function assumptionsAreDefault({ wwr, lgd, fbaRatio, hurdle, imUsd, capModel, cpLink, ownLink, cryptoGroup } = {}) {
   const D = HIDDEN_INPUT_DEFAULTS
   return Number(wwr) === D.wwr && Number(cpLink ?? 1) === 1 && Number(ownLink ?? 1) === 1 && parseFloat(lgd) === parseFloat(D.lgd) && parseFloat(fbaRatio) === parseFloat(D.fbaRatio)
-    && parseFloat(hurdle) === parseFloat(D.hurdle) && simmImValue(simmIm) == null && capModel === D.capModel
+    && parseFloat(hurdle) === parseFloat(D.hurdle) && imUsdValue(imUsd) == null && capModel === D.capModel && !cryptoGroup
 }
 
 // A model parameter box holds a number the request will carry (a blank or a non-number is sent as nothing).

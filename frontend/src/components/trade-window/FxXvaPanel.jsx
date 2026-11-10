@@ -26,7 +26,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from './xva-shared.jsx'
 import {
-  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, imUsdValue, CRYPTO_GROUPS,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine,
 } from './xva-shared'
 import { Note } from '../common/Note'
@@ -155,7 +155,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const [lgd, setLgd] = useState(HIDDEN_INPUT_DEFAULTS.lgd)
   const [fbaRatio, setFbaRatio] = useState(HIDDEN_INPUT_DEFAULTS.fbaRatio)
   const [hurdle, setHurdle] = useState(HIDDEN_INPUT_DEFAULTS.hurdle)
-  const [simmIm, setSimmIm] = useState(HIDDEN_INPUT_DEFAULTS.simmIm)          // blank = SIMM-style weight on the spot delta, server-side
+  const [imUsd, setImUsd] = useState(HIDDEN_INPUT_DEFAULTS.imUsd)             // initial margin in dollars; blank = the engine's estimate
+  const [cryptoGroup, setCryptoGroup] = useState('')                          // a digital asset's Basel group; '' = the engine's default
   const [capModel, setCapModel] = useState(HIDDEN_INPUT_DEFAULTS.capModel)
   // runs
   const [res, setRes] = useState(null)
@@ -187,7 +188,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         seed: useSeed, vol_mode: volMode, vol_pct: numOrNull(volPct), paths,
         ...spreadCurvePayload(spreads.cp, spreads.own, spreads.ftp),
         lgd: Number(lgd) / 100, own_lgd: Number(lgd) / 100, fba_ratio: Number(fbaRatio) / 100, hurdle_rate: Number(hurdle) / 100,
-        capital_model: capModel, wwr_multiplier: wwr, simm_im_m: simmImValue(simmIm),
+        capital_model: capModel, wwr_multiplier: wwr, im_usd: imUsdValue(imUsd), crypto_group: cryptoGroup || null,
         cp_hazard_if_halves: Number(cpLink) || 1, own_hazard_if_halves: Number(ownLink) || 1,
         csa: fxCsaBody(settlement, imExchanged),
         collateral: collateralBody(collateral),
@@ -217,6 +218,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // bp against the notional: the ticket's, or in a package the sum of every leg's
   const notionalQ = pkg && pkg.ready ? [quote, ...pkg.quotes].reduce((a, q) => a + (quoteNotional(q) || 0), 0) : quoteNotional(quote)
   const nLegs = pkg ? pkg.count + 1 : 1
+  const isDigital = !!quote && !['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD', 'SEK', 'NOK'].includes(String(quote.base_currency || '').toUpperCase())
   const ww = wrongWayLine(res)
   // what netting is worth: the package's peak expected exposure against its legs' peaks added up
   const legPeaks = res?.package && Array.isArray(res.legs) ? res.legs.reduce((a, l) => a + (Number(l.ee_gross_peak) || 0), 0) : null
@@ -270,7 +272,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             {simulateError}
             <RunAssumes>
               {runAssumesLine({ paths, model: fxModelWords({ volPct, volMode, params: res?.params }), spreads,
-                assumptions: { wwr, lgd, fbaRatio, hurdle, simmIm, capModel, cpLink, ownLink } })}
+                assumptions: { wwr, lgd, fbaRatio, hurdle, imUsd, capModel, cpLink, ownLink, cryptoGroup } })}
             </RunAssumes>
           </>) : (<>
 
@@ -345,6 +347,16 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
               {notionalQ ? <> · notional {fmt(notionalQ).replace(/^\+/, '')} {ccy}</> : null}
               {res && <> · seed {res.seed ?? seed}</>}
             </VaFooter>
+            {res?.capital && (
+              <div data-testid="xva-basis" style={{ padding: '6px 16px 2px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                <div data-testid="xva-capital-basis"><span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>CAPITAL</span>{' '}{res.capital.basis}</div>
+                <div data-testid="xva-im-basis" data-im={Math.round(Number(res.capital.im_0) || 0)}><span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>INITIAL MARGIN</span>{' '}
+                  {res.capital.im_basis === 'none' ? 'none exchanged under this settlement'
+                    : <><span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(res.capital.im_0).replace(/^\+/, '')}</span> at the first date · {res.capital.im_basis}</>}
+                  {res.capital.im_basis !== 'none' && <Note inline>{res.capital.im_note}</Note>}
+                </div>
+              </div>
+            )}
             {ww?.cp && (
               <div data-testid="xva-wwr" data-cva={Math.round(ww.cp.cva)} data-independent={Math.round(ww.cp.independent)} style={{ padding: '6px 16px 2px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
                 <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>{ww.cp.wrong ? 'WRONG-WAY RISK' : 'RIGHT-WAY RISK'}</span>
@@ -370,7 +382,15 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">
               <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
-              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm} capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} simmTip='fxSimmIm' tip={tip} untip={untip} /></div>
+              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} tip={tip} untip={untip}>
+                {res?.capital?.crypto_group != null || isDigital ? (<>
+                  <label htmlFor="xva-crypto-group" style={{ alignSelf: 'center', fontSize: '0.75rem', color: 'var(--text-dim)', gridColumn: '1' }}>Basel group</label>
+                  <select id="xva-crypto-group" data-testid="xva-crypto-group" value={cryptoGroup} onChange={e => setCryptoGroup(e.target.value)} style={{ ...INP, cursor: 'pointer', gridColumn: '2 / span 3' }}
+                    title="SCO60: a Group 2a cryptoasset (a regulated derivative or ETF, USD 10bn of market capitalisation, USD 50m a day, a year of prices, shown to the supervisor) takes SA-CCR with a 32 % factor; anything else is Group 2b, 50 % of each trade's notional">
+                    {CRYPTO_GROUPS.map(([k, words]) => <option key={k || 'default'} value={k}>{words}</option>)}
+                  </select>
+                </>) : null}
+              </AssumptionsBlock></div>
             </div>
           )}
         </div>

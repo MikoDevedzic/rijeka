@@ -184,7 +184,7 @@ export function SpreadCurvesGrid({ spreads, onChange, tip = noop, untip = noop }
 
 // SETTLEMENT: the three presets, the one-line description, the preset's own inputs
 // (`fields`, the rates tab's threshold / MTA / MPoR / IM yield; none on FX) and the
-// "SIMM IM exchanged" and "Compare on-chain" toggles. Picking a preset sets IM exchanged
+// "Initial margin exchanged" and "Compare on-chain" toggles. Picking a preset sets IM exchanged
 // on for the collateralised ones, as the rates tab always has.
 export function SettlementBlock({ settlement, setSettlement, imExchanged, setImExchanged, compareOnChain, setCompareOnChain,
                                   fields = [], tip = noop, untip = noop, collateral = null, setCollateral = null, instruments = [], scheduleCollateral = null }) {
@@ -213,7 +213,7 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
             <input type='text' value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...INP,textAlign:'right'}}/>
           </div>
         ))}
-        <div style={{...LBL,alignSelf:'center',marginBottom:0,borderBottom:'none',cursor:'default'}}>SIMM IM exchanged</div>
+        <div style={{...LBL,alignSelf:'center',marginBottom:0,borderBottom:'none',cursor:'default'}}>Initial margin exchanged</div>
         <label style={{display:'flex',justifyContent:'flex-end',alignItems:'center',cursor:'pointer'}}>
           <input type='checkbox' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
         </label>
@@ -274,23 +274,24 @@ function CollateralBlock({ collateral, setCollateral, instruments, scheduleColla
   )
 }
 
-// ASSUMPTIONS: LGD %, FBA/FTP ratio, Hurdle rate %, SIMM IM $M, the capital model and the MVA note.
-export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, setHurdle, simmIm, setSimmIm, capModel, setCapModel,
-                                   note = RATES_MVA_NOTE, simmTip = 'simmIm', tip = noop, untip = noop }) {
+// ASSUMPTIONS: LGD %, FBA/FTP ratio, Hurdle rate %, the initial margin in dollars, the capital model and the MVA note.
+// `children` sits after the capital model (a digital asset's Basel group).
+export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, setHurdle, imUsd, setImUsd, capModel, setCapModel,
+                                   note = RATES_MVA_NOTE, imTip = 'imUsd', tip = noop, untip = noop, children = null }) {
   const rows = [
     {label:'LGD %',val:lgd,set:setLgd,tk:'lgd'},
     {label:'FBA/FTP ratio',val:fbaRatio,set:setFbaRatio,tk:'fbaRatio'},
     {label:'Hurdle rate %',val:hurdle,set:setHurdle,tk:'hurdle'},
-    {label:'SIMM IM $M',val:simmIm,set:setSimmIm,tk:simmTip},
+    {label:'Initial margin USD',val:imUsd,set:setImUsd,tk:imTip,placeholder:'estimate',testId:'xva-im-usd'},
   ]
   return (
     <>
       <SectionHeader>ASSUMPTIONS<Note inline>{note}</Note></SectionHeader>
       <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 72px minmax(0,1fr) 72px',gap:'5px 10px'}}>
-        {rows.map(({label,val,set,tk})=>(
+        {rows.map(({label,val,set,tk,placeholder,testId})=>(
           <div key={label} style={{display:'contents'}}>
             <TipLabel tipKey={tk} tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>{label}</TipLabel>
-            <input type='text' value={val} onChange={e=>set(e.target.value)} style={{...INP,textAlign:'right'}}/>
+            <input type='text' value={val} onChange={e=>set(e.target.value)} placeholder={placeholder} data-testid={testId} style={{...INP,textAlign:'right'}}/>
           </div>
         ))}
         <TipLabel tipKey='capModel' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Capital model</TipLabel>
@@ -299,6 +300,7 @@ export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, s
           <option value='cem'>CEM</option>
           <option value='imm'>IMM</option>
         </select>
+        {children}
       </div>
     </>
   )
@@ -422,7 +424,7 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
   const bp = (v) => v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} bp`
   const cols = VA_COLS(rows.length)
   const size = moneySize(rows.flatMap(r => [unsigned(fmt(r.cur)), unsigned(fmt(r.oc))]))
-  const onChainNote = <>Same {compare.n_paths?.toLocaleString()} paths, same seed. On chain is continuous variation margin, a {compare.csa?.mpor_days} business day margin period of risk, SIMM IM × {compare.csa?.simm_mpor_scale?.toFixed(3)}; IM {fmt(compare.capital?.im_0)} against {fmt(current.capital?.im_0)}.</>
+  const onChainNote = <>Same {compare.n_paths?.toLocaleString()} paths, same seed. On chain is continuous variation margin and a {compare.csa?.mpor_days} business day margin period of risk; IM {fmt(compare.capital?.im_0)} against {fmt(current.capital?.im_0)}.</>
   return (
     <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
       {saving && (

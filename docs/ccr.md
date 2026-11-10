@@ -29,7 +29,7 @@ Every trade of a counterparty is valued on the same paths and summed per path an
 
 ## The CSA
 
-From the counterparty record: NO_CSA → uncollateralised; VM or VM_IM → daily variation margin with the record's threshold and minimum transfer amount, a 10-business-day margin period of risk, initial margin when the type says so (SIMM weight on the netting set's IR01, MPoR-scaled, amortising with maturity). The collateral model is the XVA engine's: variation margin held against the value lagged by the MPoR (Brownian bridge inside a step), residual E⁺ = max(V − C − IM, 0).
+From the counterparty record: NO_CSA → uncollateralised; VM or VM_IM → daily variation margin with the record's threshold and minimum transfer amount, a 10-business-day margin period of risk, initial margin when the type says so (the engine's estimate: the 99th percentile rise of the set's value over the margin period at each date; not ISDA SIMM). The collateral model is the XVA engine's: variation margin held against the value lagged by the MPoR (Brownian bridge inside a step), residual E⁺ = max(V − C − IM, 0).
 
 ## Measures
 

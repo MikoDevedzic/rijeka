@@ -127,13 +127,6 @@ const NAV = [
           { label: 'SUPERVISORY FACTORS',path: '/configurations/ccr/sa-ccr',               live: false, sprint: '6'  },
         ],
       },
-      {
-        id: 'ccr-simm',
-        label: 'SIMM',
-        children: [
-          { label: 'RISK WEIGHTS',       path: '/configurations/ccr/simm',                 live: false, sprint: '6B' },
-        ],
-      },
     ],
   },
   {

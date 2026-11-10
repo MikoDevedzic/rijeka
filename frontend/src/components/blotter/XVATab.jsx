@@ -13,7 +13,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from '../trade-window/xva-shared.jsx'
 import {
-  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, simmImValue,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, imUsdValue,
   buildVaRows, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
 } from '../trade-window/xva-shared'
 
@@ -201,9 +201,9 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   const [hurdle, setHurdle] = useState(HIDDEN_INPUT_DEFAULTS.hurdle)
   const [capModel, setCapModel] = useState(HIDDEN_INPUT_DEFAULTS.capModel)
   const [wwr, setWwr] = useState(HIDDEN_INPUT_DEFAULTS.wwr)
-  // Blank => derive from ISDA SIMM (RW x IR01) server-side. A hardcoded
-  // 0.85 was ~3x this trade's actual IM and flowed straight into MVA.
-  const [simmIm, setSimmIm] = useState(HIDDEN_INPUT_DEFAULTS.simmIm)
+  // Initial margin in dollars. Blank = the engine's own estimate from the paths (not ISDA SIMM, which is licensed
+  // and is not computed here).
+  const [imUsd, setImUsd] = useState(HIDDEN_INPUT_DEFAULTS.imUsd)
   // Settlement / CSA. Default keeps the legacy numbers: no VM, IM posted.
   const [settlement, setSettlement] = useState('UNCOLLATERALISED')
   const [thresholdCp, setThresholdCp] = useState('')
@@ -321,10 +321,10 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         wwr_multiplier: wwr,
         csa: csaBody(settlement),
         collateral: collateralBody(collateral),
-        // Blank = derive IM from ISDA SIMM (RW x IR01) rather than a guess.
-        simm_im_m: simmImValue(simmIm),
+        // Blank = the engine's estimate (the 99th percentile move over the margin period).
+        im_usd: imUsdValue(imUsd),
         // TV and IR01 from the pricer: XVA is an adjustment to TV, not a
-        // standalone number, and IR01 drives the SIMM IM behind MVA.
+        // standalone number. IR01 is sent for the record; the margin no longer reads it.
         npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
         ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
         // Generate paths from the same curve, on the same date, that the pricer
@@ -378,7 +378,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         wwr_multiplier: wwr,
         csa: csaBody(settlement),
         collateral: collateralBody(collateral),
-        simm_im_m:    simmImValue(simmIm),
+        im_usd:       imUsdValue(imUsd),
         npv:  analytics?.npv  != null ? Number(analytics.npv)  : null,
         ir01: analytics?.ir01 != null ? Number(analytics.ir01) : null,
         // Generate paths from the same curve, on the same date, that the pricer
@@ -459,7 +459,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           {modelWords == null && calibrationBadge}
           <RunAssumes>
             {runAssumesLine({ paths, model: modelWords, spreads,
-              assumptions: { wwr, lgd, fbaRatio, hurdle, simmIm, capModel } })}
+              assumptions: { wwr, lgd, fbaRatio, hurdle, imUsd, capModel } })}
           </RunAssumes>
         </>) : (<>
 
@@ -586,7 +586,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">
               <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
-              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm} capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} /></div>
+              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} /></div>
             </div>
           )}
       </div>

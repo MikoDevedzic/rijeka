@@ -1,7 +1,43 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.9). Commits on `main` are the detail.
+methodology document carries its own version (v1.10). Commits on `main` are the detail.
+
+## 0.18.0 · 10 November 2026
+
+**No SIMM. Initial margin is your amount or the engine's estimate; KVA of a currency or digital-asset ticket
+follows the Basel classes.**
+
+- **Rijeka does not compute ISDA SIMM, and no longer says it does.** SIMM is ISDA's licensed methodology. Its
+  risk-weight table is out of the code, and nothing on a screen, in an answer of the API or in the methodology
+  is named for it, except the sentence that says it is not computed and that a firm with a licence enters its own
+  figure.
+- **Initial margin is an amount in dollars, or the engine's estimate.** On every XVA tab, "Initial margin USD"
+  takes an amount (250000, 250k, 0.25m): it is exchanged each way and held for the life, and MVA is its funding
+  cost. Left blank, the engine estimates it from its own simulated paths: at each date the 99th percentile rise
+  (what we call) and fall (what we post) of the value over the margin period, the confidence the margin rules
+  for non-cleared derivatives name. The tab says which of the two it used and how much.
+- **KVA of a currency or digital-asset ticket uses SA-CCR's own class**, read from the Basel text: 4 % for a
+  currency pair (CRE52.72); for a Group 2a cryptoasset SA-CCR's cryptoasset class at 32 % with a 120 % option
+  volatility (SCO60.98); for a Group 2b cryptoasset 50 % of each trade's notional, with no netting in the add-on
+  (SCO60.99). BTC and ETH default to Group 2a and everything else to 2b; the Basel group selector on the tab
+  changes it. Before this the engine applied the interest-rate factor to everything, which made a digital asset's
+  KVA a rounding. The legs of a package now net in the add-on inside one hedging set.
+- **Numbers that moved, each explained in `GOLDEN_CHANGES.md`:** on the pinned 5-year swap the estimate is about
+  half the SIMM-weighted margin (it is at current volatility, not a stressed one), so MVA is smaller and, with
+  less margin held, margined CVA, FVA and KVA are larger; a margined EURUSD forward's KVA is about a hundred
+  times larger (the FX class). Nothing uncollateralised moved, except KVA on currency and digital-asset tickets.
+- **The Excel replications rebuild the new margin and add-on in cells:** 87 checks in the rates book and 51 in
+  each of the currency and digital-asset books pass under every CSA preset, evaluated cell by cell.
+- **The methodology is v1.10:** the initial margin section, the add-on by asset class, wrong-way risk and the
+  package run are written down; the SIMM reference is gone.
+- **The request field is `im_usd`** on the four XVA routes; `simm_im_m` (millions), the old name of the same
+  input, is still read so a page loaded before the release keeps working. `crypto_group` (2a, 2b) is new.
+- **Limits, in `docs/xva.md` and the model inventory:** the estimate is not a regulatory margin model (current
+  volatility, one confidence, a cross-section of the paths); the Basel group of an asset is the bank's to show
+  its supervisor; a payout style enters the add-on at its payout.
+- **Not in this change:** the legal-entity and counterparty records still carry a field for the margin model a
+  CSA names (a fact about the agreement, not a calculation); the public site's own pages.
 
 ## 0.17.0 · 10 November 2026
 

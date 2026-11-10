@@ -14,10 +14,10 @@ Hosted demo at [app.rijeka.app](https://app.rijeka.app); the in-app **ROADMAP** 
 
 - **Pricing.** OIS bootstrap per currency (SOFR, €STR, SONIA, SARON, TONA, AONIA, CORRA); IRS, OIS and basis swaps; European swaptions (Bachelier on a β=0 SABR surface); caps, floors and collars; Bermudans on a Hull-White trinomial tree; FX spot, forwards and NDFs on the G10 pairs and non-deliverable forwards on BTC, ETH and SOL on one interest-rate-parity model; FX and digital-asset options in six styles (European, American, digital, barrier, double barrier, touch) on one engine, each against its QuantLib counterpart.
 - **Risk.** Key-rate IR01 ladders by bump-and-reprice with FX01 / CRY01, FUND01 and vega; historical-simulation VaR by full revaluation with the curves, spots and volatility surfaces as factors, the ladder VaR alongside; named stress; backtesting (Basel traffic light, Kupiec); limits with utilisation and breaches.
-- **Counterparty credit and XVA.** Netting sets on shared Hull-White and lognormal paths, real-world calibration from public history with historical block sampling, the CSA on the netted value, EE / EPE / PFE and credit limits; the XVA waterfall (CVA, DVA, FVA, FBA, KVA, MVA) under CSA presets with a margin period of risk; SIMM initial margin.
+- **Counterparty credit and XVA.** Netting sets on shared Hull-White and lognormal paths, real-world calibration from public history with historical block sampling, the CSA on the netted value, EE / EPE / PFE and credit limits; the XVA waterfall (CVA, DVA, FVA, FBA, KVA, MVA) under CSA presets with a margin period of risk; initial margin as an amount you set or the engine's own estimate (ISDA SIMM is licensed and is not implemented).
 - **P&L.** Attribution by sequential full revaluation (carry, cash, curves by bucket, spot, points, vol, residual), day / MTD / YTD, trader and controller sign-off, XVA P&L.
 - **Confirmation on chain.** Canonical record v2 → EIP-712 → registry on Sepolia; amend and terminate; a public verifier that trusts nothing of Rijeka's. Messenger with firms, rooms, trade cards and wallet countersigning; Telegram mirror.
-- **Open box.** The methodology (v1.9) names the module for every formula; the Methodology tab exports an Excel replication per product from your own market data, the ticket rebuilt in cells with every number linked to its derivation and a Checks sheet against the engine; the XVA book carries the engine's own Monte Carlo draws.
+- **Open box.** The methodology (v1.10) names the module for every formula; the Methodology tab exports an Excel replication per product from your own market data, the ticket rebuilt in cells with every number linked to its derivation and a Checks sheet against the engine; the XVA book carries the engine's own Monte Carlo draws.
 - **Prometheus.** A read-only assistant inside the messenger: sees your book and the engine, never changes anything.
 
 ## Validation
@@ -38,7 +38,7 @@ The desk home opens on the **desk globe**: a turning Earth lit by the real sun, 
 
 ## Prometheus
 
-The desk's quant, risk and margin analyst. Reads everything, changes nothing. Live today: read-only chat over your trades and the engine, in-app news summaries, and the **book brief** on the home page: the pricers compute a fact sheet (NPV and IR01 per trade, curve moves, pending confirmations, maturities, CSA terms, news tagged to the positions), Prometheus narrates it citing fact ids, and every number in the prose is checked against the sheet before it is shown; forecasting and advice are rejected. Next: scenario risk across the whole book, counterparty exposure and CVA commentary, SIMM margin against thresholds, a Telegram digest.
+The desk's quant, risk and margin analyst. Reads everything, changes nothing. Live today: read-only chat over your trades and the engine, in-app news summaries, and the **book brief** on the home page: the pricers compute a fact sheet (NPV and IR01 per trade, curve moves, pending confirmations, maturities, CSA terms, news tagged to the positions), Prometheus narrates it citing fact ids, and every number in the prose is checked against the sheet before it is shown; forecasting and advice are rejected. Next: scenario risk across the whole book, counterparty exposure and CVA commentary, margin against thresholds, a Telegram digest.
 
 ---
 
@@ -99,7 +99,7 @@ see [SELF-HOSTING.md](SELF-HOSTING.md). The full schema is in
 
 **Institutional quality, open access.** The same mathematics used at tier-1 banks, available to anyone.
 
-**One taxonomy.** IR01 not DV01; FX01 on a pair and CRY01 on a digital asset; on a digital asset IR01 is discounting only and FUND01 the funding rate; SIMM-aligned aggregation.
+**One taxonomy.** IR01 not DV01; FX01 on a pair and CRY01 on a digital asset; on a digital asset IR01 is discounting only and FUND01 the funding rate; one aggregation.
 
 **Audit-ready.** Every snapshot is stamped with its source and provenance; calibrations are stored with their fit diagnostics; every pricing change ships with a test and a before/after number.
 
@@ -131,7 +131,7 @@ Tables: `docs/migrations/2026-10-30_market_risk.sql`.
 
 ## Risk taxonomy
 
-One set of names on every ticket, SIMM-aligned. Rate factors are per basis point; spot factors are per 1 % (the SIMM delta convention for FX and equity).
+One set of names on every ticket. Rate factors are per basis point; spot factors are per 1 %.
 
 | Factor | Rates (IRS, swaption, cap/floor) | FX forward / NDF | Crypto forward | FX option | Crypto option |
 |--------|-----------------------------------|------------------|----------------|-----------|---------------|
@@ -143,7 +143,7 @@ One set of names on every ticket, SIMM-aligned. Rate factors are per basis point
 | VEGA | swaption / cap surface, +1 bp normal vol | — | — | +1 vol point | +1 vol point |
 | THETA | one day's carry | one day's carry | one day's carry | one calendar day | one calendar day |
 | GAMMA | dollar convexity to ±1 bp | — (a forward is linear in spot) | — | spot gamma | spot gamma |
-| XVA | HW1F Monte Carlo exposure → waterfall | lognormal forward exposure → the same waterfall | the same, with an assumed IM weight (outside SIMM) | on the exposure paths (ccr) | on the exposure paths (ccr) |
+| XVA | HW1F Monte Carlo exposure → waterfall | lognormal forward exposure → the same waterfall | the same, with the Basel cryptoasset add-on (SCO60.98 / 60.99) | on the exposure paths (ccr) | on the exposure paths (ccr) |
 
 The names on screen: `IR01 DISC` is the key `IR01_DISC`; `SPOT01` in the limits catalogue is FX01 or CRY01 by asset.
 
@@ -170,7 +170,7 @@ The spread schedules live in one place, `backend/market_data/demo_feed.py`, and 
 
 ## Documentation
 
-- `docs/methodology/rijeka_methodology.pdf` (v1.9, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
+- `docs/methodology/rijeka_methodology.pdf` (v1.10, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
 - `docs/VALIDATION.md` — the validation charter, what is validated against what, and the open findings
 - `docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md` — the per-module notes behind the methodology chapters
 - `docs/ops/deploy.md` — the deploy chain (API first on Render, then the app from the `release` branch)
