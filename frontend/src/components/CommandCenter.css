@@ -8,7 +8,8 @@
 
 /* ── AppBar ── */
 .cc-bar { position:relative; z-index:2; display:flex; align-items:center; gap:0; height:44px; padding:0 1.5rem; border-bottom:1px solid var(--border); background:var(--bg-deep); }
-.cc-logo { font-family:var(--sans); font-size:0.9375rem; font-weight:600; letter-spacing:0.34em; color:var(--text-hi); padding-right:1.5rem; border-right:1px solid var(--border); margin-right:0.65rem; white-space:nowrap; }
+/* the name's own look is .rj-wordmark (index.css); here only its place in this bar */
+.cc-logo { padding-right:1.5rem; border-right:1px solid var(--border); margin-right:0.65rem; white-space:nowrap; }
 
 /* ── Nav ── */
 .cc-nav { display:flex; align-items:center; gap:0; flex:1; }
