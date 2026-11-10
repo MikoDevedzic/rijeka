@@ -99,6 +99,10 @@ const STATUS_COLOR = {
   CANCELLED: 'var(--red)', TERMINATED: 'var(--text-dim)', MATURED: 'var(--text-dim)',
 }
 
+// What a new ticket opens on, and the order of the asset-class chips: digital assets first.
+const NEW_TICKET = { assetClass: 'CRYPTO', curInst: 'CRYPTO_FORWARD' }
+const ASSET_ORDER = ['CRYPTO', 'FX', 'RATES']
+
 /** Where a stored trade lands in the window: asset class, currency instrument, registry product. */
 function viewTarget(trade) {
   const it = String(trade?.instrument_type || '').toUpperCase()
@@ -220,8 +224,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const product                        = getProduct(productKey)
   // FX and digital assets share one panel (interest-rate parity) and are not
   // registry products: the window keeps parties, dates, tabs and footer.
-  const [assetClass, setAssetClass]    = useState(view0?.assetClass || product?.assetClass || 'RATES')
-  const [curInst, setCurInst]          = useState(view0?.curInst || 'FX_FORWARD')
+  // A new ticket opens on digital assets (10 November 2026: the first thing a visitor sees); a stored trade opens
+  // on its own asset class.
+  const [assetClass, setAssetClass]    = useState(view0?.assetClass || NEW_TICKET.assetClass)
+  const [curInst, setCurInst]          = useState(view0?.curInst || NEW_TICKET.curInst)
   const isCurrency                     = assetClass === 'FX' || assetClass === 'CRYPTO'
   const fxRef                          = useRef(null)
   const winRef                         = useRef(null)
@@ -233,6 +239,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     if (el) { el.style.height = ''; el.style.width = '' }
   }, [assetClass, curInst, productKey])
   const [fxQuote, setFxQuote]          = useState(null)
+  // where the currency panel draws its valuation block: the top of the CASHFLOWS tab, once that tab has been opened
+  const [valuationSlot, setValuationSlot] = useState(null)
   // the quote a trade was booked from in this window: the term sheet reads AS BOOKED only while it is still the one shown
   const [bookedFxQuote, setBookedFxQuote] = useState(null)
   // The currency ticket reprices as its terms are typed. Between a change and the price that answers it the panel
@@ -256,7 +264,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const n0 = (v) => {
     const n = Math.round(Number(v) || 0)
     const shown = (n === 0 ? 0 : n).toLocaleString('en-US', { maximumFractionDigits: 0 })   // never "-0"; en-US like the rest of the ticket, whatever the browser's locale
-    return fxStale ? <span className="tbw-fx-stale" data-testid="fx-footer-stale" title="Repricing: these figures are for the terms before the last change">{shown}</span> : shown
+    return shown          // while a price is owed the footer dims these and says so (TradeFooter `stale`); the figure itself stays text, so it rolls to the next one
   }
   const currencyFooter = {
     footer: {
@@ -1026,7 +1034,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             disables every input, select and chip inside it at once. */}
         <fieldset className="tbw-fieldset" disabled={viewMode}>
         <InstrumentSelector
-          assetClasses={[...new Set([...listAssetClasses(), 'FX', 'CRYPTO'])]}
+          assetClasses={[...new Set([...ASSET_ORDER, ...listAssetClasses()])]}
           activeAssetClass={assetClass}
           onAssetClassChange={(c) => { if (!['RATES', 'FX', 'CRYPTO'].includes(c)) return; setAssetClass(c); setFxQuote(null); if (c === 'FX') setCurInst('FX_FORWARD'); if (c === 'CRYPTO') setCurInst('CRYPTO_FORWARD') }}
           products={isCurrency ? CURRENCY_PRODUCTS[assetClass] : listProductsByAssetClass(product.assetClass)}
@@ -1044,8 +1052,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         />
 
         {isCurrency && !viewMode && (<>
-            <FxCryptoPanel ref={fxRef} ac={assetClass} inst={curInst} onPriced={(q, meta) => { setFxQuote(q); setFxStale(!!(q && meta?.stale)) }} onError={(m) => setBookErr(m)} />
-            <XVASummary result={fxQuote} />
+            <FxCryptoPanel ref={fxRef} ac={assetClass} inst={curInst} valuationSlot={valuationSlot} onPriced={(q, meta) => { setFxQuote(q); setFxStale(!!(q && meta?.stale)) }} onError={(m) => setBookErr(m)} />
           </>)}
         {!isCurrency && (<>
         <PrimaryEconomics
@@ -1078,25 +1085,26 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           {error && <div className="tbw-sec"><div className="tbw-error">{error}</div></div>}
           {!fxQuote && pricing && <div className="tbw-sec tbw-mut">valuing…</div>}
           <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} booked />
-          <XVASummary result={fxQuote} />
         </>)}
 
-        {!isCurrency && (<>
-        <AnalyticsBlock
-          descriptor={displayProduct}
-          result={result}
-          pricing={pricing || !!awaitingPar}
-          error={error}
-          state={state}
-        />
-
-        <XVASummary result={result} />
-        </>)}
+        {/* TRADE holds what the user sets. What comes back (the valuation, the flows) is on CASHFLOWS, and its
+            headline figures are in the footer on every tab; only a price that failed is said here, under the terms. */}
+        {!isCurrency && error && (
+          <div className="tbw-sec" data-testid="price-error"><div className="tbw-error">{error}</div></div>
+        )}
       </div>
 
       {tabsVisited['CASHFLOWS'] && !isCurrency && (
         <div style={{ display: activeTab === 'CASHFLOWS' ? 'block' : 'none' }}>
+          {/* the flows first, as the tab is named; under them the valuation: each figure with its formula, and what the price was built from */}
           <CashflowsPanel result={result} productKey={productKey} state={state} />
+          <AnalyticsBlock
+            descriptor={displayProduct}
+            result={result}
+            pricing={pricing || !!awaitingPar}
+            error={error}
+            state={state}
+          />
         </div>
       )}
 
@@ -1120,6 +1128,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       {tabsVisited['CASHFLOWS'] && isCurrency && (
         <div style={{ display: activeTab === 'CASHFLOWS' ? 'block' : 'none' }}>
           <FxCashflowsPanel quote={fxQuote} crypto={assetClass === 'CRYPTO'} active={activeTab === 'CASHFLOWS'} stale={fxStale} />
+          <div ref={setValuationSlot} />
         </div>
       )}
       {tabsVisited['CURVE SCENARIO'] && isCurrency && (
@@ -1219,6 +1228,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       )}
 
       <TradeFooter
+        stale={isCurrency && fxStale}
         descriptor={isCurrency ? currencyFooter : displayProduct}
         result={isCurrency ? fxQuote : result}
         state={state}

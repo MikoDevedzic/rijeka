@@ -11,6 +11,7 @@
 // ────────────────────────────────────────────────────────────────────────────────────
 import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar } from './xva-shared'
 import { Keycap } from '../common/Shortcuts'
+import Roll from '../common/Roll'
 import { ariaKey } from '../../lib/shortcuts'
 
 const noop = () => {}
@@ -354,7 +355,7 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
                 boxShadow:isExp?'inset 0 2px 0 '+row.color:'none'}}>
               <div style={{fontSize:'0.72rem',fontWeight:500,letterSpacing:'0.09em',color:'var(--text-mute)',fontFamily:'var(--sans)',marginBottom:'5px'}}>{row.label}</div>
               <div style={{fontSize:'0.9375rem',fontWeight:500,color:row.value!=null?row.color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px',whiteSpace:'nowrap'}}>
-                {fmt(row.value)}
+                <Roll>{fmt(row.value)}</Roll>
               </div>
               <div>
                 {row.sub && <div style={{fontSize:'0.75rem',fontWeight:row.sub.weight,color:row.sub.color,fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{row.sub.text}</div>}
@@ -386,7 +387,7 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
       {saving && (
         <div data-testid="saving-on-chain" style={{display:'flex',flexWrap:'wrap',columnGap:'14px',rowGap:'2px',alignItems:'baseline',padding:'7px 16px',borderBottom:'1px solid var(--border)',background:'rgb(var(--accent-rgb) / 0.06)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
           <span style={{fontSize:'0.72rem',letterSpacing:'0.1em',color:'var(--accent)',fontWeight:600,fontFamily:'var(--sans)'}}>SAVING ON CHAIN</span>
-          <span style={{fontSize:'1.3rem',lineHeight:1.1,fontWeight:500,letterSpacing:'-0.01em',color:saving.money>=0?'var(--accent-hi)':'var(--down)'}}>{fmt(saving.money)}</span>
+          <span style={{fontSize:'1.3rem',lineHeight:1.1,fontWeight:500,letterSpacing:'-0.01em',color:saving.money>=0?'var(--accent-hi)':'var(--down)'}}><Roll>{fmt(saving.money)}</Roll></span>
           {saving.bpUpfront!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} upfront</span>}
           {saving.bpRunning!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>· {bp(saving.bpRunning)} running</span>}
           <span style={{marginLeft:'auto',fontSize:'0.75rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>vs {preset} · same paths, same collateral · bp of notional</span>

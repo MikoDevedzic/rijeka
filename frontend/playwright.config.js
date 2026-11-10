@@ -18,6 +18,7 @@ export default defineConfig({
   use: {
     baseURL: WEB,
     viewport: { width: 1440, height: 900 },      // a laptop: what fits here fits everywhere
+    reducedMotion: 'reduce',                     // a figure read at once is the figure, not a frame of its roll (shortcuts and roll journeys turn motion on)
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },

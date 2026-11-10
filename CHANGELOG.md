@@ -3,6 +3,32 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## Digital assets first; one shape for every ticket; a colour per risk factor · 10 November 2026 (frontend only; the API stays 0.16.2)
+
+- **A new ticket opens on a digital-asset forward.** CRYPTO is the first asset class on the ticket and in the
+  blotter's rail, then FX, then RATES. A stored trade still opens on its own asset class.
+- **TRADE is what you set; what comes back is elsewhere.** The valuation block (the figures, each with its
+  formula, and what the price was built from) and the pointer to the XVA tab have left the TRADE tab on every
+  product. The footer carries the headline figures on every tab, as before. A digital-asset or FX ticket's TRADE
+  tab now fits the window without scrolling inside it. A swap's price that fails is still said under its terms.
+- **CASHFLOWS is the flows, then the valuation, on every product.** A forward is shown the way a swap is: four
+  summary tiles (NET NPV, each leg's PV, when and how it settles), a table per leg (what is received, what is
+  paid) and the net of the two. The amounts are the ones the tab already showed: N·F against N·K, whose
+  difference is (F − K)·N; a cash-settled forward had only the net line. The valuation block follows the flows,
+  on the swap as well.
+- **DETAILS is the record beside the market it was priced on**, as two panels of rows (what it is, its value,
+  where the value is from) in place of a grid of tiles.
+- **One colour per risk factor, the same on every product.** A small square before a sensitivity's name: interest
+  rates, FX spot, digital-asset spot, forward basis, volatility, time. The IR01 on a swap, on an option and on a
+  digital-asset forward is the same blue because it is the same risk, and its tooltip says it adds across the
+  book. An asset class takes the colour of the factor it mainly carries (a dot on the ticket's chips, the
+  blotter's badges and rail). The figure keeps the colour of its sign.
+- **A figure rolls to its new value and flashes once.** In the footer, the valuation tiles, the XVA strip and the
+  saving on chain: from zero for a first price, from the figure that was there after that, in a third of a
+  second, then a flash in the colour of the way it moved. With "reduce motion" set the new figure is simply shown.
+- **Fixed on the way:** the swap's cashflow summary printed a signed zero ("−$0") and coloured a positive leg in
+  brass; a rounded zero is now unsigned and a figure takes the colour of its sign.
+
 ## Function keys · 10 November 2026 (frontend only; the API stays 0.16.2)
 
 - **The desk's keys.** F1 Home, F2 Blotter, F3 New trade (from any page), F4 Price, F5 XVA and, pressed again on

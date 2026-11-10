@@ -55,6 +55,30 @@ bilateral.
 EE in limestone, ENE in blue, PFE 95 % in amber, the simulated paths as hairs of limestone or blue by where they
 end (`trade-window/exposure-chart.js`). Three hues that cannot be mistaken for one another.
 
+## The shape of a ticket
+
+The same on every product. **TRADE** is what the user sets. **DETAILS** is the detail of it: a swap's period
+schedule; for a forward or an option, the record as it will be booked beside the market it was priced on.
+**CASHFLOWS** is what comes back: the flows as legs with their present values and their net, then the valuation
+(each figure with its formula, and what the price was built from). The **footer** carries the headline figures
+on every tab. Nothing that is computed sits among the inputs, except a field that shows its default (dashed).
+A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX, RATES.
+
+## Risk factors
+
+One colour per risk factor, the same on every product (`frontend/src/lib/risk-factors.js`, tokens `--rf-*`):
+interest rates, FX spot, digital-asset spot, forward basis, volatility, time. It marks the factor's **name**, as
+a small square before the label (`RiskMark`); the figure keeps the colour of its sign. An asset class takes the
+colour of the factor it mainly carries. The purpose is to be read without being told: the IR01 of a swap, an
+option and a digital-asset forward is one colour because it is one risk, and it adds across the book.
+
+## Figures that move
+
+A figure that arrives or changes rolls to its value and flashes once (`components/common/Roll.jsx`,
+`lib/roll.js`): every frame is a figure the app would print, the last frame is the text itself, and with
+"reduce motion" set there is no roll. The journeys run with reduced motion, so a figure read at once is the
+figure; `ticket-shape.spec.js` turns motion on to watch a roll.
+
 ## Keys
 
 The function keys are one table (`frontend/src/lib/shortcuts.js`) read by the listener

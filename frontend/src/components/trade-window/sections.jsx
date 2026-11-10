@@ -15,6 +15,8 @@
 import React, { useState } from 'react'
 import { useModulesStore } from '../../store/useModulesStore'
 import { Keycap } from '../common/Shortcuts'
+import Roll, { RiskMark } from '../common/Roll'
+import { ASSET_FACTOR, RISK_FACTORS } from '../../lib/risk-factors'
 import { ariaKey } from '../../lib/shortcuts'
 
 const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CAPITAL','CURVE SCENARIO','◆ CONFIRM']
@@ -56,7 +58,7 @@ export function InstrumentSelector({
           <button key={c}
                   className={`tbw-chip ${c === activeAssetClass ? 'is-on' : ''}`}
                   onClick={() => onAssetClassChange?.(c)}>
-            {c}
+            {ASSET_FACTOR[c] && <span className="ac-dot" aria-hidden="true" style={{ background: `var(${RISK_FACTORS[ASSET_FACTOR[c]].token})` }} />}{c}
           </button>
         ))}
       </div>
@@ -350,6 +352,7 @@ export function TradeFooter({
   descriptor, result, state, pricing, onPrice, onBook, onCancel,
   booking, booked, bookErr,
   bookDisabled = false, bookTitle = undefined,         // the window's own reason BOOK cannot be pressed yet (no counterparty chosen)
+  stale = false,                                       // a price is owed: these figures are for the terms before the last change
 }) {
   const metrics = result ? (descriptor.footer.metrics(result, state) || []) : []
   const structLabel = descriptor.footer.structureLabel(state)
@@ -359,10 +362,14 @@ export function TradeFooter({
       <div className="tbw-footer-metrics">
         {metrics.map((m, i) => (
           <div key={i} className="tbw-footer-metric">
-            <div className="tbw-lbl" style={{ fontSize: 12, marginBottom: 2 }}>{m.label}</div>
+            <div className="tbw-lbl" style={{ fontSize: 12, marginBottom: 2 }}><RiskMark label={m.label} />{m.label}</div>
             <div className={`tbw-mono tbw-${m.colorBy || 'default'}`}
                  style={{ fontSize: 13, fontWeight: 500 }}>
-              {m.value ?? '—'}
+              {/* one element whether the figure is current or stale, so the figure rolls from what it was to what it becomes */}
+              <span className={stale ? 'tbw-fx-stale' : undefined} data-testid={stale ? 'fx-footer-stale' : undefined}
+                    title={stale ? 'Repricing: these figures are for the terms before the last change' : undefined}>
+                {typeof m.value === 'string' ? <Roll>{m.value}</Roll> : (m.value ?? '—')}
+              </span>
             </div>
           </div>
         ))}
@@ -413,10 +420,10 @@ function Field({ label, children }) {
 function MetricCard({ label, value, colorBy, math, showMath }) {
   return (
     <div className="tbw-metric-card">
-      <div className="tbw-lbl" style={{ marginBottom: 6 }}>{label}</div>
+      <div className="tbw-lbl" style={{ marginBottom: 6 }}><RiskMark label={label} />{label}</div>
       <div className={`tbw-mono tbw-${colorBy || 'default'}`}
            style={{ fontSize: 16, fontWeight: 500 }}>
-        {value ?? '—'}
+        {typeof value === 'string' ? <Roll>{value}</Roll> : (value ?? '—')}
       </div>
       {showMath && math && (
         <div className="tbw-mono tbw-mut" style={{ fontSize: 10.5, lineHeight: 1.45, marginTop: 6, whiteSpace: 'pre-line' }}>{math}</div>
@@ -455,9 +462,10 @@ function fmtN(v) {
 
 function fmtPnl(v) {
   if (v == null) return '\u2014'
-  const n = Number(v)
-  const sign = n >= 0 ? '+' : '\u2212'
-  return sign + '$' + Math.abs(Math.round(n)).toLocaleString('en-US')
+  const n = Math.round(Number(v))
+  // a figure that rounds to nothing is nothing: no sign in front of the zero
+  const sign = n > 0 ? '+' : n < 0 ? '\u2212' : ''
+  return sign + '$' + Math.abs(n).toLocaleString('en-US')
 }
 
 function CashflowSummaryCard({ label, value, colorKey }) {
@@ -479,8 +487,8 @@ function CashflowSummaryCard({ label, value, colorKey }) {
         fontSize: 14,
         fontWeight: 700,
         fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
-        color: colorKey === 'accent'  ? 'var(--accent)'
-             : colorKey === 'negative'? 'var(--red)'
+        color: colorKey === 'accent'  ? 'var(--up)'          // 'accent' here has always meant a positive figure
+             : colorKey === 'negative'? 'var(--down)'
              : colorKey === 'blue'    ? 'var(--blue)'
              : colorKey === 'amber'   ? 'var(--amber)'
              : 'var(--text-hi)',
@@ -659,7 +667,7 @@ function SwapCashflowTables({ result, productKey, state }) {
       }}>
         <CashflowSummaryCard label={isSwpn ? 'OPTION NPV' : 'NET NPV'}
           value={fmtPnl(npv)}
-          colorKey={npv != null && npv >= 0 ? 'accent' : 'negative'} />
+          colorKey={npv == null || Math.round(npv) === 0 ? undefined : npv > 0 ? 'accent' : 'negative'} />
         <CashflowSummaryCard label={isSwpn ? 'FWD FIXED LEG PV' : 'FIXED LEG PV'}
           value={fixedLeg ? fmtPnl(fixedLeg.pv) : '\u2014'}
           colorKey="negative" />

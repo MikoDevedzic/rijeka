@@ -44,6 +44,7 @@ test('function keys: pages, a new ticket, price, XVA, simulate, book, confirm', 
   await app.keyboard.press('F3')
   const win = app.locator('.tbw-window')
   await expect(win).toHaveCount(1)
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()          // a new ticket opens on digital assets; this journey is a swap's
   await selectDemoBank(app, win)
   await expect(win.getByRole('button', { name: '▶ PRICE' }).locator('.kc')).toHaveText('F4')
   await expect(win.getByRole('button', { name: 'XVA', exact: true }).locator('.kc')).toHaveText('F5')

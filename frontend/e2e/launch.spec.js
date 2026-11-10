@@ -22,6 +22,7 @@ async function openTicket(app) {
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
   await win.waitFor()
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()          // a new ticket opens on digital assets; this journey is a swap's
   const cp = win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first()
   await cp.selectOption({ label: 'RIJEKA DEMO BANK AG' })
   return win

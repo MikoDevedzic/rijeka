@@ -5,6 +5,7 @@ import { productLabel } from '../../lib/labels'
 import './BlotterShell.css'
 import { Keycap } from '../common/Shortcuts'
 import { ariaKey } from '../../lib/shortcuts'
+import { ASSET_FACTOR, RISK_FACTORS } from '../../lib/risk-factors'
 
 const TH = ({ col, label, sortCol, sortDir, onSort }) => (
   <th className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)}>
@@ -47,7 +48,7 @@ function tenor(t) {
   return y >= 1 ? `${y.toFixed(1)}Y` : `${Math.round(y * 12)}M`
 }
 
-const ASSET_CLASSES = ['RATES', 'FX', 'CRYPTO', 'CREDIT', 'EQUITY', 'COMMODITY']
+const ASSET_CLASSES = ['CRYPTO', 'FX', 'RATES', 'CREDIT', 'EQUITY', 'COMMODITY']
 const STATUSES      = ['PENDING', 'LIVE', 'MATURED', 'CANCELLED']
 const STORES        = ['WORKING', 'PRODUCTION', 'HISTORY']
 
@@ -105,6 +106,7 @@ export default function BlotterShell() {
             onClick={() => setFilter('assetClass', ac === 'ALL' ? '' : ac)}
           >
             {ac === 'ALL' ? 'ALL CLASSES' : ac}
+            {ASSET_FACTOR[ac] && <span className="bl-filter-dot" style={{ background: `var(${RISK_FACTORS[ASSET_FACTOR[ac]].token})` }} />}
           </button>
         ))}
 
@@ -173,7 +175,7 @@ export default function BlotterShell() {
             <table className="bl-table">
               {/* widths for what each column holds; the counterparty takes what is left */}
               <colgroup>
-                {[30, 114, 60, 124, 92, null, 82, 118, 62, 92, 108, 88, 100].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
+                {[30, 114, 74, 124, 92, null, 80, 118, 62, 92, 106, 86, 100].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
               </colgroup>
               <thead>
                 <tr>
@@ -231,7 +233,8 @@ export default function BlotterShell() {
                       </td>
                       <td className="bl-td-ref">{t.trade_ref}</td>
                       <td>
-                        <span className="bl-ac-badge">
+                        <span className="bl-ac-badge" title={ASSET_FACTOR[t.asset_class] ? `${t.asset_class}: in the colour of ${RISK_FACTORS[ASSET_FACTOR[t.asset_class]].name.toLowerCase()}, the risk it mainly carries` : undefined}>
+                          {ASSET_FACTOR[t.asset_class] && <span className="ac-dot" aria-hidden="true" style={{ background: `var(${RISK_FACTORS[ASSET_FACTOR[t.asset_class]].token})` }} />}
                           {ac.a}
                         </span>
                       </td>

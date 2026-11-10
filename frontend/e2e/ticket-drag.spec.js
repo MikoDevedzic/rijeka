@@ -11,6 +11,7 @@ test('ticket: dragged by its header it follows the pointer, rests where dropped,
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
   await win.waitFor()
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()          // a new ticket opens on digital assets; this journey is a swap's
   await expect(win.getByRole('button', { name: '▶ PRICE' })).toBeVisible()
   await par                                          // the par rate has landed: nothing else is about to write the ticket
   await app.waitForLoadState('networkidle')

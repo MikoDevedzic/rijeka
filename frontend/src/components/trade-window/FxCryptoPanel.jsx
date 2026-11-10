@@ -14,6 +14,7 @@
 // machine in fx-ticket.js (createTicketPricer); this component tells it the terms and draws what it says.
 // Every number typed here is kept as typed and read by one parser (parseNumber): what cannot be read is marked
 // and is never priced or booked.
+import { createPortal } from 'react-dom'
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { sourceShort, isVenue } from '../market-data/fx-source'
 import { getSessionSafe } from '../../lib/session'
@@ -57,7 +58,7 @@ const Cell = ({ label, sub, children }) => (
   </div>
 )
 
-const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, onError }, ref) {
+const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, onError, valuationSlot = null }, ref) {
   const crypto = ac === 'CRYPTO'
   const shape = SHAPE_OF[inst] || 'FORWARD'
   const [pairs, setPairs] = useState([])
@@ -843,10 +844,14 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         {ownInputs && <div className="tbw-fx-note is-warning" data-testid="fx-override-note" role="note">{ownInputs}</div>}
         {/* the option's premium: what is paid or received, as a share of the notional at spot (of the payout for a digital or a touch) */}
         {premium && <div className={`tbw-fx-note tbw-fx-premium${dim ? ' tbw-fx-dim' : ''}`} data-testid="fx-premium">{premium}</div>}
-        <div className={dim ? 'tbw-fx-dim' : undefined}>
-          <AnalyticsBlock descriptor={descriptor} result={quote ? { ...quote, curve_id: cur?.quote_curve } : null} pricing={repricing} />
-        </div>
       </div>
+      {/* The valuation (the figures, each with its formula, and what the price was built from) is an output: it is
+          drawn at the top of the CASHFLOWS tab, in the slot the window gives this panel, not among the inputs here.
+          The footer carries the headline figures on every tab. */}
+      {valuationSlot && createPortal(
+        <div className={dim ? 'tbw-fx-dim' : undefined} data-testid="fx-valuation">
+          <AnalyticsBlock descriptor={descriptor} result={quote ? { ...quote, curve_id: cur?.quote_curve } : null} pricing={repricing} />
+        </div>, valuationSlot)}
     </>
   )
 })

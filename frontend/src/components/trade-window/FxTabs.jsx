@@ -43,8 +43,10 @@ const shown = (n, d = 0) => { const r = Number(n); return Math.abs(r) < 0.5 * 10
 const fmt = (n, d = 0) => n == null || isNaN(n) ? '—' : shown(n, d).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d })
 const tone = (n, d = 0) => { if (n == null || isNaN(n)) return 'var(--text-dim)'; const r = shown(n, d); return r > 0 ? 'var(--green)' : r < 0 ? 'var(--red)' : 'var(--text)' }
 const rateDp = (q) => q?.base_currency && ['BTC', 'ETH', 'SOL'].includes(q.base_currency) ? 2 : q?.pair === 'USDJPY' ? 3 : 5
-const secHdr = { fontSize: 12, fontWeight: 700, letterSpacing: '0.18em', color: 'var(--text)', fontFamily: 'var(--sans)', paddingLeft: 10, borderLeft: '3px solid var(--accent)', lineHeight: 1.2, margin: '14px 0 10px' }
-const lbl = { fontSize: '0.8rem', letterSpacing: '0.12em', color: 'var(--text-dim)', fontFamily: 'var(--mono)' }
+const secHdr = { fontSize: 11.5, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text-hi)', fontFamily: 'var(--sans)', lineHeight: 1.2, margin: '16px 0 10px' }
+// DETAILS: the record and the market it was priced on, side by side like the two legs of a swap's schedule
+const twoCol = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '0 18px', alignItems: 'start' }
+const lbl = { fontSize: '0.75rem', letterSpacing: '0.08em', color: 'var(--text-mute)', fontFamily: 'var(--sans)', fontWeight: 500 }
 const th = { ...lbl, padding: '6px 8px 6px 0', textAlign: 'right', borderBottom: '1px solid var(--border-hi)' }
 const td = { fontSize: '0.8125rem', fontFamily: 'var(--mono)', color: 'var(--text)', padding: '6px 8px 6px 0', textAlign: 'right', borderBottom: '1px solid var(--border)', fontVariantNumeric: 'tabular-nums' }
 const tdL = { ...td, textAlign: 'left', fontFamily: 'var(--sans)' }
@@ -71,18 +73,40 @@ function StaleFrame({ stale, active, children }) {
   </>)
 }
 
-function Grid({ items, cols = 3, min }) {
+// A panel of rows: what it is, its value, and the note that says where the value is from. One row per fact, so a
+// term sheet reads down the page like a schedule, not across a wall of tiles. (`cols` and `min` are accepted and
+// unused: every caller gets the same panel.)
+function Grid({ items }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: min ? `repeat(auto-fit, minmax(min(100%, ${min}px), 1fr))` : `repeat(${cols}, 1fr)`, gap: 8 }}>
-      {items.map(([k, v, s, testId, raw]) => (
-        <div key={k} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '7px 9px', background: 'var(--bg-deep)' }}>
-          <div style={{ ...lbl, fontSize: '0.76rem', marginBottom: 2 }}>{k}</div>
-          <div data-testid={testId} data-value={raw} style={{ fontFamily: 'var(--mono)', fontSize: '0.9375rem', color: 'var(--text-hi)' }}>{v ?? '—'}</div>
-          {s && <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{s}</div>}
+    <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--r-3)', overflow: 'hidden', background: 'var(--bg)' }}>
+      {items.map(([k, v, s, testId, raw], i) => (
+        <div key={k} style={{ display: 'grid', gridTemplateColumns: 'minmax(118px, 0.42fr) minmax(0, 1fr)', columnGap: 14, padding: '7px 12px', borderTop: i ? '1px solid var(--border)' : 'none' }}>
+          <div style={{ ...lbl, paddingTop: 2 }}>{k}</div>
+          <div style={{ minWidth: 0 }}>
+            <div data-testid={testId} data-value={raw} style={{ fontFamily: 'var(--mono)', fontSize: '0.875rem', color: 'var(--text-hi)', overflowWrap: 'anywhere' }}>{v ?? '—'}</div>
+            {s && <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', lineHeight: 1.45 }}>{s}</div>}
+          </div>
         </div>
       ))}
     </div>
   )
+}
+
+// The summary above a tab's tables: a label over a figure, as on the swap's CASHFLOWS tab.
+function Tile({ label, value, color, sub: note, testId }) {
+  return (
+    <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--r-3)', padding: '9px 12px', minWidth: 0 }}>
+      <div style={{ ...lbl, marginBottom: 4 }}>{label}</div>
+      <div data-testid={testId} style={{ fontFamily: 'var(--mono)', fontSize: '1rem', fontWeight: 500, color: color || 'var(--text-hi)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+      {note && <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 2 }}>{note}</div>}
+    </div>
+  )
+}
+const tiles = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, margin: '4px 0 6px' }
+// PAY or RECEIVE beside a leg's name, tinted by the sign of what it does to us
+function Dir({ pay }) {
+  const c = pay ? 'var(--down)' : 'var(--up)'
+  return <span style={{ fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', padding: '1px 7px', borderRadius: 'var(--r-1)', border: `1px solid ${c}`, color: c, background: pay ? 'rgb(var(--down-rgb) / 0.10)' : 'rgb(var(--up-rgb) / 0.10)' }}>{pay ? '→ PAY' : '← RECEIVE'}</span>
 }
 
 // ── A FIXED OR SETTLED TRADE ───────────────────────────────────────────────────
@@ -188,6 +212,7 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
     const pays = st.payout ? `pays ${fmt(st.payout.amount, 0)} ${st.payout.currency || ''}`.trim() : null
     return (
       <div className="tbw-no-drag" style={wrap}>
+        <div style={twoCol}><div>
         <div style={secHdr}>{sheet}</div>
         <Grid items={[
           ['INSTRUMENT', crypto ? 'DIGITAL-ASSET OPTION (NDO)' : cash ? 'FX NON-DELIVERABLE OPTION' : 'FX OPTION', `${quote.pair} · canonical record v2 · ${crypto ? 'ISDA Digital Asset Derivatives Definitions' : 'ISDA FX and Currency Option Definitions'}`],
@@ -208,6 +233,7 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
           [cash ? (crypto ? 'SETTLEMENT PRICE SOURCE' : 'FIXING SOURCE') : 'FIXING', cash ? (t.settlement_price_source || t.fixing_source || quote.fixing_source || '—') : 'none (deliverable)', cash ? `on ${quote.expiry_date}` : ''],
           ['CALCULATION AGENT', t.calculation_agent || 'none named', 'automatic exercise'],
         ]} />
+        </div><div>
         {settledBlock || (<>
         <div style={secHdr}>MARKET IT WAS PRICED ON</div>
         <Grid items={[
@@ -220,12 +246,14 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
           ['MODEL', modelWords(quote.method, crypto ? 'Black-76' : 'Garman–Kohlhagen'), quote.style && quote.style !== 'EUROPEAN' ? 'same lognormal dynamics; σ from the ATM/RR/BF surface at the strike, held flat for the barrier' : crypto ? 'the FX option engine with the carry rate as the base rate; σ from the ATM/RR/BF surface' : 'Black–Scholes with the base currency as the dividend-paying asset; σ from the ATM/RR/BF surface'],
         ]} />
         </>)}
+        </div></div>
         <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Terms are edited on the TRADE tab; this is the record the counterparty will sign.</div>
       </div>
     )
   }
   return (
     <div className="tbw-no-drag" style={wrap}>
+      <div style={twoCol}><div>
       <div style={secHdr}>{sheet}</div>
       <Grid items={[
         ['INSTRUMENT', crypto ? 'CRYPTO FORWARD' : ndf ? 'FX NDF' : quote.shape === 'SPOT' ? 'FX SPOT' : 'FX FORWARD', `${quote.pair} · canonical record v2`],
@@ -238,6 +266,7 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
         [crypto || ndf ? 'FIXING SOURCE' : 'FIXING', crypto || ndf ? (t.settlement_price_source || t.fixing_source || quote.fixing_source || '—') : 'none (deliverable)', crypto || ndf ? `on ${t.fixing_date || t.valuation_date || quote.settlement_date}${t.valuation_time ? ' · ' + t.valuation_time : ''}` : ''],
         ['CALCULATION AGENT', t.calculation_agent || 'none named', crypto ? (t.disruption_fallback || '') : ''],
       ]} />
+      </div><div>
       {settledBlock || (<>
       <div style={secHdr}>MARKET IT WAS PRICED ON</div>
       <Grid items={[
@@ -252,6 +281,7 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
         ['MODEL', crypto ? 'F = S·e^(−r_carry·T)/DF_quote' : 'F = S·DF_base/DF_quote, both from the spot date', crypto ? 'NPV = ±N·(F − K)·DF_quote' : 'NPV = ±N·(F − K)·DF_quote, from today'],
       ]} />
       </>)}
+      </div></div>
       <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>Terms are edited on the TRADE tab; this is the record the counterparty will sign.</div>
     </div>
   )
@@ -321,44 +351,69 @@ function CashflowsBody({ quote, crypto }) {
       </div>
     )
   }
-  const rows = ndf ? [
-    { leg: `NET CASH SETTLEMENT · ${quote.quote_currency}`, ccy: quote.quote_currency, date: quote.settlement_date,
-      amount: sign * quote.base_notional * (quote.forward - quote.forward_rate), df: quote.df_quote,
-      note: `(F − K) × N at today's forward; the fixing on ${quote.settlement_date} decides the actual amount` },
-  ] : [
-    { leg: `${sign > 0 ? 'RECEIVE' : 'PAY'} ${quote.base_currency}`, ccy: quote.base_currency, date: quote.settlement_date, amount: sign * quote.base_notional, df: quote.df_quote, inQuote: sign * quote.base_notional * quote.forward, note: `${quote.base_currency} principal, valued at the fair forward` },
-    { leg: `${sign > 0 ? 'PAY' : 'RECEIVE'} ${quote.quote_currency}`, ccy: quote.quote_currency, date: quote.settlement_date, amount: -sign * quote.quote_notional, df: quote.df_quote, inQuote: -sign * quote.quote_notional, note: `${quote.base_currency} notional × K` },
-  ]
-  const pv = rows.reduce((s, r) => s + (r.inQuote ?? r.amount) * r.df, 0)
+  // A forward as two legs, the way a swap is shown: what is received and what is paid, each in the quote currency
+  // and discounted on the quote curve, and the net of the two. The amounts are the ones this tab has always
+  // shown: N·F against N·K (the quote notional of a deliverable forward), whose difference is (F − K)·N. A
+  // cash-settled forward pays only that net, sized by the fixing; a deliverable one exchanges both principals.
+  const base = quote.base_currency, qc = quote.quote_currency
+  const N = quote.base_notional, F = quote.forward, K = quote.forward_rate, df = quote.df_quote
+  const baseDp = crypto && base !== 'USD' ? 4 : 0
+  const quoteNotional = ndf ? N * K : quote.quote_notional
+  const legs = [
+    { key: 'base', name: `${base} LEG`, pay: sign < 0, notional: `${fmt(N, baseDp)} ${base}`, priceLabel: ndf ? 'FIXING · AT F TODAY' : 'FAIR FORWARD (F)', price: F, amount: sign * N * F,
+      note: ndf ? `${fmt(N, baseDp)} ${base} at the fixing on ${quote.settlement_date}; today's estimate is the fair forward` : `${fmt(N, baseDp)} ${base} ${sign > 0 ? 'received' : 'delivered'} on the value date, in ${qc} at the fair forward` },
+    { key: 'quote', name: `${qc} LEG`, pay: sign > 0, notional: `${fmt(quoteNotional)} ${qc}`, priceLabel: crypto ? 'FORWARD PRICE (K)' : 'FORWARD RATE (K)', price: K, amount: -sign * quoteNotional,
+      note: `${fmt(N, baseDp)} ${base} × K, fixed on the trade date` },
+  ].map(l => ({ ...l, pv: l.amount * df }))
+  const net = legs.reduce((a, l) => a + l.amount, 0)
+  const pv = legs.reduce((a, l) => a + l.pv, 0)
+  const head = ['SETTLEMENT DATE', 'NOTIONAL', null, `AMOUNT ${qc}`, 'DF', `PV ${qc}`]
+  // one set of column widths for both legs and the net, so the amounts, the discount factors and the PVs line up down the tab
+  const cols = <colgroup>{[16, 20, 22, 16, 12, 14].map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}</colgroup>
+  const fixed = { width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }
   return (
     <div className="tbw-no-drag" style={wrap}>
-      <div style={secHdr}>SETTLEMENT · {quote.settlement_date}</div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead><tr>
-          <th style={{ ...th, textAlign: 'left' }}>LEG</th><th style={th}>DATE</th><th style={th}>AMOUNT</th>
-          {!ndf && <th style={th}>IN {quote.quote_currency} AT F</th>}<th style={th}>DF</th><th style={th}>PV {quote.quote_currency}</th>
-        </tr></thead>
-        <tbody>
-          {rows.map(r => (
-            <tr key={r.leg}>
-              <td style={tdL}>{r.leg}<div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{r.note}</div></td>
-              <td style={td}>{r.date}</td>
-              <td style={{ ...td, color: tone(r.amount, crypto && r.ccy !== 'USD' ? 4 : 0) }}>{fmt(r.amount, crypto && r.ccy !== 'USD' ? 4 : 0)} {r.ccy}</td>
-              {!ndf && <td style={td}>{fmt(r.inQuote)}</td>}
-              <td style={td}>{fmt(r.df, 6)}</td>
-              <td style={{ ...td, color: tone((r.inQuote ?? r.amount) * r.df) }}>{fmt((r.inQuote ?? r.amount) * r.df)}</td>
-            </tr>
-          ))}
-          <tr>
-            <td style={{ ...tdL, fontWeight: 700, borderBottom: 'none' }}>NPV</td><td style={{ ...td, borderBottom: 'none' }} colSpan={ndf ? 3 : 4}></td>
-            <td style={{ ...td, fontWeight: 700, borderBottom: 'none', color: tone(pv) }}>{fmt(pv)}</td>
-          </tr>
-        </tbody>
+      <div style={secHdr}>CASHFLOWS · SETTLEMENT {quote.settlement_date}</div>
+      <div style={tiles}>
+        <Tile label="NET NPV" value={`${signed(quote.npv, 0)} ${qc}`} color={tone(quote.npv)} testId="fx-cf-npv" />
+        <Tile label={`${legs[0].name} PV`} value={signed(legs[0].pv, 0)} color={tone(legs[0].pv)} />
+        <Tile label={`${legs[1].name} PV`} value={signed(legs[1].pv, 0)} color={tone(legs[1].pv)} />
+        <Tile label={ndf ? 'SETTLES · CASH' : 'SETTLES · PHYSICAL'} value={quote.settlement_date} sub={ndf ? `one net payment in ${qc}` : 'both principals exchange'} />
+      </div>
+      {legs.map(l => (
+        <div key={l.key} style={{ marginBottom: 12 }} data-testid={`fx-cf-leg-${l.key}`}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0 6px' }}>
+            <span style={{ ...lbl, color: 'var(--text-dim)', fontWeight: 600 }}>{l.name}</span><Dir pay={l.pay} />
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-mute)' }}>{l.note}</span>
+          </div>
+          <table style={fixed}>
+            {cols}
+            <thead><tr>{head.map((h, i) => <th key={i} style={{ ...th, textAlign: i === 0 ? 'left' : 'right' }}>{h ?? l.priceLabel}</th>)}</tr></thead>
+            <tbody><tr>
+              <td style={{ ...td, textAlign: 'left' }}>{quote.settlement_date}</td>
+              <td style={td}>{l.notional}</td>
+              <td style={td}>{fmt(l.price, dp)}</td>
+              <td style={{ ...td, color: tone(l.amount) }}>{signed(l.amount, 0)}</td>
+              <td style={td}>{fmt(df, 6)}</td>
+              <td style={{ ...td, fontWeight: 500, color: tone(l.pv) }}>{signed(l.pv, 0)}</td>
+            </tr></tbody>
+          </table>
+        </div>
+      ))}
+      <table style={fixed} data-testid="fx-cf-net">
+        {cols}
+        <tbody><tr>
+          <td colSpan={3} style={{ ...tdL, fontWeight: 600, color: 'var(--text-hi)', borderTop: '2px solid var(--border-hi)', borderBottom: 'none' }}>{ndf ? `NET CASH SETTLEMENT · ${qc}` : `NET · ${qc}`}
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontWeight: 400 }}>{ndf ? `(F − K) × N at today's forward; the fixing on ${quote.settlement_date} decides the actual amount` : 'the two legs at the fair forward'}</div></td>
+          <td style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none', color: tone(net) }}>{signed(net, 0)}</td>
+          <td style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none' }}>{fmt(df, 6)}</td>
+          <td style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none', fontWeight: 600, color: tone(pv) }}>{signed(pv, 0)}</td>
+        </tr></tbody>
       </table>
       <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10, lineHeight: 1.5 }}>
-        {ndf ? `Cash-settled: one payment in ${quote.quote_currency} on the settlement date, sized by the fixing against K ${fmt(quote.forward_rate, dp)}. Today's estimate uses the fair forward ${fmt(quote.forward, dp)}.`
-             : `Deliverable: both principals exchange on the value date. Both legs are expressed in ${quote.quote_currency} at today's fair forward ${fmt(quote.forward, dp)} and discounted on the ${quote.quote_currency} curve, which is the engine's ±N·(F − K)·DF.`}
-        {' '}Matches the engine's NPV of {fmt(quote.npv)} {quote.quote_currency} within rounding.
+        {ndf ? `Cash-settled: one payment in ${qc} on the settlement date, sized by the fixing against K ${fmt(K, dp)}. Today's estimate uses the fair forward ${fmt(F, dp)}.`
+             : `Deliverable: both principals exchange on the value date. Both legs are expressed in ${qc} at today's fair forward ${fmt(F, dp)} and discounted on the ${qc} curve.`}
+        {' '}Matches the engine's NPV of {fmt(quote.npv)} {qc} within rounding.
       </div>
     </div>
   )

@@ -38,7 +38,7 @@ test('the pages behind the top bar', async ({ app }) => {
 
 test('the rates ticket: trade, details, cashflows, XVA, scenario, booked, confirmed', async ({ app }) => {
   test.setTimeout(300_000)
-  const win = await ticket(app)
+  const win = await ticket(app, 'RATES', /^IR SWAP$/i)
   await win.getByRole('button', { name: '▶ PRICE' }).click()
   await app.waitForResponse(r => r.url().endsWith('/price/preview') && r.request().method() === 'POST')
   await app.waitForTimeout(600)
@@ -65,6 +65,25 @@ test('the rates ticket: trade, details, cashflows, XVA, scenario, booked, confir
   await app.waitForTimeout(800)
   await shot(app, 'rates-confirmed')
 })
+
+for (const [slug, asset, product] of [['crypto-forward', 'CRYPTO', /^CRYPTO FORWARD$/i], ['crypto-option', 'CRYPTO', /^CRYPTO OPTION$/i], ['fx-forward', 'FX', /^FX FORWARD$/i]]) {
+  test(`${slug}: every tab, the whole height of each`, async ({ app }) => {
+    test.setTimeout(300_000)
+    const win = await ticket(app, asset, product)
+    await win.getByRole('button', { name: '▶ PRICE' }).click()
+    await app.waitForTimeout(2500)
+    // the ticket scrolls inside itself: one picture per screenful of the TRADE tab
+    await shot(app, `${slug}-trade-1`)
+    await win.evaluate(el => { el.scrollTop = el.scrollHeight })
+    await app.waitForTimeout(300)
+    await shot(app, `${slug}-trade-2`)
+    for (const tab of ['DETAILS', 'CASHFLOWS', 'CURVE SCENARIO']) {
+      await win.getByRole('button', { name: tab, exact: true }).click()
+      await app.waitForTimeout(900)
+      await shot(app, `${slug}-${tab.toLowerCase().replace(' ', '-')}`)
+    }
+  })
+}
 
 test('the digital-asset option ticket: trade and XVA', async ({ app }) => {
   test.setTimeout(300_000)

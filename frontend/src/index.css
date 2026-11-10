@@ -80,6 +80,16 @@
   --blue-glow:    rgba(143, 193, 230, 0.10);
   --blue-rgb:     143 193 230;
 
+  /* Risk factors: one colour each, the same on every product (lib/risk-factors.js). The colour marks the
+     factor's name; the figure keeps the colour of its sign. An asset class takes the colour of the factor it
+     mainly carries: rates the curve's, FX and digital assets their spot's. */
+  --rf-ir:        #8fc1e7;
+  --rf-fx:        #6fd0c0;
+  --rf-cry:       #c1a6ee;
+  --rf-basis:     #e8a6d0;
+  --rf-vol:       #cfe08a;
+  --rf-time:      #a9b9af;
+
   /* Other */
   --purple:       #c0a5ee;
   --purple-dim:   #4c3f6b;
@@ -142,6 +152,20 @@ button, input, select, textarea { font-family: inherit; }
   font-weight: 500; letter-spacing: 0.04em;
 }
 .mo { font-family: var(--mono); }
+
+/* The mark before a sensitivity's name, in its risk factor's colour */
+.rf-mark { display: inline-block; width: 7px; height: 7px; border-radius: 2px; margin-right: 6px; vertical-align: 0.05em; flex: 0 0 auto; }
+/* An asset class in the colour of the factor it mainly carries: a dot before its name */
+.ac-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: 0.1em; }
+
+/* A figure that has just rolled to a new value (common/Roll.jsx) flashes once: brighter, with a glow in the
+   colour of the way it moved, then back to the colour of its sign. */
+@keyframes rj-flash { 0% { filter: brightness(1.75); text-shadow: 0 0 14px var(--rj-flash, currentColor); } 100% { filter: none; text-shadow: none; } }
+.rj-flash { animation: rj-flash 0.7s ease-out 1; }
+.rj-flash-up { --rj-flash: var(--up); }
+.rj-flash-down { --rj-flash: var(--down); }
+.rj-flash-in { --rj-flash: var(--text-hi); }
+@media (prefers-reduced-motion: reduce) { .rj-flash { animation: none; } }
 
 /* A key printed on its button (common/Shortcuts.jsx Keycap; the keys are lib/shortcuts.js). It takes the colour
    of the button's own text at half strength, so it reads on a quiet button and on the brass one alike. */

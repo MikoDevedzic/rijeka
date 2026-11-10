@@ -383,12 +383,13 @@ test.describe('in a browser that writes decimals with a comma', () => {
     await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
     await expect(win).toContainText('10,000,000 EUR')
     await expect(win, 'the term sheet is not written in the browser\'s language').not.toContainText('10.000.000')
-    await win.getByRole('button', { name: 'TRADE', exact: true }).click()
-    // each caption is the engine's own expression, with its sign
+    // each caption is the engine's own expression, with its sign: the valuation is under the flows on CASHFLOWS
+    await win.getByRole('button', { name: 'CASHFLOWS', exact: true }).click()
     await win.getByText('Σ MATH').click()
     await expect(win).toContainText('±N·F·DF_USD·1%')
     await expect(win).toContainText('±N·F·[e^(−1bp·τ) − 1]·DF_USD')
     await win.getByText('Σ MATH').click()
+    await win.getByRole('button', { name: 'TRADE', exact: true }).click()
 
     // change the last digit: the override is the number typed, not a hundred thousand times it
     const edited = text.slice(0, -1) + (text.endsWith('7') ? '3' : '7')
