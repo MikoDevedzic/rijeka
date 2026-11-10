@@ -116,6 +116,61 @@ def test_option_xva_seed_42_repeats(client, auth_a, ids, pairs):
     assert a["ee"] == b["ee"] and a["xva"] == b["xva"] and c["ee"] != a["ee"]
 
 
+# ── a package of legs on one pair, as one netting set ───────────────────────────────────────────
+
+def _fwd_quote(client, auth_a, pair, notional, days):
+    r = client.post("/api/currency/forward/price", json={"pair": pair, "shape": "FORWARD", "base_notional": notional, "direction": "BUY",
+                                                          "settlement_date": _settle(days)}, headers=auth_a)
+    assert r.status_code == 200, r.text[:300]
+    return r.json()
+
+
+@pytest.mark.parametrize("vol_mode", ["SURFACE", "FLAT"])
+def test_a_package_of_one_forward_answers_as_the_forward_route(client, auth_a, ids, pairs, vol_mode):
+    eur = pairs["EURUSD"]
+    q = _fwd_quote(client, auth_a, "EURUSD", 10_000_000, 91)
+    one = client.post("/api/xva/currency", json={"pair": "EURUSD", "base_notional": 10_000_000, "settlement_date": q["settlement_date"], "forward_rate": q["forward"],
+                                                  "direction": "BUY", "paths": 400, "vol_mode": vol_mode, "csa": {"preset": "BILATERAL"}}, headers=auth_a)
+    pkg = client.post("/api/xva/currency-package", json={"trades": [B.fx_forward(ids["a"], "PKG-ONE", eur, q)], "paths": 400, "vol_mode": vol_mode,
+                                                          "csa": {"preset": "BILATERAL"}}, headers=auth_a)
+    assert one.status_code == 200 and pkg.status_code == 200, (one.text[:300], pkg.text[:300])
+    a, b = one.json(), pkg.json()
+    _shape(b)
+    assert b["package"] is True and len(b["legs"]) == 1
+    assert b["xva"] == a["xva"] and b["ee"] == a["ee"] and b["pfe"] == a["pfe"], "one leg: the forward's own run"
+
+
+def test_a_strip_with_an_option_runs_as_one_set_and_nets(client, auth_a, ids, pairs):
+    btc = pairs["BTCUSD"]
+    legs = []
+    for n, days in enumerate((31, 62, 93), start=1):
+        legs.append(B.crypto_forward(ids["a"], f"PKG-S-{n}", btc, _fwd_quote(client, auth_a, "BTCUSD", 10, days)))
+    oq = client.post("/api/currency/option/price", json=B.option_price_request("BTCUSD", "BARRIER", btc["spot"], _settle(93), True, 10), headers=auth_a)
+    assert oq.status_code == 200, oq.text[:300]
+    legs.append(B.crypto_option(ids["a"], "PKG-S-O", btc, oq.json(), "BARRIER"))
+    r = client.post("/api/xva/currency-package", json={"trades": legs, "paths": 400}, headers=auth_a)
+    assert r.status_code == 200, r.text[:500]
+    j = r.json()
+    _shape(j)
+    assert j["pair"] == "BTCUSD" and [x["leg"] for x in j["legs"]] == [1, 2, 3, 4]
+    assert j["xva"]["npv"] == pytest.approx(sum(x["npv"] for x in j["legs"]), abs=0.05)
+    assert "4 legs" in j["params"]["model"] and "net spot sensitivity" in j["capital"]["im_basis"]
+    # the set's peak expected exposure is at most the sum of the legs' peaks
+    assert max(j["ee_gross"]) <= sum(x["ee_gross_peak"] for x in j["legs"]) + 1.0
+    again = client.post("/api/xva/currency-package", json={"trades": legs, "paths": 400}, headers=auth_a).json()
+    assert again["xva"] == j["xva"] and again["ee"] == j["ee"], "seed 42 repeats"
+
+
+def test_a_package_on_two_pairs_or_with_a_swap_is_refused(client, auth_a, ids, pairs):
+    a = B.fx_forward(ids["a"], "PKG-X-1", pairs["EURUSD"], _fwd_quote(client, auth_a, "EURUSD", 10_000_000, 91))
+    b = B.crypto_forward(ids["a"], "PKG-X-2", pairs["BTCUSD"], _fwd_quote(client, auth_a, "BTCUSD", 10, 91))
+    r = client.post("/api/xva/currency-package", json={"trades": [a, b], "paths": 300}, headers=auth_a)
+    assert r.status_code == 422 and "leg 2" in r.text and "same pair" in r.text
+    r = client.post("/api/xva/currency-package", json={"trades": [B.swap(ids["a"], "PKG-X-3")], "paths": 300}, headers=auth_a)
+    assert r.status_code == 422 and "leg 1" in r.text
+    assert client.post("/api/xva/currency-package", json={"trades": [], "paths": 300}, headers=auth_a).status_code == 422
+
+
 # ── incremental: the counterparty's netting set with and without the trade ──────────────────────
 
 def _incremental(client, auth_a, ids, trade: dict) -> dict:
@@ -128,6 +183,18 @@ def _incremental(client, auth_a, ids, trade: dict) -> dict:
     assert j["ee"]["grid"] and len(j["ee"]["with"]) == len(j["ee"]["grid"])
     assert j["other_trades"] >= 0 and j["n_paths"]
     return j
+
+
+def test_incremental_xva_for_a_package_charges_every_leg(client, auth_a, ids, pairs):
+    btc = pairs["BTCUSD"]
+    legs = [B.crypto_forward(ids["a"], f"IT-INC-PKG-{n}", btc, _fwd_quote(client, auth_a, "BTCUSD", 10, days)) for n, days in ((1, 31), (2, 62))]
+    r = client.post("/api/xva/incremental", json={"counterparty_id": ids["a"]["counterparty_id"], "trades": legs, "n_paths": 300}, headers=auth_a)
+    assert r.status_code == 200, r.text[:500]
+    j = r.json()
+    assert j["mode"] == "INCREMENTAL" and j["legs"] == 2
+    one = _incremental(client, auth_a, ids, legs[0])
+    assert one["legs"] == 1 and j["incremental"]["total"] != one["incremental"]["total"], "two legs are not charged as the first alone"
+    assert client.post("/api/xva/incremental", json={"counterparty_id": ids["a"]["counterparty_id"]}, headers=auth_a).status_code == 422
 
 
 def test_incremental_xva_for_a_swap(client, auth_a, ids, booked):

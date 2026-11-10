@@ -47,10 +47,14 @@ export function disabledReason({ counterpartyId, priced, buildTrade, tradeId }) 
 }
 
 // The request body. A stored trade goes by id; a hypothetical one as the booking body.
-export function buildRequest({ counterpartyId, tradeId, buildTrade }) {
+export function buildRequest({ counterpartyId, tradeId, buildTrade, buildTrades }) {
+  // a package: the body of every leg, so the charge is the package's with its legs netted in the set
+  const many = !tradeId && typeof buildTrades === 'function' ? buildTrades() : null
+  const pkg = Array.isArray(many) && many.length > 1 && many.every(Boolean)
   return {
     counterparty_id: counterpartyId || null,
-    trade: tradeId ? null : (buildTrade?.() ?? null),
+    trade: tradeId || pkg ? null : (buildTrade?.() ?? null),
+    ...(pkg ? { trades: many } : {}),
     trade_id: tradeId || null,
     n_paths: null,
   }

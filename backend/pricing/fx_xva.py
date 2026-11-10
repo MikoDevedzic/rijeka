@@ -66,33 +66,55 @@ def monthly_grid(t_years: float) -> tuple[int, float]:
     return steps, t_years / steps
 
 
+def _driver(n_paths: int, steps: int, dt: float, seed: int, sigma: float, pillars: Optional[list]):
+    """The standard normals drawn, the grid, the step vols and M: the driftless lognormal every forward of the pair
+    rides (F_t = F_0 · M_t, E[M_t] = 1). With a surface, the step vols give Var(ln M_t) the ATM variance at every
+    grid date; without one, a flat sigma."""
+    rng = np.random.default_rng(seed)
+    z = rng.standard_normal((n_paths, steps))
+    t = np.arange(1, steps + 1) * dt
+    if pillars:
+        from pricing.fx_vol import step_vols
+        sv = np.array(step_vols(pillars, t))
+        m = np.exp(np.cumsum(-0.5 * sv ** 2 * dt + sv * math.sqrt(dt) * z, axis=1))
+    else:
+        sv = np.full(steps, sigma)
+        w = np.cumsum(z, axis=1) * math.sqrt(dt)
+        m = np.exp(-0.5 * sigma ** 2 * t + sigma * w)
+    return z, t, sv, m
+
+
+def _forward_sigma(inp: ForwardXvaInput) -> float:
+    return (inp.vol_pct if inp.vol_pct is not None else default_vol_pct(inp.pair)) / 100.0
+
+
+def _forward_values(inp: ForwardXvaInput, steps: int, dt: float, m: np.ndarray) -> tuple[np.ndarray, float, dict]:
+    """A forward's MtM from our side on a grid of `steps` × dt driven by M, and V0. Nothing after it settles
+    (a grid longer than the forward: a package, simulate_package_paths)."""
+    sign = 1.0 if str(inp.direction).upper() == "BUY" else -1.0
+    t = np.arange(1, steps + 1) * dt
+    f_t = inp.forward * m
+    # DF_q(t, T) = DF_q(0, T) / DF_q(0, t) with the flat continuous zero to T as the curve proxy
+    p0 = [math.exp(-inp.quote_zero * k * dt) for k in range(steps + 2)]
+    df_t_T = np.array([inp.df_quote_t / p0[k] for k in range(1, steps + 1)])
+    paths = sign * inp.base_notional * (f_t - inp.strike) * df_t_T[None, :]
+    if t[-1] > inp.t_years + 1e-9:
+        paths = np.where((t <= inp.t_years + 1e-9)[None, :], paths, 0.0)
+    v0 = sign * inp.base_notional * (inp.forward - inp.strike) * inp.df_quote_t
+    return paths, v0, {"f_t": f_t, "df_t_T": df_t_T, "p0": p0}
+
+
 def simulate_paths(inp: ForwardXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
     """MtM paths from our side on the monthly grid, P(0, k·dt) on the quote curve, and V0.
     noise_out, when given, receives the standard normals drawn (z, n_paths × steps) and the forward paths (f_t),
     so the Excel replication can rebuild every path from the engine's own draws."""
     steps, dt = monthly_grid(inp.t_years)
-    sigma = (inp.vol_pct if inp.vol_pct is not None else default_vol_pct(inp.pair)) / 100.0
-    sign = 1.0 if str(inp.direction).upper() == "BUY" else -1.0
-    rng = np.random.default_rng(seed)
-    z = rng.standard_normal((n_paths, steps))
-    t = np.arange(1, steps + 1) * dt
-    if inp.pillars:
-        # the surface's ATM term structure: step vols so that Var(ln F_t) is the ATM variance at every grid date
-        from pricing.fx_vol import step_vols
-        sv = np.array(step_vols(inp.pillars, t))
-        f_t = inp.forward * np.exp(np.cumsum(-0.5 * sv ** 2 * dt + sv * math.sqrt(dt) * z, axis=1))
-    else:
-        sv = np.full(steps, sigma)
-        w = np.cumsum(z, axis=1) * math.sqrt(dt)
-        f_t = inp.forward * np.exp(-0.5 * sigma ** 2 * t + sigma * w)
-    # DF_q(t, T) = DF_q(0, T) / DF_q(0, t) with the flat continuous zero to T as the curve proxy
-    p0 = [math.exp(-inp.quote_zero * k * dt) for k in range(steps + 2)]
-    df_t_T = np.array([inp.df_quote_t / p0[k] for k in range(1, steps + 1)])
-    paths = sign * inp.base_notional * (f_t - inp.strike) * df_t_T[None, :]
-    v0 = sign * inp.base_notional * (inp.forward - inp.strike) * inp.df_quote_t
+    sigma = _forward_sigma(inp)
+    z, _, sv, m = _driver(n_paths, steps, dt, seed, sigma, inp.pillars)
+    paths, v0, x = _forward_values(inp, steps, dt, m)
     if noise_out is not None:
-        noise_out.update(z=z, f_t=f_t, df_t_T=df_t_T, sigma=sigma, steps=steps, dt=dt, step_vols=sv)
-    return paths, p0, v0
+        noise_out.update(z=z, f_t=x["f_t"], df_t_T=x["df_t_T"], sigma=sigma, steps=steps, dt=dt, step_vols=sv)
+    return paths, x["p0"], v0
 
 
 def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0,
@@ -165,25 +187,18 @@ def _payoff_at_expiry(spec, S_T: np.ndarray, knocked: np.ndarray) -> np.ndarray:
     return np.where(knocked, 0.0, v) if spec.pay_at_hit else v
 
 
-def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
-    """Option value paths from our side on the monthly grid to settlement, P(0, k·dt) on the quote curve, V0."""
+def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray) -> tuple[np.ndarray, float, dict]:
+    """An option's value from our side on a grid of `steps` × dt driven by M, and V0. Nothing after it settles
+    (a grid longer than the option: a package, simulate_package_paths)."""
     from pricing.fx_exotic import knocked_so_far, value, value_on_paths, value_on_paths_vols
-    from pricing.fx_vol import path_vols, step_vols
-    steps, dt = monthly_grid(inp.t_settle)
+    from pricing.fx_vol import path_vols
+    n_paths = m.shape[0]
     sigma = float(inp.vol)
     sign = 1.0 if str(inp.direction).upper() == "BUY" else -1.0
     r_q = float(inp.quote_zero)
     r_b = r_q - math.log(max(inp.forward, 1e-12) / max(inp.spot, 1e-12)) / max(inp.t_settle, 1e-9)   # the carry the forward implies
-    rng = np.random.default_rng(seed)
-    z = rng.standard_normal((n_paths, steps))
     t = np.arange(1, steps + 1) * dt
-    if inp.pillars:
-        sv = np.array(step_vols(inp.pillars, t))                                  # the surface's ATM term structure
-        f_t = inp.forward * np.exp(np.cumsum(-0.5 * sv ** 2 * dt + sv * math.sqrt(dt) * z, axis=1))
-    else:
-        sv = np.full(steps, sigma)
-        w = np.cumsum(z, axis=1) * math.sqrt(dt)
-        f_t = inp.forward * np.exp(-0.5 * sigma ** 2 * t + sigma * w)         # the forward to settlement, driftless
+    f_t = inp.forward * m                                                      # the forward to settlement, driftless
     s_t = f_t * np.exp(-(r_q - r_b) * (inp.t_settle - t))                      # the spot it implies with deterministic rates
     p0 = [math.exp(-r_q * k * dt) for k in range(steps + 2)]
     df_t_T = np.array([inp.df_quote_t / p0[k] for k in range(1, steps + 1)])
@@ -193,6 +208,8 @@ def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 
     i_exp = next((k for k in range(steps) if t[k] >= inp.t_expiry - 1e-9), steps - 1)
     V = np.zeros((n_paths, steps))
     for k in range(steps):
+        if t[k] > inp.t_settle + 1e-9:
+            break                                                               # settled: nothing left of it
         j_last = min(k, i_exp)
         hist = np.concatenate([np.full((n_paths, 1), inp.spot), s_t[:, :j_last + 1]], axis=1)
         knocked = knocked_so_far(spec, hist) if barrier_like else np.zeros(n_paths, dtype=bool)
@@ -208,9 +225,18 @@ def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 
         else:
             V[:, k] = sign * scale * _payoff_at_expiry(spec, s_t[:, i_exp], knocked) * df_t_T[k]
     v0 = sign * scale * float(value(spec, inp.spot, r_q, r_b, sigma, inp.t_expiry, 1.0))
+    return V, v0, {"f_t": f_t, "s_t": s_t, "df_t_T": df_t_T, "p0": p0, "r_b": r_b, "i_exp": i_exp}
+
+
+def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
+    """Option value paths from our side on the monthly grid to settlement, P(0, k·dt) on the quote curve, V0."""
+    steps, dt = monthly_grid(inp.t_settle)
+    sigma = float(inp.vol)
+    z, _, sv, m = _driver(n_paths, steps, dt, seed, sigma, inp.pillars)
+    V, v0, x = _option_values(inp, steps, dt, m)
     if noise_out is not None:
-        noise_out.update(z=z, f_t=f_t, s_t=s_t, df_t_T=df_t_T, sigma=sigma, steps=steps, dt=dt, r_b=r_b, i_exp=i_exp, step_vols=sv)
-    return V, p0, v0
+        noise_out.update(z=z, f_t=x["f_t"], s_t=x["s_t"], df_t_T=x["df_t_T"], sigma=sigma, steps=steps, dt=dt, r_b=x["r_b"], i_exp=x["i_exp"], step_vols=sv)
+    return V, x["p0"], v0
 
 
 def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0, own_cds_bp: float = 42.0,
@@ -241,4 +267,115 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
                      + ("; barriers monitored at the grid points" if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else "")
                      + ("; American valued as European on the paths (a lower bound)" if spec.style == "AMERICAN" else ""),
             "_paths": paths}
+    return wf, meta
+
+
+# ── A package: several legs on one pair, one set of paths ────────────────────────────────────────
+
+def _is_option(leg) -> bool:
+    return isinstance(leg, OptionXvaInput)
+
+
+def _horizon(leg) -> float:
+    return float(leg.t_settle if _is_option(leg) else leg.t_years)
+
+
+def _leg_notional(leg) -> float:
+    """The notional the leg's own run hands the waterfall (forward_xva, option_xva)."""
+    if not _is_option(leg):
+        return abs(leg.base_notional * leg.forward)
+    if leg.spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER"):
+        return max(abs(leg.base_notional * leg.forward), 1.0)
+    return max(abs(float(leg.spec.payout or 0.0)), 1.0)
+
+
+def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float, list[dict]]:
+    """The package's value paths from our side: every leg valued by its own engine (a forward's MtM, an option's
+    style in closed form) on ONE grid, monthly to the longest settlement, and ONE driver M, so the legs net
+    path by path. Each leg's forward is F_i(0)·M_t: one factor, carry deterministic, so every forward of the pair
+    is a martingale and each leg starts at its own price. The driver's vol is the surface's ATM term structure
+    when a leg carries the surface, else the longest leg's own vol held flat; an option is valued at its own vol
+    either way. A leg is nothing after it settles. A package of one leg is that leg's own run, draw for draw.
+    Returns the paths, P(0, k·dt) on the longest leg's quote zero, V0 and a row per leg (v0, horizon)."""
+    if not legs:
+        raise ValueError("a package needs at least one leg")
+    if len({str(l.pair).upper() for l in legs}) != 1:
+        raise ValueError("every leg of a package is on the same pair")
+    longest = max(legs, key=_horizon)
+    steps, dt = monthly_grid(_horizon(longest))
+    pillars = next((l.pillars for l in legs if l.pillars), None)
+    sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)
+    z, t, sv, m = _driver(n_paths, steps, dt, seed, sigma, pillars)
+    p0 = [math.exp(-float(longest.quote_zero) * k * dt) for k in range(steps + 2)]
+    V = np.zeros((n_paths, steps))
+    v0, rows = 0.0, []
+    for leg in legs:
+        Vi, v0i, _ = (_option_values if _is_option(leg) else _forward_values)(leg, steps, dt, m)
+        V = V + Vi
+        v0 += v0i
+        rows.append({"v0": float(v0i), "horizon": _horizon(leg), "option": _is_option(leg), "paths": Vi})
+    if noise_out is not None:
+        noise_out.update(z=z, m=m, sigma=sigma, steps=steps, dt=dt, step_vols=sv)
+    return V, p0, v0, rows
+
+
+def package_addons(legs: list, csa: CSA, steps: int, dt: float) -> tuple[list[float], Optional[list[float]]]:
+    """The capital add-on along the grid: the sum of each leg's own single-factor add-on while it is alive
+    (SF × N_i × supervisory duration × maturity factor of its remaining life: what run_waterfall computes for a
+    leg on its own), and the same unmargined for the CRE52.2 cap. No offset between legs in the add-on: the
+    replacement cost nets on the paths, the add-on does not."""
+    from pricing.xva_engine import SF_IR
+    grid, unm = [], []
+    for i in range(steps):
+        t = (i + 1) * dt
+        a = u = 0.0
+        for leg in legs:
+            m_t = max(_horizon(leg) - t, 0.0)
+            if m_t <= 0:
+                continue
+            sd = (1.0 - math.exp(-0.05 * m_t)) / 0.05
+            n = _leg_notional(leg)
+            a += SF_IR * n * sd * csa.sa_ccr_maturity_factor(m_t)
+            u += SF_IR * n * sd * math.sqrt(min(max(m_t, 10.0 / 250.0), 1.0))
+        grid.append(a)
+        unm.append(u)
+    return grid, (unm if csa.sa_ccr_margined else None)
+
+
+def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0, own_cds_bp: float = 42.0,
+                ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
+                capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
+                own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
+                simm_im_m: Optional[float] = None) -> tuple[WaterfallResult, dict]:
+    """XVA of a package of legs on one pair as one netting set: the summed paths through the same waterfall.
+    Initial margin on the NET spot sensitivity of the legs; the capital add-on as package_addons."""
+    paths, p0, v0, rows = simulate_package_paths(legs, n_paths=n_paths, seed=seed, noise_out=noise_out)
+    longest = max(legs, key=_horizon)
+    steps, dt = monthly_grid(_horizon(longest))
+    rw = im_risk_weight(longest.pair)
+    known = [l.spot01 for l in legs if l.spot01 is not None]
+    im_m = simm_im_m if simm_im_m is not None else (abs(sum(known)) * rw / 1e6 if known else None)
+    params = WaterfallParams(
+        notional=sum(_leg_notional(l) for l in legs), maturity_y=_horizon(longest), dt=dt, theta=max(float(longest.quote_zero), 1e-6),
+        lgd=lgd, own_lgd=own_lgd, cp_cds_bp=cp_cds_bp, own_cds_bp=own_cds_bp, cp_cds_curve=cp_cds_curve,
+        own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, fba_ratio=fba_ratio, hurdle_rate=hurdle_rate,
+        capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
+        ir01=None, simm_im_m=im_m,
+    )
+    wf = run_waterfall(paths, v0, p0, params, csa, addon_profiles=package_addons(legs, csa, steps, dt),
+                       **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
+    pillars = next((l.pillars for l in legs if l.pillars), None)
+    sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)
+    styles = sorted({l.spec.style for l in legs if _is_option(l)})
+    meta = {"vol_pct": sigma * 100.0,
+            "vol_source": "the longest leg's vol" + (f" ({longest.vol_source})" if getattr(longest, "vol_source", None) else ""),
+            "vol_mode": ("ATM term structure of the surface for the paths" + ("; each option at the smile of each path's moneyness (sticky-delta)" if styles else "")) if pillars
+                        else "flat (the longest leg's vol for the paths" + ("; each option at its own vol" if styles else "") + ")",
+            "im_rw_per_pct": rw, "im_basis": ("SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM") + ", on the net spot sensitivity of the legs",
+            "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "p0_grid": [float(x) for x in p0], "_paths": paths, "_legs": rows,
+            "model": f"{len(legs)} legs on one set of paths: every forward of the pair is its own forward times one lognormal driver, "
+                     "so the legs net path by path; each leg valued as on its own (a forward's mark, an option's style in closed form); "
+                     "a leg is nothing after it settles; the capital add-on is the sum of the legs' add-ons"
+                     + ("; barriers monitored at the grid points" if any(s in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") for s in styles) else "")
+                     + ("; American valued as European on the paths (a lower bound)" if "AMERICAN" in styles else "")}
     return wf, meta

@@ -274,3 +274,56 @@ test('a forward with an option leg: a put added to a forward, made a digital, bo
   await expect(fx.getByRole('button', { name: /BOOK 2 LEGS/ })).toBeVisible()
   expectClean(problems)
 })
+
+test('XVA of a package: a strip on a digital asset runs as one netting set, and a changed leg clears the run', async ({ app, problems }) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await selectDemoBank(app, win)
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  // a forward hedged with a strip: three legs, each priced
+  await win.getByTestId('fx-legs-strip-3').click()
+  const rows = win.getByTestId('fx-leg')
+  await expect(rows).toHaveCount(2)
+  await expect.poll(async () => (await rows.getByTestId('fx-leg-npv').evaluateAll(els => els.every(e => e.getAttribute('data-value') !== ''))), { message: 'every leg is priced' }).toBe(true)
+
+  // the XVA tab runs the package, not the ticket alone
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()
+  await expect(win.getByTestId('xva-package')).toHaveAttribute('data-legs', '3')
+  const asked = app.waitForResponse(r => r.url().endsWith('/api/xva/currency-package') && r.request().method() === 'POST', { timeout: 90_000 })
+  await win.getByRole('button', { name: /SIMULATE 3 LEGS/ }).click()
+  const resp = await asked
+  expect(resp.status()).toBe(200)
+  const sent = resp.request().postDataJSON(), got = await resp.json()
+  expect(sent.trades).toHaveLength(3)
+  expect(sent.trades.every(t => t.instrument_type === 'CRYPTO_FORWARD')).toBe(true)
+  expect(got.package).toBe(true)
+  expect(got.legs).toHaveLength(3)
+  // the legs settle a month apart: the grid runs to the last of them
+  expect(got.legs[2].settles).toBeGreaterThan(got.legs[0].settles)
+  await expect(win.getByTestId('va-strip')).toBeVisible()
+  await expect(win.getByTestId('xva-netting')).toBeVisible()
+  // netting never adds exposure: the set's peak is at most the legs' peaks added up
+  expect(Number(await win.getByTestId('xva-netting').getAttribute('data-net'))).toBeLessThanOrEqual(Number(await win.getByTestId('xva-netting').getAttribute('data-gross')))
+  await expectNoHorizontalOverflow(win, 'XVA of a package')
+  await app.screenshot({ path: 'e2e/.out/shots/legs-xva-package.png' })
+
+  // a leg removed: the run on screen was of other terms, so it goes, and the button counts the legs that are left
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  await rows.first().getByRole('button', { name: /Remove leg/ }).click()
+  await expect(rows).toHaveCount(1)
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()
+  await expect(win.getByTestId('xva-netting')).toHaveCount(0)
+  await expect(win.getByRole('button', { name: /SIMULATE 2 LEGS/ })).toBeVisible()
+  // with no further leg the ticket runs on its own again
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  await win.getByTestId('fx-legs-clear').click()
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()
+  await expect(win.getByTestId('xva-package')).toHaveCount(0)
+  const single = app.waitForResponse(r => r.url().endsWith('/api/xva/currency') && r.request().method() === 'POST', { timeout: 90_000 })
+  await win.getByRole('button', { name: /SIMULATE$/ }).click()
+  expect((await single).status()).toBe(200)
+  expectClean(problems)
+})

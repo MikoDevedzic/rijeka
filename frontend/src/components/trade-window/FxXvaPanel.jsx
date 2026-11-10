@@ -19,7 +19,7 @@ import { getSessionMaybe } from '../../lib/session'
 import ExposureCanvas from './ExposureCanvas'
 import IncrementalXva from './IncrementalXva'
 import { settledState } from './fx-scenario'
-import { xvaResultMatches, xvaTermsKey } from './fx-requests'
+import { xvaTermsKey } from './fx-requests'
 import {
   SectionHeader, TipLabel, PathsWwrSliders, ModelBadge, SimulateButtons, ProofExpander,
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
@@ -91,7 +91,13 @@ function SurfaceProof({ result }) {
   )
 }
 
-export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId, stale = false }) {
+// `legs`: the further legs of a package (the DETAILS tab), or null: {count, ready, key, bodies, quotes}. With legs the
+// run is the whole package as one netting set (POST /api/xva/currency-package): every leg on the same paths.
+export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId, stale = false, legs = null }) {
+  const pkg = legs && legs.count > 0 ? legs : null
+  const pkgWaiting = !!pkg && !pkg.ready          // a leg is still being priced: the run waits for it
+  // the terms a result was simulated for: the ticket's and, in a package, every leg's
+  const runKey = quote ? xvaTermsKey(quote) + (pkg ? '|' + pkg.key : '') : null
   const payload = quote ? { pair: `${quote.base_currency}${quote.quote_currency}`, base_notional: quote.base_notional,
     settlement_date: quote.settlement_date, forward_rate: quote.forward_rate, direction: quote.direction } : null
   const isOption = quote?.shape === 'OPTION'
@@ -166,11 +172,11 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // A result for other terms than the quote's is not shown as this trade's: once a new quote has landed (not while
   // the last one is still being repriced), a result simulated for different terms is cleared, and so is a run that
   // comes back after the terms it was started for have gone. State adjusted during the render, not in an effect.
-  if ((res || cmp) && quote && !stale && !xvaResultMatches(resFor, quote)) { setRes(null); setCmp(null); setResFor(null) }
+  if ((res || cmp) && quote && !stale && resFor !== runKey) { setRes(null); setCmp(null); setResFor(null) }
 
   const run = async (useSeed = 42) => {
-    if (!quote || !payload || stale) return
-    const termsAtRun = xvaTermsKey(quote)
+    if (!quote || !payload || stale || pkgWaiting) return
+    const termsAtRun = runKey
     setSeed(useSeed)
     setBusy(true); setErr(null)
     try {
@@ -183,13 +189,16 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         csa: fxCsaBody(settlement, imExchanged),
         collateral: collateralBody(collateral),
       }
-      const body = isOption
+      const body = pkg
+        ? { trades: [buildTrade?.(), ...pkg.bodies], ...common }
+        : isOption
         ? { trade: buildTrade?.(), ...common }
         : { pair: payload.pair, base_notional: Number(payload.base_notional), settlement_date: payload.settlement_date,
             forward_rate: payload.forward_rate ?? null, direction: payload.direction || 'BUY', ...common }
-      if (isOption && !body.trade) throw new Error('Price the option first')
+      if (pkg && !body.trades.every(Boolean)) throw new Error('Price every leg first')
+      if (!pkg && isOption && !body.trade) throw new Error('Price the option first')
       const post = async (b) => {
-        const r = await fetch(`${API}/api/xva/${isOption ? 'currency-option' : 'currency'}`, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
+        const r = await fetch(`${API}/api/xva/${pkg ? 'currency-package' : isOption ? 'currency-option' : 'currency'}`, { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(b) })
         const j = await r.json()
         if (!r.ok) throw new Error(j.detail ? (typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail)) : `xva ${r.status}`)
         return j
@@ -202,7 +211,12 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   }
 
   const xva = res?.xva
-  const notionalQ = quoteNotional(quote)
+  // bp against the notional: the ticket's, or in a package the sum of every leg's
+  const notionalQ = pkg && pkg.ready ? [quote, ...pkg.quotes].reduce((a, q) => a + (quoteNotional(q) || 0), 0) : quoteNotional(quote)
+  const nLegs = pkg ? pkg.count + 1 : 1
+  // what netting is worth: the package's peak expected exposure against its legs' peaks added up
+  const legPeaks = res?.package && Array.isArray(res.legs) ? res.legs.reduce((a, l) => a + (Number(l.ee_gross_peak) || 0), 0) : null
+  const netPeak = res?.package && Array.isArray(res.ee_gross) && res.ee_gross.length ? Math.max(...res.ee_gross.map(Number)) : null
   const vaRows = buildVaRows(xva, { kind: 'notional', notional: notionalQ })
   const cmpRows = onChainCompareRows(xva, cmp?.xva)
   const saving = onChainSaving(xva, cmp?.xva, notionalQ)
@@ -211,15 +225,19 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
 
   const incremental = (
     <IncrementalXva counterpartyId={counterpartyId} counterpartyName={counterpartyName} buildTrade={buildTrade}
-      tradeId={tradeId} priced={!!quote} ccy={ccy} />
+      tradeId={tradeId} priced={!!quote && !pkgWaiting} ccy={ccy}
+      buildTrades={pkg && pkg.ready ? () => [buildTrade?.(), ...pkg.bodies] : null} legs={nLegs} legsKey={pkg ? pkg.key : ''} />
   )
 
   // The three pieces both views show; the simple view puts settlement first.
   // a trade whose fixing date has been reached has no forward left: a run would simulate one that no longer exists
   const fixed = settledState(quote) != null
   const simulateButtons = (<>
-    <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote || fixed || stale} label={quote ? '▶ SIMULATE' : 'PRICE THE TICKET FIRST'}
+    <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote || fixed || stale || pkgWaiting} label={quote ? (pkg ? `▶ SIMULATE ${nLegs} LEGS` : '▶ SIMULATE') : 'PRICE THE TICKET FIRST'}
       onSimulate={() => run(42)} onReroll={() => run(1 + Math.floor(Math.random() * 2147483000))} />
+    {pkg && !!quote && <div data-testid="xva-package" data-legs={nLegs} style={{fontSize:'0.75rem',color:'var(--text-dim)',margin:'-6px 0 12px',lineHeight:1.5}}>
+      {pkgWaiting ? 'a leg is being priced: SIMULATE waits for every leg' : <>The package of {nLegs} legs as one netting set: every leg on the same paths, netted before the charge is taken.</>}
+    </div>}
     {stale && !!quote && <div data-testid="xva-stale-note" style={{fontSize:'0.75rem',color:'var(--text-mute)',margin:'-6px 0 12px',lineHeight:1.5}}>repricing: SIMULATE waits for the price of the terms as they now stand</div>}
     {fixed && <div data-testid="xva-fixed-note" style={{fontSize:'0.75rem',color:'var(--text-dim)',margin:'-6px 0 12px',lineHeight:1.5}}>This trade has fixed: there is no exposure left to simulate beyond the settlement amount.</div>}
   </>)
@@ -253,15 +271,17 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           </>) : (<>
 
           <div data-testid="xva-advanced" style={{display:'flex',flexDirection:'column',flexShrink:0}}>
-          <SectionHeader>{isOption ? 'OPTION ON THE PATHS' : 'FORWARD MODEL'}<Note inline>
-            {isOption
+          <SectionHeader>{pkg ? 'PACKAGE ON THE PATHS' : isOption ? 'OPTION ON THE PATHS' : 'FORWARD MODEL'}<Note inline>
+            {pkg
+              ? <>Every leg on one set of paths: each forward of the pair is its own forward times one lognormal driver, so the legs move together and net path by path. A forward leg is marked ±N·(F<sub>t</sub> − K)·DF, an option leg is valued in its style's closed form, and a leg is nothing after it settles. Initial margin is on the net spot sensitivity of the legs; the capital add-on is the sum of the legs' add-ons (no offset between them). A vol typed here is used for every leg.</>
+              : isOption
               ? <>Lognormal spot at the option's vol; on every path the {styleWord} is valued with its closed form, the credit engine's model: before expiry the holder's value with the time left (barriers and touches carry which paths have knocked, monitored at the grid points; an American as its European, a lower bound), after it the payoff fixed and discounted to settlement. Bought: one-sided exposure after the premium. Vol from the pair's surface at the option's expiry and strike; type a number to override.</>
               : <>Lognormal forward, exposure ±N·(F<sub>t</sub> − K)·DF. Vol is the pair's surface at the forward's tenor (ATM); type a number to override. A pair without a surface uses the demo default, and the run says so.</>}
           </Note></SectionHeader>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 100px', gap:'4px', marginBottom:'6px' }}>
             <TipLabel tipKey='fxVol' tip={tip} untip={untip} style={{ alignSelf:'center' }}>Vol % override</TipLabel>
             <input type='text' inputMode='decimal' value={volPct} onChange={e => setVolPct(e.target.value)}
-              placeholder={res?.params?.vol_pct != null ? String(res.params.vol_pct) : 'surface'}
+              placeholder={res?.params?.vol_pct != null ? Number(res.params.vol_pct).toFixed(2) : 'surface'}
               style={{ ...INP, textAlign:'right', color: volPct ? 'var(--text-hi)' : 'var(--text-dim)', borderColor: volPct ? 'var(--border-hi)' : 'var(--border)' }} />
           </div>
           <div onMouseEnter={e => tip('fxVolMode', e)} onMouseLeave={untip} style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
@@ -295,7 +315,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             style={{flex:'0 0 auto',height:XVA_CHART_HEIGHT,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
             <RunReadout result={res} />
             <ChartReadout result={res} fmt={fmt}
-              model={<>{res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {res?.steps} monthly steps · {ccy}</>} />
+              model={<>{res?.package ? `${res.legs?.length} legs, one netting set` : res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {res?.steps} monthly steps · {ccy}</>} />
           </ExposureCanvas>
 
           <div style={{flexShrink:0,overflowX:'auto'}} data-testid="xva-outputs">
@@ -306,6 +326,13 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
               {notionalQ ? <> · notional {fmt(notionalQ).replace(/^\+/, '')} {ccy}</> : null}
               {res && <> · seed {res.seed ?? seed}</>}
             </VaFooter>
+            {legPeaks != null && netPeak != null && legPeaks > 0 && (
+              <div data-testid="xva-netting" data-net={Math.round(netPeak)} data-gross={Math.round(legPeaks)} style={{ padding: '6px 16px 10px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>NETTING</span>
+                {' '}peak expected exposure <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(netPeak).replace(/^\+/, '')}</span> as one set,
+                {' '}<span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(legPeaks).replace(/^\+/, '')}</span> leg by leg
+              </div>
+            )}
           </div>
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">

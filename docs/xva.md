@@ -122,6 +122,25 @@ bound); at and after expiry the payoff fixed at the expiry grid point and discou
 option's exposure is one-sided after the premium (CVA, no DVA); a sold one the reverse. The ticket draws the
 simulated paths behind EE, ENE and PFE, and the on-chain comparison runs the same paths under atomic settlement.
 
+**A package of legs as one netting set** (`/api/xva/currency-package`, `pricing/fx_xva.package_xva`; 10 November
+2026). A ticket with further legs on its DETAILS tab (a strip, a collar, a forward with an option) is run as one
+set: the body of every leg goes in `trades`, each is read exactly as its own route reads it, and all are valued
+on one grid (monthly to the longest settlement) and one driver. Every forward of the pair is its own forward
+today times the same driftless lognormal M_t (one factor, carry deterministic), so each leg starts at its own
+price and the legs move together; a forward leg is marked ±N·(F_i·M_t − K)·DF, an option leg is valued in its
+style's closed form as on its own, and a leg is nothing after it settles. The summed paths go through the same
+waterfall, so exposure nets path by path before any charge is taken. The driver's vol is the surface's ATM term
+structure (each option at the smile of each path's moneyness), or in flat mode the longest leg's vol with each
+option at its own. Initial margin is the weight on the NET spot sensitivity of the legs. The capital add-on is
+the sum of each leg's own single-factor add-on while it is alive: there is no offset between legs in the
+add-on, so KVA of a bought and a sold forward of the same terms is not zero although every other component is.
+A package of one leg is that leg's own run, draw for draw (`tests/test_package_xva.py`). The answer has the shape
+of the single-trade routes plus a row per leg (its value, when it settles, its own peak expected exposure), which
+the tab shows as what netting is worth. `POST /api/xva/incremental` takes the same `trades` list, so the charge
+in the counterparty's netting set is the package's. Limits: one pair per package; the legs share one factor, so
+a calendar spread's exposure to the SHAPE of the forward curve or of the vol term structure moving is not
+simulated; an option's expiry between two grid dates is fixed at the later one, as on its own.
+
 **Vol along the paths.** Both stand-alone engines and the credit engine use the surface, not one number held:
 the spot steps with the piecewise forward vols of the pair's ATM term structure (`fx_vol.step_vols`), so its
 log-variance at every grid date is the surface's ATM variance there; an option is valued at each date at the

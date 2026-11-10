@@ -224,6 +224,7 @@ def run_waterfall(
     reg_csa: Optional[CSA] = None,
     capital=None,
     saccr: Optional[list] = None,
+    addon_profiles: Optional[tuple] = None,
 ) -> WaterfallResult:
     """
     Exposure profiles and XVA under `csa`. `paths` are MtM from our side
@@ -233,7 +234,9 @@ def run_waterfall(
     regulatory CSA (pricing/collateral.py: recognised collateral at its haircut) and drives the SA-CCR branch;
     None means the two are the same, as before. `saccr` is the netting set as SaccrTrade rows
     (pricing/sa_ccr.py): the add-on is then the multi-class CRE52 add-on along the grid; None keeps the
-    single-factor interest-rate add-on. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
+    single-factor interest-rate add-on. `addon_profiles` is (add-on per grid step, the same unmargined or None),
+    worked out by the caller: a package of legs hands in the sum of its legs' single-factor add-ons
+    (pricing/fx_xva.package_xva); ignored when `saccr` is given. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
     hurdle replace the params' and the BA-CVA capital leg joins KVA; None keeps today's KVA exactly.
     """
     n_paths, T = paths.shape
@@ -292,6 +295,8 @@ def run_waterfall(
         grid_t = [(i + 1) * DT for i in range(T)]
         addon_grid = addon_profile(saccr, reg, grid_t)
         addon_grid_unm = addon_profile(saccr, CSA.uncollateralised(), grid_t) if reg.sa_ccr_margined else None
+    elif addon_profiles is not None:
+        addon_grid, addon_grid_unm = addon_profiles
     else:
         addon_grid = addon_grid_unm = None
 

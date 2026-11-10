@@ -305,6 +305,13 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // What the table shows for each leg: its price, and whether that price is of the terms it now shows. A leg just
   // changed is waiting from that moment, not from when its request goes out.
   const legView = Object.fromEntries(fxLegs.map(l => { const q = legQuotes[l.id], mine = !!q && q.key === legKey(l); return [l.id, { quote: q?.quote || null, error: mine ? q.error : null, pending: !mine || !!q.pending }] }))
+  // The further legs as the XVA tab runs them: each leg's trade body, once every leg is priced for the terms it shows.
+  const xvaLegs = (() => {
+    if (!legsFor || viewMode || !fxLegs.length) return null
+    const rows = fxLegs.map(l => { const v = legView[l.id]; const body = v && !v.pending && v.quote ? fxRef.current?.legBody?.(v.quote, l) : null; return body ? { body, quote: v.quote } : null })
+    const ready = rows.every(Boolean)
+    return { count: fxLegs.length, ready, key: legsKey, bodies: ready ? rows.map(r => r.body) : [], quotes: ready ? rows.map(r => r.quote) : [] }
+  })()
   // a leg that is gone takes its price with it; a product that has no legs has none
   useEffect(() => { if (!legsFor && legsHeld.legs.length) setLegsHeld({ on: null, legs: [] }) }, [legsFor, legsHeld.legs.length])
   const CURRENCY_PRODUCTS = {
@@ -1276,6 +1283,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             buildTrade={buildCurrencyTrade}
             tradeId={incrementalTradeId}
             stale={fxStale}
+            legs={xvaLegs}
           />
         </div>
       )}

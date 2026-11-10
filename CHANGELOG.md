@@ -3,6 +3,28 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## 0.16.5 · 10 November 2026
+
+**Legs, step 3, first part: the XVA of a package is one run.**
+
+- **A ticket with legs is simulated as one netting set.** The XVA tab's button reads SIMULATE n LEGS and sends
+  every leg (`POST /api/xva/currency-package`). Every leg is valued on the same simulated paths: each forward of
+  the pair is its own forward times one lognormal driver, a forward leg is marked, an option leg is valued in its
+  style's closed form, a leg is nothing after it settles, and the sum goes through the same waterfall. A strip,
+  a collar or a forward with an option is charged on what is left after its legs offset each other.
+- **What netting is worth is on the screen:** the set's peak expected exposure beside the legs' peaks added up.
+- **The charge in the counterparty's netting set** (CHARGE THIS PACKAGE) takes every leg too.
+- **A package of one leg is that leg's own run, draw for draw**, and the two single-trade routes now read their
+  inputs through the functions the package uses, so a leg is read one way. Nothing a single trade shows moved
+  (the reference suite, the Excel replications and the pinned book are unchanged).
+- **A run on screen is of the legs on screen:** change, add or remove a leg and it is cleared; SIMULATE waits
+  while a leg is being priced.
+- **Limits, in `docs/xva.md` and the model inventory:** one pair per package; one factor, so the shape of the
+  forward curve or of the vol term structure moving is not simulated; the capital add-on is the sum of the legs'
+  add-ons with no offset between them; no methodology section yet.
+- **Still to come in step 3:** CASHFLOWS, CURVE SCENARIO and the footer over the whole package, and one
+  confirmation for it.
+
 ## Legs, step 2: every option style as a leg; collar, risk reversal, straddle, calendar · 10 November 2026 (frontend only)
 
 - **A leg can be a forward, a call, a put or a touch**, on a forward ticket and on an option ticket alike (every

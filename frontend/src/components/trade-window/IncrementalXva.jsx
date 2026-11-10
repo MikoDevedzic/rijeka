@@ -26,14 +26,14 @@ const th = { ...mono, fontSize: 11, letterSpacing: '0.12em', color: 'var(--text-
 const td = { ...mono, fontSize: '0.8125rem', color: 'var(--text-hi)', textAlign: 'right', padding: '4px 8px', whiteSpace: 'nowrap' }
 const foot = { ...mono, fontSize: '0.7rem', color: 'var(--text-mute)', marginTop: 6, lineHeight: 1.5 }
 
-export default function IncrementalXva({ counterpartyId, counterpartyName, buildTrade, tradeId, priced, ccy = 'USD' }) {
+export default function IncrementalXva({ counterpartyId, counterpartyName, buildTrade, tradeId, priced, ccy = 'USD', buildTrades = null, legs = 0, legsKey = '' }) {
   const [res, setRes] = useState(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const live = useRef(true)
   useEffect(() => () => { live.current = false }, [])
   // A result belongs to one netting set: a new counterparty starts clean.
-  useEffect(() => { setRes(null); setErr(null) }, [counterpartyId, tradeId])
+  useEffect(() => { setRes(null); setErr(null) }, [counterpartyId, tradeId, legsKey])
 
   const view = !!tradeId
   const reason = busy ? null : disabledReason({ counterpartyId, priced, buildTrade, tradeId })
@@ -43,7 +43,7 @@ export default function IncrementalXva({ counterpartyId, counterpartyName, build
     if (busy || reason) return
     setBusy(true); setErr(null)
     try {
-      const body = buildRequest({ counterpartyId, tradeId, buildTrade })
+      const body = buildRequest({ counterpartyId, tradeId, buildTrade, buildTrades })
       let j
       if (MOCK) {
         await new Promise(r => setTimeout(r, 600))
@@ -79,14 +79,16 @@ export default function IncrementalXva({ counterpartyId, counterpartyName, build
         {view ? 'MARGINAL XVA · REMOVING THIS TRADE' : `INCREMENTAL XVA · ${cpLabel}'S NETTING SET`}
       </div>
       <div style={{ fontSize: '0.75rem', color: 'var(--text-mute)', lineHeight: 1.45, marginBottom: 10 }}>
-        The credit engine's risk-neutral run with this trade and without it, same paths. This is the charge the desk would quote; the number above is the trade on its own.
+        {legs > 1 && !view
+          ? <>The credit engine's risk-neutral run with this package of {legs} legs and without it, same paths. This is the charge the desk would quote; the number above is the package on its own.</>
+          : <>The credit engine's risk-neutral run with this trade and without it, same paths. This is the charge the desk would quote; the number above is the trade on its own.</>}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button onClick={run} disabled={busy || !!reason} title={reason || undefined}
           style={{ padding: '7px 14px', ...mono, fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: busy || reason ? 'default' : 'pointer',
             background: 'rgba(217,178,92,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1 }}>
-          {busy ? 'RUNNING…' : res ? 'RECOMPUTE' : 'CHARGE THIS TRADE'}
+          {busy ? 'RUNNING…' : res ? 'RECOMPUTE' : legs > 1 && !view ? 'CHARGE THIS PACKAGE' : 'CHARGE THIS TRADE'}
         </button>
         {reason && <span style={{ ...mono, fontSize: '0.75rem', color: 'var(--text-mute)', letterSpacing: '0.04em' }}>— {reason}</span>}
         {busy && <span style={{ ...mono, fontSize: '0.75rem', color: 'var(--text-mute)' }}>credit engine valuing the netting set twice…</span>}
