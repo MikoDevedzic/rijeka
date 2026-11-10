@@ -68,7 +68,7 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   await expect(saving).toContainText(Math.abs(savedUsd).toLocaleString('en-US'))
   expect(await win.getByTestId('xva-outputs').innerText(), 'one sign per figure, a rounded zero unsigned').not.toMatch(/\+\+|--|−−|\+-|\+−|-\+|−\+/)
   // the saving line is one row: every part sits on the same line as the label
-  const tops = await saving.locator('span').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().bottom)))
+  const tops = await saving.locator('span:visible').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().bottom)))
   expect(Math.max(...tops) - Math.min(...tops), 'the saving line wraps').toBeLessThanOrEqual(6)
   await expectFullyInView(win.getByTestId('xva-outputs'), 'XVA results (strip, saving, comparison) under BILATERAL')
   await expectNoHorizontalOverflow(win.getByTestId('xva-left'), 'XVA left column')

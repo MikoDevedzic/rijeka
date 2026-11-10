@@ -50,7 +50,7 @@ test('a new ticket opens on a digital-asset forward: inputs on TRADE, the record
 
   // CASHFLOWS: summary tiles, one table per leg, the net; the legs add up to the net, and the net is the NPV
   await win.getByRole('button', { name: 'CASHFLOWS', exact: true }).click()
-  const flows = win.getByText(/^CASHFLOWS · SETTLEMENT/).locator('xpath=..')
+  const flows = win.getByText(/^CASHFLOWS · SETTLEMENT/).locator('xpath=../..')      // the heading sits in a row with its note and the export
   await expect(flows).toContainText('BTC LEG PV')
   await expect(flows).toContainText('USD LEG PV')
   await expect(flows).toContainText('SETTLES · CASH')

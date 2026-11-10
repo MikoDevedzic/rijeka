@@ -167,6 +167,33 @@ button, input, select, textarea { font-family: inherit; }
 .rj-flash-in { --rj-flash: var(--text-hi); }
 @media (prefers-reduced-motion: reduce) { .rj-flash { animation: none; } }
 
+/* A note that stays off the page until it is asked for (common/Note.jsx): a small mark beside the figure; the
+   note shows when the mark is hovered, focused or tapped. With the NOTES switch on (data-notes="on" on the root)
+   every note is written out where it stands and the marks go. */
+.rj-note { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 6px; cursor: help; border-radius: 50%; flex: 0 0 auto; }
+.rj-note-mark {
+  display: inline-grid; place-items: center; width: 13px; height: 13px; box-sizing: border-box;
+  border: 1px solid var(--border-glow); border-radius: 50%; color: var(--text-mute);
+  font: 500 9px/1 var(--mono); letter-spacing: 0; text-transform: none; font-style: normal;
+}
+.rj-note:hover .rj-note-mark, .rj-note:focus .rj-note-mark { color: var(--text-hi); border-color: var(--text-dim); }
+.rj-note-corner { position: absolute; top: 8px; right: 8px; margin: 0; }
+.rj-note-body { display: none; }
+:root:not([data-notes="on"]) .rj-note:hover .rj-note-body,
+:root:not([data-notes="on"]) .rj-note:focus .rj-note-body {
+  display: block; position: fixed; z-index: 3000; width: max-content; max-width: 320px; padding: 8px 10px;
+  background: var(--panel-3); border: 1px solid var(--border-glow); border-radius: var(--r-2); box-shadow: var(--shadow-panel);
+  color: var(--text); font: 400 12px/1.5 var(--sans); letter-spacing: 0; text-transform: none; text-align: left;
+  white-space: normal; overflow-wrap: anywhere; pointer-events: none;
+}
+:root[data-notes="on"] .rj-note { display: block; position: static; margin: 2px 0 0; cursor: auto; flex-basis: 100%; border-radius: 0; }
+:root[data-notes="on"] .rj-note-inline { display: inline; margin: 0 0 0 4px; flex: 1 1 100%; order: 9; }
+:root[data-notes="on"] .rj-note .rj-note-mark { display: none; }
+:root[data-notes="on"] .rj-note-body {
+  display: block; color: var(--text-dim); font: 400 11.5px/1.45 var(--sans); letter-spacing: 0; text-transform: none; text-align: left; white-space: normal;
+}
+:root[data-notes="on"] .rj-note-inline .rj-note-body { display: inline; color: var(--text-mute); }
+
 /* A key printed on its button (common/Shortcuts.jsx Keycap; the keys are lib/shortcuts.js). It takes the colour
    of the button's own text at half strength, so it reads on a quiet button and on the brass one alike. */
 .kc {

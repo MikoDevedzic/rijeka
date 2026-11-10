@@ -82,6 +82,21 @@ for (const [slug, asset, product] of [['crypto-forward', 'CRYPTO', /^CRYPTO FORW
       await app.waitForTimeout(900)
       await shot(app, `${slug}-${tab.toLowerCase().replace(' ', '-')}`)
     }
+    // XVA with every input showing, after a run; then a note under the pointer, and the same tab with NOTES on
+    await win.getByRole('button', { name: 'XVA', exact: true }).click()
+    const inputs = win.getByRole('button', { name: /SHOW MODEL INPUTS/ })
+    if (await inputs.count()) await inputs.click()
+    await win.getByRole('button', { name: /SIMULATE/ }).click()
+    await app.waitForTimeout(3500)
+    await shot(app, `${slug}-xva`)
+    await win.getByRole('button', { name: 'CASHFLOWS', exact: true }).click()
+    await win.locator('.rj-note:visible').first().hover()
+    await app.waitForTimeout(300)
+    await shot(app, `${slug}-cashflows-note`)
+    await win.getByTestId('notes-toggle').click()
+    await app.waitForTimeout(300)
+    await shot(app, `${slug}-cashflows-notes-on`)
+    await win.getByTestId('notes-toggle').click()
   })
 }
 

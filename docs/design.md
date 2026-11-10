@@ -11,7 +11,7 @@ code that draws on a canvas, and `theme.test.js` holds the two together.
 | `--accent` (brass), `--accent-hi` | the action of the view (BOOK TRADE, + NEW TRADE), the selected tab's rule, what is sealed on chain, the saving on chain | a label, a typed value, a positive number |
 | `--up`, `--down` | the sign of a number; the paying or selling side; a state that is good or bad in itself (live, calibrated, a verify that passed; defaulted, a failed check) | a selection, an action |
 | `--amber` | a caution, something provisional, the PFE tail | an action |
-| `--blue` | the counterpart series: ENE, DVA and FBA, a benefit, a link on paper | a selection |
+| `--blue` | the counterpart series on a chart (ENE), a link on paper | a selection; a figure in a table (it takes the colour of its sign) |
 | `--text-hi`, `--text`, `--text-dim`, `--text-mute`, `--text-faint` | limestone, in five steps. Contrast on `--bg` / `--panel` / `--panel-2`: `--text-mute` 6.2 / 5.6 / 4.8, `--text-faint` 5.3 / 4.8 / 4.1 | `--text-faint` on `--panel-2` or lighter |
 | `--panel`, `--panel-2`, `--panel-3` | a surface one step up; `--panel-3` is the fill of a selected chip | |
 
@@ -65,6 +65,34 @@ on every tab. On TRADE the only computed things are a field that shows its defau
 premium line and the notes that say why there is no price. A stored currency trade opened from the blotter has
 no valuation block (it never had).
 A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX, RATES.
+
+## Tabs
+
+The ticket's tabs are one control of joined buttons (`.tbw-tabs`): each has an edge, so it reads as something to
+press; the selected one is the lighter panel (as a selected chip is) over the brass rule. A chip is a separate
+box and picks a term of the trade; the joined control moves between views of it.
+
+## Notes
+
+What explains a figure (where it is from, what a row means) is not on the page until it is asked for: a small
+mark beside the figure (`components/common/Note.jsx`), whose note shows on hover, on keyboard focus and on a
+tap. **NOTES**, at the right of the tab bar, writes every note out where it stands and is remembered in the
+browser (`lib/notes.js`, `data-notes` on the root). A note's text is always in the page, shown or not. What stays
+on the page: a field's one-line tag of where its default is from, a warning, and anything that says why there
+is no price. Not yet behind marks: the lines on the TRADE tab, the swap's tabs and the scenario tab.
+
+## Type on the ticket
+
+One rule on every tab: a label is 11px in capitals; a value is 12.5px, a number, a date or a formula in mono and
+words in the interface face; a headline figure is 13 to 16px in mono. A tab does not pick its own sizes.
+
+## The XVA results
+
+One table (`xva-shared.jsx` `VaStrip`, `OnChainCompareRow`): the adjustments across, each line of figures a row
+named once at the left. Every row of money is set alike; a figure takes the colour of its sign and nothing else;
+ALL-IN is the one column that stands out and the saving on chain the one brass figure. Nothing scrolls inside
+the tab: the inputs column is as tall as its inputs, and the credit curves and the assumptions sit under the
+results they drive.
 
 ## Risk factors
 

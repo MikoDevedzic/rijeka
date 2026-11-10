@@ -13,7 +13,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from '../trade-window/xva-shared.jsx'
 import {
-  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, simmImValue,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, simmImValue,
   buildVaRows, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
 } from '../trade-window/xva-shared'
 
@@ -496,13 +496,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
         <CalibProofPanel calib={calib}/>
         {simulateError}
 
-        <SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} />
-
         {settlementBlock}
-
-        <AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio}
-          hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm}
-          capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} />
         </>)}
       </div>
 
@@ -585,10 +579,16 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
 
         {/* Unified XVA waterfall - $ and bp in same cell */}
         <div style={{flexShrink:0}} data-testid="xva-outputs">
-          <VaStrip rows={vaRows} fmt={fmtDollar} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} />
+          <VaStrip rows={vaRows} fmt={fmtDollar} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} runLabel={simResult?.csa?.preset ? String(simResult.csa.preset).replace('_', '-') : 'THIS RUN'} />
           <OnChainCompareRow rows={cmpRows} current={simResult} compare={compareResult} fmt={fmtDollar} saving={saving} />
           <VaFooter>ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA~ · Click any VA to expand · bp = VA / IR01</VaFooter>
         </div>
+          {view !== 'simple' && (
+            <div style={XVA_BAND} data-testid="xva-assumptions">
+              <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
+              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm} capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} /></div>
+            </div>
+          )}
       </div>
 
       {/* Floating tooltip */}

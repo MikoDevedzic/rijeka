@@ -3,6 +3,38 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## The ticket, easier to read · 10 November 2026 (frontend only; the API stays 0.16.2)
+
+- **Tabs that read as something to press.** The ticket's tabs are one control of joined buttons, each with an
+  edge; the selected one is a lighter panel over the brass rule. They were bare words with a rule under one.
+- **Notes are behind a mark until they are asked for.** On a forward's or an option's DETAILS and CASHFLOWS, in
+  the valuation's breakdown and on the XVA tab, the line that says where a number is from or what a row means
+  is now a small mark beside it: hover it, tab to it or tap it and the note shows. **NOTES**, at the right of
+  the tab bar, writes every note out where it stands (for learning the screen, for a picture, for a screen
+  with no pointer) and is remembered in the browser. The TRADE tab, the swap's own tabs and the scenario tab
+  keep their lines for now.
+- **One type rule on every tab.** DETAILS set every value in the mono face at a size that moved with the screen;
+  TRADE sets a field at 12.5px, numbers in mono and words in the interface face. DETAILS and CASHFLOWS now
+  follow TRADE: a number, a date or a formula in mono, words in the interface face, the same sizes.
+- **A forward's or an option's CASHFLOWS exports to Excel** (EXPORT XLSX, as the swap's schedule does): what the
+  trade is, the legs and their net (or the premium and the payoff), and the market it was priced on. A present
+  value is written as amount × discount factor and the net as a sum, each with the figure the tab showed, so
+  the sheet recomputes and can be checked against the screen.
+- **XVA: the results are one table.** The adjustments run across; each line of figures is a row named once at
+  the left (the run, named for its settlement; its basis points; the same run on chain; the change). The run
+  and the on-chain row are set alike: one face, one size, and a figure takes the colour of its sign and nothing
+  else (a cost is the colour of a negative, a benefit of a positive, a rounded zero is unsigned and quiet).
+  Each adjustment used to carry a colour of its own (a zero in amber, DVA in blue), in ten sizes, and "bp of
+  notional" was printed nine times. ALL-IN is the one column that stands out, and the saving on chain the one
+  brass figure. Press a column for its definition, as before.
+- **XVA: nothing scrolls inside the tab.** The inputs column was pinned to the chart's height and scrolled inside
+  itself, so the settlement and the assumptions were out of view. It is now as tall as its inputs, and the
+  credit curves and the assumptions sit under the results they drive, in view on a laptop screen for a forward
+  or an option. A swap under a CSA has more settlement inputs than fit a 900px screen: there the window scrolls,
+  once, and nothing inside it does. The chart is a quarter shorter to make the room.
+- **Not changed:** no figure, formula or request. The change in an adjustment is coloured by its sign (what it
+  does to the all-in), where it used to be coloured by whether the adjustment shrank.
+
 ## Digital assets first; one shape for every ticket; a colour per risk factor · 10 November 2026 (frontend only; the API stays 0.16.2)
 
 - **A new ticket opens on a digital-asset forward.** CRYPTO is the first asset class on the ticket and in the

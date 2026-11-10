@@ -26,9 +26,10 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from './xva-shared.jsx'
 import {
-  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, simmImValue,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS,
 } from './xva-shared'
+import { Note } from '../common/Note'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -252,7 +253,11 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           </>) : (<>
 
           <div data-testid="xva-advanced" style={{display:'flex',flexDirection:'column',flexShrink:0}}>
-          <SectionHeader>{isOption ? 'OPTION ON THE PATHS' : 'FORWARD MODEL'}</SectionHeader>
+          <SectionHeader>{isOption ? 'OPTION ON THE PATHS' : 'FORWARD MODEL'}<Note inline>
+            {isOption
+              ? <>Lognormal spot at the option's vol; on every path the {styleWord} is valued with its closed form, the credit engine's model: before expiry the holder's value with the time left (barriers and touches carry which paths have knocked, monitored at the grid points; an American as its European, a lower bound), after it the payoff fixed and discounted to settlement. Bought: one-sided exposure after the premium. Vol from the pair's surface at the option's expiry and strike; type a number to override.</>
+              : <>Lognormal forward, exposure ±N·(F<sub>t</sub> − K)·DF. Vol is the pair's surface at the forward's tenor (ATM); type a number to override. A pair without a surface uses the demo default, and the run says so.</>}
+          </Note></SectionHeader>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 100px', gap:'4px', marginBottom:'6px' }}>
             <TipLabel tipKey='fxVol' tip={tip} untip={untip} style={{ alignSelf:'center' }}>Vol % override</TipLabel>
             <input type='text' inputMode='decimal' value={volPct} onChange={e => setVolPct(e.target.value)}
@@ -274,24 +279,13 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           ) : (
             <ModelBadge kind='muted'>{quote ? `Vol from the pair's surface at ${isOption ? "the option's expiry and strike" : "the forward's tenor"} — press SIMULATE.` : 'Price the ticket first.'}</ModelBadge>
           )}
-          <div style={{ fontSize:'0.75rem', color:'var(--text-mute)', marginBottom:'8px', lineHeight:1.5 }}>
-            {isOption
-              ? <>Lognormal spot at the option's vol; on every path the {styleWord} is valued with its closed form, the credit engine's model: before expiry the holder's value with the time left (barriers and touches carry which paths have knocked, monitored at the grid points; an American as its European, a lower bound), after it the payoff fixed and discounted to settlement. Bought: one-sided exposure after the premium. Vol from the pair's surface at the option's expiry and strike; type a number to override.</>
-              : <>Lognormal forward, exposure ±N·(F<sub>t</sub> − K)·DF. Vol is the pair's surface at the forward's tenor (ATM); type a number to override. A pair without a surface uses the demo default, and the run says so.</>}
-          </div>
           </div>
 
           {simulateButtons}
           <SurfaceProof result={res} />
           {simulateError}
 
-          <SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} />
-
           {settlementBlock}
-
-          <AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio}
-            hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm}
-            capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} simmTip='fxSimmIm' tip={tip} untip={untip} />
           </>)}
         </div>
 
@@ -305,7 +299,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           </ExposureCanvas>
 
           <div style={{flexShrink:0}} data-testid="xva-outputs">
-            <VaStrip rows={vaRows} fmt={fmt} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} />
+            <VaStrip rows={vaRows} fmt={fmt} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} runLabel={res?.csa?.preset ? String(res.csa.preset).replace('_', '-') : 'THIS RUN'} />
             <OnChainCompareRow rows={cmpRows} current={res} compare={cmp} fmt={fmt} saving={saving} />
             <VaFooter>
               ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA · Click any VA to expand · bp = VA / (notional × 1bp)
@@ -313,6 +307,12 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
               {res && <> · seed {res.seed ?? seed}</>}
             </VaFooter>
           </div>
+          {view !== 'simple' && (
+            <div style={XVA_BAND} data-testid="xva-assumptions">
+              <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
+              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} simmIm={simmIm} setSimmIm={setSimmIm} capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} simmTip='fxSimmIm' tip={tip} untip={untip} /></div>
+            </div>
+          )}
         </div>
 
         <FloatingTip tooltip={tooltip} onLeave={untip} />

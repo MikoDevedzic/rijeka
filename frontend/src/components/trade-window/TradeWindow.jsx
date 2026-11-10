@@ -1128,7 +1128,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       {tabsVisited['CASHFLOWS'] && isCurrency && (
         <div style={{ display: activeTab === 'CASHFLOWS' ? 'block' : 'none' }}>
           <FxCashflowsPanel quote={fxQuote} crypto={assetClass === 'CRYPTO'} active={activeTab === 'CASHFLOWS'} stale={fxStale} />
-          <div ref={setValuationSlot} />
+          <div ref={setValuationSlot} className="tbw-valuation-slot" />
         </div>
       )}
       {tabsVisited['CURVE SCENARIO'] && isCurrency && (

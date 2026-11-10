@@ -12,6 +12,7 @@
 import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar } from './xva-shared'
 import { Keycap } from '../common/Shortcuts'
 import Roll from '../common/Roll'
+import { Note } from '../common/Note'
 import { ariaKey } from '../../lib/shortcuts'
 
 const noop = () => {}
@@ -282,8 +283,8 @@ export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, s
   ]
   return (
     <>
-      <SectionHeader>ASSUMPTIONS</SectionHeader>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 80px',gap:'4px 8px'}}>
+      <SectionHeader>ASSUMPTIONS<Note inline>{note}</Note></SectionHeader>
+      <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 72px minmax(0,1fr) 72px',gap:'5px 10px'}}>
         {rows.map(({label,val,set,tk})=>(
           <div key={label} style={{display:'contents'}}>
             <TipLabel tipKey={tk} tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>{label}</TipLabel>
@@ -296,9 +297,6 @@ export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, s
           <option value='cem'>CEM</option>
           <option value='imm'>IMM</option>
         </select>
-      </div>
-      <div style={{marginTop:'8px',fontSize:'0.78rem',color:'var(--text-mute)',lineHeight:1.5,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'var(--r-1)',padding:'6px 8px'}}>
-        {note}
       </div>
     </>
   )
@@ -337,80 +335,113 @@ export function ChartReadout({ result, model, fmt = fmtDollar, children }) {
   )
 }
 
-// The eight VA cells (buildVaRows) with the bp line, the expanded description under them;
-// hovering a cell lights its curve on the chart, clicking it expands the definition.
-export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighlight = noop }) {
+// ── The results, as one table ─────────────────────────────────────────────────────────────────────────
+// The adjustments run across (NPV, CVA … ALL-IN); each line of figures is a row with its name printed once at
+// the left: the run itself, its size in basis points, the same run settled on chain, and the change. Every row
+// of money is set the same way (one size, one face) and a figure takes the colour of its sign and nothing else:
+// a cost is the colour of a negative, a benefit of a positive, a rounded zero is unsigned and quiet. ALL-IN is
+// the one column that stands out. VaStrip draws the head and the run; OnChainCompareRow draws the saving and
+// the on-chain rows on the same columns, so the two read as one table.
+const VA_COLS = (n) => `150px repeat(${n}, minmax(0, 1fr))`
+const VA_ROW = { display:'grid', alignItems:'stretch', padding:'0 12px 0 16px' }
+const VA_NAME = { fontSize:'11px', fontWeight:500, letterSpacing:'0.08em', color:'var(--text-mute)', fontFamily:'var(--sans)', textAlign:'left', padding:'8px 8px 7px 0', minWidth:0, whiteSpace:'nowrap', lineHeight:1.25 }
+const VA_CELL = { fontFamily:'var(--mono)', fontVariantNumeric:'tabular-nums', textAlign:'right', padding:'7px 6px', whiteSpace:'nowrap', minWidth:0, overflow:'hidden', textOverflow:'ellipsis' }
+const VA_MONEY = { ...VA_CELL, fontSize:'13.5px', fontWeight:500 }
+const VA_SMALL = { ...VA_CELL, fontSize:'12px', fontWeight:400, padding:'0 6px 7px' }
+const VA_TOTAL = { background:'var(--panel)', boxShadow:'inset 1px 0 0 var(--border-hi)' }
+// a figure that rounds to nothing at the precision it is printed at: no sign, no colour
+const isZero = (text) => /^[+\-−]?\$?0(\.0+)?( ?bp|%)?$/.test(String(text).trim())
+// (the test reads the text as it will be printed: "+$0", "-0.0bp")
+const unsigned = (text) => isZero(text) ? String(text).replace(/^[+\-−]/, '') : text
+const signTone = (v, text) => (v == null || !Number.isFinite(Number(v)) || isZero(text)) ? 'var(--text-dim)' : Number(v) > 0 ? 'var(--up)' : 'var(--down)'
+
+export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighlight = noop, runLabel = 'THIS RUN' }) {
   const exp = rows.find(r => r.key === expanded)
+  const cols = VA_COLS(rows.length)
+  const subName = rows.find(r => r.key === 'cva')?.sub?.caption || rows.find(r => r.sub)?.sub?.caption
+  const col = (row) => ({
+    onClick: () => setExpanded(expanded === row.key ? null : row.key),
+    onMouseEnter: () => row.curve !== 'none' && onHighlight(row.curve),
+    onMouseLeave: () => onHighlight(null),
+  })
   return (
     <>
-      <div data-testid="va-strip" style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},minmax(0,1fr))`,gap:'1px',background:'var(--border)',borderTop:'1px solid var(--border)'}}>
-        {rows.map(row => {
-          const isExp = expanded===row.key
-          return (
-            <div key={row.key}
-              onClick={()=>setExpanded(isExp?null:row.key)}
-              onMouseEnter={()=>row.curve!=='none'&&onHighlight(row.curve)}
-              onMouseLeave={()=>onHighlight(null)}
-              style={{background:'var(--panel)',padding:'9px 8px 7px',cursor:'pointer',minWidth:0,overflow:'hidden',
-                boxShadow:isExp?'inset 0 2px 0 '+row.color:'none'}}>
-              <div style={{fontSize:'0.72rem',fontWeight:500,letterSpacing:'0.09em',color:'var(--text-mute)',fontFamily:'var(--sans)',marginBottom:'5px'}}>{row.label}</div>
-              <div style={{fontSize:'0.9375rem',fontWeight:500,color:row.value!=null?row.color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px',whiteSpace:'nowrap'}}>
-                <Roll>{fmt(row.value)}</Roll>
+      <div data-testid="va-strip" style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
+        <div style={{...VA_ROW,gridTemplateColumns:cols,borderBottom:'1px solid var(--border)',background:'var(--panel)'}}>
+          <div style={VA_NAME} />
+          {rows.map(row => (
+            <button key={row.key} type="button" {...col(row)} aria-expanded={expanded === row.key}
+              title={`${row.label}: press for its definition`}
+              style={{...VA_CELL,background:'transparent',border:'none',cursor:'pointer',fontFamily:'var(--sans)',fontSize:'11px',fontWeight:row.key==='all_in'?600:500,letterSpacing:'0.08em',
+                color:row.key==='all_in'||expanded===row.key?'var(--text-hi)':'var(--text-mute)',boxShadow:expanded===row.key?'inset 0 -2px 0 var(--text-dim)':'none'}}>{row.label}</button>
+          ))}
+        </div>
+        <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-run">
+          <div style={VA_NAME}>{runLabel}</div>
+          {rows.map(row => {
+            const text = unsigned(fmt(row.value))
+            return (
+              <div key={row.key} {...col(row)} style={{...VA_MONEY,cursor:'pointer',color:row.value!=null?signTone(row.value, text):'var(--text-mute)',...(row.key==='all_in'?{...VA_TOTAL,fontWeight:600}:null)}}>
+                <Roll>{text}</Roll>
               </div>
-              <div>
-                {row.sub && <div style={{fontSize:'0.75rem',fontWeight:row.sub.weight,color:row.sub.color,fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{row.sub.text}</div>}
-                {row.sub && <div title={row.sub.caption} style={{fontSize:'0.72rem',color:row.sub.captionColor,fontFamily:'var(--sans)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{row.sub.caption}</div>}
-              </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
+        {subName && (
+          <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-bp">
+            <div style={{...VA_NAME,padding:'0 8px 7px 0'}}>{/rate/.test(subName) ? 'BP ON RATE' : 'BP OF NOTIONAL'}</div>
+            {rows.map(row => (
+              <div key={row.key} title={row.sub?.caption} style={{...VA_SMALL,color:'var(--text-dim)',...(row.key==='all_in'?VA_TOTAL:null)}}>{row.sub ? unsigned(row.sub.text).replace(/\s?bp$/, '') : '—'}</div>
+            ))}
+          </div>
+        )}
       </div>
       {exp && (
-        <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)',padding:'10px 16px',fontSize:'0.8125rem',color:'var(--text-dim)',lineHeight:1.7,fontFamily:'var(--sans)'}}>
-          <span style={{color:exp.color,fontWeight:500,fontFamily:'var(--mono)',marginRight:'8px'}}>{exp.label}</span>
+        <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)',padding:'10px 16px',fontSize:'12.5px',color:'var(--text-dim)',lineHeight:1.6,fontFamily:'var(--sans)'}}>
+          <span style={{color:'var(--text-hi)',fontWeight:600,letterSpacing:'0.06em',marginRight:'8px'}}>{exp.label}</span>
           {exp.desc}
-          {exp.curve!=='none' && <span style={{marginLeft:'8px',fontSize:'0.75rem',color:'var(--text-mute)'}}>· Driven by {exp.curve} curve</span>}
+          {exp.curve!=='none' && <span style={{marginLeft:'8px',color:'var(--text-mute)'}}>· Driven by the {exp.curve} curve</span>}
         </div>
       )}
     </>
   )
 }
 
-// The ON-CHAIN comparison under the strip: each VA under the on-chain preset against the current
-// run (onChainCompareRows), and the line saying it is the same paths and seed.
+// The same run settled on chain, on the table's own columns: the saving, then each adjustment and its change.
 export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, saving = null }) {
   if (!rows?.length || !current || !compare) return null
   const preset = current.csa?.preset?.replace('_','-')
   const bp = (v) => v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} bp`
+  const cols = VA_COLS(rows.length)
   return (
     <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
       {saving && (
-        <div data-testid="saving-on-chain" style={{display:'flex',flexWrap:'wrap',columnGap:'14px',rowGap:'2px',alignItems:'baseline',padding:'7px 16px',borderBottom:'1px solid var(--border)',background:'rgb(var(--accent-rgb) / 0.06)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
-          <span style={{fontSize:'0.72rem',letterSpacing:'0.1em',color:'var(--accent)',fontWeight:600,fontFamily:'var(--sans)'}}>SAVING ON CHAIN</span>
-          <span style={{fontSize:'1.3rem',lineHeight:1.1,fontWeight:500,letterSpacing:'-0.01em',color:saving.money>=0?'var(--accent-hi)':'var(--down)'}}><Roll>{fmt(saving.money)}</Roll></span>
-          {saving.bpUpfront!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} upfront</span>}
-          {saving.bpRunning!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>· {bp(saving.bpRunning)} running</span>}
-          <span style={{marginLeft:'auto',fontSize:'0.75rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>vs {preset} · same paths, same collateral · bp of notional</span>
+        <div data-testid="saving-on-chain" style={{display:'flex',flexWrap:'wrap',columnGap:'14px',rowGap:'2px',alignItems:'baseline',padding:'8px 16px',borderBottom:'1px solid var(--border)',background:'rgb(var(--accent-rgb) / 0.06)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
+          <span style={{fontSize:'11px',letterSpacing:'0.1em',color:'var(--accent)',fontWeight:600,fontFamily:'var(--sans)'}}>SAVING ON CHAIN</span>
+          <span style={{fontSize:'18px',lineHeight:1.1,fontWeight:500,letterSpacing:'-0.01em',color:saving.money>=0?'var(--accent-hi)':'var(--down)'}}><Roll>{fmt(saving.money)}</Roll></span>
+          {saving.bpUpfront!=null && <span style={{fontSize:'12px',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} upfront</span>}
+          {saving.bpRunning!=null && <span style={{fontSize:'12px',color:'var(--text-dim)'}}>· {bp(saving.bpRunning)} running</span>}
+          <Note inline>against {preset}, on the same paths with the same collateral; basis points are of the notional</Note>
         </div>
       )}
-      <div style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
-        {rows.map(({ key, oc, delta, pct, better }) => (
-          <div key={key} style={{background:'var(--bg-deep)',padding:'5px 10px',minWidth:0,overflow:'hidden'}}>
-            <div style={{fontSize:'0.8125rem',fontWeight:500,color:oc!=null?'var(--text-hi)':'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fmt(oc)}</div>
-            {key==='npv' && <div style={{fontSize:'0.68rem',letterSpacing:'0.1em',color:'var(--accent)',fontFamily:'var(--sans)',fontWeight:600,whiteSpace:'nowrap'}}>ON-CHAIN</div>}
-            {pct!=null && key!=='all_in' && (
-              <div style={{fontSize:'0.72rem',color:better?'var(--up)':'var(--down)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}} title="on-chain less the current run, and the change in the adjustment's size">
-                {fmt(delta)} · {pct>=0?'+':''}{pct.toFixed(0)}%
-              </div>
-            )}
-            {key==='all_in' && delta!=null && (
-              <div style={{fontSize:'0.72rem',color:delta>=0?'var(--up)':'var(--down)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fmt(delta)}</div>
-            )}
-          </div>
-        ))}
+      <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-on-chain">
+        <div style={{...VA_NAME,color:'var(--accent)',fontWeight:600}}>ON CHAIN
+          <Note inline>Same {compare.n_paths?.toLocaleString()} paths, same seed. On chain is continuous variation margin, a {compare.csa?.mpor_days} business day margin period of risk, SIMM IM × {compare.csa?.simm_mpor_scale?.toFixed(3)}; IM {fmt(compare.capital?.im_0)} against {fmt(current.capital?.im_0)}.</Note>
+        </div>
+        {rows.map(({ key, oc }) => {
+          const text = unsigned(fmt(oc))
+          return <div key={key} style={{...VA_MONEY,color:oc!=null?signTone(oc, text):'var(--text-mute)',...(key==='all_in'?{...VA_TOTAL,fontWeight:600}:null)}}>{text}</div>
+        })}
       </div>
-      <div style={{padding:'5px 16px',fontSize:'0.75rem',color:'var(--text-mute)',fontFamily:'var(--mono)',background:'var(--bg)'}}>
-        Same {compare.n_paths?.toLocaleString()} paths, same seed · ON-CHAIN = continuous VM · {compare.csa?.mpor_days}bd MPoR · SIMM IM × {compare.csa?.simm_mpor_scale?.toFixed(3)} · IM {fmt(compare.capital?.im_0)} vs {fmt(current.capital?.im_0)}
+      <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-change">
+        <div style={{...VA_NAME,padding:'0 8px 7px 0'}}>CHANGE</div>
+        {rows.map(({ key, delta, pct }) => {
+          const text = delta == null || key === 'npv' ? '—' : unsigned(fmt(delta))
+          return (
+            <div key={key} title={pct != null ? `on chain less this run; the adjustment is ${pct >= 0 ? '+' : ''}${pct.toFixed(0)}% in size` : 'on chain less this run'}
+              style={{...VA_SMALL,color:text==='—'?'var(--text-mute)':signTone(delta, text),...(key==='all_in'?VA_TOTAL:null)}}>{text}</div>
+          )
+        })}
       </div>
     </div>
   )
@@ -419,8 +450,8 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
 // The strip's footer line: "ALL-IN = NPV + … · Click any VA to expand · bp = …".
 export function VaFooter({ children }) {
   return (
-    <div style={{padding:'5px 16px',fontSize:'0.75rem',color:'var(--text-faint)',fontFamily:'var(--mono)',background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
-      {children}
+    <div style={{padding:'6px 16px',fontSize:'11.5px',color:'var(--text-mute)',fontFamily:'var(--sans)',background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
+      Press a column for its definition<Note inline>{children}</Note>
     </div>
   )
 }

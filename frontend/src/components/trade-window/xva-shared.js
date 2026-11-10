@@ -105,12 +105,15 @@ export const SEC_HDR = { fontSize: '11.5px', fontWeight:600, letterSpacing:'0.1e
 export const LEFT_COL = { width:'320px', minWidth:'320px', borderRight:'1px solid var(--border)',
   overflowY:'auto', padding:'12px', display:'flex', flexDirection:'column' }
 
-// The XVA panels' layout: the chart and the results set the panel's height and are always in view; the inputs
-// column is pinned to that height and scrolls inside itself, however many inputs a settlement shows.
-export const XVA_ROW = { position:'relative', display:'flex', overflow:'hidden', background:'var(--bg)' }
-export const XVA_LEFT = { ...LEFT_COL, position:'absolute', top:0, bottom:0, left:0 }
-export const XVA_RIGHT = { flex:1, marginLeft:LEFT_COL.width, minWidth:0, display:'flex', flexDirection:'column', overflow:'hidden' }
-export const XVA_CHART_HEIGHT = 'clamp(240px, 36vh, 440px)'
+// The XVA panels' layout: nothing scrolls inside the tab. The left column holds what is chosen before a run
+// (the model, the paths, the settlement) and is as tall as that; the chart and the results are on the right,
+// and under the results, in the whole view, the credit curves and the assumptions the run was made on. The
+// window is the only thing that scrolls, and only when the screen is shorter than the tab.
+export const XVA_ROW = { position:'relative', display:'flex', alignItems:'stretch', overflow:'hidden', background:'var(--bg)' }
+export const XVA_LEFT = { ...LEFT_COL, overflowY:'visible', flex:'0 0 auto' }
+export const XVA_RIGHT = { flex:1, minWidth:0, display:'flex', flexDirection:'column', overflow:'hidden' }
+export const XVA_BAND = { display:'grid', gridTemplateColumns:'minmax(0, 1.25fr) minmax(0, 1fr)', columnGap:'32px', padding:'0 16px 14px', borderTop:'1px solid var(--border)', background:'var(--bg)' }
+export const XVA_CHART_HEIGHT = 'clamp(220px, 27vh, 440px)'
 
 export const SETTLEMENT_PRESETS = [
   ['UNCOLLATERALISED', 'NO CSA', 'var(--text-hi)'],

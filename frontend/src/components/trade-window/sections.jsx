@@ -15,6 +15,9 @@
 import React, { useState } from 'react'
 import { useModulesStore } from '../../store/useModulesStore'
 import { Keycap } from '../common/Shortcuts'
+import { Note, NotesToggle } from '../common/Note'
+
+const isNoteColumn = (c) => /^NOTES?$/i.test(String(c || ''))
 import Roll, { RiskMark } from '../common/Roll'
 import { ASSET_FACTOR, RISK_FACTORS, labelText } from '../../lib/risk-factors'
 import { ariaKey } from '../../lib/shortcuts'
@@ -33,11 +36,14 @@ export function TabBar({ active = 'TRADE', onTab = () => {} }) {
   React.useEffect(() => { if (gone) onTab('TRADE') }, [gone, onTab])
   return (
     <div className="tbw-tabbar">
-      {tabs.map(t => (
-        <button key={t} data-tab={t} className={`tbw-tab ${t === active ? 'is-active' : ''}`}
-                aria-keyshortcuts={ariaKey(TAB_KEY[t])}
-                onClick={() => onTab(t)}>{t}{TAB_KEY[t] && <Keycap id={TAB_KEY[t]} />}</button>
-      ))}
+      <div className="tbw-tabs">
+        {tabs.map(t => (
+          <button key={t} data-tab={t} aria-current={t === active ? 'page' : undefined} className={`tbw-tab ${t === active ? 'is-active' : ''}`}
+                  aria-keyshortcuts={ariaKey(TAB_KEY[t])}
+                  onClick={() => onTab(t)}>{t}{TAB_KEY[t] && <Keycap id={TAB_KEY[t]} />}</button>
+        ))}
+      </div>
+      <NotesToggle />
     </div>
   )
 }
@@ -285,13 +291,13 @@ export function AnalyticsBlock({ descriptor, result, pricing, error }) {
   return (
     <div className="tbw-sec">
       <div className="tbw-sec-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span className="tbw-lbl">
+        <span className="tbw-lbl" style={{ whiteSpace: 'nowrap' }}>
           ANALYTICS <span className="tbw-mut" style={{ marginLeft: 6 }}>
             {result.curve_id || ''} · {result.valuation_date || ''}
           </span>
         </span>
         {metrics.some(m => m.math) && (
-          <button className="tbw-breakdown-toggle" onClick={() => setMath(x => !x)} title="Annotate each number with the formula that produced it">
+          <button className="tbw-breakdown-toggle" style={{ width: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '5px 10px' }} onClick={() => setMath(x => !x)} title="Annotate each number with the formula that produced it">
             {math ? '▾' : '▸'} Σ MATH
           </button>
         )}
@@ -311,14 +317,17 @@ export function AnalyticsBlock({ descriptor, result, pricing, error }) {
           {open && (
             <table className="tbw-breakdown-table">
               <thead>
-                <tr>{breakdown.columns.map(c => <th key={c}>{c}</th>)}</tr>
+                <tr>{breakdown.columns.filter(c => !isNoteColumn(c)).map(c => <th key={c}>{c}</th>)}</tr>
               </thead>
               <tbody>
                 {breakdown.rows.map((row, ri) => (
                   <tr key={ri}>
-                    {row.map((cell, ci) => (
-                      <td key={ci}>{cell}</td>
-                    ))}
+                    {row.map((cell, ci) => {
+                      // a NOTE column is the note of the value before it: behind its mark, or written out with NOTES on
+                      if (isNoteColumn(breakdown.columns[ci])) return null
+                      const note = isNoteColumn(breakdown.columns[ci + 1]) ? row[ci + 1] : null
+                      return <td key={ci} className={ci > 0 ? 'tbw-mono' : undefined}>{cell}<Note inline>{note}</Note></td>
+                    })}
                   </tr>
                 ))}
               </tbody>

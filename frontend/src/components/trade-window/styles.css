@@ -120,36 +120,58 @@
 
 /* ── Tabs ──────────────────────────────────────────────────────────────── */
 
+/* The tabs are one control of joined buttons: each has an edge, so it reads as something to press; the selected
+   one is the lighter panel (as a selected chip is) over the brass rule. The bar keeps the height it had. */
 .tbw-tabbar {
   position: sticky; top: 44px; z-index: 2; background: var(--panel);
   display: flex;
-  gap: 4px;
-  padding: 0 14px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   letter-spacing: 0.07em;
 }
+.tbw-tabs {
+  display: inline-flex; min-width: 0;
+  border: 1px solid var(--border-hi); border-radius: var(--r-2); overflow: hidden; background: var(--bg);
+}
 
 .tbw-tab {
-  padding: 13px 14px 12px;
-  color: var(--text-mute);
-  margin-bottom: -1px;
+  padding: 7px 14px 6px;
+  color: var(--text-dim);
   background: transparent;
   border: none;
+  border-left: 1px solid var(--border-hi);
   border-bottom: 2px solid transparent;
   font-weight: 500;
-  transition: color .12s;
+  white-space: nowrap;
+  transition: color .12s, background .12s;
 }
+.tbw-tab:first-child { border-left: none; }
 
 .tbw-tab:hover:not(.is-active) {
   color: var(--text-hi);
+  background: rgba(255, 255, 255, 0.04);
 }
-
 
 .tbw-tab.is-active {
   color: var(--text-hi);
+  background: var(--panel-3);
   border-bottom: 2px solid var(--accent);
 }
+.tbw-tab:focus-visible { outline-offset: -2px; }
+
+/* NOTES: every figure's note written out, or behind its mark (common/Note.jsx) */
+.tbw-notes-toggle {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
+  padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-2); background: transparent;
+  color: var(--text-mute); font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
+  transition: color .12s, border-color .12s, background .12s;
+}
+.tbw-notes-toggle:hover { color: var(--text-hi); border-color: var(--border-hi); }
+.tbw-notes-toggle.is-on { color: var(--text-hi); background: var(--panel-3); border-color: var(--border-glow); }
+.tbw-notes-toggle.is-on .rj-note-mark { color: var(--text-hi); border-color: var(--text-dim); }
 
 /* ── Sections ──────────────────────────────────────────────────────────── */
 
@@ -287,6 +309,9 @@
 .tbw-warning  { color: var(--amber); }
 .tbw-accent   { color: var(--accent); }
 .tbw-default  { color: var(--text-hi); }
+
+/* The valuation under a forward's flows: the flows' panel ends with room for the footer, which the valuation takes */
+.tbw-valuation-slot:not(:empty) { margin-top: -40px; }
 
 /* ── Footer ────────────────────────────────────────────────────────────── */
 
