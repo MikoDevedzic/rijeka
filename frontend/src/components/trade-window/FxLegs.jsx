@@ -35,9 +35,11 @@ const sideBtn = (sell, off) => ({ width: 50, padding: '5px 0', borderRadius: 'va
 // What a style's terms say, in a sentence (the row under the leg, and the ticket's own row).
 function says(l, k, dp) {
   const st = styleOf(l)
-  if (st === 'TOUCH') return `pays ${fmt(l.payout)} if ${fmt(l.barrier, dp)} is ${l.touchType === 'NO_TOUCH' ? 'never reached' : 'reached'} before ${l.date}`
+  const dbl = String(l.touchType || '').startsWith('DOUBLE'), no = String(l.touchType || '').endsWith('NO_TOUCH')
+  if (st === 'TOUCH') return dbl ? `pays ${fmt(l.payout)} if spot ${no ? 'stays inside' : 'leaves'} ${fmt(l.lowerB, dp)} to ${fmt(l.upperB, dp)} before ${l.date}`
+    : `pays ${fmt(l.payout)} if ${fmt(l.barrier, dp)} is ${no ? 'never reached' : 'reached'} before ${l.date}${l.payAtHit && !no ? ', when it is reached' : ''}`
   if (st === 'DIGITAL') return `pays ${fmt(l.payout)} if the fixing is ${l.kind === 'CALL' ? 'above' : 'below'} ${fmt(k, dp)}`
-  if (st === 'BARRIER') return `${String(l.barrierType).endsWith('OUT') ? 'dies' : 'comes alive'} if spot ${String(l.barrierType).startsWith('UP') ? 'rises to' : 'falls to'} ${fmt(l.barrier, dp)}`
+  if (st === 'BARRIER') return `${String(l.barrierType).endsWith('OUT') ? 'dies' : 'comes alive'} if spot ${String(l.barrierType).startsWith('UP') ? 'rises to' : 'falls to'} ${fmt(l.barrier, dp)}${l.rebate > 0 ? `; rebate ${fmt(l.rebate)}` : ''}`
   if (st === 'DOUBLE_BARRIER') return `${l.barrierType === 'KNOCK_IN' ? 'comes alive' : 'dies'} if spot leaves ${fmt(l.lowerB, dp)} to ${fmt(l.upperB, dp)}`
   return null
 }
@@ -85,15 +87,15 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
   const pricedRows = rows.filter(r => r.quote && r.date && !r.problem)
   const oneDate = several && pricedRows.length === rows.length && new Set(rows.map(r => r.date)).size === 1 && rows.some(isOption)
   const chart = several && pricedRows.length >= 2 && (oneDate ? (() => {
-    const H = 210, L = 76, R = 24, TOP = 26, BOT = 26, F = Number(quote.forward)
+    const H = 210, L = 76, R = 24, TOP = 26, BOT = 26, F = Number(quote.forward), S = Number(quote.spot)
     // the premium of the options, as today's value: what was paid for the ones bought less what was taken for the ones sold
     const premium = rows.filter(isOption).reduce((a, r) => a + Number(r.quote.npv || 0), 0)
-    const pay = (x) => rows.reduce((a, r) => a + (r.direction === 'SELL' ? -1 : 1) * legPayoff(r, x, kOf(r, r.quote), F), 0) - premium
+    const pay = (x) => rows.reduce((a, r) => a + (r.direction === 'SELL' ? -1 : 1) * legPayoff(r, x, kOf(r, r.quote), S), 0) - premium
     const xs = Array.from({ length: 241 }, (_, i) => F * (0.6 + 0.8 * i / 240)), ys = xs.map(pay)
     let lo = Math.min(...ys, 0), hi = Math.max(...ys, 0); const pad = (hi - lo || 1) * 0.12; lo -= pad; hi += pad
     const X = (x) => L + (x - xs[0]) / (xs[240] - xs[0]) * (W - L - R), Y = (v) => H - BOT - (v - lo) / (hi - lo) * (H - TOP - BOT)
     const strikes = [...new Set(rows.map(r => kOf(r, r.quote)).filter(k => k != null && k > xs[0] && k < xs[240]))]
-    const levels = [...new Set(rows.flatMap(r => { const st = styleOf(r); return st === 'TOUCH' || st === 'BARRIER' ? [r.barrier] : st === 'DOUBLE_BARRIER' ? [r.lowerB, r.upperB] : [] }).filter(b => b > xs[0] && b < xs[240]))]
+    const levels = [...new Set(rows.flatMap(r => { const st = styleOf(r); const dbl = st === 'DOUBLE_BARRIER' || (st === 'TOUCH' && String(r.touchType).startsWith('DOUBLE')); return dbl ? [r.lowerB, r.upperB] : st === 'TOUCH' || st === 'BARRIER' ? [r.barrier] : [] }).filter(b => b > xs[0] && b < xs[240]))]
     return (
       <div style={{ borderTop: '1px solid var(--border)', padding: '10px 16px 4px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, marginBottom: 2 }}>
@@ -230,12 +232,12 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
                     <td style={{ ...td, background: 'var(--bg-deep)' }} />
                     <td colSpan={cols - 1} style={{ ...td, background: 'var(--bg-deep)', textAlign: 'left', fontFamily: 'var(--sans)', padding: '5px 12px 7px 5px' }}>
                       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 14px' }}>
-                        {!fixed && st === 'TOUCH' && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>KIND {sel(r, 'touchType', 'Touch kind', [['ONE_TOUCH', 'ONE-TOUCH'], ['NO_TOUCH', 'NO-TOUCH']], 112, v => set(r.id, { touchType: v }))}</label>}
+                        {!fixed && st === 'TOUCH' && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>KIND {sel(r, 'touchType', 'Touch kind', [['ONE_TOUCH', 'ONE-TOUCH'], ['NO_TOUCH', 'NO-TOUCH'], ['DOUBLE_ONE_TOUCH', 'DOUBLE ONE-TOUCH'], ['DOUBLE_NO_TOUCH', 'DOUBLE NO-TOUCH']], 156, v => reshape(r, { touchType: v }))}</label>}
                         {!fixed && st === 'BARRIER' && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>BARRIER {sel(r, 'barrierType', 'Barrier kind', [['UP_OUT', 'UP-AND-OUT'], ['UP_IN', 'UP-AND-IN'], ['DOWN_OUT', 'DOWN-AND-OUT'], ['DOWN_IN', 'DOWN-AND-IN']], 136, v => set(r.id, { barrierType: v }))}</label>}
                         {!fixed && st === 'DOUBLE_BARRIER' && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>BARRIERS {sel({ ...r, barrierType: r.barrierType === 'KNOCK_IN' ? 'KNOCK_IN' : 'KNOCK_OUT' }, 'barrierType', 'Barriers', [['KNOCK_OUT', 'KNOCK-OUT'], ['KNOCK_IN', 'KNOCK-IN']], 118, v => set(r.id, { barrierType: v }))}</label>}
-                        {!fixed && (st === 'BARRIER' || st === 'TOUCH') && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>LEVEL {numIn(r, 'barrier', 'Barrier', 100, dp)}</label>}
-                        {!fixed && st === 'DOUBLE_BARRIER' && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>LOWER {numIn(r, 'lowerB', 'Lower barrier', 100, dp)}</label>}
-                        {!fixed && st === 'DOUBLE_BARRIER' && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>UPPER {numIn(r, 'upperB', 'Upper barrier', 100, dp)}</label>}
+                        {!fixed && (st === 'BARRIER' || (st === 'TOUCH' && !String(r.touchType).startsWith('DOUBLE'))) && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>LEVEL {numIn(r, 'barrier', 'Barrier', 100, dp)}</label>}
+                        {!fixed && (st === 'DOUBLE_BARRIER' || (st === 'TOUCH' && String(r.touchType).startsWith('DOUBLE'))) && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>LOWER {numIn(r, 'lowerB', 'Lower barrier', 100, dp)}</label>}
+                        {!fixed && (st === 'DOUBLE_BARRIER' || (st === 'TOUCH' && String(r.touchType).startsWith('DOUBLE'))) && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>UPPER {numIn(r, 'upperB', 'Upper barrier', 100, dp)}</label>}
                         {!fixed && (st === 'DIGITAL' || st === 'TOUCH') && <label style={{ ...lbl, display: 'inline-flex', alignItems: 'center', gap: 6 }}>PAYOUT {qc} {numIn(r, 'payout', 'Payout', 110, 0)}</label>}
                         {sentence && <span data-testid="fx-leg-sentence" style={{ marginLeft: fixed ? 0 : 'auto', fontSize: 12, color: 'var(--text-dim)' }}>{sentence}</span>}
                       </div>

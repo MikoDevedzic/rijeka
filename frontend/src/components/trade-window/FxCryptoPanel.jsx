@@ -366,8 +366,11 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     return { ...ticket, option: opt, shape: opt ? 'OPTION' : (crypto ? 'NDF' : shape === 'NDF' ? 'NDF' : 'FORWARD'),
       direction: leg.direction, notional: text(leg.notional), settlement: leg.date, expiry: leg.date, optSettle: '', strike: text(leg.strike),
       optType: leg.kind === 'PUT' ? 'PUT' : 'CALL', style: leg.kind === 'TOUCH' ? 'TOUCH' : opt ? (leg.style || 'EUROPEAN') : 'EUROPEAN',
-      payout: text(leg.payout), payoutCcy: 'QUOTE', barrierType: leg.barrierType || 'UP_OUT', barrier: text(leg.barrier), lowerB: text(leg.lowerB), upperB: text(leg.upperB),
-      rebate: '', touchType: leg.touchType || 'ONE_TOUCH', payAtHit: false, volOv: '', cashSettled: crypto ? true : !!cashSettled, defaultK: null }
+      payout: text(leg.payout), payoutCcy: leg.payoutCcy || 'QUOTE', barrierType: leg.barrierType || 'UP_OUT', barrier: text(leg.barrier), lowerB: text(leg.lowerB), upperB: text(leg.upperB),
+      rebate: text(leg.rebate), touchType: leg.touchType || 'ONE_TOUCH', payAtHit: !!leg.payAtHit,
+      // the surface's vol for the leg's own date and strike: a vol typed on the ticket is the ticket's
+      // an option leg settles as the ticket's product does: in cash on a digital asset and on an NDF, else as the ticket's own option would
+      volOv: '', cashSettled: crypto || shape === 'NDF' ? true : !!cashSettled, defaultK: null }
   }
   // The trade POST body minus what the window owns (parties, dates, desk, book).
   // Never from the quote of other terms. Called bare it is the quote of the terms on screen; BOOK hands back the
@@ -402,11 +405,14 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       if (!cur || shape === 'SPOT') return null
       const num = (x) => (x.given && !x.invalid ? x.value : null)
       return { kind: !option ? 'FWD' : style === 'TOUCH' ? 'TOUCH' : optType, direction, notional: notionalSent(ticket), date: option ? expiry : settlement, strike: num(nums.strike),
-               style: option && style !== 'TOUCH' ? style : 'EUROPEAN', barrierType, barrier: num(nums.barrier), lowerB: num(nums.lowerB), upperB: num(nums.upperB), payout: num(nums.payout), touchType }
+               style: option && style !== 'TOUCH' ? style : 'EUROPEAN', barrierType, barrier: num(nums.barrier), lowerB: num(nums.lowerB), upperB: num(nums.upperB),
+               rebate: num(nums.rebate), payout: num(nums.payout), payoutCcy, touchType, payAtHit: !!payAtHit }
     },
     legRequest: (leg) => (!cur || shape === 'SPOT' ? null : priceRequest(legTicket(leg))),
     legBody: (q, leg) => { if (!cur || !q) return null; const today = iso(new Date()); return { ...build(q, legTicket(leg)), trade_date: today, effective_date: today } },
     legDefaults: () => ({ dp, payout: crypto ? 100000 : 1000000 }),
+    // what a leg takes from the ticket beyond its own terms (its price and its record change when one of these does)
+    legContext: () => JSON.stringify([pair, shape, crypto || shape === 'NDF' ? true : !!cashSettled, spotOv, crypto ? fundOv : '', crypto ? settleSrc : '']),
   }))
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────

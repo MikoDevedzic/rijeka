@@ -28,7 +28,10 @@ export function addMonths(iso, months) {
 // BARRIER, DOUBLE_BARRIER) and that style's terms; they are the fields of the standalone option ticket.
 export const LEG_KINDS = ['FWD', 'CALL', 'PUT', 'TOUCH']
 export const LEG_STYLES = ['EUROPEAN', 'AMERICAN', 'DIGITAL', 'BARRIER', 'DOUBLE_BARRIER']
-const STYLE_DEFAULTS = { style: 'EUROPEAN', barrierType: 'UP_OUT', barrier: null, lowerB: null, upperB: null, payout: null, touchType: 'ONE_TOUCH' }
+const STYLE_DEFAULTS = { style: 'EUROPEAN', barrierType: 'UP_OUT', barrier: null, lowerB: null, upperB: null, rebate: null, payout: null, payoutCcy: 'QUOTE', touchType: 'ONE_TOUCH', payAtHit: false }
+// every term of a leg that its price or its record depends on, in one order (the key of its price)
+export const LEG_TERMS = ['kind', 'direction', 'notional', 'date', 'strike', 'style', 'barrierType', 'barrier', 'lowerB', 'upperB', 'rebate', 'payout', 'payoutCcy', 'touchType', 'payAtHit']
+const doubleTouch = (l) => String(l.touchType || '').startsWith('DOUBLE')
 export const isOption = (l) => l.kind === 'CALL' || l.kind === 'PUT' || l.kind === 'TOUCH'
 // the style a leg is priced and booked as: a touch is its own style, a forward has none
 export const styleOf = (l) => (l.kind === 'TOUCH' ? 'TOUCH' : isOption(l) ? (LEG_STYLES.includes(l.style) ? l.style : 'EUROPEAN') : null)
@@ -46,8 +49,9 @@ export function seedStyle(l, f, { dp = 2, payout = 100000 } = {}) {
   const r = (x) => Number(x.toFixed(dp)), st = styleOf(l), out = {}
   if (!finite(f) || f <= 0) return out
   const down = String(l.barrierType || '').startsWith('DOWN')
-  if ((st === 'BARRIER' || (st === 'TOUCH' && !String(l.touchType || '').startsWith('DOUBLE'))) && !(l.barrier > 0)) out.barrier = r(f * (down ? 0.85 : 1.15))
-  if (st === 'DOUBLE_BARRIER' && !(l.lowerB > 0 && l.upperB > 0)) { out.lowerB = r(f * 0.85); out.upperB = r(f * 1.15); if (!String(l.barrierType || '').startsWith('KNOCK')) out.barrierType = 'KNOCK_OUT' }
+  if ((st === 'BARRIER' || (st === 'TOUCH' && !doubleTouch(l))) && !(l.barrier > 0)) out.barrier = r(f * (down ? 0.85 : 1.15))
+  if ((st === 'DOUBLE_BARRIER' || (st === 'TOUCH' && doubleTouch(l))) && !(l.lowerB > 0 && l.upperB > 0)) { out.lowerB = r(f * 0.85); out.upperB = r(f * 1.15) }
+  if (st === 'DOUBLE_BARRIER' && !String(l.barrierType || '').startsWith('KNOCK')) out.barrierType = 'KNOCK_OUT'
   if (st === 'BARRIER' && String(l.barrierType || '').startsWith('KNOCK')) out.barrierType = 'UP_OUT'
   if ((st === 'DIGITAL' || st === 'TOUCH') && !(l.payout > 0)) out.payout = payout
   return out
@@ -78,7 +82,9 @@ export function pairedLeg(first, what, { f = null, k = null, dp = 2 } = {}) {
   const strike = first.strike ?? (finite(k) ? k : null)
   if (what === 'STRADDLE') return newLeg(first, { kind: other, strike })
   if (what === 'CALENDAR') return newLeg(first, { direction: flip, date: addMonths(first.date, 1), strike })
-  const mirrored = finite(f) && finite(strike) && Math.abs(strike / f - 1) > 0.005 ? 2 * f - strike : finite(f) ? f * (other === 'CALL' ? 1.1 : 0.9) : null
+  // as far from the forward on the other side; struck at the forward (or so far that the mirror is not a price), 10 % away
+  const mirror = finite(f) && finite(strike) && Math.abs(strike / f - 1) > 0.005 ? 2 * f - strike : null
+  const mirrored = mirror != null && mirror > 0 ? mirror : finite(f) ? f * (other === 'CALL' ? 1.1 : 0.9) : null
   return newLeg(first, { kind: other, direction: flip, strike: mirrored == null ? null : Number(mirrored.toFixed(dp)) })
 }
 
@@ -88,18 +94,25 @@ export function pairedLeg(first, what, { f = null, k = null, dp = 2 } = {}) {
 // option bought and sold on two dates at one strike is a calendar. Anything else is custom.
 export function structureOf(first, legs) {
   if (!legs.length) return 'OUTRIGHT'
-  const same = (a, b, keys) => keys.every(k => a[k] === b[k])
-  if (legs.every((l, i) => same(l, first, ['kind', 'direction', 'notional']) && styleOf(l) === styleOf(first) && l.date === addMonths(first.date, i + 1))) return 'STRIP'
+  // a term a leg does not carry is its default (a leg typed by hand and one made by newLeg read alike)
+  const term = (l, k) => l[k] ?? STYLE_DEFAULTS[k] ?? null
+  const same = (a, b, keys) => keys.every(k => term(a, k) === term(b, k))
+  // a strip repeats the ticket's own leg, an option's style terms and all; only the date and the strike are each leg's own
+  const SHAPE = ['kind', 'direction', 'notional']
+  const STYLE_TERMS = ['barrierType', 'barrier', 'lowerB', 'upperB', 'rebate', 'payout', 'payoutCcy', 'touchType', 'payAtHit']
+  if (legs.every((l, i) => same(l, first, SHAPE) && styleOf(l) === styleOf(first) && (!isOption(first) || same(l, first, STYLE_TERMS)) && l.date === addMonths(first.date, i + 1))) return 'STRIP'
   if (legs.length === 1) {
     const [a, b] = [first, legs[0]]
     const vanilla = (l) => (l.kind === 'CALL' || l.kind === 'PUT') && (styleOf(l) === 'EUROPEAN' || styleOf(l) === 'AMERICAN')
-    if (vanilla(a) && vanilla(b) && a.notional === b.notional) {
+    // two options of one exercise style and one size, each with a strike
+    if (vanilla(a) && vanilla(b) && styleOf(a) === styleOf(b) && a.notional === b.notional && a.strike != null && b.strike != null) {
       if (a.date === b.date && a.kind !== b.kind) {
-        if (a.direction === b.direction) return a.strike != null && a.strike === b.strike ? 'STRADDLE' : 'CUSTOM'
-        const put = a.kind === 'PUT' ? a : b
+        if (a.direction === b.direction) return a.strike === b.strike ? 'STRADDLE' : 'CUSTOM'
+        const put = a.kind === 'PUT' ? a : b, call = a.kind === 'PUT' ? b : a
+        if (!(put.strike < call.strike)) return 'CUSTOM'                 // the put under the call, or it is not a collar
         return put.direction === 'BUY' ? 'COLLAR' : 'RISK REVERSAL'
       }
-      if (a.kind === b.kind && a.date !== b.date && a.direction !== b.direction && a.strike != null && a.strike === b.strike) return 'CALENDAR'
+      if (a.kind === b.kind && a.date !== b.date && a.direction !== b.direction && a.strike === b.strike) return 'CALENDAR'
     }
   }
   return 'CUSTOM'
@@ -112,19 +125,24 @@ export function legProblem(l) {
   if (!payoutStyle && (!finite(l.notional) || l.notional <= 0)) return 'a size above zero'
   if (!ISO.test(String(l.date))) return isOption(l) ? 'an expiry date' : 'a settlement date'
   if (l.kind !== 'TOUCH' && l.strike != null && !(finite(l.strike) && l.strike > 0)) return 'a strike above zero, or none for the fair forward'
-  if ((st === 'BARRIER' || (st === 'TOUCH' && !String(l.touchType || '').startsWith('DOUBLE'))) && !(finite(l.barrier) && l.barrier > 0)) return 'a barrier level'
-  if (st === 'DOUBLE_BARRIER' && !(finite(l.lowerB) && finite(l.upperB) && l.lowerB > 0 && l.upperB > l.lowerB)) return 'a lower and an upper barrier, in that order'
+  if ((st === 'BARRIER' || (st === 'TOUCH' && !doubleTouch(l))) && !(finite(l.barrier) && l.barrier > 0)) return 'a barrier level'
+  if ((st === 'DOUBLE_BARRIER' || (st === 'TOUCH' && doubleTouch(l))) && !(finite(l.lowerB) && finite(l.upperB) && l.lowerB > 0 && l.upperB > l.lowerB)) return 'a lower and an upper barrier, in that order'
   if (payoutStyle && !(finite(l.payout) && l.payout > 0)) return 'a payout above zero'
   return null
 }
 
 // What one unit of a leg pays at expiry with the underlying at `x`, before its side: a forward x − K, a call or a put
 // its intrinsic value, a digital or a touch its payout. In this picture a barrier is read at the expiry alone (a knock
-// that happens on the way and comes back is not seen), which the chart says. `k` is the strike the leg is priced at.
+// that happens on the way and comes back is not seen), which the chart says. `k` is the strike the leg is priced at,
+// `f` the spot now (which side of it a touch's barrier is on).
 export function legPayoff(l, x, k, f = null) {
   const N = finite(l.notional) ? l.notional : 0, st = styleOf(l)
   if (!isOption(l)) return N * (x - k)
-  if (st === 'TOUCH') { const up = finite(f) ? l.barrier >= f : true; const past = up ? x >= l.barrier : x <= l.barrier; return (l.touchType === 'NO_TOUCH' ? !past : past) ? l.payout : 0 }
+  if (st === 'TOUCH') {
+    // reached from where spot is now (`f` here is the spot): a barrier above it going up, one below it going down
+    const past = doubleTouch(l) ? (x <= l.lowerB || x >= l.upperB) : (finite(f) ? l.barrier >= f : true) ? x >= l.barrier : x <= l.barrier
+    return (String(l.touchType).endsWith('NO_TOUCH') ? !past : past) ? l.payout : 0
+  }
   const call = l.kind === 'CALL'
   if (st === 'DIGITAL') return (call ? x > k : x < k) ? l.payout : 0
   let v = N * Math.max(call ? x - k : k - x, 0)

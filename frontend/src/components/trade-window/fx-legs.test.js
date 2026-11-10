@@ -125,4 +125,37 @@ describe('a forward as a package of legs', () => {
     expect(legPayoff({ kind: 'TOUCH', touchType: 'NO_TOUCH', barrier: 95000, payout: 100000 }, 96000, null, 74000)).toBe(0)
     expect(legPayoff({ kind: 'TOUCH', touchType: 'ONE_TOUCH', barrier: 60000, payout: 100000 }, 59000, null, 74000)).toBe(100000)   // a barrier below the forward is reached going down
   })
+
+  it('a package is named only for what it is', () => {
+    const put = { kind: 'PUT', direction: 'BUY', notional: 10, date: '2027-02-10', strike: 65000, style: 'EUROPEAN' }
+    const call = { kind: 'CALL', direction: 'SELL', notional: 10, date: '2027-02-10', strike: 85000, style: 'EUROPEAN' }
+    expect(structureOf(put, [call])).toBe('COLLAR')
+    expect(structureOf(put, [{ ...call, style: 'AMERICAN' }])).toBe('CUSTOM')                 // one European, one American
+    expect(structureOf(put, [{ ...call, strike: 60000 }])).toBe('CUSTOM')                     // the call under the put
+    expect(structureOf(put, [{ ...call, strike: null }])).toBe('CUSTOM')                      // a strike not yet known
+    expect(structureOf({ ...put, direction: 'SELL' }, [{ ...call, direction: 'BUY' }])).toBe('RISK REVERSAL')
+    expect(structureOf({ ...put, strike: 74000 }, [{ ...call, direction: 'BUY', strike: 74000, style: 'AMERICAN' }])).toBe('CUSTOM')   // not one style: not a straddle
+    expect(structureOf({ ...call, direction: 'SELL' }, [{ ...call, direction: 'BUY', date: '2027-03-10', style: 'AMERICAN' }])).toBe('CUSTOM')
+    // a strip of options repeats the style's terms: a leg with another barrier is not the strip
+    const ko = { ...call, style: 'BARRIER', barrierType: 'UP_OUT', barrier: 95000, rebate: 500 }
+    const strip = stripLegs(ko, 3)
+    expect(strip.every(l => l.rebate === 500 && l.barrier === 95000)).toBe(true)              // a copy carries every term, the rebate too
+    expect(structureOf(ko, strip)).toBe('STRIP')
+    expect(structureOf(ko, [{ ...strip[0], barrier: 99000 }, strip[1]])).toBe('CUSTOM')
+    expect(structureOf(ko, [{ ...strip[0], rebate: null }, strip[1]])).toBe('CUSTOM')
+    expect(structureOf(ko, [{ ...strip[0], strike: 90000 }, strip[1]])).toBe('STRIP')         // its own strike is still the strip
+  })
+  it('the other side is never struck at or below zero; a double touch has two levels and pays on leaving them', () => {
+    const far = { kind: 'CALL', direction: 'BUY', notional: 10, date: '2027-02-10', strike: 200000, style: 'EUROPEAN' }
+    expect(pairedLeg(far, 'OTHER', { f: 74000 }).strike).toBe(66600)                           // the mirror would be below zero: 10 % under the forward
+    const dt = { kind: 'TOUCH', touchType: 'DOUBLE_NO_TOUCH', date: '2027-02-10', payout: 100000 }
+    expect(legProblem(dt)).toMatch(/lower and an upper/)
+    expect(seedStyle(dt, 100000)).toEqual({ lowerB: 85000, upperB: 115000 })
+    const set = { ...dt, lowerB: 85000, upperB: 115000 }
+    expect(legProblem(set)).toBeNull()
+    expect(legPayoff(set, 100000, null, 100000)).toBe(100000); expect(legPayoff(set, 120000, null, 100000)).toBe(0)
+    expect(legPayoff({ ...set, touchType: 'DOUBLE_ONE_TOUCH' }, 120000, null, 100000)).toBe(100000)
+    // a single touch is reached from where spot is: a barrier between spot and the forward is above spot
+    expect(legPayoff({ kind: 'TOUCH', touchType: 'ONE_TOUCH', barrier: 100500, payout: 1 }, 100600, null, 100000)).toBe(1)
+  })
 })

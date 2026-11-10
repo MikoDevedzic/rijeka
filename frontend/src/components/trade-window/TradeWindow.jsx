@@ -58,7 +58,7 @@ import FxXvaPanel from './FxXvaPanel'
 import CapitalTab from './CapitalTab'
 import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
 import FxLegs from './FxLegs'
-import { packageRef, packageTag, structureOf } from './fx-legs'
+import { LEG_TERMS, packageRef, packageTag, structureOf } from './fx-legs'
 
 const NO_LEGS = []          // one empty list, so "no legs" is the same value at every render
 // import './products/credit'
@@ -268,12 +268,14 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // Price every further leg whose terms (or whose ticket: the pair, the market typed over) have changed since its last
   // price. The request is the ticket's own with the leg's side, size, date and strike (FxCryptoPanel legRequest).
   // every term of a leg that its price or its record depends on
-  const legTerms = (l) => [l.kind, l.direction, l.notional, l.date, l.strike, l.style, l.barrierType, l.barrier, l.lowerB, l.upperB, l.payout, l.touchType]
+  const legTerms = (l) => LEG_TERMS.map(k => l[k])
   const legsKey = JSON.stringify(fxLegs.map(l => [l.id, ...legTerms(l)]))
   // what a leg's price depends on beyond its own terms: the ticket's pair, kind of settlement and market (a typed spot or carry shows in the quote)
   const fxQuoteId = fxQuote ? `${fxQuote.pair}|${fxQuote.shape}|${fxQuote.valuation_date}|${fxQuote.spot}|${fxQuote.base_rate}|${fxQuote.forward_mode}` : ''
   // a leg's price is the price of exactly these: its own terms and that market. BOOK checks the same key.
-  const legKey = (l) => JSON.stringify([...legTerms(l), fxQuoteId])
+  // and what it takes from the ticket: the pair, how it settles, a typed spot or carry, the source (FxCryptoPanel legContext)
+  const legContext = fxRef.current?.legContext?.() || ''
+  const legKey = (l) => JSON.stringify([...legTerms(l), fxQuoteId, legContext])
   useEffect(() => {
     if (!legsFor || viewMode || bookedLegs || !fxLegs.length || !fxQuoteId) return
     let dead = false
@@ -297,7 +299,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       }
     }, 350)
     return () => { dead = true; clearTimeout(timer) }
-  }, [legsKey, fxQuoteId, legsFor, viewMode, bookedLegs])      // eslint-disable-line react-hooks/exhaustive-deps
+  }, [legsKey, fxQuoteId, legContext, legsFor, viewMode, bookedLegs])      // eslint-disable-line react-hooks/exhaustive-deps
   // the ticket as a leg, with the strike it was priced at where none was typed (what the package is named by)
   const firstPriced = (f, q) => (f && f.strike == null && f.kind !== 'TOUCH' && q ? { ...f, strike: Number(f.kind === 'FWD' ? q.forward_rate : q.strike) } : f)
   // What the table shows for each leg: its price, and whether that price is of the terms it now shows. A leg just
@@ -833,7 +835,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       setBooking(false)
     }
   // the legs as they stand when BOOK is pressed, not as they were when the window opened
-  }, [booking, pricing, economics, onBook, fxLegs, legQuotes, legsFor, fxQuoteId])      // eslint-disable-line react-hooks/exhaustive-deps
+  }, [booking, pricing, economics, onBook, fxLegs, legQuotes, legsFor, fxQuoteId, legContext])      // eslint-disable-line react-hooks/exhaustive-deps
 
   // A package that stopped part of the way (a leg was refused after earlier ones were booked): book the legs that
   // have no trade yet, under the same package and at the places they had. The booked legs are not sent again.
