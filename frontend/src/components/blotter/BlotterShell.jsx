@@ -256,7 +256,7 @@ export default function BlotterShell() {
                       <td className="bl-td-dim">{productLabel(t.instrument_type)}</td>
                       <td>
                         {readPackageTag(t.strategy)
-                          ? (() => { const k = readPackageTag(t.strategy); return <span className="bl-structure-badge bl-pkg" data-testid="bl-pkg" title={`Leg ${k.i} of ${k.n} of the package ${k.ref}. Search the blotter for ${k.ref} to see them together.`}>{k.structure} {k.i}/{k.n}</span> })()
+                          ? (() => { const k = readPackageTag(t.strategy); return <span className="bl-structure-badge bl-pkg" data-testid="bl-pkg" title={`Leg ${k.i} of ${k.n} of the package ${k.ref}. Search the blotter for ${k.ref} to see them together.`}>{t.structure && t.structure !== 'VANILLA' ? `${t.structure.replace(/_/g, ' ')} · ` : ''}{k.structure} {k.i}/{k.n}</span> })()
                           : t.structure
                           ? <span className="bl-structure-badge">{t.structure.replace(/_/g, ' ')}</span>
                           : <span className="bl-td-dim" style={{ opacity: 0.3 }}>—</span>

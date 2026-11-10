@@ -16,7 +16,8 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
   ("STRIP PKG-M3K9Q2 2/6"), which is the booking firm's own and is never shown to the counterparty. No database
   change. A leg that does not hold the price of the terms it shows stops the booking before anything is sent,
   and says which. If a later leg is refused after earlier ones were booked, the table says how many stand and
-  why the next did not.
+  why the next did not, and BOOK THE REMAINING LEGS books the rest under the same package without sending the
+  booked ones again. NEW TRADE, another pair or another product starts with the ticket alone.
 - **The blotter** shows a package leg's place (STRIP 2/6) in the STRUCTURE column, finds a package by its
   reference in the search box, and the row's right-click menu offers "The n legs of this package".
 - **Not in this step:** option legs and the presets that need them (collar, risk reversal, straddle, calendar);

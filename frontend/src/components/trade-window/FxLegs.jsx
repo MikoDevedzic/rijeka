@@ -29,7 +29,7 @@ const sideBtn = (sell, off) => ({ width: 54, padding: '5px 0', borderRadius: 'va
 
 // `first`: the ticket's own leg ({direction, notional, settlement}) with `quote`; `legs`: the further ones;
 // `quotes`: id → { quote, error, pending } for each; `booked`: once booked, { ref, refs: { first, [id] } }.
-export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypto, dp = 2, locked = false, booked = null, stale = false }) {
+export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypto, dp = 2, locked = false, booked = null, stale = false, onBookRest = null, busy = false }) {
   if (!first || !quote) return null
   const base = quote.base_currency, qc = quote.quote_currency
   const nDp = crypto ? 4 : 0
@@ -102,7 +102,8 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
       </div>
       {booked?.failed && (
         <div data-testid="fx-legs-failed" role="alert" style={{ margin: '0 16px 10px', padding: '7px 10px', border: '1px solid rgba(233,151,90,0.4)', borderRadius: 'var(--r-2)', background: 'rgba(233,151,90,0.06)', color: 'var(--amber)', fontSize: 12.5, lineHeight: 1.5 }}>
-          {booked.failed.leg - 1} of {booked.failed.of} legs were booked. Leg {booked.failed.leg} was not: {booked.failed.why} The booked legs stand as trades of {booked.ref}: book the rest as trades of their own, or cancel the booked ones.
+          {Object.keys(booked.refs).length} of {booked.failed.of} legs are booked. Leg {booked.failed.leg} was not: {booked.failed.why}{/[.!?]$/.test(String(booked.failed.why)) ? '' : '.'} The booked legs stand as trades of {booked.ref}.
+          {onBookRest && <button type="button" data-testid="fx-legs-book-rest" disabled={busy} onClick={onBookRest} style={{ ...tool, marginLeft: 10, color: 'var(--text-hi)', borderColor: 'var(--amber)' }}>{busy ? 'BOOKING…' : 'BOOK THE REMAINING LEGS'}</button>}
         </div>
       )}
       <div style={{ overflowX: 'auto' }}>

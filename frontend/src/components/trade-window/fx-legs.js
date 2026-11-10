@@ -68,10 +68,16 @@ export function packageTotals(rows) {
 }
 
 // The package's reference and the tag each of its trades carries in `strategy`.
-export const packageRef = (now = Date.now(), rand = Math.random()) => `PKG-${now.toString(36).toUpperCase().slice(-5)}${Math.floor(rand * 1296).toString(36).toUpperCase().padStart(2, '0')}`
+// Four characters of the clock and four at random (1.7 million): two packages do not get one reference.
+export const packageRef = (now = Date.now(), rand = Math.random()) => `PKG-${now.toString(36).toUpperCase().slice(-4)}${Math.floor(rand * 36 ** 4).toString(36).toUpperCase().padStart(4, '0')}`
 export const packageTag = (structure, ref, i, n) => `${structure} ${ref} ${i}/${n}`
 // A trade's place in a package, read back from its `strategy`: { structure, ref, i, n }, or null for any other text.
+// Only what the ticket writes: one of the structures it books, a place from 1 to the count. A strategy the desk typed
+// itself ("Macro", "BUTTERFLY PKG-1 5/3") is not a tag and leaves the trade's own structure showing.
+export const PACKAGE_STRUCTURES = ['STRIP', 'CUSTOM', 'COLLAR', 'RISK REVERSAL', 'STRADDLE', 'CALENDAR']
 export function readPackageTag(strategy) {
-  const m = /^([A-Z][A-Z -]*?) (PKG-[A-Z0-9]{4,12}) (\d+)\/(\d+)$/.exec(String(strategy ?? ''))
-  return m ? { structure: m[1], ref: m[2], i: Number(m[3]), n: Number(m[4]) } : null
+  const m = /^([A-Z][A-Z ]*?) (PKG-[A-Z0-9]{4,12}) (\d{1,3})\/(\d{1,3})$/.exec(String(strategy ?? ''))
+  if (!m || !PACKAGE_STRUCTURES.includes(m[1])) return null
+  const i = Number(m[3]), n = Number(m[4])
+  return i >= 1 && i <= n ? { structure: m[1], ref: m[2], i, n } : null
 }

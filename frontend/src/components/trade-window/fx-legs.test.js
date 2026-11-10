@@ -51,9 +51,11 @@ describe('a forward as a package of legs', () => {
   })
   it('a package tag is written into the trade and read back; other text is not a tag', () => {
     const ref = packageRef(1794322831000, 0.5)
-    expect(ref).toMatch(/^PKG-[A-Z0-9]{7}$/)
+    expect(ref).toMatch(/^PKG-[A-Z0-9]{8}$/)
+    expect(packageRef(1794322831000, 0.25)).not.toBe(ref)                    // the same millisecond, another package
     const tag = packageTag('STRIP', ref, 2, 6)
     expect(readPackageTag(tag)).toEqual({ structure: 'STRIP', ref, i: 2, n: 6 })
-    for (const not of [null, '', 'Macro', 'STRIP 2/6', 'strip PKG-ABCDE 1/2', 'STRIP PKG-ABCDE 1']) expect(readPackageTag(not)).toBeNull()
+    for (const not of [null, '', 'Macro', 'STRIP 2/6', 'strip PKG-ABCDE 1/2', 'STRIP PKG-ABCDE 1', 'BUTTERFLY PKG-ABCD1 1/3', 'STRIP PKG-ABCD1 5/3', 'STRIP PKG-ABCD1 0/3']) expect(readPackageTag(not), String(not)).toBeNull()
+    expect(readPackageTag('RISK REVERSAL PKG-ABCD1 2/2')).toMatchObject({ structure: 'RISK REVERSAL', i: 2, n: 2 })
   })
 })

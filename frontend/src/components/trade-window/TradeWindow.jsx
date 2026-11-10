@@ -59,6 +59,8 @@ import CapitalTab from './CapitalTab'
 import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
 import FxLegs from './FxLegs'
 import { packageRef, packageTag, structureOf } from './fx-legs'
+
+const NO_LEGS = []          // one empty list, so "no legs" is the same value at every render
 // import './products/credit'
 // import './products/equity'
 // import './products/commodity'
@@ -252,12 +254,17 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // A forward as a package of legs (fx-legs.js, the DETAILS tab): the ticket is the first leg; these are the further
   // ones, each with the price of its own terms (id → { key, quote, error, pending }), and, once booked, the package's
   // reference and the trade each leg became.
-  const [fxLegs, setFxLegs]            = useState([])
+  const [legsHeld, setLegsHeld]        = useState({ on: null, legs: [] })
   const [legQuotes, setLegQuotes]      = useState({})
   const [bookedLegs, setBookedLegs]    = useState(null)
   const legQuotesRef = useRef({})                       // the prices as they stand, for the pricing loop to read between its requests
   useEffect(() => { legQuotesRef.current = legQuotes })
   const legsFor = ['CRYPTO_FORWARD', 'FX_FORWARD', 'NDF'].includes(curInst) && (assetClass === 'CRYPTO' || assetClass === 'FX')
+  // The legs are of one pair and one kind of forward: a size and a strike typed for BTCUSD mean nothing on ETHUSD.
+  // While the ticket has no quote (between prices) they are kept; on another pair there are none.
+  const legsOn = fxQuote ? `${fxQuote.pair}|${fxQuote.shape}` : legsHeld.on
+  const fxLegs = legsHeld.on === legsOn ? legsHeld.legs : NO_LEGS
+  const setFxLegs = (legs) => setLegsHeld({ on: legsOn, legs })
   // Price every further leg whose terms (or whose ticket: the pair, the market typed over) have changed since its last
   // price. The request is the ticket's own with the leg's side, size, date and strike (FxCryptoPanel legRequest).
   const legsKey = JSON.stringify(fxLegs.map(l => [l.id, l.direction, l.notional, l.settlement, l.strike]))
@@ -293,7 +300,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // changed is waiting from that moment, not from when its request goes out.
   const legView = Object.fromEntries(fxLegs.map(l => { const q = legQuotes[l.id], mine = !!q && q.key === legKey(l); return [l.id, { quote: q?.quote || null, error: mine ? q.error : null, pending: !mine || !!q.pending }] }))
   // a leg that is gone takes its price with it; a product that has no legs has none
-  useEffect(() => { if (!legsFor && fxLegs.length) setFxLegs([]) }, [legsFor, fxLegs.length])
+  useEffect(() => { if (!legsFor && legsHeld.legs.length) setLegsHeld({ on: null, legs: [] }) }, [legsFor, legsHeld.legs.length])
   const CURRENCY_PRODUCTS = {
     FX:     [{ key: 'FX_SPOT', label: 'FX spot' }, { key: 'FX_FORWARD', label: 'FX forward' }, { key: 'NDF', label: 'NDF' }, { key: 'FX_SWAP', label: 'FX swap', live: false }, { key: 'FX_OPTION', label: 'FX option' }],
     CRYPTO: [{ key: 'CRYPTO_FORWARD', label: 'Crypto forward' }, { key: 'CRYPTO_OPTION', label: 'Crypto option' }],
@@ -804,12 +811,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           try { refs[priced[i].l.id] = (await post({ ...priced[i].b, trade_ref: `${t.trade_ref}-${i + 2}` }, packageTag(pkg.structure, pkg.ref, i + 2, n))).trade_ref }
           catch (e) {
             // the legs already booked stand as trades of the package: said, with their references, not hidden
-            setBookedLegs({ ref: pkg.ref, refs, failed: { leg: i + 2, of: n, why: e.message || String(e) } }); setBookedTrade(t); setBookedFxQuote(decision.quote)
+            setBookedLegs({ ref: pkg.ref, structure: pkg.structure, refs, failed: { leg: i + 2, of: n, why: e.message || String(e) } }); setBookedTrade(t); setBookedFxQuote(decision.quote)
             try { useTradesStore.getState().fetchTrades?.() } catch { /* best effort */ }
             throw new Error(`Booked ${i + 1} of ${n} legs of ${pkg.ref} (${Object.values(refs).join(', ')}). Leg ${i + 2} was not booked: ${e.message || e}. Book it as a trade of its own, or cancel the booked legs.`)
           }
         }
-        setBookedLegs({ ref: pkg.ref, refs })
+        setBookedLegs({ ref: pkg.ref, structure: pkg.structure, refs })
       }
       setBookedTrade(t)
       // the quote that was sent, not whatever the window holds by now: a price that landed while the POST was out is not the booked one
@@ -823,6 +830,38 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   // the legs as they stand when BOOK is pressed, not as they were when the window opened
   }, [booking, pricing, economics, onBook, fxLegs, legQuotes, legsFor, fxQuoteId])      // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A package that stopped part of the way (a leg was refused after earlier ones were booked): book the legs that
+  // have no trade yet, under the same package and at the places they had. The booked legs are not sent again.
+  const handleBookRest = useCallback(async () => {
+    if (booking || !bookedLegs?.failed || !bookedTrade) return
+    setBooking(true)
+    const refs = { ...bookedLegs.refs }, n = fxLegs.length + 1
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      const session = await getSessionWithCache(sessionCacheRef)
+      for (let i = 0; i < fxLegs.length; i++) {
+        const l = fxLegs[i]
+        if (refs[l.id]) continue
+        const q = legQuotes[l.id]?.quote, b = q ? fxRef.current?.legBody?.(q, l) : null
+        if (!b) throw Object.assign(new Error('it has no price to book at'), { leg: i + 2 })
+        const res = await fetch(API + '/api/trades/', {
+          method: 'POST', headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...b, trade_ref: `${bookedTrade.trade_ref}-${i + 2}`, own_legal_entity_id: economics.ownEntityId, counterparty_id: economics.counterpartyId,
+                                 desk: economics.desk || null, book: economics.book || null, trade_date: today, effective_date: today, strategy: packageTag(bookedLegs.structure, bookedLegs.ref, i + 2, n) }),
+        })
+        const j = await res.json().catch(() => ({}))
+        if (!res.ok) throw Object.assign(new Error(typeof j.detail === 'string' ? j.detail : 'the booking was refused'), { leg: i + 2 })
+        refs[l.id] = j.trade_ref
+      }
+      setBookedLegs({ ...bookedLegs, refs, failed: null }); setBookErr('')
+    } catch (e) {
+      setBookedLegs({ ...bookedLegs, refs, failed: { leg: e.leg || bookedLegs.failed.leg, of: n, why: e.message || String(e) } })
+    } finally {
+      setBooking(false)
+      try { useTradesStore.getState().fetchTrades?.() } catch { /* best effort */ }
+    }
+  }, [booking, bookedLegs, bookedTrade, fxLegs, legQuotes, economics])
 
   // Incremental XVA (XVA tab): the counterparty's netting set with and without
   // this trade. A stored or just-booked trade goes by id (the marginal effect of
@@ -967,6 +1006,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
   const handleNewTrade = () => {
     setBookedTrade(null); setBookedFxQuote(null); setResult(null); setError(''); setBookErr('')
+    setFxLegs([]); setLegQuotes({}); setBookedLegs(null)        // a package that was booked is not carried into the next ticket
     // Sprint 12 item 3 — also clear lifecycle state
     setConfirmErr(''); setCancelErr('')
     setConfirming(false); setCancelling(false)
@@ -1115,10 +1155,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         <InstrumentSelector
           assetClasses={[...new Set([...ASSET_ORDER, ...listAssetClasses()])]}
           activeAssetClass={assetClass}
-          onAssetClassChange={(c) => { if (!['RATES', 'FX', 'CRYPTO'].includes(c)) return; setAssetClass(c); setFxQuote(null); setFxLegs([]); setLegQuotes({}); if (c === 'FX') setCurInst('FX_FORWARD'); if (c === 'CRYPTO') setCurInst('CRYPTO_FORWARD') }}
+          onAssetClassChange={(c) => { if (!['RATES', 'FX', 'CRYPTO'].includes(c)) return; setAssetClass(c); setFxQuote(null); setFxLegs([]); setLegQuotes({}); setBookedLegs(null); if (c === 'FX') setCurInst('FX_FORWARD'); if (c === 'CRYPTO') setCurInst('CRYPTO_FORWARD') }}
           products={isCurrency ? CURRENCY_PRODUCTS[assetClass] : listProductsByAssetClass(product.assetClass)}
           activeProductKey={isCurrency ? curInst : productKey}
-          onProductChange={isCurrency ? (k) => { setCurInst(k); setFxQuote(null); setFxLegs([]); setLegQuotes({}) } : setProductKey}
+          onProductChange={isCurrency ? (k) => { setCurInst(k); setFxQuote(null); setFxLegs([]); setLegQuotes({}); setBookedLegs(null) } : setProductKey}
           structures={isCurrency ? [] : product.structures}
           activeStructure={structure}
           onStructureChange={setStructure}
@@ -1203,7 +1243,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           {legsFor && !viewMode && fxQuote && (
             <div className="tbw-no-drag">
               <FxLegs first={fxRef.current?.firstLeg?.() || null} quote={fxQuote} legs={fxLegs} setLegs={setFxLegs} quotes={legView} crypto={assetClass === 'CRYPTO'}
-                dp={assetClass === 'CRYPTO' ? 2 : fxQuote.pair === 'USDJPY' ? 3 : 5} locked={!!bookedTrade} booked={bookedLegs} stale={fxStale} />
+                dp={assetClass === 'CRYPTO' ? 2 : fxQuote.pair === 'USDJPY' ? 3 : 5} locked={!!bookedTrade} booked={bookedLegs} stale={fxStale} onBookRest={handleBookRest} busy={booking} />
             </div>
           )}
           <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} active={activeTab === 'DETAILS'} stale={fxStale}
