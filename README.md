@@ -17,7 +17,7 @@ Hosted demo at [app.rijeka.app](https://app.rijeka.app); the in-app **ROADMAP** 
 - **Counterparty credit and XVA.** Netting sets on shared Hull-White and lognormal paths, real-world calibration from public history with historical block sampling, the CSA on the netted value, EE / EPE / PFE and credit limits; the XVA waterfall (CVA, DVA, FVA, FBA, KVA, MVA) under CSA presets with a margin period of risk; initial margin as an amount you set or the engine's own estimate (ISDA SIMM is licensed and is not implemented).
 - **P&L.** Attribution by sequential full revaluation (carry, cash, curves by bucket, spot, points, vol, residual), day / MTD / YTD, trader and controller sign-off, XVA P&L.
 - **Confirmation on chain.** Canonical record v2 → EIP-712 → registry on Sepolia; amend and terminate; a public verifier that trusts nothing of Rijeka's. Messenger with firms, rooms, trade cards and wallet countersigning; Telegram mirror.
-- **Open box.** The methodology (v1.10) names the module for every formula; the Methodology tab exports an Excel replication per product from your own market data, the ticket rebuilt in cells with every number linked to its derivation and a Checks sheet against the engine; the XVA book carries the engine's own Monte Carlo draws.
+- **Open box.** The methodology (v1.11) names the module for every formula; the Methodology tab exports an Excel replication per product from your own market data, the ticket rebuilt in cells with every number linked to its derivation and a Checks sheet against the engine; the XVA book carries the engine's own Monte Carlo draws.
 - **Prometheus.** A read-only assistant inside the messenger: sees your book and the engine, never changes anything.
 
 ## Validation
@@ -170,7 +170,7 @@ The spread schedules live in one place, `backend/market_data/demo_feed.py`, and 
 
 ## Documentation
 
-- `docs/methodology/rijeka_methodology.pdf` (v1.10, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
+- `docs/methodology/rijeka_methodology.pdf` (v1.11, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
 - `docs/VALIDATION.md` — the validation charter, what is validated against what, and the open findings
 - `docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md` — the per-module notes behind the methodology chapters
 - `docs/ops/deploy.md` — the deploy chain (API first on Render, then the app from the `release` branch)

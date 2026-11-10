@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { addMonths, newLeg, nextLeg, stripLegs, pairedLeg, seedStyle, styleOf, structureOf, legProblem, legPayoff, packageTotals, packageRef, packageTag, readPackageTag } from './fx-legs'
+import { addMonths, newLeg, nextLeg, stripLegs, pairedLeg, seedStyle, styleOf, structureOf, legProblem, legPayoff, packageTotals, packageRef, packageTag, readPackageTag, packageOf } from './fx-legs'
 
 const first = { kind: 'FWD', direction: 'SELL', notional: 5, date: '2026-12-10', strike: 73550 }
 
@@ -157,5 +157,28 @@ describe('a forward as a package of legs', () => {
     expect(legPayoff({ ...set, touchType: 'DOUBLE_ONE_TOUCH' }, 120000, null, 100000)).toBe(100000)
     // a single touch is reached from where spot is: a barrier between spot and the forward is above spot
     expect(legPayoff({ kind: 'TOUCH', touchType: 'ONE_TOUCH', barrier: 100500, payout: 1 }, 100600, null, 100000)).toBe(1)
+  })
+})
+
+describe('a package as the server names it: one trade ID, a leg ID for each leg', () => {
+  const leg = (id, i, n, status = 'PENDING', pid = 'TRD-44312345', structure = 'STRIP') => ({ id, trade_ref: `${pid}-${i}`, status, strategy: `${structure} ${pid} ${i}/${n}` })
+  it('reads the tag the booking writes, with the package\'s trade ID', () => {
+    expect(readPackageTag('STRIP TRD-44312345 2/3')).toEqual({ structure: 'STRIP', ref: 'TRD-44312345', i: 2, n: 3 })
+    expect(readPackageTag('RISK REVERSAL TRD-00000001 1/2')).toMatchObject({ structure: 'RISK REVERSAL', ref: 'TRD-00000001' })
+    // the ticket's older reference is still read, and what is neither is not a tag
+    expect(readPackageTag('STRIP PKG-ABCD1234 1/2')).toMatchObject({ ref: 'PKG-ABCD1234' })
+    for (const not of ['STRIP TRD-1234 1/2', 'STRIP TRD-44312345-1 1/2', 'STRIP TRD-44312345 0/2', 'STRIP TRD-44312345 3/2', 'TRD-44312345 1/2']) expect(readPackageTag(not), not).toBe(null)
+  })
+  it('finds every leg of a trade\'s package among the blotter\'s trades, in order, or nothing', () => {
+    const a = leg('a', 1, 3), b = leg('b', 2, 3), c = leg('c', 3, 3)
+    const other = leg('x', 1, 2, 'PENDING', 'TRD-99999999'), single = { id: 's', trade_ref: 'TRD-11111111', status: 'PENDING', strategy: null }
+    const all = [c, single, a, other, b]
+    expect(packageOf(b, all)).toEqual({ tradeId: 'TRD-44312345', structure: 'STRIP', n: 3, legs: [a, b, c] })
+    expect(packageOf(single, all)).toBe(null)
+    expect(packageOf(a, [a, c]), 'a leg missing from the list').toBe(null)
+    expect(packageOf(other, all), 'the other package has one of its two legs here').toBe(null)
+    expect(packageOf(null, all)).toBe(null)
+    // two packages do not mix: the same place in another package is not this package's leg
+    expect(packageOf(a, [a, b, leg('z', 3, 3, 'PENDING', 'TRD-22222222')])).toBe(null)
   })
 })

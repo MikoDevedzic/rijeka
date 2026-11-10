@@ -172,8 +172,23 @@ export const packageTag = (structure, ref, i, n) => `${structure} ${ref} ${i}/${
 // itself ("Macro", "BUTTERFLY PKG-1 5/3") is not a tag and leaves the trade's own structure showing.
 export const PACKAGE_STRUCTURES = ['STRIP', 'CUSTOM', 'COLLAR', 'RISK REVERSAL', 'STRADDLE', 'CALENDAR']
 export function readPackageTag(strategy) {
-  const m = /^([A-Z][A-Z ]*?) (PKG-[A-Z0-9]{4,12}) (\d{1,3})\/(\d{1,3})$/.exec(String(strategy ?? ''))
+  // the package's trade ID as the server names it (TRD-12345678), or the reference the ticket made before that (PKG-…)
+  const m = /^([A-Z][A-Z ]*?) (TRD-\d{8}|PKG-[A-Z0-9]{4,12}) (\d{1,3})\/(\d{1,3})$/.exec(String(strategy ?? ''))
   if (!m || !PACKAGE_STRUCTURES.includes(m[1])) return null
   const i = Number(m[3]), n = Number(m[4])
   return i >= 1 && i <= n ? { structure: m[1], ref: m[2], i, n } : null
+}
+
+// The legs of the package `trade` belongs to, from a list of trades (the blotter's): every leg, in its place, or
+// null when the trade is no leg, or a leg is missing from the list. { tradeId, structure, n, legs: [trade, ...] }.
+export function packageOf(trade, trades) {
+  const tag = readPackageTag(trade?.strategy)
+  if (!tag) return null
+  const legs = []
+  for (const t of trades || []) {
+    const g = readPackageTag(t?.strategy)
+    if (g && g.ref === tag.ref && g.n === tag.n) legs[g.i - 1] = t
+  }
+  for (let i = 0; i < tag.n; i++) if (!legs[i]) return null
+  return legs.length === tag.n ? { tradeId: tag.ref, structure: tag.structure, n: tag.n, legs } : null
 }

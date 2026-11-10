@@ -24,7 +24,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.10 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.11 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -449,6 +449,9 @@ Every netting set is simulated once on the risk-neutral paths and re-collaterali
 
 \subsection{The canonical record (schema v2)}
 Both parties sign one record that either can derive alone from its own booking. The record is keyed by the unique transaction identifier, names the two parties by LEI in sorted order, names the payer and receiver LEI of every leg, the buyer and seller of every embedded option and the payer and receiver of every custom cashflow, and orders legs by content. It contains only the economic terms: no internal references, no book or desk, no status, no timestamps, no party names. Serialisation rules, which a verifier in any language must reproduce exactly: JSON, UTF-8, keys sorted at every level, separators \code{,} and \code{:} with no whitespace; numbers as decimal strings without exponent, trailing zeros or negative zero; dates ISO-8601; nulls and booleans preserved; strings unchanged. The trade hash is $h=\mathrm{keccak256}(\text{bytes})$. The schema version is inside the payload so a confirmation is always re-derived under the version it was signed with.
+
+\subsection{A package of trades confirmed as one}
+A package (a strip, a collar, a forward with an option) is several trades between the same two parties, booked together under one trade ID with a leg ID for each. Each leg keeps its own unique transaction identifier and its own canonical record, as above. What the parties sign and the registry anchors, once, is the \emph{package record}: the schema name and version (\code{rijeka-package}, version 1), the two LEIs in sorted order and the keccak256 hashes of the legs' records, sorted. It commits to every term of every leg, and each side derives the same bytes from its own bookings; neither firm's reference for the package enters. A leg is proved by re-deriving its own record, finding its hash among the package's legs, and re-deriving the package hash, which is the hash the signatures cover and the registry holds. The legs are confirmed together or not at all. One leg of a package cannot yet be amended or terminated on its own, since that is a new package record signed by both parties. \emph{Functions \code{package_payload}, \code{package_hash}; route \code{/api/chain/confirm-package}.}
 
 \subsection{Signatures}
 Each party signs an EIP-712 typed message in the domain \code{Rijeka Trade Confirmation}, version 1, bound to the chain and the registry address:

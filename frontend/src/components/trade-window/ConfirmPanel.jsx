@@ -83,7 +83,9 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
           canonical schema v{att.schema_version} · EIP-712 · {att.eip712?.name} v{att.eip712?.version}
         </span>
       </div>
-      {row('TRADE HASH', att.trade_hash)}
+      {att.package && row('PACKAGE', <span data-testid="cert-package">{att.package.trade_id} · leg {att.package.leg} of {att.package.of} · {anchored ? 'one record on chain for the package' : 'one signed record for the package'}</span>, 'var(--accent-hi)')}
+      {att.package && row('PACKAGE HASH', <span data-testid="cert-package-hash">{att.package.hash}</span>)}
+      {row(att.package ? 'THIS LEG\'S HASH' : 'TRADE HASH', att.trade_hash)}
       {att.prev_hash && row('SUPERSEDES', att.prev_hash + '  (amended — earlier signed record)', 'var(--amber)')}
       {row('BOOKED BY', `${own.lei || '—'} · ${short(own.address)} · sig ${short(own.signature)} (${own.key_source})`)}
       {row(att.bilateral === false ? 'COUNTERPARTY' : 'COUNTERSIGNED BY', `${cp.lei || '—'} · ${short(cp.address)} · sig ${short(cp.signature)} (${cp.key_source})`)}
@@ -188,6 +190,8 @@ export function ConfirmPanel({
   onRemoteConfirmed = () => {},
   onTerminate = null,
   terminating = false,
+  pkg = null,             // the package this trade is a leg of: { tradeId, structure, n, legs: [trade, ...] } (fx-legs.js packageOf)
+  pkgPending = false,     // every leg still PENDING: CONFIRM confirms the package as one record
 }) {
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
@@ -251,7 +255,16 @@ export function ConfirmPanel({
 
           {bookedTrade.trade_ref && (
             <div className="tbw-mut" style={{ marginTop: 10, fontSize: 12 }}>
-              Trade ref: {bookedTrade.trade_ref}
+              {pkg ? 'Leg ID' : 'Trade ref'}: {bookedTrade.trade_ref}
+            </div>
+          )}
+          {pkg && (
+            <div data-testid="confirm-package" data-legs={pkg.n} style={{ marginTop: 8, fontSize: 12, lineHeight: 1.6 }}>
+              <span className="tbw-mut">Trade ID </span><span data-testid="confirm-package-id" style={{ fontFamily: MONO, color: 'var(--accent-hi)' }}>{pkg.tradeId}</span>
+              <span className="tbw-mut"> · {pkg.structure.toLowerCase()} of {pkg.n} legs</span>
+              <div data-testid="confirm-package-legs" className="tbw-mut" style={{ fontFamily: MONO }}>
+                {pkg.legs.map(l => <span key={l.id} style={{ marginRight: 12, color: l.id === bookedTrade.id ? 'var(--text-hi)' : undefined }}>{l.trade_ref} {String(l.status || '').toLowerCase()}</span>)}
+              </div>
             </div>
           )}
 
@@ -264,7 +277,7 @@ export function ConfirmPanel({
           {(status === 'CONFIRMED' || status === 'TERMINATED') && (
             <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying}
               verifyResult={verifyResult} onDownloadProof={onDownloadProof} onCopyProofLink={onCopyProofLink}
-              onTerminate={status === 'CONFIRMED' ? onTerminate : null} terminating={terminating} confirmErr={confirmErr} />
+              onTerminate={status === 'CONFIRMED' && !attestation?.attestation?.package ? onTerminate : null} terminating={terminating} confirmErr={confirmErr} />
           )}
         </div>
       </div>
@@ -297,7 +310,16 @@ export function ConfirmPanel({
           </div>
           {bookedTrade.trade_ref && (
             <div className="tbw-mut" style={{ marginTop: 8, fontSize: 12 }}>
-              Trade ref: {bookedTrade.trade_ref}
+              {pkg ? 'Leg ID' : 'Trade ref'}: {bookedTrade.trade_ref}
+            </div>
+          )}
+          {pkg && (
+            <div data-testid="confirm-package" data-legs={pkg.n} style={{ marginTop: 8, fontSize: 12, lineHeight: 1.6 }}>
+              <span className="tbw-mut">Trade ID </span><span data-testid="confirm-package-id" style={{ fontFamily: MONO, color: 'var(--accent-hi)' }}>{pkg.tradeId}</span>
+              <span className="tbw-mut"> · {pkg.structure.toLowerCase()} of {pkg.n} legs</span>
+              <div data-testid="confirm-package-legs" className="tbw-mut" style={{ fontFamily: MONO }}>
+                {pkg.legs.map(l => <span key={l.id} style={{ marginRight: 12, color: l.id === bookedTrade.id ? 'var(--text-hi)' : undefined }}>{l.trade_ref} {String(l.status || '').toLowerCase()}</span>)}
+              </div>
             </div>
           )}
         </div>
@@ -309,10 +331,15 @@ export function ConfirmPanel({
         }}>
           {cpOnNetwork
             ? 'Cancelling closes the trade without settlement — terminal and cannot be undone.'
-            : 'CONFIRM builds the canonical trade record, has both legal entities sign its keccak256 hash (EIP-712), '
-              + 'and anchors the pair of signatures in the TradeConfirmationRegistry on Ethereum. From that block both '
-              + 'parties hold an identical, immutable record of the terms. Only the hash goes on-chain. Cancelling closes '
-              + 'the trade without settlement — terminal and cannot be undone.'}
+            : pkgPending
+              ? `CONFIRM confirms the whole package as one record: each of the ${pkg.n} legs keeps its own canonical record and hash, `
+                + 'both legal entities sign (EIP-712) the package record that lists those hashes, and one transaction anchors it in the '
+                + 'TradeConfirmationRegistry on Ethereum. Every leg is confirmed together, or none. Only the hash goes on-chain. '
+                + 'Cancelling closes this leg without settlement — terminal and cannot be undone.'
+              : 'CONFIRM builds the canonical trade record, has both legal entities sign its keccak256 hash (EIP-712), '
+                + 'and anchors the pair of signatures in the TradeConfirmationRegistry on Ethereum. From that block both '
+                + 'parties hold an identical, immutable record of the terms. Only the hash goes on-chain. Cancelling closes '
+                + 'the trade without settlement — terminal and cannot be undone.'}
         </div>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -329,7 +356,7 @@ export function ConfirmPanel({
                   ? `◆ ANCHORING · tx ${short(anchor.tx_hash)}`
                   : (confirmErr || anchor?.failed)
                     ? '▶ RETRY CONFIRM'
-                    : '◆ CONFIRM ON-CHAIN'}
+                    : pkgPending ? `◆ CONFIRM PACKAGE ON-CHAIN · ${pkg.n} LEGS, ONE RECORD` : '◆ CONFIRM ON-CHAIN'}
             </button>
           )}
 

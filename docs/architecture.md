@@ -315,10 +315,19 @@ before it the trigger took the role from the client's sign-up metadata); provisi
    vega, theta, gamma) and the cashflows.
 2. **Book.** `POST /api/book/trade` writes the trade, its legs and the BOOKED event in one transaction
    (idempotent by key). A product trade (FX, digital asset, option) is one block of terms, no legs.
+   A package of legs (a strip, a collar: the DETAILS tab of a currency or digital-asset ticket) is booked whole by
+   `POST /api/book/package`: every leg a trade of its own, all in one transaction or none. The package has one
+   trade ID (`TRD-12345678`) and each leg a leg ID under it (`TRD-12345678-1`, `-2`, ...); no row carries the
+   bare ID, and each leg's `strategy` holds the structure, the trade ID and its place (`STRIP TRD-12345678 2/3`).
 3. **Confirm.** Both parties derive the same canonical record from their own bookings; each signs the
    EIP-712 message (a demo entity's key is Rijeka's, a real LEI's is the firm's wallet); the relayer
    anchors the pair of signatures; the CONFIRMED event carries the transaction. The messenger's trade
    card is the same flow with wallet countersigning, mirrored to Telegram when configured.
+   A package is confirmed as one record (`POST /api/chain/confirm-package`): each leg keeps its own UTI and
+   canonical record; the parties sign, and the relayer anchors once, the package record (the two LEIs and the
+   legs' hashes, `chain/canonical.package_payload`); every leg's CONFIRMED event carries its own hash, the
+   package's hash and its place, written in one transaction after the anchor. Amending or terminating one leg
+   of a package is refused for now, and a counterparty with its own wallet still confirms leg by leg.
 4. **Mark and explain.** The daily batch stores a mark per trade, the attributed P&L rows, the risk
    report (ladder, VaR, stress, limits) and the counterparty-credit run; the pages open from the
    stored day and RECALCULATE reprices live. Prometheus reads the same tables through read-only tools.

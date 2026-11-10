@@ -679,6 +679,36 @@ export async function confirmTradeOnChain(tradeId, extras = {}) {
   return { pending: false, trade, legs, eventId: event_id, idempotentReplay: !!idempotent_replay }
 }
 
+/** A package of legs booked whole (backend api/routes/booking.py, POST /api/book/package): every leg or none, in
+ *  one transaction. The server names the package (its trade ID, TRD-12345678) and each leg (TRD-12345678-1, ...).
+ *  Resolves { package: { trade_id, structure, legs }, trades: [the leg trades, in order] }. */
+export async function bookPackage(structure, legs, extras = {}) {
+  const session = await getSession()
+  const res = await fetch(API + '/api/book/package', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json', 'Idempotency-Key': extras.idempotencyKey || crypto.randomUUID() },
+    body: JSON.stringify({ structure, legs }),
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok) throw Object.assign(new Error(typeof j.detail === 'string' ? j.detail : (j.detail ? JSON.stringify(j.detail) : 'Booking the package failed (HTTP ' + res.status + ')')), { status: res.status })
+  return j
+}
+
+/** One confirmation for a package (POST /api/chain/confirm-package): every leg PENDING -> CONFIRMED together, the
+ *  package record (the legs' hashes) signed by both parties and anchored once. Resolves
+ *  { package: { trade_id, legs, hash, record, anchor }, trades: [the legs, CONFIRMED] }. */
+export async function confirmPackageOnChain(tradeIds, extras = {}) {
+  const session = await getSession()
+  const res = await fetch(API + '/api/chain/confirm-package', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json', 'Idempotency-Key': extras.idempotencyKey || crypto.randomUUID() },
+    body: JSON.stringify({ trade_ids: tradeIds }),
+  })
+  const j = await res.json().catch(() => ({}))
+  if (!res.ok) throw Object.assign(new Error(typeof j.detail === 'string' ? j.detail : 'POST /api/chain/confirm-package failed (HTTP ' + res.status + ')'), { status: res.status })
+  return j
+}
+
 /** Where an anchor in flight stands (backend chain/pending.py): { pending, tx_hash, explorer_tx, note }
  *  while the transaction waits for a block; { applied: true, status: 'CONFIRMED', trade, legs } once the
  *  CONFIRMED event is written; { failed: true, reason } when it reverted or was dropped. */

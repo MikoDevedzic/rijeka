@@ -45,8 +45,8 @@ function says(l, k, dp) {
 }
 
 // `first`: the ticket as a leg (FxCryptoPanel firstLeg) with `quote`; `legs`: the further ones; `quotes`: id →
-// { quote, error, pending } for each; `booked`: once booked, { ref, refs: { first, [id] }, failed? }.
-export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypto, dp = 2, defaults = {}, locked = false, booked = null, stale = false, onBookRest = null, busy = false }) {
+// { quote, error, pending } for each; `booked`: once booked, { ref: the package's trade ID, refs: { first, [id] }: each leg's ID }.
+export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypto, dp = 2, defaults = {}, locked = false, booked = null, stale = false }) {
   if (!first || !quote) return null
   const base = quote.base_currency, qc = quote.quote_currency
   const nDp = crypto ? 4 : 0
@@ -157,7 +157,10 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
         <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text-hi)' }}>LEGS · {rows.length}</span>
         <span data-testid="fx-legs-structure" style={{ ...lbl, border: '1px solid var(--border-hi)', borderRadius: 'var(--r-1)', padding: '1px 7px', color: several ? 'var(--text-hi)' : 'var(--text-mute)' }}>{structure}</span>
         <Note inline>The first leg is the ticket itself, set on the TRADE tab. Every further leg is on the same pair: a forward, a call, a put or a touch, with its own side, size, date and strike, and an option's own style. A strike left empty is the fair forward for its date. BOOK books each leg as its own trade, tied together as one package.{several ? ' The other tabs and the footer show the first leg for now.' : ''}</Note>
-        {booked && <span data-testid="fx-legs-package" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--accent-hi)' }}>{booked.ref}</span>}
+        {booked && <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={lbl}>TRADE ID</span>
+          <span data-testid="fx-legs-package" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--accent-hi)' }}>{booked.ref}</span>
+        </span>}
         {!locked && (
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" style={{ ...tool, color: 'var(--text-hi)', borderColor: 'var(--border-glow)' }} data-testid="fx-legs-add" onClick={() => setLegs([...legs, nextLeg(first, legs)])}>+ ADD LEG</button>
@@ -169,12 +172,6 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
           </span>
         )}
       </div>
-      {booked?.failed && (
-        <div data-testid="fx-legs-failed" role="alert" style={{ margin: '0 16px 10px', padding: '7px 10px', border: '1px solid rgba(233,151,90,0.4)', borderRadius: 'var(--r-2)', background: 'rgba(233,151,90,0.06)', color: 'var(--amber)', fontSize: 12.5, lineHeight: 1.5 }}>
-          {Object.keys(booked.refs).length} of {booked.failed.of} legs are booked. Leg {booked.failed.leg} was not: {booked.failed.why}{/[.!?]$/.test(String(booked.failed.why)) ? '' : '.'} The booked legs stand as trades of {booked.ref}.
-          {onBookRest && <button type="button" data-testid="fx-legs-book-rest" disabled={busy} onClick={onBookRest} style={{ ...tool, marginLeft: 10, color: 'var(--text-hi)', borderColor: 'var(--amber)' }}>{busy ? 'BOOKING…' : 'BOOK THE REMAINING LEGS'}</button>}
-        </div>
-      )}
       <div style={{ overflowX: 'auto' }}>
         <table data-testid="fx-legs-table" style={{ width: '100%', minWidth: 1080, borderCollapse: 'collapse' }}>
           <thead><tr>
@@ -184,7 +181,7 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
             <th style={th}>VALUE {qc}</th>
             <th style={th}><span className="rf-mark" style={{ background: `var(${RISK_FACTORS[crypto ? 'cry' : 'fx'].token})` }} />{spotName}</th>
             <th style={th}><span className="rf-mark" style={{ background: `var(${RISK_FACTORS.ir.token})` }} />IR01</th>
-            <th style={{ ...th, paddingRight: 12, textAlign: booked ? 'left' : 'right' }}>{booked ? 'BOOKED AS' : ''}</th>
+            <th style={{ ...th, paddingRight: 12, textAlign: booked ? 'left' : 'right' }}>{booked ? 'LEG ID' : ''}</th>
           </tr></thead>
           <tbody>
             {rows.map(r => {

@@ -1060,31 +1060,34 @@ def proof_pack(trade_id: str, db: Session = Depends(get_db), user: dict = Depend
     payload, h = _canonical_for(db, trade, attested_version(att))
     pk = package_of(att)
     if pk:
+        # A leg of a package. What both parties signed and the registry holds is the PACKAGE record, so that is the
+        # proof's `canonical` and `trade_hash`: a verifier that knows nothing of packages checks exactly that record,
+        # its signatures and its anchor. The leg's own record travels beside it (`leg`), with its hash, which is one
+        # of the record's `legs`: a verifier that knows packages checks this trade's terms are in what was signed.
         record = package_payload(pk["legs"], pk.get("parties") or payload["parties"])
         return {
             "format":         "rijeka-confirmation-proof",
             "format_version": 1,
             "generated_at":   datetime.now(timezone.utc).isoformat(),
             "trade_ref":      trade.trade_ref,
-            "canonical":      payload,
-            "trade_hash":     _hexb(h),
-            "package":        {"record": record, "hash": _hexb(package_hash(record)), "leg": pk.get("leg"), "of": pk.get("of"),
-                               "trade_id": pk.get("trade_id")},
+            "canonical":      record,
+            "trade_hash":     _hexb(package_hash(record)),
+            "leg":            {"canonical": payload, "trade_hash": _hexb(h), "leg": pk.get("leg"), "of": pk.get("of")},
+            "package":        {"trade_id": pk.get("trade_id"), "structure": pk.get("structure"), "legs": pk.get("of")},
             "attestation":    att,
             "how_to_verify": [
                 "This trade was confirmed as one leg of a package: both parties signed, and the registry holds, the "
-                "PACKAGE record, which lists the hash of every leg.",
-                "1. Serialise `canonical` (this leg) as JSON with keys sorted at every level, separators ',' and ':', "
-                "no whitespace, UTF-8, and keccak256 it. It must equal `trade_hash`.",
-                "2. `trade_hash` must be one of `package.record.legs`.",
-                "3. Serialise `package.record` the same way and keccak256 it. It must equal `package.hash` and "
-                "`attestation.package.hash`.",
-                "4. Rebuild the EIP-712 digests from `attestation.eip712` "
-                "(TradeConfirmation(bytes32 tradeHash,address counterparty) with tradeHash = package.hash; each party "
+                "PACKAGE record (`canonical`), which lists the hash of every leg.",
+                "1. Serialise `canonical` as JSON with keys sorted at every level, separators ',' and ':', no whitespace, "
+                "UTF-8, and keccak256 it. It must equal `trade_hash` and `attestation.package.hash`.",
+                "2. Rebuild the EIP-712 digests from `attestation.eip712` "
+                "(TradeConfirmation(bytes32 tradeHash,address counterparty) with tradeHash = `trade_hash`; each party "
                 "signs with the OTHER party's address) and recover both signatures. They must equal the two party addresses.",
-                "5. Call getConfirmation(package.hash) on the registry at `attestation.eip712.verifying_contract` on chain "
+                "3. Call getConfirmation(trade_hash) on the registry at `attestation.eip712.verifying_contract` on chain "
                 f"{att.get('eip712', {}).get('chain_id')}. Status must be Confirmed and the parties must match.",
-                "6. To check the whole package, repeat steps 1 and 2 with the record of each of its legs.",
+                "4. This leg: serialise `leg.canonical` the same way and keccak256 it. It must equal `leg.trade_hash`, "
+                "and `leg.trade_hash` must be one of `canonical.legs`. Then these terms are in what was signed.",
+                "5. To check the whole package, repeat step 4 with the proof of each of its legs.",
             ],
         }
     return {

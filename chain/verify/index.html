@@ -177,6 +177,29 @@ el("run").addEventListener("click", async () => {
     add("fail", "could not hash the canonical record", e.message);
   }
 
+  // 1b — a leg of a package: the signed record above is the package's (the hashes of its legs); this trade's own
+  // terms are in `leg`. They must hash to `leg.trade_hash`, and that hash must be one of the package's legs.
+  if (proof.leg && proof.leg.canonical) {
+    try {
+      const legHash = ethers.keccak256(new TextEncoder().encode(canonicalise(proof.leg.canonical)));
+      const claimedLeg = String(proof.leg.trade_hash || "").toLowerCase();
+      const legs = Array.isArray(canonical.legs) ? canonical.legs.map(x => String(x).toLowerCase()) : [];
+      const own = legHash.toLowerCase() === claimedLeg;
+      const inPkg = legs.includes(legHash.toLowerCase());
+      add(own ? "pass" : "fail",
+          own ? "this leg's terms hash to the leg's stated hash" : "LEG HASH MISMATCH — these are not the leg's signed terms",
+          "recomputed " + legHash + (own ? "" : "  ·  claimed " + claimedLeg));
+      add(inPkg ? "pass" : "fail",
+          inPkg ? `this leg is one of the ${legs.length} legs of the signed package` + (proof.leg.leg ? ` (leg ${proof.leg.leg} of ${proof.leg.of})` : "")
+                : "THIS LEG IS NOT IN THE SIGNED PACKAGE",
+          inPkg ? "its hash is listed in the package record both parties signed" : "the package record does not list " + legHash);
+    } catch (e) {
+      add("fail", "could not hash the leg's record", e.message);
+    }
+  } else if (canonical.schema === "rijeka-package") {
+    add("skip", "a package record: no leg supplied", "the signatures and the anchor are of the whole package; a leg's own terms are checked from that leg's proof pack");
+  }
+
   // 2 — recover both signatures
   const parties = att.parties || {};
   const A = parties.own || {}, B = parties.counterparty || {};

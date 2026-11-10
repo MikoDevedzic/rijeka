@@ -1,7 +1,29 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.10). Commits on `main` are the detail.
+methodology document carries its own version (v1.11). Commits on `main` are the detail.
+
+## 0.19.0 · 10 November 2026
+
+**A package is one trade: one trade ID, a leg ID for each leg, one confirmation on chain.**
+
+- **Booked whole.** A ticket with legs is booked by one call (`POST /api/book/package`) in one transaction: every
+  leg or none. Before this each leg was a request of its own and a refusal part of the way left some booked.
+- **One trade ID, a leg ID each.** The package has a trade ID of the usual shape (TRD-12345678) and each leg its
+  own ID under it (TRD-12345678-1, -2, ...). DETAILS shows TRADE ID and a LEG ID column; the blotter finds the
+  legs by the trade ID. A single trade is never given a name a package's legs stand under.
+- **One confirmation.** On the CONFIRM tab a package whose legs are all pending offers CONFIRM PACKAGE ON-CHAIN ·
+  n LEGS, ONE RECORD. Each leg keeps its own record and hash; both parties sign the package record that lists
+  those hashes; one transaction anchors it (`POST /api/chain/confirm-package`). Every leg is confirmed together.
+- **The certificate of a leg** shows the package and its place (leg 2 of 3), the package's hash (what is on
+  chain) and the leg's own hash. VERIFY re-derives the leg's record, finds it in the package and re-derives the
+  package's hash; the proof pack carries the package record as what was signed, with the leg's record beside it,
+  so the public verifier as it is today checks it, and its source now checks the leg inside the package too.
+- **Limits:** one leg of a package confirmed this way cannot be amended or terminated on its own yet (the API
+  says so, and the certificate offers no button that would only fail); a counterparty with its own wallet
+  confirms leg by leg; a leg can still be confirmed on its own, after which the package route refuses the set.
+  Not run against a live chain here: the local stack has none.
+- **Not in this change:** CASHFLOWS, CURVE SCENARIO and the footer over the whole package.
 
 ## 0.18.0 · 10 November 2026
 

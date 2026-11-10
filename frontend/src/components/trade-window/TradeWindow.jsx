@@ -41,7 +41,7 @@ import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, INDEX_CURVE } from './booking'
+import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, INDEX_CURVE } from './booking'
 import { TENOR_Y, EXPIRY_Y } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
@@ -58,7 +58,7 @@ import FxXvaPanel from './FxXvaPanel'
 import CapitalTab from './CapitalTab'
 import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
 import FxLegs from './FxLegs'
-import { LEG_TERMS, packageRef, packageTag, structureOf } from './fx-legs'
+import { LEG_TERMS, structureOf, packageOf } from './fx-legs'
 
 const NO_LEGS = []          // one empty list, so "no legs" is the same value at every render
 // import './products/credit'
@@ -814,23 +814,20 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         if (!b) throw new Error(`Leg ${i + 2} could not be built: nothing was booked.`)
         return { l, b }
       })
-      const n = priced.length + 1
-      const pkg = priced.length ? { ref: packageRef(), structure: structureOf(firstPriced(fxRef.current.firstLeg(), decision.quote), legs) } : null
-      const t = await post(body, pkg ? packageTag(pkg.structure, pkg.ref, 1, n) : null)
-      if (pkg) {
-        const refs = { first: t.trade_ref }
-        for (let i = 0; i < priced.length; i++) {
-          // each further leg is named after the first (TRD-94333140-2): the API names a trade by the clock's second, and
-          // two of one firm's trades cannot share a name
-          try { refs[priced[i].l.id] = (await post({ ...priced[i].b, trade_ref: `${t.trade_ref}-${i + 2}` }, packageTag(pkg.structure, pkg.ref, i + 2, n))).trade_ref }
-          catch (e) {
-            // the legs already booked stand as trades of the package: said, with their references, not hidden
-            setBookedLegs({ ref: pkg.ref, structure: pkg.structure, refs, failed: { leg: i + 2, of: n, why: e.message || String(e) } }); setBookedTrade(t); setBookedFxQuote(decision.quote)
-            try { useTradesStore.getState().fetchTrades?.() } catch { /* best effort */ }
-            throw new Error(`Booked ${i + 1} of ${n} legs of ${pkg.ref} (${Object.values(refs).join(', ')}). Leg ${i + 2} was not booked: ${e.message || e}. Book it as a trade of its own, or cancel the booked legs.`)
-          }
-        }
-        setBookedLegs({ ref: pkg.ref, structure: pkg.structure, refs })
+      // A package is booked whole, in one call: every leg or none (POST /api/book/package). The server names it: one
+      // trade ID for the package (TRD-12345678) and a leg ID for each leg under it (TRD-12345678-1, -2, ...).
+      let t
+      if (priced.length) {
+        const structure = structureOf(firstPriced(fxRef.current.firstLeg(), decision.quote), legs)
+        const whole = (b) => ({ ...b, legs: [], own_legal_entity_id: economics.ownEntityId, counterparty_id: economics.counterpartyId,
+                                desk: economics.desk || null, book: economics.book || null, trade_date: today, effective_date: today })
+        const r = await bookPackage(structure, [whole(body), ...priced.map(x => whole(x.b))])
+        const refs = { first: r.trades[0].trade_ref }
+        priced.forEach((x, k) => { refs[x.l.id] = r.trades[k + 1].trade_ref })
+        setBookedLegs({ ref: r.package.trade_id, structure: r.package.structure, refs, ids: r.trades.map(x => x.id) })
+        t = r.trades[0]
+      } else {
+        t = await post(body, null)
       }
       setBookedTrade(t)
       // the quote that was sent, not whatever the window holds by now: a price that landed while the POST was out is not the booked one
@@ -844,38 +841,6 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   // the legs as they stand when BOOK is pressed, not as they were when the window opened
   }, [booking, pricing, economics, onBook, fxLegs, legQuotes, legsFor, fxQuoteId, legContext])      // eslint-disable-line react-hooks/exhaustive-deps
-
-  // A package that stopped part of the way (a leg was refused after earlier ones were booked): book the legs that
-  // have no trade yet, under the same package and at the places they had. The booked legs are not sent again.
-  const handleBookRest = useCallback(async () => {
-    if (booking || !bookedLegs?.failed || !bookedTrade) return
-    setBooking(true)
-    const refs = { ...bookedLegs.refs }, n = fxLegs.length + 1
-    try {
-      const today = new Date().toISOString().slice(0, 10)
-      const session = await getSessionWithCache(sessionCacheRef)
-      for (let i = 0; i < fxLegs.length; i++) {
-        const l = fxLegs[i]
-        if (refs[l.id]) continue
-        const q = legQuotes[l.id]?.quote, b = q ? fxRef.current?.legBody?.(q, l) : null
-        if (!b) throw Object.assign(new Error('it has no price to book at'), { leg: i + 2 })
-        const res = await fetch(API + '/api/trades/', {
-          method: 'POST', headers: { Authorization: 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...b, trade_ref: `${bookedTrade.trade_ref}-${i + 2}`, own_legal_entity_id: economics.ownEntityId, counterparty_id: economics.counterpartyId,
-                                 desk: economics.desk || null, book: economics.book || null, trade_date: today, effective_date: today, strategy: packageTag(bookedLegs.structure, bookedLegs.ref, i + 2, n) }),
-        })
-        const j = await res.json().catch(() => ({}))
-        if (!res.ok) throw Object.assign(new Error(typeof j.detail === 'string' ? j.detail : 'the booking was refused'), { leg: i + 2 })
-        refs[l.id] = j.trade_ref
-      }
-      setBookedLegs({ ...bookedLegs, refs, failed: null }); setBookErr('')
-    } catch (e) {
-      setBookedLegs({ ...bookedLegs, refs, failed: { leg: e.leg || bookedLegs.failed.leg, of: n, why: e.message || String(e) } })
-    } finally {
-      setBooking(false)
-      try { useTradesStore.getState().fetchTrades?.() } catch { /* best effort */ }
-    }
-  }, [booking, bookedLegs, bookedTrade, fxLegs, legQuotes, economics])
 
   // Incremental XVA (XVA tab): the counterparty's netting set with and without
   // this trade. A stored or just-booked trade goes by id (the marginal effect of
@@ -894,6 +859,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   }), [state, direction, economics, result])
   const buildCurrencyTrade = useCallback(() => fxRef.current?.bookBody ? fxRef.current.bookBody() : null, [])
 
+  // The package the booked trade is a leg of, from the blotter's trades: { tradeId, structure, n, legs }. `pendingPackage`
+  // is it when every leg is still PENDING (then CONFIRM confirms the package as one record); else a leg goes alone.
+  const allTrades = useTradesStore(s => s.trades)
+  const tradePackage = bookedTrade ? packageOf(allTrades.find(x => x.id === bookedTrade.id) || bookedTrade, allTrades) : null
+  const pendingPackage = tradePackage && tradePackage.legs.every(x => x.status === 'PENDING') ? tradePackage : null
+
   // Sprint 12 item 3 — CONFIRM handler: PENDING -> CONFIRMED
   const handleConfirm = useCallback(async (mode = 'chain') => {
     if (!bookedTrade?.id) return
@@ -903,9 +874,17 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       // Default path signs the canonical trade hash for both parties and
       // anchors it (TradeConfirmationRegistry). 'offchain' is the plain
       // status flip for environments with no signing keys configured.
-      const r = mode === 'offchain'
-        ? await confirmTrade(bookedTrade.id)
-        : await confirmTradeOnChain(bookedTrade.id)
+      // A leg of a package whose legs are all still pending: the package is confirmed as one record, every leg together.
+      const pkg = mode !== 'offchain' ? pendingPackage : null
+      let r
+      if (pkg) {
+        const done = await confirmPackageOnChain(pkg.legs.map(x => x.id))
+        r = { trade: done.trades.find(x => x.id === bookedTrade.id) || done.trades[0] }
+      } else {
+        r = mode === 'offchain'
+          ? await confirmTrade(bookedTrade.id)
+          : await confirmTradeOnChain(bookedTrade.id)
+      }
       if (mode !== 'offchain') {
         try { setAttestation(await getAttestation(r.trade.id)) } catch (e) { console.warn('[chain] attestation fetch failed', e) }
       }
@@ -922,7 +901,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     } finally {
       setConfirming(false)
     }
-  }, [bookedTrade, confirming, cancelling, productKey, onBook])
+  }, [bookedTrade, confirming, cancelling, productKey, onBook, pendingPackage])
 
   // The counterparty countersigned from chat: the trade is CONFIRMED server-side. Reflect it here
   // and load the attestation, without re-running any confirm call.
@@ -1257,7 +1236,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           {legsFor && !viewMode && fxQuote && (
             <div className="tbw-no-drag">
               <FxLegs first={fxRef.current?.firstLeg?.() || null} quote={fxQuote} legs={fxLegs} setLegs={setFxLegs} quotes={legView} crypto={assetClass === 'CRYPTO'} defaults={fxRef.current?.legDefaults?.() || {}}
-                dp={assetClass === 'CRYPTO' ? 2 : fxQuote.pair === 'USDJPY' ? 3 : 5} locked={!!bookedTrade} booked={bookedLegs} stale={fxStale} onBookRest={handleBookRest} busy={booking} />
+                dp={assetClass === 'CRYPTO' ? 2 : fxQuote.pair === 'USDJPY' ? 3 : 5} locked={!!bookedTrade} booked={bookedLegs} stale={fxStale} />
             </div>
           )}
           <FxDetailsPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} active={activeTab === 'DETAILS'} stale={fxStale}
@@ -1336,6 +1315,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         <div style={{ display: activeTab === '◆ CONFIRM' ? 'block' : 'none' }}>
           <ConfirmPanel
             bookedTrade={bookedTrade}
+            pkg={tradePackage}
+            pkgPending={!!pendingPackage}
             confirming={confirming}
             cancelling={cancelling}
             confirmErr={confirmErr}

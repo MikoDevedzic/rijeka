@@ -115,8 +115,14 @@ def test_a_package_is_confirmed_as_one_record_and_each_leg_verifies(client, auth
         assert v["package"] == {"trade_id": pid, "leg": i, "of": 3, "hash": H, "recomputed_hash": H, "hash_matches": True, "leg_in_package": True}
         assert v["signatures_valid_for_current_state"] is True, "both signatures are over the package's hash"
         p = client.get(f"/api/chain/proof/{tid}", headers=auth_a).json()
-        assert p["trade_hash"] == att["trade_hash"] and p["package"]["hash"] == H and p["package"]["record"] == record and (p["package"]["leg"], p["package"]["of"]) == (i, 3)
-        assert any("one of `package.record.legs`" in step for step in p["how_to_verify"])
+        # the proof's signed record is the package's (what a verifier that knows nothing of packages checks), with
+        # this leg's own record beside it
+        assert p["canonical"] == record and p["trade_hash"] == H
+        assert p["leg"]["trade_hash"] == att["trade_hash"] and (p["leg"]["leg"], p["leg"]["of"]) == (i, 3) and p["leg"]["canonical"]["schema"] == "rijeka-trade"
+        assert p["leg"]["canonical"] == v["canonical"] and p["package"]["trade_id"] == pid
+        from chain.canonical import trade_hash_hex
+        assert trade_hash_hex(p["leg"]["canonical"]) == att["trade_hash"] and att["trade_hash"] in p["canonical"]["legs"]
+        assert any("one of `canonical.legs`" in step for step in p["how_to_verify"])
         ev = client.get(f"/api/trade-events/{tid}", headers=auth_a).json()
         assert [e["event_type"] for e in ev] == ["CONFIRMED", "BOOKED"]
     assert sorted(leg_hashes) == record["legs"] and len(set(leg_hashes)) == 3, "each leg has a UTI and a record of its own"

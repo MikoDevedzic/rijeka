@@ -61,26 +61,28 @@ test('a strip of forwards: built on DETAILS, each leg priced, a strike and a sid
   await app.screenshot({ path: 'e2e/.out/shots/legs-strip.png' })
 
   // BOOK books the three, each its own trade, and shows what each became
-  const booked = []
-  app.on('request', r => { if (r.url() === API + '/api/trades/' && r.method() === 'POST') booked.push({ sent: r.postDataJSON() }) })
+  const calls = []
+  app.on('request', r => { if (r.url() === API + '/api/book/package' && r.method() === 'POST') calls.push(r.postDataJSON()) })
   // BOOK pressed while a leg is still being priced for its new side books nothing and says so
   await win.getByRole('button', { name: /BOOK 3 LEGS/ }).click()
   await expect(win.locator('.tbw-title')).toContainText(/nothing was booked/i)
-  expect(booked.length, 'nothing was sent').toBe(0)
+  expect(calls.length, 'nothing was sent').toBe(0)
   for (const i of [0, 1]) await expect(rows.nth(i), 'every leg holds the price of the terms it shows').toHaveAttribute('data-pending', 'false')
   await expect(rows.getByTestId('fx-leg-says')).toHaveCount(0)
   await win.getByRole('button', { name: /BOOK/ }).click()
   await expect(win.getByTestId('fx-legs-package')).toBeVisible({ timeout: 30_000 })
   const pkg = (await win.getByTestId('fx-legs-package').innerText()).trim()
-  expect(pkg).toMatch(/^PKG-[A-Z0-9]+$/)
+  // the package has ONE trade ID, of the usual shape, and each leg its own ID under it
+  expect(pkg).toMatch(/^TRD-\d{8}$/)
   await expect(win.getByTestId('fx-leg-ref')).toHaveCount(3)
-  await expect(win.getByTestId('fx-legs-failed')).toHaveCount(0)
   const refs = (await win.getByTestId('fx-leg-ref').allInnerTexts()).map(x => x.trim())
-  expect(refs[0]).toMatch(/^TRD-\d+$/)
-  expect(refs.slice(1), 'each further leg is named after the first').toEqual([`${refs[0]}-2`, `${refs[0]}-3`])
-  await expect.poll(() => booked.length, { message: 'three trades were booked' }).toBe(3)
-  booked.sort((a, b) => a.sent.strategy.localeCompare(b.sent.strategy))
-  expect(booked.map(b => b.sent.strategy)).toEqual([`CUSTOM ${pkg} 1/3`, `CUSTOM ${pkg} 2/3`, `CUSTOM ${pkg} 3/3`])
+  expect(refs, 'each leg is the trade ID and its place').toEqual([`${pkg}-1`, `${pkg}-2`, `${pkg}-3`])
+  // one call books the three: the legs as the ticket shows them, none named by the ticket
+  expect(calls.length, 'one call for the whole package').toBe(1)
+  const booked = calls[0].legs.map(sent => ({ sent }))
+  expect(calls[0].structure).toBe('CUSTOM')
+  expect(booked.length).toBe(3)
+  for (const b of booked) { expect(b.sent.trade_ref).toBeUndefined(); expect(b.sent.strategy).toBeUndefined() }
   expect(booked[1].sent.terms.forward_price).toBe(String(Math.round(fair + 500)))
   expect(booked[2].sent.terms.direction).toBe('SELL')
   expect(new Set(booked.map(b => b.sent.terms.settlement_date)).size, 'three settlement dates').toBe(3)
@@ -120,8 +122,9 @@ test('a strip of forwards: built on DETAILS, each leg priced, a strike and a sid
   expectClean(problems)
 })
 
-test('a package that stops part of the way says what stands, and the rest is booked from the table', async ({ app, problems }) => {
+test('a package that is refused books nothing: no leg stands on its own, and the ticket says so', async ({ app, problems }) => {
   await app.goto('/blotter')
+  const before = await app.locator('.bl-row').count()
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
   await win.waitFor()
@@ -130,32 +133,32 @@ test('a package that stops part of the way says what stands, and the rest is boo
   await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
   await win.getByTestId('fx-legs-strip-3').click()
   const rows = win.getByTestId('fx-leg')
+  await expect(rows).toHaveCount(2)
   for (const i of [0, 1]) await expect(rows.nth(i)).toHaveAttribute('data-pending', 'false')
 
-  // the API refuses the second trade once (as it does when two trades are named alike)
-  let posts = 0
-  await app.route(API + '/api/trades/', async (route) => {
-    if (route.request().method() !== 'POST') return route.continue()
-    posts += 1
-    if (posts === 2) return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ detail: 'The trade could not be saved; the error is in the server log.' }) })
-    return route.continue()
+  // the booking is refused (as the API refuses a leg it cannot take): one call, and nothing of the package exists
+  let calls = 0
+  await app.route(API + '/api/book/package', async (route) => {
+    calls += 1
+    await route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: 'leg 3 of 3: refused by the test. Nothing was booked.' }) })
   })
   await win.getByRole('button', { name: /BOOK 3 LEGS/ }).click()
-  const failed = win.getByTestId('fx-legs-failed')
-  await expect(failed).toBeVisible({ timeout: 30_000 })
-  await expect(failed).toContainText('1 of 3 legs are booked. Leg 2 was not: The trade could not be saved')
-  const refs = () => win.getByTestId('fx-leg-ref').allInnerTexts().then(a => a.map(x => x.trim()))
-  expect((await refs()).filter(r => r !== '—').length, 'one leg stands').toBe(1)
-  // BOOK is done for the first leg and cannot send it again; the rest is booked from the table
-  await expect(win.getByRole('button', { name: /BOOKED/ })).toBeDisabled()
-  await win.getByTestId('fx-legs-book-rest').click()
-  await expect(failed).toHaveCount(0, { timeout: 30_000 })
-  const all = await refs()
-  expect(all.filter(r => r !== '—').length).toBe(3)
-  expect(all.slice(1)).toEqual([`${all[0]}-2`, `${all[0]}-3`])
-  expect(posts, 'the first leg was sent once: four posts in all, one of them refused').toBe(4)
-  // the refused booking is the one problem the browser reports, and it is the one this journey made
-  expect(problems.filter(x => !/500|trades\//.test(x)), `other problems:\n${problems.join('\n')}`).toEqual([])
+  await expect(win.locator('.tbw-title')).toContainText(/leg 3 of 3/i)
+  await expect(win.locator('.tbw-title')).toContainText(/nothing was booked/i)
+  expect(calls).toBe(1)
+  await expect(win.getByTestId('fx-legs-package'), 'no trade ID: nothing was booked').toHaveCount(0)
+  await expect(win.getByTestId('fx-leg-ref')).toHaveCount(0)
+  await expect(rows.nth(0).locator('input').first(), 'the legs are still the ticket\'s to change').toBeVisible()
+  await expect(win.getByRole('button', { name: /RETRY BOOK/ })).toBeVisible()
+
+  // with the refusal gone the retry books the three
+  await app.unroute(API + '/api/book/package')
+  await win.getByRole('button', { name: /RETRY BOOK/ }).click()
+  await expect(win.getByTestId('fx-legs-package')).toBeVisible({ timeout: 30_000 })
+  await expect(win.getByTestId('fx-leg-ref')).toHaveCount(3)
+  await win.locator('.tbw-light-r').click()
+  await expect.poll(async () => app.locator('.bl-row').count()).toBe(before + 3)
+  expect(problems.filter(x => !/422|book\/package/.test(x)), `other problems:\n${problems.join('\n')}`).toEqual([])
 })
 
 // Step 2: a leg can be an option of any style the ticket books on its own, and the two-option structures are one press.
@@ -226,17 +229,19 @@ test('an option ticket: a risk reversal, a straddle and a calendar in one press;
   await app.screenshot({ path: 'e2e/.out/shots/legs-touch.png' })
 
   const sent = []
-  app.on('request', r => { if (r.url() === API + '/api/trades/' && r.method() === 'POST') sent.push(r.postDataJSON()) })
+  let structureSent = null
+  app.on('request', r => { if (r.url() === API + '/api/book/package' && r.method() === 'POST') { const b = r.postDataJSON(); structureSent = b.structure; sent.push(...b.legs) } })
   await win.getByRole('button', { name: /BOOK 2 LEGS/ }).click()
   await expect(win.getByTestId('fx-legs-package')).toBeVisible({ timeout: 30_000 })
-  await expect(win.getByTestId('fx-legs-failed')).toHaveCount(0)
   await expect.poll(() => sent.length).toBe(2)
   expect(sent.map(b => [b.instrument_type, b.structure])).toEqual([['CRYPTO_OPTION', 'EUROPEAN'], ['CRYPTO_OPTION', 'TOUCH']])
   expect(sent[1].terms).toMatchObject({ direction: 'SELL', touch_type: 'ONE_TOUCH', payout: '100000', barrier_monitoring: 'CONTINUOUS' })
   expect(sent[1].terms.strike_price, 'a touch books no strike').toBeUndefined()
-  expect(sent.map(b => b.strategy.replace(/PKG-\w+/, 'PKG'))).toEqual(['CUSTOM PKG 1/2', 'CUSTOM PKG 2/2'])
+  expect(structureSent, 'the structure travels with the package, the server writes each leg\'s place').toBe('CUSTOM')
+  const pkgId = (await win.getByTestId('fx-legs-package').innerText()).trim()
+  expect(pkgId).toMatch(/^TRD-\d{8}$/)
   await win.locator('.tbw-light-r').click()
-  await app.getByPlaceholder(/Search/).fill(sent[0].strategy.match(/PKG-\w+/)[0])
+  await app.getByPlaceholder(/Search/).fill(pkgId)
   expect((await app.getByTestId('bl-pkg').allInnerTexts()).map(x => x.trim()).sort()).toEqual(['EUROPEAN · CUSTOM 1/2', 'TOUCH · CUSTOM 2/2'])
   expectClean(problems)
 })
@@ -255,12 +260,14 @@ test('a forward with an option leg: a put added to a forward, made a digital, bo
   await expect(rows.nth(0).getByLabel('Notional of leg 2'), 'a payout has no size').toHaveCount(0)
   await settled(rows, 0)
   const sent = []
-  app.on('request', r => { if (r.url() === API + '/api/trades/' && r.method() === 'POST') sent.push(r.postDataJSON()) })
+  let structureSent = null
+  app.on('request', r => { if (r.url() === API + '/api/book/package' && r.method() === 'POST') { const b = r.postDataJSON(); structureSent = b.structure; sent.push(...b.legs) } })
   await win.getByRole('button', { name: /BOOK 2 LEGS/ }).click()
   await expect(win.getByTestId('fx-legs-package')).toBeVisible({ timeout: 30_000 })
   await expect.poll(() => sent.length).toBe(2)
   expect(sent.map(b => [b.instrument_type, b.structure])).toEqual([['CRYPTO_FORWARD', 'VANILLA'], ['CRYPTO_OPTION', 'DIGITAL']])
   expect(sent[1].terms).toMatchObject({ option_type: 'PUT', direction: 'BUY', payout: '100000', digital_asset: 'BTC' })
+  expect(structureSent).toBe('CUSTOM')
   expect(sent[1].notional, 'the record carries the payout').toBe(100000)
   await win.locator('.tbw-light-r').click()
 
@@ -438,5 +445,70 @@ test('margin and capital on a digital-asset ticket: no SIMM anywhere; a typed do
   await win.getByRole('button', { name: 'XVA', exact: true }).click()
   await expect(win.getByTestId('xva-im-usd')).toHaveValue('')
   await expect(win.getByTestId('xva-crypto-group')).toHaveValue('')
+  expectClean(problems)
+})
+
+test('a package is one trade on chain: one trade ID, a leg ID each, confirmed together as one record, each leg verified', async ({ app, problems }) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await selectDemoBank(app, win)
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  await win.getByTestId('fx-legs-strip-3').click()
+  const rows = win.getByTestId('fx-leg')
+  await expect(rows).toHaveCount(2)
+  for (const i of [0, 1]) await expect(rows.nth(i)).toHaveAttribute('data-pending', 'false')
+  await win.getByRole('button', { name: /BOOK 3 LEGS/ }).click()
+  await expect(win.getByTestId('fx-legs-package')).toBeVisible({ timeout: 30_000 })
+  const pid = (await win.getByTestId('fx-legs-package').innerText()).trim()
+  expect(pid).toMatch(/^TRD-\d{8}$/)
+  await expect(win.getByText('TRADE ID', { exact: true })).toBeVisible()
+
+  // CONFIRM: the tab names the package, its trade ID and every leg's ID, and offers ONE confirmation for the three
+  await win.getByRole('button', { name: /CONFIRM/ }).first().click()
+  const pkg = win.getByTestId('confirm-package')
+  await expect(pkg).toHaveAttribute('data-legs', '3')
+  await expect(win.getByTestId('confirm-package-id')).toHaveText(pid)
+  await expect(win.getByTestId('confirm-package-legs')).toContainText(`${pid}-1 pending`)
+  await expect(win.getByTestId('confirm-package-legs')).toContainText(`${pid}-3 pending`)
+  const one = app.waitForResponse(r => r.url().endsWith('/api/chain/confirm-package') && r.request().method() === 'POST', { timeout: 120_000 })
+  let single = 0
+  app.on('request', r => { if (/\/api\/chain\/confirm\/[0-9a-f-]+$/.test(r.url())) single += 1 })
+  await win.getByRole('button', { name: /CONFIRM PACKAGE ON-CHAIN · 3 LEGS, ONE RECORD/ }).click()
+  const resp = await one
+  expect(resp.status()).toBe(201)
+  const done = await resp.json()
+  expect(resp.request().postDataJSON().trade_ids).toHaveLength(3)
+  expect(done.package.trade_id).toBe(pid)
+  expect(done.package.record.legs).toHaveLength(3)
+  expect(done.trades.map(t => t.status)).toEqual(['CONFIRMED', 'CONFIRMED', 'CONFIRMED'])
+  expect(done.trades.map(t => t.trade_ref)).toEqual([`${pid}-1`, `${pid}-2`, `${pid}-3`])
+  expect(single, 'no leg was confirmed on its own').toBe(0)
+
+  // the certificate of the leg in the window: the package, its hash, and this leg's own hash, three different things
+  const cert = win.getByTestId('confirm-certificate')
+  await expect(cert).toBeVisible({ timeout: 30_000 })
+  await expect(win.getByTestId('cert-package')).toContainText(`${pid} · leg 1 of 3`)
+  await expect(win.getByTestId('cert-package-hash')).toHaveText(done.package.hash)
+  await expect(cert).toContainText("THIS LEG'S HASH")
+  await expect(win.getByTestId('confirm-package-legs')).toContainText(`${pid}-2 confirmed`)
+  // VERIFY re-derives this leg's record, finds it in the package, and re-derives the package's hash
+  const verified = app.waitForResponse(r => /\/api\/chain\/verify\//.test(r.url()), { timeout: 60_000 })
+  await cert.getByRole('button', { name: /VERIFY/ }).click()
+  const v = await (await verified).json()
+  expect(v.hash_matches).toBe(true)
+  expect(v.package).toMatchObject({ trade_id: pid, leg: 1, of: 3, hash: done.package.hash, hash_matches: true, leg_in_package: true })
+  expect(v.signatures_valid_for_current_state).toBe(true)
+  await expectNoHorizontalOverflow(win, 'CONFIRM of a package')
+  await app.screenshot({ path: 'e2e/.out/shots/legs-confirm-package.png' })
+
+  // the blotter: the three legs, each confirmed, found by the trade ID
+  await win.locator('.tbw-light-r').click()
+  await app.getByPlaceholder(/Search/).fill(pid)
+  await expect(app.locator('.bl-row')).toHaveCount(3)
+  await expect(app.locator('.bl-row').filter({ hasText: 'CONFIRMED' })).toHaveCount(3)
+  expect((await app.getByTestId('bl-pkg').allInnerTexts()).map(x => x.trim()).sort()).toEqual(['STRIP 1/3', 'STRIP 2/3', 'STRIP 3/3'])
   expectClean(problems)
 })
