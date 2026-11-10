@@ -82,6 +82,13 @@ deeper ground, with a sentence saying what they mean; a further leg's fields are
 rule, as a field typed over its default does. A leg whose price is not yet of the terms it shows is dimmed. The
 PACKAGE row is set as the figures above it and adds them.
 
+With further legs the footer, CASHFLOWS and CURVE SCENARIO are the package's (`fx-package.js`). The word PACKAGE
+is in the label of every figure that is a sum, and LEG 1 in the label of every figure that is still the ticket's
+own (the forward tile, the scenario fixing, the valuation under the flows): no figure is left for the reader to
+guess whose it is. CASHFLOWS opens on the package, with a button for each leg's own flows. When the package
+cannot be summed the tab says in amber that it shows leg 1 only, and why. A footer too crowded for one line
+drops its units, never a word that carries meaning (paid, received, what a package is waiting for).
+
 ## The right-click menu
 
 The desk's own menu (`components/common/ContextMenu.jsx`, `.rj-menu`) is put only on things that have actions of

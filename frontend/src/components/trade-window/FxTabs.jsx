@@ -21,7 +21,8 @@ import { DELTA_LABEL } from './fx-shape'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { getSessionSafe } from '../../lib/session'
 import { Note } from '../common/Note'
-import { exportCashflows } from './fx-export'
+import { exportCashflows, exportPackageCashflows } from './fx-export'
+import { closedForm, legShocks, legWords, packageFlows, packageGap, repricePackage } from './fx-package'
 import { apiFetch } from '../../lib/api'
 import FxScenarioChart from './FxScenarioChart'
 import FxVolSurface from './FxVolChart'
@@ -300,7 +301,134 @@ export function FxCashflowsPanel({ stale = false, active = true, ...rest }) {
   return <StaleFrame stale={stale && !!rest.quote} active={active}><CashflowsBody {...rest} /></StaleFrame>
 }
 
-function CashflowsBody({ quote, crypto }) {
+// A ticket with further legs: the package first (every leg in a row, and the dates on which money moves), and each
+// leg's own flows behind its chip, exactly as a single trade's. `pkg` is fx-package.js packageView.
+function CashflowsBody({ quote, crypto, pkg = null }) {
+  const [show, setShow] = useState(0)                       // 0: the package; n: leg n
+  if (!pkg) return <LegCashflows quote={quote} crypto={crypto} />
+  const at = show > pkg.n ? 0 : show                         // a leg that was removed: back to the package
+  const chip = (n, text) => (
+    <button key={n} type="button" data-testid={n ? `fx-cf-show-leg-${n}` : 'fx-cf-show-package'} aria-pressed={at === n} onClick={() => setShow(n)}
+      style={{ padding: '4px 10px', borderRadius: 'var(--r-2)', border: `1px solid ${at === n ? 'var(--border-glow)' : 'var(--border)'}`, background: at === n ? 'var(--panel-3)' : 'transparent',
+        color: at === n ? 'var(--text-hi)' : 'var(--text-dim)', fontFamily: 'var(--sans)', fontSize: 11.5, fontWeight: 500, letterSpacing: '0.06em', cursor: 'pointer' }}>{text}</button>
+  )
+  const legQuote = at ? pkg.each[at - 1] : null
+  return (
+    <div>
+      <div className="tbw-no-drag" data-testid="fx-cf-views" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '12px 16px 0' }}>
+        {chip(0, `PACKAGE · ${pkg.n} LEGS`)}
+        {Array.from({ length: pkg.n }, (_, i) => chip(i + 1, `LEG ${i + 1}`))}
+      </div>
+      {at === 0 ? <PackageCashflows pkg={pkg} crypto={crypto} onLeg={setShow} />
+        : legQuote ? <LegCashflows quote={legQuote} crypto={crypto} />
+        : <div className="tbw-no-drag" style={{ ...wrap, paddingTop: 18, color: 'var(--text-dim)', fontSize: 12.5 }} data-testid="fx-cf-leg-gap">
+            Leg {at} {pkg.failed.includes(at) ? 'could not be priced: its flows are not shown. The DETAILS tab says why.' : 'is being priced.'}
+          </div>}
+    </div>
+  )
+}
+
+function PackageCashflows({ pkg, crypto, onLeg }) {
+  const gap = packageGap(pkg)
+  const f = gap ? null : packageFlows(pkg.quotes, { crypto })
+  if (!f) {
+    return (
+      <div className="tbw-no-drag" style={{ ...wrap, paddingTop: 18, color: 'var(--text-dim)', fontSize: 12.5 }} data-testid="fx-cf-package-gap">
+        The package's flows are shown once every leg is priced{gap ? `: ${gap}` : ''}. Each leg that is priced has its own flows behind its button above.
+      </div>
+    )
+  }
+  const q0 = pkg.quotes[0]
+  const qc = q0.quote_currency, base = q0.base_currency, dp = rateDp(q0)
+  const nDp = crypto && base !== 'USD' ? 4 : 0
+  const anyOption = f.premium != null
+  const exchanged = f.legs.some(l => l.exchange)
+  const top = { borderTop: '2px solid var(--border-hi)', borderBottom: 'none' }
+  const legBtn = { background: 'transparent', border: 'none', padding: 0, color: 'var(--text-hi)', fontFamily: 'var(--sans)', fontSize: 12.5, fontWeight: 500, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'var(--border-hi)', textUnderlineOffset: 3 }
+  const firstDate = f.dates.find(d => d.amount != null)?.date, lastDate = [...f.dates].reverse().find(d => d.amount != null)?.date
+  return (
+    <div className="tbw-no-drag" style={wrap} data-testid="fx-cf-package">
+      <div style={hdrRow}><span>PACKAGE · {pkg.n} LEGS · {firstDate === lastDate ? `SETTLEMENT ${firstDate}` : `SETTLEMENTS ${firstDate} TO ${lastDate}`}</span>
+        <Note inline>
+          Every leg is a trade of its own, priced by the engine; the package's figures are their sums, in {qc}. A forward is shown at what it would settle if the fixing were today's
+          fair forward, (F − K) × N; an option at its payoff at today's forward, which, discounted, is its value less the time value. Nothing here is priced a second way.
+        </Note>
+        <button type="button" style={toolBtn} data-testid="fx-cf-export" title="Every leg, the dates on which money moves and the market each leg was priced on, as an Excel workbook"
+          onClick={() => exportPackageCashflows({ quotes: pkg.quotes, flows: f, crypto, dp })}>EXPORT XLSX</button>
+      </div>
+      <div style={{ ...tiles, gridTemplateColumns: `repeat(${anyOption ? 4 : 3}, minmax(0, 1fr))` }}>
+        <Tile label="PACKAGE NPV" value={`${signed(f.npv, 0)} ${qc}`} color={tone(f.npv)} testId="fx-cf-package-npv" raw={f.npv} sub={`the sum of ${pkg.n} legs`} />
+        {anyOption && <Tile label={`NET PREMIUM · ${qc}`} value={signed(f.premium, 0)} color={tone(f.premium)} sub={f.premium < 0 ? 'paid on the trade date' : f.premium > 0 ? 'received on the trade date' : 'nothing changes hands'} testId="fx-cf-package-premium" raw={f.premium} />}
+        <Tile label={`AT TODAY'S FORWARD · ${qc}`} value={signed(f.amount, 0)} color={tone(f.amount)} sub="what the legs would settle, summed" />
+        <Tile label="MONEY MOVES ON" value={`${f.dates.length} ${f.dates.length === 1 ? 'DATE' : 'DATES'}`} sub={f.legs.every(l => l.cash) ? `net payments in ${qc}` : f.legs.some(l => l.cash) ? 'net payments and exchanges of principal' : 'principals exchange'} />
+      </div>
+
+      <div style={{ ...secHdr, marginTop: 4 }}>THE LEGS</div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }} data-testid="fx-cf-package-legs">
+          <thead><tr>
+            <th style={{ ...th, textAlign: 'left' }}>LEG</th><th style={{ ...th, textAlign: 'left' }}>TRADE</th><th style={th}>SETTLES</th>
+            {anyOption && <th style={th}>PREMIUM {qc}</th>}
+            <th style={th}>AT TODAY'S FORWARD {qc}</th><th style={th}>DF</th><th style={th}>NPV {qc}</th>
+          </tr></thead>
+          <tbody>
+            {f.legs.map(l => (
+              <tr key={l.n} data-testid="fx-cf-package-leg" data-npv={l.npv}>
+                <td style={tdL}><button type="button" style={legBtn} onClick={() => onLeg(l.n)} title={`Leg ${l.n}'s own flows`}>LEG {l.n}</button></td>
+                <td style={{ ...tdL, whiteSpace: 'nowrap' }}>{legWords(l, { base, fmt, dp, nDp })}</td>
+                <td style={td}>{l.date}</td>
+                {anyOption && <td style={{ ...td, color: l.premium == null ? 'var(--text-mute)' : tone(l.premium) }}>{l.premium == null ? '—' : signed(l.premium, 0)}</td>}
+                <td style={{ ...td, color: tone(l.amount) }}>{signed(l.amount, 0)}</td>
+                <td style={td}>{fmt(l.df, 6)}</td>
+                <td style={{ ...td, fontWeight: 500, color: tone(l.npv) }}>{signed(l.npv, 0)}</td>
+              </tr>
+            ))}
+            <tr data-testid="fx-cf-package-total">
+              <td colSpan={3} style={{ ...tdL, ...top, fontWeight: 600, color: 'var(--text-hi)' }}>PACKAGE · {qc}</td>
+              {anyOption && <td style={{ ...td, ...top, color: tone(f.premium) }}>{signed(f.premium, 0)}</td>}
+              <td style={{ ...td, ...top, color: tone(f.amount) }}>{signed(f.amount, 0)}</td>
+              <td style={{ ...td, ...top }} />
+              <td style={{ ...td, ...top, fontWeight: 600, color: tone(f.npv) }}>{signed(f.npv, 0)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style={hdrRow}><span>BY DATE</span>
+        <Note inline>
+          The dates on which money moves, earliest first: the premiums on the trade date, then each settlement date with the legs that settle on it netted.
+          {exchanged ? ` A deliverable leg exchanges both principals: the ${base} and ${qc} columns are those amounts, known today.` : ''}
+          {' '}The settlement amounts are today's estimate, at the fair forward; the fixing on each date decides the actual amount.
+        </Note>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }} data-testid="fx-cf-package-dates">
+          <thead><tr>
+            <th style={{ ...th, textAlign: 'left' }}>DATE</th><th style={{ ...th, textAlign: 'left' }}>LEGS</th>
+            {anyOption && <th style={th}>PREMIUM {qc}</th>}
+            {exchanged && <th style={th}>{base} EXCHANGED</th>}{exchanged && <th style={th}>{qc} EXCHANGED</th>}
+            <th style={th}>AT TODAY'S FORWARD {qc}</th><th style={th}>PV {qc}</th>
+          </tr></thead>
+          <tbody>
+            {f.dates.map(d => (
+              <tr key={d.date} data-testid="fx-cf-package-date">
+                <td style={{ ...tdL, fontFamily: 'var(--mono)' }}>{d.date}</td>
+                <td style={tdL}>{d.legs.join(', ')}</td>
+                {anyOption && <td style={{ ...td, color: d.premium == null ? 'var(--text-mute)' : tone(d.premium) }}>{d.premium == null ? '—' : signed(d.premium, 0)}</td>}
+                {exchanged && <td style={{ ...td, color: d.base == null ? 'var(--text-mute)' : tone(d.base, nDp) }}>{d.base == null ? '—' : signed(d.base, nDp)}</td>}
+                {exchanged && <td style={{ ...td, color: d.quote == null ? 'var(--text-mute)' : tone(d.quote) }}>{d.quote == null ? '—' : signed(d.quote, 0)}</td>}
+                <td style={{ ...td, color: d.amount == null ? 'var(--text-mute)' : tone(d.amount) }}>{d.amount == null ? '—' : signed(d.amount, 0)}</td>
+                <td style={{ ...td, color: d.pv == null ? 'var(--text-mute)' : tone(d.pv) }}>{d.pv == null ? '—' : signed(d.pv, 0)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function LegCashflows({ quote, crypto }) {
   if (!quote) return <Empty what="The settlement flows" />
   const done = settledState(quote)
   if (done) {
@@ -518,7 +646,7 @@ export function FxScenarioPanel({ stale = false, active = true, ...rest }) {
   return <StaleFrame stale={dim} active={active}><ScenarioBody {...rest} stale={dim} active={active} /></StaleFrame>
 }
 
-function ScenarioBody({ quote, crypto, terms, active, stale }) {
+function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const [spot, setSpot] = useState(0)
   const [qbp, setQbp] = useState(0)
   const [bbp, setBbp] = useState(0)
@@ -590,7 +718,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     const days = Math.max(settleX - lag, 0)
     const nodes = curveNodes(quoted ? row.forward_points : carryPoints({ spot: quote.spot, forward: quote.forward, days, pip, tenorDays }), lag, tenorDays)
     if (!nodes) return null
-    return { pip, settleX, quoted, days, nodes, tenorDays, label: quoted ? row.forward_curve?.label : null }
+    return { pip, settleX, quoted, days, nodes, tenorDays, lag, label: quoted ? row.forward_curve?.label : null }
   }, [quote, done, crypto, market, pair, option])
 
   if (!quote) return <Empty what="Scenarios" />
@@ -602,7 +730,13 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   // the rate sliders exist for the closed form only; a digital asset's second slider is its forward basis, +1 bp a
   // year of which is −1 bp on the carry rate the form takes (CRYBASIS01 = −FUND01)
   const tSettle = option ? quote.t_settle : quote.t
-  const qPill = pillarsShown(quote.curves?.quote?.pillars, tSettle), bPill = crypto ? [] : pillarsShown(quote.curves?.base?.pillars, tSettle)
+  // A package: every leg under the one scenario, each at its own settlement date (fx-package.js). Its curves are
+  // then shown as far as the LAST leg settles, with every pillar before it: a shock on one reaches each leg as the
+  // engine's curve would carry it, and a pillar left out of the list would be read as not there.
+  const pq = pkg?.quotes || null
+  const legT = (q) => (q.shape === 'OPTION' ? q.t_settle : q.t)
+  const tLong = pq ? Math.max(tSettle, ...pq.map(legT).filter(Number.isFinite)) : tSettle
+  const qPill = pillarsShown(quote.curves?.quote?.pillars, tLong, pq ? Infinity : 8), bPill = crypto ? [] : pillarsShown(quote.curves?.base?.pillars, tLong, pq ? Infinity : 8)
   const qOwn = shockAtTime(qPill, own.quote, tSettle), bOwn = shockAtTime(bPill, own.base, tSettle)
   const rq = european ? qbp + qOwn : 0, rb = european ? (crypto ? -bbp : bbp + bOwn) : 0
   const nodes = model?.nodes || []
@@ -614,6 +748,15 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const base = model ? reprice(quote) : null
   const now = base ? at() : null
   const curve = model ? shockedCurve({ spot: quote.spot, pip, nodes, moves: moved, spotPct: spot, quoteBp: rq, baseBp: rb }) : null
+  // the scenario as every leg reads it, and the package at the market and under it; null when a leg is not the closed form's
+  const scen = model && pq ? { spotPct: spot, quoteBp: qbp, baseBp: bbp, volPts: vpt, pip, crypto, moved: Object.fromEntries(nodes.map((n, i) => [n.tenor, moved[i]])),
+    tenorDays: model.tenorDays, lag: model.lag, quotePillars: qPill, quoteOwn: own.quote, basePillars: bPill, baseOwn: own.base } : null
+  const pBase = scen ? repricePackage(pq, null) : null
+  const pNow = scen ? repricePackage(pq, scen) : null
+  const whole = !!(pBase && pNow)                        // the figures below are the package's
+  const notClosed = pq ? pq.map((q, i) => (closedForm(q) ? null : i + 1)).filter(Boolean) : []
+  const pkgWhy = !pkg || whole ? null
+    : packageGap(pkg) || (notClosed.length ? `leg ${notClosed.join(', ')} is of a style the engine reprices itself, which the browser's closed form does not` : 'a leg does not carry what the closed form needs')
   if (!base || !now || !curve) {
     return (
       <div className="empty-state" style={{ padding: '40px 24px' }} data-testid="fx-scenario-unavailable">
@@ -627,6 +770,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const tenorsMoved = nodes.some(n => (moves[n.tenor] || 0) !== 0)
   const anyMove = spot !== 0 || rq !== 0 || rb !== 0 || tenorsMoved || flatPips !== 0
   const d = (x) => x - base.npv
+  const settleOf = (q) => daysBetween(q.valuation_date, q.settlement_date) ?? Math.round(legT(q) * 365)
+  const longX = pq ? Math.max(settleX, ...pq.map(settleOf).filter(Number.isFinite)) : settleX
   const reset = () => { setSpot(0); setQbp(0); setBbp(0); setVpt(0); setFpips(0); setMoves({}); setPill({ pair, quote: {}, base: {} }); setFixingText(null) }
 
   // the chart reports a drag as a distance in price from where it began; the shocks are worked out here
@@ -673,14 +818,19 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     <div data-testid="fx-scenario-curve" data-drag={stale ? 'off' : 'on'} style={stale ? { pointerEvents: 'none' } : undefined}>
       <FxScenarioChart today={quote.valuation_date} curve={curve} fixings={fixingSeries(rows, source)} tradeSource={source} strike={strike} levels={chartLevels(quote)}
         settle={{ x: settleX, date: quote.settlement_date }} expiry={option ? { x: daysBetween(quote.valuation_date, quote.expiry_date), date: quote.expiry_date } : null}
+        legs={pq ? pq.slice(1).map((q, i) => ({ n: i + 2, x: settleOf(q), forward: whole ? pNow.rows[i + 1].forward : null })) : null}
         fix={fixesEarly ? { x: daysBetween(quote.valuation_date, fixDate), date: fixDate } : null}
         forward={now.forward} dp={dp} moved={anyMove} ready={ready} height={220} onDragStart={onDragStart} onDrag={onDrag} onDragEnd={() => { origin.current = null }} />
     </div>
   )
   // an option's vol surface: the pair's stored surface as the pairs answer carries it, or nothing until that answer is back
   const pairRow = market?.pair === pair ? market.row : null
-  const volSurface = option && pairRow && 'vol_surface' in pairRow        // an answer without the field says nothing about a surface
-    ? <FxVolSurface quote={quote} surface={pairRow.vol_surface || null} pair={pair} vpt={european ? vpt : 0} dp={dp} ready={ready} headerStyle={secHdr} />
+  // A package repriced whole whose first leg is a forward may still hold an option: its vol is then a curve of the
+  // package, shocked like the others and shown at that option's expiry and strike (the first such leg).
+  const optN = option ? 1 : whole ? pq.findIndex(q => q.shape === 'OPTION') + 1 : 0
+  const optQ = optN ? (option ? quote : pq[optN - 1]) : null
+  const volSurface = optQ && pairRow && 'vol_surface' in pairRow        // an answer without the field says nothing about a surface
+    ? <FxVolSurface quote={optQ} surface={pairRow.vol_surface || null} pair={pair} vpt={european ? vpt : 0} dp={dp} ready={ready} headerStyle={secHdr} />
     : null
 
   // ── the curves the price was built on, each in its risk factor's colour, and what has been done to each ──
@@ -698,7 +848,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
       says: said(crypto ? (european && bbp ? `${plus(bbp)} bp` : null) : (fpips ? `${plus(fpips)} pips` : null), points(nTen)) },
     european && { key: 'quote', name: quote.quote_curve || `${qc} CURVE`, sub: `${qc} discounting`, color: rf('ir'), says: said(qbp ? `${plus(qbp)} bp` : null, points(count(qPill, own.quote))) },
     european && !crypto && { key: 'base', name: quote.curves?.base?.id || `${bc} RATE`, sub: `${bc} discounting`, color: rf('ir'), says: said(bbp ? `${plus(bbp)} bp` : null, points(count(bPill, own.base))) },
-    option && { key: 'vol', name: `${pair} VOL`, sub: quote.vol_source || 'the pair\'s surface', color: rf('vol'), says: said(european && vpt ? `${plus(vpt, 2)} pt` : null) },
+    optQ && { key: 'vol', name: `${pair} VOL`, sub: optQ.vol_source || 'the pair\'s surface', color: rf('vol'), says: said(european && vpt ? `${plus(vpt, 2)} pt` : null) },
   ].filter(Boolean)
   const cur = curves.find(c => c.key === sel) || curves[0]
   const rateKey = cur.key === 'quote' || cur.key === 'base' ? cur.key : null
@@ -721,7 +871,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
 
   // point by point: the forward curve's tenors (in points), or a rate curve's pillars (in basis points)
   const bounds = cur.key === 'fwd' ? tenorBounds(nodes, { spot: quote.spot, pip }) : null
-  const lastTenor = (() => { const j = nodes.findIndex(n => n.x >= settleX); return j < 0 ? nodes.length : Math.min(nodes.length, j + 2) })()
+  const lastTenor = (() => { const j = nodes.findIndex(n => n.x >= longX); return j < 0 ? nodes.length : Math.min(nodes.length, j + 2) })()
   const pointRows = cur.key === 'fwd'
     ? nodes.slice(0, lastTenor).map((n, i) => ({ id: n.tenor, name: n.tenor, market: fmt(curve[i + 1].base, dp), scen: fmt(curve[i + 1].shocked, dp), value: moves[n.tenor] || 0, d: crypto ? dp : 1,
         set: (v) => { const c = bounds ? clampTo(v, bounds[i].lo, bounds[i].hi) : v; setMoves({ ...moves, [n.tenor]: c }); return c } }))
@@ -746,8 +896,14 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     ...(crypto ? {} : { base: reprice(quote, { baseBp: rb, pip }) }),
     ...(option ? { vol: reprice(quote, { volPts: vpt, pip }) } : {}),
   } : {}
-  const dOf = (k) => (alone[k] ? alone[k].npv - base.npv : null)
-  const total = d(now.npv)
+  // a package: the same decomposition, each factor's shock alone over every leg
+  const ONLY = { spot: ['spotPct'], fwd: crypto ? ['dPoints', 'baseBp'] : ['dPoints'], quote: ['quoteBp'], base: ['baseBp'], vol: ['volPts'] }
+  const dOf = (k) => {
+    if (!whole) return alone[k] ? alone[k].npv - base.npv : null
+    const r = european && ONLY[k] ? repricePackage(pq, scen, { only: ONLY[k] }) : null
+    return r ? r.npv - pBase.npv : null
+  }
+  const total = whole ? pNow.npv - pBase.npv : d(now.npv)
   const cross = european ? total - curves.reduce((a, c) => a + (dOf(c.key) ?? 0), 0) : null
   const shockSaid = {
     spot: spot ? `${plus(spot, 2)}%` : '—',
@@ -755,10 +911,14 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     quote: rq ? `${plus(rq, 1)} bp` : '—', base: rb ? `${plus(rb, 1)} bp` : '—', vol: vpt ? `${plus(vpt, 2)} pt` : '—',
   }
   // sensitivity × shock: what the ticket's own risk figures say the shock is worth (a dragged tenor has no figure of its own)
-  const first = {
-    spot: spot * (quote.spot01 ?? 0), fwd: crypto ? bbp * (crybasis01(quote) ?? 0) : null,
-    quote: rq * (quote.ir01_disc ?? 0), base: rb * (quote.ir01_base ?? 0), vol: vpt * (quote.vega ?? 0),
-  }
+  const firstOf = (q, s) => ({
+    spot: spot * (q.spot01 ?? 0), fwd: crypto ? bbp * (crybasis01(q) ?? 0) : null,
+    quote: s.quoteBp * (q.ir01_disc ?? 0), base: s.baseBp * (q.ir01_base ?? 0), vol: vpt * (q.shape === 'OPTION' ? (q.vega ?? 0) : 0),
+  })
+  // a package: each leg's own figures times the shock that leg sees, summed (a dragged tenor still has no figure)
+  const first = whole
+    ? pq.map(q => firstOf(q, legShocks(q, scen))).reduce((a, b) => Object.fromEntries(Object.keys(a).map(k => [k, a[k] == null ? null : a[k] + b[k]])))
+    : firstOf(quote, { quoteBp: rq, baseBp: rb })
   const firstTotal = curves.reduce((a, c) => a + (first[c.key] ?? 0), 0)
   const cols = `150px repeat(${curves.length + 2}, minmax(0, 1fr))`
   const rRow = { display: 'grid', gridTemplateColumns: cols, alignItems: 'stretch', padding: '0 12px 0 16px', minWidth: 640 }
@@ -776,17 +936,17 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
         <div style={{ ...rCell, ...lbl, fontSize: 11, fontWeight: 600, color: 'var(--text-hi)', ...rTot }}>TOTAL</div>
       </div>
       <div style={{ ...rRow, paddingTop: 7 }} data-testid="fx-scn-shock">
-        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SHOCK AT SETTLEMENT</div>
+        <div style={{ ...rName, padding: '0 8px 7px 0' }}>{whole ? 'SHOCK AT LEG 1' : 'SHOCK AT SETTLEMENT'}</div>
         {curves.map(c => <div key={c.key} style={rSmall}>{shockSaid[c.key]}</div>)}
         <div style={rSmall}>—</div><div style={{ ...rSmall, ...rTot }}>—</div>
       </div>
       <div style={rRow} data-testid="fx-scn-change">
-        <div style={rName}>CHANGE IN NPV · {qc}</div>
+        <div style={rName}>{whole ? 'PACKAGE CHANGE' : 'CHANGE IN NPV'} · {qc}</div>
         {curves.map(c => money(dOf(c.key), c.key))}
         {money(cross, 'cross')}{money(total, 'total')}
       </div>
       <div style={rRow} data-testid="fx-scn-first">
-        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SENSITIVITY × SHOCK<Note inline>{DELTA_LABEL(crypto)} × the spot shock, IR01 × the rate shock{crypto ? ', CRYBASIS01 × the basis shock' : ''}{option ? ', VEGA × the vol shock' : ''}: the ticket's own risk figures. It is the change in value to first order, and it adds across factors{tenorsMoved || (!crypto && dPoints) ? '. A tenor moved in points has no figure of its own and is left out' : ''}.</Note></div>
+        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SENSITIVITY × SHOCK<Note inline>{DELTA_LABEL(crypto)} × the spot shock, IR01 × the rate shock{crypto ? ', CRYBASIS01 × the basis shock' : ''}{optQ ? ', VEGA × the vol shock' : ''}: the ticket's own risk figures. It is the change in value to first order, and it adds across factors{tenorsMoved || (!crypto && dPoints) ? '. A tenor moved in points has no figure of its own and is left out' : ''}.</Note></div>
         {curves.map(c => money(first[c.key], c.key, rSmall))}
         <div style={rSmall}>—</div>{money(firstTotal, 'total', rSmall)}
       </div>
@@ -795,13 +955,20 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
 
   // ── one ladder: the selected curve moved flat, on top of the scenario ──
   const bpSteps = [-100, -50, -25, -10, 0, 10, 25, 50, 100]
+  // a column of the ladder: `more` on top of the scenario. A package takes it on every leg; the forward shown is leg 1's.
+  const step = (more) => {
+    if (!whole) return at({ spotPct: spot + (more.spotPct || 0), quoteBp: rq + (more.quoteBp || 0), baseBp: rb + (more.baseBp || 0), volPts: vpt + (more.volPts || 0), dPoints: dPoints + (more.dPoints || 0) })
+    const r = repricePackage(pq, scen, { extra: more })
+    return r ? { forward: r.rows[0].forward, npv: r.npv } : null
+  }
   const ladder = european && {
-    spot: { xs: [-10, -5, -2, -1, 0, 1, 2, 5, 10], unit: '%', at: (x) => at({ spotPct: spot + x }) },
-    fwd: crypto ? { xs: bpSteps, unit: 'bp', at: (x) => at({ baseBp: -(bbp + x) }) } : { xs: [-100, -50, -20, -10, 0, 10, 20, 50, 100], unit: ' pips', at: (x) => at({ dPoints: dPoints + x }) },
-    quote: { xs: bpSteps, unit: 'bp', at: (x) => at({ quoteBp: rq + x }) },
-    base: { xs: bpSteps, unit: 'bp', at: (x) => at({ baseBp: rb + x }) },
-    vol: { xs: [-5, -2, -1, -0.5, 0, 0.5, 1, 2, 5], unit: 'pt', at: (x) => at({ volPts: vpt + x }) },
+    spot: { xs: [-10, -5, -2, -1, 0, 1, 2, 5, 10], unit: '%', at: (x) => step({ spotPct: x }) },
+    fwd: crypto ? { xs: bpSteps, unit: 'bp', at: (x) => step({ baseBp: -x }) } : { xs: [-100, -50, -20, -10, 0, 10, 20, 50, 100], unit: ' pips', at: (x) => step({ dPoints: x }) },
+    quote: { xs: bpSteps, unit: 'bp', at: (x) => step({ quoteBp: x }) },
+    base: { xs: bpSteps, unit: 'bp', at: (x) => step({ baseBp: x }) },
+    vol: { xs: [-5, -2, -1, -0.5, 0, 0.5, 1, 2, 5], unit: 'pt', at: (x) => step({ volPts: x }) },
   }[cur.key]
+  const scenNpv = whole ? pNow.npv : now.npv, marketNpv = whole ? pBase.npv : base.npv
   const none = { forward: null, npv: null }                                  // a ladder cell that cannot be priced shows a dash
   const lad = ladder ? ladder.xs.map(x => ({ x, r: ladder.at(x) || none })) : []
   const lRow = { display: 'grid', gridTemplateColumns: `150px repeat(${lad.length}, minmax(0, 1fr))`, padding: '0 12px 0 16px', minWidth: 760 }
@@ -816,11 +983,51 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
           ? <div key={x} data-testid="fx-scenario-base" data-forward={r.forward ?? ''} data-npv={r.npv ?? ''} style={{ ...lCell, ...lbl, fontSize: 11, color: 'var(--text-hi)', ...mid(x) }}>scenario</div>
           : <div key={x} style={{ ...lCell, ...lbl, fontSize: 11 }}>{plus(x, 2)}{ladder.unit}</div>)}
       </div>
-      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>FORWARD</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, ...mid(x) }}>{fmt(r.forward, dp)}</div>)}</div>
-      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>NPV · {qc}</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, color: tone(r.npv), ...mid(x) }}>{fmt(r.npv)}</div>)}</div>
-      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>CHANGE</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, color: x === 0 ? 'var(--text-mute)' : tone(r.npv == null ? null : r.npv - now.npv), ...mid(x) }}>{x === 0 || r.npv == null ? '—' : signedChange(r.npv - now.npv)}</div>)}</div>
+      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>{whole ? 'FORWARD · LEG 1' : 'FORWARD'}</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, ...mid(x) }}>{fmt(r.forward, dp)}</div>)}</div>
+      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>{whole ? 'PACKAGE NPV' : 'NPV'} · {qc}</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, color: tone(r.npv), ...mid(x) }}>{fmt(r.npv)}</div>)}</div>
+      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>CHANGE</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, color: x === 0 ? 'var(--text-mute)' : tone(r.npv == null ? null : r.npv - scenNpv), ...mid(x) }}>{x === 0 || r.npv == null ? '—' : signedChange(r.npv - scenNpv)}</div>)}</div>
     </div>
   )
+
+  // ── a package: every leg under the scenario, and their sum; or the reason the scenario is of leg 1 only ──
+  const legRows = whole ? packageFlows(pq, { crypto })?.legs : null
+  const pCell = { fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', padding: '6px 8px 6px 0', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', borderBottom: '1px solid var(--border)' }
+  const pHead = { ...lbl, textAlign: 'right', padding: '6px 8px 6px 0', borderBottom: '1px solid var(--border-hi)', whiteSpace: 'nowrap' }
+  const pTop = { borderTop: '2px solid var(--border-hi)', borderBottom: 'none' }
+  const packageBlock = pkg && (whole && legRows ? (
+    <div data-testid="fx-scn-package" style={{ overflowX: 'auto', padding: '0 16px 12px', borderBottom: ladder ? '1px solid var(--border)' : 'none', background: 'var(--bg)' }}>
+      <div style={{ ...secHdr, margin: '12px 0 8px' }}>THE PACKAGE UNDER THIS SCENARIO · {pkg.n} LEGS
+        <Note inline>Every leg repriced under the same scenario, each at its own settlement date: the spot shock in full, the forward curve's move and each rate curve's shock read at that leg's date. The package is their sum.</Note></div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
+        <thead><tr>
+          <th style={{ ...pHead, textAlign: 'left' }}>LEG</th><th style={{ ...pHead, textAlign: 'left' }}>TRADE</th><th style={pHead}>SETTLES</th>
+          <th style={pHead}>FORWARD · SCENARIO</th><th style={pHead}>NPV AT THE MARKET</th><th style={pHead}>NPV · SCENARIO</th><th style={pHead}>CHANGE · {qc}</th>
+        </tr></thead>
+        <tbody>
+          {legRows.map((l, i) => { const a = pBase.rows[i].npv, b = pNow.rows[i].npv; return (
+            <tr key={l.n} data-testid="fx-scn-package-leg" data-change={b - a}>
+              <td style={{ ...pCell, textAlign: 'left', fontFamily: 'var(--sans)' }}>LEG {l.n}</td>
+              <td style={{ ...pCell, textAlign: 'left', fontFamily: 'var(--sans)' }}>{legWords(l, { base: bc, fmt, dp, nDp })}</td>
+              <td style={pCell}>{l.date}</td>
+              <td style={pCell}>{fmt(pNow.rows[i].forward, dp)}</td>
+              <td style={{ ...pCell, color: tone(a) }}>{fmt(a)}</td>
+              <td style={{ ...pCell, color: tone(b) }}>{fmt(b)}</td>
+              <td style={{ ...pCell, color: tone(b - a) }}>{signedChange(b - a)}</td>
+            </tr>) })}
+          <tr data-testid="fx-scn-package-total" data-change={total} data-npv={pNow.npv}>
+            <td colSpan={4} style={{ ...pCell, ...pTop, textAlign: 'left', fontFamily: 'var(--sans)', fontWeight: 600, color: 'var(--text-hi)' }}>PACKAGE · {qc}</td>
+            <td style={{ ...pCell, ...pTop, color: tone(pBase.npv) }}>{fmt(pBase.npv)}</td>
+            <td style={{ ...pCell, ...pTop, color: tone(pNow.npv) }}>{fmt(pNow.npv)}</td>
+            <td style={{ ...pCell, ...pTop, fontWeight: 600, color: tone(total) }}>{signedChange(total)}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <div data-testid="fx-scn-package-off" style={{ padding: '10px 16px', borderBottom: ladder ? '1px solid var(--border)' : 'none', background: 'var(--bg)', fontSize: 12.5, color: 'var(--amber)' }}>
+      This scenario is of leg 1 only, not the package of {pkg.n} legs: {pkgWhy}.
+    </div>
+  ))
 
   // ── the left column ──
   const curveBtn = (c) => (
@@ -843,7 +1050,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const onEnter = (e) => { if (e.key === 'Enter') e.target.blur() }
   const left = (
     <div style={XVA_LEFT} data-testid="fx-scn-left">
-      <div style={{ ...secHdr, marginTop: 4 }}>CURVES THAT PRICE THIS TRADE<Note inline>Every market input the price was built from, each in the colour of its risk factor. Select one to shock it flat, point by point, or by dragging on the chart.</Note></div>
+      <div style={{ ...secHdr, marginTop: 4 }}>CURVES THAT PRICE THIS {pq ? 'PACKAGE' : 'TRADE'}<Note inline>Every market input the price was built from, each in the colour of its risk factor. Select one to shock it flat, point by point, or by dragging on the chart.</Note></div>
       {curves.map(curveBtn)}
       {flat && (<>
         <div style={secHdr}>FLAT SHOCK · {flat.what}{cur.key === 'fwd' && quotedForward && european && <Note inline testId="fx-scenario-quoted-note">On quoted points the pricer holds the forward when a rate curve moves: the two curve shocks show the carry effect only, and a spot shock scales the points with spot.</Note>}</div>
@@ -881,8 +1088,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const chartTitle = cur.key === 'spot' || cur.key === 'fwd' ? `FORWARD CURVE · ${pair}` : rateKey ? `${cur.name} · ZERO RATE % A YEAR` : ''          // the surface block carries its own heading
   const chartSays = cur.key === 'spot' || cur.key === 'fwd'
     ? `${model.quoted ? `Spot plus the quoted points${model.label ? ` (${model.label})` : ''}.` : 'The curve is the ticket\'s own carry from spot to the forward.'} Drag a tenor up or down to move it; hold Shift, or drag the spot point at TODAY, to move the whole curve.`
-    : rateKey ? 'The curve\'s own pillars up to the settlement date and the two after it; those beyond cannot reach this trade. Drag a pillar up or down to shock it.'
-    : 'The pair\'s stored surface, read at this expiry and strike as the engine reads it. The flat shock moves the level of the smile, not its shape.'
+    : rateKey ? `The curve's own pillars up to the ${pq ? 'last leg\'s settlement' : 'settlement date'} and the two after it; those beyond cannot reach this ${pq ? 'package' : 'trade'}. Drag a pillar up or down to shock it.`
+    : `The pair's stored surface, read at ${option ? 'this' : `leg ${optN}'s`} expiry and strike as the engine reads it. The flat shock moves the level of the smile${whole && pq.filter(q => q.shape === 'OPTION').length > 1 ? ' on every option leg' : ''}, not its shape.`
   const selected = cur.key === 'spot' || cur.key === 'fwd' ? chart
     : rateKey ? (pills.length
         ? <FxRateCurve pillars={pills} own={own[rateKey]} flat={rateFlat} settleT={tSettle} color={cur.color} disabled={stale}
@@ -891,7 +1098,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     : (volSurface || <div style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>{ready ? `No vol surface is stored for ${pair}.` : `Reading the surface stored for ${pair}…`}</div>)
   const fixingCell = (
     <div style={{ position: 'relative', background: 'var(--bg-deep)', border: '1px solid var(--border)', borderRadius: 'var(--r-3)', padding: '9px 12px', minWidth: 0 }}>
-      <div style={{ ...lbl, marginBottom: 4 }}>{option ? (american ? 'FIXING AT EXERCISE OR EXPIRY' : 'FIXING AT EXPIRY') : 'SCENARIO FIXING'}
+      <div style={{ ...lbl, marginBottom: 4 }}>{option ? (american ? 'FIXING AT EXERCISE OR EXPIRY' : 'FIXING AT EXPIRY') : 'SCENARIO FIXING'}{pkg ? ' · LEG 1' : ''}
         <Note inline><span style={{ display: 'block' }}>{formula}, with N {fmt(quote.base_notional, nDp)} {bc} and K {fmt(strike, dp)}, in {qc}. The fixing follows the scenario's forward until one is typed.</span>
           <FixingSource source={source} time={fixTime} date={cash ? fixDate : null} settles={cash ? quote.settlement_date : null} american={american} last={last} cash={cash} dp={dp} /></Note>
       </div>
@@ -921,11 +1128,12 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
           </div>
           {results}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr)', gap: 8, padding: '10px 16px', borderTop: '1px solid var(--border)', borderBottom: ladder ? '1px solid var(--border)' : 'none', background: 'var(--bg)' }}>
-            <Tile label="FORWARD · SCENARIO" value={fmt(now.forward, dp)} testId="fx-scenario-forward" raw={now.forward} sub={`at the market ${fmt(base.forward, dp)}`} />
-            <Tile label={`NPV · ${qc}`} value={fmt(now.npv)} color={tone(now.npv)} sub={`at the market ${fmt(base.npv)}`} />
-            <Tile label={`CHANGE · ${qc}`} value={signedChange(total)} color={tone(total)} />
+            <Tile label={pkg ? 'FORWARD · LEG 1' : 'FORWARD · SCENARIO'} value={fmt(now.forward, dp)} testId="fx-scenario-forward" raw={now.forward} sub={`at the market ${fmt(base.forward, dp)}`} />
+            <Tile label={`${whole ? 'PACKAGE NPV' : pkg ? 'LEG 1 NPV' : 'NPV'} · ${qc}`} value={fmt(scenNpv)} color={tone(scenNpv)} sub={`at the market ${fmt(marketNpv)}`} testId="fx-scenario-npv" raw={scenNpv} />
+            <Tile label={`${whole ? 'PACKAGE CHANGE' : pkg ? 'LEG 1 CHANGE' : 'CHANGE'} · ${qc}`} value={signedChange(total)} color={tone(total)} testId="fx-scenario-change" raw={total} />
             {fixingCell}
           </div>
+          {packageBlock}
           {ladderBlock}
           {!european && <div style={{ padding: '0 16px 12px', background: 'var(--bg)' }}><StyleLadder crypto={crypto} quote={quote} active={active} stale={stale} /></div>}
         </div>

@@ -63,13 +63,49 @@ export function sheetModel({ quote, legs = null, net = null, pv = null, option =
   return { title: `${quote.pair || base + qc} ${quote.shape === 'OPTION' ? 'option' : 'forward'} cashflows`, meta, tables }
 }
 
+// A package of legs: every leg in a row, the dates on which money moves, and the market each leg was priced on.
+// `flows` is fx-package.js packageFlows(quotes). A leg's present value at today's forward is a formula (amount ×
+// discount factor) and each total a sum, with the figures the tab showed as their stored results.
+export function packageSheetModel({ quotes, flows, crypto = false, dp = 5 }) {
+  const q0 = quotes[0]
+  const qc = q0.quote_currency, base = q0.base_currency
+  const rate = '#,##0.' + '0'.repeat(dp), size = crypto && base !== 'USD' ? '#,##0.0000' : '#,##0'
+  const num = (v, fmt) => (v == null || !Number.isFinite(Number(v)) ? '' : { v: Number(v), fmt })
+  const tot = (v, col) => (Number.isFinite(Number(v)) ? { v: Number(v), fmt: money, sum: col } : '')
+  const meta = [
+    ['PAIR', q0.pair || `${base}${qc}`],
+    ['PACKAGE', `${flows.legs.length} LEGS`],
+    ['VALUATION DATE', q0.valuation_date || ''],
+    ['NPV', num(flows.npv, money)],
+    ['NPV CURRENCY', qc],
+  ]
+  if (flows.premium != null) meta.push(['NET PREMIUM', num(flows.premium, money)], ['PREMIUM DATE', q0.valuation_date || ''])
+  const kind = (l) => (l.option ? (l.style === 'TOUCH' ? 'TOUCH' : `${l.optionType}${l.style !== 'EUROPEAN' ? ` ${String(l.style).replace(/_/g, ' ')}` : ''}`) : 'FORWARD')
+  const tables = [{
+    name: `THE LEGS (${qc})`,
+    head: ['LEG', 'DIRECTION', 'TYPE', `NOTIONAL ${base}`, 'STRIKE / K', 'SETTLEMENT DATE', `PREMIUM ${qc}`, `AT TODAY'S FORWARD ${qc}`, 'DF', `PV AT THE FORWARD ${qc}`, `NPV ${qc}`],
+    rows: flows.legs.map(l => [l.n, l.direction, kind(l), num(l.notional, size), num(l.level, rate), l.date || '', num(l.premium, money), num(l.amount, money), num(l.df, df6),
+      Number.isFinite(Number(l.pv)) ? { v: Number(l.pv), fmt: money, f: (r) => `H${r}*I${r}` } : '', num(l.npv, money)]),
+    total: ['PACKAGE', '', '', '', '', '', flows.premium == null ? '' : tot(flows.premium, 'G'), tot(flows.amount, 'H'), '', tot(flows.pv, 'J'), tot(flows.npv, 'K')],
+  }, {
+    name: `BY DATE (${qc})`,
+    head: ['DATE', 'LEGS', `PREMIUM ${qc}`, `${base} EXCHANGED`, `${qc} EXCHANGED`, `AT TODAY'S FORWARD ${qc}`, `PV ${qc}`],
+    rows: flows.dates.map(d => [d.date || '', d.legs.join(', '), num(d.premium, money), num(d.base, size), num(d.quote, money), num(d.amount, money), num(d.pv, money)]),
+  }, {
+    name: 'MARKET EACH LEG WAS PRICED ON',
+    head: ['LEG', 'SPOT', 'FAIR FORWARD', `DF ${qc}`, 'VOL %', 'SPOT SOURCE', 'CURVE'],
+    rows: quotes.map((q, i) => [i + 1, num(q.spot, rate), num(q.forward, rate), num(q.df_quote, df6), q.vol_pct == null ? '' : num(q.vol_pct, '0.00'), q.spot_source || '', q.quote_curve || '']),
+  }]
+  return { title: `${q0.pair || base + qc} package of ${flows.legs.length} legs, cashflows`, meta, tables }
+}
+
 const INK = 'FF1C2240', MUTE = 'FF5D6482', RULE = 'FFB9BECF', HEAD = 'FFF1F2EC'
 
 export async function buildWorkbook(model, ExcelJS, now = new Date()) {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Rijeka'; wb.created = now
   const ws = wb.addWorksheet('CASHFLOWS')
-  ws.columns = [18, 14, 18, 18, 16, 18, 12, 18].map(width => ({ width }))
+  ws.columns = [18, 14, 18, 18, 16, 18, 18, 22, 12, 22, 18].map(width => ({ width }))
   const put = (row, i, cell, style = {}) => {
     const c = row.getCell(i + 1)
     const o = cell != null && typeof cell === 'object' ? cell : { v: cell }
@@ -112,16 +148,24 @@ export async function buildWorkbook(model, ExcelJS, now = new Date()) {
   return wb
 }
 
-export async function exportCashflows(args) {
+async function save(model, name) {
   const m = await import('exceljs')
   const ExcelJS = m.default || m
-  const model = sheetModel(args)
   const wb = await buildWorkbook(model, ExcelJS)
   const buf = await wb.xlsx.writeBuffer()
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  const q = args.quote
-  a.href = url; a.download = `rijeka_${q.pair || q.base_currency + q.quote_currency}_${q.settlement_date || 'cashflows'}_cashflows.xlsx`
+  a.href = url; a.download = name
   a.click(); URL.revokeObjectURL(url)
+}
+
+export async function exportCashflows(args) {
+  const q = args.quote
+  await save(sheetModel(args), `rijeka_${q.pair || q.base_currency + q.quote_currency}_${q.settlement_date || 'cashflows'}_cashflows.xlsx`)
+}
+
+export async function exportPackageCashflows(args) {
+  const q = args.quotes[0]
+  await save(packageSheetModel(args), `rijeka_${q.pair || q.base_currency + q.quote_currency}_package_${args.flows.legs.length}_legs_cashflows.xlsx`)
 }

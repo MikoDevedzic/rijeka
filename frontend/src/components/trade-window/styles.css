@@ -314,6 +314,10 @@
 
 /* The valuation under a forward's flows: the flows' panel ends with room for the footer, which the valuation takes */
 .tbw-valuation-slot:not(:empty) { margin-top: -32px; }
+/* A package: the valuation is leg 1's and is named; the name takes the room the flows' panel left */
+.tbw-leg1-valuation { margin: -34px 16px 0; padding: 10px 0 0; border-top: 1px solid var(--border); font-family: var(--sans); font-size: 11.5px; font-weight: 600; letter-spacing: 0.1em; color: var(--text-hi); }
+.tbw-leg1-valuation span { margin-left: 10px; font-weight: 400; letter-spacing: 0; font-size: 12px; color: var(--text-mute); }
+.tbw-valuation-slot.tbw-valuation-slot-named:not(:empty) { margin-top: 0; }
 
 /* ── Footer ────────────────────────────────────────────────────────────── */
 
@@ -335,6 +339,12 @@
   display: flex;
   gap: 14px;
   align-items: center;
+  container-type: inline-size; min-width: 0;
+}
+/* Six figures beside a long structure name and the buttons (an option, a package with one): when they cannot
+   share the line, the units go (the TRADE tab's tiles carry each) and the names, the figures and a premium's paid or received stay on it. */
+@container (max-width: 800px) {
+  .tbw-footer-metrics:has(> .tbw-footer-metric:nth-child(6)) .tbw-fx-unit:not(.tbw-fx-unit-keep) { display: none; }
 }
 
 .tbw-footer-actions {

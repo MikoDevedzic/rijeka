@@ -64,7 +64,8 @@ function layout(W, H, p, frozen) {
   const vis = (p.curve || []).map((c, index) => ({ ...c, index })).filter(c => fin(c.base) && fin(c.shocked) && fin(c.x))
   const hasCurve = vis.length > 0 && vis[0].x === 0
   if (!hasCurve && !p.settled) return null
-  const ahead = Math.max(0, ...[p.settle?.x, p.expiry?.x].filter(fin))
+  // a package's further legs settle on dates of their own: the axis reaches the last of them
+  const ahead = Math.max(0, ...[p.settle?.x, p.expiry?.x, ...(p.legs || []).map(l => l?.x)].filter(fin))
   // without a curve the right side only has to reach a settlement date still ahead; one day stands for "none"
   const maxDays = hasCurve ? horizonDays(vis, ahead) : Math.max(ahead * 1.05, 1)
   if (!(maxDays > 0)) return null
@@ -142,6 +143,9 @@ function draw(canvas, p, L, hover) {
   if (fixAt && onAxis(fixAt.x) && !(settleOn && fixAt.x === p.settle.x)) marks.push({ x: xs(fixAt.x), text: `FIX ${isoDate(fixAt.date)}`.trim() })
   if (settleOn) marks.push({ x: xs(p.settle.x), text: `SETTLE ${isoDate(p.settle.date)}`.trim() })
   marks.forEach(m => vline(m.x, 'rgba(246,241,228,0.45)', 1, [4, 3]))
+  // a package's further legs: a fainter line at each one's settlement, its number at the foot of the line
+  const others = hasCurve ? (p.legs || []).filter(l => l && onAxis(l.x) && !(settleOn && l.x === p.settle.x)) : []
+  others.forEach(l => vline(xs(l.x), 'rgba(246,241,228,0.22)', 1, [2, 4]))
   ctx.textBaseline = 'bottom'; ctx.fillStyle = C.hi
   if (marks.length === 2 && Math.abs(marks[0].x - marks[1].x) < ctx.measureText(marks[0].text).width / 2 + ctx.measureText(marks[1].text).width / 2 + 10) {
     const text = `${marks[0].text} · ${marks[1].text}`
@@ -211,6 +215,14 @@ function draw(canvas, p, L, hover) {
     ctx.fillStyle = C.hi; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(text, tx, ty + 1)
   }
   if (hasCurve && p.settle && fin(p.settle.x) && fin(p.forward)) dot(xs(p.settle.x), p.forward, C.curve, false)
+  // each further leg at its own scenario forward: a small ring and the leg's number, no figure (the table under the chart has it)
+  others.forEach(l => {
+    if (!fin(l.forward)) return
+    const x = xs(l.x), y = Math.max(top, Math.min(bottom, ys(l.forward)))
+    ctx.beginPath(); ctx.arc(x, y, 3.5, 0, Math.PI * 2); ctx.fillStyle = C.bg; ctx.fill()
+    ctx.strokeStyle = C.curve; ctx.lineWidth = 1.5; ctx.stroke()
+    ctx.fillStyle = C.label; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(String(l.n), x, bottom - 3)
+  })
   if (!hasCurve && used) dot(xs(used.x), used.value, C.fix, !!used.estimate)
 
   // the point under the cursor: its tenor, its value, and how far it has moved

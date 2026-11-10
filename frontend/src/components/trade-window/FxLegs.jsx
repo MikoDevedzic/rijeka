@@ -50,7 +50,14 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
   if (!first || !quote) return null
   const base = quote.base_currency, qc = quote.quote_currency
   const nDp = crypto ? 4 : 0
-  const kOf = (l, q) => (l.kind === 'TOUCH' ? null : q ? Number(isOption(l) ? q.strike : q.forward_rate) : l.strike)
+  // A leg's strike: the one it was priced at, else the one typed. A leg whose type has just changed still holds the
+  // price of what it was (a forward's has no strike, an option's no forward price): that is no strike, not a NaN
+  // for the charts to draw.
+  const kOf = (l, q) => {
+    if (l.kind === 'TOUCH') return null
+    const k = q ? Number(isOption(l) ? q.strike : q.forward_rate) : l.strike
+    return Number.isFinite(k) ? k : (Number.isFinite(l.strike) ? l.strike : null)
+  }
   // named with the strike the ticket is priced at: a strike left empty on TRADE is the fair forward, and a straddle struck there is a straddle
   const structure = structureOf({ ...first, strike: first.strike ?? kOf(first, quote) }, legs)
   const rows = [
@@ -85,7 +92,7 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
   // ── the picture: one date → what the package pays at expiry; several → the strikes against the fair forwards ──
   const W = 880
   const pricedRows = rows.filter(r => r.quote && r.date && !r.problem)
-  const oneDate = several && pricedRows.length === rows.length && new Set(rows.map(r => r.date)).size === 1 && rows.some(isOption)
+  const oneDate = several && pricedRows.length === rows.length && new Set(rows.map(r => r.date)).size === 1 && rows.some(isOption) && rows.every(r => r.kind === 'TOUCH' || kOf(r, r.quote) != null)
   const chart = several && pricedRows.length >= 2 && (oneDate ? (() => {
     const H = 210, L = 76, R = 24, TOP = 26, BOT = 26, F = Number(quote.forward), S = Number(quote.spot)
     // the premium of the options, as today's value: what was paid for the ones bought less what was taken for the ones sold

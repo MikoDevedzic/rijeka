@@ -185,7 +185,11 @@ The CURVE SCENARIO tab of a currency or digital-asset ticket (`trade-window/FxSc
 `fx-scenario.js`) draws the pair's recent fixings and its forward curve, lets the curve be dragged by tenor or as a
 whole, and reprices in the browser with the pricer's own closed form and the backend's interpolation of forward
 points: an approximation, exact with no shock, labelled as one, and pinned to the backend by shared vectors
-(`backend/tests/vectors/fx_scenario.json`, read by a test on each side). A scenario fixing shows the settlement
+(`backend/tests/vectors/fx_scenario.json`, read by a test on each side). A ticket with further legs is seen as
+one on the footer, CASHFLOWS and this tab (`trade-window/fx-package.js`): sums of what each leg's own price
+carries, and one scenario read by each leg at its own settlement date; nothing is priced a second way, nothing
+is asked of the API beyond each leg's price, and a package with a leg missing or of a style the closed form does
+not price is not summed without it. A scenario fixing shows the settlement
 amount by the rule above. A trade that is `FIXED` or `SETTLED` has no forward to shock: the tab shows the fixing
 used, the amount and both dates as the API returned them. The API gives that answer only to a client that asks
 for it (`states` on `POST /price`); a web client from before it is answered as it always was. Nothing the tab

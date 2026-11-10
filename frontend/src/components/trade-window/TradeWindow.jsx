@@ -57,6 +57,7 @@ import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
 import FxXvaPanel from './FxXvaPanel'
 import CapitalTab from './CapitalTab'
 import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
+import { packageGap, packageRisk, packageView } from './fx-package'
 import FxLegs from './FxLegs'
 import { LEG_TERMS, structureOf, packageOf } from './fx-legs'
 
@@ -313,6 +314,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     const failed = fxLegs.some(l => { const v = legView[l.id]; return !!v && !v.pending && (!!v.error || !v.quote) })
     return { count: fxLegs.length, ready, failed, key: legsKey, bodies: ready ? rows.map(r => r.body) : [], quotes: ready ? rows.map(r => r.quote) : [] }
   })()
+  // The package as the other tabs and the footer see it (fx-package.js): the ticket's quote and every further leg's,
+  // whole only when each leg is priced for the terms it shows. Null for a ticket without further legs.
+  const pkg = legsFor && !viewMode && fxQuote ? packageView(fxQuote, fxLegs, legView) : null
   // a leg that is gone takes its price with it; a product that has no legs has none
   useEffect(() => { if (!legsFor && legsHeld.legs.length) setLegsHeld({ on: null, legs: [] }) }, [legsFor, legsHeld.legs.length])
   const CURRENCY_PRODUCTS = {
@@ -337,7 +341,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const currencyFooter = {
     footer: {
       // an option's structure is its style, on a currency pair and on a digital asset alike
-      structureLabel: () => ((curInst === 'FX_OPTION' || curInst === 'CRYPTO_OPTION') && fxTerms?.style ? fxTerms.style.replace(/_/g, ' ') : (SHAPE_OF[curInst] || 'FORWARD')),
+      // a package is named as DETAILS names it (STRIP, COLLAR, CUSTOM, ...), and as it will be booked
+      structureLabel: () => {
+        if (pkg) { try { return structureOf(firstPriced(fxRef.current?.firstLeg?.(), fxQuote), fxLegs) } catch { /* the ticket as one trade, below */ } }
+        return (curInst === 'FX_OPTION' || curInst === 'CRYPTO_OPTION') && fxTerms?.style ? fxTerms.style.replace(/_/g, ' ') : (SHAPE_OF[curInst] || 'FORWARD')
+      },
       // The desk's names with their units (the same span as the ticket's tiles, FxCryptoPanel): CRY01 / FX01 for
       // +1 % spot, IR01 for +1 bp on the discounting curve, CRYBASIS01 for +1 bp a year on a digital asset's forward
       // basis (a long gains; the API sends it as crybasis01, and older answers only fund01, its negative), VEGA for
@@ -345,15 +353,34 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       // The strip is plain: no figure is coloured by its sign (the tiles above carry the sign and the colour).
       metrics: (r) => {
         if (!r) return []
-        const unit = (name, u) => <>{name}<span className="tbw-fx-unit"> · {u}</span></>
+        // `keep`: words that are not a unit (paid or received, what a package is waiting for) stay when a crowded footer drops its units
+        const unit = (name, u, keep = false) => <>{name}<span className={keep ? 'tbw-fx-unit tbw-fx-unit-keep' : 'tbw-fx-unit'}> · {u}</span></>
         const crypto = assetClass === 'CRYPTO'
+        // A package: the sum over every leg, under the same names. Until each leg is priced the figures are a dash
+        // and the first label says what is owed: a sum with a leg missing is not the package's.
+        if (pkg) {
+          const t = packageRisk(pkg.quotes), gap = packageGap(pkg)
+          const v = (x) => (t ? n0(x) : '—')
+          // short names: six figures share the footer's one line with the buttons (the count of legs is on BOOK)
+          return [
+            t && t.options === 'ALL'
+              ? { label: unit('NET PREMIUM ' + r.quote_currency, t.npv >= 0 ? 'paid' : 'received', true), value: n0(Math.abs(t.npv)) }
+              : { label: gap ? unit('PACKAGE NPV ' + r.quote_currency, gap, true) : 'PACKAGE NPV ' + r.quote_currency, value: v(t?.npv) },
+            { label: unit(DELTA_LABEL(crypto), '1 % spot'), value: v(t?.spot01) },
+            ...(crypto
+              ? [{ label: unit('IR01', '1 bp'), value: v(t?.ir01) }, { label: unit('CRYBASIS01', '1 bp basis'), value: v(t?.crybasis01) }]
+              : [{ label: unit(`${r.quote_currency} IR01`, '1 bp'), value: v(t?.irQuote) }, { label: unit(`${r.base_currency} IR01`, '1 bp'), value: v(t?.irBase) }]),
+            { label: unit('THETA', '1 day'), value: v(t?.theta) },
+            ...(t && t.options !== 'NONE' ? [{ label: unit('VEGA', '1 pt'), value: v(t.vega) }] : []),
+          ]
+        }
         const crybasis = r.crybasis01 ?? (r.fund01 != null ? -r.fund01 : r.ir01_base != null ? -r.ir01_base : r.rho_base_per_bp != null ? -r.rho_base_per_bp : 0)
         const spot01 = r.spot01 ?? r.delta_quote_per_pct
         const option = r.shape === 'OPTION'
         return [
           // an option's first figure is its premium, paid or received (the NET NPV tile stays in the analytics block)
           option
-            ? { label: unit('PREMIUM ' + r.quote_currency, r.direction === 'SELL' ? 'received' : 'paid'), value: n0(Math.abs(r.npv)) }
+            ? { label: unit('PREMIUM ' + r.quote_currency, r.direction === 'SELL' ? 'received' : 'paid', true), value: n0(Math.abs(r.npv)) }
             : { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv) },
           { label: unit(DELTA_LABEL(crypto), '1 % spot'), value: n0(spot01) },
           ...(crypto
@@ -1251,13 +1278,15 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       )}
       {tabsVisited['CASHFLOWS'] && isCurrency && (
         <div style={{ display: activeTab === 'CASHFLOWS' ? 'block' : 'none' }}>
-          <FxCashflowsPanel quote={fxQuote} crypto={assetClass === 'CRYPTO'} active={activeTab === 'CASHFLOWS'} stale={fxStale} />
-          <div ref={setValuationSlot} className="tbw-valuation-slot" />
+          <FxCashflowsPanel quote={fxQuote} crypto={assetClass === 'CRYPTO'} active={activeTab === 'CASHFLOWS'} stale={fxStale} pkg={pkg} />
+          {/* the valuation under the flows is the ticket's own: with further legs it is leg 1's, and says so */}
+          {pkg && <div data-testid="fx-cf-leg1-valuation" className="tbw-leg1-valuation">LEG 1 · THE TICKET'S OWN VALUATION<span> the package's figures are above and in the footer</span></div>}
+          <div ref={setValuationSlot} className={pkg ? 'tbw-valuation-slot tbw-valuation-slot-named' : 'tbw-valuation-slot'} />
         </div>
       )}
       {tabsVisited['CURVE SCENARIO'] && isCurrency && (
         <div style={{ display: activeTab === 'CURVE SCENARIO' ? 'block' : 'none' }}>
-          <FxScenarioPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} active={activeTab === 'CURVE SCENARIO'} stale={fxStale} />
+          <FxScenarioPanel quote={fxQuote} terms={fxTerms} crypto={assetClass === 'CRYPTO'} active={activeTab === 'CURVE SCENARIO'} stale={fxStale} pkg={pkg} />
         </div>
       )}
       {tabsVisited['XVA'] && isCurrency && (

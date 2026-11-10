@@ -3,6 +3,32 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.11). Commits on `main` are the detail.
 
+## 0.19.1 · 10 November 2026
+
+**The footer, CASHFLOWS and CURVE SCENARIO are the package's.** Until now a ticket with further legs showed the
+first leg alone on these three.
+
+- **Footer.** PACKAGE NPV (for a package of options alone, NET PREMIUM, paid or received) and each sensitivity
+  summed over the legs; the structure reads as DETAILS names it (STRIP, COLLAR, CUSTOM, ...). While a leg is being
+  priced, or one could not be, the figures are a dash and the first label says which: a sum with a leg missing is
+  not shown. A footer with six figures beside a long structure name drops its units before it wraps.
+- **CASHFLOWS.** The package first: every leg in a row (its premium, what it would settle at today's forward,
+  its discount factor, the engine's NPV) and the dates on which money moves, earliest first, the legs that share a
+  date netted; a deliverable currency leg shows both principals. Each leg's own flows are behind its button, as a
+  single trade's. EXPORT XLSX writes the package: the legs, the dates, the market each leg was priced on.
+- **CURVE SCENARIO.** One scenario over every leg: the spot shock in full, the forward curve's move read at each
+  leg's own days from spot, each rate curve's pillar shocks read at each leg's own time (the engine's
+  interpolation), the vol shock on every option leg. The change by factor, the tiles and the ladder are the
+  package's; a table shows each leg at the market and under the scenario; the chart marks each further leg's
+  settlement. A package's vol is one of its curves even when its first leg is a forward.
+- **Limits, stated on the screen:** the scenario is the browser's closed form (forwards and European options).
+  A package holding a leg of any other style (American, barrier, digital, touch) is not summed without it: the
+  tab says the scenario is of leg 1 only, and which leg stands in the way. The settlement amounts on CASHFLOWS
+  are today's estimate at the fair forward; a touch has no figure there. A booked leg opened from the blotter
+  still shows that leg alone.
+- **Fixed on the way:** a leg whose type had just been changed drew its strike as not-a-number on the DETAILS
+  chart until its new price arrived (console errors, no wrong figure).
+
 ## 0.19.0 · 10 November 2026
 
 **A package is one trade: one trade ID, a leg ID for each leg, one confirmation on chain.**
