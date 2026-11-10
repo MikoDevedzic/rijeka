@@ -149,7 +149,14 @@ button, input, select, textarea { font-family: inherit; }
   display: inline-block; margin-left: 0.55em; padding: 0 0.38em; min-width: 1.5em; text-align: center;
   font-family: var(--mono); font-size: 0.82em; font-weight: 400; font-style: normal; letter-spacing: 0; line-height: 1.5;
   color: inherit; opacity: 0.62; border: 1px solid currentColor; border-radius: 3px; vertical-align: baseline;
+  margin-block: -2px;                 /* the border does not add to the height of the button it sits in */
   text-transform: none; pointer-events: none;
+}
+/* Under 1420px the top bar has no room for three keycaps beside the demo chip and the role (it ran off the screen
+   at 1366), and the booking chord's cap wraps the option ticket's footer: the keys still work, and each button's
+   tooltip names its key. */
+@media (max-width: 1419px) {
+  .ab-nav .kc, .cc-nav-btn .kc, .tbw-btn-book .kc { display: none; }
 }
 
 /* ══════════════════════════════════════════════════════════════

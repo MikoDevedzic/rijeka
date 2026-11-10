@@ -468,7 +468,7 @@ function BootScreen({ steps, ready, sofr, name, role, onDone }) {
   const done = Object.values(all).filter(x => x?.ok).length
 
   return (
-    <div className={`boot${leaving ? ' leaving' : ''}`} onClick={finish} role="status" aria-live="polite">
+    <div className={`boot${leaving ? ' leaving' : ''}`} data-no-shortcuts onClick={finish} role="status" aria-live="polite">
       <svg className="boot-curve" viewBox="0 0 900 260" preserveAspectRatio="none">
         {curve && <path d={curve} />}
       </svg>

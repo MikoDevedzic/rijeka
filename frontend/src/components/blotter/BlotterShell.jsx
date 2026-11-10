@@ -4,6 +4,7 @@ import useBookingStore from '../../store/useBookingStore'
 import { productLabel } from '../../lib/labels'
 import './BlotterShell.css'
 import { Keycap } from '../common/Shortcuts'
+import { ariaKey } from '../../lib/shortcuts'
 
 const TH = ({ col, label, sortCol, sortDir, onSort }) => (
   <th className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)}>
@@ -135,7 +136,7 @@ export default function BlotterShell() {
           </div>
         </div>
 
-        <button className="bl-new-trade-btn" aria-keyshortcuts="F3" onClick={() => useBookingStore.getState().open()}>
+        <button className="bl-new-trade-btn" aria-keyshortcuts={ariaKey('new-trade')} onClick={() => useBookingStore.getState().open()}>
           + NEW TRADE<Keycap id="new-trade" />
         </button>
         {selectedIds.size > 0 && (

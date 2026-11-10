@@ -15,6 +15,7 @@
 import React, { useState } from 'react'
 import { useModulesStore } from '../../store/useModulesStore'
 import { Keycap } from '../common/Shortcuts'
+import { ariaKey } from '../../lib/shortcuts'
 
 const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CAPITAL','CURVE SCENARIO','◆ CONFIRM']
 const TAB_MODULE = { 'XVA': 'XVA', 'CAPITAL': 'CAPITAL', '◆ CONFIRM': 'CHAIN_CONFIRM' }
@@ -32,7 +33,7 @@ export function TabBar({ active = 'TRADE', onTab = () => {} }) {
     <div className="tbw-tabbar">
       {tabs.map(t => (
         <button key={t} data-tab={t} className={`tbw-tab ${t === active ? 'is-active' : ''}`}
-                aria-keyshortcuts={TAB_KEY[t] === 'xva' ? 'F5' : TAB_KEY[t] === 'confirm' ? 'F6' : undefined}
+                aria-keyshortcuts={ariaKey(TAB_KEY[t])}
                 onClick={() => onTab(t)}>{t}{TAB_KEY[t] && <Keycap id={TAB_KEY[t]} />}</button>
       ))}
     </div>
@@ -372,15 +373,15 @@ export function TradeFooter({
           STRUCTURE <span className="tbw-struct-value">{structLabel}</span>
         </div>
         <button className="tbw-btn tbw-btn-cancel" onClick={onCancel}>CANCEL</button>
-        <button className="tbw-btn tbw-btn-price" data-action="price" aria-keyshortcuts="F4" disabled={pricing} onClick={onPrice}>
-          {pricing ? '⏳ PRICING…' : '▶ PRICE'}<Keycap id="price" />
+        <button className="tbw-btn tbw-btn-price" data-action="price" aria-keyshortcuts={ariaKey('price')} title="Price: F4" disabled={pricing} onClick={onPrice}>
+          {pricing ? '⏳ PRICING…' : '▶ PRICE'}{!pricing && <Keycap id="price" />}
         </button>
         <button
           className="tbw-btn tbw-btn-book"
           data-action="book"
-          aria-keyshortcuts="Control+Enter Meta+Enter"
+          aria-keyshortcuts={ariaKey('book')}
           disabled={pricing || booking || booked || !result || bookDisabled}
-          title={!booked && bookDisabled ? bookTitle : undefined}
+          title={booked ? undefined : bookDisabled ? bookTitle : 'Book trade: Ctrl+Enter (⌘+Enter on a Mac), with the focus in this ticket'}
           onClick={onBook}
           style={booked ? { opacity: 0.6, cursor: "default" } : undefined}
         >
@@ -391,7 +392,7 @@ export function TradeFooter({
               : bookErr
                 ? "▶ RETRY BOOK"
                 : "▶ BOOK TRADE"}
-          {!booked && !booking && <Keycap id="book" />}
+          {!booked && !booking && !(pricing || !result || bookDisabled) && <Keycap id="book" />}
         </button>
       </div>
     </div>

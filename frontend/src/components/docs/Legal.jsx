@@ -7,7 +7,7 @@ import './Docs.css'
 
 function Page({ meta, sections, other }) {
   return (
-    <div className="legal">
+    <div className="legal" data-no-shortcuts>
       <header className="legal-head">
         <Link to="/login" className="legal-brand">RIJEKA</Link>
         <nav><Link to="/terms">TERMS</Link><Link to="/privacy">PRIVACY</Link><a href="https://rijeka.app">RIJEKA.APP</a></nav>

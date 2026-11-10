@@ -4,9 +4,10 @@
 //   F1 Home · F2 Blotter · F3 New trade · F4 Price · F5 XVA (again: simulate) · F6 Confirm · F8 Methodology
 //   Ctrl/⌘ + Enter books the open ticket: a chord, because booking writes a trade.
 //
-// A page key (F1, F2, F3, F8) always acts. A ticket key (F4, F5, F6, the chord) acts only when a ticket is open
-// and its button is there and enabled; otherwise the key is left to the browser (F5 reloads, as anywhere).
-// F7 is kept for the inspector on a figure, which is not built yet.
+// A page key (F1, F2, F3, F8) always acts on the desk. A ticket key (F4, F5, F6) acts on the open ticket (see
+// activeTicket for which) and is taken from the browser whenever one is open; with none open it is left to the
+// browser (F5 reloads, as anywhere). The chord books only the ticket that holds the focus. No key acts in a window
+// that is not the desk (shortcutsOff). F7 is kept for the inspector on a figure, which is not built yet.
 export const SHORTCUTS = [
   { id: 'home',        key: 'F1', label: 'Home',        scope: 'page',   path: '/command-center' },
   { id: 'blotter',     key: 'F2', label: 'Blotter',     scope: 'page',   path: '/blotter' },
@@ -41,30 +42,51 @@ export function keyLabel(id, mac = typeof navigator !== 'undefined' && /Mac|iPho
 }
 export const shortcutForPath = (path) => BY_PATH[path] || null
 
-// The open ticket a key acts on: the one that holds the focus, else the one opened last (it is drawn on top).
-export function activeTicket(doc = document) {
+// What a button carries in aria-keyshortcuts, from the same table as its keycap.
+export const ariaKey = (id) => { const s = BY_ID[id]; return !s ? undefined : s.chord ? 'Control+Enter Meta+Enter' : s.key }
+
+// Which open ticket a key acts on. Tickets are drawn in the order they were opened and none is raised, so "the
+// one the user means" is: the ticket holding the focus; else the one they last touched (a click or a focus inside
+// it), unless a ticket has been opened since, which is then the one in front; else the newest. `touched` is kept by
+// the listener ({ el, at } and the time the newest ticket was opened).
+export function activeTicket(doc = document, touched = null) {
   const all = [...doc.querySelectorAll('.tbw-window')]
-  return all.find(w => w.contains(doc.activeElement)) || all[all.length - 1] || null
+  if (!all.length) return null
+  const focused = all.find(w => w.contains(doc.activeElement))
+  if (focused) return focused
+  if (touched?.el && all.includes(touched.el) && touched.at > (touched.openedAt || 0)) return touched.el
+  return all[all.length - 1]
 }
 
-// A ticket key presses the ticket's own button, so it does exactly what the click does and nothing when the
-// button is missing (a module switched off) or disabled (pricing in flight, nothing to book). Returns whether a
-// button was pressed: only then is the key taken from the browser.
+// A ticket key presses the ticket's own button, so it does exactly what the click does, and nothing when the
+// button is missing (a module switched off) or disabled (pricing in flight, nothing to book).
+// Returns { pressed, taken }. A function key is taken from the browser whenever a ticket is open, pressed or
+// not: F5 must never reload the page from under an open ticket. The booking chord is different in two ways,
+// because it writes a trade: it acts only on the ticket that holds the focus (never on one behind the messenger
+// or under another window while the user types elsewhere), and it is taken only when it booked, so Ctrl+Enter
+// still means what it meant to the field it was typed in.
 const press = (el) => { if (!el || el.disabled) return false; el.click(); return true }
-export function runTicketShortcut(id, doc = document) {
-  const win = activeTicket(doc)
-  if (!win) return false
-  const tab = (name) => win.querySelector(`.tbw-tab[data-tab="${name}"]`)
-  if (id === 'price') return press(win.querySelector('[data-action="price"]'))
-  if (id === 'book') return press(win.querySelector('[data-action="book"]'))
-  if (id === 'confirm') return press(tab('◆ CONFIRM'))
-  if (id === 'xva') {
-    const t = tab('XVA')
-    if (!t) return false
-    if (!t.classList.contains('is-active')) return press(t)
-    // already on the tab: the key runs it (the visible SIMULATE of this ticket: rates and currency tickets each have one)
-    const sim = [...win.querySelectorAll('[data-action="simulate"]')].find(b => b.offsetParent !== null)
-    return press(sim) || true
+export function runTicketShortcut(id, doc = document, touched = null) {
+  if (id === 'book') {
+    const win = [...doc.querySelectorAll('.tbw-window')].find(w => w.contains(doc.activeElement))
+    const pressed = !!win && press(win.querySelector('[data-action="book"]'))
+    return { pressed, taken: pressed }
   }
-  return false
+  const win = activeTicket(doc, touched)
+  if (!win) return { pressed: false, taken: false }
+  const tab = (name) => win.querySelector(`.tbw-tab[data-tab="${name}"]`)
+  let pressed = false
+  if (id === 'price') pressed = press(win.querySelector('[data-action="price"]'))
+  else if (id === 'confirm') pressed = press(tab('◆ CONFIRM'))
+  else if (id === 'xva') {
+    const t = tab('XVA')
+    if (t && !t.classList.contains('is-active')) pressed = press(t)
+    // already on the tab: the key runs it (the visible SIMULATE of this ticket)
+    else if (t) pressed = press([...win.querySelectorAll('[data-action="simulate"]')].find(b => b.offsetParent !== null))
+  }
+  return { pressed, taken: true }
 }
+
+// Where the keys are off altogether: a window or page that is not the desk (the messenger's own window, the
+// legal pages, the sign-in page) and the boot screen, each marked data-no-shortcuts.
+export const shortcutsOff = (doc = document) => !!doc.querySelector('[data-no-shortcuts]')

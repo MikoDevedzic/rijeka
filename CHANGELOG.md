@@ -6,14 +6,25 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
 ## Function keys · 10 November 2026 (frontend only; the API stays 0.16.2)
 
 - **The desk's keys.** F1 Home, F2 Blotter, F3 New trade (from any page), F4 Price, F5 XVA and, pressed again on
-  that tab, SIMULATE, F6 Confirm, F8 Methodology. Ctrl+Enter (⌘+Enter on a Mac) books the open ticket: a chord,
-  because booking writes a trade, and Enter alone books nothing. Each button shows its key.
-- **A key does what its button does.** A ticket key presses the ticket's own button, so it is ignored when the
-  button is missing (a module switched off) or disabled (a price in flight, nothing to book), and with several
-  tickets open it acts on the one holding the focus, else the one opened last. Keys work while the focus is in a
-  field. A function key held with Ctrl, ⌘, Alt or Shift is left to the browser, and so is a ticket key when no
-  ticket is open (F5 then reloads the page, as anywhere). F7 is kept for the inspector on a figure, not built
-  yet. On a Mac laptop the function keys need fn unless the keyboard is set to standard function keys.
+  that tab, SIMULATE, F6 Confirm, F8 Methodology. Ctrl+Enter (⌘+Enter on a Mac) books: a chord, because booking
+  writes a trade, and Enter alone books nothing. Each button shows its key; on a screen narrower than 1420px the
+  top bar and the BOOK button leave the keycap out (there is no room for it) and name the key in their tooltip.
+- **A key does what its button does.** A ticket key presses the ticket's own button, so nothing happens when the
+  button is missing (a module switched off) or disabled (a price in flight). With a ticket open F4, F5 and F6 are
+  always taken from the browser, so F5 never reloads the page from under a ticket; with none open they are the
+  browser's (F5 reloads, as anywhere). A function key held with Ctrl, ⌘, Alt or Shift is left to the browser.
+- **Which ticket.** With several open, a key means the ticket that holds the focus; else the one last clicked or
+  focused, unless a ticket has been opened since, which is the one in front; else the newest. F3 takes the focus
+  out of the ticket it is about to cover.
+- **Booking is narrower than the rest.** The chord books only the ticket that holds the focus. Typed in a field
+  outside a ticket (the messenger's box, a search field, a form under Configurations) it books nothing and still
+  means what it meant to that field.
+- **Where the keys are off.** The messenger's own window, the terms and privacy pages, the sign-in page and the
+  boot screen.
+- **Left as it is:** F7 is kept for the inspector on a figure, not built yet. On a Mac laptop the function keys
+  need fn unless the keyboard is set to standard function keys. On Windows F4 on a focused list no longer opens
+  it while a ticket is open (it prices). Tickets are still not raised when clicked: a key follows the click, the
+  drawing order does not.
 
 ## The look: Harbour · 10 November 2026 (frontend only; the API stays 0.16.2)
 

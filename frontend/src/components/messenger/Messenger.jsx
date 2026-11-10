@@ -201,7 +201,7 @@ export function MessengerPage() {
     window.close()
   }
   return (
-    <div className="ms-page">
+    <div className="ms-page" data-no-shortcuts>
       <header className="ms-titlebar">
         <span className="ms-brand">✦ RIJEKA</span>
         <span className="ms-sub">messages · Prometheus</span>

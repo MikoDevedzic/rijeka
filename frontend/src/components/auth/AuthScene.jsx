@@ -31,7 +31,7 @@ export default function AuthScene({ children, eyebrow }) {
   const chain = pulse?.chain || {}
 
   return (
-    <div className="au-shell">
+    <div className="au-shell" data-no-shortcuts>
       <section className="au-scene" aria-hidden="true">
         <div className="au-scene-top">
           <div className="au-mark">RIJEKA</div>

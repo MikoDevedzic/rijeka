@@ -57,10 +57,13 @@ end (`trade-window/exposure-chart.js`). Three hues that cannot be mistaken for o
 
 ## Keys
 
-The function keys are one table (`frontend/src/lib/shortcuts.js`) read by the listener and by every button that
-prints its key (`Keycap`, the `.kc` class): F1 Home, F2 Blotter, F3 New trade, F4 Price, F5 XVA and then
-SIMULATE, F6 Confirm, F8 Methodology, Ctrl/⌘+Enter to book. A keycap is hidden from a button's accessible name;
-the button carries `aria-keyshortcuts`. A ticket key presses the ticket's own button.
+The function keys are one table (`frontend/src/lib/shortcuts.js`) read by the listener
+(`components/common/Shortcuts.jsx`), by every keycap a button prints (`Keycap`, the `.kc` class) and by every
+`aria-keyshortcuts` (`ariaKey`): F1 Home, F2 Blotter, F3 New trade, F4 Price, F5 XVA and then SIMULATE, F6
+Confirm, F8 Methodology, Ctrl/⌘+Enter to book. A keycap is hidden from a button's accessible name. A ticket key
+presses the ticket's own button. The chord books only the ticket that holds the focus. A page that is not the
+desk carries `data-no-shortcuts` and no key acts there. Under 1420px wide the top bar and the BOOK button do not
+print their keycap.
 
 ## What is not done yet
 
