@@ -362,6 +362,7 @@ export function TradeFooter({
   booking, booked, bookErr,
   bookDisabled = false, bookTitle = undefined,         // the window's own reason BOOK cannot be pressed yet (no counterparty chosen)
   stale = false,                                       // a price is owed: these figures are for the terms before the last change
+  bookWord = 'BOOK TRADE',                             // a package of legs says how many it books
 }) {
   const metrics = result ? (descriptor.footer.metrics(result, state) || []) : []
   const structLabel = descriptor.footer.structureLabel(state)
@@ -407,7 +408,7 @@ export function TradeFooter({
               ? "✓ BOOKED"
               : bookErr
                 ? "▶ RETRY BOOK"
-                : "▶ BOOK TRADE"}
+                : `▶ ${bookWord}`}
           {!booked && !booking && !(pricing || !result || bookDisabled) && <Keycap id="book" />}
         </button>
       </div>

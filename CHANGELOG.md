@@ -26,6 +26,42 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
   not rewritten.
 - No schema change and no migration: the index is the one production already has.
 
+## A forward as a package of legs: strips · 10 November 2026 (frontend only)
+
+- **DETAILS of a currency or digital-asset forward is now a table of legs.** The first leg is the ticket itself
+  (set on TRADE). **+ ADD LEG** adds the same forward a month later; **STRIP × 3 / 6 / 12** fills a forward for
+  each month. Every further leg has its own side, size, settlement date and strike; a strike left empty is the
+  fair forward for its date, worked out by the engine. Each leg is priced by the same route as the ticket, and
+  the value, the spot sensitivity and IR01 add in a PACKAGE row. Under the table, the strikes against the fair
+  forwards, with the size of each leg.
+- **BOOK books the package** (the button says how many legs): each leg is its own trade, of the kind the desk
+  already prices, fixes, settles and confirms, tied by a tag in the trade's `strategy` field
+  ("STRIP PKG-M3K9Q2 2/6"), which is the booking firm's own and is never shown to the counterparty. No database
+  change. A leg that does not hold the price of the terms it shows stops the booking before anything is sent,
+  and says which. If a later leg is refused after earlier ones were booked, the table says how many stand and
+  why the next did not, and BOOK THE REMAINING LEGS books the rest under the same package without sending the
+  booked ones again. NEW TRADE, another pair or another product starts with the ticket alone.
+- **The blotter** shows a package leg's place (STRIP 2/6) in the STRUCTURE column, finds a package by its
+  reference in the search box, and the row's right-click menu offers "The n legs of this package".
+- **Not in this step:** option legs and the presets that need them (collar, risk reversal, straddle, calendar);
+  the other tabs (CASHFLOWS, XVA, CURVE SCENARIO, CONFIRM) and the footer still show the first leg; one
+  confirmation and one XVA run for the whole package; pasting or importing legs from Excel.
+- **Found on the way, not fixed here:** the API names a trade by the clock's second, so two trades booked by one
+  firm in the same second collide and the second is refused with a 500. A package names its further legs after
+  the first (TRD-94333140-2), which avoids it; two separate tickets booked in the same second still can.
+
+## A right-click menu on the blotter; ALL shows every trade again · 10 November 2026 (frontend only)
+
+- **Right-click a trade in the blotter** for a menu at the pointer: open it (or the ticked trades together), copy
+  its reference, its UTI or the counterparty's reference, show only the trades of its counterparty, its asset
+  class or its status, show every trade again, tick or untick it. The arrows, Home, End, Enter and Escape work
+  it. Nothing on the menu changes a trade: confirming and terminating stay on the ticket, where the terms are in
+  front of the person who acts. Text fields and links keep the browser's own menu.
+- **Fixed: ALL STATUS, ALL CLASSES and ALL STORES hid every trade.** After choosing a status, a class or a store
+  in the rail, pressing its ALL button emptied the blotter ("no trades match filters") until the page was
+  loaded again: the button wrote an empty value and the filter read it as a value to match. Found while wiring
+  the menu's own filters. The rule is now one function with its own tests (`lib/blotter-filter.js`).
+
 ## The shell: the name, the top bar, the blotter's rail · 10 November 2026 (frontend only)
 
 - **The name is the brightest thing on the page.** RIJEKA on the top bar (and on the home page's own bar) is

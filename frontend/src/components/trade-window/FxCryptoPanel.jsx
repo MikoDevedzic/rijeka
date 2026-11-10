@@ -258,10 +258,12 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // The trade body from what the ticket holds. With a quote `q` and the pair loaded it is the body that is booked
   // (payload()); with neither it is the same block from the form alone, for the tabs that read the terms before
   // or between pricings (terms()): what only a quote knows is null there, and a blank strike is null.
-  const build = (q) => {
+  const build = (q, leg = null) => {
     const str = (v) => v == null ? null : String(v)
-    const typedStrike = nums.strike.given && !nums.strike.invalid ? nums.strike.value : null
-    const N = notionalSent(ticket)                    // what the price request sent: the base notional, 1 for a payout style (fx-ticket.js notionalSent)
+    // a further leg of a package (fx-legs.js) is the same forward with its own side, size and strike
+    const typedStrike = leg ? leg.strike : (nums.strike.given && !nums.strike.invalid ? nums.strike.value : null)
+    const side = leg ? leg.direction : direction
+    const N = leg ? leg.notional : notionalSent(ticket)                    // what the price request sent: the base notional, 1 for a payout style (fx-ticket.js notionalSent)
     // the record's notional: the payout in its currency for a digital or a touch (the hidden base notional is nobody's), else N in base
     const booked = bookedNotional(ticket, { base: cur?.base, quote: cur?.quote })
     const premium = q ? String(Math.abs(Math.round(q.npv * 100) / 100)) : null
@@ -328,7 +330,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       asset_class: 'CRYPTO', instrument_type: 'CRYPTO_FORWARD', structure: 'VANILLA',
       notional: N, notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
       terms: {
-        digital_asset: cur?.base, notional_amount: String(N), direction, forward_price: str(K), price_currency: 'USD',
+        digital_asset: cur?.base, notional_amount: String(N), direction: side, forward_price: str(K), price_currency: 'USD',
         valuation_date: fixingDateFor(settleDate), valuation_time: settle.time, settlement_date: settleDate, settlement_currency: 'USD',
         settlement_price_source: settle.source, calculation_agent: null,
         disruption_fallback: 'ISDA Digital Asset Derivatives Definitions fallbacks',
@@ -339,7 +341,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       asset_class: 'FX', instrument_type: inst, structure: 'VANILLA',
       notional: N, notional_ccy: cur?.base, maturity_date: settleDate, discount_curve_id: cur?.quote_curve,
       terms: {
-        direction, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
+        direction: side, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
         base_notional: String(N), forward_rate: str(K), value_date: settleDate,
         settlement_type: ndf ? 'NON_DELIVERABLE' : 'DELIVERABLE',
         ...(ndf ? { settlement_currency: 'USD', fixing_source: cur?.fixing_default, fixing_date: settleDate } : {}),
@@ -373,6 +375,12 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     settled: withTerms(() => pricer.settled().then(h => (h ? h.quote : null))),
     quote: withTerms(() => pricer.held()?.quote ?? null),
     payload, terms, bookBody, busy: () => busy,
+    // A further leg of a package (the DETAILS tab; forwards only): the price request for the ticket's pair, kind of
+    // settlement and typed market, with the leg's own side, size, date and strike (none: the fair forward, rounded
+    // by the API), and the trade body for the quote that came back. null where the ticket is not a forward.
+    legRequest: (leg) => (option || !cur || shape === 'SPOT' ? null : priceRequest({ ...ticket, direction: leg.direction, notional: String(leg.notional), settlement: leg.settlement, strike: leg.strike == null ? '' : String(leg.strike), defaultK: null })),
+    legBody: (q, leg) => { if (option || !cur || !q) return null; const today = iso(new Date()); return { ...build(q, leg), trade_date: today, effective_date: today } },
+    firstLeg: () => (option || !cur || shape === 'SPOT' ? null : { direction, notional: notionalSent(ticket), settlement }),
   }))
 
   // ── render: the same sections, labels and cards as the rates ticket ──────────
