@@ -148,15 +148,51 @@ def test_a_package_confirmation_is_idempotent_and_a_single_leg_can_still_go_alon
     a = client.post("/api/chain/confirm-package", json={"trade_ids": tids}, headers={**auth_a, "Idempotency-Key": key})
     b = client.post("/api/chain/confirm-package", json={"trade_ids": tids}, headers={**auth_a, "Idempotency-Key": key})
     assert a.status_code == 201 and b.status_code == 201 and b.json()["package"]["hash"] == a.json()["package"]["hash"]
-    # a second package: one leg confirmed on its own first (leg by leg is still allowed); the package route then
-    # refuses the set, because not every leg is PENDING, and the other leg goes on its own too
+    # a second package, whole and pending: ONE leg is not anchored alone (found by review: it would leave the package
+    # unable ever to be one record), and the refusal costs nothing
     pk2 = _package(client, auth_a, ids, pairs, n=2, structure="CUSTOM", tag="PKS")
     t1, t2 = (t["id"] for t in pk2["trades"])
-    assert client.post(f"/api/chain/confirm/{t1}", headers=auth_a).status_code == 201
+    pid2 = pk2["package"]["trade_id"]
+    r = client.post(f"/api/chain/confirm/{t1}", headers=auth_a)
+    assert r.status_code == 409 and f"leg of package {pid2}" in r.text and "confirm-package" in r.text, r.text[:300]
+    assert client.get(f"/api/trade-events/{t1}", headers=auth_a).json()[0]["event_type"] == "BOOKED"
+    # once a leg has gone its own way (confirmed off-chain here) the package is no longer whole: it is refused as
+    # one, and the other leg is confirmed on its own, with a record of its own
+    assert client.post(f"/api/trade-events/confirm/{t1}", headers=auth_a).status_code in (200, 201)
     assert client.post("/api/chain/confirm-package", json={"trade_ids": [t1, t2]}, headers=auth_a).status_code == 409
     assert client.post(f"/api/chain/confirm/{t2}", headers=auth_a).status_code == 201
-    v = client.post(f"/api/chain/verify/{t1}", headers=auth_a).json()
+    v = client.post(f"/api/chain/verify/{t2}", headers=auth_a).json()
     assert v["package"] is None and v["hash_matches"] and v["signatures_valid_for_current_state"]
+
+
+def test_only_the_server_writes_a_package_tag(client, auth_a, ids, pairs):
+    """Found by review: the link was a text field any booking could set, so trades that were never booked together
+    could be tagged as a package and confirmed as one."""
+    from datetime import date, timedelta
+    from tests.integration import bodies as B
+    btc = pairs["BTCUSD"]
+    q = client.post("/api/currency/forward/price", json={"pair": "BTCUSD", "shape": "FORWARD", "base_notional": 10, "direction": "BUY",
+                                                          "settlement_date": (date.today() + timedelta(days=45)).isoformat()}, headers=auth_a).json()
+    forged = "STRIP TRD-00000001 1/2"
+    body = B.crypto_forward(ids["a"], "FORGE-1", btc, q)
+    assert client.post("/api/book/trade", json={**body, "strategy": forged}, headers=auth_a).status_code == 422
+    flat = {k: v for k, v in body.items() if k != "legs"}
+    assert client.post("/api/trades/", json={**flat, "trade_ref": "FORGE-2", "strategy": forged}, headers=auth_a).status_code == 422
+    # an honest strategy is still the desk's to write and change, and the older ticket's own grouping tag is only text
+    ok = client.post("/api/book/trade", json={**body, "strategy": "Macro hedge"}, headers=auth_a)
+    assert ok.status_code == 201, ok.text[:300]
+    tid = ok.json()["trade"]["id"]
+    assert client.put(f"/api/trades/{tid}", json={"strategy": "STRIP PKG-ABCD1234 1/2"}, headers=auth_a).status_code == 200
+    assert client.put(f"/api/trades/{tid}", json={"strategy": forged}, headers=auth_a).status_code == 422
+    # a real leg's tag is not edited, so a leg cannot be taken out of its package or moved into another
+    pk = _package(client, auth_a, ids, pairs, n=2, structure="CUSTOM", tag="PKT")
+    leg = pk["trades"][0]
+    assert client.put(f"/api/trades/{leg['id']}", json={"strategy": "Macro hedge"}, headers=auth_a).status_code == 422
+    assert client.put(f"/api/trades/{leg['id']}", json={"strategy": leg["strategy"].replace("1/2", "2/2")}, headers=auth_a).status_code == 422
+    assert client.put(f"/api/trades/{leg['id']}", json={"strategy": leg["strategy"]}, headers=auth_a).status_code == 200, "the same tag is no change"
+    # trades tagged by the older ticket (a PKG- reference) are not a package the server booked: not confirmed as one
+    r = client.post("/api/chain/confirm-package", json={"trade_ids": [tid, leg["id"]]}, headers=auth_a)
+    assert r.status_code == 422 and "not a leg of a package" in r.text
 
 
 def test_a_single_trade_is_not_a_package(client, auth_a, ids, pairs, booked):

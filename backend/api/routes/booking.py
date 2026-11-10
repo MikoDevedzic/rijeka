@@ -64,6 +64,7 @@ from middleware.auth import verify_token
 from api.routes._errors import internal
 from api.routes._leg_defaults import complete_leg
 from api.routes._trade_ref import insert_trade, free_package_id, leg_ref
+from api.routes._package import PACKAGE_MAX_LEGS, PACKAGE_STRUCTURES, package_tag, refuse_client_tag
 
 router = APIRouter(prefix="/api/book", tags=["booking"])
 log = logging.getLogger(__name__)
@@ -461,7 +462,7 @@ def book_trade_atomic(
 
 
 def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key: Optional[str] = None,
-               *, commit: bool = True, uti: Optional[str] = None) -> dict:
+               *, commit: bool = True, uti: Optional[str] = None, package_leg: bool = False) -> dict:
     """
     The atomic booking itself (trade + BOOKED event + legs), shared by
     POST /api/book/trade and by booking the counterparty's side of a trade
@@ -469,7 +470,10 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
     leaves the transaction open so the caller can add to it (e.g. the
     CONFIRMED event) and commit once; the caller must then roll back on error.
     uti: set when the trade already has one (the other party's booking of it).
+    package_leg: the caller is book_package, which wrote the leg's package tag; a client may not write one.
     """
+    if not package_leg:
+        refuse_client_tag(body.strategy)
     body = complete_booking(body)
 
     # ── Idempotency short-circuit ─────────────────────────────
@@ -647,21 +651,11 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
 
 # ── A package of legs: one trade ID, a leg ID for each leg, one transaction ──────────────────────
 
-PACKAGE_STRUCTURES = ("STRIP", "COLLAR", "RISK REVERSAL", "STRADDLE", "CALENDAR", "CUSTOM")
-PACKAGE_MAX_LEGS = 24
-
-
 class PackageRequest(BaseModel):
     """A package (a strip, a collar, a forward with an option): the booking body of each leg, in the order of the
     ticket. The server names the package and its legs; a leg's own trade_ref or strategy is not taken."""
     structure: str = "CUSTOM"
     legs: List[BookingRequest]
-
-
-def package_tag(structure: str, trade_id: str, i: int, n: int) -> str:
-    """What ties a leg to its package, in the trade's `strategy` (the booking firm's own field, never shown to the
-    counterparty): the structure, the package's trade ID, the leg's place. The frontend reads it (fx-legs.js)."""
-    return f"{structure} {trade_id} {i}/{n}"
 
 
 @router.post("/package", status_code=201)
@@ -705,22 +699,43 @@ def book_package(db: Session, user_id: UUID, body: PackageRequest, idempotency_k
         cached = db.query(IdempotencyKey).filter(IdempotencyKey.user_id == user_id, IdempotencyKey.key == idempotency_key).first()
         if cached:
             return {**cached.result, "idempotent_replay": True}
+    def replay():
+        if not idempotency_key:
+            return None
+        hit = db.query(IdempotencyKey).filter(IdempotencyKey.user_id == user_id, IdempotencyKey.key == idempotency_key).first()
+        return {**hit.result, "idempotent_replay": True} if hit else None
+
     try:
-        trade_id = free_package_id(db, user_id)
-        trades, legs = [], []
-        for i, leg in enumerate(body.legs, start=1):
-            named = leg.model_copy(update={"trade_ref": leg_ref(trade_id, i), "strategy": package_tag(structure, trade_id, i, n)})
-            try:
-                r = book_trade(db, user_id, named, None, commit=False)      # rolls the whole transaction back on any error
-            except HTTPException as e:
-                raise HTTPException(status_code=e.status_code, detail=f"leg {i} of {n}: {e.detail}. Nothing was booked.")
-            trades.append(r["trade"])
-            legs.append(r["legs"])
-        result = {"package": {"trade_id": trade_id, "structure": structure, "legs": n}, "trades": trades, "trade_legs": legs, "idempotent_replay": False}
-        if idempotency_key:
-            db.add(IdempotencyKey(key=idempotency_key, user_id=user_id, result=result))
-        db.commit()
-        return result
+        # The trade ID is taken by a look and then held by the legs' own names. Two bookings in one second (two
+        # windows, a double press) can reach for the same ID: the one that loses finds a leg's name taken, and takes
+        # another ID. A double press with one key is answered with the first booking, not a second one.
+        for _attempt in range(4):
+            trade_id = free_package_id(db, user_id)
+            trades, legs, taken = [], [], False
+            for i, leg in enumerate(body.legs, start=1):
+                named = leg.model_copy(update={"trade_ref": leg_ref(trade_id, i), "strategy": package_tag(structure, trade_id, i, n)})
+                try:
+                    r = book_trade(db, user_id, named, None, commit=False, package_leg=True)      # rolls the whole transaction back on any error
+                except HTTPException as e:
+                    if e.status_code == 409 and "already exists" in str(e.detail):
+                        taken = True                     # another booking holds this ID's legs: nothing of ours is written
+                        break
+                    raise HTTPException(status_code=e.status_code, detail=f"leg {i} of {n}: {e.detail}. Nothing was booked.")
+                trades.append(r["trade"])
+                legs.append(r["legs"])
+            if taken:
+                again = replay()
+                if again:
+                    return again
+                continue
+            result = {"package": {"trade_id": trade_id, "structure": structure, "legs": n}, "trades": trades, "trade_legs": legs, "idempotent_replay": False}
+            if idempotency_key:
+                db.add(IdempotencyKey(key=idempotency_key, user_id=user_id, result=result))
+            db.commit()
+            from api.routes.pricer import invalidate_trade_cache
+            invalidate_trade_cache()
+            return result
+        raise HTTPException(status_code=409, detail="The package's trade ID was taken by another booking four times in a row. Nothing was booked; book it again.")
     except HTTPException:
         db.rollback()
         raise

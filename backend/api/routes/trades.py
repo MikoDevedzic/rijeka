@@ -253,6 +253,8 @@ def trades_their_refs(db: Session = Depends(get_db), user: dict = Depends(verify
 
 @router.post("/")
 def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    from api.routes._package import refuse_client_tag
+    refuse_client_tag(body.strategy)
     new_id    = uuid.uuid4()
     kwargs = {
         "id":                   new_id,
@@ -317,6 +319,9 @@ def update_trade(trade_id: uuid.UUID, body: TradeUpdate, db: Session = Depends(g
     if not t:
         raise HTTPException(status_code=404, detail="Trade not found")
     updates = body.dict(exclude_none=True)
+    if "strategy" in updates:
+        from api.routes._package import refuse_client_tag
+        refuse_client_tag(updates["strategy"], was=t.strategy)
     if "status" in updates and updates["status"] != t.status:
         # Status is a lifecycle fact, not a field: PENDING->CONFIRMED etc. go
         # through /api/trade-events and /api/chain so an event and, where

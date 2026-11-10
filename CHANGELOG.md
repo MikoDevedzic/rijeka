@@ -19,9 +19,21 @@ methodology document carries its own version (v1.11). Commits on `main` are the 
   chain) and the leg's own hash. VERIFY re-derives the leg's record, finds it in the package and re-derives the
   package's hash; the proof pack carries the package record as what was signed, with the leg's record beside it,
   so the public verifier as it is today checks it, and its source now checks the leg inside the package too.
+- **A package is what was booked together, and it is confirmed together.** Only the server writes a package's
+  tag (the ordinary booking and edit routes refuse one, and a leg's tag is not edited), so trades cannot be
+  tagged into a package afterwards. While every leg is pending, one leg is not anchored on its own (the API
+  refuses it, and the ticket reads the package from the legs it just booked, so a CONFIRM pressed at once still
+  confirms the package). Once a leg has gone its own way the others are confirmed one by one.
+- **The public register** lists a package once, by the hash the registry holds.
+- **The verifier's source** gives a package record with no leg its own verdict (the record is signed and anchored;
+  no trade's terms were checked). The page at rijeka.app/verify is the landing site's copy and changes when that
+  site is deployed: until then it proves a package's record and does not check a leg's terms inside it.
 - **Limits:** one leg of a package confirmed this way cannot be amended or terminated on its own yet (the API
   says so, and the certificate offers no button that would only fail); a counterparty with its own wallet
-  confirms leg by leg; a leg can still be confirmed on its own, after which the package route refuses the set.
+  confirms leg by leg; the route waits for the block in the request (no 202), and after a lost answer the same
+  press finishes it without a second transaction or charge (`docs/ops/deploy.md`); that the legs listed are all
+  the legs of the package is the booking's fact, not one the registry knows; packages booked before this
+  release (a PKG- reference, one request per leg) stay a grouping in the blotter and are confirmed leg by leg.
   Not run against a live chain here: the local stack has none.
 - **Not in this change:** CASHFLOWS, CURVE SCENARIO and the footer over the whole package.
 

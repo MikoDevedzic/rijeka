@@ -181,9 +181,11 @@ export function readPackageTag(strategy) {
 
 // The legs of the package `trade` belongs to, from a list of trades (the blotter's): every leg, in its place, or
 // null when the trade is no leg, or a leg is missing from the list. { tradeId, structure, n, legs: [trade, ...] }.
+// Only a package the server booked (its trade ID is a TRD-): the older ticket's PKG- reference groups rows in the
+// blotter and is not a package that is confirmed as one.
 export function packageOf(trade, trades) {
   const tag = readPackageTag(trade?.strategy)
-  if (!tag) return null
+  if (!tag || !/^TRD-\d{8}$/.test(tag.ref)) return null
   const legs = []
   for (const t of trades || []) {
     const g = readPackageTag(t?.strategy)

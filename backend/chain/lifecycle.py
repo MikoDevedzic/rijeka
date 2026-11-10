@@ -77,6 +77,37 @@ def refuse_package_leg(db: Session, trade, what: str) -> None:
     )
 
 
+def whole_pending_package(db: Session, trade) -> Optional[tuple]:
+    """(the package's trade ID, the number of legs) when `trade` is a leg of a package the server booked and every
+    one of its legs is still PENDING, so the package can be confirmed as one record; else None."""
+    from api.routes._package import read_package_tag
+    from db.models import Trade
+    tag = read_package_tag(getattr(trade, "strategy", None))
+    if tag is None:
+        return None
+    _structure, package_id, _i, n = tag
+    legs = db.query(Trade).filter(Trade.user_id == trade.user_id, Trade.trade_ref.like(package_id + "-%")).all()
+    mine = [t for t in legs if (read_package_tag(t.strategy) or (None, None, None, None))[1] == package_id]
+    if len(mine) == n and all(t.status == "PENDING" for t in mine):
+        return package_id, n
+    return None
+
+
+def refuse_one_leg_of_a_whole_package(db: Session, trade) -> None:
+    """409 for an on-chain confirmation of ONE leg while its package can still be confirmed as one record: a leg
+    anchored alone would leave the package unable ever to be. Once a leg has gone its own way (cancelled, confirmed
+    off-chain) the others are confirmed one by one, as before."""
+    whole = whole_pending_package(db, trade)
+    if whole is None:
+        return
+    package_id, n = whole
+    raise HTTPException(
+        status_code=409,
+        detail=(f"{trade.trade_ref} is a leg of package {package_id}, whose {n} legs are all pending: confirm the package "
+                f"as one record (POST /api/chain/confirm-package with its {n} trade ids), not one leg alone."),
+    )
+
+
 def is_terminated(att: Optional[dict]) -> bool:
     return bool(att and att.get("terminated"))
 
@@ -90,6 +121,14 @@ def refuse_offchain_mutation(db: Session, trade, what: str) -> None:
     if att is None:
         return
     a = att.get("anchor") or {}
+    pk = package_of(att)
+    if pk:
+        raise HTTPException(
+            status_code=409,
+            detail=(f"{trade.trade_ref} is confirmed on-chain as leg {pk.get('leg')} of {pk.get('of')} of package "
+                    f"{pk.get('trade_id') or ''} (block {a.get('block_number')}). {what} would leave the signed record out of "
+                    f"step with the booking, and one leg of a package cannot be amended or terminated on its own yet."),
+        )
     raise HTTPException(
         status_code=409,
         detail=(f"{trade.trade_ref} is confirmed on-chain (block {a.get('block_number')}, "

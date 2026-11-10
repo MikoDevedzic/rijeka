@@ -291,3 +291,33 @@ def test_a_double_press_books_the_package_once(client, auth_e, at_second):
     assert b.json()["idempotent_replay"] is True and b.json()["package"] == a.json()["package"]
     assert [t["id"] for t in b.json()["trades"]] == [t["id"] for t in a.json()["trades"]]
     assert client.post("/api/book/package", json=body, headers={**auth_e, "Idempotency-Key": "not-a-uuid"}).status_code == 400
+
+
+
+def test_a_package_whose_trade_id_was_taken_meanwhile_takes_the_next(client, auth_e, at_second, monkeypatch):
+    """Found by review: two bookings in one second can reach for the same trade ID; the one that loses was told
+    409 although nothing was wrong with it."""
+    from api.routes import _trade_ref as R
+    from api.routes import booking
+    at_second(1_795_400_000)
+    first = client.post("/api/book/package", json={"structure": "CUSTOM", "legs": _legs(2)}, headers=auth_e).json()
+    taken = first["package"]["trade_id"]
+    real, calls = booking.free_package_id, []
+
+    def stale(db, user_id):
+        calls.append(1)
+        return taken if len(calls) == 1 else real(db, user_id)      # the look that raced: it still says the name is free
+    monkeypatch.setattr(booking, "free_package_id", stale)
+    r = client.post("/api/book/package", json={"structure": "CUSTOM", "legs": _legs(2)}, headers=auth_e)
+    assert r.status_code == 201, r.text[:300]
+    assert len(calls) == 2 and r.json()["package"]["trade_id"] not in (taken,) and r.json()["package"]["trade_id"] == R.generated_ref(1_795_400_000 + R.PACKAGE_OFFSET + 1)
+    # a double press with one key that lost the same race is answered with the first booking
+    import uuid as _u
+    key = str(_u.uuid4())
+    a = client.post("/api/book/package", json={"structure": "CUSTOM", "legs": _legs(2)}, headers={**auth_e, "Idempotency-Key": key}).json()
+    calls.clear()
+    monkeypatch.setattr(booking, "free_package_id", lambda db, user_id: a["package"]["trade_id"])
+    monkeypatch.setattr(booking, "IdempotencyKey", booking.IdempotencyKey)
+    # the cache is looked up before anything is written, so this is the plain replay; the in-flight case is the same code path after a collision
+    b = client.post("/api/book/package", json={"structure": "CUSTOM", "legs": _legs(2)}, headers={**auth_e, "Idempotency-Key": key}).json()
+    assert b["idempotent_replay"] is True and b["package"] == a["package"]

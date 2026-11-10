@@ -183,17 +183,24 @@ _reg_cache: dict[str, Any] = {"at": 0.0, "body": None, "n": 0}
 
 def _register(db: Session, n: int) -> dict:
     rows = []
+    seen: set = set()            # a package's legs each carry the package's record: the register lists it once
     try:
         for r in db.execute(text(_REG_SQL), {"n": n}):
             att = (r.payload or {}).get("attestation") or {}
             anchor = att.get("anchor") or {}
             if not anchor.get("anchored"):
                 continue
+            pkg_hash = (att.get("package") or {}).get("hash")
+            if pkg_hash:
+                if pkg_hash in seen:
+                    continue
+                seen.add(pkg_hash)
             parties = att.get("parties") or {}
             own, cp = parties.get("own") or {}, parties.get("counterparty") or {}
             rows.append({
-                "trade_hash": att.get("trade_hash"),
-                "package_hash": ((att.get("package") or {}).get("hash")),        # a leg of a package: what the registry holds
+                # the hash the registry holds: for a leg of a package, the package's (one row for the package: below)
+                "trade_hash": (att.get("package") or {}).get("hash") or att.get("trade_hash"),
+                "package": bool((att.get("package") or {}).get("hash")),
                 "block_number": anchor.get("block_number"), "tx_hash": anchor.get("tx_hash"),
                 "explorer_tx": anchor.get("explorer_tx"), "chain_id": anchor.get("chain_id"), "registry": anchor.get("registry"),
                 "confirmed_at": anchor.get("confirmed_at"),

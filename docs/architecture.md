@@ -69,14 +69,35 @@ caller and, for firm views, by `firm_members`. The API connects through the tran
 (port 6543). Schema: `docs/schema.sql` plus `docs/migrations/` in date order (see `SELF-HOSTING.md`).
 
 **The chain**: `chain/src/TradeConfirmationRegistry.sol` on Sepolia. A confirmation is the keccak of
-the canonical record signed by both parties under EIP-712; the API's relayer anchors it, pays the gas
-from one funded wallet, and is budgeted per user, firm and platform. The verifier at `rijeka.app/verify`
-is a static page that reads the registry directly; nothing in it trusts Rijeka's servers.
+the canonical record signed by both parties under EIP-712 (for a leg of a package confirmed as one, the
+keccak of the package record, which lists the legs' hashes); the API's relayer anchors it, pays the gas
+from one funded wallet, and is budgeted per user, firm and platform (one anchor, one charge: a package
+is one). The verifier at `rijeka.app/verify` is a static page that reads the registry directly; nothing
+in it trusts Rijeka's servers.
+
+The four ways a trade is confirmed, side by side:
+
+| Route | Who signs for the counterparty | When the block is slow | Afterwards |
+|---|---|---|---|
+| `POST /api/chain/confirm/{id}` | Rijeka, a key it holds (a demo entity) | 202 after `RIJEKA_CHAIN_SYNC_WAIT_S`, then `chain/pending.py` | amend and terminate on chain |
+| `GET /request` then `POST /countersign/{id}` | the counterparty's own system | waits in the request | amend and terminate on chain |
+| the chat trade card | the counterparty's wallet | waits in the request | amend and terminate on chain |
+| `POST /api/chain/confirm-package` | Rijeka, a key it holds; refused (422) for a counterparty with its own wallet, whose legs go one by one | waits in the request, up to the backend's three minutes; no 202, no pending row | one leg cannot be amended or terminated yet (409) |
+
+A proof pack (`GET /api/chain/proof/{id}`) carries `canonical` (what was signed), `trade_hash` and the
+attestation. For a leg of a package `canonical` is the package record and `trade_hash` its hash, and the
+leg's own record and hash travel in `leg`.
 
 **The landing site** (`netlify_drop/`, git-ignored, deployed with the Netlify CLI): rijeka.app, the
 public tools (IRS pricer, XVA simulator and waterfall, SABR surface, Bermudan tree, attribution, SIMM),
 the verifier, terms and privacy. It reads the API's public endpoints (pulse, calendar, the register of
-anchored confirmations).
+anchored confirmations). In the register `trade_hash` is the hash the registry holds (for a leg of a
+package, the package's; the leg's own is `leg_hash`), so a link into the verifier or the registry is by
+`trade_hash`. The verifier's source is `chain/verify/index.html` in the repository; the page at
+rijeka.app/verify is the copy in `netlify_drop/verify`, which changes only when the owner deploys the
+landing site, on its own schedule and not with the app's release. **Until the copy that knows packages
+is deployed, the live verifier proves a package's record (its hash, both signatures, its anchor) and
+does not check a leg's own terms inside it:** it ignores the proof's `leg` block.
 
 ## Market data, source by source
 
@@ -319,6 +340,10 @@ before it the trigger took the role from the client's sign-up metadata); provisi
    `POST /api/book/package`: every leg a trade of its own, all in one transaction or none. The package has one
    trade ID (`TRD-12345678`) and each leg a leg ID under it (`TRD-12345678-1`, `-2`, ...); no row carries the
    bare ID, and each leg's `strategy` holds the structure, the trade ID and its place (`STRIP TRD-12345678 2/3`).
+   That tag is defined once (`api/routes/_package.py`: the structures, the size, the format), written only by
+   this route (the ordinary booking and edit routes refuse a `strategy` that reads as one), and read by the
+   confirmation route and by the browser (`fx-legs.js`; `tests/test_package_tag.py` holds the two to each
+   other). A package column is the cleaner home for it and needs a migration.
 3. **Confirm.** Both parties derive the same canonical record from their own bookings; each signs the
    EIP-712 message (a demo entity's key is Rijeka's, a real LEI's is the firm's wallet); the relayer
    anchors the pair of signatures; the CONFIRMED event carries the transaction. The messenger's trade
@@ -326,8 +351,13 @@ before it the trigger took the role from the client's sign-up metadata); provisi
    A package is confirmed as one record (`POST /api/chain/confirm-package`): each leg keeps its own UTI and
    canonical record; the parties sign, and the relayer anchors once, the package record (the two LEIs and the
    legs' hashes, `chain/canonical.package_payload`); every leg's CONFIRMED event carries its own hash, the
-   package's hash and its place, written in one transaction after the anchor. Amending or terminating one leg
-   of a package is refused for now, and a counterparty with its own wallet still confirms leg by leg.
+   package's hash and its place, written in one transaction after the anchor (the legs locked and checked again
+   first). While every leg of a package is pending, `POST /api/chain/confirm/{id}` refuses one leg alone.
+   Amending or terminating one leg
+   of a package is refused for now (409), and for a counterparty with its own wallet the route answers 422:
+   its legs are confirmed one by one, each a single-trade record with an anchor of its own. The route waits
+   for the receipt in the request and has no pending-anchor path; the runbook for a slow or lost answer is in
+   `docs/ops/deploy.md`.
 4. **Mark and explain.** The daily batch stores a mark per trade, the attributed P&L rows, the risk
    report (ladder, VaR, stress, limits) and the counterparty-credit run; the pages open from the
    stored day and RECALCULATE reprices live. Prometheus reads the same tables through read-only tools.

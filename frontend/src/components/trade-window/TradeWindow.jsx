@@ -824,7 +824,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         const r = await bookPackage(structure, [whole(body), ...priced.map(x => whole(x.b))])
         const refs = { first: r.trades[0].trade_ref }
         priced.forEach((x, k) => { refs[x.l.id] = r.trades[k + 1].trade_ref })
-        setBookedLegs({ ref: r.package.trade_id, structure: r.package.structure, refs, ids: r.trades.map(x => x.id) })
+        // the legs as booked (id, leg ID, status): CONFIRM reads the package from these, at once, without waiting for
+        // the blotter's trades to arrive (a CONFIRM pressed before they did confirmed one leg alone: found by review)
+        setBookedLegs({ ref: r.package.trade_id, structure: r.package.structure, refs, trades: r.trades.map(x => ({ id: x.id, trade_ref: x.trade_ref, status: x.status, strategy: x.strategy })) })
         t = r.trades[0]
       } else {
         t = await post(body, null)
@@ -862,7 +864,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // The package the booked trade is a leg of, from the blotter's trades: { tradeId, structure, n, legs }. `pendingPackage`
   // is it when every leg is still PENDING (then CONFIRM confirms the package as one record); else a leg goes alone.
   const allTrades = useTradesStore(s => s.trades)
-  const tradePackage = bookedTrade ? packageOf(allTrades.find(x => x.id === bookedTrade.id) || bookedTrade, allTrades) : null
+  // from the blotter's trades when they hold every leg (their statuses are the live ones); else from the legs this
+  // window booked a moment ago
+  const bookedPackage = bookedTrade && bookedLegs?.trades?.some(x => x.id === bookedTrade.id)
+    ? { tradeId: bookedLegs.ref, structure: bookedLegs.structure, n: bookedLegs.trades.length, legs: bookedLegs.trades } : null
+  const tradePackage = bookedTrade ? (packageOf(allTrades.find(x => x.id === bookedTrade.id) || bookedTrade, allTrades) || bookedPackage) : null
   const pendingPackage = tradePackage && tradePackage.legs.every(x => x.status === 'PENDING') ? tradePackage : null
 
   // Sprint 12 item 3 — CONFIRM handler: PENDING -> CONFIRMED

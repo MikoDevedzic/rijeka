@@ -998,7 +998,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
 
 # ── A package of legs on one pair, as one netting set ────────────────────────────────────────
 
-PACKAGE_MAX_LEGS = 24
+from api.routes._package import PACKAGE_MAX_LEGS      # noqa: E402  (one definition: api/routes/_package.py)
 PACKAGE_MAX_YEARS = 10.0             # the longest settlement a package run takes
 PACKAGE_MAX_WORK = 4_000_000         # legs × paths × monthly steps: what one run may cost
 PACKAGE_FORWARDS = ("FX_FORWARD", "NDF", "CRYPTO_FORWARD")

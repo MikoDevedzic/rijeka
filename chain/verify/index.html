@@ -271,6 +271,12 @@ el("run").addEventListener("click", async () => {
   v.className = "verdict " + (anyFail ? "bad" : "ok");
   if (anyFail) {
     v.innerHTML = "NOT VERIFIED<span class='note'>At least one check failed. These trade terms are not the ones both parties signed and anchored, or the confirmation does not exist on this chain.</span>";
+  } else if (canonical.schema === "rijeka-package" && !(proof.leg && proof.leg.canonical)) {
+    // a package record lists hashes: with no leg supplied, no trade's terms were checked at all
+    v.className = "verdict";
+    v.innerHTML = "PACKAGE RECORD VERIFIED — NO TERMS CHECKED<span class='note'>Both named parties signed this package record and it is recorded on chain "
+      + (rec ? "at block " + rec.blockNumber : "") + ". A package record holds only the hashes of its legs: no trade's terms were checked here. "
+      + "Verify a leg's own proof pack to check its terms.</span>";
   } else {
     v.innerHTML = "VERIFIED<span class='note'>These exact terms were signed by both named parties and recorded on chain "
       + (rec ? "at block " + rec.blockNumber : "") + ". Neither party can alter them without breaking this proof.</span>";

@@ -106,6 +106,23 @@ reverted transaction, or one the node no longer knows after 15 minutes, marks th
 the reason; the trade stays PENDING and the button offers RETRY. A second confirm while a
 transaction is in flight reconciles instead of sending again.
 
+**A package (`POST /api/chain/confirm-package`) is synchronous.** It does not read
+`RIJEKA_CHAIN_SYNC_WAIT_S`: it waits for the receipt in the request, up to the backend's three minutes,
+answers 201 with every leg CONFIRMED, and writes no pending row. What can go wrong, and what to do:
+
+- **502 "Chain anchoring failed"**: the transaction was not accepted, or the receipt did not come in time.
+  It may still be mined. Press CONFIRM PACKAGE again: the legs' UTIs were committed before anything was
+  signed, so the same hashes are derived, the registry is found to hold the record, and the legs are
+  confirmed from it. No second transaction is paid for, and the budget is not charged again when the
+  registry already has the record.
+- **500 "The package is on the registry but was not recorded; confirm it again to finish"**: the anchor is
+  there and the database write failed (every leg is still PENDING: the write is one transaction). The same
+  press finishes it.
+- **409 on one leg**: a leg is no longer PENDING (cancelled, or confirmed on its own). The package cannot
+  be confirmed as one any more; the remaining legs go one by one with `POST /api/chain/confirm/{id}`.
+- **Amending or terminating a leg of a confirmed package**: refused (409) until a package amendment is
+  built. There is no path today; the package stands as signed.
+
 Without the `pending_anchors` table the route waits the full receipt timeout in the request, as
 before. Countersign (the chat card), amend and terminate stay synchronous: countersign's caller
 posts to the room after the committed event, and amend applies the booking changes in the

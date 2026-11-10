@@ -277,7 +277,7 @@ export function ConfirmPanel({
           {(status === 'CONFIRMED' || status === 'TERMINATED') && (
             <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying}
               verifyResult={verifyResult} onDownloadProof={onDownloadProof} onCopyProofLink={onCopyProofLink}
-              onTerminate={status === 'CONFIRMED' && !attestation?.attestation?.package ? onTerminate : null} terminating={terminating} confirmErr={confirmErr} />
+              onTerminate={status === 'CONFIRMED' && attestation?.attestation && !attestation.attestation.package ? onTerminate : null} terminating={terminating} confirmErr={confirmErr} />
           )}
         </div>
       </div>

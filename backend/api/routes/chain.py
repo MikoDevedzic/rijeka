@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-import re
 from typing import List, Optional
 from uuid import UUID, uuid4
 
@@ -53,7 +52,8 @@ from chain.canonical import (canonical_payload, canonical_bytes, trade_hash, CAN
 from chain.signing import (confirmation_typed_data, amendment_typed_data, termination_typed_data,
                            sign, recover, eip712_digest)
 from chain.lifecycle import (latest_attested_event, anchored_attestation, is_terminated, package_of, anchored_hash,
-                             refuse_package_leg)
+                             refuse_package_leg, refuse_one_leg_of_a_whole_package, current_attestation)
+from api.routes._package import PACKAGE_MAX_LEGS, read_package_tag
 from chain.canonical import TRADE_FIELDS_V2, LEG_FIELDS_V2
 from projections.trade_projection import project, EventLike
 from db.models import IdempotencyKey
@@ -435,7 +435,6 @@ def confirm_on_chain(
     user: dict = Depends(verify_token),
 ):
     user_id = _check_write_role(user)
-    _check_chain_quota(db, user_id, kind="confirm")
     _validate_idempotency_header(idempotency_key)
     cached = _lookup_idempotent(db, user_id, idempotency_key)
     if cached:
@@ -443,6 +442,9 @@ def confirm_on_chain(
 
     trade_uuid = _parse_trade_uuid(trade_id)
     trade = _load_pending_trade(db, trade_uuid, user_id)
+    # one leg of a package whose legs are all pending is not anchored alone: the package could then never be one record
+    refuse_one_leg_of_a_whole_package(db, trade)
+    _check_chain_quota(db, user_id, kind="confirm")           # charged for a trade that can be confirmed, not for a refusal
 
     # 1. Canonical record and hash (current schema; v2 needs the UTI first)
     ensure_uti(db, trade)
@@ -491,18 +493,10 @@ def confirm_on_chain(
 
 # ── A package of trades confirmed as one ─────────────────────────────────────────────────────────
 
-PACKAGE_MAX_LEGS = 24
-_PKG_TAG = re.compile(r"^([A-Z][A-Z ]*?) ((?:TRD-\d{8})|(?:PKG-[A-Z0-9]{4,12})) (\d{1,3})/(\d{1,3})$")
-
-
 def package_tag_of(trade: Trade) -> Optional[tuple]:
-    """(structure, the package's trade ID, the leg's place, the number of legs) from the trade's `strategy`, as the
-    booking wrote it (api/routes/booking.package_tag; the ticket's older tag with a PKG- reference too)."""
-    m = _PKG_TAG.match(str(trade.strategy or ""))
-    if not m:
-        return None
-    i, n = int(m.group(3)), int(m.group(4))
-    return (m.group(1), m.group(2), i, n) if 1 <= i <= n else None
+    """(structure, the package's trade ID, the leg's place, the number of legs) from the trade's `strategy`, as
+    POST /api/book/package wrote it (api/routes/_package.py). Only a tag the server wrote: a client cannot."""
+    return read_package_tag(trade.strategy)
 
 
 class PackageConfirmBody(BaseModel):
@@ -528,6 +522,13 @@ def confirm_package_on_chain(
     Like POST /confirm this signs for both sides, which is possible only when the counterparty's key is held (a
     demo entity); for a counterparty with its own wallet each leg goes through /request and /countersign.
     Amending or terminating one leg of a package confirmed this way is refused for now (chain/lifecycle).
+
+    What the signatures cover is the legs listed and their terms. That these are ALL the legs of the package is
+    the booking's fact (the tag only the server writes), not something the registry knows.
+
+    The route waits for the receipt in the request and has no pending-anchor path. After a lost answer or a failed
+    write the same request finishes the job: the UTIs are committed before anything is signed, so the same hashes
+    are derived, the registry is found to hold the record, and nothing is sent or charged again.
     """
     user_id = _check_write_role(user)
     _validate_idempotency_header(idempotency_key)
@@ -573,8 +574,22 @@ def confirm_package_on_chain(
         raise HTTPException(status_code=422, detail=f"Cannot build the package record: {e}")
     H = package_hash(pkg)
 
-    _check_chain_quota(db, user_id, kind="confirm")           # one anchor, one charge
+    # a leg with a transaction of its own in flight (a single confirm that answered 202) is not swept into a package
+    if P.tables_present(db):
+        flying = [t.trade_ref for t in trades if P.open_for_trade(db, t.id) is not None]
+        if flying:
+            raise HTTPException(status_code=409, detail=f"{', '.join(flying)}: a confirmation of its own is already in flight. Let it finish (or fail) first.")
+
     be, chain_id, registry = _eip712_ctx()
+    # one anchor, one charge; and none when the registry already holds this record (a second try after a lost answer)
+    already = None
+    if be.anchored:
+        try:
+            already = be.get(H)
+        except Exception as e:      # noqa: BLE001
+            log.info("chain: registry read before the package anchor failed: %s", type(e).__name__)
+    if not (already is not None and getattr(already, "status", "None") == "Confirmed"):
+        _check_chain_quota(db, user_id, kind="confirm")
     td_own = confirmation_typed_data(chain_id, registry, H, key_cp.address)
     td_cp  = confirmation_typed_data(chain_id, registry, H, key_own.address)
     sig_own = sign(td_own, key_own.private_key)
@@ -591,6 +606,20 @@ def confirm_package_on_chain(
 
     results = []
     try:
+        # The legs again, locked, as they stand NOW: the anchor took its time, and another request may have finished
+        # this package, or a leg may have gone its own way, meanwhile.
+        locked = {t.id: t for t in db.query(Trade).filter(Trade.id.in_([t.id for t in trades]), Trade.user_id == user_id).with_for_update().all()}
+        trades = [locked[t.id] for t in trades]
+        if all(t.status == "CONFIRMED" and (package_of(current_attestation(db, t.id)) or {}).get("hash") == _hexb(H) for t in trades):
+            from api.routes.booking import _serialize_trade
+            db.rollback()
+            return {"package": {"trade_id": package_id, "structure": structure, "legs": n, "hash": _hexb(H), "record": pkg, "anchor": anchor},
+                    "trades": [_serialize_trade(t) for t in trades], "idempotent_replay": True}
+        gone = [t.trade_ref for t in trades if t.status != "PENDING"]
+        if gone:
+            raise HTTPException(status_code=409, detail=(
+                f"{', '.join(gone)} changed while the package was being anchored and is no longer pending. The package record is on the "
+                f"registry; nothing was recorded here. Tell the operator: package {package_id}, hash {_hexb(H)}."))
         for i, (t, (payload, h)) in enumerate(zip(trades, records), start=1):
             attestation = {
                 "schema_version": CANONICAL_SCHEMA_VERSION,
@@ -617,9 +646,12 @@ def confirm_package_on_chain(
         if idempotency_key:
             db.add(IdempotencyKey(key=idempotency_key, user_id=user_id, result=out))
         db.commit()
-    except HTTPException:
+    except HTTPException as e:
         db.rollback()
-        raise
+        if e.status_code == 409 and "no longer pending" in str(e.detail):
+            raise
+        log.error("package %s anchored but not recorded: %s", package_id, e.detail)
+        raise HTTPException(status_code=500, detail="The package is on the registry but was not recorded; confirm it again to finish.")
     except Exception as e:      # noqa: BLE001
         db.rollback()
         log.exception("package %s anchored but not recorded", package_id)

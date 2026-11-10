@@ -512,3 +512,43 @@ test('a package is one trade on chain: one trade ID, a leg ID each, confirmed to
   expect((await app.getByTestId('bl-pkg').allInnerTexts()).map(x => x.trim()).sort()).toEqual(['STRIP 1/3', 'STRIP 2/3', 'STRIP 3/3'])
   expectClean(problems)
 })
+
+test('CONFIRM pressed before the blotter has the new legs still confirms the package as one, never one leg alone', async ({ app, problems }) => {
+  // Found by review: the package was read from the blotter's trades, which arrive a moment after BOOK; a quick press
+  // confirmed the first leg alone, and the package could then never be one record.
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await selectDemoBank(app, win)
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  await win.getByTestId('fx-legs-strip-3').click()
+  const rows = win.getByTestId('fx-leg')
+  await expect(rows).toHaveCount(2)
+  for (const i of [0, 1]) await expect(rows.nth(i)).toHaveAttribute('data-pending', 'false')
+
+  // from here the blotter's list of trades does not arrive until it is let through
+  const held = []
+  await app.route(/\/rest\/v1\/trades\?/, route => { held.push(route) })
+  await win.getByRole('button', { name: /BOOK 3 LEGS/ }).click()
+  await expect(win.getByTestId('fx-legs-package')).toBeVisible({ timeout: 30_000 })
+  const pid = (await win.getByTestId('fx-legs-package').innerText()).trim()
+  await win.getByRole('button', { name: /CONFIRM/ }).first().click()
+  // the tab already knows the package, from the legs this window booked
+  await expect(win.getByTestId('confirm-package-id')).toHaveText(pid)
+  await expect(win.getByTestId('confirm-package')).toHaveAttribute('data-legs', '3')
+  let single = 0
+  app.on('request', r => { if (/\/api\/chain\/confirm\/[0-9a-f-]+$/.test(r.url())) single += 1 })
+  const one = app.waitForResponse(r => r.url().endsWith('/api/chain/confirm-package') && r.request().method() === 'POST', { timeout: 120_000 })
+  await win.getByRole('button', { name: /CONFIRM PACKAGE ON-CHAIN · 3 LEGS, ONE RECORD/ }).click()
+  const resp = await one
+  expect(resp.status()).toBe(201)
+  expect(resp.request().postDataJSON().trade_ids).toHaveLength(3)
+  expect(single, 'no leg was confirmed on its own').toBe(0)
+  // and the server would not have taken one leg alone either: a whole pending package is confirmed as one
+  await app.unroute(/\/rest\/v1\/trades\?/)
+  for (const r of held) { try { await r.continue() } catch { /* the page moved on */ } }
+  await expect(win.getByTestId('cert-package')).toContainText(`${pid} · leg 1 of 3`, { timeout: 30_000 })
+  expect(problems.filter(x => !/rest\/v1\/trades|Failed to fetch|aborted/i.test(x)), `other problems:\n${problems.join('\n')}`).toEqual([])
+})

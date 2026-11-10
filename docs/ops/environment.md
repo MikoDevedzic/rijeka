@@ -122,5 +122,5 @@ Read at build time by Vite; set them in Netlify's build environment or a local `
 | `RIJEKA_WORKER` | `jobs/queue.py` (`worker_expected`) | `auto` (on when `RENDER` is set and the `jobs` table exists) | `1` / `0`: send RUN NOW and the risk backfill to the worker service as job rows, or run them in a thread of the API process. With `1` the table must exist; without a worker running, jobs queue. |
 | `RIJEKA_WORKER_KINDS` | `worker.py` | every handler (`ccr_run,risk_backfill`) | Comma-separated kinds this worker process claims. |
 | `RIJEKA_WORKER_NAME` | `worker.py` | host:pid (Render's instance id) | The name in `worker_heartbeat`, shown on `/api/ops/health` under `worker`. |
-| `RIJEKA_CHAIN_SYNC_WAIT_S` | `chain/pending.py` | `25` (the backend's full timeout when the `pending_anchors` table is missing or the value is `0`) | Seconds `POST /api/chain/confirm` waits for the receipt before answering 202 and leaving the anchor to reconciliation. |
+| `RIJEKA_CHAIN_SYNC_WAIT_S` | `chain/pending.py` | `25` (the backend's full timeout when the `pending_anchors` table is missing or the value is `0`) | Seconds `POST /api/chain/confirm` waits for the receipt before answering 202 and leaving the anchor to reconciliation. Not read by `POST /api/chain/confirm-package`, which waits in the request (docs/ops/deploy.md). |
 
