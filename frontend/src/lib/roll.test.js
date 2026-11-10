@@ -11,16 +11,19 @@ describe('a figure that rolls to its new value', () => {
     expect(parseFigure('0 USD')).toMatchObject({ value: 0, suffix: ' USD' })
     expect(parseFigure('108,466.36')).toMatchObject({ value: 108466.36, decimals: 2 })
     for (const t of ['—', 'pricing…', '', null, undefined, 42, {}]) expect(parseFigure(t), String(t)).toBeNull()
+    // more than one number, or a number grouped with points: shown as it is, not rolled
+    for (const t of ['12.3 / 15.6', '0.99049 / 0.99247', '+$1.234.567', '5 + 5', '2026-11-10']) expect(parseFigure(t), t).toBeNull()
   })
   it('writes a number in between exactly as the app would have printed it', () => {
     const like = parseFigure('+$4,669')
-    expect(formatLike(0, like)).toBe('+$0')
+    expect(formatLike(0, like)).toBe('$0')                                  // a frame that rounds to nothing has no sign
+    expect(formatLike(0.3, parseFigure('−$2,986'))).toBe('$0')
     expect(formatLike(1234.4, like)).toBe('+$1,234')
     expect(formatLike(4669, like)).toBe('+$4,669')                         // the last frame is the text itself
     expect(formatLike(1493, parseFigure('−$2,986'))).toBe('−$1,493')
     expect(formatLike(1.74, parseFigure('3.480%'))).toBe('1.740%')
     expect(formatLike(54233.18, parseFigure('108,466.36'))).toBe('54,233.18')
-    for (const t of ['+$4,669', '−$2,986', '10,743', '3.480%', '0 USD', '108,466.36', '+$0', '27']) expect(formatLike(parseFigure(t).value, parseFigure(t)), t).toBe(t)
+    for (const t of ['+$4,669', '−$2,986', '10,743', '3.480%', '0 USD', '108,466.36', '27']) expect(formatLike(parseFigure(t).value, parseFigure(t)), t).toBe(t)
   })
   it('rolls from what was shown, or from zero for a first price or a figure that crossed zero', () => {
     expect(rollFrom('—', '+$4,669')).toMatchObject({ start: 0 })

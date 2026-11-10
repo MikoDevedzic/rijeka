@@ -376,8 +376,8 @@ function CashflowsBody({ quote, crypto }) {
       <div style={secHdr}>CASHFLOWS · SETTLEMENT {quote.settlement_date}</div>
       <div style={tiles}>
         <Tile label="NET NPV" value={`${signed(quote.npv, 0)} ${qc}`} color={tone(quote.npv)} testId="fx-cf-npv" />
-        <Tile label={`${legs[0].name} PV`} value={signed(legs[0].pv, 0)} color={tone(legs[0].pv)} />
-        <Tile label={`${legs[1].name} PV`} value={signed(legs[1].pv, 0)} color={tone(legs[1].pv)} />
+        <Tile label={`${legs[0].name} PV · ${qc}`} value={signed(legs[0].pv, 0)} color={tone(legs[0].pv)} sub={ndf ? 'at the fixing, not exchanged' : undefined} />
+        <Tile label={`${legs[1].name} PV · ${qc}`} value={signed(legs[1].pv, 0)} color={tone(legs[1].pv)} sub={ndf ? 'against K, not exchanged' : undefined} />
         <Tile label={ndf ? 'SETTLES · CASH' : 'SETTLES · PHYSICAL'} value={quote.settlement_date} sub={ndf ? `one net payment in ${qc}` : 'both principals exchange'} />
       </div>
       {legs.map(l => (

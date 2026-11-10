@@ -11,11 +11,12 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
   formula, and what the price was built from) and the pointer to the XVA tab have left the TRADE tab on every
   product. The footer carries the headline figures on every tab, as before. A digital-asset or FX ticket's TRADE
   tab now fits the window without scrolling inside it. A swap's price that fails is still said under its terms.
-- **CASHFLOWS is the flows, then the valuation, on every product.** A forward is shown the way a swap is: four
+- **CASHFLOWS is the flows, then the valuation, on every new ticket.** A forward is shown the way a swap is: four
   summary tiles (NET NPV, each leg's PV, when and how it settles), a table per leg (what is received, what is
   paid) and the net of the two. The amounts are the ones the tab already showed: N·F against N·K, whose
-  difference is (F − K)·N; a cash-settled forward had only the net line. The valuation block follows the flows,
-  on the swap as well.
+  difference is (F − K)·N; a cash-settled forward had only the net line, and its two legs say they are not
+  exchanged. The valuation block follows the flows, on the swap as well. A stored currency trade opened from the
+  blotter has the flows and, as before, no valuation block.
 - **DETAILS is the record beside the market it was priced on**, as two panels of rows (what it is, its value,
   where the value is from) in place of a grid of tiles.
 - **One colour per risk factor, the same on every product.** A small square before a sensitivity's name: interest
@@ -26,8 +27,9 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
 - **A figure rolls to its new value and flashes once.** In the footer, the valuation tiles, the XVA strip and the
   saving on chain: from zero for a first price, from the figure that was there after that, in a third of a
   second, then a flash in the colour of the way it moved. With "reduce motion" set the new figure is simply shown.
-- **Fixed on the way:** the swap's cashflow summary printed a signed zero ("−$0") and coloured a positive leg in
-  brass; a rounded zero is now unsigned and a figure takes the colour of its sign.
+- **Fixed on the way:** the swap's cashflow summary printed a signed zero ("−$0") and coloured the fixed leg red
+  and the float leg brass whichever way they ran; a rounded zero is now unsigned and uncoloured, and each card
+  and row takes the colour of its figure's sign.
 
 ## Function keys · 10 November 2026 (frontend only; the API stays 0.16.2)
 

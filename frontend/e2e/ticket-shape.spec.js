@@ -73,6 +73,21 @@ test('a new ticket opens on a digital-asset forward: inputs on TRADE, the record
   await expectNoHorizontalOverflow(win, 'the CASHFLOWS tab')
   await app.screenshot({ path: 'e2e/.out/shots/shape-crypto-cashflows.png' })
 
+  // sold instead of bought: each leg changes sides, and they still add up to the net and to the NPV
+  await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+  const before = await win.getByTestId('fx-forward-rate').getAttribute('data-value')
+  await win.getByRole('button', { name: 'Sell BTC', exact: true }).click()
+  await priced(win)
+  expect(await win.getByTestId('fx-forward-rate').getAttribute('data-value')).toBe(before)
+  await win.getByRole('button', { name: 'CASHFLOWS', exact: true }).click()
+  await expect.poll(() => legPv('base'), { message: 'sold: the asset leg is paid' }).toBeLessThan(0)
+  expect(await legPv('quote'), 'and the dollar leg received').toBeGreaterThan(0)
+  await expect(win.getByTestId('fx-cf-leg-base')).toContainText('→ PAY')
+  await expect(win.getByTestId('fx-cf-leg-quote')).toContainText('← RECEIVE')
+  const netSold = num(await win.getByTestId('fx-cf-net').locator('td').last().innerText())
+  expect(Math.abs((await legPv('base')) + (await legPv('quote')) - netSold)).toBeLessThanOrEqual(1)
+  expect(Math.abs(netSold - num(await win.getByTestId('fx-cf-npv').innerText()))).toBeLessThanOrEqual(1)
+
   // the same risk factor is the same colour on this forward and on a swap; the asset classes differ
   const irOnForward = await markColour(win, 'IR01')
   const spotOnForward = await markColour(win, 'CRY01')
@@ -86,7 +101,8 @@ test('a new ticket opens on a digital-asset forward: inputs on TRADE, the record
   await expect(footer).toContainText('IR01')
   expect(await markColour(win, 'IR01'), 'IR01 on a swap is the colour of IR01 on a digital-asset forward').toBe(irOnForward)
   // the swap's TRADE tab holds no valuation either, and its CASHFLOWS has it under the legs
-  for (const out of ['ANALYTICS', 'BREAKDOWN']) await expect(win.locator('.tbw-fieldset').getByText(out, { exact: false })).toHaveCount(0)
+  // (the swap's CASHFLOWS pane is mounted and hidden by now, so this is about what can be seen on TRADE)
+  for (const out of [/^ANALYTICS/, /BREAKDOWN/]) expect(await win.getByText(out).filter({ visible: true }).count(), `${out} is not on the swap's TRADE tab`).toBe(0)
   await win.getByRole('button', { name: 'CASHFLOWS', exact: true }).click()
   await expect(win.getByText('FIXED LEG PV', { exact: true })).toBeVisible()
   await expect(win.getByText(/^ANALYTICS/).first()).toBeVisible()

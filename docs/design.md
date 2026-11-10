@@ -61,7 +61,9 @@ The same on every product. **TRADE** is what the user sets. **DETAILS** is the d
 schedule; for a forward or an option, the record as it will be booked beside the market it was priced on.
 **CASHFLOWS** is what comes back: the flows as legs with their present values and their net, then the valuation
 (each figure with its formula, and what the price was built from). The **footer** carries the headline figures
-on every tab. Nothing that is computed sits among the inputs, except a field that shows its default (dashed).
+on every tab. On TRADE the only computed things are a field that shows its default (dashed), an option's
+premium line and the notes that say why there is no price. A stored currency trade opened from the blotter has
+no valuation block (it never had).
 A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX, RATES.
 
 ## Risk factors
@@ -77,7 +79,8 @@ option and a digital-asset forward is one colour because it is one risk, and it 
 A figure that arrives or changes rolls to its value and flashes once (`components/common/Roll.jsx`,
 `lib/roll.js`): every frame is a figure the app would print, the last frame is the text itself, and with
 "reduce motion" set there is no roll. The journeys run with reduced motion, so a figure read at once is the
-figure; `ticket-shape.spec.js` turns motion on to watch a roll.
+figure; `ticket-shape.spec.js` turns motion on to watch a roll. Text with more than one number in it is shown,
+not rolled, and a frame that rounds to nothing carries no sign.
 
 ## Keys
 

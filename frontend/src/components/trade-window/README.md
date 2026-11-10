@@ -131,8 +131,8 @@ to a different position.
 | 4  | PrimaryEconomics    | Universal — notional, CCY, direction, tenor, eff/mat date |
 | 5  | ProductTerms        | `descriptor.terms.Component`              |
 | 6  | OptionFeeBlock      | Rendered **only** if `descriptor.optionFee !== null` |
-| 7  | AnalyticsBlock      | Metrics grid (`descriptor.analytics.metrics`) + collapsible breakdown (`descriptor.analytics.breakdown`) |
-| 8  | XVASummary          | Universal — link to XVA tab                |
+| 7  | AnalyticsBlock      | Metrics grid (`descriptor.analytics.metrics`) + collapsible breakdown (`descriptor.analytics.breakdown`). Since 10 November 2026 it is on the CASHFLOWS tab, under the flows, not on TRADE |
+| 8  | XVASummary          | No longer rendered (10 November 2026): the XVA tab and its key are the pointer |
 | 9  | TradeFooter         | Sticky — metric chips + STRUCTURE label + PRICE + BOOK TRADE |
 
 If a new product requires a tenth section, extend the shell contract once

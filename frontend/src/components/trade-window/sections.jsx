@@ -16,7 +16,7 @@ import React, { useState } from 'react'
 import { useModulesStore } from '../../store/useModulesStore'
 import { Keycap } from '../common/Shortcuts'
 import Roll, { RiskMark } from '../common/Roll'
-import { ASSET_FACTOR, RISK_FACTORS } from '../../lib/risk-factors'
+import { ASSET_FACTOR, RISK_FACTORS, labelText } from '../../lib/risk-factors'
 import { ariaKey } from '../../lib/shortcuts'
 
 const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CAPITAL','CURVE SCENARIO','◆ CONFIRM']
@@ -299,7 +299,7 @@ export function AnalyticsBlock({ descriptor, result, pricing, error }) {
 
       <div className="tbw-metrics-grid">
         {metrics.map((m, i) => (
-          <MetricCard key={i} {...m} showMath={math} />
+          <MetricCard key={labelText(m.label) || i} {...m} showMath={math} />
         ))}
       </div>
 
@@ -361,7 +361,7 @@ export function TradeFooter({
     <div className="tbw-footer">
       <div className="tbw-footer-metrics">
         {metrics.map((m, i) => (
-          <div key={i} className="tbw-footer-metric">
+          <div key={labelText(m.label) || i} className="tbw-footer-metric">
             <div className="tbw-lbl" style={{ fontSize: 12, marginBottom: 2 }}><RiskMark label={m.label} />{m.label}</div>
             <div className={`tbw-mono tbw-${m.colorBy || 'default'}`}
                  style={{ fontSize: 13, fontWeight: 500 }}>
@@ -468,6 +468,10 @@ function fmtPnl(v) {
   return sign + '$' + Math.abs(n).toLocaleString('en-US')
 }
 
+// The colour of a money figure: its sign once rounded to the dollar it is printed in; none for a zero.
+const signKey = (v) => { const n = Math.round(Number(v)); return !Number.isFinite(n) || n === 0 ? undefined : n > 0 ? 'accent' : 'negative' }
+const signColor = (v) => { const k = signKey(v); return k === 'accent' ? 'var(--up)' : k === 'negative' ? 'var(--down)' : 'var(--text-hi)' }
+
 function CashflowSummaryCard({ label, value, colorKey }) {
   return (
     <div style={{
@@ -516,7 +520,7 @@ function CapletTable({ result, ccy }) {
       }}>
         <CashflowSummaryCard label="OPTION NPV"
           value={fmtPnl(npv)}
-          colorKey={(npv || 0) >= 0 ? 'accent' : 'negative'} />
+          colorKey={signKey(npv)} />
         <CashflowSummaryCard label="PREMIUM %"
           value={premiumPct != null ? premiumPct.toFixed(4) + '%' : '\u2014'}
           colorKey="accent" />
@@ -577,7 +581,7 @@ function CapletTable({ result, ccy }) {
                 <td style={{
                   padding: '4px 8px',
                   textAlign: 'right',
-                  color: (cl.pv || 0) >= 0 ? 'var(--up)' : 'var(--down)',
+                  color: signColor(cl.pv),
                   fontWeight: 600,
                 }}>{fmtPnl(cl.pv)}</td>
               </tr>
@@ -596,7 +600,7 @@ function CapletTable({ result, ccy }) {
                 padding: '5px 8px',
                 textAlign: 'right',
                 fontWeight: 700,
-                color: (npv || 0) >= 0 ? 'var(--up)' : 'var(--down)',
+                color: signColor(npv),
               }}>{fmtPnl(npv)}</td>
             </tr>
           </tbody>
@@ -667,13 +671,13 @@ function SwapCashflowTables({ result, productKey, state }) {
       }}>
         <CashflowSummaryCard label={isSwpn ? 'OPTION NPV' : 'NET NPV'}
           value={fmtPnl(npv)}
-          colorKey={npv == null || Math.round(npv) === 0 ? undefined : npv > 0 ? 'accent' : 'negative'} />
+          colorKey={signKey(npv)} />
         <CashflowSummaryCard label={isSwpn ? 'FWD FIXED LEG PV' : 'FIXED LEG PV'}
           value={fixedLeg ? fmtPnl(fixedLeg.pv) : '\u2014'}
-          colorKey="negative" />
+          colorKey={signKey(fixedLeg?.pv)} />
         <CashflowSummaryCard label={isSwpn ? 'FWD FLOAT LEG PV' : 'FLOAT LEG PV'}
           value={floatLeg ? fmtPnl(floatLeg.pv) : '\u2014'}
-          colorKey="accent" />
+          colorKey={signKey(floatLeg?.pv)} />
         <CashflowSummaryCard label="PERIODS"
           value={fixedPeriods + ' + ' + floatPeriods}
           colorKey="blue" />
@@ -756,7 +760,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                       <td style={{
                         fontSize: 12, padding: '5px 6px', textAlign: 'right',
                         fontWeight: 600,
-                        color: pv >= 0 ? 'var(--up)' : 'var(--down)',
+                        color: signColor(pv),
                       }}>{fmtPnl(pv)}</td>
                       <td style={{ fontSize: 12, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
                         {cf.zero_rate != null ? (cf.zero_rate * 100).toFixed(3) : '\u2014'}
@@ -787,7 +791,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                     fontSize: 12, fontWeight: 700,
                     padding: '5px 6px',
                     textAlign: 'right',
-                    color: leg.pv >= 0 ? 'var(--up)' : 'var(--down)',
+                    color: signColor(leg.pv),
                   }}>{fmtPnl(leg.pv)}</td>
                   <td />
                 </tr>

@@ -9,6 +9,9 @@ export function parseFigure(text) {
   const m = typeof text === 'string' ? text.match(RX) : null
   if (!m) return null
   const [, prefix, int, frac = '', suffix] = m
+  // one number, or it does not roll: "12.3 / 15.6" would roll its first half, and a figure grouped with points
+  // ("1.234.567", a browser that writes decimals with a comma) would be read as 1.234
+  if (/\d/.test(suffix)) return null
   const negative = /[-−]/.test(prefix)
   const value = Number(int.replace(/,/g, '') + frac)
   if (!Number.isFinite(value)) return null
@@ -21,7 +24,9 @@ export function formatLike(v, like) {
   const body = like.grouped
     ? n.toLocaleString('en-US', { minimumFractionDigits: like.decimals, maximumFractionDigits: like.decimals })
     : n.toFixed(like.decimals)
-  return like.prefix + body + like.suffix
+  // a frame that rounds to nothing carries no sign, as everywhere else in the app
+  const prefix = Number(body.replace(/,/g, '')) === 0 ? like.prefix.replace(/[+\-−]/g, '') : like.prefix
+  return prefix + body + like.suffix
 }
 
 // Where a roll to `text` starts from, given what was shown before: the old magnitude when both are numbers of the

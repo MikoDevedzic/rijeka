@@ -846,7 +846,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         {premium && <div className={`tbw-fx-note tbw-fx-premium${dim ? ' tbw-fx-dim' : ''}`} data-testid="fx-premium">{premium}</div>}
       </div>
       {/* The valuation (the figures, each with its formula, and what the price was built from) is an output: it is
-          drawn at the top of the CASHFLOWS tab, in the slot the window gives this panel, not among the inputs here.
+          drawn under the flows on the CASHFLOWS tab, in the slot the window gives this panel, not among the inputs here.
           The footer carries the headline figures on every tab. */}
       {valuationSlot && createPortal(
         <div className={dim ? 'tbw-fx-dim' : undefined} data-testid="fx-valuation">

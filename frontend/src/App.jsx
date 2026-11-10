@@ -90,8 +90,9 @@ function ConfigLayout() {
 
 // Renders one trade window per entry in the booking store — survives navigation.
 // A window with a trade shows that stored trade (read-only terms, revaluation,
-// confirmation); one without is a new ticket for `productKey` (IR_SWAP unless
-// the opener says otherwise). Both are the unified TradeWindow: the legacy
+// confirmation); one without is a new ticket, which opens on a digital-asset
+// forward (TradeWindow NEW_TICKET; `productKey` is the swap product it shows
+// when RATES is chosen). Both are the unified TradeWindow: the legacy
 // TradeBookingWindow and its per-product localStorage gate were retired in the
 // launch audit (batch C) once booking.js covered every rates product.
 function PersistentBookingWindow() {

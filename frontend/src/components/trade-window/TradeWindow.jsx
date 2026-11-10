@@ -239,7 +239,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     if (el) { el.style.height = ''; el.style.width = '' }
   }, [assetClass, curInst, productKey])
   const [fxQuote, setFxQuote]          = useState(null)
-  // where the currency panel draws its valuation block: the top of the CASHFLOWS tab, once that tab has been opened
+  // where the currency panel draws its valuation block: under the flows on the CASHFLOWS tab, once that tab has been opened
   const [valuationSlot, setValuationSlot] = useState(null)
   // the quote a trade was booked from in this window: the term sheet reads AS BOOKED only while it is still the one shown
   const [bookedFxQuote, setBookedFxQuote] = useState(null)

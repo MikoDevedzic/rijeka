@@ -6,7 +6,7 @@
 // The colour marks the factor's NAME (a small square before the label). The figure itself keeps the colour of its
 // sign (docs/design.md): two meanings, two places. The tokens are --rf-* in index.css.
 export const RISK_FACTORS = {
-  ir:    { name: 'Interest rates',     token: '--rf-ir',    adds: 'the same risk on every product that discounts or projects on a curve: the IR01 of a swap, an option and a forward add up to the book\'s IR01' },
+  ir:    { name: 'Interest rates',     token: '--rf-ir',    adds: 'the same risk on every product that discounts or projects on a curve: the sensitivity to one curve adds across swaps, options and forwards alike (measure by measure, curve by curve)' },
   fx:    { name: 'FX spot',            token: '--rf-fx',    adds: 'adds across every trade on the same currency pair' },
   cry:   { name: 'Digital-asset spot', token: '--rf-cry',   adds: 'adds across every trade on the same asset: forwards and the delta of options' },
   basis: { name: 'Forward basis',      token: '--rf-basis', adds: 'the carry between spot and forward: adds across forwards and options on the same asset' },
