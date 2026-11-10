@@ -24,7 +24,7 @@ from api.routes import booking as booking_route
 from api.routes import trades as trades_route
 from api.routes.booking import BookingRequest, LegInput, book_trade
 from api.routes.trades import TradeCreate, create_trade
-from db.models import Trade, TradeLeg
+from db.models import Trade, TradeEvent, TradeLeg
 
 SECOND = 1_794_312_345                    # one frozen second: every booking below happens inside it
 SHAPE = re.compile(r"^TRD-\d{8}$")
@@ -46,6 +46,7 @@ class Book:
         self.taken: set = set()           # (user_id, trade_ref) of every trade row that was flushed
         self.pending: list = []
         self.legs: list = []
+        self.events: list = []
         self.inserts = 0
         self.fail_with = fail_with        # another constraint's name: every trade insert breaks it
         self.savepoints = 0
@@ -65,6 +66,8 @@ class Book:
                 self.taken.add(key)
             elif isinstance(obj, TradeLeg):
                 self.legs.append(obj)
+            elif isinstance(obj, TradeEvent):
+                self.events.append(obj)
 
     @contextlib.contextmanager
     def begin_nested(self):
@@ -146,6 +149,25 @@ def test_two_atomic_bookings_in_the_same_second_get_two_references():
     refs = [first["trade"]["trade_ref"], second["trade"]["trade_ref"]]
     assert refs == ["TRD-94312345", "TRD-94312346"] and db.refs() == refs
     assert len(first["legs"]) == 2 and first["trade"]["id"] != second["trade"]["id"]
+
+
+def test_the_booked_event_carries_the_reference_the_row_was_given():
+    """The event stream is the record. POST /api/book/trade assembled its BOOKED event before the row was named,
+    so a generated reference was null in the event (Edgar and Vera, 10 November 2026)."""
+    db = Book()
+    create_trade(_ticket(), db=db, user=_who())
+    book_trade(db, USER_A, _booking())                            # collides, so the name in the event is the retried one
+    book_trade(db, USER_A, _booking(trade_ref="MY-OWN-REF"))
+    in_events = [(e.payload["trade"]["trade_ref"], e.post_state["trade"]["trade_ref"]) for e in db.events]
+    assert in_events == [("TRD-94312345",) * 2, ("TRD-94312346",) * 2, ("MY-OWN-REF",) * 2]
+
+
+def test_the_index_named_here_is_the_one_the_model_and_the_schema_have():
+    """A renamed index would turn the retry into a 500 without a test noticing (Vera, 10 November 2026)."""
+    from pathlib import Path
+    assert _trade_ref.UNIQUE in {c.name for c in Trade.__table__.constraints}
+    schema = Path(__file__).resolve().parents[2] / "docs" / "schema.sql"
+    assert f"CREATE UNIQUE INDEX {_trade_ref.UNIQUE} ON public.trades USING btree (user_id, trade_ref)" in schema.read_text()
 
 
 def test_the_two_routes_share_one_users_names():

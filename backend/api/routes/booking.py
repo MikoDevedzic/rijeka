@@ -540,6 +540,8 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
         # The flush materializes the trade row before the event inserts (FK trade_events.trade_id).
         trade = insert_trade(db, row, body.trade_ref)
         trade_ref = trade.trade_ref
+        # the BOOKED event was assembled before the row had its name: the event stream is the record, so it carries it too
+        booked_payload["trade"]["trade_ref"] = trade_ref
 
         # Step 2: BOOKED event. Trigger tr_trade_events_assign_seq assigns event_seq=1,
         #         tx_time=now(), valid_time=effective_date::timestamptz.

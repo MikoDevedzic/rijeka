@@ -20,6 +20,10 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
 - **A reference the client supplies is never changed.** A duplicate is refused with 409 on both routes
   (`POST /api/trades/` answered 500). A generated reference never takes the `-2` form a package gives its own
   further legs.
+- **The BOOKED event names the trade as the row does.** `POST /api/book/trade` assembled its event before the
+  row had its name, so a generated reference was null in the event while the row carried it (found by the
+  database keeper's and the reviewer's reads of this change). New bookings record it; events already written are
+  not rewritten.
 - No schema change and no migration: the index is the one production already has.
 
 ## The shell: the name, the top bar, the blotter's rail · 10 November 2026 (frontend only)

@@ -99,6 +99,7 @@ def test_two_atomic_bookings_in_one_second(client, auth_e, at_second):
     a, b = first.json(), second.json()
     assert [a["trade"]["trade_ref"], b["trade"]["trade_ref"]] == ["TRD-00000200", "TRD-00000201"]
     for j in (a, b):                                                                       # the retry kept the booking whole: legs and event
+        assert _stored(j["trade"]["id"]) == (j["trade"]["trade_ref"],) * 2                         # and the event names the trade as the row does
         assert len(j["legs"]) == 2 and len(client.get(f"/api/trade-legs/{j['trade']['id']}", headers=auth_e).json()) == 2
         assert [e["event_type"] for e in client.get(f"/api/trade-events/{j['trade']['id']}", headers=auth_e).json()] == ["BOOKED"]
 
