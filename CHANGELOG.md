@@ -3,6 +3,34 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## 0.16.3 · 10 November 2026
+
+**CURVE SCENARIO in the XVA tab's shape (forwards and options on a currency pair or a digital asset).**
+
+- **Every curve the price was built on is listed** at the left, each in its risk factor's colour, with what has
+  been done to it: the spot, the forward points (a digital asset's forward basis), the discounting curve, the
+  second currency's curve on a currency pair, the vol surface on an option.
+- **One way to move any of them.** The selected curve takes a flat shock (a slider or a typed number), a shock
+  on one point (typed in the table beside it), or a drag on the chart. Before, only the forward curve could be
+  dragged and the rate curves were one slider each. A rate curve now draws its own pillars and each can be
+  moved; a currency pair's quoted points can be moved together, in pips.
+- **The result is one table**, set as the XVA results are: the factors across; the shock at settlement, the
+  change in value from each shock alone, what is left over when they act together, and the total; and under it
+  sensitivity × shock from the ticket's own risk figures, which adds across factors.
+- **One ladder**, laid across, for the selected curve, on top of the scenario (the two ladders side by side are
+  gone; the spot ladder used to ignore a dragged spot). Notes are behind their marks, as on the other tabs.
+- **What a pillar's shock does.** A forward or an option settles on one date, so of a rate curve its price sees
+  the zero rate to that date. A shock on a pillar reaches the price through the shock at the settlement time,
+  read between the two pillars around it, linearly in time (flat before the first and after the last). The tab
+  shows the pillars up to the settlement and the two after it: those beyond cannot reach the trade. This is the
+  browser's closed form, as the tab already was, and still says APPROXIMATION; the engine is not asked.
+- **API:** `POST /api/currency/forward/price` and `/option/price` answer with `curves`: the discounting curve's
+  id and pillars (date, years, zero rate, discount factor) and, where the second currency is carried on a curve,
+  that one's. Display only: no figure in the answer changes. An older web app ignores the field; the new one
+  against an older API lists the curve with a flat shock only.
+- **Not in this change:** the swap's scenario tab (a separate, older screen); an exotic option keeps the
+  engine's own ladder and takes spot and tenor moves only, as before.
+
 ## The ticket, easier to read · 10 November 2026 (frontend only; the API stays 0.16.2)
 
 - **Tabs that read as something to press.** The ticket's tabs are one control of joined buttons, each with an

@@ -789,3 +789,39 @@ describe('modelWords: the engine\'s method, with the forward named once', () => 
     expect(modelWords('  ', 'Black-76')).toBe('Black-76 on the forward to settlement')
   })
 })
+
+describe('a rate curve shocked point by point', () => {
+  const pillars = [{ date: '2026-12-10', t: 0.0822, zero_pct: 4.22 }, { date: '2027-02-10', t: 0.2521, zero_pct: 4.12 }, { date: '2027-05-10', t: 0.4959, zero_pct: 4.02 }, { date: '2027-11-10', t: 1, zero_pct: 3.9 }]
+  it('reads the shock at the settlement time between the two pillars around it, linearly in time', async () => {
+    const { shockAtTime } = await import('./fx-scenario')
+    expect(shockAtTime(pillars, { '2027-02-10': 10 }, 0.2521)).toBeCloseTo(10, 12)                  // on a pillar: its own shock
+    expect(shockAtTime(pillars, { '2026-12-10': 0, '2027-02-10': 10 }, (0.0822 + 0.2521) / 2)).toBeCloseTo(5, 12)
+    expect(shockAtTime(pillars, { '2027-02-10': 10, '2027-05-10': -20 }, 0.2521 + 0.25 * (0.4959 - 0.2521))).toBeCloseTo(2.5, 12)
+    expect(shockAtTime(pillars, { '2026-12-10': 7 }, 0.01)).toBe(7)                                 // before the first: held flat
+    expect(shockAtTime(pillars, { '2027-11-10': -3 }, 5)).toBe(-3)                                  // after the last: held flat
+    expect(shockAtTime(pillars, { '2027-11-10': 50 }, 0.2521)).toBe(0)                              // a pillar it does not sit beside: nothing
+    expect(shockAtTime(pillars, {}, 0.3)).toBe(0); expect(shockAtTime(pillars, null, 0.3)).toBe(0)
+    expect(shockAtTime([], { x: 1 }, 0.3)).toBe(0); expect(shockAtTime(null, {}, 0.3)).toBe(0); expect(shockAtTime(pillars, {}, NaN)).toBe(0)
+    expect(shockAtTime(pillars, { '2027-02-10': 'abc' }, 0.2521)).toBe(0)                           // unreadable: no shock
+  })
+  it('a parallel shock on every pillar is that shock at any time', async () => {
+    const { shockAtTime } = await import('./fx-scenario')
+    const all = Object.fromEntries(pillars.map(p => [p.date, 25]))
+    for (const t of [0.01, 0.1, 0.2521, 0.4, 0.9, 3]) expect(shockAtTime(pillars, all, t)).toBeCloseTo(25, 12)
+  })
+  it('shows the pillars up to the settlement and the two after it, the nearest kept', async () => {
+    const { pillarsShown } = await import('./fx-scenario')
+    expect(pillarsShown(pillars, 0.2521).map(p => p.date)).toEqual(['2026-12-10', '2027-02-10', '2027-05-10'])
+    expect(pillarsShown(pillars, 0.3).map(p => p.date)).toEqual(['2026-12-10', '2027-02-10', '2027-05-10', '2027-11-10'])
+    expect(pillarsShown(pillars, 9).length).toBe(4)                                                 // beyond the curve: all of it
+    const many = Array.from({ length: 30 }, (_, i) => ({ date: `d${i}`, t: (i + 1) / 12, zero_pct: 4 }))
+    const shown = pillarsShown(many, 2.01)
+    expect(shown.length).toBe(8); expect(shown[shown.length - 1].t).toBeCloseTo(26 / 12, 9)         // the two after 2.01y close the list
+    expect(pillarsShown(null, 1)).toEqual([]); expect(pillarsShown([{ t: 1 }], 1)).toEqual([]); expect(pillarsShown(pillars, NaN)).toEqual([])
+  })
+  it('names a pillar by its tenor', async () => {
+    const { tenorLabel } = await import('./fx-scenario')
+    expect([1 / 365, 7 / 365, 14 / 365, 0.0822, 0.2521, 0.4959, 0.75, 1, 2, 1.5].map(tenorLabel)).toEqual(['1D', '1W', '2W', '1M', '3M', '6M', '9M', '1Y', '2Y', '18M'])
+    expect(tenorLabel(0)).toBe(''); expect(tenorLabel(NaN)).toBe('')
+  })
+})

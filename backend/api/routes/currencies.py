@@ -662,6 +662,20 @@ def _curve(db: Session, user_id: str, curve_id: str, val_date: date):
         raise HTTPException(status_code=422, detail=f"{curve_id}: {e}")
 
 
+def curve_points(curve, val_date: date) -> list[dict[str, Any]]:
+    """A curve's own pillars, for the scenario tab to draw and to shock point by point: the date, the years to it
+    (ACT/365, as the quote's `t`), the continuous zero rate in % and the discount factor. Display only: nothing
+    is priced from this list."""
+    import math
+    out = []
+    for d, df in (getattr(curve, "_df_pillars", None) or []):
+        t = (d - val_date).days / 365.0
+        if t <= 0 or df <= 0:
+            continue
+        out.append({"date": d.isoformat(), "t": round(t, 6), "zero_pct": round(-math.log(df) / t * 100, 6), "df": round(float(df), 10)})
+    return out
+
+
 def spot_lag(pair: str) -> int:
     """The pair's spot lag in business days: 0 for a digital asset, FX_SPOT_LAG or 2."""
     p = str(pair or "").upper()
@@ -784,6 +798,9 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                model="F = S·DF_base/DF_quote from the spot date (parity) or S + quoted points (market); NPV_quote = ±N_base·(F−K)·DF_quote; ACT/365")
     # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the
     # funding rate's is FUND01; on a currency pair both legs are rate curves and IR01 is their sum
+    # the curves the price was built on, pillar by pillar (a flat rate has none of its own: its name is in base_discounting)
+    out["curves"] = {"quote": {"id": st["quote_curve"], "pillars": curve_points(q_curve, val_date)},
+                     "base": ({"id": st["base_curve"], "pillars": curve_points(kw["base_curve"], val_date)} if kw.get("base_curve") is not None else None)}
     out["crypto"] = crypto
     out["fund01"] = out.get("ir01_base") if crypto else None
     out["crybasis01"] = crybasis01(out["fund01"])
@@ -935,7 +952,7 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
                quote_curve_snapshot=fwd["quote_curve_snapshot"], forward_mode=fwd["forward_mode"], forward_source=fwd["forward_source"],
                implied_forward=fwd["implied_forward"], market_points=fwd["market_points"], basis_points=fwd["basis_points"],
                forward_points=fwd["forward_points"], df_base=fwd["df_base"], quote_rate=fwd["quote_rate"], base_rate=fwd["base_rate"],
-               t=fwd["t"], t_spot=fwd.get("t_spot", 0.0), quote_notional=base_notional * K,
+               t=fwd["t"], t_spot=fwd.get("t_spot", 0.0), quote_notional=base_notional * K, curves=fwd.get("curves"),
                model=f"{out.get('method', 'Garman–Kohlhagen')} on the forward to settlement; σ from the pair's ATM/RR25/BF25 surface (Malz smile in delta); ACT/365")
     return out
 

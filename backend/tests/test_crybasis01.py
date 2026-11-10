@@ -171,3 +171,24 @@ def test_strike_dp_books_the_rounded_fair_forward_in_one_request():
     assert atm["strike"] == atm["forward"] and dp5["forward"] == atm["forward"] and dp5["strike"] == round(atm["forward"], 5) != atm["forward"]
     assert dp5["quote_notional"] == pytest.approx(1e6 * dp5["strike"]) and dp5["npv"] != atm["npv"] and abs(dp5["npv"] - atm["npv"]) < abs(atm["npv"]) * 1e-3
     assert bad.status_code == 422
+
+
+def test_the_quote_carries_the_pillars_of_the_curves_it_was_priced_on():
+    """The scenario tab draws the discounting curve and shocks it point by point: a forward's and an option's answer
+    carry the curve's own pillars (date, years, zero rate, discount factor), consistent with one another."""
+    import math
+    import main
+    c, currencies = _client(_mock_db())
+    fwd = {"pair": "BTCUSD", "shape": "NDF", "base_notional": 10, "settlement_date": SETTLE.isoformat(), "valuation_date": VAL.isoformat(), "direction": "BUY"}
+    try:
+        q = _priced(c, currencies, fwd)
+    finally:
+        main.app.dependency_overrides.clear()
+    quote = q["curves"]["quote"]
+    assert quote["id"] == q["quote_curve"] and len(quote["pillars"]) >= 1
+    assert q["curves"]["base"] is None                       # a digital asset carries at a rate, not on a curve
+    for p in quote["pillars"]:
+        assert p["t"] > 0 and 0 < p["df"] < 1
+        assert math.exp(-p["zero_pct"] / 100 * p["t"]) == pytest.approx(p["df"], rel=1e-6)
+        assert p["zero_pct"] == pytest.approx(4.0, abs=0.05)  # the fixture's flat 4 %
+    assert [p["t"] for p in quote["pillars"]] == sorted(p["t"] for p in quote["pillars"])

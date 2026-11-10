@@ -198,7 +198,7 @@ test('crypto forward: the scenario tab has a curve to drag, and a fixing at expi
   const fix = Math.round(k) + 1000
   await win.getByTestId('fx-scenario-fixing').fill(String(fix))
   await expect.poll(() => value('fx-scenario-settlement')).toBeCloseTo(quote.base_notional * (fix - k), -1)
-  await expect(win.getByTestId('fx-scenario-source')).toBeVisible()
+  await expect(win.getByTestId('fx-scenario-source')).toHaveCount(1)        // behind the fixing's note mark; its words are in the page
   await expect(win.getByTestId('fx-scenario-dates')).toContainText(/fixes on \d{4}-\d{2}-\d{2}, settles \d{4}-\d{2}-\d{2}/)
   await expectNoHorizontalOverflow(win, 'scenario tab')
   await expectFullyInView(chart, 'the scenario chart')

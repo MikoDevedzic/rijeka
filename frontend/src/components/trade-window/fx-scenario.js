@@ -27,6 +27,7 @@ export const TENOR_BOUND = 0.5        // one tenor moves at most ±50 % of spot,
 export const FORWARD_FLOOR = 0.01     // and never below 1 % of spot: a forward stays positive
 export const RIPPLE_SIGMA = 0.15      // width of the ripple, in square-root years (the chart's own time axis)
 export const FIXING_DAYS = 30         // how far back the chart's left side reaches
+export const RATE_SHOCK_BOUND = 300   // a rate pillar moves at most ±300 bp, flat shock and its own together
 export const FX_SPOT_LAG_DAYS = 2     // the market's convention for a currency pair, for a caller that cannot infer it
 
 const finite = (v) => typeof v === 'number' && Number.isFinite(v)
@@ -219,6 +220,43 @@ export function shockedCurve({ spot, pip, nodes, moves, spotPct = 0, quoteBp = 0
       shocked: (spot + (n.points + moves[i]) * pip) * k * carryFactor(quoteBp, baseBp, n.days),
     })),
   ]
+}
+
+// ── a rate curve shocked point by point ────────────────────────────────────────────────────────────────
+// A forward or an option settles on one date, so of a discounting curve its price sees one number: the zero rate
+// to that date. A shock typed or dragged on a pillar reaches the price through the shock at the settlement time:
+// read between the two pillars around it, linearly in time, and held flat before the first pillar and after the
+// last. `pillars` are the curve's own ({date, t, zero_pct}), `shocks` the basis points on each by its date.
+export function shockAtTime(pillars, shocks, t) {
+  if (!Array.isArray(pillars) || !pillars.length || !finite(t)) return 0
+  const at = (p) => { const b = Number(shocks?.[p.date]); return finite(b) ? b : 0 }
+  if (t <= pillars[0].t) return at(pillars[0])
+  for (let i = 1; i < pillars.length; i++) {
+    const a = pillars[i - 1], b = pillars[i]
+    if (t <= b.t) return b.t > a.t ? at(a) + (at(b) - at(a)) * (t - a.t) / (b.t - a.t) : at(b)
+  }
+  return at(pillars[pillars.length - 1])
+}
+
+// The pillars a single-date trade is drawn against: every pillar up to its settlement and the two after it (the
+// one that closes the interval it sits in, and one more for the shape), at most `max`, the nearest to it kept.
+// Pillars beyond those cannot reach the price. [] for anything that is not a list of pillars.
+export function pillarsShown(pillars, t, max = 8) {
+  if (!Array.isArray(pillars) || !finite(t)) return []
+  const ok = pillars.filter(p => p && finite(p.t) && p.t > 0 && finite(p.zero_pct) && typeof p.date === 'string').sort((a, b) => a.t - b.t)
+  const after = ok.findIndex(p => p.t >= t)
+  const end = after < 0 ? ok.length : Math.min(ok.length, after + 2)
+  return ok.slice(Math.max(0, end - max), end)
+}
+
+// A pillar's name on the chart and in the table: its time as a tenor (1W, 3M, 2Y), to the nearest whole unit.
+export function tenorLabel(t) {
+  if (!finite(t) || t <= 0) return ''
+  const days = t * 365
+  if (days < 25) return days < 4 ? `${Math.max(1, Math.round(days))}D` : `${Math.round(days / 7)}W`
+  if (days < 345) return `${Math.round(days / 30.4)}M`
+  const y = days / 365
+  return Math.abs(y - Math.round(y)) < 0.08 ? `${Math.round(y)}Y` : `${Math.round(days / 30.4)}M`
 }
 
 // ── the closed form ──────────────────────────────────────────────────────────────────

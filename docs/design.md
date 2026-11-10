@@ -94,6 +94,14 @@ ALL-IN is the one column that stands out and the saving on chain the one brass f
 the tab: the inputs column is as tall as its inputs, and the credit curves and the assumptions sit under the
 results they drive.
 
+## The scenario tab
+
+The XVA tab's shape (`FxTabs.jsx` `ScenarioBody`, `FxRateCurve.jsx`): at the left the curves the price was
+built on, each a button with its risk factor's mark and what has been done to it, then the selected curve's
+flat shock and its points; at the right the selected curve's chart, the result as one table (factors across,
+TOTAL the column that stands out), the scenario's forward, value and fixing, and one ladder for the selected
+curve. A point that was typed or dragged carries the brass rule, as a field typed over its default does.
+
 ## Risk factors
 
 One colour per risk factor, the same on every product (`frontend/src/lib/risk-factors.js`, tokens `--rf-*`):

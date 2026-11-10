@@ -25,11 +25,15 @@ import { exportCashflows } from './fx-export'
 import { apiFetch } from '../../lib/api'
 import FxScenarioChart from './FxScenarioChart'
 import FxVolSurface from './FxVolChart'
+import FxRateCurve from './FxRateCurve'
+import { RISK_FACTORS } from '../../lib/risk-factors'
+import { XVA_ROW, XVA_LEFT, XVA_RIGHT } from './xva-shared'
 import { ladderKey, ladderShown, ladderWanted, marketKey } from './fx-requests'
 import { NOT_A_NUMBER, crybasis01, formatRead, parseNumber } from './fx-ticket'
 import {
-  FIXING_DAYS, FX_SPOT_LAG_DAYS, SPOT_BOUND_PCT, applyTenorDrag, carryFactor, carryPoints, chartLevels, curveNodes, daysBetween,
+  FIXING_DAYS, FX_SPOT_LAG_DAYS, RATE_SHOCK_BOUND, SPOT_BOUND_PCT, applyTenorDrag, carryFactor, carryPoints, chartLevels, curveNodes, daysBetween,
   fixingSeries, fixingTime, interpPoints, latestFixing, modelWords, reprice, rippleWeights, settledFacts, settledState, settlementAmount, shockedCurve,
+  pillarsShown, shockAtTime, tenorLabel,
   signedChange, spotLagDays, spotPctFromDrag, strikeAsBooked, styleTerms, tenorBounds, tenorMap,
 } from './fx-scenario'
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -100,11 +104,11 @@ function Grid({ items }) {
 }
 
 // The summary above a tab's tables: a label over a figure, as on the swap's CASHFLOWS tab.
-function Tile({ label, value, color, sub: note, testId }) {
+function Tile({ label, value, color, sub: note, testId, raw }) {
   return (
     <div style={{ position: 'relative', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--r-3)', padding: '9px 12px', minWidth: 0 }}>
       <div style={{ ...lbl, marginBottom: 4, paddingRight: note ? 18 : 0 }}>{label}</div>
-      <div data-testid={testId} style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 500, color: color || 'var(--text-hi)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+      <div data-testid={testId} data-value={raw} style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 500, color: color || 'var(--text-hi)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
       <Note corner>{note}</Note>
     </div>
   )
@@ -123,7 +127,6 @@ function Dir({ pay }) {
 // computed here: no forward, no payoff, no discounting.
 const dot = (...parts) => parts.filter(p => p != null && p !== '').join(' · ')
 const signed = (n, d = 2) => (n == null ? '—' : `${shown(n, d) > 0 ? '+' : ''}${fmt(n, d)}`)
-const signedDelta = (x, base) => (x == null || base == null ? '—' : `${shown(x - base) > 0 ? '+' : ''}${fmt(x - base)}`)
 const ORIGIN = { FEED: 'from the feed', MANUAL: 'entered by the desk' }
 
 // Why the figures are provisional, in plain words. When the amount hangs on a knock state nobody recorded, the
@@ -439,18 +442,6 @@ function CashflowsBody({ quote, crypto }) {
 // with the engine to cents (an option's Φ here is a polynomial), a spot shock scales the
 // quoted points with spot, and on quoted points the pricer would not move the forward with
 // the rate sliders. The banner and the caption under the sliders say so.
-function Slider({ label, v, set, min, max, step, unit }) {
-  const shown = Number(v.toFixed(2))            // a dragged curve leaves the spot shock between the slider's steps
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr 90px', gap: 10, alignItems: 'center', marginBottom: 8 }}>
-      <span style={lbl}>{label}</span>
-      <input type="range" min={min} max={max} step={step} value={v} onChange={e => set(Number(e.target.value))} style={{ accentColor: 'var(--accent)' }} />
-      {/* a shock's size is neutral: red and green are for a value's sign (a loss, a gain), not for up and down */}
-      <span style={{ fontFamily: 'var(--mono)', fontSize: '0.875rem', color: v === 0 ? 'var(--text-dim)' : 'var(--text)', textAlign: 'right' }}>{v > 0 ? '+' : ''}{shown}{unit}</span>
-    </div>
-  )
-}
-
 function StyleLadder({ crypto, quote, active, stale }) {
   // every style repriced by the engine itself on a grid of spot and vol shocks (POST /api/currency/option/ladder):
   // 46 option prices on the server. Asked once per quote, only while this tab is showing and the quote is not
@@ -532,6 +523,9 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const [qbp, setQbp] = useState(0)
   const [bbp, setBbp] = useState(0)
   const [vpt, setVpt] = useState(0)
+  const [sel, setSel] = useState('spot')                               // the curve the left column and the chart are showing
+  const [fpips, setFpips] = useState(0)                                // a currency pair's quoted points, all moved together, in pips
+  const [pill, setPill] = useState({ pair: null, quote: {}, base: {} }) // a rate curve's pillars shocked one by one: date → bp, for one pair
   const [drags, setDrags] = useState({ pair: null, by: {} })           // tenor → points it has been dragged, for one pair
   const [typed, setTyped] = useState({ pair: null, text: null })       // the scenario fixing as typed; null: it follows the shocked forward
   const [market, setMarket] = useState(null)             // { pair, row, tenorDays }: the pair's spot, points, pip, sources and the API's tenor map
@@ -550,6 +544,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const fixingText = typed.pair === pair ? typed.text : null
   const setMoves = (by) => setDrags({ pair, by })
   const setFixingText = (text) => setTyped({ pair, text })
+  const own = pill.pair === pair ? pill : { quote: {}, base: {} }
+  const setOwn = (which, date, bp) => setPill({ pair, quote: own.quote, base: own.base, [which]: { ...own[which], [date]: bp } })
   // The curve and the surface the ticket priced on. The pairs answer does not depend on the ticket's terms, so it is
   // read once for the stored market the quote names (its pair, and the reads of the points and the surface it priced
   // on), not for every quote, and only while this tab is showing and the quote is not being repriced.
@@ -603,10 +599,14 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
 
   // the rate sliders exist for the closed form only; a digital asset's second slider is its forward basis, +1 bp a
   // year of which is −1 bp on the carry rate the form takes (CRYBASIS01 = −FUND01)
-  const rq = european ? qbp : 0, rb = european ? (crypto ? -bbp : bbp) : 0
+  const tSettle = option ? quote.t_settle : quote.t
+  const qPill = pillarsShown(quote.curves?.quote?.pillars, tSettle), bPill = crypto ? [] : pillarsShown(quote.curves?.base?.pillars, tSettle)
+  const qOwn = shockAtTime(qPill, own.quote, tSettle), bOwn = shockAtTime(bPill, own.base, tSettle)
+  const rq = european ? qbp + qOwn : 0, rb = european ? (crypto ? -bbp : bbp + bOwn) : 0
   const nodes = model?.nodes || []
   const pip = model?.pip
-  const moved = nodes.map(n => moves[n.tenor] || 0)
+  const flatPips = crypto ? 0 : fpips
+  const moved = nodes.map(n => (moves[n.tenor] || 0) + flatPips)
   const dPoints = model ? interpPoints(Object.fromEntries(nodes.map((n, i) => [n.tenor, moved[i]])), model.days, model.tenorDays) : null
   const at = (o = {}) => (dPoints == null ? null : reprice(quote, { spotPct: spot, quoteBp: rq, baseBp: rb, volPts: vpt, dPoints, pip, ...o }))
   const base = model ? reprice(quote) : null
@@ -622,14 +622,14 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     )
   }
   const { settleX } = model
-  const tenorsMoved = moved.some(m => m !== 0)
-  const anyMove = spot !== 0 || rq !== 0 || rb !== 0 || tenorsMoved
+  const tenorsMoved = nodes.some(n => (moves[n.tenor] || 0) !== 0)
+  const anyMove = spot !== 0 || rq !== 0 || rb !== 0 || tenorsMoved || flatPips !== 0
   const d = (x) => x - base.npv
-  const reset = () => { setSpot(0); setQbp(0); setBbp(0); setVpt(0); setMoves({}); setFixingText(null) }
+  const reset = () => { setSpot(0); setQbp(0); setBbp(0); setVpt(0); setFpips(0); setMoves({}); setPill({ pair, quote: {}, base: {} }); setFixingText(null) }
 
   // the chart reports a drag as a distance in price from where it began; the shocks are worked out here
   // (not while the ticket reprices: the curve on screen is the one before the last change of terms)
-  const onDragStart = () => { origin.current = stale ? null : { moves: moved.slice(), spot } }
+  const onDragStart = () => { origin.current = stale ? null : { moves: nodes.map(n => moves[n.tenor] || 0), spot } }
   const onDrag = ({ index, whole, dPrice }) => {
     const o = origin.current
     if (!o || stale) return
@@ -669,138 +669,263 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
 
   const chart = (
     <div data-testid="fx-scenario-curve" data-drag={stale ? 'off' : 'on'} style={stale ? { pointerEvents: 'none' } : undefined}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div style={secHdr}>FORWARD CURVE · {pair}</div>
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-          {model.quoted ? `Spot plus the quoted points${model.label ? ` (${model.label})` : ''}` : 'The curve is the ticket\'s own carry from spot to the forward'}
-        </div>
-      </div>
       <FxScenarioChart today={quote.valuation_date} curve={curve} fixings={fixingSeries(rows, source)} tradeSource={source} strike={strike} levels={chartLevels(quote)}
         settle={{ x: settleX, date: quote.settlement_date }} expiry={option ? { x: daysBetween(quote.valuation_date, quote.expiry_date), date: quote.expiry_date } : null}
         fix={fixesEarly ? { x: daysBetween(quote.valuation_date, fixDate), date: fixDate } : null}
-        forward={now.forward} dp={dp} moved={anyMove} ready={ready} onDragStart={onDragStart} onDrag={onDrag} onDragEnd={() => { origin.current = null }} />
+        forward={now.forward} dp={dp} moved={anyMove} ready={ready} height={220} onDragStart={onDragStart} onDrag={onDrag} onDragEnd={() => { origin.current = null }} />
     </div>
   )
-  // an option's vol surface, under the forward curve: the pair's stored surface as the pairs answer carries it, or one
-  // line saying none is stored. Nothing until that answer is back, and nothing for a forward. The VOL slider exists
-  // for the closed form only, like the rate sliders.
+  // an option's vol surface: the pair's stored surface as the pairs answer carries it, or nothing until that answer is back
   const pairRow = market?.pair === pair ? market.row : null
   const volSurface = option && pairRow && 'vol_surface' in pairRow        // an answer without the field says nothing about a surface
     ? <FxVolSurface quote={quote} surface={pairRow.vol_surface || null} pair={pair} vpt={european ? vpt : 0} dp={dp} ready={ready} headerStyle={secHdr} />
     : null
-  const forwardTile = ['FORWARD', fmt(now.forward, dp), `base ${fmt(base.forward, dp)}`, 'fx-scenario-forward', now.forward]
-  const resetButton = <button onClick={reset} className="btn" data-testid="fx-scenario-reset" style={{ marginTop: 4 }}>RESET</button>
-  const banner = { background: 'rgba(233,151,90,0.06)', borderBottom: '1px solid rgba(233,151,90,0.15)', padding: '5px 12px', margin: '0 -16px', fontSize: '0.8125rem', color: 'var(--amber)' }
-  const approximation = <><span aria-hidden="true">⚠ </span><span data-testid="fx-scenario-banner">Scenario: an approximation in the browser, to cents with no shock; nothing is saved.</span></>
 
-  if (!european) {
-    return (
-      <div className="tbw-no-drag" style={wrap}>
-        <div style={banner}>{approximation} <span>The ladder below is the engine's own, repriced on every cell ({quote.method || 'the style\'s own model'}).</span></div>
-        {chart}
-        {volSurface}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 300px) minmax(0, 1fr)', gap: 20, alignItems: 'start', marginTop: 12 }}>
-          <div>
-            <Grid cols={1} items={[forwardTile]} />
-            {resetButton}
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-              The chart moves the forward to settlement in closed form. The ladder below is the API's: the engine reprices this {(quote.style || '').replace(/_/g, ' ').toLowerCase()} option on its own grid of spot and vol shocks, so it does not follow the dragged curve.
-            </div>
-            <FixingSource source={source} time={fixTime} date={cash ? fixDate : null} settles={cash ? quote.settlement_date : null} american={american} last={last} cash={cash} dp={dp} />
-          </div>
-        </div>
-        <StyleLadder crypto={crypto} quote={quote} active={active} stale={stale} />
-      </div>
-    )
+  // ── the curves the price was built on, each in its risk factor's colour, and what has been done to each ──
+  const qc = quote.quote_currency, bc = quote.base_currency
+  const rf = (k) => `var(${RISK_FACTORS[k].token})`
+  const plus = (v, d = 0) => `${v > 0 ? '+' : ''}${Number(v.toFixed(d))}`
+  const count = (o) => Object.values(o || {}).filter(v => Number(v)).length
+  const said = (...parts) => parts.filter(Boolean).join(' · ') || '—'
+  const points = (n) => (n ? `${n} ${n > 1 ? 'points' : 'point'}` : null)
+  const nTen = nodes.filter(n => (moves[n.tenor] || 0) !== 0).length
+  const curves = [
+    { key: 'spot', name: crypto ? `${bc} SPOT` : `${pair} SPOT`, sub: quote.spot_source || 'the stored spot', color: rf(crypto ? 'cry' : 'fx'), says: said(spot ? `${plus(spot, 2)}%` : null) },
+    { key: 'fwd', name: crypto ? `${bc} FORWARD BASIS` : `${pair} FORWARD POINTS`, color: rf('basis'),
+      sub: model.quoted ? `the quoted points${model.label ? `, ${model.label}` : ''}` : 'the ticket\'s own carry from spot',
+      says: said(crypto ? (european && bbp ? `${plus(bbp)} bp` : null) : (fpips ? `${plus(fpips)} pips` : null), points(nTen)) },
+    european && { key: 'quote', name: quote.quote_curve || `${qc} CURVE`, sub: `${qc} discounting`, color: rf('ir'), says: said(qbp ? `${plus(qbp)} bp` : null, points(count(own.quote))) },
+    european && !crypto && { key: 'base', name: quote.curves?.base?.id || `${bc} RATE`, sub: `${bc} discounting`, color: rf('ir'), says: said(bbp ? `${plus(bbp)} bp` : null, points(count(own.base))) },
+    option && { key: 'vol', name: `${pair} VOL`, sub: quote.vol_source || 'the pair\'s surface', color: rf('vol'), says: said(european && vpt ? `${plus(vpt, 2)} pt` : null) },
+  ].filter(Boolean)
+  const cur = curves.find(c => c.key === sel) || curves[0]
+  const rateKey = cur.key === 'quote' || cur.key === 'base' ? cur.key : null
+  const pills = rateKey === 'quote' ? qPill : rateKey === 'base' ? bPill : []
+  const rateFlat = rateKey === 'quote' ? qbp : rateKey === 'base' ? bbp : 0
+
+  // the flat shock of the selected curve
+  const flat = {
+    spot: { v: spot, set: setSpot, min: -SPOT_BOUND_PCT, max: SPOT_BOUND_PCT, step: 0.5, unit: '%', what: '% OF SPOT' },
+    fwd: crypto ? (european ? { v: bbp, set: setBbp, min: -200, max: 200, step: 5, unit: 'bp', what: 'BP A YEAR · UP = FORWARD UP' } : null)
+                : { v: fpips, set: setFpips, min: -200, max: 200, step: 1, unit: ' pips', what: 'PIPS ON EVERY TENOR' },
+    quote: { v: qbp, set: setQbp, min: -200, max: 200, step: 5, unit: 'bp', what: 'BASIS POINTS' },
+    base: { v: bbp, set: setBbp, min: -200, max: 200, step: 5, unit: 'bp', what: 'BASIS POINTS' },
+    vol: european ? { v: vpt, set: setVpt, min: -5, max: 5, step: 0.25, unit: 'pt', what: 'VOL POINTS' } : null,
+  }[cur.key]
+  // a shock as typed: a sign, digits, en-US grouping, a unit after it; empty is no shock, anything else is left as it was
+  const typedNumber = (text) => { const t = String(text).replace('−', '-').trim(); if (t === '') return 0; const m = /^([+-]?)\s*(\d[\d,]*\.?\d*|\.\d+)\s*(%|bp|pt|pips)?$/i.exec(t); if (!m) return null; const n = Number(m[2].replace(/,/g, '')); return Number.isFinite(n) ? (m[1] === '-' ? -n : n) : null }
+  const clampTo = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+
+  // point by point: the forward curve's tenors (in points), or a rate curve's pillars (in basis points)
+  const bounds = cur.key === 'fwd' ? tenorBounds(nodes, { spot: quote.spot, pip }) : null
+  const lastTenor = (() => { const j = nodes.findIndex(n => n.x >= settleX); return j < 0 ? nodes.length : Math.min(nodes.length, j + 2) })()
+  const pointRows = cur.key === 'fwd'
+    ? nodes.slice(0, lastTenor).map((n, i) => ({ id: n.tenor, name: n.tenor, market: fmt(curve[i + 1].base, dp), scen: fmt(curve[i + 1].shocked, dp), value: moves[n.tenor] || 0, d: crypto ? dp : 1,
+        set: (v) => setMoves({ ...moves, [n.tenor]: bounds ? clampTo(v, bounds[i].lo, bounds[i].hi) : v }) }))
+    : rateKey
+      ? pills.map(p => { const mine = Number(own[rateKey][p.date]) || 0; return { id: p.date, name: tenorLabel(p.t), market: p.zero_pct.toFixed(3), scen: (p.zero_pct + (rateFlat + mine) / 100).toFixed(3), value: mine, d: 0,
+          set: (v) => setOwn(rateKey, p.date, clampTo(Math.round(v), -RATE_SHOCK_BOUND - rateFlat, RATE_SHOCK_BOUND - rateFlat)) } })
+      : []
+  const pointUnit = cur.key === 'fwd' ? (crypto ? `MOVE ${qc}` : 'MOVE PIPS') : 'SHOCK BP'
+  const resetCurve = () => {
+    if (cur.key === 'spot') setSpot(0)
+    if (cur.key === 'fwd') { setMoves({}); if (crypto) setBbp(0); else setFpips(0) }
+    if (cur.key === 'quote') { setQbp(0); setPill({ pair, quote: {}, base: own.base }) }
+    if (cur.key === 'base') { setBbp(0); setPill({ pair, quote: own.quote, base: {} }) }
+    if (cur.key === 'vol') setVpt(0)
   }
 
-  const spotLadder = [-10, -5, -2, -1, 0, 1, 2, 5, 10]
-  const rateLadder = [-100, -50, -25, 0, 25, 50, 100]
-  // the digital asset's second rate shock is on its forward basis (CRYBASIS01, long positive): +1 bp a year on the
-  // basis is −1 bp on the carry rate the closed form takes, so the slider's sign is turned for the repricing
-  const firstOrder = spot * (quote.spot01 ?? 0) + qbp * (quote.ir01_disc ?? 0) + bbp * (crypto ? (crybasis01(quote) ?? 0) : (quote.ir01_base ?? 0)) + vpt * (quote.vega ?? 0)
+  // ── the result, factor by factor: each one's shock alone, what is left over when they act together, and the total ──
+  const alone = european ? {
+    spot: reprice(quote, { spotPct: spot, pip }),
+    fwd: reprice(quote, { dPoints, baseBp: crypto ? rb : 0, pip }),
+    quote: reprice(quote, { quoteBp: rq, pip }),
+    ...(crypto ? {} : { base: reprice(quote, { baseBp: rb, pip }) }),
+    ...(option ? { vol: reprice(quote, { volPts: vpt, pip }) } : {}),
+  } : {}
+  const dOf = (k) => (alone[k] ? alone[k].npv - base.npv : null)
+  const total = d(now.npv)
+  const cross = european ? total - curves.reduce((a, c) => a + (dOf(c.key) ?? 0), 0) : null
+  const shockSaid = {
+    spot: spot ? `${plus(spot, 2)}%` : '—',
+    fwd: crypto ? said(bbp ? `${plus(bbp)} bp` : null, dPoints ? `${signed(dPoints * pip, dp)} ${qc}` : null) : (dPoints ? `${plus(dPoints, 1)} pips` : '—'),
+    quote: rq ? `${plus(rq, 1)} bp` : '—', base: rb ? `${plus(rb, 1)} bp` : '—', vol: vpt ? `${plus(vpt, 2)} pt` : '—',
+  }
+  // sensitivity × shock: what the ticket's own risk figures say the shock is worth (a dragged tenor has no figure of its own)
+  const first = {
+    spot: spot * (quote.spot01 ?? 0), fwd: crypto ? bbp * (crybasis01(quote) ?? 0) : null,
+    quote: rq * (quote.ir01_disc ?? 0), base: rb * (quote.ir01_base ?? 0), vol: vpt * (quote.vega ?? 0),
+  }
+  const firstTotal = curves.reduce((a, c) => a + (first[c.key] ?? 0), 0)
+  const cols = `150px repeat(${curves.length + 2}, minmax(0, 1fr))`
+  const rRow = { display: 'grid', gridTemplateColumns: cols, alignItems: 'stretch', padding: '0 12px 0 16px', minWidth: 640 }
+  const rName = { ...lbl, padding: '8px 8px 7px 0', whiteSpace: 'nowrap' }
+  const rCell = { fontFamily: 'var(--mono)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', padding: '7px 6px', whiteSpace: 'nowrap', fontSize: 13.5, fontWeight: 500 }
+  const rSmall = { ...rCell, fontSize: 12, fontWeight: 400, color: 'var(--text-dim)', padding: '0 6px 7px' }
+  const rTot = { background: 'var(--panel)', boxShadow: 'inset 1px 0 0 var(--border-hi)' }
+  const money = (v, key, style = rCell) => <div key={key} style={{ ...style, ...(style === rCell ? { color: tone(v) } : null), ...(key === 'total' ? { ...rTot, ...(style === rCell ? { fontWeight: 600 } : null) } : null) }}>{v == null ? '—' : signedChange(v)}</div>
+  const results = european && (
+    <div data-testid="fx-scn-results" style={{ overflowX: 'auto', borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
+      <div style={{ ...rRow, background: 'var(--panel)', borderBottom: '1px solid var(--border)' }}>
+        <div style={rName} />
+        {curves.map(c => <div key={c.key} style={{ ...rCell, ...lbl, fontSize: 11 }}><span className="rf-mark" style={{ background: c.color }} />{c.key === 'spot' ? 'SPOT' : c.key === 'fwd' ? (crypto ? 'BASIS' : 'POINTS') : c.key === 'quote' ? `${qc} CURVE` : c.key === 'base' ? `${bc} RATE` : 'VOL'}</div>)}
+        <div style={{ ...rCell, ...lbl, fontSize: 11 }}>CROSS<Note inline>What is left when the shocks act together: the total less each shock taken alone.</Note></div>
+        <div style={{ ...rCell, ...lbl, fontSize: 11, fontWeight: 600, color: 'var(--text-hi)', ...rTot }}>TOTAL</div>
+      </div>
+      <div style={{ ...rRow, paddingTop: 7 }} data-testid="fx-scn-shock">
+        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SHOCK AT SETTLEMENT</div>
+        {curves.map(c => <div key={c.key} style={rSmall}>{shockSaid[c.key]}</div>)}
+        <div style={rSmall}>—</div><div style={{ ...rSmall, ...rTot }}>—</div>
+      </div>
+      <div style={rRow} data-testid="fx-scn-change">
+        <div style={rName}>CHANGE IN NPV · {qc}</div>
+        {curves.map(c => money(dOf(c.key), c.key))}
+        {money(cross, 'cross')}{money(total, 'total')}
+      </div>
+      <div style={rRow} data-testid="fx-scn-first">
+        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SENSITIVITY × SHOCK<Note inline>{DELTA_LABEL(crypto)} × the spot shock, IR01 × the rate shock{crypto ? ', CRYBASIS01 × the basis shock' : ''}{option ? ', VEGA × the vol shock' : ''}: the ticket's own risk figures. It is the change in value to first order, and it adds across factors{tenorsMoved || (!crypto && dPoints) ? '. A tenor moved in points has no figure of its own and is left out' : ''}.</Note></div>
+        {curves.map(c => money(first[c.key], c.key, rSmall))}
+        <div style={rSmall}>—</div>{money(firstTotal, 'total', rSmall)}
+      </div>
+    </div>
+  )
+
+  // ── one ladder: the selected curve moved flat, on top of the scenario ──
+  const bpSteps = [-100, -50, -25, -10, 0, 10, 25, 50, 100]
+  const ladder = european && {
+    spot: { xs: [-10, -5, -2, -1, 0, 1, 2, 5, 10], unit: '%', at: (x) => at({ spotPct: spot + x }) },
+    fwd: crypto ? { xs: bpSteps, unit: 'bp', at: (x) => at({ baseBp: -(bbp + x) }) } : { xs: [-100, -50, -20, -10, 0, 10, 20, 50, 100], unit: ' pips', at: (x) => at({ dPoints: dPoints + x }) },
+    quote: { xs: bpSteps, unit: 'bp', at: (x) => at({ quoteBp: rq + x }) },
+    base: { xs: bpSteps, unit: 'bp', at: (x) => at({ baseBp: rb + x }) },
+    vol: { xs: [-5, -2, -1, -0.5, 0, 0.5, 1, 2, 5], unit: 'pt', at: (x) => at({ volPts: vpt + x }) },
+  }[cur.key]
   const none = { forward: null, npv: null }                                  // a ladder cell that cannot be priced shows a dash
+  const lad = ladder ? ladder.xs.map(x => ({ x, r: ladder.at(x) || none })) : []
+  const lRow = { display: 'grid', gridTemplateColumns: `150px repeat(${lad.length}, minmax(0, 1fr))`, padding: '0 12px 0 16px', minWidth: 760 }
+  const lCell = { fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', padding: '6px 6px', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }
+  const mid = (x) => (x === 0 ? { background: 'var(--panel)' } : null)
+  const ladderBlock = ladder && (
+    <div data-testid="fx-scn-ladder" style={{ overflowX: 'auto', paddingBottom: 12, background: 'var(--bg)' }}>
+      <div style={{ ...secHdr, margin: '12px 16px 8px' }}>LADDER · {cur.name}<Note inline>Each column is this curve moved flat by that much, on top of the scenario, with every other shock held. The middle column is the scenario itself.</Note></div>
+      <div style={{ ...lRow, background: 'var(--panel)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ ...lbl, padding: '7px 0' }}>{cur.key === 'spot' ? 'SPOT' : 'SHIFT'}</div>
+        {lad.map(({ x, r }) => x === 0
+          ? <div key={x} data-testid="fx-scenario-base" data-forward={r.forward ?? ''} data-npv={r.npv ?? ''} style={{ ...lCell, ...lbl, fontSize: 11, color: 'var(--text-hi)', ...mid(x) }}>scenario</div>
+          : <div key={x} style={{ ...lCell, ...lbl, fontSize: 11 }}>{plus(x, 2)}{ladder.unit}</div>)}
+      </div>
+      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>FORWARD</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, ...mid(x) }}>{fmt(r.forward, dp)}</div>)}</div>
+      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>NPV · {qc}</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, color: tone(r.npv), ...mid(x) }}>{fmt(r.npv)}</div>)}</div>
+      <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>CHANGE</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, color: x === 0 ? 'var(--text-mute)' : tone(r.npv == null ? null : r.npv - now.npv), ...mid(x) }}>{x === 0 || r.npv == null ? '—' : signedChange(r.npv - now.npv)}</div>)}</div>
+    </div>
+  )
+
+  // ── the left column ──
+  const curveBtn = (c) => (
+    <button key={c.key} type="button" data-testid={`fx-scn-curve-${c.key}`} aria-pressed={c.key === cur.key} onClick={() => setSel(c.key)}
+      style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 8, alignItems: 'center', width: '100%', padding: '8px 10px', marginBottom: 6, textAlign: 'left', cursor: 'pointer',
+        borderRadius: 'var(--r-2)', border: `1px solid ${c.key === cur.key ? 'var(--border-glow)' : 'var(--border)'}`, background: c.key === cur.key ? 'var(--panel-3)' : 'transparent',
+        color: c.key === cur.key ? 'var(--text-hi)' : 'var(--text-dim)', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500, letterSpacing: '0.04em' }}>
+      <span className="rf-mark" style={{ background: c.color, margin: 0 }} />
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+        <span style={{ display: 'block', fontSize: 11, fontWeight: 400, letterSpacing: 0, color: 'var(--text-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</span>
+      </span>
+      <span data-testid={`fx-scn-says-${c.key}`} style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 400, letterSpacing: 0, color: c.says === '—' ? 'var(--text-mute)' : 'var(--text-hi)', whiteSpace: 'nowrap' }}>{c.says}</span>
+    </button>
+  )
+  const inputBox = { background: 'var(--bg)', color: 'var(--text-hi)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '5px 7px', fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', width: '100%' }
+  const setBox = { borderColor: 'var(--accent-dim)', boxShadow: 'inset 0 -2px 0 var(--accent)' }
+  const commit = (e, set) => { const v = typedNumber(e.target.value); if (v != null) set(v) }
+  const onEnter = (e) => { if (e.key === 'Enter') e.target.blur() }
+  const left = (
+    <div style={XVA_LEFT} data-testid="fx-scn-left">
+      <div style={{ ...secHdr, marginTop: 4 }}>CURVES THAT PRICE THIS TRADE<Note inline>Every market input the price was built from, each in the colour of its risk factor. Select one to shock it flat, point by point, or by dragging on the chart.</Note></div>
+      {curves.map(curveBtn)}
+      {flat && (<>
+        <div style={secHdr}>FLAT SHOCK · {flat.what}{cur.key === 'fwd' && quotedForward && european && <Note inline testId="fx-scenario-quoted-note">On quoted points the pricer holds the forward when a rate curve moves: the two curve shocks show the carry effect only, and a spot shock scales the points with spot.</Note>}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 84px', gap: 10, alignItems: 'center' }}>
+          <input type="range" data-testid="fx-scn-flat" aria-label={`Flat shock, ${cur.name}`} min={flat.min} max={flat.max} step={flat.step} value={flat.v} disabled={stale}
+            onChange={e => flat.set(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--text)' }} />
+          <input key={`${cur.key}:${flat.v}`} type="text" inputMode="decimal" data-testid="fx-scn-flat-value" aria-label={`Flat shock value, ${cur.name}`} defaultValue={`${plus(flat.v, 2)}${flat.unit}`} disabled={stale}
+            onBlur={e => commit(e, v => flat.set(clampTo(v, flat.min, flat.max)))} onKeyDown={onEnter} style={{ ...inputBox, ...(flat.v ? setBox : null) }} />
+        </div>
+      </>)}
+      {pointRows.length > 0 && (<>
+        <div style={secHdr}>POINT BY POINT<Note inline>{cur.key === 'fwd' ? 'Type a move on one tenor, or drag that tenor on the chart: a drag carries its neighbours with it, a typed move does not.' : 'Type a shock on one pillar, or drag it on the chart. A trade that settles on one date sees the curve at that date: the shock there is read between the two pillars around it.'} A typed point carries the brass rule.</Note></div>
+        <table data-testid="fx-scn-points" style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
+          <thead><tr>{['TENOR', 'MARKET', pointUnit, 'SCENARIO'].map((h, i) => <th key={h} style={{ ...lbl, textAlign: i ? 'right' : 'left', padding: '4px 4px 6px', borderBottom: '1px solid var(--border-hi)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
+          <tbody>{pointRows.map(r => (
+            <tr key={r.id}>
+              <td style={{ fontSize: 12.5, color: 'var(--text-dim)', padding: '3px 4px', borderBottom: '1px solid var(--border)' }}>{r.name}</td>
+              <td style={{ fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', padding: '3px 4px', borderBottom: '1px solid var(--border)' }}>{r.market}</td>
+              <td style={{ padding: '3px 4px', borderBottom: '1px solid var(--border)', width: 84 }}>
+                <input key={`${r.id}:${r.value}`} type="text" inputMode="decimal" data-point={r.id} aria-label={`Shock at ${r.name}`} placeholder="—" defaultValue={r.value ? plus(r.value, r.d) : ''} disabled={stale}
+                  onBlur={e => commit(e, r.set)} onKeyDown={onEnter} style={{ ...inputBox, ...(r.value ? setBox : null) }} />
+              </td>
+              <td style={{ fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', padding: '3px 4px', borderBottom: '1px solid var(--border)', color: 'var(--text-hi)' }}>{r.scen}</td>
+            </tr>))}</tbody>
+        </table>
+      </>)}
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button type="button" className="tbw-btn" style={{ flex: 1, padding: '7px 10px' }} data-testid="fx-scn-reset-curve" onClick={resetCurve}>RESET CURVE</button>
+        <button type="button" className="tbw-btn" style={{ flex: 1, padding: '7px 10px' }} data-testid="fx-scenario-reset" onClick={reset}>RESET ALL</button>
+      </div>
+    </div>
+  )
+
+  // ── the right column: the selected curve, the result, the forward and the fixing, the ladder ──
+  const chartTitle = cur.key === 'spot' || cur.key === 'fwd' ? `FORWARD CURVE · ${pair}` : rateKey ? `${cur.name} · ZERO RATE % A YEAR` : ''          // the surface block carries its own heading
+  const chartSays = cur.key === 'spot' || cur.key === 'fwd'
+    ? `${model.quoted ? `Spot plus the quoted points${model.label ? ` (${model.label})` : ''}.` : 'The curve is the ticket\'s own carry from spot to the forward.'} Drag a tenor up or down to move it; hold Shift, or drag the spot point at TODAY, to move the whole curve.`
+    : rateKey ? 'The curve\'s own pillars up to the settlement date and the two after it; those beyond cannot reach this trade. Drag a pillar up or down to shock it.'
+    : 'The pair\'s stored surface, read at this expiry and strike as the engine reads it. The flat shock moves the level of the smile, not its shape.'
+  const selected = cur.key === 'spot' || cur.key === 'fwd' ? chart
+    : rateKey ? (pills.length
+        ? <FxRateCurve pillars={pills} own={own[rateKey]} flat={rateFlat} settleT={tSettle} color={cur.color} disabled={stale}
+            shockAt={(p) => rateFlat + (Number(own[rateKey][p.date]) || 0)} onPoint={(date, bp) => setOwn(rateKey, date, bp)} />
+        : <div data-testid="fx-scn-one-rate" style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>This curve is one rate on this trade ({rateKey === 'base' ? (quote.base_discounting || 'a flat rate') : 'no pillars were sent'}): it has no points to move, so it takes the flat shock only.</div>)
+    : (volSurface || <div style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>No vol surface is stored for {pair}.</div>)
+  const fixingCell = (
+    <div style={{ position: 'relative', background: 'var(--bg-deep)', border: '1px solid var(--border)', borderRadius: 'var(--r-3)', padding: '9px 12px', minWidth: 0 }}>
+      <div style={{ ...lbl, marginBottom: 4 }}>{option ? (american ? 'FIXING AT EXERCISE OR EXPIRY' : 'FIXING AT EXPIRY') : 'SCENARIO FIXING'}
+        <Note inline><span style={{ display: 'block' }}>{formula}, with N {fmt(quote.base_notional, nDp)} {bc} and K {fmt(strike, dp)}, in {qc}. The fixing follows the scenario's forward until one is typed.</span>
+          <FixingSource source={source} time={fixTime} date={cash ? fixDate : null} settles={cash ? quote.settlement_date : null} american={american} last={last} cash={cash} dp={dp} /></Note>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <input data-testid="fx-scenario-fixing" type="text" inputMode="decimal" aria-label="Scenario fixing" value={fixingShown} data-invalid={fixingBad ? 'true' : undefined}
+          onChange={e => setFixingText(e.target.value)} style={{ ...inputBox, width: 112, ...(fixingText != null ? setBox : null), ...(fixingBad ? { color: 'var(--amber)', borderColor: 'var(--amber)', boxShadow: 'none' } : {}) }} />
+        <span data-testid="fx-scenario-settlement" data-value={amount ?? ''} title="What the trade settles at that fixing" style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 500, color: tone(amount, 2) }}>
+          {amount == null ? '—' : `${signed(amount)} ${qc}`}
+        </span>
+      </div>
+      {fixingText != null && <button type="button" className="tbw-btn" style={{ marginTop: 6, padding: '3px 8px', fontSize: 11 }} onClick={() => setFixingText(null)} title="Follow the scenario's forward at settlement again">USE THE FORWARD</button>}
+      {fixingBad && <div data-testid="fx-scenario-fixing-invalid" style={{ fontSize: 11.5, color: 'var(--amber)', marginTop: 4 }}>the fixing is {NOT_A_NUMBER}</div>}
+    </div>
+  )
   return (
-    <div className="tbw-no-drag" style={wrap}>
-      <div style={banner}>{approximation}</div>
-      {chart}
-      {volSurface}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 360px) minmax(0, 1fr)', gap: 20 }}>
-        <div>
-          <div style={secHdr}>SHOCKS</div>
-          <Slider label="SPOT" v={spot} set={setSpot} min={-SPOT_BOUND_PCT} max={SPOT_BOUND_PCT} step={0.5} unit="%" />
-          <Slider label={`${quote.quote_currency} CURVE`} v={qbp} set={setQbp} min={-200} max={200} step={5} unit="bp" />
-          <Slider label={crypto ? `BASIS (${quote.quote_currency} − ${quote.base_currency}) · 1 bp up = forward up` : `${quote.base_currency} CURVE`} v={bbp} set={setBbp} min={-200} max={200} step={5} unit="bp" />
-          {quotedForward && <div data-testid="fx-scenario-quoted-note" style={{ fontSize: '0.7rem', color: 'var(--text-dim)', margin: '-2px 0 8px' }}>on quoted points the pricer holds the forward when a curve moves: the two curve sliders show the carry effect only, and a spot shock scales the points with spot</div>}
-          {option && <Slider label="VOL" v={vpt} set={setVpt} min={-5} max={5} step={0.25} unit="pt" />}
-          {resetButton}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 20, alignContent: 'start' }}>
-          <div>
-            <div style={secHdr}>SHOCKED</div>
-            <Grid cols={2} items={[
-              forwardTile,
-              [`NPV ${quote.quote_currency}`, fmt(now.npv), `base ${fmt(base.npv)}`],
-              ['ΔNPV', signedChange(d(now.npv)), 'vs base'],
-              ['FIRST ORDER', signedChange(firstOrder), `${DELTA_LABEL(crypto)}·Δspot + ${crypto ? 'IR01·Δbp + CRYBASIS01·Δbp' : 'IR01s·Δbp'}${option ? ' + VEGA·Δvol' : ''}${tenorsMoved ? ' · without the dragged tenors' : ''}`],
-            ]} />
-          </div>
-          <div>
-            <div style={secHdr}>{option ? (american ? 'FIXING AT EXERCISE OR EXPIRY' : 'FIXING AT EXPIRY') : 'FIXING'}</div>
-            <div style={{ border: '1px solid var(--border)', borderRadius: 4, padding: '8px 10px', background: 'var(--bg-deep)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ ...lbl, fontSize: '0.76rem' }}>SCENARIO FIXING</span>
-                <input data-testid="fx-scenario-fixing" type="text" inputMode="decimal" aria-label="Scenario fixing" value={fixingShown} data-invalid={fixingBad ? 'true' : undefined}
-                  onChange={e => setFixingText(e.target.value)} style={{ width: 130, fontFamily: 'var(--mono)', textAlign: 'right', ...(fixingBad ? { color: 'var(--amber)', borderColor: 'var(--amber)' } : {}) }} />
-                {fixingText != null && <button className="btn" onClick={() => setFixingText(null)} title="Follow the shocked forward at settlement again">USE THE FORWARD</button>}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                <span style={{ ...lbl, fontSize: '0.76rem' }}>SETTLEMENT AMOUNT</span>
-                <span data-testid="fx-scenario-settlement" data-value={amount ?? ''} style={{ fontFamily: 'var(--mono)', fontSize: '0.9375rem', color: tone(amount, 2) }}>
-                  {amount == null ? '—' : `${signed(amount)} ${quote.quote_currency}`}
-                </span>
-              </div>
-              {fixingBad && <div data-testid="fx-scenario-fixing-invalid" style={{ fontSize: '0.7rem', color: 'var(--amber)', marginTop: 4 }}>the fixing is {NOT_A_NUMBER}</div>}
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', marginTop: 4 }}>
-                {formula}, with N {fmt(quote.base_notional, nDp)} {quote.base_currency} and K {fmt(strike, dp)}, in {quote.quote_currency}
-              </div>
+    <div className="tbw-no-drag" style={{ fontFamily: 'var(--sans)' }}>
+      <div style={XVA_ROW}>
+        {left}
+        <div style={XVA_RIGHT}>
+          <div style={{ padding: '10px 16px 6px', borderBottom: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+              {chartTitle && <span style={{ ...secHdr, margin: 0 }}>{chartTitle}</span>}<Note inline>{chartSays}</Note>
+              <span style={{ fontSize: 11, color: 'var(--amber)', border: '1px solid rgba(233,151,90,0.4)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>APPROXIMATION</span>
+              <Note inline testId="fx-scenario-banner">Scenario: an approximation in the browser, to cents with no shock; nothing is saved.{european ? '' : ` The ladder below is the engine's own, repriced on every cell (${quote.method || 'the style\'s own model'}), so it does not follow the dragged curve.`}</Note>
             </div>
-            <FixingSource source={source} time={fixTime} date={cash ? fixDate : null} settles={cash ? quote.settlement_date : null} american={american} last={last} cash={cash} dp={dp} />
+            {selected}
           </div>
+          {results}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr)', gap: 8, padding: '10px 16px', borderTop: '1px solid var(--border)', borderBottom: ladder ? '1px solid var(--border)' : 'none', background: 'var(--bg)' }}>
+            <Tile label="FORWARD · SCENARIO" value={fmt(now.forward, dp)} testId="fx-scenario-forward" raw={now.forward} sub={`at the market ${fmt(base.forward, dp)}`} />
+            <Tile label={`NPV · ${qc}`} value={fmt(now.npv)} color={tone(now.npv)} sub={`at the market ${fmt(base.npv)}`} />
+            <Tile label={`CHANGE · ${qc}`} value={signedChange(total)} color={tone(total)} />
+            {fixingCell}
+          </div>
+          {ladderBlock}
+          {!european && <div style={{ padding: '0 16px 12px', background: 'var(--bg)' }}><StyleLadder crypto={crypto} quote={quote} active={active} stale={stale} /></div>}
         </div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '0 20px' }}>
-        <div>
-          <div style={secHdr}>SPOT LADDER · {quote.quote_currency}</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={th}>SPOT</th><th style={th}>LEVEL</th><th style={th}>FORWARD</th><th style={th}>NPV</th><th style={th}>ΔNPV</th></tr></thead>
-            <tbody>{spotLadder.map(s => { const r = at({ spotPct: s }) || none; return (
-              <tr key={s} data-testid={s === 0 ? 'fx-scenario-base' : undefined} data-forward={s === 0 ? r.forward ?? '' : undefined} data-npv={s === 0 ? r.npv ?? '' : undefined}
-                  style={{ background: s === 0 ? 'var(--accent-glow)' : 'transparent' }}>
-                <td style={td}>{s > 0 ? '+' : ''}{s}%</td><td style={td}>{fmt(quote.spot * (1 + s / 100), dp)}</td><td style={td}>{fmt(r.forward, dp)}</td>
-                <td style={{ ...td, color: tone(r.npv) }}>{fmt(r.npv)}</td>
-                <td style={{ ...td, color: tone(d(r.npv)) }}>{signedDelta(r.npv, base.npv)}</td>
-              </tr>) })}</tbody>
-          </table>
-          <div data-testid="fx-spot-ladder-note" style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 6 }}>at the stored spot, not the dragged one: each row is the closed form at that spot; the rate ladder keeps the dragged spot</div>
-        </div>
-        <div>
-          <div style={secHdr}>{crypto ? `RATE LADDER · ${quote.quote_currency} CURVE AND ${quote.base_currency} BASIS, BOTH SHIFTED` : 'RATE LADDER · PARALLEL, BOTH CURVES'}</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={th}>SHIFT</th><th style={th}>FORWARD</th><th style={th}>NPV</th><th style={th}>ΔNPV</th><th style={th}>{quote.quote_currency} ONLY</th><th style={th} title={crypto ? `the basis (${quote.quote_currency} − ${quote.base_currency}): 1 bp up = forward up` : undefined}>{crypto ? 'BASIS' : quote.base_currency} ONLY</th></tr></thead>
-            <tbody>{rateLadder.map(b => { const bb0 = crypto ? -b : b; const r = at({ quoteBp: b, baseBp: bb0 }) || none; const q = at({ quoteBp: b, baseBp: 0 }) || none; const bb = at({ quoteBp: 0, baseBp: bb0 }) || none; return (
-              <tr key={b} style={{ background: b === 0 ? 'var(--accent-glow)' : 'transparent' }}>
-                <td style={td}>{b > 0 ? '+' : ''}{b}bp</td><td style={td}>{fmt(r.forward, dp)}</td>
-                <td style={{ ...td, color: tone(r.npv) }}>{fmt(r.npv)}</td>
-                <td style={{ ...td, color: tone(d(r.npv)) }}>{signedDelta(r.npv, base.npv)}</td>
-                <td style={td}>{signedDelta(q.npv, base.npv)}</td><td style={td}>{signedDelta(bb.npv, base.npv)}</td>
-              </tr>) })}</tbody>
-          </table>
-        </div>
-      </div>
-      <div style={{ fontSize: '0.72rem', color: 'var(--text-mute)', marginTop: 10 }}>{option ? `An option is convex in spot: ΔNPV runs ahead of ${DELTA_LABEL(crypto)} × the shock on the way up and behind it on the way down, which is the gamma; the vol slider moves the smile level, not its shape.` : `A forward is linear in spot, so ΔNPV equals ${DELTA_LABEL(crypto)} × the shock exactly; ${crypto ? `the rate ladder shows the ${quote.quote_currency} curve and the basis each moving the forward, the basis up with its shift` : 'the rate ladder shows the two curve legs offsetting at a fair strike'}.`}{tenorsMoved ? ' Both ladders are read off the dragged curve.' : ''}</div>
     </div>
   )
 }

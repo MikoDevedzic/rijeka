@@ -82,6 +82,20 @@ for (const [slug, asset, product] of [['crypto-forward', 'CRYPTO', /^CRYPTO FORW
       await app.waitForTimeout(900)
       await shot(app, `${slug}-${tab.toLowerCase().replace(' ', '-')}`)
     }
+    // the scenario tab: each curve selected in turn, with a shock on it
+    await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+    for (const key of ['fwd', 'quote', 'base', 'vol']) {
+      const c = win.getByTestId(`fx-scn-curve-${key}`)
+      if (!(await c.count())) continue
+      await c.click()
+      const flat = win.getByTestId('fx-scn-flat')
+      if (await flat.count()) { await flat.focus(); for (let i = 0; i < 5; i++) await app.keyboard.press('ArrowRight') }
+      const first = win.locator('[data-testid="fx-scn-points"] input').nth(1)
+      if (await first.count()) { await first.fill(key === 'fwd' ? '150' : '-20'); await first.blur() }
+      await app.waitForTimeout(500)
+      await shot(app, `${slug}-scenario-${key}`)
+    }
+    await win.getByTestId('fx-scenario-reset').click()
     // XVA with every input showing, after a run; then a note under the pointer, and the same tab with NOTES on
     await win.getByRole('button', { name: 'XVA', exact: true }).click()
     const inputs = win.getByRole('button', { name: /SHOW MODEL INPUTS/ })

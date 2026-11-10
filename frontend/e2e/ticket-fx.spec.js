@@ -182,6 +182,7 @@ test('crypto option: the scenario tab shows the vol surface, read as the engine 
   expect(quote.vol_pct, 'the option priced at a vol').toBeGreaterThan(0)
   await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
 
+  await win.getByTestId('fx-scn-curve-vol').click()                           // the surface is one of the curves that price the option
   const block = win.getByTestId('fx-vol-surface')
   await block.scrollIntoViewIfNeeded()
   await expect(block, 'both charts have drawn').toHaveAttribute('data-ready', 'true')
@@ -203,8 +204,7 @@ test('crypto option: the scenario tab shows the vol surface, read as the engine 
   await app.screenshot({ path: 'e2e/.out/shots/scenario-vol-surface.png' })
 
   // the VOL slider: +2 points moves the surface shown by 2 points
-  const vol = win.locator('input[type="range"]').filter({ has: app.locator('xpath=preceding-sibling::span[normalize-space()="VOL"]') }).first()
-  const slider = (await vol.count()) ? vol : win.locator('span', { hasText: /^VOL$/ }).locator('xpath=following-sibling::input[@type="range"]').first()
+  const slider = win.getByTestId('fx-scn-flat')                               // the selected curve's flat shock: here, vol points
   await slider.focus()
   for (let i = 0; i < 8; i++) await app.keyboard.press('ArrowRight')          // eight steps of a quarter point
   await expect.poll(() => num(atm, 'data-shocked')).toBeCloseTo((await num(atm, 'data-value')) + 2, 6)
