@@ -248,28 +248,36 @@ means every module on in the firm's row, which is what a firm that has never cho
 is answered is that, less what a demo holds for the admin role (next paragraph).
 
 **Held for the admin role on a demo.** Capital is not part of the hosted demo. `modules.held()` names the modules
-an instance keeps for the admin role: `RIJEKA_HELD_MODULES`, or `modules.ON_REQUEST` (capital) when it is unset.
+an instance keeps for the admin role: `RIJEKA_HELD_MODULES`, or `modules.ON_REQUEST` (capital) when it is unset; a
+name in it that is not a module key holds the default as well, so a mistake never releases capital.
 Where `RIJEKA_DEMO_PROVISION` is on (the default when the variable is unset), `modules.locked` answers those
 modules for every user without the admin role (`profiles.role`, read on the request; when that read fails, the role
-`verify_token` read up to 30 seconds earlier, else `viewer`; `is_on` has only the user id and gets `viewer`). One
-list and one function decide, and this follows:
+`verify_token` read up to 30 seconds earlier, else `viewer`; `is_on` has only the user id, so when that read fails
+the account counts as a `viewer`). One list and one function decide, and this follows:
 - `GET /api/modules` answers with them off whatever `firms.modules` holds, lists them under `on_request` and gives
   `contact`; the presets it offers have them off and every preset says so in its description; the changes it lists
   leave them out (the `module_events` rows are whole, and the admin role is shown them whole).
   `routes/modules._view` is the only place the answer for a user is composed.
 - `PUT /api/modules` by someone they are held from never switches one on. A map keeps what the row says (the page
   sends them off because that is how they were answered). A preset that has one off switches it off, as its name
-  promises; a preset that has one on leaves the row's value. Nothing is refused: a page opened before a deploy
-  still saves its other switches, and asking for a held module there does nothing.
-- `modules.is_on(uid, key)` is false for a held module (no batch asks about capital today; the role is read only
-  for a held module, so the nightly ticks cost what they did).
+  promises; a preset that has one on leaves the row's value. Nothing asked for is refused: a page opened before a
+  deploy still saves its other switches, and asking for a held module there does nothing. One save is turned away:
+  when the firm's row cannot be read, a save by someone a module is held from answers 503 and writes nothing,
+  because a failed read would otherwise pass for on.
+- `modules.is_on(uid, key)` is false for a held module unless the account has the admin role (`profiles.role`,
+  read by the user id). No batch asks about capital today; were P&L, market risk or counterparty credit held, their
+  nightly ticks would skip every account without the admin role. The role is read only for a held module, so the
+  nightly ticks cost what they did.
 - Provisioning writes a new firm's row as the signup preset has it (there is nothing before it to keep).
 
 The frontend has no rule of its own: the tab, the Risk section and the route follow the answer as for any switch,
-and the MODULES page shows the row as on request. It treats every module as on until `GET /api/modules` answers
-and whenever the read fails. After a 5xx, or no answer at all, it asks again three times (3, 10 and 30 seconds
-later), then not until the next sign-in, the home or the Modules page; a 4xx is not asked again. A held module (its
-tab, its Risk section and its route) is visible for that long, and a reload on `/risk/capital` draws the page
+and the MODULES page shows the row as on request. It treats every module as on until `GET /api/modules` first
+answers; a read that fails later keeps the last answer. After a 5xx, no answer at all or a body that is not JSON,
+it asks again three times (3, 10 and 30 seconds
+later), then only when something else asks: a page load or sign-in, a change of session, the top bar mounting again
+(a move between the desk pages, the documents and Configurations), the home, or the Modules page; a 4xx is not
+asked again by the timer; an answer, or a save on the Modules page, drops retries already queued. Before the first
+answer a held module (its tab, its Risk section and its route) is visible, and a reload on `/risk/capital` draws the page
 before the answer sends it home. A ticket open on a tab whose module then goes off returns to TRADE. The hold is a
 presentation rule, like the switch, not an entitlement: `/api/capital` stays callable, and Risk → Collateral reads
 it. With `RIJEKA_DEMO_PROVISION=0`, or `RIJEKA_HELD_MODULES=NONE`, nothing is held back. A request to see a held

@@ -2,10 +2,11 @@
 modules.py — which modules the firm runs.
 
 GET /api/modules       the firm's switches as this user has them, the catalogue, the presets, the last changes (any signed-in user)
-PUT /api/modules       {preset} or {modules: {key: bool}}, optional note (the admin role, or the owner of a sandbox firm of one: modules.may_edit); 409 before the migration
+PUT /api/modules       {preset} or {modules: {key: bool}}, optional note (the admin role, or the owner of a sandbox firm of one: modules.may_edit); 409 before the migration;
+                       503 when the firm's row could not be read and a module is held from the caller
 
-Where sign-ins get a sandbox (RIJEKA_DEMO_PROVISION on) a module held for the admin role (modules.ON_REQUEST:
-capital) is off for everyone else in the answer and in the presets offered, and listed under `on_request` with
+Where sign-ins get a sandbox (RIJEKA_DEMO_PROVISION on) a module held for the admin role (modules.held():
+RIJEKA_HELD_MODULES, capital by default) is off for everyone else in the answer and in the presets offered, and listed under `on_request` with
 `contact`; the changes listed leave it out (the audit rows themselves are whole). Someone it is held from can
 never switch it on: a map keeps what the row says about it, a preset can only switch it off (modules.set_for_firm).
 The answer for a user is composed here, in `_view`, and only here.
@@ -16,6 +17,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 import modules as M
@@ -70,6 +72,10 @@ def put_modules(body: ModulesBody, db: Session = Depends(get_db), user: dict = D
         bad = [k for k in body.modules if k not in M.KEYS]
         if bad:
             raise HTTPException(status_code=422, detail=f"unknown module {', '.join(bad)}")
-    M.set_for_firm(db, firm_id, uid, body.modules, body.preset, body.note, locked=M.locked(db, user))
+    try:
+        M.set_for_firm(db, firm_id, uid, body.modules, body.preset, body.note, locked=M.locked(db, user))
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="The firm's switches could not be read, so nothing was saved. Try again.")
     db.commit()
     return _view(db, user)

@@ -133,7 +133,8 @@ def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
         assert M.locked(db, user) == ()
     # an instance that keeps sandboxes says what it holds: nothing, or its own list; a value that names no module holds the default
     with patch("api.routes._roles.role_of", return_value="trader") as role:
-        for value, want in (("NONE", ()), ("", ()), (" none ", ()), ("capital, ipv", ("CAPITAL", "IPV")), ("IPV", ("IPV",)), ("CAPITL", ("CAPITAL",)), ("NONE,IPV", ("IPV",))):
+        for value, want in (("NONE", ()), ("", ()), (" none ", ()), ("capital, ipv", ("CAPITAL", "IPV")), ("IPV", ("IPV",)), ("NONE,IPV", ("IPV",)),
+                            ("CAPITL", ("CAPITAL",)), ("CAPTIAL,PNL", ("PNL", "CAPITAL")), ("0", ("CAPITAL",)), ("*", ("CAPITAL",))):      # a mistyped name never releases capital
             monkeypatch.setenv("RIJEKA_HELD_MODULES", value)
             assert M.held() == want and M.locked(db, user) == want, value
         monkeypatch.setenv("RIJEKA_HELD_MODULES", "NONE")
@@ -181,7 +182,7 @@ def test_someone_capital_is_held_from_can_never_switch_it_on_and_only_a_preset_s
              (ModulesBody(modules={**M.all_on(), "CAPITAL": True}), {True: True, False: False}),
              (ModulesBody(modules={**M.all_on(), "CAPITAL": False, "NEWS": False}), {True: True, False: False}))
     for row_has in (True, False):
-        monkeypatch.setattr(M, "for_firm", lambda db, firm_id, v=row_has: {"modules": {**M.all_on(), "CAPITAL": v}, "preset": "DEALER", "source": "firm"})
+        monkeypatch.setattr(M, "for_firm", lambda db, firm_id, strict=False, v=row_has: {"modules": {**M.all_on(), "CAPITAL": v}, "preset": "DEALER", "source": "firm"})
         for body, want in cases:
             db.reset_mock()
             assert put_modules(body, db=db, user=user) == {"ok": True} and db.commit.called      # never refused: a page opened before the deploy still saves
@@ -193,6 +194,24 @@ def test_someone_capital_is_held_from_can_never_switch_it_on_and_only_a_preset_s
     db.reset_mock()
     put_modules(ModulesBody(preset="FUND"), db=db, user=user)
     assert json.loads(db.execute.call_args_list[0].args[1]["m"]) == M.preset_modules("FUND")       # every other switch is the preset's
+    # the row could not be read: nothing is written (a failed read answers "every module on" everywhere else, and
+    # kept as the "before" it would have switched capital on), and the caller is told to try again
+    from sqlalchemy.exc import OperationalError
+    monkeypatch.undo()                              # the real for_firm from here
+    assert M.for_firm.__module__ == "modules" and M.for_firm.__name__ == "for_firm"
+    monkeypatch.setattr(M, "may_edit", lambda db, user: True); monkeypatch.setattr(M, "firm_of_user", lambda db, uid: "firm")
+    monkeypatch.setattr(M, "columns_present", lambda db: True); monkeypatch.setattr(M, "locked", lambda db, user: ("CAPITAL",))
+    monkeypatch.setattr("api.routes._limits.heavy", lambda *a, **k: None)
+    db = MagicMock(); db.execute.side_effect = OperationalError("SELECT", {}, Exception("connection dropped"))
+    for body in (ModulesBody(preset="DEALER"), ModulesBody(modules={"PNL": True})):
+        db.reset_mock()
+        with pytest.raises(HTTPException) as e:
+            put_modules(body, db=db, user=user)
+        assert e.value.status_code == 503 and db.execute.call_count == 1 and not db.commit.called and db.rollback.called
+    assert M.for_firm(db, "firm")["modules"] == M.all_on()                                         # for showing pages a failed read is still "everything on"
+    db = MagicMock()
+    monkeypatch.setattr(M, "for_firm", lambda db, firm_id, strict=False: {"modules": {**M.all_on(), "CAPITAL": False}, "preset": "DEALER", "source": "firm"})
+    monkeypatch.setattr(route, "_view", lambda db, user: {"ok": True})
     # nobody held back: stored as asked
     monkeypatch.setattr(M, "locked", lambda db, user: ())
     db.reset_mock()

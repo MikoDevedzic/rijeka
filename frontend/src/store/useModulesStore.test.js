@@ -28,6 +28,29 @@ describe('module switches: a read the API could not answer', () => {
     expect(fetch).toHaveBeenCalledTimes(2)                               // an answer ends it
   })
 
+  it('counts an answer that is not JSON as a failure, so the retries stay three', async () => {
+    const page = { ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected token <') } }      // the static host's HTML
+    const fetch = vi.fn().mockResolvedValue(page)
+    vi.stubGlobal('fetch', fetch)
+    await useModulesStore.getState().load()
+    await vi.advanceTimersByTimeAsync(600000)
+    expect(fetch).toHaveBeenCalledTimes(4)
+    expect(useModulesStore.getState().modules.CAPITAL).toBe(false)      // a read that fails after an answer keeps the answer
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(answer(200, HELD)))
+    await useModulesStore.getState().load()                             // an answer refills the retries for the tests below
+  })
+
+  it('drops a retry that was queued before a save', async () => {
+    const fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue(answer(200, { modules: { NEWS: true, CAPITAL: false } }))
+    vi.stubGlobal('fetch', fetch)
+    await useModulesStore.getState().load()                             // fails: a retry is queued for 3 s
+    useModulesStore.getState().apply({ modules: { NEWS: false, CAPITAL: false } })      // the Modules page saved meanwhile
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(fetch).toHaveBeenCalledTimes(1)                              // the queued retry did not read over the save
+    expect(useModulesStore.getState().modules.NEWS).toBe(false)
+    await useModulesStore.getState().load()
+  })
+
   it('is not asked again after a refusal', async () => {
     const fetch = vi.fn().mockResolvedValue(answer(403))
     vi.stubGlobal('fetch', fetch)

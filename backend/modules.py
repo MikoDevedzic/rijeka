@@ -5,8 +5,8 @@ the flash plus XVA); it never deletes anything, and switching back on resumes wi
 firm (or the column missing: a deploy ahead of docs/migrations/2026-11-04_firm_modules.sql) means every module
 on in the firm's row. Every change is a module_events row with who, when, before and after.
 
-What a user is answered is the firm's row less what the instance holds for the admin role (ON_REQUEST, `locked`):
-that is decided here and nowhere else."""
+What a user is answered is the firm's row less what the instance holds for the admin role (`held()`:
+RIJEKA_HELD_MODULES, capital by default; `locked`): that is decided here and nowhere else."""
 from __future__ import annotations
 
 import json
@@ -45,36 +45,35 @@ PRESETS: dict[str, dict[str, Any]] = {
 # Modules a demo keeps for the admin role (9 November 2026: capital is out of the Phase 1 demo). Where every
 # sign-in gets its own sandbox workspace (RIJEKA_DEMO_PROVISION on, which is also what an unset variable means),
 # nobody but a profile admin is answered these as on, whatever the firm's row says, and nobody else can switch
-# them on (set_for_firm); the MODULES page shows them as available on request, with CONTACT. An instance with
+# them on (set_for_firm; a save that cannot read the row is turned away rather than trusted); the MODULES page shows them as available on request, with CONTACT. An instance with
 # RIJEKA_DEMO_PROVISION=0 holds nothing back. Like every switch this hides pages and tabs; it is not an
 # entitlement, and the module's API routes stay callable.
 # A request is met on a self-hosted desk, or by a grant per firm that does not exist yet (backlog 60). It is never
 # met by handing out the admin role: that role also opens the Users page, platform usage and the ops detail.
-# RIJEKA_HELD_MODULES names them for an instance that keeps sandboxes and wants something else: unset is ON_REQUEST,
-# NONE (or empty) holds nothing back, a list of module keys holds those.
+# RIJEKA_HELD_MODULES names them for an instance that keeps sandboxes and wants something else (held()): unset is
+# ON_REQUEST, NONE (or empty) holds nothing back, a list of module keys holds those.
 ON_REQUEST: tuple[str, ...] = ("CAPITAL",)
 CONTACT = "miko@rijeka.app"
 
 
 def held() -> tuple[str, ...]:
     """The modules this instance keeps for the admin role where sign-ins get a sandbox: RIJEKA_HELD_MODULES, or
-    ON_REQUEST when it is unset. A value that names no module and is not NONE or empty is a mistake, and a mistake
-    holds the default rather than nothing."""
+    ON_REQUEST when it is unset. NONE or empty holds nothing. A name that is not a module key is a mistake, and a
+    mistake never releases anything: the default is then held as well as whatever the list does name."""
     import os
     raw = os.getenv("RIJEKA_HELD_MODULES")
     if raw is None:
         return ON_REQUEST
-    names = {x.strip().upper() for x in raw.split(",")} - {""}
-    if names <= {"NONE"}:
-        return ()
-    return tuple(k for k in KEYS if k in names) or ON_REQUEST
+    names = {x.strip().upper() for x in raw.split(",")} - {"", "NONE"}
+    mistyped = bool(names - set(KEYS))
+    return tuple(k for k in KEYS if k in names or (mistyped and k in ON_REQUEST))
 
 _PRESENT: dict[str, bool] = {}
 
 
 def signup_preset() -> Optional[str]:
     """The preset a newly provisioned workspace starts on: RIJEKA_SIGNUP_PRESET, LAUNCH by default. Empty, NONE or
-    an unknown name leaves a new firm as every firm was before: nothing chosen, every module on."""
+    an unknown name leaves a new firm as every firm was before: nothing chosen, every module on in its row."""
     import os
     name = os.getenv("RIJEKA_SIGNUP_PRESET", "LAUNCH").strip().upper()
     return name if name in PRESETS else None
@@ -144,14 +143,18 @@ def normalise(d: Optional[dict]) -> dict[str, bool]:
     return out
 
 
-def for_firm(db, firm_id) -> dict[str, Any]:
-    """{"modules": {key: bool}, "preset": str|None, "source": "firm"|"default"}."""
+def for_firm(db, firm_id, strict: bool = False) -> dict[str, Any]:
+    """{"modules": {key: bool}, "preset": str|None, "source": "firm"|"default"}. A read that fails answers every
+    module on, which is right for showing pages and wrong as the "before" of a write that must not switch a held
+    module on: `strict` lets that failure through instead."""
     if firm_id is None or not columns_present(db):
         return {"modules": all_on(), "preset": None, "source": "default"}
     try:
         row = db.execute(text("SELECT modules, modules_preset FROM firms WHERE id = :f"), {"f": str(firm_id)}).first()
     except Exception:          # noqa: BLE001
         db.rollback()
+        if strict:
+            raise
         return {"modules": all_on(), "preset": None, "source": "default"}
     if not row or row[0] is None:
         return {"modules": all_on(), "preset": row[1] if row else None, "source": "default"}
@@ -205,7 +208,7 @@ def set_for_firm(db, firm_id, uid: str, modules: Optional[dict] = None, preset: 
     value. So the row is on only where it was on before and no preset its owner chose said otherwise."""
     if not columns_present(db):
         raise RuntimeError("firm modules need docs/migrations/2026-11-04_firm_modules.sql applied first")
-    before = for_firm(db, firm_id)
+    before = for_firm(db, firm_id, strict=bool(locked))      # held modules are kept from it: a failed read must not pass for "on"
     if preset:
         after = preset_modules(preset)
         pname = preset.upper()

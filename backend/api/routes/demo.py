@@ -225,7 +225,7 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
         firm = Firm(name=name, kind="OTHER", coverage_tier="FREE")
         db.add(firm); db.flush()
         # A new workspace starts on the launch set (book, value, XVA, confirm); its owner switches the rest on
-        # under Configurations. Only here, where the firm is created: an existing firm is never touched.
+        # under Configurations, less what the instance holds for the admin role (modules.held). Only here, where the firm is created: an existing firm is never touched.
         import modules as M
         preset = M.signup_preset()
         if preset and M.columns_present(db):

@@ -100,6 +100,7 @@ const PHASES = [
 // (store onRequest), the line says so instead of promising a tab the reader will not find.
 export default function Roadmap() {
   const onRequest = useModulesStore(s => s.onRequest)
+  const contact = useModulesStore(s => s.catalogue?.contact)      // the address is given here: not everyone can open the Modules page
   return (
     <div className="doc">
       <header className="doc-head">
@@ -112,7 +113,7 @@ export default function Roadmap() {
           <section key={ph.title} className="rm-phase">
             <h2>{ph.title} <span className={`rm-status ${ph.status.toLowerCase()}`}>{ph.status}</span></h2>
             <ul>
-              {ph.items.map(([st, text, mod], i) => <li key={i} className={st.toLowerCase()}><span className="rm-dot" /><span className="rm-st">{st}</span><span>{text}{mod && onRequest.includes(mod) ? ' (not part of this demo: available on request, see Configurations → Modules)' : ''}</span></li>)}
+              {ph.items.map(([st, text, mod], i) => <li key={i} className={st.toLowerCase()}><span className="rm-dot" /><span className="rm-st">{st}</span><span>{text}{mod && onRequest.includes(mod) ? ` (not part of this demo: available on request${contact ? `, write to ${contact}` : ''})` : ''}</span></li>)}
             </ul>
           </section>
         ))}

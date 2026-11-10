@@ -1,6 +1,7 @@
 // store/useModulesStore.js — which modules this user has (GET /api/modules: the firm's switches, less what the
-// instance holds for the admin role). Every module is on until the answer arrives and whenever the read fails, so
-// a deploy ahead of the migration changes nothing; a read the API could not answer is asked again (RETRY_MS).
+// instance holds for the admin role). Every module is on until the first answer, so a deploy ahead of the
+// migration changes nothing; a read that fails later keeps the last answer. A read the API could not answer (a
+// 5xx, no answer, a body that is not JSON) is asked again, RETRY_MS, until an answer or a save ends the chain.
 import { create } from 'zustand'
 import { getSessionMaybe } from '../lib/session'
 
@@ -9,6 +10,7 @@ export const MODULE_KEYS = ['CHAIN_CONFIRM', 'PNL', 'XVA', 'MARKET_RISK', 'COUNT
 const ALL_ON = Object.fromEntries(MODULE_KEYS.map(k => [k, true]))
 const RETRY_MS = [3000, 10000, 30000]      // after a 5xx or no answer at all: a restart, not a refusal. Three times, then not until something calls load() again
 let failures = 0
+let chain = 0                              // an answer or a save starts a new one: retries queued before it do nothing
 
 export const useModulesStore = create((set, get) => ({
   modules: ALL_ON,
@@ -30,13 +32,13 @@ export const useModulesStore = create((set, get) => ({
         if (r.status >= 500) get().again()
         return
       }
-      failures = 0
       const j = await r.json()
+      failures = 0; chain++
       set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true })
     } catch { set({ loaded: true }); get().again() /* every module stays on until the API answers */ }
   },
-  again: () => { if (failures < RETRY_MS.length) setTimeout(() => get().load(), RETRY_MS[failures++]) },
-  apply: (j) => set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true }),
+  again: () => { const mine = chain; if (failures < RETRY_MS.length) setTimeout(() => { if (mine === chain) get().load() }, RETRY_MS[failures++]) },
+  apply: (j) => { chain++; set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true }) },
 }))
 
 // The modules a route needs; a page whose module is off sends the visitor home.
