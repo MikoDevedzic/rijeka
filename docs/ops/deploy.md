@@ -9,6 +9,22 @@ Two hosts deploy from this repository:
   the API undeployed until a manual deploy.
 - **app.rijeka.app** on Netlify builds the **`release`** branch, not `main`.
 
+## When Render does not deploy
+
+On 10 November 2026 a push to `main` with a backend change (ac31220, 0.16.3) started no deploy at all: no
+deployment record on GitHub for the commit (earlier ones appear within a second of the push), and
+`GET /api/ops/health` still reported the commit before it two hours later. With `autoDeployTrigger: commit`
+there are no checks for Render to wait for, so this was a push it did not act on. The app is not released
+while the API is behind (`release` follows the API), so nothing half-ships; nothing else is lost.
+
+Two ways to ask again, either is enough:
+
+- the owner: Render dashboard → `rijeka-api` → Manual Deploy → Deploy latest commit;
+- a commit that touches a file under `backend/` (Render's build filter ignores `frontend/`, `docs/` and
+  `*.md`), taken through the usual chain: branch, pull request, the checks, the push to `main`.
+
+Then read the commit back from the health endpoint as after any deploy.
+
 `release` is moved to the commit the live API is serving (`GET /api/ops/health` reports it as
 `commit`, from Render's `RENDER_GIT_COMMIT`). The frontend therefore lands a few minutes after
 the API that serves it, never before; a failed API deploy leaves the frontend where it was; a
