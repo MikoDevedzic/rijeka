@@ -310,7 +310,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     if (!legsFor || viewMode || !fxLegs.length) return null
     const rows = fxLegs.map(l => { const v = legView[l.id]; const body = v && !v.pending && v.quote ? fxRef.current?.legBody?.(v.quote, l) : null; return body ? { body, quote: v.quote } : null })
     const ready = rows.every(Boolean)
-    return { count: fxLegs.length, ready, key: legsKey, bodies: ready ? rows.map(r => r.body) : [], quotes: ready ? rows.map(r => r.quote) : [] }
+    const failed = fxLegs.some(l => { const v = legView[l.id]; return !!v && !v.pending && (!!v.error || !v.quote) })
+    return { count: fxLegs.length, ready, failed, key: legsKey, bodies: ready ? rows.map(r => r.body) : [], quotes: ready ? rows.map(r => r.quote) : [] }
   })()
   // a leg that is gone takes its price with it; a product that has no legs has none
   useEffect(() => { if (!legsFor && legsHeld.legs.length) setLegsHeld({ on: null, legs: [] }) }, [legsFor, legsHeld.legs.length])

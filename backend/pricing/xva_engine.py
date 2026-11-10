@@ -225,6 +225,7 @@ def run_waterfall(
     capital=None,
     saccr: Optional[list] = None,
     addon_profiles: Optional[tuple] = None,
+    im_schedule: Optional[tuple] = None,
 ) -> WaterfallResult:
     """
     Exposure profiles and XVA under `csa`. `paths` are MtM from our side
@@ -234,9 +235,11 @@ def run_waterfall(
     regulatory CSA (pricing/collateral.py: recognised collateral at its haircut) and drives the SA-CCR branch;
     None means the two are the same, as before. `saccr` is the netting set as SaccrTrade rows
     (pricing/sa_ccr.py): the add-on is then the multi-class CRE52 add-on along the grid; None keeps the
-    single-factor interest-rate add-on. `addon_profiles` is (add-on per grid step, the same unmargined or None),
-    worked out by the caller: a package of legs hands in the sum of its legs' single-factor add-ons
-    (pricing/fx_xva.package_xva); ignored when `saccr` is given. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
+    single-factor interest-rate add-on. `addon_profiles` is (add-on per grid step, the same unmargined or None,
+    the CEM add-on per grid step or None), worked out by the caller: a package of legs hands in the sum of its
+    legs' single-factor add-ons (pricing/fx_xva.package_xva); ignored when `saccr` is given. `im_schedule` is
+    (IM today, IM per grid step), also the caller's: a package's margin follows its legs as they settle; None
+    keeps the margin of params amortised in a line to the maturity. Used only when the CSA exchanges IM. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
     hurdle replace the params' and the BA-CVA capital leg joins KVA; None keeps today's KVA exactly.
     """
     n_paths, T = paths.shape
@@ -251,6 +254,8 @@ def run_waterfall(
     rw     = rw_10d * csa.simm_mpor_scale
     if not csa.im_exchanged:
         im_0 = 0.0
+    elif im_schedule is not None:
+        im_0 = float(im_schedule[0])
     elif params.simm_im_m is not None:
         im_0 = params.simm_im_m * 1e6
     elif params.ir01 is not None:
@@ -262,6 +267,8 @@ def run_waterfall(
         im_0  = abs(N * ann_0 * 1e-4) * rw
     im_profile = [im_0 * max(M0 - (i + 1) * DT, 0.0) / M0 if M0 > 0 else 0.0
                   for i in range(T)]
+    if im_schedule is not None and csa.im_exchanged:
+        im_profile = [float(x) for x in im_schedule[1]]
     im_arr = np.asarray(im_profile)
 
     # ── Collateral and residual exposure ─────────────────────────────────────
@@ -295,10 +302,12 @@ def run_waterfall(
         grid_t = [(i + 1) * DT for i in range(T)]
         addon_grid = addon_profile(saccr, reg, grid_t)
         addon_grid_unm = addon_profile(saccr, CSA.uncollateralised(), grid_t) if reg.sa_ccr_margined else None
+        addon_cem = None
     elif addon_profiles is not None:
-        addon_grid, addon_grid_unm = addon_profiles
+        addon_grid, addon_grid_unm = addon_profiles[0], addon_profiles[1]
+        addon_cem = addon_profiles[2] if len(addon_profiles) > 2 else None
     else:
-        addon_grid = addon_grid_unm = None
+        addon_grid = addon_grid_unm = addon_cem = None
 
     # ── Waterfall loop ───────────────────────────────────────────────────────
     lgd, own_lgd = params.lgd, params.own_lgd
@@ -364,7 +373,7 @@ def run_waterfall(
             if params.capital_model == "imm":
                 ead_t = ALPHA * ee[i]
             elif params.capital_model == "cem":
-                ead_t = rc_t + SF_IR * N * mf_t
+                ead_t = rc_t + (addon_cem[i] if addon_cem is not None else SF_IR * N * mf_t)
             else:
                 ead_t = ALPHA * (rc_t + mult * addon)
                 if reg.sa_ccr_margined:

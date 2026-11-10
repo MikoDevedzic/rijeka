@@ -932,6 +932,8 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
 # ── A package of legs on one pair, as one netting set ────────────────────────────────────────
 
 PACKAGE_MAX_LEGS = 24
+PACKAGE_MAX_YEARS = 10.0             # the longest settlement a package run takes
+PACKAGE_MAX_WORK = 4_000_000         # legs × paths × monthly steps: what one run may cost
 PACKAGE_FORWARDS = ("FX_FORWARD", "NDF", "CRYPTO_FORWARD")
 PACKAGE_OPTIONS = ("FX_OPTION", "CRYPTO_OPTION")
 
@@ -996,6 +998,13 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     val_date = body.valuation_date or date.today()
     inputs, quotes, pair = package_inputs(db, user["sub"], body.trades, val_date=val_date, vol_pct=body.vol_pct, vol_mode=body.vol_mode)
     csa = _csa_of(db, user["sub"], body.csa, body.collateral)
+    horizon = max(fx_xva._horizon(i) for i in inputs)
+    if horizon > PACKAGE_MAX_YEARS:
+        raise HTTPException(status_code=422, detail=f"a package run takes settlements up to {PACKAGE_MAX_YEARS:.0f} years out; the longest leg settles in {horizon:.1f}")
+    work = len(inputs) * min(body.paths, 10000) * fx_xva.monthly_grid(horizon)[0]
+    if work > PACKAGE_MAX_WORK:
+        fits = max(200, int(PACKAGE_MAX_WORK / (len(inputs) * fx_xva.monthly_grid(horizon)[0]) // 100 * 100))
+        raise HTTPException(status_code=422, detail=f"{len(inputs)} legs to {horizon:.1f} years at {body.paths} paths is more than one run takes; {fits} paths fit")
     import time as _time
     _t0 = _time.perf_counter()
     wf, meta = fx_xva.package_xva(inputs, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
@@ -1007,7 +1016,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     raw = wf.exposure_paths if csa.collateralised else meta["_paths"]
     step = max(1, raw.shape[0] // min(80, raw.shape[0]))
     legs = [{"leg": n, "instrument_type": str(d.get("instrument_type") or "").upper(), "npv": round(float(q["npv"]), 2),
-             "settles": round(float(row["horizon"]), 4), "ee_gross_peak": round(float(max(np.mean(np.maximum(row["paths"], 0.0), axis=0))), 2)}
+             "settles": round(float(row["horizon"]), 4), "ee_gross_peak": round(float(row["ee_gross_peak"]), 2)}
             for n, (d, q, row) in enumerate(zip(body.trades, quotes, meta["_legs"]), start=1)]
     return {
         "sample_paths": [[round(float(v), 0) for v in r] for r in raw[::step, :]],

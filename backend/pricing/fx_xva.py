@@ -84,13 +84,19 @@ def _driver(n_paths: int, steps: int, dt: float, seed: int, sigma: float, pillar
     return z, t, sv, m
 
 
+def _settle_step(t: np.ndarray, t_settle: float) -> int:
+    """The first grid date at or after a settlement; the last one when the grid ends before it."""
+    return next((k for k in range(len(t)) if t[k] >= t_settle - 1e-9), len(t) - 1)
+
+
 def _forward_sigma(inp: ForwardXvaInput) -> float:
     return (inp.vol_pct if inp.vol_pct is not None else default_vol_pct(inp.pair)) / 100.0
 
 
 def _forward_values(inp: ForwardXvaInput, steps: int, dt: float, m: np.ndarray) -> tuple[np.ndarray, float, dict]:
-    """A forward's MtM from our side on a grid of `steps` × dt driven by M, and V0. Nothing after it settles
-    (a grid longer than the forward: a package, simulate_package_paths)."""
+    """A forward's MtM from our side on a grid of `steps` × dt driven by M, and V0. On a grid longer than the
+    forward (a package, simulate_package_paths) it stays to the first grid date at or after its settlement, where it
+    is its settled amount, and is nothing after: a settlement between two grid dates is read at the later one."""
     sign = 1.0 if str(inp.direction).upper() == "BUY" else -1.0
     t = np.arange(1, steps + 1) * dt
     f_t = inp.forward * m
@@ -99,7 +105,10 @@ def _forward_values(inp: ForwardXvaInput, steps: int, dt: float, m: np.ndarray) 
     df_t_T = np.array([inp.df_quote_t / p0[k] for k in range(1, steps + 1)])
     paths = sign * inp.base_notional * (f_t - inp.strike) * df_t_T[None, :]
     if t[-1] > inp.t_years + 1e-9:
-        paths = np.where((t <= inp.t_years + 1e-9)[None, :], paths, 0.0)
+        k_set = _settle_step(t, inp.t_years)
+        if t[k_set] > inp.t_years + 1e-9:
+            paths[:, k_set] = sign * inp.base_notional * (f_t[:, k_set] - inp.strike)      # settled: no discounting left
+        paths[:, k_set + 1:] = 0.0
     v0 = sign * inp.base_notional * (inp.forward - inp.strike) * inp.df_quote_t
     return paths, v0, {"f_t": f_t, "df_t_T": df_t_T, "p0": p0}
 
@@ -188,8 +197,9 @@ def _payoff_at_expiry(spec, S_T: np.ndarray, knocked: np.ndarray) -> np.ndarray:
 
 
 def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray) -> tuple[np.ndarray, float, dict]:
-    """An option's value from our side on a grid of `steps` × dt driven by M, and V0. Nothing after it settles
-    (a grid longer than the option: a package, simulate_package_paths)."""
+    """An option's value from our side on a grid of `steps` × dt driven by M, and V0. On a grid longer than the
+    option (a package, simulate_package_paths) it stays to the first grid date at or after its settlement, where it
+    is its payoff, and is nothing after: an expiry or a settlement between two grid dates is read at the later one."""
     from pricing.fx_exotic import knocked_so_far, value, value_on_paths, value_on_paths_vols
     from pricing.fx_vol import path_vols
     n_paths = m.shape[0]
@@ -206,10 +216,9 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray) ->
     scale = inp.base_notional if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else 1.0
     barrier_like = spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH")
     i_exp = next((k for k in range(steps) if t[k] >= inp.t_expiry - 1e-9), steps - 1)
+    k_set = _settle_step(t, inp.t_settle)
     V = np.zeros((n_paths, steps))
-    for k in range(steps):
-        if t[k] > inp.t_settle + 1e-9:
-            break                                                               # settled: nothing left of it
+    for k in range(k_set + 1):                                                  # nothing after it has settled
         j_last = min(k, i_exp)
         hist = np.concatenate([np.full((n_paths, 1), inp.spot), s_t[:, :j_last + 1]], axis=1)
         knocked = knocked_so_far(spec, hist) if barrier_like else np.zeros(n_paths, dtype=bool)
@@ -223,7 +232,7 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray) ->
             else:
                 V[:, k] = sign * scale * value_on_paths(spec, s_t[:, k], r_q, r_b, sigma, tau, knocked, 1.0)
         else:
-            V[:, k] = sign * scale * _payoff_at_expiry(spec, s_t[:, i_exp], knocked) * df_t_T[k]
+            V[:, k] = sign * scale * _payoff_at_expiry(spec, s_t[:, i_exp], knocked) * (df_t_T[k] if t[k] <= inp.t_settle + 1e-9 else 1.0)
     v0 = sign * scale * float(value(spec, inp.spot, r_q, r_b, sigma, inp.t_expiry, 1.0))
     return V, v0, {"f_t": f_t, "s_t": s_t, "df_t_T": df_t_T, "p0": p0, "r_b": r_b, "i_exp": i_exp}
 
@@ -289,14 +298,19 @@ def _leg_notional(leg) -> float:
     return max(abs(float(leg.spec.payout or 0.0)), 1.0)
 
 
-def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float, list[dict]]:
+def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None,
+                           keep_leg_paths: bool = False) -> tuple[np.ndarray, list[float], float, list[dict]]:
     """The package's value paths from our side: every leg valued by its own engine (a forward's MtM, an option's
     style in closed form) on ONE grid, monthly to the longest settlement, and ONE driver M, so the legs net
     path by path. Each leg's forward is F_i(0)·M_t: one factor, carry deterministic, so every forward of the pair
     is a martingale and each leg starts at its own price. The driver's vol is the surface's ATM term structure
     when a leg carries the surface, else the longest leg's own vol held flat; an option is valued at its own vol
-    either way. A leg is nothing after it settles. A package of one leg is that leg's own run, draw for draw.
-    Returns the paths, P(0, k·dt) on the longest leg's quote zero, V0 and a row per leg (v0, horizon)."""
+    either way. A leg stays to the first grid date at or after its settlement (its settled amount there) and is
+    nothing after, so a settlement between two grid dates is carried up to a step longer, never dropped.
+    A package of one leg is that leg's own run, draw for draw.
+    Returns the paths, P(0, k·dt) on the longest leg's quote zero, V0 and a row per leg (v0, horizon, the peak of
+    its own expected positive exposure; its paths too when keep_leg_paths, which a caller with many long legs
+    should not ask for: one matrix per leg)."""
     if not legs:
         raise ValueError("a package needs at least one leg")
     if len({str(l.pair).upper() for l in legs}) != 1:
@@ -313,33 +327,53 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
         Vi, v0i, _ = (_option_values if _is_option(leg) else _forward_values)(leg, steps, dt, m)
         V = V + Vi
         v0 += v0i
-        rows.append({"v0": float(v0i), "horizon": _horizon(leg), "option": _is_option(leg), "paths": Vi})
+        rows.append({"v0": float(v0i), "horizon": _horizon(leg), "option": _is_option(leg),
+                     "ee_gross_peak": float(np.max(np.mean(np.maximum(Vi, 0.0), axis=0))), **({"paths": Vi} if keep_leg_paths else {})})
     if noise_out is not None:
         noise_out.update(z=z, m=m, sigma=sigma, steps=steps, dt=dt, step_vols=sv)
     return V, p0, v0, rows
 
 
-def package_addons(legs: list, csa: CSA, steps: int, dt: float) -> tuple[list[float], Optional[list[float]]]:
+def package_addons(legs: list, csa: CSA, steps: int, dt: float) -> tuple[list[float], Optional[list[float]], list[float]]:
     """The capital add-on along the grid: the sum of each leg's own single-factor add-on while it is alive
     (SF × N_i × supervisory duration × maturity factor of its remaining life: what run_waterfall computes for a
-    leg on its own), and the same unmargined for the CRE52.2 cap. No offset between legs in the add-on: the
-    replacement cost nets on the paths, the add-on does not."""
+    leg on its own), the same unmargined for the CRE52.2 cap, and the same for the CEM branch (SF × N_i × maturity
+    factor). No offset between legs in the add-on: the replacement cost nets on the paths, the add-on does not."""
     from pricing.xva_engine import SF_IR
-    grid, unm = [], []
+    grid, unm, cem = [], [], []
     for i in range(steps):
         t = (i + 1) * dt
-        a = u = 0.0
+        a = u = c = 0.0
         for leg in legs:
             m_t = max(_horizon(leg) - t, 0.0)
             if m_t <= 0:
                 continue
             sd = (1.0 - math.exp(-0.05 * m_t)) / 0.05
             n = _leg_notional(leg)
-            a += SF_IR * n * sd * csa.sa_ccr_maturity_factor(m_t)
+            mf = csa.sa_ccr_maturity_factor(m_t)
+            a += SF_IR * n * sd * mf
             u += SF_IR * n * sd * math.sqrt(min(max(m_t, 10.0 / 250.0), 1.0))
+            c += SF_IR * n * mf
         grid.append(a)
         unm.append(u)
-    return grid, (unm if csa.sa_ccr_margined else None)
+        cem.append(c)
+    return grid, (unm if csa.sa_ccr_margined else None), cem
+
+
+def package_im(legs: list, rw: float, steps: int, dt: float) -> Optional[tuple[float, list[float]]]:
+    """Initial margin today and along the grid, from the legs' spot sensitivities: the weight on the NET
+    sensitivity of the legs still alive, each leg's own amortised in a line to its settlement (what run_waterfall
+    does for a leg on its own). So a calendar spread posts little while both legs stand and the remaining leg's
+    margin once the near one has settled. None when no leg carries a sensitivity."""
+    known = [(l.spot01, _horizon(l)) for l in legs if l.spot01 is not None]
+    if not known:
+        return None
+    im_0 = abs(sum(s for s, _ in known)) * rw / 1e6 * 1e6
+    profile = []
+    for i in range(steps):
+        t = (i + 1) * dt
+        profile.append(abs(sum((s * rw / 1e6 * 1e6) * max(T - t, 0.0) / T if T > 0 else 0.0 for s, T in known)))
+    return im_0, profile
 
 
 def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0, own_cds_bp: float = 42.0,
@@ -348,7 +382,8 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
                 own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
                 simm_im_m: Optional[float] = None) -> tuple[WaterfallResult, dict]:
     """XVA of a package of legs on one pair as one netting set: the summed paths through the same waterfall.
-    Initial margin on the NET spot sensitivity of the legs; the capital add-on as package_addons."""
+    Initial margin on the NET spot sensitivity of the legs still alive (package_im; a figure typed by the desk is
+    used as typed, amortised to the longest settlement); the capital add-on as package_addons."""
     paths, p0, v0, rows = simulate_package_paths(legs, n_paths=n_paths, seed=seed, noise_out=noise_out)
     longest = max(legs, key=_horizon)
     steps, dt = monthly_grid(_horizon(longest))
@@ -363,6 +398,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
         ir01=None, simm_im_m=im_m,
     )
     wf = run_waterfall(paths, v0, p0, params, csa, addon_profiles=package_addons(legs, csa, steps, dt),
+                       im_schedule=package_im(legs, rw, steps, dt) if simm_im_m is None else None,
                        **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     pillars = next((l.pillars for l in legs if l.pillars), None)
     sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)
@@ -371,11 +407,11 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
             "vol_source": "the longest leg's vol" + (f" ({longest.vol_source})" if getattr(longest, "vol_source", None) else ""),
             "vol_mode": ("ATM term structure of the surface for the paths" + ("; each option at the smile of each path's moneyness (sticky-delta)" if styles else "")) if pillars
                         else "flat (the longest leg's vol for the paths" + ("; each option at its own vol" if styles else "") + ")",
-            "im_rw_per_pct": rw, "im_basis": ("SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM") + ", on the net spot sensitivity of the legs",
+            "im_rw_per_pct": rw, "im_basis": ("SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM") + ", on the net spot sensitivity of the legs still alive",
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "p0_grid": [float(x) for x in p0], "_paths": paths, "_legs": rows,
             "model": f"{len(legs)} legs on one set of paths: every forward of the pair is its own forward times one lognormal driver, "
                      "so the legs net path by path; each leg valued as on its own (a forward's mark, an option's style in closed form); "
-                     "a leg is nothing after it settles; the capital add-on is the sum of the legs' add-ons"
+                     "a leg stays to the first grid date at or after its settlement and is nothing after; the capital add-on is the sum of the legs' add-ons"
                      + ("; barriers monitored at the grid points" if any(s in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") for s in styles) else "")
                      + ("; American valued as European on the paths (a lower bound)" if "AMERICAN" in styles else "")}
     return wf, meta

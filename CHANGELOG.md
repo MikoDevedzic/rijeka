@@ -19,9 +19,12 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
   (the reference suite, the Excel replications and the pinned book are unchanged).
 - **A run on screen is of the legs on screen:** change, add or remove a leg and it is cleared; SIMULATE waits
   while a leg is being priced.
+- **Margin follows the legs.** Initial margin is on the net spot sensitivity of the legs still alive, so a
+  calendar spread posts little while both legs stand and the far leg's margin once the near one has settled.
 - **Limits, in `docs/xva.md` and the model inventory:** one pair per package; one factor, so the shape of the
   forward curve or of the vol term structure moving is not simulated; the capital add-on is the sum of the legs'
-  add-ons with no offset between them; no methodology section yet.
+  add-ons with no offset between them; a leg that settles between two monthly dates stands to the later one; a
+  run takes up to 24 legs, ten years and four million leg-path-steps; no methodology section yet.
 - **Still to come in step 3:** CASHFLOWS, CURVE SCENARIO and the footer over the whole package, and one
   confirmation for it.
 

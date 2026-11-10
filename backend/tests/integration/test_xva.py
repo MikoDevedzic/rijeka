@@ -169,6 +169,16 @@ def test_a_package_on_two_pairs_or_with_a_swap_is_refused(client, auth_a, ids, p
     r = client.post("/api/xva/currency-package", json={"trades": [B.swap(ids["a"], "PKG-X-3")], "paths": 300}, headers=auth_a)
     assert r.status_code == 422 and "leg 1" in r.text
     assert client.post("/api/xva/currency-package", json={"trades": [], "paths": 300}, headers=auth_a).status_code == 422
+    assert client.post("/api/xva/currency-package", json={"trades": [a] * 25, "paths": 300}, headers=auth_a).status_code == 422, "24 legs at most"
+
+
+def test_a_package_run_is_bounded_by_what_one_run_may_cost(client, auth_a, ids, pairs):
+    """Found by review: 24 long legs at 10,000 paths kept a matrix per leg and could exhaust the instance."""
+    far = B.fx_forward(ids["a"], "PKG-BIG", pairs["EURUSD"], _fwd_quote(client, auth_a, "EURUSD", 10_000_000, 730))
+    r = client.post("/api/xva/currency-package", json={"trades": [far] * 24, "paths": 10000}, headers=auth_a)
+    assert r.status_code == 422 and "paths fit" in r.text, r.text[:300]
+    ok = client.post("/api/xva/currency-package", json={"trades": [far] * 24, "paths": 500}, headers=auth_a)
+    assert ok.status_code == 200, ok.text[:300]
 
 
 # ── incremental: the counterparty's netting set with and without the trade ──────────────────────

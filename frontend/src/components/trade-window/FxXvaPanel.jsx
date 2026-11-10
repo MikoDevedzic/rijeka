@@ -91,7 +91,7 @@ function SurfaceProof({ result }) {
   )
 }
 
-// `legs`: the further legs of a package (the DETAILS tab), or null: {count, ready, key, bodies, quotes}. With legs the
+// `legs`: the further legs of a package (the DETAILS tab), or null: {count, ready, failed, key, bodies, quotes}. With legs the
 // run is the whole package as one netting set (POST /api/xva/currency-package): every leg on the same paths.
 export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId, stale = false, legs = null }) {
   const pkg = legs && legs.count > 0 ? legs : null
@@ -236,7 +236,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
     <SimulateButtons simulating={busy} hasResult={!!res} disabled={!quote || fixed || stale || pkgWaiting} label={quote ? (pkg ? `▶ SIMULATE ${nLegs} LEGS` : '▶ SIMULATE') : 'PRICE THE TICKET FIRST'}
       onSimulate={() => run(42)} onReroll={() => run(1 + Math.floor(Math.random() * 2147483000))} />
     {pkg && !!quote && <div data-testid="xva-package" data-legs={nLegs} style={{fontSize:'0.75rem',color:'var(--text-dim)',margin:'-6px 0 12px',lineHeight:1.5}}>
-      {pkgWaiting ? 'a leg is being priced: SIMULATE waits for every leg' : <>The package of {nLegs} legs as one netting set: every leg on the same paths, netted before the charge is taken.</>}
+      {pkgWaiting ? (pkg.failed ? 'a leg has no price (see DETAILS): the package runs once every leg is priced' : 'a leg is being priced: SIMULATE waits for every leg') : <>The package of {nLegs} legs as one netting set: every leg on the same paths, netted before the charge is taken.</>}
     </div>}
     {stale && !!quote && <div data-testid="xva-stale-note" style={{fontSize:'0.75rem',color:'var(--text-mute)',margin:'-6px 0 12px',lineHeight:1.5}}>repricing: SIMULATE waits for the price of the terms as they now stand</div>}
     {fixed && <div data-testid="xva-fixed-note" style={{fontSize:'0.75rem',color:'var(--text-dim)',margin:'-6px 0 12px',lineHeight:1.5}}>This trade has fixed: there is no exposure left to simulate beyond the settlement amount.</div>}

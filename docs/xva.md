@@ -128,18 +128,25 @@ set: the body of every leg goes in `trades`, each is read exactly as its own rou
 on one grid (monthly to the longest settlement) and one driver. Every forward of the pair is its own forward
 today times the same driftless lognormal M_t (one factor, carry deterministic), so each leg starts at its own
 price and the legs move together; a forward leg is marked ±N·(F_i·M_t − K)·DF, an option leg is valued in its
-style's closed form as on its own, and a leg is nothing after it settles. The summed paths go through the same
+style's closed form as on its own. A leg stays to the first grid date at or after its settlement, where it is
+its settled amount, and is nothing after: a settlement between two grid dates is carried up to one step longer,
+never dropped. The summed paths go through the same
 waterfall, so exposure nets path by path before any charge is taken. The driver's vol is the surface's ATM term
 structure (each option at the smile of each path's moneyness), or in flat mode the longest leg's vol with each
-option at its own. Initial margin is the weight on the NET spot sensitivity of the legs. The capital add-on is
-the sum of each leg's own single-factor add-on while it is alive: there is no offset between legs in the
-add-on, so KVA of a bought and a sold forward of the same terms is not zero although every other component is.
+option at its own. Initial margin is the weight on the NET spot sensitivity of the legs still alive, each leg's
+own running off in a line to its settlement (`package_im`): a calendar spread posts little while both legs stand
+and the far leg's margin once the near one has settled; a margin typed by the desk is used as typed. The capital
+add-on is the sum of each leg's own single-factor add-on while it is alive, under SA-CCR and under the older CEM
+alike: there is no offset between legs in the add-on, so KVA of a bought and a sold forward of the same terms is
+not zero although every other component is. One run takes up to 24 legs, settlements up to ten years out, and
+legs × paths × monthly steps up to four million (the route says how many paths fit).
 A package of one leg is that leg's own run, draw for draw (`tests/test_package_xva.py`). The answer has the shape
 of the single-trade routes plus a row per leg (its value, when it settles, its own peak expected exposure), which
 the tab shows as what netting is worth. `POST /api/xva/incremental` takes the same `trades` list, so the charge
 in the counterparty's netting set is the package's. Limits: one pair per package; the legs share one factor, so
 a calendar spread's exposure to the SHAPE of the forward curve or of the vol term structure moving is not
-simulated; an option's expiry between two grid dates is fixed at the later one, as on its own.
+simulated; an expiry or a settlement between two grid dates is read at the later one, so a leg can stand up to
+a month longer than its contract (on its own grid a leg's settlement is the last date).
 
 **Vol along the paths.** Both stand-alone engines and the credit engine use the surface, not one number held:
 the spot steps with the piecewise forward vols of the pair's ATM term structure (`fx_vol.step_vols`), so its
