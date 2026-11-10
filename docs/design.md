@@ -8,7 +8,7 @@ code that draws on a canvas, and `theme.test.js` holds the two together.
 
 | Token | Means | Never |
 |---|---|---|
-| `--accent` (brass), `--accent-hi` | the action of the view (BOOK TRADE, + NEW TRADE), the selected tab's rule, what is sealed on chain, the saving on chain | a label, a typed value, a positive number |
+| `--accent` (brass), `--accent-hi` | the action of the view (BOOK TRADE, + NEW TRADE), the selected tab's rule, what is sealed on chain, the saving on chain, the name RIJEKA | a label, a typed value, a positive number |
 | `--up`, `--down` | the sign of a number; the paying or selling side; a state that is good or bad in itself (live, calibrated, a verify that passed; defaulted, a failed check) | a selection, an action |
 | `--amber` | a caution, something provisional, the PFE tail | an action |
 | `--blue` | the counterpart series on a chart (ENE), a link on paper | a selection; a figure in a table (it takes the colour of its sign) |
@@ -65,6 +65,14 @@ on every tab. On TRADE the only computed things are a field that shows its defau
 premium line and the notes that say why there is no price. A stored currency trade opened from the blotter has
 no valuation block (it never had).
 A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX, RATES.
+
+## The name, the top bar, a rail
+
+The name RIJEKA (`.rj-wordmark`) is brass and the one thing that glows: nothing else on a page carries a light
+of its own. The pages on the top bar (`.ab-link`) are buttons; the one you are on is the lighter panel over the
+brass rule. In a rail of filters (the blotter's left pane) a section's heading is the size of its choices and
+reads as their heading by weight, the bright text colour and a rule above it; the choices sit a step in, in the
+quieter colour, and the selected one is the lighter panel with the brass rule at its edge.
 
 ## Tabs
 

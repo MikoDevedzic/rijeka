@@ -19,19 +19,23 @@
   padding: 12px 0;
 }
 .bl-left-header { padding: 0 12px 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
-.bl-left-title { font-family: var(--sans); font-size: 0.875rem; font-weight: 600; letter-spacing: 0.12em; color: var(--text-hi); }
-.bl-left-sub    { font-family: var(--sans); font-size:0.86rem; color: var(--text-dim); margin-top: 2px; letter-spacing: 0.04em; }
+.bl-left-title { font-family: var(--sans); font-size: 0.9375rem; font-weight: 600; letter-spacing: 0.14em; color: var(--text-hi); }
+.bl-left-sub    { font-family: var(--sans); font-size: 0.8125rem; color: var(--text-mute); margin-top: 3px; letter-spacing: 0.04em; }
 
-.bl-section-lbl { font-family: var(--sans); font-size: 0.75rem; font-weight: 500; letter-spacing: 0.1em; color: var(--text-mute); padding: 0 12px; margin: 10px 0 4px; }
+/* A section's heading is the same size as its choices and reads as their heading by weight, colour and a rule
+   above it; the choices sit under it, a step in, in the quieter colour. */
+.bl-section-lbl { font-family: var(--sans); font-size: 0.875rem; font-weight: 600; letter-spacing: 0.12em; color: var(--text-hi);
+  padding: 12px 12px 0; margin: 12px 0 6px; border-top: 1px solid var(--border); }
+.bl-left-header + .bl-section-lbl { border-top: none; padding-top: 0; margin-top: 4px; }
 .bl-filter-btn {
   display: flex; align-items: center; justify-content: space-between;
-  width: 100%; padding: 5px 12px; background: none; border: none;
+  width: 100%; padding: 5px 12px 5px 22px; background: none; border: none;
   color: var(--text-dim); font-family: var(--sans);
-  font-size:0.86rem; font-weight: 400; cursor: pointer;
+  font-size: 0.875rem; font-weight: 400; letter-spacing: 0.03em; cursor: pointer;
   transition: all 0.1s; text-align: left;
 }
 .bl-filter-btn:hover  { color: var(--text); background: var(--panel); }
-.bl-filter-btn.active { color: var(--text-hi); font-weight: 500; background: var(--panel); box-shadow: inset 2px 0 0 var(--accent); }
+.bl-filter-btn.active { color: var(--text-hi); font-weight: 500; background: var(--panel-3); box-shadow: inset 2px 0 0 var(--accent); }
 .bl-filter-dot {
   width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
 }
@@ -44,7 +48,7 @@
   margin-bottom: 10px;
 }
 .bl-sum-row { display: flex; justify-content: space-between; padding: 2px 0; }
-.bl-sum-lbl { font-size: 0.8125rem; letter-spacing: 0.08em; color: var(--text-mute); }
+.bl-sum-lbl { font-size: 0.8125rem; letter-spacing: 0.1em; color: var(--text-mute); }
 .bl-sum-val { font-size: 0.86rem; font-weight: 500; font-family: var(--mono); color: var(--text-hi); }
 
 .bl-new-trade-btn { margin: 0 12px 12px;

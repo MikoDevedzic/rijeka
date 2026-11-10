@@ -3,6 +3,17 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## The shell: the name, the top bar, the blotter's rail · 10 November 2026 (frontend only)
+
+- **The name is the brightest thing on the page.** RIJEKA on the top bar (and on the home page's own bar) is
+  brass, a size larger, and carries a soft light that breathes slowly; with "reduce motion" set it is still.
+- **The pages on the top bar read as buttons.** The page you are on is a lighter panel over the brass rule, as
+  a selected tab on the ticket is; the others light under the pointer.
+- **The blotter's rail has a hierarchy.** A section's heading (STATUS, ASSET CLASS, STORE) was smaller and
+  fainter than the choices under it. It is now their size, in the bright text colour and a heavier weight, with
+  a rule above it, and the choices sit under it a step in. The selected choice is the lighter panel with the
+  brass rule at its edge.
+
 ## 0.16.3 · 10 November 2026
 
 **CURVE SCENARIO in the XVA tab's shape (forwards and options on a currency pair or a digital asset).**

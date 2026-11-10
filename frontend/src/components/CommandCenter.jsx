@@ -32,7 +32,7 @@ export default function CommandCenter() {
   return (
     <div className="cc-root">
       <div className="cc-bar">
-        <span className="cc-logo">RIJEKA</span>
+        <span className="cc-logo rj-wordmark">RIJEKA</span>
         <nav className="cc-nav">
           {nav.map(n => (
             <button

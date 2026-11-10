@@ -33,10 +33,7 @@ export default function AppBar() {
       borderBottom:'1px solid var(--border)',
       flexShrink:0, gap:'1.5rem', zIndex:10,
     }}>
-      <div onClick={()=>navigate('/command-center')} style={{
-        fontFamily:'var(--sans)', fontSize:'0.9375rem', fontWeight:600,
-        letterSpacing:'0.34em', color:'var(--text-hi)', cursor:'pointer', flexShrink:0,
-      }}>RIJEKA</div>
+      <div className="rj-wordmark" onClick={()=>navigate('/command-center')}>RIJEKA</div>
 
       <div style={{width:'1px',height:'20px',background:'var(--border)',flexShrink:0}}/>
 
@@ -49,15 +46,7 @@ export default function AppBar() {
           <span key={mod.path} className="ab-nav">
           <button onClick={e => (e.metaKey || e.ctrlKey || e.shiftKey) ? popOut() : navigate(mod.to)}
                   aria-keyshortcuts={shortcutForPath(mod.path)?.key}
-                  title={mod.label + (shortcutForPath(mod.path) ? ` (${shortcutForPath(mod.path).key})` : '') + ' — ⌘/Ctrl-click to open in its own window'} style={{
-            background:'none', border:'none',
-            borderBottom: isActive(mod)?'2px solid var(--accent)':'2px solid transparent',
-            color: isActive(mod)?'var(--text-hi)':'var(--text-dim)',
-            fontFamily:'var(--sans)', fontSize:'0.875rem', fontWeight:500,
-            letterSpacing:'0.08em', padding:'0 0.85rem', cursor:'pointer',
-            transition:'color 0.12s, border-color 0.12s', height:'100%',
-            display:'flex', alignItems:'center',
-          }}>{mod.label}{shortcutForPath(mod.path) && <Keycap id={shortcutForPath(mod.path).id} />}</button>
+                  title={mod.label + (shortcutForPath(mod.path) ? ` (${shortcutForPath(mod.path).key})` : '') + ' — ⌘/Ctrl-click to open in its own window'} className={`ab-link${isActive(mod) ? ' is-on' : ''}`} aria-current={isActive(mod) ? 'page' : undefined}>{mod.label}{shortcutForPath(mod.path) && <Keycap id={shortcutForPath(mod.path).id} />}</button>
           <button className="ab-pop" onClick={popOut} title={'Open ' + mod.label + ' in its own window'}>⧉</button>
           </span>
         )})}

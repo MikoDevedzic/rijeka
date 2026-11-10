@@ -167,6 +167,33 @@ button, input, select, textarea { font-family: inherit; }
 .rj-flash-in { --rj-flash: var(--text-hi); }
 @media (prefers-reduced-motion: reduce) { .rj-flash { animation: none; } }
 
+/* The name. Brass, and the one thing on the page that glows: a soft light that breathes slowly (still, with
+   "reduce motion" set). Every bar that carries the name uses this class. */
+.rj-wordmark {
+  font-family: var(--sans); font-size: 1.0625rem; font-weight: 700; letter-spacing: 0.34em; line-height: 1;
+  color: var(--accent-hi); cursor: pointer; flex-shrink: 0; user-select: none;
+  text-shadow: 0 0 14px rgb(var(--accent-rgb) / 0.45), 0 0 2px rgb(var(--accent-rgb) / 0.35);
+  animation: rj-wordmark 5s ease-in-out infinite alternate;
+  transition: color .15s;
+}
+.rj-wordmark:hover { color: var(--text-hi); }
+@keyframes rj-wordmark {
+  from { text-shadow: 0 0 10px rgb(var(--accent-rgb) / 0.30), 0 0 2px rgb(var(--accent-rgb) / 0.30); }
+  to   { text-shadow: 0 0 22px rgb(var(--accent-rgb) / 0.65), 0 0 3px rgb(var(--accent-rgb) / 0.50); }
+}
+@media (prefers-reduced-motion: reduce) { .rj-wordmark { animation: none; } }
+
+/* The pages on the top bar: each a button; the one you are on is a lighter panel over the brass rule, as a
+   selected tab on the ticket is. */
+.ab-link {
+  display: flex; align-items: center; height: 100%; padding: 0 0.85rem; cursor: pointer;
+  background: none; border: none; border-bottom: 2px solid transparent; border-top: 2px solid transparent;
+  color: var(--text-dim); font-family: var(--sans); font-size: 0.875rem; font-weight: 500; letter-spacing: 0.08em;
+  transition: color .12s, background .12s, border-color .12s;
+}
+.ab-link:hover { color: var(--text-hi); background: rgba(255, 255, 255, 0.04); }
+.ab-link.is-on { color: var(--text-hi); font-weight: 600; background: var(--panel-3); border-bottom-color: var(--accent); }
+
 /* A note that stays off the page until it is asked for (common/Note.jsx): a small mark beside the figure; the
    note shows when the mark is hovered, focused or tapped. With the NOTES switch on (data-notes="on" on the root)
    every note is written out where it stands and the marks go. */

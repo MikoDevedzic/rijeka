@@ -98,7 +98,7 @@ export default function BlotterShell() {
           </button>
         ))}
 
-        <div className="bl-section-lbl" style={{ marginTop: '1rem' }}>ASSET CLASS</div>
+        <div className="bl-section-lbl">ASSET CLASS</div>
         {['ALL', ...ASSET_CLASSES].map(ac => (
           <button
             key={ac}
@@ -110,7 +110,7 @@ export default function BlotterShell() {
           </button>
         ))}
 
-        <div className="bl-section-lbl" style={{ marginTop: '1rem' }}>STORE</div>
+        <div className="bl-section-lbl">STORE</div>
         {['ALL', ...STORES].map(s => (
           <button
             key={s}

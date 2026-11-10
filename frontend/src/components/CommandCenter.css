@@ -13,8 +13,8 @@
 /* ── Nav ── */
 .cc-nav { display:flex; align-items:center; gap:0; flex:1; }
 .cc-nav-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text-dim); font-family:var(--sans); font-size:0.875rem; font-weight:500; letter-spacing:0.08em; padding:0 0.85rem; height:44px; cursor:pointer; text-transform:uppercase; transition:color 0.12s, border-color 0.12s; }
-.cc-nav-btn:hover { color:var(--text); }
-.cc-nav-btn.active { color:var(--text-hi); border-bottom-color:var(--accent); }
+.cc-nav-btn:hover { color:var(--text-hi); background:rgba(255,255,255,0.04); }
+.cc-nav-btn.active { color:var(--text-hi); font-weight:600; background:var(--panel-3); border-bottom-color:var(--accent); }
 
 /* ── Bar right ── */
 .cc-bar-right { display:flex; align-items:center; gap:0.75rem; font-size:0.875rem; letter-spacing:0.06em; margin-left:auto; }
