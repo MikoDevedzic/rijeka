@@ -12,7 +12,6 @@ hours of Market News. Cached in-process for a minute; every field is
 optional so a slow RPC or an empty table never breaks the page.
 """
 import logging
-import os
 import threading
 import time
 from typing import Any, Optional
@@ -25,6 +24,12 @@ from db.session import get_db
 from api.routes.demo import _template_user_id, _LICENSED_SOURCE_SQL
 
 log = logging.getLogger("rijeka.public")
+def _demo_provisioning() -> bool:
+    """Whether sign-ins get a sandbox here: the one reading of RIJEKA_DEMO_PROVISION (unset is on, 0 is off)."""
+    from api.routes.demo import enabled
+    return enabled()
+
+
 router = APIRouter(prefix="/api/public", tags=["public"])
 
 TTL_SECONDS = 60
@@ -105,7 +110,7 @@ def build(db: Session) -> dict:
         "news_24h": _scalar(db, "SELECT count(*) FROM news_items WHERE created_at > now() - interval '24 hours'"),
         "headlines": _headlines(db),
         "chain": _chain(),
-        "demo": bool(os.getenv("RIJEKA_DEMO_PROVISION")),
+        "demo": _demo_provisioning(),
         # Where the demo's numbers come from (public sources, synthetic vols): see market_data/demo_feed.py.
         "market_data": {"kind": "demo", "providers": [x["provider"] for x in _demo_sources()]},
     }

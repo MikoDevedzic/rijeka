@@ -7,7 +7,7 @@ import { getSessionMaybe } from '../lib/session'
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 export const MODULE_KEYS = ['CHAIN_CONFIRM', 'PNL', 'XVA', 'MARKET_RISK', 'COUNTERPARTY_CREDIT', 'CAPITAL', 'PROMETHEUS', 'NEWS', 'COLLATERAL', 'XVA_RESERVES', 'IPV']
 const ALL_ON = Object.fromEntries(MODULE_KEYS.map(k => [k, true]))
-const RETRY_MS = [3000, 10000, 30000]      // after a 5xx or no answer at all: a restart, not a refusal
+const RETRY_MS = [3000, 10000, 30000]      // after a 5xx or no answer at all: a restart, not a refusal. Three times, then not until something calls load() again
 let failures = 0
 
 export const useModulesStore = create((set, get) => ({

@@ -6,8 +6,9 @@ PUT /api/modules       {preset} or {modules: {key: bool}}, optional note (the ad
 
 Where sign-ins get a sandbox (RIJEKA_DEMO_PROVISION on) a module held for the admin role (modules.ON_REQUEST:
 capital) is off for everyone else in the answer and in the presets offered, and listed under `on_request` with
-`contact`. A write by someone it is held from leaves the row's value for it as it was, whatever the preset or the
-map says. The answer for a user is composed here, in `_view`, and only here.
+`contact`; the changes listed leave it out (the audit rows themselves are whole). Someone it is held from can
+never switch it on: a map keeps what the row says about it, a preset can only switch it off (modules.set_for_firm).
+The answer for a user is composed here, in `_view`, and only here.
 """
 from __future__ import annotations
 
@@ -38,7 +39,9 @@ def _view(db: Session, user: dict) -> dict:
     return {**cur, "modules": M.without(cur["modules"], locked), "firm_id": str(firm_id) if firm_id else None, "writable": M.columns_present(db),
             "can_edit": bool(firm_id and M.may_edit(db, user)), "view": M.view_for_firm(db, firm_id), **M.catalogue(locked),
             "on_request": list(locked), "contact": M.CONTACT,
-            "events": M.events(db, firm_id), "planned": list(M.PLANNED)}
+            "events": [{**e, "changed": [k for k in e["changed"] if k not in locked], "after": M.without(e["after"], locked)}
+                       for e in M.events(db, firm_id)],
+            "planned": list(M.PLANNED)}
 
 
 @router.get("")

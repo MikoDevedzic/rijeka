@@ -11,27 +11,34 @@ Capital is not part of the hosted demo.
   own sandbox workspace (`RIJEKA_DEMO_PROVISION` on, which is also what an unset variable means),
   `GET /api/modules` answers every user without the admin role with capital off, whatever the firm's row says: a
   workspace made before the launch preset, a preset that includes capital (Dealer, Classroom) and a firm whose
-  admin switched it on are all answered the same way. The admin role keeps every module and every switch. An
-  instance with `RIJEKA_DEMO_PROVISION=0` holds nothing back.
-- **A save by someone it is held from leaves the row alone.** A preset or a map sent by such a user stores
-  everything else and keeps what the row said about capital, in either direction, so the audit trail never shows a
-  capital change by someone who cannot see it, and nothing is refused (a page opened before the deploy still saves).
+  admin switched it on are all answered the same way. The admin role keeps every module and every switch.
+- **Who is not affected.** An instance with `RIJEKA_DEMO_PROVISION=0` holds nothing back. An instance that keeps
+  sandboxes (a classroom) sets the new `RIJEKA_HELD_MODULES=NONE`; the same setting can name other modules to hold.
+- **Someone it is held from can never switch it on.** A save of the switches keeps what the row said about capital.
+  A preset that has it off (Launch, Corporate, Fund) switches the row off; a preset that has it on leaves the row.
+  Nothing is refused: a page opened before the deploy still saves its other switches, and ticking Capital there
+  does nothing. The list of changes such a user is shown leaves capital out; the audit rows are whole.
 - **Configurations → Modules says how to see it.** Capital is listed as off and on request, with the address to
   write to, and has no switch. A workspace that has chosen nothing reads DEFAULT · NOTHING CHOSEN instead of
-  EVERYTHING ON; Dealer and Classroom say "(capital on request)"; and since Dealer, Fund and Classroom are then
-  the same switches, the preset the firm chose is the one lit. The launch home's link reads "Switch on P&L, risk
-  and more"; the two roadmap lines that describe the CAPITAL tab and Risk → CAPITAL say they are available on
-  request; the note under a counterparty's terms names only the pages the reader has (it named the credit report
-  and the CAPITAL tab to a launch workspace that has neither).
+  EVERYTHING ON; every preset says "(capital on request)"; and since Dealer, Fund and Classroom are then the same
+  switches, the preset the firm chose is the one lit. The launch home's link reads "Switch on P&L, risk and more";
+  the two roadmap lines that describe the CAPITAL tab and Risk → CAPITAL say they are available on request; the
+  note under a counterparty's terms names only the pages the reader has (it named the credit report and the
+  CAPITAL tab to a launch workspace that has neither).
 - **KVA stays.** It is an XVA charge: the XVA tab, its capital-model input and the saving on chain are unchanged.
-- **A page whose module is off no longer starts to load.** A reload on such a page waited for nothing and asked the
-  API before going home; a routed page now waits for the switches first. The switches are asked for again after a
-  5xx or no answer (3, 10 and 30 seconds later).
+- **The switches are asked for again when the API could not answer.** After a 5xx or no answer at all, three more
+  times (3, 10 and 30 seconds later); until then every module is on, as before. A ticket open on a tab whose
+  module then goes off returns to TRADE.
+- **The public pulse reads the demo setting like everything else.** `GET /api/public/pulse` said `demo: true` for
+  any non-empty `RIJEKA_DEMO_PROVISION`, `0` included, and `false` when it was unset; it now answers what
+  `demo.enabled()` answers. On the hosted demo the value is unchanged.
 - **What it is not.** Like every module switch it hides pages and tabs and is not an entitlement: `/api/capital`
   stays callable; Risk → Collateral, when a demo user switches it on, still shows the book under collateral
-  regimes with its RWA and capital lines; and until `GET /api/modules` answers, or while it fails, the app treats
-  every module as on, so a ticket opened in that moment has the tab. There is no way yet to show capital to one
-  firm on the hosted demo: the admin role is not that (it opens the Users page and platform usage too).
+  regimes with its RWA and capital lines; the counterparty form still has its capital attributes. Until
+  `GET /api/modules` answers, or while it fails, the app treats every module as on: a ticket opened in that moment
+  has the tab, a reload on Risk → CAPITAL draws the page before it is sent home, and after a failed read the Risk
+  section is there until the read succeeds. There is no way yet to show capital to one firm on the hosted demo:
+  the admin role is not that (it opens the Users page and platform usage too).
 
 ## 0.16.1 · 9 November 2026
 

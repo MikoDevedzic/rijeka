@@ -35,6 +35,8 @@ Learned on 9 November 2026 (CI failed a branch every local suite had passed)
 - A line that sets process-wide state (`TZ`, a locale, an environment variable a C library reads) is read with one question: what had the process already read before this line ran? On Linux `os.environ["TZ"] = ...` without `time.tzset()` changes nothing until something else calls `tzset()`; macOS follows the variable at once, so the Mac cannot show it.
 - A test that writes a row the API keeps a copy of (a role, a module switch, anything behind a TTL) drops the copy in the same step. Otherwise the result depends on how fast the machine is (the Mac and two slow CI runs passed, one CI run in between failed). When the author says a path "already" does something, find every writer of that column, the browser's direct writes included. Search `backend/` for every TTL cache the changed tests touch.
 - For anything that reads today's date, ask what it answers at 19:00–24:00 New York, when the desk's date and the UTC date differ, and whether the suite has ever run in that window on Linux.
+- The range is `origin/main...HEAD` after a `git fetch`, whatever the brief says: the deploy chain moves `origin/main` by pushing a commit to it, so the local `main` can be weeks behind and `main...HEAD` is then the whole history (9 November 2026: 434 files instead of 14).
+- When a working tree gains uncommitted edits while you read, review the commit: export it (`git archive`) and run the suites there, and say which is which.
 
 Rules
 - You are read-only: never edit files, never commit, never push.

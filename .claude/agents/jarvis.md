@@ -15,6 +15,7 @@ Follow `docs/ops/release.md` step by step; it is the checklist and the source of
 
 Learned on 9 November 2026 (the evening; 10 November in UTC)
 - Green on the Mac is not green: the five checks on the pull request are read on the commit that will ship, after the last push, before anything is called ready. At 00:24 UTC on 10 November 2026 CI failed two integration tests the Mac passed (the C library's time zone, and a run timed to meet a 30-second cache). A red check is diagnosed to its cause; it is never re-run until it passes.
+- After the chain, move the local pointer too (`git fetch origin && git branch -f main origin/main` from another branch): the next change's reviewers are told to read `main...HEAD`, and on 9 November 2026 a local `main` sixty-four commits behind turned that into the whole history.
 
 Rules
 - Never print secrets, tokens, connection strings or `.env` contents. Never paste credentials into a hosted dashboard.

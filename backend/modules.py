@@ -44,14 +44,30 @@ PRESETS: dict[str, dict[str, Any]] = {
 
 # Modules a demo keeps for the admin role (9 November 2026: capital is out of the Phase 1 demo). Where every
 # sign-in gets its own sandbox workspace (RIJEKA_DEMO_PROVISION on, which is also what an unset variable means),
-# nobody but a profile admin is answered these as on, whatever the firm's row says, and nobody else can change
-# what the row says about them; the MODULES page shows them as available on request, with CONTACT. An instance
-# with RIJEKA_DEMO_PROVISION=0 holds nothing back. Like every switch this hides pages and tabs; it is not an
+# nobody but a profile admin is answered these as on, whatever the firm's row says, and nobody else can switch
+# them on (set_for_firm); the MODULES page shows them as available on request, with CONTACT. An instance with
+# RIJEKA_DEMO_PROVISION=0 holds nothing back. Like every switch this hides pages and tabs; it is not an
 # entitlement, and the module's API routes stay callable.
-# A request is met on a self-hosted desk, or by a grant per firm that does not exist yet (backlog). It is never
+# A request is met on a self-hosted desk, or by a grant per firm that does not exist yet (backlog 60). It is never
 # met by handing out the admin role: that role also opens the Users page, platform usage and the ops detail.
+# RIJEKA_HELD_MODULES names them for an instance that keeps sandboxes and wants something else: unset is ON_REQUEST,
+# NONE (or empty) holds nothing back, a list of module keys holds those.
 ON_REQUEST: tuple[str, ...] = ("CAPITAL",)
 CONTACT = "miko@rijeka.app"
+
+
+def held() -> tuple[str, ...]:
+    """The modules this instance keeps for the admin role where sign-ins get a sandbox: RIJEKA_HELD_MODULES, or
+    ON_REQUEST when it is unset. A value that names no module and is not NONE or empty is a mistake, and a mistake
+    holds the default rather than nothing."""
+    import os
+    raw = os.getenv("RIJEKA_HELD_MODULES")
+    if raw is None:
+        return ON_REQUEST
+    names = {x.strip().upper() for x in raw.split(",")} - {""}
+    if names <= {"NONE"}:
+        return ()
+    return tuple(k for k in KEYS if k in names) or ON_REQUEST
 
 _PRESENT: dict[str, bool] = {}
 
@@ -84,12 +100,13 @@ def may_edit(db, user: dict) -> bool:
 
 
 def locked(db, user: dict) -> tuple[str, ...]:
-    """The modules this user cannot have on: ON_REQUEST on a hosted demo, for everyone but the admin role."""
+    """The modules this user cannot have on: held(), where sign-ins get a sandbox, for everyone but the admin role."""
     from api.routes.demo import enabled as demo_enabled
-    if not ON_REQUEST or not demo_enabled():
+    keys = held()
+    if not keys or not demo_enabled():
         return ()
     from api.routes._roles import role_of
-    return () if role_of(db, user) == "admin" else ON_REQUEST
+    return () if role_of(db, user) == "admin" else keys
 
 
 def without(mods: dict[str, bool], keys) -> dict[str, bool]:
@@ -176,14 +193,16 @@ def is_on(db, uid: str, key: str) -> bool:
     P&L, market risk and counterparty credit) cost what they did."""
     if not for_user(db, uid)["modules"].get(key, True):
         return False
-    return key not in ON_REQUEST or key not in locked(db, {"sub": str(uid)})
+    return key not in held() or key not in locked(db, {"sub": str(uid)})
 
 
 def set_for_firm(db, firm_id, uid: str, modules: Optional[dict] = None, preset: Optional[str] = None, note: Optional[str] = None,
                  locked: tuple[str, ...] = ()) -> dict[str, Any]:
     """Write the switches (from a preset, or an explicit map) and the audit row; the caller commits. `locked` are
-    the modules held from the writer (modules.locked): the row keeps what it says about them, whatever the preset
-    or the map says, so the audit row never shows a held module changed by someone who cannot see it."""
+    the modules held from the writer (modules.locked), who can never switch one on. A map keeps what the row says
+    about them (the page sends them off because that is how they were answered, which is not a choice). A preset
+    that has one off switches it off, as the preset's name promises; a preset that has one on leaves the row's
+    value. So the row is on only where it was on before and no preset its owner chose said otherwise."""
     if not columns_present(db):
         raise RuntimeError("firm modules need docs/migrations/2026-11-04_firm_modules.sql applied first")
     before = for_firm(db, firm_id)
@@ -193,7 +212,7 @@ def set_for_firm(db, firm_id, uid: str, modules: Optional[dict] = None, preset: 
     else:
         after = normalise(modules)
         pname = "CUSTOM"
-    after = {**after, **{k: before["modules"][k] for k in locked}}
+    after = {**after, **{k: before["modules"][k] and (after[k] if preset else True) for k in locked}}
     db.execute(text("UPDATE firms SET modules = CAST(:m AS jsonb), modules_preset = :p WHERE id = :f"), {"m": json.dumps(after), "p": pname, "f": str(firm_id)})
     db.execute(text("INSERT INTO module_events (id, firm_id, user_id, preset, before, after, note) VALUES (:id, :f, :u, :p, CAST(:b AS jsonb), CAST(:a AS jsonb), :n)"),
                {"id": str(uuid.uuid4()), "f": str(firm_id), "u": str(uid), "p": pname, "b": json.dumps(before["modules"]) if before["source"] == "firm" else None,
@@ -222,12 +241,11 @@ def events(db, firm_id, limit: int = 20) -> list[dict]:
 
 def catalogue(locked: tuple[str, ...] = ()) -> dict[str, Any]:
     """The modules and the presets as this reader can have them: a module in `locked` is marked on_request and is
-    off in every preset, so the page compares the firm's switches with what a preset would actually give; a preset
-    that would have switched one on says so in its description."""
-    label = {m["key"]: m["label"].lower() for m in MODULES}
+    off in every preset, so the page compares the firm's switches with what a preset would actually give, and every
+    preset says so in its description (LAUNCH's "everything else is one switch away" is not true of a held module)."""
+    held = ", ".join(m["label"].lower() for m in MODULES if m["key"] in locked)
 
     def desc(name: str) -> str:
-        held = [label[k] for k in locked if preset_modules(name)[k]]
-        return PRESETS[name]["desc"] + (f" ({', '.join(held)} on request)" if held else "")
+        return PRESETS[name]["desc"] + (f" ({held} on request)" if held else "")
     return {"definitions": [{**m, "on_request": True} if m["key"] in locked else m for m in MODULES],
             "presets": {k: {"label": v["label"], "desc": desc(k), "modules": without(preset_modules(k), locked)} for k, v in PRESETS.items()}}

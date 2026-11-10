@@ -119,12 +119,8 @@ function PersistentBookingWindow() {
 
 // A page whose module the firm switched off sends the visitor home. Which modules a page needs is said once,
 // in store/useModulesStore ROUTE_MODULES; `gated` makes the route for one of its paths.
-// Nothing is drawn until the firm's switches have been answered (or the read has failed, which leaves every
-// module on): a reload on a page whose module is off goes home without the page mounting and asking the API first.
 function ModuleGate({ path, children }) {
   const modules = useModulesStore(s => s.modules)
-  const loaded = useModulesStore(s => s.loaded)
-  if (!loaded) return null
   if ((ROUTE_MODULES[path] || []).some(k => modules[k] === false)) return <Navigate to="/command-center" replace />
   return children
 }

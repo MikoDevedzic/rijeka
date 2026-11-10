@@ -167,7 +167,7 @@ test('demo: capital is on request; no CAPITAL tab, no Risk → CAPITAL, and KVA 
   await expect(app, 'Risk → CAPITAL is off').toHaveURL(/\/command-center/)
   // the roadmap says so instead of promising the tab
   await app.goto('/roadmap')
-  await expect(app.getByText('not part of the hosted demo: available on request', { exact: false })).toHaveCount(2)
+  await expect(app.getByText('not part of this demo: available on request', { exact: false })).toHaveCount(2)
   // the ticket: no CAPITAL tab beside XVA; KVA is an XVA charge and stays
   const win = await openTicket(app)
   const priced = app.waitForResponse(r => r.url().endsWith('/price/preview') && r.request().method() === 'POST')

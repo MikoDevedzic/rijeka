@@ -70,7 +70,7 @@ export default function ModulesPage() {
               <button key={k} className="pnl-btn ghost" disabled={busy || !view.writable} onClick={() => save({ preset: k })} title={p.desc}
                 style={presetOf(view.modules) === k ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}>{p.label.toUpperCase()}</button>
             ))}
-            {!view.writable && <span className="pnl-note">apply docs/migrations/2026-11-04_firm_modules.sql to switch modules; until then every module is on</span>}
+            {!view.writable && <span className="pnl-note">apply docs/migrations/2026-11-04_firm_modules.sql to switch modules{held.length ? '' : '; until then every module is on'}</span>}
           </div>
         </section>
 

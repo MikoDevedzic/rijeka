@@ -112,7 +112,7 @@ export default function Roadmap() {
           <section key={ph.title} className="rm-phase">
             <h2>{ph.title} <span className={`rm-status ${ph.status.toLowerCase()}`}>{ph.status}</span></h2>
             <ul>
-              {ph.items.map(([st, text, mod], i) => <li key={i} className={st.toLowerCase()}><span className="rm-dot" /><span className="rm-st">{st}</span><span>{text}{mod && onRequest.includes(mod) ? ' (not part of the hosted demo: available on request, see Configurations → Modules)' : ''}</span></li>)}
+              {ph.items.map(([st, text, mod], i) => <li key={i} className={st.toLowerCase()}><span className="rm-dot" /><span className="rm-st">{st}</span><span>{text}{mod && onRequest.includes(mod) ? ' (not part of this demo: available on request, see Configurations → Modules)' : ''}</span></li>)}
             </ul>
           </section>
         ))}

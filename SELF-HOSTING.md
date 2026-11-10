@@ -116,7 +116,9 @@ What is not in the compose file:
    With provisioning on (which is also what leaving the variable unset means), a new workspace starts on
    the launch set of modules (`RIJEKA_SIGNUP_PRESET`; `NONE` for everything the instance offers) and its
    owner switches the rest on under Configurations → Modules, except capital, which an instance with
-   provisioning on keeps for the admin role; with provisioning off, only the admin role switches modules
+   provisioning on keeps for the admin role unless `RIJEKA_HELD_MODULES=NONE` is set (held, the page
+   names the project's address as the one to write to; it is a constant in `backend/modules.py`); with
+   provisioning off, only the admin role switches modules
    and nothing is held back.
 3. **Frontend.** Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_API_URL`,
    then `cd frontend && npm install && npm run build` and serve `dist/`.

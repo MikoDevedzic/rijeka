@@ -119,6 +119,7 @@ def test_the_launch_view_follows_the_last_preset_chosen_not_the_name_of_the_curr
 def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
     from unittest.mock import MagicMock, patch
     assert M.ON_REQUEST == ("CAPITAL",) and set(M.ON_REQUEST) <= set(M.KEYS) and "@" in M.CONTACT
+    monkeypatch.delenv("RIJEKA_HELD_MODULES", raising=False)
     db, user = MagicMock(), {"sub": "u-1"}
     with patch("api.routes._roles.role_of", return_value="trader") as role:
         monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "0")
@@ -130,13 +131,24 @@ def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
             assert M.locked(db, user) == ("CAPITAL",), other
     with patch("api.routes._roles.role_of", return_value="admin"):
         assert M.locked(db, user) == ()
+    # an instance that keeps sandboxes says what it holds: nothing, or its own list; a value that names no module holds the default
+    with patch("api.routes._roles.role_of", return_value="trader") as role:
+        for value, want in (("NONE", ()), ("", ()), (" none ", ()), ("capital, ipv", ("CAPITAL", "IPV")), ("IPV", ("IPV",)), ("CAPITL", ("CAPITAL",)), ("NONE,IPV", ("IPV",))):
+            monkeypatch.setenv("RIJEKA_HELD_MODULES", value)
+            assert M.held() == want and M.locked(db, user) == want, value
+        monkeypatch.setenv("RIJEKA_HELD_MODULES", "NONE")
+        role.reset_mock()
+        assert M.locked(db, user) == () and not role.called
+    monkeypatch.delenv("RIJEKA_HELD_MODULES")
+    assert M.held() == M.ON_REQUEST
     # off, whatever the firm's row or a preset says; nothing else moves
     assert M.without(M.all_on(), ("CAPITAL",)) == {**M.all_on(), "CAPITAL": False} and M.without(M.all_on(), ()) == M.all_on()
     assert M.without(M.preset_modules("LAUNCH"), ("CAPITAL",)) == M.preset_modules("LAUNCH")
     cat = M.catalogue(("CAPITAL",))
     assert [m["key"] for m in cat["definitions"] if m.get("on_request")] == ["CAPITAL"]
     assert not any(p["modules"]["CAPITAL"] for p in cat["presets"].values()) and cat["presets"]["DEALER"]["modules"]["PNL"]
-    assert cat["presets"]["DEALER"]["desc"] == "everything on (capital on request)" and cat["presets"]["FUND"]["desc"] == M.PRESETS["FUND"]["desc"]
+    assert cat["presets"]["DEALER"]["desc"] == "everything on (capital on request)"
+    assert all(p["desc"] == M.PRESETS[k]["desc"] + " (capital on request)" for k, p in cat["presets"].items())      # LAUNCH's "one switch away" too
     assert M.catalogue()["presets"]["DEALER"]["desc"] == "everything on"
     assert not any(m.get("on_request") for m in M.catalogue()["definitions"]) and all(M.catalogue()["presets"]["DEALER"]["modules"].values())
     assert not any("on_request" in m for m in M.MODULES)                           # the catalogue marks a copy, never the definitions
@@ -150,7 +162,7 @@ def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
     assert M.for_user(db, "demo")["modules"]["CAPITAL"] is True                                           # the row, as it is
 
 
-def test_a_save_by_someone_capital_is_held_from_leaves_what_the_row_says_about_it(monkeypatch):
+def test_someone_capital_is_held_from_can_never_switch_it_on_and_only_a_preset_switches_it_off(monkeypatch):
     from unittest.mock import MagicMock
     import json
     import api.routes.modules as route
@@ -161,22 +173,26 @@ def test_a_save_by_someone_capital_is_held_from_leaves_what_the_row_says_about_i
     monkeypatch.setattr(M, "locked", lambda db, user: ("CAPITAL",))
     monkeypatch.setattr(route, "_view", lambda db, user: {"ok": True})
     monkeypatch.setattr("api.routes._limits.heavy", lambda *a, **k: None)
-    bodies = (ModulesBody(preset="DEALER"), ModulesBody(preset="LAUNCH"), ModulesBody(modules={**M.all_on(), "CAPITAL": True}),
-              ModulesBody(modules={**M.all_on(), "CAPITAL": False, "NEWS": False}))
+    # what the row says after each kind of save, by what it said before: never switched on; a map (the page sends it
+    # off because that is how it was answered) leaves it; a preset that has it off switches it off
+    cases = ((ModulesBody(preset="DEALER"), {True: True, False: False}),
+             (ModulesBody(preset="LAUNCH"), {True: False, False: False}),
+             (ModulesBody(preset="FUND"), {True: False, False: False}),
+             (ModulesBody(modules={**M.all_on(), "CAPITAL": True}), {True: True, False: False}),
+             (ModulesBody(modules={**M.all_on(), "CAPITAL": False, "NEWS": False}), {True: True, False: False}))
     for row_has in (True, False):
         monkeypatch.setattr(M, "for_firm", lambda db, firm_id, v=row_has: {"modules": {**M.all_on(), "CAPITAL": v}, "preset": "DEALER", "source": "firm"})
-        for body in bodies:
+        for body, want in cases:
             db.reset_mock()
             assert put_modules(body, db=db, user=user) == {"ok": True} and db.commit.called      # never refused: a page opened before the deploy still saves
             stored = json.loads(db.execute.call_args_list[0].args[1]["m"])
-            assert stored["CAPITAL"] is row_has, (row_has, body)                                   # neither a preset nor a map moves it, in either direction
+            assert stored["CAPITAL"] is want[row_has], (row_has, body)
             audit = db.execute.call_args_list[1].args[1]
-            assert json.loads(audit["a"]) == stored and json.loads(audit["b"])["CAPITAL"] is row_has      # and the audit row shows no change of capital
+            assert json.loads(audit["a"]) == stored and json.loads(audit["b"])["CAPITAL"] is row_has
         assert stored["NEWS"] is False and stored["PNL"] is True                                   # the rest of what was asked is stored
-    launch = M.preset_modules("LAUNCH")
     db.reset_mock()
-    put_modules(ModulesBody(preset="LAUNCH"), db=db, user=user)
-    assert json.loads(db.execute.call_args_list[0].args[1]["m"]) == {**launch, "CAPITAL": False}
+    put_modules(ModulesBody(preset="FUND"), db=db, user=user)
+    assert json.loads(db.execute.call_args_list[0].args[1]["m"]) == M.preset_modules("FUND")       # every other switch is the preset's
     # nobody held back: stored as asked
     monkeypatch.setattr(M, "locked", lambda db, user: ())
     db.reset_mock()

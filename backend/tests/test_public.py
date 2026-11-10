@@ -79,3 +79,15 @@ def test_register_lists_anchored_confirmations_without_private_fields():
     assert b["total"] == 1 and b["confirmations"][0]["parties"] == ["LEI_A", "LEI_B"]
     assert b["confirmations"][0]["bilateral"] is True and b["confirmations"][0]["instrument_type"] == "IR_SWAP"
     assert "trade_ref" not in b["confirmations"][0] and "notional" not in b["confirmations"][0]
+
+
+def test_the_pulse_reads_the_demo_setting_the_way_everything_else_does(monkeypatch):
+    """Until 0.16.2 the pulse said demo for any non-empty value, 0 included, and not-demo when the variable was unset."""
+    from api.routes import demo, public
+    for value, want in (("0", False), ("false", False), ("1", True), (None, True)):
+        monkeypatch.delenv("RIJEKA_DEMO_PROVISION", raising=False)
+        if value is not None:
+            monkeypatch.setenv("RIJEKA_DEMO_PROVISION", value)
+        assert public._demo_provisioning() is want and demo.enabled() is want, value
+    import inspect
+    assert 'os.getenv("RIJEKA_DEMO_PROVISION")' not in inspect.getsource(public)

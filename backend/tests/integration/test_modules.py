@@ -5,6 +5,7 @@ import os
 
 import sqlalchemy as sa
 
+from modules import PRESETS as M_PRESETS
 from tests.integration.conftest import USER_A, set_role
 
 
@@ -118,11 +119,13 @@ def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(clien
         assert j["on_request"] == [] and j["presets"]["DEALER"]["modules"]["CAPITAL"] is True and j["modules"]["CAPITAL"] is False
         r = client.put("/api/modules", json={"preset": "DEALER"}, headers=new)
         assert r.status_code == 200 and all(r.json()["modules"].values()) and _stored(j["firm_id"])["CAPITAL"] is True
+        assert "CAPITAL" in r.json()["events"][0]["changed"]                # the admin is shown the whole audit row
     finally:
         set_role(NEW_USER, "trader")
     j = client.get("/api/modules", headers=new).json()
     assert j["modules"]["CAPITAL"] is False and j["on_request"] == ["CAPITAL"] and _stored(j["firm_id"])["CAPITAL"] is True
     assert sum(j["modules"].values()) == len(j["modules"]) - 1
+    assert j["events"][0]["preset"] == "DEALER" and j["events"][0]["changed"] == [] and j["events"][0]["after"]["CAPITAL"] is False      # the same row, as someone it is held from is answered
     # the page's own save of another switch (it sends capital off, as it was answered) leaves the row's capital on,
     # and the audit row says only what its author changed
     r = client.put("/api/modules", json={"modules": {**j["modules"], "NEWS": False}}, headers=new)
@@ -130,6 +133,9 @@ def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(clien
     assert r.json()["modules"]["CAPITAL"] is False and r.json()["modules"]["NEWS"] is False
     r = client.put("/api/modules", json={"preset": "LAUNCH"}, headers=new)
     assert r.status_code == 200 and not r.json()["modules"]["MARKET_RISK"] and r.json()["view"] == "launch"
+    assert _stored(r.json()["firm_id"])["CAPITAL"] is False              # a preset that has capital off switches the row off; nothing switches it back on but the admin role
+    assert client.put("/api/modules", json={"preset": "DEALER"}, headers=new).status_code == 200 and _stored(r.json()["firm_id"])["CAPITAL"] is False
+    assert client.put("/api/modules", json={"preset": "LAUNCH"}, headers=new).status_code == 200
     assert client.put("/api/modules", json={"preset": "DEALER", "note": "x" * 501}, headers=new).status_code == 422
     # an existing firm is exactly as it was. It has two members, so it is not a sandbox: neither its ADMIN member nor
     # the other may switch modules for the colleague without the admin role (Magnus, 9 November 2026)
@@ -159,6 +165,10 @@ def test_an_instance_can_start_new_workspaces_on_everything(client, monkeypatch)
     j = client.get("/api/modules", headers=new).json()
     assert j["source"] == "default" and j["firm_id"]
     assert {k for k, v in j["modules"].items() if not v} == {"CAPITAL"} and j["on_request"] == ["CAPITAL"]     # everything the demo offers
+    # an instance that keeps sandboxes and holds nothing back says so
+    monkeypatch.setenv("RIJEKA_HELD_MODULES", "NONE")
+    j = client.get("/api/modules", headers=new).json()
+    assert all(j["modules"].values()) and j["on_request"] == [] and all(p["desc"] == d["desc"] for p, d in ((j["presets"][k], M_PRESETS[k]) for k in M_PRESETS))
 
 
 def test_a_new_workspace_is_never_joined_to_a_firm_that_happens_to_share_its_name(client, monkeypatch):

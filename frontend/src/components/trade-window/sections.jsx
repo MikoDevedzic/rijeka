@@ -23,6 +23,9 @@ const TAB_MODULE = { 'XVA': 'XVA', 'CAPITAL': 'CAPITAL', '◆ CONFIRM': 'CHAIN_C
 export function TabBar({ active = 'TRADE', onTab = () => {} }) {
   const modules = useModulesStore(s => s.modules)
   const tabs = TABS.filter(t => !TAB_MODULE[t] || modules[TAB_MODULE[t]] !== false)
+  // The switches can arrive (or be read again) while a ticket is open: a tab that has just gone is not left showing
+  const gone = !tabs.includes(active)
+  React.useEffect(() => { if (gone) onTab('TRADE') }, [gone, onTab])
   return (
     <div className="tbw-tabbar">
       {tabs.map(t => (
