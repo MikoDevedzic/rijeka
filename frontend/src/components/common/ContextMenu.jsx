@@ -39,6 +39,10 @@ export default function ContextMenu({ x, y, items, onClose, label = 'Actions' })
     }
   }, [onClose])
 
+  // nothing to offer (what it was opened on has gone): closed, not left to come back later
+  const empty = usable.length === 0
+  useEffect(() => { if (empty) onClose() }, [empty, onClose])
+
   const choose = (it) => { if (!it || it.disabled) return; onClose(); it.onSelect?.() }
   const onKey = (e) => {
     const k = usable.indexOf(active)
@@ -51,6 +55,7 @@ export default function ContextMenu({ x, y, items, onClose, label = 'Actions' })
     else if (e.key === 'Tab') { e.preventDefault(); onClose() }
   }
 
+  if (empty) return null
   return createPortal(
     <div ref={ref} className="rj-menu" role="menu" aria-label={label} tabIndex={-1} data-testid="context-menu" data-no-shortcuts
          style={{ left: at.left, top: at.top }} onKeyDown={onKey} onContextMenu={e => e.preventDefault()}>

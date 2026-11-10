@@ -28,4 +28,8 @@ describe('the right-click menu of a blotter row', () => {
     expect(labels(rowMenu(t, { selected: [{ id: 'c' }, { id: 'd' }] }, {}))).not.toContain('Open the 2 ticked trades')   // this row is not one of them
     expect(rowMenu(null)).toEqual([])
   })
+  it('without a clipboard the copies are greyed and say why', () => {
+    const none = rowMenu(t, { theirRef: 'THEIR-7', canCopy: false }, {})
+    for (const l of ['Copy reference', 'Copy UTI', 'Copy their reference']) expect(none.find(i => i.label === l)).toMatchObject({ disabled: true, hint: 'no clipboard here' })
+  })
 })

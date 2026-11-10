@@ -6,7 +6,7 @@
 // `does` is what the blotter can do: { open(trades), copy(text), filter(key, value), toggle(id), clear() }.
 const short = (s, n = 26) => { const t = String(s ?? ''); return t.length > n ? t.slice(0, n - 1) + '…' : t }
 
-export function rowMenu(t, { selected = [], theirRef = null, filters = {} } = {}, does = {}) {
+export function rowMenu(t, { selected = [], theirRef = null, filters = {}, canCopy = true } = {}, does = {}) {
   if (!t) return []
   const ticked = selected.some(x => x.id === t.id)
   const several = ticked && selected.length > 1
@@ -16,9 +16,10 @@ export function rowMenu(t, { selected = [], theirRef = null, filters = {} } = {}
     { label: 'Open', hint: t.trade_ref, onSelect: () => does.open?.([t]) },
     ...(several ? [{ label: `Open the ${selected.length} ticked trades`, onSelect: () => does.open?.(selected) }] : []),
     { separator: true },
-    { label: 'Copy reference', hint: t.trade_ref, disabled: !t.trade_ref, onSelect: () => does.copy?.(t.trade_ref) },
-    { label: 'Copy UTI', hint: t.uti ? short(t.uti, 18) : 'none yet', disabled: !t.uti, onSelect: () => does.copy?.(t.uti) },
-    ...(theirRef ? [{ label: 'Copy their reference', hint: theirRef, onSelect: () => does.copy?.(theirRef) }] : []),
+    // where the browser gives no clipboard (a page not served securely) the copies are greyed and say so
+    { label: 'Copy reference', hint: canCopy ? t.trade_ref : 'no clipboard here', disabled: !t.trade_ref || !canCopy, onSelect: () => does.copy?.(t.trade_ref) },
+    { label: 'Copy UTI', hint: !t.uti ? 'none yet' : canCopy ? short(t.uti, 18) : 'no clipboard here', disabled: !t.uti || !canCopy, onSelect: () => does.copy?.(t.uti) },
+    ...(theirRef ? [{ label: 'Copy their reference', hint: canCopy ? theirRef : 'no clipboard here', disabled: !canCopy, onSelect: () => does.copy?.(theirRef) }] : []),
     { separator: true },
     { heading: 'SHOW ONLY' },
     { label: cp ? short(cp) : 'This counterparty', disabled: !cp, onSelect: () => does.filter?.('search', cp) },

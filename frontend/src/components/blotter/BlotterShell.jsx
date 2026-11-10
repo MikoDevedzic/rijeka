@@ -78,8 +78,9 @@ export default function BlotterShell() {
   const toggle = (id) => { const next = new Set(selectedIds); if (next.has(id)) next.delete(id); else next.add(id); setSelectedIds(next) }
   const menuTrade = menu ? rows.find(r => r.id === menu.id) : null
   const menuItems = menuTrade ? rowMenu(menuTrade,
-    { selected: rows.filter(r => selectedIds.has(r.id)), theirRef: theirRefs[menuTrade.id]?.trade_ref || null, filters },
-    { open: (ts) => ts.forEach(x => useBookingStore.getState().open(x)), copy: (text) => { navigator.clipboard?.writeText(String(text)).catch(() => {}) },
+    { selected: rows.filter(r => selectedIds.has(r.id)), theirRef: theirRefs[menuTrade.id]?.trade_ref || null, filters, canCopy: !!navigator.clipboard?.writeText },
+    // several opened together are un-ticked, as the OPEN N TRADES button does
+    { open: (ts) => { ts.forEach(x => useBookingStore.getState().open(x)); if (ts.length > 1) setSelectedIds(new Set()) }, copy: (text) => { navigator.clipboard?.writeText(String(text)).catch(() => {}) },
       filter: setFilter, clear: resetFilters, toggle }) : []
 
   const live    = trades.filter(t => t.status === 'LIVE').length
@@ -289,7 +290,8 @@ export default function BlotterShell() {
       {/* Right panel removed — trades open as floating windows */}
 
       {/* TradeBookingWindow now rendered at App root — persists across navigation */}
-      {menuTrade && <ContextMenu x={menu.x} y={menu.y} items={menuItems} label={`Actions for ${menuTrade.trade_ref}`} onClose={() => setMenu(null)} />}
+      {/* with no items (its row has gone: a live update, a filter) the menu puts itself away, not kept for the row's return */}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems} label={`Actions for ${menuTrade?.trade_ref || 'a trade'}`} onClose={() => setMenu(null)} />}
     </div>
   )
 }
