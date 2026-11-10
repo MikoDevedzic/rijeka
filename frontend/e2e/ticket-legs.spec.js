@@ -415,6 +415,28 @@ test('margin and capital on a digital-asset ticket: no SIMM anywhere; a typed do
   for (const k of ['cva', 'dva', 'fva', 'fba', 'mva']) expect(twoB.xva[k], k).toBe(typed.xva[k])
   await expect(win.getByTestId('xva-capital-basis')).toContainText('SCO60.99')
   await expectNoHorizontalOverflow(win, 'XVA with margin and capital lines')
+
+  // an entry that is not an amount is said to be that, and no run starts on it (found by review: it was taken as blank)
+  await win.getByTestId('xva-im-usd').fill('1,5m')
+  await expect(win.getByTestId('xva-im-usd')).toHaveAttribute('aria-invalid', 'true')
+  let ran = false
+  const watch = r => { if (r.url().endsWith('/api/xva/currency') && r.method() === 'POST') ran = true }
+  app.on('request', watch)
+  await win.getByRole('button', { name: /SIMULATE$/ }).click()
+  await expect(win.getByText(/Initial margin: type an amount/)).toBeVisible()
+  await app.waitForTimeout(500)
+  app.off('request', watch)
+  expect(ran, 'no run on an entry that is not an amount').toBe(false)
+  // the box is in the ticket's own currency, and says so
+  await expect(win.getByText('Initial margin USD', { exact: true })).toBeVisible()
   await app.screenshot({ path: 'e2e/.out/shots/xva-margin-capital.png' })
+
+  // another asset starts with neither the amount nor the group of the last one
+  await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+  await win.locator('select').filter({ has: app.locator('option', { hasText: 'ETHUSD' }) }).first().selectOption('ETHUSD')
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeLessThan(50_000)
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()
+  await expect(win.getByTestId('xva-im-usd')).toHaveValue('')
+  await expect(win.getByTestId('xva-crypto-group')).toHaveValue('')
   expectClean(problems)
 })

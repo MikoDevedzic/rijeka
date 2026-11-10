@@ -9,7 +9,7 @@
 // Pure helpers and constants live in xva-shared.js. The simple view's three pieces are here
 // too: the toggle, the counterparty line and the line on what a run assumes.
 // ────────────────────────────────────────────────────────────────────────────────────
-import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar, moneySize } from './xva-shared'
+import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar, moneySize, imUsdProblem } from './xva-shared'
 import { Keycap } from '../common/Shortcuts'
 import Roll from '../common/Roll'
 import { Note } from '../common/Note'
@@ -277,21 +277,22 @@ function CollateralBlock({ collateral, setCollateral, instruments, scheduleColla
 // ASSUMPTIONS: LGD %, FBA/FTP ratio, Hurdle rate %, the initial margin in dollars, the capital model and the MVA note.
 // `children` sits after the capital model (a digital asset's Basel group).
 export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, setHurdle, imUsd, setImUsd, capModel, setCapModel,
-                                   note = RATES_MVA_NOTE, imTip = 'imUsd', tip = noop, untip = noop, children = null }) {
+                                   note = RATES_MVA_NOTE, imTip = 'imUsd', tip = noop, untip = noop, children = null, imCcy = 'USD' }) {
   const rows = [
     {label:'LGD %',val:lgd,set:setLgd,tk:'lgd'},
     {label:'FBA/FTP ratio',val:fbaRatio,set:setFbaRatio,tk:'fbaRatio'},
     {label:'Hurdle rate %',val:hurdle,set:setHurdle,tk:'hurdle'},
-    {label:'Initial margin USD',val:imUsd,set:setImUsd,tk:imTip,placeholder:'estimate',testId:'xva-im-usd'},
+    {label:`Initial margin ${imCcy}`,val:imUsd,set:setImUsd,tk:imTip,placeholder:'estimate',testId:'xva-im-usd',bad:!!imUsdProblem(imUsd)},
   ]
   return (
     <>
       <SectionHeader>ASSUMPTIONS<Note inline>{note}</Note></SectionHeader>
       <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) 72px minmax(0,1fr) 72px',gap:'5px 10px'}}>
-        {rows.map(({label,val,set,tk,placeholder,testId})=>(
+        {rows.map(({label,val,set,tk,placeholder,testId,bad})=>(
           <div key={label} style={{display:'contents'}}>
             <TipLabel tipKey={tk} tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>{label}</TipLabel>
-            <input type='text' value={val} onChange={e=>set(e.target.value)} placeholder={placeholder} data-testid={testId} style={{...INP,textAlign:'right'}}/>
+            <input type='text' value={val} onChange={e=>set(e.target.value)} placeholder={placeholder} data-testid={testId} aria-invalid={bad || undefined}
+              style={{...INP,textAlign:'right',...(bad ? {borderColor:'var(--red)',color:'var(--red)'} : {})}}/>
           </div>
         ))}
         <TipLabel tipKey='capModel' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Capital model</TipLabel>

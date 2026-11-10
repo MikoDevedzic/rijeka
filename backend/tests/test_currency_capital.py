@@ -57,6 +57,14 @@ def test_group_2a_is_the_crypto_class_at_32_percent():
     wf, meta = fx_xva.forward_xva(_fwd(), CSA.uncollateralised(), n_paths=500)
     assert wf.addon_0 == pytest.approx(0.32 * 10 * 98_000.0 * math.sqrt(5 / 12), rel=1e-9)
     assert meta["crypto_group"] == "2a" and "32 %" in meta["capital_basis"] and "SCO60.98" in meta["capital_basis"]
+    # whose choice the group was is in the words: the default is the engine's reading, and says what the rule requires
+    assert "the engine's default for BTC" in meta["capital_basis"] and "SCO60.55" in meta["capital_basis"] and "Group 2b unless" in meta["capital_basis"]
+    _, chosen = fx_xva.forward_xva(_fwd(), CSA.uncollateralised(), n_paths=300, crypto_group="2a")
+    assert "set by the desk" in chosen["capital_basis"] and "default" not in chosen["capital_basis"]
+    _, sol = fx_xva.forward_xva(_fwd("SOLUSD", n=1000.0, F=200.0, spot=195.0), CSA.uncollateralised(), n_paths=300)
+    assert "the engine's default for SOL" in sol["capital_basis"]
+    _, eur = fx_xva.forward_xva(_fwd("EURUSD", n=1e7, F=1.17, spot=1.165), CSA.uncollateralised(), n_paths=300)
+    assert "default" not in eur["capital_basis"] and "desk" not in eur["capital_basis"]
     # and the charge is no longer a rounding: 8 % × the risk weight × EAD at the hurdle, over the life
     assert wf.kva < -100
 

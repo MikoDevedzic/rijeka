@@ -128,6 +128,32 @@ def test_margin_follows_the_legs_as_they_settle():
     assert fx_xva.package_xva([far, near], CSA.uncollateralised(), n_paths=300)[0].im_0 == 0
 
 
+def test_a_leg_that_settles_is_a_payment_not_a_move_in_the_margin_or_the_collateral():
+    """Found by the validator: a 3M forward deep in the money beside a 1Y forward. The date after the near leg
+    paid, the margin jumped to some 660,000 against 37,000 for the far leg alone: the cash that had left the set
+    was read as a move over the margin period (and stood as collateral for a step)."""
+    near = _fwd(t=0.25, strike=1.00, n=1e7)                 # some 1.7m in the money: it pays that at month 3
+    far = _fwd(t=1.0, n=1e6)
+    csa = CSA.bilateral()
+    pkg, _ = fx_xva.package_xva([near, far], csa, n_paths=1500)
+    alone, _ = fx_xva.forward_xva(far, csa, n_paths=1500)
+    # from the first date after the settlement the set IS the far leg: its margin, each way, and its exposure
+    assert pkg.im_profile[3:] == pytest.approx(alone.im_profile[3:], rel=1e-9)
+    assert pkg.im_received_profile[3:] == pytest.approx(alone.im_received_profile[3:], rel=1e-9)
+    assert pkg.ee[3:] == pytest.approx(alone.ee[3:], rel=1e-9, abs=1e-6) and pkg.ene[3:] == pytest.approx(alone.ene[3:], rel=1e-9, abs=1e-6)
+    assert max(pkg.im_profile[3:]) < 3 * alone.im_profile[0], "no spike at the settlement"
+    # and without the correction the spike is there: the same paths with no record of what settled
+    nz = {}
+    V, p0, v0, _ = fx_xva.simulate_package_paths([near, far], n_paths=1500, noise_out=nz)
+    assert nz["settled"] is not None and not nz["settled"][:, :3].any() and nz["settled"][:, 3:].any()
+    from pricing.xva_engine import WaterfallParams, run_waterfall
+    raw = run_waterfall(V, v0, p0, WaterfallParams(notional=1.0, maturity_y=1.0, dt=1 / 12, theta=0.04), csa)
+    assert raw.im_profile[3] > 5 * pkg.im_profile[3], "what the validator saw"
+    # a package whose legs all end together has nothing settling early: the run is untouched
+    fx_xva.simulate_package_paths([_fwd(t=0.5), _fwd(t=0.5, direction="SELL", strike=1.2)], n_paths=50, noise_out=nz)
+    assert nz["settled"] is None
+
+
 def test_the_older_capital_model_takes_the_legs_own_add_ons_too():
     one = _fwd(t=0.5)
     a, _ = fx_xva.forward_xva(one, CSA.uncollateralised(), n_paths=300, capital_model="cem")

@@ -271,6 +271,7 @@ def run_waterfall(
     addon_profiles: Optional[tuple] = None,
     apply_multiplier: bool = True,
     wrong_way: Optional[dict] = None,
+    settled: Optional[np.ndarray] = None,
 ) -> WaterfallResult:
     """
     Exposure profiles and XVA under `csa`. `paths` are MtM from our side
@@ -288,7 +289,10 @@ def run_waterfall(
     {"x": (n_paths, T) the market variable on the grid, "beta_cp": b, "beta_own": b} (hazard_beta, path_survival).
     CVA is then LGD · Σ E[exposure_i · default probability in step i ON THAT PATH] and DVA likewise with our own
     default; the result also carries both with default independent of the market. None, or both betas zero, is
-    today's calculation exactly. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
+    today's calculation exactly. `settled` is (n_paths, T): the cash that has settled out of the set by each grid
+    date, per path (a leg of a package that has paid). The value a margin period earlier is then read on the set
+    with that cash still in it, and the cash taken off again: a settlement is a payment, not a move, so it is
+    neither margined nor left standing as collateral for a step. None: no leg settles before the end. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
     hurdle replace the params' and the BA-CVA capital leg joins KVA; None keeps today's KVA exactly.
     """
     n_paths, T = paths.shape
@@ -300,7 +304,10 @@ def run_waterfall(
 
     # ── Collateral ───────────────────────────────────────────────────────────
     bridge = np.zeros_like(paths)
-    v_lag = lagged_values(paths, v0, DT, csa.mpor_years, rng, noise_out=bridge) if csa.collateralised else None
+    whole = paths if settled is None else paths + settled        # the set with what has settled still in it: no jump at a settlement
+    v_lag = lagged_values(whole, v0, DT, csa.mpor_years, rng, noise_out=bridge) if csa.collateralised else None
+    if v_lag is not None and settled is not None:
+        v_lag = v_lag - settled
     coll  = collateral_held(v_lag, csa) if v_lag is not None else np.zeros_like(paths)
     resid = paths - coll
 
@@ -313,7 +320,7 @@ def run_waterfall(
     elif csa.im_exchanged and T:
         # the value a margin period earlier: the lag already drawn for the variation margin, else one of its own
         # (its own generator, so no other number of the run depends on whether IM is exchanged)
-        lag = v_lag if v_lag is not None else lagged_values(paths, v0, DT, csa.mpor_years, np.random.default_rng(seed=44))
+        lag = v_lag if v_lag is not None else lagged_values(whole, v0, DT, csa.mpor_years, np.random.default_rng(seed=44)) - (0.0 if settled is None else settled)
         im_recv, im_post = model_im(paths, lag)
         im_basis = (f"the engine's estimate: the {IM_CONFIDENCE:g}th percentile move of the value over the margin period "
                     f"({csa.mpor_days:g} business days), each way; not ISDA SIMM")

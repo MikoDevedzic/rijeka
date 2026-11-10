@@ -61,7 +61,7 @@ export const TIPS = {
   hurdle: { title: 'Hurdle rate (%)',
     body: 'Required return on regulatory capital.\n\nKVA = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]\nCapital(t) = SA-CCR EAD(t) x 8% (Basel III RWA)\n\nTypical: 10-15% for investment banks. At 12% hurdle, a 5Y $10M IRS generates ~$70-80K KVA. KVA is often larger than CVA for vanilla rates trades.' },
   imUsd: { title: 'Initial margin (USD)',
-    body: 'Initial margin, each way, in dollars. Type the amount (250000, 250k or 0.25m): it is held for the life of the trade and MVA is its funding cost, −Σ IM × max(FTP − pickup, 0) × dt × DF.\n\nBlank = the engine\'s own estimate from the simulated paths: at each date the 99th percentile rise (what we call) and fall (what we post) of the value over the margin period, about its mean. It is at today\'s volatility, not a stressed one, so it can read lower than a regulatory figure.\n\nRijeka does not compute ISDA SIMM. SIMM is ISDA\'s licensed methodology: a firm with a licence enters its own SIMM figure here.' },
+    body: 'Initial margin, each way, in the ticket\'s currency (the quote currency of a pair). Type the amount (250000, 250k or 0.25m): it is held for the life of the trade and MVA is its funding cost, −Σ IM × max(FTP − pickup, 0) × dt × DF.\n\nBlank = the engine\'s own estimate from the simulated paths: at each date the 99th percentile rise (what we call) and fall (what we post) of the value over the margin period, about its mean. It is at today\'s volatility, not a stressed one, so it can read lower than a regulatory figure.\n\nRijeka does not compute ISDA SIMM. SIMM is ISDA\'s licensed methodology: a firm with a licence enters its own SIMM figure here.' },
   settlement: { title: 'Settlement / CSA',
     body: 'How the trade is margined. Every VA is computed on the RESIDUAL exposure after collateral:\n\nE+(t) = max(V(t) − VM(t) − IM_recv, 0)\n\nUNCOLLATERALISED — no variation margin. Full MtM at risk. IM may still be posted (legacy MVA).\n\nBILATERAL — daily VM under a CSA, thresholds and MTA apply, 10 business-day margin period of risk (BCBS-IOSCO floor for non-cleared). Initial margin exchanged.\n\nON-CHAIN — atomic settlement: continuous VM, zero threshold and MTA, 5bd MPoR (the cleared floor). Half the margin period: the initial margin estimate, and MVA with it, fall by about sqrt(5/10) = 0.707; SA-CCR margined maturity factor 1.5·sqrt(MPoR/250) cuts KVA by the same factor.\n\nWhat the margin is held in is the COLLATERAL block below: it sets the carry in ColVA and the pickup in MVA.' },
   collateral: { title: 'Collateral: what the margin is held in',
@@ -189,13 +189,21 @@ export function spreadCurvePayload(cp, own, ftp) {
   }
 }
 
-// The initial margin the desk typed, in dollars, or null for the engine's estimate: "250000", "250,000", "250k",
-// "0.25m". Anything else (and a negative) is no amount.
+// The initial margin the desk typed, in the ticket's currency, or null: "250000", "250,000", "250k", "0.25m". A
+// comma is a thousands separator only (groups of three): "1,5m" is not an amount, so a decimal comma is never
+// read as ten times the figure. Blank is null too: imUsdProblem tells a blank from an entry that could not be read.
 export function imUsdValue(s) {
-  const m = String(s ?? '').trim().replace(/,/g, '').match(/^(\d+(?:\.\d+)?|\.\d+)\s*([kKmM]?)$/)
-  if (!m) return null
-  const v = parseFloat(m[1]) * (m[2] === '' ? 1 : /k/i.test(m[2]) ? 1e3 : 1e6)
+  const t = String(s ?? '').trim()
+  const m = t.match(/^(\d{1,3}(?:,\d{3})+|\d+)?(\.\d+)?\s*([kKmM]?)$/)
+  if (!m || (m[1] == null && m[2] == null)) return null
+  const v = parseFloat((m[1] || '0').replace(/,/g, '') + (m[2] || '')) * (m[3] === '' ? 1 : /k/i.test(m[3]) ? 1e3 : 1e6)
   return Number.isFinite(v) ? v : null
+}
+// What is wrong with the margin box, or null: something typed that is not an amount. A run does not start on it
+// (the engine's estimate under a box that still shows the entry would pass for the entry).
+export function imUsdProblem(s) {
+  const t = String(s ?? '').trim()
+  return t !== '' && imUsdValue(t) == null ? 'Initial margin: type an amount such as 250000, 250,000, 250k or 0.25m, or leave it blank for the engine\'s estimate' : null
 }
 
 // The Basel group a digital asset's capital add-on is run under ('' = the engine's default for the asset).

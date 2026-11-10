@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null, getSessionSafe: async () => null }))
 
 import {
-  VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
+  VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
   ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS,
@@ -65,6 +65,16 @@ describe('spread curves', () => {
     expect(imUsdValue(' 2 M ')).toBe(2000000)
     expect(imUsdValue('0')).toBe(0)
     expect(numOrNull('1,250.5')).toBe(1250.5); expect(numOrNull('')).toBeNull()
+  })
+  it('an entry that is not an amount is said to be that, and a decimal comma is never read as ten times the figure', () => {
+    // found by review: these were silently taken as blank (the estimate) or, for the last, as 15,000,000
+    for (const bad of ['1e6', '1.000.000', '250 000', '$250k', '1,5m', '1,50', '12,3456', 'abc', '-5']) {
+      expect(imUsdValue(bad), bad).toBeNull()
+      expect(imUsdProblem(bad), bad).toMatch(/type an amount/)
+    }
+    for (const ok of ['', '   ', null, undefined, '250000', '250,000', '1,250,000.50', '250k', '0.25m', '.5m']) expect(imUsdProblem(ok), String(ok)).toBeNull()
+    expect(imUsdValue('1,250,000.50')).toBe(1250000.5)
+    expect(imUsdValue('.5m')).toBe(500000)
   })
   it('nothing the tabs say about margin claims SIMM: the note says it is licensed and not computed', () => {
     expect(RATES_MVA_NOTE).toBe(IM_NOTE)

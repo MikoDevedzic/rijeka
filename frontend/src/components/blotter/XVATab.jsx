@@ -13,7 +13,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from '../trade-window/xva-shared.jsx'
 import {
-  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, imUsdValue,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, imUsdValue, imUsdProblem,
   buildVaRows, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
 } from '../trade-window/xva-shared'
 
@@ -280,6 +280,9 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
   }, [])
 
   const handleSimulate = async (useSeed = 42) => {      // 42 repeats exactly; RE-ROLL passes a fresh seed
+    // a margin entry that is not an amount is said to be that: no run starts on the engine's estimate under it
+    const imBad = imUsdProblem(imUsd)
+    if (imBad) { setSimErr(imBad); return }
     setSimulating(true); setSimErr(null)
     try {
       const session = await getSession()

@@ -85,6 +85,12 @@ def from_netting_set(ns: NettingSet, mkt, fx_to_usd: dict[str, float], asof: dat
                     notes.append(f"{ref}: no spot for {pair}; the contract rate stands in for it")
                 kq = fx_to_usd.get(quote, 1.0) or 1.0
                 ac = "CRYPTO" if _is_crypto(base) else "FX"
+                if ac == "CRYPTO" and base.upper() not in ("BTC", "ETH"):
+                    # the ticket's default for this asset is Group 2b (pricing/fx_xva.crypto_group_of); the book-level
+                    # report has no Group 2b treatment yet (SCO60.99 splits the netting set) and says so
+                    note = f"{base} is run in SA-CCR's cryptoasset class here (Group 2a, 32 %); the ticket's default for it is Group 2b (50 % of gross notional, SCO60.99), which this report does not apply yet"
+                    if note not in notes:
+                        notes.append(note)
                 if kind == "FORWARD":
                     N = float(it["terms"]["notional"]) * float(spot) * kq               # the foreign leg in the domestic currency (CRE52.35)
                     E = max(years(asof, it["maturity"]), 0.0)

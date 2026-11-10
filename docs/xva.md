@@ -82,7 +82,17 @@ out because what every path does over the period (a coupon, the passage of time)
 period gives a smaller estimate, by about √(5/10) from bilateral to on chain. Limits: the estimate is at the
 model's current volatility, not one calibrated to a period of stress, so it reads lower than a stressed
 regulatory figure (about half of a SIMM-weighted figure on the pinned 5-year swap); it is a cross-section of the
-paths at each date, not a margin recomputed on each path; one confidence for every asset class. The answer names
+paths at each date, not a margin recomputed on each path (an option far out of the money carries the same margin
+as one in the money); one confidence for every asset class. The value a margin period earlier comes from the
+bridge between grid dates, which keeps the variance of the move but is Gaussian where the value is lognormal:
+against an exact simulation (the validator's, 10 November 2026) the margin we call is within about 1 % at
+currency vols and reads 7 to 15 % low at digital-asset vols, the margin we post within a few per cent either
+way. **A margined CVA is small by construction:** exposure beyond the margin is the 1 % tail of the same model's
+own move at the same percentile (on a six-month forward CVA falls from −71 uncollateralised to −0.24 bilateral),
+so gap risk, jumps, a fatter tail than the model's and a margin call that is not met are not in it; the figure
+says the margin covers the model's move, not that the counterparty risk is that small. A leg of a package that
+settles is a payment, not a move: the value a margin period earlier is read on the set with the settled cash
+still in it (`run_waterfall(settled=)`), so the margin and the collateral do not jump at a settlement. The answer names
 which of the two it used (`capital.im_basis`) and carries the note (`capital.im_note`).
 
 **The capital add-on of a currency or digital-asset ticket (10 November 2026)** is SA-CCR's for its asset class
@@ -97,9 +107,15 @@ same terms carry no add-on), except under Group 2b, where each trade's half-noti
 Group 2b unless the bank has shown its supervisor SCO60.55's hedging recognition criteria; the engine's default
 is 2a for BTC and ETH and 2b otherwise, and `crypto_group` on the request (the Basel group selector on the tab)
 sets it. Before this the engine applied the interest-rate factor (0.5 % × supervisory duration) to everything,
-which made a digital asset's KVA a rounding. Limits: a style whose size is a payout (a digital, a touch) enters
-at its payout, which the rules do not name; a barrier enters at its vanilla delta; the counterparty's risk weight
-is the ticket's input; the older CEM and internal-model choices are unchanged.
+which made a digital asset's KVA a rounding. The answer says whose choice the group was (`capital.basis`: set by the desk, or the engine's default with the
+condition the rule sets). Limits: a style whose size is a payout (a digital, a touch) enters
+at its payout, which the rules do not name; a barrier enters at its vanilla delta; an option's maturity is its
+settlement, a day or two after the last exercise date CRE52.31 names; the notional is in the quote currency of
+the pair, as every figure of the ticket is, not converted to a bank's domestic currency; under Group 2b a leg's
+add-on stops at the grid date before its exposure does when it settles between two dates; the counterparty's risk
+weight is the ticket's input; the older CEM and internal-model choices are unchanged. **The book-level capital
+report (`ccr/saccr_map.py`) has no Group 2b treatment yet:** it runs every digital asset in the cryptoasset class
+(Group 2a), so SOL is charged differently there and on its ticket, and the report's notes say so.
 
 ## 7b. ColVA: what the variation margin is held in
 

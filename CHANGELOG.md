@@ -34,8 +34,18 @@ follows the Basel classes.**
 - **The request field is `im_usd`** on the four XVA routes; `simm_im_m` (millions), the old name of the same
   input, is still read so a page loaded before the release keeps working. `crypto_group` (2a, 2b) is new.
 - **Limits, in `docs/xva.md` and the model inventory:** the estimate is not a regulatory margin model (current
-  volatility, one confidence, a cross-section of the paths); the Basel group of an asset is the bank's to show
-  its supervisor; a payout style enters the add-on at its payout.
+  volatility, one confidence, a cross-section of the paths); against an exact simulation it is within about 1 % at
+  currency vols and reads 7 to 15 % low at digital-asset vols; a margined CVA is small by construction (what is
+  left beyond the margin is the 1 % tail of the model's own move: no gap risk, no jumps); the Basel group of an
+  asset is the bank's to show its supervisor, and the answer says when the group is the engine's default; a
+  payout style enters the add-on at its payout; the book-level capital report still runs every digital asset as
+  Group 2a.
+- **A leg of a package that settles is a payment, not a move:** the margin and the collateral no longer jump for
+  a month when a leg pays.
+- **The margin box is in the ticket's own currency** and says which; an entry that is not an amount is said to be
+  that and no run starts on it; another pair starts with neither the amount nor the group of the last.
+- **On the first batch after this release the XVA reserves of a margined counterparty step** (MVA down, margined
+  CVA and KVA up, as above): it will show in the P&L explain as a reserve move with no market move behind it.
 - **Not in this change:** the legal-entity and counterparty records still carry a field for the margin model a
   CSA names (a fact about the agreement, not a calculation); the public site's own pages.
 

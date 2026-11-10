@@ -363,15 +363,19 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
     z, t, sv, m = _driver(n_paths, steps, dt, seed, sigma, pillars)
     p0 = [math.exp(-float(longest.quote_zero) * k * dt) for k in range(steps + 2)]
     V = np.zeros((n_paths, steps))
+    settled = np.zeros((n_paths, steps))          # the cash that has settled out of the set by each date, per path
     v0, rows = 0.0, []
     for leg in legs:
         Vi, v0i, _ = (_option_values if _is_option(leg) else _forward_values)(leg, steps, dt, m)
         V = V + Vi
         v0 += v0i
+        k_set = _settle_step(t, _horizon(leg))
+        if k_set < steps - 1:
+            settled[:, k_set + 1:] += Vi[:, k_set][:, None]      # its value at its last date is what it paid
         rows.append({"v0": float(v0i), "horizon": _horizon(leg), "option": _is_option(leg),
                      "ee_gross_peak": float(np.max(np.mean(np.maximum(Vi, 0.0), axis=0))), **({"paths": Vi} if keep_leg_paths else {})})
     if noise_out is not None:
-        noise_out.update(z=z, m=m, sigma=sigma, steps=steps, dt=dt, step_vols=sv)
+        noise_out.update(z=z, m=m, sigma=sigma, steps=steps, dt=dt, step_vols=sv, settled=settled if settled.any() else None)
     return V, p0, v0, rows
 
 
@@ -437,6 +441,10 @@ def capital_inputs(legs: list, csa: CSA, steps: int, dt: float, capital_model: s
     with a package's legs each at their own remaining life."""
     pair = legs[0].pair
     group = crypto_group_of(pair, crypto_group)
+    chosen = bool(str(crypto_group or "").strip())
+    whose = "" if group is None else (" · set by the desk" if chosen else
+                                      f" · the engine's default for {pair[:3].upper()}: a cryptoasset is Group 2b unless the bank has shown its supervisor the "
+                                      "hedging recognition criteria (SCO60.55)" if group == "2a" else f" · the engine's default for {pair[:3].upper()} (SCO60.55)")
     cem = package_addons(legs, csa, steps, dt)[2] if len(legs) > 1 else None
     model = str(capital_model or "sa_ccr").lower()
     if model != "sa_ccr":
@@ -446,9 +454,9 @@ def capital_inputs(legs: list, csa: CSA, steps: int, dt: float, capital_model: s
     if group == "2b":
         grid = [sum(0.5 * r.notional for r in rows if r.maturity_y - (i + 1) * dt > 0) for i in range(steps)]
         return {"kwargs": {"addon_profiles": (grid, grid, cem), "apply_multiplier": False}, "group": group,
-                "basis": "Group 2b cryptoasset: exposure = α × (replacement cost + 50 % of each trade's gross notional), no hedging set, no multiplier (SCO60.99)"}
+                "basis": "Group 2b cryptoasset: exposure = α × (replacement cost + 50 % of each trade's gross notional), no hedging set, no multiplier (SCO60.99)" + whose}
     return {"kwargs": {"saccr": rows, **({"addon_profiles": (None, None, cem)} if cem is not None else {})}, "group": group,
-            "basis": ("Group 2a cryptoasset: SA-CCR with the crypto class, supervisory factor 32 %, option volatility 120 % (SCO60.98)" if group == "2a"
+            "basis": ("Group 2a cryptoasset: SA-CCR with the crypto class, supervisory factor 32 %, option volatility 120 % (SCO60.98)" + whose if group == "2a"
                       else "SA-CCR, foreign exchange class, supervisory factor 4 % (CRE52.72)")}
 
 
@@ -474,7 +482,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         im_amount=im_amount,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, **cap["kwargs"],
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, settled=noise_out.get("settled"), **cap["kwargs"],
                        **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     pillars = next((l.pillars for l in legs if l.pillars), None)
     sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)

@@ -26,7 +26,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from './xva-shared.jsx'
 import {
-  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, imUsdValue, CRYPTO_GROUPS,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine,
 } from './xva-shared'
 import { Note } from '../common/Note'
@@ -57,7 +57,6 @@ function SurfaceProof({ result }) {
     ['SOURCE', p.vol_source || '—'],
     ['MODE', p.vol_mode || '—'],
     ...(p.style ? [['STYLE', String(p.style).replace(/_/g, ' ')]] : []),
-    ['IM WEIGHT', p.im_rw_per_pct != null ? `${p.im_rw_per_pct} per 1% (${p.im_basis || 'spot delta'})` : '—'],
     ['MODEL', p.model || '—'],
   ]
   return (
@@ -93,7 +92,7 @@ function SurfaceProof({ result }) {
 
 // `legs`: the further legs of a package (the DETAILS tab), or null: {count, ready, failed, key, bodies, quotes}. With legs the
 // run is the whole package as one netting set (POST /api/xva/currency-package): every leg on the same paths.
-export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId, stale = false, legs = null }) {
+export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId, stale = false, legs = null, crypto = false }) {
   const pkg = legs && legs.count > 0 ? legs : null
   const pkgWaiting = !!pkg && !pkg.ready          // a leg is still being priced: the run waits for it
   // the terms a result was simulated for: the ticket's and, in a package, every leg's
@@ -157,6 +156,11 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const [hurdle, setHurdle] = useState(HIDDEN_INPUT_DEFAULTS.hurdle)
   const [imUsd, setImUsd] = useState(HIDDEN_INPUT_DEFAULTS.imUsd)             // initial margin in dollars; blank = the engine's estimate
   const [cryptoGroup, setCryptoGroup] = useState('')                          // a digital asset's Basel group; '' = the engine's default
+  // The margin typed and the group chosen are of one pair: another pair starts with neither (a size in another
+  // currency, a group that was another asset's). State adjusted during the render, not in an effect.
+  const pairNow = quote ? `${quote.base_currency}${quote.quote_currency}` : null
+  const [pairSeen, setPairSeen] = useState(pairNow)
+  if (pairNow && pairNow !== pairSeen) { setPairSeen(pairNow); if (pairSeen) { setImUsd(''); setCryptoGroup('') } }
   const [capModel, setCapModel] = useState(HIDDEN_INPUT_DEFAULTS.capModel)
   // runs
   const [res, setRes] = useState(null)
@@ -179,6 +183,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
 
   const run = async (useSeed = 42) => {
     if (!quote || !payload || stale || pkgWaiting) return
+    const imBad = imUsdProblem(imUsd)
+    if (imBad) { setErr(imBad); return }
     const termsAtRun = runKey
     setSeed(useSeed)
     setBusy(true); setErr(null)
@@ -218,7 +224,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // bp against the notional: the ticket's, or in a package the sum of every leg's
   const notionalQ = pkg && pkg.ready ? [quote, ...pkg.quotes].reduce((a, q) => a + (quoteNotional(q) || 0), 0) : quoteNotional(quote)
   const nLegs = pkg ? pkg.count + 1 : 1
-  const isDigital = !!quote && !['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD', 'SEK', 'NOK'].includes(String(quote.base_currency || '').toUpperCase())
+  const isDigital = !!crypto
   const ww = wrongWayLine(res)
   // what netting is worth: the package's peak expected exposure against its legs' peaks added up
   const legPeaks = res?.package && Array.isArray(res.legs) ? res.legs.reduce((a, l) => a + (Number(l.ee_gross_peak) || 0), 0) : null
@@ -382,7 +388,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">
               <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
-              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} tip={tip} untip={untip}>
+              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} tip={tip} untip={untip} imCcy={ccy}>
                 {res?.capital?.crypto_group != null || isDigital ? (<>
                   <label htmlFor="xva-crypto-group" style={{ alignSelf: 'center', fontSize: '0.75rem', color: 'var(--text-dim)', gridColumn: '1' }}>Basel group</label>
                   <select id="xva-crypto-group" data-testid="xva-crypto-group" value={cryptoGroup} onChange={e => setCryptoGroup(e.target.value)} style={{ ...INP, cursor: 'pointer', gridColumn: '2 / span 3' }}

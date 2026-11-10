@@ -92,6 +92,20 @@ def test_saccr_mapping_of_a_hypothetical_swap_and_forward():
     assert ir.hedging_set == "USD" and ir.delta == 1.0 and ir.end_y == pytest.approx(5.0, abs=0.02) and ir.notional == 1e7
     assert fx.hedging_set == "EURUSD" and fx.delta == -1.0 and fx.notional == pytest.approx(2e6 * 1.10) and fx.end_y == pytest.approx(1.0, abs=0.02)
     assert any("no spot" in n for n in notes)
+    # a digital asset whose ticket defaults to Group 2b: the book-level mapping runs it as Group 2a and says so, once
+    def sol(ref):
+        t = hypothetical_trade({"instrument_type": "CRYPTO_FORWARD", "notional": 1000, "notional_ccy": "SOL", "trade_date": "2026-11-02", "effective_date": "2026-11-02",
+                                "maturity_date": "2027-02-02", "terms": {"digital_asset": "SOL", "notional_amount": "1000", "direction": "BUY", "forward_price": "200",
+                                                                         "price_currency": "USD", "valuation_date": "2027-02-02", "settlement_date": "2027-02-02",
+                                                                         "settlement_currency": "USD", "settlement_price_source": "DERIBIT"}}, None, "u")
+        t.trade_ref = ref
+        return t
+    ns2 = NettingSet(None, {"sub": "u"}, [sol("S1"), sol("S2")], asof)
+    rows2, notes2 = from_netting_set(ns2, None, {"USD": 1.0}, asof, None)
+    assert len(rows2) == 2, (ns2.skipped, notes2)
+    if rows2:
+        assert all(r.asset_class == "CRYPTO" for r in rows2)
+        assert sum("Group 2b" in n and "SOL" in n for n in notes2) == 1
 
 
 def test_par_rate_from_a_flat_curve():

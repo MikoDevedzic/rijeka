@@ -1285,6 +1285,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             tradeId={incrementalTradeId}
             stale={fxStale}
             legs={xvaLegs}
+            crypto={assetClass === 'CRYPTO'}
           />
         </div>
       )}
