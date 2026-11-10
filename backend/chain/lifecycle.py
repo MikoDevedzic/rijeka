@@ -51,6 +51,32 @@ def anchored_attestation(db: Session, trade_id: UUID) -> Optional[dict]:
     return None
 
 
+def package_of(att: Optional[dict]) -> Optional[dict]:
+    """The package block of an attestation: the trade was confirmed as one leg of a package (chain/canonical.py),
+    so what the registry holds is the package's hash, not the trade's own."""
+    pk = (att or {}).get("package")
+    return pk if isinstance(pk, dict) and pk.get("hash") else None
+
+
+def anchored_hash(att: Optional[dict]) -> Optional[str]:
+    """The hash the registry holds for this attestation: the package's for a leg of a package, else the trade's."""
+    pk = package_of(att)
+    return pk["hash"] if pk else (att or {}).get("trade_hash")
+
+
+def refuse_package_leg(db: Session, trade, what: str) -> None:
+    """409 for a lifecycle step on ONE leg of a package confirmed as one record. The registry holds the package's
+    hash; superseding or closing a single leg means a new package record signed by both, which is not built yet."""
+    pk = package_of(current_attestation(db, trade.id))
+    if pk is None:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail=(f"{trade.trade_ref} was confirmed as leg {pk.get('leg')} of {pk.get('of')} of package {pk.get('trade_id') or pk['hash'][:12] + '…'}: "
+                f"one record on chain for the whole package. {what} one leg of a package on its own is not built yet."),
+    )
+
+
 def is_terminated(att: Optional[dict]) -> bool:
     return bool(att and att.get("terminated"))
 

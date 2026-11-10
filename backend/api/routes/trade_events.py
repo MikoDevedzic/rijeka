@@ -339,9 +339,13 @@ def _apply_lifecycle_transition(
     idempotency_key: Optional[str],
     confirmation_hash: Optional[str] = None,
     counterparty_confirmed: bool = False,
+    commit: bool = True,
 ) -> dict:
     """
     Shared atomic path for CONFIRMED / CANCELLED.
+
+    commit=False leaves the transaction open: the caller applies several transitions (the legs of a package
+    confirmed as one) and commits once; on any error it must roll back, which this function has then done.
 
     Transaction:
       1. Compute pre_state via projection (current trade+legs+cashflows)
@@ -397,8 +401,9 @@ def _apply_lifecycle_transition(
                 result=result,
             ))
 
-        db.commit()
-        invalidate_trade_cache()
+        if commit:
+            db.commit()
+            invalidate_trade_cache()
         return result
 
     except IntegrityError as e:

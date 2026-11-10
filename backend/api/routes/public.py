@@ -193,6 +193,7 @@ def _register(db: Session, n: int) -> dict:
             own, cp = parties.get("own") or {}, parties.get("counterparty") or {}
             rows.append({
                 "trade_hash": att.get("trade_hash"),
+                "package_hash": ((att.get("package") or {}).get("hash")),        # a leg of a package: what the registry holds
                 "block_number": anchor.get("block_number"), "tx_hash": anchor.get("tx_hash"),
                 "explorer_tx": anchor.get("explorer_tx"), "chain_id": anchor.get("chain_id"), "registry": anchor.get("registry"),
                 "confirmed_at": anchor.get("confirmed_at"),

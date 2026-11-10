@@ -520,6 +520,40 @@ def _canonical_v2(trade: Any, legs: Iterable[Any], own_entity: Any, counterparty
     }
 
 
+# ── A package of trades confirmed as one ────────────────────────────────────────────────────────
+# A package (a strip, a collar) is several trades between the same two parties, each with its own UTI and its own
+# canonical record (above). The package record is what the parties sign and the registry anchors ONCE: the two
+# LEIs and the hashes of the legs' records, sorted. It commits to every term of every leg; a leg is proved by
+# re-deriving its own record, finding its hash in `legs`, and re-deriving the package hash. Neither firm's
+# reference for the package enters: each side derives the same bytes from its own bookings of the legs.
+PACKAGE_SCHEMA = "rijeka-package"
+PACKAGE_SCHEMA_VERSION = 1
+
+
+def package_payload(leg_hashes: Iterable[str], parties: Iterable[str]) -> dict:
+    """The package record under the current version. leg_hashes: '0x' + 64 hex, one per leg (at least two, no
+    repeats); parties: the two LEIs."""
+    legs = sorted(str(h).lower() for h in leg_hashes)
+    if len(legs) < 2:
+        raise ValueError("a package has at least two legs")
+    if len(set(legs)) != len(legs):
+        raise ValueError("two legs of a package have the same record")
+    for h in legs:
+        if not (h.startswith("0x") and len(h) == 66 and all(c in "0123456789abcdef" for c in h[2:])):
+            raise ValueError(f"{h!r} is not a 32-byte hash")
+    ps = sorted(str(x) for x in parties)
+    if len(ps) != 2 or ps[0] == ps[1] or not all(ps):
+        raise ValueError("a package is between two parties with different LEIs")
+    return {"schema": PACKAGE_SCHEMA, "schema_version": PACKAGE_SCHEMA_VERSION, "parties": ps, "legs": legs}
+
+
+def package_hash(payload: dict) -> bytes:
+    """keccak256 of the package record's canonical bytes. 32 bytes: what both parties sign and the registry holds."""
+    if payload.get("schema") != PACKAGE_SCHEMA or payload.get("schema_version") != PACKAGE_SCHEMA_VERSION:
+        raise ValueError("not a package record of a supported version")
+    return keccak(canonical_bytes(payload))
+
+
 def canonical_bytes(payload: dict) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 

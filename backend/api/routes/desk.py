@@ -229,7 +229,8 @@ def lifecycle(db: Session, user: dict) -> dict:
             row = {"trade_ref": r.trade_ref, "counterparty": cp.name if cp else None,
                    "product": _product(r.instrument_type, r.asset_class), "confirmed_at": _iso(r.created_at),
                    "anchored": bool(a.get("anchored")), "block_number": a.get("block_number"), "tx_hash": a.get("tx_hash"),
-                   "explorer_tx": a.get("explorer_tx"), "trade_hash": att.get("trade_hash"), "bilateral": bool(att.get("bilateral"))}
+                   "explorer_tx": a.get("explorer_tx"), "trade_hash": att.get("trade_hash"), "bilateral": bool(att.get("bilateral")),
+                   "package_hash": (att.get("package") or {}).get("hash"), "package": (att.get("package") or {}).get("trade_id")}
             anchors.append(row)
             if not row["anchored"]:
                 actions.append({"kind": "OFF_CHAIN", "title": f"{r.trade_ref} confirmed off-chain",

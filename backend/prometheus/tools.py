@@ -448,7 +448,8 @@ class Toolbox(SourceToolbox):
         out["chain_backend_anchored"] = bool(be.anchored)
         if be.anchored and stored:
             try:
-                rec = be.get(bytes.fromhex(stored[2:]))
+                from chain.lifecycle import anchored_hash
+                rec = be.get(bytes.fromhex((anchored_hash(att) or stored)[2:]))      # a leg of a package: the package's hash
                 out["on_chain"] = rec.__dict__ if rec else None
             except Exception as e:  # network read; report, don't fail the answer
                 out["on_chain_error"] = f"registry read failed: {e}"

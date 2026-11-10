@@ -31,7 +31,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+import re
+from typing import List, Optional
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Header
@@ -47,10 +48,12 @@ from api.routes.trade_events import (
     _check_write_role, _validate_idempotency_header, _lookup_idempotent,
     _parse_trade_uuid, _load_pending_trade, _apply_lifecycle_transition,
 )
-from chain.canonical import canonical_payload, canonical_bytes, trade_hash, CANONICAL_SCHEMA_VERSION
+from chain.canonical import (canonical_payload, canonical_bytes, trade_hash, CANONICAL_SCHEMA_VERSION,
+                             package_payload, package_hash, PACKAGE_SCHEMA_VERSION)
 from chain.signing import (confirmation_typed_data, amendment_typed_data, termination_typed_data,
                            sign, recover, eip712_digest)
-from chain.lifecycle import latest_attested_event, anchored_attestation, is_terminated
+from chain.lifecycle import (latest_attested_event, anchored_attestation, is_terminated, package_of, anchored_hash,
+                             refuse_package_leg)
 from chain.canonical import TRADE_FIELDS_V2, LEG_FIELDS_V2
 from projections.trade_projection import project, EventLike
 from db.models import IdempotencyKey
@@ -486,6 +489,146 @@ def confirm_on_chain(
     return anchor_confirmation(db, trade, user_id, be, h, key_own.address, key_cp.address, sig_own, sig_cp, attestation, idempotency_key)
 
 
+# ── A package of trades confirmed as one ─────────────────────────────────────────────────────────
+
+PACKAGE_MAX_LEGS = 24
+_PKG_TAG = re.compile(r"^([A-Z][A-Z ]*?) ((?:TRD-\d{8})|(?:PKG-[A-Z0-9]{4,12})) (\d{1,3})/(\d{1,3})$")
+
+
+def package_tag_of(trade: Trade) -> Optional[tuple]:
+    """(structure, the package's trade ID, the leg's place, the number of legs) from the trade's `strategy`, as the
+    booking wrote it (api/routes/booking.package_tag; the ticket's older tag with a PKG- reference too)."""
+    m = _PKG_TAG.match(str(trade.strategy or ""))
+    if not m:
+        return None
+    i, n = int(m.group(3)), int(m.group(4))
+    return (m.group(1), m.group(2), i, n) if 1 <= i <= n else None
+
+
+class PackageConfirmBody(BaseModel):
+    trade_ids: List[str]
+
+
+@router.post("/confirm-package", status_code=201)
+def confirm_package_on_chain(
+    body: PackageConfirmBody,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_token),
+):
+    """
+    ONE confirmation for a package of trades (a strip, a collar): every leg PENDING -> CONFIRMED together.
+
+    Each leg keeps its own UTI and its own canonical record. The parties sign, and the registry anchors once, the
+    PACKAGE record: the two LEIs and the legs' hashes, sorted (chain/canonical.package_payload). Each leg's
+    CONFIRMED event carries its own hash, the package's hash, record and transaction, and its place. All of the
+    package's legs are named, all are PENDING, and all are confirmed or none: the events and the status flips are
+    one transaction, written only after the registry has the record.
+
+    Like POST /confirm this signs for both sides, which is possible only when the counterparty's key is held (a
+    demo entity); for a counterparty with its own wallet each leg goes through /request and /countersign.
+    Amending or terminating one leg of a package confirmed this way is refused for now (chain/lifecycle).
+    """
+    user_id = _check_write_role(user)
+    _validate_idempotency_header(idempotency_key)
+    cached = _lookup_idempotent(db, user_id, idempotency_key)
+    if cached:
+        return cached
+
+    ids = [_parse_trade_uuid(x) for x in (body.trade_ids or [])]
+    if not 2 <= len(ids) <= PACKAGE_MAX_LEGS or len(set(ids)) != len(ids):
+        raise HTTPException(status_code=422, detail=f"trade_ids: the {2} to {PACKAGE_MAX_LEGS} legs of one package, each once")
+    trades = [_load_pending_trade(db, i, user_id) for i in ids]
+
+    # the legs of ONE package, all of them: the booking's own tag says which package, which place, how many
+    tags = [package_tag_of(t) for t in trades]
+    if any(t is None for t in tags):
+        missing = ", ".join(tr.trade_ref for tr, tg in zip(trades, tags) if tg is None)
+        raise HTTPException(status_code=422, detail=f"{missing}: not a leg of a package. Confirm a single trade with POST /api/chain/confirm/{{trade_id}}.")
+    structure, package_id, _i, n = tags[0]
+    if any((tg[1], tg[3]) != (package_id, n) for tg in tags) or sorted(tg[2] for tg in tags) != list(range(1, n + 1)):
+        raise HTTPException(status_code=422, detail=f"These are not all the legs of one package: {package_id} has {n} legs and every one of them is confirmed together.")
+    trades = [tr for _tg, tr in sorted(zip(tags, trades), key=lambda x: x[0][2])]
+    if len({(t.own_legal_entity_id, t.counterparty_id) for t in trades}) != 1:
+        raise HTTPException(status_code=422, detail="The legs of a package are between the same two parties.")
+
+    # party keys: both held, as POST /confirm
+    key_own, key_cp, _own_id, _cp_id = _resolve_parties(db, trades[0])
+    if key_cp.private_key is None:
+        raise HTTPException(status_code=422, detail=(
+            f"No signing key held for {key_cp.lei}, which is correct for a real counterparty. A package is confirmed as one "
+            f"record only with a counterparty whose key is held; with {key_cp.lei} confirm each leg through "
+            f"GET /api/chain/request/{{trade_id}} and POST /api/chain/countersign/{{trade_id}}."))
+
+    # each leg's own record (v2 needs its UTI). The UTIs are committed before anything is signed: a second try
+    # after a lost answer then derives the same hashes, finds the record on the registry and finishes.
+    for t in trades:
+        ensure_uti(db, t)
+    db.commit()
+    records = [_canonical_for(db, t) for t in trades]
+    leg_hashes = [_hexb(h) for _p, h in records]
+    try:
+        pkg = package_payload(leg_hashes, records[0][0]["parties"])
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"Cannot build the package record: {e}")
+    H = package_hash(pkg)
+
+    _check_chain_quota(db, user_id, kind="confirm")           # one anchor, one charge
+    be, chain_id, registry = _eip712_ctx()
+    td_own = confirmation_typed_data(chain_id, registry, H, key_cp.address)
+    td_cp  = confirmation_typed_data(chain_id, registry, H, key_own.address)
+    sig_own = sign(td_own, key_own.private_key)
+    sig_cp  = sign(td_cp,  key_cp.private_key)
+    assert recover(td_own, sig_own) == key_own.address
+    assert recover(td_cp,  sig_cp)  == key_cp.address
+
+    try:
+        receipt = be.confirm(H, key_own.address, key_cp.address, sig_own, sig_cp)
+    except Exception as e:
+        log.exception("on-chain confirm of package %s failed", package_id)
+        raise internal(502, "Chain anchoring failed", e)
+    anchor = receipt.to_dict()
+
+    results = []
+    try:
+        for i, (t, (payload, h)) in enumerate(zip(trades, records), start=1):
+            attestation = {
+                "schema_version": CANONICAL_SCHEMA_VERSION,
+                "trade_hash":     _hexb(h),                       # this leg's own record
+                "canonical_bytes_len": len(canonical_bytes(payload)),
+                # what was signed and anchored: the package record, of which this leg is one
+                "package": {"schema_version": PACKAGE_SCHEMA_VERSION, "hash": _hexb(H), "legs": pkg["legs"], "parties": pkg["parties"],
+                            "trade_id": package_id, "structure": structure, "leg": i, "of": n,
+                            "canonical_bytes_len": len(canonical_bytes(pkg))},
+                "parties": {
+                    "own":          {"lei": key_own.lei, "address": key_own.address, "signature": _hexb(sig_own), "key_source": key_own.source},
+                    "counterparty": {"lei": key_cp.lei,  "address": key_cp.address,  "signature": _hexb(sig_cp),  "key_source": key_cp.source},
+                },
+                "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": chain_id, "verifying_contract": registry},
+                "bilateral": False,                               # both signatures were produced here
+                "anchor": anchor,
+            }
+            results.append(_apply_lifecycle_transition(
+                db=db, user_id=user_id, trade=t, event_type="CONFIRMED", new_status="CONFIRMED",
+                payload={"attestation": attestation}, idempotency_key=None,
+                confirmation_hash=_hexb(h), counterparty_confirmed=True, commit=False))
+        out = {"package": {"trade_id": package_id, "structure": structure, "legs": n, "hash": _hexb(H), "record": pkg, "anchor": anchor},
+               "trades": [r["trade"] for r in results], "idempotent_replay": False}
+        if idempotency_key:
+            db.add(IdempotencyKey(key=idempotency_key, user_id=user_id, result=out))
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:      # noqa: BLE001
+        db.rollback()
+        log.exception("package %s anchored but not recorded", package_id)
+        raise internal(500, "The package is on the registry but was not recorded; confirm it again to finish", e)
+    from api.routes.pricer import invalidate_trade_cache
+    invalidate_trade_cache()
+    return out
+
+
 @router.post("/reconcile/{trade_id}")
 def reconcile_anchor(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """Where an anchor in flight stands; applies the CONFIRMED transition when the registry has it.
@@ -703,6 +846,7 @@ def amendment_request(trade_id: str, body: AmendRequestBody, db: Session = Depen
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
+    refuse_package_leg(db, trade, "Amending")
     att, prev, payload, new = _preview_amendment(db, trade, body.changes)
     k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
     be, chain_id, registry = _eip712_ctx()
@@ -748,6 +892,7 @@ def amend_on_chain(trade_id: str, body: AmendBody,
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
+    refuse_package_leg(db, trade, "Amending")
     if trade.status != "CONFIRMED":
         raise HTTPException(status_code=409, detail=f"{trade.trade_ref} is {trade.status}; only a CONFIRMED trade can be amended.")
 
@@ -804,6 +949,7 @@ def termination_request(trade_id: str, db: Session = Depends(get_db), user: dict
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
+    refuse_package_leg(db, trade, "Terminating")
     att, h = _current_record(db, trade)
     k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
     be, chain_id, registry = _eip712_ctx()
@@ -839,6 +985,7 @@ def terminate_on_chain(trade_id: str, body: TerminateBody,
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
+    refuse_package_leg(db, trade, "Terminating")
     if trade.status != "CONFIRMED":
         raise HTTPException(status_code=409, detail=f"{trade.trade_ref} is {trade.status}; only a CONFIRMED trade can be terminated.")
     att, h = _current_record(db, trade)
@@ -874,7 +1021,8 @@ def get_attestation(trade_id: str, db: Session = Depends(get_db), user: dict = D
     be = get_backend()
     rec = None
     try:
-        rec = be.get(bytes.fromhex(att["trade_hash"][2:])) if be.anchored else None
+        # a leg of a package: the registry holds the package's hash
+        rec = be.get(bytes.fromhex(anchored_hash(att)[2:])) if be.anchored else None
     except Exception as e:
         log.warning("chain read failed: %s", e)
     return {
@@ -883,6 +1031,7 @@ def get_attestation(trade_id: str, db: Session = Depends(get_db), user: dict = D
         "event_id":    str(ev.id),
         "event_seq":   ev.event_seq,
         "attestation": att,
+        "anchored_hash": anchored_hash(att),
         "on_chain":    rec.__dict__ if rec else None,
     }
 
@@ -909,6 +1058,35 @@ def proof_pack(trade_id: str, db: Session = Depends(get_db), user: dict = Depend
         raise HTTPException(status_code=404, detail="This trade has no on-chain confirmation to prove.")
 
     payload, h = _canonical_for(db, trade, attested_version(att))
+    pk = package_of(att)
+    if pk:
+        record = package_payload(pk["legs"], pk.get("parties") or payload["parties"])
+        return {
+            "format":         "rijeka-confirmation-proof",
+            "format_version": 1,
+            "generated_at":   datetime.now(timezone.utc).isoformat(),
+            "trade_ref":      trade.trade_ref,
+            "canonical":      payload,
+            "trade_hash":     _hexb(h),
+            "package":        {"record": record, "hash": _hexb(package_hash(record)), "leg": pk.get("leg"), "of": pk.get("of"),
+                               "trade_id": pk.get("trade_id")},
+            "attestation":    att,
+            "how_to_verify": [
+                "This trade was confirmed as one leg of a package: both parties signed, and the registry holds, the "
+                "PACKAGE record, which lists the hash of every leg.",
+                "1. Serialise `canonical` (this leg) as JSON with keys sorted at every level, separators ',' and ':', "
+                "no whitespace, UTF-8, and keccak256 it. It must equal `trade_hash`.",
+                "2. `trade_hash` must be one of `package.record.legs`.",
+                "3. Serialise `package.record` the same way and keccak256 it. It must equal `package.hash` and "
+                "`attestation.package.hash`.",
+                "4. Rebuild the EIP-712 digests from `attestation.eip712` "
+                "(TradeConfirmation(bytes32 tradeHash,address counterparty) with tradeHash = package.hash; each party "
+                "signs with the OTHER party's address) and recover both signatures. They must equal the two party addresses.",
+                "5. Call getConfirmation(package.hash) on the registry at `attestation.eip712.verifying_contract` on chain "
+                f"{att.get('eip712', {}).get('chain_id')}. Status must be Confirmed and the parties must match.",
+                "6. To check the whole package, repeat steps 1 and 2 with the record of each of its legs.",
+            ],
+        }
     return {
         "format":         "rijeka-confirmation-proof",
         "format_version": 1,
@@ -951,12 +1129,29 @@ def verify_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depe
     payload, h = _canonical_for(db, trade, attested_version(att) if att else CANONICAL_SCHEMA_VERSION)
     recomputed = _hexb(h)
 
+    # A leg of a package: what was signed and anchored is the package record. The leg's own hash, recomputed from
+    # the booking as it stands, must be one of the record's legs, and the record must hash to what was stored.
+    pk = package_of(att)
+    package = None
+    signed = h
+    if pk:
+        try:
+            record = package_payload(pk["legs"], pk.get("parties") or payload["parties"])
+            signed = package_hash(record)
+            package = {"trade_id": pk.get("trade_id"), "leg": pk.get("leg"), "of": pk.get("of"), "hash": pk["hash"],
+                       "recomputed_hash": _hexb(signed), "hash_matches": _hexb(signed).lower() == str(pk["hash"]).lower(),
+                       "leg_in_package": recomputed.lower() in [str(x).lower() for x in pk["legs"]]}
+        except (ValueError, KeyError, TypeError) as e:
+            signed = bytes.fromhex(str(pk["hash"])[2:])
+            package = {"trade_id": pk.get("trade_id"), "leg": pk.get("leg"), "of": pk.get("of"), "hash": pk["hash"],
+                       "recomputed_hash": None, "hash_matches": False, "leg_in_package": False, "error": str(e)}
+
     be = get_backend()
     rec = None
     chain_error = None
     if be.anchored:
         try:
-            rec = be.get(h)
+            rec = be.get(signed)
         except Exception as e:
             chain_error = str(e)
 
@@ -965,9 +1160,12 @@ def verify_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depe
         try:
             chain_id = att["eip712"]["chain_id"]; registry = att["eip712"]["verifying_contract"]
             own = att["parties"]["own"]; cp = att["parties"]["counterparty"]
-            r_own = recover(confirmation_typed_data(chain_id, registry, h, cp["address"]), bytes.fromhex(own["signature"][2:]))
-            r_cp  = recover(confirmation_typed_data(chain_id, registry, h, own["address"]), bytes.fromhex(cp["signature"][2:]))
+            r_own = recover(confirmation_typed_data(chain_id, registry, signed, cp["address"]), bytes.fromhex(own["signature"][2:]))
+            r_cp  = recover(confirmation_typed_data(chain_id, registry, signed, own["address"]), bytes.fromhex(cp["signature"][2:]))
             sig_ok = (r_own == own["address"]) and (r_cp == cp["address"])
+            # a leg of a package: the signatures stand for this trade only while its record is still one of the legs
+            if package is not None:
+                sig_ok = sig_ok and package["hash_matches"] and package["leg_in_package"]
         except Exception:
             sig_ok = False
 
@@ -985,4 +1183,5 @@ def verify_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depe
         "on_chain_confirmed": bool(rec and rec.status == "Confirmed"),
         "chain_error":      chain_error,
         "canonical":        payload,
+        "package":          package,
     }
