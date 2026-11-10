@@ -6,6 +6,8 @@ import './BlotterShell.css'
 import { Keycap } from '../common/Shortcuts'
 import { ariaKey } from '../../lib/shortcuts'
 import { ASSET_FACTOR, RISK_FACTORS } from '../../lib/risk-factors'
+import ContextMenu from '../common/ContextMenu'
+import { rowMenu } from './row-menu'
 
 const TH = ({ col, label, sortCol, sortDir, onSort }) => (
   <th className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)}>
@@ -53,10 +55,11 @@ const STATUSES      = ['PENDING', 'LIVE', 'MATURED', 'CANCELLED']
 const STORES        = ['WORKING', 'PRODUCTION', 'HISTORY']
 
 export default function BlotterShell() {
-  const { trades, theirRefs, loading, error, fetchTrades, startLive, filters, setFilter, filteredTrades } = useTradesStore()
+  const { trades, theirRefs, loading, error, fetchTrades, startLive, filters, setFilter, resetFilters, filteredTrades } = useTradesStore()
   const [sortCol, setSortCol]        = useState('trade_date')
   const [sortDir, setSortDir]        = useState('desc')
   const [selectedIds, setSelectedIds] = useState(new Set())
+  const [menu, setMenu] = useState(null)                // { x, y, id }: the right-click menu of one row
 
   useEffect(() => { fetchTrades(); return startLive() }, [])   // live while the blotter is on screen
 
@@ -70,6 +73,14 @@ export default function BlotterShell() {
     const c = av < bv ? -1 : av > bv ? 1 : 0
     return sortDir === 'asc' ? c : -c
   })
+
+  // a row's right-click menu: open, copy an identifier, narrow the blotter to trades like it, tick it (row-menu.js)
+  const toggle = (id) => { const next = new Set(selectedIds); if (next.has(id)) next.delete(id); else next.add(id); setSelectedIds(next) }
+  const menuTrade = menu ? rows.find(r => r.id === menu.id) : null
+  const menuItems = menuTrade ? rowMenu(menuTrade,
+    { selected: rows.filter(r => selectedIds.has(r.id)), theirRef: theirRefs[menuTrade.id]?.trade_ref || null, filters },
+    { open: (ts) => ts.forEach(x => useBookingStore.getState().open(x)), copy: (text) => { navigator.clipboard?.writeText(String(text)).catch(() => {}) },
+      filter: setFilter, clear: resetFilters, toggle }) : []
 
   const live    = trades.filter(t => t.status === 'LIVE').length
   const pending = trades.filter(t => t.status === 'PENDING').length
@@ -218,6 +229,8 @@ export default function BlotterShell() {
                       key={t.id}
                       className={`bl-row ${isChecked ? 'bl-row-selected' : ''}`}
                       onClick={() => useBookingStore.getState().open(t)}
+                      onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: t.id }) }}
+                      aria-haspopup="menu"
                     >
                       <td style={{width:'32px',padding:'0 8px'}} onClick={e=>e.stopPropagation()}>
                         <input type='checkbox'
@@ -276,6 +289,7 @@ export default function BlotterShell() {
       {/* Right panel removed — trades open as floating windows */}
 
       {/* TradeBookingWindow now rendered at App root — persists across navigation */}
+      {menuTrade && <ContextMenu x={menu.x} y={menu.y} items={menuItems} label={`Actions for ${menuTrade.trade_ref}`} onClose={() => setMenu(null)} />}
     </div>
   )
 }

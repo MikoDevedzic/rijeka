@@ -3,6 +3,18 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## A right-click menu on the blotter; ALL shows every trade again · 10 November 2026 (frontend only)
+
+- **Right-click a trade in the blotter** for a menu at the pointer: open it (or the ticked trades together), copy
+  its reference, its UTI or the counterparty's reference, show only the trades of its counterparty, its asset
+  class or its status, show every trade again, tick or untick it. The arrows, Home, End, Enter and Escape work
+  it. Nothing on the menu changes a trade: confirming and terminating stay on the ticket, where the terms are in
+  front of the person who acts. Text fields and links keep the browser's own menu.
+- **Fixed: ALL STATUS, ALL CLASSES and ALL STORES hid every trade.** After choosing a status, a class or a store
+  in the rail, pressing its ALL button emptied the blotter ("no trades match filters") until the page was
+  loaded again: the button wrote an empty value and the filter read it as a value to match. Found while wiring
+  the menu's own filters. The rule is now one function with its own tests (`lib/blotter-filter.js`).
+
 ## The shell: the name, the top bar, the blotter's rail · 10 November 2026 (frontend only)
 
 - **The name is the brightest thing on the page.** RIJEKA on the top bar (and on the home page's own bar) is

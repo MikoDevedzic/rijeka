@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { passesFilters } from '../lib/blotter-filter'
 import { supabase } from '../lib/supabase'
 import { getSessionMaybe } from '../lib/session'
 
@@ -116,23 +117,6 @@ export const useTradesStore = create((set, get) => ({
 
   filteredTrades: () => {
     const { trades, filters } = get()
-    return trades.filter(t => {
-      if (filters.status    !== 'ALL' && t.status     !== filters.status)    return false
-      if (filters.assetClass !== 'ALL' && t.asset_class !== filters.assetClass) return false
-      if (filters.store     !== 'ALL' && t.store      !== filters.store)     return false
-      if (filters.search) {
-        const q = filters.search.toLowerCase()
-        const theirs = get().theirRefs[t.id]
-        if (!( (t.trade_ref || '').toLowerCase().includes(q)
-            || (t.uti || '').toLowerCase().includes(q)
-            || (theirs?.trade_ref || '').toLowerCase().includes(q)
-            || (t.counterparty?.name || '').toLowerCase().includes(q)
-            || (t.desk || '').toLowerCase().includes(q)
-            || (t.instrument_type || '').toLowerCase().includes(q)
-            || (t.structure || '').toLowerCase().replace(/_/g, ' ').includes(q) ))
-          return false
-      }
-      return true
-    })
+    return trades.filter(t => passesFilters(t, filters, get().theirRefs[t.id]?.trade_ref))
   },
 }))

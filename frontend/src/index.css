@@ -167,6 +167,22 @@ button, input, select, textarea { font-family: inherit; }
 .rj-flash-in { --rj-flash: var(--text-hi); }
 @media (prefers-reduced-motion: reduce) { .rj-flash { animation: none; } }
 
+/* The desk's right-click menu (common/ContextMenu.jsx): a small panel at the pointer */
+.rj-menu {
+  position: fixed; z-index: 4000; min-width: 220px; max-width: 320px; padding: 5px; outline: none;
+  background: var(--panel-2); border: 1px solid var(--border-glow); border-radius: var(--r-3); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  font-family: var(--sans); font-size: 12.5px; color: var(--text);
+}
+.rj-menu-item {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 18px; width: 100%; padding: 6px 10px; text-align: left;
+  background: transparent; border: none; border-radius: var(--r-1); color: var(--text); font: inherit; letter-spacing: 0.02em; cursor: pointer;
+}
+.rj-menu-item.is-active { background: var(--panel-3); color: var(--text-hi); }
+.rj-menu-item:disabled { color: var(--text-faint); cursor: default; }
+.rj-menu-hint { font-family: var(--mono); font-size: 11.5px; color: var(--text-mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+.rj-menu-sep { height: 1px; margin: 5px 4px; background: var(--border-hi); }
+.rj-menu-head { padding: 4px 10px 3px; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; color: var(--text-mute); }
+
 /* The name. Brass, and the one thing on the page that glows: a soft light that breathes slowly (still, with
    "reduce motion" set). Every bar that carries the name uses this class. */
 .rj-wordmark {

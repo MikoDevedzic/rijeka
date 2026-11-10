@@ -74,6 +74,13 @@ brass rule. In a rail of filters (the blotter's left pane) a section's heading i
 reads as their heading by weight, the bright text colour and a rule above it; the choices sit a step in, in the
 quieter colour, and the selected one is the lighter panel with the brass rule at its edge.
 
+## The right-click menu
+
+The desk's own menu (`components/common/ContextMenu.jsx`, `.rj-menu`) is put only on things that have actions of
+their own: a row of the blotter today (`blotter/row-menu.js`). It opens, copies and arranges; it never changes a
+trade. Text fields and links keep the browser's menu. An item that does not apply is greyed, not hidden, so the
+menu is the same shape on every row.
+
 ## Tabs
 
 The ticket's tabs are one control of joined buttons (`.tbw-tabs`): each has an edge, so it reads as something to
