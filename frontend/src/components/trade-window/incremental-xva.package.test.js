@@ -23,28 +23,3 @@ describe('incremental XVA request for a package', () => {
     expect(r.trades).toBeUndefined()
   })
 })
-
-// Wrong-way risk: the line under the results says what the link did to CVA, and only when a link was run.
-import { wrongWayLine, assumptionsAreDefault, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS } from './xva-shared'
-
-describe('wrong-way risk on the XVA tab', () => {
-  it('has a line only for a run with the counterparty linked', () => {
-    expect(wrongWayLine(null)).toBe(null)
-    expect(wrongWayLine({ xva: { cva: -100 }, wwr: null })).toBe(null)
-    expect(wrongWayLine({ xva: { cva: -100, dva: 50 }, wwr: { cp_hazard_if_halves: 1, own_hazard_if_halves: 1, cva_independent: -100, dva_independent: 50 } })).toBe(null)
-    expect(wrongWayLine({ xva: { cva: -250 }, wwr: { cp_hazard_if_halves: 3, cva_independent: -100 } })).toEqual({ cp: { cva: -250, independent: -100, k: 3, wrong: true, change: -150 }, own: null })
-    expect(wrongWayLine({ xva: { cva: -40 }, wwr: { cp_hazard_if_halves: 3, cva_independent: -100 } }).cp.wrong).toBe(false)
-    // found by review: our own link moved DVA and the tab said nothing
-    expect(wrongWayLine({ xva: { cva: -100, dva: 80 }, wwr: { cp_hazard_if_halves: 1, own_hazard_if_halves: 2, cva_independent: -100, dva_independent: 50 } }))
-      .toEqual({ cp: null, own: { dva: 80, independent: 50, k: 2, change: 30 } })
-  })
-  it('a link is one of the assumptions the simple view names as the desk\'s own', () => {
-    const D = HIDDEN_INPUT_DEFAULTS
-    expect(assumptionsAreDefault({ ...D })).toBe(true)
-    expect(assumptionsAreDefault({ ...D, cpLink: '1', ownLink: '1' })).toBe(true)
-    expect(assumptionsAreDefault({ ...D, cpLink: '3' })).toBe(false)
-    expect(assumptionsAreDefault({ ...D, ownLink: '0.5' })).toBe(false)
-    expect(CREDIT_LINKS[0][0]).toBe('1')
-    expect(CREDIT_LINKS.every(([k]) => Number(k) >= 0.1 && Number(k) <= 20)).toBe(true)
-  })
-})

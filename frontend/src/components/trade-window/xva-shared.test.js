@@ -13,7 +13,7 @@ import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, simmImValue, numOrNull,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
-  ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE,
+  ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS,
 } from './xva-shared'
 
 const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fva: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
@@ -263,5 +263,28 @@ describe('the size the results table sets its money at', () => {
     expect(moneySize(['+$260', '+€12,345,678'])).toBe(11)  // one long figure sizes every figure in the table
     expect(moneySize([])).toBe(13.5)
     expect(moneySize([null, undefined])).toBe(13.5)
+  })
+})
+
+// Wrong-way risk: the lines under the results say what a link did, and only when a link was run.
+describe('wrong-way risk on the XVA tab', () => {
+  it('has a line only for a run with the counterparty linked', () => {
+    expect(wrongWayLine(null)).toBe(null)
+    expect(wrongWayLine({ xva: { cva: -100 }, wwr: null })).toBe(null)
+    expect(wrongWayLine({ xva: { cva: -100, dva: 50 }, wwr: { cp_hazard_if_halves: 1, own_hazard_if_halves: 1, cva_independent: -100, dva_independent: 50 } })).toBe(null)
+    expect(wrongWayLine({ xva: { cva: -250 }, wwr: { cp_hazard_if_halves: 3, cva_independent: -100 } })).toEqual({ cp: { cva: -250, independent: -100, k: 3, wrong: true, change: -150 }, own: null })
+    expect(wrongWayLine({ xva: { cva: -40 }, wwr: { cp_hazard_if_halves: 3, cva_independent: -100 } }).cp.wrong).toBe(false)
+    // found by review: our own link moved DVA and the tab said nothing
+    expect(wrongWayLine({ xva: { cva: -100, dva: 80 }, wwr: { cp_hazard_if_halves: 1, own_hazard_if_halves: 2, cva_independent: -100, dva_independent: 50 } }))
+      .toEqual({ cp: null, own: { dva: 80, independent: 50, k: 2, change: 30 } })
+  })
+  it('a link is one of the assumptions the simple view names as the desk\'s own', () => {
+    const D = HIDDEN_INPUT_DEFAULTS
+    expect(assumptionsAreDefault({ ...D })).toBe(true)
+    expect(assumptionsAreDefault({ ...D, cpLink: '1', ownLink: '1' })).toBe(true)
+    expect(assumptionsAreDefault({ ...D, cpLink: '3' })).toBe(false)
+    expect(assumptionsAreDefault({ ...D, ownLink: '0.5' })).toBe(false)
+    expect(CREDIT_LINKS[0][0]).toBe('1')
+    expect(CREDIT_LINKS.every(([k]) => Number(k) >= 0.1 && Number(k) <= 20)).toBe(true)
   })
 })
