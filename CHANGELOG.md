@@ -17,16 +17,20 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
   TRADE sets a field at 12.5px, numbers in mono and words in the interface face. DETAILS and CASHFLOWS now
   follow TRADE: a number, a date or a formula in mono, words in the interface face, the same sizes.
 - **A forward's or an option's CASHFLOWS exports to Excel** (EXPORT XLSX, as the swap's schedule does): what the
-  trade is, the legs and their net (or the premium and the payoff), and the market it was priced on. A present
-  value is written as amount × discount factor and the net as a sum, each with the figure the tab showed, so
-  the sheet recomputes and can be checked against the screen.
+  trade is, the legs and their net, and the market it was priced on. A present value is written as amount ×
+  discount factor and the net as a sum, each with the figure the tab showed, so the sheet recomputes and can be
+  checked against the screen. An option's sheet states the premium and breaks the value into the discounted
+  payoff at today's forward and the time value, which add up to it. A figure the quote does not carry is an
+  empty cell.
 - **XVA: the results are one table.** The adjustments run across; each line of figures is a row named once at
   the left (the run, named for its settlement; its basis points; the same run on chain; the change). The run
   and the on-chain row are set alike: one face, one size, and a figure takes the colour of its sign and nothing
   else (a cost is the colour of a negative, a benefit of a positive, a rounded zero is unsigned and quiet).
   Each adjustment used to carry a colour of its own (a zero in amber, DVA in blue), in ten sizes, and "bp of
   notional" was printed nine times. ALL-IN is the one column that stands out, and the saving on chain the one
-  brass figure. Press a column for its definition, as before.
+  brass figure. Press a column for its definition, as before. No figure is ever cut short: the money steps down
+  a size, in every row together, when one figure is long, and on a narrow window the results scroll sideways.
+  On a swap the two rates in the basis-point row say what they are (par, rate).
 - **XVA: nothing scrolls inside the tab.** The inputs column was pinned to the chart's height and scrolled inside
   itself, so the settlement and the assumptions were out of view. It is now as tall as its inputs, and the
   credit curves and the assumptions sit under the results they drive, in view on a laptop screen for a forward

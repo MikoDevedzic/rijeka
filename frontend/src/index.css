@@ -193,6 +193,9 @@ button, input, select, textarea { font-family: inherit; }
   display: block; color: var(--text-dim); font: 400 11.5px/1.45 var(--sans); letter-spacing: 0; text-transform: none; text-align: left; white-space: normal;
 }
 :root[data-notes="on"] .rj-note-inline .rj-note-body { display: inline; color: var(--text-mute); }
+:root[data-notes="on"] .rj-note.rj-note-off { display: none; }
+.rj-notes-only { display: none; }
+:root[data-notes="on"] .rj-notes-only { display: block; color: var(--text-mute); font: 400 11.5px/1.45 var(--sans); letter-spacing: 0; white-space: normal; }
 
 /* A key printed on its button (common/Shortcuts.jsx Keycap; the keys are lib/shortcuts.js). It takes the colour
    of the button's own text at half strength, so it reads on a quiet button and on the brass one alike. */

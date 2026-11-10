@@ -134,8 +134,10 @@
 }
 .tbw-tabs {
   display: inline-flex; min-width: 0;
-  border: 1px solid var(--border-hi); border-radius: var(--r-2); overflow: hidden; background: var(--bg);
+  border: 1px solid var(--border-hi); border-radius: var(--r-2); overflow-x: auto; overflow-y: hidden; scrollbar-width: none; background: var(--bg);
 }
+.tbw-tabs::-webkit-scrollbar { display: none; }
+.tbw-tab { flex: 0 0 auto; }
 
 .tbw-tab {
   padding: 7px 14px 6px;
@@ -311,7 +313,7 @@
 .tbw-default  { color: var(--text-hi); }
 
 /* The valuation under a forward's flows: the flows' panel ends with room for the footer, which the valuation takes */
-.tbw-valuation-slot:not(:empty) { margin-top: -40px; }
+.tbw-valuation-slot:not(:empty) { margin-top: -32px; }
 
 /* ── Footer ────────────────────────────────────────────────────────────── */
 

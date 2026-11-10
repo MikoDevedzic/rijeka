@@ -108,6 +108,20 @@ test('XVA: nothing scrolls inside the tab, every assumption is in view, and the 
     else expect([up, down], `${t} is a zero: no sign, no colour`).not.toContain(c)
   }
   expect(cells.some(x => /^[-−]/.test(x.t)) && cells.some(x => /^\+/.test(x.t)), 'the run has a cost and a benefit').toBe(true)
+  // no figure is cut: each money cell holds the whole of its text
+  for (const row of ['va-run', 'va-on-chain', 'va-change']) {
+    const cut = await win.getByTestId(row).locator(':scope > div').evaluateAll(els => els.slice(1).filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.innerText))
+    expect(cut, `${row}: figures that do not fit their cell`).toEqual([])
+  }
+  // NOTES on: the on-chain note is a line under the rows, and the table keeps its columns
+  const nameWidth = () => win.getByTestId('va-on-chain').locator(':scope > div').first().evaluate(el => Math.round(el.getBoundingClientRect().height))
+  const before = await nameWidth()
+  await win.getByTestId('notes-toggle').click()
+  await expect(win.locator('.rj-notes-only')).toBeVisible()
+  await expect(win.locator('.rj-notes-only')).toContainText('same seed')
+  expect(await nameWidth(), 'the on-chain row keeps its height with the notes written out').toBe(before)
+  await win.getByTestId('notes-toggle').click()
+  await expect(win.locator('.rj-notes-only')).toBeHidden()
   // the unit is said once, in the row's name
   await expect(win.getByTestId('va-bp')).toContainText('BP OF NOTIONAL')
   expect((await win.getByTestId('va-bp').innerText()).match(/bp/gi).length).toBe(1)

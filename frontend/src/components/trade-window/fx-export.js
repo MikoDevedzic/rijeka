@@ -3,6 +3,8 @@
 // price was built on. A present value is written as a formula (amount × discount factor) and the net as a sum,
 // with the figure the tab showed as its stored result, so the sheet recomputes in Excel and can be checked
 // against the screen.
+// An option's sheet states the premium and breaks the value into the discounted payoff at today's forward and
+// the time value, which add up to it.
 //
 // `sheetModel` is the content, as plain rows, and is what the tests read; `exportCashflows` writes it with
 // ExcelJS (bundled; nothing is fetched at run time) and hands the file to the browser.
@@ -14,13 +16,15 @@ const money = '#,##0;[Red]-#,##0', df6 = '0.000000'
 export function sheetModel({ quote, legs = null, net = null, pv = null, option = null, crypto = false, ndf = false, dp = 5 }) {
   const qc = quote.quote_currency, base = quote.base_currency
   const rate = '#,##0.' + '0'.repeat(dp)
+  // a figure the quote does not carry is an empty cell, never a NaN
+  const num = (v, fmt) => (v == null || !Number.isFinite(Number(v)) ? '' : { v: Number(v), fmt })
   const meta = [
     ['PAIR', quote.pair || `${base}${qc}`],
     ['INSTRUMENT', `${crypto ? 'CRYPTO' : 'FX'} ${quote.shape === 'OPTION' ? 'OPTION' : ndf ? 'NDF' : 'FORWARD'}`],
     ['DIRECTION', `${quote.direction} ${base}`],
     ['VALUATION DATE', quote.valuation_date || ''],
     ['SETTLEMENT DATE', quote.settlement_date || ''],
-    ['NPV', { v: Number(quote.npv), fmt: money }],
+    ['NPV', num(quote.npv, money)],
     ['NPV CURRENCY', qc],
   ]
   const tables = []
@@ -28,20 +32,25 @@ export function sheetModel({ quote, legs = null, net = null, pv = null, option =
     tables.push({
       name: `CASHFLOWS (${qc})`,
       head: ['LEG', 'DIRECTION', 'SETTLEMENT DATE', 'NOTIONAL', 'PRICE', `AMOUNT ${qc}`, 'DF', `PV ${qc}`],
-      rows: legs.map(l => [l.name, l.pay ? 'PAY' : 'RECEIVE', quote.settlement_date, l.notional, { v: Number(l.price), fmt: rate },
-        { v: Number(l.amount), fmt: money }, { v: Number(quote.df_quote), fmt: df6 }, { v: Number(l.pv), fmt: money, f: (r) => `F${r}*G${r}` }]),
-      total: [ndf ? 'NET CASH SETTLEMENT' : 'NET', '', '', '', '', { v: Number(net), fmt: money, sum: 'F' }, '', { v: Number(pv), fmt: money, sum: 'H' }],
+      rows: legs.map(l => [l.name, l.pay ? 'PAY' : 'RECEIVE', quote.settlement_date, l.notional, num(l.price, rate),
+        num(l.amount, money), num(quote.df_quote, df6), Number.isFinite(Number(l.pv)) ? { v: Number(l.pv), fmt: money, f: (r) => `F${r}*G${r}` } : '']),
+      total: [ndf ? 'NET CASH SETTLEMENT' : 'NET', '', '', '', '', Number.isFinite(Number(net)) ? { v: Number(net), fmt: money, sum: 'F' } : '', '', Number.isFinite(Number(pv)) ? { v: Number(pv), fmt: money, sum: 'H' } : ''],
     })
   }
   if (option) {
+    // the value is the discounted payoff at today's forward plus the time value: the two rows add up to it
+    const intrinsicPv = Number(option.intrinsic) * Number(option.df)
+    meta.push(['PREMIUM', num(option.premium, money)], ['PREMIUM DATE', quote.valuation_date || ''])
     tables.push({
-      name: `FLOWS (${qc})`,
-      head: ['FLOW', 'DATE', `AMOUNT ${qc}`, 'DF', `PV ${qc}`],
-      rows: option.map(o => [o.name, o.date, { v: Number(o.amount), fmt: money }, { v: Number(o.df), fmt: df6 }, { v: Number(o.amount) * Number(o.df), fmt: money, f: (r) => `C${r}*D${r}` }]),
-      total: ['OPTION VALUE', '', '', '', { v: Number(quote.npv), fmt: money }],
+      name: `OPTION VALUE (${qc})`,
+      head: ['PART', 'DATE', `AMOUNT ${qc}`, 'DF', `PV ${qc}`],
+      rows: [
+        [option.payoffName, quote.settlement_date || '', num(option.intrinsic, money), num(option.df, df6), Number.isFinite(intrinsicPv) ? { v: intrinsicPv, fmt: money, f: (r) => `C${r}*D${r}` } : ''],
+        ['TIME VALUE', '', '', '', num(Number(quote.npv) - intrinsicPv, money)],
+      ],
+      total: ['OPTION VALUE', '', '', '', Number.isFinite(Number(quote.npv)) ? { v: Number(quote.npv), fmt: money, sum: 'E' } : ''],
     })
   }
-  const num = (v, fmt) => (v == null || Number.isNaN(Number(v)) ? '' : { v: Number(v), fmt })
   const market = [
     ['SPOT', num(quote.spot, rate), quote.spot_source || ''],
     ['FAIR FORWARD', num(quote.forward, rate), ''],

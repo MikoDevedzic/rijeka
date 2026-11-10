@@ -9,7 +9,7 @@
 // Pure helpers and constants live in xva-shared.js. The simple view's three pieces are here
 // too: the toggle, the counterparty line and the line on what a run assumes.
 // ────────────────────────────────────────────────────────────────────────────────────
-import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar } from './xva-shared'
+import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar, moneySize } from './xva-shared'
 import { Keycap } from '../common/Shortcuts'
 import Roll from '../common/Roll'
 import { Note } from '../common/Note'
@@ -342,20 +342,23 @@ export function ChartReadout({ result, model, fmt = fmtDollar, children }) {
 // a cost is the colour of a negative, a benefit of a positive, a rounded zero is unsigned and quiet. ALL-IN is
 // the one column that stands out. VaStrip draws the head and the run; OnChainCompareRow draws the saving and
 // the on-chain rows on the same columns, so the two read as one table.
-const VA_COLS = (n) => `150px repeat(${n}, minmax(0, 1fr))`
-const VA_ROW = { display:'grid', alignItems:'stretch', padding:'0 12px 0 16px' }
+const VA_COLS = (n) => `132px repeat(${n}, minmax(0, 1fr))`
+const VA_ROW = { display:'grid', alignItems:'stretch', padding:'0 12px 0 16px', minWidth:'780px' }
 const VA_NAME = { fontSize:'11px', fontWeight:500, letterSpacing:'0.08em', color:'var(--text-mute)', fontFamily:'var(--sans)', textAlign:'left', padding:'8px 8px 7px 0', minWidth:0, whiteSpace:'nowrap', lineHeight:1.25 }
-const VA_CELL = { fontFamily:'var(--mono)', fontVariantNumeric:'tabular-nums', textAlign:'right', padding:'7px 6px', whiteSpace:'nowrap', minWidth:0, overflow:'hidden', textOverflow:'ellipsis' }
+const VA_CELL = { fontFamily:'var(--mono)', fontVariantNumeric:'tabular-nums', textAlign:'right', padding:'7px 4px', whiteSpace:'nowrap', minWidth:0 }
 const VA_MONEY = { ...VA_CELL, fontSize:'13.5px', fontWeight:500 }
-const VA_SMALL = { ...VA_CELL, fontSize:'12px', fontWeight:400, padding:'0 6px 7px' }
+const VA_SMALL = { ...VA_CELL, fontSize:'12px', fontWeight:400, padding:'0 4px 7px' }
+// in the basis-point row of a swap, two cells hold a rate, not basis points: each says which
+const RATE_WORD = { 'par rate': 'par', 'all-in rate': 'rate' }
 const VA_TOTAL = { background:'var(--panel)', boxShadow:'inset 1px 0 0 var(--border-hi)' }
 // a figure that rounds to nothing at the precision it is printed at: no sign, no colour
-const isZero = (text) => /^[+\-−]?\$?0(\.0+)?( ?bp|%)?$/.test(String(text).trim())
+const isZero = (text) => /^[+\-−]?\s*(?:[A-Z]{3}\s?|[$€£¥])?0(\.0+)?(\s?bp|%)?$/.test(String(text).trim())
 // (the test reads the text as it will be printed: "+$0", "-0.0bp")
 const unsigned = (text) => isZero(text) ? String(text).replace(/^[+\-−]/, '') : text
 const signTone = (v, text) => (v == null || !Number.isFinite(Number(v)) || isZero(text)) ? 'var(--text-dim)' : Number(v) > 0 ? 'var(--up)' : 'var(--down)'
 
-export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighlight = noop, runLabel = 'THIS RUN' }) {
+export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighlight = noop, runLabel = 'THIS RUN', also = [] }) {
+  const size = moneySize([...rows.map(r => unsigned(fmt(r.value))), ...also.map(v => unsigned(fmt(v)))])
   const exp = rows.find(r => r.key === expanded)
   const cols = VA_COLS(rows.length)
   const subName = rows.find(r => r.key === 'cva')?.sub?.caption || rows.find(r => r.sub)?.sub?.caption
@@ -381,7 +384,7 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
           {rows.map(row => {
             const text = unsigned(fmt(row.value))
             return (
-              <div key={row.key} {...col(row)} style={{...VA_MONEY,cursor:'pointer',color:row.value!=null?signTone(row.value, text):'var(--text-mute)',...(row.key==='all_in'?{...VA_TOTAL,fontWeight:600}:null)}}>
+              <div key={row.key} {...col(row)} title={text} style={{...VA_MONEY,fontSize:size,cursor:'pointer',color:row.value!=null?signTone(row.value, text):'var(--text-mute)',...(row.key==='all_in'?{...VA_TOTAL,fontWeight:600}:null)}}>
                 <Roll>{text}</Roll>
               </div>
             )
@@ -391,7 +394,10 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
           <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-bp">
             <div style={{...VA_NAME,padding:'0 8px 7px 0'}}>{/rate/.test(subName) ? 'BP ON RATE' : 'BP OF NOTIONAL'}</div>
             {rows.map(row => (
-              <div key={row.key} title={row.sub?.caption} style={{...VA_SMALL,color:'var(--text-dim)',...(row.key==='all_in'?VA_TOTAL:null)}}>{row.sub ? unsigned(row.sub.text).replace(/\s?bp$/, '') : '—'}</div>
+              <div key={row.key} title={row.sub?.caption} style={{...VA_SMALL,color:'var(--text-dim)',...(row.key==='all_in'?VA_TOTAL:null)}}>
+                {row.sub && RATE_WORD[row.sub.caption] && <span style={{fontFamily:'var(--sans)',fontSize:'11px',color:'var(--text-mute)',marginRight:'4px'}}>{RATE_WORD[row.sub.caption]}</span>}
+                {row.sub ? unsigned(row.sub.text).replace(/\s?bp$/, '') : '—'}
+              </div>
             ))}
           </div>
         )}
@@ -413,6 +419,8 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
   const preset = current.csa?.preset?.replace('_','-')
   const bp = (v) => v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} bp`
   const cols = VA_COLS(rows.length)
+  const size = moneySize(rows.flatMap(r => [unsigned(fmt(r.cur)), unsigned(fmt(r.oc))]))
+  const onChainNote = <>Same {compare.n_paths?.toLocaleString()} paths, same seed. On chain is continuous variation margin, a {compare.csa?.mpor_days} business day margin period of risk, SIMM IM × {compare.csa?.simm_mpor_scale?.toFixed(3)}; IM {fmt(compare.capital?.im_0)} against {fmt(current.capital?.im_0)}.</>
   return (
     <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
       {saving && (
@@ -425,12 +433,10 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
         </div>
       )}
       <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-on-chain">
-        <div style={{...VA_NAME,color:'var(--accent)',fontWeight:600}}>ON CHAIN
-          <Note inline>Same {compare.n_paths?.toLocaleString()} paths, same seed. On chain is continuous variation margin, a {compare.csa?.mpor_days} business day margin period of risk, SIMM IM × {compare.csa?.simm_mpor_scale?.toFixed(3)}; IM {fmt(compare.capital?.im_0)} against {fmt(current.capital?.im_0)}.</Note>
-        </div>
+        <div style={{...VA_NAME,color:'var(--accent)',fontWeight:600}}>ON CHAIN<Note inline markOnly>{onChainNote}</Note></div>
         {rows.map(({ key, oc }) => {
           const text = unsigned(fmt(oc))
-          return <div key={key} style={{...VA_MONEY,color:oc!=null?signTone(oc, text):'var(--text-mute)',...(key==='all_in'?{...VA_TOTAL,fontWeight:600}:null)}}>{text}</div>
+          return <div key={key} title={text} style={{...VA_MONEY,fontSize:size,color:oc!=null?signTone(oc, text):'var(--text-mute)',...(key==='all_in'?{...VA_TOTAL,fontWeight:600}:null)}}>{text}</div>
         })}
       </div>
       <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-change">
@@ -443,6 +449,7 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
           )
         })}
       </div>
+      <div className="rj-notes-only" style={{padding:'0 16px 7px'}}>{onChainNote}</div>
     </div>
   )
 }
@@ -461,7 +468,7 @@ export function FloatingTip({ tooltip, onLeave = noop }) {
   if (!tooltip || !TIPS[tooltip.key]) return null
   return (
     <div onMouseLeave={onLeave}
-      style={{position:'fixed',left:Math.min(tooltip.x,window.innerWidth-360),top:Math.max(8,tooltip.y-8),width:'340px',background:'var(--panel-2)',border:'1px solid var(--border-hi)',borderRadius:'var(--r-3)',padding:'12px 14px',zIndex:9999,boxShadow:'0 12px 36px rgba(0,0,0,0.5)',pointerEvents:'none'}}>
+      style={{position:'fixed',left:Math.min(tooltip.x,window.innerWidth-360),...(tooltip.y > window.innerHeight * 0.55 ? {bottom:Math.max(8, window.innerHeight - tooltip.y - 28)} : {top:Math.max(8,tooltip.y-8)}),width:'340px',background:'var(--panel-2)',border:'1px solid var(--border-hi)',borderRadius:'var(--r-3)',padding:'12px 14px',zIndex:9999,boxShadow:'0 12px 36px rgba(0,0,0,0.5)',pointerEvents:'none'}}>
       <div style={{fontSize:'0.8125rem',fontWeight:600,letterSpacing:'0.04em',color:'var(--text-hi)',fontFamily:'var(--sans)',marginBottom:'6px',borderBottom:'1px solid var(--border)',paddingBottom:'6px'}}>{TIPS[tooltip.key].title}</div>
       <div style={{fontSize:'0.75rem',color:'var(--text-dim)',lineHeight:1.7,fontFamily:'var(--sans)',whiteSpace:'pre-wrap'}}>{TIPS[tooltip.key].body}</div>
     </div>

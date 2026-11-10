@@ -326,7 +326,7 @@ export function AnalyticsBlock({ descriptor, result, pricing, error }) {
                       // a NOTE column is the note of the value before it: behind its mark, or written out with NOTES on
                       if (isNoteColumn(breakdown.columns[ci])) return null
                       const note = isNoteColumn(breakdown.columns[ci + 1]) ? row[ci + 1] : null
-                      return <td key={ci} className={ci > 0 ? 'tbw-mono' : undefined}>{cell}<Note inline>{note}</Note></td>
+                      return <td key={ci} className={ci > 0 && /\d/.test(labelText(cell)) ? 'tbw-mono' : undefined}>{cell}<Note inline>{note}</Note></td>
                     })}
                   </tr>
                 ))}

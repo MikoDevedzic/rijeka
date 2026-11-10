@@ -343,7 +343,7 @@ function CashflowsBody({ quote, crypto }) {
             {' '}The option's value is the discounted expected payoff under the forward's lognormal distribution at {fmt(quote.vol_pct, 2)}% vol, which is the engine's Garman–Kohlhagen figure.
           </Note>
           <button type="button" style={toolBtn} data-testid="fx-cf-export" title="The flows and the market they were priced on, as an Excel workbook"
-            onClick={() => exportCashflows({ quote, crypto, dp, option: [{ name: 'PREMIUM', date: quote.valuation_date, amount: premium, df: 1 }, { name: payoutStyle ? 'PAYOUT' : 'PAYOFF AT EXPIRY', date: quote.settlement_date, amount: intrinsic, df: quote.df_quote }] })}>EXPORT XLSX</button>
+            onClick={() => exportCashflows({ quote, crypto, dp, option: { premium, payoffName: payoutStyle ? 'PAYOUT AT TODAY\'S FORWARD' : 'PAYOFF AT TODAY\'S FORWARD', intrinsic, df: quote.df_quote } })}>EXPORT XLSX</button>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead><tr><th style={{ ...th, textAlign: 'left' }}>FLOW</th><th style={th}>DATE</th><th style={th}>AMOUNT</th><th style={th}>DF</th><th style={th}>PV {quote.quote_currency}</th></tr></thead>

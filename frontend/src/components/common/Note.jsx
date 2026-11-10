@@ -5,14 +5,16 @@
 //
 // The note's text is always in the page (hidden, then shown), so a reader that takes the text of a panel still
 // gets it. The switch is remembered in this browser and is the same for every ticket.
-import { useRef } from 'react'
+import { useId, useRef } from 'react'
 import { bubblePlace, notesOn, setNotesOn, useNotesOn } from '../../lib/notes'
 
 // `inline`: the note belongs in a line of text (after a leg's name); written out, it stays in the line.
 // `corner`: the mark sits in the top right corner of the nearest positioned box (a tile); written out, the note
 // is a line where it stands in the markup.
-export function Note({ children, inline = false, corner = false, testId }) {
+// `markOnly`: with NOTES on this note is written out somewhere with more room (a line under a table), so here it goes.
+export function Note({ children, inline = false, corner = false, markOnly = false, testId }) {
   const body = useRef(null)
+  const id = useId()
   if (children == null || children === false || children === '') return null
   const place = (e) => {
     const b = body.current, mark = e.currentTarget.firstElementChild
@@ -22,10 +24,10 @@ export function Note({ children, inline = false, corner = false, testId }) {
     b.style.left = `${p.left}px`; b.style.top = `${p.top}px`
   }
   return (
-    <span className={`rj-note${inline ? ' rj-note-inline' : ''}${corner ? ' rj-note-corner' : ''}`} tabIndex={0}
-          onMouseEnter={place} onFocus={place} data-testid={testId}>
+    <span className={`rj-note${inline ? ' rj-note-inline' : ''}${corner ? ' rj-note-corner' : ''}${markOnly ? ' rj-note-off' : ''}`} tabIndex={0}
+          role="img" aria-label="note" aria-describedby={id} onMouseEnter={place} onFocus={place} data-testid={testId}>
       <span className="rj-note-mark" aria-hidden="true">i</span>
-      <span className="rj-note-body" ref={body} role="note">{children}</span>
+      <span className="rj-note-body" id={id} ref={body} role="note">{children}</span>
     </span>
   )
 }

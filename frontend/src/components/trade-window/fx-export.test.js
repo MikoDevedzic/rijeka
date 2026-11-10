@@ -32,10 +32,20 @@ describe('the CASHFLOWS tab as a workbook', () => {
     expect(back.getWorksheet('CASHFLOWS').getCell('A1').value).toBe('RIJEKA')
   })
   it('an option: the premium and the payoff, and the vol it was priced at', () => {
-    const m = sheetModel({ quote: { ...quote, shape: 'OPTION', strike: 110000, vol_pct: 38.56 }, crypto: true, dp: 2,
-      option: [{ name: 'PREMIUM', date: '2026-11-10', amount: -4669, df: 1 }, { name: 'PAYOFF AT EXPIRY', date: '2027-02-10', amount: 0, df: 0.990487 }] })
-    expect(m.tables[0].name).toBe('FLOWS (USD)')
-    expect(m.tables[0].rows[0][4]).toMatchObject({ v: -4669 })
+    const m = sheetModel({ quote: { ...quote, shape: 'OPTION', strike: 110000, vol_pct: 38.56, npv: 4669 }, crypto: true, dp: 2,
+      option: { premium: -4669, payoffName: 'PAYOFF AT TODAY\'S FORWARD', intrinsic: 1000, df: 0.990487 } })
+    expect(m.meta).toContainEqual(['PREMIUM', { v: -4669, fmt: expect.any(String) }])
+    expect(m.tables[0].name).toBe('OPTION VALUE (USD)')
+    // the payoff's present value and the time value add up to the option's value
+    const [payoff, time] = m.tables[0].rows
+    expect(payoff[4].v + time[4].v).toBeCloseTo(4669, 9)
+    expect(m.tables[0].total[4]).toMatchObject({ v: 4669, sum: 'E' })
     expect(m.tables[1].rows.map(r => r[0])).toContain('VOL %')
+  })
+  it('a figure the quote does not carry is an empty cell, not a NaN', () => {
+    const m = sheetModel({ quote: { ...quote, df_base: undefined, spot: null }, legs: [{ ...legs[0], price: undefined, pv: NaN }], net, pv, crypto: true, ndf: true, dp: 2 })
+    expect(m.tables[0].rows[0][4]).toBe(''); expect(m.tables[0].rows[0][7]).toBe('')
+    const market = Object.fromEntries(m.tables[1].rows.map(r => [r[0], r[1]]))
+    expect(market.SPOT).toBe(''); expect(market['DF BTC']).toBe('')
   })
 })

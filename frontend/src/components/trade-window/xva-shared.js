@@ -113,6 +113,11 @@ export const XVA_ROW = { position:'relative', display:'flex', alignItems:'stretc
 export const XVA_LEFT = { ...LEFT_COL, overflowY:'visible', flex:'0 0 auto' }
 export const XVA_RIGHT = { flex:1, minWidth:0, display:'flex', flexDirection:'column', overflow:'hidden' }
 export const XVA_BAND = { display:'grid', gridTemplateColumns:'minmax(0, 1.25fr) minmax(0, 1fr)', columnGap:'32px', padding:'0 16px 14px', borderTop:'1px solid var(--border)', background:'var(--bg)' }
+// The size every money figure in the table is set at: the largest at which the longest of them fits its column
+// (xva-shared.jsx; a cell is about 76px at the window's own width; DM Mono advances 0.6em). Both rows are sized from the same
+// figures, so the run and the on-chain row are always alike.
+export const moneySize = (texts) => { const n = Math.max(0, ...texts.map(t => String(t ?? '').length)); return n <= 9 ? 13.5 : n <= 10 ? 12.5 : n <= 11 ? 11.5 : 11 }
+
 export const XVA_CHART_HEIGHT = 'clamp(220px, 27vh, 440px)'
 
 export const SETTLEMENT_PRESETS = [

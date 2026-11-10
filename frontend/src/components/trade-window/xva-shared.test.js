@@ -253,3 +253,15 @@ describe('the simple view', () => {
     expect(runAssumesLine(base)).not.toMatch(/SIMULATE|—/)
   })
 })
+
+describe('the size the results table sets its money at', () => {
+  it('steps down so the longest figure fits its column, and never below 11px', async () => {
+    const { moneySize } = await import('./xva-shared')
+    expect(moneySize(['+$260', '-$78', '$0'])).toBe(13.5)
+    expect(moneySize(['-$123,456'])).toBe(13.5)
+    expect(moneySize(['-$1,234,567'])).toBe(11.5)          // eleven characters: about 76px at 11.5px
+    expect(moneySize(['+$260', '+€12,345,678'])).toBe(11)  // one long figure sizes every figure in the table
+    expect(moneySize([])).toBe(13.5)
+    expect(moneySize([null, undefined])).toBe(13.5)
+  })
+})
