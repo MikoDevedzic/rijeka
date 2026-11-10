@@ -149,12 +149,18 @@ simulated; an expiry or a settlement between two grid dates is read at the later
 a month longer than its contract (on its own grid a leg's settlement is the last date).
 
 **Wrong-way risk** (`pricing/xva_engine.path_survival`, 10 November 2026). On a currency or digital-asset
-ticket a party's default can be tied to the asset. Following Hull and White ("CVA and Wrong-Way Risk", Financial
-Analysts Journal 68(5), 2012), the default intensity on path p at grid date i is
+ticket a party's default can be tied to the asset. In the manner of Hull and White ("CVA and Wrong-Way Risk",
+Financial Analysts Journal 68(5), 2012): an intensity that is a function of a simulated variable, with a
+time-dependent level calibrated to the credit curve. The variable (the asset against its forward, not the
+value of the portfolio) and the functional form (exponential) are this engine's, so the direction is the desk's
+input and is not derived from the trade. The default intensity on path p at grid date i is
 h_i(p) = c_i · (asset / its forward)^b = c_i · exp(b · ln M_i(p)), and survival is
 q_i(p) = q_{i−1}(p) · exp(−h_i(p) · Δt). c_i is solved date by date (Newton) so that the MEAN survival across
 paths is the credit curve's at that date: the curve is repriced exactly, and b only moves default probability
-between paths. CVA is then LGD · Σ_i E[exposure_i(p) · (q_{i−1}(p) − q_i(p))] · DF_i, with the exposure after
+between paths. The variable is the trade's own driver, the asset's forward to the trade's settlement against
+that forward today; for an option with carry it is not the spot against its forward at each date (the two
+differ by a deterministic factor and agree at settlement). The intensity of a step is read at the END of the
+step, the date of that step's exposure. CVA is then LGD · Σ_i E[exposure_i(p) · (q_{i−1}(p) − q_i(p))] · DF_i, with the exposure after
 collateral and margin as before; DVA likewise with our own default. The desk's input is not b but its meaning:
 the multiple the intensity takes when the asset halves against its forward (`cp_hazard_if_halves`,
 `own_hazard_if_halves`; b = −log2 of it; 1 = independent, the default, which is the calculation before this
@@ -163,12 +169,16 @@ fallen (a sold forward, a bought put) is the wrong way and CVA rises; being owed
 way and it falls. The answer carries `wwr`: the two inputs and CVA and DVA as they would be with independence, and
 the tab shows both. Checked in `tests/test_wrong_way_risk.py`: the mean survival equals the curve at every date;
 on two states the solved intensities satisfy the definition; the Monte Carlo agrees with a Gauss–Hermite
-quadrature of the same definition that shares no code with it (bought and sold, three multiples); with the link
-off every component is unchanged. Limits: the multiple is the desk's judgement, not calibrated to anything (a
+quadrature of the same definition that shares no code with it (bought and sold, three multiples, within 2 % at
+40,000 paths); with the link off every component is unchanged. These check the code against its own definition.
+The one outside figure so far: the validator's own simulation (4 million paths, another generator, another
+root-finder) of a sold and a bought three-month forward at × 3 and independent, each within 1 % of the engine at
+20,000 paths, inside its sampling error. Limits: the multiple is the desk's judgement, not calibrated to anything (a
 crypto counterparty has no traded credit curve to regress on); one link per party for the whole life; the link
 is to the asset of the ticket only; funding, capital and margin terms do not see it; the netting-set charge
 (`/api/xva/incremental`, the credit engine) does not model it yet; a rates ticket keeps the multiplier
-(`wwr_multiplier`), which currency tickets no longer show.
+(`wwr_multiplier`), which currency tickets no longer show and the currency routes refuse together with a link
+(one or the other: a multiplier on top of a modelled link would count the effect twice).
 
 **Vol along the paths.** Both stand-alone engines and the credit engine use the surface, not one number held:
 the spot steps with the piecewise forward vols of the pair's ATM term structure (`fx_vol.step_vols`), so its

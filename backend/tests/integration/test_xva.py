@@ -206,6 +206,16 @@ def test_wrong_way_risk_on_the_three_currency_routes(client, auth_a, ids, pairs)
     assert r.status_code == 200 and r.json()["wwr"]["cva_independent"] <= 0, r.text[:300]
     for bad in (0, -1, 50):
         assert client.post("/api/xva/currency", json={**sold, "cp_hazard_if_halves": bad}, headers=auth_a).status_code == 422
+    # found by both reviewers: the multiplier on top of a link counted the effect twice. One or the other
+    both = client.post("/api/xva/currency", json={**sold, "cp_hazard_if_halves": 3.0, "wwr_multiplier": 1.5}, headers=auth_a)
+    assert both.status_code == 422 and "one or the other" in both.text
+    assert client.post("/api/xva/currency-option", json={"trade": opt, "paths": 400, "own_hazard_if_halves": 2.0, "wwr_multiplier": 1.2}, headers=auth_a).status_code == 422
+    assert client.post("/api/xva/currency-package", json={"trades": [leg], "paths": 400, "cp_hazard_if_halves": 2.0, "wwr_multiplier": 1.2}, headers=auth_a).status_code == 422
+    alone = client.post("/api/xva/currency", json={**sold, "wwr_multiplier": 1.5}, headers=auth_a)
+    assert alone.status_code == 200 and alone.json()["xva"]["cva"] == pytest.approx(1.5 * plain["xva"]["cva"], abs=0.02), "the multiplier alone is as before"
+    # our own link moves DVA alone and the answer carries what it would be without
+    own = client.post("/api/xva/currency", json={**sold, "own_hazard_if_halves": 3.0}, headers=auth_a).json()
+    assert own["xva"]["cva"] == plain["xva"]["cva"] and own["wwr"]["dva_independent"] == plain["xva"]["dva"] and own["xva"]["dva"] != plain["xva"]["dva"]
 
 
 # ── incremental: the counterparty's netting set with and without the trade ──────────────────────

@@ -359,12 +359,17 @@ export const CREDIT_LINKS = Object.freeze([
   ['1', 'independent'], ['1.5', '× 1.5 when it halves'], ['2', '× 2 when it halves'], ['3', '× 3 when it halves'], ['5', '× 5 when it halves'],
   ['0.5', '× 0.5 when it halves (worsens as it rises)'],
 ])
-// What the link did to CVA, for the line under the results: null when the run had no link.
+// What a link did, for the lines under the results: the counterparty's to CVA (`cp`), our own to DVA (`own`), each
+// null when that party was not linked; null altogether when the run had no link.
 export function wrongWayLine(res) {
-  const w = res?.wwr, cva = Number(res?.xva?.cva)
-  if (!w || !Number.isFinite(cva) || Number(w.cp_hazard_if_halves) === 1) return null
-  const ind = Number(w.cva_independent)
-  return { cva, independent: ind, k: Number(w.cp_hazard_if_halves), wrong: cva < ind, change: cva - ind }
+  const w = res?.wwr
+  if (!w) return null
+  const cva = Number(res?.xva?.cva), dva = Number(res?.xva?.dva)
+  const cp = Number(w.cp_hazard_if_halves) !== 1 && Number.isFinite(cva)
+    ? { cva, independent: Number(w.cva_independent), k: Number(w.cp_hazard_if_halves), wrong: cva < Number(w.cva_independent), change: cva - Number(w.cva_independent) } : null
+  const own = w.own_hazard_if_halves != null && Number(w.own_hazard_if_halves) !== 1 && Number.isFinite(dva)
+    ? { dva, independent: Number(w.dva_independent), k: Number(w.own_hazard_if_halves), change: dva - Number(w.dva_independent) } : null
+  return cp || own ? { cp, own } : null
 }
 
 // The spread grid still produces the desk's default curves (a blank cell is 0, as in toCurve).

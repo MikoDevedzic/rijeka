@@ -31,9 +31,12 @@ describe('wrong-way risk on the XVA tab', () => {
   it('has a line only for a run with the counterparty linked', () => {
     expect(wrongWayLine(null)).toBe(null)
     expect(wrongWayLine({ xva: { cva: -100 }, wwr: null })).toBe(null)
-    expect(wrongWayLine({ xva: { cva: -100 }, wwr: { cp_hazard_if_halves: 1, own_hazard_if_halves: 2, cva_independent: -100 } })).toBe(null)
-    expect(wrongWayLine({ xva: { cva: -250 }, wwr: { cp_hazard_if_halves: 3, cva_independent: -100 } })).toEqual({ cva: -250, independent: -100, k: 3, wrong: true, change: -150 })
-    expect(wrongWayLine({ xva: { cva: -40 }, wwr: { cp_hazard_if_halves: 3, cva_independent: -100 } }).wrong).toBe(false)
+    expect(wrongWayLine({ xva: { cva: -100, dva: 50 }, wwr: { cp_hazard_if_halves: 1, own_hazard_if_halves: 1, cva_independent: -100, dva_independent: 50 } })).toBe(null)
+    expect(wrongWayLine({ xva: { cva: -250 }, wwr: { cp_hazard_if_halves: 3, cva_independent: -100 } })).toEqual({ cp: { cva: -250, independent: -100, k: 3, wrong: true, change: -150 }, own: null })
+    expect(wrongWayLine({ xva: { cva: -40 }, wwr: { cp_hazard_if_halves: 3, cva_independent: -100 } }).cp.wrong).toBe(false)
+    // found by review: our own link moved DVA and the tab said nothing
+    expect(wrongWayLine({ xva: { cva: -100, dva: 80 }, wwr: { cp_hazard_if_halves: 1, own_hazard_if_halves: 2, cva_independent: -100, dva_independent: 50 } }))
+      .toEqual({ cp: null, own: { dva: 80, independent: 50, k: 2, change: 30 } })
   })
   it('a link is one of the assumptions the simple view names as the desk\'s own', () => {
     const D = HIDDEN_INPUT_DEFAULTS

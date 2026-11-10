@@ -13,14 +13,16 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
   credit curve is repriced exactly (Hull and White, 2012). CVA is the exposure on each path times the default
   probability on that path.
 - **The tab shows both figures:** CVA with the link and CVA if default were independent, named WRONG-WAY RISK or
-  RIGHT-WAY RISK by which way it went. Sold the coin to a counterparty that worsens as it falls: the charge
+  RIGHT-WAY RISK by which way it went; with our own credit linked, DVA with and without. Sold the coin to a counterparty that worsens as it falls: the charge
   rises. Bought it from the same counterparty: it falls.
 - **Independent is the default and changes nothing:** every component is what it was, number for number (the
   reference suite, the Excel replications and the pinned book are unchanged).
 - **The multiplier (WWR ×) is gone from currency and digital-asset tickets**, where the link replaces it; a rates
-  ticket keeps it.
-- **Checked** against a quadrature of the same definition that shares no code with the simulation, and against
-  the definition itself. **Limits, in `docs/xva.md` and the model inventory:** the multiple is the desk's
+  ticket keeps it. The currency routes refuse a multiplier together with a link: one or the other.
+- **Checked** against a quadrature of the same definition that shares no code with the simulation, against the
+  definition itself, and by the validator's own simulation of four cases (within 1 %, inside sampling error). It
+  is in the manner of Hull and White, not their model: the variable is the asset, not the portfolio's value, so
+  the direction is the desk's input. **Limits, in `docs/xva.md` and the model inventory:** the multiple is the desk's
   judgement of the counterparty, not calibrated; one link for the life of the trade; the netting-set charge and
   the funding, capital and margin terms do not see it; no methodology section yet.
 

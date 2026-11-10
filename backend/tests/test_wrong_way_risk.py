@@ -101,14 +101,14 @@ def _quadrature_cva(sign, n, F, K, r, sigma, T, steps, spread_bp, lgd, beta, ord
 def test_the_monte_carlo_agrees_with_a_quadrature_of_the_same_definition(direction, k):
     T = 2 / 12                        # two monthly steps: the quadrature is two-dimensional
     inp = _fwd(direction, t=T, vol=60.0)
-    wf, meta = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=10000, cp_cds_bp=300.0, lgd=0.6, cp_hazard_if_halves=k)
+    wf, meta = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=40000, cp_cds_bp=300.0, lgd=0.6, cp_hazard_if_halves=k)
     ref = _quadrature_cva(1.0 if direction == "BUY" else -1.0, 10.0, 100_000.0, 100_000.0, 0.04, 0.60, T, 2, 300.0, 0.6, hazard_beta(k))
-    assert wf.cva == pytest.approx(ref, rel=0.03), (wf.cva, ref)
+    assert wf.cva == pytest.approx(ref, rel=0.02), (wf.cva, ref)      # sampling error at 40,000 paths is about 0.8 %
     if k == 1.0:
         assert meta["wwr"] is None and wf.cva_independent is None
     else:
         ind = _quadrature_cva(1.0 if direction == "BUY" else -1.0, 10.0, 100_000.0, 100_000.0, 0.04, 0.60, T, 2, 300.0, 0.6, 0.0)
-        assert wf.cva_independent == pytest.approx(ind, rel=0.03)
+        assert wf.cva_independent == pytest.approx(ind, rel=0.02)
         assert meta["wwr"]["cva_independent"] == wf.cva_independent and meta["wwr"]["cp_hazard_if_halves"] == k
 
 

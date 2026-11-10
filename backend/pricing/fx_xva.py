@@ -125,6 +125,7 @@ def wwr_of(x: np.ndarray, cp_hazard_if_halves: float, own_hazard_if_halves: floa
 def wwr_meta(wf: WaterfallResult, cp_hazard_if_halves: float, own_hazard_if_halves: float) -> Optional[dict]:
     if wf.cva_independent is None and wf.dva_independent is None:
         return None
+    # a party that was not linked has no separate independent figure: its charge IS the independent one
     return {"cp_hazard_if_halves": float(cp_hazard_if_halves), "own_hazard_if_halves": float(own_hazard_if_halves),
             "cva_independent": wf.cva_independent if wf.cva_independent is not None else wf.cva,
             "dva_independent": wf.dva_independent if wf.dva_independent is not None else wf.dva,

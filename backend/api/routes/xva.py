@@ -746,6 +746,15 @@ def surface_vol_pct(db, user_id: str, pair: str, t_years: float, forward: float,
     return float(v) * 100.0, f"{pair}_VOL surface, ATM at {t_years:.2f}y ({tier}; {getattr(vs, 'valuation_date', '')})"
 
 
+def one_wrong_way(body) -> None:
+    """A modelled link and the multiplier are one or the other: the multiplier on top of a link would count the
+    effect twice, and both figures of the answer would carry it."""
+    linked = float(body.cp_hazard_if_halves) != 1.0 or float(body.own_hazard_if_halves) != 1.0
+    if linked and float(getattr(body, "wwr_multiplier", 1.0) or 1.0) != 1.0:
+        raise HTTPException(status_code=422, detail="wwr_multiplier and a credit link (cp_hazard_if_halves, own_hazard_if_halves) are one or the other: "
+                                                    "leave the multiplier at 1 when a link is given")
+
+
 def wwr_block(m: Optional[dict]) -> Optional[dict]:
     """The wrong-way block of a currency XVA answer: the two inputs, CVA and DVA as they would be with default
     independent of the asset, the model in a sentence. None when the run had no link."""
@@ -795,6 +804,7 @@ def _csa_of(db, uid: str, csa_body, collateral_body) -> CSA:
 @router.post("/currency")
 def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """XVA for an FX or crypto forward through the rates waterfall (pricing/fx_xva.py)."""
+    one_wrong_way(body)                 # before the limiter: a refused request does not use the allowance
     heavy(user, "XVA simulation", 6)
     from pricing import fx_xva
     pair = body.pair.upper()
@@ -909,6 +919,7 @@ def option_xva_input(db, uid: str, pair: str, terms: dict, *, val_date: date, vo
 def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """XVA for an FX or digital-asset option, any style, through the rates waterfall: the option valued along
     simulated spot paths with the credit engine's model (pricing/fx_xva.option_xva)."""
+    one_wrong_way(body)                 # before the limiter: a refused request does not use the allowance
     heavy(user, "XVA simulation", 6)
     from pricing import fx_xva
     d = dict(body.trade or {})
@@ -1018,6 +1029,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     """XVA for a package of FX or digital-asset legs on one pair (forwards and options of any style) as ONE
     netting set: every leg on the same simulated paths, so they net before the charge is taken
     (pricing/fx_xva.package_xva). The answer has the shape of POST /currency, plus a row per leg."""
+    one_wrong_way(body)                 # before the limiter: a refused request does not use the allowance
     heavy(user, "XVA simulation", 6)
     from pricing import fx_xva
     val_date = body.valuation_date or date.today()

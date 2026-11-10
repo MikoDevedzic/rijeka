@@ -345,11 +345,18 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
               {notionalQ ? <> · notional {fmt(notionalQ).replace(/^\+/, '')} {ccy}</> : null}
               {res && <> · seed {res.seed ?? seed}</>}
             </VaFooter>
-            {ww && (
-              <div data-testid="xva-wwr" data-cva={Math.round(ww.cva)} data-independent={Math.round(ww.independent)} style={{ padding: '6px 16px 2px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-                <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>{ww.wrong ? 'WRONG-WAY RISK' : 'RIGHT-WAY RISK'}</span>
-                {' '}CVA <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(ww.cva)}</span> with the counterparty's credit tied to {quote?.base_currency || 'the asset'} (× {ww.k} when it halves),
-                {' '}<span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(ww.independent)}</span> if independent
+            {ww?.cp && (
+              <div data-testid="xva-wwr" data-cva={Math.round(ww.cp.cva)} data-independent={Math.round(ww.cp.independent)} style={{ padding: '6px 16px 2px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>{ww.cp.wrong ? 'WRONG-WAY RISK' : 'RIGHT-WAY RISK'}</span>
+                {' '}CVA <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(ww.cp.cva)}</span> with the counterparty's credit tied to {quote?.base_currency || 'the asset'} (× {ww.cp.k} when it halves),
+                {' '}<span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(ww.cp.independent)}</span> if independent
+              </div>
+            )}
+            {ww?.own && (
+              <div data-testid="xva-wwr-own" data-dva={Math.round(ww.own.dva)} data-independent={Math.round(ww.own.independent)} style={{ padding: '6px 16px 2px', fontSize: '0.75rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text)' }}>OUR OWN CREDIT</span>
+                {' '}DVA <span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(ww.own.dva)}</span> with our credit tied to {quote?.base_currency || 'the asset'} (× {ww.own.k} when it halves),
+                {' '}<span style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)' }}>{fmt(ww.own.independent)}</span> if independent
               </div>
             )}
             {legPeaks != null && netPeak != null && legPeaks > 0 && (
