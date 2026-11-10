@@ -5,6 +5,7 @@ cannot be deleted once it has a lifecycle; both create paths derive and check th
 way; ids and dates are validated at the model, not as a 500; the expensive handlers are rate-limited;
 Prometheus has a daily allowance; platform-wide numbers need the admin role; the public health body
 carries no exception text."""
+import contextlib
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -47,6 +48,7 @@ class _DB:
     def add(self, o): self.added.append(o)
     def delete(self, o): self.deleted.append(o)
     def flush(self): pass
+    def begin_nested(self): return contextlib.nullcontext()      # the savepoint a generated trade reference is inserted in
     def commit(self): self.committed = True
     def rollback(self): pass
     def refresh(self, o): pass

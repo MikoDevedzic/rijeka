@@ -3,6 +3,25 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## 0.16.4 · 10 November 2026
+
+**Two bookings in one second no longer ask for the same reference.**
+
+- **What broke.** A trade booked without a reference was named `TRD-` and the last eight digits of the clock's
+  second. Two bookings by one user inside a second (a package posting its legs, two tickets, two windows, a
+  double press) asked for the same name; one user's references are unique (`uq_trades_user_ref`), so the second
+  was refused: 500 "The trade could not be saved" from `POST /api/trades/`, 409 from `POST /api/book/trade`.
+- **Now.** The reference keeps its shape, `TRD-` and eight digits, and the first booking of a second reads as it
+  always did. The trade row is inserted inside a savepoint; when the database says the name is taken, the next
+  number is tried (eight in a row, then numbers drawn at random, so a long burst costs a bounded number of
+  attempts). The database decides, not a read before the write, so two requests in flight are told apart too.
+  One helper, `backend/api/routes/_trade_ref.py`, used by both create routes and so by the booking made from a
+  counterparty's card.
+- **A reference the client supplies is never changed.** A duplicate is refused with 409 on both routes
+  (`POST /api/trades/` answered 500). A generated reference never takes the `-2` form a package gives its own
+  further legs.
+- No schema change and no migration: the index is the one production already has.
+
 ## The shell: the name, the top bar, the blotter's rail · 10 November 2026 (frontend only)
 
 - **The name is the brightest thing on the page.** RIJEKA on the top bar (and on the home page's own bar) is

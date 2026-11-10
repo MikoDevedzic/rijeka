@@ -8,10 +8,11 @@ from api.routes.pricer import invalidate_trade_cache
 from api.routes._instrument_alias import normalize_instrument_type  # M009 inbound translator
 from api.routes.trade_cards import their_refs
 from api.routes._errors import internal
+from api.routes._trade_ref import insert_trade, is_ref_collision
 from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, Dict, Any
 from datetime import date
-import logging, uuid, time
+import logging, uuid
 
 log = logging.getLogger("rijeka.trades")
 
@@ -253,10 +254,9 @@ def trades_their_refs(db: Session = Depends(get_db), user: dict = Depends(verify
 @router.post("/")
 def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     new_id    = uuid.uuid4()
-    trade_ref = body.trade_ref or f"TRD-{str(int(time.time()))[-8:]}"
     kwargs = {
         "id":                   new_id,
-        "trade_ref":            trade_ref,
+        "trade_ref":            body.trade_ref,    # the client's own, or None: insert_trade names it
         "status":               body.status,
         "store":                body.store,
         "asset_class":          body.asset_class,
@@ -284,9 +284,9 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
     if kwargs.get("own_legal_entity_id") and not db.query(LegalEntity).filter(LegalEntity.id == kwargs["own_legal_entity_id"], LegalEntity.user_id == kwargs["user_id"]).first():
         raise HTTPException(status_code=422, detail="own_legal_entity_id is not one of yours")
     try:
-        trade = Trade(**kwargs)
-        db.add(trade)
-        db.flush()
+        # a reference the client did not give is generated, and cannot repeat for this user (_trade_ref.py)
+        trade = insert_trade(db, lambda ref: Trade(**{**kwargs, "trade_ref": ref}), body.trade_ref)
+        kwargs["trade_ref"] = trade.trade_ref
         # The BOOKED event: the first fact of the trade's lifecycle, as POST /api/book/trade writes it,
         # so an event stream exists for every trade however it was created.
         payload = {"trade": {k: (str(v) if isinstance(v, (uuid.UUID, date)) else v) for k, v in kwargs.items()}, "legs": []}
@@ -296,9 +296,15 @@ def create_trade(body: TradeCreate, db: Session = Depends(get_db), user: dict = 
         db.commit()
         invalidate_trade_cache()
         db.refresh(trade)
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
-        log.exception("trade %s (%s/%s structure %s) could not be saved: %s", trade_ref, body.asset_class, body.instrument_type, kwargs["structure"], e)
+        if isinstance(e, IntegrityError) and is_ref_collision(e):
+            # only a reference the client supplied can get here; it is refused, not replaced (as POST /api/book/trade does)
+            raise HTTPException(status_code=409, detail=f"trade_ref '{kwargs['trade_ref']}' already exists for this user")
+        log.exception("trade %s (%s/%s structure %s) could not be saved: %s", kwargs["trade_ref"] or "(not yet named)", body.asset_class, body.instrument_type, kwargs["structure"], e)
         raise HTTPException(status_code=500, detail="The trade could not be saved; the error is in the server log.")
     cp = db.query(Counterparty).filter(Counterparty.id == trade.counterparty_id).first() if trade.counterparty_id else None
     return serialize(trade, cp)

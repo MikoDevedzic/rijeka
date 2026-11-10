@@ -56,7 +56,6 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 import uuid
-import time
 import logging
 
 from db.session import get_db
@@ -64,6 +63,7 @@ from db.models import Trade, TradeLeg, TradeEvent, IdempotencyKey
 from middleware.auth import verify_token
 from api.routes._errors import internal
 from api.routes._leg_defaults import complete_leg
+from api.routes._trade_ref import insert_trade
 
 router = APIRouter(prefix="/api/book", tags=["booking"])
 log = logging.getLogger(__name__)
@@ -499,7 +499,7 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
     trade_id = uuid.uuid4()
     event_id = uuid.uuid4()
     leg_ids = [uuid.uuid4() for _ in body.legs]
-    trade_ref = body.trade_ref or f"TRD-{str(int(time.time()))[-8:]}"
+    trade_ref = body.trade_ref      # the client's own, or None: insert_trade names the row
 
     # ── Build BOOKED payload (pure) ──────────────────────────
     booked_payload = build_booked_payload(body, trade_id, leg_ids)
@@ -507,35 +507,39 @@ def book_trade(db: Session, user_id: UUID, body: BookingRequest, idempotency_key
     # ── Atomic DB writes ──────────────────────────────────────
     try:
         # Step 1: trade row with latest_event_id=NULL (FK satisfied by NULL)
-        trade = Trade(
-            id=trade_id,
-            trade_ref=trade_ref,
-            status="PENDING",
-            store=body.store,
-            asset_class=body.asset_class,
-            instrument_type=body.instrument_type,
-            structure=body.structure,
-            own_legal_entity_id=uuid.UUID(body.own_legal_entity_id) if body.own_legal_entity_id else None,
-            counterparty_id=uuid.UUID(body.counterparty_id) if body.counterparty_id else None,
-            notional=body.notional,
-            notional_ccy=body.notional_ccy,
-            trade_date=body.trade_date,
-            effective_date=body.effective_date,
-            maturity_date=body.maturity_date,
-            terms=body.terms,
-            discount_curve_id=body.discount_curve_id,
-            forecast_curve_id=body.forecast_curve_id,
-            desk=body.desk,
-            book=body.book,
-            strategy=body.strategy,
-            uti=uti,
-            user_id=user_id,
-            latest_event_id=None,
-            version_seq=0,
-            created_by=user_id,
-        )
-        db.add(trade)
-        db.flush()  # materialize trade row before event inserts (FK trade_events.trade_id)
+        def row(ref: str) -> Trade:
+            return Trade(
+                id=trade_id,
+                trade_ref=ref,
+                status="PENDING",
+                store=body.store,
+                asset_class=body.asset_class,
+                instrument_type=body.instrument_type,
+                structure=body.structure,
+                own_legal_entity_id=uuid.UUID(body.own_legal_entity_id) if body.own_legal_entity_id else None,
+                counterparty_id=uuid.UUID(body.counterparty_id) if body.counterparty_id else None,
+                notional=body.notional,
+                notional_ccy=body.notional_ccy,
+                trade_date=body.trade_date,
+                effective_date=body.effective_date,
+                maturity_date=body.maturity_date,
+                terms=body.terms,
+                discount_curve_id=body.discount_curve_id,
+                forecast_curve_id=body.forecast_curve_id,
+                desk=body.desk,
+                book=body.book,
+                strategy=body.strategy,
+                uti=uti,
+                user_id=user_id,
+                latest_event_id=None,
+                version_seq=0,
+                created_by=user_id,
+            )
+
+        # A reference the client did not give is generated and cannot repeat for this user (_trade_ref.py).
+        # The flush materializes the trade row before the event inserts (FK trade_events.trade_id).
+        trade = insert_trade(db, row, body.trade_ref)
+        trade_ref = trade.trade_ref
 
         # Step 2: BOOKED event. Trigger tr_trade_events_assign_seq assigns event_seq=1,
         #         tx_time=now(), valid_time=effective_date::timestamptz.
