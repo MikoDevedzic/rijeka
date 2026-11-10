@@ -86,8 +86,9 @@ With further legs the footer, CASHFLOWS and CURVE SCENARIO are the package's (`f
 is in the label of every figure that is a sum, and LEG 1 in the label of every figure that is still the ticket's
 own (the forward tile, the scenario fixing, the valuation under the flows): no figure is left for the reader to
 guess whose it is. CASHFLOWS opens on the package, with a button for each leg's own flows. When the package
-cannot be summed the tab says in amber that it shows leg 1 only, and why. A footer too crowded for one line
-drops its units, never a word that carries meaning (paid, received, what a package is waiting for).
+cannot be summed the tab says in amber that it shows leg 1 only, and why. A package's footer of six figures
+names them without their units (the TRADE tab's tiles carry each), never without a word that carries meaning
+(paid, received, what a package is waiting for); a single trade's footer is as it was.
 
 ## The right-click menu
 

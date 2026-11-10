@@ -11,7 +11,8 @@ first leg alone on these three.
 - **Footer.** PACKAGE NPV (for a package of options alone, NET PREMIUM, paid or received) and each sensitivity
   summed over the legs; the structure reads as DETAILS names it (STRIP, COLLAR, CUSTOM, ...). While a leg is being
   priced, or one could not be, the figures are a dash and the first label says which: a sum with a leg missing is
-  not shown. A footer with six figures beside a long structure name drops its units before it wraps.
+  not shown. A package's footer with six figures (one with an option in it) names them without their units, so
+  the line holds beside a long structure name; paid or received stays. No other ticket's footer changes.
 - **CASHFLOWS.** The package first: every leg in a row (its premium, what it would settle at today's forward,
   its discount factor, the engine's NPV) and the dates on which money moves, earliest first, the legs that share a
   date netted; a deliverable currency leg shows both principals. Each leg's own flows are behind its button, as a
@@ -23,11 +24,17 @@ first leg alone on these three.
   settlement. A package's vol is one of its curves even when its first leg is a forward.
 - **Limits, stated on the screen:** the scenario is the browser's closed form (forwards and European options).
   A package holding a leg of any other style (American, barrier, digital, touch) is not summed without it: the
-  tab says the scenario is of leg 1 only, and which leg stands in the way. The settlement amounts on CASHFLOWS
+  tab says the scenario is of leg 1 only, and which leg stands in the way. The same holds for a leg priced on
+  another pair or one that has fixed or settled. CAPITAL still shows the first leg, and DETAILS says so. The settlement amounts on CASHFLOWS
   are today's estimate at the fair forward; a touch has no figure there. A booked leg opened from the blotter
   still shows that leg alone.
 - **Fixed on the way:** a leg whose type had just been changed drew its strike as not-a-number on the DETAILS
-  chart until its new price arrived (console errors, no wrong figure).
+  chart until its new price arrived (console errors, no wrong figure). The note on DETAILS that said the other
+  tabs show the first leg now says what they show.
+- **Evidence and what is missing:** the package's scenario is held to the single-trade closed form leg by leg,
+  and one figure was derived independently of the code (agreement to 1e-10). There is no comparison with the
+  engine or an outside reference for a package, no Excel replication of the sum and no methodology section
+  (`docs/model_inventory.md`).
 
 ## 0.19.0 · 10 November 2026
 

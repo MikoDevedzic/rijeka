@@ -353,25 +353,28 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       // The strip is plain: no figure is coloured by its sign (the tiles above carry the sign and the colour).
       metrics: (r) => {
         if (!r) return []
-        // `keep`: words that are not a unit (paid or received, what a package is waiting for) stay when a crowded footer drops its units
-        const unit = (name, u, keep = false) => <>{name}<span className={keep ? 'tbw-fx-unit tbw-fx-unit-keep' : 'tbw-fx-unit'}> · {u}</span></>
+        const unit = (name, u) => <>{name}<span className="tbw-fx-unit"> · {u}</span></>
         const crypto = assetClass === 'CRYPTO'
         // A package: the sum over every leg, under the same names. Until each leg is priced the figures are a dash
         // and the first label says what is owed: a sum with a leg missing is not the package's.
         if (pkg) {
           const t = packageRisk(pkg.quotes), gap = packageGap(pkg)
           const v = (x) => (t ? n0(x) : '—')
-          // short names: six figures share the footer's one line with the buttons (the count of legs is on BOOK)
+          // Six figures (a package with an option in it) share the footer's one line with a structure's name and the
+          // buttons: they are then named without their units, which the TRADE tab's tiles carry. Paid or received,
+          // and what a package is waiting for, are not units and stay. (The count of legs is on BOOK.)
+          const six = !!t && t.options !== 'NONE'
+          const u = (name, what) => (six ? name : unit(name, what))
           return [
             t && t.options === 'ALL'
-              ? { label: unit('NET PREMIUM ' + r.quote_currency, t.npv >= 0 ? 'paid' : 'received', true), value: n0(Math.abs(t.npv)) }
-              : { label: gap ? unit('PACKAGE NPV ' + r.quote_currency, gap, true) : 'PACKAGE NPV ' + r.quote_currency, value: v(t?.npv) },
-            { label: unit(DELTA_LABEL(crypto), '1 % spot'), value: v(t?.spot01) },
+              ? { label: unit('NET PREMIUM ' + r.quote_currency, t.npv >= 0 ? 'paid' : 'received'), value: n0(Math.abs(t.npv)) }
+              : { label: gap ? unit('PACKAGE NPV ' + r.quote_currency, gap) : 'PACKAGE NPV ' + r.quote_currency, value: v(t?.npv) },
+            { label: u(DELTA_LABEL(crypto), '1 % spot'), value: v(t?.spot01) },
             ...(crypto
-              ? [{ label: unit('IR01', '1 bp'), value: v(t?.ir01) }, { label: unit('CRYBASIS01', '1 bp basis'), value: v(t?.crybasis01) }]
-              : [{ label: unit(`${r.quote_currency} IR01`, '1 bp'), value: v(t?.irQuote) }, { label: unit(`${r.base_currency} IR01`, '1 bp'), value: v(t?.irBase) }]),
-            { label: unit('THETA', '1 day'), value: v(t?.theta) },
-            ...(t && t.options !== 'NONE' ? [{ label: unit('VEGA', '1 pt'), value: v(t.vega) }] : []),
+              ? [{ label: u('IR01', '1 bp'), value: v(t?.ir01) }, { label: u('CRYBASIS01', '1 bp basis'), value: v(t?.crybasis01) }]
+              : [{ label: u(`${r.quote_currency} IR01`, '1 bp'), value: v(t?.irQuote) }, { label: u(`${r.base_currency} IR01`, '1 bp'), value: v(t?.irBase) }]),
+            { label: u('THETA', '1 day'), value: v(t?.theta) },
+            ...(six ? [{ label: 'VEGA', value: v(t.vega) }] : []),
           ]
         }
         const crybasis = r.crybasis01 ?? (r.fund01 != null ? -r.fund01 : r.ir01_base != null ? -r.ir01_base : r.rho_base_per_bp != null ? -r.rho_base_per_bp : 0)
@@ -380,7 +383,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         return [
           // an option's first figure is its premium, paid or received (the NET NPV tile stays in the analytics block)
           option
-            ? { label: unit('PREMIUM ' + r.quote_currency, r.direction === 'SELL' ? 'received' : 'paid', true), value: n0(Math.abs(r.npv)) }
+            ? { label: unit('PREMIUM ' + r.quote_currency, r.direction === 'SELL' ? 'received' : 'paid'), value: n0(Math.abs(r.npv)) }
             : { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv) },
           { label: unit(DELTA_LABEL(crypto), '1 % spot'), value: n0(spot01) },
           ...(crypto

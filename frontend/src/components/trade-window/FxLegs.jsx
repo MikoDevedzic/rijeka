@@ -163,7 +163,7 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 16px 8px', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.1em', color: 'var(--text-hi)' }}>LEGS · {rows.length}</span>
         <span data-testid="fx-legs-structure" style={{ ...lbl, border: '1px solid var(--border-hi)', borderRadius: 'var(--r-1)', padding: '1px 7px', color: several ? 'var(--text-hi)' : 'var(--text-mute)' }}>{structure}</span>
-        <Note inline>The first leg is the ticket itself, set on the TRADE tab. Every further leg is on the same pair: a forward, a call, a put or a touch, with its own side, size, date and strike, and an option's own style. A strike left empty is the fair forward for its date. BOOK books each leg as its own trade, tied together as one package.{several ? ' The other tabs and the footer show the first leg for now.' : ''}</Note>
+        <Note inline>The first leg is the ticket itself, set on the TRADE tab. Every further leg is on the same pair: a forward, a call, a put or a touch, with its own side, size, date and strike, and an option's own style. A strike left empty is the fair forward for its date. BOOK books each leg as its own trade, tied together as one package.{several ? ' The footer, CASHFLOWS and CURVE SCENARIO show the package; XVA runs it as one netting set; CAPITAL still shows the first leg.' : ''}</Note>
         {booked && <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6 }}>
           <span style={lbl}>TRADE ID</span>
           <span data-testid="fx-legs-package" style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--accent-hi)' }}>{booked.ref}</span>

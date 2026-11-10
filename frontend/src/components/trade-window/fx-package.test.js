@@ -43,6 +43,14 @@ describe('the package as the ticket holds it', () => {
     expect(failed.failed).toEqual([2])
     expect(packageGap(failed)).toBe('leg 2 could not be priced')
     expect(packageView(strip[0], legs, {}).pending).toBe(true)                   // a leg the table has not heard of yet
+    // a leg priced on another pair is not summed in: the figures add only in one quote currency
+    const other = packageView(strip[0], legs, { a: { quote: { ...strip[1], base_currency: 'ETH' }, pending: false }, b: { quote: strip[2], pending: false } })
+    expect(other.quotes).toBeNull()
+    expect(packageGap(other)).toBe('a leg is priced on another pair')
+    // a leg that has fixed or settled is not a live one
+    const fixed = packageView(strip[0], legs, { a: { quote: { ...strip[1], state: 'FIXED' }, pending: false }, b: { quote: strip[2], pending: false } })
+    expect(fixed.quotes).toBeNull()
+    expect(packageGap(fixed)).toBe('leg 2 has fixed or settled')
     expect(packageGap(packageView(null, legs, { a: { quote: strip[1], pending: false }, b: { quote: strip[2], pending: false } }))).toBe('the ticket is being priced')
   })
 })
@@ -188,9 +196,27 @@ describe('one scenario over every leg', () => {
     const spotOnly = repricePackage(strip, scen, { only: ['spotPct'] }).npv
     expect(spotOnly).toBeCloseTo(repricePackage(strip, s({ spotPct: 2 })).npv, 6)
     const all = repricePackage(strip, scen).npv
-    const parts = ['spotPct', 'quoteBp', 'dPoints'].map(k => repricePackage(strip, scen, { only: [k] }).npv - base)
-    expect(Math.abs(all - base - parts.reduce((a, b) => a + b, 0))).toBeLessThan(Math.abs(all - base) * 0.05 + 1)      // what is left is the cross term
+    // every factor kept is the scenario itself; none kept is the market
+    expect(repricePackage(strip, scen, { only: ['spotPct', 'quoteBp', 'baseBp', 'volPts', 'dPoints'] }).npv).toBeCloseTo(all, 9)
+    expect(repricePackage(strip, scen, { only: [] }).npv).toBeCloseTo(base, 9)
+    // a rate shock alone only rediscounts and carries: each leg by its own closed form
+    const rateOnly = strip.reduce((a, q) => a + reprice(q, { quoteBp: 30 }).npv, 0)
+    expect(repricePackage(strip, scen, { only: ['quoteBp'] }).npv).toBeCloseTo(rateOnly, 6)
     expect(repricePackage(strip, scen, { extra: { spotPct: 1 } }).npv).toBeCloseTo(repricePackage(strip, s({ spotPct: 3, quoteBp: 30, moved: { '1M': 50, '2M': 50, '3M': 50 } })).npv, 6)
+  })
+  it('agrees with a figure derived independently of this code (Emmy, 10 Nov 2026)', () => {
+    // A strip of three cash-settled BTC forwards, spot 70,000, no spot lag, discounted at 4 % (DF = exp(−0.04·T)).
+    // Scenario: spot +3 %; +40 bp on the 61-day pillar of the discounting curve (pillars at 30, 61, 91, 181 days);
+    // +200 points on the 2M tenor, every other tenor unmoved. The two figures were computed in Python from the
+    // definitions, without this module: 2681.4547672131 at the market, 1921.1459408566 under the scenario.
+    const leg = (direction, size, days, F, K) => ({ shape: 'FORWARD', direction, base_notional: size, spot: 70000, forward: F, forward_rate: K,
+      df_quote: Math.exp(-0.04 * days / 365), df_base: 1, t: days / 365, t_spot: 0, valuation_date: '2026-11-10',
+      settlement_date: new Date(Date.UTC(2026, 10, 10 + days)).toISOString().slice(0, 10), base_currency: 'BTC', quote_currency: 'USD' })
+    const three = [leg('BUY', 2, 30, 70400, 70000), leg('SELL', 3, 61, 70900, 71200), leg('BUY', 1, 91, 71500, 70500)]
+    const pillars = [30, 61, 91, 181].map(d => ({ date: `d${d}`, t: d / 365, zero_pct: 4 }))
+    const scen = s({ spotPct: 3, moved: { ...Object.fromEntries(Object.keys(TENOR_DAYS).map(t => [t, 0])), '2M': 200 }, quotePillars: pillars, quoteOwn: { d61: 40 } })
+    expect(repricePackage(three, null).npv).toBeCloseTo(2681.4547672131, 6)
+    expect(repricePackage(three, scen).npv).toBeCloseTo(1921.1459408566, 6)
   })
   it('an option leg takes the vol shock; a forward leg does not', () => {
     const quotes = [strip[0], opt()]

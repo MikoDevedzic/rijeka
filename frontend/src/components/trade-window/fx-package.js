@@ -5,7 +5,7 @@
 // the leg's own forward and discount factor); nothing is priced a second way. The legs are on one pair and in one
 // quote currency (the DETAILS table adds legs to the ticket's pair), so their figures add. A package is shown as
 // one only when EVERY leg is priced for the terms it shows: a sum with a leg missing is not the package's.
-import { daysBetween, interpPoints, reprice, shockAtTime } from './fx-scenario'
+import { daysBetween, interpPoints, reprice, settledState, shockAtTime } from './fx-scenario'
 import { crybasis01 } from './fx-ticket'
 
 const finite = (x) => typeof x === 'number' && Number.isFinite(x)
@@ -22,13 +22,19 @@ export function packageView(firstQuote, legs, view) {
   const pending = each.some(v => v.pending)
   const failed = each.map((v, i) => (!v.pending && (v.error || !v.quote) ? i + 2 : null)).filter(Boolean)
   const all = [firstQuote || null, ...each.map(v => (v.pending || v.error ? null : v.quote || null))]
-  return { n: further.length + 1, pending, failed, each: all, quotes: all.every(Boolean) ? all : null }
+  // the figures add only on one pair, in one quote currency: a leg priced on another is not summed in
+  const mixed = !!firstQuote && all.some(q => q && (q.base_currency !== firstQuote.base_currency || q.quote_currency !== firstQuote.quote_currency))
+  // a leg that has fixed or settled has no forward to settle at and nothing to reprice: it is not summed as a live one
+  const done = all.map((q, i) => (q && settledState(q) ? i + 1 : null)).filter(Boolean)
+  return { n: further.length + 1, pending, failed, mixed, done, each: all, quotes: all.every(Boolean) && !mixed && !done.length ? all : null }
 }
 
 // What stands in a package's way, in words, or null when it is whole.
 export function packageGap(pkg) {
   if (!pkg || pkg.quotes) return null
   if (pkg.failed.length) return `leg ${pkg.failed.join(', ')} could not be priced`
+  if (pkg.mixed) return 'a leg is priced on another pair'
+  if (pkg.done?.length) return `leg ${pkg.done.join(', ')} has fixed or settled`
   return pkg.pending ? 'a leg is being priced' : 'the ticket is being priced'
 }
 
@@ -134,7 +140,10 @@ export const closedForm = (q) => !!q && (q.shape !== 'OPTION' || !q.style || q.s
 // settles on another date reads the same curves at ITS date: the points moved at its own days from spot, each
 // rate curve's pillar shocks at its own time (shockAtTime, the engine's own interpolation).
 //   scenario: { spotPct, quoteBp, baseBp, volPts, pip, crypto,
-//               moved: { tenor: points }, tenorDays, lag,                    the forward curve as dragged and shifted
+//               moved: { tenor: points }, tenorDays, lag,                    the forward curve as dragged and shifted:
+//                                                                            EVERY tenor of the curve, an unmoved one at 0
+//                                                                            (one left out is read as not on the curve,
+//                                                                            and its neighbours' moves are spread over it)
 //               quotePillars, quoteOwn, basePillars, baseOwn }                the pillar shocks of each rate curve
 // Null for a leg the closed form does not price, or whose settlement cannot be placed on the curve.
 export function legShocks(q, s) {

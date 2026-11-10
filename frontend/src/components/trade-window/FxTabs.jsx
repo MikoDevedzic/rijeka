@@ -304,9 +304,10 @@ export function FxCashflowsPanel({ stale = false, active = true, ...rest }) {
 // A ticket with further legs: the package first (every leg in a row, and the dates on which money moves), and each
 // leg's own flows behind its chip, exactly as a single trade's. `pkg` is fx-package.js packageView.
 function CashflowsBody({ quote, crypto, pkg = null }) {
-  const [show, setShow] = useState(0)                       // 0: the package; n: leg n
+  const [shown, setShown] = useState({ of: 0, leg: 0 })     // leg 0: the package; leg n: leg n, of a package of `of` legs
   if (!pkg) return <LegCashflows quote={quote} crypto={crypto} />
-  const at = show > pkg.n ? 0 : show                         // a leg that was removed: back to the package
+  const at = shown.of === pkg.n ? shown.leg : 0              // a leg added or removed: back to the package, not to whichever leg now has that number
+  const setShow = (leg) => setShown({ of: pkg.n, leg })
   const chip = (n, text) => (
     <button key={n} type="button" data-testid={n ? `fx-cf-show-leg-${n}` : 'fx-cf-show-package'} aria-pressed={at === n} onClick={() => setShow(n)}
       style={{ padding: '4px 10px', borderRadius: 'var(--r-2)', border: `1px solid ${at === n ? 'var(--border-glow)' : 'var(--border)'}`, background: at === n ? 'var(--panel-3)' : 'transparent',
@@ -734,9 +735,12 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   // then shown as far as the LAST leg settles, with every pillar before it: a shock on one reaches each leg as the
   // engine's curve would carry it, and a pillar left out of the list would be read as not there.
   const pq = pkg?.quotes || null
+  // the legs that have a price, whole package or not: how far the curves are shown does not jump (and a pillar's
+  // shock does not drop out of the scenario) each time one leg is being repriced
+  const legQs = pkg ? pkg.each.filter(Boolean) : null
   const legT = (q) => (q.shape === 'OPTION' ? q.t_settle : q.t)
-  const tLong = pq ? Math.max(tSettle, ...pq.map(legT).filter(Number.isFinite)) : tSettle
-  const qPill = pillarsShown(quote.curves?.quote?.pillars, tLong, pq ? Infinity : 8), bPill = crypto ? [] : pillarsShown(quote.curves?.base?.pillars, tLong, pq ? Infinity : 8)
+  const tLong = legQs ? Math.max(tSettle, ...legQs.map(legT).filter(Number.isFinite)) : tSettle
+  const qPill = pillarsShown(quote.curves?.quote?.pillars, tLong, pkg ? Infinity : 8), bPill = crypto ? [] : pillarsShown(quote.curves?.base?.pillars, tLong, pkg ? Infinity : 8)
   const qOwn = shockAtTime(qPill, own.quote, tSettle), bOwn = shockAtTime(bPill, own.base, tSettle)
   const rq = european ? qbp + qOwn : 0, rb = european ? (crypto ? -bbp : bbp + bOwn) : 0
   const nodes = model?.nodes || []
@@ -771,7 +775,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const anyMove = spot !== 0 || rq !== 0 || rb !== 0 || tenorsMoved || flatPips !== 0
   const d = (x) => x - base.npv
   const settleOf = (q) => daysBetween(q.valuation_date, q.settlement_date) ?? Math.round(legT(q) * 365)
-  const longX = pq ? Math.max(settleX, ...pq.map(settleOf).filter(Number.isFinite)) : settleX
+  const longX = legQs ? Math.max(settleX, ...legQs.map(settleOf).filter(Number.isFinite)) : settleX
   const reset = () => { setSpot(0); setQbp(0); setBbp(0); setVpt(0); setFpips(0); setMoves({}); setPill({ pair, quote: {}, base: {} }); setFixingText(null) }
 
   // the chart reports a drag as a distance in price from where it began; the shocks are worked out here
@@ -818,7 +822,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
     <div data-testid="fx-scenario-curve" data-drag={stale ? 'off' : 'on'} style={stale ? { pointerEvents: 'none' } : undefined}>
       <FxScenarioChart today={quote.valuation_date} curve={curve} fixings={fixingSeries(rows, source)} tradeSource={source} strike={strike} levels={chartLevels(quote)}
         settle={{ x: settleX, date: quote.settlement_date }} expiry={option ? { x: daysBetween(quote.valuation_date, quote.expiry_date), date: quote.expiry_date } : null}
-        legs={pq ? pq.slice(1).map((q, i) => ({ n: i + 2, x: settleOf(q), forward: whole ? pNow.rows[i + 1].forward : null })) : null}
+        legs={pkg ? pkg.each.map((q, i) => (i && q ? { n: i + 1, x: settleOf(q), forward: whole ? pNow.rows[i].forward : null } : null)).filter(Boolean) : null}
         fix={fixesEarly ? { x: daysBetween(quote.valuation_date, fixDate), date: fixDate } : null}
         forward={now.forward} dp={dp} moved={anyMove} ready={ready} height={220} onDragStart={onDragStart} onDrag={onDrag} onDragEnd={() => { origin.current = null }} />
     </div>
@@ -1050,7 +1054,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const onEnter = (e) => { if (e.key === 'Enter') e.target.blur() }
   const left = (
     <div style={XVA_LEFT} data-testid="fx-scn-left">
-      <div style={{ ...secHdr, marginTop: 4 }}>CURVES THAT PRICE THIS {pq ? 'PACKAGE' : 'TRADE'}<Note inline>Every market input the price was built from, each in the colour of its risk factor. Select one to shock it flat, point by point, or by dragging on the chart.</Note></div>
+      <div style={{ ...secHdr, marginTop: 4 }}>CURVES THAT PRICE THIS {pkg ? 'PACKAGE' : 'TRADE'}<Note inline>Every market input the price was built from, each in the colour of its risk factor. Select one to shock it flat, point by point, or by dragging on the chart.</Note></div>
       {curves.map(curveBtn)}
       {flat && (<>
         <div style={secHdr}>FLAT SHOCK · {flat.what}{cur.key === 'fwd' && quotedForward && european && <Note inline testId="fx-scenario-quoted-note">On quoted points the pricer holds the forward when a rate curve moves: the two curve shocks show the carry effect only, and a spot shock scales the points with spot.</Note>}</div>
@@ -1088,7 +1092,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const chartTitle = cur.key === 'spot' || cur.key === 'fwd' ? `FORWARD CURVE · ${pair}` : rateKey ? `${cur.name} · ZERO RATE % A YEAR` : ''          // the surface block carries its own heading
   const chartSays = cur.key === 'spot' || cur.key === 'fwd'
     ? `${model.quoted ? `Spot plus the quoted points${model.label ? ` (${model.label})` : ''}.` : 'The curve is the ticket\'s own carry from spot to the forward.'} Drag a tenor up or down to move it; hold Shift, or drag the spot point at TODAY, to move the whole curve.`
-    : rateKey ? `The curve's own pillars up to the ${pq ? 'last leg\'s settlement' : 'settlement date'} and the two after it; those beyond cannot reach this ${pq ? 'package' : 'trade'}. Drag a pillar up or down to shock it.`
+    : rateKey ? `The curve's own pillars up to the ${pkg ? 'last leg\'s settlement' : 'settlement date'} and the two after it; those beyond cannot reach this ${pkg ? 'package' : 'trade'}. Drag a pillar up or down to shock it.`
     : `The pair's stored surface, read at ${option ? 'this' : `leg ${optN}'s`} expiry and strike as the engine reads it. The flat shock moves the level of the smile${whole && pq.filter(q => q.shape === 'OPTION').length > 1 ? ' on every option leg' : ''}, not its shape.`
   const selected = cur.key === 'spot' || cur.key === 'fwd' ? chart
     : rateKey ? (pills.length

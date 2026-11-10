@@ -339,12 +339,6 @@
   display: flex;
   gap: 14px;
   align-items: center;
-  container-type: inline-size; min-width: 0;
-}
-/* Six figures beside a long structure name and the buttons (an option, a package with one): when they cannot
-   share the line, the units go (the TRADE tab's tiles carry each) and the names, the figures and a premium's paid or received stay on it. */
-@container (max-width: 800px) {
-  .tbw-footer-metrics:has(> .tbw-footer-metric:nth-child(6)) .tbw-fx-unit:not(.tbw-fx-unit-keep) { display: none; }
 }
 
 .tbw-footer-actions {
