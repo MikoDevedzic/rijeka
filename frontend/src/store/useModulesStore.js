@@ -12,6 +12,7 @@ export const useModulesStore = create((set, get) => ({
   preset: null,
   source: 'default',
   canEdit: false,          // this user may switch the firm's modules (GET /api/modules → can_edit)
+  onRequest: [],           // modules this user cannot have on in the hosted demo (GET /api/modules → on_request); the answer already has them off
   launch: false,           // the firm is a launch workspace (GET /api/modules → view): the simple home and XVA tab, whatever the preset is called now
   catalogue: null,
   loaded: false,
@@ -23,10 +24,10 @@ export const useModulesStore = create((set, get) => ({
       const r = await fetch(`${API}/api/modules`, { headers: { Authorization: `Bearer ${s.access_token}` } })
       if (!r.ok) { set({ loaded: true }); return }       // answered, with nothing chosen: every module stays on, and nobody waits on `loaded` for good
       const j = await r.json()
-      set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, launch: j.view === 'launch', catalogue: j, loaded: true })
+      set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true })
     } catch { set({ loaded: true }) /* every module stays on */ }
   },
-  apply: (j) => set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, launch: j.view === 'launch', catalogue: j, loaded: true }),
+  apply: (j) => set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true }),
 }))
 
 // The modules a route needs; a page whose module is off sends the visitor home.

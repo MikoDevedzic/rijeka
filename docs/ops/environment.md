@@ -26,7 +26,7 @@ the repository.
 | Variable | Read in | Default | Purpose |
 |---|---|---|---|
 | `CORS_ORIGINS` | `main.py` | empty | Extra allowed origins, comma-separated (the landing site). |
-| `RIJEKA_DEMO_PROVISION` | `api/routes/demo.py`, `public.py`, `modules.py` (who may switch modules), `api/routes/currencies.py` | `1` | Every sign-in gets a sandbox workspace (own entity, demo counterparty, market data, trader role). `0` on a self-hosted desk. |
+| `RIJEKA_DEMO_PROVISION` | `api/routes/demo.py`, `public.py`, `modules.py` (who may switch modules; which modules are held for the admin role: capital), `api/routes/currencies.py` | `1` | Every sign-in gets a sandbox workspace (own entity, demo counterparty, market data, trader role), and capital is off for everyone but the admin role. `0` on a self-hosted desk. |
 | `RIJEKA_SIGNUP_PRESET` | `modules.py`, `api/routes/demo.py` | `LAUNCH` | The module preset a newly provisioned workspace starts on (LAUNCH, DEALER, CORPORATE, FUND, CLASSROOM). Empty, `NONE` or a name that is not a preset: nothing chosen, every module on, as before 9 November 2026 (a mistyped name is not an error). Existing firms are never changed by it. |
 | `RIJEKA_DEMO_TEMPLATE_EMAIL` | `api/routes/demo.py` | empty | The account whose market data new visitors get a copy of, and the one the feeds write to. Empty: the earliest admin of a dealer firm. |
 | `RIJEKA_DEMO_MARKET_DATA` | `api/routes/demo_market_data.py`, `settlement/store.py` | `1` | The daily rebuild from public sources, the digital-asset marks and fixings ticks and their health checks. `0` to run on your own marks. (The spot tick is not gated by it.) |

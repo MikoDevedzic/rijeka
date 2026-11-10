@@ -34,7 +34,7 @@ test('launch workspace: the home is four next steps and the navigation is the na
   await expect(home).toBeVisible()
   await expect(home).toContainText('Book one trade and follow it through')
   for (const step of ['Book a trade', 'Price it', 'See the XVA charge and what settling on chain saves', 'Confirm it on chain']) await expect(home).toContainText(step)
-  await expect(app.getByTestId('launch-more')).toHaveText('Switch on P&L, risk, capital and more')
+  await expect(app.getByTestId('launch-more')).toHaveText('Switch on P&L, risk and more')
   // nothing of the dashboard a new desk does not need yet
   for (const gone of ['USD SOFR', 'ATM VOL', 'YOUR BOOK']) await expect(app.getByText(gone, { exact: true })).toHaveCount(0)
   for (const gone of ['RISK', 'P&L']) await expect(app.getByRole('button', { name: gone, exact: true })).toHaveCount(0)
@@ -112,6 +112,58 @@ test('launch workspace: the ticket has no CAPITAL tab and XVA opens simple, with
   await expectFullyInView(win.getByTestId('xva-outputs'), 'XVA results in the advanced view')
   // the choice is remembered on this machine
   expect(await app.evaluate(() => window.localStorage.getItem('rijeka.xva.view'))).toBe('advanced')
+  await app.unrouteAll({ behavior: 'ignoreErrors' })
+  expectClean(problems)
+})
+
+// Capital is not part of the hosted demo (9 November 2026): for everyone but the admin role the API answers with
+// it off, marked on request, and off in every preset (backend: tests/integration/test_modules.py). The stack is a
+// self-hosted desk, where nothing is held back, so that answer is given here the way onLaunch gives LAUNCH.
+test('hosted demo: capital is on request; no CAPITAL tab, no Risk → CAPITAL, and KVA stays on the XVA tab', async ({ app, problems }) => {
+  await app.route(/\/api\/modules$/, async route => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    const res = await route.fetch()
+    const body = await res.json()
+    body.modules.CAPITAL = false
+    for (const p of Object.values(body.presets)) p.modules.CAPITAL = false
+    body.definitions = body.definitions.map(d => d.key === 'CAPITAL' ? { ...d, on_request: true } : d)
+    Object.assign(body, { on_request: ['CAPITAL'], contact: 'miko@rijeka.app', can_edit: true, source: 'firm', preset: 'DEALER' })
+    await route.fulfill({ response: res, json: body })
+  })
+  // Configurations → Modules: shown, not switchable, with the address to write to; every other module still switches
+  await app.goto('/configurations/modules')
+  const row = app.getByTestId('module-on-request-CAPITAL')
+  await expect(row).toContainText('CAPITAL · on request')
+  await expect(row).toContainText('Not part of the hosted demo. To see it, write to miko@rijeka.app.')
+  await expect(row.getByRole('link', { name: 'miko@rijeka.app' })).toHaveAttribute('href', 'mailto:miko@rijeka.app')
+  await expect(row.getByRole('checkbox')).toHaveCount(0)
+  await expect(app.getByRole('checkbox', { name: 'Capital on' })).toHaveCount(0)
+  await expect(app.getByRole('checkbox', { name: 'Collateral on' })).toBeEnabled()
+  await expectNoHorizontalOverflow(row, 'the on-request row')
+  await app.screenshot({ path: 'e2e/.out/shots/modules-capital-on-request.png' })
+  // Risk: the other sections are there, CAPITAL is not, and its address goes home
+  await app.goto('/risk')
+  const sections = app.getByRole('navigation', { name: 'Risk sections' })
+  await expect(sections.getByRole('link', { name: 'COLLATERAL', exact: true })).toBeVisible()
+  await expect(sections.getByRole('link', { name: 'CAPITAL', exact: true })).toHaveCount(0)
+  await app.goto('/risk/capital')
+  await expect(app, 'Risk → CAPITAL is off').toHaveURL(/\/command-center/)
+  // the roadmap says so instead of promising the tab
+  await app.goto('/roadmap')
+  await expect(app.getByText('not part of the hosted demo: available on request', { exact: false })).toHaveCount(2)
+  // the ticket: no CAPITAL tab beside XVA; KVA is an XVA charge and stays
+  const win = await openTicket(app)
+  const priced = app.waitForResponse(r => r.url().endsWith('/price/preview') && r.request().method() === 'POST')
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  expect((await priced).status()).toBe(200)
+  await expect(win.getByRole('button', { name: 'CAPITAL', exact: true })).toHaveCount(0)
+  for (const tab of ['TRADE', 'DETAILS', 'CASHFLOWS', 'XVA', 'CURVE SCENARIO', '◆ CONFIRM']) await expect(win.getByRole('button', { name: tab, exact: true })).toBeVisible()
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()
+  await win.getByRole('button', { name: 'BILATERAL', exact: true }).click()
+  const { run } = await simulateWithComparison(app, win, '/api/xva/simulate')
+  expect(run.xva.kva, 'KVA is computed').toBeLessThan(0)
+  await expect(win.getByTestId('va-strip')).toContainText('KVA')
+  await app.screenshot({ path: 'e2e/.out/shots/ticket-capital-on-request.png' })
   await app.unrouteAll({ behavior: 'ignoreErrors' })
   expectClean(problems)
 })

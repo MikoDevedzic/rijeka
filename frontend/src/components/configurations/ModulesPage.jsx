@@ -4,7 +4,8 @@
 // tabs, skips its batches and relaxes its gates; it never deletes anything. Presets for
 // the usual shapes of a firm; every change is an audit row. GET /api/modules; PUT for whoever may
 // switch (an admin, or the owner of a sandbox workspace: can_edit in the answer). The route in App.jsx
-// lets the same people in; nothing here looks at the role.
+// lets the same people in; nothing here looks at the role. A module the hosted demo holds back (on_request in
+// the answer: capital) is shown as available on request with the address to write to, and cannot be switched.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
@@ -43,6 +44,7 @@ export default function ModulesPage() {
   const dirty = !!(view && draft && Object.keys(draft).some(k => draft[k] !== view.modules[k]))
   const presetOf = (mods) => Object.entries(view?.presets || {}).find(([, p]) => Object.keys(p.modules).every(k => p.modules[k] === mods[k]))?.[0] || 'CUSTOM'
   const defs = view?.definitions || []
+  const held = view?.on_request || []
 
   return (
     <div className="pnl">
@@ -73,6 +75,13 @@ export default function ModulesPage() {
             <div className="rk-row dim" style={{ gridTemplateColumns: '5rem 14rem 1fr' }}><span>STATE</span><span>MODULE</span><span>WHAT IT SWITCHES</span></div>
             {defs.map(d => {
               const on = draft?.[d.key] !== false
+              if (held.includes(d.key)) return (
+                <div key={d.key} className="rk-row" data-testid={`module-on-request-${d.key}`} style={{ gridTemplateColumns: '5rem 14rem 1fr' }}>
+                  <span><span className="pnl-chip">OFF</span></span>
+                  <span className="rk-ref">{d.label.toUpperCase()}<small className="pnl-note" style={{ display: 'inline' }}> · on request</small></span>
+                  <span className="pnl-tv dim" style={{ textAlign: 'left', whiteSpace: 'normal' }}>{d.effects}. Not part of the hosted demo. To see it, write to <a href={`mailto:${view.contact}`} style={{ color: 'var(--accent)' }}>{view.contact}</a>.</span>
+                </div>
+              )
               return (
                 <div key={d.key} className="rk-row" style={{ gridTemplateColumns: '5rem 14rem 1fr', opacity: d.planned ? 0.55 : 1 }}>
                   <span>

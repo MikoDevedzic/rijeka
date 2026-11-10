@@ -245,6 +245,15 @@ but still open by URL. Nothing is deleted, and switching back on resumes; what a
 module was off is not backfilled, so a module's history starts when it is first on. Null, or the columns missing,
 means every module on, which is what every firm created before 9 November 2026 has.
 
+**Held for the admin role on a hosted demo.** `modules.ON_REQUEST` (capital) is not part of the hosted demo. Where
+`RIJEKA_DEMO_PROVISION` is on, `modules.locked` answers those modules for every user without the admin role
+(`profiles.role`), and three things follow from that one list: `GET /api/modules` (and `modules.for_user`) answer
+with them off whatever `firms.modules` holds, mark them `on_request` and give `contact`; the presets offered have
+them off; `PUT /api/modules` stores them off when a preset includes one and refuses one asked for by name (403).
+The frontend has no rule of its own: the tab, the Risk section and the route follow the answer as for any switch,
+and the MODULES page shows the row as on request. With `RIJEKA_DEMO_PROVISION=0` nothing is held back. It is the
+same kind of thing as a switch, not an entitlement: `/api/capital` stays callable (Risk → Collateral reads it).
+
 Presets: LAUNCH (book, value, the XVA charge and its saving on chain, confirm; P&L, the risk pages, capital,
 collateral, reserves and IPV off), DEALER (everything), CORPORATE (book, confirm, P&L, the ticket's XVA), FUND
 (everything but capital), CLASSROOM (everything; the chain's network is a deployment setting). All eleven modules

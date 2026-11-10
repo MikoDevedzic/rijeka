@@ -1,5 +1,6 @@
 // ROADMAP — what is built, what is being built, what comes next. Honest statuses only.
 import './Docs.css'
+import { useModulesStore } from '../../store/useModulesStore'
 
 const PHASES = [
   { title: 'PHASE 1 · RATES', status: 'LIVE', items: [
@@ -24,8 +25,8 @@ const PHASES = [
     ['DONE', 'IPV: the market data the book is priced on verified by pillar and surface point against an independent mark, overrides with their first- and second-order P&L, the gate, the controller\'s sign-off; FLASH and OFFICIAL on the trading P&L; XVA RESERVES as the reserve book'],
     ['NEXT', 'IPV next: the sequential explain of the reserve change, a second market-data feed on self-host as the independent mark, the monthly IPV report'],
     ['DONE', 'Greeks and bump-and-reprice ladders; exposure profiles (EE, ENE, PFE) and SA-CCR EAD inside the XVA module'],
-    ['DONE', 'CAPITAL tab on every ticket: SIMM IM, SA-CCR EAD by asset class (CRE52, SCO60.98), RWA, CCR and CVA capital (MAR50), KVA, MVA, leverage exposure and HQLA under collateral regimes (cash and government securities, stablecoin, tokenised fund shares, tokenised sovereign) and counterparty types; the Basel worked examples as the reference suite'],
-    ['DONE', 'Risk → CAPITAL: the book under collateral regimes, every netting set re-collateralised channel by channel from the CSA as booked to on-chain under current rules and to the forward states, the attribution per step with its paragraph, the invariants stated'],
+    ['DONE', 'CAPITAL tab on every ticket: SIMM IM, SA-CCR EAD by asset class (CRE52, SCO60.98), RWA, CCR and CVA capital (MAR50), KVA, MVA, leverage exposure and HQLA under collateral regimes (cash and government securities, stablecoin, tokenised fund shares, tokenised sovereign) and counterparty types; the Basel worked examples as the reference suite', 'CAPITAL'],
+    ['DONE', 'Risk → CAPITAL: the book under collateral regimes, every netting set re-collateralised channel by channel from the CSA as booked to on-chain under current rules and to the forward states, the attribution per step with its paragraph, the invariants stated', 'CAPITAL'],
     ['NEXT', 'Capital next: FRTB sensitivities-based market-risk capital from the ladder, SIMM across risk classes with incremental IM and netting-set consolidation, a CSV import for a client book, an Excel replication'],
     ['DONE', 'MARKET RISK tab: key-rate IR01 ladder by bump-and-reprice, historical-simulation VaR by full revaluation (every trade repriced on each of two years of observed days, the ladder VaR alongside as the linear comparison), named stress by full revaluation, limits on any reported number with utilisation and breaches'],
     ['DONE', 'VaR backtesting: yesterday\'s VaR against today\'s clean, hypothetical or dirty P&L; exceptions, the Basel traffic light from the binomial, Kupiec\'s test; the 95% and ladder VaR alongside'],
@@ -95,7 +96,10 @@ const PHASES = [
   ]},
 ]
 
+// An item may name the module it belongs to (third element). Where the hosted demo holds that module back
+// (store onRequest), the line says so instead of promising a tab the reader will not find.
 export default function Roadmap() {
+  const onRequest = useModulesStore(s => s.onRequest)
   return (
     <div className="doc">
       <header className="doc-head">
@@ -108,7 +112,7 @@ export default function Roadmap() {
           <section key={ph.title} className="rm-phase">
             <h2>{ph.title} <span className={`rm-status ${ph.status.toLowerCase()}`}>{ph.status}</span></h2>
             <ul>
-              {ph.items.map(([st, text], i) => <li key={i} className={st.toLowerCase()}><span className="rm-dot" /><span className="rm-st">{st}</span><span>{text}</span></li>)}
+              {ph.items.map(([st, text, mod], i) => <li key={i} className={st.toLowerCase()}><span className="rm-dot" /><span className="rm-st">{st}</span><span>{text}{mod && onRequest.includes(mod) ? ' (not part of the hosted demo: available on request, see Configurations → Modules)' : ''}</span></li>)}
             </ul>
           </section>
         ))}

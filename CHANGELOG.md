@@ -3,6 +3,25 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## 0.16.2 · 9 November 2026
+
+Capital is not part of the hosted demo.
+
+- **No CAPITAL tab beside XVA, no Risk → CAPITAL, for anyone but the admin role.** Where every sign-in gets its own
+  sandbox workspace (`RIJEKA_DEMO_PROVISION` on), `GET /api/modules` answers with capital off for every user without
+  the admin role, whatever the firm's row says: a workspace made before the launch preset, a preset that includes
+  capital (Dealer, Classroom) and a firm whose admin switched it on are all answered the same way. A preset applies
+  without it; asking for it by name is refused with 403 and the address to write to. The admin role keeps every
+  module and every switch. A self-hosted desk (`RIJEKA_DEMO_PROVISION=0`) holds nothing back.
+- **Configurations → Modules says how to see it.** Capital is listed as off and on request, with the address to
+  write to, and has no switch. The launch home's link reads "Switch on P&L, risk and more"; the two roadmap lines
+  that describe the CAPITAL tab and Risk → CAPITAL say they are available on request; the counterparty form's note
+  names only what the reader has.
+- **KVA stays.** It is an XVA charge: the XVA tab, its capital-model input and the saving on chain are unchanged.
+- **What it is not.** Like every module switch it hides pages and tabs and is not an entitlement: `/api/capital`
+  stays callable, and Risk → Collateral, when a demo user switches it on, still shows the book under collateral
+  regimes with its RWA and capital lines.
+
 ## 0.16.1 · 9 November 2026
 
 Every tab of the currency and digital-asset ticket read as a first-time user reads it, and the ticket under a moving

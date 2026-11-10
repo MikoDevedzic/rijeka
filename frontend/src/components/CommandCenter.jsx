@@ -196,7 +196,7 @@ function DeskHome({ demo, navigate }) {
           </div>
         )}
         {canEdit
-          ? <Link className="lh-more" data-testid="launch-more" to="/configurations/modules">{'Switch on P&L, risk, capital and more'}</Link>
+          ? <Link className="lh-more" data-testid="launch-more" to="/configurations/modules">{'Switch on P&L, risk and more'}</Link>
           : <span className="lh-more" data-testid="launch-more">{"More modules can be switched on by your firm's admin"}</span>}
       </div>
       {footer}

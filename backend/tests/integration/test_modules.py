@@ -64,11 +64,21 @@ def _fresh_user() -> None:
     eng.dispose()
 
 
+def _stored(firm_id: str) -> dict:
+    """firms.modules as the row holds it, not as the API answers for a user."""
+    eng = sa.create_engine(os.environ["DATABASE_URL"])
+    with eng.connect() as c:
+        row = c.execute(sa.text("SELECT modules FROM firms WHERE id = :f"), {"f": firm_id}).scalar()
+    eng.dispose()
+    return row
+
+
 def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(client, auth_a, auth_b, monkeypatch):
     from stack.token import mint
     new = {"Authorization": f"Bearer {mint(NEW_USER, NEW_EMAIL, 'trader')}"}
     _fresh_user()
     before_a = client.get("/api/modules", headers=auth_a).json()
+    row_a = _stored(before_a["firm_id"])
     # before the workspace exists: no firm, every module on, nothing to edit
     j = client.get("/api/modules", headers=new).json()
     assert j["firm_id"] is None and all(j["modules"].values()) and j["can_edit"] is False
@@ -86,20 +96,44 @@ def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(clien
     assert client.post("/api/demo/provision", headers=new).status_code == 200
     assert client.get("/api/modules", headers=new).json()["modules"]["PNL"] is True
     r = client.put("/api/modules", json={"preset": "DEALER"}, headers=new)
-    assert r.status_code == 200 and all(r.json()["modules"].values()) and r.json()["view"] == "full"      # a full preset: the full app
+    assert r.status_code == 200 and r.json()["view"] == "full"                                             # a full preset: the full app
+    # ... less capital, which the hosted demo holds for the admin role (9 November 2026): off in the answer, in the
+    # presets offered and in the row, marked on request with the address to write to, refused by name
+    j = r.json()
+    assert {k for k, v in j["modules"].items() if not v} == {"CAPITAL"} and j["on_request"] == ["CAPITAL"] and "@" in j["contact"]
+    assert j["presets"]["DEALER"]["modules"] == j["modules"] and [d["key"] for d in j["definitions"] if d.get("on_request")] == ["CAPITAL"]
+    assert _stored(j["firm_id"])["CAPITAL"] is False
+    r = client.put("/api/modules", json={"modules": {**j["modules"], "CAPITAL": True}}, headers=new)
+    assert r.status_code == 403 and "available on request" in r.json()["detail"] and _stored(j["firm_id"])["CAPITAL"] is False
+    assert client.put("/api/modules", json={"modules": j["modules"]}, headers=new).status_code == 200      # the page's own save, capital left off
+    # the admin role has it, and may switch it; the row then says on, and a trader in that firm still has it off
+    set_role(NEW_USER, "admin")
+    try:
+        j = client.get("/api/modules", headers=new).json()
+        assert j["on_request"] == [] and j["presets"]["DEALER"]["modules"]["CAPITAL"] is True and j["modules"]["CAPITAL"] is False
+        r = client.put("/api/modules", json={"preset": "DEALER"}, headers=new)
+        assert r.status_code == 200 and all(r.json()["modules"].values()) and _stored(j["firm_id"])["CAPITAL"] is True
+    finally:
+        set_role(NEW_USER, "trader")
+    j = client.get("/api/modules", headers=new).json()
+    assert j["modules"]["CAPITAL"] is False and j["on_request"] == ["CAPITAL"] and _stored(j["firm_id"])["CAPITAL"] is True
+    assert sum(j["modules"].values()) == len(j["modules"]) - 1
     r = client.put("/api/modules", json={"preset": "LAUNCH"}, headers=new)
     assert r.status_code == 200 and not r.json()["modules"]["MARKET_RISK"] and r.json()["view"] == "launch"
     assert client.put("/api/modules", json={"preset": "DEALER", "note": "x" * 501}, headers=new).status_code == 422
     # an existing firm is exactly as it was. It has two members, so it is not a sandbox: neither its ADMIN member nor
     # the other may switch modules for the colleague without the admin role (Magnus, 9 November 2026)
     after_a = client.get("/api/modules", headers=auth_a).json()
-    assert after_a["modules"] == before_a["modules"] and after_a["preset"] == before_a["preset"] and all(after_a["modules"].values())
+    # (its row is untouched; what its traders are answered differs only by capital, held back on a hosted demo)
+    assert _stored(after_a["firm_id"]) == row_a and after_a["preset"] == before_a["preset"] and all(before_a["modules"].values())
+    assert after_a["modules"] == {**before_a["modules"], "CAPITAL": False} and after_a["on_request"] == ["CAPITAL"] and before_a["on_request"] == []
     assert after_a["view"] == "full" and after_a["can_edit"] is False and client.get("/api/modules", headers=auth_b).json()["can_edit"] is False
     for who in (auth_a, auth_b):
         assert client.put("/api/modules", json={"preset": "LAUNCH"}, headers=who).status_code == 403
     # where sign-ins do not get a sandbox (a firm deployment), only the admin role switches modules
     monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "0")
-    assert client.get("/api/modules", headers=new).json()["can_edit"] is False
+    j = client.get("/api/modules", headers=new).json()
+    assert j["can_edit"] is False and j["on_request"] == [] and j["presets"]["DEALER"]["modules"]["CAPITAL"] is True     # a self-hosted desk holds nothing back
     assert client.put("/api/modules", json={"preset": "DEALER"}, headers=new).status_code == 403
     # a module switched off does not refuse its API: the switch hides and skips, it is not an entitlement (stated in docs/architecture.md)
     assert client.get("/api/modules", headers=new).json()["modules"]["PNL"] is False
@@ -113,7 +147,8 @@ def test_an_instance_can_start_new_workspaces_on_everything(client, monkeypatch)
     monkeypatch.setenv("RIJEKA_SIGNUP_PRESET", "none")
     assert client.post("/api/demo/provision", headers=new).status_code == 200
     j = client.get("/api/modules", headers=new).json()
-    assert all(j["modules"].values()) and j["source"] == "default" and j["firm_id"]
+    assert j["source"] == "default" and j["firm_id"]
+    assert {k for k, v in j["modules"].items() if not v} == {"CAPITAL"} and j["on_request"] == ["CAPITAL"]     # everything the demo offers
 
 
 def test_a_new_workspace_is_never_joined_to_a_firm_that_happens_to_share_its_name(client, monkeypatch):

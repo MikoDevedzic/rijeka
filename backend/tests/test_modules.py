@@ -116,6 +116,66 @@ def test_the_launch_view_follows_the_last_preset_chosen_not_the_name_of_the_curr
     assert M.view_for_firm(MagicMock(), "firm") == "full"
 
 
+def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
+    from unittest.mock import MagicMock, patch
+    assert M.ON_REQUEST == ("CAPITAL",) and set(M.ON_REQUEST) <= set(M.KEYS) and "@" in M.CONTACT
+    db, user = MagicMock(), {"sub": "u-1"}
+    with patch("api.routes._roles.role_of", return_value="trader") as role:
+        monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "0")
+        assert M.locked(db, user) == () and not role.called                        # a self-hosted desk: nothing is held back, nothing is read
+        monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "1")
+        assert M.locked(db, user) == ("CAPITAL",)                                  # the hosted demo: everyone but the admin role
+    for other in ("viewer", "sales", ""):
+        with patch("api.routes._roles.role_of", return_value=other):
+            assert M.locked(db, user) == ("CAPITAL",), other
+    with patch("api.routes._roles.role_of", return_value="admin"):
+        assert M.locked(db, user) == ()
+    # off, whatever the firm's row or a preset says; nothing else moves
+    assert M.without(M.all_on(), ("CAPITAL",)) == {**M.all_on(), "CAPITAL": False} and M.without(M.all_on(), ()) == M.all_on()
+    assert M.without(M.preset_modules("LAUNCH"), ("CAPITAL",)) == M.preset_modules("LAUNCH")
+    cat = M.catalogue(("CAPITAL",))
+    assert [m["key"] for m in cat["definitions"] if m.get("on_request")] == ["CAPITAL"]
+    assert not any(p["modules"]["CAPITAL"] for p in cat["presets"].values()) and cat["presets"]["DEALER"]["modules"]["PNL"]
+    assert not any(m.get("on_request") for m in M.catalogue()["definitions"]) and all(M.catalogue()["presets"]["DEALER"]["modules"].values())
+    assert not any("on_request" in m for m in M.MODULES)                           # the catalogue marks a copy, never the definitions
+    # what a user has: the firm's switches, less what is held back from that user
+    monkeypatch.setattr(M, "firm_of_user", lambda db, uid: "firm")
+    monkeypatch.setattr(M, "for_firm", lambda db, firm_id: {"modules": M.all_on(), "preset": "DEALER", "source": "firm"})
+    monkeypatch.setattr(M, "locked", lambda db, user: ("CAPITAL",) if user["sub"] == "demo" else ())
+    assert M.is_on(db, "demo", "CAPITAL") is False and M.is_on(db, "demo", "PNL") is True and M.for_user(db, "demo")["preset"] == "DEALER"
+    assert M.is_on(db, "boss", "CAPITAL") is True
+
+
+def test_a_held_module_is_stored_off_and_refused_by_name(monkeypatch):
+    from unittest.mock import MagicMock
+    import json
+    import api.routes.modules as route
+    db, user = MagicMock(), {"sub": "u"}
+    monkeypatch.setattr(M, "may_edit", lambda db, user: True)
+    monkeypatch.setattr(M, "firm_of_user", lambda db, uid: "firm")
+    monkeypatch.setattr(M, "columns_present", lambda db: True)
+    monkeypatch.setattr(M, "locked", lambda db, user: ("CAPITAL",))
+    monkeypatch.setattr(M, "for_firm", lambda db, firm_id: {"modules": M.all_on(), "preset": None, "source": "default"})
+    monkeypatch.setattr(route, "_view", lambda db, uid, user=None: {"ok": True})
+    monkeypatch.setattr("api.routes._limits.heavy", lambda *a, **k: None)
+    with pytest.raises(HTTPException) as e:
+        put_modules(ModulesBody(modules={"CAPITAL": True, "PNL": True}), db=db, user=user)
+    assert e.value.status_code == 403 and "Capital is available on request" in e.value.detail and M.CONTACT in e.value.detail
+    assert not db.execute.called and not db.commit.called                           # refused before anything is written
+    # a preset that includes it applies without it; so does a map that leaves it off
+    for body in (ModulesBody(preset="DEALER"), ModulesBody(modules={**M.all_on(), "CAPITAL": False})):
+        db.reset_mock()
+        assert put_modules(body, db=db, user=user) == {"ok": True} and db.commit.called
+        stored = json.loads(db.execute.call_args_list[0].args[1]["m"])
+        assert stored == {**M.all_on(), "CAPITAL": False}, body
+        assert json.loads(db.execute.call_args_list[1].args[1]["a"]) == stored      # the audit row says what was stored
+    # nobody held back: the same preset stores everything on
+    monkeypatch.setattr(M, "locked", lambda db, user: ())
+    db.reset_mock()
+    put_modules(ModulesBody(preset="DEALER"), db=db, user=user)
+    assert json.loads(db.execute.call_args_list[0].args[1]["m"]) == M.all_on()
+
+
 def test_the_frontend_and_the_backend_name_the_same_modules():
     """Two lists of the module keys exist (backend/modules.py and the frontend store); nothing else ties them (Nikola)."""
     import re
