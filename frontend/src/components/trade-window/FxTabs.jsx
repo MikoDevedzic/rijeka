@@ -524,7 +524,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const [bbp, setBbp] = useState(0)
   const [vpt, setVpt] = useState(0)
   const [sel, setSel] = useState('spot')                               // the curve the left column and the chart are showing
-  const [fpips, setFpips] = useState(0)                                // a currency pair's quoted points, all moved together, in pips
+  const [flatPts, setFlatPts] = useState({ pair: null, v: 0 })         // a currency pair's quoted points, all moved together, in pips, for one pair
   const [pill, setPill] = useState({ pair: null, quote: {}, base: {} }) // a rate curve's pillars shocked one by one: date → bp, for one pair
   const [drags, setDrags] = useState({ pair: null, by: {} })           // tenor → points it has been dragged, for one pair
   const [typed, setTyped] = useState({ pair: null, text: null })       // the scenario fixing as typed; null: it follows the shocked forward
@@ -545,6 +545,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const setMoves = (by) => setDrags({ pair, by })
   const setFixingText = (text) => setTyped({ pair, text })
   const own = pill.pair === pair ? pill : { quote: {}, base: {} }
+  const fpips = flatPts.pair === pair ? flatPts.v : 0
+  const setFpips = (v) => setFlatPts({ pair, v })
   const setOwn = (which, date, bp) => setPill({ pair, quote: own.quote, base: own.base, [which]: { ...own[which], [date]: bp } })
   // The curve and the surface the ticket priced on. The pairs answer does not depend on the ticket's terms, so it is
   // read once for the stored market the quote names (its pair, and the reads of the points and the surface it priced
@@ -635,7 +637,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     if (!o || stale) return
     const k = index - 1                                                      // the chart's first point is spot
     if (whole || k < 0) {
-      const ref = k < 0 ? quote.spot : (quote.spot + (nodes[k].points + o.moves[k]) * pip) * carryFactor(rq, rb, nodes[k].days)
+      const ref = k < 0 ? quote.spot : (quote.spot + (nodes[k].points + o.moves[k] + flatPips) * pip) * carryFactor(rq, rb, nodes[k].days)
       const pct = spotPctFromDrag({ originPct: o.spot, dPrice, ref })
       if (pct != null) setSpot(pct)
     } else {
@@ -685,7 +687,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const qc = quote.quote_currency, bc = quote.base_currency
   const rf = (k) => `var(${RISK_FACTORS[k].token})`
   const plus = (v, d = 0) => `${v > 0 ? '+' : ''}${Number(v.toFixed(d))}`
-  const count = (o) => Object.values(o || {}).filter(v => Number(v)).length
+  const count = (shown, o) => shown.filter(x => Number(o?.[x.date])).length
   const said = (...parts) => parts.filter(Boolean).join(' · ') || '—'
   const points = (n) => (n ? `${n} ${n > 1 ? 'points' : 'point'}` : null)
   const nTen = nodes.filter(n => (moves[n.tenor] || 0) !== 0).length
@@ -694,8 +696,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     { key: 'fwd', name: crypto ? `${bc} FORWARD BASIS` : `${pair} FORWARD POINTS`, color: rf('basis'),
       sub: model.quoted ? `the quoted points${model.label ? `, ${model.label}` : ''}` : 'the ticket\'s own carry from spot',
       says: said(crypto ? (european && bbp ? `${plus(bbp)} bp` : null) : (fpips ? `${plus(fpips)} pips` : null), points(nTen)) },
-    european && { key: 'quote', name: quote.quote_curve || `${qc} CURVE`, sub: `${qc} discounting`, color: rf('ir'), says: said(qbp ? `${plus(qbp)} bp` : null, points(count(own.quote))) },
-    european && !crypto && { key: 'base', name: quote.curves?.base?.id || `${bc} RATE`, sub: `${bc} discounting`, color: rf('ir'), says: said(bbp ? `${plus(bbp)} bp` : null, points(count(own.base))) },
+    european && { key: 'quote', name: quote.quote_curve || `${qc} CURVE`, sub: `${qc} discounting`, color: rf('ir'), says: said(qbp ? `${plus(qbp)} bp` : null, points(count(qPill, own.quote))) },
+    european && !crypto && { key: 'base', name: quote.curves?.base?.id || `${bc} RATE`, sub: `${bc} discounting`, color: rf('ir'), says: said(bbp ? `${plus(bbp)} bp` : null, points(count(bPill, own.base))) },
     option && { key: 'vol', name: `${pair} VOL`, sub: quote.vol_source || 'the pair\'s surface', color: rf('vol'), says: said(european && vpt ? `${plus(vpt, 2)} pt` : null) },
   ].filter(Boolean)
   const cur = curves.find(c => c.key === sel) || curves[0]
@@ -712,8 +714,9 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     base: { v: bbp, set: setBbp, min: -200, max: 200, step: 5, unit: 'bp', what: 'BASIS POINTS' },
     vol: european ? { v: vpt, set: setVpt, min: -5, max: 5, step: 0.25, unit: 'pt', what: 'VOL POINTS' } : null,
   }[cur.key]
-  // a shock as typed: a sign, digits, en-US grouping, a unit after it; empty is no shock, anything else is left as it was
-  const typedNumber = (text) => { const t = String(text).replace('−', '-').trim(); if (t === '') return 0; const m = /^([+-]?)\s*(\d[\d,]*\.?\d*|\.\d+)\s*(%|bp|pt|pips)?$/i.exec(t); if (!m) return null; const n = Number(m[2].replace(/,/g, '')); return Number.isFinite(n) ? (m[1] === '-' ? -n : n) : null }
+  // a shock as typed: a sign, a number grouped the en-US way or not at all, a unit after it. Empty is no shock;
+  // anything else ("abc", a decimal comma) is not read and the box goes back to what is applied
+  const typedNumber = (text) => { const t = String(text).replace('−', '-').trim(); if (t === '') return 0; const m = /^([+-]?)\s*(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d*)?|\.\d+)\s*(%|bp|pt|pips)?$/i.exec(t); if (!m) return null; const n = Number(m[2].replace(/,/g, '')); return Number.isFinite(n) ? (m[1] === '-' ? -n : n) : null }
   const clampTo = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
 
   // point by point: the forward curve's tenors (in points), or a rate curve's pillars (in basis points)
@@ -721,10 +724,10 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   const lastTenor = (() => { const j = nodes.findIndex(n => n.x >= settleX); return j < 0 ? nodes.length : Math.min(nodes.length, j + 2) })()
   const pointRows = cur.key === 'fwd'
     ? nodes.slice(0, lastTenor).map((n, i) => ({ id: n.tenor, name: n.tenor, market: fmt(curve[i + 1].base, dp), scen: fmt(curve[i + 1].shocked, dp), value: moves[n.tenor] || 0, d: crypto ? dp : 1,
-        set: (v) => setMoves({ ...moves, [n.tenor]: bounds ? clampTo(v, bounds[i].lo, bounds[i].hi) : v }) }))
+        set: (v) => { const c = bounds ? clampTo(v, bounds[i].lo, bounds[i].hi) : v; setMoves({ ...moves, [n.tenor]: c }); return c } }))
     : rateKey
       ? pills.map(p => { const mine = Number(own[rateKey][p.date]) || 0; return { id: p.date, name: tenorLabel(p.t), market: p.zero_pct.toFixed(3), scen: (p.zero_pct + (rateFlat + mine) / 100).toFixed(3), value: mine, d: 0,
-          set: (v) => setOwn(rateKey, p.date, clampTo(Math.round(v), -RATE_SHOCK_BOUND - rateFlat, RATE_SHOCK_BOUND - rateFlat)) } })
+          set: (v) => { const c = clampTo(Math.round(v), -RATE_SHOCK_BOUND - rateFlat, RATE_SHOCK_BOUND - rateFlat); setOwn(rateKey, p.date, c); return c } } })
       : []
   const pointUnit = cur.key === 'fwd' ? (crypto ? `MOVE ${qc}` : 'MOVE PIPS') : 'SHOCK BP'
   const resetCurve = () => {
@@ -835,7 +838,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
   )
   const inputBox = { background: 'var(--bg)', color: 'var(--text-hi)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '5px 7px', fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', width: '100%' }
   const setBox = { borderColor: 'var(--accent-dim)', boxShadow: 'inset 0 -2px 0 var(--accent)' }
-  const commit = (e, set) => { const v = typedNumber(e.target.value); if (v != null) set(v) }
+  // the box shows what is applied: a value out of bounds comes back clamped, text that is not a number comes back as it was
+  const commit = (e, apply, was, show) => { const v = typedNumber(e.target.value); e.target.value = show(v == null ? was : apply(v)) }
   const onEnter = (e) => { if (e.key === 'Enter') e.target.blur() }
   const left = (
     <div style={XVA_LEFT} data-testid="fx-scn-left">
@@ -847,11 +851,11 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
           <input type="range" data-testid="fx-scn-flat" aria-label={`Flat shock, ${cur.name}`} min={flat.min} max={flat.max} step={flat.step} value={flat.v} disabled={stale}
             onChange={e => flat.set(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--text)' }} />
           <input key={`${cur.key}:${flat.v}`} type="text" inputMode="decimal" data-testid="fx-scn-flat-value" aria-label={`Flat shock value, ${cur.name}`} defaultValue={`${plus(flat.v, 2)}${flat.unit}`} disabled={stale}
-            onBlur={e => commit(e, v => flat.set(clampTo(v, flat.min, flat.max)))} onKeyDown={onEnter} style={{ ...inputBox, ...(flat.v ? setBox : null) }} />
+            onBlur={e => commit(e, v => { const c = clampTo(v, flat.min, flat.max); flat.set(c); return c }, flat.v, v => `${plus(v, 2)}${flat.unit}`)} onKeyDown={onEnter} style={{ ...inputBox, ...(flat.v ? setBox : null) }} />
         </div>
       </>)}
       {pointRows.length > 0 && (<>
-        <div style={secHdr}>POINT BY POINT<Note inline>{cur.key === 'fwd' ? 'Type a move on one tenor, or drag that tenor on the chart: a drag carries its neighbours with it, a typed move does not.' : 'Type a shock on one pillar, or drag it on the chart. A trade that settles on one date sees the curve at that date: the shock there is read between the two pillars around it.'} A typed point carries the brass rule.</Note></div>
+        <div style={secHdr}>POINT BY POINT<Note inline>{cur.key === 'fwd' ? 'Type a move on one tenor, or drag that tenor on the chart: a drag carries its neighbours with it, a typed move does not.' : 'Type a shock on one pillar, or drag it on the chart. A trade that settles on one date sees the curve at that date, and the shock there is read as the engine\'s curve reads it (linear in the log of the discount factor between pillars): +50 bp on one pillar is less than +50 bp at a date beside it.'} A typed point carries the brass rule.</Note></div>
         <table data-testid="fx-scn-points" style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
           <thead><tr>{['TENOR', 'MARKET', pointUnit, 'SCENARIO'].map((h, i) => <th key={h} style={{ ...lbl, textAlign: i ? 'right' : 'left', padding: '4px 4px 6px', borderBottom: '1px solid var(--border-hi)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
           <tbody>{pointRows.map(r => (
@@ -860,7 +864,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', padding: '3px 4px', borderBottom: '1px solid var(--border)' }}>{r.market}</td>
               <td style={{ padding: '3px 4px', borderBottom: '1px solid var(--border)', width: 84 }}>
                 <input key={`${r.id}:${r.value}`} type="text" inputMode="decimal" data-point={r.id} aria-label={`Shock at ${r.name}`} placeholder="—" defaultValue={r.value ? plus(r.value, r.d) : ''} disabled={stale}
-                  onBlur={e => commit(e, r.set)} onKeyDown={onEnter} style={{ ...inputBox, ...(r.value ? setBox : null) }} />
+                  onBlur={e => commit(e, r.set, r.value, v => (v ? plus(v, r.d) : ''))} onKeyDown={onEnter} style={{ ...inputBox, ...(r.value ? setBox : null) }} />
               </td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', padding: '3px 4px', borderBottom: '1px solid var(--border)', color: 'var(--text-hi)' }}>{r.scen}</td>
             </tr>))}</tbody>
@@ -883,8 +887,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     : rateKey ? (pills.length
         ? <FxRateCurve pillars={pills} own={own[rateKey]} flat={rateFlat} settleT={tSettle} color={cur.color} disabled={stale}
             shockAt={(p) => rateFlat + (Number(own[rateKey][p.date]) || 0)} onPoint={(date, bp) => setOwn(rateKey, date, bp)} />
-        : <div data-testid="fx-scn-one-rate" style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>This curve is one rate on this trade ({rateKey === 'base' ? (quote.base_discounting || 'a flat rate') : 'no pillars were sent'}): it has no points to move, so it takes the flat shock only.</div>)
-    : (volSurface || <div style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>No vol surface is stored for {pair}.</div>)
+        : <div data-testid="fx-scn-one-rate" style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>{rateKey === 'base' && quotedForward ? `On quoted points the ${bc} rate is the one the points imply, a single rate` : `This curve is one rate on this trade (${rateKey === 'base' ? (quote.base_discounting || 'a flat rate') : 'no pillars were sent'})`}: it has no points to move, so it takes the flat shock only.</div>)
+    : (volSurface || <div style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>{ready ? `No vol surface is stored for ${pair}.` : `Reading the surface stored for ${pair}…`}</div>)
   const fixingCell = (
     <div style={{ position: 'relative', background: 'var(--bg-deep)', border: '1px solid var(--border)', borderRadius: 'var(--r-3)', padding: '9px 12px', minWidth: 0 }}>
       <div style={{ ...lbl, marginBottom: 4 }}>{option ? (american ? 'FIXING AT EXERCISE OR EXPIRY' : 'FIXING AT EXPIRY') : 'SCENARIO FIXING'}

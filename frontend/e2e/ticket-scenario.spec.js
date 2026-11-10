@@ -69,6 +69,18 @@ test('a forward: its curves are listed; the discounting curve is shocked flat, b
   await rows.nth(0).locator('input').blur()
   expect(await total()).toBe(before)
   await expect(win.getByTestId('fx-scn-says-quote')).toHaveText('+25 bp · 1 point')
+  await expect(rows.nth(0).locator('input'), 'the box goes back to what is applied').toHaveValue('')
+  // a decimal comma is not guessed at, and a value out of bounds comes back as the bound that was applied
+  await rows.nth(0).locator('input').fill('1,5')
+  await rows.nth(0).locator('input').blur()
+  await expect(rows.nth(0).locator('input')).toHaveValue('')
+  expect(await total()).toBe(before)
+  await win.getByTestId('fx-scn-flat-value').fill('900')
+  await win.getByTestId('fx-scn-flat-value').blur()
+  await expect(win.getByTestId('fx-scn-flat-value')).toHaveValue('+200bp')
+  await win.getByTestId('fx-scn-flat-value').fill('25')
+  await win.getByTestId('fx-scn-flat-value').blur()
+  await expect(win.getByTestId('fx-scn-says-quote')).toHaveText('+25 bp · 1 point')
 
   // a drag on the chart: the first pillar goes up
   const pillar = win.getByTestId('fx-rate-curve').locator('circle').first()

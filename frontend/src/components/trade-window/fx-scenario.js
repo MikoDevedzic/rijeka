@@ -224,18 +224,31 @@ export function shockedCurve({ spot, pip, nodes, moves, spotPct = 0, quoteBp = 0
 
 // ── a rate curve shocked point by point ────────────────────────────────────────────────────────────────
 // A forward or an option settles on one date, so of a discounting curve its price sees one number: the zero rate
-// to that date. A shock typed or dragged on a pillar reaches the price through the shock at the settlement time:
-// read between the two pillars around it, linearly in time, and held flat before the first pillar and after the
-// last. `pillars` are the curve's own ({date, t, zero_pct}), `shocks` the basis points on each by its date.
+// to that date. A shock typed or dragged on a pillar reaches the price through the shock at the settlement time,
+// read as the engine's own curve would read it (backend/pricing/curve.py): the curve is linear in the LOG of the
+// discount factor between pillars, in time, from an anchor of 1 at the valuation date, and holds the last
+// pillar's zero rate beyond it. A shock of Δ basis points on the zero rate of a pillar at t moves that pillar's
+// log discount factor by −Δ·t, so between two pillars a and b the zero rate at T moves by
+//     [ (1 − w)·Δa·ta + w·Δb·tb ] / T,      w = (T − ta) / (tb − ta),
+// which is Δ itself for a parallel shock, the first pillar's shock before it (the anchor has none and no time)
+// and the last pillar's after it. It is NOT the average of the two shocks: +50 bp on a 2M pillar alone is about
+// +16 bp at 3M when the next pillar is 4M, not +25. `pillars` are the curve's own ({date, t, zero_pct});
+// `shocks` the basis points on each, by its date.
 export function shockAtTime(pillars, shocks, t) {
-  if (!Array.isArray(pillars) || !pillars.length || !finite(t)) return 0
+  if (!Array.isArray(pillars) || !pillars.length || !finite(t) || t <= 0) return 0
   const at = (p) => { const b = Number(shocks?.[p.date]); return finite(b) ? b : 0 }
-  if (t <= pillars[0].t) return at(pillars[0])
-  for (let i = 1; i < pillars.length; i++) {
-    const a = pillars[i - 1], b = pillars[i]
-    if (t <= b.t) return b.t > a.t ? at(a) + (at(b) - at(a)) * (t - a.t) / (b.t - a.t) : at(b)
+  const last = pillars[pillars.length - 1]
+  if (t >= last.t) return at(last)
+  let a = { t: 0, date: null }                           // the anchor at the valuation date
+  for (const b of pillars) {
+    if (t <= b.t) {
+      if (!(b.t > a.t)) return at(b)
+      const w = (t - a.t) / (b.t - a.t)
+      return ((1 - w) * (a.date == null ? 0 : at(a)) * a.t + w * at(b) * b.t) / t
+    }
+    a = b
   }
-  return at(pillars[pillars.length - 1])
+  return at(last)
 }
 
 // The pillars a single-date trade is drawn against: every pillar up to its settlement and the two after it (the

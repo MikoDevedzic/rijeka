@@ -792,16 +792,23 @@ describe('modelWords: the engine\'s method, with the forward named once', () => 
 
 describe('a rate curve shocked point by point', () => {
   const pillars = [{ date: '2026-12-10', t: 0.0822, zero_pct: 4.22 }, { date: '2027-02-10', t: 0.2521, zero_pct: 4.12 }, { date: '2027-05-10', t: 0.4959, zero_pct: 4.02 }, { date: '2027-11-10', t: 1, zero_pct: 3.9 }]
-  it('reads the shock at the settlement time between the two pillars around it, linearly in time', async () => {
+  it('reads the shock at the settlement time as the engine\'s curve would: linear in the log discount factor between pillars', async () => {
     const { shockAtTime } = await import('./fx-scenario')
     expect(shockAtTime(pillars, { '2027-02-10': 10 }, 0.2521)).toBeCloseTo(10, 12)                  // on a pillar: its own shock
-    expect(shockAtTime(pillars, { '2026-12-10': 0, '2027-02-10': 10 }, (0.0822 + 0.2521) / 2)).toBeCloseTo(5, 12)
-    expect(shockAtTime(pillars, { '2027-02-10': 10, '2027-05-10': -20 }, 0.2521 + 0.25 * (0.4959 - 0.2521))).toBeCloseTo(2.5, 12)
-    expect(shockAtTime(pillars, { '2026-12-10': 7 }, 0.01)).toBe(7)                                 // before the first: held flat
-    expect(shockAtTime(pillars, { '2027-11-10': -3 }, 5)).toBe(-3)                                  // after the last: held flat
+    // between two pillars: [(1 − w)·Δa·ta + w·Δb·tb] / T
+    const T = 0.2521 + 0.25 * (0.4959 - 0.2521)
+    expect(shockAtTime(pillars, { '2027-02-10': 10, '2027-05-10': -20 }, T)).toBeCloseTo((0.75 * 10 * 0.2521 + 0.25 * -20 * 0.4959) / T, 12)
+    // the case the engine's test pins (backend/tests/test_scenario_pillar_shock.py): pillars 61 and 120 days out, settlement at 92, +50 bp on the first
+    const two = [{ date: 'a', t: 61 / 365, zero_pct: 4.1 }, { date: 'b', t: 120 / 365, zero_pct: 4.0 }]
+    expect(shockAtTime(two, { a: 50 }, 92 / 365)).toBeCloseTo(15.7332, 4)
+    expect(shockAtTime(two, { b: 50 }, 92 / 365)).toBeCloseTo(34.2668, 4)
+    expect(shockAtTime(two, { a: 50 }, 92 / 365) + shockAtTime(two, { b: 50 }, 92 / 365)).toBeCloseTo(50, 10)   // the two together are the parallel shock
+    expect(shockAtTime(two, { a: 40, b: -20 }, 0.2521 * 1)).not.toBeCloseTo(40 + (-60) * 0.5, 0)   // not the average of the shocks
+    expect(shockAtTime(pillars, { '2026-12-10': 7 }, 0.01)).toBeCloseTo(7, 12)                      // before the first: its shock (the anchor has none and no time)
+    expect(shockAtTime(pillars, { '2027-11-10': -3 }, 5)).toBe(-3)                                  // after the last: its zero rate is held
     expect(shockAtTime(pillars, { '2027-11-10': 50 }, 0.2521)).toBe(0)                              // a pillar it does not sit beside: nothing
     expect(shockAtTime(pillars, {}, 0.3)).toBe(0); expect(shockAtTime(pillars, null, 0.3)).toBe(0)
-    expect(shockAtTime([], { x: 1 }, 0.3)).toBe(0); expect(shockAtTime(null, {}, 0.3)).toBe(0); expect(shockAtTime(pillars, {}, NaN)).toBe(0)
+    expect(shockAtTime([], { x: 1 }, 0.3)).toBe(0); expect(shockAtTime(null, {}, 0.3)).toBe(0); expect(shockAtTime(pillars, {}, NaN)).toBe(0); expect(shockAtTime(pillars, { '2026-12-10': 7 }, 0)).toBe(0)
     expect(shockAtTime(pillars, { '2027-02-10': 'abc' }, 0.2521)).toBe(0)                           // unreadable: no shock
   })
   it('a parallel shock on every pillar is that shock at any time', async () => {

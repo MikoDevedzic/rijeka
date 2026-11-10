@@ -788,6 +788,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                                        forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
                                        quote_curve=q_curve, direction=direction, pip=st["pip"], spot_date=fx_spot,
                                        base_rate=rate_b)
+            kw.pop("base_curve", None)          # on quoted points the second currency is the one rate the points imply, not its curve
             f_src = f"market points ({pair}_FWD {st['forward_curve']['valuation_date']}, {marks_label(st['forward_curve']['source'])}), basis {basis_pts:+.1f} pts vs parity"
     out = r.__dict__.copy()
     out.update(pair=pair, shape=shape, valuation_date=val_date.isoformat(), settlement_date=settle.isoformat(),
