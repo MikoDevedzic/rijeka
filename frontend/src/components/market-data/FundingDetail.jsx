@@ -59,7 +59,7 @@ function FundingSpreads({ curve }) {
       {msg && (
         <div style={{
           fontSize: '12px', padding: '4px 10px', borderRadius: 2, marginBottom: 8,
-          background: 'rgba(14,201,160,.10)', border: '1px solid var(--accent-dim)',
+          background: 'rgba(217,178,92,.10)', border: '1px solid var(--accent-dim)',
           color: 'var(--accent)',
         }}>
           {msg}

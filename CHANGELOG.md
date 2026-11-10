@@ -3,6 +3,31 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.9). Commits on `main` are the detail.
 
+## The look: Harbour · 10 November 2026 (frontend only; the API stays 0.16.2)
+
+One colour system, one pair of typefaces, and the screens a new user meets rebuilt on them (`docs/design.md`).
+
+- **Colour means something.** Deep green surfaces, limestone type. Brass is the action of the view, the selected
+  tab's rule and what is sealed on chain, and nothing else; the accent it replaces (teal) was also the colour of
+  labels, typed values, selected chips, positive numbers and most buttons. A number takes the colour of its sign (green, coral); a selected
+  chip is a lighter panel; a status has a colour only when it says something.
+- **Type.** Instrument Sans for the interface and DM Mono for numbers replace Space Grotesk and JetBrains Mono;
+  a number is never heavier than the 500 cut.
+- **The ticket.** Quiet tabs with a brass rule under the open one, softer corners, PRICE as a quiet button and
+  BOOK TRADE as the one brass button; pay and receive are tinted by sign.
+- **The blotter.** Denser rows, columns sized for what they hold (a reference and a counterparty are no longer cut
+  short), neutral class badges; CONFIRMED is brass, PENDING a hollow dot.
+- **The XVA tab.** The exposure chart draws EE in limestone, ENE in blue and PFE 95 % in amber over the simulated
+  paths; the saving on chain is the one brass figure; model
+  inputs are limestone, not brass. No figure is added or changed.
+- **The confirmation.** The signed record is a certificate on paper with a serif heading and a seal drawn from the
+  trade's hash (the same hash always draws the same seal; grey and without its centre point until the record is
+  anchored). The rows, the three actions and what VERIFY answers are as they were.
+- **The home page** keeps its layout and its news; it takes the palette and the type.
+- **Not in this change:** the lineage tree on a figure, the mark of where each number came from on the rates
+  ticket, EPE on the XVA tab (it needs its reference check first), and the pages not listed here beyond the
+  palette. On a laptop-height screen the policy path's axis labels still run into the line under them, as before.
+
 ## 0.16.2 · 9 November 2026
 
 Capital is not part of the hosted demo.

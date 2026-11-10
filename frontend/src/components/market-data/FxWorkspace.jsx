@@ -102,7 +102,7 @@ export default function FxWorkspace() {
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {msg && <div style={{ margin: '8px 14px 0', padding: '7px 10px', borderRadius: 4, fontSize: '0.84rem', border: '1px solid', color: msg.kind === 'ok' ? 'var(--accent)' : 'var(--red)', borderColor: msg.kind === 'ok' ? 'var(--accent-dim)' : 'rgba(224,80,64,.4)', background: msg.kind === 'ok' ? 'var(--accent-glow)' : 'rgba(224,80,64,.08)' }}>{msg.text}</div>}
+        {msg && <div style={{ margin: '8px 14px 0', padding: '7px 10px', borderRadius: 4, fontSize: '0.84rem', border: '1px solid', color: msg.kind === 'ok' ? 'var(--accent)' : 'var(--red)', borderColor: msg.kind === 'ok' ? 'var(--accent-dim)' : 'rgba(240,147,130,.4)', background: msg.kind === 'ok' ? 'var(--accent-glow)' : 'rgba(240,147,130,.08)' }}>{msg.text}</div>}
         {cur ? <PairDetail p={cur} md={md} reload={load} flash={flash} busy={busy} setBusy={setBusy} bbg={bbg} />
              : <div className="empty-state"><div className="empty-icon">⟨/⟩</div><div className="empty-title">Select a pair</div><div className="empty-sub">{pairs.length} pairs — 6 G10 · 3 digital assets</div></div>}
       </div>
@@ -117,8 +117,8 @@ function FxForwardChart({ p, tenors, pts, parity }) {
   const par = tenors.map(t => parity[t]?.implied_forward != null ? { t: yrs(t), v: parity[t].implied_forward } : null).filter(Boolean)
   if (p.spot == null || quoted.length + par.length < 2) return null
   const series = []
-  if (quoted.length >= 1) series.push({ label: 'QUOTED', color: '#0dd4a8', points: [{ t: 0, v: p.spot }, ...quoted] })
-  if (par.length >= 1) series.push({ label: 'PARITY', color: '#4a9ad4', dash: [5, 3], points: [{ t: 0, v: p.spot }, ...par] })
+  if (quoted.length >= 1) series.push({ label: 'QUOTED', color: '#d9b25c', points: [{ t: 0, v: p.spot }, ...quoted] })
+  if (par.length >= 1) series.push({ label: 'PARITY', color: '#8fc1e6', dash: [5, 3], points: [{ t: 0, v: p.spot }, ...par] })
   return (
     <div style={{ margin: '8px 0 12px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, padding: 8 }}>
       <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 5 }}>

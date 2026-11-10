@@ -58,7 +58,7 @@ function dirChipStyle(on, isSell) {
     cursor: 'pointer',
     border: '1px solid ' + (on ? (isSell ? 'var(--red)' : 'var(--accent)') : 'var(--text-mute)'),
     background: on
-      ? (isSell ? 'rgba(224,80,64,0.12)' : 'rgba(13,212,168,0.12)')
+      ? (isSell ? 'rgba(240,147,130,0.12)' : 'rgba(217,178,92,0.12)')
       : 'transparent',
     color: on ? (isSell ? 'var(--red)' : 'var(--accent)') : 'var(--text-dim)',
     transition: 'all 0.1s',

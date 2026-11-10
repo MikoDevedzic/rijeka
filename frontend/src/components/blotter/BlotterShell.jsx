@@ -11,24 +11,27 @@ const TH = ({ col, label, sortCol, sortDir, onSort }) => (
 )
 
 const AC = {
-  RATES:     { c: 'var(--accent)', a: 'RTS' },
-  FX:        { c: 'var(--blue)',   a: 'FX'  },
-  CREDIT:    { c: 'var(--amber)',  a: 'CRD' },
-  EQUITY:    { c: 'var(--purple)', a: 'EQT' },
-  COMMODITY: { c: 'var(--red)',    a: 'CMD' },
-  CRYPTO:    { c: 'var(--chain)',  a: 'CRY' },
+  RATES:     { a: 'RTS' },
+  FX:        { a: 'FX'  },
+  CREDIT:    { a: 'CRD' },
+  EQUITY:    { a: 'EQT' },
+  COMMODITY: { a: 'CMD' },
+  CRYPTO:    { a: 'CRY' },
 }
+// A status takes a colour only when it says something: brass is sealed on chain, green is running; a trade still
+// waiting has a hollow dot, one that is over is faint.
 const ST = {
-  PENDING:    { c: 'var(--amber)', l: 'PENDING'    },
-  LIVE:       { c: 'var(--accent)',l: 'LIVE'       },
-  MATURED:    { c: 'var(--text-dim)', l: 'MATURED' },
-  CANCELLED:  { c: 'var(--red)',   l: 'CANCELLED'  },
-  TERMINATED: { c: 'var(--red)',   l: 'TERMINATED' },
+  PENDING:    { c: 'var(--text-dim)',   l: 'PENDING',   hollow: true },
+  CONFIRMED:  { c: 'var(--accent)',     l: 'CONFIRMED'  },
+  LIVE:       { c: 'var(--up)',         l: 'LIVE'       },
+  MATURED:    { c: 'var(--text-faint)', l: 'MATURED'    },
+  CANCELLED:  { c: 'var(--text-faint)', l: 'CANCELLED'  },
+  TERMINATED: { c: 'var(--text-faint)', l: 'TERMINATED' },
 }
 const SR = {
-  WORKING:    { c: 'var(--amber)', l: 'WORKING'    },
-  PRODUCTION: { c: 'var(--blue)',  l: 'PRODUCTION' },
-  HISTORY:    { c: 'var(--text-dim)', l: 'HISTORY' },
+  WORKING:    { l: 'WORKING'    },
+  PRODUCTION: { l: 'PRODUCTION' },
+  HISTORY:    { l: 'HISTORY'    },
 }
 
 function fmt(n) {
@@ -100,9 +103,6 @@ export default function BlotterShell() {
             onClick={() => setFilter('assetClass', ac === 'ALL' ? '' : ac)}
           >
             {ac === 'ALL' ? 'ALL CLASSES' : ac}
-            {ac !== 'ALL' && AC[ac] && (
-              <span className="bl-filter-dot" style={{ background: AC[ac].c }} />
-            )}
           </button>
         ))}
 
@@ -140,7 +140,7 @@ export default function BlotterShell() {
         {selectedIds.size > 0 && (
           <button
             className="bl-new-trade-btn"
-            style={{marginTop:'6px',background:'rgba(74,154,212,0.12)',borderColor:'var(--blue)',color:'var(--blue)'}}
+            style={{marginTop:'6px',background:'rgba(143,193,230,0.12)',borderColor:'var(--blue)',color:'var(--blue)'}}
             onClick={() => {
               const selected = rows.filter(r => selectedIds.has(r.id))
               selected.forEach(t => useBookingStore.getState().open(t))
@@ -169,6 +169,10 @@ export default function BlotterShell() {
           {error   && <div className="bl-state bl-state-err">{error}</div>}
           {!loading && !error && (
             <table className="bl-table">
+              {/* widths for what each column holds; the counterparty takes what is left */}
+              <colgroup>
+                {[32, 124, 62, 128, 96, null, 72, 128, 50, 92, 108, 86, 104].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
+              </colgroup>
               <thead>
                 <tr>
                   <th style={{width:'32px',padding:'0 8px'}}>
@@ -201,15 +205,14 @@ export default function BlotterShell() {
                     {trades.length === 0 ? 'NO TRADES — CLICK + NEW TRADE TO BEGIN' : 'NO TRADES MATCH FILTERS'}
                   </td></tr>
                 ) : rows.map(t => {
-                  const ac = AC[t.asset_class] || { c: 'var(--text-dim)', a: t.asset_class }
+                  const ac = AC[t.asset_class] || { a: t.asset_class }
                   const st = ST[t.status]      || { c: 'var(--text-dim)', l: t.status }
-                  const sr = SR[t.store]        || { c: 'var(--text-dim)', l: t.store }
+                  const sr = SR[t.store]        || { l: t.store }
                   const isChecked = selectedIds.has(t.id)
                   return (
                     <tr
                       key={t.id}
                       className={`bl-row ${isChecked ? 'bl-row-selected' : ''}`}
-                      style={{ borderLeft: `2px solid ${ac.c}` }}
                       onClick={() => useBookingStore.getState().open(t)}
                     >
                       <td style={{width:'32px',padding:'0 8px'}} onClick={e=>e.stopPropagation()}>
@@ -226,7 +229,7 @@ export default function BlotterShell() {
                       </td>
                       <td className="bl-td-ref">{t.trade_ref}</td>
                       <td>
-                        <span className="bl-ac-badge" style={{ color: ac.c, borderColor: ac.c + '40' }}>
+                        <span className="bl-ac-badge">
                           {ac.a}
                         </span>
                       </td>
@@ -237,7 +240,7 @@ export default function BlotterShell() {
                           : <span className="bl-td-dim" style={{ opacity: 0.3 }}>—</span>
                         }
                       </td>
-                      <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <td>
                         {t.counterparty?.name || '—'}
                       </td>
                       <td className={theirRefs[t.id] ? '' : 'bl-td-dim'} title={theirRefs[t.id] ? `${theirRefs[t.id].firm}'s ref` : ''}>
@@ -249,11 +252,11 @@ export default function BlotterShell() {
                       <td className="bl-td-dim">{tenor(t)}</td>
                       <td className="bl-td-dim bl-td-sm">{fmtD(t.trade_date)}</td>
                       <td>
-                        <span className="bl-status-dot" style={{ background: st.c }} />
+                        <span className="bl-status-dot" style={st.hollow ? { border: `1px solid ${st.c}` } : { background: st.c }} />
                         <span className="bl-status-txt" style={{ color: st.c }}>{st.l}</span>
                       </td>
                       <td>
-                        <span className="bl-store-txt" style={{ color: sr.c }}>{sr.l}</span>
+                        <span className="bl-store-txt">{sr.l}</span>
                       </td>
                       <td className="bl-td-dim bl-td-sm" title={t.uti || ''}>{shortUti(t.uti)}</td>
                     </tr>

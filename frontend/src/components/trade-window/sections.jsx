@@ -562,7 +562,7 @@ function CapletTable({ result, ccy }) {
                 <td style={{
                   padding: '4px 8px',
                   textAlign: 'right',
-                  color: (cl.pv || 0) >= 0 ? 'var(--accent)' : 'var(--red)',
+                  color: (cl.pv || 0) >= 0 ? 'var(--up)' : 'var(--down)',
                   fontWeight: 600,
                 }}>{fmtPnl(cl.pv)}</td>
               </tr>
@@ -581,7 +581,7 @@ function CapletTable({ result, ccy }) {
                 padding: '5px 8px',
                 textAlign: 'right',
                 fontWeight: 700,
-                color: (npv || 0) >= 0 ? 'var(--accent)' : 'var(--red)',
+                color: (npv || 0) >= 0 ? 'var(--up)' : 'var(--down)',
               }}>{fmtPnl(npv)}</td>
             </tr>
           </tbody>
@@ -614,8 +614,8 @@ function SwapCashflowTables({ result, productKey, state }) {
     <>
       {isSwpn && (
         <div style={{
-          background: 'rgba(74,154,212,0.05)',
-          border: '1px solid rgba(74,154,212,0.2)',
+          background: 'rgba(143,193,230,0.05)',
+          border: '1px solid rgba(143,193,230,0.2)',
           borderRadius: 2,
           padding: '8px 12px',
           marginBottom: 10,
@@ -629,8 +629,8 @@ function SwapCashflowTables({ result, productKey, state }) {
               fontSize: 12,
               padding: '1px 6px',
               borderRadius: 2,
-              background: 'rgba(74,154,212,0.1)',
-              border: '1px solid rgba(74,154,212,0.3)',
+              background: 'rgba(143,193,230,0.1)',
+              border: '1px solid rgba(143,193,230,0.3)',
               color: 'var(--blue)',
             }}>
               {(state.expiry || '1Y')}{'\u00D7'}{state.tenor || '5Y'}{' \u00B7 Physical Settlement'}
@@ -681,9 +681,9 @@ function SwapCashflowTables({ result, productKey, state }) {
               fontSize: 12, fontWeight: 700,
               padding: '1px 6px',
               borderRadius: 2,
-              background: leg.direction === 'PAY' ? 'rgba(224,80,64,0.10)' : 'rgba(13,212,168,0.10)',
-              border: '1px solid ' + (leg.direction === 'PAY' ? 'var(--red)' : 'var(--accent)'),
-              color: leg.direction === 'PAY' ? 'var(--red)' : 'var(--accent)',
+              background: leg.direction === 'PAY' ? 'rgb(var(--down-rgb) / 0.10)' : 'rgb(var(--up-rgb) / 0.10)',
+              border: '1px solid ' + (leg.direction === 'PAY' ? 'var(--down)' : 'var(--up)'),
+              color: leg.direction === 'PAY' ? 'var(--down)' : 'var(--up)',
             }}>{leg.direction === 'PAY' ? '\u2192 PAY' : '\u2190 RECEIVE'}</span>
           </div>
           <div style={{ overflowX: 'auto' }}>
@@ -741,7 +741,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                       <td style={{
                         fontSize: 12, padding: '5px 6px', textAlign: 'right',
                         fontWeight: 600,
-                        color: pv >= 0 ? 'var(--accent)' : 'var(--red)',
+                        color: pv >= 0 ? 'var(--up)' : 'var(--down)',
                       }}>{fmtPnl(pv)}</td>
                       <td style={{ fontSize: 12, padding: '5px 6px', textAlign: 'right', color: 'var(--text-dim)' }}>
                         {cf.zero_rate != null ? (cf.zero_rate * 100).toFixed(3) : '\u2014'}
@@ -772,7 +772,7 @@ function SwapCashflowTables({ result, productKey, state }) {
                     fontSize: 12, fontWeight: 700,
                     padding: '5px 6px',
                     textAlign: 'right',
-                    color: leg.pv >= 0 ? 'var(--accent)' : 'var(--red)',
+                    color: leg.pv >= 0 ? 'var(--up)' : 'var(--down)',
                   }}>{fmtPnl(leg.pv)}</td>
                   <td />
                 </tr>

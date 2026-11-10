@@ -55,7 +55,7 @@ function BootstrapScene({ quotes, active }) {
       const Y = r => TOP + (hi - r) / (hi - lo) * (BOT - TOP)
       const YD = d => TOP + (1 - d) / (1 - Math.min(...df) + 0.02) * (BOT - TOP)
       ctx.clearRect(0, 0, W, H)
-      ctx.font = `${10 * dpr}px "JetBrains Mono", monospace`; ctx.fillStyle = 'rgba(95,108,123,0.9)'; ctx.textAlign = 'center'
+      ctx.font = `${10 * dpr}px "JetBrains Mono", monospace`; ctx.fillStyle = 'rgba(111,135,125,0.9)'; ctx.textAlign = 'center'
       for (const n of [1, 2, 5, 10, 20, 30]) if (n <= T) ctx.fillText(`${n}Y`, X(n), H - 8 * dpr)
       ctx.textAlign = 'right'; for (const r of [lo + 0.25, (lo + hi) / 2, hi - 0.25]) ctx.fillText(`${r.toFixed(2)}%`, L - 6 * dpr, Y(r) + 3 * dpr)
       ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = dpr
@@ -73,12 +73,12 @@ function BootstrapScene({ quotes, active }) {
         return k
       }
       const label = (txt, x, y, color, on) => { if (!on) return; ctx.font = `${10.5 * dpr}px "JetBrains Mono", monospace`; ctx.textAlign = 'left'; ctx.fillStyle = color; ctx.fillText(txt, x, y) }
-      const kp = line(par, Y, '#0dd4a8', 0.3, 2.6, 'rgba(13,212,168,0.6)')
-      const kz = line(zero, Y, '#4a9ad4', 2.9, 5.2, 'rgba(74,154,212,0.6)')
-      const kd = line(df, YD, '#f0a020', 5.5, 7.8, 'rgba(240,160,32,0.5)')
-      label(`PAR ${par[T - 1].toFixed(3)}%`, L + 8 * dpr, Y(par[T - 1]) - 8 * dpr, '#0dd4a8', kp >= 1)
-      label(`ZERO ${zero[T - 1].toFixed(3)}%`, L + 8 * dpr, Y(zero[T - 1]) + 16 * dpr, '#4a9ad4', kz >= 1)
-      label(`DF(${T}Y) ${df[T - 1].toFixed(4)}`, R - 150 * dpr, YD(df[T - 1]) - 8 * dpr, '#f0a020', kd >= 1)
+      const kp = line(par, Y, '#d9b25c', 0.3, 2.6, 'rgba(217,178,92,0.6)')
+      const kz = line(zero, Y, '#8fc1e6', 2.9, 5.2, 'rgba(143,193,230,0.6)')
+      const kd = line(df, YD, '#e9975a', 5.5, 7.8, 'rgba(233,151,90,0.5)')
+      label(`PAR ${par[T - 1].toFixed(3)}%`, L + 8 * dpr, Y(par[T - 1]) - 8 * dpr, '#d9b25c', kp >= 1)
+      label(`ZERO ${zero[T - 1].toFixed(3)}%`, L + 8 * dpr, Y(zero[T - 1]) + 16 * dpr, '#8fc1e6', kz >= 1)
+      label(`DF(${T}Y) ${df[T - 1].toFixed(4)}`, R - 150 * dpr, YD(df[T - 1]) - 8 * dpr, '#e9975a', kd >= 1)
       if (el < 9 && !reduce) raf = requestAnimationFrame(draw)
     }
     raf = requestAnimationFrame(draw)

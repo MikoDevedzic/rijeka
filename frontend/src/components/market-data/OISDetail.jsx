@@ -10,10 +10,10 @@ function tenorToYears(t) { return TENOR_TO_YEARS[t] ?? 1; }
 // ── Source badge ──────────────────────────────────────────────────────────────
 function SourceBadge({ src }) {
   const map = {
-    BLOOMBERG: { bg:'rgba(74,154,212,0.12)', bd:'rgba(74,154,212,0.3)', c:'#4a9ad4' },
-    FED:       { bg:'rgba(144,96,204,0.12)', bd:'rgba(144,96,204,0.3)', c:'#9060cc' },
-    MANUAL:    { bg:'rgba(82,104,120,0.12)', bd:'rgba(82,104,120,0.3)', c:'var(--text-dim)' },
-    IMPORT:    { bg:'rgba(240,160,32,0.12)', bd:'rgba(240,160,32,0.3)', c:'#f0a020' },
+    BLOOMBERG: { bg:'rgba(143,193,230,0.12)', bd:'rgba(143,193,230,0.3)', c:'#8fc1e6' },
+    FED:       { bg:'rgba(192,165,238,0.12)', bd:'rgba(192,165,238,0.3)', c:'#c0a5ee' },
+    MANUAL:    { bg:'rgba(111,135,125,0.12)', bd:'rgba(111,135,125,0.3)', c:'var(--text-dim)' },
+    IMPORT:    { bg:'rgba(233,151,90,0.12)', bd:'rgba(233,151,90,0.3)', c:'#e9975a' },
   };
   const s = map[src] || map.MANUAL;
   return (
@@ -40,7 +40,7 @@ function CurveCanvas({ instruments, hasData, title }) {
       <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'5px'}}>
         {title}
       </div>
-      <RateCurveCanvas points={points} unit="%" color="#0dd4a8" height={190} />
+      <RateCurveCanvas points={points} unit="%" color="#d9b25c" height={190} />
     </div>
   );
 }
@@ -250,7 +250,7 @@ function OISInstruments({ curve }) {
             const isOn = inst.tenor === 'ON';
             const src = quoteSources[i] || (isOn ? 'FED' : 'MANUAL');
             const bs = bootstrap[inst.tenor] || {};
-            const rowBg = isOn ? 'rgba(144,96,204,0.06)' : 'transparent';
+            const rowBg = isOn ? 'rgba(192,165,238,0.06)' : 'transparent';
             const tdBase = { fontSize:'0.875rem', color:'var(--text)', padding:'5px 4px 5px 0',
               borderBottom:'1px solid var(--panel-2)', background:rowBg };
             const tdR = { ...tdBase, textAlign:'right', fontVariantNumeric:'tabular-nums' };
@@ -259,19 +259,19 @@ function OISInstruments({ curve }) {
               <div key={`tog-${i}`} style={tdBase}>
                 <input type="checkbox" checked={inst.en}
                   onChange={e => toggleInstrument(curve.id, i, e.target.checked)}
-                  style={{cursor:'pointer', accentColor:'#0dd4a8'}} />
+                  style={{cursor:'pointer', accentColor:'#d9b25c'}} />
               </div>,
-              <div key={`t-${i}`} style={{...tdBase, color: isOn?'#9060cc':'var(--accent)', fontWeight: isOn?700:400}}>
+              <div key={`t-${i}`} style={{...tdBase, color: isOn?'#c0a5ee':'var(--accent)', fontWeight: isOn?700:400}}>
                 {inst.tenor}
               </div>,
               <div key={`tk-${i}`} style={{...tdBase, fontSize:'0.8125rem', color:'var(--text-dim)'}}>
                 {blpTickers[inst.tenor] ? blpTickers[inst.tenor].replace(' BGN Curncy','') : inst.ticker}
               </div>,
               <div key={`src-${i}`} style={tdBase}><SourceBadge src={src} /></div>,
-              <div key={`mid-${i}`} style={{...tdR, color:'#0dd4a8'}}>{bs.mid ? parseFloat(bs.mid).toFixed(8) : '—'}</div>,
+              <div key={`mid-${i}`} style={{...tdR, color:'#d9b25c'}}>{bs.mid ? parseFloat(bs.mid).toFixed(8) : '—'}</div>,
               <div key={`z-${i}`} style={{...tdR, color:'var(--text-dim)'}}>{bs.zero || '—'}</div>,
               <div key={`df-${i}`} style={{...tdR, color:'var(--text-dim)'}}>{bs.df || '—'}</div>,
-              <div key={`fw-${i}`} style={{...tdR, color:'#f0a020'}}>{bs.fwd || '—'}</div>,
+              <div key={`fw-${i}`} style={{...tdR, color:'#e9975a'}}>{bs.fwd || '—'}</div>,
             ];
           })}
         </div>
@@ -304,7 +304,7 @@ function OISInstruments({ curve }) {
             <button
               onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
-              style={{padding:'0.25rem 0.85rem',background:'rgba(14,201,160,0.07)',
+              style={{padding:'0.25rem 0.85rem',background:'rgba(217,178,92,0.07)',
                 border:'1px solid var(--accent)',borderRadius:2,fontFamily:"'IBM Plex Mono',var(--mono)",
                 fontSize:'1rem',fontWeight:700,letterSpacing:'0.1em',color:'var(--accent)',cursor:'pointer'}}
             >{snapshotSaving?.[curve.id] ? 'SAVING...' : '▶ SAVE TO DB'}</button>
@@ -330,8 +330,8 @@ function OISInstruments({ curve }) {
               const onInst = curve.instruments.find(i => i.type === 'OISDeposit' || i.type === 'BasisDeposit')
               if (!onInst) return null
               return (
-                <div style={{fontSize:'0.875rem',color:'#9060cc',background:'rgba(144,96,204,0.06)',
-                  border:'1px solid rgba(144,96,204,0.2)',borderRadius:'2px',
+                <div style={{fontSize:'0.875rem',color:'#c0a5ee',background:'rgba(192,165,238,0.06)',
+                  border:'1px solid rgba(192,165,238,0.2)',borderRadius:'2px',
                   padding:'4px 7px',marginBottom:'8px',lineHeight:1.6}}>
                   O/N fixing: <strong>{onInst.ticker}</strong>
                   {curve.description ? ' — ' + curve.description : ' — demo data from public sources on the hosted desk; self-host to snap your own terminal.'}
@@ -384,7 +384,7 @@ function OISInstruments({ curve }) {
             {/* Result / error */}
             {blpSnapResult && (
               <div style={{fontSize:'0.875rem',color:'var(--accent)',marginBottom:'6px',
-                background:'rgba(13,212,168,0.05)',border:'1px solid rgba(13,212,168,0.2)',
+                background:'rgba(217,178,92,0.05)',border:'1px solid rgba(217,178,92,0.2)',
                 padding:'5px 7px',borderRadius:'2px',lineHeight:1.7}}>
                 ✓ SNAPPED & SAVED TO DB · {blpSnapResult.quotes_saved} TENORS · {blpSnapResult.snap_date}
                 
@@ -397,7 +397,7 @@ function OISInstruments({ curve }) {
             )}
             {blpSnapError && (
               <div style={{fontSize:'0.875rem',color:'var(--red)',marginBottom:'6px',
-                background:'rgba(224,80,64,0.05)',border:'1px solid rgba(224,80,64,0.2)',
+                background:'rgba(240,147,130,0.05)',border:'1px solid rgba(240,147,130,0.2)',
                 padding:'5px 7px',borderRadius:'2px'}}>✗ {blpSnapError}</div>
             )}
 

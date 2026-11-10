@@ -6,13 +6,13 @@
 // desk palette (canvas cannot read CSS variables, so the hex values mirror
 // index.css).
 //
-//   <RateCurveCanvas points={[{ t: years, v: value }]} unit="%" color="#0dd4a8" height={180} />
+//   <RateCurveCanvas points={[{ t: years, v: value }]} unit="%" color="#d9b25c" height={180} />
 //   <RateCurveCanvas series={[{ label, color, points }, …]} unit="" decimals={5} />
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useRef } from 'react'
 
 const C = {
-  bg: '#0C1015', grid: 'rgba(38,48,60,0.9)', axis: '#5F6C7B', label: '#8B98A8', hi: '#F4F7FA',
+  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#6f877d', label: '#8a9f94', hi: '#f6f1e4',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
 const X_TICKS = [0.25, 0.5, 1, 2, 3, 5, 7, 10, 15, 20, 25, 30, 40, 50]
@@ -72,7 +72,7 @@ function draw(canvas, { series, unit = '%', decimals }) {
     ctx.fillStyle = C.axis; ctx.fillText(v.toFixed(dp) + (unit === '%' ? '%' : ''), PAD.l - 8, y)
   }
   if (vMin < 0 && vMax > 0) {
-    ctx.strokeStyle = 'rgba(244,247,250,0.25)'; ctx.lineWidth = 0.8; ctx.setLineDash([3, 3])
+    ctx.strokeStyle = 'rgba(246,241,228,0.25)'; ctx.lineWidth = 0.8; ctx.setLineDash([3, 3])
     ctx.beginPath(); ctx.moveTo(PAD.l, ys(0)); ctx.lineTo(W - PAD.r, ys(0)); ctx.stroke(); ctx.setLineDash([])
   }
   // tenor axis
@@ -82,14 +82,14 @@ function draw(canvas, { series, unit = '%', decimals }) {
     const x = xs(t)
     if (x - lastX < 34) return
     lastX = x
-    ctx.strokeStyle = 'rgba(38,48,60,0.6)'; ctx.lineWidth = 0.5
+    ctx.strokeStyle = 'rgba(67,84,74,0.6)'; ctx.lineWidth = 0.5
     ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, H - PAD.b); ctx.stroke()
     ctx.fillStyle = C.label; ctx.fillText(tick(t), x, H - PAD.b + 7)
   })
 
   const fmt = v => v.toFixed(Math.max(dp, decimals ?? 2)) + suffix
   ss.forEach((s, si) => {
-    const pts = s.points, color = s.color || '#0dd4a8', rgb = hexToRgb(color)
+    const pts = s.points, color = s.color || '#d9b25c', rgb = hexToRgb(color)
     const path = () => { ctx.beginPath(); pts.forEach((p, i) => i === 0 ? ctx.moveTo(xs(p.t), ys(p.v)) : ctx.lineTo(xs(p.t), ys(p.v))) }
     if (si === 0) {                                    // area under the primary series
       path(); ctx.lineTo(xs(pts[pts.length - 1].t), H - PAD.b); ctx.lineTo(xs(pts[0].t), H - PAD.b); ctx.closePath()
@@ -115,7 +115,7 @@ function draw(canvas, { series, unit = '%', decimals }) {
     ctx.font = FONT; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'
     let x = PAD.l + 6
     ss.forEach(s => {
-      ctx.strokeStyle = s.color || '#0dd4a8'; ctx.lineWidth = 2
+      ctx.strokeStyle = s.color || '#d9b25c'; ctx.lineWidth = 2
       if (s.dash) ctx.setLineDash(s.dash)
       ctx.beginPath(); ctx.moveTo(x, PAD.t - 6); ctx.lineTo(x + 16, PAD.t - 6); ctx.stroke(); ctx.setLineDash([])
       ctx.fillStyle = C.label; ctx.fillText(s.label || '', x + 21, PAD.t - 6)
@@ -124,7 +124,7 @@ function draw(canvas, { series, unit = '%', decimals }) {
   }
 }
 
-export default function RateCurveCanvas({ points, series, unit = '%', color = '#0dd4a8', height = 180, decimals, style }) {
+export default function RateCurveCanvas({ points, series, unit = '%', color = '#d9b25c', height = 180, decimals, style }) {
   const ref = useRef(null)
   const all = series || [{ points, color }]
   const key = all.map(s => (s.label || '') + ':' + (s.points || []).map(p => `${p.t}:${p.v}`).join('|')).join('||')

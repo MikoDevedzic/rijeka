@@ -85,7 +85,7 @@ export default function IncrementalXva({ counterpartyId, counterpartyName, build
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button onClick={run} disabled={busy || !!reason} title={reason || undefined}
           style={{ padding: '7px 14px', ...mono, fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: busy || reason ? 'default' : 'pointer',
-            background: 'rgba(13,212,168,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1 }}>
+            background: 'rgba(217,178,92,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1 }}>
           {busy ? 'RUNNING…' : res ? 'RECOMPUTE' : 'CHARGE THIS TRADE'}
         </button>
         {reason && <span style={{ ...mono, fontSize: '0.75rem', color: 'var(--text-mute)', letterSpacing: '0.04em' }}>— {reason}</span>}

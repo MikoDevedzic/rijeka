@@ -246,11 +246,11 @@ function PillarTable({ input, drafts, setDrafts, onOverride, onWithdraw, signed 
 
 function Cell({ c, input, drafts, setDrafts, onOverride, signed }) {
   if (!c) return <div style={{ padding: 6, color: 'var(--text-mute)', ...mono, fontSize: 11 }}>—</div>
-  const bg = c.status === 'OVERRIDDEN' ? 'rgba(224,179,65,0.08)' : c.status === 'REVIEW' ? 'rgba(255,107,107,0.08)' : 'var(--bg)'
+  const bg = c.status === 'OVERRIDDEN' ? 'rgba(224,179,65,0.08)' : c.status === 'REVIEW' ? 'rgba(240,147,130,0.08)' : 'var(--bg)'
   return (
     <div style={{ background: bg, border: `1px solid ${PILLAR_COLOR[c.status] || 'var(--border)'}`, borderRadius: 2, padding: '4px 6px', display: 'flex', flexDirection: 'column', gap: 2, ...mono }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}><span>{fmtQuote(c.desk, input.kind)}</span><span style={{ color: PILLAR_COLOR[c.status], fontSize: 10 }}>{c.gap != null ? fmtShift(c.gap, input.unit) : c.status === 'UNVERIFIED' ? 'no indep.' : ''}</span></div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-dim)' }}><span>vega {fmtSigned(c.sensitivity)}</span><span style={{ color: c.impact ? (c.impact < 0 ? 'var(--red)' : 'var(--accent)') : 'var(--text-mute)' }}>{c.impact ? fmtSigned(c.impact) : ''}</span></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-dim)' }}><span>vega {fmtSigned(c.sensitivity)}</span><span style={{ color: c.impact ? (c.impact < 0 ? 'var(--down)' : 'var(--up)') : 'var(--text-mute)' }}>{c.impact ? fmtSigned(c.impact) : ''}</span></div>
       <OverrideCell p={c} input={input} drafts={drafts} setDrafts={setDrafts} onOverride={onOverride} signed={signed} small />
     </div>
   )

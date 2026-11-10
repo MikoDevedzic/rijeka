@@ -1,73 +1,101 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:wght@300..700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wdth,wght@75..100,400..700&family=DM+Mono:wght@400;500&family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..700;1,6..96,400..700&display=swap');
 @import "tailwindcss";
 
-/* One type system: Space Grotesk for interface text, JetBrains Mono for
-   numbers, references and codes (the same pair the boot screen and the
-   landing page use). Components that still name the old families get the
-   new faces through these bridges, so the desk reads as one building. */
-@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 300 700; font-display: swap;
-  src: url(https://fonts.gstatic.com/s/spacegrotesk/v22/V8mDoQDjQSkFtoMM3T6r8E7mPbF4C_k3HqU.woff2) format('woff2'); }
-@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 300 700; font-display: swap;
-  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbV2o-flEEny0FZhsfKu5WU4xD7OwGtT0rU.woff2) format('woff2'); }
-@font-face { font-family: 'DM Mono'; font-style: normal; font-weight: 300 700; font-display: swap;
-  src: url(https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbV2o-flEEny0FZhsfKu5WU4xD7OwGtT0rU.woff2) format('woff2'); }
+/* One type system (Harbour, 10 November 2026): Instrument Sans for interface text, DM Mono for numbers,
+   references and codes, Bodoni Moda for the confirmation certificate and nothing else.
+   DM Mono is drawn in two weights. A number asked for at 600 or 700 gets the 500 cut, never a smeared synthetic
+   bold: the faces below cover those weights with the same file. Components that still name the earlier families
+   get the new faces through the bridges, so the desk reads as one building. */
+@font-face { font-family: 'DM Mono'; font-style: normal; font-weight: 600 700; font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbYf-Vlg.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 300 400; font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthqQBK6PYK0.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500 700; font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbYf-Vlg.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 300 400; font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthqQBK6PYK0.woff2) format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500 700; font-display: swap;
+  src: url(https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbYf-Vlg.woff2) format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 300 700; font-stretch: 75% 100%; font-display: swap;
+  src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxicypc9vsFDm051Uf6KVwgkfoSbT2lBgGygpg.woff2) format('woff2'); }
+@font-face { font-family: 'Space Grotesk'; font-style: normal; font-weight: 300 700; font-stretch: 75% 100%; font-display: swap;
+  src: url(https://fonts.gstatic.com/s/instrumentsans/v4/pxicypc9vsFDm051Uf6KVwgkfoSbT2lBgGygpg.woff2) format('woff2'); }
 
-/* ══════════════════════════════════════════════════════════════
-   RIJEKA — Global Design Tokens
-   ══════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════
+   RIJEKA — design tokens (Harbour)
+   Deep bottle-green water, limestone type, brass for the one thing to press and for what is sealed on chain.
+   Colour means something: brass is an action or a seal; --up and --down are the sign of a number and nothing
+   else; --amber is a caution or something provisional; --blue is the counterpart series (ENE, DVA, a benefit).
+   The *-rgb triplets exist so a tint is written rgb(var(--accent-rgb) / .12), not a second literal.
+   frontend/src/theme.js mirrors these for code that draws on a canvas; a test holds the two together.
+   ════════════════════════════════════════════════════════ */
 :root {
-  /* ── Layered blue-black ── adopted 28 Oct 2026 (Phase 1 launch) ──
-     Surfaces step up from the page background so panels read as panels;
-     secondary text sits at ~5.5:1 on the base instead of #666's 3:1. */
+  /* Surfaces: each step up is a panel on the one below */
+  --bg:           #0b1d1a;
+  --bg-deep:      #081714;
+  --panel:        #102723;
+  --panel-2:      #16332d;
+  --panel-3:      #1d4039;
 
-  /* Backgrounds */
-  --bg:           #07090C;
-  --bg-deep:      #04060A;
-  --panel:        #0C1015;
-  --panel-2:      #11171E;
-  --panel-3:      #171F28;
+  /* Lines */
+  --border:       #24372f;
+  --border-hi:    #43544a;
+  --border-glow:  #5f7165;
 
-  /* Borders */
-  --border:       #1A222C;
-  --border-hi:    #26303C;
-  --border-glow:  #33404F;
+  /* Type: limestone on water. --text-mute is 5.6:1 on --bg, --text-faint (captions only) 4.4:1 */
+  --text:         #e9e3d3;
+  --text-hi:      #f6f1e4;
+  --text-dim:     #a9b9ae;
+  --text-mute:    #8a9f94;
+  --text-muted:   #8a9f94;   /* legacy name used by the auth pages */
+  --text-faint:   #6f877d;
 
-  /* Text */
-  --text:         #DCE3EA;
-  --text-hi:      #F4F7FA;
-  --text-dim:     #AAB6C4;
-  --text-mute:    #8E9CAC;
-  --text-muted:   #8B98A8;   /* legacy name used by the auth pages */
+  /* Brass: the action, the selected thing, the seal */
+  --accent:       #d9b25c;
+  --accent-hi:    #f1d488;
+  --accent-dim:   #7d6731;
+  --accent-ink:   #1b1403;
+  --accent-glow:  rgba(217, 178, 92, 0.10);
+  --accent-rgb:   217 178 92;
 
-  /* Accent — teal */
-  --accent:       #0dd4a8;
-  --accent-dim:   #097a61;
-  --accent-glow:  rgba(13, 212, 168, 0.10);
+  /* The sign of a number */
+  --up:           #8fe0ae;
+  --up-rgb:       143 224 174;
+  --down:         #f09382;
+  --down-rgb:     240 147 130;
+  --green:        #8fe0ae;
+  --red:          #f09382;
+  --red-dim:      #6b3a31;
 
-  /* Amber */
-  --amber:        #f0a020;
-  --amber-dim:    #8a5010;
-  --amber-glow:   rgba(240, 160, 32, 0.08);
+  /* Caution, provisional */
+  --amber:        #e9975a;
+  --amber-dim:    #7a4a26;
+  --amber-glow:   rgba(233, 151, 90, 0.10);
+  --amber-rgb:    233 151 90;
 
-  /* Blue */
-  --blue:         #4a9ad4;
-  --blue-dim:     #1a3a60;
-  --blue-glow:    rgba(74, 154, 212, 0.08);
+  /* The counterpart series */
+  --blue:         #8fc1e6;
+  --blue-dim:     #2f4f66;
+  --blue-glow:    rgba(143, 193, 230, 0.10);
+  --blue-rgb:     143 193 230;
 
-  /* Other palette */
-  --green:        #1dc87a;
-  --purple:       #9060cc;
-  --purple-dim:   #3a2060;
-  --purple-glow:  rgba(144, 96, 204, 0.08);
-  --red:          #e05040;
-  --cyan:         #20c0c8;
-  --chain:        #f07820;
+  /* Other */
+  --purple:       #c0a5ee;
+  --purple-dim:   #4c3f6b;
+  --purple-glow:  rgba(192, 165, 238, 0.10);
+  --cyan:         #7fd3cc;
+  --chain:        #f1d488;
   --crit:         #ffffff;
 
   /* Typography */
-  --sans: 'Space Grotesk', 'IBM Plex Sans', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
-  --shadow-panel: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px rgba(0,0,0,0.35);
+  --sans:  'Instrument Sans', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  --mono:  'DM Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --serif: 'Bodoni Moda', Didot, 'Bodoni 72', 'Times New Roman', serif;
+
+  /* Corners and depth */
+  --r-1: 4px;  --r-2: 6px;  --r-3: 10px;  --r-4: 14px;
+  --shadow-panel: 0 1px 0 rgba(255,255,255,0.03) inset, 0 8px 24px rgba(0,0,0,0.30);
+  --shadow-window: 0 30px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(226,211,170,0.10);
 
   /* Layout heights */
   --appbar-h:  44px;
@@ -92,13 +120,8 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 body { font-size: 13px; }
-/* a faint cold light from the top-left: enough to stop empty areas reading as a void */
-body {
-  background:
-    radial-gradient(1200px 600px at 8% -10%, rgba(13,212,168,0.06), transparent 60%),
-    radial-gradient(900px 500px at 100% 100%, rgba(74,154,212,0.04), transparent 60%),
-    var(--bg);
-}
+/* the water lightens a little toward the top: enough to stop empty areas reading as a void */
+body { background: linear-gradient(180deg, #0d221e 0%, var(--bg) 55%) fixed; }
 #root { background: transparent; }
 :focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
 button, input, select, textarea { font-family: inherit; }
@@ -293,7 +316,7 @@ button, input, select, textarea { font-family: inherit; }
 .p-amber   { border-color: var(--amber-dim);  color: var(--amber); }
 .p-purple  { border-color: var(--purple-dim); color: var(--purple); }
 .p-dim     { border-color: var(--border-hi);  color: var(--text-dim); }
-.p-red     { border-color: #5a1a10;           color: var(--red); }
+.p-red     { border-color: #6b3a31;           color: var(--red); }
 
 /* ── Inner tabs ─────────────────────────────────────────────── */
 .inner-tabs {
@@ -367,7 +390,7 @@ button, input, select, textarea { font-family: inherit; }
   border-radius: 7px; cursor: pointer; position: relative; transition: background .2s; vertical-align: middle;
 }
 .tog:checked        { background: var(--accent-dim); }
-.tog::after         { content: ''; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #2a3d50; top: 2px; left: 2px; transition: transform .2s; }
+.tog::after         { content: ''; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #43544a; top: 2px; left: 2px; transition: transform .2s; }
 .tog:checked::after { transform: translateX(14px); background: var(--accent); }
 
 /* Inline quote input */
@@ -401,7 +424,7 @@ button, input, select, textarea { font-family: inherit; }
 }
 .bp-tog         { appearance: none; width: 32px; height: 16px; background: var(--border-hi); border-radius: 8px; cursor: pointer; position: relative; transition: background .2s; }
 .bp-tog:checked { background: var(--accent-dim); }
-.bp-tog::after  { content: ''; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #2a3d50; top: 2px; left: 2px; transition: transform .2s; }
+.bp-tog::after  { content: ''; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #43544a; top: 2px; left: 2px; transition: transform .2s; }
 .bp-tog:checked::after { transform: translateX(16px); background: var(--accent); }
 
 /* ── Curve output strip ─────────────────────────────────────── */
@@ -471,8 +494,8 @@ button, input, select, textarea { font-family: inherit; }
 /* ── Generic buttons / inputs (used in snap, spreads, etc.) ─── */
 .btn         { background: var(--panel-2); border: 1px solid var(--border-hi); color: var(--text); font-family: var(--sans); font-size: 12px; font-weight: 500; padding: 5px 12px; border-radius: 3px; cursor: pointer; transition: all .15s; }
 .btn:hover   { border-color: var(--border-glow); color: var(--text-hi); background: var(--panel-3); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #04120E; font-weight: 600; }
-.btn.primary:hover { background: #2ee6bf; box-shadow: 0 0 0 3px var(--accent-glow), 0 4px 16px rgba(13,212,168,.25); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1b1403; font-weight: 600; }
+.btn.primary:hover { background: #f1d488; box-shadow: 0 0 0 3px var(--accent-glow), 0 4px 16px rgba(217,178,92,.25); }
 .inp         { background: var(--bg-deep); border: 1px solid var(--border-hi); color: var(--text-hi); font-family: var(--sans); font-size: 12px; padding: 4px 8px; border-radius: 2px; outline: none; width: 100%; }
 .inp:focus   { border-color: var(--accent-dim); }
 .lbl         { font-size: 12px; color: var(--text-dim); margin-bottom: 3px; display: block; }
@@ -494,8 +517,8 @@ button, input, select, textarea { font-family: inherit; }
 .auth-handle-label{font-family: var(--sans);font-size:12px;letter-spacing:0.12em;color:var(--text-muted);flex-shrink:0}
 .auth-handle-value{font-family: var(--sans);font-size:13px;font-weight:700;color:var(--accent);letter-spacing:0.05em}
 .auth-error{font-family: var(--sans);font-size:12px;color:var(--red);border:1px solid var(--red);padding:0.5rem 0.75rem;background:rgba(217,80,64,0.08)}
-.auth-btn{background:var(--accent);color:#04120E;border:none;border-radius:4px;font-family: var(--sans);font-size:12px;font-weight:700;letter-spacing:0.15em;padding:0.75rem 1rem;cursor:pointer;transition:opacity 0.15s;width:100%;margin-top:0.25rem}
-.auth-btn:hover:not(:disabled){background:#2ee6bf;box-shadow:0 0 0 3px var(--accent-glow),0 4px 16px rgba(13,212,168,.25)}
+.auth-btn{background:var(--accent);color:#1b1403;border:none;border-radius:4px;font-family: var(--sans);font-size:12px;font-weight:700;letter-spacing:0.15em;padding:0.75rem 1rem;cursor:pointer;transition:opacity 0.15s;width:100%;margin-top:0.25rem}
+.auth-btn:hover:not(:disabled){background:#f1d488;box-shadow:0 0 0 3px var(--accent-glow),0 4px 16px rgba(217,178,92,.25)}
 .auth-btn:disabled{opacity:0.5;cursor:not-allowed}
 .auth-footer{font-family: var(--sans);font-size:12px;color:var(--text-muted);text-align:center;margin:0}
 .auth-link{color:var(--accent);text-decoration:none}
@@ -565,8 +588,8 @@ button, input, select, textarea { font-family: inherit; }
 }
 .structure-btn--active {
   background: rgba(14,201,160,0.09);
-  border-color: var(--accent, #0ec9a0);
-  color: var(--accent, #0ec9a0);
+  border-color: var(--accent, #d9b25c);
+  color: var(--accent, #d9b25c);
 }
 .structure-btn__label {
   font-family: var(--mono, 'IBM Plex Mono', monospace, monospace);
@@ -588,7 +611,7 @@ button, input, select, textarea { font-family: inherit; }
   background: rgba(14,201,160,0.08);
   border: 1px solid rgba(14,201,160,0.25);
   border-radius: 3px;
-  color: var(--accent, #0ec9a0);
+  color: var(--accent, #d9b25c);
   font-family: var(--mono, 'IBM Plex Mono', monospace, monospace);
   font-size: 12px;
   font-weight: 600;
@@ -599,7 +622,7 @@ button, input, select, textarea { font-family: inherit; }
 .structure-badge--inflation {
   background: rgba(61,139,200,0.08);
   border-color: rgba(61,139,200,0.3);
-  color: var(--blue, #3d8bc8);
+  color: var(--blue, #8fc1e6);
 }
 /* ── end Sprint 4A ─────────────────────────────────────────── */
 

@@ -14,7 +14,7 @@ export const RATES_CURVES = [
     calendar: 'UnitedStates(FederalReserve)', settlementDays: 1, bdc: 'ModifiedFollowing',
     payFreq: 'Annual', payLag: 2, telescopic: true,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#0ec9a0', liquidityHorizon: '30Y',
+    color: '#d9b25c', liquidityHorizon: '30Y',
     instruments: [
       { en: true,  type: 'OISDeposit', tenor: 'ON',  ticker: 'SOFRRATE Index',      quote: 3.650, unit: '%' },
       { en: true,  type: 'OIS',        tenor: '1W',  ticker: 'USOSFR1Z BGN Curncy', quote: 3.642, unit: '%' },
@@ -55,7 +55,7 @@ export const RATES_CURVES = [
     id: 'USD_EFFR', ccy: 'USD', flag: '🇺🇸', name: 'EFFR Basis', fullName: 'USD SOFR/EFFR Basis',
     curve_class: 'BASIS', baseCurveId: 'USD_SOFR', baseLabel: 'USD SOFR OIS',
     description: 'Federal Funds Effective Rate vs SOFR basis. ON fixing: FEDL01 Index (NY Federal Reserve).',
-    qlHelper: 'BasisSwapRateHelper', color: '#3d8bc8', liquidityHorizon: '30Y',
+    qlHelper: 'BasisSwapRateHelper', color: '#8fc1e6', liquidityHorizon: '30Y',
     // Bloomberg DES conventions (USSFVF series) — source: USSFVF6 BGN Curncy
     blpConventions: {
       baseLeg:   { index: 'FEDL01 Index',    dayCount: 'ACT/360', payFreq: 'Quarterly', resetFreq: 'Daily', resetPosition: 'Arrears', payDelay: 2, calcCal: 'FD', fixingCal: 'FD' },
@@ -89,7 +89,7 @@ export const RATES_CURVES = [
     id: 'USD_TSOFR_1M', ccy: 'USD', flag: '🇺🇸', name: 'Term SOFR 1M', fullName: 'USD Term SOFR 1M',
     curve_class: 'BASIS', baseCurveId: 'USD_SOFR', baseLabel: 'USD SOFR OIS',
     description: 'CME Term SOFR 1M vs compounded SOFR. Thin market — manual input only.',
-    qlHelper: 'IborSwapRateHelper', color: '#3d8bc8', liquidityHorizon: '30Y',
+    qlHelper: 'IborSwapRateHelper', color: '#8fc1e6', liquidityHorizon: '30Y',
     instruments: [
       { en: false, type: 'IRS', tenor: '1Y',  ticker: 'USDTSOFR1M1Y=',  quote: 4.520, unit: '%' },
       { en: false, type: 'IRS', tenor: '2Y',  ticker: 'USDTSOFR1M2Y=',  quote: 4.090, unit: '%' },
@@ -105,7 +105,7 @@ export const RATES_CURVES = [
     id: 'USD_TSOFR_3M', ccy: 'USD', flag: '🇺🇸', name: 'Term SOFR 3M', fullName: 'USD Term SOFR 3M',
     curve_class: 'BASIS', baseCurveId: 'USD_SOFR', baseLabel: 'USD SOFR OIS',
     description: 'CME Term SOFR 3M vs compounded SOFR. No liquid basis market — manual input only.',
-    qlHelper: 'IborSwapRateHelper', color: '#3d8bc8', liquidityHorizon: '30Y',
+    qlHelper: 'IborSwapRateHelper', color: '#8fc1e6', liquidityHorizon: '30Y',
     instruments: [
       { en: false, type: 'IRS', tenor: '1Y',  ticker: 'USDTSOFR3M1Y=',  quote: 4.530, unit: '%' },
       { en: false, type: 'IRS', tenor: '2Y',  ticker: 'USDTSOFR3M2Y=',  quote: 4.095, unit: '%' },
@@ -121,7 +121,7 @@ export const RATES_CURVES = [
     id: 'USD_TSOFR_6M', ccy: 'USD', flag: '🇺🇸', name: 'Term SOFR 6M', fullName: 'USD Term SOFR 6M',
     curve_class: 'BASIS', baseCurveId: 'USD_SOFR', baseLabel: 'USD SOFR OIS',
     description: 'CME Term SOFR 6M vs compounded SOFR. Thin market — manual input only.',
-    qlHelper: 'IborSwapRateHelper', color: '#3d8bc8', liquidityHorizon: '30Y',
+    qlHelper: 'IborSwapRateHelper', color: '#8fc1e6', liquidityHorizon: '30Y',
     instruments: [
       { en: false, type: 'IRS', tenor: '1Y',  ticker: 'USDTSOFR6M1Y=',  quote: 4.545, unit: '%' },
       { en: false, type: 'IRS', tenor: '2Y',  ticker: 'USDTSOFR6M2Y=',  quote: 4.105, unit: '%' },
@@ -135,7 +135,7 @@ export const RATES_CURVES = [
     id: 'USD_1M3M', ccy: 'USD', flag: '🇺🇸', name: '1M/3M Basis', fullName: 'USD SOFR 1M/3M Tenor Basis',
     curve_class: 'BASIS', baseCurveId: 'USD_SOFR', baseLabel: 'USD SOFR OIS',
     description: 'Term SOFR 1M vs 3M tenor basis spread. Thin market — enter manually.',
-    qlHelper: 'BasisSwapRateHelper', color: '#3d8bc8', liquidityHorizon: '10Y',
+    qlHelper: 'BasisSwapRateHelper', color: '#8fc1e6', liquidityHorizon: '10Y',
     instruments: [
       { en: false, type: 'Basis', tenor: '1Y',  ticker: '', quote: -2.5, unit: 'bp' },
       { en: false, type: 'Basis', tenor: '2Y',  ticker: '', quote: -2.8, unit: 'bp' },
@@ -147,7 +147,7 @@ export const RATES_CURVES = [
     id: 'USD_3M6M', ccy: 'USD', flag: '🇺🇸', name: '3M/6M Basis', fullName: 'USD SOFR 3M/6M Tenor Basis',
     curve_class: 'BASIS', baseCurveId: 'USD_SOFR', baseLabel: 'USD SOFR OIS',
     description: 'Term SOFR 3M vs 6M tenor basis spread. Thin market — enter manually.',
-    qlHelper: 'BasisSwapRateHelper', color: '#3d8bc8', liquidityHorizon: '10Y',
+    qlHelper: 'BasisSwapRateHelper', color: '#8fc1e6', liquidityHorizon: '10Y',
     instruments: [
       { en: false, type: 'Basis', tenor: '1Y',  ticker: '', quote: -1.8, unit: 'bp' },
       { en: false, type: 'Basis', tenor: '2Y',  ticker: '', quote: -2.0, unit: 'bp' },
@@ -159,7 +159,7 @@ export const RATES_CURVES = [
     id: 'USD_FUNDING', ccy: 'USD', flag: '🇺🇸', name: 'USD Funding', fullName: 'USD Firm Funding Curve',
     curve_class: 'FUNDING', baseCurveId: 'USD_SOFR', baseLabel: 'USD SOFR OIS',
     description: 'Firm cost of funds = USD SOFR OIS + firm credit spread.',
-    color: '#e8a020', spreadMode: 'term', liquidityHorizon: '30Y',
+    color: '#e9975a', spreadMode: 'term', liquidityHorizon: '30Y',
     spreads: { ON: 12, W1: 15, M1: 20, M3: 28, M6: 35, Y1: 42, Y2: 52, Y3: 58, Y5: 65, Y7: 70, Y10: 75, Y20: 85, Y30: 88 },
     oisRef: { ON: 3.650, M1: 3.660, M3: 3.675, M6: 3.687, Y1: 3.712, Y2: 3.639, Y3: 3.602, Y5: 3.643, Y7: 3.734, Y10: 3.866, Y20: 4.142, Y30: 4.103 },
   },
@@ -171,7 +171,7 @@ export const RATES_CURVES = [
     calendar: 'TARGET()', settlementDays: 2, bdc: 'ModifiedFollowing',
     payFreq: 'Annual', payLag: 2, telescopic: true,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#3d8bc8', liquidityHorizon: '30Y',
+    color: '#8fc1e6', liquidityHorizon: '30Y',
     instruments: [
       { en: true, type: 'OISDeposit', tenor: 'ON',  ticker: 'ESTRRATE Index',     quote: 2.400, unit: '%' },
       { en: true, type: 'OIS',        tenor: '1W',  ticker: 'EESWE1Z BGN Curncy', quote: 2.390, unit: '%' },
@@ -214,7 +214,7 @@ export const RATES_CURVES = [
     calendar: 'UnitedKingdom(Exchange)', settlementDays: 0, bdc: 'ModifiedFollowing',
     payFreq: 'Annual', payLag: 0, telescopic: false,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#9060cc', liquidityHorizon: '30Y',
+    color: '#c0a5ee', liquidityHorizon: '30Y',
     instruments: [
       { en: true, type: 'OISDeposit', tenor: 'ON',  ticker: 'SONIO/N Index',     quote: 4.450, unit: '%' },
       { en: true, type: 'OIS',        tenor: '1W',  ticker: 'BPSWS1Z BGN Curncy', quote: 4.430, unit: '%' },
@@ -256,7 +256,7 @@ export const RATES_CURVES = [
     calendar: 'Japan()', settlementDays: 2, bdc: 'ModifiedFollowing',
     payFreq: 'Annual', payLag: 2, telescopic: true,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#e8a020', liquidityHorizon: '30Y',
+    color: '#e9975a', liquidityHorizon: '30Y',
     instruments: [
       { en: true, type: 'OISDeposit', tenor: 'ON',  ticker: 'TONAR Index',        quote: 0.500, unit: '%' },
       { en: true, type: 'OIS',        tenor: '1W',  ticker: 'JYSO1Z BGN Curncy',  quote: 0.520, unit: '%' },
@@ -302,7 +302,7 @@ export const RATES_CURVES = [
     calendar: 'Switzerland()', settlementDays: 2, bdc: 'ModifiedFollowing',
     payFreq: 'Annual', payLag: 2, telescopic: true,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#d95040', liquidityHorizon: '30Y',
+    color: '#f09382', liquidityHorizon: '30Y',
     instruments: [
       { en: true, type: 'OISDeposit', tenor: 'ON',  ticker: 'SARON Index',         quote: 0.420, unit: '%' },
       { en: true, type: 'OIS',        tenor: '1W',  ticker: 'SFSNT1Z BGN Curncy',  quote: 0.410, unit: '%' },
@@ -342,7 +342,7 @@ export const RATES_CURVES = [
     calendar: 'Australia()', settlementDays: 0, bdc: 'ModifiedFollowing',
     payFreq: 'Annual', payLag: 0, telescopic: true,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#1dc87a', liquidityHorizon: '9M',
+    color: '#8fe0ae', liquidityHorizon: '9M',
     instruments: [
       { en: true, type: 'OISDeposit', tenor: 'ON', ticker: 'RBACTRD Index',     quote: 4.100, unit: '%' },
       { en: true, type: 'OIS',        tenor: '1W', ticker: 'ADSO1Z BGN Curncy', quote: 4.093, unit: '%' },
@@ -361,7 +361,7 @@ export const RATES_CURVES = [
     calendar: 'Canada()', settlementDays: 1, bdc: 'ModifiedFollowing',
     payFreq: 'Annual', payLag: 2, telescopic: true,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#ef6c2c', liquidityHorizon: '30Y',
+    color: '#f1d488', liquidityHorizon: '30Y',
     instruments: [
       { en: true, type: 'OISDeposit', tenor: 'ON',  ticker: 'CORRA Index',        quote: 2.950, unit: '%' },
       { en: true, type: 'OIS',        tenor: '1W',  ticker: 'CDSO1Z BGN Curncy',  quote: 2.940, unit: '%' },
@@ -433,7 +433,7 @@ export const RATES_CURVES = [
     dayCounter: 'Actual/360', calendar: 'Norway()', settlementDays: 1,
     bdc: 'ModifiedFollowing', payFreq: 'Annual', payLag: 1, telescopic: true,
     defaultInterp: 'LogLinearDiscount', accuracy: '1e-12', maxIter: 100, extrapolation: true,
-    color: '#ef6c2c', liquidityHorizon: '1Y',
+    color: '#f1d488', liquidityHorizon: '1Y',
     instruments: [
       { en: true, type: 'OISDeposit', tenor: 'ON', ticker: 'NOWA Index',        quote: 4.500, unit: '%' },
       { en: true, type: 'OIS',        tenor: '1W', ticker: 'NKS1W BGN Curncy',  quote: 4.480, unit: '%' },
@@ -534,7 +534,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_EURUSD', ccy: 'XCCY', ccy_dom: 'EUR', ccy_for: 'USD', flag: '🇪🇺🇺🇸',
     name: 'EUR/USD XCCY', fullName: 'EUR/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['EUR_ESTR', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['EUR_ESTR', 'USD_SOFR'], color: '#c0a5ee',
     description: 'EUR/USD XCCY basis. EUR leg: ESTRON Index. USD leg: SOFRRATE Index. MTM=True.',
     liquidityHorizon: '30Y',
     blpConventions: {
@@ -565,7 +565,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_GBPUSD', ccy: 'XCCY', ccy_dom: 'GBP', ccy_for: 'USD', flag: '🇬🇧🇺🇸',
     name: 'GBP/USD XCCY', fullName: 'GBP/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['GBP_SONIA', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['GBP_SONIA', 'USD_SOFR'], color: '#c0a5ee',
     description: 'GBP/USD XCCY basis. GBP leg: SONIA. USD leg: SOFRRATE Index. MTM=True.',
     liquidityHorizon: '50Y',
     blpConventions: {
@@ -595,7 +595,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_JPYUSD', ccy: 'XCCY', ccy_dom: 'JPY', ccy_for: 'USD', flag: '🇯🇵🇺🇸',
     name: 'JPY/USD XCCY', fullName: 'JPY/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['JPY_TONAR', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['JPY_TONAR', 'USD_SOFR'], color: '#c0a5ee',
     description: 'JPY/USD XCCY basis. JPY leg: TONA. USD leg: SOFRRATE Index. MTM=True.',
     liquidityHorizon: '40Y',
     blpConventions: {
@@ -625,7 +625,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_CHFUSD', ccy: 'XCCY', ccy_dom: 'CHF', ccy_for: 'USD', flag: '🇨🇭🇺🇸',
     name: 'CHF/USD XCCY', fullName: 'CHF/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['CHF_SARON', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['CHF_SARON', 'USD_SOFR'], color: '#c0a5ee',
     description: 'CHF/USD XCCY basis. CHF leg: SARON. USD leg: SOFRRATE Index. MTM=True.',
     liquidityHorizon: '30Y',
     blpConventions: {
@@ -654,7 +654,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_AUDUSD', ccy: 'XCCY', ccy_dom: 'AUD', ccy_for: 'USD', flag: '🇦🇺🇺🇸',
     name: 'AUD/USD XCCY', fullName: 'AUD/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['AUD_AONIA', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['AUD_AONIA', 'USD_SOFR'], color: '#c0a5ee',
     description: 'AUD/USD XCCY basis. AUD leg: 3mBBSW. USD leg: SOFRRATE Index. MTM=True.',
     liquidityHorizon: '30Y',
     blpConventions: {
@@ -687,7 +687,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_CADUSD', ccy: 'XCCY', ccy_dom: 'CAD', ccy_for: 'USD', flag: '🇨🇦🇺🇸',
     name: 'CAD/USD XCCY', fullName: 'CAD/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['CAD_CORRA', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['CAD_CORRA', 'USD_SOFR'], color: '#c0a5ee',
     description: 'CAD/USD XCCY basis. CAD leg: CORRA. USD leg: SOFRRATE Index. MTM=True.',
     liquidityHorizon: '30Y',
     blpConventions: {
@@ -720,7 +720,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_SEKUSD', ccy: 'XCCY', ccy_dom: 'SEK', ccy_for: 'USD', flag: '🇸🇪🇺🇸',
     name: 'SEK/USD XCCY', fullName: 'SEK/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['SEK_SWESTR', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['SEK_SWESTR', 'USD_SOFR'], color: '#c0a5ee',
     description: 'SEK/USD XCCY basis. SEK leg: 3mSTIBOR. USD leg: SOFRRATE. MTM=True.',
     liquidityHorizon: '30Y',
     blpConventions: {
@@ -749,7 +749,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_NOKUSD', ccy: 'XCCY', ccy_dom: 'NOK', ccy_for: 'USD', flag: '🇳🇴🇺🇸',
     name: 'NOK/USD XCCY', fullName: 'NOK/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['NOK_NOWA', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['NOK_NOWA', 'USD_SOFR'], color: '#c0a5ee',
     description: 'NOK/USD XCCY basis. NOK leg: 3mNIBOR. USD leg: SOFRRATE. MTM=True.',
     liquidityHorizon: '30Y',
     blpConventions: {
@@ -778,7 +778,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_NZDUSD', ccy: 'XCCY', ccy_dom: 'NZD', ccy_for: 'USD', flag: '🇳🇿🇺🇸',
     name: 'NZD/USD XCCY', fullName: 'NZD/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['NZD_NZIONA', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['NZD_NZIONA', 'USD_SOFR'], color: '#c0a5ee',
     description: 'NZD/USD XCCY basis. No standard Bloomberg XCCY series — enter manually.',
     liquidityHorizon: '10Y',
     blpConventions: {
@@ -796,7 +796,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_HKDUSD', ccy: 'XCCY', ccy_dom: 'HKD', ccy_for: 'USD', flag: '🇭🇰🇺🇸',
     name: 'HKD/USD XCCY', fullName: 'HKD/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['HKD_HONIA', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['HKD_HONIA', 'USD_SOFR'], color: '#c0a5ee',
     description: 'HKD/USD XCCY basis. HKD leg: 3mHIBOR. USD leg: SOFRRATE. MTM=True.',
     liquidityHorizon: '15Y',
     blpConventions: {
@@ -820,7 +820,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_SGDUSD', ccy: 'XCCY', ccy_dom: 'SGD', ccy_for: 'USD', flag: '🇸🇬🇺🇸',
     name: 'SGD/USD XCCY', fullName: 'SGD/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['SGD_SORA', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['SGD_SORA', 'USD_SOFR'], color: '#c0a5ee',
     description: 'Offshore SGD/USD XCCY basis. SGD leg: SORA. USD leg: SOFRRATE. MTM=True.',
     liquidityHorizon: '30Y',
     blpConventions: {
@@ -846,7 +846,7 @@ export const RATES_CURVES = [
   {
     id: 'XCCY_DKKUSD', ccy: 'XCCY', ccy_dom: 'DKK', ccy_for: 'USD', flag: '🇩🇰🇺🇸',
     name: 'DKK/USD XCCY', fullName: 'DKK/USD Cross-Currency Basis',
-    curve_class: 'XCCY', parentCurves: ['DKK_DESTR', 'USD_SOFR'], color: '#9060cc',
+    curve_class: 'XCCY', parentCurves: ['DKK_DESTR', 'USD_SOFR'], color: '#c0a5ee',
     description: 'DKK/USD XCCY basis. DKK leg: 3mCIBOR. USD leg: SOFRRATE. Closely tracks EUR/USD given DKK peg.',
     liquidityHorizon: '30Y',
     blpConventions: {

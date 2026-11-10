@@ -17,10 +17,10 @@ const TENOR_TO_Y = {
 // Source badge (matches OISDetail)
 function SourceBadge({ src }) {
   const map = {
-    BLOOMBERG: { bg:'rgba(74,154,212,0.12)', bd:'rgba(74,154,212,0.3)', c:'#4a9ad4' },
-    FED:       { bg:'rgba(144,96,204,0.12)', bd:'rgba(144,96,204,0.3)', c:'#9060cc' },
-    MANUAL:    { bg:'rgba(82,104,120,0.12)', bd:'rgba(82,104,120,0.3)', c:'var(--text-dim)' },
-    IMPORT:    { bg:'rgba(240,160,32,0.12)', bd:'rgba(240,160,32,0.3)', c:'#f0a020' },
+    BLOOMBERG: { bg:'rgba(143,193,230,0.12)', bd:'rgba(143,193,230,0.3)', c:'#8fc1e6' },
+    FED:       { bg:'rgba(192,165,238,0.12)', bd:'rgba(192,165,238,0.3)', c:'#c0a5ee' },
+    MANUAL:    { bg:'rgba(111,135,125,0.12)', bd:'rgba(111,135,125,0.3)', c:'var(--text-dim)' },
+    IMPORT:    { bg:'rgba(233,151,90,0.12)', bd:'rgba(233,151,90,0.3)', c:'#e9975a' },
   };
   const s = map[src] || map.MANUAL;
   return (
@@ -46,7 +46,7 @@ function BasisCanvas({ instruments, hasData, title }) {
   return (
     <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',padding:'8px',marginTop:'6px'}}>
       <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'5px'}}>{title}</div>
-      <RateCurveCanvas points={points} unit="bp" color="#4a9ad4" height={170} />
+      <RateCurveCanvas points={points} unit="bp" color="#8fc1e6" height={170} />
     </div>
   );
 }
@@ -218,7 +218,7 @@ function BasisInstruments({ curve }) {
               <div key={`tog-${i}`} style={tdS}>
                 <input type="checkbox" checked={inst.en}
                   onChange={e => toggleInstrument(curve.id, i, e.target.checked)}
-                  style={{cursor:'pointer', accentColor:'#0dd4a8'}} />
+                  style={{cursor:'pointer', accentColor:'#d9b25c'}} />
               </div>,
               <div key={`t-${i}`} style={{...tdS, color:'var(--blue)', fontWeight:400}}>{inst.tenor}</div>,
               <div key={`tk-${i}`} style={{...tdS, fontSize:'0.8125rem', color:'var(--text-dim)'}}>
@@ -266,7 +266,7 @@ function BasisInstruments({ curve }) {
             <button
               onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
-              style={{padding:'0.25rem 0.85rem', background:'rgba(14,201,160,0.07)',
+              style={{padding:'0.25rem 0.85rem', background:'rgba(217,178,92,0.07)',
                 border:'1px solid var(--accent)', borderRadius:2,
                 fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', fontWeight:700,
                 letterSpacing:'0.1em', color:'var(--accent)', cursor:'pointer'}}
@@ -327,14 +327,14 @@ function BasisInstruments({ curve }) {
             </div>
             {blpSnapResult && (
               <div style={{fontSize:'0.875rem', color:'var(--accent)', marginBottom:'6px',
-                background:'rgba(13,212,168,0.05)', border:'1px solid rgba(13,212,168,0.2)',
+                background:'rgba(217,178,92,0.05)', border:'1px solid rgba(217,178,92,0.2)',
                 padding:'5px 7px', borderRadius:'2px', lineHeight:1.7}}>
                 ✓ SNAPPED & SAVED TO DB · {blpSnapResult.quotes_saved} TENORS · {blpSnapResult.snap_date}
               </div>
             )}
             {blpSnapError && (
               <div style={{fontSize:'0.875rem', color:'var(--red)', marginBottom:'6px',
-                background:'rgba(224,80,64,0.05)', border:'1px solid rgba(224,80,64,0.2)',
+                background:'rgba(240,147,130,0.05)', border:'1px solid rgba(240,147,130,0.2)',
                 padding:'5px 7px', borderRadius:'2px'}}>✗ {blpSnapError}</div>
             )}
             {Object.keys(blpTickers).length > 0 && (

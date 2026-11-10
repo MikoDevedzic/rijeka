@@ -87,7 +87,7 @@ export default class ErrorBoundary extends Component {
         }}>{msg}</div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' }}>
           <button className="btn" onClick={this.primary}
-            style={{ background: 'var(--accent)', borderColor: 'var(--accent)', color: '#04120E', fontWeight: 700, letterSpacing: '0.08em' }}>
+            style={{ background: 'var(--accent)', borderColor: 'var(--accent)', color: '#1b1403', fontWeight: 700, letterSpacing: '0.08em' }}>
             {copy.action}
           </button>
           {this.props.onReset && (
@@ -108,7 +108,7 @@ export default class ErrorBoundary extends Component {
     if (scope === 'window') {
       return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', background: 'rgba(4,6,10,0.55)', backdropFilter: 'blur(2px)' }}>
+          justifyContent: 'center', background: 'rgba(8,23,20,0.55)', backdropFilter: 'blur(2px)' }}>
           <div style={{ width: 560, maxWidth: 'calc(100vw - 32px)', border: '1px solid var(--border-hi)', borderRadius: 8,
             background: 'linear-gradient(180deg, var(--panel-2), var(--panel))', boxShadow: 'var(--shadow-panel)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--border)',

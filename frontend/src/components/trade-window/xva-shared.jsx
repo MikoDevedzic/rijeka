@@ -29,7 +29,7 @@ export function XvaViewToggle({ view, setView }) {
   const simple = view === 'simple'
   return (
     <button data-testid="xva-view-toggle" aria-expanded={!simple} onClick={() => setView(simple ? 'advanced' : 'simple')}
-      style={{alignSelf:'flex-end',flexShrink:0,background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',fontFamily:'var(--mono)',fontSize:'0.7rem',fontWeight:700,letterSpacing:'0.08em',padding:'2px 6px',borderRadius:'2px',cursor:'pointer'}}>
+      style={{alignSelf:'flex-end',flexShrink:0,background:'transparent',border:'1px solid var(--border)',color:'var(--text-mute)',fontFamily:'var(--sans)',fontSize:'0.7rem',fontWeight:500,letterSpacing:'0.07em',padding:'3px 8px',borderRadius:'var(--r-1)',cursor:'pointer'}}>
       {simple ? 'SHOW MODEL INPUTS' : 'HIDE MODEL INPUTS'}
     </button>
   )
@@ -61,13 +61,13 @@ export function PathsWwrSliders({ paths, setPaths, wwr, setWwr, tip, untip, path
     <>
       <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
         <TipLabel tipKey={pathsTip} tip={tip} untip={untip} style={{ whiteSpace:'nowrap', marginBottom:0 }}>PATHS</TipLabel>
-        <input type='range' min='500' max='5000' step='500' value={paths} onChange={e=>setPaths(parseInt(e.target.value))} style={{flex:1,accentColor:'var(--accent)'}}/>
-        <span style={{fontSize:'0.8125rem',color:'var(--blue)',fontFamily:'var(--mono)',minWidth:'40px',textAlign:'right'}}>{paths.toLocaleString()}</span>
+        <input type='range' min='500' max='5000' step='500' value={paths} onChange={e=>setPaths(parseInt(e.target.value))} style={{flex:1,accentColor:'var(--text-dim)'}}/>
+        <span style={{fontSize:'0.8125rem',color:'var(--text-hi)',fontFamily:'var(--mono)',minWidth:'40px',textAlign:'right'}}>{paths.toLocaleString()}</span>
       </div>
       <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
         <TipLabel tipKey='wwr' tip={tip} untip={untip} style={{ whiteSpace:'nowrap', marginBottom:0 }}>WWR ×</TipLabel>
-        <input type='range' min='1.0' max='2.0' step='0.1' value={wwr} onChange={e=>setWwr(parseFloat(e.target.value))} style={{flex:1,accentColor:'var(--amber)'}}/>
-        <span style={{fontSize:'0.8125rem',color:'var(--amber)',fontFamily:'var(--mono)',minWidth:'30px',textAlign:'right'}}>{wwr.toFixed(1)}</span>
+        <input type='range' min='1.0' max='2.0' step='0.1' value={wwr} onChange={e=>setWwr(parseFloat(e.target.value))} style={{flex:1,accentColor:'var(--text-dim)'}}/>
+        <span style={{fontSize:'0.8125rem',color:'var(--text-hi)',fontFamily:'var(--mono)',minWidth:'30px',textAlign:'right'}}>{wwr.toFixed(1)}</span>
       </div>
     </>
   )
@@ -76,9 +76,9 @@ export function PathsWwrSliders({ paths, setPaths, wwr, setWwr, tip, untip, path
 // The model badge under the sliders: kind 'ok' is the rates "✔ CALIBRATED …" box; 'warn' and
 // 'info' the same box in amber / blue; 'muted' the plain note shown when there is nothing yet.
 const BADGE = {
-  ok:   { color:'var(--accent)', bg:'rgba(13,212,168,0.05)',  border:'rgba(13,212,168,0.15)',  dash:'rgba(13,212,168,0.3)' },
-  warn: { color:'var(--amber)',  bg:'rgba(240,160,32,0.05)',  border:'rgba(240,160,32,0.15)',  dash:'rgba(240,160,32,0.3)' },
-  info: { color:'var(--blue)',   bg:'rgba(74,154,212,0.05)',  border:'rgba(74,154,212,0.15)',  dash:'rgba(74,154,212,0.3)' },
+  ok:   { color:'var(--up)',     bg:'rgb(var(--up-rgb) / 0.05)', border:'rgb(var(--up-rgb) / 0.18)', dash:'rgb(var(--up-rgb) / 0.3)' },
+  warn: { color:'var(--amber)',  bg:'rgba(233,151,90,0.05)',  border:'rgba(233,151,90,0.15)',  dash:'rgba(233,151,90,0.3)' },
+  info: { color:'var(--blue)',   bg:'rgba(143,193,230,0.05)',  border:'rgba(143,193,230,0.15)',  dash:'rgba(143,193,230,0.3)' },
 }
 export function ModelBadge({ kind = 'ok', tipKey, tip = noop, untip = noop, children }) {
   if (kind === 'muted') return <div style={{fontSize:'0.75rem',color:'var(--text-mute)',marginBottom:'8px'}}>{children}</div>
@@ -86,7 +86,7 @@ export function ModelBadge({ kind = 'ok', tipKey, tip = noop, untip = noop, chil
   return (
     <div onMouseEnter={e => tipKey && tip(tipKey, e)} onMouseLeave={untip}
       style={{fontSize:'0.75rem',color:c.color,background:c.bg,
-      border:'1px solid '+c.border,borderRadius:'2px',padding:'4px 7px',
+      border:'1px solid '+c.border,borderRadius:'var(--r-1)',padding:'5px 8px',
       marginBottom:'8px',lineHeight:1.5,cursor:tipKey?'help':'default',borderBottom:'1px dashed '+c.dash}}>
       {children}
     </div>
@@ -98,12 +98,12 @@ export function SimulateButtons({ simulating, hasResult, disabled = false, label
   return (
     <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
       <button onClick={onSimulate} disabled={simulating || disabled}
-        style={{flex:2,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:'var(--mono)',border:'1px solid rgba(13,212,168,0.4)',background:'rgba(13,212,168,0.06)',color:'var(--accent)',opacity:simulating?0.5:1}}>
+        style={{flex:2,padding:'8px',fontSize:'0.8125rem',fontWeight:600,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'var(--r-2)',fontFamily:'var(--sans)',border:'1px solid var(--accent-dim)',background:'rgb(var(--accent-rgb) / 0.08)',color:'var(--accent-hi)',opacity:simulating?0.5:1}}>
         {simulating?'SIMULATING...':label}
       </button>
       <button onClick={onReroll} disabled={simulating || disabled || !hasResult}
         title="The same model with fresh random numbers: the numbers move within the Monte Carlo error and settle as you raise PATHS"
-        style={{flex:1,padding:'6px',fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',fontFamily:'var(--mono)',border:'1px solid var(--border)',background:'transparent',color:hasResult?'var(--text-dim)':'var(--text-mute)',opacity:simulating?0.5:1}}>
+        style={{flex:1,padding:'8px',fontSize:'0.8125rem',fontWeight:500,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'var(--r-2)',fontFamily:'var(--sans)',border:'1px solid var(--border-hi)',background:'transparent',color:hasResult?'var(--text-dim)':'var(--text-faint)',opacity:simulating?0.5:1}}>
         RE-ROLL
       </button>
     </div>
@@ -117,12 +117,12 @@ export function ProofExpander({ title, right, open, onToggle, children }) {
       <div
         onClick={onToggle}
         style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer',
-          padding:'4px 7px',borderRadius:'2px',
+          padding:'5px 8px',borderRadius:'var(--r-1)',
           background:'rgba(255,255,255,0.02)',border:'1px solid var(--border)',
           marginBottom: open ? '8px' : '0'}}
       >
-        <span style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'.10em',
-          color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
+        <span style={{fontSize:'0.75rem',fontWeight:500,letterSpacing:'.08em',
+          color:'var(--text-mute)',fontFamily:'var(--sans)'}}>
           {open ? '▼' : '►'} {title}
         </span>
         {right}
@@ -143,16 +143,15 @@ function SpreadRow({ label, values, onChange, tipKey, tip, untip }) {
     <div style={{ marginBottom:'4px' }}>
       <div style={{ display:'grid', gridTemplateColumns:'56px repeat(6,1fr)', gap:'3px', alignItems:'center' }}>
         <div onMouseEnter={e=>tip(tipKey,e)} onMouseLeave={untip}
-          style={{ fontSize:'0.75rem', color:'var(--accent)', fontFamily:'var(--mono)',
-            letterSpacing:'0.03em', borderBottom:'1px dashed rgba(13,212,168,0.4)',
-            cursor:'help', paddingBottom:'1px' }}>{label}</div>
+          style={{ fontSize:'0.75rem', color:'var(--text-dim)', fontFamily:'var(--sans)',
+            letterSpacing:'0.02em', borderBottom:'1px dotted var(--border-glow)',
+            cursor:'help', paddingBottom:'1px', whiteSpace:'nowrap' }}>{label}</div>
         {TENORS_6.map(t => (
           <input key={t} type='text' inputMode='decimal'
             placeholder='—' defaultValue={values?.[t]||''}
             onBlur={e => onChange(t, e.target.value)}
             style={{ ...INP, textAlign:'right', padding:'4px 6px', fontSize:'0.875rem',
-              color: values?.[t] ? 'var(--accent)' : 'var(--text-mute)',
-              fontWeight: values?.[t] ? 600 : 400 }} />
+              color: values?.[t] ? 'var(--text-hi)' : 'var(--text-mute)' }} />
         ))}
       </div>
     </div>
@@ -190,10 +189,10 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
         style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'3px',marginBottom:'6px'}}>
         {SETTLEMENT_PRESETS.map(([k,label,c])=>(
           <button key={k} onClick={()=>{ setSettlement(k); setImExchanged(k!=='UNCOLLATERALISED') }}
-            style={{padding:'5px 2px',fontSize:'0.8rem',fontWeight:700,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'2px',
-              fontFamily:'var(--mono)',
-              border:settlement===k?'1px solid '+c:'1px solid var(--border)',
-              background:settlement===k?c+'14':'transparent',color:settlement===k?c:'var(--text-mute)'}}>
+            style={{padding:'7px 2px',fontSize:'0.75rem',fontWeight:500,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'var(--r-2)',
+              fontFamily:'var(--sans)',
+              border:settlement===k?'1px solid var(--border-glow)':'1px solid var(--border)',
+              background:settlement===k?'var(--panel-3)':'transparent',color:settlement===k?c:'var(--text-mute)'}}>
             {label}
           </button>
         ))}
@@ -210,7 +209,7 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
         ))}
         <div style={{...LBL,alignSelf:'center',marginBottom:0,borderBottom:'none',cursor:'default'}}>SIMM IM exchanged</div>
         <label style={{display:'flex',justifyContent:'flex-end',alignItems:'center',cursor:'pointer'}}>
-          <input type='checkbox' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'var(--amber)'}}/>
+          <input type='checkbox' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
         </label>
         {settlement!=='ON_CHAIN' && (<>
           <TipLabel tipKey='compare' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Compare on-chain</TipLabel>
@@ -259,11 +258,11 @@ function CollateralBlock({ collateral, setCollateral, instruments, scheduleColla
         <span>carry over OIS · posted {carryFmt(carryOf(collateral?.posted))} · received {carryFmt(carryOf(collateral?.received))}</span>
         {scheduleCollateral && !fromSchedule && (
           <button onClick={() => setCollateral({ ...scheduleCollateral, source: 'SCHEDULE' })}
-            style={{marginLeft:'auto',background:'transparent',border:'1px solid var(--border)',color:'var(--accent)',fontFamily:'var(--mono)',fontSize:'0.7rem',padding:'2px 6px',borderRadius:'2px',cursor:'pointer'}}>
+            style={{marginLeft:'auto',background:'transparent',border:'1px solid var(--border-hi)',color:'var(--text-dim)',fontFamily:'var(--sans)',fontSize:'0.7rem',letterSpacing:'0.05em',padding:'3px 7px',borderRadius:'var(--r-1)',cursor:'pointer'}}>
             COUNTERPARTY'S SCHEDULE
           </button>
         )}
-        {fromSchedule && <span style={{marginLeft:'auto',color:'var(--accent)'}}>from the counterparty's schedule</span>}
+        {fromSchedule && <span style={{marginLeft:'auto',color:'var(--text-dim)'}}>from the counterparty's schedule</span>}
       </div>
     </div>
   )
@@ -295,7 +294,7 @@ export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, s
           <option value='imm'>IMM</option>
         </select>
       </div>
-      <div style={{marginTop:'8px',fontSize:'0.8rem',color:'var(--text-mute)',lineHeight:1.5,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'2px',padding:'5px 7px'}}>
+      <div style={{marginTop:'8px',fontSize:'0.78rem',color:'var(--text-mute)',lineHeight:1.5,background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'var(--r-1)',padding:'6px 8px'}}>
         {note}
       </div>
     </>
@@ -322,11 +321,11 @@ export function ChartReadout({ result, model, fmt = fmtDollar, children }) {
     <div style={{marginLeft:'auto',textAlign:'right',fontSize:'0.7rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
       {result.n_paths?.toLocaleString()} paths · {model}
       {csa && (
-        <span style={{color:csa.collateralised?'var(--accent)':'var(--red)', marginLeft:'8px'}}>
+        <span style={{color:csa.collateralised?'var(--text-dim)':'var(--down)', marginLeft:'8px'}}>
           · {String(csa.preset||'').replace('_','-')}{csa.collateralised ? ` · ${csa.mpor_days}bd MPoR` : ''}{csa.im_exchanged ? ' · IM' : ''}
           {csa.collateralised && result.ee_gross && (() => {
             const g = Math.max(...result.ee_gross), r = Math.max(...result.ee)
-            return <span style={{color:'var(--accent-dim)'}}> · peak EE gross {fmt(g)} → residual {fmt(r)} ({g>0?(-100*(1-r/g)).toFixed(0):'0'}%)</span>
+            return <span style={{color:'var(--text-mute)'}}> · peak EE gross {fmt(g)} → residual {fmt(r)} ({g>0?(-100*(1-r/g)).toFixed(0):'0'}%)</span>
           })()}
         </span>
       )}
@@ -341,7 +340,7 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
   const exp = rows.find(r => r.key === expanded)
   return (
     <>
-      <div data-testid="va-strip" style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
+      <div data-testid="va-strip" style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},minmax(0,1fr))`,gap:'1px',background:'var(--border)',borderTop:'1px solid var(--border)'}}>
         {rows.map(row => {
           const isExp = expanded===row.key
           return (
@@ -349,23 +348,23 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
               onClick={()=>setExpanded(isExp?null:row.key)}
               onMouseEnter={()=>row.curve!=='none'&&onHighlight(row.curve)}
               onMouseLeave={()=>onHighlight(null)}
-              style={{background:'var(--bg)',padding:'8px 8px 6px',cursor:'pointer',
-                borderTop:isExp?'2px solid '+row.color:'2px solid transparent'}}>
-              <div style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'0.10em',color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px'}}>{row.label}</div>
-              <div style={{fontSize:'0.9375rem',fontWeight:700,color:row.value!=null?row.color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'3px'}}>
+              style={{background:'var(--panel)',padding:'9px 10px 7px',cursor:'pointer',minWidth:0,
+                boxShadow:isExp?'inset 0 2px 0 '+row.color:'none'}}>
+              <div style={{fontSize:'0.72rem',fontWeight:500,letterSpacing:'0.09em',color:'var(--text-mute)',fontFamily:'var(--sans)',marginBottom:'5px'}}>{row.label}</div>
+              <div style={{fontSize:'1rem',fontWeight:500,color:row.value!=null?row.color:'var(--text-mute)',fontFamily:'var(--mono)',marginBottom:'4px',whiteSpace:'nowrap'}}>
                 {fmt(row.value)}
               </div>
-              <div style={{borderTop:'1px solid var(--border)',paddingTop:'3px'}}>
-                {row.sub && <div style={{fontSize:'0.75rem',fontWeight:row.sub.weight,color:row.sub.color,fontFamily:'var(--mono)'}}>{row.sub.text}</div>}
-                {row.sub && <div style={{fontSize:'0.8rem',color:row.sub.captionColor,fontFamily:'var(--sans)'}}>{row.sub.caption}</div>}
+              <div>
+                {row.sub && <div style={{fontSize:'0.75rem',fontWeight:400,color:row.sub.color,fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{row.sub.text}</div>}
+                {row.sub && <div style={{fontSize:'0.72rem',color:row.sub.captionColor,fontFamily:'var(--sans)',whiteSpace:'nowrap'}}>{row.sub.caption}</div>}
               </div>
             </div>
           )
         })}
       </div>
       {exp && (
-        <div style={{background:'var(--bg)',border:'1px solid var(--border)',borderTop:'none',padding:'10px 14px',fontSize:'0.8125rem',color:'var(--text-dim)',lineHeight:1.7,fontFamily:'var(--sans)'}}>
-          <span style={{color:exp.color,fontWeight:700,fontFamily:'var(--mono)',marginRight:'8px'}}>{exp.label}</span>
+        <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)',padding:'10px 16px',fontSize:'0.8125rem',color:'var(--text-dim)',lineHeight:1.7,fontFamily:'var(--sans)'}}>
+          <span style={{color:exp.color,fontWeight:500,fontFamily:'var(--mono)',marginRight:'8px'}}>{exp.label}</span>
           {exp.desc}
           {exp.curve!=='none' && <span style={{marginLeft:'8px',fontSize:'0.75rem',color:'var(--text-mute)'}}>· Driven by {exp.curve} curve</span>}
         </div>
@@ -383,31 +382,31 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
   return (
     <div style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
       {saving && (
-        <div data-testid="saving-on-chain" style={{display:'flex',flexWrap:'wrap',columnGap:'12px',rowGap:'2px',alignItems:'baseline',padding:'5px 14px',borderBottom:'1px solid var(--border)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
-          <span style={{fontSize:'0.8rem',letterSpacing:'0.12em',color:'var(--accent)',fontWeight:700}}>SAVING ON CHAIN</span>
-          <span style={{fontSize:'0.9375rem',fontWeight:700,color:saving.money>=0?'var(--accent)':'var(--red)'}}>{fmt(saving.money)}</span>
+        <div data-testid="saving-on-chain" style={{display:'flex',flexWrap:'wrap',columnGap:'14px',rowGap:'2px',alignItems:'baseline',padding:'7px 16px',borderBottom:'1px solid var(--border)',background:'rgb(var(--accent-rgb) / 0.06)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
+          <span style={{fontSize:'0.72rem',letterSpacing:'0.1em',color:'var(--accent)',fontWeight:600,fontFamily:'var(--sans)'}}>SAVING ON CHAIN</span>
+          <span style={{fontSize:'1.3rem',lineHeight:1.1,fontWeight:500,letterSpacing:'-0.01em',color:saving.money>=0?'var(--accent-hi)':'var(--down)'}}>{fmt(saving.money)}</span>
           {saving.bpUpfront!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} upfront</span>}
           {saving.bpRunning!=null && <span style={{fontSize:'0.8rem',color:'var(--text-dim)'}}>· {bp(saving.bpRunning)} running</span>}
-          <span style={{marginLeft:'auto',fontSize:'0.75rem',color:'var(--text-mute)'}}>vs {preset} · same paths, same collateral · bp of notional</span>
+          <span style={{marginLeft:'auto',fontSize:'0.75rem',color:'var(--text-mute)',fontFamily:'var(--sans)'}}>vs {preset} · same paths, same collateral · bp of notional</span>
         </div>
       )}
       <div style={{display:'grid',gridTemplateColumns:`repeat(${rows.length},1fr)`,gap:'1px',background:'var(--border)'}}>
         {rows.map(({ key, oc, delta, pct, better }) => (
-          <div key={key} style={{background:'var(--bg-deep)',padding:'4px 8px',minWidth:0,overflow:'hidden'}}>
-            <div style={{fontSize:'0.8125rem',fontWeight:700,color:oc!=null?'var(--accent)':'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fmt(oc)}</div>
-            {key==='npv' && <div style={{fontSize:'0.7rem',letterSpacing:'0.10em',color:'var(--accent)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>ON-CHAIN</div>}
+          <div key={key} style={{background:'var(--bg-deep)',padding:'5px 10px',minWidth:0,overflow:'hidden'}}>
+            <div style={{fontSize:'0.8125rem',fontWeight:500,color:oc!=null?'var(--text-hi)':'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fmt(oc)}</div>
+            {key==='npv' && <div style={{fontSize:'0.68rem',letterSpacing:'0.1em',color:'var(--accent)',fontFamily:'var(--sans)',fontWeight:600,whiteSpace:'nowrap'}}>ON-CHAIN</div>}
             {pct!=null && key!=='all_in' && (
-              <div style={{fontSize:'0.72rem',color:better?'var(--accent)':'var(--red)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}} title="on-chain less the current run, and the change in the adjustment's size">
+              <div style={{fontSize:'0.72rem',color:better?'var(--up)':'var(--down)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}} title="on-chain less the current run, and the change in the adjustment's size">
                 {fmt(delta)} · {pct>=0?'+':''}{pct.toFixed(0)}%
               </div>
             )}
             {key==='all_in' && delta!=null && (
-              <div style={{fontSize:'0.72rem',color:delta>=0?'var(--accent)':'var(--red)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fmt(delta)}</div>
+              <div style={{fontSize:'0.72rem',color:delta>=0?'var(--up)':'var(--down)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>{fmt(delta)}</div>
             )}
           </div>
         ))}
       </div>
-      <div style={{padding:'4px 14px',fontSize:'0.8rem',color:'var(--accent-dim)',fontFamily:'var(--mono)',background:'var(--bg)'}}>
+      <div style={{padding:'5px 16px',fontSize:'0.75rem',color:'var(--text-mute)',fontFamily:'var(--mono)',background:'var(--bg)'}}>
         Same {compare.n_paths?.toLocaleString()} paths, same seed · ON-CHAIN = continuous VM · {compare.csa?.mpor_days}bd MPoR · SIMM IM × {compare.csa?.simm_mpor_scale?.toFixed(3)} · IM {fmt(compare.capital?.im_0)} vs {fmt(current.capital?.im_0)}
       </div>
     </div>
@@ -417,7 +416,7 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
 // The strip's footer line: "ALL-IN = NPV + … · Click any VA to expand · bp = …".
 export function VaFooter({ children }) {
   return (
-    <div style={{padding:'4px 14px',fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--mono)',background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
+    <div style={{padding:'5px 16px',fontSize:'0.75rem',color:'var(--text-faint)',fontFamily:'var(--mono)',background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
       {children}
     </div>
   )
@@ -428,8 +427,8 @@ export function FloatingTip({ tooltip, onLeave = noop }) {
   if (!tooltip || !TIPS[tooltip.key]) return null
   return (
     <div onMouseLeave={onLeave}
-      style={{position:'fixed',left:Math.min(tooltip.x,window.innerWidth-360),top:Math.max(8,tooltip.y-8),width:'340px',background:'var(--panel)',border:'1px solid rgba(13,212,168,0.4)',borderRadius:'2px',padding:'10px 12px',zIndex:9999,boxShadow:'0 4px 24px rgba(0,0,0,0.8)',pointerEvents:'none'}}>
-      <div style={{fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.08em',color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'6px',borderBottom:'1px solid var(--border)',paddingBottom:'5px'}}>{TIPS[tooltip.key].title}</div>
+      style={{position:'fixed',left:Math.min(tooltip.x,window.innerWidth-360),top:Math.max(8,tooltip.y-8),width:'340px',background:'var(--panel-2)',border:'1px solid var(--border-hi)',borderRadius:'var(--r-3)',padding:'12px 14px',zIndex:9999,boxShadow:'0 12px 36px rgba(0,0,0,0.5)',pointerEvents:'none'}}>
+      <div style={{fontSize:'0.8125rem',fontWeight:600,letterSpacing:'0.04em',color:'var(--text-hi)',fontFamily:'var(--sans)',marginBottom:'6px',borderBottom:'1px solid var(--border)',paddingBottom:'6px'}}>{TIPS[tooltip.key].title}</div>
       <div style={{fontSize:'0.75rem',color:'var(--text-dim)',lineHeight:1.7,fontFamily:'var(--sans)',whiteSpace:'pre-wrap'}}>{TIPS[tooltip.key].body}</div>
     </div>
   )

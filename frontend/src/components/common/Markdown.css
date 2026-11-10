@@ -10,7 +10,7 @@
 .pm-md li > ul, .pm-md li > ol { margin: 2px 0; }
 .pm-md strong { color: var(--text); font-weight: 700; }
 .pm-md h1, .pm-md h2, .pm-md h3, .pm-md h4 {
-  font-size: 13px; font-weight: 700; margin: 12px 0 6px; color: #f07820; letter-spacing: 0.02em;
+  font-size: 13px; font-weight: 700; margin: 12px 0 6px; color: #f1d488; letter-spacing: 0.02em;
 }
 .pm-md code {
   font-family: 'IBM Plex Mono', var(--mono), monospace; font-size: 12px;

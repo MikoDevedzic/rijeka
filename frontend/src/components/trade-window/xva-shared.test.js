@@ -73,7 +73,7 @@ describe('buildVaRows', () => {
     expect(by.cva.sub).toMatchObject({ text: '-0.6bp', caption: 'bp on rate', weight: 600 })
     expect(by.dva.sub.text).toBe('+0.2bp')
     expect(by.npv.sub).toMatchObject({ text: '3.665%', caption: 'par rate' })
-    expect(by.all_in.sub).toMatchObject({ text: '3.539%', caption: 'all-in rate', color: 'var(--accent)', weight: 700 })
+    expect(by.all_in.sub).toMatchObject({ text: '3.539%', caption: 'all-in rate', color: 'var(--text-hi)', weight: 500 })
     expect(by.cva.value).toBe(-3200.6)
   })
   it('rates before a run: no bp lines, the rate lines show a dash when the par rate is unknown', () => {
@@ -87,7 +87,7 @@ describe('buildVaRows', () => {
     const by = Object.fromEntries(rows.map(r => [r.key, r]))
     expect(by.cva.sub).toMatchObject({ text: '-3.2bp', caption: 'bp of notional' })
     expect(by.npv.sub).toMatchObject({ text: '+12.5bp', caption: 'bp of notional', color: 'var(--text-dim)' })
-    expect(by.all_in.sub).toMatchObject({ text: '+6.2bp', caption: 'all-in bp of notional', color: 'var(--accent)', weight: 700 })
+    expect(by.all_in.sub).toMatchObject({ text: '+6.2bp', caption: 'all-in bp of notional', color: 'var(--text-hi)', weight: 500 })
     expect(buildVaRows(xva, { kind: 'notional', notional: null }).every(r => r.sub === null)).toBe(true)
   })
 })

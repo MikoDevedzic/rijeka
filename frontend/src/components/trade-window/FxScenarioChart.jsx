@@ -33,8 +33,8 @@ import { useEffect, useRef, useState } from 'react'
 import { addDays, axisDates, chartGeometry, daysBetween, horizonDays, isoDate, valueRange, FIXING_DAYS } from './fx-scenario'
 
 const C = {
-  bg: '#0C1015', grid: 'rgba(38,48,60,0.9)', axis: '#5F6C7B', label: '#8B98A8', hi: '#F4F7FA',
-  curve: '#0dd4a8', curveRgb: '13,212,168', fix: '#4a9ad4', strike: '#F0A020', level: '#E06C75',
+  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#6f877d', label: '#8a9f94', hi: '#f6f1e4',
+  curve: '#d9b25c', curveRgb: '13,212,168', fix: '#8fc1e6', strike: '#e9975a', level: '#E06C75',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
 const HIT = 16                                           // pixels around a point that count as on it
@@ -117,7 +117,7 @@ function draw(canvas, p, L, hover) {
     const ticks = axisDates([...PAST_TICKS.map(d => addDays(p.today, d)), p.today])
     PAST_TICKS.forEach((d, i) => {
       const x = xs(d)
-      vline(x, 'rgba(38,48,60,0.6)')
+      vline(x, 'rgba(67,84,74,0.6)')
       ctx.fillStyle = C.label; ctx.fillText(ticks[i], Math.max(x, left + 16), bottom + 7)
     })
   }
@@ -126,10 +126,10 @@ function draw(canvas, p, L, hover) {
     const x = xs(c.x)
     if (x - lastX < 30) return
     lastX = x
-    vline(x, 'rgba(38,48,60,0.6)')
+    vline(x, 'rgba(67,84,74,0.6)')
     ctx.fillStyle = C.label; ctx.fillText(c.tenor, x, bottom + 7)
   })
-  vline(x0, 'rgba(244,247,250,0.55)', 1)
+  vline(x0, 'rgba(246,241,228,0.55)', 1)
   ctx.fillStyle = C.hi; ctx.fillText('TODAY', x0, bottom + 7)
 
   // vertical markers, named above the plot: an option's expiry and its settlement; a forward's settlement, with
@@ -141,7 +141,7 @@ function draw(canvas, p, L, hover) {
   if (hasCurve && p.expiry && onAxis(p.expiry.x)) marks.push({ x: xs(p.expiry.x), text: `EXPIRY ${isoDate(p.expiry.date)}`.trim() })
   if (fixAt && onAxis(fixAt.x) && !(settleOn && fixAt.x === p.settle.x)) marks.push({ x: xs(fixAt.x), text: `FIX ${isoDate(fixAt.date)}`.trim() })
   if (settleOn) marks.push({ x: xs(p.settle.x), text: `SETTLE ${isoDate(p.settle.date)}`.trim() })
-  marks.forEach(m => vline(m.x, 'rgba(244,247,250,0.45)', 1, [4, 3]))
+  marks.forEach(m => vline(m.x, 'rgba(246,241,228,0.45)', 1, [4, 3]))
   ctx.textBaseline = 'bottom'; ctx.fillStyle = C.hi
   if (marks.length === 2 && Math.abs(marks[0].x - marks[1].x) < ctx.measureText(marks[0].text).width / 2 + ctx.measureText(marks[1].text).width / 2 + 10) {
     const text = `${marks[0].text} · ${marks[1].text}`
@@ -207,7 +207,7 @@ function draw(canvas, p, L, hover) {
     const text = num(value, dp), w = ctx.measureText(text).width
     const tx = x + 9 + w > right ? x - 9 - w : x + 9
     const ty = y - 16 < top ? y + 6 : y - 16
-    ctx.fillStyle = 'rgba(12,16,21,0.85)'; ctx.fillRect(tx - 3, ty - 1, w + 6, 13)
+    ctx.fillStyle = 'rgba(16,39,35,0.85)'; ctx.fillRect(tx - 3, ty - 1, w + 6, 13)
     ctx.fillStyle = C.hi; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(text, tx, ty + 1)
   }
   if (hasCurve && p.settle && fin(p.settle.x) && fin(p.forward)) dot(xs(p.settle.x), p.forward, C.curve, false)
@@ -221,7 +221,7 @@ function draw(canvas, p, L, hover) {
     const w = ctx.measureText(text).width
     const tx = inX(xs(h.x), w + 8) - w / 2
     const ty = ys(h.shocked) + 12 + 13 > bottom ? ys(h.shocked) - 26 : ys(h.shocked) + 12
-    ctx.fillStyle = 'rgba(12,16,21,0.92)'; ctx.fillRect(tx - 4, ty - 1, w + 8, 14)
+    ctx.fillStyle = 'rgba(16,39,35,0.92)'; ctx.fillRect(tx - 4, ty - 1, w + 8, 14)
     ctx.strokeStyle = `rgba(${C.curveRgb},0.5)`; ctx.lineWidth = 0.6; ctx.strokeRect(tx - 4, ty - 1, w + 8, 14)
     ctx.fillStyle = C.hi; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(text, tx, ty + 1.5)
   }

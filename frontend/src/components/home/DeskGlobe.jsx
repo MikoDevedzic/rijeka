@@ -21,7 +21,7 @@ const DESKS = [
   { city: 'LONDON',    tz: 'Europe/London',    lat: 51.51,  lon: -0.13 },
   { city: 'NEW YORK',  tz: 'America/New_York', lat: 40.71,  lon: -74.01 },
 ]
-const ACCENT = '#0dd4a8', AMBER = '#f0a020', BLUE = '#4a9ad4', DIM = '#8B98A8', MUTE = '#5F6C7B', HI = '#F4F7FA'
+const ACCENT = '#d9b25c', AMBER = '#e9975a', BLUE = '#8fc1e6', DIM = '#8a9f94', MUTE = '#6f877d', HI = '#f6f1e4'
 const TILT = 24 * Math.PI / 180            // camera latitude
 const SPIN = 0.02                          // radians per second: one turn in about five minutes
 const RING = 1.42                          // orbit radius, in globe radii

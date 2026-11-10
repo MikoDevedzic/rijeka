@@ -46,7 +46,7 @@ const CalibProofPanel = ({ calib }) => {
     const scaleY = v => pad.t + (H - pad.t - pad.b) * (1 - v / maxV)
 
     // background
-    ctx.fillStyle = '#0C1015'
+    ctx.fillStyle = '#102723'
     ctx.fillRect(0, 0, W, H)
 
     // gridlines
@@ -57,7 +57,7 @@ const CalibProofPanel = ({ calib }) => {
       const y = pad.t + (H - pad.t - pad.b) * (i / ticks)
       ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke()
       const val = maxV * (1 - i / ticks)
-      ctx.fillStyle = '#5F6C7B'
+      ctx.fillStyle = '#6f877d'
       ctx.font='10px JetBrains Mono,monospace'
       ctx.textAlign = 'right'
       ctx.fillText(val.toFixed(0), pad.l - 3, y + 3)
@@ -73,22 +73,22 @@ const CalibProofPanel = ({ calib }) => {
       const x1 = cx - barW - gap / 2
       const y1 = scaleY(mkt)
       const bh1 = H - pad.b - y1
-      ctx.shadowColor = '#0dd4a8'; ctx.shadowBlur = 6
-      ctx.fillStyle = '#0dd4a8'
+      ctx.shadowColor = '#d9b25c'; ctx.shadowBlur = 6
+      ctx.fillStyle = '#d9b25c'
       ctx.fillRect(x1, y1, barW, bh1)
 
       // model bar (amber glow)
       const x2 = cx + gap / 2
       const y2 = scaleY(mdl)
       const bh2 = H - pad.b - y2
-      ctx.shadowColor = '#f0a020'; ctx.shadowBlur = 6
-      ctx.fillStyle = '#f0a020'
+      ctx.shadowColor = '#e9975a'; ctx.shadowBlur = 6
+      ctx.fillStyle = '#e9975a'
       ctx.fillRect(x2, y2, barW, bh2)
 
       ctx.shadowBlur = 0
 
       // x label
-      ctx.fillStyle = '#5F6C7B'
+      ctx.fillStyle = '#6f877d'
       ctx.font='10px JetBrains Mono,monospace'
       ctx.textAlign = 'center'
       const label = row.ticker ? row.ticker.replace('USD', '').replace(' ICPL Curncy','') : (row.expiry_y + 'Y×' + row.tenor_y + 'Y')
@@ -97,11 +97,11 @@ const CalibProofPanel = ({ calib }) => {
 
     // legend
     ctx.shadowBlur = 0
-    ctx.fillStyle = '#0dd4a8'; ctx.fillRect(W - 90, 4, 8, 8)
-    ctx.fillStyle = '#8B98A8'; ctx.font='10px JetBrains Mono,monospace'; ctx.textAlign = 'left'
+    ctx.fillStyle = '#d9b25c'; ctx.fillRect(W - 90, 4, 8, 8)
+    ctx.fillStyle = '#8a9f94'; ctx.font='10px JetBrains Mono,monospace'; ctx.textAlign = 'left'
     ctx.fillText('Market', W - 79, 12)
-    ctx.fillStyle = '#f0a020'; ctx.fillRect(W - 35, 4, 8, 8)
-    ctx.fillStyle = '#8B98A8'; ctx.fillText('Model', W - 24, 12)
+    ctx.fillStyle = '#e9975a'; ctx.fillRect(W - 35, 4, 8, 8)
+    ctx.fillStyle = '#8a9f94'; ctx.fillText('Model', W - 24, 12)
   }, [open, calib])
 
   if (!Array.isArray(calib?.fit_details) || calib.fit_details.length === 0) return null
@@ -158,7 +158,7 @@ const CalibProofPanel = ({ calib }) => {
           Basket: {calib.basket_size} instruments · 5Y-tenor column
         </span>
         <span style={{marginLeft:'auto',fontSize:'0.8rem',fontFamily:'var(--mono)',
-          color: calib.converged ? 'var(--accent)' : 'var(--red)'}}>
+          color: calib.converged ? 'var(--up)' : 'var(--down)'}}>
           {calib.converged ? '✔ CONVERGED' : '⚠ NOT CONVERGED'} · {calib.iterations} iter
         </span>
       </div>
@@ -476,11 +476,11 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
               <div style={{ display:'flex', alignItems:'center', gap:'3px' }}>
                 {set ? (
                   <input type='text' value={val} onChange={e=>set(e.target.value)}
-                    style={{ ...INP, textAlign:'right', color: val&&val!=='—'?'var(--accent)':'var(--text-dim)', borderColor: val?'rgba(13,212,168,0.3)':'var(--border)' }} />
+                    style={{ ...INP, textAlign:'right', color: val&&val!=='—'?'var(--text-hi)':'var(--text-dim)' }} />
                 ) : (
                   <div style={{ ...INP, textAlign:'right', color:'var(--text-dim)' }}>{val}</div>
                 )}
-                {calib && set && <span style={{ fontSize:'0.8rem', color:'var(--accent)', whiteSpace:'nowrap', background:'rgba(13,212,168,0.08)', border:'1px solid rgba(13,212,168,0.2)', padding:'1px 3px', borderRadius:'2px' }}>CALIB</span>}
+                {calib && set && <span style={{ fontSize:'0.68rem', letterSpacing:'0.06em', color:'var(--text-mute)', whiteSpace:'nowrap', border:'1px solid var(--border-hi)', padding:'1px 4px', borderRadius:'var(--r-1)' }}>CALIB</span>}
               </div>
             </div>
           ))}
@@ -511,8 +511,8 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
 
         {/* Swaption 2-phase EE context */}
         {instrumentType === 'IR_SWAPTION' && (
-          <div style={{flexShrink:0, background:'rgba(74,154,212,0.04)',
-            borderBottom:'1px solid rgba(74,154,212,0.15)', padding:'8px 12px'}}>
+          <div style={{flexShrink:0, background:'rgba(143,193,230,0.04)',
+            borderBottom:'1px solid rgba(143,193,230,0.15)', padding:'8px 12px'}}>
             <div style={{display:'flex', alignItems:'center', gap:'10px',
               marginBottom:'5px', flexWrap:'wrap'}}>
               <span style={{fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.10em',
@@ -521,7 +521,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
               </span>
               {swaptionExpiry && swaptionTenor && (
                 <span style={{fontSize:'0.8rem', padding:'1px 6px', borderRadius:'2px',
-                  background:'rgba(74,154,212,0.1)', border:'1px solid rgba(74,154,212,0.25)',
+                  background:'rgba(143,193,230,0.1)', border:'1px solid rgba(143,193,230,0.25)',
                   color:'var(--blue)', fontFamily:'var(--mono)'}}>
                   {swaptionExpiry}×{swaptionTenor} · {(direction||'PAY')==='PAY'?'Payer':'Receiver'}
                 </span>
@@ -536,7 +536,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
             </div>
             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr',
               gap:'6px', fontSize:'0.75rem', fontFamily:'var(--mono)'}}>
-              <div style={{background:'rgba(13,212,168,0.04)', border:'1px solid rgba(13,212,168,0.12)',
+              <div style={{background:'rgba(217,178,92,0.04)', border:'1px solid rgba(217,178,92,0.12)',
                 borderRadius:'2px', padding:'6px 8px'}}>
                 <div style={{color:'var(--accent)', fontWeight:700, marginBottom:'3px', fontSize:'0.8rem',
                   letterSpacing:'0.08em'}}>
@@ -550,7 +550,7 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
                   F(t) from HW1F short rate paths. σ_N from SABR surface at strike K.
                 </div>
               </div>
-              <div style={{background:'rgba(74,154,212,0.04)', border:'1px solid rgba(74,154,212,0.12)',
+              <div style={{background:'rgba(143,193,230,0.04)', border:'1px solid rgba(143,193,230,0.12)',
                 borderRadius:'2px', padding:'6px 8px'}}>
                 <div style={{color:'var(--blue)', fontWeight:700, marginBottom:'3px', fontSize:'0.8rem',
                   letterSpacing:'0.08em'}}>

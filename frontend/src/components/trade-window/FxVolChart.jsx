@@ -31,8 +31,8 @@ import { isoDate, valueRange } from './fx-scenario'
 import { deltaRange, pillars, shockedVol, smileCurve, smileVol, surfaceReading, termCurve, volGeometry } from './fx-vol'
 
 const C = {
-  bg: '#0C1015', grid: 'rgba(38,48,60,0.9)', axis: '#5F6C7B', label: '#8B98A8', hi: '#F4F7FA',
-  curve: '#0dd4a8', curveRgb: '13,212,168', call: '#4a9ad4', put: '#E06C75', strike: '#F0A020',
+  bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#6f877d', label: '#8a9f94', hi: '#f6f1e4',
+  curve: '#d9b25c', curveRgb: '13,212,168', call: '#8fc1e6', put: '#E06C75', strike: '#e9975a',
 }
 const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
 const HEIGHT = 220
@@ -86,7 +86,7 @@ function mark(ctx, geo, x, v, text, hollow) {
   const w = ctx.measureText(text).width
   const tx = x + 9 + w > geo.right ? x - 9 - w : x + 9
   const ty = y - 16 < geo.top ? y + 6 : y - 16
-  ctx.fillStyle = 'rgba(12,16,21,0.85)'; ctx.fillRect(tx - 3, ty - 1, w + 6, 13)
+  ctx.fillStyle = 'rgba(16,39,35,0.85)'; ctx.fillRect(tx - 3, ty - 1, w + 6, 13)
   ctx.fillStyle = C.hi; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText(text, tx, ty + 1)
 }
 const clip = (ctx, geo) => { ctx.save(); ctx.beginPath(); ctx.rect(geo.left - 6, geo.top - 2, geo.right - geo.left + 12, geo.bottom - geo.top + 4); ctx.clip() }
@@ -118,14 +118,14 @@ function drawTerm(ctx, W, H, { reading, vpt, expiryDate }) {
     const x = xs(p.t)
     if (placed.some(q => Math.abs(q - x) < 30)) return
     placed.push(x)
-    vline(ctx, geo, x, 'rgba(38,48,60,0.6)')
+    vline(ctx, geo, x, 'rgba(67,84,74,0.6)')
     const w = ctx.measureText(p.tenor).width
     ctx.fillStyle = C.label; ctx.fillText(p.tenor, Math.max(left + w / 2, Math.min(right - w / 2, x)), bottom + 7)
   })
 
   // the option's expiry, named above the plot
   const xe = xs(T)
-  vline(ctx, geo, xe, 'rgba(244,247,250,0.45)', 1, [4, 3])
+  vline(ctx, geo, xe, 'rgba(246,241,228,0.45)', 1, [4, 3])
   const text = `EXPIRY ${isoDate(expiryDate)}`.trim()        // ISO, like every date the tabs print
   ctx.textBaseline = 'bottom'; ctx.fillStyle = C.hi; ctx.fillText(text, inX(geo, xe, ctx.measureText(text).width), top - 6)
 
@@ -167,7 +167,7 @@ function drawSmile(ctx, W, H, { reading, vpt, dp }) {
   // delta axis: the quoted points by name, puts (low strikes) on the left
   ctx.textAlign = 'center'; ctx.textBaseline = 'top'
   DELTA_TICKS.forEach(([d, name]) => {
-    vline(ctx, geo, xs(d), 'rgba(38,48,60,0.6)')
+    vline(ctx, geo, xs(d), 'rgba(67,84,74,0.6)')
     ctx.fillStyle = d === 0.5 ? C.hi : C.label; ctx.fillText(name, xs(d), bottom + 7)
   })
 

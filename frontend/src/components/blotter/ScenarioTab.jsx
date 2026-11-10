@@ -656,30 +656,30 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
     const xS=t=>PAD.l+Math.sqrt(t/30)*CW
     const yS=r=>PAD.t+CH-(r-minR)/(maxR-minR)*CH
 
-    ctx.fillStyle='#0C1015'; ctx.fillRect(0,0,W,H)
+    ctx.fillStyle='#102723'; ctx.fillRect(0,0,W,H)
 
     // Grid
     const gStep=visHalf>0.5?0.25:0.1
     ctx.font='10px DM Mono,JetBrains Mono,monospace'
     for(let r=Math.ceil(minR/gStep)*gStep;r<=maxR+0.001;r=Math.round((r+gStep)*10000)/10000){
       const y=yS(r); if(y<PAD.t-2||y>H-PAD.b+2)continue
-      ctx.strokeStyle='rgba(38,48,60,0.9)'; ctx.lineWidth=0.6
+      ctx.strokeStyle='rgba(67,84,74,0.9)'; ctx.lineWidth=0.6
       ctx.beginPath(); ctx.moveTo(PAD.l,y); ctx.lineTo(W-PAD.r,y); ctx.stroke()
-      ctx.fillStyle='#5F6C7B'; ctx.textAlign='right'; ctx.textBaseline='middle'
+      ctx.fillStyle='#6f877d'; ctx.textAlign='right'; ctx.textBaseline='middle'
       ctx.fillText(r.toFixed(2)+'%',PAD.l-8,y)
     }
     // X axis + labels
-    ctx.strokeStyle='rgba(38,48,60,0.9)'; ctx.lineWidth=0.6
+    ctx.strokeStyle='rgba(67,84,74,0.9)'; ctx.lineWidth=0.6
     ctx.beginPath(); ctx.moveTo(PAD.l,H-PAD.b); ctx.lineTo(W-PAD.r,H-PAD.b); ctx.stroke()
-    ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='#8B98A8'
+    ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='#8a9f94'
     ;['1M','6M','1Y','2Y','5Y','10Y','20Y','30Y'].forEach(t=>{
       const x=xS(TENOR_Y[t]); ctx.fillText(t,x,H-PAD.b+6)
-      ctx.strokeStyle='rgba(38,48,60,0.6)'; ctx.lineWidth=0.5
+      ctx.strokeStyle='rgba(67,84,74,0.6)'; ctx.lineWidth=0.5
       ctx.beginPath(); ctx.moveTo(x,PAD.t); ctx.lineTo(x,H-PAD.b); ctx.stroke()
     })
 
     const avgSh=sh.reduce((a,b)=>a+b,0)/sh.length
-    const shClr=avgSh<=0?'#4a9ad4':'#e05040'
+    const shClr=avgSh<=0?'#8fc1e6':'#f09382'
     const shClrRgb=avgSh<=0?'74,154,212':'224,80,64'
     const anyShift=sh.some(s=>Math.abs(s)>0.05)
 
@@ -688,19 +688,19 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
     TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
     ctx.lineTo(xS(TENOR_Y[TENORS[TENORS.length-1]]),H-PAD.b); ctx.lineTo(xS(TENOR_Y[TENORS[0]]),H-PAD.b); ctx.closePath()
     const gBase=ctx.createLinearGradient(0,PAD.t,0,H-PAD.b)
-    gBase.addColorStop(0,'rgba(13,212,168,0.12)'); gBase.addColorStop(1,'rgba(13,212,168,0)')
+    gBase.addColorStop(0,'rgba(217,178,92,0.12)'); gBase.addColorStop(1,'rgba(217,178,92,0)')
     ctx.fillStyle=gBase; ctx.fill()
     ctx.setLineDash([]); ctx.lineJoin='round'; ctx.lineCap='round'
     ctx.beginPath()
     TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
-    ctx.strokeStyle='rgba(13,212,168,0.15)'; ctx.lineWidth=7; ctx.stroke()
+    ctx.strokeStyle='rgba(217,178,92,0.15)'; ctx.lineWidth=7; ctx.stroke()
     ctx.beginPath()
     TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
-    ctx.strokeStyle='#0dd4a8'; ctx.lineWidth=2; ctx.stroke()
+    ctx.strokeStyle='#d9b25c'; ctx.lineWidth=2; ctx.stroke()
     TENORS.forEach((t,i)=>{
       const cx=xS(TENOR_Y[t]),cy=yS(baseRts[i])
-      ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2); ctx.strokeStyle='rgba(13,212,168,0.25)'; ctx.lineWidth=3; ctx.stroke()
-      ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2); ctx.fillStyle='#0dd4a8'; ctx.fill()
+      ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2); ctx.strokeStyle='rgba(217,178,92,0.25)'; ctx.lineWidth=3; ctx.stroke()
+      ctx.beginPath(); ctx.arc(cx,cy,3,0,Math.PI*2); ctx.fillStyle='#d9b25c'; ctx.fill()
     })
 
     // Shocked curve
@@ -708,7 +708,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       ctx.beginPath()
       TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(baseRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
       ;[...TENORS].reverse().forEach(t=>{const i=TENORS.indexOf(t);ctx.lineTo(xS(TENOR_Y[t]),yS(shockRts[i]))})
-      ctx.closePath(); ctx.fillStyle=avgSh>0?'rgba(224,80,64,0.06)':'rgba(74,154,212,0.06)'; ctx.fill()
+      ctx.closePath(); ctx.fillStyle=avgSh>0?'rgba(240,147,130,0.06)':'rgba(143,193,230,0.06)'; ctx.fill()
       ctx.setLineDash([5,3])
       ctx.beginPath()
       TENORS.forEach((t,i)=>{const x=xS(TENOR_Y[t]),y=yS(shockRts[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)})
@@ -727,15 +727,15 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
 
     // Legend
     ctx.font='10px DM Mono,JetBrains Mono,monospace'; ctx.textBaseline='middle'; ctx.setLineDash([])
-    ctx.strokeStyle='#0dd4a8'; ctx.lineWidth=2
+    ctx.strokeStyle='#d9b25c'; ctx.lineWidth=2
     ctx.beginPath(); ctx.moveTo(PAD.l,PAD.t-14); ctx.lineTo(PAD.l+20,PAD.t-14); ctx.stroke()
-    ctx.fillStyle='#0dd4a8'; ctx.textAlign='left'; ctx.fillText('BASE',PAD.l+24,PAD.t-14)
+    ctx.fillStyle='#d9b25c'; ctx.textAlign='left'; ctx.fillText('BASE',PAD.l+24,PAD.t-14)
     if(anyShift){
       ctx.setLineDash([4,2]); ctx.strokeStyle=shClr
       ctx.beginPath(); ctx.moveTo(PAD.l+66,PAD.t-14); ctx.lineTo(PAD.l+86,PAD.t-14); ctx.stroke(); ctx.setLineDash([])
       ctx.fillStyle=shClr; ctx.fillText('SHOCKED',PAD.l+90,PAD.t-14)
       const avgBp=Math.round(avgSh)
-      ctx.fillStyle=avgBp>0?'#e05040':'#4a9ad4'; ctx.textAlign='right'
+      ctx.fillStyle=avgBp>0?'#f09382':'#8fc1e6'; ctx.textAlign='right'
       ctx.fillText((avgBp>0?'+':'')+avgBp+'bp AVG',W-PAD.r,PAD.t-14)
     }
   }
@@ -908,7 +908,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
     <div className='tbw-no-drag' style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',background:'var(--bg)'}}>
 
       {/* Notice bar */}
-      <div style={{background:'rgba(240,160,32,0.06)',borderBottom:'1px solid rgba(240,160,32,0.15)',
+      <div style={{background:'rgba(233,151,90,0.06)',borderBottom:'1px solid rgba(233,151,90,0.15)',
         padding:'5px 16px',fontSize:'0.8125rem',color:'var(--amber)',letterSpacing:'0.02em',flexShrink:0,
         fontFamily:'var(--sans)'}}>
         {IS_SWPN
@@ -961,15 +961,15 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   style={{flex:2,padding:'7px',borderRadius:'3px',
                     cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',
                     fontFamily:'var(--sans)',fontSize:'0.8125rem',fontWeight:600,
-                    border:scenarioPricing?'1px solid rgba(240,160,32,0.55)':(anyShift&&!confirmed)?'1px solid rgba(13,212,168,0.6)':'1px solid var(--border)',
-                    background:scenarioPricing?'rgba(240,160,32,0.1)':(anyShift&&!confirmed)?'rgba(13,212,168,0.1)':'transparent',
+                    border:scenarioPricing?'1px solid rgba(233,151,90,0.55)':(anyShift&&!confirmed)?'1px solid rgba(217,178,92,0.6)':'1px solid var(--border)',
+                    background:scenarioPricing?'rgba(233,151,90,0.1)':(anyShift&&!confirmed)?'rgba(217,178,92,0.1)':'transparent',
                     color:scenarioPricing?'var(--amber)':(anyShift&&!confirmed)?'var(--accent)':'var(--text-dim)'}}>
                   {scenarioPricing?'Repricing...':(anyShift&&!confirmed)?(IS_SWPN?'Confirm & reprice (rate+vol) →':'Confirm & reprice →'):'Confirm shape'}
                 </button>
               </div>
               {anyShift&&!confirmed&&(
                 <div style={{fontSize:'0.75rem',color:'var(--amber)',fontFamily:'var(--sans)',
-                  background:'rgba(240,160,32,0.06)',border:'1px solid rgba(240,160,32,0.2)',
+                  background:'rgba(233,151,90,0.06)',border:'1px solid rgba(233,151,90,0.2)',
                   borderRadius:'3px',padding:'4px 8px'}}>
                   Shape unsaved — confirm to reprice · avg {avgBp>0?'+':''}{avgBp}bp
                 </div>
@@ -982,7 +982,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               )}
               {scenarioError&&(
                 <div style={{fontSize:'0.75rem',color:'var(--red)',fontFamily:'var(--sans)',
-                  background:'rgba(224,80,64,0.06)',border:'1px solid rgba(224,80,64,0.25)',
+                  background:'rgba(240,147,130,0.06)',border:'1px solid rgba(240,147,130,0.25)',
                   borderRadius:'3px',padding:'4px 8px'}}>
                   {scenarioError}
                 </div>
@@ -1000,8 +1000,8 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                     {Object.entries(VOL_SCEN).map(([key,sc]) => (
                       <button key={key} onClick={()=>applyVolScen(key)}
                         style={{display:'flex',alignItems:'center',gap:'7px',padding:'5px 7px',
-                          border:'1px solid '+(volScenKey===key?(key==='base'?'rgba(13,212,168,.5)':'rgba(240,160,32,.5)'):'var(--border)'),
-                          borderRadius:'2px',cursor:'pointer',background:volScenKey===key?(key==='base'?'rgba(13,212,168,.07)':'rgba(240,160,32,.06)'):'transparent',
+                          border:'1px solid '+(volScenKey===key?(key==='base'?'rgba(217,178,92,.5)':'rgba(233,151,90,.5)'):'var(--border)'),
+                          borderRadius:'2px',cursor:'pointer',background:volScenKey===key?(key==='base'?'rgba(217,178,92,.07)':'rgba(233,151,90,.06)'):'transparent',
                           color:volScenKey===key?(key==='base'?'var(--accent)':'var(--amber)'):'var(--text-mute)',
                           fontFamily:'var(--sans)',fontSize:'0.8125rem',
                           transition:'all .12s',textAlign:'left'}}>
@@ -1017,7 +1017,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   </div>
                   {volScenKey!=='base'&&(
                     <div style={{marginTop:'6px',fontSize:'0.75rem',color:'var(--amber)',
-                      background:'rgba(240,160,32,0.04)',border:'1px solid rgba(240,160,32,0.15)',
+                      background:'rgba(233,151,90,0.04)',border:'1px solid rgba(233,151,90,0.15)',
                       borderRadius:'2px',padding:'4px 8px',fontFamily:'var(--mono)'}}>
                       σ base: {(parseFloat(swaptionVol)||85).toFixed(1)}bp → shocked: {getShockedVolBp(activeVolP).toFixed(1)}bp
                     </div>
@@ -1071,7 +1071,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   })}
                   {capResult && (
                     <div style={{marginTop:'6px',fontSize:'0.75rem',color:'var(--amber)',
-                      background:'rgba(240,160,32,0.04)',border:'1px solid rgba(240,160,32,0.15)',
+                      background:'rgba(233,151,90,0.04)',border:'1px solid rgba(233,151,90,0.15)',
                       borderRadius:'2px',padding:'4px 8px',fontFamily:'var(--mono)'}}>
                       vol: {parseFloat(capVolOverride||capResult.vol_bp||85).toFixed(1)}bp · NPV: {capResult.npv!=null?'$'+Math.round(capResult.npv).toLocaleString():'—'}
                     </div>
@@ -1090,8 +1090,8 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               {Object.keys(baseOverrides).length>0&&(
                 <button onClick={()=>setBaseOverrides({})}
                   style={{fontSize:'0.75rem',padding:'2px 8px',borderRadius:'2px',cursor:'pointer',
-                    fontFamily:'var(--sans)',border:'1px solid rgba(240,160,32,0.3)',
-                    background:'rgba(240,160,32,0.06)',color:'var(--amber)'}}>
+                    fontFamily:'var(--sans)',border:'1px solid rgba(233,151,90,0.3)',
+                    background:'rgba(233,151,90,0.06)',color:'var(--amber)'}}>
                   clear overrides
                 </button>
               )}
@@ -1122,7 +1122,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                     key={t+'-'+(isOverride?baseOverrides[t]:marketBase.toFixed(8))}
                     onBlur={e=>{const v=parseFloat(e.target.value);if(!isNaN(v)&&v>0&&v<20){setBaseOverrides(o=>({...o,[t]:v.toFixed(4)}));setTick(x=>x+1);scheduleDraw()}else e.target.value=base.toFixed(4)}}
                     title={isOverride?'Overridden par rate — clear overrides to return to market':'Market par rate — edit to override'}
-                    style={{background:'transparent',border:'1px solid '+(isOverride?'rgba(240,160,32,0.5)':'var(--border)'),borderRadius:'2px',
+                    style={{background:'transparent',border:'1px solid '+(isOverride?'rgba(233,151,90,0.5)':'var(--border)'),borderRadius:'2px',
                       color:isOverride?'var(--amber)':'var(--text)',fontFamily:'var(--mono)',fontSize:'0.8125rem',padding:'2px 6px',outline:'none',textAlign:'right',width:'100%'}}/>
                   <span style={{fontSize:'0.8125rem',fontWeight:shBp!==0?700:400,color:shiftClr,fontFamily:'var(--mono)',textAlign:'right'}}>
                     {shBp===0?'—':(shBp>0?'+':'')+shBp.toFixed(1)}
@@ -1162,7 +1162,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
             <canvas ref={canvasRef} style={{display:'block',cursor:'crosshair'}}/>
             {dragTip&&(
               <div style={{position:'absolute',left:dragTip.x,top:dragTip.y,pointerEvents:'none',zIndex:10,
-                background:'var(--panel)',border:'1px solid '+(dragTip.bp>=0?'rgba(224,80,64,0.7)':'rgba(74,154,212,0.7)'),
+                background:'var(--panel)',border:'1px solid '+(dragTip.bp>=0?'rgba(240,147,130,0.7)':'rgba(143,193,230,0.7)'),
                 borderRadius:'3px',padding:'5px 12px',fontSize:'0.875rem',fontFamily:'var(--mono)',
                 fontWeight:700,color:dragTip.bp>=0?'var(--red)':'var(--blue)',whiteSpace:'nowrap',
                 boxShadow:'0 4px 16px rgba(0,0,0,0.9)'}}>
@@ -1214,18 +1214,18 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   onClick={()=>setVolMode('rotate')}
                   style={{padding:'3px 8px',fontSize:'0.8rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:'var(--mono)',
-                    border: volMode==='rotate'?'1px solid rgba(74,154,212,.5)':'1px solid var(--panel-2)',
+                    border: volMode==='rotate'?'1px solid rgba(143,193,230,.5)':'1px solid var(--panel-2)',
                     color: volMode==='rotate'?'var(--blue)':'var(--text-mute)',
-                    background: volMode==='rotate'?'rgba(74,154,212,.07)':'transparent'}}>
+                    background: volMode==='rotate'?'rgba(143,193,230,.07)':'transparent'}}>
                   ⟳ ROTATE
                 </button>
                 <button
                   onClick={()=>setVolMode(m=>m==='reshape'?'rotate':'reshape')}
                   style={{padding:'3px 8px',fontSize:'0.8rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:'var(--mono)',
-                    border: volMode==='reshape'?'1px solid rgba(240,160,32,.5)':'1px solid var(--panel-2)',
+                    border: volMode==='reshape'?'1px solid rgba(233,151,90,.5)':'1px solid var(--panel-2)',
                     color: volMode==='reshape'?'var(--amber)':'var(--text-mute)',
-                    background: volMode==='reshape'?'rgba(240,160,32,.07)':'transparent'}}>
+                    background: volMode==='reshape'?'rgba(233,151,90,.07)':'transparent'}}>
                   ✦ {volMode==='reshape'?'RESHAPING...':'RESHAPE'}
                 </button>
               </div>
@@ -1251,8 +1251,8 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',
                 gap:4,pointerEvents:'none',zIndex:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <div style={{width:16,height:2,background:'rgba(13,212,168,.6)',borderRadius:1}}/>
-                  <span style={{fontSize:'0.76rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>BASE</span>
+                  <div style={{width:16,height:2,background:'rgba(217,178,92,.6)',borderRadius:1}}/>
+                  <span style={{fontSize:'0.76rem',color:'rgba(217,178,92,.5)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>BASE</span>
                 </div>
                 {volScenKey!=='base'&&(
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
@@ -1294,8 +1294,8 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               )}
               <div style={{position:'absolute',bottom:6,left:8,display:'flex',flexDirection:'column',gap:4,pointerEvents:'none',zIndex:2}}>
                 <div style={{display:'flex',alignItems:'center',gap:6}}>
-                  <div style={{width:16,height:2,background:'rgba(13,212,168,.6)',borderRadius:1}}/>
-                  <span style={{fontSize:'0.76rem',color:'rgba(13,212,168,.5)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>
+                  <div style={{width:16,height:2,background:'rgba(217,178,92,.6)',borderRadius:1}}/>
+                  <span style={{fontSize:'0.76rem',color:'rgba(217,178,92,.5)',letterSpacing:'.07em',fontFamily:'var(--mono)'}}>
                     {(parseFloat(capVolOverride)||capResult?.vol_bp||85).toFixed(1)}bp · {capResult?.vol_tier||'—'}
                   </span>
                 </div>
@@ -1370,8 +1370,8 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                         {item.approx&&item.shocked!=null&&(
                           <button onClick={()=>setThetaApproxVisible(v=>!v)}
                             style={{fontSize:'0.75rem',padding:'1px 5px',borderRadius:'2px',cursor:'pointer',
-                              fontFamily:'var(--sans)',border:'1px solid rgba(240,160,32,0.3)',
-                              background:'rgba(240,160,32,0.06)',color:'var(--amber)'}}>
+                              fontFamily:'var(--sans)',border:'1px solid rgba(233,151,90,0.3)',
+                              background:'rgba(233,151,90,0.06)',color:'var(--amber)'}}>
                             {thetaApproxVisible?'▴':'▾'} ~
                           </button>
                         )}
@@ -1379,13 +1379,13 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                       <div style={{fontSize:'1rem',fontWeight:700,fontFamily:'var(--mono)',color:'var(--blue)'}}>{fmt(item.base)}</div>
                       {item.shocked!=null&&<>
                         <div style={{fontSize:'1rem',fontWeight:700,fontFamily:'var(--mono)',
-                          color:item.shocked>=0?'var(--accent)':'var(--red)'}}>
+                          color:item.shocked>=0?'var(--up)':'var(--down)'}}>
                           {fmt(item.shocked)}{item.approx&&<span style={{fontSize:'0.75rem',color:'var(--amber)',marginLeft:2}}>~</span>}
                         </div>
                         {delta!=null&&<div style={{fontSize:'0.8125rem',marginTop:2,fontFamily:'var(--mono)',
-                          color:delta>=0?'var(--accent)':'var(--red)'}}>{delta>=0?'+':''}{fmt(delta)}</div>}
+                          color:delta>=0?'var(--up)':'var(--down)'}}>{delta>=0?'+':''}{fmt(delta)}</div>}
                         {item.approx&&thetaApproxVisible&&<div style={{fontSize:'0.75rem',color:'var(--amber)',marginTop:3,
-                          borderTop:'1px solid rgba(240,160,32,0.2)',paddingTop:3,fontFamily:'var(--sans)'}}>
+                          borderTop:'1px solid rgba(233,151,90,0.2)',paddingTop:3,fontFamily:'var(--sans)'}}>
                           ΔTheta ∝ ΔIR01/IR01 — directional only
                         </div>}
                       </>}

@@ -22,7 +22,7 @@ const td = { ...mono, fontSize: '0.8125rem', color: 'var(--text-hi)', textAlign:
 const foot = { ...mono, fontSize: '0.7rem', color: 'var(--text-mute)', lineHeight: 1.5 }
 // a chip is one block that never breaks inside its label; the rows wrap whole chips (flex-wrap)
 const chip = (on) => ({ ...mono, fontSize: '0.7rem', letterSpacing: '0.06em', padding: '3px 7px', borderRadius: 2, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border)'),
-  color: on ? 'var(--accent)' : 'var(--text-dim)', background: on ? 'rgba(13,212,168,0.08)' : 'transparent', display: 'inline-block', whiteSpace: 'nowrap', lineHeight: 1.3 })
+  color: on ? 'var(--accent)' : 'var(--text-dim)', background: on ? 'rgba(217,178,92,0.08)' : 'transparent', display: 'inline-block', whiteSpace: 'nowrap', lineHeight: 1.3 })
 const chipRow = { display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 10 }
 
 export default function CapitalTab({ counterpartyId, counterpartyName, buildTrade, tradeId, priced, ccy = 'USD', hasRecordType = false }) {
@@ -107,7 +107,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
 
           <button onClick={run} disabled={busy || !!reason} title={reason || undefined}
             style={{ width: '100%', padding: '7px', ...mono, fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: busy || reason ? 'default' : 'pointer',
-              background: 'rgba(13,212,168,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1, marginBottom: 6 }}>
+              background: 'rgba(217,178,92,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1, marginBottom: 6 }}>
             {busy ? 'RUNNING…' : res ? 'RECOMPUTE' : '▶ CAPITAL UNDER EVERY REGIME'}
           </button>
           {reason && <div style={{ ...foot }}>— {reason}</div>}
@@ -158,7 +158,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
                           return (
                             <td key={n} onClick={() => { setSel({ regime: n, key: r.key }); setOpen(true) }}
                               style={{ ...td, fontWeight: 400, color: on ? 'var(--accent)' : 'var(--text-hi)',
-                                background: on ? 'rgba(13,212,168,0.08)' : 'transparent' }}>
+                                background: on ? 'rgba(217,178,92,0.08)' : 'transparent' }}>
                               {fmtCell(r.cells[n], r.key, ccy)}
                             </td>
                           )

@@ -9,6 +9,7 @@
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useState } from 'react'
 import { useModulesStore } from '../../store/useModulesStore'
+import { T } from '../../theme'
 
 export const TENORS_6 = ['1Y', '2Y', '3Y', '5Y', '7Y', '10Y']
 export const TENOR_YEARS = { '1Y': 1, '2Y': 2, '3Y': 3, '5Y': 5, '7Y': 7, '10Y': 10 }
@@ -21,15 +22,15 @@ export const SPREAD_DEFAULTS = {
 }
 
 export const VA_DEFS = {
-  npv:    { label:'NPV',    color:'#F4F7FA', desc:'Present value at mid-market. Positive = asset to you. This is the base price before any XVA adjustments.', curve:'none' },
-  cva:    { label:'CVA',    color:'#e05040', desc:'Credit Valuation Adjustment = -LGD x Sum[ EE(t) x (PD_cp(t) - PD_cp(t-dt)) x DF(t) ]. Cost of counterparty default risk over the EE profile. Always negative.', curve:'EE' },
-  dva:    { label:'DVA',    color:'#4a9ad4', desc:'Debt Valuation Adjustment = +LGD x Sum[ |ENE(t)| x (PD_own(t) - PD_own(t-dt)) x DF(t) ]. Benefit from your own default risk. Always positive. Excluded from regulatory capital.', curve:'ENE' },
-  fva:    { label:'FVA',    color:'#e05040', desc:'Funding Valuation Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative.', curve:'EE' },
-  fba:    { label:'FBA',    color:'#4a9ad4', desc:'Funding Benefit Adjustment = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]. Benefit when counterparty funds your negative MTM. FBA/FTP ratio typically 0.5-0.7.', curve:'ENE' },
-  kva:    { label:'KVA',    color:'#e05040', desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
-  mva:    { label:'MVA',    color:'#f0a020', desc:'Margin Valuation Adjustment = -Sum[ IM(t) x max(FTP(t) - pickup, 0) x dt x DF(t) ]. Cost of funding initial margin, less what the asset it is posted in earns over OIS. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
-  colva:  { label:'ColVA',  color:'#f0a020', desc:'Collateral Valuation Adjustment = Sum[ (VM posted(t) x s_post + VM held(t) x s_recv) x dt x DF(t) ]: the carry of the variation margin against cash at OIS. s = what the asset the margin is held in earns over OIS (a Treasury bill at OIS: 0; a stablecoin earning nothing: minus OIS). Cash on both sides: zero. Positive = benefit.', curve:'none' },
-  all_in: { label:'ALL-IN', color:'#0dd4a8', desc:'NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
+  npv:    { label:'NPV',    color:T.textHi, desc:'Present value at mid-market. Positive = asset to you. This is the base price before any XVA adjustments.', curve:'none' },
+  cva:    { label:'CVA',    color:T.down, desc:'Credit Valuation Adjustment = -LGD x Sum[ EE(t) x (PD_cp(t) - PD_cp(t-dt)) x DF(t) ]. Cost of counterparty default risk over the EE profile. Always negative.', curve:'EE' },
+  dva:    { label:'DVA',    color:T.blue, desc:'Debt Valuation Adjustment = +LGD x Sum[ |ENE(t)| x (PD_own(t) - PD_own(t-dt)) x DF(t) ]. Benefit from your own default risk. Always positive. Excluded from regulatory capital.', curve:'ENE' },
+  fva:    { label:'FVA',    color:T.down, desc:'Funding Valuation Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative.', curve:'EE' },
+  fba:    { label:'FBA',    color:T.blue, desc:'Funding Benefit Adjustment = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]. Benefit when counterparty funds your negative MTM. FBA/FTP ratio typically 0.5-0.7.', curve:'ENE' },
+  kva:    { label:'KVA',    color:T.down, desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
+  mva:    { label:'MVA',    color:T.amber, desc:'Margin Valuation Adjustment = -Sum[ IM(t) x max(FTP(t) - pickup, 0) x dt x DF(t) ]. Cost of funding initial margin, less what the asset it is posted in earns over OIS. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
+  colva:  { label:'ColVA',  color:T.amber, desc:'Collateral Valuation Adjustment = Sum[ (VM posted(t) x s_post + VM held(t) x s_recv) x dt x DF(t) ]: the carry of the variation margin against cash at OIS. s = what the asset the margin is held in earns over OIS (a Treasury bill at OIS: 0; a stablecoin earning nothing: minus OIS). Cash on both sides: zero. Positive = benefit.', curve:'none' },
+  all_in: { label:'ALL-IN', color:T.textHi, desc:'NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
 }
 export const VA_INFO = VA_DEFS
 export const VA_KEYS = Object.keys(VA_DEFS)
@@ -91,15 +92,16 @@ export const TIPS = {
 }
 
 // ── styles every XVA tab uses ────────────────────────────────────────────────────
-export const INP = { background:'var(--panel)', border:'1px solid var(--border)', borderRadius:'2px',
+export const INP = { background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--r-1)',
   color:'var(--text-hi)', fontFamily:'var(--mono)', fontSize:'0.8125rem',
-  padding:'3px 6px', outline:'none', width:'100%' }
-export const LBL = { fontSize:'0.75rem', color:'var(--accent)', letterSpacing:'0.07em',
+  padding:'4px 7px', outline:'none', width:'100%' }
+// a label that explains itself on hover: a dotted rule under it, in the text colour (brass is not a label colour)
+export const LBL = { fontSize:'0.78rem', color:'var(--text-dim)', letterSpacing:'0.02em',
   fontFamily:'var(--sans)', marginBottom:'2px',
-  borderBottom:'1px dashed rgba(13,212,168,0.4)', cursor:'help', paddingBottom:'1px' }
-export const SEC_HDR = { fontSize: '12px', fontWeight:700, letterSpacing:'0.18em', color:'var(--text)',
-  fontFamily:'var(--sans)', paddingLeft:'10px', borderLeft:'3px solid var(--accent)', lineHeight:1.2,
-  marginTop:'14px', marginBottom:'8px' }
+  borderBottom:'1px dotted var(--border-glow)', cursor:'help', paddingBottom:'1px' }
+export const SEC_HDR = { fontSize: '11.5px', fontWeight:600, letterSpacing:'0.1em', color:'var(--text-hi)',
+  fontFamily:'var(--sans)', lineHeight:1.2,
+  marginTop:'18px', marginBottom:'10px' }
 export const LEFT_COL = { width:'320px', minWidth:'320px', borderRight:'1px solid var(--border)',
   overflowY:'auto', padding:'12px', display:'flex', flexDirection:'column' }
 
@@ -111,9 +113,9 @@ export const XVA_RIGHT = { flex:1, marginLeft:LEFT_COL.width, minWidth:0, displa
 export const XVA_CHART_HEIGHT = 'clamp(240px, 36vh, 440px)'
 
 export const SETTLEMENT_PRESETS = [
-  ['UNCOLLATERALISED', 'NO CSA', 'var(--red)'],
-  ['BILATERAL', 'BILATERAL', 'var(--blue)'],
-  ['ON_CHAIN', 'ON-CHAIN', 'var(--accent)'],
+  ['UNCOLLATERALISED', 'NO CSA', 'var(--text-hi)'],
+  ['BILATERAL', 'BILATERAL', 'var(--text-hi)'],
+  ['ON_CHAIN', 'ON-CHAIN', 'var(--accent)'],            // on chain is the sealed thing: the one brass choice
 ]
 export const SETTLEMENT_DESC = {
   UNCOLLATERALISED: 'No variation margin — full MtM at risk.',
@@ -204,7 +206,7 @@ export function buildVaRows(xva, basis = { kind: 'rate' }) {
           color: 'var(--text-dim)', captionColor: 'var(--text-mute)', weight: 600 }
       } else if (key === 'all_in') {
         sub = { text: known ? basis.allInRate.toFixed(3) + '%' : '—', caption: 'all-in rate',
-          color: 'var(--accent)', captionColor: 'var(--accent)', weight: 700 }
+          color: 'var(--text-hi)', captionColor: 'var(--text-mute)', weight: 500 }
       } else if (val != null && basis.dv01 > 0) {
         sub = { text: signed((val / basis.dv01).toFixed(1)), caption: 'bp on rate',
           color: def.color + 'AA', captionColor: 'var(--text-mute)', weight: 600 }
@@ -214,7 +216,7 @@ export function buildVaRows(xva, basis = { kind: 'rate' }) {
       if (val != null && n > 0) {
         const bp = (val / (n * 1e-4)).toFixed(1)
         sub = key === 'all_in'
-          ? { text: signed(bp), caption: 'all-in bp of notional', color: 'var(--accent)', captionColor: 'var(--accent)', weight: 700 }
+          ? { text: signed(bp), caption: 'all-in bp of notional', color: 'var(--text-hi)', captionColor: 'var(--text-mute)', weight: 500 }
           : { text: signed(bp), caption: 'bp of notional',
               color: key === 'npv' ? 'var(--text-dim)' : def.color + 'AA', captionColor: 'var(--text-mute)', weight: 600 }
       }

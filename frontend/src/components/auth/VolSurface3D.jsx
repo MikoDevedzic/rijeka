@@ -9,7 +9,7 @@ const FALLBACK_GRID = (() => {
   return { exps, tens, z }
 })()
 
-export default function VolSurface3D({ grid, height = 260, accent = '#0dd4a8' }) {
+export default function VolSurface3D({ grid, height = 260, accent = '#d9b25c' }) {
   const ref = useRef(null)
   const g = grid || FALLBACK_GRID
 
@@ -77,14 +77,14 @@ export default function VolSurface3D({ grid, height = 260, accent = '#0dd4a8' })
         ctx.beginPath()
         f.q.forEach((q, k) => { const [x, y] = toPx(q); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y) })
         ctx.closePath()
-        ctx.fillStyle = `rgba(13,212,168,${(0.025 + 0.2 * f.h) * reveal})`
+        ctx.fillStyle = `rgba(217,178,92,${(0.025 + 0.2 * f.h) * reveal})`
         ctx.fill()
       }
       // wire: along tenor then along expiry; alpha by depth so the back reads as behind
       ctx.lineWidth = Math.max(0.8, S / 420)
       const seg = (a, b, k) => {
         const depth = 1 - Math.min(1, Math.max(0, ((a[2] + b[2]) / 2 + 1.2) / 2.4))
-        ctx.strokeStyle = `rgba(13,212,168,${(0.22 + 0.6 * depth) * k})`
+        ctx.strokeStyle = `rgba(217,178,92,${(0.22 + 0.6 * depth) * k})`
         const [x1, y1] = toPx(a), [x2, y2] = toPx(b)
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
       }
@@ -97,7 +97,7 @@ export default function VolSurface3D({ grid, height = 260, accent = '#0dd4a8' })
         if (!isNode(i, j)) continue
         const q = P[i][j], [x, y] = toPx(q)
         const depth = 1 - Math.min(1, Math.max(0, (q[2] + 1.2) / 2.4))
-        ctx.fillStyle = `rgba(13,212,168,${(0.25 + 0.7 * depth) * reveal})`
+        ctx.fillStyle = `rgba(217,178,92,${(0.25 + 0.7 * depth) * reveal})`
         ctx.beginPath(); ctx.arc(x, y, Math.max(1.4, S / 120) * (0.6 + 0.6 * depth), 0, Math.PI * 2); ctx.fill()
       }
       // axis captions on the two front edges

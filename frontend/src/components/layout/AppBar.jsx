@@ -27,13 +27,13 @@ export default function AppBar() {
   return (
     <header style={{
       display:'flex', alignItems:'center', padding:'0 1.5rem',
-      height:'44px', background:'var(--bg-deep)',
+      height:'var(--appbar-h)', background:'var(--bg-deep)',
       borderBottom:'1px solid var(--border)',
       flexShrink:0, gap:'1.5rem', zIndex:10,
     }}>
       <div onClick={()=>navigate('/command-center')} style={{
-        fontFamily:"'IBM Plex Sans', var(--sans)", fontSize:'1.0625rem', fontWeight:700,
-        letterSpacing:'0.2em', color:'var(--accent)', cursor:'pointer', flexShrink:0,
+        fontFamily:'var(--sans)', fontSize:'0.9375rem', fontWeight:600,
+        letterSpacing:'0.34em', color:'var(--text-hi)', cursor:'pointer', flexShrink:0,
       }}>RIJEKA</div>
 
       <div style={{width:'1px',height:'20px',background:'var(--border)',flexShrink:0}}/>
@@ -49,10 +49,10 @@ export default function AppBar() {
                   title={mod.label + ' — ⌘/Ctrl-click to open in its own window'} style={{
             background:'none', border:'none',
             borderBottom: isActive(mod)?'2px solid var(--accent)':'2px solid transparent',
-            color: isActive(mod)?'var(--accent)':'var(--text-dim)',
-            fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', fontWeight:700,
-            letterSpacing:'0.1em', padding:'0 0.85rem', cursor:'pointer',
-            transition:'all 0.12s', height:'100%',
+            color: isActive(mod)?'var(--text-hi)':'var(--text-dim)',
+            fontFamily:'var(--sans)', fontSize:'0.875rem', fontWeight:500,
+            letterSpacing:'0.08em', padding:'0 0.85rem', cursor:'pointer',
+            transition:'color 0.12s, border-color 0.12s', height:'100%',
             display:'flex', alignItems:'center',
           }}>{mod.label}</button>
           <button className="ab-pop" onClick={popOut} title={'Open ' + mod.label + ' in its own window'}>⧉</button>
@@ -62,20 +62,20 @@ export default function AppBar() {
 
       <div style={{flex:1}}/>
 
-      <div style={{display:'flex',alignItems:'center',gap:'0.75rem',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',letterSpacing:'0.08em',flexShrink:0}}>
+      <div style={{display:'flex',alignItems:'center',gap:'0.75rem',fontFamily:'var(--sans)',fontSize:'0.875rem',letterSpacing:'0.06em',flexShrink:0}}>
         {demo?.enabled && (
           <span title="Hosted demo on the Sepolia testnet. Your workspace was set up automatically: an own entity, RIJEKA DEMO BANK AG as counterparty (Rijeka holds its key, so solo confirmations are marked not bilateral) and a copy of the demo market data. Data may be reset."
-                style={{color:'var(--bg)',background:'var(--amber)',fontWeight:700,padding:'0.1rem 0.45rem',borderRadius:'2px',cursor:'help'}}>DEMO · SEPOLIA</span>
+                style={{color:'var(--amber)',border:'1px solid var(--amber-dim)',fontWeight:500,padding:'0.15rem 0.5rem',borderRadius:'var(--r-1)',cursor:'help'}}>DEMO · SEPOLIA</span>
         )}
         {demo?.enabled && <span style={{color:'var(--border)'}}>·</span>}
         <RoleSwitch />
         <span style={{color:'var(--border)'}}>·</span>
-        <span style={{color:'var(--accent)',fontWeight:700}}>{displayName}</span>
+        <span style={{color:'var(--text-hi)',fontWeight:500}}>{displayName}</span>
         <button onClick={signOut} style={{
           background:'transparent', border:'1px solid var(--border)',
-          color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem',
-          fontWeight:700, letterSpacing:'0.1em', padding:'0.25rem 0.65rem',
-          cursor:'pointer', borderRadius:'2px', transition:'all 0.15s',
+          color:'var(--text-dim)', fontFamily:'var(--sans)', fontSize:'0.8125rem',
+          fontWeight:500, letterSpacing:'0.08em', padding:'0.3rem 0.7rem',
+          cursor:'pointer', borderRadius:'var(--r-2)', transition:'all 0.15s',
         }}>EXIT</button>
       </div>
     </header>

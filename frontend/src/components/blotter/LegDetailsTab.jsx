@@ -29,28 +29,28 @@ const S = {
   structLbl:{ fontSize:'12px', color:C.muted, letterSpacing:'0.08em' },
   structVal:{ fontSize:'13px', color:C.accent, fontFamily:'var(--mono)', fontWeight:600 },
   zcWrap:{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'12px', color:C.muted, letterSpacing:'0.07em' },
-  zcBox:(on)=>({ width:'13px', height:'13px', border:'1px solid '+(on?C.accent:'var(--border-hi)'), borderRadius:'2px', background:on?'rgba(13,212,168,0.15)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize: '12px', color:C.accent }),
+  zcBox:(on)=>({ width:'13px', height:'13px', border:'1px solid '+(on?C.accent:'var(--border-hi)'), borderRadius:'2px', background:on?'rgba(217,178,92,0.15)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize: '12px', color:C.accent }),
   grid:{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' },
   panel:{ background:C.panel, border:'1px solid '+C.border, borderRadius:'3px', padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px' },
   panelHdr:{ display:'flex', alignItems:'center', gap:'8px', fontSize: '12px', letterSpacing:'0.1em', color:C.muted, fontWeight:600 },
-  badge:(pay)=>({ fontSize:'12px', letterSpacing:'0.07em', fontWeight:600, padding:'2px 8px', borderRadius:'2px', background:pay?'rgba(224,80,64,0.12)':'rgba(13,212,168,0.12)', color:pay?C.red:C.accent, border:'1px solid '+(pay?'rgba(224,80,64,0.3)':'rgba(13,212,168,0.3)') }),
+  badge:(pay)=>({ fontSize:'12px', letterSpacing:'0.07em', fontWeight:600, padding:'2px 8px', borderRadius:'2px', background:pay?'rgba(240,147,130,0.12)':'rgba(217,178,92,0.12)', color:pay?C.red:C.accent, border:'1px solid '+(pay?'rgba(240,147,130,0.3)':'rgba(217,178,92,0.3)') }),
   divider:{ height:'1px', background:'var(--border)' },
   secTitle:{ fontSize: '12px', color:C.accent, letterSpacing:'0.08em', fontWeight:600 },
   secHint:{ fontSize:'12px', color:C.dim, marginTop:'2px', marginBottom:'4px' },
   toolbar:{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' },
-  toolBtn:(color)=>({ fontSize:'12px', color:color||C.accent, background:color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.08)`:'rgba(13,212,168,0.08)', border:`1px solid ${color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.25)`:'rgba(13,212,168,0.2)'}`, borderRadius:'2px', padding:'3px 10px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em' }),
+  toolBtn:(color)=>({ fontSize:'12px', color:color||C.accent, background:color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.08)`:'rgba(217,178,92,0.08)', border:`1px solid ${color?`rgba(${color===C.red?'224,80,64':color===C.blue?'74,158,255':color===C.amber?'245,200,66':'0,212,168'},0.25)`:'rgba(217,178,92,0.2)'}`, borderRadius:'2px', padding:'3px 10px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em' }),
   tbl:{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' },
   th:{ fontSize:'12px', color:C.dim, letterSpacing:'0.07em', padding:'4px 4px', textAlign:'left', borderBottom:'1px solid '+C.border, fontWeight:400, whiteSpace:'nowrap' },   // a header on two lines pushes its leg's rows below the other leg's
   td:{ padding:'2px 3px', borderBottom:'1px solid var(--border)' },
   cell:{ fontSize: '12px', fontFamily:'var(--mono)', background:C.panel2, border:'1px solid '+C.border, borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', outline:'none', color:C.text, WebkitAppearance:'none', MozAppearance:'textfield', appearance:'textfield' },
   cellRo:{ fontSize: '12px', fontFamily:'var(--mono)', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', color:C.muted, userSelect:'none' },
-  cellAmber:{ fontSize: '12px', fontFamily:'var(--mono)', background:'rgba(240,160,32,0.06)', border:'1px solid rgba(240,160,32,0.4)', borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', outline:'none', color:C.amber, WebkitAppearance:'none', MozAppearance:'textfield', appearance:'textfield' },
+  cellAmber:{ fontSize: '12px', fontFamily:'var(--mono)', background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.4)', borderRadius:'2px', padding:'3px 5px', width:'100%', boxSizing:'border-box', outline:'none', color:C.amber, WebkitAppearance:'none', MozAppearance:'textfield', appearance:'textfield' },
   del:{ background:'none', border:'none', color:C.red, cursor:'pointer', fontSize:'12px', padding:'0 4px', opacity:0.6 },
   loading:{ fontSize: '12px', color:C.muted, fontStyle:'italic', padding:'8px 2px' },
   emptyRow:{ fontSize:'12px', color:C.dim, fontStyle:'italic', padding:'5px 2px' },
   hintBox:{ fontSize:'12px', color:C.muted, lineHeight:1.6, background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'2px', padding:'6px 9px', marginTop:'4px' },
   coming:{ fontSize:'12px', color:C.dim, border:'1px dashed '+C.border, borderRadius:'2px', padding:'8px', textAlign:'center', letterSpacing:'0.05em' },
-  dropZone:(active)=>({ border:'1px dashed '+(active?C.accent:'var(--text-mute)'), borderRadius:'3px', padding:'10px', textAlign:'center', fontSize:'12px', color:active?C.accent:C.dim, background:active?'rgba(13,212,168,0.04)':'transparent', transition:'all 0.15s', cursor:'pointer', letterSpacing:'0.05em' }),
+  dropZone:(active)=>({ border:'1px dashed '+(active?C.accent:'var(--text-mute)'), borderRadius:'3px', padding:'10px', textAlign:'center', fontSize:'12px', color:active?C.accent:C.dim, background:active?'rgba(217,178,92,0.04)':'transparent', transition:'all 0.15s', cursor:'pointer', letterSpacing:'0.05em' }),
 }
 
 function EditCell({ value, original, onChange, placeholder='' }) {
@@ -344,7 +344,7 @@ export default function LegDetailsTab({
             {struct === 'BASIS' ? 'FLOAT LEG 1' : 'FIXED LEG'}
             <span style={S.badge(dir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'PAY LEG 1':'RECEIVE LEG 1') : (dir==='PAY'?'PAY FIXED':'RECEIVE FIXED')}</span>
             {hasFixedOverrides && (
-              <button onClick={resetFixed} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(240,160,32,0.06)', border:'1px solid rgba(240,160,32,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
+              <button onClick={resetFixed} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
                 RESET TO PAR
               </button>
             )}
@@ -403,7 +403,7 @@ export default function LegDetailsTab({
             {struct === 'BASIS' ? 'FLOAT LEG 2' : 'FLOAT LEG'}
             <span style={S.badge(floatDir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'RECEIVE LEG 2':'PAY LEG 2') : (floatDir==='PAY'?'PAY FLOAT':'RECEIVE FLOAT')}</span>
             {hasFloatOverrides && (
-              <button onClick={resetFloat} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(240,160,32,0.06)', border:'1px solid rgba(240,160,32,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
+              <button onClick={resetFloat} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
                 RESET TO PAR
               </button>
             )}
@@ -474,7 +474,7 @@ export default function LegDetailsTab({
                               <input
                                 type='number'
                                 placeholder={isCapped ? 'cap K %' : 'flr K %'}
-                                style={{...S.cell, color:C.amber, borderColor:'rgba(240,160,32,0.4)'}}
+                                style={{...S.cell, color:C.amber, borderColor:'rgba(233,151,90,0.4)'}}
                                 value={strikeForRow(row.period_start)}
                                 onChange={e=>updateStrikeForRow(row.period_start, e.target.value)}
                               />
@@ -510,10 +510,10 @@ export default function LegDetailsTab({
                   ))}
                   {feeAmount && feeSettleDate && (
                     <>
-                      <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.875rem',fontFamily:'var(--mono)',color:'var(--amber)'}}>{feeSettleDate}</div>
-                      <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.875rem',fontFamily:'var(--mono)',color:'var(--amber)'}}>{feeAmount}</div>
-                      <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.875rem',color:'var(--text-dim)'}}>{feeAmountType}</div>
-                      <div style={{background:'rgba(240,160,32,0.04)',padding:'5px 8px',fontSize:'0.8rem',color:'var(--text-dim)',display:'flex',alignItems:'center',justifyContent:'center'}}>UPFRT</div>
+                      <div style={{background:'rgba(233,151,90,0.04)',padding:'5px 8px',fontSize:'0.875rem',fontFamily:'var(--mono)',color:'var(--amber)'}}>{feeSettleDate}</div>
+                      <div style={{background:'rgba(233,151,90,0.04)',padding:'5px 8px',fontSize:'0.875rem',fontFamily:'var(--mono)',color:'var(--amber)'}}>{feeAmount}</div>
+                      <div style={{background:'rgba(233,151,90,0.04)',padding:'5px 8px',fontSize:'0.875rem',color:'var(--text-dim)'}}>{feeAmountType}</div>
+                      <div style={{background:'rgba(233,151,90,0.04)',padding:'5px 8px',fontSize:'0.8rem',color:'var(--text-dim)',display:'flex',alignItems:'center',justifyContent:'center'}}>UPFRT</div>
                     </>
                   )}
                   {(feeSchedule||[]).map((row,i)=>(

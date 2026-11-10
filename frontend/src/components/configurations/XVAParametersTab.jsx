@@ -258,8 +258,8 @@ function RatesHW1FTab(){
       </div>
       {calibErr&&<div style={{fontSize:'0.75rem',color:'var(--red)',padding:'4px 0'}}>✘ {calibErr}</div>}
       {calibResult&&(
-        <div style={{padding:'8px 10px',background:'rgba(13,212,168,0.04)',
-          border:'1px solid rgba(13,212,168,0.2)',borderRadius:'2px',marginTop:'6px'}}>
+        <div style={{padding:'8px 10px',background:'rgba(217,178,92,0.04)',
+          border:'1px solid rgba(217,178,92,0.2)',borderRadius:'2px',marginTop:'6px'}}>
           <div style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'0.10em',
             color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'5px'}}>
             ✔ CALIBRATION COMPLETE

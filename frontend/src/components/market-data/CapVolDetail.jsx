@@ -61,7 +61,7 @@ function CapVolHeatmap({ atmRows, hasData }) {
           const v   = row?.flat_vol_bp ?? null;
           const intensity = v !== null ? (v - minV) / rng : 0;
           const bg  = v !== null
-            ? `rgba(13,212,168,${0.06 + intensity * 0.35})`
+            ? `rgba(217,178,92,${0.06 + intensity * 0.35})`
             : 'transparent';
           return (
             <div key={t} style={{ height: '18px', borderRadius: '1px', background: bg,
@@ -235,7 +235,7 @@ function CapInstruments() {
         <button
           onClick={snapSurface}
           disabled={snapLoading}
-          style={{ padding: '0.25rem 0.85rem', background: 'rgba(14,201,160,0.07)',
+          style={{ padding: '0.25rem 0.85rem', background: 'rgba(217,178,92,0.07)',
             border: '1px solid var(--accent)', borderRadius: 2,
             fontFamily: "'IBM Plex Mono',var(--mono)", fontSize: '1rem',
             fontWeight: 700, letterSpacing: '0.1em', color: 'var(--accent)',
@@ -406,7 +406,7 @@ function CapVolConfig() {
         <select className="bp-sel"><option>Flat</option><option>Linear</option></select>
       </div>
       <div style={{ marginTop: '12px', padding: '8px 10px',
-        background: 'rgba(74,154,212,0.04)', border: '1px solid rgba(74,154,212,0.15)',
+        background: 'rgba(143,193,230,0.04)', border: '1px solid rgba(143,193,230,0.15)',
         borderRadius: '2px', fontSize: '0.8125rem', color: 'var(--text-dim)',
         fontFamily: "'IBM Plex Mono',var(--mono)", lineHeight: 1.7 }}>
         Cap/floor pricing uses direct table lookup from the saved flat-vol surface.

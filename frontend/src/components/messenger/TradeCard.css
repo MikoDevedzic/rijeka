@@ -1,14 +1,14 @@
 /* Trade card inside a chat room */
-.tc { border: 1px solid rgba(74,154,212,0.45); border-radius: 3px; background: var(--panel-2); min-width: min(420px, 100%); max-width: 560px; }
-.tc-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: rgba(74,154,212,0.06); }
+.tc { border: 1px solid rgba(143,193,230,0.45); border-radius: 3px; background: var(--panel-2); min-width: min(420px, 100%); max-width: 560px; }
+.tc-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--border); background: rgba(143,193,230,0.06); }
 .tc-kind { font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; color: var(--blue); }
 .tc-ref  { font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; color: var(--text); }
 .tc-chip {
   margin-left: auto; font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
   border: 1px solid var(--border-hi); border-radius: 2px; padding: 1px 6px; color: var(--text-dim); white-space: nowrap;
 }
-.tc-chip.ok      { color: var(--accent); border-color: rgba(13,212,168,0.5); }
-.tc-chip.pending { color: var(--amber);  border-color: rgba(240,160,32,0.5); }
+.tc-chip.ok      { color: var(--accent); border-color: rgba(217,178,92,0.5); }
+.tc-chip.pending { color: var(--amber);  border-color: rgba(233,151,90,0.5); }
 .tc-body { padding: 9px 12px 11px; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; line-height: 1.5; white-space: normal; }
 .tc-line { color: var(--text); }
 .tc-leg b { font-weight: 600; }
@@ -19,9 +19,9 @@
 .tc-confirmed { color: var(--accent); font-size: 12px; }
 .tc-confirmed a { color: var(--accent); }
 .tc-match { font-size: 12px; padding: 6px 8px; border-radius: 2px; }
-.tc-match.ok    { color: var(--accent); background: rgba(13,212,168,0.06); }
-.tc-match.none  { color: var(--amber); background: rgba(240,160,32,0.06); }
-.tc-match.break { color: var(--red); background: rgba(224,80,64,0.06); }
+.tc-match.ok    { color: var(--accent); background: rgba(217,178,92,0.06); }
+.tc-match.none  { color: var(--amber); background: rgba(233,151,90,0.06); }
+.tc-match.break { color: var(--red); background: rgba(240,147,130,0.06); }
 .tc-match table { margin: 5px 0; border-collapse: collapse; font-size: 12px; color: var(--text); }
 .tc-match td { padding: 2px 10px 2px 0; }
 .tc-btn {
@@ -29,8 +29,8 @@
   font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
   background: none; border: 1px solid var(--border-hi); color: var(--text-dim);
 }
-.tc-btn.primary { background: rgba(13,212,168,0.08); border-color: rgba(13,212,168,0.5); color: var(--accent); }
-.tc-btn.primary:hover { background: rgba(13,212,168,0.16); }
+.tc-btn.primary { background: rgba(217,178,92,0.08); border-color: rgba(217,178,92,0.5); color: var(--accent); }
+.tc-btn.primary:hover { background: rgba(217,178,92,0.16); }
 .tc-btn:disabled { opacity: 0.4; cursor: default; }
 .tc-sign, .tc-register { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--border-hi); }
 .tc-actions { display: flex; gap: 6px; }
@@ -50,7 +50,7 @@
 /* Trade picker (over the thread) */
 .tc-picker {
   position: absolute; inset: auto 12px 64px 12px; max-height: 60%; z-index: 5; display: flex; flex-direction: column; gap: 8px;
-  background: var(--panel); border: 1px solid rgba(74,154,212,0.5); border-radius: 3px; padding: 10px 12px; box-shadow: 0 8px 28px rgba(0,0,0,0.5);
+  background: var(--panel); border: 1px solid rgba(143,193,230,0.5); border-radius: 3px; padding: 10px 12px; box-shadow: 0 8px 28px rgba(0,0,0,0.5);
 }
 .tc-picker-head { display: flex; justify-content: space-between; align-items: center; font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; color: var(--blue); }
 .tc-picker-list { overflow-y: auto; display: flex; flex-direction: column; }

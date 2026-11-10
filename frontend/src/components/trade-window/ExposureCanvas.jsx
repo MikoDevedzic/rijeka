@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { drawExposureChart } from './exposure-chart'
 
-const LEGEND = [{ l: 'EE', c: 'var(--accent)', n: 'EE' }, { l: 'ENE', c: 'var(--blue)', n: 'ENE' }, { l: 'PFE 95%', c: 'var(--amber)', n: 'PFE' }]
+const LEGEND = [{ l: 'EE', c: 'var(--text-hi)', n: 'EE' }, { l: 'ENE', c: 'var(--blue)', n: 'ENE' }, { l: 'PFE 95%', c: 'var(--amber)', n: 'PFE' }]
 
 export default function ExposureCanvas({ result, height = 230, placeholder = 'EE / ENE / PFE — press SIMULATE',
                                          highlight, onHighlight, style, children }) {

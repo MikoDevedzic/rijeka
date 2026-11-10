@@ -332,9 +332,9 @@ export function SwapTermsBody({ state, update }) {
 
   // Direction labels for the inner leg badges (structure-aware)
   const fixedDirLabel = direction === 'PAY' ? '\u2192 PAY FIXED' : '\u2190 RECEIVE FIXED'
-  const fixedDirColor = direction === 'PAY' ? 'var(--red)' : 'var(--accent)'
+  const fixedDirColor = direction === 'PAY' ? 'var(--down)' : 'var(--up)'
   const floatDirLabel = direction === 'PAY' ? '\u2190 RECEIVE FLOAT' : '\u2192 PAY FLOAT'
-  const floatDirColor = direction === 'PAY' ? 'var(--accent)' : 'var(--red)'
+  const floatDirColor = direction === 'PAY' ? 'var(--up)' : 'var(--down)'
 
   const selStyle = { width: '100%' }
 

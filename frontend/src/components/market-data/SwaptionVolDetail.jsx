@@ -26,9 +26,9 @@ const isBasket = (e, t) => BASKET_KEYS.has(e + '|' + t);
 // ── Source badge — identical to OISDetail ────────────────────────────────────
 function SourceBadge({ src }) {
   const map = {
-    BLOOMBERG: { bg:'rgba(74,154,212,0.12)', bd:'rgba(74,154,212,0.3)', c:'#4a9ad4' },
-    MANUAL:    { bg:'rgba(82,104,120,0.12)', bd:'rgba(82,104,120,0.3)', c:'var(--text-dim)' },
-    IMPORT:    { bg:'rgba(240,160,32,0.12)', bd:'rgba(240,160,32,0.3)', c:'#f0a020' },
+    BLOOMBERG: { bg:'rgba(143,193,230,0.12)', bd:'rgba(143,193,230,0.3)', c:'#8fc1e6' },
+    MANUAL:    { bg:'rgba(111,135,125,0.12)', bd:'rgba(111,135,125,0.3)', c:'var(--text-dim)' },
+    IMPORT:    { bg:'rgba(233,151,90,0.12)', bd:'rgba(233,151,90,0.3)', c:'#e9975a' },
   };
   const s = map[src] || map.MANUAL;
   return (
@@ -76,7 +76,7 @@ function VolSurface({ grid, hasData }) {
             const v = cell.vol_bp;
             const intensity = v !== null ? (v - minV) / rng : 0;
             const bg = v !== null
-              ? `rgba(13,212,168,${0.06 + intensity * 0.35})`
+              ? `rgba(217,178,92,${0.06 + intensity * 0.35})`
               : 'transparent';
             return (
               <div key={cell.tenor} style={{ height:'18px', borderRadius:'1px', background:bg,
@@ -237,7 +237,7 @@ function SwvInstruments() {
                     style={{ padding:'2px',
                       borderBottom:'1px solid var(--panel-2)',
                       background: isBasket(row.expiry, cell.tenor)
-                        ? 'rgba(13,212,168,0.03)' : 'transparent' }}>
+                        ? 'rgba(217,178,92,0.03)' : 'transparent' }}>
                     <div style={{ fontSize:'0.8rem', color:'var(--text-dim)',
                       fontFamily:"'IBM Plex Mono',var(--mono)", padding:'1px 4px 0',
                       letterSpacing:'0.02em', lineHeight:1 }}>
@@ -269,7 +269,7 @@ function SwvInstruments() {
       <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'6px',
         fontSize:'0.8125rem', color:'var(--text-dim)' }}>
         <div style={{ width:'10px', height:'10px', borderRadius:'1px',
-          background:'rgba(13,212,168,0.15)', border:'1px solid rgba(13,212,168,0.3)', flexShrink:0 }} />
+          background:'rgba(217,178,92,0.15)', border:'1px solid rgba(217,178,92,0.3)', flexShrink:0 }} />
         HW1F calibration basket — co-terminal + diagonal + long-end anchors
       </div>
 
@@ -302,7 +302,7 @@ function SwvInstruments() {
             <button
               onClick={() => saveSnapshot(saveDate, 'MANUAL')}
               disabled={snapshotSaving || filled === 0}
-              style={{ padding:'0.25rem 0.85rem', background:'rgba(14,201,160,0.07)',
+              style={{ padding:'0.25rem 0.85rem', background:'rgba(217,178,92,0.07)',
                 border:'1px solid var(--accent)', borderRadius:2,
                 fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem',
                 fontWeight:700, letterSpacing:'0.1em', color:'var(--accent)',
@@ -329,7 +329,7 @@ function SwvInstruments() {
         {source === 'BLOOMBERG' && (
           <div style={{ border:'1px solid var(--border)', borderRadius:'2px', padding:'8px' }}>
             <div style={{ fontSize:'0.875rem', color:'var(--blue)',
-              background:'rgba(74,154,212,0.06)', border:'1px solid rgba(74,154,212,0.2)',
+              background:'rgba(143,193,230,0.06)', border:'1px solid rgba(143,193,230,0.2)',
               borderRadius:'2px', padding:'4px 7px', marginBottom:'8px', lineHeight:1.6 }}>
               Tickers: <strong>USSNA[expiry][tenor] Curncy</strong> · Normal vol bp · ATM straddle ·
               Leave source blank — Bloomberg picks first available (BVOL/FMCA/GIRO/TRPU).
@@ -376,7 +376,7 @@ function SwvInstruments() {
 
             {blpSnapResult && (
               <div style={{ fontSize:'0.875rem', color:'var(--accent)', marginBottom:'6px',
-                background:'rgba(13,212,168,0.05)', border:'1px solid rgba(13,212,168,0.2)',
+                background:'rgba(217,178,92,0.05)', border:'1px solid rgba(217,178,92,0.2)',
                 padding:'5px 7px', borderRadius:'2px', lineHeight:1.7 }}>
                 ✔ SNAPPED & SAVED · {blpSnapResult.quotes_saved} CELLS · {blpSnapResult.snap_date}
                 {blpSnapResult.failed?.length > 0 && (
@@ -388,7 +388,7 @@ function SwvInstruments() {
             )}
             {blpSnapError && (
               <div style={{ fontSize:'0.875rem', color:'var(--red)',
-                background:'rgba(224,80,64,0.05)', border:'1px solid rgba(224,80,64,0.2)',
+                background:'rgba(240,147,130,0.05)', border:'1px solid rgba(240,147,130,0.2)',
                 padding:'5px 7px', borderRadius:'2px' }}>
                 ✘ {blpSnapError}
               </div>
@@ -702,7 +702,7 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
                   const src  = e.source || 'AUTO';
                   return (
                     <tr key={p.tenor_label}
-                      style={{ background: dirt ? 'rgba(240,160,32,0.03)' : 'transparent' }}>
+                      style={{ background: dirt ? 'rgba(233,151,90,0.03)' : 'transparent' }}>
                       {/* Tenor */}
                       <td style={{ ...mono, fontSize:'0.875rem', fontWeight:600,
                         color:'var(--accent)', padding:'3px 5px',
@@ -859,8 +859,8 @@ function alphaFromAtm(atmVol, T, rho, nu) {
 
 // ── Vol Smile Canvas Chart ────────────────────────────────────────────────────
 const TENOR_COLORS = {   // canvas strokes: literal palette (index.css tokens), not var()
-  '1Y': '#0dd4a8', '2Y': '#4a9ad4', '3Y': '#f0a020',
-  '5Y': '#e05040', '7Y': '#9060cc', '9Y': '#1dc87a',
+  '1Y': '#d9b25c', '2Y': '#8fc1e6', '3Y': '#e9975a',
+  '5Y': '#f09382', '7Y': '#c0a5ee', '9Y': '#8fe0ae',
 };
 
 function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
@@ -887,7 +887,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Background
-    ctx.fillStyle = '#0C1015';
+    ctx.fillStyle = '#102723';
     ctx.fillRect(0, 0, W, H);
 
     const PAD = { top:18, right:16, bottom:36, left:46 };
@@ -912,7 +912,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
       });
     });
     if (!allVols.length) {
-      ctx.fillStyle = '#5F6C7B';
+      ctx.fillStyle = '#6f877d';
       ctx.font = `11px 'JetBrains Mono', monospace`;
       ctx.textAlign = 'center';
       ctx.fillText('SNAP OR SAVE SKEW TO VIEW THE SMILE', W/2, H/2);
@@ -924,14 +924,14 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
     const yToCanvas = y => PAD.top + (1 - (y - yMin) / (yMax - yMin)) * cH;
 
     // Grid lines
-    ctx.strokeStyle = 'rgba(38,48,60,0.9)';
+    ctx.strokeStyle = 'rgba(67,84,74,0.9)';
     ctx.lineWidth = 0.6;
     const yTicks = 5;
     for (let i = 0; i <= yTicks; i++) {
       const y = yMin + (yMax - yMin) * i / yTicks;
       const cy = yToCanvas(y);
       ctx.beginPath(); ctx.moveTo(PAD.left, cy); ctx.lineTo(PAD.left + cW, cy); ctx.stroke();
-      ctx.fillStyle = '#5F6C7B';
+      ctx.fillStyle = '#6f877d';
       ctx.font = `10px 'JetBrains Mono', monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(y.toFixed(1), PAD.left - 5, cy + 3);
@@ -952,7 +952,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
     // X axis labels
     [-200, -100, 0, 100, 200].forEach(off => {
       const cx = xToCanvas(off);
-      ctx.fillStyle = off === 0 ? '#8B98A8' : off < 0 ? '#e0504099' : '#0dd4a899';
+      ctx.fillStyle = off === 0 ? '#8a9f94' : off < 0 ? '#e0504099' : '#0dd4a899';
       ctx.font = `10px 'JetBrains Mono', monospace`;
       ctx.textAlign = 'center';
       ctx.fillText((off > 0 ? '+' : '') + off, cx, PAD.top + cH + 22);
@@ -962,7 +962,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
     ctx.save();
     ctx.translate(11, PAD.top + cH/2);
     ctx.rotate(-Math.PI/2);
-    ctx.fillStyle = '#5F6C7B';
+    ctx.fillStyle = '#6f877d';
     ctx.font = `10px 'JetBrains Mono', monospace`;
     ctx.textAlign = 'center';
     ctx.fillText('Vol (bp)', 0, 0);
@@ -970,7 +970,7 @@ function VolSmileChart({ activeExpiry, skewGrid, atmGrid, sabrParams }) {
 
     // Draw one smile curve per tenor
     SWAPTION_TENORS.forEach(ten => {
-      const color  = TENOR_COLORS[ten] || '#8B98A8';
+      const color  = TENOR_COLORS[ten] || '#8a9f94';
       const atmVol = atmGrid?.find(r => r.expiry === activeExpiry)
                        ?.cells?.find(c => c.tenor === ten)?.vol_bp;
       if (!atmVol) return;
@@ -1327,7 +1327,7 @@ function SwvOTMSkew({ atmGrid }) {
       </SectionLabel>
 
       {/* Model identity banner */}
-      <div style={{ background:'rgba(13,212,168,0.04)', border:'1px solid rgba(13,212,168,0.15)',
+      <div style={{ background:'rgba(217,178,92,0.04)', border:'1px solid rgba(217,178,92,0.15)',
         borderRadius:'2px', padding:'7px 12px', marginBottom:'10px',
         display:'flex', alignItems:'baseline', gap:'12px', flexWrap:'wrap' }}>
         <span style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
@@ -1341,7 +1341,7 @@ function SwvOTMSkew({ atmGrid }) {
       </div>
 
       {/* SABR minimum requirements panel */}
-      <div style={{ background:'rgba(74,154,212,0.04)', border:'1px solid rgba(74,154,212,0.15)',
+      <div style={{ background:'rgba(143,193,230,0.04)', border:'1px solid rgba(143,193,230,0.15)',
         borderRadius:'2px', padding:'8px 10px', marginBottom:'10px', lineHeight:1.8 }}>
         <div style={{ fontSize:'0.8125rem', fontWeight:700, color:'var(--blue)',
           letterSpacing:'0.08em', ...mono, marginBottom:'4px' }}>
@@ -1368,7 +1368,7 @@ function SwvOTMSkew({ atmGrid }) {
           const { total, goodBuckets, okBuckets, emptyBuckets } = surfaceCompleteness(skewGrid, atmGrid);
           if (!total) return null;
           return (
-            <div style={{ marginTop:'6px', paddingTop:'6px', borderTop:'1px solid rgba(74,154,212,0.1)',
+            <div style={{ marginTop:'6px', paddingTop:'6px', borderTop:'1px solid rgba(143,193,230,0.1)',
               fontSize:'0.8125rem', ...mono, color:'var(--text-dim)' }}>
               Surface coverage: &nbsp;
               <span style={{ color:'var(--accent)' }}>{goodBuckets} QUOTED</span> &nbsp;·&nbsp;
@@ -1418,20 +1418,20 @@ function SwvOTMSkew({ atmGrid }) {
               <th style={{ ...thS, textAlign:'left', width:'42px' }}>TENOR</th>
               {OTM_STRIKE_OFFSETS.map(off => (
                 <th key={off} style={{ ...thS,
-                  color: off < 0 ? 'var(--red)' : 'var(--accent)' }}>
+                  color: off < 0 ? 'var(--down)' : 'var(--up)' }}>
                   {OTM_STRIKE_LABELS[String(off)]}
                 </th>
               )).slice(0, 4)}
               {/* ATM column in the middle */}
               <th style={{ ...thS, color:'var(--blue)',
-                background:'rgba(74,154,212,0.06)',
-                borderLeft:'1px solid rgba(74,154,212,0.2)',
-                borderRight:'1px solid rgba(74,154,212,0.2)' }}>
+                background:'rgba(143,193,230,0.06)',
+                borderLeft:'1px solid rgba(143,193,230,0.2)',
+                borderRight:'1px solid rgba(143,193,230,0.2)' }}>
                 ATM{absMode ? ' (bp)' : ''}
               </th>
               {OTM_STRIKE_OFFSETS.map(off => (
                 <th key={off} style={{ ...thS,
-                  color: off < 0 ? 'var(--red)' : 'var(--accent)' }}>
+                  color: off < 0 ? 'var(--down)' : 'var(--up)' }}>
                   {OTM_STRIKE_LABELS[String(off)]}
                 </th>
               )).slice(4)}
@@ -1464,7 +1464,7 @@ function SwvOTMSkew({ atmGrid }) {
                       <td key={off} style={{ padding:'2px',
                         borderBottom:'1px solid var(--panel-2)' }}>
                         {ticker && (
-                          <div style={{ fontSize:'0.72rem', color:'rgba(74,154,212,0.5)',
+                          <div style={{ fontSize:'0.72rem', color:'rgba(143,193,230,0.5)',
                             ...mono, padding:'0 4px', lineHeight:1, letterSpacing:'0.01em' }}>
                             {ticker.replace(' SMKO Curncy','')}
                           </div>
@@ -1489,9 +1489,9 @@ function SwvOTMSkew({ atmGrid }) {
                   {/* ATM column — read-only, shows actual vol */}
                   <td style={{ padding:'3px 6px', textAlign:'right',
                     borderBottom:'1px solid var(--panel-2)',
-                    background:'rgba(74,154,212,0.04)',
-                    borderLeft:'1px solid rgba(74,154,212,0.15)',
-                    borderRight:'1px solid rgba(74,154,212,0.15)',
+                    background:'rgba(143,193,230,0.04)',
+                    borderLeft:'1px solid rgba(143,193,230,0.15)',
+                    borderRight:'1px solid rgba(143,193,230,0.15)',
                     ...mono, fontSize:'0.875rem', fontWeight:700,
                     color: atmVol !== null ? 'var(--blue)' : 'var(--text-dim)' }}>
                     {atmVol !== null ? atmVol.toFixed(1) : '—'}
@@ -1504,7 +1504,7 @@ function SwvOTMSkew({ atmGrid }) {
                       <td key={off} style={{ padding:'2px',
                         borderBottom:'1px solid var(--panel-2)' }}>
                         {ticker && (
-                          <div style={{ fontSize:'0.72rem', color:'rgba(13,212,168,0.5)',
+                          <div style={{ fontSize:'0.72rem', color:'rgba(217,178,92,0.5)',
                             ...mono, padding:'0 4px', lineHeight:1, letterSpacing:'0.01em' }}>
                             {ticker.replace(' SMKO Curncy','')}
                           </div>
@@ -1537,9 +1537,9 @@ function SwvOTMSkew({ atmGrid }) {
                         <span style={{ ...mono, fontSize:'0.8rem', fontWeight:700,
                           color: q.color,
                           padding:'1px 5px', borderRadius:'2px',
-                          background: q.level==='good' ? 'rgba(13,212,168,0.08)'
-                                    : q.level==='ok'   ? 'rgba(240,160,32,0.08)'
-                                    : q.level==='partial' ? 'rgba(224,80,64,0.08)'
+                          background: q.level==='good' ? 'rgba(217,178,92,0.08)'
+                                    : q.level==='ok'   ? 'rgba(233,151,90,0.08)'
+                                    : q.level==='partial' ? 'rgba(240,147,130,0.08)'
                                     : 'transparent',
                           border: `1px solid ${q.color}33`,
                         }}>
@@ -1555,7 +1555,7 @@ function SwvOTMSkew({ atmGrid }) {
             <tr>
               <td colSpan={10 + 1} style={{ padding:'4px 6px',
                 borderTop:'1px solid var(--border)', borderBottom:'1px solid var(--panel-2)',
-                background:'rgba(74,154,212,0.03)' }}>
+                background:'rgba(143,193,230,0.03)' }}>
                 <span style={{ fontSize:'0.8rem', color:'var(--blue)',
                   fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.08em' }}>
                   SABR INTERPOLATED — no market tickers for these tenors
@@ -1574,7 +1574,7 @@ function SwvOTMSkew({ atmGrid }) {
                 p => p.expiry_label === activeExpiry && p.tenor_label === ten
               );
               return (
-                <tr key={ten} style={{ background:'rgba(74,154,212,0.02)', opacity:0.7 }}>
+                <tr key={ten} style={{ background:'rgba(143,193,230,0.02)', opacity:0.7 }}>
                   <td style={{ fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.875rem',
                     fontWeight:600, color:'var(--blue)', padding:'3px 6px 3px 0',
                     borderBottom:'1px solid var(--panel-2)' }}>
@@ -1589,9 +1589,9 @@ function SwvOTMSkew({ atmGrid }) {
                   </td>
                   <td style={{ padding:'3px 6px', textAlign:'right',
                     borderBottom:'1px solid var(--panel-2)',
-                    background:'rgba(74,154,212,0.04)',
-                    borderLeft:'1px solid rgba(74,154,212,0.15)',
-                    borderRight:'1px solid rgba(74,154,212,0.15)',
+                    background:'rgba(143,193,230,0.04)',
+                    borderLeft:'1px solid rgba(143,193,230,0.15)',
+                    borderRight:'1px solid rgba(143,193,230,0.15)',
                     fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.875rem',
                     fontWeight:700, color:'var(--blue)' }}>
                     {atmVol !== null ? atmVol.toFixed(1) : '—'}
@@ -1606,7 +1606,7 @@ function SwvOTMSkew({ atmGrid }) {
                     textAlign:'center' }}>
                     <span style={{ fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.8rem',
                       color:'var(--blue)', padding:'1px 5px', borderRadius:'2px',
-                      background:'rgba(74,154,212,0.08)', border:'1px solid rgba(74,154,212,0.2)' }}>
+                      background:'rgba(143,193,230,0.08)', border:'1px solid rgba(143,193,230,0.2)' }}>
                       INTERP
                     </span>
                   </td>
@@ -1635,9 +1635,9 @@ function SwvOTMSkew({ atmGrid }) {
 
       {/* Bloomberg SMKO snap — abs vol mode only */}
       {absMode && (
-        <div style={{ border:'1px solid rgba(74,154,212,0.2)', borderRadius:'2px',
+        <div style={{ border:'1px solid rgba(143,193,230,0.2)', borderRadius:'2px',
           padding:'8px 10px', marginBottom:'8px',
-          background:'rgba(74,154,212,0.04)' }}>
+          background:'rgba(143,193,230,0.04)' }}>
           <div style={{ fontSize:'0.8125rem', fontWeight:700, color:'var(--blue)',
             letterSpacing:'0.08em', ...mono, marginBottom:'6px' }}>
             SNAP MARKET DATA — Full OTM Surface (all 8 strikes)
@@ -1689,7 +1689,7 @@ function SwvOTMSkew({ atmGrid }) {
         <button
           onClick={saveSkew}
           disabled={saving || filledCells === 0}
-          style={{ padding:'0.25rem 0.85rem', background:'rgba(14,201,160,0.07)',
+          style={{ padding:'0.25rem 0.85rem', background:'rgba(217,178,92,0.07)',
             border:'1px solid var(--accent)', borderRadius:2,
             ...mono, fontSize:'1rem', fontWeight:700,
             letterSpacing:'0.1em', color:'var(--accent)',
@@ -1864,7 +1864,7 @@ export default function SwaptionVolDetail() {
 
         {/* ── Master snap bar ───────────────────────────────────────────── */}
         <div style={{ margin:'6px 0 2px', padding:'8px 10px',
-          background:'rgba(13,212,168,0.04)', border:'1px solid rgba(13,212,168,0.15)',
+          background:'rgba(217,178,92,0.04)', border:'1px solid rgba(217,178,92,0.15)',
           borderRadius:'2px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
             <span style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
@@ -1874,7 +1874,7 @@ export default function SwaptionVolDetail() {
             </span>
           </div>
           <button onClick={handleMasterSnap} disabled={masterSnapping} style={{
-            padding:'6px 16px', background:'rgba(13,212,168,0.07)',
+            padding:'6px 16px', background:'rgba(217,178,92,0.07)',
             border:'1px solid var(--accent)', borderRadius:'2px',
             ...mono, fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.10em',
             color:'var(--accent)', cursor: masterSnapping ? 'not-allowed' : 'pointer',

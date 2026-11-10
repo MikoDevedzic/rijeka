@@ -15,25 +15,27 @@
 // All backend calls live in the parent (trade-window/booking.js confirmTrade
 // and cancelTrade). This component is pure presentation + local dialog state.
 //
-// Design: Pure Black theme. Amber for pending, teal for confirmed, red for
-// cancelled. Uses the same tbw-btn-book / tbw-btn-cancel classes as the
-// footer so the visual language matches.
+// Design (Harbour): the signed record is a certificate, the one light surface in the app, because it is the part
+// that leaves it (the proof pack, the picture someone posts): paper, a serif heading, and a seal drawn from the
+// trade's hash (Seal.jsx). Inside `.cert` the colour tokens are the paper's inks (styles.css), so every row and
+// button below takes them without naming a colour. Uses the same tbw-btn classes as the footer.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
 import { SendForConfirmation } from './SendForConfirmation'
 import { useSendStatus, useAnchoring } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
+import Seal from './Seal'
 
 const STATUS_COLORS = {
-  PENDING:    'var(--amber)',  // amber
-  CONFIRMED:  'var(--accent)',  // teal
-  CANCELLED:  'var(--red)',  // red
-  LIVE:       'var(--blue)',  // blue
+  PENDING:    'var(--text-hi)',     // waiting: no colour of its own
+  CONFIRMED:  'var(--accent)',      // sealed
+  CANCELLED:  'var(--text-dim)',
+  LIVE:       'var(--up)',
   TERMINATED: 'var(--text-dim)',
   MATURED:    'var(--text-dim)',
-  DEFAULTED:  'var(--red)',
-  NOVATED:    'var(--purple)',  // purple
+  DEFAULTED:  'var(--down)',
+  NOVATED:    'var(--purple)',
 }
 
 const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace'
@@ -61,9 +63,16 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   )
   const vr = verifyResult
   const vOk = vr && !vr.error && vr.hash_matches && vr.signatures_valid_for_current_state !== false && (!anchored || vr.on_chain_confirmed)
+  const title = terminated ? 'The record is closed on chain'
+    : anchored ? (att.bilateral === false ? 'The terms are signed and anchored' : 'Both sides signed the same terms')
+    : 'The terms are signed, not yet anchored'
   return (
-    <div style={{ marginTop: 18, padding: 14, background: 'var(--panel)', border: '1px solid ' + (anchored ? 'rgba(13,212,168,0.35)' : 'var(--border-hi)'), borderRadius: 2, maxWidth: 720 }}>
-      <div className="tbw-lbl" style={{ color: terminated ? 'var(--text-dim)' : anchored ? 'var(--accent)' : 'var(--text-dim)', marginBottom: 8 }}>
+    <div className="cert" data-testid="confirm-certificate" style={{ marginTop: 18 }}>
+      <Seal hash={att.trade_hash} complete={anchored && !terminated} ink={anchored && !terminated ? '#2a3b98' : '#868ca4'} ink2={anchored && !terminated ? '#bf261d' : '#868ca4'} />
+      <div className="cert-body">
+      <p className="cert-caps">Certificate of confirmation</p>
+      <h5 className="cert-title">{title}</h5>
+      <div className="tbw-lbl" style={{ color: terminated ? 'var(--text-dim)' : anchored ? 'var(--accent)' : 'var(--text-dim)', marginBottom: 10 }}>
         {terminated ? `◆ TERMINATED ON ${chainName(att.anchor.chain_id).toUpperCase()}`
           : anchored ? `◆ CONFIRMED ON ${chainName(att.anchor.chain_id).toUpperCase()}` : '◇ SIGNED — NOT ANCHORED'}
         {att.bilateral === false && <span className="tbw-mut" style={{ marginLeft: 10, fontWeight: 400, letterSpacing: 0, color: 'var(--amber)' }}>both signatures produced here — demo, not bilateral</span>}
@@ -91,14 +100,14 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
-        <button className="tbw-btn" onClick={onVerify} disabled={verifying} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'rgba(13,212,168,0.4)', color: 'var(--accent)' }}>
+        <button className="tbw-btn cert-go" onClick={onVerify} disabled={verifying} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116 }}>
           {verifying ? '⏳ VERIFYING…' : '⟳ VERIFY'}
         </button>
         <button className="tbw-btn" onClick={onDownloadProof} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'var(--border-hi)' }}>
           ↓ PROOF PACK
         </button>
         {onCopyProofLink && (
-          <button className="tbw-btn" onClick={onCopyProofLink} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'var(--accent-dim)', color: 'var(--accent)' }}>
+          <button className="tbw-btn" onClick={onCopyProofLink} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'var(--border-hi)' }}>
             ⛓ COPY PROOF LINK
           </button>
         )}
@@ -111,11 +120,11 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
       {anchored && !terminated && onTerminate && (
         <div style={{ marginTop: 12 }}>
           {!showTerminate ? (
-            <button className="tbw-btn" onClick={() => setShowTerminate(true)} style={{ borderColor: 'rgba(224,80,64,0.4)', color: 'var(--red)' }}>
+            <button className="tbw-btn" onClick={() => setShowTerminate(true)} style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>
               ◆ TERMINATE ON-CHAIN
             </button>
           ) : (
-            <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid rgba(224,80,64,0.35)', borderRadius: 2, maxWidth: 520 }}>
+            <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid var(--red)', borderRadius: 'var(--r-2)', maxWidth: 520 }}>
               <div className="tbw-lbl" style={{ color: 'var(--red)' }}>TERMINATE — BOTH PARTIES SIGN, REGISTRY MARKS THE RECORD CLOSED</div>
               <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5, margin: '6px 0 10px' }}>
                 Closes the signed record on-chain with a TradeTermination signature from each party. When the
@@ -136,10 +145,9 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
         </div>
       )}
       {vr && !vr.info && (
-        <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: 2, fontSize: 12, fontFamily: MONO,
-          background: vr.error ? 'rgba(224,80,64,0.06)' : vOk ? 'rgba(13,212,168,0.06)' : 'rgba(240,160,32,0.06)',
-          border: '1px solid ' + (vr.error ? 'rgba(224,80,64,0.3)' : vOk ? 'rgba(13,212,168,0.3)' : 'rgba(240,160,32,0.3)'),
-          color: vr.error ? 'var(--red)' : vOk ? 'var(--accent)' : 'var(--amber)', lineHeight: 1.7 }}>
+        <div data-testid="confirm-verify-result" style={{ marginTop: 10, padding: '8px 10px', borderRadius: 'var(--r-1)', fontSize: 12, fontFamily: MONO,
+          background: 'var(--bg)', border: '1px solid ' + (vr.error ? 'var(--red)' : vOk ? 'var(--green)' : 'var(--amber)'),
+          color: vr.error ? 'var(--red)' : vOk ? 'var(--green)' : 'var(--amber)', lineHeight: 1.7 }}>
           {vr.error ? ('Verify failed: ' + vr.error) : (<>
             <div>{vr.hash_matches ? '✔' : '✘'} hash of current terms {vr.hash_matches ? 'matches' : 'DOES NOT MATCH'} the signed hash</div>
             <div>{vr.signatures_valid_for_current_state ? '✔' : '✘'} both signatures {vr.signatures_valid_for_current_state ? 'valid' : 'INVALID'} for the current terms</div>
@@ -148,6 +156,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
           </>)}
         </div>
       )}
+      </div>
     </div>
   )
 }
@@ -340,7 +349,7 @@ export function ConfirmPanel({
         </div>
 
         {anchoring && (
-          <div style={{ padding: 12, background: 'var(--panel)', border: '1px solid rgba(240,160,32,0.4)', borderRadius: 2, maxWidth: 560 }}>
+          <div style={{ padding: 12, background: 'var(--panel)', border: '1px solid rgba(233,151,90,0.4)', borderRadius: 2, maxWidth: 560 }}>
             <div className="tbw-lbl" style={{ color: 'var(--amber)' }}>◆ ANCHORING · TX {short(anchor.tx_hash)}</div>
             <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5, marginTop: 6 }}>
               Both signatures are made and the transaction is sent; the block has not taken it yet. This tab asks the

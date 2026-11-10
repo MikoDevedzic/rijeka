@@ -41,7 +41,7 @@ export function SendForConfirmation({ s, compact = false }) {
             {!status.counterparty.has_signer && ` ${cp} hasn't registered a signing wallet yet; they'll be asked to when they open the card.`}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="tbw-btn" onClick={openInChat} style={{ borderColor: 'rgba(13,212,168,0.4)', color: 'var(--accent)' }}>OPEN IN CHAT →</button>
+            <button className="tbw-btn" onClick={openInChat} style={{ borderColor: 'rgba(217,178,92,0.4)', color: 'var(--accent)' }}>OPEN IN CHAT →</button>
           </div>
         </>
       ) : (

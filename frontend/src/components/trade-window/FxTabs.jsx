@@ -101,7 +101,7 @@ function ProvisionalNotes({ facts, ccy, ids }) {
   const { reasons, amount, ifTouched } = facts
   if (!reasons.length) return null
   return (
-    <div data-provisional="true" style={{ marginTop: 10, padding: '6px 10px', border: '1px solid rgba(240,160,32,0.3)', borderRadius: 4, background: 'rgba(240,160,32,0.06)', color: 'var(--amber)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+    <div data-provisional="true" style={{ marginTop: 10, padding: '6px 10px', border: '1px solid rgba(233,151,90,0.3)', borderRadius: 4, background: 'rgba(233,151,90,0.06)', color: 'var(--amber)', fontSize: '0.8125rem', lineHeight: 1.5 }}>
       {reasons.map((r, i) => (
         <div key={i}>
           {r.kind === 'NO_FIXING' ? `No fixing is stored for ${r.source || 'the named source'}${r.date ? ` on ${r.date}` : ''}: this is an estimate on the stored spot`
@@ -624,7 +624,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale }) {
     : null
   const forwardTile = ['FORWARD', fmt(now.forward, dp), `base ${fmt(base.forward, dp)}`, 'fx-scenario-forward', now.forward]
   const resetButton = <button onClick={reset} className="btn" data-testid="fx-scenario-reset" style={{ marginTop: 4 }}>RESET</button>
-  const banner = { background: 'rgba(240,160,32,0.06)', borderBottom: '1px solid rgba(240,160,32,0.15)', padding: '5px 12px', margin: '0 -16px', fontSize: '0.8125rem', color: 'var(--amber)' }
+  const banner = { background: 'rgba(233,151,90,0.06)', borderBottom: '1px solid rgba(233,151,90,0.15)', padding: '5px 12px', margin: '0 -16px', fontSize: '0.8125rem', color: 'var(--amber)' }
   const approximation = <><span aria-hidden="true">⚠ </span><span data-testid="fx-scenario-banner">Scenario: an approximation in the browser, to cents with no shock; nothing is saved.</span></>
 
   if (!european) {

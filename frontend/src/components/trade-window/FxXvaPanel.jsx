@@ -78,8 +78,8 @@ function SurfaceProof({ result }) {
           </div>
           <div style={{display:'flex',flexWrap:'wrap',gap:'3px'}}>
             {steps.map((v, i) => (
-              <span key={i} style={{fontSize:'0.75rem',fontFamily:'var(--mono)',color:'var(--accent)',background:'rgba(13,212,168,0.05)',
-                border:'1px solid rgba(13,212,168,0.15)',borderRadius:'2px',padding:'1px 4px'}}>
+              <span key={i} style={{fontSize:'0.75rem',fontFamily:'var(--mono)',color:'var(--accent)',background:'rgba(217,178,92,0.05)',
+                border:'1px solid rgba(217,178,92,0.15)',borderRadius:'2px',padding:'1px 4px'}}>
                 <span style={{color:'var(--text-mute)'}}>{i + 1}m </span>{Number(v).toFixed(2)}
               </span>
             ))}
@@ -257,13 +257,13 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             <TipLabel tipKey='fxVol' tip={tip} untip={untip} style={{ alignSelf:'center' }}>Vol % override</TipLabel>
             <input type='text' inputMode='decimal' value={volPct} onChange={e => setVolPct(e.target.value)}
               placeholder={res?.params?.vol_pct != null ? String(res.params.vol_pct) : 'surface'}
-              style={{ ...INP, textAlign:'right', color: volPct ? 'var(--accent)' : 'var(--text-dim)', borderColor: volPct ? 'rgba(13,212,168,0.3)' : 'var(--border)' }} />
+              style={{ ...INP, textAlign:'right', color: volPct ? 'var(--text-hi)' : 'var(--text-dim)', borderColor: volPct ? 'var(--border-hi)' : 'var(--border)' }} />
           </div>
           <div onMouseEnter={e => tip('fxVolMode', e)} onMouseLeave={untip} style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
             {VOL_MODES.map(([k, label]) => (
               <button key={k} onClick={() => setVolMode(k)} title={MODE_TITLE[k]}
-                style={{ flex:1, padding:'4px 0', fontSize:'0.7rem', fontWeight:700, letterSpacing:'0.08em', fontFamily:'var(--mono)', cursor:'pointer', background: volMode === k ? 'rgba(13,212,168,0.06)' : 'transparent', borderRadius:'2px',
-                  border: volMode === k ? '1px solid var(--accent)' : '1px solid var(--border)', color: volMode === k ? 'var(--accent)' : 'var(--text-dim)' }}>{label}</button>
+                style={{ flex:1, padding:'4px 0', fontSize:'0.7rem', fontWeight:700, letterSpacing:'0.08em', fontFamily:'var(--mono)', cursor:'pointer', background: volMode === k ? 'rgba(217,178,92,0.06)' : 'transparent', borderRadius:'2px',
+                  border: volMode === k ? '1px solid var(--border-glow)' : '1px solid var(--border)', color: volMode === k ? 'var(--text-hi)' : 'var(--text-dim)' }}>{label}</button>
             ))}
           </div>
 

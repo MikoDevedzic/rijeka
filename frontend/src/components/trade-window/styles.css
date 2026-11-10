@@ -1,9 +1,9 @@
 /* trade-window/styles.css
- * ─────────────────────────────────────────────────────────────────────────
- * Pure Black theme — Rijeka canonical palette.
- * All tbw-* classes live under this file so the old TradeBookingWindow.jsx
- * and the new TradeWindow.jsx can run side-by-side during migration.
- * ───────────────────────────────────────────────────────────────────────── */
+ * ─────────────────────────────────────────────────────────────────────
+ * The ticket, in Harbour (index.css tokens). Brass is the one thing to press (BOOK TRADE) and the mark of what
+ * the user typed over a default; a selected chip is a lighter panel, not a colour; a number takes the colour of
+ * its sign. All tbw-* classes live in this file.
+ * ───────────────────────────────────────────────────────────────────── */
 
 .tbw-window {
   /* Floating modal positioning — JS-driven after Patch 8 */
@@ -21,15 +21,15 @@
   flex-direction: column;  /* than the window (a two-line cashflow table, or after a manual resize) */
   resize: both;            /* native browser resize handle bottom-right */
   z-index: 1000;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.95);
+  box-shadow: var(--shadow-window);
 
-  /* Base chrome — lifted surface against blotter (var(--bg-deep)) for visual hierarchy */
-  background: var(--panel-2);
+  /* Base chrome: one panel up from the blotter */
+  background: var(--panel);
   color: var(--text-hi);
   font-family: var(--sans);
   font-size: 13px;
   border: 1px solid var(--border-hi);
-  border-radius: 6px;
+  border-radius: var(--r-4);
 }
 
 /* Weakened reset — only inherit color/font. Leave border/background/padding
@@ -40,18 +40,23 @@
   cursor: pointer;
 }
 
-.tbw-window input,
-.tbw-window select {
-  background: var(--panel);
+.tbw-window input, .tbw-window select {
+  background: var(--bg);
   color: var(--text-hi);
   border: 1px solid var(--border);
-  border-radius: 2px;
-  padding: 6px 8px;
-  font-size: 12px;
+  border-radius: var(--r-2);
+  padding: 7px 9px;
+  font-size: 12.5px;
   font-family: inherit;
   width: 100%;
   box-sizing: border-box;
+  transition: border-color .12s;
 }
+
+.tbw-window input:hover:not(:disabled),
+.tbw-window select:hover:not(:disabled) { border-color: var(--border-hi); }
+.tbw-window input:focus,
+.tbw-window select:focus { outline: none; border-color: var(--accent-dim); }
 
 .tbw-window input.tbw-mono,
 .tbw-window .tbw-mono {
@@ -68,77 +73,80 @@
 }
 
 .tbw-chip {
-  border: 1px solid var(--text-mute);
-  padding: 6px 12px;
-  border-radius: 2px;
+  border: 1px solid var(--border);
+  padding: 7px 13px;
+  border-radius: var(--r-2);
   font-size: 12px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   font-weight: 500;
   cursor: pointer;
   color: var(--text-dim);
-  background: var(--panel-2);
+  background: transparent;
+  transition: background .12s, border-color .12s, color .12s;
 }
 
 .tbw-chip:hover:not(:disabled):not(.is-on) {
-  border-color: var(--text-mute);
+  border-color: var(--border-hi);
   color: var(--text-hi);
-  background: var(--border);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .tbw-chip:disabled {
-  color: var(--text-mute);
+  color: var(--text-faint);
+  border-style: dashed;
   cursor: not-allowed;
 }
 
 .tbw-chip.is-on {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--bg-deep);
+  /* selected: a lighter panel and the full text colour. Colour is kept for meaning. */
+  border-color: var(--border-glow);
+  background: var(--panel-3);
+  color: var(--text-hi);
 }
 
 .tbw-chip.is-on-amber {
   border-color: var(--amber);
-  background: var(--amber);
-  color: var(--bg-deep);
+  background: rgb(var(--amber-rgb) / 0.14);
+  color: var(--amber);
 }
 
 .tbw-chip.tbw-chip-dir-pay.is-on {
-  border-color: var(--red);
-  background: var(--red);
-  color: var(--bg-deep);
+  /* paying is the sign of a cashflow: tinted, not filled */
+  border-color: var(--down);
+  background: rgb(var(--down-rgb) / 0.14);
+  color: var(--down);
 }
 
 /* ── Tabs ──────────────────────────────────────────────────────────────── */
 
 .tbw-tabbar {
-  position: sticky; top: 38px; z-index: 2; background: var(--panel-2);
+  position: sticky; top: 44px; z-index: 2; background: var(--panel);
   display: flex;
-  padding: 0 16px;
+  gap: 4px;
+  padding: 0 14px;
   border-bottom: 1px solid var(--border);
   font-size: 12px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.07em;
 }
 
 .tbw-tab {
-  padding: 12px 20px;
-  color: var(--text-dim);
+  padding: 13px 14px 12px;
+  color: var(--text-mute);
   margin-bottom: -1px;
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
+  font-weight: 500;
+  transition: color .12s;
 }
 
 .tbw-tab:hover:not(.is-active) {
-  color: var(--text-dim);
-  background: var(--bg-deep);
+  color: var(--text-hi);
 }
 
-.tbw-tab + .tbw-tab {
-  border-left: 1px solid var(--border-hi);
-}
 
 .tbw-tab.is-active {
-  color: var(--accent);
+  color: var(--text-hi);
   border-bottom: 2px solid var(--accent);
 }
 
@@ -150,12 +158,12 @@
 }
 
 .tbw-lbl {
-  font-size: 12px;
-  color: var(--text-dim);
-  letter-spacing: 0.12em;
+  font-size: 11px;
+  color: var(--text-mute);
+  letter-spacing: 0.08em;
   margin-bottom: 7px;
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 500;
   cursor: move;      /* labels are drag zones (Patch 15) */
   user-select: none;
 }
@@ -175,11 +183,11 @@
 }
 
 .tbw-helper-badge {
-  padding: 4px 8px;
+  padding: 4px 9px;
   border: 1px solid;
-  border-radius: 2px;
+  border-radius: var(--r-1);
   font-size: 12px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   font-weight: 500;
 }
 
@@ -196,7 +204,7 @@
   font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   font-size: 12px;
   padding: 6px 8px;
-  background: rgba(255, 107, 107, 0.05);
+  background: rgba(240,147,130, 0.05);
   border-left: 2px solid var(--red);
 }
 
@@ -218,17 +226,18 @@
 }
 
 .tbw-metric-card {
-  background: var(--bg-deep);
-  border: 1px solid var(--border-hi);
-  border-radius: 3px;
-  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-3);
+  padding: 12px 14px;
 }
 
 /* ── Breakdown table ──────────────────────────────────────────────────── */
 
 .tbw-breakdown-wrap {
   border: 1px solid var(--border);
-  border-radius: 3px;
+  border-radius: var(--r-3);
+  overflow: hidden;
 }
 
 .tbw-breakdown-toggle {
@@ -265,8 +274,12 @@
 
 /* ── Colors ────────────────────────────────────────────────────────────── */
 
-.tbw-positive { color: var(--accent); }
-.tbw-negative { color: var(--red); }
+.tbw-positive {
+  color: var(--up);
+}
+.tbw-negative {
+  color: var(--down);
+}
 .tbw-blue     { color: var(--blue); }
 .tbw-amber    { color: var(--amber); }
 .tbw-info     { color: var(--blue); }
@@ -284,7 +297,7 @@
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 12px 18px;
   background: var(--bg-deep);
   border-top: 1px solid var(--border);
   align-items: center;
@@ -315,29 +328,33 @@
 }
 
 .tbw-btn {
-  border: 1px solid var(--border);
-  padding: 6px 14px;
-  border-radius: 2px;
+  border: 1px solid var(--border-hi);
+  padding: 8px 16px;
+  border-radius: var(--r-2);
   font-size: 12px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   font-weight: 500;
   cursor: pointer;
   color: var(--text-dim);
+  background: transparent;
+  transition: background .12s, border-color .12s, color .12s, transform .12s;
 }
 
 .tbw-btn-cancel {
   color: var(--text-dim);
+  border-color: transparent;
 }
 
 .tbw-btn-price {
-  border-color: var(--amber);
-  color: var(--amber);
+  /* PRICE is a quiet button: the brass is kept for the one that books */
+  border-color: var(--border-glow);
+  color: var(--text-hi);
   background: transparent;
   font-weight: 500;
 }
 
 .tbw-btn-price:hover:not(:disabled) {
-  background: rgba(245, 200, 66, 0.08);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .tbw-btn-price:disabled {
@@ -348,32 +365,32 @@
 .tbw-btn-book {
   border-color: var(--accent);
   background: var(--accent);
-  color: var(--bg-deep);
-  padding: 6px 18px;
+  color: var(--accent-ink);
+  padding: 8px 20px;
   font-weight: 600;
 }
 
 .tbw-btn-book:hover:not(:disabled) {
-  background: #2ee6bf;
-  border-color: #2ee6bf;
+  background: var(--accent-hi);
+  border-color: var(--accent-hi);
+  color: var(--accent-ink);
 }
 
 .tbw-btn-book:disabled {
-  opacity: 0.5;
-  background: var(--border);
-  color: var(--text-mute);
-  border-color: var(--text-mute);
+  background: transparent;
+  color: var(--text-faint);
+  border-color: var(--border);
   cursor: not-allowed;
 }
 /* ── Window header (Patch 8) ─────────────────────────────────────────── */
 
 .tbw-header {
-  position: sticky; top: 0; z-index: 3; height: 38px; box-sizing: border-box;   /* the tab bar pins just below */
+  position: sticky; top: 0; z-index: 3; height: 44px; box-sizing: border-box;   /* the tab bar pins just below */
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 14px;
-  background: var(--panel-3);
+  padding: 10px 16px;
+  background: var(--panel);
   border-bottom: 1px solid var(--border);
   cursor: move;
   user-select: none;
@@ -403,7 +420,7 @@
 
 .tbw-title {
   font-size: 12px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   font-weight: 600;
   color: var(--text-hi);
   text-transform: uppercase;
@@ -420,22 +437,18 @@
 /* ── Section header hierarchy (Patch 14) ──────────────────────────────── */
 
 /* First .tbw-lbl inside each .tbw-sec becomes the section header. */
-.tbw-sec > .tbw-lbl:first-child,
-.tbw-sec > .tbw-sec-header > .tbw-lbl,
-.tbw-sec > .tbw-terms-header > .tbw-lbl {
-  font-size: 12px;
-  color: var(--text);
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  padding-left: 10px;
-  border-left: 3px solid var(--accent);
-  margin-bottom: 12px;
+.tbw-sec > .tbw-lbl:first-child, .tbw-sec > .tbw-sec-header > .tbw-lbl, .tbw-sec > .tbw-terms-header > .tbw-lbl {
+  font-size: 11.5px;
+  color: var(--text-hi);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  margin-bottom: 14px;
   line-height: 1.2;
 }
 
 /* Give sections a bit more breathing room between them. */
 .tbw-sec {
-  padding: 16px 18px;
+  padding: 18px 22px;
 }
 
 /* ── View mode: a stored trade opened from the blotter ────────────────── */
@@ -470,8 +483,8 @@
 
 /* Status badge on a stored trade, where a new ticket has its header buttons. */
 .tbw-status-badge {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
-  padding: 2px 10px; border-radius: 2px;
+  font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
+  padding: 3px 10px; border-radius: var(--r-1);
   font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
   border: 1px solid currentColor;
   background: rgba(255, 255, 255, 0.03);
@@ -497,10 +510,10 @@
 .tbw-fx-dim { opacity: 0.45; transition: opacity 0.12s; }
 .tbw-fx-stale { opacity: 0.45; }
 
-/* A field that shows its default (DefaultedInput): the number in the normal colour, an override in the accent,
+/* A field that shows its default (DefaultedInput): the number in the normal colour, an override marked by a brass rule under it (typed by you),
    a dash when there is no number yet; under it a muted line saying where the number is from. */
 .tbw-fx-def { min-width: 0; }
-.tbw-window input.tbw-fx-def-input.is-override { color: var(--accent); border-color: var(--accent); }
+.tbw-window input.tbw-fx-def-input.is-override { color: var(--text-hi); border-color: var(--accent-dim); box-shadow: inset 0 -2px 0 var(--accent); }
 .tbw-window input.tbw-fx-def-input.is-empty { color: var(--text-mute); }
 /* text that cannot be read as a number: kept as typed, in the warning colour, and said so under the field */
 .tbw-window input.tbw-fx-def-input.is-invalid { color: var(--amber); border-color: var(--amber); }
@@ -552,11 +565,11 @@
 /* The forward: read-only, the mono face at the size of an input's text, in a box the height of an input. */
 .tbw-fx-fwd {
   box-sizing: border-box;
-  padding: 6px 8px;
-  font-size: 12px;
+  padding: 7px 9px;
+  font-size: 12.5px;
   color: var(--text-hi);
-  border: 1px solid var(--border);
-  border-radius: 2px;
+  border: 1px dashed var(--border-hi);
+  border-radius: var(--r-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -606,3 +619,29 @@
 
 /* What a barrier or a touch is observed on, said once under the style row. */
 .tbw-fx-barrier-note { margin: -4px 0 10px; font-size: 11px; line-height: 1.4; letter-spacing: 0.04em; color: var(--text-mute); }
+
+/* ── The confirmation certificate ─────────────────────────────────────────────
+   The one light surface in the app. Inside it the colour tokens are the paper's inks, so the rows, links and
+   buttons of the attestation take them without naming a colour: ink for text, the blue of a stamp for what is
+   sealed and for links, red for the serial point and for anything that ends the record. */
+.cert {
+  --text-hi: #141936; --text: #1c2240; --text-dim: #4b5273; --text-mute: #6c7390; --text-faint: #868ca4;
+  --accent: #2a3b98; --accent-hi: #1f2d7a; --accent-dim: #8e98c8; --accent-ink: #fafbf7;
+  --blue: #2a3b98; --amber: #96560f; --red: #bf261d; --down: #bf261d; --green: #1c6b45; --up: #1c6b45;
+  --border: rgba(20, 25, 54, 0.15); --border-hi: rgba(20, 25, 54, 0.36); --border-glow: rgba(20, 25, 54, 0.5);
+  --panel: #ffffff; --bg: #f1f2ec;
+  display: flex; gap: 26px; align-items: flex-start;
+  max-width: 940px; padding: 26px 28px;
+  background: #fafbf7; color: var(--text);
+  border-radius: var(--r-1);
+  box-shadow: 0 0 0 1px rgba(20, 25, 54, 0.12), 0 18px 44px rgba(0, 0, 0, 0.35);
+}
+.cert-body { min-width: 0; flex: 1; }
+.cert-caps { margin: 0; font-size: 11px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-faint); }
+.cert-title { margin: 4px 0 12px; font-family: var(--serif); font-style: italic; font-weight: 500; font-size: 30px; line-height: 1.08; letter-spacing: 0; color: var(--text-hi); text-wrap: balance; }
+.cert .tbw-mut { color: var(--text-mute); }
+.cert .tbw-btn { color: var(--text-hi); border-color: var(--border-hi); border-radius: 2px; font-weight: 600; letter-spacing: 0.1em; }
+.cert .tbw-btn:hover:not(:disabled) { color: var(--text-hi); border-color: var(--text-hi); background: rgba(20, 25, 54, 0.04); }
+.cert .tbw-btn.cert-go { background: var(--text-hi); border-color: var(--text-hi); color: #fafbf7; }
+.cert .tbw-btn.cert-go:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fafbf7; }
+.cert input { background: #ffffff; color: var(--text-hi); border-color: var(--border-hi); }

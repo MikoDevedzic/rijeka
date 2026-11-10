@@ -1,27 +1,27 @@
 .cc-root { position:relative; width:100vw; min-height:100vh; display:flex; flex-direction:column;
   background:
-    radial-gradient(1200px 600px at 12% -10%, rgba(13,212,168,0.10), transparent 60%),
-    radial-gradient(900px 500px at 95% 10%, rgba(74,154,212,0.08), transparent 60%),
+    radial-gradient(1200px 600px at 12% -10%, rgba(217,178,92,0.10), transparent 60%),
+    radial-gradient(900px 500px at 95% 10%, rgba(143,193,230,0.08), transparent 60%),
     repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 48px),
     repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 48px),
     var(--bg); }
 
 /* ── AppBar ── */
-.cc-bar { position:relative; z-index:2; display:flex; align-items:center; gap:0; height:44px; padding:0 1.25rem; border-bottom:1px solid var(--border); background:rgba(0,0,0,0.55); backdrop-filter:blur(6px); }
-.cc-logo { font-family:'IBM Plex Sans', var(--sans); font-size:1.0625rem; font-weight:700; letter-spacing:0.2em; color:var(--accent); padding-right:1rem; border-right:1px solid var(--border); margin-right:0.5rem; white-space:nowrap; }
+.cc-bar { position:relative; z-index:2; display:flex; align-items:center; gap:0; height:44px; padding:0 1.5rem; border-bottom:1px solid var(--border); background:var(--bg-deep); }
+.cc-logo { font-family:var(--sans); font-size:0.9375rem; font-weight:600; letter-spacing:0.34em; color:var(--text-hi); padding-right:1.5rem; border-right:1px solid var(--border); margin-right:0.65rem; white-space:nowrap; }
 
 /* ── Nav ── */
 .cc-nav { display:flex; align-items:center; gap:0; flex:1; }
-.cc-nav-btn { background:none; border:none; border-bottom:2px solid transparent; color:#8ab0c8; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size:1rem; font-weight:700; letter-spacing:0.1em; padding:0 0.75rem; height:44px; cursor:pointer; text-transform:uppercase; transition:color 0.15s, border-color 0.15s; }
+.cc-nav-btn { background:none; border:none; border-bottom:2px solid transparent; color:var(--text-dim); font-family:var(--sans); font-size:0.875rem; font-weight:500; letter-spacing:0.08em; padding:0 0.85rem; height:44px; cursor:pointer; text-transform:uppercase; transition:color 0.12s, border-color 0.12s; }
 .cc-nav-btn:hover { color:var(--text); }
-.cc-nav-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+.cc-nav-btn.active { color:var(--text-hi); border-bottom-color:var(--accent); }
 
 /* ── Bar right ── */
-.cc-bar-right { display:flex; align-items:center; gap:0.6rem; font-size:1rem; letter-spacing:0.1em; margin-left:auto; }
-.cc-read-only { color:var(--text-dim); font-weight:700; letter-spacing:0.08em; }
+.cc-bar-right { display:flex; align-items:center; gap:0.75rem; font-size:0.875rem; letter-spacing:0.06em; margin-left:auto; }
+.cc-read-only { color:var(--text-dim); font-weight:500; letter-spacing:0.06em; }
 .cc-dot { color:var(--border-hi); }
-.cc-user { color:var(--accent); font-weight:700; }
-.cc-exit { background:transparent; border:1px solid var(--border); color:var(--text-dim); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size:1rem; font-weight:700; letter-spacing:0.1em; padding:0.25rem 0.6rem; cursor:pointer; border-radius:2px; transition:all 0.15s; }
+.cc-user { color:var(--text-hi); font-weight:500; }
+.cc-exit { background:transparent; border:1px solid var(--border); color:var(--text-dim); font-family:var(--sans); font-size:0.8125rem; font-weight:500; letter-spacing:0.08em; padding:0.3rem 0.7rem; cursor:pointer; border-radius:var(--r-2); transition:all 0.15s; }
 .cc-exit:hover { border-color:var(--text-dim); color:var(--text); }
 
 /* ── Footer ── */
@@ -49,7 +49,7 @@
 
 .dh-grid { display:grid; grid-template-columns:1.2fr 1fr 1fr; gap:1rem; padding:1rem 0 0.25rem; flex:1; min-height:0; }
 .dh-newscard { min-height:0; }
-.dh-card { background:rgba(12,12,12,0.82); border:1px solid var(--border); border-radius:3px; padding:0.9rem 1rem 1rem; display:flex; flex-direction:column; gap:0.8rem; min-height:0; backdrop-filter:blur(4px); }
+.dh-card { background:rgba(8,23,20,0.82); border:1px solid var(--border); border-radius:3px; padding:0.9rem 1rem 1rem; display:flex; flex-direction:column; gap:0.8rem; min-height:0; backdrop-filter:blur(4px); }
 .dh-card header { display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:0.86rem; letter-spacing:0.12em; color:var(--text-dim); }
 .dh-link { background:none; border:none; padding:0; color:var(--accent); font-family:var(--mono); font-size:0.86rem; letter-spacing:0.12em; cursor:pointer; text-decoration:none; }
 .dh-link:hover { text-decoration:underline; }
@@ -139,15 +139,15 @@
 .boot { position:fixed; inset:0; z-index:50; background:var(--bg); display:flex; align-items:center; justify-content:center; cursor:pointer; overflow:hidden; transition:opacity .65s ease; }
 .boot.leaving { opacity:0; pointer-events:none; }
 .boot::before { content:''; position:absolute; inset:0; background:
-  radial-gradient(900px 500px at 50% 60%, rgba(13,212,168,0.14), transparent 65%),
+  radial-gradient(900px 500px at 50% 60%, rgba(217,178,92,0.14), transparent 65%),
   repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 48px),
   repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 48px); }
 .boot-curve { position:absolute; left:0; right:0; bottom:6vh; width:100%; height:38vh; opacity:0.55; }
-.boot-curve path { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; stroke-dasharray:4000; stroke-dashoffset:4000; animation:dhDraw 2.4s cubic-bezier(.3,.7,.2,1) .3s forwards; filter:drop-shadow(0 0 10px rgba(13,212,168,0.6)); }
+.boot-curve path { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; stroke-dasharray:4000; stroke-dashoffset:4000; animation:dhDraw 2.4s cubic-bezier(.3,.7,.2,1) .3s forwards; filter:drop-shadow(0 0 10px rgba(217,178,92,0.6)); }
 .boot-box { position:relative; width:min(680px, 92vw); display:flex; flex-direction:column; align-items:center; gap:0.6rem; animation:bootIn .7s ease both; }
 @keyframes bootIn { from { opacity:0; transform:translateY(10px) } to { opacity:1; transform:none } }
 .boot-greet { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.3em; color:var(--text-dim); }
-.boot-mark { font-size:clamp(2.4rem, 6vw, 4.5rem); font-weight:900; letter-spacing:0.35em; color:var(--accent); text-shadow:0 0 40px rgba(13,212,168,0.35); margin-left:0.35em; }
+.boot-mark { font-size:clamp(2.4rem, 6vw, 4.5rem); font-weight:900; letter-spacing:0.35em; color:var(--accent); text-shadow:0 0 40px rgba(217,178,92,0.35); margin-left:0.35em; }
 .boot-sub { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.3em; color:var(--text-dim); margin-bottom:1.2rem; }
 .boot-steps { list-style:none; margin:0; padding:0; width:100%; font-family:var(--mono); font-size:0.86rem; display:flex; flex-direction:column; gap:0.35rem; }
 .boot-steps li { display:grid; grid-template-columns:1.4rem 11rem 1fr; gap:0.6rem; align-items:center; color:var(--text); animation:bootIn .35s ease both; }
@@ -192,7 +192,7 @@
 .dh-ccy:hover { border-color:var(--border-glow); color:var(--text); }
 .dh-ccy.on { border-color:var(--accent); color:var(--accent); background:var(--accent-glow); }
 .dh-caption { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.08em; color:var(--text-mute); }
-.pp-dot { fill:var(--amber); stroke:#07090C; stroke-width:1.5; }
+.pp-dot { fill:var(--amber); stroke:#0b1d1a; stroke-width:1.5; }
 .pp-dot-t { fill:var(--amber); }
 .pp-lr { stroke:var(--amber); stroke-dasharray:3 4; stroke-width:1; opacity:0.7; }
 .pp-lr-t { fill:var(--amber); opacity:0.8; }

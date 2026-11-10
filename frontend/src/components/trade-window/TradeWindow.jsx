@@ -1005,7 +1005,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
               type="button"
               onMouseDown={e => e.stopPropagation()}
               onClick={e => { e.stopPropagation(); handleViewTrade() }}
-              style={{ fontSize: '0.8125rem', fontWeight: 700, padding: '2px 8px', borderRadius: '2px', cursor: 'pointer', fontFamily: "'IBM Plex Mono',var(--mono)", background: 'rgba(13,212,168,0.08)', border: '1px solid var(--accent)', color: 'var(--accent)' }}
+              style={{ fontSize: '0.8125rem', fontWeight: 700, padding: '2px 8px', borderRadius: '2px', cursor: 'pointer', fontFamily: "'IBM Plex Mono',var(--mono)", background: 'rgba(217,178,92,0.08)', border: '1px solid var(--accent)', color: 'var(--accent)' }}
             >VIEW IN BLOTTER</button>
             <button
               type="button"
