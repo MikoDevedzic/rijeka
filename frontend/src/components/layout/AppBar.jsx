@@ -6,6 +6,8 @@ import RoleSwitch from './RoleSwitch'
 import { useVisibleNav } from './useVisibleNav'
 import { openAppWindow } from '../../lib/windows'
 import './AppBar.css'
+import { Keycap } from '../common/Shortcuts'
+import { shortcutForPath } from '../../lib/shortcuts'
 
 export default function AppBar() {
   const navigate  = useNavigate()
@@ -46,7 +48,8 @@ export default function AppBar() {
           return (
           <span key={mod.path} className="ab-nav">
           <button onClick={e => (e.metaKey || e.ctrlKey || e.shiftKey) ? popOut() : navigate(mod.to)}
-                  title={mod.label + ' — ⌘/Ctrl-click to open in its own window'} style={{
+                  aria-keyshortcuts={shortcutForPath(mod.path)?.key}
+                  title={mod.label + (shortcutForPath(mod.path) ? ` (${shortcutForPath(mod.path).key})` : '') + ' — ⌘/Ctrl-click to open in its own window'} style={{
             background:'none', border:'none',
             borderBottom: isActive(mod)?'2px solid var(--accent)':'2px solid transparent',
             color: isActive(mod)?'var(--text-hi)':'var(--text-dim)',
@@ -54,7 +57,7 @@ export default function AppBar() {
             letterSpacing:'0.08em', padding:'0 0.85rem', cursor:'pointer',
             transition:'color 0.12s, border-color 0.12s', height:'100%',
             display:'flex', alignItems:'center',
-          }}>{mod.label}</button>
+          }}>{mod.label}{shortcutForPath(mod.path) && <Keycap id={shortcutForPath(mod.path).id} />}</button>
           <button className="ab-pop" onClick={popOut} title={'Open ' + mod.label + ' in its own window'}>⧉</button>
           </span>
         )})}

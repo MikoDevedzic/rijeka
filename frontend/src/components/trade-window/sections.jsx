@@ -14,9 +14,11 @@
 
 import React, { useState } from 'react'
 import { useModulesStore } from '../../store/useModulesStore'
+import { Keycap } from '../common/Shortcuts'
 
 const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CAPITAL','CURVE SCENARIO','◆ CONFIRM']
 const TAB_MODULE = { 'XVA': 'XVA', 'CAPITAL': 'CAPITAL', '◆ CONFIRM': 'CHAIN_CONFIRM' }
+const TAB_KEY = { 'XVA': 'xva', '◆ CONFIRM': 'confirm' }      // the function key that opens a tab (lib/shortcuts.js)
 
 // ── TabBar ─────────────────────────────────────────────────────────────────
 
@@ -29,8 +31,9 @@ export function TabBar({ active = 'TRADE', onTab = () => {} }) {
   return (
     <div className="tbw-tabbar">
       {tabs.map(t => (
-        <button key={t} className={`tbw-tab ${t === active ? 'is-active' : ''}`}
-                onClick={() => onTab(t)}>{t}</button>
+        <button key={t} data-tab={t} className={`tbw-tab ${t === active ? 'is-active' : ''}`}
+                aria-keyshortcuts={TAB_KEY[t] === 'xva' ? 'F5' : TAB_KEY[t] === 'confirm' ? 'F6' : undefined}
+                onClick={() => onTab(t)}>{t}{TAB_KEY[t] && <Keycap id={TAB_KEY[t]} />}</button>
       ))}
     </div>
   )
@@ -369,11 +372,13 @@ export function TradeFooter({
           STRUCTURE <span className="tbw-struct-value">{structLabel}</span>
         </div>
         <button className="tbw-btn tbw-btn-cancel" onClick={onCancel}>CANCEL</button>
-        <button className="tbw-btn tbw-btn-price" disabled={pricing} onClick={onPrice}>
-          {pricing ? '⏳ PRICING…' : '▶ PRICE'}
+        <button className="tbw-btn tbw-btn-price" data-action="price" aria-keyshortcuts="F4" disabled={pricing} onClick={onPrice}>
+          {pricing ? '⏳ PRICING…' : '▶ PRICE'}<Keycap id="price" />
         </button>
         <button
           className="tbw-btn tbw-btn-book"
+          data-action="book"
+          aria-keyshortcuts="Control+Enter Meta+Enter"
           disabled={pricing || booking || booked || !result || bookDisabled}
           title={!booked && bookDisabled ? bookTitle : undefined}
           onClick={onBook}
@@ -386,6 +391,7 @@ export function TradeFooter({
               : bookErr
                 ? "▶ RETRY BOOK"
                 : "▶ BOOK TRADE"}
+          {!booked && !booking && <Keycap id="book" />}
         </button>
       </div>
     </div>

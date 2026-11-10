@@ -36,6 +36,7 @@ Needs: PostgreSQL 16, PostgREST (`brew install postgrest`; CI downloads the stat
 | `pages.spec.js` | every page opens signed in with no uncaught error, no console error, no failed API call, no error boundary |
 | `ticket-rates.spec.js` | a new swap priced at once waits for the par rate (never a 0 % coupon); XVA under a bilateral CSA with the on-chain comparison, the saving on one row, one sign per figure, the results fully on a 1440×900 screen, the inputs column not overflowing; the margin in USDC shows a negative ColVA and the same CVA; CAPITAL has seven stock rows and no prices; BOOK; CONFIRM shows the attestation |
 | `launch.spec.js` | a launch workspace (the home, the narrow navigation, the simple XVA view); a demo user for whom capital is on request (the Modules page, no CAPITAL tab, no Risk → CAPITAL, KVA still on the XVA tab; the answer is given by the journey because the stack runs with provisioning off, and the API's own answer is `backend/tests/integration/test_modules.py`); an existing firm untouched |
+| `shortcuts.spec.js` | the function keys: each does what its button does (pages, a new ticket, price, XVA, simulate, the booking chord, confirm), each button shows its key, a key is not typed into a field, Enter alone books nothing |
 | `ticket-fx.spec.js` | a forward and an option, FX and digital asset: priced, XVA with the saving on chain in view, a stablecoin on both sides costs its carry |
 
 A journey fails on anything the browser reports while it runs (`fixtures.js` `problems`): an uncaught exception, a

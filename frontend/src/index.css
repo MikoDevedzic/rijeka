@@ -143,6 +143,15 @@ button, input, select, textarea { font-family: inherit; }
 }
 .mo { font-family: var(--mono); }
 
+/* A key printed on its button (common/Shortcuts.jsx Keycap; the keys are lib/shortcuts.js). It takes the colour
+   of the button's own text at half strength, so it reads on a quiet button and on the brass one alike. */
+.kc {
+  display: inline-block; margin-left: 0.55em; padding: 0 0.38em; min-width: 1.5em; text-align: center;
+  font-family: var(--mono); font-size: 0.82em; font-weight: 400; font-style: normal; letter-spacing: 0; line-height: 1.5;
+  color: inherit; opacity: 0.62; border: 1px solid currentColor; border-radius: 3px; vertical-align: baseline;
+  text-transform: none; pointer-events: none;
+}
+
 /* ══════════════════════════════════════════════════════════════
    APP SHELL — AppBar / CfgNav / MdNav
    ══════════════════════════════════════════════════════════════ */

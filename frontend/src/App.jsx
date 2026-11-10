@@ -17,6 +17,7 @@ import CfgNav           from './components/layout/CfgNav'
 import BlotterShell     from './components/blotter/BlotterShell'
 import TradeWindow        from './components/trade-window/TradeWindow'
 import useBookingStore    from './store/useBookingStore'
+import Shortcuts          from './components/common/Shortcuts'
 import Messenger, { MessengerPage } from './components/messenger/Messenger'
 
 // Everything a user does not meet on the first screen after sign-in is fetched when
@@ -220,6 +221,7 @@ export default function App() {
       </Suspense>
       </PageBoundary>
       <PersistentBookingWindow />
+      <Shortcuts />
       {/* One messenger for every tab: private Prometheus, support, and rooms. */}
       <ErrorBoundary scope="widget"><Messenger /></ErrorBoundary>
     </BrowserRouter>

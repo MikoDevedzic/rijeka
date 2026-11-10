@@ -1,3 +1,5 @@
+import { Keycap } from './common/Shortcuts'
+import { shortcutForPath } from '../lib/shortcuts'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import BookBrief from './home/BookBrief'
 import { productLabel } from '../lib/labels'
@@ -36,9 +38,10 @@ export default function CommandCenter() {
             <button
               key={n.path}
               className={`cc-nav-btn${location.pathname === n.path ? ' active' : ''}`}
+              aria-keyshortcuts={shortcutForPath(n.path)?.key}
               onClick={() => navigate(n.to)}
             >
-              {n.label}
+              {n.label}{shortcutForPath(n.path) && <Keycap id={shortcutForPath(n.path).id} />}
             </button>
           ))}
         </nav>

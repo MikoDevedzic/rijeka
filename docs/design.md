@@ -55,6 +55,13 @@ bilateral.
 EE in limestone, ENE in blue, PFE 95 % in amber, the simulated paths as hairs of limestone or blue by where they
 end (`trade-window/exposure-chart.js`). Three hues that cannot be mistaken for one another.
 
+## Keys
+
+The function keys are one table (`frontend/src/lib/shortcuts.js`) read by the listener and by every button that
+prints its key (`Keycap`, the `.kc` class): F1 Home, F2 Blotter, F3 New trade, F4 Price, F5 XVA and then
+SIMULATE, F6 Confirm, F8 Methodology, Ctrl/⌘+Enter to book. A keycap is hidden from a button's accessible name;
+the button carries `aria-keyshortcuts`. A ticket key presses the ticket's own button.
+
 ## What is not done yet
 
 Colours and sizes written as literals in components, and a lint rule against new ones; brass where it still

@@ -10,6 +10,7 @@
 // too: the toggle, the counterparty line and the line on what a run assumes.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar } from './xva-shared'
+import { Keycap } from '../common/Shortcuts'
 
 const noop = () => {}
 
@@ -97,9 +98,9 @@ export function ModelBadge({ kind = 'ok', tipKey, tip = noop, untip = noop, chil
 export function SimulateButtons({ simulating, hasResult, disabled = false, label = '▶ SIMULATE', onSimulate, onReroll }) {
   return (
     <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
-      <button onClick={onSimulate} disabled={simulating || disabled}
+      <button onClick={onSimulate} disabled={simulating || disabled} data-action="simulate" aria-keyshortcuts="F5"
         style={{flex:2,padding:'8px',fontSize:'0.8125rem',fontWeight:600,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'var(--r-2)',fontFamily:'var(--sans)',border:'1px solid var(--accent-dim)',background:'rgb(var(--accent-rgb) / 0.08)',color:'var(--accent-hi)',opacity:simulating?0.5:1}}>
-        {simulating?'SIMULATING...':label}
+        {simulating?'SIMULATING...':label}{!simulating && <Keycap id="xva" />}
       </button>
       <button onClick={onReroll} disabled={simulating || disabled || !hasResult}
         title="The same model with fresh random numbers: the numbers move within the Monte Carlo error and settle as you raise PATHS"
