@@ -4,9 +4,10 @@ modules.py — which modules the firm runs.
 GET /api/modules       the firm's switches as this user has them, the catalogue, the presets, the last changes (any signed-in user)
 PUT /api/modules       {preset} or {modules: {key: bool}}, optional note (the admin role, or the owner of a sandbox firm of one: modules.may_edit); 409 before the migration
 
-On a hosted demo a module held for the admin role (modules.ON_REQUEST: capital) is off for everyone else in the
-answer, listed under `on_request` with `contact`, left out of a preset that includes it, and refused with 403 when
-asked for by name.
+Where sign-ins get a sandbox (RIJEKA_DEMO_PROVISION on) a module held for the admin role (modules.ON_REQUEST:
+capital) is off for everyone else in the answer and in the presets offered, and listed under `on_request` with
+`contact`. A write by someone it is held from leaves the row's value for it as it was, whatever the preset or the
+map says. The answer for a user is composed here, in `_view`, and only here.
 """
 from __future__ import annotations
 
@@ -29,19 +30,20 @@ class ModulesBody(BaseModel):
     note: Optional[str] = Field(None, max_length=500)
 
 
-def _view(db: Session, uid: str, user: Optional[dict] = None) -> dict:
+def _view(db: Session, user: dict) -> dict:
+    uid = user["sub"]
     firm_id = M.firm_of_user(db, uid)
     cur = M.for_firm(db, firm_id)
-    locked = M.locked(db, user) if user else ()
+    locked = M.locked(db, user)
     return {**cur, "modules": M.without(cur["modules"], locked), "firm_id": str(firm_id) if firm_id else None, "writable": M.columns_present(db),
-            "can_edit": bool(user and firm_id and M.may_edit(db, user)), "view": M.view_for_firm(db, firm_id), **M.catalogue(locked),
+            "can_edit": bool(firm_id and M.may_edit(db, user)), "view": M.view_for_firm(db, firm_id), **M.catalogue(locked),
             "on_request": list(locked), "contact": M.CONTACT,
             "events": M.events(db, firm_id), "planned": list(M.PLANNED)}
 
 
 @router.get("")
 def get_modules(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
-    return _view(db, user["sub"], user)
+    return _view(db, user)
 
 
 @router.put("")
@@ -65,10 +67,6 @@ def put_modules(body: ModulesBody, db: Session = Depends(get_db), user: dict = D
         bad = [k for k in body.modules if k not in M.KEYS]
         if bad:
             raise HTTPException(status_code=422, detail=f"unknown module {', '.join(bad)}")
-    locked = M.locked(db, user)
-    asked = [m["label"] for m in M.MODULES if m["key"] in locked and (body.modules or {}).get(m["key"])]
-    if asked and not body.preset:
-        raise HTTPException(status_code=403, detail=f"{', '.join(asked)} is available on request in the hosted demo: write to {M.CONTACT}.")
-    M.set_for_firm(db, firm_id, uid, body.modules, body.preset, body.note, locked=locked)
+    M.set_for_firm(db, firm_id, uid, body.modules, body.preset, body.note, locked=M.locked(db, user))
     db.commit()
-    return _view(db, uid, user)
+    return _view(db, user)

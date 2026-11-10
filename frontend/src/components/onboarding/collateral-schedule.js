@@ -73,3 +73,14 @@ export function summary(s) {
   const comp = Object.entries(s.posted || {}).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${k} ${Math.round(w * 100)}`).join(' · ')
   return `${comp || '—'}${s.rail === 'on_chain' ? ' → on chain' : ''}`
 }
+
+// The note under a counterparty's terms: what they feed, naming only the pages this user has (`modules` is the
+// store's key → bool map; a module is on unless it is false). Empty when none of those pages is on.
+export function termsFeed(modules = {}) {
+  const on = k => modules[k] !== false
+  const parts = [on('COUNTERPARTY_CREDIT') && 'the credit report', on('XVA') && "the ticket's XVA tab",
+    on('CAPITAL') && "the ticket's CAPITAL tab", on('CAPITAL') && 'Risk → CAPITAL'].filter(Boolean)
+  if (!parts.length) return ''
+  const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
+  return `the CSA terms and the collateral schedule feed ${list}`
+}

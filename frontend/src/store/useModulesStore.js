@@ -1,11 +1,14 @@
-// store/useModulesStore.js — which modules the firm runs (GET /api/modules). Every module is on until the
-// answer arrives and whenever the firm has not chosen, so a deploy ahead of the migration changes nothing.
+// store/useModulesStore.js — which modules this user has (GET /api/modules: the firm's switches, less what the
+// instance holds for the admin role). Every module is on until the answer arrives and whenever the read fails, so
+// a deploy ahead of the migration changes nothing; a read the API could not answer is asked again (RETRY_MS).
 import { create } from 'zustand'
 import { getSessionMaybe } from '../lib/session'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 export const MODULE_KEYS = ['CHAIN_CONFIRM', 'PNL', 'XVA', 'MARKET_RISK', 'COUNTERPARTY_CREDIT', 'CAPITAL', 'PROMETHEUS', 'NEWS', 'COLLATERAL', 'XVA_RESERVES', 'IPV']
 const ALL_ON = Object.fromEntries(MODULE_KEYS.map(k => [k, true]))
+const RETRY_MS = [3000, 10000, 30000]      // after a 5xx or no answer at all: a restart, not a refusal
+let failures = 0
 
 export const useModulesStore = create((set, get) => ({
   modules: ALL_ON,
@@ -22,11 +25,17 @@ export const useModulesStore = create((set, get) => ({
       const s = await getSessionMaybe()
       if (!s?.access_token) return
       const r = await fetch(`${API}/api/modules`, { headers: { Authorization: `Bearer ${s.access_token}` } })
-      if (!r.ok) { set({ loaded: true }); return }       // answered, with nothing chosen: every module stays on, and nobody waits on `loaded` for good
+      if (!r.ok) {                                       // every module stays on, and nobody waits on `loaded` for good
+        set({ loaded: true })
+        if (r.status >= 500) get().again()
+        return
+      }
+      failures = 0
       const j = await r.json()
       set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true })
-    } catch { set({ loaded: true }) /* every module stays on */ }
+    } catch { set({ loaded: true }); get().again() /* every module stays on until the API answers */ }
   },
+  again: () => { if (failures < RETRY_MS.length) setTimeout(() => get().load(), RETRY_MS[failures++]) },
   apply: (j) => set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true }),
 }))
 

@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useChatStore } from '../../store/useChatStore'
 import { useModulesStore } from '../../store/useModulesStore'
 import { getSessionMaybe } from '../../lib/session'
-import { bodyFromForm, defaultForm, formFromSchedule, problems, rowFor, summary, total, EMPTY_SCHEDULE } from './collateral-schedule'
+import { bodyFromForm, defaultForm, formFromSchedule, problems, rowFor, summary, termsFeed, total, EMPTY_SCHEDULE } from './collateral-schedule'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -110,7 +110,7 @@ const COLS = '1fr 130px 80px 48px 110px 1fr 200px'
 const SCHED_COLS = '9rem 10rem 6rem 5rem 2.2rem 2.2rem 6rem 6rem 6.5rem 1.5rem'
 
 export default function Counterparties() {
-  const capitalOn = useModulesStore(s => s.modules.CAPITAL !== false)
+  const feed = termsFeed(useModulesStore(s => s.modules))
   const [chatErr,      setChatErr]      = useState(null)
   const [cps,          setCps]          = useState([])
   const [les,          setLes]          = useState([])
@@ -558,9 +558,8 @@ export default function Counterparties() {
             <Btn size='lg' onClick={editCp ? saveEdit : save} disabled={saving || (hasCSA && sched.rows.length > 0 && problems(sched).length > 0)}>
               {saving ? 'SAVING...' : editCp ? 'SAVE TERMS' : 'SAVE COUNTERPARTY'}
             </Btn>
-            {editCp && <span style={{ marginLeft:'12px', fontSize:'11px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
-              {capitalOn ? "the CSA terms and the collateral schedule feed the credit report, the ticket's XVA and CAPITAL tabs and Risk → CAPITAL"
-                         : "the CSA terms and the collateral schedule feed the credit report and the ticket's XVA tab"}
+            {editCp && feed && <span data-testid="cp-terms-feed" style={{ marginLeft:'12px', fontSize:'11px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+              {feed}
             </span>}
           </div>
         </div>

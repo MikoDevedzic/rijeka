@@ -243,16 +243,31 @@ nightly batches skip the firm's accounts (`pnl.eod_tick`, `risk.daily_tick`, `cc
 entitlement: the module's API routes stay callable, and its Configurations pages are hidden from the navigation
 but still open by URL. Nothing is deleted, and switching back on resumes; what a batch did not compute while the
 module was off is not backfilled, so a module's history starts when it is first on. Null, or the columns missing,
-means every module on, which is what every firm created before 9 November 2026 has.
+means every module on in the firm's row, which is what every firm created before 9 November 2026 has; what a user
+is answered is that, less what a demo holds for the admin role (next paragraph).
 
-**Held for the admin role on a hosted demo.** `modules.ON_REQUEST` (capital) is not part of the hosted demo. Where
-`RIJEKA_DEMO_PROVISION` is on, `modules.locked` answers those modules for every user without the admin role
-(`profiles.role`), and three things follow from that one list: `GET /api/modules` (and `modules.for_user`) answer
-with them off whatever `firms.modules` holds, mark them `on_request` and give `contact`; the presets offered have
-them off; `PUT /api/modules` stores them off when a preset includes one and refuses one asked for by name (403).
+**Held for the admin role on a demo.** `modules.ON_REQUEST` (capital) is not part of the hosted demo. Where
+`RIJEKA_DEMO_PROVISION` is on (the default when the variable is unset), `modules.locked` names those modules for
+every user without the admin role (`profiles.role`, read on the request, `viewer` when the read fails). One list
+and one function decide, and four things follow:
+- `GET /api/modules` answers with them off whatever `firms.modules` holds, lists them under `on_request` and gives
+  `contact`; the presets it offers have them off and say so in their description. `routes/modules._view` is the
+  only place the answer for a user is composed.
+- `PUT /api/modules` by someone they are held from leaves the row's value for them as it was, for a preset and
+  for a map alike, so the audit row never shows a held module changed by someone who cannot see it. Nothing is
+  refused: a page opened before a deploy still saves its other switches.
+- `modules.is_on(uid, key)` is false for a held module (no batch asks about capital today; the role is read only
+  for a held module, so the nightly ticks cost what they did).
+- Provisioning writes a new firm's row as the signup preset has it (there is nothing before it to keep).
+
 The frontend has no rule of its own: the tab, the Risk section and the route follow the answer as for any switch,
-and the MODULES page shows the row as on request. With `RIJEKA_DEMO_PROVISION=0` nothing is held back. It is the
-same kind of thing as a switch, not an entitlement: `/api/capital` stays callable (Risk → Collateral reads it).
+and the MODULES page shows the row as on request. It treats every module as on until `GET /api/modules` answers
+and whenever the read fails (it asks again after a 5xx or no answer), so a held module is visible for that long;
+a routed page waits for the answer before it draws, the ticket's tab bar does not. The hold is a presentation
+rule, like the switch, not an entitlement: `/api/capital` stays callable, and Risk → Collateral reads it. With
+`RIJEKA_DEMO_PROVISION=0` nothing is held back. A request to see a held module is met on a self-hosted desk; a
+grant per firm does not exist yet, and the admin role is not one (it also opens the Users page, platform usage
+and the ops detail).
 
 Presets: LAUNCH (book, value, the XVA charge and its saving on chain, confirm; P&L, the risk pages, capital,
 collateral, reserves and IPV off), DEALER (everything), CORPORATE (book, confirm, P&L, the ticket's XVA), FUND

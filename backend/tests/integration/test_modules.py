@@ -83,6 +83,9 @@ def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(clien
     j = client.get("/api/modules", headers=new).json()
     assert j["firm_id"] is None and all(j["modules"].values()) and j["can_edit"] is False
     monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "1")
+    # where sign-ins get a sandbox, capital is held back from the first answer, before there is a firm
+    j = client.get("/api/modules", headers=new).json()
+    assert j["firm_id"] is None and {k for k, v in j["modules"].items() if not v} == {"CAPITAL"} and j["on_request"] == ["CAPITAL"] and j["can_edit"] is False
     r = client.post("/api/demo/provision", headers=new)
     assert r.status_code == 200, r.text[:400]
     j = client.get("/api/modules", headers=new).json()
@@ -97,15 +100,17 @@ def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(clien
     assert client.get("/api/modules", headers=new).json()["modules"]["PNL"] is True
     r = client.put("/api/modules", json={"preset": "DEALER"}, headers=new)
     assert r.status_code == 200 and r.json()["view"] == "full"                                             # a full preset: the full app
-    # ... less capital, which the hosted demo holds for the admin role (9 November 2026): off in the answer, in the
-    # presets offered and in the row, marked on request with the address to write to, refused by name
+    # ... less capital, which a demo holds for the admin role (9 November 2026): off in the answer and in the presets
+    # offered, marked on request with the address to write to; the row keeps what it said (LAUNCH: off), and asking
+    # for it by name changes neither the row nor the answer
     j = r.json()
     assert {k for k, v in j["modules"].items() if not v} == {"CAPITAL"} and j["on_request"] == ["CAPITAL"] and "@" in j["contact"]
     assert j["presets"]["DEALER"]["modules"] == j["modules"] and [d["key"] for d in j["definitions"] if d.get("on_request")] == ["CAPITAL"]
+    assert j["presets"]["DEALER"]["desc"].endswith("(capital on request)") and "CAPITAL" not in j["events"][0]["changed"]
     assert _stored(j["firm_id"])["CAPITAL"] is False
     r = client.put("/api/modules", json={"modules": {**j["modules"], "CAPITAL": True}}, headers=new)
-    assert r.status_code == 403 and "available on request" in r.json()["detail"] and _stored(j["firm_id"])["CAPITAL"] is False
-    assert client.put("/api/modules", json={"modules": j["modules"]}, headers=new).status_code == 200      # the page's own save, capital left off
+    assert r.status_code == 200 and r.json()["modules"]["CAPITAL"] is False and _stored(j["firm_id"])["CAPITAL"] is False
+    assert r.json()["events"][0]["changed"] == []
     # the admin role has it, and may switch it; the row then says on, and a trader in that firm still has it off
     set_role(NEW_USER, "admin")
     try:
@@ -118,6 +123,11 @@ def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(clien
     j = client.get("/api/modules", headers=new).json()
     assert j["modules"]["CAPITAL"] is False and j["on_request"] == ["CAPITAL"] and _stored(j["firm_id"])["CAPITAL"] is True
     assert sum(j["modules"].values()) == len(j["modules"]) - 1
+    # the page's own save of another switch (it sends capital off, as it was answered) leaves the row's capital on,
+    # and the audit row says only what its author changed
+    r = client.put("/api/modules", json={"modules": {**j["modules"], "NEWS": False}}, headers=new)
+    assert r.status_code == 200 and r.json()["events"][0]["changed"] == ["NEWS"] and _stored(j["firm_id"])["CAPITAL"] is True
+    assert r.json()["modules"]["CAPITAL"] is False and r.json()["modules"]["NEWS"] is False
     r = client.put("/api/modules", json={"preset": "LAUNCH"}, headers=new)
     assert r.status_code == 200 and not r.json()["modules"]["MARKET_RISK"] and r.json()["view"] == "launch"
     assert client.put("/api/modules", json={"preset": "DEALER", "note": "x" * 501}, headers=new).status_code == 422

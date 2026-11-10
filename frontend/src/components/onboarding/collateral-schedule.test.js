@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { bodyFromForm, defaultForm, formFromSchedule, problems, rowFor, summary, total } from './collateral-schedule'
+import { bodyFromForm, defaultForm, formFromSchedule, problems, rowFor, summary, termsFeed, total } from './collateral-schedule'
 
 const SEED = [{ code: 'USD_CASH' }, { code: 'UST_BILL' }, { code: 'USDC' }, { code: 'EUR_CASH' }, { code: 'BUND' }]
 
@@ -39,5 +39,16 @@ describe('collateral schedule helpers', () => {
     expect(total(f, 'received')).toBe(0)
     expect(summary({ posted: { USDC: 0.4, UST_BILL: 0.6 }, rail: 'on_chain' })).toBe('UST_BILL 60 · USDC 40 → on chain')
     expect(summary(null)).toBeNull()
+  })
+})
+
+describe('what a counterparty\'s terms feed', () => {
+  it('names only the pages the reader has', () => {
+    expect(termsFeed({})).toBe("the CSA terms and the collateral schedule feed the credit report, the ticket's XVA tab, the ticket's CAPITAL tab and Risk → CAPITAL")
+    // a demo user: capital held back
+    expect(termsFeed({ CAPITAL: false })).toBe("the CSA terms and the collateral schedule feed the credit report and the ticket's XVA tab")
+    // a launch workspace: no credit report either
+    expect(termsFeed({ CAPITAL: false, COUNTERPARTY_CREDIT: false })).toBe("the CSA terms and the collateral schedule feed the ticket's XVA tab")
+    expect(termsFeed({ CAPITAL: false, COUNTERPARTY_CREDIT: false, XVA: false })).toBe('')
   })
 })

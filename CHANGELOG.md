@@ -7,20 +7,31 @@ methodology document carries its own version (v1.9). Commits on `main` are the d
 
 Capital is not part of the hosted demo.
 
-- **No CAPITAL tab beside XVA, no Risk → CAPITAL, for anyone but the admin role.** Where every sign-in gets its own
-  sandbox workspace (`RIJEKA_DEMO_PROVISION` on), `GET /api/modules` answers with capital off for every user without
-  the admin role, whatever the firm's row says: a workspace made before the launch preset, a preset that includes
-  capital (Dealer, Classroom) and a firm whose admin switched it on are all answered the same way. A preset applies
-  without it; asking for it by name is refused with 403 and the address to write to. The admin role keeps every
-  module and every switch. A self-hosted desk (`RIJEKA_DEMO_PROVISION=0`) holds nothing back.
+- **No CAPITAL tab beside XVA and no Risk → CAPITAL, for anyone but the admin role.** Where every sign-in gets its
+  own sandbox workspace (`RIJEKA_DEMO_PROVISION` on, which is also what an unset variable means),
+  `GET /api/modules` answers every user without the admin role with capital off, whatever the firm's row says: a
+  workspace made before the launch preset, a preset that includes capital (Dealer, Classroom) and a firm whose
+  admin switched it on are all answered the same way. The admin role keeps every module and every switch. An
+  instance with `RIJEKA_DEMO_PROVISION=0` holds nothing back.
+- **A save by someone it is held from leaves the row alone.** A preset or a map sent by such a user stores
+  everything else and keeps what the row said about capital, in either direction, so the audit trail never shows a
+  capital change by someone who cannot see it, and nothing is refused (a page opened before the deploy still saves).
 - **Configurations → Modules says how to see it.** Capital is listed as off and on request, with the address to
-  write to, and has no switch. The launch home's link reads "Switch on P&L, risk and more"; the two roadmap lines
-  that describe the CAPITAL tab and Risk → CAPITAL say they are available on request; the counterparty form's note
-  names only what the reader has.
+  write to, and has no switch. A workspace that has chosen nothing reads DEFAULT · NOTHING CHOSEN instead of
+  EVERYTHING ON; Dealer and Classroom say "(capital on request)"; and since Dealer, Fund and Classroom are then
+  the same switches, the preset the firm chose is the one lit. The launch home's link reads "Switch on P&L, risk
+  and more"; the two roadmap lines that describe the CAPITAL tab and Risk → CAPITAL say they are available on
+  request; the note under a counterparty's terms names only the pages the reader has (it named the credit report
+  and the CAPITAL tab to a launch workspace that has neither).
 - **KVA stays.** It is an XVA charge: the XVA tab, its capital-model input and the saving on chain are unchanged.
+- **A page whose module is off no longer starts to load.** A reload on such a page waited for nothing and asked the
+  API before going home; a routed page now waits for the switches first. The switches are asked for again after a
+  5xx or no answer (3, 10 and 30 seconds later).
 - **What it is not.** Like every module switch it hides pages and tabs and is not an entitlement: `/api/capital`
-  stays callable, and Risk → Collateral, when a demo user switches it on, still shows the book under collateral
-  regimes with its RWA and capital lines.
+  stays callable; Risk → Collateral, when a demo user switches it on, still shows the book under collateral
+  regimes with its RWA and capital lines; and until `GET /api/modules` answers, or while it fails, the app treats
+  every module as on, so a ticket opened in that moment has the tab. There is no way yet to show capital to one
+  firm on the hosted demo: the admin role is not that (it opens the Users page and platform usage too).
 
 ## 0.16.1 · 9 November 2026
 

@@ -116,31 +116,48 @@ test('launch workspace: the ticket has no CAPITAL tab and XVA opens simple, with
   expectClean(problems)
 })
 
-// Capital is not part of the hosted demo (9 November 2026): for everyone but the admin role the API answers with
-// it off, marked on request, and off in every preset (backend: tests/integration/test_modules.py). The stack is a
-// self-hosted desk, where nothing is held back, so that answer is given here the way onLaunch gives LAUNCH.
-test('hosted demo: capital is on request; no CAPITAL tab, no Risk → CAPITAL, and KVA stays on the XVA tab', async ({ app, problems }) => {
+// Capital is not part of the demo (9 November 2026): where sign-ins get a sandbox, the API answers everyone but
+// the admin role with it off, marked on request, and off in every preset (backend: tests/integration/test_modules.py).
+// The stack runs with provisioning off, where nothing is held back, so that answer is given here the way onLaunch
+// gives LAUNCH. `shape` is the rest of the firm's state: the preset it chose, or nothing chosen at all.
+test('demo: capital is on request; no CAPITAL tab, no Risk → CAPITAL, and KVA stays on the XVA tab', async ({ app, problems }) => {
+  let shape = { source: 'firm', preset: 'FUND' }
   await app.route(/\/api\/modules$/, async route => {
     if (route.request().method() !== 'GET') return route.fallback()
     const res = await route.fetch()
     const body = await res.json()
-    body.modules.CAPITAL = false
+    for (const k of Object.keys(body.modules)) body.modules[k] = k !== 'CAPITAL'
     for (const p of Object.values(body.presets)) p.modules.CAPITAL = false
+    body.presets.DEALER.desc = 'everything on (capital on request)'
     body.definitions = body.definitions.map(d => d.key === 'CAPITAL' ? { ...d, on_request: true } : d)
-    Object.assign(body, { on_request: ['CAPITAL'], contact: 'miko@rijeka.app', can_edit: true, source: 'firm', preset: 'DEALER' })
+    Object.assign(body, { on_request: ['CAPITAL'], contact: 'miko@rijeka.app', can_edit: true, view: 'full', ...shape })
     await route.fulfill({ response: res, json: body })
   })
   // Configurations → Modules: shown, not switchable, with the address to write to; every other module still switches
   await app.goto('/configurations/modules')
   const row = app.getByTestId('module-on-request-CAPITAL')
   await expect(row).toContainText('CAPITAL · on request')
-  await expect(row).toContainText('Not part of the hosted demo. To see it, write to miko@rijeka.app.')
+  await expect(row).toContainText('Not part of this demo. To see it, write to miko@rijeka.app.')
+  // without capital Dealer, Fund and Classroom are the same switches: the one the firm chose is the one lit
+  const preset = name => app.getByRole('button', { name, exact: true })
+  const colour = name => preset(name).evaluate(el => getComputedStyle(el).color)
+  await expect(app.getByText('PRESET FUND', { exact: true })).toBeVisible()
+  expect(await colour('FUND'), 'the chosen preset is lit').not.toBe(await colour('LAUNCH'))
+  expect(await colour('DEALER'), 'a preset that merely has the same switches is not').toBe(await colour('LAUNCH'))
+  await expect(preset('DEALER')).toHaveAttribute('title', 'everything on (capital on request)')
   await expect(row.getByRole('link', { name: 'miko@rijeka.app' })).toHaveAttribute('href', 'mailto:miko@rijeka.app')
   await expect(row.getByRole('checkbox')).toHaveCount(0)
   await expect(app.getByRole('checkbox', { name: 'Capital on' })).toHaveCount(0)
   await expect(app.getByRole('checkbox', { name: 'Collateral on' })).toBeEnabled()
   await expectNoHorizontalOverflow(row, 'the on-request row')
   await app.screenshot({ path: 'e2e/.out/shots/modules-capital-on-request.png' })
+  // a workspace that has chosen nothing (made before the launch preset): the page does not say "everything on"
+  shape = { source: 'default', preset: null, events: [] }
+  await app.reload()
+  await expect(app.getByText('DEFAULT · NOTHING CHOSEN', { exact: true })).toBeVisible()
+  await expect(app.getByText('No changes yet.', { exact: true })).toBeVisible()
+  await expect(app.getByText(/EVERYTHING ON|every module is on/)).toHaveCount(0)
+  await expect(app.getByTestId('module-on-request-CAPITAL')).toBeVisible()
   // Risk: the other sections are there, CAPITAL is not, and its address goes home
   await app.goto('/risk')
   const sections = app.getByRole('navigation', { name: 'Risk sections' })

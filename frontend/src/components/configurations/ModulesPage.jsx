@@ -42,7 +42,12 @@ export default function ModulesPage() {
     catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
   const dirty = !!(view && draft && Object.keys(draft).some(k => draft[k] !== view.modules[k]))
-  const presetOf = (mods) => Object.entries(view?.presets || {}).find(([, p]) => Object.keys(p.modules).every(k => p.modules[k] === mods[k]))?.[0] || 'CUSTOM'
+  // The preset whose switches these are. Where a module is held back several presets are the same map (Dealer,
+  // Fund and Classroom without capital), so the one the firm chose wins over the first that matches.
+  const presetOf = (mods) => {
+    const same = Object.entries(view?.presets || {}).filter(([, p]) => Object.keys(p.modules).every(k => p.modules[k] === mods[k])).map(([k]) => k)
+    return same.includes(view?.preset) ? view.preset : same[0] || 'CUSTOM'
+  }
   const defs = view?.definitions || []
   const held = view?.on_request || []
 
@@ -51,7 +56,7 @@ export default function ModulesPage() {
       <div className="pnl-bar">
         <div className="pnl-title">MODULES <span className="pnl-sub">which parts of the desk this firm runs · a switch hides and un-gates, never deletes</span></div>
         <div className="pnl-ctl">
-          {view && <span className={`pnl-chip ${view.writable ? 'ok' : 'red'}`}>{view.writable ? (view.source === 'firm' ? `PRESET ${view.preset || 'CUSTOM'}` : 'DEFAULT · EVERYTHING ON') : 'MIGRATION PENDING'}</span>}
+          {view && <span className={`pnl-chip ${view.writable ? 'ok' : 'red'}`}>{view.writable ? (view.source === 'firm' ? `PRESET ${view.preset || 'CUSTOM'}` : held.length ? 'DEFAULT · NOTHING CHOSEN' : 'DEFAULT · EVERYTHING ON') : 'MIGRATION PENDING'}</span>}
         </div>
       </div>
       {launch && <div className="pnl-empty" style={{ padding: 0, maxWidth: 980 }}>This workspace is on the launch view. Switch a module on below and its pages appear; nothing is deleted when you switch one off. Choosing a full preset such as Dealer also brings back the full home page and the model inputs on the XVA tab.</div>}
@@ -79,7 +84,7 @@ export default function ModulesPage() {
                 <div key={d.key} className="rk-row" data-testid={`module-on-request-${d.key}`} style={{ gridTemplateColumns: '5rem 14rem 1fr' }}>
                   <span><span className="pnl-chip">OFF</span></span>
                   <span className="rk-ref">{d.label.toUpperCase()}<small className="pnl-note" style={{ display: 'inline' }}> · on request</small></span>
-                  <span className="pnl-tv dim" style={{ textAlign: 'left', whiteSpace: 'normal' }}>{d.effects}. Not part of the hosted demo. To see it, write to <a href={`mailto:${view.contact}`} style={{ color: 'var(--accent)' }}>{view.contact}</a>.</span>
+                  <span className="pnl-tv dim" style={{ textAlign: 'left', whiteSpace: 'normal' }}>{d.effects}. Not part of this demo. To see it, write to <a href={`mailto:${view.contact}`} style={{ color: 'var(--accent)' }}>{view.contact}</a>.</span>
                 </div>
               )
               return (
@@ -113,7 +118,7 @@ export default function ModulesPage() {
                 <span className="pnl-tv dim" style={{ textAlign: 'left', whiteSpace: 'normal' }}>{e.preset}{e.changed?.length ? ` · ${e.changed.map(k => `${k} ${e.after[k] ? 'on' : 'off'}`).join(', ')}` : ' · no change'}{e.note ? ` · ${e.note}` : ''}</span>
               </div>
             ))}
-            {!(view.events || []).length && <div className="pnl-empty">No changes yet: every module is on.</div>}
+            {!(view.events || []).length && <div className="pnl-empty">{held.length ? 'No changes yet.' : 'No changes yet: every module is on.'}</div>}
           </div>
         </section>
       </>)}
