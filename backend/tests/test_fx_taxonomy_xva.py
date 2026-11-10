@@ -49,19 +49,24 @@ def test_forward_xva_profiles_and_signs():
     inp = fx_xva.ForwardXvaInput(pair="EURUSD", base_notional=10_000_000, forward=1.12, strike=1.12, t_years=1.0,
                                  df_quote_t=0.96, quote_zero=0.04, direction="BUY", vol_pct=8.0, spot01=107_000)
     wf, meta = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=3000)
-    assert len(wf.ee) == 12 and meta["steps"] == 12 and meta["im_rw_per_pct"] == fx_xva.SIMM_FX_RW_G10
+    assert len(wf.ee) == 12 and meta["steps"] == 12 and meta["im_basis"] == "none"
+    assert "foreign exchange class" in meta["capital_basis"] and "4 %" in meta["capital_basis"] and meta["crypto_group"] is None
     assert all(e >= 0 for e in wf.ee) and all(n <= 0 for n in wf.ene) and wf.pfe[-1] > wf.ee[-1]
     assert wf.ee[-1] > wf.ee[0]                                        # exposure grows with the vol horizon
     assert wf.cva < 0 < wf.dva and wf.fva <= 0 and wf.kva <= 0 and wf.mva == 0   # no IM without a CSA
     assert abs(wf.ee[-1]) < 10_000_000 * 1.12 * 0.25                   # sane for 8 % vol over a year
 
 
-def test_crypto_uses_the_assumed_im_weight_and_collateral_reduces_cva():
+def test_crypto_margin_is_the_engines_estimate_and_collateral_reduces_cva():
     inp = fx_xva.ForwardXvaInput(pair="BTCUSD", base_notional=10, forward=82_000, strike=82_000, t_years=0.25,
                                  df_quote_t=0.99, quote_zero=0.04, direction="SELL", vol_pct=55.0, spot01=-8_100)
     open_, _ = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=2000)
     coll, meta = fx_xva.forward_xva(inp, CSA.on_chain(im_exchanged=True), n_paths=2000)
-    assert meta["im_rw_per_pct"] == fx_xva.CRYPTO_RW_ASSUMPTION and "outside SIMM" in meta["im_basis"]
+    assert "engine's estimate" in meta["im_basis"] and "not ISDA SIMM" in meta["im_basis"]
+    assert meta["crypto_group"] == "2a" and "SCO60.98" in meta["capital_basis"]
+    # the estimate is of the order of a 99 % move of 10 BTC over five business days at a vol of 55 %
+    rough = 10 * 82_000 * 0.55 * (5 / 250) ** 0.5 * 2.326
+    assert 0.4 * rough < coll.im_0 < 1.6 * rough
     assert abs(coll.cva) < abs(open_.cva) and coll.mva < 0
 
 

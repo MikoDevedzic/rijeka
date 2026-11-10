@@ -297,7 +297,9 @@ def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
         got = {es.cell(row=r, column=1).value: es.cell(row=r, column=3).value for r in range(5, 17)}
         for label, attr in (("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("XVA total", "xva_total"), ("IM₀", "im_0"), ("EAD at t = 0", "ead_0")):
             assert got[label] == pytest.approx(getattr(wf, attr))
-        assert total == pytest.approx(wf.xva_total) and wf.im_0 == pytest.approx(abs(fi["fwd"].spot01) * eng["rw"])
+        # the margin is the engine's estimate (the first date's 99th percentile fall), and the workbook rebuilds it in cells
+        assert total == pytest.approx(wf.xva_total) and wf.im_0 == wf.im_profile[0] > 0 and "not ISDA SIMM" in wf.im_basis
+        assert "PERCENTILE(" in wb["Exposure"]["K24"].value and "IMq" in wb["Exposure"]["N24"].value and wb["Exposure"]["B16"].value == 0.99
         formulas = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")]
         assert any("NORMSDIST(" in f or "NORMSINV(" in f for f in formulas) and not any("NORM.S.DIST" in f or "_xlfn" in f for f in formulas)
         assert any("LIVE" in str(c.value) for row in wb["Checks"].iter_rows(min_row=5, min_col=8, max_col=8) for c in row)

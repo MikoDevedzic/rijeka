@@ -13,7 +13,7 @@ from typing import Any, Optional
 import numpy as np
 
 from pricing.csa import CSA
-from pricing.xva_engine import WaterfallParams, collateral_held, lagged_values, run_waterfall
+from pricing.xva_engine import WaterfallParams, collateral_held, lagged_values, run_waterfall, model_im
 
 QUANTILES = (95.0, 97.5, 99.0)
 BUCKETS = (("0-1Y", 0.0, 1.0001), ("1-5Y", 1.0001, 5.0001), ("5-10Y", 5.0001, 10.0001), ("10Y+", 10.0001, 1e9))
@@ -41,7 +41,7 @@ def csa_from_counterparty(cp) -> CSA:
     return CSA(preset=kind, collateralised=True, threshold_cp=thr, threshold_own=thr, mta=mta, mpor_days=mpor, im_exchanged=im)
 
 
-def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, im0_usd: float = 0.0, seed: int = 11, flows: Optional[np.ndarray] = None) -> dict[str, Any]:
+def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, seed: int = 11, flows: Optional[np.ndarray] = None) -> dict[str, Any]:
     """flows[i]: net trade flow paid in (t_{i−1}, t_i], as the jump it makes in V. The lagged value
     is the bridge between grid points, which smears that jump; the margin call either saw the
     payment (before the window) or settles with it (inside the window), so the lagged value is
@@ -52,8 +52,7 @@ def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, im0_usd: float = 0.0, seed
     rng = np.random.default_rng(seed)
     v0 = float(V[:, 0].mean())
     future = V[:, 1:]
-    M0 = float(t[-1]) if T1 > 1 else dt
-    im = np.array([im0_usd * max(M0 - tt, 0.0) / M0 if M0 > 0 else 0.0 for tt in t[1:]]) if csa.im_exchanged and im0_usd else np.zeros(T1 - 1)
+    v_lag = None
     if csa.collateralised:
         v_lag = lagged_values(future, v0, dt, csa.mpor_years, rng)
         if flows is not None:
@@ -62,6 +61,13 @@ def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, im0_usd: float = 0.0, seed
         coll = collateral_held(v_lag, csa)
     else:
         coll = np.zeros_like(future)
+    # the margin we would call: the engine's estimate from these paths (the 99th percentile rise over the margin period)
+    if csa.im_exchanged and T1 > 1:
+        lag = v_lag if v_lag is not None else lagged_values(future, v0, dt, csa.mpor_years, np.random.default_rng(seed + 33))
+        im = model_im(future, lag)[0]
+    else:
+        im = np.zeros(T1 - 1)
+    im0_usd = float(im[0]) if len(im) else 0.0
     resid = future - coll
     e_pos = np.maximum(resid - im[None, :], 0.0)
     ee = e_pos.mean(axis=0)
@@ -80,13 +86,12 @@ def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, im0_usd: float = 0.0, seed
             "pfe95_by_bucket": buckets, "im0_usd": float(im0_usd), "mean_collateral": coll.mean(axis=0).tolist()}
 
 
-def cva(V_rn: np.ndarray, t: np.ndarray, p0: list[float], csa: CSA, notional_usd: float, cp_cds_bp: float = 85.0, lgd: float = 0.40, im0_usd: float = 0.0) -> dict[str, Any]:
+def cva(V_rn: np.ndarray, t: np.ndarray, p0: list[float], csa: CSA, notional_usd: float, cp_cds_bp: float = 85.0, lgd: float = 0.40) -> dict[str, Any]:
     n_paths, T1 = V_rn.shape
     dt = float(t[1] - t[0]) if T1 > 1 else 1 / 12
     v0 = float(V_rn[:, 0].mean())
     theta = -math.log(max(p0[-1], 1e-9)) / max(float(t[-1]), 1e-6)
-    params = WaterfallParams(notional=max(notional_usd, 1.0), maturity_y=float(t[-1]), dt=dt, theta=max(theta, 1e-6), cp_cds_bp=cp_cds_bp, lgd=lgd,
-                             simm_im_m=(im0_usd / 1e6) if im0_usd else None)
+    params = WaterfallParams(notional=max(notional_usd, 1.0), maturity_y=float(t[-1]), dt=dt, theta=max(theta, 1e-6), cp_cds_bp=cp_cds_bp, lgd=lgd)
     wf = run_waterfall(V_rn[:, 1:], v0, p0, params, csa)
     f = lambda x: float(x)
     return {"cva_usd": f(wf.cva), "dva_usd": f(wf.dva), "fva_usd": f(wf.fva), "fba_usd": f(wf.fba), "kva_usd": f(wf.kva), "mva_usd": f(wf.mva),

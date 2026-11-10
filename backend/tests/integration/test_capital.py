@@ -135,7 +135,7 @@ def test_portfolio_capital_under_regimes(client, auth_a, ids, booked):
     assert c["columns"]["ON_CHAIN_FORWARD"]["ead"] <= c["columns"]["ON_CHAIN_CURRENT"]["ead"] <= c["columns"]["BASELINE"]["ead"] + 1e-6
     assert j["totals"]["BASELINE"]["rwa"] >= j["totals"]["ON_CHAIN_CURRENT"]["rwa"] - 1e-6
     assert set(j["quote"]) == set(j["columns"]) and j["quote"]["BASELINE"]["running_bp"] == 0.0
-    assert any("SIMM" in x for x in j["invariants"])
+    assert any("initial margin" in x for x in j["invariants"]) and not any("SIMM" in x for x in j["invariants"])
     # the stored path: nothing yet, then a run (a thread here: no worker), then the report
     r = client.get("/api/capital/portfolio", headers=auth_a)
     assert r.status_code == 200 and "counterparties" in r.json()

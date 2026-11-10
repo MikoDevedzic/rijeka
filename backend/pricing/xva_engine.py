@@ -36,42 +36,31 @@ import numpy as np
 from pricing.csa import CSA
 
 
-# ── ISDA SIMM — IR delta risk weights, regular-volatility currencies ─────────
-# (USD/EUR/GBP). Units are bp, matching a sensitivity expressed as $ per bp,
-# so IM = RW x |IR01| comes out in dollars. Calibrated to a 10bd MPoR.
-SIMM_IR_RW = [
-    (0.0384, 109.0),  # 2w
-    (0.0833, 105.0),  # 1m
-    (0.25,    90.0),  # 3m
-    (0.50,    71.0),  # 6m
-    (1.0,     66.0),
-    (2.0,     66.0),
-    (3.0,     64.0),
-    (5.0,     61.0),
-    (10.0,    61.0),
-    (15.0,    61.0),
-    (20.0,    61.0),
-    (30.0,    64.0),
-]
+# ── Initial margin ───────────────────────────────────────────────────────────
+# Rijeka does not compute ISDA SIMM: SIMM is ISDA's licensed methodology and its risk weights are not in this
+# code. Initial margin is either an amount the desk sets (a firm with a SIMM licence enters its own figure) or
+# the engine's own estimate from its simulated paths, at the confidence the margin rules for non-centrally
+# cleared derivatives name (BCBS-IOSCO, "Margin requirements for non-centrally cleared derivatives": a
+# one-tailed 99 per cent interval over the margin horizon). The estimate is this engine's model, not a
+# regulatory or an ISDA figure.
+IM_CONFIDENCE = 99.0
+
+
+def model_im(paths: np.ndarray, v_lag: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """(IM we would call, IM we would post) at every grid date: the 99th percentile, across paths, of the rise
+    and of the fall in the set's value over the margin period ending at that date (V_i − V(t_i − δ)), about its
+    mean. The mean is what every path does over the period (a scheduled payment, the passage of time): not a
+    risk and not margined. Never negative."""
+    move = paths - v_lag
+    move = move - move.mean(axis=0, keepdims=True)
+    return (np.maximum(np.percentile(move, IM_CONFIDENCE, axis=0), 0.0),
+            np.maximum(np.percentile(-move, IM_CONFIDENCE, axis=0), 0.0))
+
 
 # SA-CCR constants
 SF_IR  = 0.005    # supervisory factor, interest-rate asset class
 ALPHA  = 1.4      # SA-CCR alpha
 CAP_R  = 0.08     # capital / RWA
-
-
-def simm_ir_risk_weight(maturity_y: float) -> float:
-    """Linearly interpolated SIMM IR delta risk weight (bp) for a tenor in years."""
-    pts = SIMM_IR_RW
-    if maturity_y <= pts[0][0]:
-        return pts[0][1]
-    if maturity_y >= pts[-1][0]:
-        return pts[-1][1]
-    for (t0, w0), (t1, w1) in zip(pts, pts[1:]):
-        if t0 <= maturity_y <= t1:
-            f = (maturity_y - t0) / (t1 - t0)
-            return w0 + f * (w1 - w0)
-    return pts[-1][1]
 
 
 def interp_spread(curve: Optional[list], flat_bp: float, t: float) -> float:
@@ -109,8 +98,8 @@ class WaterfallParams:
     capital_model:   str   = "sa_ccr"      # sa_ccr | cem | imm
     counterparty_rw: float = 1.0
     wwr_multiplier:  float = 1.0
-    ir01:            Optional[float] = None    # $ per bp — drives SIMM IM
-    simm_im_m:       Optional[float] = None    # explicit IM in $M (overrides SIMM)
+    im_amount:       Optional[float] = None    # initial margin set by the desk, in the trade's currency, each way,
+                                               # held for the life; None = the engine's estimate (model_im)
 
 
 @dataclass
@@ -121,7 +110,7 @@ class WaterfallResult:
     ee_gross:  List[float]          # before collateral / IM
     ene_gross: List[float]
     collateral_mean: List[float]    # mean VM held, our perspective (+ = received)
-    im_profile: List[float]         # IM posted / received (symmetric), per step
+    im_profile: List[float]         # IM we post, per step (what MVA funds)
     exposure_paths: np.ndarray      # residual V − C (for visualisation)
     cva: float
     dva: float
@@ -132,8 +121,6 @@ class WaterfallResult:
     ead_0: float
     capital_0: float
     im_0: float
-    simm_rw: float                  # MPoR-scaled risk weight actually used
-    simm_rw_10d: float              # published (10bd) weight for reference
     mf_0: float                     # SA-CCR maturity factor at t=0
     bridge_noise: Optional[np.ndarray] = None   # the standard normals drawn for the margin-period bridge (n_paths, T)
     # the capital legs (pricing/capital.py): zero unless `capital` was passed
@@ -152,6 +139,8 @@ class WaterfallResult:
     # the run had no link, so cva and dva ARE the independent figures
     cva_independent: Optional[float] = None
     dva_independent: Optional[float] = None
+    im_received_profile: Optional[List[float]] = None   # IM we call, per step (what stands between us and their default)
+    im_basis: str = "none"          # where the margin came from: none | set by the desk | the engine's estimate
 
     @property
     def xva_total(self) -> float:
@@ -280,7 +269,7 @@ def run_waterfall(
     capital=None,
     saccr: Optional[list] = None,
     addon_profiles: Optional[tuple] = None,
-    im_schedule: Optional[tuple] = None,
+    apply_multiplier: bool = True,
     wrong_way: Optional[dict] = None,
 ) -> WaterfallResult:
     """
@@ -293,9 +282,9 @@ def run_waterfall(
     (pricing/sa_ccr.py): the add-on is then the multi-class CRE52 add-on along the grid; None keeps the
     single-factor interest-rate add-on. `addon_profiles` is (add-on per grid step, the same unmargined or None,
     the CEM add-on per grid step or None), worked out by the caller: a package of legs hands in the sum of its
-    legs' single-factor add-ons (pricing/fx_xva.package_xva); ignored when `saccr` is given. `im_schedule` is
-    (IM today, IM per grid step), also the caller's: a package's margin follows its legs as they settle; None
-    keeps the margin of params amortised in a line to the maturity. Used only when the CSA exchanges IM. `wrong_way` is wrong-way risk:
+    legs' single-factor add-ons (pricing/fx_xva.package_xva); with `saccr` given only its CEM element is read. `apply_multiplier` False takes
+    the add-on whole, without the CRE52.23 multiplier: a Group 2b cryptoasset, whose exposure is α·(RC + PFE)
+    with the PFE a fixed share of notional (SCO60.99). `wrong_way` is wrong-way risk:
     {"x": (n_paths, T) the market variable on the grid, "beta_cp": b, "beta_own": b} (hazard_beta, path_survival).
     CVA is then LGD · Σ E[exposure_i · default probability in step i ON THAT PATH] and DVA likewise with our own
     default; the result also carries both with default independent of the market. None, or both betas zero, is
@@ -309,36 +298,31 @@ def run_waterfall(
     M0  = params.maturity_y
     rng = rng or np.random.default_rng(seed=43)
 
-    # ── Initial margin ───────────────────────────────────────────────────────
-    rw_10d = simm_ir_risk_weight(M0)
-    rw     = rw_10d * csa.simm_mpor_scale
-    if not csa.im_exchanged:
-        im_0 = 0.0
-    elif im_schedule is not None:
-        im_0 = float(im_schedule[0])
-    elif params.simm_im_m is not None:
-        im_0 = params.simm_im_m * 1e6
-    elif params.ir01 is not None:
-        im_0 = abs(params.ir01) * rw
-    else:
-        # Fallback when the caller has no IR01: IR01 ~ N x annuity x 1bp
-        th = params.theta
-        ann_0 = ((1.0 - math.exp(-th * M0)) / th if th > 0 else M0)
-        im_0  = abs(N * ann_0 * 1e-4) * rw
-    im_profile = [im_0 * max(M0 - (i + 1) * DT, 0.0) / M0 if M0 > 0 else 0.0
-                  for i in range(T)]
-    if im_schedule is not None and csa.im_exchanged:
-        im_profile = [float(x) for x in im_schedule[1]]
-    im_arr = np.asarray(im_profile)
-
-    # ── Collateral and residual exposure ─────────────────────────────────────
+    # ── Collateral ───────────────────────────────────────────────────────────
     bridge = np.zeros_like(paths)
     v_lag = lagged_values(paths, v0, DT, csa.mpor_years, rng, noise_out=bridge) if csa.collateralised else None
     coll  = collateral_held(v_lag, csa) if v_lag is not None else np.zeros_like(paths)
     resid = paths - coll
 
-    e_pos = np.maximum(resid - im_arr[None, :], 0.0)
-    e_neg = np.minimum(resid + im_arr[None, :], 0.0)
+    # ── Initial margin: the desk's amount, or the engine's estimate (model_im) ─
+    im_recv = im_post = np.zeros(T)
+    im_basis = "none"
+    if csa.im_exchanged and params.im_amount is not None:
+        im_recv = im_post = np.full(T, abs(float(params.im_amount)))
+        im_basis = "set by the desk, each way, held for the life"
+    elif csa.im_exchanged and T:
+        # the value a margin period earlier: the lag already drawn for the variation margin, else one of its own
+        # (its own generator, so no other number of the run depends on whether IM is exchanged)
+        lag = v_lag if v_lag is not None else lagged_values(paths, v0, DT, csa.mpor_years, np.random.default_rng(seed=44))
+        im_recv, im_post = model_im(paths, lag)
+        im_basis = (f"the engine's estimate: the {IM_CONFIDENCE:g}th percentile move of the value over the margin period "
+                    f"({csa.mpor_days:g} business days), each way; not ISDA SIMM")
+    im_0 = float(im_post[0]) if T else 0.0
+    im_profile = [float(x) for x in im_post]
+
+    # ── Residual exposure ────────────────────────────────────────────────────
+    e_pos = np.maximum(resid - im_recv[None, :], 0.0)
+    e_neg = np.minimum(resid + im_post[None, :], 0.0)
 
     ee   = np.mean(e_pos, axis=0)
     ene  = np.mean(e_neg, axis=0)
@@ -356,13 +340,13 @@ def run_waterfall(
         coll_reg_mean = np.zeros_like(coll_mean)
     v_mean = np.mean(paths, axis=0)
     resid_reg_mean = v_mean - coll_reg_mean
-    nica_arr = im_arr if reg.im_exchanged else np.zeros_like(im_arr)
+    nica_arr = im_recv if reg.im_exchanged else np.zeros(T)      # the margin we hold: independent collateral
     if saccr is not None:
         from pricing.sa_ccr import addon_profile
         grid_t = [(i + 1) * DT for i in range(T)]
         addon_grid = addon_profile(saccr, reg, grid_t)
         addon_grid_unm = addon_profile(saccr, CSA.uncollateralised(), grid_t) if reg.sa_ccr_margined else None
-        addon_cem = None
+        addon_cem = addon_profiles[2] if addon_profiles is not None and len(addon_profiles) > 2 else None
     elif addon_profiles is not None:
         addon_grid, addon_grid_unm = addon_profiles[0], addon_profiles[1]
         addon_cem = addon_profiles[2] if len(addon_profiles) > 2 else None
@@ -447,7 +431,7 @@ def run_waterfall(
             if addon > 0:
                 # the multiplier is capped at 1, so the exponent can be capped without changing it: an exposure far
                 # above the add-on (a digital's payout against a tiny add-on) must not overflow
-                mult = min(1.0, 0.05 + 0.95 * math.exp(min(v_for_mult / (1.9 * addon), 50.0)))
+                mult = min(1.0, 0.05 + 0.95 * math.exp(min(v_for_mult / (1.9 * addon), 50.0))) if apply_multiplier else 1.0
             else:
                 mult = 1.0
             if params.capital_model == "imm":
@@ -463,7 +447,7 @@ def run_waterfall(
                     mf_u = math.sqrt(min(max(m_t, 10.0 / 250.0), 1.0))          # CRE52.48: M floored at ten business days
                     addon_u = addon_grid_unm[i] if addon_grid_unm is not None else SF_IR * N * sd_t * mf_u
                     v_u = float(resid_reg_mean[i]) - float(nica_arr[i])
-                    mult_u = min(1.0, 0.05 + 0.95 * math.exp(min(v_u / (1.9 * addon_u), 50.0))) if addon_u > 0 else 1.0
+                    mult_u = min(1.0, 0.05 + 0.95 * math.exp(min(v_u / (1.9 * addon_u), 50.0))) if (addon_u > 0 and apply_multiplier) else 1.0
                     ead_u = ALPHA * (max(v_u, 0.0) + mult_u * addon_u)
                     if ead_u < ead_t:
                         ead_t = ead_u
@@ -482,7 +466,7 @@ def run_waterfall(
                 k_cva_0, rwa_0, addon_0, rc_0, mult_0 = k_cva_t, rw_cp * ead_t, addon, rc_t, mult
 
             # IM posted is funded at ftp less any yield the collateral earns
-            mva -= im_arr[i] * max(ftp_t - pickup, 0.0) * DT * disc
+            mva -= im_post[i] * max(ftp_t - pickup, 0.0) * DT * disc
 
         qcp, qow = nqcp, nqow
 
@@ -494,7 +478,7 @@ def run_waterfall(
         cva=-abs(cva), dva=abs(dva), fva=-abs(fva), fba=abs(fba),
         kva=-abs(kva), mva=-abs(mva), colva=float(colva),
         ead_0=ead_0, capital_0=cap_0, im_0=im_0,
-        simm_rw=rw, simm_rw_10d=rw_10d, mf_0=mf_0,
+        mf_0=mf_0, im_received_profile=[float(x) for x in im_recv], im_basis=im_basis,
         kva_ccr=-abs(kva_ccr), kva_cva=-abs(kva_cva), k_cva_0=k_cva_0, rwa_0=rwa_0, addon_0=addon_0, rc_0=rc_0,
         multiplier_0=mult_0, v_mean_0=float(v_mean[0]) if T else 0.0, coll_mean_0=float(coll_mean[0]) if T else 0.0,
         regulatory_margined=bool(reg.sa_ccr_margined),

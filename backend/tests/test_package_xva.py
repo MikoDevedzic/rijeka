@@ -74,8 +74,10 @@ def test_a_bought_and_a_sold_forward_net_to_nothing_and_netting_never_adds_expos
     buy, sell = _fwd(direction="BUY"), _fwd(direction="SELL")
     wf, meta = fx_xva.package_xva([buy, sell], CSA.uncollateralised(), n_paths=500)
     assert not meta["_paths"].any() and wf.cva == 0 and wf.dva == 0 and wf.fva == 0 and wf.fba == 0 and wf.im_0 == 0
-    # stated limit: the capital add-on is the sum of the legs' add-ons, so KVA does not net to zero
-    assert wf.kva < 0
+    # the add-on is SA-CCR's on the legs together: one hedging set, the two deltas cancel, so the capital is nothing too
+    assert wf.kva == 0 and "foreign exchange class" in meta["capital_basis"]
+    # the older CEM branch still adds the legs' notionals: stated, not hidden
+    assert fx_xva.package_xva([buy, sell], CSA.uncollateralised(), n_paths=300, capital_model="cem")[0].kva < 0
     legs = [_fwd(t=0.25, strike=1.16), _fwd(t=0.5, direction="SELL", strike=1.18), _opt("CALL", "SELL", 1.22), _opt("PUT", "BUY", 1.12)]
     V, _, _, rows = fx_xva.simulate_package_paths(legs, n_paths=600, keep_leg_paths=True)
     assert [r["ee_gross_peak"] for r in rows] == pytest.approx([float(np.max(np.mean(np.maximum(r["paths"], 0.0), axis=0))) for r in rows])
@@ -90,10 +92,10 @@ def test_a_collar_is_the_put_less_the_call_on_every_path_and_margin_is_on_the_ne
     Vp, _, v0p = fx_xva.simulate_option_paths(put, n_paths=300)
     Vc, _, v0c = fx_xva.simulate_option_paths(call, n_paths=300)
     assert np.allclose(V, Vp + Vc) and v0 == pytest.approx(v0p + v0c), "same grid, same draws: the legs' own runs add up"
-    put.spot01, call.spot01 = -30000.0, -20000.0
     wf, meta = fx_xva.package_xva([put, call], CSA.on_chain(im_exchanged=True), n_paths=300)
-    assert wf.im_0 == pytest.approx(50000.0 * fx_xva.SIMM_FX_RW_G10), "the weight on |−30,000 − 20,000|, not on each leg"
-    assert "net spot sensitivity of the legs still alive" in meta["im_basis"] and "2 legs" in meta["model"]
+    assert wf.im_0 > 0 and "engine's estimate" in meta["im_basis"] and "2 legs" in meta["model"]
+    typed, _ = fx_xva.package_xva([put, call], CSA.on_chain(im_exchanged=True), n_paths=300, im_amount=2_000_000.0)
+    assert typed.im_0 == 2_000_000.0 and set(typed.im_profile) == {2_000_000.0}, "the desk's amount, held for the life"
 
 
 def test_a_settlement_between_two_grid_dates_is_carried_to_the_later_one_not_dropped():
@@ -113,26 +115,17 @@ def test_a_settlement_between_two_grid_dates_is_carried_to_the_later_one_not_dro
 
 
 def test_margin_follows_the_legs_as_they_settle():
-    """Found by the validator: margin on the net sensitivity today, run off to the longest leg, left a calendar
-    spread's far leg almost unmargined once the near one had settled."""
+    """A calendar spread: the two legs ride one driver, so the set hardly moves while both stand and little margin
+    is called; once the near leg has settled the margin is the far leg's own. (Found by the validator on the first
+    version, which took margin on today's net sensitivity and ran it off to the longest leg.)"""
     far, near = _fwd(t=0.5, direction="BUY"), _fwd(t=0.25, direction="SELL")
-    far.spot01, near.spot01 = 117000.0, -116000.0
-    rw = fx_xva.SIMM_FX_RW_G10
-    im_0, profile = fx_xva.package_im([far, near], rw, 6, 0.5 / 6)
-    assert im_0 == pytest.approx(1000.0 * rw), "today: the net of the two"
-    assert profile[3] == pytest.approx(117000.0 * rw * (0.5 - 4 * 0.5 / 6) / 0.5), "month 4: the far leg's own margin, the near one gone"
-    assert profile[3] > 20 * im_0 / 6
     csa = CSA.on_chain(im_exchanged=True)
-    wf, _ = fx_xva.package_xva([far, near], csa, n_paths=300)
-    assert wf.im_0 == pytest.approx(im_0) and wf.im_profile == pytest.approx(profile)
-    alone, _ = fx_xva.forward_xva(far, csa, n_paths=300)
-    assert wf.im_profile[3:] == pytest.approx(alone.im_profile[3:]), "after the near leg: the far leg's profile as on its own"
-    # a margin typed by the desk is used as typed
-    typed, _ = fx_xva.package_xva([far, near], csa, n_paths=300, simm_im_m=2.0)
-    assert typed.im_0 == pytest.approx(2e6)
+    wf, _ = fx_xva.package_xva([far, near], csa, n_paths=1000)
+    alone, _ = fx_xva.forward_xva(far, csa, n_paths=1000)
+    assert wf.im_profile[0] < 0.05 * alone.im_profile[0], "both legs standing: the set moves by the discounting between them only"
+    assert wf.im_profile[4:] == pytest.approx(alone.im_profile[4:]), "from the month after the near leg settles: the far leg's margin as on its own"
+    assert wf.im_received_profile[4:] == pytest.approx(alone.im_received_profile[4:])
     assert fx_xva.package_xva([far, near], CSA.uncollateralised(), n_paths=300)[0].im_0 == 0
-    far.spot01 = near.spot01 = None
-    assert fx_xva.package_im([far, near], rw, 6, 0.5 / 6) is None
 
 
 def test_the_older_capital_model_takes_the_legs_own_add_ons_too():

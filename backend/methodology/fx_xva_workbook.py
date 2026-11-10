@@ -28,7 +28,9 @@ from methodology import workbook as W
 from pricing.csa import CSA, BUSINESS_DAYS_PER_YEAR, MPOR_FLOOR_BILATERAL_BD, MPOR_FLOOR_CLEARED_BD
 from pricing.currency_forward import price_currency_forward
 from pricing.fx_vol import TENOR_YEARS, parse_surface, vol_at
-from pricing.fx_xva import ForwardXvaInput, default_vol_pct, forward_xva, im_risk_weight, monthly_grid
+from pricing.fx_xva import ForwardXvaInput, default_vol_pct, forward_xva, is_crypto, monthly_grid
+from pricing.sa_ccr import SUPERVISORY
+from pricing.xva_engine import IM_CONFIDENCE
 from pricing.xva_engine import ALPHA, CAP_R, SF_IR
 
 N_PATHS, MONTHS, DIRECTION = 200, 6, "BUY"
@@ -39,11 +41,11 @@ SMILE_ITERATIONS = 8          # pricing/fx_vol.vol_at's fixed point
 # The two cases: the currency pair (EUR discounted flat at its policy rate, as the forward book does) and the digital
 # asset (its funding rate as the base rate). Same formulas, different labels and weights.
 XVA_FX_CASE = dict(pair="EURUSD", base="EUR", quote="USD", spot=1.1133, base_rate=0.025, notional=10_000_000.0, spot_fmt="0.00000", mtm_fmt="#,##0",
-                   base_rate_label="EUR rate (cont., p.a., flat)", delta="FX01", im_basis="SIMM FX delta risk weight (per 1 % spot), G10 pair",
+                   base_rate_label="EUR rate (cont., p.a., flat)", delta="FX01", sf_basis="SA-CCR, foreign exchange class (CRE52.72)",
                    rate_note="EUR is discounted flat at the yellow rate because the hosted demo carries no EUR OIS curve; on a desk DF_EUR comes from the €STR curve.",
                    title="XVA on an FX forward: lognormal forward, surface vol, CSA, waterfall")
 XVA_CRYPTO_CASE = dict(pair="BTCUSD", base="BTC", quote="USD", spot=65_000.0, base_rate=0.03, notional=10.0, spot_fmt="#,##0.00", mtm_fmt="#,##0",
-                       base_rate_label="BTC funding rate (cont., p.a.)", delta="CRY01", im_basis="assumption: a digital asset is outside SIMM (per 1 % spot)",
+                       base_rate_label="BTC funding rate (cont., p.a.)", delta="CRY01", sf_basis="SA-CCR, the cryptoasset class of a Group 2a asset (SCO60.98)",
                        rate_note="The funding (lending or staking) rate is the digital asset's base rate: F = S·e^(−r_c·T)/DF_USD, the cash-and-carry forward.",
                        title="XVA on a crypto NDF: lognormal forward, surface vol, CSA, waterfall")
 
@@ -72,7 +74,7 @@ def forward_inputs(mkt, case: dict) -> dict:
     else:
         vol_pct, src = None, f"the engine's default {default_vol_pct(case['pair']):g}% flat (no {case['pair']}_VOL surface saved; pricing/fx_xva.DEFAULT_VOL_PCT)"
     inp = ForwardXvaInput(pair=case["pair"], base_notional=case["notional"], forward=r.forward, strike=r.forward_rate, t_years=r.t, df_quote_t=r.df_quote,
-                          quote_zero=r.quote_rate, direction=DIRECTION, vol_pct=vol_pct, spot01=r.spot01, vol_source=src)
+                          quote_zero=r.quote_rate, direction=DIRECTION, vol_pct=vol_pct, spot01=r.spot01, vol_source=src, spot=case["spot"])
     return {"fwd": r, "inp": inp, "pillars": pillars, "settle": T, "vol_source": src}
 
 
@@ -86,7 +88,7 @@ def engine_runs(fi: dict) -> dict:
         runs[preset] = (csa, wf, meta)
     steps, dt = monthly_grid(fi["inp"].t_years)
     return {"noise": noise, "runs": runs, "T": steps, "dt": dt, "sigma": float(noise["sigma"]), "v0": float(runs[DEFAULT_PRESET][2]["v0"]),
-            "rw": im_risk_weight(fi["inp"].pair), "im_basis": runs[DEFAULT_PRESET][2]["im_basis"]}
+            "sf": SUPERVISORY["CRYPTO" if is_crypto(fi["inp"].pair) else "FX"]["sf"], "im_basis": runs[DEFAULT_PRESET][2]["im_basis"]}
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -308,9 +310,9 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
             ("IM exchanged (1/0)", '=IF(Preset="UNCOLLATERALISED",0,1)', "0"), ("IM yield pickup (bp)", 0.0, "0.0"),
             ("δ = MPoR/250 (years)", f"=B9/{BUSINESS_DAYS_PER_YEAR}", "0.0000"), ("Steps back = δ/Δ (< 1 here)", "=B12/Dt", "0.0000"), ("w = 1 − δ/Δ", "=1-B13", "0.0000"),
             ("V(0) (Model sheet)", "=V0", "#,##0.00"),
-            (f"IM risk weight per 1 % spot: {case['im_basis']}", eng["rw"], "0.00"),
-            (f"{case['delta']}: PV for +1 % spot (Model sheet)", "=Spot01", "#,##0.00"),
-            ("IM₀ = weight·|spot sensitivity| (the engine passes this IM explicitly, so no √(MPoR/10) scaling applies)", "=IF(B10=1,B16*ABS(B17),0)", "#,##0.00"),
+            ("IM confidence, one-tailed, each way (the engine's own estimate from these paths; not ISDA SIMM, which is licensed)", IM_CONFIDENCE / 100.0, "0.00"),
+            ("IM₀ we call: the margin at the first date", "=K24", "#,##0.00"),
+            ("IM₀ we post: the margin at the first date (the profile MVA funds)", "=N24", "#,##0.00"),
             ("VM carry, posted (bp over OIS: what the margin we post earns above cash)", 0.0, "0.0"), ("VM carry, received (bp over OIS: what the margin we hold earns above the rebate)", 0.0, "0.0")]
     for i, (label, v, fmt) in enumerate(rows, 4):
         ws.cell(row=i, column=1, value=label)
@@ -319,16 +321,19 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
             c.fill = W.FILL_IN
     W.dropdown(ws, "B4", list(PRESETS))
     _names(wb, {"Preset": "Exposure!B4", "Coll": "Exposure!B5", "THcp": "Exposure!B6", "THown": "Exposure!B7", "MTA": "Exposure!B8", "MPoR": "Exposure!B9",
-                "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "RWim": "Exposure!B16", "IM0": "Exposure!B18", "CarryPost": "Exposure!B19", "CarryRecv": "Exposure!B20"})
+                "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "IMq": "Exposure!B16", "IM0": "Exposure!B18", "CarryPost": "Exposure!B19", "CarryRecv": "Exposure!B20"})
     rs = 23
     ws.cell(row=rs - 1, column=1, value="PER STEP").font = W.F_SECTION
-    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM(t)", "mean received", "mean posted"])
+    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM we call (t)", "mean received", "mean posted", "IM we post (t)"])
     top = rs + T + 3
     dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=Paths!{L(c)}{vb[0] + p}-V0" if j == 1 else f"=Paths!{L(c)}{vb[0] + p}-Paths!{L(c - 1)}{vb[0] + p}"), "#,##0", "ΔV = V(t_i) − V(t_{i−1})")
     top = dvb[1] + 3
     lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,{'V0' if j == 1 else f'Paths!{L(c - 1)}{vb[0] + p}'}+Wlag*{L(c)}{dvb[0] + p}+Normals!{L(c)}{n0 + p}*SQRT(Wlag*(1-Wlag)*$C${rs + j}),Paths!{L(c)}{vb[0] + p})"),
                   "#,##0", "V(t − δ): lo + w·ΔV + N·√(w(1−w)·s²) (the Brownian bridge; LIVE mode re-rolls N too)")
     top = lagb[1] + 3
+    mvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Paths!{L(c)}{vb[0] + p}-{L(c)}{lagb[0] + p}", "#,##0",
+                 "Move over the margin period: V(t) − V(t − δ). Initial margin is its 99th percentile rise (what we call) and fall (what we post), about its mean")
+    top = mvb[1] + 3
     cb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=IF(Coll=1,IF(ABS(MAX({L(c)}{lagb[0] + p}-THcp,0)-MAX(-{L(c)}{lagb[0] + p}-THown,0))<MTA,0,MAX({L(c)}{lagb[0] + p}-THcp,0)-MAX(-{L(c)}{lagb[0] + p}-THown,0)),0)",
                 "#,##0", "C: collateral held against the lagged value, our side (+ = we hold theirs)")
     top = cb[1] + 3
@@ -340,7 +345,7 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
         ws.cell(row=r, column=3, value=f"=VARP({col}{dvb[0]}:{col}{dvb[1]})").number_format = "#,##0"
         res = f"{col}{resb[0]}:{col}{resb[1]}"; vcol = f"Paths!{col}{vb[0]}:{col}{vb[1]}"; ccol = f"{col}{cb[0]}:{col}{cb[1]}"
         ws.cell(row=r, column=4, value=f"=SUMPRODUCT(({res}-K{r}>0)*({res}-K{r}))/Npaths").number_format = "#,##0.00"
-        ws.cell(row=r, column=5, value=f"=SUMPRODUCT(({res}+K{r}<0)*({res}+K{r}))/Npaths").number_format = "#,##0.00"
+        ws.cell(row=r, column=5, value=f"=SUMPRODUCT(({res}+N{r}<0)*({res}+N{r}))/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=6, value=f"=PERCENTILE({res},0.95)").number_format = "#,##0.00"
         ws.cell(row=r, column=7, value=f"=SUMPRODUCT(({vcol}>0)*{vcol})/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=8, value=f"=SUMPRODUCT(({vcol}<0)*{vcol})/Npaths").number_format = "#,##0.00"
@@ -348,13 +353,15 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
         ws.cell(row=r, column=10, value=f"=AVERAGE({res})").number_format = "#,##0.00"
         ws.cell(row=r, column=12, value=f"=SUMPRODUCT(({ccol}>0)*{ccol})/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=13, value=f"=-SUMPRODUCT(({ccol}<0)*{ccol})/Npaths").number_format = "#,##0.00"
-        ws.cell(row=r, column=11, value=f"=IM0*MAX(Tyrs-B{r},0)/Tyrs").number_format = "#,##0.00"
+        mv = f"{col}{mvb[0]}:{col}{mvb[1]}"
+        ws.cell(row=r, column=11, value=f"=IF(IMx=1,MAX(PERCENTILE({mv},IMq)-AVERAGE({mv}),0),0)").number_format = "#,##0.00"
+        ws.cell(row=r, column=14, value=f"=IF(IMx=1,MAX(AVERAGE({mv})-PERCENTILE({mv},1-IMq),0),0)").number_format = "#,##0.00"
     W.widths(ws, [64, 10, 14, 14, 14, 14, 14, 14, 16, 16, 14] + [12] * max(T - 10, 0))
     ws.freeze_panes = "B5"
-    return rs, {"DV": dvb, "LAG": lagb, "C": cb, "RES": resb}
+    return rs, {"DV": dvb, "LAG": lagb, "MV": mvb, "C": cb, "RES": resb}
 
 
-def _waterfall_sheet(wb, eng, rs, grid_r0):
+def _waterfall_sheet(wb, case, eng, rs, grid_r0):
     T = eng["T"]
     ws = wb.create_sheet("Waterfall")
     ws["A1"] = "THE WATERFALL"; ws["A1"].font = W.F_TITLE
@@ -362,15 +369,16 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
                 "Costs negative, benefits positive. Discounting on the engine's P(0,t) = e^(−r_q·t)."); ws["A2"].font = W.F_SUB
     params = [("Counterparty CDS (bp)", 85.0), ("Own CDS (bp)", 42.0), ("LGD", 0.40), ("Own LGD", 0.40), ("Funding spread ftp (bp)", 55.0), ("FBA ratio", 0.55),
               ("Hurdle rate", 0.12), ("Capital model (SA_CCR / CEM / IMM)", "SA_CCR"), ("Counterparty risk weight", 1.0), ("Wrong-way multiplier", 1.0),
-              ("SA-CCR α", ALPHA), ("Supervisory factor (the engine applies the interest-rate factor to FX and digital assets for now; docs/xva.md says so)", SF_IR), ("Capital ratio", CAP_R)]
+              ("SA-CCR α", ALPHA), (f"Supervisory factor: {case['sf_basis']}", eng["sf"]), ("Capital ratio", CAP_R),
+              ("CEM factor (the engine's older branch: 0.5 % of the quote notional × the maturity factor)", SF_IR)]
     for i, (label, v) in enumerate(params, 4):
         ws.cell(row=i, column=1, value=label); c = ws.cell(row=i, column=2, value=v); c.fill = W.FILL_IN
         c.number_format = "0.00%" if label in ("LGD", "Own LGD", "Hurdle rate", "Counterparty risk weight") else "0.00##"
     W.dropdown(ws, "B11", ["SA_CCR", "CEM", "IMM"])
     _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBAr": "Waterfall!B9",
-                "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFsa": "Waterfall!B15", "CapR": "Waterfall!B16"})
+                "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFsa": "Waterfall!B15", "CapR": "Waterfall!B16", "SFcem": "Waterfall!B17"})
     r0 = 20
-    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM(t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)", "ColVA_i"]
+    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM we post (t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)", "ColVA_i"]
     W.header(ws, r0 - 1, hdr)
     for j in range(1, T + 1):
         r = r0 + j - 1; e = rs + j
@@ -389,21 +397,23 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
         ws.cell(row=r, column=13, value=f"=FTP/10000*FBAr*ABS(I{r})*Dt*C{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=14, value=f"=MAX(Tyrs-B{r},0)").number_format = "0.000000"
         ws.cell(row=r, column=15, value=f"=(1-EXP(-0.05*N{r}))/0.05").number_format = "0.000000"
-        ws.cell(row=r, column=16, value=f"=IF(Coll=1,1.5*SQRT(MAX(MPoR,IF(Preset=\"ON_CHAIN\",{MPOR_FLOOR_CLEARED_BD},{MPOR_FLOOR_BILATERAL_BD}))/{BUSINESS_DAYS_PER_YEAR}),SQRT(MIN(MAX(N{r},0),1)))").number_format = "0.0000"
-        ws.cell(row=r, column=17, value=f"=SFsa*NotlQ*O{r}*P{r}").number_format = "#,##0.00"
+        # CRE52.48 (unmargined: sqrt(min(M, 1)), M floored at ten business days) and CRE52.52 (margined)
+        ws.cell(row=r, column=16, value=f"=IF(Coll=1,1.5*SQRT(MAX(MPoR,IF(Preset=\"ON_CHAIN\",{MPOR_FLOOR_CLEARED_BD},{MPOR_FLOOR_BILATERAL_BD}))/{BUSINESS_DAYS_PER_YEAR}),SQRT(MIN(MAX(N{r},1/25),1)))").number_format = "0.0000"
+        # the class's add-on for one trade at δ = ±1: supervisory factor × the notional in the quote currency at spot × the maturity factor
+        ws.cell(row=r, column=17, value=f"=IF(N{r}>0,SFsa*ABS(Nbase)*Spot*P{r},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=18, value=f"=IF(Coll=1,Exposure!K{e},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=19, value=f"=IF(Coll=1,MAX(Exposure!J{e},THcp+MTA-R{r},0),MAX(Exposure!J{e},0))").number_format = "#,##0.00"
-        ws.cell(row=r, column=20, value=f"=IF(Q{r}>0,MIN(1,0.05+0.95*EXP((Exposure!J{e}-R{r})/(1.9*Q{r}))),1)").number_format = "0.0000"
-        ws.cell(row=r, column=21, value=f"=IF(CapModel=\"IMM\",AlphaSA*H{r},IF(CapModel=\"CEM\",S{r}+SFsa*NotlQ*P{r},IF(Coll=1,MIN(AlphaSA*(S{r}+T{r}*Q{r}),AD{r}),AlphaSA*(S{r}+T{r}*Q{r}))))").number_format = "#,##0.00"
+        ws.cell(row=r, column=20, value=f"=IF(Q{r}>0,MIN(1,0.05+0.95*EXP(MIN((Exposure!J{e}-R{r})/(1.9*Q{r}),50))),1)").number_format = "0.0000"
+        ws.cell(row=r, column=21, value=f"=IF(CapModel=\"IMM\",AlphaSA*H{r},IF(CapModel=\"CEM\",S{r}+SFcem*NotlQ*IF(Coll=1,P{r},SQRT(MIN(MAX(N{r},0),1))),IF(Coll=1,MIN(AlphaSA*(S{r}+T{r}*Q{r}),AD{r}),AlphaSA*(S{r}+T{r}*Q{r}))))").number_format = "#,##0.00"
         ws.cell(row=r, column=22, value=f"=CapR*RWcp*U{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=23, value=f"=IF(N{r}>0,Hurdle*V{r}*Dt*C{r},0)").number_format = "#,##0.00"
-        ws.cell(row=r, column=24, value=f"=Exposure!K{e}").number_format = "#,##0.00"
+        ws.cell(row=r, column=24, value=f"=Exposure!N{e}").number_format = "#,##0.00"
         ws.cell(row=r, column=25, value=f"=IF(N{r}>0,X{r}*MAX(FTP/10000-Pickup/10000,0)*Dt*C{r},0)").number_format = "#,##0.00"
         # CRE52.2: the same set unmargined (the collateral held, the unmargined maturity factor, RC = max(V − C, 0)); the EAD is capped at it
         ws.cell(row=r, column=26, value=f"=SQRT(MIN(MAX(MAX(N{r},0),1/25),1))").number_format = "0.0000"
-        ws.cell(row=r, column=27, value=f"=SFsa*NotlQ*O{r}*Z{r}").number_format = "#,##0.00"
+        ws.cell(row=r, column=27, value=f"=IF(N{r}>0,SFsa*ABS(Nbase)*Spot*Z{r},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=28, value=f"=MAX(Exposure!J{e}-R{r},0)").number_format = "#,##0.00"
-        ws.cell(row=r, column=29, value=f"=IF(AA{r}>0,MIN(1,0.05+0.95*EXP((Exposure!J{e}-R{r})/(1.9*AA{r}))),1)").number_format = "0.0000"
+        ws.cell(row=r, column=29, value=f"=IF(AA{r}>0,MIN(1,0.05+0.95*EXP(MIN((Exposure!J{e}-R{r})/(1.9*AA{r}),50))),1)").number_format = "0.0000"
         ws.cell(row=r, column=30, value=f"=AlphaSA*(AB{r}+AC{r}*AA{r})").number_format = "#,##0.00"
         # ColVA: the carry of the variation margin against cash at OIS; what we posted earns CarryPost, what we hold earns CarryRecv (both over OIS)
         ws.cell(row=r, column=31, value=f"=(Exposure!M{e}*CarryPost/10000+Exposure!L{e}*CarryRecv/10000)*Dt*C{r}").number_format = "#,##0.00"
@@ -415,7 +425,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     for i, (label, f) in enumerate(totals):
         ws.cell(row=rt + i, column=1, value=label).font = Font(bold=True)
         ws.cell(row=rt + i, column=2, value=f).number_format = "#,##0.00"
-    ws.cell(row=rt + len(totals) + 1, column=1, value="The last step lands on settlement itself (m = 0), where the engine books no capital or IM funding; the add-on uses the quote notional N·F₀, the engine's SA-CCR notional for a forward.").font = Font(color=W.MUTED)
+    ws.cell(row=rt + len(totals) + 1, column=1, value="The last step lands on settlement itself (m = 0), where the engine books no capital or IM funding; the add-on is SA-CCR's for the pair's class: the supervisory factor × the notional in the quote currency at spot × the maturity factor (one trade, δ = ±1).").font = Font(color=W.MUTED)
     W.widths(ws, [44, 10, 12, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 10, 10, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11, 11])
     ws.freeze_panes = "C20"
     return r0, r1, rt
@@ -468,8 +478,9 @@ def _engine_sheet(wb, case, eng, blocks, rs, rt):
     ws.cell(row=r, column=1, value="Simulation").font = W.F_SECTION
     ws.cell(row=r + 1, column=1, value="σ (decimal)"); c = ws.cell(row=r + 1, column=2, value=eng["sigma"]); c.fill = W.FILL_RJ; c.number_format = "0.0000%"
     ws.cell(row=r + 2, column=1, value="V(0)"); c = ws.cell(row=r + 2, column=2, value=eng["v0"]); c.fill = W.FILL_RJ; c.number_format = "#,##0.00"
-    ws.cell(row=r + 3, column=1, value="IM weight per 1 % spot"); c = ws.cell(row=r + 3, column=2, value=eng["rw"]); c.fill = W.FILL_RJ
-    ws.cell(row=r + 3, column=3, value=eng["im_basis"]).font = Font(color=W.MUTED)
+    ws.cell(row=r + 3, column=1, value="Supervisory factor"); c = ws.cell(row=r + 3, column=2, value=eng["sf"]); c.fill = W.FILL_RJ; c.number_format = "0.00%"
+    ws.cell(row=r + 3, column=3, value=case["sf_basis"]).font = Font(color=W.MUTED)
+    ws.cell(row=r + 4, column=1, value="Initial margin"); ws.cell(row=r + 4, column=3, value=eng["im_basis"]).font = Font(color=W.MUTED)
     W.widths(ws, [24] + [15] * 13)
     ws.freeze_panes = "B5"
 
@@ -515,7 +526,9 @@ def _xva_forward_workbook(mkt, case: dict):
         "ENGINE mode (Model sheet) reproduces the engine to rounding: the Checks sheet compares the vol, the forward on a few paths, V(0), every EE, ENE and PFE and every XVA. LIVE mode re-rolls the normals with NORMSINV(RAND()) on each recalculation; "
         "the Convergence sheet shows the Monte Carlo error and the Checks read LIVE instead of PASS. Switch Excel to manual calculation before going LIVE.",
         "CSA: a preset (UNCOLLATERALISED, BILATERAL with a 10-day margin period, ON_CHAIN with a 5-day one) or your own thresholds and MTA; the Engine sheet holds the engine's run under each preset. "
-        f"Initial margin is the pair's risk weight on the spot sensitivity ({case['delta']}): {case['im_basis']}.",
+        "Initial margin is the engine's own estimate from these paths: at each date the 99th percentile rise (what we call) and fall (what we post) of V over the margin period, about its mean. "
+        "It is not ISDA SIMM, which is ISDA's licensed methodology and is not computed here; a desk with its own figure types it on the ticket.",
+        f"The capital add-on is {case['sf_basis']}: the supervisory factor on the notional in the quote currency at spot.",
         case["rate_note"],
     ], mkt, summary=[("Model", f"lognormal forward, σ = {eng['sigma']:.4%} from {fi['vol_source']}"), ("Paths", f"{N_PATHS} on {T} monthly steps (Δ = {eng['dt']:.5f}y)")])
     _curve_sheet(wb, mkt)
@@ -525,14 +538,14 @@ def _xva_forward_workbook(mkt, case: dict):
     zrows, nrows = _normals_sheet(wb, eng, wf_noise)
     blocks = _paths_sheet(wb, case, eng, grid_r0, zrows)
     rs, blocks_exp = _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0)
-    r0, r1, rt = _waterfall_sheet(wb, eng, rs, grid_r0)
+    r0, r1, rt = _waterfall_sheet(wb, case, eng, rs, grid_r0)
     _engine_sheet(wb, case, eng, blocks, rs, rt)
     _convergence_sheet(wb, eng, blocks_exp, rs)
     W.live(wb, "Mode")
     W.ticket(wb, "XVA (the ticket's XVA tab)", [("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FVA", f"Waterfall!B{rt + 2}", "#,##0.00", ""),
                                                ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""), ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the VM held, against cash at OIS"),
                                                ("XVA TOTAL", f"Waterfall!B{rt + 7}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
-                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", case["im_basis"]),
+                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "the margin we post at the first date: the engine's estimate, not ISDA SIMM"),
                                                ("PEAK EE", f"Waterfall!B{rt + 11}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 12}", "#,##0.00", "")])
     W.ticket(wb, "THE FORWARD AND THE CSA", [("PAIR", "Model!B4", "@", ""), ("NOTIONAL", "Model!B6", "#,##0.####", base), ("DIRECTION", "Model!B7", '"BUY";"SELL";"FLAT"', f"+1 = buy {base}"),
                                              ("SETTLEMENT", "Model!B8", "yyyy-mm-dd", f"T = {inp.t_years:.4f}y"), ("FAIR FORWARD", "Model!B13", case["spot_fmt"], f"{quote} per {base}, from parity"),
@@ -550,7 +563,7 @@ def _xva_forward_workbook(mkt, case: dict):
         ("V", "side·N·(F_t − K)·DF_q(t,T)", f"Paths!B{blocks['V'][0]}", "the forward's value on path 1 at step 1", "#,##0"),
         ("V(t−δ)", "lo + w·ΔV + N·√(w(1−w)·VARP(ΔV))", f"Exposure!B{blocks_exp['LAG'][0]}", "the Brownian bridge over the margin period", "#,##0"),
         ("C", "max(V_lag − TH_cp, 0) − max(−V_lag − TH_own, 0), zeroed under the MTA", f"Exposure!B{blocks_exp['C'][0]}", "", "#,##0"),
-        ("IM₀", f"weight·|{case['delta']}|", "Exposure!B18", case["im_basis"], "#,##0.00"),
+        ("IM₀", "99th percentile fall of V over the margin period, about its mean", "Exposure!B18", "the first date; not ISDA SIMM", "#,##0.00"),
         ("EE, ENE, PFE", "mean(max(V−C−IM,0)), mean(min(V−C+IM,0)), 95th percentile of V−C", f"Exposure!D{rs + 1}", "step 1", "#,##0.00"),
         ("Q(t)", "exp(−s/LGD·t)", f"Waterfall!D{r0}", "the credit triangle", "0.000000"),
         ("CVA", "−LGD·Σ EE·ΔQ·P(0,t)·WWR", f"Waterfall!B{rt}", "", "#,##0.00"), ("DVA", "+LGD_own·Σ |ENE|·ΔQ_own·P(0,t)", f"Waterfall!B{rt + 1}", "", "#,##0.00"),

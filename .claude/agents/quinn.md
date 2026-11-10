@@ -26,6 +26,7 @@ Learned on 9 November 2026 (the scenario tab and the as-booked label)
 - A label that claims a state ("AS BOOKED") gets a journey that takes the state away again: change a term, press NEW TRADE, and read the label each time.
 - A fix for a race gets a journey that holds the request open and changes the screen meanwhile, and that journey is run once against the old behaviour to see it fail. A journey that never failed has shown nothing.
 - A number format is read in a browser set to another language (`locale: 'de-DE'`) on every tab, not only in the fields.
+- The frontend's unit run is judged by the exit code of `npm test`, the command CI runs, not by its line of passed tests. On 10 November 2026 a new test file loaded the sign-in client: every test passed, the run reported an unhandled error and CI failed the build, after the local check had read only the count. A test file that imports `xva-shared` mocks `../../lib/session` as its neighbours do.
 
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.

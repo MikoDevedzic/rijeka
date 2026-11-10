@@ -140,7 +140,7 @@ class SimulateRequest(BaseModel):
     # supply it we return npv=None rather than silently reporting 0.0,
     # so the UI cannot display an all-in that ignores the trade's MtM.
     npv: Optional[float] = None
-    ir01: Optional[float] = None         # $ per bp, from the pricer — drives SIMM IM
+    ir01: Optional[float] = None         # $ per bp, from the pricer; no longer read (it sized a SIMM-weighted margin)
     # Term structure the paths are generated from. Same shape the pricer takes,
     # so both can be handed the identical payload. If omitted, the curve is
     # loaded from the DB snapshot exactly as /price does.
@@ -166,9 +166,11 @@ class SimulateRequest(BaseModel):
     capital_model: str = "sa_ccr"        # sa_ccr | cem | imm
     counterparty_rw: float = 1.0         # Basel counterparty risk weight (1.0 = 100%)
     wwr_multiplier: float = 1.0
-    # IM in $M for MVA. If None, derived from ISDA SIMM IR delta on `ir01`
-    # (or a notional/tenor proxy) instead of a hardcoded guess.
-    simm_im_m: Optional[float] = None
+    # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
+    # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
+    # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
+    im_usd: Optional[float] = Field(default=None, ge=0)
+    simm_im_m: Optional[float] = Field(default=None, ge=0)
     direction: str = "PAY"                # PAY or RECEIVE — flips EE/ENE
     # Collateral terms. None → uncollateralised, no IM (MVA = 0).
     #   {"preset": "BILATERAL", "threshold_cp": 5e5, "mta": 1e5, "mpor_days": 10}
@@ -604,7 +606,7 @@ def simulate(
             ftp_bp=body.ftp_bp, ftp_curve=body.ftp_curve, fba_ratio=body.fba_ratio,
             hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
             counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-            ir01=body.ir01, simm_im_m=body.simm_im_m,
+            im_amount=im_amount_of(body),
         ),
         csa,
     )
@@ -686,8 +688,8 @@ def simulate(
             "capital_0":  round(cap_0, 2),
             "rw":         rw_cp,
             "im_0":       round(im_0, 2),
-            "simm_rw":     round(wf.simm_rw, 2),      # MPoR-scaled weight used
-            "simm_rw_10d": round(wf.simm_rw_10d, 2),  # published 10bd weight
+            "im_basis":    wf.im_basis,
+            "im_note":     IM_NOTE,
             "mpor_days":   csa.mpor_days,
             "sa_ccr_mf_0": round(wf.mf_0, 4),
             "margined":    csa.sa_ccr_margined,
@@ -725,7 +727,12 @@ class CurrencyXvaRequest(BaseModel):
     collateral: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
-    simm_im_m: Optional[float] = None    # IM in $M for MVA; None = SIMM-style weight on the spot delta
+    # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
+    # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
+    # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
+    im_usd: Optional[float] = Field(default=None, ge=0)
+    simm_im_m: Optional[float] = Field(default=None, ge=0)
+    crypto_group: Optional[str] = None   # a digital asset's Basel group for the capital add-on: 2a | 2b; None = the engine's default
     # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
     # halves against its forward. 1 = default independent of the asset (the numbers before this existed)
     cp_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
@@ -753,6 +760,26 @@ def one_wrong_way(body) -> None:
     if linked and float(getattr(body, "wwr_multiplier", 1.0) or 1.0) != 1.0:
         raise HTTPException(status_code=422, detail="wwr_multiplier and a credit link (cp_hazard_if_halves, own_hazard_if_halves) are one or the other: "
                                                     "leave the multiplier at 1 when a link is given")
+
+
+def im_amount_of(body) -> Optional[float]:
+    """The initial margin the desk set, in currency units: `im_usd`, or the older `simm_im_m` in millions."""
+    if getattr(body, "im_usd", None) is not None:
+        return float(body.im_usd)
+    if getattr(body, "simm_im_m", None) is not None:
+        return float(body.simm_im_m) * 1e6
+    return None
+
+
+def crypto_group_or_422(group: Optional[str]) -> Optional[str]:
+    g = str(group or "").strip().lower()
+    if g and g not in ("2a", "2b"):
+        raise HTTPException(status_code=422, detail="crypto_group must be 2a or 2b")
+    return g or None
+
+
+IM_NOTE = ("Initial margin is the amount the desk set, or this engine's own estimate. Rijeka does not compute ISDA SIMM: "
+           "SIMM is ISDA's licensed methodology, and a firm with a licence enters its own figure.")
 
 
 def wwr_block(m: Optional[dict]) -> Optional[dict]:
@@ -789,7 +816,8 @@ def forward_xva_input(db, uid: str, pair: str, *, base_notional: float, settleme
     inp = fx_xva.ForwardXvaInput(pair=pair, base_notional=base_notional, forward=float(q["forward"]),
                                  strike=float(q["forward_rate"]), t_years=float(q["t"]), df_quote_t=float(q["df_quote"]),
                                  quote_zero=float(q["quote_rate"]), direction=direction, vol_pct=vol_pct, vol_source=vol_source,
-                                 spot01=float(q.get("spot01", q.get("delta_quote_per_pct", 0.0))), pillars=pillars or None)
+                                 spot01=float(q.get("spot01", q.get("delta_quote_per_pct", 0.0))), pillars=pillars or None,
+                                 spot=float(q["spot"]) if q.get("spot") else None)
     return inp, q
 
 
@@ -819,7 +847,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                                   ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd,
                                   hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
                                   counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m,
+                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
                                   cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(q["npv"])
@@ -840,9 +868,10 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
-        "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
+        "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
+                    "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "vol_mode", "step_vols_pct")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "step_vols_pct")},
     }
 
 
@@ -872,7 +901,12 @@ class CurrencyOptionXvaRequest(BaseModel):
     collateral: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
-    simm_im_m: Optional[float] = None    # IM in $M for MVA; None = SIMM-style weight on the spot delta
+    # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
+    # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
+    # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
+    im_usd: Optional[float] = Field(default=None, ge=0)
+    simm_im_m: Optional[float] = Field(default=None, ge=0)
+    crypto_group: Optional[str] = None   # a digital asset's Basel group for the capital add-on: 2a | 2b; None = the engine's default
     # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
     # halves against its forward. 1 = default independent of the asset (the numbers before this existed)
     cp_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
@@ -936,7 +970,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
     wf, meta = fx_xva.option_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
                                  ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                  capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-                                 cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m,
+                                 cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
                                   cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(q["npv"])
@@ -955,9 +989,10 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
-        "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
+        "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
+                    "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "style", "vol_mode")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "style", "vol_mode")},
     }
 
 
@@ -992,7 +1027,12 @@ class CurrencyPackageXvaRequest(BaseModel):
     collateral: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"
-    simm_im_m: Optional[float] = None
+    # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
+    # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
+    # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
+    im_usd: Optional[float] = Field(default=None, ge=0)
+    simm_im_m: Optional[float] = Field(default=None, ge=0)
+    crypto_group: Optional[str] = None
     # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
     # halves against its forward. 1 = default independent of the asset (the numbers before this existed)
     cp_hazard_if_halves: float = Field(default=1.0, ge=0.1, le=20.0)
@@ -1047,7 +1087,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     wf, meta = fx_xva.package_xva(inputs, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
                                   ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                   capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
-                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), simm_im_m=body.simm_im_m,
+                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
                                   cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(sum(float(q["npv"]) for q in quotes))
@@ -1069,9 +1109,10 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
-        "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_rw_per_pct": meta["im_rw_per_pct"]},
+        "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
+                    "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_rw_per_pct", "im_basis", "model", "vol_mode")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode")},
     }
 
 

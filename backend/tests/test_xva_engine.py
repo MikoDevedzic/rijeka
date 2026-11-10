@@ -18,7 +18,7 @@ import pytest
 from pricing.csa import CSA
 from pricing.xva_engine import (
     WaterfallParams, run_waterfall, lagged_values, collateral_held,
-    simm_ir_risk_weight, interp_spread,
+    interp_spread, model_im, IM_CONFIDENCE,
 )
 
 
@@ -47,8 +47,7 @@ def make_paths(n_paths=4000, maturity_y=5.0, dt=1.0 / 12, notional=1e7,
 
 
 def default_params(theta, maturity_y=5.0, dt=1.0 / 12, **kw):
-    base = dict(notional=1e7, maturity_y=maturity_y, dt=dt, theta=theta,
-                ir01=4550.0)
+    base = dict(notional=1e7, maturity_y=maturity_y, dt=dt, theta=theta)
     base.update(kw)
     return WaterfallParams(**base)
 
@@ -110,17 +109,20 @@ class TestUncollateralisedParity:
         np.testing.assert_allclose(wf.ee, wf.ee_gross)
         assert all(c == 0.0 for c in wf.collateral_mean)
 
-    def test_legacy_mva_when_im_exchanged_without_vm(self):
-        """IM without VM: MVA equals the legacy formula on the legacy IM."""
+    def test_mva_of_a_margin_the_desk_sets_is_its_funding_cost_over_the_life(self):
+        """IM without VM, the amount set by the desk and held for the life: MVA is that amount funded at the
+        spread, step by step to the step before maturity (no capital or margin is booked at maturity itself)."""
         paths, p0, theta, T = make_paths()
-        P = default_params(theta)
+        P = default_params(theta, im_amount=250_000.0)
         csa = CSA(preset="UNCOLLATERALISED", collateralised=False, im_exchanged=True,
                   mpor_days=10.0)
         wf  = run_waterfall(paths, 0.0, p0, P, csa)
-        im_0 = abs(P.ir01) * simm_ir_risk_weight(P.maturity_y)
-        ref = legacy_waterfall(paths, p0, P, im_0=im_0)
-        assert wf.im_0 == pytest.approx(im_0)
-        assert wf.mva == pytest.approx(ref["mva"], rel=1e-12)
+        assert wf.im_0 == 250_000.0 and set(wf.im_profile) == {250_000.0} and wf.im_received_profile == wf.im_profile
+        assert "desk" in wf.im_basis
+        by_hand = -sum(250_000.0 * (P.ftp_bp / 1e4) * P.dt * p0[i + 1] for i in range(T) if P.maturity_y - (i + 1) * P.dt > 0)
+        assert wf.mva == pytest.approx(by_hand, rel=1e-12)
+        # no margin exchanged: none charged, whatever was typed
+        assert run_waterfall(paths, 0.0, p0, P, CSA.uncollateralised()).mva == 0.0
 
     def test_receive_direction_is_mirror(self):
         paths, p0, theta, T = make_paths()
@@ -217,14 +219,47 @@ class TestCSAEffects:
         im    = self._run(CSA.bilateral(im_exchanged=True))
         assert sum(im.ee) < sum(no_im.ee)
         assert no_im.mva == 0.0 and im.mva < 0.0
-        assert im.im_0 == pytest.approx(abs(self.P.ir01) * simm_ir_risk_weight(5.0))
+        assert "engine's estimate" in im.im_basis and "not ISDA SIMM" in im.im_basis and no_im.im_basis == "none"
 
-    def test_simm_im_scales_with_sqrt_mpor(self):
+    def test_the_engines_margin_is_the_percentile_it_says_it_is(self):
+        """The estimate is the 99th percentile rise (what we call) and fall (what we post) of the value over the
+        margin period, about its mean, at each date: rebuilt here from the lag the engine drew."""
+        csa = CSA.bilateral()
+        wf = self._run(csa)
+        lag = lagged_values(self.paths, 100_000.0, self.P.dt, csa.mpor_years, np.random.default_rng(11))
+        move = self.paths - lag
+        move = move - move.mean(axis=0)
+        assert wf.im_received_profile == pytest.approx(np.percentile(move, 99.0, axis=0))
+        assert wf.im_profile == pytest.approx(np.percentile(-move, 99.0, axis=0))
+        assert IM_CONFIDENCE == 99.0 and wf.im_0 == wf.im_profile[0]
+        # about 1 % of paths move by more than the margin at a date, each way
+        over = (move > np.array(wf.im_received_profile)[None, :]).mean()
+        assert 0.005 < over < 0.015
+
+    def test_a_scheduled_move_every_path_makes_is_not_margined(self):
+        """A payment or the passage of time moves every path alike: the margin is on the move about the mean."""
+        lag = np.zeros((500, 3))
+        jump = np.full((500, 3), 1_000_000.0)
+        recv, post = model_im(jump, lag)
+        assert (recv == 0).all() and (post == 0).all()
+        rng = np.random.default_rng(5)
+        noise = rng.standard_normal((500, 3)) * 1000.0
+        r2, p2 = model_im(jump + noise, lag)
+        r3, p3 = model_im(noise, lag)
+        assert r2 == pytest.approx(r3) and p2 == pytest.approx(p3)
+
+    def test_the_margin_scales_with_the_square_root_of_the_margin_period(self):
         bi = self._run(CSA.bilateral())
         oc = self._run(CSA.on_chain())
-        assert oc.im_0 / bi.im_0 == pytest.approx(math.sqrt(5 / 10), rel=1e-9)
-        assert oc.simm_rw / oc.simm_rw_10d == pytest.approx(math.sqrt(0.5), rel=1e-9)
-        assert bi.simm_rw == pytest.approx(bi.simm_rw_10d)
+        # 5 business days against 10: a diffusion's move scales by sqrt(1/2), to the sampling of the bridge
+        assert sum(oc.im_profile) / sum(bi.im_profile) == pytest.approx(math.sqrt(5 / 10), rel=0.08)
+
+    def test_margin_only_without_variation_margin_does_not_move_any_other_number(self):
+        """IM without VM draws its own lag from its own generator: the gross profiles are the run's without IM."""
+        a = self._run(CSA.uncollateralised())
+        b = self._run(CSA(preset="UNCOLLATERALISED", collateralised=False, im_exchanged=True, mpor_days=10.0))
+        assert b.ee_gross == a.ee_gross and b.pfe == a.pfe and b.im_0 > 0 and b.mva < 0
+        assert sum(b.ee) < sum(a.ee), "the margin we hold stands between us and their default"
 
     def test_im_yield_pickup_reduces_mva(self):
         a = self._run(CSA.on_chain(im_yield_pickup_bp=0.0))
@@ -269,12 +304,13 @@ class TestWaterfallOrdering:
         assert abs(bi.cva) < 0.35 * abs(un.cva)
         assert abs(oc.cva) < abs(bi.cva)
 
-    def test_on_chain_im_is_29pct_lower(self):
+    def test_on_chain_margin_is_about_29pct_lower(self):
+        """Half the margin period: the estimate is lower by about 1 − sqrt(1/2), to the sampling of the bridge."""
         paths, p0, theta, T = make_paths()
         P = default_params(theta)
         bi = run_waterfall(paths, 0.0, p0, P, CSA.bilateral())
         oc = run_waterfall(paths, 0.0, p0, P, CSA.on_chain())
-        assert 1 - oc.im_0 / bi.im_0 == pytest.approx(0.2929, abs=1e-3)
+        assert 1 - sum(oc.im_profile) / sum(bi.im_profile) == pytest.approx(0.2929, abs=0.06)
 
 
 # ── CSA request parsing ──────────────────────────────────────────────────────
@@ -300,7 +336,7 @@ class TestCSAFromRequest:
 
     def test_to_dict_roundtrip_fields(self):
         d = CSA.on_chain().to_dict()
-        assert d["simm_mpor_scale"] == pytest.approx(math.sqrt(0.5))
+        assert "simm_mpor_scale" not in d, "no SIMM scaling: Rijeka does not compute SIMM"
         assert d["mpor_years"] == pytest.approx(5 / 250)
 
 
@@ -309,7 +345,7 @@ class TestCSAFromRequest:
 def test_colva_is_zero_for_cash_and_the_closed_form_for_a_spread():
     paths, p0, theta, _T = make_paths(n_paths=1500, seed=3)
     v0 = 0.0
-    params = default_params(theta, ir01=5000.0)
+    params = default_params(theta)
     base = CSA.bilateral(threshold_cp=0.0, mta=0.0, im_exchanged=True)
     wf0 = run_waterfall(paths, v0, p0, params, base, np.random.default_rng(1))
     assert wf0.colva == 0.0 and wf0.xva_total == wf0.cva + wf0.dva + wf0.fva + wf0.fba + wf0.kva + wf0.mva

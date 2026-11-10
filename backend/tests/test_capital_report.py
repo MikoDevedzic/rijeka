@@ -59,9 +59,10 @@ def test_attribution_sums_to_the_columns_and_orders_as_the_rules_do():
     assert by["IM_ELIGIBILITY"][1]["mva"] == pytest.approx(0.0, abs=1e-6)
     assert by["TOKENISED_IM"][1]["mva"] > 0                        # the posted asset's yield reduces the funding cost
     assert by["HQLA_L1"][1]["hqla_im"] > 0 and by["HQLA_L1"][1]["ead"] == 0.0
-    # SIMM invariance: IM moves only with the MPoR scaling, never with the collateral
+    # the margin is the engine's estimate from the paths: it moves with the margin period, never with the collateral
     assert by["COLLATERAL"][1]["im"] == 0.0 and by["TOKENISED_IM"][1]["im"] == 0.0
-    assert by["MPOR_RELIEF"][0]["im"] == pytest.approx(by["DISPUTES"][0]["im"] * (5 / 10) ** 0.5)
+    # half the period: lower by about sqrt(1/2), to the sampling of a 99th percentile on 800 paths
+    assert by["MPOR_RELIEF"][0]["im"] == pytest.approx(by["DISPUTES"][0]["im"] * (5 / 10) ** 0.5, rel=0.1)
 
 
 def test_a_stablecoin_baseline_recovers_through_the_collateral_channel():

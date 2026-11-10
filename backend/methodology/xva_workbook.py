@@ -29,10 +29,10 @@ from openpyxl.utils import get_column_letter as L
 
 from methodology import workbook as W
 from pricing.calibration import calibrate_hw1f, hw1f_swaption_vol_normal, tenor_to_years
-from pricing.csa import CSA, BUSINESS_DAYS_PER_YEAR, MPOR_FLOOR_BILATERAL_BD, MPOR_FLOOR_CLEARED_BD, SIMM_REFERENCE_MPOR_BD
+from pricing.csa import CSA, BUSINESS_DAYS_PER_YEAR, MPOR_FLOOR_BILATERAL_BD, MPOR_FLOOR_CLEARED_BD
 from pricing.curve import discount_fn_from_curve
 from pricing.hw1f_mc import grids, simulate_swap_paths
-from pricing.xva_engine import ALPHA, CAP_R, SF_IR, SIMM_IR_RW, WaterfallParams, run_waterfall
+from pricing.xva_engine import ALPHA, CAP_R, IM_CONFIDENCE, SF_IR, WaterfallParams, run_waterfall
 
 N_PATHS, MATURITY_Y, NOTIONAL, FIXED_RATE, DIRECTION = 200, 2.0, 10_000_000.0, 0.03643, "PAY"
 DT = 1.0 / 12.0
@@ -346,8 +346,10 @@ def _exposure_sheet(wb, eng, blocks, nrows, grid_r0):
             ("IM exchanged (1/0)", '=IF(Preset="UNCOLLATERALISED",0,1)', "0"), ("IM yield pickup (bp)", 0.0, "0.0"),
             ("δ = MPoR/250 (years)", f"=B9/{BUSINESS_DAYS_PER_YEAR}", "0.0000"), ("Steps back = δ/Δ (< 1 here)", "=B12/Dt", "0.0000"), ("w = 1 − δ/Δ", "=1-B13", "0.0000"),
             ("V(0): the model's own t = 0 value", eng["v0"], "#,##0.00"),
-            ("SIMM weight at this maturity (bp, 10bd)", f"={_simm_formula()}", "0.00"), ("MPoR scaling √(MPoR/10)", f"=SQRT(B9/{SIMM_REFERENCE_MPOR_BD})", "0.0000"),
-            ("IR01 proxy: N·(1 − e^(−θM))/θ·1bp", "=Notl*(1-EXP(-Theta*Nsteps*Dt))/Theta*0.0001", "#,##0.00"), ("IM₀ = weight·scaling·|IR01|", "=IF(B10=1,B16*B17*ABS(B18),0)", "#,##0.00"),
+            ("IM confidence, one-tailed, each way (the engine's own estimate from these paths; not ISDA SIMM, which is licensed)", IM_CONFIDENCE / 100.0, "0.00"),
+            ("IM₀ we call: the margin at the first date", "=K25", "#,##0.00"),
+            ("A desk with its own figure (its SIMM, under its licence) types it on the ticket: that amount is then held for the life", "", "@"),
+            ("IM₀ we post: the margin at the first date (the profile MVA funds)", "=N25", "#,##0.00"),
             ("VM carry, posted (bp over OIS: what the margin we post earns above cash)", 0.0, "0.0"), ("VM carry, received (bp over OIS: what the margin we hold earns above the rebate)", 0.0, "0.0")]
     for i, (label, v, fmt) in enumerate(rows, 4):
         ws.cell(row=i, column=1, value=label)
@@ -358,18 +360,21 @@ def _exposure_sheet(wb, eng, blocks, nrows, grid_r0):
             c.fill = W.FILL_RJ
     W.dropdown(ws, "B4", list(PRESETS))
     _names(wb, {"Preset": "Exposure!B4", "Coll": "Exposure!B5", "THcp": "Exposure!B6", "THown": "Exposure!B7", "MTA": "Exposure!B8", "MPoR": "Exposure!B9",
-                "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "V0": "Exposure!B15", "IM0": "Exposure!B19", "CarryPost": "Exposure!B20", "CarryRecv": "Exposure!B21"})
+                "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "V0": "Exposure!B15", "IMq": "Exposure!B16", "IM0": "Exposure!B19", "CarryPost": "Exposure!B20", "CarryRecv": "Exposure!B21"})
     # per-step summary
     rs = 24
     ws.cell(row=rs - 1, column=1, value="PER STEP").font = W.F_SECTION
-    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM(t)", "mean received", "mean posted"])
-    # blocks below: ΔV, V lagged, C, residual
+    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM we call (t)", "mean received", "mean posted", "IM we post (t)"])
+    # blocks below: ΔV, V lagged, the move over the margin period, C, residual
     top = rs + T + 3
     dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=Paths!{L(c)}{vb[0] + p}-V0" if j == 1 else f"=Paths!{L(c)}{vb[0] + p}-Paths!{L(c - 1)}{vb[0] + p}"), "#,##0", "ΔV = V(t_i) − V(t_{i−1})")
     top = dvb[1] + 3
     lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,{'V0' if j == 1 else f'Paths!{L(c - 1)}{vb[0] + p}'}+Wlag*{L(c)}{dvb[0] + p}+Normals!{L(c)}{n0 + p}*SQRT(Wlag*(1-Wlag)*$C${rs + j}),Paths!{L(c)}{vb[0] + p})"),
                   "#,##0", "V(t − δ): lo + w·ΔV + N·√(w(1−w)·s²) (the Brownian bridge; LIVE mode re-rolls N too)")
     top = lagb[1] + 3
+    mvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Paths!{L(c)}{vb[0] + p}-{L(c)}{lagb[0] + p}", "#,##0",
+                 "Move over the margin period: V(t) − V(t − δ). Initial margin is its 99th percentile rise (what we call) and fall (what we post), about its mean")
+    top = mvb[1] + 3
     cb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=IF(Coll=1,IF(ABS(MAX({L(c)}{lagb[0] + p}-THcp,0)-MAX(-{L(c)}{lagb[0] + p}-THown,0))<MTA,0,MAX({L(c)}{lagb[0] + p}-THcp,0)-MAX(-{L(c)}{lagb[0] + p}-THown,0)),0)",
                 "#,##0", "C: collateral held against the lagged value, our side (+ = we hold theirs)")
     top = cb[1] + 3
@@ -381,7 +386,7 @@ def _exposure_sheet(wb, eng, blocks, nrows, grid_r0):
         ws.cell(row=r, column=3, value=f"=VARP({col}{dvb[0]}:{col}{dvb[1]})").number_format = "#,##0"
         res = f"{col}{resb[0]}:{col}{resb[1]}"; vcol = f"Paths!{col}{vb[0]}:{col}{vb[1]}"; ccol = f"{col}{cb[0]}:{col}{cb[1]}"
         ws.cell(row=r, column=4, value=f"=SUMPRODUCT(({res}-K{r}>0)*({res}-K{r}))/Npaths").number_format = "#,##0.00"
-        ws.cell(row=r, column=5, value=f"=SUMPRODUCT(({res}+K{r}<0)*({res}+K{r}))/Npaths").number_format = "#,##0.00"
+        ws.cell(row=r, column=5, value=f"=SUMPRODUCT(({res}+N{r}<0)*({res}+N{r}))/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=6, value=f"=PERCENTILE({res},0.95)").number_format = "#,##0.00"
         ws.cell(row=r, column=7, value=f"=SUMPRODUCT(({vcol}>0)*{vcol})/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=8, value=f"=SUMPRODUCT(({vcol}<0)*{vcol})/Npaths").number_format = "#,##0.00"
@@ -389,19 +394,12 @@ def _exposure_sheet(wb, eng, blocks, nrows, grid_r0):
         ws.cell(row=r, column=10, value=f"=AVERAGE({res})").number_format = "#,##0.00"
         ws.cell(row=r, column=12, value=f"=SUMPRODUCT(({ccol}>0)*{ccol})/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=13, value=f"=-SUMPRODUCT(({ccol}<0)*{ccol})/Npaths").number_format = "#,##0.00"
-        ws.cell(row=r, column=11, value=f"=IM0*MAX(Nsteps*Dt-B{r},0)/(Nsteps*Dt)").number_format = "#,##0.00"
+        mv = f"{col}{mvb[0]}:{col}{mvb[1]}"
+        ws.cell(row=r, column=11, value=f"=IF(IMx=1,MAX(PERCENTILE({mv},IMq)-AVERAGE({mv}),0),0)").number_format = "#,##0.00"
+        ws.cell(row=r, column=14, value=f"=IF(IMx=1,MAX(AVERAGE({mv})-PERCENTILE({mv},1-IMq),0),0)").number_format = "#,##0.00"
     W.widths(ws, [40, 10, 14, 14, 14, 14, 14, 14, 16, 16, 14] + [12] * (T - 10))
     ws.freeze_panes = "B5"
-    return rs, {"DV": dvb, "LAG": lagb, "C": cb, "RES": resb}
-
-
-def _simm_formula() -> str:
-    """Linear interpolation of the SIMM IR weight at M = T·Δ, in one cell."""
-    xs = ",".join(f"{t}" for t, _ in SIMM_IR_RW); ys = ",".join(f"{w}" for _, w in SIMM_IR_RW)
-    # LOOKUP finds the bracketing node; the slope term interpolates
-    return (f"IF(Nsteps*Dt<={SIMM_IR_RW[0][0]},{SIMM_IR_RW[0][1]},IF(Nsteps*Dt>={SIMM_IR_RW[-1][0]},{SIMM_IR_RW[-1][1]},"
-            f"LOOKUP(Nsteps*Dt,{{{xs}}},{{{ys}}})+(Nsteps*Dt-LOOKUP(Nsteps*Dt,{{{xs}}}))/(INDEX({{{xs}}},MATCH(Nsteps*Dt,{{{xs}}},1)+1)-LOOKUP(Nsteps*Dt,{{{xs}}}))"
-            f"*(INDEX({{{ys}}},MATCH(Nsteps*Dt,{{{xs}}},1)+1)-LOOKUP(Nsteps*Dt,{{{xs}}},{{{ys}}}))))")
+    return rs, {"DV": dvb, "LAG": lagb, "MV": mvb, "C": cb, "RES": resb}
 
 
 def _waterfall_sheet(wb, eng, rs, grid_r0):
@@ -419,7 +417,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBAr": "Waterfall!B9",
                 "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFir": "Waterfall!B15", "CapR": "Waterfall!B16"})
     r0 = 20
-    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM(t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)", "ColVA_i"]
+    hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FVA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM we post (t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)", "ColVA_i"]
     W.header(ws, r0 - 1, hdr)
     for j in range(1, T + 1):
         r = r0 + j - 1; e = rs + j
@@ -442,17 +440,17 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
         ws.cell(row=r, column=17, value=f"=SFir*Notl*O{r}*P{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=18, value=f"=IF(Coll=1,Exposure!K{e},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=19, value=f"=IF(Coll=1,MAX(Exposure!J{e},THcp+MTA-R{r},0),MAX(Exposure!J{e},0))").number_format = "#,##0.00"
-        ws.cell(row=r, column=20, value=f"=IF(Q{r}>0,MIN(1,0.05+0.95*EXP((Exposure!J{e}-R{r})/(1.9*Q{r}))),1)").number_format = "0.0000"
+        ws.cell(row=r, column=20, value=f"=IF(Q{r}>0,MIN(1,0.05+0.95*EXP(MIN((Exposure!J{e}-R{r})/(1.9*Q{r}),50))),1)").number_format = "0.0000"
         ws.cell(row=r, column=21, value=f"=IF(CapModel=\"IMM\",AlphaSA*H{r},IF(CapModel=\"CEM\",S{r}+SFir*Notl*P{r},IF(Coll=1,MIN(AlphaSA*(S{r}+T{r}*Q{r}),AD{r}),AlphaSA*(S{r}+T{r}*Q{r}))))").number_format = "#,##0.00"
         ws.cell(row=r, column=22, value=f"=CapR*RWcp*U{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=23, value=f"=IF(N{r}>0,Hurdle*V{r}*Dt*C{r},0)").number_format = "#,##0.00"
-        ws.cell(row=r, column=24, value=f"=Exposure!K{e}").number_format = "#,##0.00"
+        ws.cell(row=r, column=24, value=f"=Exposure!N{e}").number_format = "#,##0.00"
         ws.cell(row=r, column=25, value=f"=IF(N{r}>0,X{r}*MAX(FTP/10000-Pickup/10000,0)*Dt*C{r},0)").number_format = "#,##0.00"
         # CRE52.2: the same set unmargined (the collateral held, the unmargined maturity factor, RC = max(V − C, 0)); the EAD is capped at it
         ws.cell(row=r, column=26, value=f"=SQRT(MIN(MAX(N{r},0.04),1))").number_format = "0.0000"
         ws.cell(row=r, column=27, value=f"=SFir*Notl*O{r}*Z{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=28, value=f"=MAX(Exposure!J{e}-R{r},0)").number_format = "#,##0.00"
-        ws.cell(row=r, column=29, value=f"=IF(AA{r}>0,MIN(1,0.05+0.95*EXP((Exposure!J{e}-R{r})/(1.9*AA{r}))),1)").number_format = "0.0000"
+        ws.cell(row=r, column=29, value=f"=IF(AA{r}>0,MIN(1,0.05+0.95*EXP(MIN((Exposure!J{e}-R{r})/(1.9*AA{r}),50))),1)").number_format = "0.0000"
         ws.cell(row=r, column=30, value=f"=AlphaSA*(AB{r}+AC{r}*AA{r})").number_format = "#,##0.00"
         # ColVA: the carry of the variation margin against cash at OIS; what we posted earns CarryPost, what we hold earns CarryRecv (both over OIS)
         ws.cell(row=r, column=31, value=f"=(Exposure!M{e}*CarryPost/10000+Exposure!L{e}*CarryRecv/10000)*Dt*C{r}").number_format = "#,##0.00"
@@ -564,7 +562,7 @@ def xva_rates_workbook(mkt):
     W.ticket(wb, "XVA (the ticket's XVA tab)", [("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FVA", f"Waterfall!B{rt + 2}", "#,##0.00", ""),
                                                ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""), ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the VM held, against cash at OIS"),
                                                ("XVA TOTAL", f"Waterfall!B{rt + 7}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
-                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "SIMM"),
+                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "the margin we post at the first date: the engine's estimate, not ISDA SIMM"),
                                                ("PEAK EE", f"Waterfall!B{rt + 11}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 12}", "#,##0.00", "")])
     W.ticket(wb, "MODEL AND CSA", [("a", "Model!B4", "0.0000", "mean reversion"), ("σ", "Model!B5", "0.0000%", "short-rate vol"), ("RMSE OF THE FIT", f"Calibration!B{cal['rs'] + 1}", "0.00", "bp"),
                                    ("CSA PRESET", "Exposure!B4", "@", ""), ("MPoR", "Exposure!B9", "0", "business days"), ("MODE", "Model!B13", "@", "ENGINE or LIVE")])

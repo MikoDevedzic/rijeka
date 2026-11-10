@@ -72,8 +72,7 @@ def _type_key(ct: CounterpartyType) -> str:
 
 def capital_grid(sets: dict[str, Optional[dict]], regimes: list[COL.Regime], types: list[CounterpartyType],
                  cp_cds_bp: float, lgd: float, hurdle: float, seed: int = 43) -> dict[str, Any]:
-    """sets: name → {V (paths × T+1, USD), t (T+1 years), p0 (T+2 discount factors), rows (SaccrTrade list), im_10d (IM at a
-    10-day MPoR, USD), gross (USD), mtm (today's net mark)} or None for an empty set. Returns, per regime and counterparty
+    """sets: name → {V (paths × T+1, USD), t (T+1 years), p0 (T+2 discount factors), rows (SaccrTrade list), gross (USD), mtm (today's net mark)} or None for an empty set. Returns, per regime and counterparty
     type, the metrics of every set and the differences; per regime, the SA-CCR snapshot of every set."""
     from ccr.capital_report import run_set
     out_cells: dict[str, dict[str, dict]] = {}
@@ -246,7 +245,7 @@ def capital_trade(body: CapitalTradeRequest, db: Session = Depends(get_db), user
     notes = sorted(set(notes))
     notes.append("common random numbers: every set and every regime runs on the same risk-neutral paths (seed 7), so differences are the trade and the regime, not the noise")
     notes.append("the regulatory CSA keeps collateral the rules recognise, at its haircut; the economic CSA is what is exchanged; both are shown per regime")
-    notes.append("IM: ISDA SIMM's interest-rate delta weight on the set's IR01 and the FX delta weight on its spot sensitivity (a labelled assumption for digital assets), scaled by sqrt(MPoR/10)")
+    notes.append("IM: the engine's own estimate from the paths, the 99th percentile move over each regime's margin period; Rijeka does not compute ISDA SIMM, which is licensed")
     return {"mode": mode, "counterparty": cp.name if cp else "UNASSIGNED", "counterparty_id": str(cp_id) if cp_id else None, "asof": asof.isoformat(),
             "n_paths": S_with["n_paths"], "months": S_with["months"], "seed": 7, "other_trades": len(without), "measure": "RISK_NEUTRAL",
             "metrics": METRICS, "cost_keys": COST_KEYS, "quote": quotes, "trades_today": S_with["today"],

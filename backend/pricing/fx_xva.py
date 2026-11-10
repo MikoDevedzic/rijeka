@@ -6,12 +6,15 @@ T-forward measure F_t is driftless and lognormal with a flat volatility σ, so
 the exposure paths are simulated directly (no rate model is needed) and
 handed to pricing.xva_engine.run_waterfall, which applies the CSA, initial
 margin and the CVA / DVA / FVA / FBA / KVA / MVA integrals exactly as it does
-for a swap. σ is a desk input per pair: the demo has no public vol surface
-for FX or digital assets, and the defaults below say so.
+for a swap. σ is the pair's surface, or a desk input, or the default below
+for a pair with none, and the run says which.
 
-Initial margin: SIMM's FX delta risk weight is applied to the spot
-sensitivity (FX01, PV for +1 % spot) instead of the IR weight on IR01.
-Digital assets are outside SIMM; the weight used is an assumption, labelled.
+Initial margin is an amount the desk sets, or the engine's own estimate from
+these paths (xva_engine.model_im). It is not ISDA SIMM, which is licensed.
+
+Capital: the add-on is SA-CCR's for the asset class of the pair (saccr_rows):
+foreign exchange (CRE52), a Group 2a cryptoasset (SCO60.98) or a Group 2b
+cryptoasset (SCO60.99).
 """
 from __future__ import annotations
 
@@ -29,19 +32,31 @@ DEFAULT_VOL_PCT = {
     "EURUSD": 7.5, "GBPUSD": 8.0, "USDJPY": 10.0, "USDCHF": 8.0, "AUDUSD": 10.0, "USDCAD": 7.0,
     "BTCUSD": 55.0, "ETHUSD": 70.0, "SOLUSD": 90.0,
 }
-# SIMM FX delta risk weight (per 1 % spot) for G10 pairs; digital assets are not in SIMM.
-SIMM_FX_RW_G10 = 7.4
-CRYPTO_RW_ASSUMPTION = 35.0
 G10 = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "SEK", "NOK"}
+# Which Basel group a digital asset is run under when the desk does not say (SCO60.55: Group 2a needs a
+# regulated derivative or ETF, USD 10bn of market capitalisation, USD 50m of daily volume and a year of prices,
+# shown to the supervisor; everything else is 2b). The default is this engine's reading, the desk's to change.
+GROUP_2A_DEFAULT = {"BTC", "ETH"}
 
 
 def default_vol_pct(pair: str) -> float:
     return DEFAULT_VOL_PCT.get(pair.upper(), 60.0 if pair[:3].upper() not in G10 else 9.0)
 
 
-def im_risk_weight(pair: str) -> float:
-    base = pair[:3].upper()
-    return SIMM_FX_RW_G10 if base in G10 else CRYPTO_RW_ASSUMPTION
+def is_crypto(pair: str) -> bool:
+    return pair[:3].upper() not in G10
+
+
+def crypto_group_of(pair: str, group: Optional[str] = None) -> Optional[str]:
+    """'2a' or '2b' for a digital asset (the desk's choice, else the default above); None for a currency pair."""
+    if not is_crypto(pair):
+        return None
+    g = str(group or "").lower().replace("group", "").strip()
+    if g in ("2a", "2b"):
+        return g
+    if g:
+        raise ValueError("crypto_group must be 2a or 2b")
+    return "2a" if pair[:3].upper() in GROUP_2A_DEFAULT else "2b"
 
 
 @dataclass
@@ -55,7 +70,8 @@ class ForwardXvaInput:
     quote_zero: float           # continuous zero to T on the quote curve (for DF_q(0, t) along the grid)
     direction: str = "BUY"      # of the base currency
     vol_pct: Optional[float] = None
-    spot01: Optional[float] = None   # PV for +1 % spot, drives SIMM-style IM
+    spot01: Optional[float] = None   # PV for +1 % spot
+    spot: Optional[float] = None     # today's spot, for the SA-CCR notional (CRE52.35); None = the forward stands in
     vol_source: Optional[str] = None # where vol_pct came from (the pair's surface, a desk input); None = the demo default
     pillars: Optional[list] = None   # the pair's surface (fx_vol.parse_surface): the paths step with its ATM term structure
 
@@ -151,21 +167,21 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
                 own_lgd: float = 0.40, hurdle_rate: float = 0.12, capital_model: str = "sa_ccr",
                 counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None, own_cds_curve=None,
                 ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
-                simm_im_m: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0) -> tuple[WaterfallResult, dict]:
+                im_amount: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0,
+                crypto_group: Optional[str] = None) -> tuple[WaterfallResult, dict]:
     noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0 = simulate_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     wwr = wwr_of(np.log(noise_out["f_t"] / inp.forward), cp_hazard_if_halves, own_hazard_if_halves)
     steps, dt = monthly_grid(inp.t_years)
-    rw = im_risk_weight(inp.pair)
-    im_m = simm_im_m if simm_im_m is not None else (abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None)
+    cap = capital_inputs([inp], csa, steps, dt, capital_model, crypto_group)
     params = WaterfallParams(
         notional=abs(inp.base_notional * inp.forward), maturity_y=inp.t_years, dt=dt, theta=max(inp.quote_zero, 1e-6),
         lgd=lgd, own_lgd=own_lgd, cp_cds_bp=cp_cds_bp, own_cds_bp=own_cds_bp, cp_cds_curve=cp_cds_curve,
         own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, fba_ratio=fba_ratio, hurdle_rate=hurdle_rate,
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
-        ir01=None, simm_im_m=im_m,
+        im_amount=im_amount,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, **cap["kwargs"], **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     nz = {}
     if inp.pillars:
         _, _, _ = simulate_paths(inp, n_paths=2, seed=seed, noise_out=nz)      # the step vols, for the record
@@ -173,7 +189,7 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
             "vol_source": (inp.vol_source or "desk input") if inp.vol_pct is not None else "demo default (no surface for this pair)",
             "vol_mode": "ATM term structure of the surface (step vols)" if inp.pillars else "flat",
             "step_vols_pct": [round(float(v) * 100, 3) for v in nz["step_vols"]] if inp.pillars else None,
-            "im_rw_per_pct": rw, "im_basis": "SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM",
+            "im_basis": wf.im_basis, "capital_basis": cap["basis"], "crypto_group": cap["group"],
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward at the surface's ATM vol to settlement, same waterfall as rates",
             "p0_grid": [float(x) for x in p0], "_paths": paths,       # the MtM paths, for the ticket's chart (not serialised as such)
             "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
@@ -275,13 +291,13 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
                ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
                capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
                own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
-               simm_im_m: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0) -> tuple[WaterfallResult, dict]:
+               im_amount: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0,
+               crypto_group: Optional[str] = None) -> tuple[WaterfallResult, dict]:
     noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0 = simulate_option_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     wwr = wwr_of(np.log(noise_out["f_t"] / inp.forward), cp_hazard_if_halves, own_hazard_if_halves)
     steps, dt = monthly_grid(inp.t_settle)
-    rw = im_risk_weight(inp.pair)
-    im_m = simm_im_m if simm_im_m is not None else (abs(inp.spot01 or 0.0) * rw / 1e6 if inp.spot01 is not None else None)
+    cap = capital_inputs([inp], csa, steps, dt, capital_model, crypto_group)
     spec = inp.spec
     notional = abs(inp.base_notional * inp.forward) if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else abs(float(spec.payout or 0.0))
     params = WaterfallParams(
@@ -289,12 +305,12 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
         lgd=lgd, own_lgd=own_lgd, cp_cds_bp=cp_cds_bp, own_cds_bp=own_cds_bp, cp_cds_curve=cp_cds_curve,
         own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, fba_ratio=fba_ratio, hurdle_rate=hurdle_rate,
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
-        ir01=None, simm_im_m=im_m,
+        im_amount=im_amount,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, **cap["kwargs"], **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     meta = {"vol_pct": inp.vol * 100.0, "vol_source": inp.vol_source or "the pair's surface at the option's expiry and strike",
             "vol_mode": "ATM term structure for the paths, the smile at each path's moneyness (sticky-delta)" if inp.pillars else "flat (today's vol at the strike, held along the path)",
-            "im_rw_per_pct": rw, "im_basis": "SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM",
+            "im_basis": wf.im_basis, "capital_basis": cap["basis"], "crypto_group": cap["group"],
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "style": spec.style, "p0_grid": [float(x) for x in p0],
             "model": f"lognormal spot{' with the surface' + chr(39) + 's term structure' if inp.pillars else ' at the option' + chr(39) + 's vol'}; {spec.style.replace('_', ' ').lower()} valued on each path with the style's closed form "
                      f"(the credit engine's model); payoff fixed at expiry, discounted to settlement"
@@ -385,47 +401,80 @@ def package_addons(legs: list, csa: CSA, steps: int, dt: float) -> tuple[list[fl
     return grid, (unm if csa.sa_ccr_margined else None), cem
 
 
-def package_im(legs: list, rw: float, steps: int, dt: float) -> Optional[tuple[float, list[float]]]:
-    """Initial margin today and along the grid, from the legs' spot sensitivities: the weight on the NET
-    sensitivity of the legs still alive, each leg's own amortised in a line to its settlement (what run_waterfall
-    does for a leg on its own). So a calendar spread posts little while both legs stand and the remaining leg's
-    margin once the near one has settled. None when no leg carries a sensitivity."""
-    known = [(l.spot01, _horizon(l)) for l in legs if l.spot01 is not None]
-    if not known:
-        return None
-    im_0 = abs(sum(s for s, _ in known)) * rw / 1e6 * 1e6
-    profile = []
-    for i in range(steps):
-        t = (i + 1) * dt
-        profile.append(abs(sum((s * rw / 1e6 * 1e6) * max(T - t, 0.0) / T if T > 0 else 0.0 for s, T in known)))
-    return im_0, profile
+def saccr_rows(legs: list) -> list:
+    """The legs as SA-CCR trades of their asset class (pricing/sa_ccr.py): foreign exchange (CRE52.35: the foreign
+    leg in the domestic currency, at spot) or the cryptoasset class of SCO60.98 (the notional in fiat), one
+    hedging set per pair; a forward at δ = ±1, an option at the supervisory delta of its strike with the class's
+    supervisory volatility (CRE52.40; a barrier or a digital at its vanilla delta), an option with no strike (a
+    touch) at ±1. A style whose size is a payout, not a notional, enters at its payout: the rules name no
+    notional for it, and this is the engine's reading."""
+    from pricing.sa_ccr import SUPERVISORY, SaccrTrade, supervisory_delta
+    rows = []
+    for n, leg in enumerate(legs, start=1):
+        ac = "CRYPTO" if is_crypto(leg.pair) else "FX"
+        bought = str(leg.direction).upper() == "BUY"
+        if not _is_option(leg):
+            N = abs(leg.base_notional) * float(leg.spot or leg.forward)
+            rows.append(SaccrTrade(ac, leg.pair.upper(), N, 0.0, leg.t_years, leg.t_years, 1.0 if bought else -1.0, trade_ref=f"LEG {n}"))
+            continue
+        spec = leg.spec
+        vanilla_size = spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER")
+        N = abs(leg.base_notional) * float(leg.spot) if vanilla_size else abs(float(spec.payout or 0.0))
+        K = float(spec.strike or 0.0)
+        if K > 0 and spec.style != "TOUCH":
+            delta = supervisory_delta(spec.option_type, bought, float(leg.spot), K, max(leg.t_expiry, 1.0 / 365.0), SUPERVISORY[ac]["vol"])
+        else:
+            delta = 1.0 if bought else -1.0
+        rows.append(SaccrTrade(ac, leg.pair.upper(), N, 0.0, leg.t_settle, leg.t_settle, delta, trade_ref=f"LEG {n}"))
+    return rows
+
+
+def capital_inputs(legs: list, csa: CSA, steps: int, dt: float, capital_model: str, crypto_group: Optional[str]) -> dict:
+    """What the waterfall's capital leg takes for these legs: {"kwargs": for run_waterfall, "basis": the rule in
+    words, "group": '2a' | '2b' | None}. Under SA-CCR: the FX class for a currency pair; the crypto class for a
+    Group 2a asset; for a Group 2b asset 50 % of each trade's gross notional while it is alive, taken whole (no
+    hedging set, no multiplier: SCO60.99). The older CEM branch and the internal-model branch are as they were,
+    with a package's legs each at their own remaining life."""
+    pair = legs[0].pair
+    group = crypto_group_of(pair, crypto_group)
+    cem = package_addons(legs, csa, steps, dt)[2] if len(legs) > 1 else None
+    model = str(capital_model or "sa_ccr").lower()
+    if model != "sa_ccr":
+        return {"kwargs": {"addon_profiles": (None, None, cem)} if cem is not None else {}, "group": group,
+                "basis": "CEM as this engine has it (0.5 % of notional × maturity factor)" if model == "cem" else "internal model: α × expected exposure"}
+    rows = saccr_rows(legs)
+    if group == "2b":
+        grid = [sum(0.5 * r.notional for r in rows if r.maturity_y - (i + 1) * dt > 0) for i in range(steps)]
+        return {"kwargs": {"addon_profiles": (grid, grid, cem), "apply_multiplier": False}, "group": group,
+                "basis": "Group 2b cryptoasset: exposure = α × (replacement cost + 50 % of each trade's gross notional), no hedging set, no multiplier (SCO60.99)"}
+    return {"kwargs": {"saccr": rows, **({"addon_profiles": (None, None, cem)} if cem is not None else {})}, "group": group,
+            "basis": ("Group 2a cryptoasset: SA-CCR with the crypto class, supervisory factor 32 %, option volatility 120 % (SCO60.98)" if group == "2a"
+                      else "SA-CCR, foreign exchange class, supervisory factor 4 % (CRE52.72)")}
 
 
 def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0, own_cds_bp: float = 42.0,
                 ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
                 capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
                 own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
-                simm_im_m: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0) -> tuple[WaterfallResult, dict]:
+                im_amount: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0,
+                crypto_group: Optional[str] = None) -> tuple[WaterfallResult, dict]:
     """XVA of a package of legs on one pair as one netting set: the summed paths through the same waterfall.
-    Initial margin on the NET spot sensitivity of the legs still alive (package_im; a figure typed by the desk is
-    used as typed, amortised to the longest settlement); the capital add-on as package_addons."""
+    Initial margin is the desk's amount or the engine's estimate from the package's own paths, so it follows the
+    legs as they settle; the capital add-on is SA-CCR's on the legs together (capital_inputs)."""
     noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0, rows = simulate_package_paths(legs, n_paths=n_paths, seed=seed, noise_out=noise_out)
     wwr = wwr_of(np.log(noise_out["m"]), cp_hazard_if_halves, own_hazard_if_halves)
     longest = max(legs, key=_horizon)
     steps, dt = monthly_grid(_horizon(longest))
-    rw = im_risk_weight(longest.pair)
-    known = [l.spot01 for l in legs if l.spot01 is not None]
-    im_m = simm_im_m if simm_im_m is not None else (abs(sum(known)) * rw / 1e6 if known else None)
+    cap = capital_inputs(legs, csa, steps, dt, capital_model, crypto_group)
     params = WaterfallParams(
         notional=sum(_leg_notional(l) for l in legs), maturity_y=_horizon(longest), dt=dt, theta=max(float(longest.quote_zero), 1e-6),
         lgd=lgd, own_lgd=own_lgd, cp_cds_bp=cp_cds_bp, own_cds_bp=own_cds_bp, cp_cds_curve=cp_cds_curve,
         own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, fba_ratio=fba_ratio, hurdle_rate=hurdle_rate,
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
-        ir01=None, simm_im_m=im_m,
+        im_amount=im_amount,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, addon_profiles=package_addons(legs, csa, steps, dt),
-                       im_schedule=package_im(legs, rw, steps, dt) if simm_im_m is None else None, wrong_way=wwr,
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, **cap["kwargs"],
                        **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     pillars = next((l.pillars for l in legs if l.pillars), None)
     sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)
@@ -434,12 +483,12 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
             "vol_source": "the longest leg's vol" + (f" ({longest.vol_source})" if getattr(longest, "vol_source", None) else ""),
             "vol_mode": ("ATM term structure of the surface for the paths" + ("; each option at the smile of each path's moneyness (sticky-delta)" if styles else "")) if pillars
                         else "flat (the longest leg's vol for the paths" + ("; each option at its own vol" if styles else "") + ")",
-            "im_rw_per_pct": rw, "im_basis": ("SIMM FX delta weight" if rw == SIMM_FX_RW_G10 else "assumption: digital asset, outside SIMM") + ", on the net spot sensitivity of the legs still alive",
+            "im_basis": wf.im_basis, "capital_basis": cap["basis"], "crypto_group": cap["group"],
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "p0_grid": [float(x) for x in p0], "_paths": paths, "_legs": rows,
             "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves),
             "model": f"{len(legs)} legs on one set of paths: every forward of the pair is its own forward times one lognormal driver, "
                      "so the legs net path by path; each leg valued as on its own (a forward's mark, an option's style in closed form); "
-                     "a leg stays to the first grid date at or after its settlement and is nothing after; the capital add-on is the sum of the legs' add-ons"
+                     "a leg stays to the first grid date at or after its settlement and is nothing after"
                      + ("; barriers monitored at the grid points" if any(s in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") for s in styles) else "")
                      + ("; American valued as European on the paths (a lower bound)" if "AMERICAN" in styles else "")}
     return wf, meta

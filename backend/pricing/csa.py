@@ -9,7 +9,7 @@ A CSA turns a raw MtM path V(t) into a residual exposure
 where C(t) is variation margin held, lagged by the margin period of risk
 (MPoR), and IM is initial margin exchanged under the uncleared margin
 rules. Everything downstream — CVA, DVA, FVA, FBA, SA-CCR EAD for KVA, and
-the SIMM IM that drives MVA — is a function of these residuals and of the
+the initial margin that drives MVA — is a function of these residuals and of the
 MPoR, so the CSA is the single object that distinguishes an uncollateralised
 bilateral trade, a CSA'd bilateral trade and a continuously-margined
 on-chain trade.
@@ -22,11 +22,12 @@ with the call zeroed when |C| < MTA. δ is the MPoR in years
 
 Initial margin
 --------------
-ISDA SIMM IR delta: IM = RW(tenor) × |IR01|. The published risk weights are
-calibrated to a 10-business-day MPoR; for a different MPoR the weights scale
-by sqrt(mpor / 10) (BCBS-IOSCO, ISDA SIMM methodology §B). IM is assumed
-exchanged symmetrically (both parties post), amortising with residual
-maturity. IM received reduces our exposure; IM posted is funded and drives
+An amount the desk sets (each way, held for the life), or the engine's own
+estimate from its simulated paths: the 99th percentile rise and fall of the
+value over the MPoR at each date (pricing/xva_engine.model_im), the
+confidence the BCBS-IOSCO margin rules name. Rijeka does not compute ISDA
+SIMM, which is ISDA's licensed methodology: a firm with a licence enters its
+own figure. IM received reduces our exposure; IM posted is funded and drives
 MVA.
 
 SA-CCR
@@ -40,11 +41,11 @@ Presets
 -------
     UNCOLLATERALISED  no VM, no IM. MPoR irrelevant.
     BILATERAL         daily VM, 10bd MPoR (BCBS floor for non-cleared),
-                      SIMM IM exchanged. Thresholds / MTA from the request.
+                      IM exchanged. Thresholds / MTA from the request.
     ON_CHAIN          atomic settlement: VM continuous, zero threshold and
                       MTA, 5bd MPoR (the cleared floor — the regulatory
                       recognition the blockchain-derivatives paper argues
-                      for), SIMM IM exchanged with the sqrt(5/10) scaling.
+                      for), IM exchanged over the shorter period.
 """
 
 from __future__ import annotations
@@ -57,7 +58,6 @@ BUSINESS_DAYS_PER_YEAR = 250
 
 MPOR_FLOOR_BILATERAL_BD = 10.0   # BCBS-IOSCO non-cleared
 MPOR_FLOOR_CLEARED_BD   = 5.0    # cleared / on-chain recognition
-SIMM_REFERENCE_MPOR_BD  = 10.0   # SIMM risk weights are calibrated here
 
 
 @dataclass
@@ -68,7 +68,7 @@ class CSA:
     threshold_own:     float = 0.0                  # $ — our threshold
     mta:               float = 0.0                  # $ minimum transfer amount
     mpor_days:         float = MPOR_FLOOR_BILATERAL_BD
-    im_exchanged:      bool  = False                # SIMM IM posted both ways
+    im_exchanged:      bool  = False                # initial margin posted both ways
     im_yield_pickup_bp: float = 0.0                 # bp of ftp recovered on posted IM (tokenised collateral earning yield)
     settlement:        str   = "bilateral"          # "bilateral" | "on_chain"
     # Collateral eligibility (pricing/collateral.py derives these; the defaults are today's behaviour):
@@ -86,11 +86,6 @@ class CSA:
     @property
     def mpor_years(self) -> float:
         return self.mpor_days / BUSINESS_DAYS_PER_YEAR
-
-    @property
-    def simm_mpor_scale(self) -> float:
-        """sqrt(MPoR / 10bd): factor applied to SIMM risk weights."""
-        return math.sqrt(self.mpor_days / SIMM_REFERENCE_MPOR_BD)
 
     @property
     def sa_ccr_margined(self) -> bool:
@@ -112,7 +107,6 @@ class CSA:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["mpor_years"]      = self.mpor_years
-        d["simm_mpor_scale"] = self.simm_mpor_scale
         return d
 
     # ── Presets ──────────────────────────────────────────────────────────────

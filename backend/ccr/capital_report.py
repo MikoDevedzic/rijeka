@@ -18,7 +18,8 @@ difference is the regime, never the noise.
     HQLA_L1             Level 1 liquidity treatment of the margin posted          FORWARD      BCBS 238 / LCR30: a state
     = ON_CHAIN_FORWARD
 
-Invariant by construction, and reported as such: SIMM initial margin at a given MPoR, market-risk capital."""
+Invariant by construction, and reported as such: initial margin at a given MPoR (the engine's estimate, a function of
+the paths and the margin period, not of what the margin is held in), market-risk capital."""
 from __future__ import annotations
 
 import logging
@@ -59,7 +60,7 @@ CURRENT_LAST = "IM_ELIGIBILITY"
 # ── the sets ───────────────────────────────────────────────────────────────────────────────────────
 
 def prepare_set(db, user: dict, cp, trades: list, asof: date, mkt, st: dict, tpl, notes: list[str]) -> Optional[dict]:
-    """The netting set on the risk-neutral paths with its SA-CCR rows, IM at a 10-day MPoR, gross notional and today's
+    """The netting set on the risk-neutral paths with its SA-CCR rows, gross notional and today's
     mark; None for no trades; {"empty": True, ...} when nothing could be simulated."""
     from ccr import calibration as C
     from ccr.report import netting_set_paths
@@ -77,9 +78,8 @@ def prepare_set(db, user: dict, cp, trades: list, asof: date, mkt, st: dict, tpl
             dfs[c] = df_fn(P["curves"][key], asof)
     rows, rnotes = from_netting_set(P["ns"], mkt, P["fx"], asof, dfs)
     notes.extend(rnotes)
-    im_10d = (P["im0"] / P["csa"].simm_mpor_scale if P["csa"].simm_mpor_scale else P["im0"]) + P["im0_fx_10d"]
     mtm = sum(float(x.get("mtm_usd") or 0.0) for x in P["today"])
-    return {"V": P["V_rn"], "t": P["p_rn"].t, "p0": P["p0"], "rows": rows, "im_10d": im_10d, "gross": P["gross"], "mtm": mtm,
+    return {"V": P["V_rn"], "t": P["p_rn"].t, "p0": P["p0"], "rows": rows, "gross": P["gross"], "mtm": mtm,
             "n_paths": P["n_paths"], "months": P["months"], "ns": P["ns"], "today": P["today"], "empty": False, "csa": P["csa"]}
 
 
@@ -107,9 +107,9 @@ def run_set(S: dict, regime: COL.Regime, ci: CAP.CapitalInputs, cp_cds_bp: float
     T1 = V.shape[1]
     dt = float(t[1] - t[0]) if T1 > 1 else 1 / 12
     theta = -math.log(max(p0[-1], 1e-9)) / max(float(t[-1]), 1e-6)
-    im_m = (S["im_10d"] * eco.simm_mpor_scale / 1e6) if (S["im_10d"] and eco.im_exchanged) else None
+    # initial margin under each regime is the engine's estimate over that regime's margin period (xva_engine.model_im)
     params = WaterfallParams(notional=max(S["gross"], 1.0), maturity_y=float(t[-1]), dt=dt, theta=max(theta, 1e-6),
-                             cp_cds_bp=cp_cds_bp, lgd=lgd, hurdle_rate=hurdle, simm_im_m=im_m)
+                             cp_cds_bp=cp_cds_bp, lgd=lgd, hurdle_rate=hurdle)
     wf = run_waterfall(V[:, 1:], float(V[:, 0].mean()), p0, params, eco, np.random.default_rng(seed), reg_csa=reg, capital=ci, saccr=S["rows"] or None)
     V0 = float(S["mtm"])
     C0 = (regime.recognised_fraction("received") * max(V0 - eco.threshold_cp, 0.0)) if eco.collateralised else 0.0
@@ -259,7 +259,7 @@ def report(db: Session, user: dict, progress: Optional[dict] = None, hurdle: flo
     return {"date": asof.isoformat(), "counterparties": out, "totals": totals, "steps": steps, "quote": quote, "columns": list(COLUMNS),
             "metrics": list(METRICS), "cost_keys": list(COST_KEYS), "hurdle": hurdle, "yield_bp": yield_bp, "gross_notional_usd": gross,
             "unassigned_trades": unassigned, "seed": 7, "measure": "RISK_NEUTRAL",
-            "invariants": ["SIMM initial margin at a given margin period of risk: a function of the sensitivities and ISDA's weights, not of the collateral",
+            "invariants": ["initial margin at a given margin period of risk: the engine's estimate from the paths, not a function of what the margin is held in",
                            "market-risk capital (FRTB): not a function of collateral or settlement; not computed here",
                            "every column and step runs on the same paths (seed 7): a difference is the regime, not the noise",
                            "P&L charges (CVA, FVA, KVA, MVA) and regulatory stock (RWA, K) are separate ledgers and are never added to each other"],

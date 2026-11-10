@@ -114,28 +114,8 @@ def netting_set_paths(db: Session, user: dict, cp, trades: list, asof: date, mkt
         # the schedule when one is recorded (instruments, rail, carries): its economic CSA; else the record's own terms
         from collateral.regimes import regime_for
         csa = regime_for(db, user["sub"], cp, csa, mkt, asof).economic_csa()
-    # IM for a CSA that exchanges it: SIMM weight on the netting set's IR01 (ladder), MPoR-scaled; the FX part
-    # (SIMM's FX delta weight on spot01, a labelled assumption for digital assets) is reported beside it for the
-    # capital route and does not enter the credit report's numbers
-    im0 = im0_fx_10d = 0.0
-    if csa.im_exchanged:
-        try:
-            from pnl.explain import Valuer
-            from pricing.fx_xva import im_risk_weight
-            from pricing.xva_engine import simm_ir_risk_weight
-            from risk.sensitivities import trade_ladder
-            val = Valuer(db, user)
-            ir01 = 0.0
-            spot01: dict[str, float] = {}
-            for it in ns.items:
-                lad = trade_ladder(db, user, it["trade"], asof, mkt, val)
-                ir01 += lad["ir01"] * fx.get(it["ccy"], 1.0)
-                for a, v in (lad.get("spot01") or {}).items():
-                    spot01[a] = spot01.get(a, 0.0) + float(v)
-            im0 = abs(ir01) * simm_ir_risk_weight((ns.max_maturity - asof).days / 365.25) * csa.simm_mpor_scale
-            im0_fx_10d = sum(abs(v) * im_risk_weight(a if len(a) == 6 else f"{a}USD") for a, v in spot01.items())
-        except Exception as e:          # noqa: BLE001
-            log.info("ccr: IM estimate failed for %s: %s", base["counterparty"], e)
+    # IM for a CSA that exchanges it is the engine's own estimate from these paths (pricing/xva_engine.model_im):
+    # no sensitivity ladder and no weights are read for it
     # risk neutral: the XVA reserve levels (the P&L's), always
     p_rn = simulate(rn, curves, spots, spot_rates, asof, months, n_paths, seed=7)
     V_rn, today = netted_paths(ns, p_rn, fx, flat_base)
@@ -143,7 +123,7 @@ def netting_set_paths(db: Session, user: dict, cp, trades: list, asof: date, mkt
     p0 = [float(p_rn.p0[usd_key](tt)) for tt in p_rn.t] + [float(p_rn.p0[usd_key](float(p_rn.t[-1]) + 1 / 12))]
     gross = sum(abs(float(it["trade"].notional or 0)) * fx.get((it["trade"].notional_ccy or "USD").upper(), 1.0) for it in ns.items)
     out.update(empty=False, rn=rn, rw=rw, rate_keys=rate_keys, curves=curves, spots=spots, spot_rates=spot_rates, flat_base=flat_base, fx=fx,
-               months=months, n_paths=n_paths, csa=csa, im0=im0, im0_fx_10d=im0_fx_10d, p_rn=p_rn, V_rn=V_rn, today=today, p0=p0, gross=gross,
+               months=months, n_paths=n_paths, csa=csa, p_rn=p_rn, V_rn=V_rn, today=today, p0=p0, gross=gross,
                usd_key=usd_key, pairs=pairs, currencies=currencies)
     return out
 
@@ -158,16 +138,16 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
             return {**base, "empty": True, "skipped": ns.skipped + [{"trade_ref": "*", "reason": f"no spot for {', '.join(P['missing'])}"}]}
         return {**base, "empty": True}
     rn, rw, curves, spots, spot_rates, flat_base, fx = P["rn"], P["rw"], P["curves"], P["spots"], P["spot_rates"], P["flat_base"], P["fx"]
-    months, n_paths, csa, im0, p_rn, V_rn, today, p0, gross = P["months"], P["n_paths"], P["csa"], P["im0"], P["p_rn"], P["V_rn"], P["today"], P["p0"], P["gross"]
+    months, n_paths, csa, p_rn, V_rn, today, p0, gross = P["months"], P["n_paths"], P["csa"], P["p_rn"], P["V_rn"], P["today"], P["p0"], P["gross"]
     # real world: exposure (the credit page's)
     if exposure:
         p_rw = simulate(rw, curves, spots, spot_rates, asof, months, n_paths, seed=7)
         V_rw, today = netted_paths(ns, p_rw, fx, flat_base)
         flows = flows_per_step(ns, p_rw, fx) if csa.collateralised else None
-        ex = exposures(V_rw, p_rw.t, csa, im0, flows=flows)
+        ex = exposures(V_rw, p_rw.t, csa, flows=flows)
     else:
         p_rw, ex = p_rn, None
-    cv = cva_of(V_rn, p_rn.t, p0, csa, gross, cp_cds_bp=float(st["cp_cds_bp"]), lgd=float(st["lgd"]), im0_usd=im0)
+    cv = cva_of(V_rn, p_rn.t, p0, csa, gross, cp_cds_bp=float(st["cp_cds_bp"]), lgd=float(st["lgd"]))
     grid = [d.isoformat() for d in p_rw.grid[1:]]
     out = {**base, "empty": False, "asof": asof.isoformat(), "grid": grid, "t": [float(x) for x in p_rw.t[1:]], "n_paths": n_paths, "months": months,
            "csa_model": {"preset": csa.preset, "collateralised": csa.collateralised, "threshold_usd": csa.threshold_cp, "mta_usd": csa.mta, "mpor_days": csa.mpor_days, "im_exchanged": csa.im_exchanged},

@@ -15,7 +15,7 @@ from tests.test_xva_engine import make_paths
 
 def _setup(n=1500, M=5.0):
     paths, p0, theta, T = make_paths(n_paths=n, maturity_y=M, seed=3)
-    params = WaterfallParams(notional=1e7, maturity_y=M, dt=1.0 / 12, theta=theta, ir01=4_500.0)
+    params = WaterfallParams(notional=1e7, maturity_y=M, dt=1.0 / 12, theta=theta)
     return paths, p0, params
 
 
