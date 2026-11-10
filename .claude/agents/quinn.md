@@ -27,6 +27,7 @@ Learned on 9 November 2026 (the scenario tab and the as-booked label)
 - A fix for a race gets a journey that holds the request open and changes the screen meanwhile, and that journey is run once against the old behaviour to see it fail. A journey that never failed has shown nothing.
 - A number format is read in a browser set to another language (`locale: 'de-DE'`) on every tab, not only in the fields.
 - The frontend's unit run is judged by the exit code of `npm test`, the command CI runs, not by its line of passed tests. On 10 November 2026 a new test file loaded the sign-in client: every test passed, the run reported an unhandled error and CI failed the build, after the local check had read only the count. A test file that imports `xva-shared` mocks `../../lib/session` as its neighbours do.
+- A journey for something done right after an action (BOOK, then CONFIRM) presses the second button at once, with the page's next fetch held open (`app.route` on the request, released afterwards), as well as after everything has settled. On 10 November 2026 the settled path hid a package whose first leg could be confirmed alone when CONFIRM was pressed before the blotter's trades arrived.
 
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
