@@ -38,7 +38,7 @@ export const useModulesStore = create((set, get) => ({
     } catch { set({ loaded: true }); get().again() /* every module stays on until the API answers */ }
   },
   again: () => { const mine = chain; if (failures < RETRY_MS.length) setTimeout(() => { if (mine === chain) get().load() }, RETRY_MS[failures++]) },
-  apply: (j) => { chain++; set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true }) },
+  apply: (j) => { chain++; failures = 0; set({ modules: { ...ALL_ON, ...(j.modules || {}) }, preset: j.preset || null, source: j.source || 'default', canEdit: !!j.can_edit, onRequest: j.on_request || [], launch: j.view === 'launch', catalogue: j, loaded: true }) },
 }))
 
 // The modules a route needs; a page whose module is off sends the visitor home.

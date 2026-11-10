@@ -263,7 +263,8 @@ the account counts as a `viewer`). One list and one function decide, and this fo
   promises; a preset that has one on leaves the row's value. Nothing asked for is refused: a page opened before a
   deploy still saves its other switches, and asking for a held module there does nothing. One save is turned away:
   when the firm's row cannot be read, a save by someone a module is held from answers 503 and writes nothing,
-  because a failed read would otherwise pass for on.
+  because a failed read would otherwise pass for on. A save whose write fails also answers 503 and writes nothing,
+  for any caller.
 - `modules.is_on(uid, key)` is false for a held module unless the account has the admin role (`profiles.role`,
   read by the user id). No batch asks about capital today; were P&L, market risk or counterparty credit held, their
   nightly ticks would skip every account without the admin role. The role is read only for a held module, so the

@@ -18,8 +18,9 @@ Capital is not part of the hosted demo.
 - **Someone it is held from can never switch it on.** A save of the switches keeps what the row said about capital.
   A preset that has it off (Launch, Corporate, Fund) switches the row off; a preset that has it on leaves the row.
   Nothing asked for is refused: a page opened before the deploy still saves its other switches, and ticking
-  Capital there changes nothing in the row (it is recorded as a save, with no change). One save is turned away: when the firm's row cannot be read, a save by such a user
-  answers 503 and writes nothing, because a failed read would otherwise pass for on. The list of changes such a
+  Capital there changes nothing in the row's switches (it is recorded as a save, with no change). One save is turned away: when the firm's row cannot be read, a save by such a user
+  answers 503 and writes nothing, because a failed read would otherwise pass for on (a save whose write fails
+  answers 503 too, where it was an unhandled error). The list of changes such a
   user is shown leaves capital out; the audit rows are whole.
 - **Configurations → Modules says how to see it.** Capital is listed as off and on request, with the address to
   write to, and has no switch. A workspace that has chosen nothing reads DEFAULT · NOTHING CHOSEN instead of
