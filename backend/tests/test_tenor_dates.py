@@ -141,7 +141,9 @@ def test_calendar_block_and_notes():
     today = date(2026, 11, 9)
     b = TD.calendar_block("EURUSD", today)
     assert b["name"] == "NEW_YORK+TARGET" and b["weekend"] == ["SAT", "SUN"]
-    assert "2026-11-26" in b["holidays"] and "2027-12-24" in b["holidays"] and b["holidays"][-1] <= "2029-11-09"
+    # eleven years of holidays (three until 0.22.0): a date typed out to the ten-year tenor is rolled in the browser too
+    assert "2026-11-26" in b["holidays"] and "2027-12-24" in b["holidays"] and "2036-11-27" in b["holidays"]
+    assert "2029-11-09" < b["holidays"][-1] <= "2037-11-09"
     assert b["holidays"] == sorted(b["holidays"]) and all(date.fromisoformat(h).weekday() < 5 for h in b["holidays"])
     assert TD.calendar_block("BTCUSD", today)["name"] == "NEW_YORK"
     assert TD.settlement_note("EURUSD", date(2027, 2, 12)) == (True, None)

@@ -4,7 +4,7 @@ assets. The market is handed over explicitly (as-of quotes), never read as 'late
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 from types import SimpleNamespace
 from typing import Any, Optional
 
@@ -199,7 +199,8 @@ def _value_swaption(db: Session, user: dict, trade, val_date: date, mkt: Market)
 
 
 def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[str, Any]:
-    from api.routes.currencies import CURVE_FOR, PIP, POLICY_RATE_PCT, interp_points, is_crypto, spot_date, split_pair
+    from api.routes.currencies import CURVE_FOR, PIP, POLICY_RATE_PCT, is_crypto, spot_date, split_pair
+    from pricing.forward_points import points_at
     from api.routes.pricer import _build_curve
     from pricing.currency_forward import price_currency_forward
     pair, t = _currency_terms(trade)
@@ -259,8 +260,20 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
     # their own right and get their own attribution step.
     pts = forward_points(mkt, pair)
     if pts and t["shape"] != "SPOT" and market_mode(mkt):
-        days = (settle - (fx_spot or val_date)).days           # points are quoted from the spot date
-        f_mkt = S + interp_points(pts, days) * pip
+        sd0 = fx_spot or val_date
+        days = (settle - sd0).days                             # points are quoted from the spot date
+        parity_at_settle = r.forward
+
+        def parity_forward(d: int) -> float:
+            # the two curves' forward d days from spot (pricing/forward_points.py asks for it only beyond the last quote)
+            if d == days:
+                return parity_at_settle
+            return price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,
+                                          valuation_date=val_date, settlement_date=sd0 + timedelta(days=d), quote_curve=q_curve,
+                                          direction=t["direction"], pip=pip, spot_date=fx_spot, **kw).forward
+        # the same rule as the ticket (currencies._price): quoted points inside the tenors, parity plus the last
+        # quoted basis held as a rate beyond them
+        f_mkt = S + points_at(pts, days, spot=S, pip=pip, parity_forward=parity_forward).points * pip
         if f_mkt > 0 and r.t > 0:
             from pricing.currency_forward import implied_base_rate, year_fraction
             sd = fx_spot or val_date
@@ -374,7 +387,10 @@ def forward_points(mkt: Market, pair: str) -> Optional[dict]:
     q = mkt.quotes(f"{pair}_FWD")
     if not q:
         return None
-    pts = {x["tenor"]: float(x["rate"]) for x in q if x.get("tenor") in TENOR_DAYS and x.get("rate") is not None}
+    # a pillar is a tenor that is switched on (currencies.forward_curve): one the desk switched off is priced like
+    # any unquoted date
+    pts = {x["tenor"]: float(x["rate"]) for x in q if x.get("tenor") in TENOR_DAYS and x.get("rate") is not None
+           and x.get("enabled", True)}
     return pts if len(pts) >= 2 else None
 
 

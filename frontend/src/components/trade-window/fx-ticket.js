@@ -40,9 +40,15 @@ export const MAX_SIGMAS = 40
 // The standard tenors of the ticket, and the last one a digital asset is priced to: the pair's forward points and
 // its vol surface both end at two years, and beyond their last tenor the API holds the points (not the rate) and
 // the vol flat, so a five-year forward would be spot plus the two-year points. That is not a price.
-export const TENORS = ['1W', '2W', '1M', '2M', '3M', '6M', '9M', '1Y', '18M', '2Y']
+export const TENORS = ['1W', '2W', '1M', '2M', '3M', '6M', '9M', '1Y', '18M', '2Y', '3Y', '4Y', '5Y', '7Y', '10Y']   // to ten years (0.22.0): pricing/tenor_dates.py TENORS
+// A digital asset's option prices to its last vol tenor. Its forward prices to ten years since 0.22.0: beyond the
+// last quoted tenor the forward is implied (parity plus the last basis held as a rate) and the ticket says so.
 export const MAX_CRYPTO_TENOR = '2Y'
-export const CRYPTO_LIMIT_NOTE = `digital assets price to ${MAX_CRYPTO_TENOR}: the forward points and the vol surface end there`
+export const MAX_CRYPTO_FORWARD_TENOR = '10Y'
+export const CRYPTO_LIMIT_NOTE = `a digital-asset option prices to ${MAX_CRYPTO_TENOR}: the vol surface ends there`
+export const CRYPTO_FORWARD_LIMIT_NOTE = `a digital-asset forward prices to ${MAX_CRYPTO_FORWARD_TENOR}; beyond the quoted tenors it is implied, and marked so`
+// the tenors a product is offered: every one, but a digital asset's option stops at its last vol tenor
+export const tenorsFor = ({ crypto, option }) => (crypto && option ? TENORS.slice(0, TENORS.indexOf(MAX_CRYPTO_TENOR) + 1) : TENORS)
 
 const finite = (n) => typeof n === 'number' && Number.isFinite(n)
 
@@ -249,8 +255,8 @@ export function firstDate(today) {
   if (!isIsoDate(today)) return null
   return new Date(utcDay(today).getTime() + DAY_MS).toISOString().slice(0, 10)
 }
-export function lastDate({ crypto, today, dates = null }) {
-  return crypto ? tenorDateFor(MAX_CRYPTO_TENOR, today, dates) : null
+export function lastDate({ crypto, today, dates = null, option = true }) {
+  return crypto ? tenorDateFor(option ? MAX_CRYPTO_TENOR : MAX_CRYPTO_FORWARD_TENOR, today, dates) : null
 }
 
 // K as it is shown and booked: the forward to the pair's decimals, as a number. What the screen says is what the
@@ -412,7 +418,7 @@ export function priceable(t) {
   const last = horizon(today)
   // this file's own: a digital asset is not priced beyond its last tenor (see MAX_CRYPTO_TENOR), the API's date for
   // it when the pairs answer carries the tenor dates
-  const cryptoLast = lastDate({ crypto: !!t.crypto, today, dates: tenorDates(cur, t.option ? 'OPTION' : 'FORWARD') })
+  const cryptoLast = lastDate({ crypto: !!t.crypto, today, dates: tenorDates(cur, t.option ? 'OPTION' : 'FORWARD'), option: !!t.option })
   const level = (v) => positive(v) && v >= spot * LEVEL_RANGE[0] && v <= spot * LEVEL_RANGE[1]
 
   if (!t.option) {
@@ -423,7 +429,7 @@ export function priceable(t) {
       // "settlement_date must be after the valuation date", answered 422 by currencies _price)
       if (!isIsoDate(t.settlement)) return no('enter a settlement date')
       if (t.settlement <= today) return no('the settlement date must be after today')
-      if (cryptoLast && t.settlement > cryptoLast) return no(CRYPTO_LIMIT_NOTE)
+      if (cryptoLast && t.settlement > cryptoLast) return no(CRYPTO_FORWARD_LIMIT_NOTE)
       if (t.settlement > last) return no(`the settlement date is more than ${MAX_YEARS_OUT} years out: press PRICE`)
     }
     if (t.crypto && n.fundOv.given) {

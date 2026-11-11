@@ -97,7 +97,12 @@ def test_forward_points_carry_the_basis_and_hold_the_rate_flat_beyond_the_last_e
     from api.routes import currencies
     from market_data import demo_feed
     from pricing.fx_vol import TENOR_YEARS
-    assert D.FWD_TENOR_DAYS == {t: currencies.TENOR_DAYS[t] for t in currencies.FWD_TENORS}
+    assert D.FWD_TENOR_DAYS == {t: currencies.TENOR_DAYS[t] for t in currencies.FWD_TENORS if currencies.TENOR_DAYS[t] <= 730}
+    # a tenor beyond the venue's last listed expiry is the feed's own carry of the last basis: it is named so,
+    # and one inside the listed expiries is not
+    tagged = {q["tenor"] for q in b["forward"] if q.get("extrapolated")}
+    assert tagged == {t for t, d in D.FWD_TENOR_DAYS.items() if d > last_days}
+    assert "2Y" in tagged and "6M" not in tagged and "1W" not in tagged
     assert [t for t in D.VOL_TENORS if t not in ("2W", "3W")] == demo_feed.FX_VOL_TENORS      # the FX grid plus two tenors inside the first month
     from risk import vols
     assert set(D.VOL_TENORS) <= set(vols.WINDOW)                                              # every tenor has a realised-vol window for the history

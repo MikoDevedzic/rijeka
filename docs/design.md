@@ -169,6 +169,10 @@ One rule for the whole app, held by Iris (`.claude/agents/iris.md`) and by a che
   whatever was sized in px did not.
 - A figure takes the colour of text, or of its sign. Brass is not a figure, a label or a typed value; blue is not a
   figure in a table. A derived figure (what parity implies) is quieter than a quoted one.
+- A figure that is not a quote says so. Where a market input can be quoted or implied (a forward at a tenor), the
+  quoted one is upright and names its source; the implied one is in italics, dimmed, with a mark (IMPLIED in
+  amber, INTERPOLATED quiet) whose words say how it was reached. On a chart the implied part is dashed. On the
+  ticket an implied forward beyond the quotes is said under the figure, in amber.
 - What is still set by hand is counted and may only go down (11 November 2026: 53 distinct sizes, 623 sizes in rem,
   209 hex colours outside the tokens, 6 fonts named directly, all in canvas drawings). The next step is the sizes
   in rem, page by page, each with pictures before and after.

@@ -20,7 +20,7 @@
 
 // Days from the spot date to each quoted tenor. GET /api/currency/pairs sends the backend's own map as
 // tenor_days (tenorMap below); this copy stands in only for an API answer that does not carry it.
-export const TENOR_DAYS = { ON: 1, '1W': 7, '2W': 14, '1M': 30, '2M': 61, '3M': 91, '6M': 182, '9M': 273, '1Y': 365, '2Y': 730 }
+export const TENOR_DAYS = { ON: 1, '1W': 7, '2W': 14, '1M': 30, '2M': 61, '3M': 91, '6M': 182, '9M': 273, '1Y': 365, '18M': 547, '2Y': 730, '3Y': 1095, '4Y': 1460, '5Y': 1825, '7Y': 2555, '10Y': 3650 }
 
 export const SPOT_BOUND_PCT = 50      // the whole curve moves at most ±50 % (the SPOT shock)
 export const TENOR_BOUND = 0.5        // one tenor moves at most ±50 % of spot, in price

@@ -27,7 +27,7 @@ def test_pairs_carry_calendar_spot_and_tenor_dates(client, auth_a):
             assert k in p, f"{pair}: {k} missing from the pairs answer"
         cal = p["calendar"]
         assert cal["name"] == TD.pair_calendar(pair) and cal["weekend"] == ["SAT", "SUN"]
-        assert cal["holidays"] == sorted(cal["holidays"]) and all(today <= date.fromisoformat(h) <= TD.add_months(today, 36) for h in cal["holidays"])
+        assert cal["holidays"] == sorted(cal["holidays"]) and all(today <= date.fromisoformat(h) <= TD.add_months(today, 12 * TD.HOLIDAY_YEARS) for h in cal["holidays"])
         assert all(not is_business_day(date.fromisoformat(h), cal["name"]) for h in cal["holidays"])
         assert p["spot_date"] == TD.spot(pair, today).isoformat()
         assert p["spot_lag_business_days"] == (0 if p["crypto"] else 1 if pair == "USDCAD" else 2)

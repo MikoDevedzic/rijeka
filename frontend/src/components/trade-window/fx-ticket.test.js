@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { priceable, priceRequest, styleFields, styleSends, seedLevels, roundLevel, seedVolPct, surfaceAtmPct, yearsTo, annualisedBasis, forwardCaption, ticketToday, isIsoDate,
          tenorDate, tenorOf, tenorLabel, firstDate, lastDate, holdToLast,
-         TENORS, MAX_CRYPTO_TENOR, CRYPTO_LIMIT_NOTE, SPOT_HINT, STYLES, MAX_FUNDING_PCT, GATED_STYLES, NOT_A_NUMBER,
+         TENORS, MAX_CRYPTO_TENOR, MAX_CRYPTO_FORWARD_TENOR, CRYPTO_LIMIT_NOTE, CRYPTO_FORWARD_LIMIT_NOTE, tenorsFor, SPOT_HINT, STYLES, MAX_FUNDING_PCT, GATED_STYLES, NOT_A_NUMBER,
          parseNumber, formatInput, formatRead, readNumbers, unreadable, overrideNote, quoteFor, failureText, createTicketPricer,
          tenorDates, tenorDateFor, tenorSettlement, closedWhy, isBusinessDay, addBusinessDays, rollDate, rollRule, rolledTag, spotDateFor, spotLagLabel, bookedNotional, dateCap,
          bookedStrike, apiRoundsStrike, notionalSent, numbersSent, crybasis01, premiumLine, optionSentence, SENS_UNITS } from './fx-ticket'
@@ -222,7 +222,7 @@ describe('may the automatic pricing send these terms', () => {
   })
   it('every reason is a few plain words, with no em dash', () => {
     const cases = [fwd({ cur: undefined }), fwd({ notional: '' }), fwd({ settlement: TODAY }), opt({ expiry: TODAY }), opt({ style: 'BARRIER' }),
-                   opt({ style: 'DOUBLE_BARRIER' }), opt({ style: 'TOUCH' }), opt({ strike: '0' }), opt({ volOv: '0' }), fwd({ settlement: '2031-01-01' })]
+                   opt({ style: 'DOUBLE_BARRIER' }), opt({ style: 'TOUCH' }), opt({ strike: '0' }), opt({ volOv: '0' }), fwd({ settlement: '2037-01-01' }), opt({ expiry: '2031-01-01' })]
     for (const t of cases) {
       const r = priceable(t)
       expect(r.ok).toBe(false)
@@ -439,10 +439,19 @@ describe('the tenor tells the truth about the date', () => {
 
 describe('the last date a digital asset prices to', () => {
   const LIMIT = '2028-11-09'
-  it('two years from today for a digital asset, none for a currency pair; the first date is tomorrow', () => {
+  it('an option two years from today and a forward ten for a digital asset, none for a currency pair; the first date is tomorrow', () => {
     expect(MAX_CRYPTO_TENOR).toBe('2Y')
+    expect(MAX_CRYPTO_FORWARD_TENOR).toBe('10Y')
     expect(lastDate({ crypto: true, today: TODAY })).toBe(LIMIT)
+    expect(lastDate({ crypto: true, today: TODAY, option: true })).toBe(LIMIT)
+    expect(lastDate({ crypto: true, today: TODAY, option: false })).toBe('2036-11-09')
     expect(lastDate({ crypto: false, today: TODAY })).toBeNull()
+    expect(lastDate({ crypto: false, today: TODAY, option: false })).toBeNull()
+    // the tenors offered: a digital asset's option stops at its last vol tenor, everything else goes to ten years
+    expect(tenorsFor({ crypto: true, option: true }).at(-1)).toBe('2Y')
+    expect(tenorsFor({ crypto: true, option: false }).at(-1)).toBe('10Y')
+    expect(tenorsFor({ crypto: false, option: true })).toEqual(TENORS)
+    expect(TENORS.slice(-5)).toEqual(['3Y', '4Y', '5Y', '7Y', '10Y'])
     expect(firstDate(TODAY)).toBe('2026-11-10')
     expect(firstDate('2026-12-31')).toBe('2027-01-01')
   })
@@ -457,15 +466,22 @@ describe('the last date a digital asset prices to', () => {
   it('at the limit a digital asset prices; a day beyond, the automatic pricing sends nothing and says why', () => {
     expect(ok(fwd({ settlement: LIMIT }))).toBe(true)
     expect(ok(opt({ expiry: LIMIT }))).toBe(true)
-    expect(priceable(fwd({ settlement: '2028-11-10' }))).toEqual({ ok: false, why: CRYPTO_LIMIT_NOTE })
+    // a forward prices beyond the two years the option stops at, to ten; a day beyond ten it does not
+    expect(ok(fwd({ settlement: '2028-11-10' }))).toBe(true)
+    expect(ok(fwd({ settlement: '2036-11-09' }))).toBe(true)
+    expect(priceable(fwd({ settlement: '2036-11-10' }))).toEqual({ ok: false, why: CRYPTO_FORWARD_LIMIT_NOTE })
+    expect(priceable(opt({ expiry: '2028-11-10' }))).toEqual({ ok: false, why: CRYPTO_LIMIT_NOTE })
     expect(priceable(opt({ expiry: '2031-11-09' }))).toEqual({ ok: false, why: CRYPTO_LIMIT_NOTE })
-    expect(CRYPTO_LIMIT_NOTE).toBe('digital assets price to 2Y: the forward points and the vol surface end there')
+    expect(CRYPTO_LIMIT_NOTE).toBe('a digital-asset option prices to 2Y: the vol surface ends there')
+    expect(CRYPTO_FORWARD_LIMIT_NOTE).toBe('a digital-asset forward prices to 10Y; beyond the quoted tenors it is implied, and marked so')
   })
-  it('a currency pair is not limited: five years out prices, and reads CUSTOM · 5.0 years', () => {
+  it('a currency pair is not limited: five years out prices and is the 5Y tenor; six reads CUSTOM · 6.0 years', () => {
     expect(ok(fxFwd({ settlement: '2031-11-09' }))).toBe(true)
     expect(ok(fxOpt({ expiry: '2031-11-09' }))).toBe(true)
-    expect(tenorOf('2031-11-09', TODAY)).toBeNull()
-    expect(tenorLabel('2031-11-09', TODAY)).toBe('CUSTOM · 5.0 years')
+    expect(tenorOf('2031-11-09', TODAY)).toBe('5Y')
+    expect(ok(fxFwd({ settlement: '2032-11-09' }))).toBe(true)
+    expect(tenorOf('2032-11-09', TODAY)).toBeNull()
+    expect(tenorLabel('2032-11-09', TODAY)).toBe('CUSTOM · 6.0 years')
   })
 })
 
@@ -942,7 +958,7 @@ describe('a typed date is rolled by the API\'s rule', () => {
   })
   it('the check holds a digital asset to the API\'s last date when it gave one', () => {
     expect(ok(fwd({ cur: BTC_DATED, settlement: '2028-11-09' }))).toBe(true)
-    expect(why(fwd({ cur: BTC_DATED, settlement: '2028-11-10' }))).toBe(CRYPTO_LIMIT_NOTE)
+    expect(ok(fwd({ cur: BTC_DATED, settlement: '2028-11-10' })), 'a forward is not held to the option\'s two years').toBe(true)
     expect(ok(opt({ cur: { ...BTC_DATED, tenor_dates: { ...BTC_DATED.tenor_dates, option: { '2Y': { expiry: '2028-11-10', settlement: '2028-11-13' } } } }, expiry: '2028-11-10' })), 'the option\'s own last date').toBe(true)
   })
 })

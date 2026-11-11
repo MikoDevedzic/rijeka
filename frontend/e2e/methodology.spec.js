@@ -72,7 +72,7 @@ test('methodology: a section reads as the document does, with its evidence, a wo
   // beside it: the inventory's rows for this section, its status, and its workbooks
   const ev = app.getByTestId('mr-evidence')
   await expect(ev.getByTestId('mr-status')).toHaveText('AN OUTSIDE VALIDATOR IS WANTED')
-  await expect(ev.getByTestId('mr-model')).toHaveCount(3)
+  await expect(ev.getByTestId('mr-model')).toHaveCount(4)        // the forward beyond the last quote has a row of its own since 0.22.0
   await expect(ev.getByTestId('mr-model').first()).toContainText('Reference comparisons')
   await expect(ev.getByTestId('mr-export-fx_forward')).toBeVisible()
   await expect(ev.getByTestId('mr-export-crypto_ndf')).toBeVisible()

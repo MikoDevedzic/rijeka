@@ -1,7 +1,33 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.12). Commits on `main` are the detail.
+methodology document carries its own version (v1.13). Commits on `main` are the detail.
+
+## 0.22.0 · 11 November 2026
+
+**Forward curves to ten years, with what is implied marked as implied.** Asked for by the owner: "we need to be able
+to model all FX to 10y... the derived points on the forward curve has to be differentiated somehow so user knows its
+implied and how... in configurations, user should be able to turn on/off tenors on the curve."
+
+- **Beyond the last quoted tenor a forward is parity plus that tenor's basis, held flat as a rate.** Until now the
+  last points were held flat, so a five-year forward was the two-year one: wrong past the last quote. On a currency
+  pair the basis is the cross-currency basis; on a digital asset it is the futures basis, so the asset's implied
+  rate is what is held. Forwards inside the quoted tenors are unchanged, and so is every figure of the pinned book.
+  The same rule prices the ticket, a booked trade and the P&L revaluation (`pricing/forward_points.py`).
+- **Every forward says what it is.** The price carries `forward_kind` (QUOTED, INTERPOLATED or IMPLIED),
+  `forward_method` in words and the basis rate. The ticket marks a forward beyond the quotes "implied, not quoted"
+  with the method, in amber. The forwards page has a row for every tenor to 10Y: a quoted row names its source, a
+  row that is not a quote is in italics with an IMPLIED or INTERPOLATED mark, and the chart draws the implied part
+  dashed.
+- **A tenor can be switched off** on the forwards page: its points stay on the row and its date is priced like any
+  unquoted one. Two tenors must stay on. No migration: the stored quote already had the flag.
+- **The ticket's tenors go to 10Y** (3Y, 4Y, 5Y, 7Y, 10Y added). A digital asset's forward prices to ten years (it
+  stopped at two); its option still stops at two, where the vol surface ends.
+- A tenor the venue feed fills beyond the venue's last listed expiry is named as implied (it prices as before).
+- Checked: 12 rows against QuantLib's parity with the basis done by hand (EURUSD, USDJPY, a digital asset, at 3Y, 5Y
+  and 10Y), unit tests of the rule, an API test on a real database, a browser journey. Methodology v1.13, §12.
+- Limits: one number read off the last quote stands in for the basis beyond it; nothing trades that far out on a
+  digital asset, and the screen says so; a scenario's shock of the points is still flat beyond the last tenor.
 
 ## 0.21.2 · 11 November 2026
 

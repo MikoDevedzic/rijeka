@@ -250,9 +250,9 @@ test('market data: saved forward points on a digital-asset pair can be handed ba
   await expect(table.getByText('FEED', { exact: true }).first()).toBeVisible()
   await expect(table).not.toContainText('handed back')
   await oneLine('FEED')
-  // every row is one line high: the header and nine tenors (a wrapped label made a row four lines)
+  // every row is one line high: the header and fifteen tenors, to ten years since 0.22.0 (a wrapped label made a row four lines)
   const rows = await table.locator('> div').evaluateAll(cells => [...new Set(cells.map(c => Math.round(c.getBoundingClientRect().top)))].length)
-  expect(rows).toBe(10)
+  expect(rows).toBe(16)
   expect((await table.boundingBox()).height / rows, 'the height of a row').toBeLessThan(40)
   await app.screenshot({ path: 'e2e/.out/shots/forward-points.png', fullPage: true })
   // on a wide screen the panel reads as a table with its chart and buttons, not columns spread across the monitor

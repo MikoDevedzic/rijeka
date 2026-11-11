@@ -40,10 +40,10 @@ from typing import Optional
 
 from pricing.calendars import (add_business_days, apply_bdc, ccy_to_calendar, holidays_between, is_business_day, joint, why_closed)
 
-TENORS = ("1W", "2W", "1M", "2M", "3M", "6M", "9M", "1Y", "18M", "2Y")      # the ticket's TENOR select (fx-ticket.js)
+TENORS = ("1W", "2W", "1M", "2M", "3M", "6M", "9M", "1Y", "18M", "2Y", "3Y", "4Y", "5Y", "7Y", "10Y")      # the ticket's TENOR select (fx-ticket.js); to ten years since 0.22.0
 NEW_YORK = "NEW_YORK"
 EXPIRY_SEARCH_DAYS = 10         # calendar days back from the delivery date an FX option's expiry is looked for
-HOLIDAY_YEARS = 3               # the pairs answer lists holidays from today to today + this
+HOLIDAY_YEARS = 11              # the pairs answer lists holidays from today to today + this: past the ten-year tenor (0.22.0; three until then)
 _TENOR = re.compile(r"^(\d+)([DWMY])$")
 
 
