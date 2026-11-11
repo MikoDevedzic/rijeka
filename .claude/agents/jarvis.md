@@ -17,6 +17,10 @@ Learned on 9 November 2026 (the evening; 10 November in UTC)
 - Green on the Mac is not green: the five checks on the pull request are read on the commit that will ship, after the last push, before anything is called ready. At 00:24 UTC on 10 November 2026 CI failed two integration tests the Mac passed (the C library's time zone, and a run timed to meet a 30-second cache). A red check is diagnosed to its cause; it is never re-run until it passes.
 - After the chain, move the local pointer too (`git fetch origin && git branch -f main origin/main` from another branch): the next change's reviewers are told to read `main...HEAD`, and on 9 November 2026 a local `main` sixty-four commits behind turned that into the whole history.
 
+Learned on 11 November 2026
+- A deploy of the public site (`netlify_drop/`, rijeka.app) is a deploy: the gates run before it, on the difference between the folder and the live site, as they would on a branch. On 11 November 2026 the landing site went out with a merged verifier that neither Vera nor Magnus had read; the reviews ran only afterwards, on the repository's copy, and Magnus found that a proof or a link could name a registry of its own and be shown VERIFIED (the flaw was older than the deploy, but the deploy was the moment to find it). Vera reads anything over a line; Magnus reads any change to the verifier or to anything that takes its input from a link.
+- A page that is live and a source that is ahead of it are two facts: say which rule is on which, in the map and in the report, until the owner's next deploy of the landing site makes them one.
+
 Rules
 - Never print secrets, tokens, connection strings or `.env` contents. Never paste credentials into a hosted dashboard.
 - Say what is verified and what is not. "Live" means the commit hash was read back from production, not that a push succeeded.

@@ -45,9 +45,11 @@
   .pass .mark,.pass .t{color:var(--ok)}
   .fail .mark,.fail .t{color:var(--bad)}
   .skip .mark,.skip .t{color:var(--dim)}
+  .warn .mark,.warn .t{color:var(--warn)}
   .verdict{margin-top:22px;padding:14px 16px;border-radius:3px;font-family:var(--mono);font-size:.9375rem;font-weight:700;letter-spacing:.04em}
   .verdict.ok{background:rgba(0,212,168,.07);border:1px solid rgba(0,212,168,.35);color:var(--ok)}
   .verdict.bad{background:rgba(255,107,107,.07);border:1px solid rgba(255,107,107,.35);color:var(--bad)}
+  .verdict.part{background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.35);color:var(--warn)}
   .verdict .note{display:block;font-weight:400;font-size:.75rem;color:var(--mut);margin-top:6px;letter-spacing:0}
   a{color:var(--link)}
   footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-size:.75rem}
@@ -113,7 +115,7 @@ const rows = [];
 function reset(){ rows.length = 0; el("checks").innerHTML = ""; el("verdict").innerHTML = ""; }
 function add(state, title, detail){
   rows.push(state);
-  const mark = state === "pass" ? "✔" : state === "fail" ? "✘" : "–";
+  const mark = state === "pass" ? "✔" : state === "fail" ? "✘" : state === "warn" ? "!" : "–";
   const d = document.createElement("div");
   d.className = "chk " + state;
   d.innerHTML = `<div class="mark">${mark}</div><div class="body"><div class="t"></div><div class="d"></div></div>`;
@@ -121,12 +123,23 @@ function add(state, title, detail){
   d.querySelector(".d").textContent = detail || "";
   el("checks").appendChild(d);
 }
+/** The verdict box. Head and note are set as text: nothing from a link or a proof is ever read as markup. */
+function verdictBox(cls, head, note){
+  const v = document.createElement("div");
+  v.className = "verdict" + (cls ? " " + cls : "");
+  v.textContent = head;
+  const n = document.createElement("span");
+  n.className = "note";
+  n.textContent = note;
+  v.appendChild(n);
+  el("verdict").appendChild(v);
+}
 
 // A real confirmation, embedded so the page can be checked with one click:
 // TRD-90271749, IRS between RIJEKA CAPITAL and CONFLUENCE BANK AG (a demo
 // entity, LEI DEMO…CB), countersigned from the counterparty's own wallet,
 // anchored on Sepolia at block 11,773,600.
-const EXAMPLE = `{"format":"rijeka-confirmation-proof","format_version":1,"generated_at":"2026-10-13T20:44:41+00:00","trade_ref":"TRD-90271749","canonical":{"schema":"rijeka-trade","schema_version":1,"trade":{"trade_ref":"TRD-90271749","uti":null,"asset_class":"RATES","instrument_type":"IR_SWAP","structure":"VANILLA","notional":"10000000","notional_ccy":"USD","trade_date":"2026-09-24","effective_date":"2026-09-28","maturity_date":"2031-09-28","terms":{"spread":"0","leverage":"1","direction":"PAY","fixed_bdc":"MOD_FOLLOWING","float_bdc":"MOD_FOLLOWING","fixed_rate":"0.04115425","float_index":"SOFR","fixed_calendar":null,"fixed_pay_freq":"ANNUAL","float_calendar":null,"float_pay_freq":"ANNUAL","fixed_day_count":"ACT/360","float_day_count":"ACT/360","float_direction":"RECEIVE","float_reset_freq":"DAILY"},"discount_curve_id":null,"forecast_curve_id":null},"legs":[{"leg_ref":"FIXED-1","leg_seq":"1","leg_type":"FIXED","direction":"PAY","currency":"USD","notional":"10000000","notional_type":"BULLET","notional_schedule":null,"effective_date":"2026-09-28","maturity_date":"2031-09-28","first_period_start":null,"last_period_end":null,"day_count":"ACT/360","payment_frequency":"ANNUAL","reset_frequency":null,"bdc":"MOD_FOLLOWING","stub_type":"SHORT_FRONT","payment_calendar":null,"payment_lag":"2","fixed_rate":"0.04115425","fixed_rate_type":"FLAT","fixed_rate_schedule":null,"spread":null,"spread_type":"FLAT","spread_schedule":null,"forecast_curve_id":null,"discount_curve_id":"USD_SOFR","embedded_options":[],"leverage":"1","ois_compounding":null,"terms":{"custom_cashflows":[]}},{"leg_ref":"FLOAT-1","leg_seq":"2","leg_type":"FLOAT","direction":"RECEIVE","currency":"USD","notional":"10000000","notional_type":"BULLET","notional_schedule":null,"effective_date":"2026-09-28","maturity_date":"2031-09-28","first_period_start":null,"last_period_end":null,"day_count":"ACT/360","payment_frequency":"ANNUAL","reset_frequency":"DAILY","bdc":"MOD_FOLLOWING","stub_type":"SHORT_FRONT","payment_calendar":null,"payment_lag":"2","fixed_rate":"0","fixed_rate_type":"FLAT","fixed_rate_schedule":null,"spread":"0","spread_type":"FLAT","spread_schedule":null,"forecast_curve_id":"USD_SOFR","discount_curve_id":"USD_SOFR","embedded_options":[],"leverage":"1","ois_compounding":null,"terms":{"custom_cashflows":[]}}],"parties":{"own":{"lei":"254900OPPU84GM83MG36","name":"RIJEKA CAPITAL"},"counterparty":{"lei":"DEMO00000000000000CB","name":"CONFLUENCE BANK AG"}}},"trade_hash":"0x6375ab76a9a7ad1183eed6f98acde784fb9226ae4246191bb76b5088241d3858","attestation":{"via":{"channel":"chat","room_id":"c3ba2fb2-47f8-4a7b-946d-c45d15821eae","user_id":"9d1301c3-a6d1-4865-890d-0b6ec8f90544"},"anchor":{"note":null,"tx_hash":"0xde92a3cec7c2be603a326c3b14a75924448db64a9b184e4050483ec6b65733f5","anchored":true,"chain_id":11155111,"registry":"0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e","explorer_tx":"https://sepolia.etherscan.io/tx/0xde92a3cec7c2be603a326c3b14a75924448db64a9b184e4050483ec6b65733f5","block_number":11773600,"confirmed_at":1790271804},"eip712":{"name":"Rijeka Trade Confirmation","version":"1","chain_id":11155111,"verifying_contract":"0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e"},"parties":{"own":{"lei":"254900OPPU84GM83MG36","address":"0xa0D56a0e30692A26Cb2842eC4595b2034099d95F","signature":"0x308584548850cfcc81f5a4bfbd2c6c50e0e719ec60aa1eadbc4e51d0a39001982f7dcebbe921500122fbe7cb0ddee0109df3b2d5af53aafa77f771ddf1f0b89c1c","key_source":"dev"},"counterparty":{"lei":"DEMO00000000000000CB","address":"0xaB21b083B2045f89EB036Cd0352c5730e8fAf09b","signature":"0xc7fbcdc5b2872db45dfdb89fd0560fdbca5637f7ca5672324fc00d1f4340e3061076297c9c7c9f83dcbd05ea169c961d307a06d253a5f29fb8d5562dab25d9851b","key_source":"countersigned"}},"bilateral":true,"trade_hash":"0x6375ab76a9a7ad1183eed6f98acde784fb9226ae4246191bb76b5088241d3858","schema_version":1,"canonical_bytes_len":2303}}`;
+const EXAMPLE = `{"format":"rijeka-confirmation-proof","format_version":1,"generated_at":"2026-10-13T20:44:41+00:00","trade_ref":"TRD-90271749","canonical":{"schema":"rijeka-trade","schema_version":1,"trade":{"trade_ref":"TRD-90271749","uti":null,"asset_class":"RATES","instrument_type":"IR_SWAP","structure":"VANILLA","notional":"10000000","notional_ccy":"USD","trade_date":"2026-09-24","effective_date":"2026-09-28","maturity_date":"2031-09-28","terms":{"spread":"0","leverage":"1","direction":"PAY","fixed_bdc":"MOD_FOLLOWING","float_bdc":"MOD_FOLLOWING","fixed_rate":"0.04115425","float_index":"SOFR","fixed_calendar":null,"fixed_pay_freq":"ANNUAL","float_calendar":null,"float_pay_freq":"ANNUAL","fixed_day_count":"ACT/360","float_day_count":"ACT/360","float_direction":"RECEIVE","float_reset_freq":"DAILY"},"discount_curve_id":null,"forecast_curve_id":null},"legs":[{"leg_ref":"FIXED-1","leg_seq":"1","leg_type":"FIXED","direction":"PAY","currency":"USD","notional":"10000000","notional_type":"BULLET","notional_schedule":null,"effective_date":"2026-09-28","maturity_date":"2031-09-28","first_period_start":null,"last_period_end":null,"day_count":"ACT/360","payment_frequency":"ANNUAL","reset_frequency":null,"bdc":"MOD_FOLLOWING","stub_type":"SHORT_FRONT","payment_calendar":null,"payment_lag":"2","fixed_rate":"0.04115425","fixed_rate_type":"FLAT","fixed_rate_schedule":null,"spread":null,"spread_type":"FLAT","spread_schedule":null,"forecast_curve_id":null,"discount_curve_id":"USD_SOFR","embedded_options":[],"leverage":"1","ois_compounding":null,"terms":{"custom_cashflows":[]}},{"leg_ref":"FLOAT-1","leg_seq":"2","leg_type":"FLOAT","direction":"RECEIVE","currency":"USD","notional":"10000000","notional_type":"BULLET","notional_schedule":null,"effective_date":"2026-09-28","maturity_date":"2031-09-28","first_period_start":null,"last_period_end":null,"day_count":"ACT/360","payment_frequency":"ANNUAL","reset_frequency":"DAILY","bdc":"MOD_FOLLOWING","stub_type":"SHORT_FRONT","payment_calendar":null,"payment_lag":"2","fixed_rate":"0","fixed_rate_type":"FLAT","fixed_rate_schedule":null,"spread":"0","spread_type":"FLAT","spread_schedule":null,"forecast_curve_id":"USD_SOFR","discount_curve_id":"USD_SOFR","embedded_options":[],"leverage":"1","ois_compounding":null,"terms":{"custom_cashflows":[]}}],"parties":{"own":{"lei":"254900OPPU84GM83MG36","name":"RIJEKA CAPITAL"},"counterparty":{"lei":"DEMO00000000000000CB","name":"CONFLUENCE BANK AG"}}},"trade_hash":"0x6375ab76a9a7ad1183eed6f98acde784fb9226ae4246191bb76b5088241d3858","attestation":{"anchor":{"note":null,"tx_hash":"0xde92a3cec7c2be603a326c3b14a75924448db64a9b184e4050483ec6b65733f5","anchored":true,"chain_id":11155111,"registry":"0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e","explorer_tx":"https://sepolia.etherscan.io/tx/0xde92a3cec7c2be603a326c3b14a75924448db64a9b184e4050483ec6b65733f5","block_number":11773600,"confirmed_at":1790271804},"eip712":{"name":"Rijeka Trade Confirmation","version":"1","chain_id":11155111,"verifying_contract":"0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e"},"parties":{"own":{"lei":"254900OPPU84GM83MG36","address":"0xa0D56a0e30692A26Cb2842eC4595b2034099d95F","signature":"0x308584548850cfcc81f5a4bfbd2c6c50e0e719ec60aa1eadbc4e51d0a39001982f7dcebbe921500122fbe7cb0ddee0109df3b2d5af53aafa77f771ddf1f0b89c1c","key_source":"dev"},"counterparty":{"lei":"DEMO00000000000000CB","address":"0xaB21b083B2045f89EB036Cd0352c5730e8fAf09b","signature":"0xc7fbcdc5b2872db45dfdb89fd0560fdbca5637f7ca5672324fc00d1f4340e3061076297c9c7c9f83dcbd05ea169c961d307a06d253a5f29fb8d5562dab25d9851b","key_source":"countersigned"}},"bilateral":true,"trade_hash":"0x6375ab76a9a7ad1183eed6f98acde784fb9226ae4246191bb76b5088241d3858","schema_version":1,"canonical_bytes_len":2303}}`;
 el("example").addEventListener("click", () => {
   el("proof").value = JSON.stringify(JSON.parse(EXAMPLE), null, 2);
   el("rpc").value = "https://ethereum-sepolia-rpc.publicnode.com|11155111";
@@ -139,33 +152,94 @@ el("example").addEventListener("click", () => {
 // #hash=0x…[&chain=11155111][&registry=0x…]  a bare hash from the public register:
 //        the registry is read for status, parties and block; full verification
 //        (recomputing the hash, checking the signatures) still needs the proof pack.
+//
+// The registries this page knows, by chain. A proof or a link names the registry it was anchored in, and whoever
+// wrote it chose that address: anyone can deploy a registry of their own and sign with keys of their own. So a
+// record in any other contract is reported, in amber, and never as VERIFIED or ANCHORED. A self-hosted copy of
+// this page lists its own registry here.
 const REGISTRIES = { 11155111: "0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e" };
+const knownRegistry = (chainId, addr) => {
+  const k = REGISTRIES[Number(chainId)];
+  return !!k && !!addr && String(addr).toLowerCase() === k.toLowerCase();
+};
+const UNKNOWN_REGISTRY = "Anyone can deploy a registry and sign with keys of their own, so a record there says nothing about who the parties are. Check the address against the deployment you trust.";
+const whichKnown = chainId => REGISTRIES[Number(chainId)] ? `the registry this page knows on chain ${Number(chainId)} is ${REGISTRIES[Number(chainId)]}` : `this page knows no registry on chain ${chainId}`;
+const MAX_LINK = 524288, MAX_PROOF = 2097152;      // characters of a link; bytes of the proof it unpacks to
 function b64urlToBytes(s){ s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; const bin = atob(s); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
 async function inflate(bytes){
-  try { const ds = new DecompressionStream("deflate-raw"); const w = ds.writable.getWriter(); w.write(bytes); w.close();
-        return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer()); }
-  catch (e) { return new TextDecoder().decode(bytes); }     // link was plain base64 JSON
+  let ds;
+  try { ds = new DecompressionStream("deflate-raw"); }
+  catch (e) { return new TextDecoder().decode(bytes); }     // no DecompressionStream: the link is plain base64 JSON
+  const w = ds.writable.getWriter();
+  w.write(bytes).catch(() => {}); w.close().catch(() => {});
+  const r = ds.readable.getReader();
+  const parts = []; let n = 0;
+  try {
+    for (;;) {
+      const { done, value } = await r.read();
+      if (done) break;
+      n += value.length;
+      // a small link can unpack to gigabytes: stop reading, and say so, rather than hang the tab
+      if (n > MAX_PROOF) { r.cancel().catch(() => {}); throw new RangeError("the proof in this link unpacks to more than 2 MB"); }
+      parts.push(value);
+    }
+  } catch (e) {
+    if (e instanceof RangeError) throw e;
+    return new TextDecoder().decode(bytes);                 // not deflate: the link was plain base64 JSON
+  }
+  const out = new Uint8Array(n); let o = 0;
+  for (const part of parts) { out.set(part, o); o += part.length; }
+  return new TextDecoder().decode(out);
 }
 async function checkHashOnly(hash, chainId, registry){
   reset(); el("proof").value = "";
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash || "")) {
+    add("fail", "the link does not carry a record hash", "expected 0x and 64 hex digits");
+    verdictBox("bad", "NOT CHECKED", "Nothing was read from the chain.");
+    return;
+  }
+  if (!registry || !ethers.isAddress(registry)) {
+    add("fail", "no registry to read", registry ? "the link's registry is not an address" : whichKnown(chainId));
+    verdictBox("bad", "NOT CHECKED", "Nothing was read from the chain.");
+    return;
+  }
+  const known = knownRegistry(chainId, registry);
+  // read the chain the link names, when the list has a node for it
+  const opt = [...el("rpc").options].find(o => o.value.endsWith("|" + Number(chainId)));
+  if (opt) { el("rpc").value = opt.value; el("rpcCustom").style.display = "none"; }
   el("status").textContent = "reading the chain…";
   const sel = el("rpc").value.split("|"); const url = sel[0] === "custom" ? el("rpcCustom").value.trim() : sel[0];
   try {
     const provider = new ethers.JsonRpcProvider(url);
     const net = await provider.getNetwork();
-    if (chainId && Number(net.chainId) !== Number(chainId)) { add("fail", "wrong network", `link says chainId ${chainId}, this node is ${net.chainId}`); return; }
+    if (chainId && Number(net.chainId) !== Number(chainId)) {
+      add("fail", "wrong network", `link says chainId ${chainId}, this node is ${net.chainId}`);
+      verdictBox("bad", "NOT CHECKED", "The node chosen above is on another chain than the link's. Choose a node on the link's chain and open the link again.");
+      el("status").textContent = "";
+      return;
+    }
     const c = new ethers.Contract(registry, ABI, provider);
     const rec = await c.getConfirmation(hash);
     const st = STATUS[Number(rec.status)] || "Unknown";
     add(st === "Confirmed" ? "pass" : "fail", "registry status: " + st,
-        st === "None" ? "no confirmation exists on this chain for this hash"
+        st === "None" ? "no confirmation exists in this registry for this hash"
                       : `block ${rec.blockNumber} · ${new Date(Number(rec.confirmedAt) * 1000).toISOString()} · registry ${registry}`);
-    if (st !== "None") add("pass", "signing parties on-chain", rec.partyA + "  /  " + rec.partyB);
+    if (!known) add("warn", "this registry is not one this page knows", `the link names ${registry}; ${whichKnown(chainId)}`);
+    if (st !== "None") add(known ? "pass" : "warn", "signing parties on-chain", rec.partyA + "  /  " + rec.partyB);
     add("skip", "terms and signatures not checked", "this link carries only the hash. Ask either party for the proof pack to recompute the hash and recover both signatures.");
-    el("verdict").innerHTML = st === "Confirmed"
-      ? `<div class="verdict ok"><b>ANCHORED</b><span class="note">This hash is recorded as a confirmed trade on chain ${net.chainId}, in block ${rec.blockNumber}, between the two addresses above. To prove what was signed, verify the proof pack.</span></div>`
-      : `<div class="verdict bad"><b>NOT FOUND</b><span class="note">No confirmed record for this hash on this chain.</span></div>`;
-  } catch (e) { add("fail", "could not read the chain", e.message); }
+    if (st === "Confirmed" && known) {
+      verdictBox("ok", "ANCHORED", `This hash is recorded as a confirmed trade on chain ${net.chainId}, in block ${rec.blockNumber}, in the registry this page knows there (${registry}), between the two addresses above. To prove what was signed, verify the proof pack.`);
+    } else if (st === "Confirmed") {
+      verdictBox("part", "RECORDED IN A REGISTRY THIS PAGE DOES NOT KNOW", `The link names registry ${registry} on chain ${net.chainId}; ${whichKnown(net.chainId)}. ${UNKNOWN_REGISTRY}`);
+    } else if (st === "None") {
+      verdictBox("bad", "NOT FOUND", "No record for this hash in this registry on this chain.");
+    } else {
+      verdictBox("bad", "NOT CURRENT", st === "Superseded" ? "This record was amended: a later record supersedes it. Verify the current one." : st === "Terminated" ? "This record was closed by both parties." : "The registry reports a status this page does not know.");
+    }
+  } catch (e) {
+    add("fail", "could not read the chain", e.message);
+    verdictBox("bad", "NOT CHECKED", "The chain could not be read. Choose another node above and open the link again.");
+  }
   el("status").textContent = "";
 }
 
@@ -254,10 +328,18 @@ el("run").addEventListener("click", async () => {
       add("fail", "signature recovery failed", e.message);
     }
   } else {
-    add(hashOk ? "skip" : "fail",
+    add(hashOk ? "warn" : "fail",
         hashOk ? "signatures not checked — none supplied"
                : "signatures do not cover these terms",
         "a signature over the signed hash cannot validate altered terms");
+  }
+
+  // 2b — which registry: the proof names it, and whoever wrote the proof chose it
+  const regKnown = knownRegistry(eip.chain_id, eip.verifying_contract);
+  if (!regKnown) {
+    add("warn", "this registry is not one this page knows",
+        (eip.verifying_contract ? `the proof names ${eip.verifying_contract} on chain ${eip.chain_id}` : "the proof names no registry")
+        + `; ${whichKnown(eip.chain_id)}. ${UNKNOWN_REGISTRY}`);
   }
 
   // 3 — read the registry from a public node
@@ -296,39 +378,51 @@ el("run").addEventListener("click", async () => {
       add("fail", "could not read the chain", e.message);
     }
     el("status").textContent = "";
-  } else if (!url) {
-    add("skip", "chain not checked", "no RPC endpoint given");
+  } else if (computed) {
+    add("warn", "chain not checked", url ? "the proof names no registry to read" : "no RPC endpoint given");
   }
 
-  // Verdict
+  // Verdict: green only when every check ran and passed, in a registry this page knows
   const anyFail = rows.includes("fail");
-  const v = document.createElement("div");
-  v.className = "verdict " + (anyFail ? "bad" : "ok");
+  const gaps = [];
+  if (!sigsOk) gaps.push("the signatures were not checked");
+  if (!chainOk) gaps.push("the chain was not read");
+  if (!regKnown) gaps.push("the registry is not one this page knows");
+  const where = rec ? ` at block ${rec.blockNumber}, in registry ${eip.verifying_contract}` : "";
   if (anyFail) {
-    v.innerHTML = "NOT VERIFIED<span class='note'>At least one check failed. These trade terms are not the ones both parties signed and anchored, or the confirmation does not exist on this chain.</span>";
+    verdictBox("bad", "NOT VERIFIED", "At least one check failed. These trade terms are not the ones both parties signed and anchored, or the confirmation does not exist on this chain.");
+  } else if (gaps.length) {
+    verdictBox("part", "NOT FULLY VERIFIED", "No check failed, but " + gaps.join(", and ") + ". "
+      + (regKnown ? "" : UNKNOWN_REGISTRY + " ") + "This is not proof of a confirmation.");
   } else if (canonical.schema === "rijeka-package" && !(proof.leg && proof.leg.canonical)) {
     // a package record lists hashes: with no leg supplied, no trade's terms were checked at all
-    v.className = "verdict";
-    v.innerHTML = "PACKAGE RECORD VERIFIED — NO TERMS CHECKED<span class='note'>Both named parties signed this package record and it is recorded on chain "
-      + (rec ? "at block " + rec.blockNumber : "") + ". A package record holds only the hashes of its legs: no trade's terms were checked here. "
-      + "Verify a leg's own proof pack to check its terms.</span>";
+    verdictBox("", "PACKAGE RECORD VERIFIED — NO TERMS CHECKED", `Both named parties signed this package record and it is recorded on chain${where}. `
+      + "A package record holds only the hashes of its legs: no trade's terms were checked here. Verify a leg's own proof pack to check its terms.");
   } else {
-    v.innerHTML = "VERIFIED<span class='note'>These exact terms were signed by both named parties and recorded on chain "
-      + (rec ? "at block " + rec.blockNumber : "") + ". Neither party can alter them without breaking this proof.</span>";
+    verdictBox("ok", "VERIFIED", `These exact terms were signed by both named parties and recorded on chain${where}. Neither party can alter them without breaking this proof.`);
   }
-  el("verdict").appendChild(v);
 });
 // link handling runs last, after every helper above is defined
 (async () => {
   const h = new URLSearchParams(location.hash.replace(/^#/, ""));
   if (h.get("p")) {
-    try { el("proof").value = JSON.stringify(JSON.parse(await inflate(b64urlToBytes(h.get("p")))), null, 2); el("run").click(); }
-    catch (e) { add("fail", "the proof link could not be decoded", e.message); }
+    try {
+      const packed = h.get("p").replace(/ /g, "+");          // a "+" of plain base64 arrives as a space
+      if (packed.length > MAX_LINK) throw new RangeError("the link is longer than this page accepts");
+      el("proof").value = JSON.stringify(JSON.parse(await inflate(b64urlToBytes(packed))), null, 2);
+      el("run").click();
+    } catch (e) {
+      add("fail", "the proof link could not be decoded", e.message);
+      verdictBox("bad", "NOT CHECKED", "The link did not unpack to a proof. Ask for the proof pack itself and paste it above.");
+    }
   } else if (h.get("hash")) {
     const chain = h.get("chain") || "11155111";
-    checkHashOnly(h.get("hash"), chain, h.get("registry") || REGISTRIES[chain] || REGISTRIES[11155111]);
+    // the link may name a registry; one this page does not know is read, and reported as such
+    checkHashOnly(h.get("hash"), chain, h.get("registry") || REGISTRIES[Number(chain)]);
   }
 })();
+// a new link opened in the same tab is a new check
+addEventListener("hashchange", () => location.reload());
 </script>
 </body>
 </html>

@@ -62,6 +62,11 @@ contacting Rijeka. It recomputes the canonical hash in the browser, recovers bot
 EIP-712 signatures locally, and reads the registry from a public Ethereum node.
 Save the file and it keeps working offline apart from the one RPC call.
 
+The page lists the registries it knows, by chain id (`REGISTRIES` in the file). A proof pack, or a link, names
+the registry it was anchored in, and whoever wrote it chose that address: anyone can deploy a registry and sign
+with keys of their own. So a record in a contract the page does not list is read and reported in amber, never as
+VERIFIED. If you deploy your own registry, add its address to `REGISTRIES` in your copy of the page.
+
 Feed it the proof pack from `GET /api/chain/proof/{trade_id}` (the CONFIRM tab has
 a `↓ PROOF PACK` button). The pack contains the canonical record, the hash, both
 signatures and the registry address — nothing else is needed.

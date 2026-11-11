@@ -111,9 +111,14 @@ anchored confirmations). In the register `trade_hash` is the hash the registry h
 package, the package's; the leg's own is `leg_hash`), so a link into the verifier or the registry is by
 `trade_hash`. The verifier's source is `chain/verify/index.html` in the repository; the page at
 rijeka.app/verify is the copy in `netlify_drop/verify`, which changes only when the owner deploys the
-landing site, on its own schedule and not with the app's release. Since 11 November 2026 the two are the same
+landing site, on its own schedule and not with the app's release. On 11 November 2026 the two were made the same
 file: the live page checks a leg inside its package, and the source has the link handling the live page had
-gained on its own (`#p=` a shared proof pack, `#hash=` a bare hash from the public register). A change to the
+gained on its own (`#p=` a shared proof pack, `#hash=` a bare hash from the public register). The source has since
+gained one rule the live page gets at the next deploy of the landing site: the page lists the registries it knows
+by chain (`REGISTRIES`), and a proof or a link that names any other contract is read and reported in amber, never
+as VERIFIED or ANCHORED, because whoever wrote the proof or the link chose that address (anyone can deploy a
+registry and sign with keys of their own). A verdict is green only when the hash, both signatures and the chain
+were all checked; a self-hosted copy of the page lists its own registry. A change to the
 verifier is made in the source and copied to `netlify_drop/verify`; before a deploy of the landing site the two
 are compared, and a difference that is not the change being shipped is resolved first, never overwritten. The
 public site carries no SIMM tool and no SIMM claim (taken down the same day): ISDA SIMM is licensed and is not

@@ -3,6 +3,24 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
+## Verifier source · 11 November 2026 (in the repository; on rijeka.app at the next deploy of the landing site)
+
+Found by the security review of the merged verifier, before it was pushed.
+
+- **A registry the page does not know never earns a green verdict.** A proof names the registry it was anchored in,
+  and a `#hash=` link could name one too; the page read whichever it was given, so a forger with a contract and two
+  keys of their own could be shown VERIFIED or ANCHORED under any party names. The page now lists the registries it
+  knows by chain; any other is read and reported in amber, with both addresses. A self-hosted copy lists its own.
+- **A verdict says only what was checked.** VERIFIED needs the hash, both signatures and the chain; a proof with no
+  signatures, or with no node to read, is NOT FULLY VERIFIED (it used to be VERIFIED).
+- **A link cannot hang the tab.** A proof link is refused above 512 KB, and stops unpacking at 2 MB (a 64 KB link
+  could unpack to 64 MB and more). A hash link that is not a hash is refused; a superseded or terminated record
+  reads NOT CURRENT; every outcome ends in a verdict.
+- The embedded example no longer carries the ids of the chat it was confirmed in (they were never part of the
+  signed record). Every verdict is written as text.
+- Checked in a browser against a stubbed chain, 19 cases, and the same cases against the page as it was (the forged
+  proof and the unsigned proof both read VERIFIED there). Not a test in CI: the page loads its library from a CDN.
+
 ## Public site · 11 November 2026
 
 Redeployed (rijeka.app is deployed on its own, not with the app).
