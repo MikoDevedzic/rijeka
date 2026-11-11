@@ -6,7 +6,11 @@ These 24 tests ran until 11 November 2026 as tests/test_rls_isolation.py against
 tokens fetched by signing in to the hosted auth service, and so wrote to whatever database that server was on. They
 run here on the local stack (backend/stack), with the stack's own tokens, in CI, like every other integration test.
 The rows they make carry TEST-RLS- in a reference or the valuation date 2099-12-31; the stack's database is
-disposable."""
+disposable.
+
+What they hold is the routes' own filter on the caller's id. The API connects to the stack as the tables' owner, as
+it always has in these tests, so row-level security is not what is exercised here: no test in this file would fail
+if a policy were dropped. The name TEST-RLS is kept from the old file."""
 from __future__ import annotations
 
 import uuid

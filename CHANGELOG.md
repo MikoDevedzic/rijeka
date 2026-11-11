@@ -18,10 +18,15 @@ methodology document carries its own version (v1.13). Commits on `main` are the 
 - **They clean up.** A calibration they save is dated 2099; left behind it is the "latest" one and the pinned
   book's swap XVA then runs on it the next time the same database is used (seen on the first local run: CVA −2,090
   → −2,733). The file removes what the harness does not truncate, before and after; the suite passes twice in a
-  row on one database and leaves nothing.
+  row on one database. Its trades, legs and events stay until the harness truncates them at the start of the next
+  session (an event cannot be deleted by a row).
+- **What these tests hold, said plainly:** the routes' own filter on the caller's id. The API connects to the
+  stack as the tables' owner, so row-level security is not exercised by them, here or before.
 - **Removed:** the fixtures in `tests/conftest.py` that read `.env.test` and signed in; the mentions of them in
   `pytest.ini`, `CONTRIBUTING.md` and the CI file's comment.
-- **Checked:** 144 integration tests on the local stack, twice; 1,299 unit and reference tests; ruff.
+- **Checked:** the integration suite on the local stack, twice: 144 passed each time, with `test_migrate.py`'s 22
+  deselected (it runs only on the default database name; CI runs it). 1,299 unit and reference tests; ruff. A cold
+  read compared every call of the old file with the new one: nothing weaker.
 
 ## What Phase 1 is, said one way · 11 November 2026 (frontend only)
 
