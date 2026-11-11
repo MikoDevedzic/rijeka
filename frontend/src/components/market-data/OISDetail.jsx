@@ -19,7 +19,7 @@ function SourceBadge({ src }) {
   return (
     <span style={{background:s.bg,border:`1px solid ${s.bd}`,color:s.c,
       fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',
-      padding:'1px 5px',borderRadius:'2px',fontFamily:"'IBM Plex Mono',var(--mono)",whiteSpace:'nowrap'}}>
+      padding:'1px 5px',borderRadius:'2px',fontFamily: 'var(--mono)',whiteSpace:'nowrap'}}>
       {src}
     </span>
   );
@@ -288,7 +288,7 @@ function OISInstruments({ curve }) {
           {['MANUAL','BLOOMBERG','IMPORT'].map(src => (
             <button className="rj-press" key={src} onClick={() => handleBlpSourceChange(src)} style={{
               flex:1,padding:'5px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
-              cursor:'pointer',fontFamily:"'IBM Plex Mono',var(--mono)",background:'transparent',borderRadius:'2px',
+              cursor:'pointer',fontFamily: 'var(--mono)',background:'transparent',borderRadius:'2px',
               border:blpSource===src?'1px solid var(--accent)':'1px solid var(--border)',
               color:blpSource===src?'var(--accent)':'var(--text-dim)',
             }}>{src === 'BLOOMBERG' ? 'BLOOMBERG · SELF-HOST' : src}</button>
@@ -300,21 +300,21 @@ function OISInstruments({ curve }) {
           <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
             <input type="date" value={saveDate} onChange={e => setSaveDate(e.target.value)}
               style={{background:'var(--panel-2)',border:'1px solid var(--border)',color:'var(--text)',
-                fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',padding:'0.25rem 0.45rem',borderRadius:2,outline:'none'}} />
+                fontFamily: 'var(--mono)',fontSize:'1rem',padding:'0.25rem 0.45rem',borderRadius:2,outline:'none'}} />
             <button className="rj-press"
               onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
               style={{padding:'0.25rem 0.85rem',background:'rgba(217,178,92,0.07)',
-                border:'1px solid var(--accent)',borderRadius:2,fontFamily:"'IBM Plex Mono',var(--mono)",
+                border:'1px solid var(--accent)',borderRadius:2,fontFamily: 'var(--mono)',
                 fontSize:'1rem',fontWeight:700,letterSpacing:'0.1em',color:'var(--accent)',cursor:'pointer'}}
             >{snapshotSaving?.[curve.id] ? 'SAVING...' : '▶ SAVE TO DB'}</button>
             {snapshotSaved?.[curve.id] && (
-              <span style={{fontSize:'0.9375rem',color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+              <span style={{fontSize:'0.9375rem',color:'var(--accent)',fontFamily: 'var(--mono)'}}>
                 ✓ saved {snapshotSaved[curve.id].date}
               </span>
             )}
             {snapshotError?.[curve.id] && (
-              <span style={{fontSize:'0.9375rem',color:'var(--red)',fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+              <span style={{fontSize:'0.9375rem',color:'var(--red)',fontFamily: 'var(--mono)'}}>
                 ✗ {snapshotError[curve.id]}
               </span>
             )}
@@ -349,7 +349,7 @@ function OISInstruments({ curve }) {
               </span>
               <button className="rj-btn" onClick={fetchBlpStatus} style={{marginLeft:'auto',fontSize:'0.875rem',
                 background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',
-                padding:'2px 6px',cursor:'pointer',fontFamily:"'IBM Plex Mono',var(--mono)",borderRadius:'2px'}}>
+                padding:'2px 6px',cursor:'pointer',fontFamily: 'var(--mono)',borderRadius:'2px'}}>
                 REFRESH
               </button>
             </div>
@@ -364,18 +364,18 @@ function OISInstruments({ curve }) {
             <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'8px'}}>
               <input type="date" value={blpSnapDate} onChange={e => setBlpSnapDate(e.target.value)}
                 style={{background:'var(--panel)',border:'1px solid var(--border)',color:'var(--text)',
-                  fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
+                  fontFamily: 'var(--mono)',fontSize:'1rem',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
               <button className="rj-press" onClick={() => snapBloomberg('live')} disabled={!blpStatus?.connected||blpSnapping}
                 style={{flex:1,padding:'6px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed',background:'transparent',
-                  borderRadius:'2px',fontFamily:"'IBM Plex Mono',var(--mono)",border:'1px solid var(--accent)',
+                  borderRadius:'2px',fontFamily: 'var(--mono)',border:'1px solid var(--accent)',
                   color:'var(--accent)',opacity:blpStatus?.connected?1:0.4}}>
                 {blpSnapping?'SNAPPING...':'▶ SNAP LIVE'}
               </button>
               <button className="rj-press" onClick={() => snapBloomberg('historical')} disabled={!blpStatus?.connected||blpSnapping}
                 style={{flex:1,padding:'6px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed',background:'transparent',
-                  borderRadius:'2px',fontFamily:"'IBM Plex Mono',var(--mono)",border:'1px solid var(--border)',
+                  borderRadius:'2px',fontFamily: 'var(--mono)',border:'1px solid var(--border)',
                   color:'var(--text-dim)',opacity:blpStatus?.connected?1:0.4}}>
                 SNAP HISTORICAL
               </button>
@@ -412,7 +412,7 @@ function OISInstruments({ curve }) {
                     <button className="rj-press" onClick={e=>{e.preventDefault();saveTickerOverrides();}}
                       style={{fontSize:'0.875rem',background:'transparent',border:'1px solid var(--blue)',
                         color:'var(--blue)',padding:'1px 6px',cursor:'pointer',
-                        fontFamily:"'IBM Plex Mono',var(--mono)",borderRadius:'2px'}}>SAVE OVERRIDES</button>
+                        fontFamily: 'var(--mono)',borderRadius:'2px'}}>SAVE OVERRIDES</button>
                   )}
                 </summary>
                 <div style={{marginTop:'6px',maxHeight:'180px',overflowY:'auto'}}>
@@ -435,7 +435,7 @@ function OISInstruments({ curve }) {
                               onChange={e=>{setBlpTickers(prev=>({...prev,[tenor]:e.target.value}));setBlpTickersEdited(true);}}
                               style={{width:'100%',background:'transparent',border:'none',
                                 borderBottom:'1px solid var(--border)',color:'var(--text)',
-                                fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'0.875rem',padding:'1px 2px',outline:'none'}} />
+                                fontFamily: 'var(--mono)',fontSize:'0.875rem',padding:'1px 2px',outline:'none'}} />
                           </td>
                         </tr>
                       ))}
@@ -457,7 +457,7 @@ function OISInstruments({ curve }) {
             <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'8px'}}>
               <input type="date" value={blpSnapDate} onChange={e => setBlpSnapDate(e.target.value)}
                 style={{background:'var(--panel)',border:'1px solid var(--border)',color:'var(--text)',
-                  fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
+                  fontFamily: 'var(--mono)',fontSize:'1rem',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
               <input type="file" accept=".csv,.txt" onChange={handleCsvUpload}
                 style={{flex:1,fontSize:'0.875rem',color:'var(--text-dim)',cursor:'pointer'}} />
             </div>
@@ -468,7 +468,7 @@ function OISInstruments({ curve }) {
                 <button className="rj-press" onClick={saveCsvImport}
                   style={{padding:'5px 14px',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
                     cursor:'pointer',background:'transparent',border:'1px solid var(--accent)',
-                    color:'var(--accent)',borderRadius:'2px',fontFamily:"'IBM Plex Mono',var(--mono)"}}>SAVE IMPORT</button>
+                    color:'var(--accent)',borderRadius:'2px',fontFamily: 'var(--mono)'}}>SAVE IMPORT</button>
               </div>
             )}
             {blpSnapResult?.source === 'IMPORT' && (

@@ -54,12 +54,12 @@ function capitalFields(form) {
 }
 
 const L = {
-  display:'block', fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+  display:'block', fontSize:'12px', fontFamily: 'var(--mono)',
   color:'var(--text-dim)', letterSpacing:'0.08em', marginBottom:'4px'
 }
 const INP = {
   background:'var(--bg)', border:'1px solid var(--fld-bd)',
-  color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'12px',
+  color:'var(--text)', fontFamily: 'var(--mono)', fontSize:'12px',
   padding:'5px 8px', borderRadius:'2px', outline:'none',
   width:'100%', boxSizing:'border-box'
 }
@@ -72,7 +72,7 @@ function Btn({ color, size, onClick, disabled, children }) {
       background:'transparent',
       border:'1px solid ' + c,
       color: c,
-      fontFamily:"'IBM Plex Mono',var(--mono)",
+      fontFamily: 'var(--mono)',
       fontSize: lg ? '12px' : '10px',
       padding: lg ? '6px 16px' : '3px 8px',
       borderRadius:'2px',
@@ -87,7 +87,7 @@ function Btn({ color, size, onClick, disabled, children }) {
 function Badge({ color, children }) {
   return (
     <span style={{
-      fontSize: '12px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
+      fontSize: '12px', fontFamily: 'var(--mono)', letterSpacing:'0.06em',
       padding:'2px 6px', borderRadius:'2px', whiteSpace:'nowrap',
       background:'color-mix(in srgb, ' + color + ' 14%, transparent)',
       color: color,
@@ -99,7 +99,7 @@ function Badge({ color, children }) {
 function Cell({ children, dim }) {
   return (
     <div style={{
-      fontSize: '12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+      fontSize: '12px', fontFamily: 'var(--mono)',
       color: dim ? 'var(--text-dim)' : 'var(--text)',
       overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'
     }}>{children || '—'}</div>
@@ -322,11 +322,11 @@ export default function Counterparties() {
       <div style={{ display:'flex', alignItems:'flex-start',
           justifyContent:'space-between', marginBottom:'20px' }}>
         <div>
-          <div style={{ fontSize:'12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <div style={{ fontSize:'12px', color:'var(--accent)', fontFamily: 'var(--mono)',
               letterSpacing:'0.1em', marginBottom:'4px' }}>
             CONFIGURATIONS / ONBOARDING
           </div>
-          <h1 style={{ fontSize:'20px', color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <h1 style={{ fontSize:'20px', color:'var(--text)', fontFamily: 'var(--mono)',
               fontWeight:400, margin:0 }}>
             COUNTERPARTIES
           </h1>
@@ -357,7 +357,7 @@ export default function Counterparties() {
           border:'1px dashed var(--accent)', borderRadius:'4px',
           padding:'20px', marginBottom:'20px', background:'var(--panel)'
         }}>
-          <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily: 'var(--mono)',
               letterSpacing:'0.08em', marginBottom:'16px' }}>
             {editCp ? 'EDIT TERMS · ' + editCp.name : 'NEW COUNTERPARTY'}
           </div>
@@ -463,7 +463,7 @@ export default function Counterparties() {
             </div>
             <div>
               <label style={L}>CLOSE-OUT NETTING · UMR</label>
-              <div style={{ display:'flex', gap:'12px', alignItems:'center', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'11px', color:'var(--text-dim)' }}>
+              <div style={{ display:'flex', gap:'12px', alignItems:'center', fontFamily: 'var(--mono)', fontSize:'11px', color:'var(--text-dim)' }}>
                 <label style={{ display:'flex', gap:'4px', alignItems:'center', cursor:'pointer' }}>
                   <input type="checkbox" checked={form.netting_enforceable} onChange={function(e) { f({ netting_enforceable: e.target.checked }) }} /> ENFORCEABLE
                 </label>
@@ -478,7 +478,7 @@ export default function Counterparties() {
                 <input style={Object.assign({}, INP, { width:'70px' })} type="number" min="1" max="60" step="1" placeholder="1"
                   value={form.margin_frequency_days}
                   onChange={function(e) { f({ margin_frequency_days: e.target.value }) }} />
-                <label style={{ display:'flex', gap:'4px', alignItems:'center', cursor:'pointer', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'11px', color:'var(--text-dim)' }}>
+                <label style={{ display:'flex', gap:'4px', alignItems:'center', cursor:'pointer', fontFamily: 'var(--mono)', fontSize:'11px', color:'var(--text-dim)' }}>
                   <input type="checkbox" checked={form.mpor_disputed} onChange={function(e) { f({ mpor_disputed: e.target.checked }) }} /> DISPUTED (floor doubled, CRE52.51)
                 </label>
               </div>
@@ -494,23 +494,23 @@ export default function Counterparties() {
                       <button className="rj-press" key={i.code} type="button" title={i.name + ' · ' + i.cls + (i.yield_today_bp != null ? ' · ' + Math.round(i.yield_today_bp) + ' bp' : '')}
                         onClick={function() { setSched(function(p) { return Object.assign({}, p, { rows: on ? p.rows.filter(function(r) { return r.instrument !== i.code }) : p.rows.concat([rowFor(i.code)]) }) }) }}
                         style={{ background: on ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent', border:'1px solid ' + (on ? 'var(--accent)' : 'var(--panel-3)'),
-                          color: on ? 'var(--accent)' : 'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'10px', padding:'3px 8px', borderRadius:'2px', cursor:'pointer', letterSpacing:'0.05em' }}>
+                          color: on ? 'var(--accent)' : 'var(--text-dim)', fontFamily: 'var(--mono)', fontSize:'10px', padding:'3px 8px', borderRadius:'2px', cursor:'pointer', letterSpacing:'0.05em' }}>
                         {i.code}
                       </button>
                     )
                   })}
-                  {!instruments.length && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>no instruments loaded</span>}
+                  {!instruments.length && <span style={{ fontSize:'11px', color:'var(--text-dim)', fontFamily: 'var(--mono)' }}>no instruments loaded</span>}
                 </div>
                 {sched.rows.length > 0 && (
                   <div style={{ border:'1px solid var(--panel-3)', borderRadius:'2px', overflow:'hidden' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'5px 8px', background:'var(--panel-2)', fontSize:'10px', letterSpacing:'0.08em', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                    <div style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'5px 8px', background:'var(--panel-2)', fontSize:'10px', letterSpacing:'0.08em', color:'var(--text-dim)', fontFamily: 'var(--mono)' }}>
                       <span>INSTRUMENT</span><span>CLASS</span><span>RAIL</span><span style={{ textAlign:'right' }}>YIELD</span><span>VM</span><span>IM</span><span>HAIRCUT %</span><span>POSTED %</span><span>RECEIVED %</span><span />
                     </div>
                     {sched.rows.map(function(r, idx) {
                       var inst = instruments.find(function(i) { return i.code === r.instrument }) || {}
                       var set = function(patch) { setSched(function(p) { return Object.assign({}, p, { rows: p.rows.map(function(x, k) { return k === idx ? Object.assign({}, x, patch) : x }) }) }) }
                       return (
-                        <div key={r.instrument} style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'4px 8px', alignItems:'center', borderTop:'1px solid var(--panel-3)', fontSize:'11px', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                        <div key={r.instrument} style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'4px 8px', alignItems:'center', borderTop:'1px solid var(--panel-3)', fontSize:'11px', fontFamily: 'var(--mono)' }}>
                           <span style={{ color:'var(--text)' }}>{r.instrument}</span>
                           <span style={{ color:'var(--text-dim)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={inst.class_label}>{inst.cls || '—'}</span>
                           <span style={{ color: inst.rail === 'on_chain' ? 'var(--accent)' : 'var(--text-dim)' }}>{inst.rail === 'on_chain' ? 'ON CHAIN' : 'BILATERAL'}</span>
@@ -525,14 +525,14 @@ export default function Counterparties() {
                         </div>
                       )
                     })}
-                    <div style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'4px 8px', borderTop:'1px solid var(--panel-3)', fontSize:'10px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                    <div style={{ display:'grid', gridTemplateColumns:SCHED_COLS, gap:'6px', padding:'4px 8px', borderTop:'1px solid var(--panel-3)', fontSize:'10px', color:'var(--text-dim)', fontFamily: 'var(--mono)' }}>
                       <span style={{ gridColumn:'1 / span 7' }}>weights are normalised on save; blank haircut = the class's CRE22.49 row</span>
                       <span>Σ {Math.round(total(sched, 'posted'))}</span><span>Σ {Math.round(total(sched, 'received'))}</span><span />
                     </div>
                   </div>
                 )}
                 <div style={{ display:'flex', gap:'16px', alignItems:'center', marginTop:'8px', flexWrap:'wrap' }}>
-                  <label style={{ display:'flex', gap:'6px', alignItems:'center', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'11px', color:'var(--text-dim)' }}>
+                  <label style={{ display:'flex', gap:'6px', alignItems:'center', fontFamily: 'var(--mono)', fontSize:'11px', color:'var(--text-dim)' }}>
                     RAIL
                     <select style={Object.assign({}, INP, { width:'140px', cursor:'pointer' })} value={sched.rail} onChange={function(e) { setSched(function(p) { return Object.assign({}, p, { rail: e.target.value }) }) }}>
                       <option value="bilateral">BILATERAL</option>
@@ -541,14 +541,14 @@ export default function Counterparties() {
                   </label>
                   <input style={Object.assign({}, INP, { flex:'1 1 240px' })} placeholder="note (the annex reference, the legal findings)" value={sched.note} onChange={function(e) { setSched(function(p) { return Object.assign({}, p, { note: e.target.value }) }) }} />
                 </div>
-                {problems(sched).map(function(m) { return <div key={m} style={{ marginTop:'4px', fontSize:'11px', color:'var(--amber)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>{m}</div> })}
+                {problems(sched).map(function(m) { return <div key={m} style={{ marginTop:'4px', fontSize:'11px', color:'var(--amber)', fontFamily: 'var(--mono)' }}>{m}</div> })}
               </div>
             )}
 
           </div>
 
           {!hasCSA && (
-            <div style={{ marginTop:'12px', fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+            <div style={{ marginTop:'12px', fontSize:'12px', fontFamily: 'var(--mono)',
                 color:'var(--amber)', opacity:.7 }}>
               NO_CSA — CSA fields will be stored as null
             </div>
@@ -558,7 +558,7 @@ export default function Counterparties() {
             <Btn size='lg' onClick={editCp ? saveEdit : save} disabled={saving || (hasCSA && sched.rows.length > 0 && problems(sched).length > 0)}>
               {saving ? 'SAVING...' : editCp ? 'SAVE TERMS' : 'SAVE COUNTERPARTY'}
             </Btn>
-            {editCp && feed && <span data-testid="cp-terms-feed" style={{ marginLeft:'12px', fontSize:'11px', color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+            {editCp && feed && <span data-testid="cp-terms-feed" style={{ marginLeft:'12px', fontSize:'11px', color:'var(--text-dim)', fontFamily: 'var(--mono)' }}>
               {feed}
             </span>}
           </div>
@@ -567,12 +567,12 @@ export default function Counterparties() {
 
       {/* ── Table ── */}
       {loading ? (
-        <div style={{ color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)",
+        <div style={{ color:'var(--text-dim)', fontFamily: 'var(--mono)',
             fontSize:'12px', padding:'60px 0', textAlign:'center' }}>
           LOADING...
         </div>
       ) : visible.length === 0 ? (
-        <div style={{ color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)",
+        <div style={{ color:'var(--text-dim)', fontFamily: 'var(--mono)',
             fontSize:'12px', padding:'60px 0', textAlign:'center' }}>
           NO COUNTERPARTIES — CLICK + ADD COUNTERPARTY
         </div>
@@ -586,7 +586,7 @@ export default function Counterparties() {
             {['NAME','LEGAL ENTITY','CSA TYPE','CCY','DISCOUNT CURVE','IM · TYPE · TERMS','ACTIONS']
               .map(function(h) {
                 return (
-                  <div key={h} style={{ fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+                  <div key={h} style={{ fontSize:'12px', fontFamily: 'var(--mono)',
                       color:'var(--text-dim)', letterSpacing:'0.08em' }}>{h}</div>
                 )
               })}
@@ -619,7 +619,7 @@ export default function Counterparties() {
                         if (ev.key === 'Escape') setEditId(null)
                       }} />
                   : <div
-                      style={{ fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+                      style={{ fontSize:'12px', fontFamily: 'var(--mono)',
                           color:'var(--text)', cursor:'pointer',
                           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
                       onDoubleClick={function() {
@@ -672,14 +672,14 @@ export default function Counterparties() {
       )}
 
       {schedMsg && (
-        <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--amber)', fontFamily:"'IBM Plex Mono',var(--mono)" }}>{schedMsg}</div>
+        <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--amber)', fontFamily: 'var(--mono)' }}>{schedMsg}</div>
       )}
       {chatErr && (
         <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--amber)',
-            fontFamily:"'IBM Plex Mono',var(--mono)" }}>{chatErr}</div>
+            fontFamily: 'var(--mono)' }}>{chatErr}</div>
       )}
       <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--text-dim)',
-          fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+          fontFamily: 'var(--mono)' }}>
         {active.length} ACTIVE
         {inactive.length > 0 ? ' · ' + inactive.length + ' INACTIVE' : ''}
         {cps.length > 0 ? ' · DOUBLE-CLICK NAME TO RENAME' : ''}

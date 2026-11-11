@@ -35,7 +35,7 @@ function SourceBadge({ src }) {
     <span style={{ background:s.bg, border:`1px solid ${s.bd}`, color:s.c,
       fontSize:'0.8125rem', fontWeight:700, letterSpacing:'0.06em',
       padding:'1px 5px', borderRadius:'2px',
-      fontFamily:"'IBM Plex Mono',var(--mono)", whiteSpace:'nowrap' }}>
+      fontFamily: 'var(--mono)', whiteSpace:'nowrap' }}>
       {src}
     </span>
   );
@@ -82,7 +82,7 @@ function VolSurface({ grid, hasData }) {
               <div key={cell.tenor} style={{ height:'18px', borderRadius:'1px', background:bg,
                 display:'flex', alignItems:'center', justifyContent:'center',
                 fontSize:'0.76rem', color:v !== null ? 'var(--accent)' : 'var(--text-dim)',
-                fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                fontFamily: 'var(--mono)' }}>
                 {v !== null ? v.toFixed(0) : '—'}
               </div>
             );
@@ -228,7 +228,7 @@ function SwvInstruments() {
             {grid.map((row) => (
               <tr key={row.expiry}>
                 <td style={{ fontSize:'0.875rem', color:'var(--accent)',
-                  fontFamily:"'IBM Plex Mono',var(--mono)", fontWeight:600,
+                  fontFamily: 'var(--mono)', fontWeight:600,
                   padding:'4px 6px 4px 0', borderBottom:'1px solid var(--panel-2)' }}>
                   {row.expiry}
                 </td>
@@ -239,7 +239,7 @@ function SwvInstruments() {
                       background: isBasket(row.expiry, cell.tenor)
                         ? 'rgba(217,178,92,0.03)' : 'transparent' }}>
                     <div style={{ fontSize:'0.8rem', color:'var(--text-dim)',
-                      fontFamily:"'IBM Plex Mono',var(--mono)", padding:'1px 4px 0',
+                      fontFamily: 'var(--mono)', padding:'1px 4px 0',
                       letterSpacing:'0.02em', lineHeight:1 }}>
                       {cell.ticker.replace(' Curncy', '')}
                     </div>
@@ -251,7 +251,7 @@ function SwvInstruments() {
                       style={{ width:'100%', background:'transparent', border:'none',
                         borderBottom:'1px solid transparent', outline:'none',
                         textAlign:'right', padding:'1px 4px 3px',
-                        fontFamily:"'IBM Plex Mono',var(--mono)",
+                        fontFamily: 'var(--mono)',
                         fontSize:'0.875rem', color:'var(--accent)',
                         caretColor:'var(--accent)' }}
                       onFocus={(e) => e.target.style.borderBottom='1px solid var(--accent)'}
@@ -285,7 +285,7 @@ function SwvInstruments() {
             <button className="rj-press" key={src} onClick={() => handleSourceChange(src)} style={{
               flex:1, padding:'5px 0', fontSize:'0.875rem', fontWeight:700,
               letterSpacing:'0.08em', cursor:'pointer',
-              fontFamily:"'IBM Plex Mono',var(--mono)", background:'transparent', borderRadius:'2px',
+              fontFamily: 'var(--mono)', background:'transparent', borderRadius:'2px',
               border: source===src ? '1px solid var(--accent)' : '1px solid var(--border)',
               color:  source===src ? 'var(--accent)' : 'var(--text-dim)',
             }}>{src}</button>
@@ -297,14 +297,14 @@ function SwvInstruments() {
           <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
             <input type="date" value={saveDate} onChange={(e) => setSaveDate(e.target.value)}
               style={{ background:'var(--panel-2)', border:'1px solid var(--border)',
-                color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)",
+                color:'var(--text)', fontFamily: 'var(--mono)',
                 fontSize:'1rem', padding:'0.25rem 0.45rem', borderRadius:2, outline:'none' }} />
             <button className="rj-press"
               onClick={() => saveSnapshot(saveDate, 'MANUAL')}
               disabled={snapshotSaving || filled === 0}
               style={{ padding:'0.25rem 0.85rem', background:'rgba(217,178,92,0.07)',
                 border:'1px solid var(--accent)', borderRadius:2,
-                fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem',
+                fontFamily: 'var(--mono)', fontSize:'1rem',
                 fontWeight:700, letterSpacing:'0.1em', color:'var(--accent)',
                 cursor: filled > 0 ? 'pointer' : 'not-allowed',
                 opacity: filled > 0 ? 1 : 0.4 }}>
@@ -312,13 +312,13 @@ function SwvInstruments() {
             </button>
             {snapshotSaved && (
               <span style={{ fontSize:'0.9375rem', color:'var(--accent)',
-                fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                fontFamily: 'var(--mono)' }}>
                 ✔ saved {snapshotSaved.date}
               </span>
             )}
             {snapshotError && (
               <span style={{ fontSize:'0.9375rem', color:'var(--red)',
-                fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                fontFamily: 'var(--mono)' }}>
                 ✘ {snapshotError}
               </span>
             )}
@@ -351,7 +351,7 @@ function SwvInstruments() {
                 style={{ marginLeft:'auto', fontSize:'0.875rem', background:'transparent',
                   border:'1px solid var(--border)', color:'var(--text-dim)',
                   padding:'2px 6px', cursor:'pointer',
-                  fontFamily:"'IBM Plex Mono',var(--mono)", borderRadius:'2px' }}>
+                  fontFamily: 'var(--mono)', borderRadius:'2px' }}>
                 REFRESH
               </button>
             </div>
@@ -359,7 +359,7 @@ function SwvInstruments() {
             <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px' }}>
               <input type="date" value={snapDate} onChange={(e) => setSnapDate(e.target.value)}
                 style={{ background:'var(--panel)', border:'1px solid var(--border)',
-                  color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)",
+                  color:'var(--text)', fontFamily: 'var(--mono)',
                   fontSize:'1rem', padding:'4px 6px', borderRadius:'2px', outline:'none' }} />
               <button className="rj-press" onClick={snapBloomberg}
                 disabled={!blpStatus?.connected || blpSnapping}
@@ -367,7 +367,7 @@ function SwvInstruments() {
                   letterSpacing:'0.08em',
                   cursor: blpStatus?.connected ? 'pointer' : 'not-allowed',
                   background:'transparent', borderRadius:'2px',
-                  fontFamily:"'IBM Plex Mono',var(--mono)",
+                  fontFamily: 'var(--mono)',
                   border:'1px solid var(--accent)', color:'var(--accent)',
                   opacity: blpStatus?.connected ? 1 : 0.4 }}>
                 {blpSnapping ? 'SNAPPING...' : '▶ SNAP LIVE'}
@@ -406,7 +406,7 @@ function SwvInstruments() {
             <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px' }}>
               <input type="date" value={snapDate} onChange={(e) => setSnapDate(e.target.value)}
                 style={{ background:'var(--panel)', border:'1px solid var(--border)',
-                  color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)",
+                  color:'var(--text)', fontFamily: 'var(--mono)',
                   fontSize:'1rem', padding:'4px 6px', borderRadius:'2px', outline:'none' }} />
               <input type="file" accept=".csv,.txt" onChange={handleCsvUpload}
                 style={{ flex:1, fontSize:'0.875rem', color:'var(--text-dim)', cursor:'pointer' }} />
@@ -423,7 +423,7 @@ function SwvInstruments() {
                   style={{ padding:'5px 14px', fontSize:'0.875rem', fontWeight:700,
                     letterSpacing:'0.08em', cursor:'pointer', background:'transparent',
                     border:'1px solid var(--accent)', color:'var(--accent)',
-                    borderRadius:'2px', fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+                    borderRadius:'2px', fontFamily: 'var(--mono)' }}>
                   SAVE IMPORT
                 </button>
               </div>
@@ -530,7 +530,7 @@ function SwvConfig() {
 
 // ── Editable SABR params panel ────────────────────────────────────────────────
 function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
-  const mono = { fontFamily:"'IBM Plex Mono',var(--mono)" };
+  const mono = { fontFamily: 'var(--mono)' };
   const [show,    setShow]    = useState(false);
   const [edits,   setEdits]   = useState({});   // key: tenor_label → {alpha_bp, rho, nu}
   const [saving,  setSaving]  = useState(false);
@@ -1311,7 +1311,7 @@ function SwvOTMSkew({ atmGrid }) {
   );
   const totalCells = SWAPTION_EXPIRIES.length * SWAPTION_TENORS.length * OTM_STRIKE_OFFSETS.length;
 
-  const mono = { fontFamily:"'IBM Plex Mono',var(--mono)" };
+  const mono = { fontFamily: 'var(--mono)' };
   const dim  = { color:'var(--text-dim)' };
   const thS  = { ...mono, fontSize:'0.8rem', fontWeight:400, letterSpacing:'0.06em',
                  ...dim, padding:'3px 5px', textAlign:'right',
@@ -1557,11 +1557,11 @@ function SwvOTMSkew({ atmGrid }) {
                 borderTop:'1px solid var(--border)', borderBottom:'1px solid var(--panel-2)',
                 background:'rgba(143,193,230,0.03)' }}>
                 <span style={{ fontSize:'0.8rem', color:'var(--blue)',
-                  fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.08em' }}>
+                  fontFamily: 'var(--mono)', letterSpacing:'0.08em' }}>
                   SABR INTERPOLATED — no market tickers for these tenors
                 </span>
                 <span style={{ fontSize:'0.8rem', color:'var(--text-dim)',
-                  fontFamily:"'IBM Plex Mono',var(--mono)", marginLeft:'8px' }}>
+                  fontFamily: 'var(--mono)', marginLeft:'8px' }}>
                   {OTM_INTERP_TENORS.join(' · ')} — params derived from {OTM_SNAP_TENORS.join('/')} anchor points
                 </span>
               </td>
@@ -1575,7 +1575,7 @@ function SwvOTMSkew({ atmGrid }) {
               );
               return (
                 <tr key={ten} style={{ background:'rgba(143,193,230,0.02)', opacity:0.7 }}>
-                  <td style={{ fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.875rem',
+                  <td style={{ fontFamily: 'var(--mono)', fontSize:'0.875rem',
                     fontWeight:600, color:'var(--blue)', padding:'3px 6px 3px 0',
                     borderBottom:'1px solid var(--panel-2)' }}>
                     {ten}
@@ -1583,7 +1583,7 @@ function SwvOTMSkew({ atmGrid }) {
                   {/* ATM col */}
                   <td colSpan={4} style={{ padding:'3px 6px', textAlign:'right',
                     borderBottom:'1px solid var(--panel-2)',
-                    fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.75rem',
+                    fontFamily: 'var(--mono)', fontSize:'0.75rem',
                     color:'var(--text-dim)' }}>
                     {sp ? `α=${(sp.alpha*10000).toFixed(1)}bp  ρ=${sp.rho.toFixed(3)}  ν=${sp.nu.toFixed(3)}` : '—'}
                   </td>
@@ -1592,19 +1592,19 @@ function SwvOTMSkew({ atmGrid }) {
                     background:'rgba(143,193,230,0.04)',
                     borderLeft:'1px solid rgba(143,193,230,0.15)',
                     borderRight:'1px solid rgba(143,193,230,0.15)',
-                    fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.875rem',
+                    fontFamily: 'var(--mono)', fontSize:'0.875rem',
                     fontWeight:700, color:'var(--blue)' }}>
                     {atmVol !== null ? atmVol.toFixed(1) : '—'}
                   </td>
                   <td colSpan={4} style={{ padding:'3px 6px',
                     borderBottom:'1px solid var(--panel-2)',
-                    fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.75rem',
+                    fontFamily: 'var(--mono)', fontSize:'0.75rem',
                     color:'var(--text-dim)', textAlign:'center' }}>
                     SABR interpolated from {OTM_SNAP_TENORS[0]} + {OTM_SNAP_TENORS[OTM_SNAP_TENORS.length-1]} anchors
                   </td>
                   <td style={{ padding:'3px 5px', borderBottom:'1px solid var(--panel-2)',
                     textAlign:'center' }}>
-                    <span style={{ fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'0.8rem',
+                    <span style={{ fontFamily: 'var(--mono)', fontSize:'0.8rem',
                       color:'var(--blue)', padding:'1px 5px', borderRadius:'2px',
                       background:'rgba(143,193,230,0.08)', border:'1px solid rgba(143,193,230,0.2)' }}>
                       INTERP
@@ -1842,7 +1842,7 @@ export default function SwaptionVolDetail() {
     { id:'vol',  label:'Vol Config' },
   ];
 
-  const mono = { fontFamily:"'IBM Plex Mono',var(--mono)" };
+  const mono = { fontFamily: 'var(--mono)' };
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%' }}>

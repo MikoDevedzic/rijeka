@@ -155,6 +155,24 @@ browser (`lib/notes.js`, `data-notes` on the root). A note's text is always in t
 on the page: a field's one-line tag of where its default is from, a warning, and anything that says why there
 is no price. Not yet behind marks: the lines on the TRADE tab, the swap's tabs and the scenario tab.
 
+## Figures
+
+One rule for the whole app, held by Iris (`.claude/agents/iris.md`) and by a check (`cd frontend && npm run design`,
+`src/design.test.js` in the unit run):
+
+- A number, a date, a rate, a tenor or a code is mono with tabular digits; 12.5px where it is a value in a table or
+  a field (`fig` in `index.css`; a field that holds a number or a date takes the face by its type or `inputMode`).
+  A field is set like the figure beside it: the points typed on the forwards page and the outright computed from
+  them are one face and one size.
+- A size is a step of one scale, in px (9, 10, 11, 11.5, 12, 12.5, 13, 14, 16, 20). The root size is fixed at 14px:
+  until 11 November 2026 it grew with the window's width, and whatever was sized in rem grew with it while
+  whatever was sized in px did not.
+- A figure takes the colour of text, or of its sign. Brass is not a figure, a label or a typed value; blue is not a
+  figure in a table. A derived figure (what parity implies) is quieter than a quoted one.
+- What is still set by hand is counted and may only go down (11 November 2026: 53 distinct sizes, 623 sizes in rem,
+  209 hex colours outside the tokens, 6 fonts named directly, all in canvas drawings). The next step is the sizes
+  in rem, page by page, each with pictures before and after.
+
 ## Type on the ticket
 
 One rule on every tab: a label is 11px in capitals; a value is 12.5px, a number, a date or a formula in mono and

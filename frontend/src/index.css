@@ -121,7 +121,11 @@
 /* The rem base: every label, caption and control size in the app is in rem. 14px on a laptop,
    16px from 2130px wide, so dense pages stay dense where space is short and open up on a
    trading monitor. Body text is set in px below and does not move. */
-html { font-size: clamp(14px, 0.75vw, 16px); }
+/* One size of type at every width. Until 11 November 2026 this grew with the window (clamp(14px, 0.75vw, 16px)):
+   whatever was sized in rem grew with it and whatever was sized in px did not, so on a wide screen a figure and
+   the field beside it were two sizes. The app is drawn, pictured and tested at this size; a reader who wants it
+   larger has the browser's zoom, which scales everything together. */
+html { font-size: 14px; }
 
 html, body, #root {
   height: 100%;
@@ -509,8 +513,10 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Inline quote input */
 .qi {
-  background: none; border: none; color: var(--accent); font-family: var(--sans);
-  font-size: 12px; width: 56px; text-align: right; outline: none;
+  /* a quote typed into a table: a figure like the ones beside it (mono, 12.5px), in the colour of text; brass is
+     not for a typed value (docs/design.md) */
+  background: none; border: none; color: var(--text-hi); font-family: var(--mono); font-variant-numeric: tabular-nums;
+  font-size: 12.5px; width: 56px; text-align: right; outline: none;
   padding: 1px 2px; border-bottom: 1px solid transparent;
 }
 .qi:focus { border-bottom-color: var(--accent-dim); background: var(--bg-deep); }
@@ -802,3 +808,14 @@ tbody tr:not(.cert *, .katex *, [data-norow]):hover { background-color: var(--ro
 tbody tr:not(.cert *, .katex *, [data-norow]):hover > :is(td, th):first-child { box-shadow: inset 3px 0 0 var(--row-rule); }
 tbody tr:not(.cert *, .katex *, [data-norow]):hover > td:hover { background-color: var(--cell-hover); }
 @media (prefers-reduced-motion: reduce) { :root :is(.rj-btn, .rj-press, .btn, .pnl-btn, .tbw-btn, .tc-btn, .ms-btn, .doc-btn, .mr-btn, .mr-step, .bl-new-trade-btn, .tbw-chip):not(.cert *):active:not(:disabled) { transform: none; } }
+
+/* ── Figures: a number, a date, a rate or a code is set one way everywhere (docs/design.md, "Figures") ─────
+   Mono with tabular digits, 12.5px where it is a value in a table or a field, in the colour of text or of its
+   sign. `fig` is the class for a figure in running markup; a field that holds a number or a date takes the face
+   by its type, so a date on the ticket is set like the notional beside it. */
+.fig { font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.fig-dim { color: var(--text-dim); }
+:root input:is([type="number"], [type="date"], [type="time"], [type="datetime-local"], [inputmode="decimal"], [inputmode="numeric"]):not(.cert *, .au-field *) {
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+:root .inp:is([inputmode="decimal"], [inputmode="numeric"], [type="number"]) { font-size: 12.5px; }

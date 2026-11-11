@@ -10,7 +10,7 @@
 .ms-launcher:hover { box-shadow: 0 0 28px rgba(241,212,136,0.45); transform: scale(1.05); }
 .ms-launcher-badge {
   position: absolute; top: -4px; right: -4px; background: var(--accent); color: #000;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; font-weight: 700;
+  font-family: var(--sans); font-size: 12px; font-weight: 700;
   min-width: 19px; height: 19px; border-radius: 10px; padding: 0 5px;
   display: inline-flex; align-items: center; justify-content: center;
 }
@@ -18,7 +18,7 @@
 .ms-launcher.out { border-style: dashed; box-shadow: none; }
 
 /* Popped out: the messenger is the whole browser window */
-.ms-page { height: 100vh; display: flex; flex-direction: column; background: var(--panel); color: var(--text); font-family: 'IBM Plex Sans', system-ui, sans-serif; }
+.ms-page { height: 100vh; display: flex; flex-direction: column; background: var(--panel); color: var(--text); font-family: var(--sans); }
 .ms-page .ms-titlebar { cursor: default; }
 
 /* Window */
@@ -26,7 +26,7 @@
   position: fixed; z-index: 1000; display: flex; flex-direction: column;
   background: var(--panel); border: 1px solid rgba(241,212,136,0.28); border-radius: 3px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.6); overflow: hidden;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif; color: var(--text);
+  font-family: var(--sans); color: var(--text);
 }
 .ms-window.ms-expanded { inset: 56px 16px 16px 16px; }
 .ms-window.ms-phone { inset: 0; border-radius: 0; border: none; }
@@ -62,7 +62,7 @@
 /* Buttons and tags */
 .ms-btn {
   background: rgba(217,178,92,0.06); border: 1px solid rgba(217,178,92,0.4); color: var(--accent);
-  font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
   padding: 6px 10px; border-radius: 2px; cursor: pointer; flex-shrink: 0;
 }
 .ms-btn:hover { background: rgba(217,178,92,0.12); }
@@ -70,13 +70,13 @@
 .ms-btn.ghost { background: none; border-color: var(--border-hi); color: var(--text-dim); }
 .ms-link {
   background: none; border: none; cursor: pointer; color: var(--text-dim);
-  font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; padding: 4px 6px;
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.08em; padding: 4px 6px;
 }
 .ms-link:hover { color: var(--text); }
 .ms-link.danger:hover { color: var(--red); }
 .ms-link:disabled { opacity: 0.4; }
 .ms-tag {
-  font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
   border: 1px solid; border-radius: 2px; padding: 1px 5px; flex-shrink: 0; vertical-align: middle;
 }
 .ms-tag.private    { color: #f1d488; border-color: rgba(241,212,136,0.5); }
@@ -93,7 +93,7 @@
 /* Conversation list */
 .ms-list { display: flex; flex-direction: column; min-height: 0; background: var(--bg-deep); }
 .ms-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-.ms-firm { color: var(--accent); font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; }
+.ms-firm { color: var(--accent); font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; }
 .ms-list-scroll { overflow-y: auto; flex: 1; }
 .ms-conv {
   display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text);
@@ -108,7 +108,7 @@
 .ms-conv.prom .ms-conv-title, .ms-conv-title.support { color: #f1d488; }
 .ms-conv-time { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
 .ms-conv-preview { font-size: 12px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; display: block; }
-.ms-conv-book { font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; color: var(--blue); margin-top: 3px; letter-spacing: 0.04em; }
+.ms-conv-book { font-family: var(--mono); font-size: 12px; color: var(--blue); margin-top: 3px; letter-spacing: 0.04em; }
 
 /* Thread */
 .ms-thread-head {
@@ -141,7 +141,7 @@
 .ms-system span { opacity: 0.7; }
 .ms-system.event { color: var(--accent); }
 .ms-system a { color: var(--accent); }
-.ms-meta { font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; color: var(--text-dim); word-break: break-word; }
+.ms-meta { font-family: var(--mono); font-size: 12px; color: var(--text-dim); word-break: break-word; }
 .ms-sources { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .ms-sources > span { text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; font-weight: 700; }
 .ms-sources a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted rgba(217,178,92,0.4); }
@@ -172,7 +172,7 @@
 .ms-compose textarea:focus { border-color: var(--accent); }
 .ms-send, .ms-ask, .ms-trade {
   align-self: flex-end; height: 40px; flex-shrink: 0; cursor: pointer; border-radius: 2px;
-  font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
 }
 .ms-send { padding: 0 14px; background: rgba(217,178,92,0.06); border: 1px solid rgba(217,178,92,0.4); color: var(--accent); }
 .ms-send:hover { background: rgba(217,178,92,0.12); }
@@ -194,14 +194,14 @@
 .ms-seg { display: inline-flex; margin-top: 6px; border: 1px solid var(--border-hi); border-radius: 2px; }
 .ms-seg button {
   background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px 12px;
-  font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
+  font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
 }
 .ms-seg button.on { background: var(--panel-3); color: var(--text); }
-.ms-label { display: flex; flex-direction: column; gap: 5px; font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; letter-spacing: 0.08em; color: var(--text-dim); }
-.ms-label .ms-sub { font-family: 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: 0; }
+.ms-label { display: flex; flex-direction: column; gap: 5px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; color: var(--text-dim); }
+.ms-label .ms-sub { font-family: var(--sans); letter-spacing: 0; }
 .ms-label input, .ms-label select {
   background: var(--bg); border: 1px solid var(--fld-bd); color: var(--text); border-radius: 2px;
-  font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; padding: 8px 10px; outline: none; letter-spacing: 0;
+  font-family: var(--sans); font-size: 13px; padding: 8px 10px; outline: none; letter-spacing: 0;
 }
 .ms-label input:focus, .ms-label select:focus { border-color: var(--accent); }
 .ms-pick-list { flex: 1; min-height: 80px; overflow-y: auto; border: 1px solid var(--border); border-radius: 2px; }

@@ -159,7 +159,7 @@ export default function App() {
   const { initAuth, loading } = useAuthStore()
   useEffect(() => { initAuth() }, [])
   if (loading) return (
-    <div style={{height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)',color:'var(--accent)',fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'0.875rem',letterSpacing:'0.15em'}}>
+    <div style={{height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)',color:'var(--accent)',fontFamily: 'var(--mono)',fontSize:'0.875rem',letterSpacing:'0.15em'}}>
       INITIALISING...
     </div>
   )

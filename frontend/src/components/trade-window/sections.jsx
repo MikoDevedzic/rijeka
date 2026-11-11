@@ -500,7 +500,7 @@ function CashflowSummaryCard({ label, value, colorKey }) {
       <div style={{
         fontSize: 14,
         fontWeight: 700,
-        fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+        fontFamily: 'var(--mono)',
         color: colorKey === 'accent'  ? 'var(--up)'          // 'accent' here has always meant a positive figure
              : colorKey === 'negative'? 'var(--down)'
              : colorKey === 'blue'    ? 'var(--blue)'
@@ -546,7 +546,7 @@ function CapletTable({ result, ccy }) {
           width: '100%',
           borderCollapse: 'collapse',
           fontSize: 12,
-          fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+          fontFamily: 'var(--mono)',
         }}>
           <thead>
             <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
@@ -619,7 +619,7 @@ function CapletTable({ result, ccy }) {
       <div style={{
         fontSize: 12,
         color: 'var(--text-dim)',
-        fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+        fontFamily: 'var(--mono)',
         padding: '4px 0',
       }}>
         {CCY_CURVE_MAP[ccy] || 'USD_SOFR'} \u00B7 Bachelier Normal \u00B7 ATM fwd = {atmFwd.toFixed(4)}%
@@ -720,7 +720,7 @@ function SwapCashflowTables({ result, productKey, state }) {
               width: '100%',
               borderCollapse: 'collapse',
               minWidth: 680,
-              fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+              fontFamily: 'var(--mono)',
             }}>
               <thead>
                 <tr style={{ background: 'var(--bg)', borderBottom: '1px solid var(--border)' }}>
@@ -814,7 +814,7 @@ function SwapCashflowTables({ result, productKey, state }) {
       <div style={{
         fontSize: 12,
         color: 'var(--text-dim)',
-        fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+        fontFamily: 'var(--mono)',
         padding: '4px 0',
       }}>
         {CCY_CURVE_MAP[ccy] || 'USD_SOFR'}

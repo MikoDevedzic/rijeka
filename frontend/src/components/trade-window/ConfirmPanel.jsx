@@ -38,7 +38,7 @@ const STATUS_COLORS = {
   NOVATED:    'var(--purple)',
 }
 
-const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace'
+const MONO = 'var(--mono)'
 
 const short = (h) => (h && h.length > 18) ? h.slice(0, 10) + '…' + h.slice(-6) : (h || '—')
 
@@ -245,7 +245,7 @@ export function ConfirmPanel({
           </div>
           <div style={{
             fontSize: 22,
-            fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+            fontFamily: 'var(--mono)',
             color,
             fontWeight: 500,
             letterSpacing: '0.05em',
@@ -301,7 +301,7 @@ export function ConfirmPanel({
           </div>
           <div style={{
             fontSize: 22,
-            fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+            fontFamily: 'var(--mono)',
             color,
             fontWeight: 500,
             letterSpacing: '0.05em',
@@ -448,7 +448,7 @@ export function ConfirmPanel({
                 background: 'var(--bg)',
                 border: '1px solid var(--border)',
                 color: 'var(--text-hi)',
-                fontFamily: '"IBM Plex Mono", ui-monospace, Consolas, monospace',
+                fontFamily: 'var(--mono)',
                 fontSize: 12,
                 borderRadius: 2,
                 outline: 'none',

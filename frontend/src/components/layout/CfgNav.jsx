@@ -363,7 +363,7 @@ function SnapAllButton({ role }) {
           fontSize:'0.8125rem', fontWeight:700, letterSpacing:'0.08em',
           padding:'2px 6px', borderRadius:'2px',
           cursor: isRunning ? 'default' : 'pointer',
-          fontFamily:"'IBM Plex Mono',var(--mono)", background:'transparent',
+          fontFamily: 'var(--mono)', background:'transparent',
           border:`1px solid ${isRunning ? 'var(--border)' : 'var(--accent)'}`,
           color: isRunning ? 'var(--text-dim)' : 'var(--accent)',
           opacity: isRunning ? 0.6 : 1,
@@ -374,7 +374,7 @@ function SnapAllButton({ role }) {
       </button>
       {snap && (
         <div style={{
-          fontSize:'0.8125rem', fontFamily:"'IBM Plex Mono',var(--mono)", lineHeight:1.4,
+          fontSize:'0.8125rem', fontFamily: 'var(--mono)', lineHeight:1.4,
           paddingLeft:'1rem', paddingRight:'0.5rem',
           color: snap.status==='done' ? 'var(--accent)'
                : snap.status==='error' ? 'var(--red)'
@@ -404,7 +404,7 @@ const S = {
     width:'100%', background:'none', border:'none',
     display:'flex', alignItems:'center', justifyContent:'space-between',
     cursor:'pointer',
-    fontFamily:"'IBM Plex Mono',var(--mono)",
+    fontFamily: 'var(--mono)',
     fontSize:'0.8125rem', fontWeight:700, letterSpacing:'0.12em',
     padding:'0.45rem 0.75rem 0.45rem 1rem',
     color:'var(--text-dim)',
@@ -418,7 +418,7 @@ const S = {
   groupWrap: { marginBottom:'0.125rem' },
   groupLabel: {
     display:'block',
-    fontFamily:"'IBM Plex Mono',var(--mono)",
+    fontFamily: 'var(--mono)',
     fontSize:'0.75rem', fontWeight:600, letterSpacing:'0.10em',
     color:'var(--text-mute)',
     padding:'0.3rem 1rem 0.2rem 1.5rem',
@@ -426,7 +426,7 @@ const S = {
   navLink: (isActive, live) => ({
     display:'flex', alignItems:'center', justifyContent:'space-between',
     padding:'0.3rem 0.75rem 0.3rem 2rem',
-    fontFamily:"'IBM Plex Mono',var(--mono)",
+    fontFamily: 'var(--mono)',
     fontSize:'0.875rem', letterSpacing:'0.05em',
     color: !live ? 'var(--border-hi)' : isActive ? 'var(--accent)' : 'var(--text)',
     textDecoration:'none',

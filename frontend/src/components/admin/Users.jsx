@@ -72,7 +72,7 @@ export default function Users() {
     active: users.filter(u => u.is_active !== false).length,
   }
 
-  const mono = { fontFamily:"'IBM Plex Mono',var(--mono)" }
+  const mono = { fontFamily: 'var(--mono)' }
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', overflow:'hidden', background:'var(--bg)', ...mono }}>

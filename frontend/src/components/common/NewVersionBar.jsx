@@ -12,7 +12,7 @@ export default function NewVersionBar() {
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 2000,
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14,
       padding: '6px 12px', background: 'var(--amber, #e9975a)', color: '#1b1403',
-      fontFamily: "'IBM Plex Mono',var(--mono)", fontSize: '0.8125rem', letterSpacing: '0.12em', fontWeight: 700,
+      fontFamily: 'var(--mono)', fontSize: '0.8125rem', letterSpacing: '0.12em', fontWeight: 700,
     }}>
       <span>A NEWER VERSION OF THE DESK IS LIVE · {String(live).slice(0, 7)}</span>
       <button type="button" onClick={() => window.location.reload()} style={{

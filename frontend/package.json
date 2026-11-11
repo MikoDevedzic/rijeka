@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "methodology": "node scripts/build-methodology.mjs",
+    "design": "node scripts/check-design.mjs",
     "preview": "vite preview",
     "e2e": "playwright test",
     "e2e:serve": "bash e2e/serve.sh"

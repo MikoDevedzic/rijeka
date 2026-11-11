@@ -61,7 +61,7 @@
 
 .tbw-window input.tbw-mono,
 .tbw-window .tbw-mono {
-  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-family: var(--mono);
 }
 
 /* ── Chips ──────────────────────────────────────────────────────────────── */
@@ -241,7 +241,7 @@
 
 .tbw-error {
   color: var(--red);
-  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 12px;
   padding: 6px 8px;
   background: rgba(240,130,140, 0.05);
@@ -519,7 +519,7 @@
 /* The trade's shared identifiers in the title bar: THEIR REF and the UTI. */
 .tbw-ids {
   margin-left: 14px;
-  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 11px;
   font-weight: 400;
   letter-spacing: 0.06em;
@@ -532,7 +532,7 @@
 .tbw-status-badge {
   font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
   padding: 3px 10px; border-radius: var(--r-1);
-  font-family: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  font-family: var(--mono);
   border: 1px solid currentColor;
   background: rgba(255, 255, 255, 0.03);
 }

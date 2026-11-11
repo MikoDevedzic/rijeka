@@ -13,7 +13,7 @@
   font-size: 13px; font-weight: 700; margin: 12px 0 6px; color: #f1d488; letter-spacing: 0.02em;
 }
 .pm-md code {
-  font-family: 'IBM Plex Mono', var(--mono), monospace; font-size: 12px;
+  font-family: var(--mono); font-size: 12px;
   background: var(--bg-deep); border: 1px solid var(--border); border-radius: 2px; padding: 0 4px;
 }
 .pm-md pre {

@@ -20,12 +20,12 @@ const EMPTY = {
 }
 
 const L = {
-  display:'block', fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+  display:'block', fontSize:'12px', fontFamily: 'var(--mono)',
   color:'var(--text-dim)', letterSpacing:'0.08em', marginBottom:'4px'
 }
 const INP = {
   background:'var(--bg)', border:'1px solid var(--fld-bd)',
-  color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'12px',
+  color:'var(--text)', fontFamily: 'var(--mono)', fontSize:'12px',
   padding:'5px 8px', borderRadius:'2px', outline:'none',
   width:'100%', boxSizing:'border-box'
 }
@@ -38,7 +38,7 @@ function Btn({ color, size, onClick, disabled, children }) {
       background:'transparent',
       border:'1px solid ' + c,
       color: c,
-      fontFamily:"'IBM Plex Mono',var(--mono)",
+      fontFamily: 'var(--mono)',
       fontSize: lg ? '12px' : '10px',
       padding: lg ? '6px 16px' : '3px 8px',
       borderRadius:'2px',
@@ -53,7 +53,7 @@ function Btn({ color, size, onClick, disabled, children }) {
 function Badge({ color, children }) {
   return (
     <span style={{
-      fontSize: '12px', fontFamily:"'IBM Plex Mono',var(--mono)", letterSpacing:'0.06em',
+      fontSize: '12px', fontFamily: 'var(--mono)', letterSpacing:'0.06em',
       padding:'2px 6px', borderRadius:'2px', whiteSpace:'nowrap',
       background:'color-mix(in srgb, ' + color + ' 14%, transparent)',
       color: color,
@@ -65,7 +65,7 @@ function Badge({ color, children }) {
 function Cell({ children, dim }) {
   return (
     <div style={{
-      fontSize: '12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+      fontSize: '12px', fontFamily: 'var(--mono)',
       color: dim ? 'var(--text-dim)' : 'var(--text)',
       overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'
     }}>{children || '—'}</div>
@@ -171,11 +171,11 @@ export default function LegalEntities() {
       <div style={{ display:'flex', alignItems:'flex-start',
           justifyContent:'space-between', marginBottom:'20px' }}>
         <div>
-          <div style={{ fontSize:'12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <div style={{ fontSize:'12px', color:'var(--accent)', fontFamily: 'var(--mono)',
               letterSpacing:'0.1em', marginBottom:'4px' }}>
             CONFIGURATIONS / ONBOARDING
           </div>
-          <h1 style={{ fontSize:'20px', color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <h1 style={{ fontSize:'20px', color:'var(--text)', fontFamily: 'var(--mono)',
               fontWeight:400, margin:0 }}>
             LEGAL ENTITIES
           </h1>
@@ -204,7 +204,7 @@ export default function LegalEntities() {
           border:'1px dashed var(--accent)', borderRadius:'4px',
           padding:'20px', marginBottom:'20px', background:'var(--panel)'
         }}>
-          <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)",
+          <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily: 'var(--mono)',
               letterSpacing:'0.08em', marginBottom:'16px' }}>
             NEW LEGAL ENTITY
           </div>
@@ -279,7 +279,7 @@ export default function LegalEntities() {
           <div style={{ display:'flex', alignItems:'center', gap:'20px', marginTop:'16px' }}>
             <label style={{
               display:'flex', alignItems:'center', gap:'8px',
-              fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'12px',
+              fontFamily: 'var(--mono)', fontSize:'12px',
               color:'var(--text-dim)', cursor:'pointer'
             }}>
               <input type="checkbox" checked={form.is_own_entity}
@@ -296,12 +296,12 @@ export default function LegalEntities() {
 
       {/* ── Table ── */}
       {loading ? (
-        <div style={{ color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)",
+        <div style={{ color:'var(--text-dim)', fontFamily: 'var(--mono)',
             fontSize:'12px', padding:'60px 0', textAlign:'center' }}>
           LOADING...
         </div>
       ) : visible.length === 0 ? (
-        <div style={{ color:'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)",
+        <div style={{ color:'var(--text-dim)', fontFamily: 'var(--mono)',
             fontSize:'12px', padding:'60px 0', textAlign:'center' }}>
           NO LEGAL ENTITIES — CLICK + ADD ENTITY
         </div>
@@ -314,7 +314,7 @@ export default function LegalEntities() {
               borderBottom:'1px solid var(--panel-3)' }}>
             {['LEI','NAME','SHORT','CCY','JURIS','SIMM','TYPE','ACTIONS'].map(function(h) {
               return (
-                <div key={h} style={{ fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+                <div key={h} style={{ fontSize:'12px', fontFamily: 'var(--mono)',
                     color:'var(--text-dim)', letterSpacing:'0.08em' }}>{h}</div>
               )
             })}
@@ -346,7 +346,7 @@ export default function LegalEntities() {
                         if (ev.key === 'Escape') setEditId(null)
                       }} />
                   : <div
-                      style={{ fontSize:'12px', fontFamily:"'IBM Plex Mono',var(--mono)",
+                      style={{ fontSize:'12px', fontFamily: 'var(--mono)',
                           color:'var(--text)', cursor:'pointer',
                           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}
                       onDoubleClick={function() {
@@ -394,7 +394,7 @@ export default function LegalEntities() {
       )}
 
       <div style={{ marginTop:'8px', fontSize:'12px', color:'var(--text-dim)',
-          fontFamily:"'IBM Plex Mono',var(--mono)" }}>
+          fontFamily: 'var(--mono)' }}>
         {active.length} ACTIVE
         {inactive.length > 0 ? ' · ' + inactive.length + ' INACTIVE' : ''}
         {rows.length > 0 ? ' · DOUBLE-CLICK NAME TO RENAME' : ''}

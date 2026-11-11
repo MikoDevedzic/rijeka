@@ -3,6 +3,24 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
+## Figures are set one way; a design keeper · 11 November 2026 (frontend only)
+
+Reported by the owner: the forwards page of Configurations and the ticket did not look alike; "the points pips look
+different size than outright"; and nobody was responsible for consistency.
+
+- **One size of type at every width.** The root size grew with the window (`clamp(14px, 0.75vw, 16px)`), so whatever
+  was sized in rem grew on a wide screen and whatever was sized in px did not: a figure and the field beside it
+  were two sizes. It is 14px now, the size the app is drawn and tested at.
+- **A figure is mono, 12.5px, in the colour of text or of its sign.** The forwards page set its tenors, days, points,
+  outrights and parity in the interface face; they are set as the ticket's are. Tenors are no longer brass, what
+  parity implies is no longer blue (quieter than a quote), the basis takes the colour of its sign, and a quote typed
+  into a table is the colour of text. A date or a number in any field takes the number face.
+- **Iris, the design keeper** (`.claude/agents/iris.md`, a gate in `CLAUDE.md`), and a check that counts what is
+  still set by hand and fails the unit run when a count rises (`npm run design`, `frontend/design-baseline.json`):
+  53 distinct sizes, 623 sizes in rem, 209 hex colours outside the tokens. 173 fonts named by hand now use the
+  tokens (the same faces: nothing moves on screen). The sizes in rem are next, page by page with pictures.
+- A journey measures it: the points field and the outright are one face and one size; the root size is the same at
+  1440 and 2400 wide; a date on the ticket is set like the notional.
 ## Dependencies · 11 November 2026 (frontend only)
 
 Eight of GitHub's nine open alerts closed; none was reachable in the app as deployed.

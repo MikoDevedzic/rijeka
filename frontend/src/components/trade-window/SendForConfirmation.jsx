@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-const MONO = '"IBM Plex Mono", ui-monospace, Consolas, monospace'
+const MONO = 'var(--mono)'
 
 // The send block: the button before sending, the state after.
 export function SendForConfirmation({ s, compact = false }) {

@@ -26,7 +26,7 @@ function SourceBadge({ src }) {
   return (
     <span style={{background:s.bg,border:`1px solid ${s.bd}`,color:s.c,
       fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',
-      padding:'1px 5px',borderRadius:'2px',fontFamily:"'IBM Plex Mono',var(--mono)",whiteSpace:'nowrap'}}>
+      padding:'1px 5px',borderRadius:'2px',fontFamily: 'var(--mono)',whiteSpace:'nowrap'}}>
       {src}
     </span>
   );
@@ -249,7 +249,7 @@ function BasisInstruments({ curve }) {
           {['MANUAL','BLOOMBERG'].map(src => (
             <button className="rj-press" key={src} onClick={() => handleBlpSourceChange(src)} style={{
               flex:1, padding:'5px 0', fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.08em',
-              cursor:'pointer', fontFamily:"'IBM Plex Mono',var(--mono)", background:'transparent', borderRadius:'2px',
+              cursor:'pointer', fontFamily: 'var(--mono)', background:'transparent', borderRadius:'2px',
               border:blpSource===src?'1px solid var(--accent)':'1px solid var(--border)',
               color:blpSource===src?'var(--accent)':'var(--text-dim)',
             }}>{src === 'BLOOMBERG' ? 'BLOOMBERG · SELF-HOST' : src}</button>
@@ -261,23 +261,23 @@ function BasisInstruments({ curve }) {
           <div style={{display:'flex', alignItems:'center', gap:'0.75rem'}}>
             <input type="date" value={saveDate} onChange={e => setSaveDate(e.target.value)}
               style={{background:'var(--panel-2)', border:'1px solid var(--border)', color:'var(--text)',
-                fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', padding:'0.25rem 0.45rem',
+                fontFamily: 'var(--mono)', fontSize:'1rem', padding:'0.25rem 0.45rem',
                 borderRadius:2, outline:'none'}} />
             <button className="rj-press"
               onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
               style={{padding:'0.25rem 0.85rem', background:'rgba(217,178,92,0.07)',
                 border:'1px solid var(--accent)', borderRadius:2,
-                fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', fontWeight:700,
+                fontFamily: 'var(--mono)', fontSize:'1rem', fontWeight:700,
                 letterSpacing:'0.1em', color:'var(--accent)', cursor:'pointer'}}
             >{snapshotSaving?.[curve.id] ? 'SAVING...' : '▶ SAVE TO DB'}</button>
             {snapshotSaved?.[curve.id] && (
-              <span style={{fontSize:'0.9375rem', color:'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+              <span style={{fontSize:'0.9375rem', color:'var(--accent)', fontFamily: 'var(--mono)'}}>
                 ✓ saved {snapshotSaved[curve.id].date}
               </span>
             )}
             {snapshotError?.[curve.id] && (
-              <span style={{fontSize:'0.9375rem', color:'var(--red)', fontFamily:"'IBM Plex Mono',var(--mono)"}}>
+              <span style={{fontSize:'0.9375rem', color:'var(--red)', fontFamily: 'var(--mono)'}}>
                 ✗ {snapshotError[curve.id]}
               </span>
             )}
@@ -296,7 +296,7 @@ function BasisInstruments({ curve }) {
               </span>
               <button className="rj-btn" onClick={fetchBlpStatus} style={{marginLeft:'auto', fontSize:'0.875rem',
                 background:'transparent', border:'1px solid var(--border)', color:'var(--text-dim)',
-                padding:'2px 6px', cursor:'pointer', fontFamily:"'IBM Plex Mono',var(--mono)", borderRadius:'2px'}}>
+                padding:'2px 6px', cursor:'pointer', fontFamily: 'var(--mono)', borderRadius:'2px'}}>
                 REFRESH
               </button>
             </div>
@@ -308,19 +308,19 @@ function BasisInstruments({ curve }) {
             <div style={{display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px'}}>
               <input type="date" value={blpSnapDate} onChange={e => setBlpSnapDate(e.target.value)}
                 style={{background:'var(--panel)', border:'1px solid var(--border)', color:'var(--text)',
-                  fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'1rem', padding:'4px 6px',
+                  fontFamily: 'var(--mono)', fontSize:'1rem', padding:'4px 6px',
                   borderRadius:'2px', outline:'none'}} />
               <button className="rj-press" onClick={() => snapBloomberg('live')} disabled={!blpStatus?.connected||blpSnapping}
                 style={{flex:1, padding:'6px 0', fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed', background:'transparent', borderRadius:'2px',
-                  fontFamily:"'IBM Plex Mono',var(--mono)", border:'1px solid var(--accent)',
+                  fontFamily: 'var(--mono)', border:'1px solid var(--accent)',
                   color:'var(--accent)', opacity:blpStatus?.connected?1:0.4}}>
                 {blpSnapping?'SNAPPING...':'▶ SNAP LIVE'}
               </button>
               <button className="rj-press" onClick={() => snapBloomberg('historical')} disabled={!blpStatus?.connected||blpSnapping}
                 style={{flex:1, padding:'6px 0', fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed', background:'transparent', borderRadius:'2px',
-                  fontFamily:"'IBM Plex Mono',var(--mono)", border:'1px solid var(--border)',
+                  fontFamily: 'var(--mono)', border:'1px solid var(--border)',
                   color:'var(--text-dim)', opacity:blpStatus?.connected?1:0.4}}>
                 SNAP HISTORICAL
               </button>
@@ -347,16 +347,16 @@ function BasisInstruments({ curve }) {
                     <button className="rj-press" onClick={e=>{e.preventDefault();saveTickerOverrides();}}
                       style={{fontSize:'0.875rem', background:'transparent', border:'1px solid var(--blue)',
                         color:'var(--blue)', padding:'1px 6px', cursor:'pointer',
-                        fontFamily:"'IBM Plex Mono',var(--mono)", borderRadius:'2px'}}>SAVE OVERRIDES</button>
+                        fontFamily: 'var(--mono)', borderRadius:'2px'}}>SAVE OVERRIDES</button>
                   )}
                 </summary>
                 <div style={{marginTop:'6px', display:'grid', gridTemplateColumns:'44px 1fr', gap:'2px 8px'}}>
                   {Object.entries(blpTickers).map(([tenor, ticker]) => (
                     <>
-                      <span key={tenor+'-t'} style={{fontSize:'0.8125rem', color:'var(--blue)', fontFamily:"'IBM Plex Mono',var(--mono)"}}>{tenor}</span>
+                      <span key={tenor+'-t'} style={{fontSize:'0.8125rem', color:'var(--blue)', fontFamily: 'var(--mono)'}}>{tenor}</span>
                       <input key={tenor+'-v'} defaultValue={ticker}
                         onBlur={e=>{ setBlpTickers(p=>({...p,[tenor]:e.target.value})); setBlpTickersEdited(true); }}
-                        style={{fontSize:'0.8125rem', fontFamily:"'IBM Plex Mono',var(--mono)",
+                        style={{fontSize:'0.8125rem', fontFamily: 'var(--mono)',
                           background:'var(--panel-2)', border:'1px solid var(--border)', color:'var(--text)',
                           padding:'1px 4px', borderRadius:'2px', outline:'none'}} />
                     </>

@@ -249,8 +249,9 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const mode = md?.forward_mode || 'MARKET'
   const thL = { fontSize: '0.78rem', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 6px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
   const thR = { ...thL, textAlign: 'right' }
-  const td = { fontSize: '0.875rem', color: 'var(--text)', padding: '5px 6px 5px 0', borderBottom: '1px solid var(--panel-2)' }
-  const tdR = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+  // a cell of the tables below: a figure, a tenor or a count, set as every figure is (index.css, "Figures")
+  const td = { fontFamily: 'var(--mono)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums', color: 'var(--text)', padding: '5px 6px 5px 0', borderBottom: '1px solid var(--panel-2)' }
+  const tdR = { ...td, textAlign: 'right' }
 
   const volsPanel = (
     <div>
@@ -265,10 +266,10 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
           const row = vols[tn] || {}; const atm = parseFloat(row.ATM); const rr = parseFloat(row.RR25) || 0; const bf = parseFloat(row.BF25) || 0
           const ok = !isNaN(atm)
           return [
-            <div key={tn + 'a'} style={{ ...td, color: 'var(--accent)' }}>{tn}</div>,
-            <div key={tn + 'b'} style={tdR}><input className="inp" style={{ width: 70, textAlign: 'right' }} value={row.ATM ?? ''} onChange={e => setVol(tn, 'ATM', e.target.value)} placeholder="—" /></div>,
-            <div key={tn + 'c'} style={tdR}><input className="inp" style={{ width: 70, textAlign: 'right' }} value={row.RR25 ?? ''} onChange={e => setVol(tn, 'RR25', e.target.value)} placeholder="0" /></div>,
-            <div key={tn + 'd'} style={tdR}><input className="inp" style={{ width: 70, textAlign: 'right' }} value={row.BF25 ?? ''} onChange={e => setVol(tn, 'BF25', e.target.value)} placeholder="0" /></div>,
+            <div key={tn + 'a'} style={td}>{tn}</div>,
+            <div key={tn + 'b'} style={tdR}><input className="inp" inputMode="decimal" style={{ width: 70, textAlign: 'right' }} value={row.ATM ?? ''} onChange={e => setVol(tn, 'ATM', e.target.value)} placeholder="—" /></div>,
+            <div key={tn + 'c'} style={tdR}><input className="inp" inputMode="decimal" style={{ width: 70, textAlign: 'right' }} value={row.RR25 ?? ''} onChange={e => setVol(tn, 'RR25', e.target.value)} placeholder="0" /></div>,
+            <div key={tn + 'd'} style={tdR}><input className="inp" inputMode="decimal" style={{ width: 70, textAlign: 'right' }} value={row.BF25 ?? ''} onChange={e => setVol(tn, 'BF25', e.target.value)} placeholder="0" /></div>,
             <div key={tn + 'e'} style={{ ...tdR, color: 'var(--text-dim)' }}>{ok ? fmt(atm + bf - rr / 2, 2) : '—'}</div>,
             <div key={tn + 'f'} style={{ ...tdR, color: 'var(--text-dim)' }}>{ok ? fmt(atm + bf + rr / 2, 2) : '—'}</div>,
           ]
@@ -296,13 +297,13 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
           const q = parity[t]; const v = pts[t]; const n = parseFloat(v)
           const outright = p.spot != null && !isNaN(n) ? p.spot + n * p.pip : null
           return [
-            <div key={t + 'a'} style={{ ...td, color: 'var(--accent)' }}>{t}</div>,
+            <div key={t + 'a'} style={td}>{t}</div>,
             <div key={t + 'b'} style={{ ...tdR, color: 'var(--text-dim)' }}>{TENOR_DAYS[t]}</div>,
-            <div key={t + 'c'} style={tdR}><input className="qi" style={{ width: 76 }} value={v ?? ''} placeholder="—" onChange={e => setPts({ ...pts, [t]: e.target.value })} /></div>,
+            <div key={t + 'c'} style={tdR}><input className="qi" inputMode="decimal" style={{ width: 76 }} value={v ?? ''} placeholder="—" onChange={e => setPts({ ...pts, [t]: e.target.value })} /></div>,
             <div key={t + 'd'} style={{ ...tdR, color: 'var(--text-hi)' }}>{outright != null ? fmt(outright, dp(pair)) : '—'}</div>,
-            <div key={t + 'e'} style={{ ...tdR, color: 'var(--blue)' }}>{q ? fmt(q.implied_points, 1) : '…'}</div>,
-            <div key={t + 'f'} style={{ ...tdR, color: 'var(--blue)' }}>{q ? fmt(q.implied_forward, dp(pair)) : '…'}</div>,
-            <div key={t + 'g'} style={{ ...tdR, color: q && !isNaN(n) ? (n - q.implied_points >= 0 ? 'var(--amber)' : 'var(--red)') : 'var(--text-mute)' }}>{q && !isNaN(n) ? fmt(n - q.implied_points, 1) : '—'}</div>,
+            <div key={t + 'e'} style={{ ...tdR, color: 'var(--text-dim)' }}>{q ? fmt(q.implied_points, 1) : '…'}</div>,
+            <div key={t + 'f'} style={{ ...tdR, color: 'var(--text-dim)' }}>{q ? fmt(q.implied_forward, dp(pair)) : '…'}</div>,
+            <div key={t + 'g'} style={{ ...tdR, color: q && !isNaN(n) ? (n - q.implied_points >= 0 ? 'var(--up)' : 'var(--down)') : 'var(--text-mute)' }}>{q && !isNaN(n) ? fmt(n - q.implied_points, 1) : '—'}</div>,
             <div key={t + 'h'} style={td}><SourceBadge src={!isNaN(n) ? (p.forward_curve?.source || 'MANUAL') : 'PARITY'} /></div>,
           ]
         })}

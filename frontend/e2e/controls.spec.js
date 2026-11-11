@@ -123,3 +123,40 @@ test('a side has its colour, a type has none, and the selected chip stands out',
   await expect.poll(() => css(side, 'color')).toBe(first === UP ? DOWN : UP)
   expectClean(problems)
 })
+
+// Reported by the owner on 11 November 2026: on the forwards page the points typed in looked a different size from
+// the outright beside them, and the page's figures were not set like the ticket's. A figure is mono at 12.5px
+// wherever it is, and a field is set like the figure beside it (docs/design.md, "Figures").
+test('a figure is set one way: the forwards page, the ticket, and a field like the figure beside it', async ({ app, problems }) => {
+  const face = loc => loc.evaluate(el => { const s = getComputedStyle(el); return [s.fontFamily.split(',')[0].replace(/["']/g, '').trim(), s.fontSize] })
+  await app.goto('/configurations/market-data/crypto')
+  const table = app.getByTestId('fwd-table')
+  await expect(table).toBeVisible({ timeout: 30_000 })
+  await app.getByRole('button', { name: 'FILL FROM PARITY' }).click()
+  const cells = table.locator('> div')
+  const points = table.locator('input').first()
+  await expect(points).not.toHaveValue('')
+  const outright = cells.nth(8 + 3), parity = cells.nth(8 + 5), tenor = cells.nth(8)
+  await expect(outright).toHaveText(/\d/)
+  expect(await face(points), 'the points typed in are set like the outright').toEqual(await face(outright))
+  expect(await face(outright)).toEqual(['DM Mono', '12.5px'])
+  expect(await face(parity)).toEqual(['DM Mono', '12.5px'])
+  expect(await face(tenor)).toEqual(['DM Mono', '12.5px'])
+  expect(await css(parity, 'color'), 'what parity implies is not the blue of a chart').not.toBe('rgb(143, 193, 230)')
+  expect(await css(tenor, 'color'), 'a tenor is not brass').not.toBe('rgb(217, 178, 92)')
+  // the size of type does not depend on the width of the window
+  const at = await app.evaluate(() => getComputedStyle(document.documentElement).fontSize)
+  await app.setViewportSize({ width: 2400, height: 1200 })
+  expect(await app.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe(at)
+  await app.setViewportSize({ width: 1440, height: 900 })
+
+  // the ticket: a date is set in the face of the notional beside it
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  const notional = win.getByTestId('fx-notional'), date = win.locator('input[type="date"]').first()
+  expect((await face(date))[0], 'a date is a figure').toBe((await face(notional))[0])
+  expect((await face(date))[0]).toBe('DM Mono')
+  expectClean(problems)
+})

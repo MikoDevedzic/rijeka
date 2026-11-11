@@ -74,7 +74,7 @@
 /* ── legal pages ── */
 .legal { min-height: 100vh; background: var(--bg); color: var(--text); }
 .legal-head { display: flex; align-items: center; gap: 1.5rem; height: 44px; padding: 0 1.25rem; border-bottom: 1px solid var(--border); }
-.legal-brand { font-family: 'IBM Plex Sans', var(--sans); font-weight: 700; letter-spacing: .2em; color: var(--accent); text-decoration: none; font-size: 1.0625rem; }
+.legal-brand { font-family: var(--sans); font-weight: 700; letter-spacing: .2em; color: var(--accent); text-decoration: none; font-size: 1.0625rem; }
 .legal-head nav { display: flex; gap: 1rem; margin-left: auto; }
 .legal-head nav a { font-family: var(--mono); font-size:0.86rem; letter-spacing: .14em; color: var(--text-dim); text-decoration: none; }
 .legal-head nav a:hover { color: var(--text); }

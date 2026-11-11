@@ -68,7 +68,7 @@ function CapVolHeatmap({ atmRows, hasData }) {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '0.76rem',
               color: v !== null ? 'var(--accent)' : 'var(--text-dim)',
-              fontFamily: "'IBM Plex Mono',var(--mono)" }}>
+              fontFamily: 'var(--mono)' }}>
               {v !== null ? v.toFixed(0) : '—'}
             </div>
           );
@@ -229,7 +229,7 @@ function CapInstruments() {
           value={valuationDate}
           onChange={e => setValuationDate(e.target.value)}
           style={{ background: 'var(--panel-2)', border: '1px solid var(--border)',
-            color: 'var(--text)', fontFamily: "'IBM Plex Mono',var(--mono)",
+            color: 'var(--text)', fontFamily: 'var(--mono)',
             fontSize: '1rem', padding: '0.25rem 0.45rem', borderRadius: 2, outline: 'none' }}
         />
         <button className="rj-press"
@@ -237,7 +237,7 @@ function CapInstruments() {
           disabled={snapLoading}
           style={{ padding: '0.25rem 0.85rem', background: 'rgba(217,178,92,0.07)',
             border: '1px solid var(--accent)', borderRadius: 2,
-            fontFamily: "'IBM Plex Mono',var(--mono)", fontSize: '1rem',
+            fontFamily: 'var(--mono)', fontSize: '1rem',
             fontWeight: 700, letterSpacing: '0.1em', color: 'var(--accent)',
             cursor: snapLoading ? 'not-allowed' : 'pointer',
             opacity: snapLoading ? 0.5 : 1 }}>
@@ -245,11 +245,11 @@ function CapInstruments() {
         </button>
         {snapMsg && (
           <span style={{ fontSize: '0.9375rem', color: 'var(--accent)',
-            fontFamily: "'IBM Plex Mono',var(--mono)" }}>✓ {snapMsg}</span>
+            fontFamily: 'var(--mono)' }}>✓ {snapMsg}</span>
         )}
         {error && (
           <span style={{ fontSize: '0.9375rem', color: 'var(--red)',
-            fontFamily: "'IBM Plex Mono',var(--mono)" }}>✗ {error}</span>
+            fontFamily: 'var(--mono)' }}>✗ {error}</span>
         )}
       </div>
 
@@ -258,7 +258,7 @@ function CapInstruments() {
         <div style={{ marginBottom: '10px' }}>
           <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)',
             letterSpacing: '0.08em', marginBottom: '5px',
-            fontFamily: "'IBM Plex Mono',var(--mono)" }}>
+            fontFamily: 'var(--mono)' }}>
             ATM STRIP — USCNSQ
           </div>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -269,15 +269,15 @@ function CapInstruments() {
                   border: '1px solid var(--border)', borderRadius: '2px',
                   padding: '8px 12px', minWidth: '72px', textAlign: 'center' }}>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
-                    fontFamily: "'IBM Plex Mono',var(--mono)", marginBottom: '3px' }}>{t}Y</div>
+                    fontFamily: 'var(--mono)', marginBottom: '3px' }}>{t}Y</div>
                   <div style={{ fontSize: '1rem', fontWeight: 700,
-                    fontFamily: "'IBM Plex Mono',var(--mono)",
+                    fontFamily: 'var(--mono)',
                     color: row ? 'var(--accent)' : 'var(--text-dim)' }}>
                     {row ? fmtVol(row.flat_vol_bp) : '—'}
                   </div>
                   {row && (
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
-                      fontFamily: "'IBM Plex Mono',var(--mono)", marginTop: '2px' }}>
+                      fontFamily: 'var(--mono)', marginTop: '2px' }}>
                       {row.source}
                     </div>
                   )}
@@ -305,7 +305,7 @@ function CapInstruments() {
                 <td colSpan={CAP_TENORS.length + 1}
                   style={{ padding: '20px', textAlign: 'center',
                     color: 'var(--text-dim)', fontSize: '0.875rem',
-                    fontFamily: "'IBM Plex Mono',var(--mono)" }}>
+                    fontFamily: 'var(--mono)' }}>
                   Loading...
                 </td>
               </tr>
@@ -314,7 +314,7 @@ function CapInstruments() {
                 <td colSpan={CAP_TENORS.length + 1}
                   style={{ padding: '20px', textAlign: 'center',
                     color: 'var(--text-dim)', fontSize: '0.875rem',
-                    fontFamily: "'IBM Plex Mono',var(--mono)" }}>
+                    fontFamily: 'var(--mono)' }}>
                   No data for {valuationDate} — snap to populate
                 </td>
               </tr>
@@ -322,7 +322,7 @@ function CapInstruments() {
               CAP_STRIKES.map(spread => (
                 <tr key={spread}>
                   <td style={{ fontSize: '0.875rem', color: 'var(--accent)',
-                    fontFamily: "'IBM Plex Mono',var(--mono)", fontWeight: 600,
+                    fontFamily: 'var(--mono)', fontWeight: 600,
                     padding: '4px 6px 4px 0', borderBottom: '1px solid var(--panel-2)' }}>
                     +{spread}bp
                   </td>
@@ -333,7 +333,7 @@ function CapInstruments() {
                         style={{ padding: '2px', borderBottom: '1px solid var(--panel-2)',
                           textAlign: 'right' }}>
                         <div style={{ padding: '1px 4px 3px',
-                          fontFamily: "'IBM Plex Mono',var(--mono)",
+                          fontFamily: 'var(--mono)',
                           fontSize: '0.875rem',
                           color: row ? 'var(--accent)' : 'var(--text-dim)' }}>
                           {row ? fmtVol(row.flat_vol_bp) : '—'}
@@ -353,7 +353,7 @@ function CapInstruments() {
 
       {/* Ticker note */}
       <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-dim)',
-        fontFamily: "'IBM Plex Mono',var(--mono)", lineHeight: 1.7 }}>
+        fontFamily: 'var(--mono)', lineHeight: 1.7 }}>
         ATM: USCNSQ{'{N}'} ICPL Curncy · PX_MID&nbsp;&nbsp;
         Skew: USCNQ{'{letter}{N}'} ICPL Curncy · MID&nbsp;&nbsp;
         Strikes: above ATM only (below-ATM USCLQ not liquid in USD SOFR caps)
@@ -408,7 +408,7 @@ function CapVolConfig() {
       <div style={{ marginTop: '12px', padding: '8px 10px',
         background: 'rgba(143,193,230,0.04)', border: '1px solid rgba(143,193,230,0.15)',
         borderRadius: '2px', fontSize: '0.8125rem', color: 'var(--text-dim)',
-        fontFamily: "'IBM Plex Mono',var(--mono)", lineHeight: 1.7 }}>
+        fontFamily: 'var(--mono)', lineHeight: 1.7 }}>
         Cap/floor pricing uses direct table lookup from the saved flat-vol surface.
         For standard strikes the quoted vol is used directly — no SABR required.
         Interpolation applies for strikes between quoted nodes only.
