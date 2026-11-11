@@ -12,6 +12,7 @@ account: it is printed in anvil's own start-up text, holds nothing on any real c
 import argparse
 import json
 import os
+import shlex
 import sys
 import time
 from urllib.parse import urlparse
@@ -23,8 +24,14 @@ LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 
 
 def local(rpc: str) -> bool:
-    u = urlparse(rpc)
-    return u.scheme == "http" and (u.hostname or "") in LOCAL_HOSTS
+    """http://<this machine>:<port> and nothing more: no name before an @, no path, no query, nothing after a #."""
+    try:
+        u = urlparse(rpc)
+        port = u.port
+    except ValueError:                   # a port that is not a number
+        return False
+    return (u.scheme == "http" and (u.hostname or "") in LOCAL_HOSTS and port is not None
+            and u.username is None and u.password is None and u.path in ("", "/") and not u.params and not u.query and not u.fragment)
 
 
 def deploy(rpc: str, wait_s: float = 15.0) -> str:
@@ -57,7 +64,9 @@ def main(argv=None) -> int:
     p.add_argument("--rpc", required=True, help="the local node, e.g. http://127.0.0.1:8546")
     a = p.parse_args(argv)
     address = deploy(a.rpc)
-    print(f"export RIJEKA_CHAIN_RPC='{a.rpc}' RIJEKA_CHAIN_REGISTRY='{address}' RIJEKA_CHAIN_RELAYER_KEY='{ANVIL_FIRST_ACCOUNT_KEY}'")
+    # what this prints is given to `eval`: every value is quoted for the shell, whatever it holds
+    print("export " + " ".join(f"{k}={shlex.quote(v)}" for k, v in (
+        ("RIJEKA_CHAIN_RPC", a.rpc), ("RIJEKA_CHAIN_REGISTRY", address), ("RIJEKA_CHAIN_RELAYER_KEY", ANVIL_FIRST_ACCOUNT_KEY))))
     return 0
 
 

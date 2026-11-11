@@ -16,6 +16,8 @@ def test_a_node_on_this_machine_is_local(rpc):
 @pytest.mark.parametrize("rpc", [
     "https://ethereum-sepolia-rpc.publicnode.com", "http://example.com:8545", "https://127.0.0.1:8546",
     "http://127.0.0.1.example.com:8546", "http://user@example.com:8546", "ws://127.0.0.1:8546", "", "127.0.0.1:8546",
+    "http://127.0.0.1@example.com:8546", "http://user@127.0.0.1:8546", "http://127.0.0.1:8546/x'; touch /tmp/p; '",
+    "http://127.0.0.1:8546/?a=1", "http://127.0.0.1:8546/#x", "http://127.0.0.1", "http://127.0.0.1:port", "http://localhost.:8546",
 ])
 def test_anything_else_is_not(rpc):
     assert not chain.local(rpc)
@@ -36,6 +38,19 @@ def test_deploy_says_when_no_node_answers():
 
 
 ANVIL = shutil.which("anvil")
+
+
+def test_what_is_printed_for_eval_is_quoted_for_the_shell(monkeypatch, capsys):
+    monkeypatch.setattr(chain, "deploy", lambda rpc: "0x5FbDB2315678afecb367f032d93F642f64180aa3")
+    assert chain.main(["--rpc", "http://127.0.0.1:8546"]) == 0
+    line = capsys.readouterr().out.strip()
+    assert line.count("\n") == 0 and line.startswith("export RIJEKA_CHAIN_RPC=http://127.0.0.1:8546 RIJEKA_CHAIN_REGISTRY=0x5FbDB")
+    # a value with a quote in it (deploy refuses such an address; this is the printing alone) cannot end the word
+    monkeypatch.setattr(chain, "deploy", lambda rpc: "x'; touch /tmp/p; '")
+    chain.main(["--rpc", "http://127.0.0.1:8546"])
+    out = capsys.readouterr().out
+    import shlex
+    assert shlex.split(out)[2] == "RIJEKA_CHAIN_REGISTRY=x'; touch /tmp/p; '"
 
 
 def _anvil(*args):

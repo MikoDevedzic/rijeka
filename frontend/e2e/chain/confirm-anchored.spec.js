@@ -17,16 +17,23 @@ const ask = async (request, method, params = []) => {
 // the node hashes a signature for us (keccak-256): an event's topic is the whole hash, a function's selector its first four bytes
 const keccak = (request, signature) => ask(request, 'web3_sha3', ['0x' + Buffer.from(signature).toString('hex')])
 
-test('a trade confirmed on a chain: signed, sent, anchored, drawn with its ring, and found on the chain and in the register', async ({ app, problems, request }) => {
+test('a trade confirmed on a chain: signed, sent, anchored, drawn with its ring, and found on the chain and in the register', async ({ app, problems, request }, testInfo) => {
   await app.emulateMedia({ reducedMotion: 'no-preference' })      // this journey watches the drawing complete
   expect(Number(await ask(request, 'eth_chainId')), 'the stack has its own test chain').toBe(LOCAL_CHAIN)
   const blockBefore = Number(await ask(request, 'eth_blockNumber'))
 
   const win = await bookedSwap(app)
+  const ref = (await win.locator('.tbw-title').innerText()).match(/TRD-\d+/)?.[0]
+  expect(ref, 'the booked trade has a reference').toBeTruthy()
   const mark = win.getByTestId('confirm-mark'), caption = win.getByTestId('confirm-mark-caption')
   await expect(mark, 'nothing is drawn before a confirmation is asked for').toHaveCount(0)
 
-  // 1. the confirmation: one request, and then the record the ticket reads carries an anchor on this chain
+  // 1. the confirmation: one request, and then the record the ticket reads carries an anchor on this chain. The
+  //    request is held a second and a half so its progress can be read: a local chain answers faster than a look
+  await app.route(`${API}/api/chain/confirm/**`, async route => {
+    await new Promise(r => setTimeout(r, 1500))
+    await route.fulfill({ response: await route.fetch() })
+  }, { times: 1 })
   const confirmed = app.waitForResponse(r => r.url().startsWith(`${API}/api/chain/confirm/`) && r.request().method() === 'POST')
   const record = app.waitForResponse(async r => r.url().startsWith(`${API}/api/chain/attestation/`) && r.ok() && !!(await r.json().catch(() => null))?.attestation?.anchor)
   await win.getByRole('button', { name: /CONFIRM ON-CHAIN/ }).click()
@@ -84,7 +91,8 @@ test('a trade confirmed on a chain: signed, sent, anchored, drawn with its ring,
   await expect(win).toContainText('registry status: Confirmed')
 
   // 5. the public register lists it: the hash, the transaction, the chain, and nothing but shapes
-  const register = await (await request.get(`${API}/api/public/confirmations?limit=49`)).json()
+  //    (the API keeps the register's answer a minute for each size asked for: a second attempt asks for another size)
+  const register = await (await request.get(`${API}/api/public/confirmations?limit=${49 - testInfo.retry}`)).json()
   const row = register.confirmations.find(c => c.trade_hash === att.trade_hash)
   expect(row, 'the register has the confirmation').toBeTruthy()
   expect(row.tx_hash).toBe(att.anchor.tx_hash)
@@ -94,8 +102,13 @@ test('a trade confirmed on a chain: signed, sent, anchored, drawn with its ring,
   expect(row.parties, 'two LEIs, twenty characters each').toHaveLength(2)
   for (const lei of row.parties) expect(lei).toMatch(/^[A-Z0-9]{20}$/)
 
-  // 6. the blotter shows the trade confirmed
+  // 6. the blotter shows this trade, found by its own reference, confirmed
   await win.locator('.tbw-light-r').click()
-  await expect(app.locator('.bl-row', { hasText: 'CONFIRMED' }).first()).toBeVisible()
+  await app.getByPlaceholder(/Search/).fill(ref)
+  const rows = app.locator('.bl-row')
+  await expect(rows).toHaveCount(1)
+  await expect(rows.first()).toContainText(ref)
+  await expect(rows.first()).toContainText('CONFIRMED')
+  await app.unrouteAll({ behavior: 'ignoreErrors' })
   expectClean(problems)
 })

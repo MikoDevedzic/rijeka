@@ -61,6 +61,10 @@ pids+=($!)
 # 2a. a chain, when the run asks for one: anvil, the registry deployed to it, and the API told where it is. The key
 #     is anvil's published first account (backend/stack/chain.py, which refuses any node that is not local)
 if [ "$CHAIN" = "1" ]; then
+  # nothing of a developer's own chain settings comes along: the stack's environment empties the node, the registry
+  # and the relayer (up.sh --env); the rest are taken away here (a second node, an explorer, limits, a party's key)
+  unset RIJEKA_CHAIN_RPC_FALLBACK RIJEKA_CHAIN_EXPLORER RIJEKA_CHAIN_MAX_FEE_GWEI RIJEKA_CHAIN_FIRM_DAILY_LIMIT RIJEKA_CHAIN_GLOBAL_DAILY_LIMIT RIJEKA_CHAIN_SYNC_WAIT_S
+  for name in $(env | sed -n 's/^\(RIJEKA_CHAIN_KEY_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$name"; done
   anvil --port $CHAIN_PORT --silent > "$OUT/anvil.log" 2>&1 &
   pids+=($!)
   CHAIN_ENV="$("$PY" -m stack.chain --rpc "http://127.0.0.1:$CHAIN_PORT" 2> "$OUT/chain-deploy.log")" || { cat "$OUT/chain-deploy.log" >&2; exit 1; }
