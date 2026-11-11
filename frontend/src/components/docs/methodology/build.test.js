@@ -1,0 +1,47 @@
+// The methodology's pages are the LaTeX source's, and the evidence beside them the model inventory's: this test
+// runs the builder and holds the committed file to what the two sources give today. When it fails, the source or
+// the inventory moved on: run `npm run methodology` in frontend/ and commit the file with the change.
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
+import { build } from '../../../../scripts/build-methodology.mjs'
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+const committed = JSON.parse(fs.readFileSync(path.resolve(HERE, 'methodology.json'), 'utf8'))
+const built = build()
+
+describe('the methodology in the app', () => {
+  it('is made from the source as it stands: run `npm run methodology` after changing the .tex or the inventory', () => {
+    expect(committed.source).toBe(built.source)
+    expect(JSON.stringify(committed)).toBe(JSON.stringify(built))
+  })
+  it('has the document\'s nineteen sections, numbered as the PDF numbers them, each with text', () => {
+    expect(built.sections.map(s => s.n)).toEqual(Array.from({ length: 19 }, (_, i) => String(i + 1)))
+    for (const s of built.sections) expect(s.blocks.length, `§${s.n}`).toBeGreaterThan(0)
+    expect(built.sections[9].title).toBe('The XVA waterfall')
+    expect(built.sections[16].blocks.filter(b => b.t === 'h3').map(b => b.n)).toEqual(['17.1', '17.2', '17.3', '17.4', '17.5'])
+  })
+  it('numbers the displays as the PDF does, and leaves no LaTeX on the page', () => {
+    const text = JSON.stringify(built.sections)
+    // read off the PDF (v1.12): the waterfall's four lines are (14) to (17), wrong-way risk (18) and (19), the
+    // parity forward of §12 is (20) and the digital-asset forward (21)
+    const tags = (sec) => built.sections[sec - 1].blocks.filter(b => b.t === 'eq').flatMap(b => [...b.html.matchAll(/<span class="mord">\(<\/span><span class="mord"><span class="mord">(\d+)<\/span>/g)].map(m => Number(m[1])))
+    expect(tags(10)).toEqual([14, 15, 16, 17, 18, 19])
+    expect(tags(12)).toEqual([20, 21, 22])
+    // prose with the maths taken out: no backslash command, no stray brace or dollar
+    const strip = (h) => h.replace(/<span class="katex">[\s\S]*?<\/span><\/span><\/span>(?=[^<]|<(?!\/span))/g, ' ')
+    for (const s of built.sections) for (const b of s.blocks) {
+      if (b.t !== 'p') continue
+      const prose = strip(b.html).replace(/<code>[\s\S]*?<\/code>/g, ' ').replace(/<[^>]+>/g, ' ')
+      expect(prose, `§${s.n}: ${prose.slice(0, 80)}`).not.toMatch(/\\[A-Za-z]+|\$/)
+    }
+    expect(text).not.toContain('??')
+  })
+  it('puts every row of the model inventory beside a section the document has', () => {
+    const rows = built.sections.reduce((n, s) => n + s.evidence.length, 0)
+    const inventory = fs.readFileSync(path.resolve(HERE, '../../../../../docs/model_inventory.md'), 'utf8').split('\n').filter(l => l.startsWith('| ') && !l.startsWith('| Model |')).length
+    expect(rows).toBe(inventory)
+    for (const s of built.sections) for (const r of s.evidence) expect(typeof r.ok).toBe('boolean')
+  })
+})

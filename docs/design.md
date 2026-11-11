@@ -74,6 +74,23 @@ brass rule. In a rail of filters (the blotter's left pane) a section's heading i
 reads as their heading by weight, the bright text colour and a rule above it; the choices sit a step in, in the
 quieter colour, and the selected one is the lighter panel with the brass rule at its edge.
 
+## The methodology
+
+A syllabus rail, one reading column of about seventy characters, the evidence for the section beside it
+(`docs/Methodology.jsx`, `docs/methodology/`). The text is the document's own, so the page sets it and adds
+nothing: formulas in KaTeX's faces on a panel with the quiet rule at its left, numbered as the PDF numbers them;
+code names in mono. No brass on this page except the selected item's rule and the registry in the scene: nothing
+here books or signs, so nothing here is the action of a view. A button is the lighter panel with a bright edge.
+Amber says an outside validator is still wanted, green that a model was compared with an outside source; the same
+two colours carry a late and an on-time batch in the health strip.
+
+How the system is built is a scene, not a diagram: a colour for each kind of piece (what people open in
+limestone, the API in teal, where things are kept in blue, market data coming in in violet, other services in
+rose) and brass for the registry alone. A step lights its pieces and its joins in limestone; only a join that
+reaches the registry is brass. The names are buttons set over the canvas in the interface face, so they stay
+sharp at any size and are read by a screen reader. There is no flat view to choose; where a browser cannot draw
+the scene the names stand in a row and the steps still say what happens.
+
 ## Legs
 
 DETAILS of a currency or digital-asset trade is a table of legs (`trade-window/FxLegs.jsx`, `fx-legs.js`): one row

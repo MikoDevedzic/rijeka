@@ -191,6 +191,7 @@ export default function App() {
           </Route>
           <Route element={<DocLayout />}>
             <Route path="/methodology" element={<Methodology />} />
+            <Route path="/methodology/:section" element={<Methodology />} />
             <Route path="/roadmap"     element={<Roadmap />} />
           </Route>
           <Route element={<ConfigLayout />}>

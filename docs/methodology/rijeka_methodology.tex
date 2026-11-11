@@ -598,8 +598,7 @@ Every number above is rebuilt in QuantLib (version 1.44), an independent open-so
 \end{itemize}
 The inputs are a public-data curve rebuild and synthetic volatilities: a clean comparison says the engine computes what the methodology says, not that the demo market is a live mark.
 
-{\small
-{\setlength{\tabcolsep}{4pt}\small
+{\small\setlength{\tabcolsep}{4pt}
 \begin{longtable}{>{\raggedright\arraybackslash}p{2.2cm}>{\raggedright\arraybackslash}p{4.6cm} r r >{\raggedright\arraybackslash}p{1.8cm} r >{\raggedright\arraybackslash}p{1.8cm}}
 \toprule
 Product & Metric & $n$ & Worst & Unit & Tol. & Kind\\
@@ -669,7 +668,7 @@ CCR paths & E[D$\cdot$payoff] vs QuantLib HW zero-bond put & 3 & -1.13 & standar
 Key-rate ladder & KR01 (+1bp quotes, rebootstrap) & 20 & 0.0314 & \% of DV01 & 0.5 & convention \\
 Key-rate ladder & ladder total (par +1bp) vs ticket IR01 (zero +1bp) & 5 & -2.14 & \% of DV01 & 3.5 & convention \\
 \bottomrule
-\end{longtable}}}
+\end{longtable}}
 
 \textbf{Causes of the convention differences.} Curve: the integer-year gap fill (\S\ref{sec:curve}). Swaps: market accrual adjustment and payment lag against Rijeka's default unadjusted accrual and the booked lag; under 0.1bp of notional. FX: the spot-date carry, now applied (the row keeps the old, valuation-date convention visible). Swaption delta: the ticket shows both the analytic forward delta $A\,\Phi(d)\cdot 1$bp with the annuity held and the curve DV01 (a $+1$bp parallel zero shift, repriced), which also moves the annuity; up to 14\% apart on a 5Y$\times$10Y. Risk and P\&L use the curve bump. Caps: the mid-period option time against QuantLib's compounded-rate model (\S\ref{sec:caps}). Exposure: the Hull--White implied vol a swaption is valued at on the paths against the market quote (\S\ref{sec:exposure}); the value today against QuantLib's Jamshidian price is within 0.35bp of notional, the paths reading the curve at one-day granularity. Ladder: a 1bp move in par quotes is a slightly smaller move in zero rates, so the ladder total sits about 2\% below the ticket's \code{IR01}; both are published and labelled.
 

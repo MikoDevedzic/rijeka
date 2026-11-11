@@ -46,6 +46,16 @@ security) so the blotter follows bookings and confirmations without a reload. He
 (three.js, ExcelJS) and the secondary pages are code-split; the first screen after sign-in is the
 blotter, the command centre and the messenger.
 
+The Methodology page reads the methodology document in place. Its pages are not written in the app:
+`frontend/scripts/build-methodology.mjs` (`npm run methodology`) makes
+`frontend/src/components/docs/methodology/methodology.json` from the LaTeX source
+(`docs/methodology/rijeka_methodology.tex`) and from `docs/model_inventory.md`, with the formulas set by KaTeX at
+build time, and `build.test.js` fails when that file is not what the two sources now give. So there are three
+prints of one source (the PDF by `tectonic`, the tracked copy the app serves under `public/methodology/`, these
+pages) and a change to the `.tex` is finished when all three are rebuilt. The first of those pages draws this map
+(`architecture-data.js` restates it; `Architecture.jsx` draws it with three.js) and shows the API's public health
+answer under it. Nothing on the page is asked of the API except the list of workbooks and that health answer.
+
 **The API** (`backend/`): one FastAPI process on Render (1 CPU, 2 GB, Virginia, the same AWS region
 as the database). Sync routes run in Starlette's thread pool; pricing is numpy/scipy on the request
 path with curve and trade caches. Routers by area: `api/routes/` (trades, booking, legs, events,

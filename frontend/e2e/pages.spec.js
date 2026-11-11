@@ -31,7 +31,9 @@ const PAGES = [
   ['/configurations/pnl/conventions', /P&L CONVENTIONS/, TITLE],
   ['/configurations/pnl/ipv-tolerances', /IPV TOLERANCES/, TITLE],
   ['/configurations/system', /SYSTEM scheduled batches/, TITLE],
-  ['/methodology', /THE METHODOLOGY DOCUMENT/, TITLE],
+  ['/methodology', /How the system is built/, TITLE],
+  ['/methodology/12', /Currency and digital-asset forwards/, TITLE],
+  ['/methodology/replications', /Excel replications/, TITLE],
   ['/roadmap', /PHASE 1 · RATES/, TITLE],
 ]
 
