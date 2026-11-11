@@ -203,12 +203,18 @@ def live_commit(url: str) -> Optional[str]:
         return None
 
 
-API_PATHS_EXCLUDED = ("frontend/", "netlify_drop/", "docs/", ".github/")   # workflows are not in the API image either
+API_ROOT = "backend/"       # render.yaml: rootDir. Render deploys the API only for a change under it.
 
 
 def frontend_only(files: list[str]) -> bool:
-    """True when every changed path is outside the API (what render.yaml's buildFilter skips)."""
-    return bool(files) and all(f.startswith(API_PATHS_EXCLUDED) or f.endswith(".md") for f in files)
+    """True when no changed path is in the API's image: nothing under `backend/` but Markdown (render.yaml:
+    `rootDir: backend`, and its buildFilter skips `*.md`). Render does not deploy such a push, so the API never
+    reports it and the frontend must follow `main` on its own.
+
+    Until 11 November 2026 this listed the folders known to be outside the API (frontend, landing site, docs,
+    workflows) and took everything else for the API. A push that changed `chain/verify/index.html` was then
+    waited for: Render never deployed it, and `release` stayed where it was."""
+    return bool(files) and not any(f.startswith(API_ROOT) and not f.endswith(".md") for f in files)
 
 
 def sync_release(own: str, repo: str, token: str, gh=github, branch: str = "release",

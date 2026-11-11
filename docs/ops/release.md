@@ -59,7 +59,7 @@ the file and what it gates.
 gh pr create --base main --head <branch> ...
 gh pr checks <n>                       # backend tests, frontend build, integration tests, registry contract tests, self-host smoke
 git push origin <sha>:main             # retry on a transient refusal
-curl -s https://rijeka-api.onrender.com/api/ops/health   # until "commit" is the sha (not for a frontend- or docs-only commit)
+curl -s https://rijeka-api.onrender.com/api/ops/health   # until "commit" is the sha (only when the commit changes a file under backend/ that is not Markdown: Render deploys nothing else)
 gh workflow run release-sync
 curl -s https://app.rijeka.app/version.json              # until "commit" is the sha
 ```

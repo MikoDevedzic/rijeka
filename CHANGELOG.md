@@ -3,6 +3,14 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
+## The app follows `main` when the API has nothing to deploy · 11 November 2026
+
+- The API's host builds from `backend/` and deploys only for a change there. The release move (the API's own at
+  startup, and the `release-sync` workflow) listed the folders it knew to be outside the API and took everything
+  else for the API. The verifier's page lives under `chain/`: the push that changed it was waited for, never
+  deployed, and the app stayed a commit behind `main`. One rule now, in both: a push with nothing under `backend/`
+  but Markdown lets the app follow `main`.
+
 ## The ticket's sides have their colours · 11 November 2026 (frontend only)
 
 Reported by the owner: on a new trade BUY and SELL were the same colour, and the same as CALL and PUT.

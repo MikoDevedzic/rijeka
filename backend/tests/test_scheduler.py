@@ -108,6 +108,22 @@ def test_release_follows_main_when_main_is_ahead_on_frontend_only():
     assert S.sync_release(own, "o/r", "t", gh=_gh_factory(main, "behind", [], ahead_files=fe, main_sha=main)) == "release already at this commit"
     assert S.frontend_only([]) is False and S.frontend_only(["netlify_drop/index.html"]) is True
     assert S.frontend_only([".github/workflows/release-sync.yml", "README.md"]) is True
+
+
+def test_what_render_does_not_deploy_is_not_waited_for():
+    """Render builds the API from `backend/` (render.yaml: rootDir) and skips Markdown. Anything else on main is
+    never served by the API, so `release` follows main's head. On 11 November 2026 a push that changed the
+    verifier's page under `chain/` was taken for an API change and `release` stayed behind."""
+    own, main = "a" * 40, "m" * 40
+    outside = ["chain/verify/index.html", "chain/README.md", "CHANGELOG.md", ".claude/agents/jarvis.md", "render.yaml",
+               "tests/reference/test_x.py", "frontend/src/components/docs/methodology/methodology.json", "backend/README.md"]
+    assert S.frontend_only(outside) is True
+    log = []
+    assert S.sync_release(own, "o/r", "t", gh=_gh_factory("b" * 40, "behind", log, ahead_files=outside, main_sha=main)) == f"release -> {main[:7]}"
+    for api in ("backend/main.py", "backend/requirements.txt", "backend/db/migrations/2026-11-05_collateral.sql", "backend/version.py"):
+        assert S.frontend_only(outside + [api]) is False, api
+    # a folder whose name only begins like the API's is not the API
+    assert S.frontend_only(["backend_notes/x.py"]) is True
     assert S.frontend_only([".github/workflows/ci.yml", "backend/main.py"]) is False
 
 

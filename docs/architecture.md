@@ -394,10 +394,11 @@ before it the trigger took the role from the client's sign-up metadata); provisi
 ## Deploy chain
 
 `main` is protected (backend tests, frontend build, registry contract tests). Render deploys every
-commit on `main` that touches the API (`render.yaml` ignores `frontend/`, `netlify_drop/`, `docs/`,
-`*.md`). The app builds from `release`, which is moved to the commit the live API reports on
+commit on `main` that touches the API: a file under `backend/` (`render.yaml`: `rootDir`) that is not
+Markdown. The app builds from `release`, which is moved to the commit the live API reports on
 `GET /api/ops/health` by the API itself at startup (with `RIJEKA_GITHUB_TOKEN`) or by the
-`release-sync` workflow; a frontend-only or docs-only push lets `release` follow `main`'s head. The
+`release-sync` workflow; a push with nothing under `backend/` (the frontend, docs, the verifier's page
+under `chain/`, a workflow) lets `release` follow `main`'s head, by the one rule both of them use. The
 full account, with the failure modes seen so far, is `docs/ops/deploy.md`. Environment variables:
 `docs/ops/environment.md`. Versions: `CHANGELOG.md`; the API reports its version and commit on
 `/api/ops/health`.

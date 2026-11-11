@@ -38,17 +38,19 @@ jobs:
           if [ -z "$live" ]; then echo "the API reports no commit yet"; exit 0; fi
           if ! git cat-file -e "$live^{commit}" 2>/dev/null; then echo "live commit unknown to this clone"; exit 0; fi
           if ! git merge-base --is-ancestor "$live" "$main"; then echo "live commit is not on main"; exit 0; fi
-          # Render skips a commit that touches only the frontend, the landing site or docs (render.yaml
-          # buildFilter), so the API keeps serving an older commit while main is ahead on frontend-only
-          # work. Those commits are safe for the frontend to take: move release to main's head when
-          # everything between the live commit and main is outside the API. (Until 2 November 2026 the
-          # job returned early when release already sat at the live commit, so a frontend-only or
-          # docs-only push never reached the app through this job.)
+          # Render builds the API from backend/ (render.yaml: rootDir) and skips Markdown (buildFilter), so
+          # the API keeps serving an older commit while main is ahead on anything else. Those commits
+          # are safe for the frontend to take: move release to main's head when nothing between the live
+          # commit and main is in the API's image. (Until 2 November 2026 the job returned early when
+          # release already sat at the live commit, so a frontend-only or docs-only push never reached
+          # the app through this job. Until 11 November 2026 it listed the folders outside the API and took
+          # the rest for the API: a push that changed chain/verify/ was waited for and never deployed.)
+          # The same rule as backend/scheduler.py frontend_only().
           target="$live"
           if [ "$live" != "$main" ]; then
             changed=$(git diff --name-only "$live" "$main")
-            api=$(printf '%s\n' "$changed" | grep -vE '^(frontend/|netlify_drop/|docs/|\.github/)' | grep -vE '\.md$' || true)
-            if [ -z "$api" ]; then target="$main"; echo "main is ahead of the API on frontend/docs only: release follows main"; fi
+            api=$(printf '%s\n' "$changed" | grep -E '^backend/' | grep -vE '\.md$' || true)
+            if [ -z "$api" ]; then target="$main"; echo "main is ahead of the API on nothing under backend/: release follows main"; fi
           fi
           if [ "$release" = "$target" ]; then echo "release already at $target"; exit 0; fi
           git push --force origin "$target:refs/heads/release"
