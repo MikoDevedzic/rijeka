@@ -166,6 +166,6 @@ so the credit report's MPoR follows the record too (null = daily, undisputed: to
 - SA-CCR deltas are held fixed along the path; the add-on profile moves with the dates only.
 - The leverage exposure and the HQLA value are the stock for the trade, not the ratio; the denominators
   are treasury inputs.
-- The crypto asset class follows SCO60.98; the IM weight for a digital asset is an assumption, labelled.
+- The crypto asset class follows SCO60.98; a digital asset's group is the engine's default (2a for BTC and ETH, 2b otherwise) unless the desk sets it.
 - Credit, equity and commodity rows exist for the reference examples; those products are not booked.
 - The counterparty type's operational cost under the uncleared margin rules is not a line yet.

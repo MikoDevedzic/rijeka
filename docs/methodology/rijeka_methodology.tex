@@ -15,6 +15,7 @@
 \usepackage[hidelinks]{hyperref}
 \emergencystretch=4em
 \usepackage{microtype}
+\usepackage{needspace}
 
 \definecolor{accent}{RGB}{9,122,97}
 \definecolor{ink}{RGB}{30,30,30}
@@ -33,6 +34,11 @@
 \newcommand{\E}{\mathbb{E}}
 \newcommand{\N}{\mathcal{N}}
 \setlist{nosep}
+% a heading is never left with only its module line at the foot of a page
+\let\plainsection\section
+\renewcommand{\section}{\needspace{9\baselineskip}\plainsection}
+\let\plainsubsection\subsection
+\renewcommand{\subsection}{\needspace{5\baselineskip}\plainsubsection}
 
 \begin{document}
 
@@ -51,7 +57,7 @@
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
 \item \textbf{1.12 (10 November 2026).} Typesetting, and one correction. No formula changed. The names of quantities are set upright, displays that ran past the margin are set on several lines, the longest paragraphs are divided, code names are printed as they are written, and this history follows the contents. Corrected: the known limitations of \S\ref{sec:capital} still described the initial-margin method that version 1.10 removed.
-\item \textbf{1.10 and 1.11 (10 November 2026).} Initial margin as the desk's own amount or the engine's estimate, with no ISDA SIMM computed or claimed, and the capital add-on of a currency or digital-asset ticket by its own SA-CCR class (\S\ref{sec:exposure}); wrong-way risk and a package of legs as one netting set (\S10); a package of trades confirmed as one record (\S\ref{sec:chain}).
+\item \textbf{1.10 and 1.11 (10 November 2026).} Initial margin as the desk's own amount or the engine's estimate, with no ISDA SIMM computed or claimed, and the capital add-on of a currency or digital-asset ticket by its own SA-CCR class (\S\ref{sec:exposure}); wrong-way risk and a package of legs as one netting set (\S\ref{sec:xva}); a package of trades confirmed as one record (\S\ref{sec:chain}).
 \item \textbf{1.9 (9 November 2026, evening).} The ticket's scenario tab for a currency forward (\S\ref{sec:fxo}, digital assets): it starts from the engine's own forward and carries a rate shock from the spot date, which the pricer's answer now names; where it is the engine priced again and where it is not is stated.
 \item \textbf{1.8 (9 November 2026, later).} Value and expiry dates by market convention, the calendars against QuantLib, \code{CRYBASIS01} in place of \code{FUND01} on the ticket (\S\ref{sec:fx}, \S\ref{sec:fxo}, \S\ref{sec:mr}); the exotic pricer at its limits and the first-passage value in logarithms (\S\ref{sec:fxo}); a strike booked as displayed.
 \item \textbf{1.7 (9 November 2026).} Fixings for digital assets and settlement on the source the record names (\S\ref{sec:fxo}).
@@ -283,7 +289,7 @@ A forward enters at $\delta=\pm1$ and an option at the supervisory delta of its 
 A cryptoasset is Group~2b unless the bank has shown its supervisor the hedging recognition criteria of SCO60.55 (a regulated derivative or exchange-traded product, USD~10bn of average market capitalisation, USD~50m of trimmed mean daily volume, a year of price observations); the engine's default is Group~2a for BTC and ETH and Group~2b otherwise, and the desk sets the group on the ticket. A style whose size is a payout enters at its payout: the rules name no notional for it, and that is this engine's reading.
 
 %--------------------------------------------------------------------
-\section{The XVA waterfall}
+\section{The XVA waterfall}\label{sec:xva}
 {\raggedright \emph{Module: \code{pricing/xva_engine.py}, function \code{run_waterfall}.}\par}\nopagebreak
 
 Default probabilities come from the credit triangle: hazard rate $h = s/\mathrm{LGD}$ for a flat or term-structured spread $s$, survival $Q(t)=e^{-ht}$. With $D_i=P(t_i)$, $\Delta t$ the grid step and $\Delta Q_i = Q(t_{i-1})-Q(t_i)$,
@@ -515,8 +521,7 @@ A CSA (\S\ref{sec:exposure}) says whether collateral is exchanged; a \emph{regim
 \text{regulatory:}\quad & C_{\mathrm{reg}}=C\,\big(1-h\big),\qquad h=1-\textstyle\sum_i w_i\,\mathrm{rec}_i\,(1-h_i),\\
 \text{economic:}\quad & C_{\mathrm{eco}}=C \text{ when enforceable, else } 0 \text{ (gross exposure)},
 \end{align}
-the regulatory reading margined if and only if recognised variation margin is exchanged and enforceable,
-with $w_i$ the composition weights, $\mathrm{rec}_i\in\{0,1\}$ the recognition and $h_i$ the haircut. The regulatory CSA feeds SA-CCR, CVA capital and the leverage exposure; the economic CSA feeds CVA, DVA, FVA, FBA, MVA and ColVA, with the pickup on posted margin the yield of its eligible part. The all-recognised regime reproduces the plain CSA field by field, so every number of \S\ref{sec:exposure} is the cash-and-government-securities column.
+with $w_i$ the composition weights, $\mathrm{rec}_i\in\{0,1\}$ the recognition and $h_i$ the haircut; the regulatory reading is margined if and only if recognised variation margin is exchanged and enforceable. The regulatory CSA feeds SA-CCR, CVA capital and the leverage exposure; the economic CSA feeds CVA, DVA, FVA, FBA, MVA and ColVA, with the pickup on posted margin the yield of its eligible part. The all-recognised regime reproduces the plain CSA field by field, so every number of \S\ref{sec:exposure} is the cash-and-government-securities column.
 
 \subsection{Instruments, schedules and the carry over OIS}
 A class is a rulebook; an \emph{instrument} is the asset: a code, its class, currency and issuer, its settlement rail (bilateral, or on chain with a token address), its yield source and an optional negotiated haircut. The yield source is a curve's short rate plus a spread (cash in a currency on its OIS; government paper on the same curve until a government curve is loaded; a tokenised fund share at OIS less its expense ratio), a fixed rate the firm enters, or none (a payment stablecoin, a cryptoasset). The public seed is cash in three currencies, Treasury bills and notes, Bunds, Gilts, three payment stablecoins, a generic tokenised money-market fund share, a generic tokenised Treasury-bill claim and three cryptoassets; a firm adds its own instruments under its own names.

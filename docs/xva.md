@@ -14,7 +14,7 @@ Variation margin held against the lagged MtM, from our side (+ = we hold theirs)
 
     C(t) = max(V(t−δ) − TH_cp, 0) − max(−V(t−δ) − TH_own, 0),   zeroed when |C| < MTA
 
-δ is the margin period of risk in years (mpor_days / 250); V(t−δ) is taken on the path by a Brownian bridge between grid points. Initial margin is exchanged symmetrically and amortises with residual maturity: IM(t) = IM₀ · (M − t)/M. The residuals are
+δ is the margin period of risk in years (mpor_days / 250); V(t−δ) is taken on the path by a Brownian bridge between grid points. Initial margin is exchanged each way: the desk's own amount, held for the life of the trade, or the engine's estimate from the paths at each date (Initial margin, below). The residuals are
 
     E⁺(t) = max(V − C − IM, 0)        EE(t)  = mean over paths
     E⁻(t) = min(V − C + IM, 0)        ENE(t) = mean over paths
@@ -81,7 +81,7 @@ for non-centrally cleared derivatives name (one-tailed, 99 per cent, over the ma
 out because what every path does over the period (a coupon, the passage of time) is not a risk. A shorter margin
 period gives a smaller estimate, by about √(5/10) from bilateral to on chain. Limits: the estimate is at the
 model's current volatility, not one calibrated to a period of stress, so it reads lower than a stressed
-regulatory figure (about half of a SIMM-weighted figure on the pinned 5-year swap); it is a cross-section of the
+regulatory figure (about half of the weights-based figure this engine carried until 0.18.0, on the pinned 5-year swap); it is a cross-section of the
 paths at each date, not a margin recomputed on each path (an option far out of the money carries the same margin
 as one in the money); one confidence for every asset class. The value a margin period earlier comes from the
 bridge between grid dates, which keeps the variance of the move but is Gaussian where the value is lognormal:
