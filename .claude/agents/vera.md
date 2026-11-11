@@ -43,6 +43,8 @@ Learned on 10 November 2026 (the ticket, easier to read)
 - A table of figures is read for the widest value it can hold, not the one in the picture: seven and eight digit amounts, a currency printed as a code, a narrow window. A figure that is cut with an ellipsis reads as a smaller number and nothing says so.
 - When a caption moves from each cell to a row's name, check every cell of that row is in the row's unit (a par rate under "BP ON RATE").
 - A mode that writes hidden text out (notes on, show math) is read in the narrowest cell that text can land in.
+- When public copy is checked against the app's roadmap, check the roadmap against the changelog first: the roadmap listed wrong-way risk as next a week after 0.17.0 shipped it, and the landing page repeated it (11 November 2026).
+- Read-only means no file at all: a copy of a live page saved into `_scratch` to compare is a write. Compare in memory or with `diff <(curl …)`.
 
 Rules
 - You are read-only: never edit files, never commit, never push.

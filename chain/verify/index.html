@@ -12,26 +12,26 @@
         crossorigin="anonymous"></script>
 <style>
   :root{
-    --bg:#000; --panel:#0C0C0C; --line:#1E1E1E; --line2:#2A2A2A;
-    --fg:#F0F0F0; --mut:#666; --dim:#333;
-    --ok:#00D4A8; --bad:#FF6B6B; --warn:#F5C842; --link:#4A9EFF;
-    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
-    --sans:'IBM Plex Sans',ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --bg:#0b1d1a; --panel:#102723; --line:#24372f; --line2:#43544a;
+    --fg:#e9e3d3; --mut:#8a9f94; --dim:#7b9388;
+    --ok:#8fe0ae; --brass:#d9b25c; --bad:#f0828c; --warn:#e9975a; --link:#8fc1e6;
+    --mono:'DM Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Instrument Sans',ui-sans-serif,system-ui,-apple-system,sans-serif;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.6}
   .wrap{max-width:980px;margin:0 auto;padding:40px 16px 80px}
   h1{font-family:var(--mono);font-size:1.25rem;letter-spacing:.06em;margin:0 0 6px;font-weight:700}
   .sub{color:var(--mut);font-size:.8125rem;margin-bottom:28px;max-width:660px}
-  .sub strong{color:#999;font-weight:600}
-  label{display:block;font-family:var(--mono);font-size:.75rem;letter-spacing:.09em;color:var(--ok);margin-bottom:6px}
-  textarea{width:100%;min-height:180px;background:#060606;border:1px solid var(--line);border-radius:3px;
+  .sub strong{color:#a9b9ae;font-weight:600}
+  label{display:block;font-family:var(--mono);font-size:.75rem;letter-spacing:.09em;color:var(--mut);margin-bottom:6px}
+  textarea{width:100%;min-height:180px;background:#081714;border:1px solid var(--line);border-radius:3px;
     color:var(--fg);font-family:var(--mono);font-size:12px;padding:10px;outline:none;resize:vertical}
-  textarea:focus{border-color:rgba(0,212,168,.45)}
+  textarea:focus{border-color:rgba(217,178,92,.45)}
   .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0 0}
   select,button{font-family:var(--mono);font-size:.8125rem;border-radius:3px;padding:8px 14px;
     background:transparent;border:1px solid var(--line2);color:var(--fg);cursor:pointer}
-  button.primary{border-color:rgba(0,212,168,.5);background:rgba(0,212,168,.08);color:var(--ok);font-weight:700;letter-spacing:.05em}
+  button.primary{border-color:rgba(217,178,92,.5);background:rgba(217,178,92,.08);color:var(--brass);font-weight:700;letter-spacing:.05em}
   button:disabled{opacity:.45;cursor:not-allowed}
   .hint{color:var(--dim);font-size:.75rem}
   .checks{margin-top:26px}
@@ -47,13 +47,13 @@
   .skip .mark,.skip .t{color:var(--dim)}
   .warn .mark,.warn .t{color:var(--warn)}
   .verdict{margin-top:22px;padding:14px 16px;border-radius:3px;font-family:var(--mono);font-size:.9375rem;font-weight:700;letter-spacing:.04em}
-  .verdict.ok{background:rgba(0,212,168,.07);border:1px solid rgba(0,212,168,.35);color:var(--ok)}
-  .verdict.bad{background:rgba(255,107,107,.07);border:1px solid rgba(255,107,107,.35);color:var(--bad)}
-  .verdict.part{background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.35);color:var(--warn)}
+  .verdict.ok{background:rgba(143,224,174,.07);border:1px solid rgba(143,224,174,.35);color:var(--ok)}
+  .verdict.bad{background:rgba(240,130,140,.07);border:1px solid rgba(240,130,140,.35);color:var(--bad)}
+  .verdict.part{background:rgba(233,151,90,.07);border:1px solid rgba(233,151,90,.35);color:var(--warn)}
   .verdict .note{display:block;font-weight:400;font-size:.75rem;color:var(--mut);margin-top:6px;letter-spacing:0}
   a{color:var(--link)}
   footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--dim);font-size:.75rem}
-  code{font-family:var(--mono);color:#888}
+  code{font-family:var(--mono);color:#8a9f94}
   @media (max-width:640px){ .wrap{padding:24px 16px 60px} }
 </style>
 </head>
@@ -77,7 +77,7 @@
       <option value="https://ethereum-rpc.publicnode.com|1">Ethereum mainnet · publicnode</option>
       <option value="custom|0">Custom RPC…</option>
     </select>
-    <input id="rpcCustom" placeholder="https://your-node" style="display:none;flex:1;min-width:220px;background:#060606;border:1px solid var(--line);border-radius:3px;color:var(--fg);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none">
+    <input id="rpcCustom" placeholder="https://your-node" style="display:none;flex:1;min-width:220px;background:#081714;border:1px solid var(--line);border-radius:3px;color:var(--fg);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none">
     <button class="primary" id="run">▶ VERIFY</button>
     <button id="example" title="A real confirmation on Sepolia: an IRS between two demo entities, countersigned with a wallet key Rijeka never held">LOAD EXAMPLE</button>
     <span class="hint" id="status"></span>
