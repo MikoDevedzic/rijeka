@@ -20,8 +20,13 @@ asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", t
   simulation to its sampling error at every vol from 8 to 110 % (`tests/test_fx_xva_lag.py`, 17 tests; the old
   bridge fails the same test at 55 % and above).
 - **Numbers that moved, each in `GOLDEN_CHANGES.md`.** A 6-month BTCUSD forward, 10 BTC, 55 % vol, bilateral CSA:
-  KVA −150.7 → −134.8 (more margin called, less exposure to hold capital against), MVA −615.5 → −622.1, CVA −2.8 →
-  −3.6 (what is left beyond the margin is the lognormal's tail, fatter than the bridge's), total −769.1 → −760.4.
+  KVA −150.7 → −134.8, MVA −615.5 → −622.1, CVA −2.8 → −3.6, total −769.1 → −760.4. Why each: the initial margin
+  we call is 9 % larger at the first date and 10 % on average (259,784 → 284,311), so the set is further
+  over-collateralised and SA-CCR's multiplier falls from 0.305 to 0.275: the add-on (104,127) and the replacement
+  cost (nothing) are unchanged and the exposure at default goes 44,462 → 40,098, which is the fall in KVA. The
+  variation margin does not rise. The margin we post is lower at the first date and 3 to 8 % higher later, 2 % on
+  average, which is MVA. What is left beyond the margin is the lognormal's tail, fatter than the bridge's: the peak
+  expected exposure beyond margin goes 952 → 1,382, which is CVA.
   On chain: KVA −113.6 → −98.7, MVA −448.2 → −463.3, total −563.1 → −564.1. At 80 % vol the total moves −1,003 →
   −1,031 bilateral and −743 → −786 on chain. (These are runs of the engine on stated inputs, 2,000 paths, seed 42;
   the pinned book's BTCUSD forward is on the local stack's own market and reads differently.) The pinned EURUSD
@@ -40,7 +45,9 @@ asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", t
   the move near the barrier (about 13 % of the margin called at one date of her case) until the paths monitor
   between grid dates; in the expiry's own step the time left runs to the grid date; the option's lag has no
   workbook and no reference row.
-- **Reviewed.** The validator's own simulation, sharing no code with the engine: a forward's margin within 1.1 %
+- **Reviewed.** The numbers guardian reproduced every figure above to the decimal from the two engines and found
+  the first wording of the KVA reason loose (it is the multiplier, through the initial margin, not the variation
+  margin): rewritten as above. The validator's own simulation, sharing no code with the engine: a forward's margin within 1.1 %
   date by date and a European call's within 1.6 % at 80 % vol, through margin periods shorter and longer than a
   step; the old bridge 16 to 21 % low on the call. A cold read found the XVA tab's margin-period note still
   describing the old method and naming SIMM: corrected.
