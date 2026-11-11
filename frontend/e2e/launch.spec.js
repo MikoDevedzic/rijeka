@@ -186,6 +186,50 @@ test('demo: capital is on request; no CAPITAL tab, no Risk → CAPITAL, and KVA 
   expectClean(problems)
 })
 
+// The hosted demo is the launch set (11 November 2026): where sign-ins get a sandbox the API answers everyone but
+// the admin role with every module outside it off and on request (backend: tests/integration/test_modules.py).
+// The stack runs with provisioning off, so that answer is given here.
+test('demo: everything outside the launch set is on request; the home does not promise a switch, and the XVA tab stays', async ({ app, problems }) => {
+  await app.route(/\/api\/modules$/, async route => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    const res = await route.fetch()
+    const body = await res.json()
+    for (const k of Object.keys(body.modules)) body.modules[k] = !OFF.includes(k)
+    for (const p of Object.values(body.presets)) for (const k of OFF) p.modules[k] = false
+    body.definitions = body.definitions.map(d => OFF.includes(d.key) ? { ...d, on_request: true } : d)
+    Object.assign(body, { on_request: OFF, contact: 'miko@rijeka.app', can_edit: true, view: 'launch', source: 'firm', preset: 'LAUNCH' })
+    await route.fulfill({ response: res, json: body })
+  })
+  await app.goto('/command-center')
+  await expect(app.getByTestId('launch-home')).toBeVisible()
+  await expect(app.getByTestId('launch-more')).toHaveText('P&L, risk and more are on request')
+  for (const gone of ['RISK', 'P&L']) await expect(app.getByRole('button', { name: gone, exact: true })).toHaveCount(0)
+  // Configurations → Modules: seven rows on request, none with a switch; what the launch set has still switches
+  await app.getByTestId('launch-more').click()
+  await expect(app).toHaveURL(/\/configurations\/modules/)
+  for (const k of OFF) {
+    const row = app.getByTestId(`module-on-request-${k}`)
+    await expect(row).toContainText('on request')
+    await expect(row.getByRole('checkbox')).toHaveCount(0)
+  }
+  await expect(app.getByTestId('modules-launch-note')).toContainText('The modules marked on request below are not part of this demo')
+  await expect(app.getByTestId('modules-launch-note')).not.toContainText('Switch a module on below')
+  await expect(app.getByRole('checkbox', { name: 'XVA on the ticket on' })).toBeEnabled()
+  await expectNoHorizontalOverflow(app.getByTestId('module-on-request-IPV'), 'an on-request row')
+  await app.screenshot({ path: 'e2e/.out/shots/modules-launch-set-on-request.png', fullPage: true })
+  // their pages go home
+  for (const path of ['/pnl', '/pnl/xva', '/pnl/ipv', '/risk', '/risk/ccr', '/risk/capital', '/risk/collateral']) {
+    await app.goto(path)
+    await expect(app, `${path} is not part of the demo`).toHaveURL(/\/command-center/)
+  }
+  // the ticket keeps every tab but CAPITAL
+  const win = await openTicket(app)
+  await expect(win.getByRole('button', { name: 'CAPITAL', exact: true })).toHaveCount(0)
+  for (const tab of ['TRADE', 'DETAILS', 'CASHFLOWS', 'XVA', 'CURVE SCENARIO', '◆ CONFIRM']) await expect(win.getByRole('button', { name: tab, exact: true })).toBeVisible()
+  await app.unrouteAll({ behavior: 'ignoreErrors' })
+  expectClean(problems)
+})
+
 test('an existing firm is untouched: the dashboard, every tab, and the XVA tab as it was', async ({ app, problems }) => {
   await app.goto('/command-center')
   await expect(app.getByTestId('launch-home')).toHaveCount(0)

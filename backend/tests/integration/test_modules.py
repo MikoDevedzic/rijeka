@@ -75,6 +75,7 @@ def _stored(firm_id: str) -> dict:
 
 
 def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(client, auth_a, auth_b, monkeypatch):
+    monkeypatch.setenv("RIJEKA_HELD_MODULES", "CAPITAL")      # an instance that holds capital alone: the mechanism. The default is the next test
     from stack.token import mint
     new = {"Authorization": f"Bearer {mint(NEW_USER, NEW_EMAIL, 'trader')}"}
     _fresh_user()
@@ -161,10 +162,15 @@ def test_an_instance_can_start_new_workspaces_on_everything(client, monkeypatch)
     _fresh_user()
     monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "1")
     monkeypatch.setenv("RIJEKA_SIGNUP_PRESET", "none")
+    monkeypatch.setenv("RIJEKA_HELD_MODULES", "CAPITAL")       # an instance that holds capital alone (the default until 0.23.2)
     assert client.post("/api/demo/provision", headers=new).status_code == 200
     j = client.get("/api/modules", headers=new).json()
     assert j["source"] == "default" and j["firm_id"]
-    assert {k for k, v in j["modules"].items() if not v} == {"CAPITAL"} and j["on_request"] == ["CAPITAL"]     # everything the demo offers
+    assert {k for k, v in j["modules"].items() if not v} == {"CAPITAL"} and j["on_request"] == ["CAPITAL"]     # everything that instance offers
+    # with the default, a workspace with nothing chosen is the launch set: everything else is held
+    monkeypatch.delenv("RIJEKA_HELD_MODULES")
+    j = client.get("/api/modules", headers=new).json()
+    assert {k for k, v in j["modules"].items() if v} == {"CHAIN_CONFIRM", "XVA", "PROMETHEUS", "NEWS"} and len(j["on_request"]) == 7
     # an instance that keeps sandboxes and holds nothing back says so
     monkeypatch.setenv("RIJEKA_HELD_MODULES", "NONE")
     j = client.get("/api/modules", headers=new).json()
@@ -193,3 +199,32 @@ def test_a_new_workspace_is_never_joined_to_a_firm_that_happens_to_share_its_nam
         with eng.begin() as c:
             c.execute(sa.text("DELETE FROM firms WHERE id = :f"), {"f": other})
         eng.dispose()
+
+
+def test_on_a_demo_a_new_workspace_is_the_launch_set_and_cannot_switch_the_rest_on(client, monkeypatch):
+    """The default of what a demo holds, since 0.23.2: everything outside the launch set. A demo user is answered
+    them as off, on request; a save that asks for one changes nothing; the fullest preset is the launch set; an
+    administrator has them all."""
+    from stack.token import mint
+    SEVEN = ["PNL", "MARKET_RISK", "COUNTERPARTY_CREDIT", "CAPITAL", "COLLATERAL", "XVA_RESERVES", "IPV"]
+    new = {"Authorization": f"Bearer {mint(NEW_USER, NEW_EMAIL, 'trader')}"}
+    _fresh_user()
+    monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "1")
+    monkeypatch.delenv("RIJEKA_HELD_MODULES", raising=False)
+    monkeypatch.delenv("RIJEKA_SIGNUP_PRESET", raising=False)
+    assert client.post("/api/demo/provision", headers=new).status_code == 200
+    j = client.get("/api/modules", headers=new).json()
+    on = {k for k, v in j["modules"].items() if v}
+    assert on == {"CHAIN_CONFIRM", "XVA", "PROMETHEUS", "NEWS"} and j["on_request"] == SEVEN and j["view"] == "launch" and "@" in j["contact"]
+    assert [d["key"] for d in j["definitions"] if d.get("on_request")] == SEVEN
+    for ask in ({"modules": {**j["modules"], "PNL": True, "MARKET_RISK": True}}, {"preset": "DEALER"}):
+        r = client.put("/api/modules", json=ask, headers=new)
+        assert r.status_code == 200 and {k for k, v in r.json()["modules"].items() if v} == on, ask
+    assert all({k for k, v in p["modules"].items() if v} == on for p in client.get("/api/modules", headers=new).json()["presets"].values())
+    set_role(NEW_USER, "admin")
+    try:
+        a = client.get("/api/modules", headers=new).json()
+        assert a["on_request"] == [] and all(a["presets"]["DEALER"]["modules"].values())
+    finally:
+        set_role(NEW_USER, "trader")
+

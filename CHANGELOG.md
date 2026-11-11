@@ -3,6 +3,34 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.14). Commits on `main` are the detail.
 
+## 0.23.2 · 11 November 2026
+
+**The hosted demo is the launch set.** Call A of the Phase 1 exit list, asked for by the owner ("we're only going
+live with XVA... we're not gonig to publish capital or margin or pnl or risk", "as recommended", then "do the
+recommendations": the default in code, so nothing has to be set on the host).
+
+- **What a demo holds back by default** is now everything outside the launch set: P&L, market risk, counterparty
+  credit, capital, collateral, the XVA reserves and IPV. Until this release it was capital alone, and a demo
+  user could switch the other six on under Configurations → Modules. They are answered as off and on request to
+  everyone but an administrator, whatever the firm's row says; a save or a preset that asks for one changes
+  nothing; the fullest preset gives a demo user the launch set. Booking, valuation, the XVA tab with every
+  charge, the scenario tab, confirmation, the messenger and the news room are as they were.
+- **The app does not promise a switch that is not there.** The launch home says "P&L, risk and more are on
+  request" where it said "Switch on P&L, risk and more", and the Modules page's note says the modules marked on
+  request are not part of the demo.
+- **The nightly batches follow the firm's own switch, as before** (`modules.runs_batch`). Holding a module hides
+  its pages; it does not stop a batch. The health page's checks for P&L, market risk and counterparty credit read
+  the latest stored day across every account, and stopping them for everyone but an administrator would have
+  turned them red on the first night no administrator's book ran.
+- **What changes for a self-hosted desk.** Nothing where `RIJEKA_DEMO_PROVISION=0`, which is what
+  `docker-compose.yml` sets: nothing is held. An instance that keeps sandboxes (provisioning on, such as a
+  classroom) now holds the seven: set `RIJEKA_HELD_MODULES=NONE` to hold nothing, or `CAPITAL` for what it had.
+- **Stated, unchanged:** the hold is a presentation rule, not an entitlement: a held module's API routes still
+  answer a signed-in user for their own firm; and a held page can show in the browser if the modules answer does
+  not arrive.
+- **Checked:** 1,340 unit and reference tests; 147 integration tests on the local stack (a new workspace on a
+  demo with the default; the mechanism with capital alone, set explicitly); 95 browser journeys, one new.
+
 ## 0.23.0 · 11 November 2026
 
 **The margin on a digital-asset ticket is no longer read low.** First step of finishing the XVA on digital assets,

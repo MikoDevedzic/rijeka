@@ -297,9 +297,9 @@ means every module on in the firm's row, which is what a firm that has never cho
 9 November 2026 started that way); what a user
 is answered is that, less what a demo holds for the admin role (next paragraph).
 
-**Held for the admin role on a demo.** Capital is not part of the hosted demo. `modules.held()` names the modules
-an instance keeps for the admin role: `RIJEKA_HELD_MODULES`, or `modules.ON_REQUEST` (capital) when it is unset; a
-name in it that is not a module key holds the default as well, so a mistake never releases capital.
+**Held for the admin role on a demo.** The hosted demo is the launch set (book, value, the XVA charge, confirm, the messenger): P&L, market risk, counterparty credit, capital, collateral, the XVA reserves and IPV are not part of it. `modules.held()` names the modules
+an instance keeps for the admin role: `RIJEKA_HELD_MODULES`, or `modules.ON_REQUEST` (those seven; capital alone until 0.23.2) when it is unset; a
+name in it that is not a module key holds the default as well, so a mistake never releases a held module.
 Where `RIJEKA_DEMO_PROVISION` is on (the default when the variable is unset), `modules.locked` answers those
 modules for every user without the admin role (`profiles.role`, read on the request; when that read fails, the role
 `verify_token` read up to 30 seconds earlier, else `viewer`; `is_on` has only the user id, so when that read fails

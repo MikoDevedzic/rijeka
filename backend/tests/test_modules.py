@@ -116,10 +116,43 @@ def test_the_launch_view_follows_the_last_preset_chosen_not_the_name_of_the_curr
     assert M.view_for_firm(MagicMock(), "firm") == "full"
 
 
-def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
+SEVEN = ("PNL", "MARKET_RISK", "COUNTERPARTY_CREDIT", "CAPITAL", "COLLATERAL", "XVA_RESERVES", "IPV")
+
+
+def test_a_demo_holds_everything_outside_the_launch_set_unless_it_says_otherwise(monkeypatch):
+    """The owner, 11 November 2026: the hosted demo is the launch set. Until 0.23.2 only capital was held, and a demo
+    user could switch P&L, risk and the rest on himself."""
     from unittest.mock import MagicMock, patch
-    assert M.ON_REQUEST == ("CAPITAL",) and set(M.ON_REQUEST) <= set(M.KEYS) and "@" in M.CONTACT
+    assert M.ON_REQUEST == SEVEN and M.ON_REQUEST == tuple(k for k in M.KEYS if k in SEVEN), "the seven, in the order of MODULES"
+    assert set(M.ON_REQUEST) == set(M.PRESETS["LAUNCH"]["off"]), "what a demo holds is exactly what the launch preset has off"
+    assert {k for k in M.KEYS if k not in M.ON_REQUEST} == {"CHAIN_CONFIRM", "XVA", "PROMETHEUS", "NEWS"}
     monkeypatch.delenv("RIJEKA_HELD_MODULES", raising=False)
+    monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "1")
+    db, user = MagicMock(), {"sub": "u-1"}
+    with patch("api.routes._roles.role_of", return_value="trader"):
+        assert M.held() == SEVEN and M.locked(db, user) == SEVEN
+        assert M.without(M.preset_modules("DEALER"), M.locked(db, user)) == M.preset_modules("LAUNCH"), "the fullest preset gives a demo user the launch set"
+    with patch("api.routes._roles.role_of", return_value="admin"):
+        assert M.locked(db, user) == ()
+    monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "0")
+    with patch("api.routes._roles.role_of", return_value="trader"):
+        assert M.locked(db, user) == (), "a self-hosted desk holds nothing"
+    monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "1")
+    with patch("api.routes._roles.role_of", return_value="trader"):
+        for value, want in (("CAPITAL", ("CAPITAL",)), ("NONE", ()), ("CAPITL", SEVEN), ("0", SEVEN), ("CAPTIAL,NEWS", tuple(k for k in M.KEYS if k in SEVEN + ("NEWS",)))):
+            monkeypatch.setenv("RIJEKA_HELD_MODULES", value)
+            assert M.held() == want and M.locked(db, user) == want, value      # a mistyped name never releases a held module
+    cat = M.catalogue(SEVEN)
+    assert [m["key"] for m in cat["definitions"] if m.get("on_request")] == list(SEVEN)
+    assert all(p["modules"] == M.preset_modules("LAUNCH") for p in cat["presets"].values())
+
+
+def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
+    """The mechanism, on an instance that holds capital alone (the default until 0.23.2, and what
+    RIJEKA_HELD_MODULES=CAPITAL still gives)."""
+    from unittest.mock import MagicMock, patch
+    assert set(M.ON_REQUEST) <= set(M.KEYS) and "@" in M.CONTACT
+    monkeypatch.setenv("RIJEKA_HELD_MODULES", "CAPITAL")
     db, user = MagicMock(), {"sub": "u-1"}
     with patch("api.routes._roles.role_of", return_value="trader") as role:
         monkeypatch.setenv("RIJEKA_DEMO_PROVISION", "0")
@@ -134,7 +167,7 @@ def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
     # an instance that keeps sandboxes says what it holds: nothing, or its own list; a value that names no module holds the default
     with patch("api.routes._roles.role_of", return_value="trader") as role:
         for value, want in (("NONE", ()), ("", ()), (" none ", ()), ("capital, ipv", ("CAPITAL", "IPV")), ("IPV", ("IPV",)), ("NONE,IPV", ("IPV",)),
-                            ("CAPITL", ("CAPITAL",)), ("CAPTIAL,PNL", ("PNL", "CAPITAL")), ("0", ("CAPITAL",)), ("*", ("CAPITAL",))):      # a mistyped name never releases capital
+                            ("CAPITL", SEVEN), ("CAPTIAL,PNL", SEVEN), ("0", SEVEN), ("*", SEVEN)):      # a mistyped name never releases what the default holds
             monkeypatch.setenv("RIJEKA_HELD_MODULES", value)
             assert M.held() == want and M.locked(db, user) == want, value
         monkeypatch.setenv("RIJEKA_HELD_MODULES", "NONE")
@@ -142,6 +175,7 @@ def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
         assert M.locked(db, user) == () and not role.called
     monkeypatch.delenv("RIJEKA_HELD_MODULES")
     assert M.held() == M.ON_REQUEST
+    monkeypatch.setenv("RIJEKA_HELD_MODULES", "CAPITAL")                          # back to the instance this test is about
     # off, whatever the firm's row or a preset says; nothing else moves
     assert M.without(M.all_on(), ("CAPITAL",)) == {**M.all_on(), "CAPITAL": False} and M.without(M.all_on(), ()) == M.all_on()
     assert M.without(M.preset_modules("LAUNCH"), ("CAPITAL",)) == M.preset_modules("LAUNCH")
@@ -158,9 +192,12 @@ def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
     monkeypatch.setattr(M, "firm_of_user", lambda db, uid: "firm")
     monkeypatch.setattr(M, "for_firm", lambda db, firm_id: {"modules": {**M.all_on(), "IPV": False}, "preset": "DEALER", "source": "firm"})
     monkeypatch.setattr(M, "locked", lambda db, user: asked.append(user["sub"]) or (("CAPITAL",) if user["sub"] == "demo" else ()))
-    assert M.is_on(db, "demo", "PNL") is True and M.is_on(db, "demo", "IPV") is False and asked == []      # the nightly ticks cost what they did
+    assert M.is_on(db, "demo", "PNL") is True and M.is_on(db, "demo", "IPV") is False and asked == []      # a module that is not held: the role is not read
     assert M.is_on(db, "demo", "CAPITAL") is False and M.is_on(db, "boss", "CAPITAL") is True and asked == ["demo", "boss"]
     assert M.for_user(db, "demo")["modules"]["CAPITAL"] is True                                           # the row, as it is
+    # a batch follows the row alone: a held module's batch still runs, and no role is read for it
+    asked.clear()
+    assert M.runs_batch(db, "demo", "CAPITAL") is True and M.runs_batch(db, "demo", "PNL") is True and M.runs_batch(db, "demo", "IPV") is False and asked == []
 
 
 def test_someone_capital_is_held_from_can_never_switch_it_on_and_only_a_preset_switches_it_off(monkeypatch):

@@ -331,7 +331,7 @@ def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Hea
     import modules as M
     for uid in users:
         try:
-            if not M.is_on(db, uid, "MARKET_RISK"):
+            if not M.runs_batch(db, uid, "MARKET_RISK"):
                 skipped.append(uid[:8] + " (module off)"); continue
             md = _market_date(db, uid)
             if md is not None and R.stored_report(db, uid, md) is not None:

@@ -5,7 +5,7 @@
 // the usual shapes of a firm; every change is an audit row. GET /api/modules; PUT for whoever may
 // switch (an admin, or the owner of a sandbox workspace: can_edit in the answer). The route in App.jsx
 // lets the same people in; nothing here looks at the role. A module the hosted demo holds back (on_request in
-// the answer: capital) is shown as available on request with the address to write to, and cannot be switched.
+// the answer: on the hosted demo everything outside the launch set) is shown as available on request with the address to write to, and cannot be switched.
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
@@ -59,7 +59,9 @@ export default function ModulesPage() {
           {view && <span className={`pnl-chip ${view.writable ? 'ok' : 'red'}`}>{view.writable ? (view.source === 'firm' ? `PRESET ${view.preset || 'CUSTOM'}` : held.length ? 'DEFAULT · NOTHING CHOSEN' : 'DEFAULT · EVERYTHING ON') : 'MIGRATION PENDING'}</span>}
         </div>
       </div>
-      {launch && <div className="pnl-empty" style={{ padding: 0, maxWidth: 980 }}>This workspace is on the launch view. Switch a module on below and its pages appear; nothing is deleted when you switch one off. Choosing a full preset such as Dealer also brings back the full home page and the model inputs on the XVA tab.</div>}
+      {launch && <div className="pnl-empty" data-testid="modules-launch-note" style={{ padding: 0, maxWidth: 980 }}>{defs.some(d => !d.planned && !held.includes(d.key) && view?.modules?.[d.key] === false)
+        ? 'This workspace is on the launch view. Switch a module on below and its pages appear; nothing is deleted when you switch one off. Choosing a full preset such as Dealer also brings back the full home page and the model inputs on the XVA tab.'
+        : 'This workspace is on the launch view: book, value, the XVA charge and its saving on chain, confirm. The modules marked on request below are not part of this demo. Choosing a full preset such as Dealer brings back the full home page and the model inputs on the XVA tab.'}</div>}
       {err && <div className="pnl-err">{err}</div>}
       {!view && !err && <div className="pnl-empty">Loading…</div>}
       {view && (<>
