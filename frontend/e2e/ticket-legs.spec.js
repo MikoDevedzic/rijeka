@@ -124,6 +124,7 @@ test('a strip of forwards: built on DETAILS, each leg priced, a strike and a sid
 
 test('a package that is refused books nothing: no leg stands on its own, and the ticket says so', async ({ app, problems }) => {
   await app.goto('/blotter')
+  await expect(app.locator('.bl-row').first(), 'the blotter has its trades before they are counted').toBeVisible()
   const before = await app.locator('.bl-row').count()
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
