@@ -74,6 +74,28 @@ brass rule. In a rail of filters (the blotter's left pane) a section's heading i
 reads as their heading by weight, the bright text colour and a rule above it; the choices sit a step in, in the
 quieter colour, and the selected one is the lighter panel with the brass rule at its edge.
 
+## Buttons, fields, rows
+
+Three things a user does to the screen, each with one look everywhere (`index.css`, the block "What can be
+pressed, typed into or pointed at"; tokens `--btn-*`, `--fld-*`, `--row-*`).
+
+- **A button is raised.** A lighter face than the panel it stands on, a bright edge, bright text, a darker foot
+  under it; it lifts under the pointer and goes down onto the foot when pressed. Brass is still the one action of
+  a view and stands on the same foot. A button whose colour says something (BUY or SELL, a selected mode, a
+  warning) keeps its colour and gains only the foot and the lift (`rj-press`). An icon or a link with no edge is
+  not a button in this sense and has neither.
+- **A field is a well.** Lighter than the panel, with the field's own edge; lighter still under the pointer; a
+  brass ring and its lightest fill while it is typed in. The fill is set for every input, select and textarea
+  wherever it is, so a new field needs nothing to look right. A value that is computed, or a field that cannot
+  be changed, has no well: what can be typed and what cannot are told apart at a glance. Dashes still mean "this
+  is the default: type over it"; amber still means "this cannot be read".
+- **A row answers the pointer.** The row under it is a band with a limestone rule at its left edge; the cell
+  under it a shade lighter; on the blotter its text comes to full strength. The selected row is the brass band
+  with the brass rule. This is every `tbody tr`, so a new table needs nothing.
+
+A new button takes a class the rules already name (`btn`, `pnl-btn`, `tbw-btn`, `mr-btn`, `doc-btn`) or
+`rj-btn`; it is not styled inline with a see-through background.
+
 ## The methodology
 
 A syllabus rail, one reading column of about seventy characters, the evidence for the section beside it

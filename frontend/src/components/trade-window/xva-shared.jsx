@@ -32,7 +32,7 @@ export function TipLabel({ tipKey, tip = noop, untip = noop, style, children }) 
 export function XvaViewToggle({ view, setView }) {
   const simple = view === 'simple'
   return (
-    <button data-testid="xva-view-toggle" aria-expanded={!simple} onClick={() => setView(simple ? 'advanced' : 'simple')}
+    <button className="rj-btn" data-testid="xva-view-toggle" aria-expanded={!simple} onClick={() => setView(simple ? 'advanced' : 'simple')}
       style={{alignSelf:'flex-end',flexShrink:0,background:'transparent',border:'1px solid var(--border)',color:'var(--text-mute)',fontFamily:'var(--sans)',fontSize:'0.7rem',fontWeight:500,letterSpacing:'0.07em',padding:'3px 8px',borderRadius:'var(--r-1)',cursor:'pointer'}}>
       {simple ? 'SHOW MODEL INPUTS' : 'HIDE MODEL INPUTS'}
     </button>
@@ -103,11 +103,11 @@ export function ModelBadge({ kind = 'ok', tipKey, tip = noop, untip = noop, chil
 export function SimulateButtons({ simulating, hasResult, disabled = false, label = '▶ SIMULATE', onSimulate, onReroll }) {
   return (
     <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
-      <button onClick={onSimulate} disabled={simulating || disabled} data-action="simulate" aria-keyshortcuts={ariaKey('xva')}
+      <button className="rj-press" onClick={onSimulate} disabled={simulating || disabled} data-action="simulate" aria-keyshortcuts={ariaKey('xva')}
         style={{flex:2,padding:'8px',fontSize:'0.8125rem',fontWeight:600,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'var(--r-2)',fontFamily:'var(--sans)',border:'1px solid var(--accent-dim)',background:'rgb(var(--accent-rgb) / 0.08)',color:'var(--accent-hi)',opacity:simulating?0.5:1}}>
         {simulating?'SIMULATING...':label}{!simulating && !disabled && <Keycap id="xva" />}
       </button>
-      <button onClick={onReroll} disabled={simulating || disabled || !hasResult}
+      <button className="rj-press" onClick={onReroll} disabled={simulating || disabled || !hasResult}
         title="The same model with fresh random numbers: the numbers move within the Monte Carlo error and settle as you raise PATHS"
         style={{flex:1,padding:'8px',fontSize:'0.8125rem',fontWeight:500,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'var(--r-2)',fontFamily:'var(--sans)',border:'1px solid var(--border-hi)',background:'transparent',color:hasResult?'var(--text-dim)':'var(--text-faint)',opacity:simulating?0.5:1}}>
         RE-ROLL
@@ -194,7 +194,7 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
       <div onMouseEnter={e=>tip('settlement',e)} onMouseLeave={untip}
         style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'3px',marginBottom:'6px'}}>
         {SETTLEMENT_PRESETS.map(([k,label,c])=>(
-          <button key={k} onClick={()=>{ setSettlement(k); setImExchanged(k!=='UNCOLLATERALISED') }}
+          <button className="rj-press" key={k} onClick={()=>{ setSettlement(k); setImExchanged(k!=='UNCOLLATERALISED') }}
             style={{padding:'7px 2px',fontSize:'0.75rem',fontWeight:500,letterSpacing:'0.06em',cursor:'pointer',borderRadius:'var(--r-2)',
               fontFamily:'var(--sans)',
               border:settlement===k?'1px solid var(--border-glow)':'1px solid var(--border)',
@@ -263,7 +263,7 @@ function CollateralBlock({ collateral, setCollateral, instruments, scheduleColla
       <div style={{display:'flex',gap:'8px',alignItems:'center',marginTop:'4px',fontSize:'0.75rem',color:'var(--text-mute)',fontFamily:'var(--mono)'}}>
         <span>carry over OIS · posted {carryFmt(carryOf(collateral?.posted))} · received {carryFmt(carryOf(collateral?.received))}</span>
         {scheduleCollateral && !fromSchedule && (
-          <button onClick={() => setCollateral({ ...scheduleCollateral, source: 'SCHEDULE' })}
+          <button className="rj-btn" onClick={() => setCollateral({ ...scheduleCollateral, source: 'SCHEDULE' })}
             style={{marginLeft:'auto',background:'transparent',border:'1px solid var(--border-hi)',color:'var(--text-dim)',fontFamily:'var(--sans)',fontSize:'0.7rem',letterSpacing:'0.05em',padding:'3px 7px',borderRadius:'var(--r-1)',cursor:'pointer'}}>
             COUNTERPARTY'S SCHEDULE
           </button>

@@ -41,7 +41,7 @@ export default function IpvTolerances() {
     setBusy(true); setErr(null)
     try { const j = await api(`/api/ipv/tolerances/${id}`, { method: 'DELETE' }); setView(v => ({ ...v, rules: j.rules })) } catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
-  const inp = { background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', padding: '6px 8px', borderRadius: 2, fontFamily: 'var(--mono)', fontSize: 12 }
+  const inp = { background: 'var(--bg)', border: '1px solid var(--fld-bd)', color: 'var(--text)', padding: '6px 8px', borderRadius: 2, fontFamily: 'var(--mono)', fontSize: 12 }
   return (
     <div className="pnl">
       <div className="pnl-bar">

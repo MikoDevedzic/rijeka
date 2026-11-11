@@ -309,7 +309,7 @@ function CashflowsBody({ quote, crypto, pkg = null }) {
   const at = shown.of === pkg.n ? shown.leg : 0              // a leg added or removed: back to the package, not to whichever leg now has that number
   const setShow = (leg) => setShown({ of: pkg.n, leg })
   const chip = (n, text) => (
-    <button key={n} type="button" data-testid={n ? `fx-cf-show-leg-${n}` : 'fx-cf-show-package'} aria-pressed={at === n} onClick={() => setShow(n)}
+    <button className="rj-press" key={n} type="button" data-testid={n ? `fx-cf-show-leg-${n}` : 'fx-cf-show-package'} aria-pressed={at === n} onClick={() => setShow(n)}
       style={{ padding: '4px 10px', borderRadius: 'var(--r-2)', border: `1px solid ${at === n ? 'var(--border-glow)' : 'var(--border)'}`, background: at === n ? 'var(--panel-3)' : 'transparent',
         color: at === n ? 'var(--text-hi)' : 'var(--text-dim)', fontFamily: 'var(--sans)', fontSize: 11.5, fontWeight: 500, letterSpacing: '0.06em', cursor: 'pointer' }}>{text}</button>
   )
@@ -354,7 +354,7 @@ function PackageCashflows({ pkg, crypto, onLeg }) {
           Every leg is a trade of its own, priced by the engine; the package's figures are their sums, in {qc}. A forward is shown at what it would settle if the fixing were today's
           fair forward, (F − K) × N; an option at its payoff at today's forward, which, discounted, is its value less the time value. Nothing here is priced a second way.
         </Note>
-        <button type="button" style={toolBtn} data-testid="fx-cf-export" title="Every leg, the dates on which money moves and the market each leg was priced on, as an Excel workbook"
+        <button className="rj-btn" type="button" style={toolBtn} data-testid="fx-cf-export" title="Every leg, the dates on which money moves and the market each leg was priced on, as an Excel workbook"
           onClick={() => exportPackageCashflows({ quotes: pkg.quotes, flows: f, crypto, dp })}>EXPORT XLSX</button>
       </div>
       <div style={{ ...tiles, gridTemplateColumns: `repeat(${anyOption ? 4 : 3}, minmax(0, 1fr))` }}>
@@ -474,7 +474,7 @@ function LegCashflows({ quote, crypto }) {
             {quote.settlement_type === 'NON_DELIVERABLE' ? `Cash-settled in ${quote.quote_currency} against the fixing.` : `Deliverable: on exercise ${fmt(quote.base_notional, 0)} ${quote.base_currency} against ${fmt(quote.quote_notional)} ${quote.quote_currency} on the settlement date.`}
             {' '}The option's value is the discounted expected payoff under the forward's lognormal distribution at {fmt(quote.vol_pct, 2)}% vol, which is the engine's Garman–Kohlhagen figure.
           </Note>
-          <button type="button" style={toolBtn} data-testid="fx-cf-export" title="The flows and the market they were priced on, as an Excel workbook"
+          <button className="rj-btn" type="button" style={toolBtn} data-testid="fx-cf-export" title="The flows and the market they were priced on, as an Excel workbook"
             onClick={() => exportCashflows({ quote, crypto, dp, option: { premium, payoffName: payoutStyle ? 'PAYOUT AT TODAY\'S FORWARD' : 'PAYOFF AT TODAY\'S FORWARD', intrinsic, df: quote.df_quote } })}>EXPORT XLSX</button>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -519,7 +519,7 @@ function LegCashflows({ quote, crypto }) {
                : `Deliverable: both principals exchange on the value date. Both legs are expressed in ${qc} at today's fair forward ${fmt(F, dp)} and discounted on the ${qc} curve.`}
           {' '}Matches the engine's NPV of {fmt(quote.npv)} {qc} within rounding.
         </Note>
-        <button type="button" style={toolBtn} data-testid="fx-cf-export" title="The legs, their net and the market they were priced on, as an Excel workbook"
+        <button className="rj-btn" type="button" style={toolBtn} data-testid="fx-cf-export" title="The legs, their net and the market they were priced on, as an Excel workbook"
           onClick={() => exportCashflows({ quote, crypto, ndf, dp, legs, net, pv })}>EXPORT XLSX</button>
       </div>
       <div style={tiles}>
@@ -1035,7 +1035,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
 
   // ── the left column ──
   const curveBtn = (c) => (
-    <button key={c.key} type="button" data-testid={`fx-scn-curve-${c.key}`} aria-pressed={c.key === cur.key} onClick={() => setSel(c.key)}
+    <button className="rj-press" key={c.key} type="button" data-testid={`fx-scn-curve-${c.key}`} aria-pressed={c.key === cur.key} onClick={() => setSel(c.key)}
       style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: 8, alignItems: 'center', width: '100%', padding: '8px 10px', marginBottom: 6, textAlign: 'left', cursor: 'pointer',
         borderRadius: 'var(--r-2)', border: `1px solid ${c.key === cur.key ? 'var(--border-glow)' : 'var(--border)'}`, background: c.key === cur.key ? 'var(--panel-3)' : 'transparent',
         color: c.key === cur.key ? 'var(--text-hi)' : 'var(--text-dim)', fontFamily: 'var(--sans)', fontSize: 12, fontWeight: 500, letterSpacing: '0.04em' }}>
@@ -1047,7 +1047,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
       <span data-testid={`fx-scn-says-${c.key}`} style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 400, letterSpacing: 0, color: c.says === '—' ? 'var(--text-mute)' : 'var(--text-hi)', whiteSpace: 'nowrap' }}>{c.says}</span>
     </button>
   )
-  const inputBox = { background: 'var(--bg)', color: 'var(--text-hi)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '5px 7px', fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', width: '100%' }
+  const inputBox = { background: 'var(--bg)', color: 'var(--text-hi)', border: '1px solid var(--fld-bd)', borderRadius: 'var(--r-2)', padding: '5px 7px', fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', width: '100%' }
   const setBox = { borderColor: 'var(--accent-dim)', boxShadow: 'inset 0 -2px 0 var(--accent)' }
   // the box shows what is applied: a value out of bounds comes back clamped, text that is not a number comes back as it was
   const commit = (e, apply, was, show) => { const v = typedNumber(e.target.value); e.target.value = show(v == null ? was : apply(v)) }

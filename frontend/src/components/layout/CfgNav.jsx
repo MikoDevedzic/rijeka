@@ -356,7 +356,7 @@ function SnapAllButton({ role }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
-      <button
+      <button className="rj-press"
         onClick={runSnap}
         disabled={isRunning}
         style={{

@@ -105,7 +105,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
           </div>
           <ModelBadge kind="muted">CDS, LGD and the funding spread are the credit engine's settings (Risk → Credit); the exposure paths are its risk-neutral paths, seed 7, so the figures tie to the book's reserves.</ModelBadge>
 
-          <button onClick={run} disabled={busy || !!reason} title={reason || undefined}
+          <button className="rj-press" onClick={run} disabled={busy || !!reason} title={reason || undefined}
             style={{ width: '100%', padding: '7px', ...mono, fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: busy || reason ? 'default' : 'pointer',
               background: 'rgba(217,178,92,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1, marginBottom: 6 }}>
             {busy ? 'RUNNING…' : res ? 'RECOMPUTE' : '▶ CAPITAL UNDER EVERY REGIME'}

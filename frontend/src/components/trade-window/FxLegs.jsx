@@ -25,7 +25,7 @@ const KIND = { FWD: 'FORWARD', CALL: 'CALL', PUT: 'PUT', TOUCH: 'TOUCH' }
 const lbl = { fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', color: 'var(--text-mute)', fontFamily: 'var(--sans)' }
 const th = { ...lbl, textAlign: 'right', padding: '7px 5px', background: 'var(--panel)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }
 const td = { fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right', padding: '4px 5px', borderBottom: '1px solid var(--border)', color: 'var(--text)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }
-const box = { background: 'var(--bg)', color: 'var(--text-hi)', border: '1px solid var(--border)', borderRadius: 'var(--r-2)', padding: '5px 7px', fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right' }
+const box = { background: 'var(--bg)', color: 'var(--text-hi)', border: '1px solid var(--fld-bd)', borderRadius: 'var(--r-2)', padding: '5px 7px', fontFamily: 'var(--mono)', fontSize: 12.5, textAlign: 'right' }
 const pick = { ...box, fontFamily: 'var(--sans)', textAlign: 'left', padding: '5px 4px', cursor: 'pointer' }
 const brass = { borderColor: 'var(--accent-dim)', boxShadow: 'inset 0 -2px 0 var(--accent)' }
 const tool = { padding: '5px 10px', border: '1px solid var(--border-hi)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--text-dim)', fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', cursor: 'pointer' }
@@ -170,12 +170,12 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
         </span>}
         {!locked && (
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button type="button" style={{ ...tool, color: 'var(--text-hi)', borderColor: 'var(--border-glow)' }} data-testid="fx-legs-add" onClick={() => setLegs([...legs, nextLeg(first, legs)])}>+ ADD LEG</button>
-            {vanilla && <button type="button" style={tool} data-testid="fx-legs-other" title={`The other of call and put on the other side, the same date and size, its strike as far from the forward: a ${otherName.toLowerCase()}`} onClick={() => pair('OTHER')}>{otherName}</button>}
-            {vanilla && <button type="button" style={tool} data-testid="fx-legs-straddle" title="The other of call and put on the same side, at the same strike and date" onClick={() => pair('STRADDLE')}>STRADDLE</button>}
-            {vanilla && <button type="button" style={tool} data-testid="fx-legs-calendar" title="The same option a month later, on the other side" onClick={() => pair('CALENDAR')}>CALENDAR</button>}
-            {[3, 6, 12].map(n => <button key={n} type="button" style={tool} data-testid={`fx-legs-strip-${n}`} title={`One leg each month for ${n} months, starting with the ticket's own, each at its fair forward`} onClick={() => setLegs(stripLegs(first, n))}>STRIP × {n}</button>)}
-            {several && <button type="button" style={tool} data-testid="fx-legs-clear" onClick={() => setLegs([])}>ONE LEG</button>}
+            <button className="rj-btn" type="button" style={{ ...tool, color: 'var(--text-hi)', borderColor: 'var(--border-glow)' }} data-testid="fx-legs-add" onClick={() => setLegs([...legs, nextLeg(first, legs)])}>+ ADD LEG</button>
+            {vanilla && <button className="rj-btn" type="button" style={tool} data-testid="fx-legs-other" title={`The other of call and put on the other side, the same date and size, its strike as far from the forward: a ${otherName.toLowerCase()}`} onClick={() => pair('OTHER')}>{otherName}</button>}
+            {vanilla && <button className="rj-btn" type="button" style={tool} data-testid="fx-legs-straddle" title="The other of call and put on the same side, at the same strike and date" onClick={() => pair('STRADDLE')}>STRADDLE</button>}
+            {vanilla && <button className="rj-btn" type="button" style={tool} data-testid="fx-legs-calendar" title="The same option a month later, on the other side" onClick={() => pair('CALENDAR')}>CALENDAR</button>}
+            {[3, 6, 12].map(n => <button className="rj-btn" key={n} type="button" style={tool} data-testid={`fx-legs-strip-${n}`} title={`One leg each month for ${n} months, starting with the ticket's own, each at its fair forward`} onClick={() => setLegs(stripLegs(first, n))}>STRIP × {n}</button>)}
+            {several && <button className="rj-btn" type="button" style={tool} data-testid="fx-legs-clear" onClick={() => setLegs([])}>ONE LEG</button>}
           </span>
         )}
       </div>
@@ -208,7 +208,7 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
                     : sel(r, 'style', 'Style', LEG_STYLES.map(s => [s, words(s)]), 124, v => reshape(r, { style: v }))}</td>
                   <td style={{ ...td, ...noLine, textAlign: 'left' }}>
                     {fixed ? <span style={{ ...sideBtn(sell, true), display: 'inline-block', textAlign: 'center' }}>{r.direction}</span>
-                           : <button type="button" style={sideBtn(sell)} aria-label={`Side of leg ${r.n}`} onClick={() => set(r.id, { direction: sell ? 'BUY' : 'SELL' })}>{r.direction}</button>}
+                           : <button className="rj-press" type="button" style={sideBtn(sell)} aria-label={`Side of leg ${r.n}`} onClick={() => set(r.id, { direction: sell ? 'BUY' : 'SELL' })}>{r.direction}</button>}
                   </td>
                   <td style={{ ...td, ...noLine }}>{payoutStyle ? <span style={{ color: 'var(--text-mute)' }}>—</span> : fixed ? fmt(r.notional, nDp) : numIn(r, 'notional', 'Notional', 78, r.notional % 1 ? 4 : 0)}</td>
                   <td style={{ ...td, ...noLine }}>{fixed ? r.date

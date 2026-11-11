@@ -86,7 +86,7 @@ export default function Users() {
               Manage access levels and AI permissions
             </p>
           </div>
-          <button onClick={fetchUsers} style={{
+          <button className="rj-btn" onClick={fetchUsers} style={{
             background:'transparent', border:'1px solid var(--border)', color:'var(--text-dim)',
             ...mono, fontSize:'1rem', fontWeight:700, letterSpacing:'0.1em',
             padding:'0.35rem 0.85rem', borderRadius:2, cursor:'pointer',
@@ -245,7 +245,7 @@ export default function Users() {
                     {/* Actions */}
                     <td style={{ padding:'0.65rem 1.25rem' }}>
                       {!isMe && (
-                        <button
+                        <button className="rj-press"
                           onClick={() => toggleActive(u.id, u.is_active !== false)}
                           disabled={isSaving}
                           style={{

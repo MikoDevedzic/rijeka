@@ -85,7 +85,7 @@ export default function IncrementalXva({ counterpartyId, counterpartyName, build
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <button onClick={run} disabled={busy || !!reason} title={reason || undefined}
+        <button className="rj-press" onClick={run} disabled={busy || !!reason} title={reason || undefined}
           style={{ padding: '7px 14px', ...mono, fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: busy || reason ? 'default' : 'pointer',
             background: 'rgba(217,178,92,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1 }}>
           {busy ? 'RUNNING…' : res ? 'RECOMPUTE' : legs > 1 && !view ? 'CHARGE THIS PACKAGE' : 'CHARGE THIS TRADE'}

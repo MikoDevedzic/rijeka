@@ -25,7 +25,7 @@ async function api(path, opts = {}) {
 const EMPTY = { code: '', name: '', cls: 'FUND_SHARES_TOKENISED', currency: 'USD', issuer: '', rail: 'on_chain', yield_kind: 'FIXED', yield_ref: '', yield_bp: '',
   chain_id: '', token_address: '', csa_haircut_pct: '', active: true, note: '' }
 const CURVES = ['USD_SOFR', 'EUR_ESTR', 'GBP_SONIA', 'JPY_TONAR', 'CHF_SARON', 'AUD_AONIA', 'CAD_CORRA']
-const inp = { background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text)', padding: '5px 8px', borderRadius: 2, fontFamily: 'var(--mono)', fontSize: 12, width: '100%', boxSizing: 'border-box' }
+const inp = { background: 'var(--bg)', border: '1px solid var(--fld-bd)', color: 'var(--text)', padding: '5px 8px', borderRadius: 2, fontFamily: 'var(--mono)', fontSize: 12, width: '100%', boxSizing: 'border-box' }
 const lbl = { display: 'block', fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 3 }
 const fmtBp = (v) => v == null ? '—' : `${v >= 0 ? '' : '−'}${Math.abs(v).toFixed(0)} bp`
 const GRID = '7rem 1fr 11rem 4rem 7rem 5.5rem 9rem 6rem 7rem'

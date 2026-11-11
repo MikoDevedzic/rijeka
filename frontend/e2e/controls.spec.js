@@ -1,0 +1,62 @@
+// What can be pressed, typed into or pointed at looks like it (docs/design.md, "Buttons, fields, rows"): a
+// button is raised, a field is a lighter well with a brass ring while it is typed in, a row answers the pointer.
+// Read from the computed style, on the ticket, the blotter and a page of each other family of button.
+import { test, expect, expectClean } from './fixtures.js'
+
+const selectDemoBank = (app, win) => win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
+const css = (loc, prop) => loc.evaluate((el, p) => getComputedStyle(el)[p], prop)
+const RAISED = 'rgb(33, 73, 63)', WELL = 'rgb(26, 58, 51)', WELL_FOCUS = 'rgb(34, 74, 65)', BAND = 'rgb(27, 61, 53)', BRASS_HI = 'rgb(241, 212, 136)'
+
+test('buttons are raised, fields are wells with a ring in focus, and the row under the pointer is lit', async ({ app, problems }) => {
+  // the blotter: the trade under the pointer is a band with a rule at its edge; the search box is a well
+  await app.goto('/blotter')
+  const row = app.locator('.bl-row').nth(1)
+  await expect(row).toBeVisible()
+  expect(await css(row, 'backgroundColor'), 'a row at rest has no band').not.toBe(BAND)
+  await row.hover()
+  await expect.poll(() => css(row, 'backgroundColor')).toBe(BAND)
+  expect(await css(row, 'boxShadow'), 'and a rule at its edge').toMatch(/inset/)
+  expect(await css(app.locator('.bl-search'), 'backgroundColor')).toBe(WELL)
+
+  // the ticket: the legs' buttons are raised and go down when pressed; a strike is a well, ringed in brass while typed in
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await selectDemoBank(app, win)
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value')), { timeout: 30_000 }).toBeGreaterThan(0)
+  expect(await css(win.locator('select').first(), 'backgroundColor'), 'a choice on TRADE is a well').toBe(WELL)
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  const add = win.getByTestId('fx-legs-add')
+  expect(await css(add, 'backgroundColor')).toBe(RAISED)
+  expect(await css(add, 'boxShadow'), 'it stands on a foot').not.toBe('none')
+  await add.hover()
+  await expect.poll(() => css(add, 'backgroundColor'), { message: 'it lifts under the pointer' }).not.toBe(RAISED)
+  await add.click()
+  const strike = win.getByTestId('fx-leg').nth(0).getByLabel('Strike of leg 2')
+  await app.mouse.move(5, 5)
+  expect(await css(strike, 'backgroundColor')).toBe(WELL)
+  await strike.focus()
+  expect(await css(strike, 'backgroundColor')).toBe(WELL_FOCUS)
+  expect(await css(strike, 'outlineColor')).toBe(BRASS_HI)
+  expect(await css(strike, 'outlineStyle')).toBe('solid')
+  // the row of a leg answers the pointer too
+  const leg = win.getByTestId('fx-leg').nth(0)
+  await leg.hover()
+  await expect.poll(() => css(leg, 'backgroundColor')).toBe(BAND)
+  // brass is still the one action, and PRICE is an ordinary button
+  expect(await css(win.locator('.tbw-btn-book'), 'backgroundColor')).toBe('rgb(217, 178, 92)')
+  expect(await css(win.locator('.tbw-btn-price'), 'backgroundColor')).toBe(RAISED)
+  await win.locator('.tbw-light-r').click()
+
+  // the other families: a P&L button, a workbook button, the methodology's own
+  await app.goto('/pnl')
+  const pnl = app.locator('.pnl-btn:not(.ghost)').first()
+  await expect(pnl).toBeVisible()
+  expect(await css(pnl, 'backgroundColor')).toBe(RAISED)
+  await app.goto('/methodology/replications')
+  const doc = app.locator('.doc-btn').first()
+  await expect(doc).toBeVisible({ timeout: 20_000 })
+  expect(await css(doc, 'backgroundColor')).toBe(RAISED)
+  expect(await css(app.locator('.mr-btn').first(), 'backgroundColor')).toBe(RAISED)
+  expectClean(problems)
+})

@@ -99,7 +99,7 @@
   display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text);
   border-bottom: 1px solid var(--border); border-left: 2px solid transparent; padding: 9px 12px; cursor: pointer; font-family: inherit;
 }
-.ms-conv:hover  { background: var(--panel); }
+.ms-conv:hover  { background: var(--row-hover); box-shadow: inset 3px 0 0 var(--row-rule); }
 .ms-conv.active { background: var(--panel-2); border-left-color: var(--accent); }
 .ms-conv.prom.active { border-left-color: #f1d488; }
 .ms-conv.invite { background: rgba(233,151,90,0.05); }

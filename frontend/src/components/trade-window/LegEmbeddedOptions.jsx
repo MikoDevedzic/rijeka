@@ -203,7 +203,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
         )}
         <div style={addMenuStyle}>
           {TYPE_OPTIONS.map(t => (
-            <button
+            <button className="rj-btn"
               key={t}
               type="button"
               style={addBtnStyle}
@@ -243,7 +243,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
             {/* Direction chips */}
             <div style={{ display: 'flex', gap: 4 }}>
               {DIRECTION_OPTIONS.map(d => (
-                <button
+                <button className="rj-press"
                   key={d}
                   type="button"
                   style={dirChipStyle(dir === d, d === 'SELL')}
@@ -260,7 +260,7 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
             </div>
 
             {/* Remove */}
-            <button
+            <button className="rj-btn"
               type="button"
               style={removeBtnStyle}
               onClick={() => removeEntry(idx)}

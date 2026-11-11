@@ -298,7 +298,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           </div>
           <div onMouseEnter={e => tip('fxVolMode', e)} onMouseLeave={untip} style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
             {VOL_MODES.map(([k, label]) => (
-              <button key={k} onClick={() => setVolMode(k)} title={MODE_TITLE[k]}
+              <button className="rj-press" key={k} onClick={() => setVolMode(k)} title={MODE_TITLE[k]}
                 style={{ flex:1, padding:'4px 0', fontSize:'0.7rem', fontWeight:700, letterSpacing:'0.08em', fontFamily:'var(--mono)', cursor:'pointer', background: volMode === k ? 'rgba(217,178,92,0.06)' : 'transparent', borderRadius:'2px',
                   border: volMode === k ? '1px solid var(--border-glow)' : '1px solid var(--border)', color: volMode === k ? 'var(--text-hi)' : 'var(--text-dim)' }}>{label}</button>
             ))}

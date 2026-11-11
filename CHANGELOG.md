@@ -3,6 +3,26 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
+## 0.21.0 · 11 November 2026
+
+**What can be pressed, typed into or pointed at looks like it, across the app.**
+
+- **A button is raised**: a lighter face, a bright edge, a darker foot, and it goes down when pressed. Until now an
+  ordinary button was see-through with a faint edge and dim text, and read as a label (+ ADD LEG on DETAILS was the
+  example). Brass stays for the one action of a view (BOOK, + NEW TRADE).
+- **A field is a lighter well**: every box that is typed into or chosen from, on every page. It brightens under
+  the pointer and takes a brass ring while it is typed in. What is computed or cannot be changed has no well, so a
+  typed value and a computed one no longer look alike. A field that is amber because it cannot be read stays amber.
+- **A row answers the pointer**: the trade under it is a band with a rule at its edge and its text at full
+  strength, on the blotter and in every table; the cell under the pointer is a shade lighter; the selected trade
+  is brass. (The blotter did highlight a row before, by one barely visible step.)
+- How: three sets of tokens and one block of rules in `index.css` (`--btn-*`, `--fld-*`, `--row-*`). The families
+  of button class the app has take the rules directly; the 92 buttons styled inline carry one of two classes
+  (`rj-btn`: the whole look; `rj-press`: the foot and the lift only, for a button whose colour says something: a
+  side, a selected state, a warning). Icons and links without an edge are left as they are.
+- Not changed: the sign-in pages (their own scene) and the certificate (paper). Tabs and the rail's filters keep
+  their look; a chip that is not selected has a clearer edge.
+
 ## 0.20.0 · 10 November 2026
 
 **The methodology is read in the app.** The Methodology page was a list of download buttons under a link to a PDF.

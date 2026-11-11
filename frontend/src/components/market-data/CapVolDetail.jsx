@@ -232,7 +232,7 @@ function CapInstruments() {
             color: 'var(--text)', fontFamily: "'IBM Plex Mono',var(--mono)",
             fontSize: '1rem', padding: '0.25rem 0.45rem', borderRadius: 2, outline: 'none' }}
         />
-        <button
+        <button className="rj-press"
           onClick={snapSurface}
           disabled={snapLoading}
           style={{ padding: '0.25rem 0.85rem', background: 'rgba(217,178,92,0.07)',

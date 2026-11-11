@@ -95,8 +95,10 @@
   cursor: pointer;   /* no fade on the highlight: it lands in the same frame as the pointer; a 0.1 s fade left a trail
                         of half-lit rows behind a moving pointer and four times the painting */
 }
-.bl-row:hover { background: var(--panel); }
-.bl-row-selected { background: rgb(var(--accent-rgb) / 0.06) !important; }
+/* the trade under the pointer: a band, a rule at its edge, its text at full strength; the selected one in brass */
+.bl-row:hover { background: var(--row-hover); box-shadow: inset 3px 0 0 var(--row-rule); }
+.bl-row:hover td { color: var(--text-hi); }
+.bl-row-selected { background: var(--row-sel) !important; box-shadow: inset 3px 0 0 var(--accent) !important; }
 .bl-table td { height: 32px; padding: 0 8px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bl-td-ref { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text-hi); }
 .bl-td-dim         { color: var(--text-dim) !important; }

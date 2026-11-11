@@ -49,7 +49,7 @@ function getAllDescendants(flat, parentId) {
 function Btn({ color, onClick, title, children }) {
   const [hover, setHover] = useState(false)
   return (
-    <button onClick={onClick} title={title}
+    <button className="rj-press" onClick={onClick} title={title}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         background: hover ? color + '22' : 'none', border: '1px solid ' + color,
@@ -322,7 +322,7 @@ export default function OrgHierarchy() {
         ))}
         <span style={{ fontSize: '12px', color: 'var(--text-dim)', marginLeft: '4px' }}>· dbl-click to rename</span>
         {inactiveCount > 0 && (
-          <button onClick={() => setShowInactive(v => !v)}
+          <button className="rj-press" onClick={() => setShowInactive(v => !v)}
             style={{
               marginLeft: 'auto', background: showInactive ? 'rgba(240,130,140,0.12)' : 'none',
               border: '1px solid ' + (showInactive ? 'var(--red)' : 'var(--border)'),
@@ -349,7 +349,7 @@ export default function OrgHierarchy() {
         ) : nodes.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '200px', gap: '12px', color: 'var(--text-dim)', fontSize: '12px' }}>
             <span style={{ letterSpacing: '0.08em' }}>NO ORG STRUCTURE DEFINED</span>
-            <button onClick={initFirm} disabled={saving}
+            <button className="rj-press" onClick={initFirm} disabled={saving}
               style={{ background: 'none', border: '1px solid var(--accent)', borderRadius: '3px', color: 'var(--accent)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize: '12px', padding: '8px 20px', cursor: 'pointer', letterSpacing: '0.08em' }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(217,178,92,0.1)'}
               onMouseLeave={e => e.currentTarget.style.background = 'none'}>

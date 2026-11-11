@@ -19,7 +19,7 @@ export default function NewVersionBar() {
         background: '#1b1403', color: 'var(--amber, #e9975a)', border: 0, borderRadius: 2,
         padding: '3px 10px', fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit', fontWeight: 700, cursor: 'pointer',
       }}>RELOAD</button>
-      <button type="button" onClick={() => setLive(null)} title="Keep this version for now" style={{
+      <button className="rj-press" type="button" onClick={() => setLive(null)} title="Keep this version for now" style={{
         background: 'transparent', color: '#1b1403', border: '1px solid rgba(27,20,3,.5)', borderRadius: 2,
         padding: '3px 8px', fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit', cursor: 'pointer',
       }}>LATER</button>

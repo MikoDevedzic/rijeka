@@ -17,7 +17,7 @@ async function api(path, opts = {}) {
   return j
 }
 const fmt = (n) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })
-const inp = { background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--text-hi)', fontFamily: 'var(--mono)', fontSize: '0.8rem', padding: '0.35rem 0.5rem', borderRadius: 2, width: '100%' }
+const inp = { background: 'var(--panel)', border: '1px solid var(--fld-bd)', color: 'var(--text-hi)', fontFamily: 'var(--mono)', fontSize: '0.8rem', padding: '0.35rem 0.5rem', borderRadius: 2, width: '100%' }
 
 export function LimitsPage() {
   const navigate = useNavigate()

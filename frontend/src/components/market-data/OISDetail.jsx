@@ -286,7 +286,7 @@ function OISInstruments({ curve }) {
         {/* Source selector */}
         <div style={{display:'flex',gap:'4px',marginBottom:'8px'}}>
           {['MANUAL','BLOOMBERG','IMPORT'].map(src => (
-            <button key={src} onClick={() => handleBlpSourceChange(src)} style={{
+            <button className="rj-press" key={src} onClick={() => handleBlpSourceChange(src)} style={{
               flex:1,padding:'5px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
               cursor:'pointer',fontFamily:"'IBM Plex Mono',var(--mono)",background:'transparent',borderRadius:'2px',
               border:blpSource===src?'1px solid var(--accent)':'1px solid var(--border)',
@@ -301,7 +301,7 @@ function OISInstruments({ curve }) {
             <input type="date" value={saveDate} onChange={e => setSaveDate(e.target.value)}
               style={{background:'var(--panel-2)',border:'1px solid var(--border)',color:'var(--text)',
                 fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',padding:'0.25rem 0.45rem',borderRadius:2,outline:'none'}} />
-            <button
+            <button className="rj-press"
               onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
               style={{padding:'0.25rem 0.85rem',background:'rgba(217,178,92,0.07)',
@@ -347,7 +347,7 @@ function OISInstruments({ curve }) {
                 {blpStatus===null?'CHECKING...':blpStatus.connected?'BLOOMBERG CONNECTED':
                   blpStatus.installed?'TERMINAL NOT CONNECTED':'BLPAPI NOT INSTALLED'}
               </span>
-              <button onClick={fetchBlpStatus} style={{marginLeft:'auto',fontSize:'0.875rem',
+              <button className="rj-btn" onClick={fetchBlpStatus} style={{marginLeft:'auto',fontSize:'0.875rem',
                 background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',
                 padding:'2px 6px',cursor:'pointer',fontFamily:"'IBM Plex Mono',var(--mono)",borderRadius:'2px'}}>
                 REFRESH
@@ -365,14 +365,14 @@ function OISInstruments({ curve }) {
               <input type="date" value={blpSnapDate} onChange={e => setBlpSnapDate(e.target.value)}
                 style={{background:'var(--panel)',border:'1px solid var(--border)',color:'var(--text)',
                   fontFamily:"'IBM Plex Mono',var(--mono)",fontSize:'1rem',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
-              <button onClick={() => snapBloomberg('live')} disabled={!blpStatus?.connected||blpSnapping}
+              <button className="rj-press" onClick={() => snapBloomberg('live')} disabled={!blpStatus?.connected||blpSnapping}
                 style={{flex:1,padding:'6px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed',background:'transparent',
                   borderRadius:'2px',fontFamily:"'IBM Plex Mono',var(--mono)",border:'1px solid var(--accent)',
                   color:'var(--accent)',opacity:blpStatus?.connected?1:0.4}}>
                 {blpSnapping?'SNAPPING...':'▶ SNAP LIVE'}
               </button>
-              <button onClick={() => snapBloomberg('historical')} disabled={!blpStatus?.connected||blpSnapping}
+              <button className="rj-press" onClick={() => snapBloomberg('historical')} disabled={!blpStatus?.connected||blpSnapping}
                 style={{flex:1,padding:'6px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed',background:'transparent',
                   borderRadius:'2px',fontFamily:"'IBM Plex Mono',var(--mono)",border:'1px solid var(--border)',
@@ -409,7 +409,7 @@ function OISInstruments({ curve }) {
                   display:'flex',justifyContent:'space-between'}}>
                   <span>TICKERS ({Object.keys(blpTickers).length}) — BGN Curncy mid</span>
                   {blpTickersEdited && (
-                    <button onClick={e=>{e.preventDefault();saveTickerOverrides();}}
+                    <button className="rj-press" onClick={e=>{e.preventDefault();saveTickerOverrides();}}
                       style={{fontSize:'0.875rem',background:'transparent',border:'1px solid var(--blue)',
                         color:'var(--blue)',padding:'1px 6px',cursor:'pointer',
                         fontFamily:"'IBM Plex Mono',var(--mono)",borderRadius:'2px'}}>SAVE OVERRIDES</button>
@@ -465,7 +465,7 @@ function OISInstruments({ curve }) {
             {csvParsed.length > 0 && (
               <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                 <span style={{fontSize:'0.875rem',color:'var(--accent)'}}>✓ {csvParsed.length} rows parsed</span>
-                <button onClick={saveCsvImport}
+                <button className="rj-press" onClick={saveCsvImport}
                   style={{padding:'5px 14px',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
                     cursor:'pointer',background:'transparent',border:'1px solid var(--accent)',
                     color:'var(--accent)',borderRadius:'2px',fontFamily:"'IBM Plex Mono',var(--mono)"}}>SAVE IMPORT</button>

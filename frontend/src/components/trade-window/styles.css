@@ -56,7 +56,7 @@
 }
 
 .tbw-window input:hover:not(:disabled),
-.tbw-window select:hover:not(:disabled) { border-color: var(--border-hi); }
+.tbw-window select:hover:not(:disabled) { border-color: var(--btn-bd-hover); }
 /* focus is the app's own ring (index.css :focus-visible); nothing here takes it away */
 
 .tbw-window input.tbw-mono,

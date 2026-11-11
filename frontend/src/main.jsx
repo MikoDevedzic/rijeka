@@ -27,8 +27,8 @@ function showFatal(title, detail) {
     '<div style="font-size:13px;color:#8a9f94;line-height:1.5;margin-bottom:14px">Nothing was changed by this. Reload to try again; if it repeats, send the text below to miko@rijeka.app.</div>' +
     '<pre style="white-space:pre-wrap;word-break:break-word;font-family:JetBrains Mono,ui-monospace,monospace;font-size:11px;color:#e9e3d3;background:#0b1d1a;border:1px solid #24372f;border-radius:4px;padding:10px;max-height:40vh;overflow:auto">' + esc(detail) + '</pre>' +
     '<div style="display:flex;gap:8px;margin-top:14px">' +
-    '<button onclick="location.reload()" style="background:#d9b25c;color:#1b1403;border:0;border-radius:3px;padding:8px 14px;font-weight:700;letter-spacing:.08em;cursor:pointer">RELOAD</button>' +
-    '<button onclick="try{sessionStorage.clear();localStorage.clear()}catch(e){};location.href=\'/login\'" style="background:#16332d;color:#e9e3d3;border:1px solid #43544a;border-radius:3px;padding:8px 14px;letter-spacing:.08em;cursor:pointer">SIGN OUT &amp; RELOAD</button>' +
+    '<button className="rj-btn" onclick="location.reload()" style="background:#d9b25c;color:#1b1403;border:0;border-radius:3px;padding:8px 14px;font-weight:700;letter-spacing:.08em;cursor:pointer">RELOAD</button>' +
+    '<button className="rj-btn" onclick="try{sessionStorage.clear();localStorage.clear()}catch(e){};location.href=\'/login\'" style="background:#16332d;color:#e9e3d3;border:1px solid #43544a;border-radius:3px;padding:8px 14px;letter-spacing:.08em;cursor:pointer">SIGN OUT &amp; RELOAD</button>' +
     '</div></div>'
   root.replaceChildren(box)
 }

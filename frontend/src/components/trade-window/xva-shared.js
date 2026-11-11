@@ -90,7 +90,7 @@ export const TIPS = {
 }
 
 // ── styles every XVA tab uses ────────────────────────────────────────────────────
-export const INP = { background:'var(--bg)', border:'1px solid var(--border)', borderRadius:'var(--r-1)',
+export const INP = { background:'var(--bg)', border:'1px solid var(--fld-bd)', borderRadius:'var(--r-1)',
   color:'var(--text-hi)', fontFamily:'var(--mono)', fontSize:'0.8125rem',
   padding:'4px 7px', outline:'none', width:'100%' }
 // a label that explains itself on hover: a dotted rule under it, in the text colour (brass is not a label colour)

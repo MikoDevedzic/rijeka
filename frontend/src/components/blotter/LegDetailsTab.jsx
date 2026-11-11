@@ -344,7 +344,7 @@ export default function LegDetailsTab({
             {struct === 'BASIS' ? 'FLOAT LEG 1' : 'FIXED LEG'}
             <span style={S.badge(dir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'PAY LEG 1':'RECEIVE LEG 1') : (dir==='PAY'?'PAY FIXED':'RECEIVE FIXED')}</span>
             {hasFixedOverrides && (
-              <button onClick={resetFixed} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
+              <button className="rj-press" onClick={resetFixed} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
                 RESET TO PAR
               </button>
             )}
@@ -353,11 +353,11 @@ export default function LegDetailsTab({
           <div style={S.secTitle}>PERIOD SCHEDULE</div>
           <div style={S.secHint}>Edit COUPON % for step-up or NOTIONAL for amortizing. Amber = overridden. Hit PRICE to reprice.</div>
           <div style={S.toolbar}>
-            <button style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
-            <button style={S.toolBtn()} onClick={handlePasteFixed}>PASTE</button>
-            <button style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
+            <button className="rj-btn" style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
+            <button className="rj-btn" style={S.toolBtn()} onClick={handlePasteFixed}>PASTE</button>
+            <button className="rj-press" style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
             <input ref={fileInputRef} type='file' accept='.xlsx' style={{display:'none'}} onChange={e=>{handleFileImport(e.target.files[0]);e.target.value=''}} />
-            <button style={S.toolBtn(C.blue)} onClick={()=>{fileTarget.current='fixed';fileInputRef.current?.click()}}>IMPORT XLS</button>
+            <button className="rj-press" style={S.toolBtn(C.blue)} onClick={()=>{fileTarget.current='fixed';fileInputRef.current?.click()}}>IMPORT XLS</button>
           </div>
           <div onDragOver={e=>{e.preventDefault();setDropFixed(true)}} onDragLeave={()=>setDropFixed(false)} onDrop={e=>handleDrop(e,false)}>
             {dropFixed ? <div style={S.dropZone(true)}>DROP EXCEL FILE TO IMPORT FIXED LEG SCHEDULE</div> : (
@@ -403,7 +403,7 @@ export default function LegDetailsTab({
             {struct === 'BASIS' ? 'FLOAT LEG 2' : 'FLOAT LEG'}
             <span style={S.badge(floatDir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'RECEIVE LEG 2':'PAY LEG 2') : (floatDir==='PAY'?'PAY FLOAT':'RECEIVE FLOAT')}</span>
             {hasFloatOverrides && (
-              <button onClick={resetFloat} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
+              <button className="rj-press" onClick={resetFloat} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
                 RESET TO PAR
               </button>
             )}
@@ -414,7 +414,7 @@ export default function LegDetailsTab({
           {isEmbedded && (
             <div style={{display:'flex', alignItems:'center', gap:'8px', margin:'4px 0 6px 0', fontSize:'12px', letterSpacing:'0.07em', color:C.muted}}>
               <span>OPTION DIRECTION:</span>
-              <button
+              <button className="rj-press"
                 onClick={()=>setCapFloorDirection('BUY')}
                 style={{
                   ...S.toolBtn(capFloorDirection==='BUY' ? C.accent : null),
@@ -422,7 +422,7 @@ export default function LegDetailsTab({
                   fontWeight: capFloorDirection==='BUY' ? 700 : 400,
                 }}
               >BUY</button>
-              <button
+              <button className="rj-press"
                 onClick={()=>setCapFloorDirection('SELL')}
                 style={{
                   ...S.toolBtn(capFloorDirection==='SELL' ? C.red : null),
@@ -438,10 +438,10 @@ export default function LegDetailsTab({
             </div>
           )}
           <div style={S.toolbar}>
-            <button style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
-            <button style={S.toolBtn()} onClick={handlePasteFloat}>PASTE</button>
-            <button style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
-            <button style={S.toolBtn(C.blue)} onClick={()=>{fileTarget.current='float';fileInputRef.current?.click()}}>IMPORT XLS</button>
+            <button className="rj-btn" style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
+            <button className="rj-btn" style={S.toolBtn()} onClick={handlePasteFloat}>PASTE</button>
+            <button className="rj-press" style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
+            <button className="rj-press" style={S.toolBtn(C.blue)} onClick={()=>{fileTarget.current='float';fileInputRef.current?.click()}}>IMPORT XLS</button>
           </div>
           <div onDragOver={e=>{e.preventDefault();setDropFloat(true)}} onDragLeave={()=>setDropFloat(false)} onDrop={e=>handleDrop(e,true)}>
             {dropFloat ? <div style={S.dropZone(true)}>DROP EXCEL FILE TO IMPORT FLOAT LEG SCHEDULE</div> : (

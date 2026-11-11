@@ -15,7 +15,7 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : `${path} ${r.status}`)
   return j
 }
-const sel = { background: 'var(--panel)', border: '1px solid var(--border)', color: 'var(--text-hi)', fontFamily: 'var(--mono)', fontSize: '0.82rem', padding: '0.35rem 0.5rem', borderRadius: 2, marginTop: 4 }
+const sel = { background: 'var(--panel)', border: '1px solid var(--fld-bd)', color: 'var(--text-hi)', fontFamily: 'var(--mono)', fontSize: '0.82rem', padding: '0.35rem 0.5rem', borderRadius: 2, marginTop: 4 }
 
 export function BookingDefaults() {
   const navigate = useNavigate()

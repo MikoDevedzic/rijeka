@@ -399,7 +399,7 @@ button, input, select, textarea { font-family: inherit; }
   padding: 4px 10px 4px 22px; cursor: pointer; border-left: 2px solid transparent;
   transition: background .1s, border-color .1s; display: flex; align-items: center; gap: 6px;
 }
-.crv-item:hover { background: var(--panel-2); }
+.crv-item:hover { background: var(--row-hover); box-shadow: inset 3px 0 0 var(--row-rule); }
 .crv-item.sel   { background: var(--panel-2); }
 .ci-body  { flex: 1; min-width: 0; }
 .ci-name  { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -745,3 +745,69 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 12px;
   line-height: 1.3;
 }
+
+/* ── What can be pressed, typed into or pointed at (docs/design.md, "Buttons, fields, rows") ───────────────
+   A button is raised: a lighter face, a bright edge, a darker foot it is pressed down onto. Brass stays for the
+   one action of a view. A field is a lighter well: it brightens under the pointer and takes a brass ring while
+   it is typed in; what is computed has no box. A row answers the pointer with a band and a rule at its edge. */
+:root {
+  --btn-bg: #21493f; --btn-bd: #6f8578; --btn-fg: var(--text-hi);
+  --btn-bg-hover: #2b5b4f; --btn-bd-hover: #a9b9ae;
+  --btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 0 rgba(0, 0, 0, 0.38);
+  --btn-shadow-brass: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 2px 0 rgba(0, 0, 0, 0.4);
+  --fld-bg: #1a3a33; --fld-bd: #5f7165; --fld-bg-hover: #1f443c; --fld-bg-focus: #224a41; --fld-ph: var(--text-mute);
+  --row-hover: #1b3d35; --row-rule: var(--text-dim); --row-sel: rgb(var(--accent-rgb) / 0.15); --cell-hover: rgba(255, 255, 255, 0.045);
+}
+
+/* a field: every box that is typed into or chosen from, wherever it is and however it was styled. The sign-in
+   pages and the certificate keep their own (a dark scene; paper). The fill is forced because most fields set
+   theirs inline; the edge is not, so a field that is amber because it cannot be read stays amber. */
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="button"], [type="submit"], [type="hidden"]), select, textarea):not(.cert *, .au-field *, [data-plain]) {
+  background-color: var(--fld-bg) !important;
+  border-color: var(--fld-bd);
+}
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="button"], [type="submit"], [type="hidden"]), select, textarea):not(.cert *, .au-field *, [data-plain])::placeholder { color: var(--fld-ph); }
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="button"], [type="submit"], [type="hidden"]), select, textarea):not(.cert *, .au-field *, [data-plain]):hover:not(:disabled, [readonly]) { background-color: var(--fld-bg-hover) !important; }
+:is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="button"], [type="submit"], [type="hidden"]), select, textarea):not(.cert *, .au-field *, [data-plain]):focus:not(:disabled, [readonly]) {
+  background-color: var(--fld-bg-focus) !important;
+  outline: 2px solid var(--accent-hi) !important; outline-offset: 1px;
+}
+/* a field that cannot be changed is not a well */
+:is(input, select, textarea):is(:disabled, [readonly]):not(.cert *, .au-field *, [data-plain]) { background-color: transparent !important; }
+
+/* a button: the families of class the app already has, and rj-btn for the ones styled inline */
+.rj-btn,
+:root .btn:not(.primary),
+:root .pnl-btn:not(.ghost),
+:root .tbw-btn:not(.tbw-btn-book):not(.tbw-btn-cancel),
+:root .tc-btn:not(.primary),
+:root .ms-btn.ghost,
+:root .doc-btn:not(.primary),
+:root .source-btn:not(.active):not(.disabled),
+:root .mr-btn,
+:root .mr-step:not([aria-pressed="true"]) {
+  background: var(--btn-bg) !important; border-color: var(--btn-bd) !important; color: var(--btn-fg) !important;
+  box-shadow: var(--btn-shadow);
+}
+:is(.rj-btn, :root .btn:not(.primary), :root .pnl-btn:not(.ghost), :root .tbw-btn:not(.tbw-btn-book):not(.tbw-btn-cancel), :root .tc-btn:not(.primary), :root .ms-btn.ghost, :root .doc-btn:not(.primary), :root .source-btn:not(.active):not(.disabled), :root .mr-btn, :root .mr-step:not([aria-pressed="true"])):hover:not(:disabled) {
+  background: var(--btn-bg-hover) !important; border-color: var(--btn-bd-hover) !important; color: #ffffff !important;
+}
+/* pressed: every button goes down onto its foot */
+:is(.rj-btn, .rj-press, .btn, .pnl-btn, .tbw-btn, .tc-btn, .ms-btn, .doc-btn, .mr-btn, .mr-step, .bl-new-trade-btn, .tbw-chip):active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.25); }
+:is(.rj-btn, .rj-press, .btn, .pnl-btn, .tbw-btn, .tc-btn, .ms-btn, .doc-btn, .mr-btn, .mr-step):disabled { box-shadow: none; }
+/* a button whose colour says something keeps it, and gains the foot and the lift */
+.rj-press { box-shadow: var(--btn-shadow); }
+.rj-press:hover:not(:disabled) { filter: brightness(1.22); }
+/* the brass ones: the action of the view, on the same foot */
+:root .btn.primary, :root .tbw-btn-book, :root .bl-new-trade-btn, :root .doc-btn.primary { box-shadow: var(--btn-shadow-brass); }
+/* a quiet toggle (P&L's ghost buttons) and a chip: a clearer edge; the selected one stays the lighter panel */
+:root .pnl-btn.ghost:not(.on) { border-color: var(--border-glow); color: var(--text); }
+:root .pnl-btn.ghost:not(.on):hover:not(:disabled) { background: var(--panel-2); color: var(--text-hi); border-color: var(--btn-bd-hover); }
+:root .tbw-chip:not(.is-on):not(:disabled) { border-color: var(--border-glow); color: var(--text); }
+:root .tbw-chip:not(.is-on):not(:disabled):hover { background: var(--panel-2); border-color: var(--btn-bd-hover); color: var(--text-hi); }
+
+/* a row: the one under the pointer is a band with a rule at its edge; the cell under it a shade lighter */
+tbody tr:not(.cert *, .katex *, [data-norow]) { box-shadow: inset 3px 0 0 transparent; }
+tbody tr:not(.cert *, .katex *, [data-norow]):hover { background-color: var(--row-hover); box-shadow: inset 3px 0 0 var(--row-rule); }
+tbody tr:not(.cert *, .katex *, [data-norow]):hover > td:hover { background-color: var(--cell-hover); }
+@media (prefers-reduced-motion: reduce) { :is(.rj-btn, .rj-press, .btn, .pnl-btn, .tbw-btn, .tc-btn, .ms-btn, .doc-btn, .mr-btn, .mr-step, .bl-new-trade-btn, .tbw-chip):active:not(:disabled) { transform: none; } }

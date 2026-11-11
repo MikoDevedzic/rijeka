@@ -24,7 +24,7 @@ const L = {
   color:'var(--text-dim)', letterSpacing:'0.08em', marginBottom:'4px'
 }
 const INP = {
-  background:'var(--bg)', border:'1px solid var(--panel-3)',
+  background:'var(--bg)', border:'1px solid var(--fld-bd)',
   color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'12px',
   padding:'5px 8px', borderRadius:'2px', outline:'none',
   width:'100%', boxSizing:'border-box'
@@ -34,7 +34,7 @@ function Btn({ color, size, onClick, disabled, children }) {
   const c = color || 'var(--accent)'
   const lg = size === 'lg'
   return (
-    <button onClick={onClick} disabled={disabled} style={{
+    <button className="rj-press" onClick={onClick} disabled={disabled} style={{
       background:'transparent',
       border:'1px solid ' + c,
       color: c,

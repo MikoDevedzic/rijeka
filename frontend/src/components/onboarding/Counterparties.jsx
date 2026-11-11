@@ -58,7 +58,7 @@ const L = {
   color:'var(--text-dim)', letterSpacing:'0.08em', marginBottom:'4px'
 }
 const INP = {
-  background:'var(--bg)', border:'1px solid var(--panel-3)',
+  background:'var(--bg)', border:'1px solid var(--fld-bd)',
   color:'var(--text)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'12px',
   padding:'5px 8px', borderRadius:'2px', outline:'none',
   width:'100%', boxSizing:'border-box'
@@ -68,7 +68,7 @@ function Btn({ color, size, onClick, disabled, children }) {
   const c = color || 'var(--accent)'
   const lg = size === 'lg'
   return (
-    <button onClick={onClick} disabled={disabled} style={{
+    <button className="rj-press" onClick={onClick} disabled={disabled} style={{
       background:'transparent',
       border:'1px solid ' + c,
       color: c,
@@ -491,7 +491,7 @@ export default function Counterparties() {
                   {instruments.filter(function(i) { return i.active !== false }).map(function(i) {
                     var on = sched.rows.some(function(r) { return r.instrument === i.code })
                     return (
-                      <button key={i.code} type="button" title={i.name + ' · ' + i.cls + (i.yield_today_bp != null ? ' · ' + Math.round(i.yield_today_bp) + ' bp' : '')}
+                      <button className="rj-press" key={i.code} type="button" title={i.name + ' · ' + i.cls + (i.yield_today_bp != null ? ' · ' + Math.round(i.yield_today_bp) + ' bp' : '')}
                         onClick={function() { setSched(function(p) { return Object.assign({}, p, { rows: on ? p.rows.filter(function(r) { return r.instrument !== i.code }) : p.rows.concat([rowFor(i.code)]) }) }) }}
                         style={{ background: on ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent', border:'1px solid ' + (on ? 'var(--accent)' : 'var(--panel-3)'),
                           color: on ? 'var(--accent)' : 'var(--text-dim)', fontFamily:"'IBM Plex Mono',var(--mono)", fontSize:'10px', padding:'3px 8px', borderRadius:'2px', cursor:'pointer', letterSpacing:'0.05em' }}>

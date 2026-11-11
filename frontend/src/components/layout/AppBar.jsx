@@ -63,7 +63,7 @@ export default function AppBar() {
         <RoleSwitch />
         <span style={{color:'var(--border)'}}>·</span>
         <span style={{color:'var(--text-hi)',fontWeight:500}}>{displayName}</span>
-        <button onClick={signOut} style={{
+        <button className="rj-btn" onClick={signOut} style={{
           background:'transparent', border:'1px solid var(--border)',
           color:'var(--text-dim)', fontFamily:'var(--sans)', fontSize:'0.8125rem',
           fontWeight:500, letterSpacing:'0.08em', padding:'0.3rem 0.7rem',

@@ -900,7 +900,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
   const df10 = Math.exp(-getBase('10Y')/100*10)
   const fwd5y5y = df5>0&&df10>0 ? (-Math.log(df10/df5)/5)*100 : 0
 
-  const inp = {background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'3px',color:'var(--text-hi)',fontFamily:'var(--mono)',fontSize:'0.875rem',padding:'4px 8px',outline:'none',width:'100%'}
+  const inp = {background:'var(--panel)',border:'1px solid var(--fld-bd)',borderRadius:'3px',color:'var(--text-hi)',fontFamily:'var(--mono)',fontSize:'0.875rem',padding:'4px 8px',outline:'none',width:'100%'}
   const secHdr = {fontSize: '12px',fontWeight:700,letterSpacing:'0.18em',color:'var(--text)',fontFamily:'var(--sans)',
     paddingLeft:'10px',borderLeft:'3px solid var(--accent)',lineHeight:1.2}
 
@@ -952,12 +952,12 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                 <span style={{fontSize:'0.875rem',fontWeight:600,color:'var(--blue)',fontFamily:'var(--mono)',minWidth:'28px'}}>{sigma}Y</span>
               </div>
               <div style={{display:'flex',gap:'8px'}}>
-                <button onClick={handleReset}
+                <button className="rj-btn" onClick={handleReset}
                   style={{flex:1,padding:'7px',borderRadius:'3px',cursor:'pointer',fontFamily:'var(--sans)',
                     fontSize:'0.8125rem',fontWeight:500,border:'1px solid var(--border)',background:'transparent',color:'var(--text-dim)'}}>
                   Reset
                 </button>
-                <button onClick={handleConfirm} disabled={(!anyShift&&!unsavedVol)||confirmed||scenarioPricing}
+                <button className="rj-press" onClick={handleConfirm} disabled={(!anyShift&&!unsavedVol)||confirmed||scenarioPricing}
                   style={{flex:2,padding:'7px',borderRadius:'3px',
                     cursor:(!anyShift||confirmed||scenarioPricing)?'not-allowed':'pointer',
                     fontFamily:'var(--sans)',fontSize:'0.8125rem',fontWeight:600,
@@ -998,7 +998,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                   </div>
                   <div style={{display:'flex',flexDirection:'column',gap:'2px'}}>
                     {Object.entries(VOL_SCEN).map(([key,sc]) => (
-                      <button key={key} onClick={()=>applyVolScen(key)}
+                      <button className="rj-press" key={key} onClick={()=>applyVolScen(key)}
                         style={{display:'flex',alignItems:'center',gap:'7px',padding:'5px 7px',
                           border:'1px solid '+(volScenKey===key?(key==='base'?'rgba(217,178,92,.5)':'rgba(233,151,90,.5)'):'var(--border)'),
                           borderRadius:'2px',cursor:'pointer',background:volScenKey===key?(key==='base'?'rgba(217,178,92,.07)':'rgba(233,151,90,.06)'):'transparent',
@@ -1045,7 +1045,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                     const baseVol = parseFloat(capVolOverride)||85
                     const shockedVol = Math.max(1, baseVol + sc.shift)
                     return (
-                      <button key={sc.l}
+                      <button className="rj-btn" key={sc.l}
                         onClick={()=>{
                           if(sc.shift===0){
                             // reset to base — reprice without vol override changes
@@ -1088,7 +1088,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                 PAR RATES · {curveId.replace('_',' ')}
               </span>
               {Object.keys(baseOverrides).length>0&&(
-                <button onClick={()=>setBaseOverrides({})}
+                <button className="rj-press" onClick={()=>setBaseOverrides({})}
                   style={{fontSize:'0.75rem',padding:'2px 8px',borderRadius:'2px',cursor:'pointer',
                     fontFamily:'var(--sans)',border:'1px solid rgba(233,151,90,0.3)',
                     background:'rgba(233,151,90,0.06)',color:'var(--amber)'}}>
@@ -1210,7 +1210,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               </div>
               {/* Mode button — top right of vol pane */}
               <div style={{position:'absolute',top:5,right:8,zIndex:3,display:'flex',gap:3}}>
-                <button
+                <button className="rj-press"
                   onClick={()=>setVolMode('rotate')}
                   style={{padding:'3px 8px',fontSize:'0.8rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:'var(--mono)',
@@ -1219,7 +1219,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                     background: volMode==='rotate'?'rgba(143,193,230,.07)':'transparent'}}>
                   ⟳ ROTATE
                 </button>
-                <button
+                <button className="rj-press"
                   onClick={()=>setVolMode(m=>m==='reshape'?'rotate':'reshape')}
                   style={{padding:'3px 8px',fontSize:'0.8rem',fontWeight:600,letterSpacing:'.08em',
                     cursor:'pointer',borderRadius:'1px',fontFamily:'var(--mono)',
@@ -1368,7 +1368,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
                         <span style={{fontSize:'0.75rem',fontWeight:600,letterSpacing:'0.08em',color:'var(--text-dim)',
                           fontFamily:'var(--sans)'}}>{item.label}</span>
                         {item.approx&&item.shocked!=null&&(
-                          <button onClick={()=>setThetaApproxVisible(v=>!v)}
+                          <button className="rj-press" onClick={()=>setThetaApproxVisible(v=>!v)}
                             style={{fontSize:'0.75rem',padding:'1px 5px',borderRadius:'2px',cursor:'pointer',
                               fontFamily:'var(--sans)',border:'1px solid rgba(233,151,90,0.3)',
                               background:'rgba(233,151,90,0.06)',color:'var(--amber)'}}>
