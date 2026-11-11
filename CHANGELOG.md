@@ -15,11 +15,13 @@ Found by the security review of the merged verifier, before it was pushed.
   signatures, or with no node to read, is NOT FULLY VERIFIED (it used to be VERIFIED).
 - **A link cannot hang the tab.** A proof link is refused above 512 KB, and stops unpacking at 2 MB (a 64 KB link
   could unpack to 64 MB and more). A hash link that is not a hash is refused; a superseded or terminated record
-  reads NOT CURRENT; every outcome ends in a verdict.
+  reads NOT CURRENT, from a link or from a proof; every outcome ends in a verdict, including an empty box, text that
+  is not a proof, and an error inside the check. One check runs at a time.
 - The embedded example no longer carries the ids of the chat it was confirmed in (they were never part of the
   signed record). Every verdict is written as text.
-- Checked in a browser against a stubbed chain, 19 cases, and the same cases against the page as it was (the forged
+- Checked in a browser against a stubbed chain, 27 cases, and the first 19 against the page as it was (the forged
   proof and the unsigned proof both read VERIFIED there). Not a test in CI: the page loads its library from a CDN.
+  Read twice by the security reviewer and twice by the independent reviewer.
 
 ## Public site · 11 November 2026
 

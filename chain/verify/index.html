@@ -156,7 +156,8 @@ el("example").addEventListener("click", () => {
 // The registries this page knows, by chain. A proof or a link names the registry it was anchored in, and whoever
 // wrote it chose that address: anyone can deploy a registry of their own and sign with keys of their own. So a
 // record in any other contract is reported, in amber, and never as VERIFIED or ANCHORED. A self-hosted copy of
-// this page lists its own registry here.
+// this page lists its own registry here. There is no mainnet registry yet: its address goes on this table in the
+// same change as that deployment, and until then a proof from chain 1 is amber.
 const REGISTRIES = { 11155111: "0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e" };
 const knownRegistry = (chainId, addr) => {
   const k = REGISTRIES[Number(chainId)];
@@ -247,19 +248,37 @@ el("rpc").addEventListener("change", e => {
   el("rpcCustom").style.display = e.target.value.startsWith("custom") ? "block" : "none";
 });
 
+let running = false;
 el("run").addEventListener("click", async () => {
+  if (running) return;                                   // a second click while the chain is being read
+  running = true; el("run").disabled = true;
+  try { await verify(); }
+  catch (e) {
+    add("fail", "the check stopped on an error", e.message);
+    verdictBox("bad", "NOT CHECKED", "The proof could not be read to the end. Nothing here is verified.");
+  }
+  finally { running = false; el("run").disabled = false; el("status").textContent = ""; }
+});
+async function verify(){
   reset();
   el("status").textContent = "";
   let proof;
   const raw = el("proof").value.trim();
   if (!raw) {
     add("skip", "nothing to verify yet", "paste a proof pack above, or click LOAD EXAMPLE to check a real confirmation on Sepolia");
+    verdictBox("", "NOTHING CHECKED", "There is no proof in the box above.");
     return;
   }
   try {
     proof = JSON.parse(raw);
   } catch (e) {
     add("fail", "proof pack is not valid JSON", e.message);
+    verdictBox("bad", "NOT CHECKED", "What was pasted is not a proof pack.");
+    return;
+  }
+  if (proof === null || typeof proof !== "object" || Array.isArray(proof)) {
+    add("fail", "proof pack is not a JSON object", "");
+    verdictBox("bad", "NOT CHECKED", "What was pasted is not a proof pack.");
     return;
   }
 
@@ -268,6 +287,7 @@ el("run").addEventListener("click", async () => {
   const canonical = proof.canonical;
   if (!canonical || !att.trade_hash) {
     add("fail", "proof pack is missing `canonical` or `attestation`", "");
+    verdictBox("bad", "NOT CHECKED", "What was pasted is not a whole proof pack.");
     return;
   }
 
@@ -343,7 +363,7 @@ el("run").addEventListener("click", async () => {
   }
 
   // 3 — read the registry from a public node
-  let chainOk = false, rec = null;
+  let chainOk = false, rec = null, notCurrent = null;
   const sel = el("rpc").value.split("|");
   const url = sel[0] === "custom" ? el("rpcCustom").value.trim() : sel[0];
   if (computed && eip.verifying_contract && url) {
@@ -360,6 +380,7 @@ el("run").addEventListener("click", async () => {
         const partiesMatch = rec.partyA.toLowerCase() === (A.address || "").toLowerCase()
                           && rec.partyB.toLowerCase() === (B.address || "").toLowerCase();
         chainOk = st === "Confirmed" && partiesMatch;
+        notCurrent = (st === "Superseded" || st === "Terminated") && partiesMatch ? st : null;
         add(st === "Confirmed" ? "pass" : "fail",
             "registry status: " + st + (st === "Superseded" ? " — this record was amended; verify the current one" : st === "Terminated" ? " — closed by both parties" : ""),
             st === "None"
@@ -389,7 +410,11 @@ el("run").addEventListener("click", async () => {
   if (!chainOk) gaps.push("the chain was not read");
   if (!regKnown) gaps.push("the registry is not one this page knows");
   const where = rec ? ` at block ${rec.blockNumber}, in registry ${eip.verifying_contract}` : "";
-  if (anyFail) {
+  if (notCurrent && sigsOk && regKnown && rows.filter(r => r === "fail").length === 1) {
+    // everything checks but the record's status: it was signed and recorded, and is no longer the current record
+    verdictBox("bad", "NOT CURRENT", `Both named parties signed these terms and they were recorded on chain${where}, but the record is no longer current: `
+      + (notCurrent === "Superseded" ? "it was amended, and a later record supersedes it. Verify the current one." : "it was closed by both parties."));
+  } else if (anyFail) {
     verdictBox("bad", "NOT VERIFIED", "At least one check failed. These trade terms are not the ones both parties signed and anchored, or the confirmation does not exist on this chain.");
   } else if (gaps.length) {
     verdictBox("part", "NOT FULLY VERIFIED", "No check failed, but " + gaps.join(", and ") + ". "
@@ -401,7 +426,7 @@ el("run").addEventListener("click", async () => {
   } else {
     verdictBox("ok", "VERIFIED", `These exact terms were signed by both named parties and recorded on chain${where}. Neither party can alter them without breaking this proof.`);
   }
-});
+}
 // link handling runs last, after every helper above is defined
 (async () => {
   const h = new URLSearchParams(location.hash.replace(/^#/, ""));
