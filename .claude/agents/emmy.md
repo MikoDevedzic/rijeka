@@ -22,6 +22,9 @@ Learned on 9 November 2026 (the scenario tab)
 - A figure worked by hand and written into a test is pinned tightly enough to catch its own error: a hand value of 1.09009506 passed a loose tolerance while the true value was 1.09009508.
 - A version line and a change note in the methodology move with the formula in the same change.
 
+Learned on 11 November 2026
+- A tenor's pillar is a round count of days and a ticket's tenor date is a calendar date. Check every label and every branch that compares the two at the boundary: on 11 November 2026 a two-year ticket, 731 to 734 days from spot, was called implied beyond a curve quoted at two years (730 days). The figure was right to a few days of carry; the word was wrong.
+
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
 - Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.

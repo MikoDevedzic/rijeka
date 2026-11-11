@@ -11,7 +11,7 @@ code that draws on a canvas, and `theme.test.js` holds the two together.
 | `--accent` (brass), `--accent-hi` | the action of the view (BOOK TRADE, + NEW TRADE), the selected tab's rule, what is sealed on chain, the saving on chain, the name RIJEKA | a label, a typed value, a positive number |
 | `--up`, `--down` | the sign of a number; a side that is chosen (coral for paying or selling, green for receiving or buying, the same in the swap's direction, an option's side, a forward's and a leg's); a state that is good or bad in itself (live, calibrated, a verify that passed; defaulted, a failed check) | a selection, an action |
 | `--amber` | a caution, something provisional, the PFE tail | an action |
-| `--blue` | the counterpart series on a chart (ENE), a link on paper | a selection; a figure in a table (it takes the colour of its sign) |
+| `--blue` | the counterpart series on a chart (ENE), a link on paper, the second desk's paths in the logo | a selection; a figure in a table (it takes the colour of its sign) |
 | `--text-hi`, `--text`, `--text-dim`, `--text-mute`, `--text-faint` | limestone, in five steps. Contrast on `--bg` / `--panel` / `--panel-2`: `--text-mute` 6.2 / 5.6 / 4.8, `--text-faint` 5.3 / 4.8 / 4.1 | `--text-faint` on `--panel-2` or lighter |
 | `--panel`, `--panel-2`, `--panel-3` | a surface one step up; `--panel-3` is the fill of a selected chip | |
 
@@ -78,9 +78,12 @@ registered-trademark sign. It is the one thing that carries a light of its own.
   trade is confirmed, and holds still in between: a mark that restarts in the header of a trading screen would
   pull the eye from the numbers. With "reduce motion" set it is drawn complete and does not move.
 - **A confirmation is the logo being drawn** (`brand/ConfirmMark.jsx`, on the ticket's CONFIRM tab). While a trade
-  is being signed and anchored the river runs and the letter is only a faint outline; the R and its ring are
-  drawn when the trade is confirmed, and never if it fails. It is drawn only for a confirmation made while the
-  ticket is open; a trade confirmed earlier shows its certificate and seal.
+  is being signed and anchored the river runs and the letter is only a faint outline. The R is drawn when the
+  trade is confirmed; the ring is the seal, and is drawn only when the record is anchored on a chain (where it is
+  not, the ring stays an outline and the words under it say CONFIRMED · NOT ANCHORED). A confirmation that fails
+  never draws the letter. The picture shows only for a confirmation of that trade made while the ticket is open
+  (`brand/confirm-phase.js`): a trade confirmed earlier, or cancelled, or terminated, has none, and its
+  certificate and seal say what it is. The words under it are a label: the quiet colour, amber when it failed.
 - **Where a new reader might stumble, the name is also spelled out.** A ringed letter followed by IJEKA takes a
   moment the first time. The sign-in pages keep the plain name (`.au-mark`), a heading says it in words, and a
   link preview or a first slide uses the whole word with the river beneath it.
@@ -189,6 +192,10 @@ One rule for the whole app, held by Iris (`.claude/agents/iris.md`) and by a che
   whatever was sized in px did not.
 - A figure takes the colour of text, or of its sign. Brass is not a figure, a label or a typed value; blue is not a
   figure in a table. A derived figure (what parity implies) is quieter than a quoted one.
+- A figure that is not a quote says so. Where a market input can be quoted or implied (a forward at a tenor), the
+  quoted one is upright and names its source; the implied one is in italics, dimmed, with a mark (IMPLIED in
+  amber, INTERPOLATED quiet) whose words say how it was reached. On a chart the implied part is dashed. On the
+  ticket an implied forward beyond the quotes is said under the figure, in amber.
 - What is still set by hand is counted and may only go down (11 November 2026: 53 distinct sizes, 623 sizes in rem,
   209 hex colours outside the tokens, 6 fonts named directly, all in canvas drawings). The next step is the sizes
   in rem, page by page, each with pictures before and after.

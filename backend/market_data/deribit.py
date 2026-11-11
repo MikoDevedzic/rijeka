@@ -91,7 +91,9 @@ SOURCE_PREFIX = "DEMO · Deribit"          # 'DEMO' passes the snapshot table's 
 # demo_feed.FX_VOL_TENORS plus 2W and 3W: the listed term structure is steepest inside the first month, and the
 # pricer is linear in vol between tenors, so without them a two- or three-week option misses the venue's mark
 VOL_TENORS = ("1W", "2W", "3W", "1M", "2M", "3M", "6M", "9M", "1Y", "2Y")
-FWD_TENOR_DAYS = {"1W": 7, "2W": 14, "1M": 30, "2M": 61, "3M": 91, "6M": 182, "9M": 273, "1Y": 365, "2Y": 730}   # currencies.TENOR_DAYS
+# The forwards page's tenors out to two years (pricing/forward_points.TENOR_DAYS). The venue lists nothing longer;
+# beyond the grid the pricer carries the last basis on as a rate itself and says the forward is implied.
+FWD_TENOR_DAYS = {"1W": 7, "2W": 14, "1M": 30, "2M": 61, "3M": 91, "6M": 182, "9M": 273, "1Y": 365, "18M": 547, "2Y": 730}
 VOL_TENOR_DAYS = {"1W": 7, "2W": 14, "3W": 21, "1M": 365 / 12, "2M": 365 / 6, "3M": 365 / 4, "6M": 182.5, "9M": 273.75, "1Y": 365, "2Y": 730}   # fx_vol.TENOR_YEARS
 
 MIN_DAYS = 2.0            # an expiry inside two days is all gamma and event
@@ -313,10 +315,14 @@ def vol_quotes(good: list[dict]) -> list[dict]:
 def forward_quotes(good: list[dict], index: float) -> list[dict]:
     """The {PAIR}_FWD snapshot's quotes: forward points over the index at the forward tenors."""
     basis = [(g["days"], math.log(g["forward"] / index) / g["t"]) for g in good]
+    last_listed = max(g["days"] for g in good)
     out = []
     for tenor, days in FWD_TENOR_DAYS.items():
         pts = index * (math.exp(_lin(basis, days) * days / 365.0) - 1.0)
-        out.append({"tenor": tenor, "quote_type": "FWD_POINTS", "rate": round(pts, 6 if index < 1000 else 2), "enabled": True})
+        q = {"tenor": tenor, "quote_type": "FWD_POINTS", "rate": round(pts, 6 if index < 1000 else 2), "enabled": True}
+        if days > last_listed:
+            q["extrapolated"] = True      # nothing is listed this far out: the last expiry's basis, held flat as a rate
+        out.append(q)
     return out
 
 

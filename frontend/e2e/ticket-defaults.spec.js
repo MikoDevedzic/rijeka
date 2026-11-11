@@ -2,7 +2,8 @@
 // "there should be something priced already when you open new trade", "we should show what the forward rate is",
 // "why when i click on spot rate it looks like there is no value there", "maturity date can be set to any date in
 // future but tenor stays at 2Y". A field on its default shows the number the price uses; the ticket prices itself;
-// the tenor always tells the truth about the date; a digital asset prices to two years, where its market data ends.
+// the tenor always tells the truth about the date; a digital asset's forward prices to ten years (implied beyond its
+// quotes, 0.22.0) and its option to two, where its vol surface ends.
 import { test, expect, expectClean, expectFullyInView, expectNoHorizontalOverflow } from './fixtures.js'
 
 const DAY = 86400000
@@ -76,7 +77,7 @@ test('crypto forward: priced on open, the forward rate shown, defaults shown as 
   expectClean(problems)
 })
 
-test('crypto forward: the tenor follows the date, and a digital asset prices to two years', async ({ app, problems }) => {
+test('crypto forward: the tenor follows the date, and a digital asset\'s forward prices to ten years', async ({ app, problems }) => {
   const win = await open(app, 'CRYPTO', /^CRYPTO FORWARD$/i)
   await settled(win)
   const tenor = win.getByTestId('fx-tenor')
@@ -102,17 +103,24 @@ test('crypto forward: the tenor follows the date, and a digital asset prices to 
   await mat.blur()
   await expect(tenor).toHaveValue('3M')
 
-  // five years out: brought back to two years, and the ticket says why
-  await tenor.selectOption('2Y')
-  const twoYears = await mat.inputValue()
-  await mat.fill(iso(Date.now() + 5 * 365 * DAY))
+  // five years out prices (it stopped at two until 0.22.0): the date stays, and the 5Y tenor is offered
+  await tenor.selectOption('5Y')
+  const fiveYears = await mat.inputValue()
+  await expect(tenor).toHaveValue('5Y')
+  await settled(win)
+  await expect(win.getByTestId('fx-tenor-limit')).toHaveCount(0)
+  // twelve years out: brought back to ten, and the ticket says why
+  await tenor.selectOption('10Y')
+  const tenYears = await mat.inputValue()
+  expect(tenYears > fiveYears).toBe(true)
+  await mat.fill(iso(Date.now() + 12 * 365 * DAY))
   await mat.blur()
-  await expect(mat).toHaveValue(twoYears)
-  await expect(tenor).toHaveValue('2Y')
-  await expect(win.getByTestId('fx-tenor-limit')).toContainText('digital assets price to 2Y')
+  await expect(mat).toHaveValue(tenYears)
+  await expect(tenor).toHaveValue('10Y')
+  await expect(win.getByTestId('fx-tenor-limit')).toContainText('a digital-asset forward prices to 10Y')
   await settled(win)
   await app.screenshot({ path: 'e2e/.out/shots/ticket-forward-tenor-limit.png' })
-  await expectNoHorizontalOverflow(win, 'crypto forward ticket at the two-year limit')
+  await expectNoHorizontalOverflow(win, 'crypto forward ticket at the ten-year limit')
   expectClean(problems)                                                      // and nothing the API refused was ever sent
 })
 

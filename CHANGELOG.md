@@ -1,7 +1,65 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.12). Commits on `main` are the detail.
+methodology document carries its own version (v1.13). Commits on `main` are the detail.
+
+## The logo · 11 November 2026 (frontend only)
+
+**A logo that simulates, and a confirmation you can watch.** Asked for by the owner: "our Rijeka logo needs to be
+better... just written down seems bit plain", then, choosing step by step from a mock: simulated paths like a Monte
+Carlo run, moving, into an R in a ring that is the name's first letter, and "on confirmation on chain the
+animation should be our logo loading... once trade confirmes the image should finish loading".
+
+- **The logo is a river of simulated paths running into the ringed R that begins the name.** Rijeka means river.
+  One desk's paths are limestone, the other's blue; they turn brass where they meet and run as one line into the
+  letter. Each path is a Brownian bridge whose coefficients turn slowly, so it keeps re-simulating. The ring is
+  open where the river enters (a letter in a closed circle reads as the registered-trademark sign).
+- **In the top bar it runs once and then holds still**, and runs once more each time a trade is confirmed. With
+  "reduce motion" set it is drawn complete and does not move. The sign-in pages keep the plain name.
+- **On the ticket's CONFIRM tab the logo is the picture of the confirmation.** The river runs while the trade is
+  being signed and anchored. The R is drawn when the trade is confirmed. The ring is the seal: it is drawn only
+  when the record is anchored on a chain, and the words under it say which (CONFIRMED ON CHAIN, or CONFIRMED · NOT
+  ANCHORED). A confirmation that fails never draws the letter. A trade confirmed earlier shows its certificate
+  and seal as before.
+- **The browser tab has the small form** (one line into the ringed R) in place of the build tool's default icon.
+- Not done: the letter is built from strokes by code and is to be redrawn by a type designer; the motion's cost
+  on a laptop has not been measured; no check against other firms' marks.
+
+## 0.22.0 · 11 November 2026
+
+**Forward curves to ten years, with what is implied marked as implied.** Asked for by the owner: "we need to be able
+to model all FX to 10y... the derived points on the forward curve has to be differentiated somehow so user knows its
+implied and how... in configurations, user should be able to turn on/off tenors on the curve."
+
+- **Beyond the last quoted tenor a forward is parity plus that tenor's basis, held flat as a rate.** Until now the
+  last points were held flat, so a five-year forward was the two-year one: wrong past the last quote. On a currency
+  pair the basis is the cross-currency basis; on a digital asset it is the futures basis, so the asset's implied
+  rate is what is held. Forwards inside the quoted tenors are unchanged, and so is every figure of the pinned book.
+  The same rule prices the ticket, a booked trade and the P&L revaluation (`pricing/forward_points.py`).
+- **Every forward says what it is.** The price carries `forward_kind` (QUOTED, INTERPOLATED or IMPLIED),
+  `forward_method` in words and the basis rate. The ticket marks a forward beyond the quotes "implied, not quoted"
+  with the method, in amber. The forwards page has a row for every tenor to 10Y: a quoted row names its source, a
+  row that is not a quote is in italics with an IMPLIED or INTERPOLATED mark, and the chart draws the implied part
+  dashed.
+- **A tenor can be switched off** on the forwards page: its points stay on the row and its date is priced like any
+  unquoted one. Two tenors must stay on. No migration: the stored quote already had the flag.
+- **The ticket's tenors go to 10Y** (3Y, 4Y, 5Y, 7Y, 10Y added). A digital asset's forward prices to ten years (it
+  stopped at two); its option still stops at two, where the vol surface ends.
+- A tenor the venue feed fills beyond the venue's last listed expiry is named as implied (it prices as before).
+- Checked: 12 rows against QuantLib's parity with the basis done by hand (EURUSD, USDJPY, a digital asset, at 3Y, 5Y
+  and 10Y), unit tests of the rule, an API test on a real database, a browser journey. Methodology v1.13, §12.
+- A ticket at a quoted tenor is that tenor: a two-year ticket settles two calendar years from spot, a few days past
+  the tenor's 730, and is priced a few days of carry from the quote and called quoted, not implied (seven days'
+  slack). A row changed on the forwards page and not yet saved says NOT SAVED. Saving over a feed's curve keeps
+  what the feed filled named as implied unless the desk types over it. The scenario tab draws a ticket's own carry
+  when its date is beyond the quotes.
+- Reviewed by the model validator (one figure re-derived by hand to nine decimals), the independent reviewer and
+  the design keeper; their findings are in this release.
+- Limits: one number read off the last quote stands in for the basis beyond it, with no band of uncertainty, and an
+  error in a curve is inside that number; while the points are held a parallel move of a curve leaves a forward
+  beyond the quotes where it was; nothing trades that far out on a digital asset, and the screen says so; a
+  scenario's shock of the points is still flat beyond the last tenor; the reference rows check the parity against
+  QuantLib and restate the rule.
 
 ## 0.21.2 · 11 November 2026
 

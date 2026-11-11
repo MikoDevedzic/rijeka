@@ -28,7 +28,7 @@ const rateDp = (pair) => !pair ? 2 : CRYPTO_BASES.includes(pair.slice(0, 3)) ? 2
 const iso = (d) => d.toISOString().slice(0, 10)
 import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
 import { settlementOptions, settlementTerms, settlementLabel, settlementNote, defaultFixingDate, clampFixingDate, earliestFixingDate, fixingCaption, MAX_FIXING_GAP_DAYS } from './fx-settlement'
-import { TENORS, CRYPTO_LIMIT_NOTE, priceRequest, priceable, styleFields as styleFieldsOf, styleSends, seedLevels, seedVolPct, yearsTo, forwardCaption, ticketToday,
+import { TENORS, CRYPTO_LIMIT_NOTE, CRYPTO_FORWARD_LIMIT_NOTE, tenorsFor, priceRequest, priceable, styleFields as styleFieldsOf, styleSends, seedLevels, seedVolPct, yearsTo, forwardCaption, ticketToday,
          tenorDate, tenorOf, tenorLabel, firstDate, lastDate, holdToLast, formatRead, formatInput, readNumbers, unreadable, overrideNote, quoteFor, createTicketPricer,
          tenorDates, tenorDateFor, tenorSettlement, rollDate, rollRule, rolledTag, spotDateFor, spotLagLabel, bookedNotional, dateCap, closedWhy,
          bookedStrike, apiRoundsStrike, notionalSent, payoutStyle, SENS_UNITS, crybasis01, premiumLine, optionSentence } from './fx-ticket'
@@ -122,8 +122,9 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   useEffect(() => {
     setPair(crypto ? 'BTCUSD' : 'EURUSD'); setNotional(crypto ? '10' : '10000000'); setCashSettled(crypto); setPayout(crypto ? '100000' : '1000000'); setSettleSrc('')
     // a date carried over from a currency pair is held to the digital asset's last tenor
-    const last = lastDate({ crypto, today: iso(new Date()) })
-    setSettlement(d => holdToLast(d, last).date); setExpiry(d => holdToLast(d, last).date); setLimitHit(''); setRolled({})
+    const today = iso(new Date())
+    setSettlement(d => holdToLast(d, lastDate({ crypto, today, option: false })).date)
+    setExpiry(d => holdToLast(d, lastDate({ crypto, today, option: true })).date); setLimitHit(''); setRolled({})
   }, [crypto])
   // an edited fixing date belongs to one product, pair and settlement date: a change of any of them puts the default back
   useEffect(() => { setFixEdit('') }, [inst, pair, settlement])
@@ -145,7 +146,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const calendar = cur?.calendar && typeof cur.calendar === 'object' ? cur.calendar : null
   // a settlement or an expiry is after today, and on a digital asset no later than the last tenor its market data carries
   const minDate = firstDate(todayIso)
-  const maxDate = lastDate({ crypto, today: todayIso, dates })
+  const maxDate = lastDate({ crypto, today: todayIso, dates, option })      // an option to its last vol tenor, a forward to ten years
   // A date set from a tenor before the pairs arrived (or for another pair) is the calendar's; once the API's dates are
   // here it moves to the API's date for that tenor, so the tenor select still reads 3M and the date is a business day.
   useEffect(() => {
@@ -578,13 +579,25 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       <div className={`tbw-fx-tag tbw-fx-tag-wrap${dim ? ' tbw-fx-dim' : ''}`}>
         {fwdLine ? (<><span>{fwdLine.points}</span>{fwdLine.basis && <span>· {fwdLine.basis}</span>}</>) : <span>{fwdEmpty}</span>}
       </div>
+      {/* a forward no tenor quotes is the model's: said under the figure, with how it was reached. Amber when the
+          pair has quoted points and this date lies beyond them (or beyond what its venue lists); quiet when the
+          pair is priced from the curves throughout, which is how it is always priced then */}
+      {shown && quote?.forward_kind === 'IMPLIED' && quote?.forward_method && (() => {
+        const beyond = quote.forward_mode === 'MARKET' && quote.market_points != null
+        return (
+          <div data-testid="fx-forward-kind" data-kind={beyond ? 'beyond-quotes' : 'curves'} className={`tbw-fx-tag tbw-fx-tag-wrap${dim ? ' tbw-fx-dim' : ''}`}
+               style={{ color: beyond ? 'var(--amber)' : 'var(--text-mute)' }}>
+            <span>implied{beyond ? ', not quoted' : ''}: {quote.forward_method}</span>
+          </div>
+        )
+      })()}
     </Cell>
   )
   // The tenor says what the date is: the standard tenor the date falls on, or CUSTOM with its length when it falls
   // on none. Choosing a tenor sets the date (the API's date for the tenor when it gave them); typing a date moves the tenor.
   const tenorSelect = (date, tenor, setDate, label) => (
     <select data-testid="fx-tenor" aria-label={label} value={tenor || 'CUSTOM'} onChange={e => { if (TENORS.includes(e.target.value)) setDate(tenorDateFor(e.target.value, todayIso, dates)) }}>
-      {TENORS.map(t => <option key={t} value={t}>{t}</option>)}
+      {tenorsFor({ crypto, option }).map(t => <option key={t} value={t}>{t}</option>)}
       {!tenor && <option value="CUSTOM">{tenorLabel(date, todayIso)}</option>}
     </select>
   )
@@ -603,7 +616,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     if (next !== date) setDate(next)
     setRolled(prev => ({ ...prev, [which]: r && r.rolled ? r : null }))
   }
-  const limitNote = (which) => limitHit === which && <div className="tbw-fx-limit" data-testid="fx-tenor-limit">{CRYPTO_LIMIT_NOTE}</div>
+  const limitNote = (which) => limitHit === which && <div className="tbw-fx-limit" data-testid="fx-tenor-limit">{option ? CRYPTO_LIMIT_NOTE : CRYPTO_FORWARD_LIMIT_NOTE}</div>
   const rolledNote = (which) => rolledTag(rolled[which]) && <div className="tbw-fx-limit" data-testid="fx-date-rolled">{rolledTag(rolled[which])}</div>
   // the quote's own word on its dates, should the API ever answer with a settlement that is no business day
   const dateWarning = quote && (quote.settlement_business_day === false || (Array.isArray(quote.date_notes) && quote.date_notes.length) || (typeof quote.date_notes === 'string' && quote.date_notes))

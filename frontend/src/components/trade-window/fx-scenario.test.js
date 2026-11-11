@@ -13,7 +13,9 @@ import {
 
 describe('interpPoints: the backend rule (currencies.py interp_points)', () => {
   it('uses the backend tenor days', () => {
-    expect(TENOR_DAYS).toEqual({ ON: 1, '1W': 7, '2W': 14, '1M': 30, '2M': 61, '3M': 91, '6M': 182, '9M': 273, '1Y': 365, '2Y': 730 })
+    // pricing/forward_points.py TENOR_DAYS: to ten years since 0.22.0
+    expect(TENOR_DAYS).toEqual({ ON: 1, '1W': 7, '2W': 14, '1M': 30, '2M': 61, '3M': 91, '6M': 182, '9M': 273, '1Y': 365, '18M': 547, '2Y': 730,
+                                 '3Y': 1095, '4Y': 1460, '5Y': 1825, '7Y': 2555, '10Y': 3650 })
   })
   const pts = { '1W': 14, '1M': 60, '3M': 182 }
   it.each([
@@ -36,7 +38,8 @@ describe('interpPoints: the backend rule (currencies.py interp_points)', () => {
   })
   it('an empty curve is zero points, as the backend has it; an unknown tenor is not a point', () => {
     expect(interpPoints({}, 30)).toBe(0)
-    expect(interpPoints({ '1M': 30, '5Y': 999 }, 400)).toBe(30)
+    expect(interpPoints({ '1M': 30, '15Y': 999 }, 400)).toBe(30)
+    expect(interpPoints({ '1M': 30, '5Y': 999 }, 1825), 'five years is a tenor now').toBe(999)
   })
   it('a missing curve, a missing day count or a tenor without a number: null, not zero', () => {
     expect(interpPoints(null, 30)).toBe(null)

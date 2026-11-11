@@ -103,6 +103,11 @@ def _clean_book(url: str) -> None:
             present = {r[0] for r in cur.fetchall()}
             tables = [t for t in TRUNCATE if t in present]
             cur.execute("TRUNCATE " + ", ".join(tables) + " CASCADE")
+            # The browser journeys share this database when both run on one machine, and one of them saves a desk's
+            # forward points (frontend/e2e/forwards.spec.js). The seed has no forward curve and the tests here expect
+            # the seed's market (the pinned book reads the latest curve), so a desk's own points are removed too.
+            if "market_data_snapshots" in present:
+                cur.execute("DELETE FROM market_data_snapshots WHERE curve_id LIKE '%\\_FWD' AND source IN ('MANUAL', 'IMPORT', 'BLOOMBERG')")
     finally:
         conn.close()
 

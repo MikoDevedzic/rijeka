@@ -127,8 +127,58 @@ def crypto_rows() -> list[Row]:
     return rows
 
 
+# Beyond the last quoted tenor (pricing/forward_points.py, 0.22.0): parity plus the basis the last quote shows,
+# held flat as a rate. Rijeka's parity is its own pricer's; the replica's is QuantLib's FxForward on its own curves,
+# and the basis arithmetic is done again here by hand.
+#   name, base ccy, quote ccy, S, pip, base: spec, quote: spec, quoted points {tenor: points}, crypto?
+EXTENSION = [
+    ("EURUSD quoted to 2Y", ql.EURCurrency(), ql.USDCurrency(), 1.1650, 1e-4, ("flat", 0.0200), ("usd",), {"1Y": 176.0, "2Y": 338.0}, False),
+    ("USDJPY quoted to 1Y", ql.USDCurrency(), ql.JPYCurrency(), 152.40, 1e-2, ("usd",), ("flat", 0.0050), {"3M": -128.0, "1Y": -505.0}, False),
+    ("BTCUSD listed to 1Y, rate 3.0%", ql.CHFCurrency(), ql.USDCurrency(), 108_000.0, 1.0, ("flat", 0.030), ("usd",), {"6M": 1_450.0, "1Y": 3_050.0}, True),
+]
+
+
+def extension_rows() -> list[Row]:
+    import math
+    from datetime import timedelta
+    from api.routes.currencies import spot_date
+    from pricing.forward_points import IMPLIED, TENOR_DAYS, points_at
+    set_eval(VAL)
+    rows = []
+    for name, bccy, qccy, S, pip, bspec, qspec, pts, crypto in EXTENSION:
+        (bc, bh), (qc, qh) = _side(bspec), _side(qspec)
+        sd = VAL if crypto else spot_date(VAL, False, bccy.code(), qccy.code())
+        cal = ql.NullCalendar() if crypto else JOINT[(bccy.code(), qccy.code())]
+
+        def rijeka_parity(d, bc=bc, qc=qc, sd=sd, bccy=bccy, qccy=qccy, S=S, pip=pip, crypto=crypto):
+            return price_currency_forward(base_currency=bccy.code(), quote_currency=qccy.code(), base_notional=1.0, forward_rate=S, spot=S,
+                                          valuation_date=VAL, settlement_date=sd + timedelta(days=d), quote_curve=qc, base_curve=bc,
+                                          direction="BUY", pip=pip, spot_date=None if crypto else sd).forward
+
+        def ql_parity(d, bh=bh, qh=qh, sd=sd, bccy=bccy, qccy=qccy, S=S, crypto=crypto, cal=cal):
+            return _ql_npv(1.0, bccy, qccy, S, sd + timedelta(days=d), True, bh, qh, S, settle_days=0 if crypto else 2, cal=cal).fairForwardRate()
+
+        last = max(pts, key=TENOR_DAYS.get)
+        d_l = TENOR_DAYS[last]
+        b = math.log((S + pts[last] * pip) / ql_parity(d_l)) / (d_l / 365.0)             # the last quote over QuantLib's parity, a year
+        for tenor in ("3Y", "5Y", "10Y"):
+            d = TENOR_DAYS[tenor]
+            at = points_at(pts, d, spot=S, pip=pip, parity_forward=rijeka_parity)
+            assert at.kind == IMPLIED and at.last_tenor == last
+            want = ql_parity(d) * math.exp(b * d / 365.0)
+            rows.append(Row("FX forward" if not crypto else "Crypto NDF", name, f"forward at {tenor}, beyond the last quote ({last}): parity + basis held as a rate",
+                            S + at.points * pip, want, "pips" if not crypto else "USD", 1e-6, scale=(1 / pip) if not crypto else 1.0))
+        rows.append(Row("FX forward" if not crypto else "Crypto NDF", name, f"the basis the {last} quote shows over parity, a year", at.basis_rate, b,
+                        "bp", 1e-6, scale=1e4))
+    return rows
+
+
 def all_rows() -> list[Row]:
-    return fx_rows() + crypto_rows()
+    return fx_rows() + crypto_rows() + extension_rows()
+
+
+def test_a_forward_beyond_the_last_quote_against_quantlib_parity_and_the_basis_by_hand():
+    assert_rows(extension_rows())
 
 
 def test_fx_forwards_against_quantlib():

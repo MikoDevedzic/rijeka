@@ -134,9 +134,10 @@ test('a figure is set one way: the forwards page, the ticket, and a field like t
   await expect(table).toBeVisible({ timeout: 30_000 })
   await app.getByRole('button', { name: 'FILL FROM PARITY' }).click()
   const cells = table.locator('> div')
-  const points = table.locator('input').first()
+  const points = table.locator('input.qi').first()
   await expect(points).not.toHaveValue('')
-  const outright = cells.nth(8 + 3), parity = cells.nth(8 + 5), tenor = cells.nth(8)
+  // nine columns since 0.22.0 (the switch first): the first tenor's row starts at cell 9
+  const outright = app.getByTestId('fwd-outright-1W'), parity = cells.nth(9 + 6), tenor = cells.nth(9 + 1)
   await expect(outright).toHaveText(/\d/)
   expect(await face(points), 'the points typed in are set like the outright').toEqual(await face(outright))
   expect(await face(outright)).toEqual(['DM Mono', '12.5px'])
