@@ -204,6 +204,7 @@ def live_commit(url: str) -> Optional[str]:
 
 
 API_ROOT = "backend/"       # render.yaml: rootDir. Render deploys the API only for a change under it.
+COMPARE_FILE_LIMIT = 300    # GitHub's compare lists at most this many files: a full list may be a cut one
 
 
 def frontend_only(files: list[str]) -> bool:
@@ -213,15 +214,33 @@ def frontend_only(files: list[str]) -> bool:
 
     Until 11 November 2026 this listed the folders known to be outside the API (frontend, landing site, docs,
     workflows) and took everything else for the API. A push that changed `chain/verify/index.html` was then
-    waited for: Render never deployed it, and `release` stayed where it was."""
+    waited for: Render never deployed it, and `release` stayed where it was.
+
+    The question is whether API code changed, not whether the host restarts: an edit to `render.yaml` may
+    restart the service, with the same code, and the frontend loses nothing by not waiting for that."""
     return bool(files) and not any(f.startswith(API_ROOT) and not f.endswith(".md") for f in files)
+
+
+def changed_paths(compare: Optional[dict]) -> Optional[list[str]]:
+    """Every path a compare touches, a renamed file under both its names (a file moved out of `backend/` is a
+    change there, and GitHub lists it under the new name only). None when the list may have been cut short:
+    what cannot be read whole is not read as "nothing in the API changed"."""
+    files = (compare or {}).get("files") or []
+    if len(files) >= COMPARE_FILE_LIMIT:
+        return None
+    out = []
+    for f in files:
+        out.append(f.get("filename", ""))
+        if f.get("previous_filename"):
+            out.append(f["previous_filename"])
+    return out
 
 
 def sync_release(own: str, repo: str, token: str, gh=github, branch: str = "release",
                  base: str = "main") -> str:
     """Moves `release` to `own` when `own` is on `base` and `release` is elsewhere; to `base`'s head instead
-    when `base` is ahead of `own` on frontend, landing-site or docs changes only (Render does not deploy
-    those, so the API never serves them, but the frontend must). Returns what happened."""
+    when `base` is ahead of `own` on nothing in the API's image (`frontend_only`: Render does not deploy
+    those commits, so the API never reports them, but the frontend must have them). Returns what happened."""
     code, ref = gh("GET", f"/repos/{repo}/git/ref/heads/{branch}", token)
     current = (ref or {}).get("object", {}).get("sha") if code == 200 else None
     code, cmp = gh("GET", f"/repos/{repo}/compare/{base}...{own}", token)
@@ -230,8 +249,8 @@ def sync_release(own: str, repo: str, token: str, gh=github, branch: str = "rele
     target = own
     if (cmp or {}).get("status") == "behind":
         code2, ahead = gh("GET", f"/repos/{repo}/compare/{own}...{base}", token)
-        files = [f.get("filename", "") for f in (ahead or {}).get("files", [])] if code2 == 200 else []
-        if frontend_only(files):
+        files = changed_paths(ahead) if code2 == 200 else None
+        if files is not None and frontend_only(files):
             code3, head = gh("GET", f"/repos/{repo}/git/ref/heads/{base}", token)
             if code3 == 200 and (head or {}).get("object", {}).get("sha"):
                 target = head["object"]["sha"]

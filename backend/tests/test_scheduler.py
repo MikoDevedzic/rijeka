@@ -78,7 +78,7 @@ def _gh_factory(release_sha, compare_status, log, ahead_files=None, main_sha="m"
         if "/compare/main..." in path:
             return 200, {"status": compare_status}
         if "/compare/" in path:                       # own...main: what main has beyond the live commit
-            return 200, {"status": "ahead", "files": [{"filename": f} for f in (ahead_files or [])]}
+            return 200, {"status": "ahead", "files": [f if isinstance(f, dict) else {"filename": f} for f in (ahead_files or [])]}
         return 200, {}
     return gh
 
@@ -115,6 +115,8 @@ def test_what_render_does_not_deploy_is_not_waited_for():
     never served by the API, so `release` follows main's head. On 11 November 2026 a push that changed the
     verifier's page under `chain/` was taken for an API change and `release` stayed behind."""
     own, main = "a" * 40, "m" * 40
+    # render.yaml is here on purpose: an edit to it may restart the host, with the same API code, and the rule
+    # asks whether API code changed
     outside = ["chain/verify/index.html", "chain/README.md", "CHANGELOG.md", ".claude/agents/jarvis.md", "render.yaml",
                "tests/reference/test_x.py", "frontend/src/components/docs/methodology/methodology.json", "backend/README.md"]
     assert S.frontend_only(outside) is True
@@ -124,6 +126,21 @@ def test_what_render_does_not_deploy_is_not_waited_for():
         assert S.frontend_only(outside + [api]) is False, api
     # a folder whose name only begins like the API's is not the API
     assert S.frontend_only(["backend_notes/x.py"]) is True
+
+
+def test_a_file_moved_out_of_the_api_and_a_list_cut_short_both_wait():
+    own, main = "a" * 40, "m" * 40
+    # GitHub lists a renamed file under its new name; where it came from is the change Render deploys for
+    moved = [{"filename": "docs/notes/x.py", "previous_filename": "backend/x.py", "status": "renamed"}]
+    assert S.changed_paths({"files": moved}) == ["docs/notes/x.py", "backend/x.py"]
+    assert S.sync_release(own, "o/r", "t", gh=_gh_factory("b" * 40, "behind", [], ahead_files=moved, main_sha=main)) == "release -> aaaaaaa"
+    # a file moved between two folders outside the API is still outside it
+    assert S.frontend_only(S.changed_paths({"files": [{"filename": "docs/b.md", "previous_filename": "frontend/a.md"}]})) is True
+    # a compare of 300 files may be a longer one cut short: release stays with the live commit
+    many = [f"frontend/src/f{i}.js" for i in range(S.COMPARE_FILE_LIMIT)]
+    assert S.changed_paths({"files": [{"filename": f} for f in many]}) is None
+    assert S.sync_release(own, "o/r", "t", gh=_gh_factory("b" * 40, "behind", [], ahead_files=many, main_sha=main)) == "release -> aaaaaaa"
+    assert S.sync_release(own, "o/r", "t", gh=_gh_factory("b" * 40, "behind", [], ahead_files=many[:-1], main_sha=main)) == f"release -> {main[:7]}"
     assert S.frontend_only([".github/workflows/ci.yml", "backend/main.py"]) is False
 
 

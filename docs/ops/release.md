@@ -18,13 +18,14 @@ this page is what to do, in order.
       commit them with it: `cd docs/methodology && tectonic rijeka_methodology.tex`, copy the PDF to
       `frontend/public/methodology/`, and `cd frontend && npm run methodology` (the unit run fails when the pages are
       stale; nothing checks that the PDF is the source's, so read its first and last page).
-- [ ] `CHANGELOG.md` and `backend/version.py` for a release that changes behaviour. A frontend- or docs-only
-      fix leaves `version.py` alone so the API does not restart.
+- [ ] `CHANGELOG.md` and `backend/version.py` for a release that changes behaviour. A fix with nothing under
+      `backend/` (frontend, docs, the verifier's page) leaves `version.py` alone so the API does not restart.
 
 ## 2. Freeze windows
 
 Ask: is there a demo or a client session in the next two hours? If yes, only a fix the user asks for by name
-ships. Prefer frontend-only changes (Render ignores `frontend/`, `docs/` and `*.md`, so the API keeps running).
+ships. Prefer frontend-only changes (Render deploys only for a file under `backend/` that is not Markdown, so the
+API keeps running).
 
 ## 3. Migrations
 

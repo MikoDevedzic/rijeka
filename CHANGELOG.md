@@ -9,7 +9,8 @@ methodology document carries its own version (v1.12). Commits on `main` are the 
   startup, and the `release-sync` workflow) listed the folders it knew to be outside the API and took everything
   else for the API. The verifier's page lives under `chain/`: the push that changed it was waited for, never
   deployed, and the app stayed a commit behind `main`. One rule now, in both: a push with nothing under `backend/`
-  but Markdown lets the app follow `main`.
+  but Markdown lets the app follow `main`. A file moved out of `backend/` counts as a change there, and a list of
+  changes GitHub may have cut short (300 files) is not read as "nothing in the API changed".
 
 ## The ticket's sides have their colours · 11 November 2026 (frontend only)
 

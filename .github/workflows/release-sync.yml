@@ -48,7 +48,9 @@ jobs:
           # The same rule as backend/scheduler.py frontend_only().
           target="$live"
           if [ "$live" != "$main" ]; then
-            changed=$(git diff --name-only "$live" "$main")
+            # --no-renames: a file moved out of backend/ is listed under its old name too (it is a change
+            # there); quotepath off: a path is printed as it is, as the API's own check reads it
+            changed=$(git -c core.quotepath=off diff --name-only --no-renames "$live" "$main")
             api=$(printf '%s\n' "$changed" | grep -E '^backend/' | grep -vE '\.md$' || true)
             if [ -z "$api" ]; then target="$main"; echo "main is ahead of the API on nothing under backend/: release follows main"; fi
           fi
