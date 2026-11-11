@@ -45,6 +45,24 @@ asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", t
   step; the old bridge 16 to 21 % low on the call. A cold read found the XVA tab's margin-period note still
   describing the old method and naming SIMM: corrected.
 
+## What Phase 1 is, said one way · 11 November 2026 (frontend only)
+
+**The home page and the roadmap say what the sign-in page says.** Asked for by the owner as the first line of the
+Phase 1 exit list ("as recommended, then we'll review").
+
+- **The home page's footer** said RATES ONLY IN PHASE 1 while the sign-in page said rates, FX and crypto forwards
+  and options are live. It now reads PHASE 1 · RATES, FX & CRYPTO FORWARDS AND OPTIONS.
+- **The roadmap was behind the app.** FX and digital assets are listed as Phase 1 beside rates, with FX options
+  (which sat under Phase 2). Wrong-way risk shipped in 0.17.0 on currency and
+  digital-asset tickets and the page still listed it only as next: it is now DONE with its limits (the multiple is
+  the desk's input, the netting-set charge does not see it). Of the two lines that named it, the Phase 2 one no
+  longer does, and the counterparty-credit one stays NEXT for what is not built (the netting set); a new NEXT line
+  names calibration. Added
+  as DONE: a trade as a package of legs (0.19.0), fixings for digital assets (0.14.0), forward curves to ten years
+  (0.22.0), the methodology read in the app (0.20.0). Phase 2 is credit and cross-currency, and is PLANNED.
+- **Checked:** lint, 587 unit tests, the design check (no count moved), both screens looked at in pictures at
+  1440 wide. **Not changed:** the names FUND01 and CRYBASIS01 on the roadmap's older lines; the sign-in page.
+
 ## The logo · 11 November 2026 (frontend only)
 
 **A logo that simulates, and a confirmation you can watch.** Asked for by the owner: "our Rijeka logo needs to be

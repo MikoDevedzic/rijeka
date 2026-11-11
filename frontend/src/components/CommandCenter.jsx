@@ -175,7 +175,7 @@ function DeskHome({ demo, navigate }) {
   const asOf = d.sofr?.valuation_date
   const stale = daysOld(asOf)
   const showPath = !d.loading && confirmed === 0
-  const footer = <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · RATES ONLY IN PHASE 1 · <a href="/terms" target="_blank" rel="noopener noreferrer">TERMS</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">PRIVACY</a> · miko@rijeka.app</div>
+  const footer = <div className="cc-footer">{demo?.enabled ? 'HOSTED DEMO · SEPOLIA TESTNET · DATA MAY BE RESET' : 'EARLY ACCESS'} · PHASE 1 · RATES, FX & CRYPTO FORWARDS AND OPTIONS · <a href="/terms" target="_blank" rel="noopener noreferrer">TERMS</a> · <a href="/privacy" target="_blank" rel="noopener noreferrer">PRIVACY</a> · miko@rijeka.app</div>
 
   if (!firmKnown && !askedAfter && !waited) return <div className="dh" />
 
