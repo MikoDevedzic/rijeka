@@ -656,7 +656,25 @@ class TestEmbeddedOptionFiguresOnTheLeg:
         finally:
             cf._price_strip_core = real
         assert r.option_errors == ["cap: no strike for the period"]
-        assert r.option_pv == 0.0 and not [c for c in r.cashflows if c.cashflow_type == "CAPLET"]
+        # not priced is None, never zero: the footer shows "not priced", not "$0"
+        assert r.option_pv is None and r.vega is None and not [c for c in r.cashflows if c.cashflow_type == "CAPLET"]
+
+    def test_an_entry_the_leg_cannot_use_is_named_not_skipped(self, flat_curve_3pct, vol_surface_atm_85bp):
+        """The real paths, nothing replaced: a side that is not BUY or SELL, a type that is not CAP or FLOOR, and
+        an option on a fixed leg each leave the leg's value as the coupons' and say what was wrong."""
+        vanilla = price_leg(_float_leg(direction="RECEIVE"), flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        side = dict(_cap_entry("SELL", 0.03)); side["direction"] = "HOLD"
+        r = price_leg(_float_leg(direction="RECEIVE", embedded_options=[side], vol_surface=vol_surface_atm_85bp), flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        assert r.option_errors == ["cap: the side must be BUY or SELL"] and r.option_pv is None and r.pv == pytest.approx(vanilla.pv)
+        kind = dict(_cap_entry("SELL", 0.03)); kind["type"] = "SWAPTION"
+        r = price_leg(_float_leg(direction="RECEIVE", embedded_options=[kind], vol_surface=vol_surface_atm_85bp), flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        assert r.option_errors == ["swaption: the type must be CAP or FLOOR"] and r.option_pv is None
+        # one good and one bad: the good one is valued, the bad one named
+        r = price_leg(_float_leg(direction="RECEIVE", embedded_options=[_cap_entry("SELL", 0.03), side], vol_surface=vol_surface_atm_85bp), flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        assert r.option_pv < 0 and r.option_errors == ["cap: the side must be BUY or SELL"]
+        fixed = {**_float_leg(direction="PAY", embedded_options=[_cap_entry("SELL", 0.03)], vol_surface=vol_surface_atm_85bp), "leg_type": "FIXED", "fixed_rate": 0.03}
+        r = price_leg(fixed, flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        assert r.option_pv is None and r.option_errors == ["an embedded cap or floor needs a floating leg; this leg is fixed"]
 
     def test_the_price_route_sums_the_legs(self):
         from api.routes.pricer import _options_summary

@@ -464,8 +464,9 @@ def price_leg(
     option_pv = option_vega = None
     option_tiers: List[str] = []
     option_errors: List[str] = []
+    if embedded_opts and not is_float:
+        option_errors.append("an embedded cap or floor needs a floating leg; this leg is fixed")
     if is_float and embedded_opts and periods:
-        option_pv, option_vega = 0.0, 0.0
         from pricing.cap_floor import (
             price_caplet_strip_over_periods   as _price_caplets,
             price_floorlet_strip_over_periods as _price_floorlets,
@@ -497,8 +498,10 @@ def price_leg(
             opt_type  = str(opt.get("type", "")).upper()
             direction_opt = str(opt.get("direction", "")).upper()
             if opt_type not in ("CAP", "FLOOR"):
+                option_errors.append(f"{opt_type.lower() or 'option'}: the type must be CAP or FLOOR")
                 continue
             if direction_opt not in ("BUY", "SELL"):
+                option_errors.append(f"{opt_type.lower()}: the side must be BUY or SELL")
                 continue
 
             # cap_floor.py expects the legacy strike_schedule_obj shape:
@@ -530,7 +533,9 @@ def price_leg(
                 )
                 if strip.error is None:
                     leg_pv += strip.npv
-                    option_pv += strip.npv; option_vega += strip.vega; option_tiers.append(strip.vol_tier)
+                    # None until a strip is priced: an option that failed is not an option worth zero
+                    option_pv = (option_pv or 0.0) + strip.npv; option_vega = (option_vega or 0.0) + strip.vega
+                    option_tiers.append(strip.vol_tier)
                     _append_strip_cashflows(strip, "CAPLET")
                 else:
                     option_errors.append(f"cap: {strip.error}")
@@ -549,7 +554,8 @@ def price_leg(
                 )
                 if strip.error is None:
                     leg_pv += strip.npv
-                    option_pv += strip.npv; option_vega += strip.vega; option_tiers.append(strip.vol_tier)
+                    option_pv = (option_pv or 0.0) + strip.npv; option_vega = (option_vega or 0.0) + strip.vega
+                    option_tiers.append(strip.vol_tier)
                     _append_strip_cashflows(strip, "FLOORLET")
                 else:
                     option_errors.append(f"floor: {strip.error}")

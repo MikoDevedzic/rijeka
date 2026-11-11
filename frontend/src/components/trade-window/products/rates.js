@@ -44,13 +44,19 @@ export const swapLegFigures = r => {
   if (!legs.length) return []
   const kinds = legs.map(l => String(l.leg_type || '').toUpperCase())
   const byKind = new Set(kinds).size === legs.length
-  return legs.map((l, i) => metricCurrency(`${byKind ? kinds[i] : (l.leg_ref || `LEG ${i + 1}`)} PV`, (l.pv ?? 0) - (l.option_pv ?? 0)))
+  return legs
+    .map((l, i) => ({ l, i, coupons: (l.pv ?? 0) - (l.option_pv ?? 0) }))
+    // a leg that is only its options (a cap, floor or collar is booked as a floating leg with no coupons) has no
+    // coupon figure: "FLOAT PV $0" would name a leg the trade does not have
+    .filter(x => !(x.l.option_pv != null && Math.abs(x.coupons) < 0.005))
+    .map(x => metricCurrency(`${byKind ? kinds[x.i] : (x.l.leg_ref || `LEG ${x.i + 1}`)} PV`, x.coupons))
 }
 // The embedded options' own figures: their value and what one basis point of normal vol does to it. Nothing when
 // the swap has no embedded option (the API sends null, which is not an option worth zero).
-export const swapOptionFigures = r => r?.option_pv == null ? [] : [
-  metricCurrency('OPTION PV', r.option_pv),
-  metricCurrency('VEGA/1bp', r.vega),
+// An option that could not be priced is said in the footer too (it is on every tab; the reason is on TRADE).
+export const swapOptionFigures = r => [
+  ...(r?.option_pv == null ? [] : [metricCurrency('OPTION PV', r.option_pv), metricCurrency('VEGA/1bp', r.vega)]),
+  ...(r?.option_errors?.length ? [{ label: 'OPTION', value: 'NOT PRICED', colorBy: 'warning' }] : []),
 ]
 
 const metricBp = (label, value) => ({
@@ -133,7 +139,7 @@ registerProduct({
       metricCurrency('NET NPV',   r.npv),
       ...swapLegFigures(r),
       ...swapOptionFigures(r),
-      ...(r.option_vol_tier ? [{ label: 'OPTION VOL', value: r.option_vol_tier, colorBy: r.option_vol_tier === 'FALLBACK' ? 'warning' : 'info' }] : []),
+      ...(r.option_vol_tier ? [{ label: 'OPTION VOL', value: r.option_vol_tier, colorBy: ['QUOTED', 'INTERP', 'OVERRIDE'].includes(r.option_vol_tier) ? 'info' : 'warning' }] : []),
       metricCurrency('IR01',      r.ir01),
       metricCurrency('IR01 DISC', r.ir01_disc),
       metricCurrency('THETA',     r.theta),

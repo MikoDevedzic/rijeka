@@ -158,15 +158,25 @@ def booked_cap_rows() -> list[Row]:
         r = price_swap("cap", [leg], {"USD_SOFR": c}, VAL)
         assert r.error is None
         sign = 1.0 if side == "BUY" else -1.0
-        pv = 0.0
+        pv = pv_up = 0.0
         for per in generate_schedule(eff, mat, "QUARTERLY", "ACT/360", Decimal(str(N)), bdc="MOD_FOLLOWING"):
             s, e, pay = per.period_start, per.period_end, per.payment_date
             tau = float(per.dcf)
             F = (h.discount(qd(s)) / h.discount(qd(e)) - 1) / tau
             T = option_time(VAL, s, e)
-            pv += N * tau * ql.bachelierBlackFormula(ql.Option.Call if kind == "CAP" else ql.Option.Put, K, F, 0.0085 * math.sqrt(T), h.discount(qd(pay)))
+            typ = ql.Option.Call if kind == "CAP" else ql.Option.Put
+            pv += N * tau * ql.bachelierBlackFormula(typ, K, F, 0.0085 * math.sqrt(T), h.discount(qd(pay)))
+            pv_up += N * tau * ql.bachelierBlackFormula(typ, K, F, 0.0086 * math.sqrt(T), h.discount(qd(pay)))
         rows.append(Row("Cap/floor", f"booked {side} {kind} K={K:.2%} {eff}-{mat} (leverage-0 float leg)", "NPV through the swap pricer, replica",
                         r.npv, sign * pv, "% of premium", 1e-6, scale=100 / pv))
+        # the option's own figures as the leg reports them since 0.21.2 (the swap ticket's OPTION PV and VEGA/1bp):
+        # the value apart from the coupons, and what one basis point of normal vol does to it, each against
+        # QuantLib's Bachelier formula on the same dates
+        leg_r = r.legs[0]
+        rows.append(Row("Cap/floor", f"booked {side} {kind} K={K:.2%} {eff}-{mat} (leverage-0 float leg)", "option value on the leg (option_pv), replica",
+                        leg_r.option_pv, sign * pv, "% of premium", 1e-6, scale=100 / pv))
+        rows.append(Row("Cap/floor", f"booked {side} {kind} K={K:.2%} {eff}-{mat} (leverage-0 float leg)", "vega on the leg (1bp vol), replica",
+                        leg_r.vega, sign * (pv_up - pv), "% of vega", 1e-4, scale=100 / (pv_up - pv)))
     return rows
 
 

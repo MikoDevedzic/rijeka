@@ -165,6 +165,8 @@ test('a swap shows each leg beside the net; an embedded cap shows its value and 
   await win.getByRole('button', { name: '+ CAP' }).first().click()
   const strike = win.getByLabel('Strike of the embedded cap').first()
   await strike.fill('4.5'); await strike.blur()
+  // the side the figures below are read against: a cap is added sold, and SELL is the lit chip (coral)
+  expect(await win.getByRole('button', { name: 'SELL', exact: true }).last().evaluate(el => getComputedStyle(el).color)).toBe('rgb(240, 130, 140)')
   body = await priced()
   await expect(win.locator('.tbw-footer-metric', { hasText: 'OPTION PV' })).toBeVisible()
   const option = await figure('OPTION PV'), vega = await figure('VEGA/1BP')
@@ -174,6 +176,13 @@ test('a swap shows each leg beside the net; an embedded cap shows its value and 
   expect(Math.abs(vega - body.vega)).toBeLessThanOrEqual(1)
   expect(Math.abs((await figure('FIXED PV')) + (await figure('FLOAT PV')) + option - (await figure('NET NPV'))), 'the legs and the option add up to the net').toBeLessThanOrEqual(3)
   expect(Math.abs((await figure('FLOAT PV')) - float), 'the coupons are worth what they were: the option is shown apart').toBeLessThanOrEqual(1)
+  // seven figures still sit on one line beside the buttons, at the narrowest width the ticket is used at
+  await app.setViewportSize({ width: 1280, height: 800 })
+  const boxes = await win.locator('.tbw-footer-metric').evaluateAll(els => els.map(e => { const b = e.getBoundingClientRect(); return [Math.round(b.top), Math.round(b.right)] }))
+  expect(new Set(boxes.map(b => b[0])).size, 'one line').toBe(1)
+  const actions = await win.locator('.tbw-footer-actions').boundingBox()
+  expect(Math.max(...boxes.map(b => b[1])), 'clear of the buttons').toBeLessThanOrEqual(Math.round(actions.x) + 1)
+  await app.setViewportSize({ width: 1440, height: 900 })
   // the same figures are on every tab
   await win.getByRole('button', { name: 'CASHFLOWS', exact: true }).click()
   await expect(win.locator('.tbw-footer-metric', { hasText: 'OPTION PV' })).toBeVisible()

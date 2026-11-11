@@ -18,9 +18,15 @@ optionality it doesnt show me Vega risk or the value of the option value on the 
   the fallback). The price says `option_pv`, `vega`, `option_vol_tier` on each leg and in total, and null on a swap
   with no option (not zero).
 - **An embedded option that could not be priced says so.** It used to add nothing and say nothing; the ticket now
-  names it and the reason under the terms.
-- No figure changed: the QuantLib reference suite (33), the engines and replications (93) and the pinned book are as
-  they were. Vega is checked against the same leg repriced on a vol surface 1bp higher.
+  names it and the reason under the terms, the footer says NOT PRICED on every tab, and its value is null, never
+  zero. An entry with a side or a type the engine does not know, or one put on a fixed leg, is named too.
+- A cap, floor or collar opened from the blotter (booked as a leg that is only its options) shows OPTION PV and
+  VEGA/1bp and no coupon figure.
+- No figure changed: the QuantLib reference suite, the engines and replications and the pinned book are as they
+  were. The option's value and vega on the leg each have a row against QuantLib's Bachelier formula (three booked
+  caps and floors), the vega is also checked against the leg repriced on a surface 1bp higher, and one leg's vega
+  was re-derived by hand (2,750.60 against 2,750.6026). The vega is $ per +1bp of normal vol, one-sided, with the
+  smile held; the swap's IR01 includes the option's delta.
 
 ## Figures are set one way; a design keeper · 11 November 2026 (frontend only)
 
