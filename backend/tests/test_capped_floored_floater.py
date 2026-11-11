@@ -600,3 +600,68 @@ class TestComposition:
         assert abs(delta_two - 2.0 * delta_one) < 1.0, (
             f"Double-stacked cap should contribute 2x: single={delta_one}, double={delta_two}"
         )
+
+
+# ════════════════════════════════════════════════════════════════════════
+# §8. The embedded option's own figures on the leg (11 November 2026)
+# ════════════════════════════════════════════════════════════════════════
+# The strip pricer has always returned its value and its vega; price_leg added the value into the leg and dropped
+# the rest, and a strip that could not be priced added nothing and said nothing. The owner, on a swap with an
+# embedded cap: "it doesnt show me Vega risk or the value of the option value on the swap."
+
+class TestEmbeddedOptionFiguresOnTheLeg:
+    def test_a_leg_with_no_option_reports_none_not_zero(self, flat_curve_3pct):
+        r = price_leg(_float_leg(direction="RECEIVE"), flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        assert r.option_pv is None and r.vega is None and r.option_vol_tier is None and r.option_errors == []
+
+    def test_the_option_value_is_the_legs_value_less_the_coupons(self, flat_curve_3pct, vol_surface_atm_85bp):
+        vanilla = price_leg(_float_leg(direction="RECEIVE"), flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        capped = price_leg(_float_leg(direction="RECEIVE", embedded_options=[_cap_entry("SELL", 0.03)], vol_surface=vol_surface_atm_85bp),
+                           flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        assert capped.option_pv == pytest.approx(capped.pv - vanilla.pv, abs=1e-6)
+        assert capped.option_pv == pytest.approx(sum(cf.pv for cf in capped.cashflows if cf.cashflow_type == "CAPLET"), abs=0.01)
+        assert capped.option_pv < 0, "a cap sold is a liability"
+
+    def test_vega_is_what_one_basis_point_of_vol_does_to_the_option(self, flat_curve_3pct, vol_surface_atm_85bp):
+        """Independent of the strip's own bump: the same leg repriced on a surface 1bp higher."""
+        up = [{**row, "flat_vol_bp": row["flat_vol_bp"] + 1.0} for row in vol_surface_atm_85bp]
+        for side, sign in (("BUY", 1), ("SELL", -1)):
+            base = price_leg(_float_leg(direction="RECEIVE", embedded_options=[_cap_entry(side, 0.03)], vol_surface=vol_surface_atm_85bp),
+                             flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+            bumped = price_leg(_float_leg(direction="RECEIVE", embedded_options=[_cap_entry(side, 0.03)], vol_surface=up),
+                               flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+            assert base.vega == pytest.approx(bumped.option_pv - base.option_pv, rel=1e-6, abs=0.01)
+            assert sign * base.vega > 0, "long an option is long vol, short is short"
+
+    def test_a_collar_sums_its_two_strips(self, flat_curve_3pct, vol_surface_atm_85bp):
+        cap = price_leg(_float_leg(direction="RECEIVE", embedded_options=[_cap_entry("SELL", 0.04)], vol_surface=vol_surface_atm_85bp),
+                        flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        floor = price_leg(_float_leg(direction="RECEIVE", embedded_options=[_floor_entry("BUY", 0.02)], vol_surface=vol_surface_atm_85bp),
+                          flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        both = price_leg(_float_leg(direction="RECEIVE", embedded_options=[_cap_entry("SELL", 0.04), _floor_entry("BUY", 0.02)], vol_surface=vol_surface_atm_85bp),
+                         flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        assert both.option_pv == pytest.approx(cap.option_pv + floor.option_pv, abs=0.01)
+        assert both.vega == pytest.approx(cap.vega + floor.vega, abs=0.01)
+
+    def test_an_option_that_cannot_be_priced_says_so(self, flat_curve_3pct, vol_surface_atm_85bp):
+        bad = dict(_cap_entry("SELL", 0.03)); bad["direction"] = "BUY"
+        leg = _float_leg(direction="RECEIVE", embedded_options=[bad], vol_surface=vol_surface_atm_85bp)
+        # the strip pricer refuses a schedule it cannot read; the leg carries the reason and no value from it
+        import pricing.cap_floor as cf
+        real = cf._price_strip_core
+        try:
+            cf._price_strip_core = lambda *a, **k: cf.StripResult(npv=0.0, vega=0.0, ir01=0.0, atm_forward=0.0, vol_tier="ERROR",
+                                                                  n_periods=0, direction="BUY", error="no strike for the period")
+            r = price_leg(leg, flat_curve_3pct, flat_curve_3pct, VAL_DATE)
+        finally:
+            cf._price_strip_core = real
+        assert r.option_errors == ["cap: no strike for the period"]
+        assert r.option_pv == 0.0 and not [c for c in r.cashflows if c.cashflow_type == "CAPLET"]
+
+    def test_the_price_route_sums_the_legs(self):
+        from api.routes.pricer import _options_summary
+        from pricing.ir_swap import LegResult
+        mk = lambda **k: LegResult(leg_id="x", leg_ref="L", leg_type="FLOAT", direction="RECEIVE", currency="USD", pv=0.0, **k)
+        assert _options_summary([mk(), mk()]) == {"option_pv": None, "vega": None, "option_vol_tier": None, "option_errors": []}
+        s = _options_summary([mk(), mk(option_pv=-120.5, vega=-3.25, option_vol_tier="QUOTED"), mk(option_pv=40.0, vega=1.0, option_vol_tier="FALLBACK", option_errors=["floor: x"])])
+        assert s == {"option_pv": pytest.approx(-80.5), "vega": pytest.approx(-2.25), "option_vol_tier": "FALLBACK", "option_errors": ["floor: x"]}

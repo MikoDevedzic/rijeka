@@ -1240,6 +1240,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         {!isCurrency && error && (
           <div className="tbw-sec" data-testid="price-error"><div className="tbw-error">{error}</div></div>
         )}
+        {/* an embedded cap or floor the engine could not value adds nothing to the price: said here, not left out in silence */}
+        {!isCurrency && !error && result?.option_errors?.length > 0 && (
+          <div className="tbw-sec" data-testid="option-error"><div className="tbw-error">An embedded option was not priced and is not in the figures below: {result.option_errors.join('; ')}</div></div>
+        )}
       </div>
 
       {tabsVisited['CASHFLOWS'] && !isCurrency && (

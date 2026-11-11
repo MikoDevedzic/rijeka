@@ -3,6 +3,25 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
+## 0.21.2 · 11 November 2026
+
+**A swap shows each leg again, and an embedded cap or floor shows its value and its vega.** Reported by the owner:
+"why did we also lose per leg value. i'm looking at IR swap and we only have Net NPV, also, when i'm adding embeded
+optionality it doesnt show me Vega risk or the value of the option value on the swap."
+
+- **Each leg's value is in the footer**, on every tab, beside the net: FIXED PV and FLOAT PV (a basis swap's two legs
+  by their own names). They were on the TRADE tab until the valuation moved to CASHFLOWS on 10 November, which left
+  the footer with the net alone.
+- **An embedded cap or floor: OPTION PV and VEGA/1bp.** The engine has always computed both for the strip; the leg
+  added the value in and dropped the rest, so the option was inside FLOAT PV and its vega nowhere. The leg's coupons
+  and its options are now shown apart and add up to the net; the vol tier used is in the valuation (amber when it is
+  the fallback). The price says `option_pv`, `vega`, `option_vol_tier` on each leg and in total, and null on a swap
+  with no option (not zero).
+- **An embedded option that could not be priced says so.** It used to add nothing and say nothing; the ticket now
+  names it and the reason under the terms.
+- No figure changed: the QuantLib reference suite (33), the engines and replications (93) and the pinned book are as
+  they were. Vega is checked against the same leg repriced on a vol surface 1bp higher.
+
 ## Figures are set one way; a design keeper · 11 November 2026 (frontend only)
 
 Reported by the owner: the forwards page of Configurations and the ticket did not look alike; "the points pips look

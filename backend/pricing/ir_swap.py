@@ -132,6 +132,13 @@ class LegResult:
     cashflows:  List[CashflowResult] = field(default_factory=list)
     ir01:       float = 0.0
     ir01_disc:  float = 0.0
+    # The leg's embedded caps and floors, taken out of `pv` (which includes them): their value, their vega
+    # ($ per 1bp of normal vol, the strip pricer's own bump), the worst vol tier used, and what could not be
+    # priced. None when the leg carries no option, so a reader can tell "no option" from "an option worth 0".
+    option_pv:      Optional[float] = None
+    vega:           Optional[float] = None
+    option_vol_tier: Optional[str] = None
+    option_errors:  List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -454,7 +461,11 @@ def price_leg(
     # columns dropped by migration 008b; `_normalize_embedded_options` is now a
     # one-liner that just reads `embedded_options`.
     embedded_opts = _normalize_embedded_options(leg)
+    option_pv = option_vega = None
+    option_tiers: List[str] = []
+    option_errors: List[str] = []
     if is_float and embedded_opts and periods:
+        option_pv, option_vega = 0.0, 0.0
         from pricing.cap_floor import (
             price_caplet_strip_over_periods   as _price_caplets,
             price_floorlet_strip_over_periods as _price_floorlets,
@@ -519,7 +530,10 @@ def price_leg(
                 )
                 if strip.error is None:
                     leg_pv += strip.npv
+                    option_pv += strip.npv; option_vega += strip.vega; option_tiers.append(strip.vol_tier)
                     _append_strip_cashflows(strip, "CAPLET")
+                else:
+                    option_errors.append(f"cap: {strip.error}")
             else:  # FLOOR
                 strip = _price_floorlets(
                     periods=periods,
@@ -535,14 +549,26 @@ def price_leg(
                 )
                 if strip.error is None:
                     leg_pv += strip.npv
+                    option_pv += strip.npv; option_vega += strip.vega; option_tiers.append(strip.vol_tier)
                     _append_strip_cashflows(strip, "FLOORLET")
+                else:
+                    option_errors.append(f"floor: {strip.error}")
     # ──────────────────────────────────────────────────────────────────────────
 
     return LegResult(
         leg_id=leg_id, leg_ref=leg_ref, leg_type=leg_type,
         direction=direction, currency=currency,
         pv=leg_pv, cashflows=cashflows,
+        option_pv=option_pv, vega=option_vega,
+        option_vol_tier=(_worst_option_tier(option_tiers) if option_tiers else None),
+        option_errors=option_errors,
     )
+
+
+def _worst_option_tier(tiers: List[str]) -> str:
+    """The least trustworthy vol tier among a leg's strips (the strip pricer's own ordering)."""
+    from pricing.cap_floor import _worst_tier
+    return _worst_tier(tiers)
 
 
 def price_swap(

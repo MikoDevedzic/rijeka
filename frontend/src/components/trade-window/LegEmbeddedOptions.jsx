@@ -234,6 +234,8 @@ export default function LegEmbeddedOptions({ entries = [], onChange, legLabel = 
               <span style={labelStyle}>Strike %</span>
               <input
                 style={strikeInputStyle}
+                inputMode="decimal"
+                aria-label={`Strike of the embedded ${String(t).toLowerCase()}`}
                 value={strike}
                 onChange={e => patchEntry(idx, { defaultStrike: e.target.value })}
                 placeholder={DEFAULT_STRIKE_PCT[t]}

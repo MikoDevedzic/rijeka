@@ -36,6 +36,23 @@ const metricCurrency = (label, value) => ({
   label, value: fmtCurrency(value), format: 'currency', colorBy: signClass(value)
 })
 
+// A swap's legs, each with its own value, for the footer and the valuation: a fixed and a floating leg are named
+// by their kind, two legs of one kind (a basis swap) by their own references. A leg's embedded caps and floors are
+// shown apart (OPTION PV), so the coupons' value is the leg's less its options: the figures add up to NET NPV.
+export const swapLegFigures = r => {
+  const legs = Array.isArray(r?.legs) ? r.legs : []
+  if (!legs.length) return []
+  const kinds = legs.map(l => String(l.leg_type || '').toUpperCase())
+  const byKind = new Set(kinds).size === legs.length
+  return legs.map((l, i) => metricCurrency(`${byKind ? kinds[i] : (l.leg_ref || `LEG ${i + 1}`)} PV`, (l.pv ?? 0) - (l.option_pv ?? 0)))
+}
+// The embedded options' own figures: their value and what one basis point of normal vol does to it. Nothing when
+// the swap has no embedded option (the API sends null, which is not an option worth zero).
+export const swapOptionFigures = r => r?.option_pv == null ? [] : [
+  metricCurrency('OPTION PV', r.option_pv),
+  metricCurrency('VEGA/1bp', r.vega),
+]
+
 const metricBp = (label, value) => ({
   label, value: value == null ? '—' : `${value.toFixed(1)}bp`, format: 'bp', colorBy: 'info'
 })
@@ -114,6 +131,9 @@ registerProduct({
   analytics: {
     metrics: r => [
       metricCurrency('NET NPV',   r.npv),
+      ...swapLegFigures(r),
+      ...swapOptionFigures(r),
+      ...(r.option_vol_tier ? [{ label: 'OPTION VOL', value: r.option_vol_tier, colorBy: r.option_vol_tier === 'FALLBACK' ? 'warning' : 'info' }] : []),
       metricCurrency('IR01',      r.ir01),
       metricCurrency('IR01 DISC', r.ir01_disc),
       metricCurrency('THETA',     r.theta),
@@ -121,21 +141,28 @@ registerProduct({
     ],
     breakdown: r => r.legs ? {
       kind: 'legs',
-      columns: ['LEG','TYPE','DIR','CCY','PV','IR01','IR01 DISC','GAMMA','THETA'],
+      columns: ['LEG','TYPE','DIR','CCY','PV','OPTION PV','VEGA/1bp','IR01','IR01 DISC','GAMMA','THETA'],
       rows: r.legs.map(l => [
         l.leg_ref, l.leg_type, l.direction, l.currency,
-        fmtCurrency(l.pv), fmtCurrency(l.ir01),
+        fmtCurrency(l.pv), l.option_pv == null ? '—' : fmtCurrency(l.option_pv), l.vega == null ? '—' : fmtCurrency(l.vega),
+        fmtCurrency(l.ir01),
         fmtCurrency(l.ir01_disc), l.gamma?.toFixed(4) ?? '—',
         fmtCurrency(l.theta),
       ]),
     } : null,
   },
 
+  // The footer is on every tab: the net figure, each leg's own value beside it (they were on the TRADE tab until
+  // the valuation moved to CASHFLOWS on 10 November 2026, which left only the net here), an embedded option's value
+  // and vega when the swap has one, and the rate risk. With an option the discounting-only IR01 gives its place
+  // to the two option figures (it stays in the valuation on CASHFLOWS): the footer is one line.
   footer: {
     metrics: r => [
       metricCurrency('NET NPV',   r.npv),
+      ...swapLegFigures(r),
+      ...swapOptionFigures(r),
       metricCurrency('IR01',      r.ir01),
-      metricCurrency('IR01 DISC', r.ir01_disc),
+      ...(r.option_pv == null ? [metricCurrency('IR01 DISC', r.ir01_disc)] : []),
       metricCurrency('THETA',     r.theta),
     ],
     structureLabel: state => state.structure || 'VANILLA',

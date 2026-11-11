@@ -137,3 +137,46 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
 
   expectClean(problems)
 })
+
+// Reported by the owner on 11 November 2026: "why did we also lose per leg value. i'm looking at IR swap and we only
+// have Net NPV, also, when i'm adding embeded optionality it doesnt show me Vega risk or the value of the option
+// value on the swap." The footer, on every tab: the net, each leg, and an embedded option's value and vega.
+test('a swap shows each leg beside the net; an embedded cap shows its value and its vega, and the figures add up', async ({ app, problems }) => {
+  const money = t => { const m = String(t).replace(/[−–]/g, '-').match(/([+-]?)\$?([\d,]+(?:\.\d+)?)/); return m ? (m[1] === '-' ? -1 : 1) * Number(m[2].replace(/,/g, '')) : NaN }
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()
+  await win.getByRole('button', { name: /^IR SWAP$/i }).click()
+  const figure = async label => money(await win.locator('.tbw-footer-metric', { hasText: label }).first().locator('span').last().textContent())
+  const priced = async () => { const r = app.waitForResponse(x => x.url().endsWith('/price/preview') && x.request().method() === 'POST'); await win.getByRole('button', { name: '▶ PRICE' }).click(); return (await r).json() }
+
+  let body = await priced()
+  await expect(win.locator('.tbw-footer-metric', { hasText: 'FIXED PV' })).toBeVisible()
+  await expect(win.locator('.tbw-footer-metric', { hasText: 'FLOAT PV' })).toBeVisible()
+  await expect(win.locator('.tbw-footer-metric', { hasText: 'OPTION PV' }), 'no option, no option figure').toHaveCount(0)
+  expect(body.option_pv, 'the API says "no option", not "an option worth nothing"').toBeNull()
+  const fixed = await figure('FIXED PV'), float = await figure('FLOAT PV')
+  expect(Math.abs(fixed), 'a leg of a 10mm five-year swap is worth something').toBeGreaterThan(100_000)
+  expect(Math.abs(fixed + float - await figure('NET NPV'))).toBeLessThanOrEqual(2)
+
+  // an embedded cap, sold, on the floating leg
+  await win.getByRole('button', { name: '+ CAP' }).first().click()
+  const strike = win.getByLabel('Strike of the embedded cap').first()
+  await strike.fill('4.5'); await strike.blur()
+  body = await priced()
+  await expect(win.locator('.tbw-footer-metric', { hasText: 'OPTION PV' })).toBeVisible()
+  const option = await figure('OPTION PV'), vega = await figure('VEGA/1BP')
+  expect(option, 'a cap sold is a liability').toBeLessThan(0)
+  expect(vega, 'and short vol').toBeLessThan(0)
+  expect(Math.abs(option - body.option_pv)).toBeLessThanOrEqual(1)
+  expect(Math.abs(vega - body.vega)).toBeLessThanOrEqual(1)
+  expect(Math.abs((await figure('FIXED PV')) + (await figure('FLOAT PV')) + option - (await figure('NET NPV'))), 'the legs and the option add up to the net').toBeLessThanOrEqual(3)
+  expect(Math.abs((await figure('FLOAT PV')) - float), 'the coupons are worth what they were: the option is shown apart').toBeLessThanOrEqual(1)
+  // the same figures are on every tab
+  await win.getByRole('button', { name: 'CASHFLOWS', exact: true }).click()
+  await expect(win.locator('.tbw-footer-metric', { hasText: 'OPTION PV' })).toBeVisible()
+  await expect(win.getByTestId('option-error')).toHaveCount(0)
+  expectClean(problems)
+})

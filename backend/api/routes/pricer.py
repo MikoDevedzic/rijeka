@@ -689,6 +689,11 @@ def price_trade(
             "pv":        float(lr.pv)        if lr.pv is not None else None,
             "ir01":      float(lr.ir01)      if hasattr(lr, 'ir01') else None,
             "ir01_disc": float(lr.ir01_disc) if hasattr(lr, 'ir01_disc') else None,
+            # the leg's embedded caps and floors on their own (pv above includes them); None when it has none
+            "option_pv":       float(lr.option_pv) if getattr(lr, "option_pv", None) is not None else None,
+            "vega":            float(lr.vega) if getattr(lr, "vega", None) is not None else None,
+            "option_vol_tier": getattr(lr, "option_vol_tier", None),
+            "option_errors":   list(getattr(lr, "option_errors", None) or []),
             "cashflows": [
                 {
                     "period_start":  cf.period_start.isoformat()  if cf.period_start  else None,
@@ -720,6 +725,9 @@ def price_trade(
         "ir01_disc": float(greeks.ir01_disc) if greeks and greeks.ir01_disc is not None else None,
         "theta":     float(greeks.theta)     if greeks and greeks.theta is not None else None,
         "gamma":     float(greeks.gamma)     if greeks and hasattr(greeks, 'gamma') and greeks.gamma is not None else None,
+        # embedded caps and floors over all legs: their value (inside npv), their vega per 1bp of normal vol, the
+        # worst vol tier, and what could not be priced. All None / empty on a swap with no embedded option.
+        **_options_summary(result.legs),
         "legs":      [_lr(lr) for lr in result.legs],
     }
 
@@ -907,6 +915,11 @@ def price_preview(
             "pv":        float(lr.pv)        if lr.pv is not None else None,
             "ir01":      float(lr.ir01)      if hasattr(lr, 'ir01') else None,
             "ir01_disc": float(lr.ir01_disc) if hasattr(lr, 'ir01_disc') else None,
+            # the leg's embedded caps and floors on their own (pv above includes them); None when it has none
+            "option_pv":       float(lr.option_pv) if getattr(lr, "option_pv", None) is not None else None,
+            "vega":            float(lr.vega) if getattr(lr, "vega", None) is not None else None,
+            "option_vol_tier": getattr(lr, "option_vol_tier", None),
+            "option_errors":   list(getattr(lr, "option_errors", None) or []),
             "cashflows": [
                 {
                     "period_start":  cf.period_start.isoformat()  if cf.period_start  else None,
@@ -938,8 +951,25 @@ def price_preview(
         "ir01_disc": float(greeks.ir01_disc) if greeks and greeks.ir01_disc is not None else None,
         "theta":     float(greeks.theta)     if greeks and greeks.theta is not None else None,
         "gamma":     float(greeks.gamma)     if greeks and hasattr(greeks, 'gamma') and greeks.gamma is not None else None,
+        # embedded caps and floors over all legs: their value (inside npv), their vega per 1bp of normal vol, the
+        # worst vol tier, and what could not be priced. All None / empty on a swap with no embedded option.
+        **_options_summary(result.legs),
         "legs":      [_lr(lr) for lr in result.legs],
     }
+
+
+def _options_summary(legs) -> dict:
+    """The embedded options of a priced swap, summed over its legs (the top-level figures of a price)."""
+    with_opt = [lr for lr in legs if getattr(lr, "option_pv", None) is not None]
+    errors = [e for lr in legs for e in (getattr(lr, "option_errors", None) or [])]
+    if not with_opt and not errors:
+        return {"option_pv": None, "vega": None, "option_vol_tier": None, "option_errors": []}
+    tiers = [lr.option_vol_tier for lr in with_opt if lr.option_vol_tier]
+    from pricing.cap_floor import _worst_tier
+    return {"option_pv": float(sum(lr.option_pv for lr in with_opt)) if with_opt else None,
+            "vega": float(sum(lr.vega or 0.0 for lr in with_opt)) if with_opt else None,
+            "option_vol_tier": _worst_tier(tiers) if tiers else None,
+            "option_errors": errors}
 
 
 # ── POST /api/price/swaption ──────────────────────────────────────────────────
