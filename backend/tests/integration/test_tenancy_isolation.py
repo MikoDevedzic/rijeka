@@ -411,7 +411,7 @@ def test_legal_entities_get_list_user_scoped(client, auth_a, auth_b):
     suf = _suffix()
     name = f"TEST-RLS-LE-ISO-{suf}"
     r_a = client.post("/api/legal-entities/",
-        json={"name": name, "home_currency": "USD", "is_own_entity": False, "lei": f"TEST{_suffix().upper()}RLS", "jurisdiction": "US"},
+        json={"name": name, "home_currency": "USD", "is_own_entity": False, "lei": f"TEST{uuid.uuid4().hex[:13].upper()}RLS", "jurisdiction": "US"},
         headers=auth_a
     )
     assert r_a.status_code == 200, f"setup failed: {r_a.status_code} {r_a.text[:300]}"
