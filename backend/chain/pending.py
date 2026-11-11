@@ -55,8 +55,10 @@ def _rollback(db) -> None:
 
 
 def tables_present(db) -> bool:
-    if _table["present"] is not None and time.time() - _table["at"] < 300:
-        return _table["present"]
+    """Whether pending_anchors exists. Only a yes is remembered (five minutes): a no is asked again every time, so
+    a migration applied while the API runs is seen at the next confirm and not up to five minutes late."""
+    if _table["present"] and time.time() - _table["at"] < 300:
+        return True
     try:
         ok = bool(db.execute(text("SELECT to_regclass('public.pending_anchors')")).scalar())
     except Exception:                    # noqa: BLE001

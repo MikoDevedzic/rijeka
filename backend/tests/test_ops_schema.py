@@ -65,3 +65,25 @@ def test_schema_status_degrades_to_unknown_without_a_session(fresh_presence_cach
     out = ops.schema_status(None)
     assert set(out) == {m[0] for m in ops.OPTIONAL_MIGRATIONS}
     assert all(v["applied"] in (False, None) for v in out.values())
+
+
+def test_a_table_that_is_absent_is_asked_for_again_and_one_that_is_present_is_remembered():
+    """A deploy runs ahead of its migration. Until 11 November 2026 these two checks kept a 'no' for five minutes, so
+    a confirm still waited in the request for that long after pending_anchors was applied."""
+    from unittest.mock import MagicMock
+    from chain import pending
+    from jobs import queue
+    for mod in (pending, queue):
+        saved = dict(mod._table)
+        try:
+            mod._table.update(present=None, at=0.0)
+            db = MagicMock()
+            db.execute.return_value.scalar.return_value = None
+            assert mod.tables_present(db) is False and mod.tables_present(db) is False
+            assert db.execute.call_count == 2, f"{mod.__name__}: a no is not kept"
+            db.execute.return_value.scalar.return_value = "public.the_table"
+            assert mod.tables_present(db) is True and mod.tables_present(db) is True
+            assert db.execute.call_count == 3, f"{mod.__name__}: a yes is kept"
+        finally:
+            mod._table.clear(); mod._table.update(saved)
+
