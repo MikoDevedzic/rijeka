@@ -208,10 +208,19 @@ def _forward_lag(inp: ForwardXvaInput, vi: np.ndarray, v0: float, steps: int, dt
 
 def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: int, dt: float,
                 m_lag: np.ndarray, t_lag: np.ndarray, j_of: np.ndarray) -> np.ndarray:
-    """An option's value at each t_i − δ: the style's closed form on the spot there with the time left, a barrier
-    or a touch carrying what the grid dates before it have seen (the paths monitor at the grid dates, and so does
-    this). In the step that ends on the expiry's grid date the time left runs to that date, where the paths fix
-    the payoff. After it the payoff is fixed and only discounting is left; once settled, the amount it paid."""
+    """An option's value at each t_i − δ: the style's closed form on the spot there with the time left. After
+    the expiry's grid date the payoff is fixed and only discounting is left; once settled, the amount it paid.
+
+    Two approximations, both the paths' own and both stated in docs/xva.md. (1) In the step that ends on the
+    expiry's grid date the time left runs to that date, where the paths fix the payoff, not to the expiry itself
+    (the two differ when the expiry is not a grid date: a currency option's two days to settlement). (2) A barrier
+    or a touch carries the knock state the grid dates BEFORE t_i − δ have seen, and is then valued by a closed form
+    that monitors continuously: a path that is beyond the barrier at t_i − δ and has not knocked on the grid is
+    valued as knocked there, though about a third of such paths are back inside at the next grid date and alive.
+    Near the barrier that overstates the move over the margin period (the validator, 11 November 2026: 9 % of
+    paths at the second month of a six-month up-barrier at 115 % of spot and 80 % vol; valued instead at the
+    barrier the margin called moved 13 % at that date and 2 to 3 % later). It goes when the paths monitor between
+    grid dates."""
     from pricing.fx_exotic import knocked_so_far, value_on_paths, value_on_paths_vols
     from pricing.fx_vol import path_vols
     n_paths = m_lag.shape[0]
@@ -232,9 +241,11 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
         if j - 1 > k_set:
             out[:, i] = vi[:, k_set]
             continue
-        seen = min(j - 2, i_exp)                                               # the last grid column at or before t_{j−1}
-        hist = np.concatenate([np.full((n_paths, 1), inp.spot), s_t[:, :seen + 1]], axis=1) if seen >= 0 else np.full((n_paths, 1), inp.spot)
-        knocked = knocked_so_far(spec, hist) if barrier_like else np.zeros(n_paths, dtype=bool)
+        knocked = np.zeros(n_paths, dtype=bool)
+        if barrier_like:
+            seen = min(j - 2, i_exp)                                           # the last grid column at or before t_{j−1}
+            hist = np.concatenate([np.full((n_paths, 1), inp.spot), s_t[:, :seen + 1]], axis=1) if seen >= 0 else np.full((n_paths, 1), inp.spot)
+            knocked = knocked_so_far(spec, hist)
         tl = float(t_lag[i])
         df = inp.df_quote_t / math.exp(-r_q * min(tl, inp.t_settle))
         if j - 1 > i_exp:                                                      # after the expiry's grid date: the payoff is fixed
@@ -511,7 +522,8 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
     for leg in legs:
         Vi, v0i, xi = (_option_values if _is_option(leg) else _forward_values)(leg, steps, dt, m)
         k_last = _settle_step(t, _horizon(leg))
-        # what the lag needs of this leg: its value on its settlement's grid date (one column, not the matrix) and its spots
+        # what the lag needs of this leg: its value on its settlement's grid date (one column, not the matrix) and, for
+        # an option, its spots on the grid (a matrix per option leg, held until the run's noise_out is dropped)
         parts.append((Vi if keep_leg_paths else _ColumnOnly(Vi[:, k_last].copy(), k_last), v0i,
                       {k: xi[k] for k in ("r_b", "s_t", "i_exp") if k in xi}))
         V = V + Vi

@@ -16,10 +16,21 @@ import pytest
 
 from pricing import fx_xva
 from pricing.csa import CSA
-from pricing.fx_exotic import ExoticSpec, value_on_paths
+from pricing.fx_exotic import ExoticSpec
 from pricing.xva_engine import IM_CONFIDENCE, lagged_values, model_im
 
 Q = 0.038          # the quote currency's zero rate
+
+
+def _cdf(x):
+    return 0.5 * (1.0 + np.vectorize(math.erf)(np.asarray(x) / math.sqrt(2.0)))
+
+
+def _call(s, k, r_q, r_b, sigma, tau):
+    """A European call on a currency, written out here (Garman and Kohlhagen): the reference prices with this, not
+    with the engine's own closed form."""
+    d1 = (np.log(s / k) + (r_q - r_b + 0.5 * sigma ** 2) * tau) / (sigma * math.sqrt(tau))
+    return s * math.exp(-r_b * tau) * _cdf(d1) - k * math.exp(-r_q * tau) * _cdf(d1 - sigma * math.sqrt(tau))
 
 
 def _fwd(vol_pct, t=0.5, direction="BUY", n=10.0, f=108465.61, k=108465.61, pair="BTCUSD"):
@@ -46,9 +57,10 @@ def _pct(move):
     return max(np.percentile(move, IM_CONFIDENCE), 0.0), max(np.percentile(-move, IM_CONFIDENCE), 0.0)
 
 
-@pytest.mark.parametrize("vol_pct, mpor_bd", [(8, 10), (55, 10), (55, 5), (80, 10), (110, 10)])
-def test_the_margin_estimate_of_a_forward_agrees_with_a_simulation_that_draws_both_dates(vol_pct, mpor_bd):
-    inp, n, lag = _fwd(vol_pct), 200_000, mpor_bd / 250.0
+@pytest.mark.parametrize("vol_pct, mpor_bd, t_years", [(8, 10, 0.5), (55, 10, 0.5), (55, 5, 0.5), (80, 10, 0.5), (110, 10, 0.5),
+                                                       (80, 25, 0.3)])      # the last: a margin period of 1.33 steps
+def test_the_margin_estimate_of_a_forward_agrees_with_a_simulation_that_draws_both_dates(vol_pct, mpor_bd, t_years):
+    inp, n, lag = _fwd(vol_pct, t=t_years), 200_000, mpor_bd / 250.0
     noise = {}
     paths, _, v0 = fx_xva.simulate_paths(inp, n_paths=n, seed=42, noise_out=noise)
     call, post = model_im(paths, noise["lag"](lag, np.random.default_rng(43)))
@@ -57,17 +69,21 @@ def test_the_margin_estimate_of_a_forward_agrees_with_a_simulation_that_draws_bo
     worst_old = 1.0
     for i in range(noise["steps"]):
         t = (i + 1) * noise["dt"]
-        m_lag, m_t = _two_dates(sigma, t, lag, n, seed=1000 + i)
         v = lambda m, at: inp.base_notional * (inp.forward * m - inp.strike) * math.exp(-Q * (T - at))
-        ref_call, ref_post = _pct(v(m_t, t) - v(m_lag, t - lag))
+        if t - lag <= 0:                            # the margin period reaches back before today: the value then is today's
+            m_t = np.exp(-0.5 * sigma ** 2 * t + sigma * math.sqrt(t) * np.random.default_rng(1000 + i).standard_normal(n))
+            ref_call, ref_post = _pct(v(m_t, t) - v(1.0, 0.0))
+        else:
+            m_lag, m_t = _two_dates(sigma, t, lag, n, seed=1000 + i)
+            ref_call, ref_post = _pct(v(m_t, t) - v(m_lag, t - lag))
         # 200,000 paths each side: a 99th percentile is known to about 1 % here (over eight seeds the two agree to
         # 0.1 % on average and differ by 1.3 % at one standard deviation at 110 % vol), so 4 % is three of those
         assert call[i] == pytest.approx(ref_call, rel=0.04), f"the margin we call at step {i + 1}"
         assert post[i] == pytest.approx(ref_post, rel=0.04), f"the margin we post at step {i + 1}"
         worst_old = min(worst_old, old_call[i] / ref_call)
-    if vol_pct >= 55:
+    if vol_pct >= 55 and t_years == 0.5:
         assert worst_old < 0.92, "at a digital asset's vol the bridge between values reads the margin we call low: the reason for this change"
-    else:
+    elif vol_pct < 55:
         assert worst_old > 0.97, "at a currency's vol the two were always close"
 
 
@@ -77,11 +93,10 @@ def test_the_margin_estimate_of_an_option_agrees_with_a_simulation_that_draws_bo
     paths, _, _ = fx_xva.simulate_option_paths(inp, n_paths=n, seed=42, noise_out=noise)
     call, post = model_im(paths, noise["lag"](lag, np.random.default_rng(43)))
     r_b = noise["r_b"]
-    none = np.zeros(n, dtype=bool)
 
-    def v(m, at):                                   # the same closed form, on a level drawn another way
+    def v(m, at):                                   # the formula written out above, on a level drawn another way
         s = inp.forward * m * math.exp(-(Q - r_b) * (inp.t_settle - at))
-        return inp.base_notional * value_on_paths(inp.spec, s, Q, r_b, sigma, inp.t_expiry - at, none, 1.0)
+        return inp.base_notional * _call(s, inp.spec.strike, Q, r_b, sigma, inp.t_expiry - at)
     for i in range(noise["steps"] - 1):             # the last date is the payoff: its own test below
         t = (i + 1) * noise["dt"]
         m_lag, m_t = _two_dates(sigma, t, lag, n, seed=2000 + i)
@@ -162,7 +177,7 @@ def test_a_package_lags_as_the_sum_of_its_legs_and_a_settled_leg_stands_at_what_
     v_near, _, _ = fx_xva._forward_values(near, both["steps"], both["dt"], both["m"])
     k_set = fx_xva._settle_step(np.arange(1, both["steps"] + 1) * both["dt"], near.t_years)
     alone = one["lag"](lag, np.random.default_rng(9))
-    assert np.allclose(alone[:, k_set + 2:], v_near[:, [k_set]]), "two steps after it settled: the amount it paid, not a move"
+    assert np.allclose(alone[:, k_set + 1:], v_near[:, [k_set]]), "from the step after it settled: the amount it paid, not a move"
     assert not np.allclose(alone[:, k_set], v_near[:, k_set]), "a margin period before its settlement it was still moving"
 
 

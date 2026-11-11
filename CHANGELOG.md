@@ -23,8 +23,9 @@ asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", t
   KVA −150.7 → −134.8 (more margin called, less exposure to hold capital against), MVA −615.5 → −622.1, CVA −2.8 →
   −3.6 (what is left beyond the margin is the lognormal's tail, fatter than the bridge's), total −769.1 → −760.4.
   On chain: KVA −113.6 → −98.7, MVA −448.2 → −463.3, total −563.1 → −564.1. At 80 % vol the total moves −1,003 →
-  −1,031 bilateral and −743 → −786 on chain. The pinned EURUSD forward (8 % vol) moves 1.4 %: MVA −845.74 → −832.08.
-  Nothing uncollateralised moves, and no rates figure.
+  −1,031 bilateral and −743 → −786 on chain. (These are runs of the engine on stated inputs, 2,000 paths, seed 42;
+  the pinned book's BTCUSD forward is on the local stack's own market and reads differently.) The pinned EURUSD
+  forward (8 % vol) moves 1.4 %: MVA −845.74 → −832.08. Nothing without margin moves, and no rates figure.
 - **A margined digital-asset forward is in the pinned book** from today (`xva.BTCUSD.bilateral`), so the next
   changes to its engine show there.
 - **The Excel replications rebuild the new lag in cells:** the forward a margin period earlier, then the trade valued
@@ -34,7 +35,15 @@ asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", t
 - **Limits, unchanged and stated:** the rates ticket and the netting-set engine (the credit page, the reserves, the
   incremental charge) still bridge between values, so a margined digital-asset position is charged a little
   differently there and on its ticket; a margined CVA is still the 1 % tail of the model's own move (no jumps, no
-  gap risk: the next step); barriers are monitored at the grid dates.
+  gap risk: the next step). Found by the validator and stated in `docs/xva.md`: a barrier or a touch that is beyond
+  its barrier a margin period earlier but has not knocked on the grid is valued as knocked there, which overstates
+  the move near the barrier (about 13 % of the margin called at one date of her case) until the paths monitor
+  between grid dates; in the expiry's own step the time left runs to the grid date; the option's lag has no
+  workbook and no reference row.
+- **Reviewed.** The validator's own simulation, sharing no code with the engine: a forward's margin within 1.1 %
+  date by date and a European call's within 1.6 % at 80 % vol, through margin periods shorter and longer than a
+  step; the old bridge 16 to 21 % low on the call. A cold read found the XVA tab's margin-period note still
+  describing the old method and naming SIMM: corrected.
 
 ## The logo · 11 November 2026 (frontend only)
 

@@ -90,7 +90,12 @@ tickets bridged between grid VALUES, which keeps the variance of the move but is
 lognormal: the margin we call read within about 1 % at currency vols and 9 to 18 % low at 55 to 110 % (the
 validator's own figure on 10 November 2026 was 7 to 15 %). The rates ticket and the netting-set engine
 (`ccr/exposure.py`: the credit page, the reserves, the incremental charge) still bridge between values, so a
-margined digital-asset position is charged a little differently there and on its ticket. **A margined CVA is small by construction:** exposure beyond the margin is the 1 % tail of the same model's
+margined digital-asset position is charged a little differently there and on its ticket. The validator's own
+simulation (11 November 2026, her code, a Garman–Kohlhagen formula of her own) puts the forward's margin within
+1.1 % date by date and a European call's within 1.6 %, at 80 % vol and both margin periods. Two approximations in the option's lag are the paths' own: in the step that ends on the expiry's grid date the time left runs to that date, where the paths fix the payoff, not to the expiry (they differ by a currency option's two days to settlement); and a barrier or a touch carries the knock state of the grid dates before t − δ and is then valued by a closed form that monitors continuously, so a path beyond the barrier at t − δ that has not knocked on the grid is valued as knocked, though about a third of those are back inside at the next grid date. Near the barrier that overstates the move (the validator, 11 November 2026: 9 % of paths at the second month of a six-month up-barrier at 115 % of spot and 80 % vol; valued at the barrier instead, the margin called moved 13 % at that date and 2 to 3 % later). It goes when the paths monitor between grid dates.
+The option's lag has no Excel replication (the workbooks are a forward) and no row in the reference suite: its
+evidence is the simulation in `tests/test_fx_xva_lag.py` (a forward and a European call; a digital, a barrier, a
+touch and a surface are held only to the package and one-leg identities). **A margined CVA is small by construction:** exposure beyond the margin is the 1 % tail of the same model's
 own move at the same percentile (on a six-month forward CVA falls from −71 uncollateralised to −0.24 bilateral),
 so gap risk, jumps, a fatter tail than the model's and a margin call that is not met are not in it; the figure
 says the margin covers the model's move, not that the counterparty risk is that small. A leg of a package that

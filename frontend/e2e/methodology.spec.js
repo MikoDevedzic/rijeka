@@ -64,7 +64,7 @@ test('methodology: a section reads as the document does, with its evidence, a wo
   await expect(app.getByRole('heading', { level: 1, name: 'Currency and digital-asset forwards' })).toBeVisible()
   // formulas are set, numbered as the PDF numbers them, and no LaTeX is left on the page
   expect(await sec.locator('.katex').count()).toBeGreaterThan(5)
-  await expect(sec.locator('.mr-eq').first()).toContainText('(20)')
+  await expect(sec.locator('.mr-eq').first()).toContainText('(21)')      // (20) until v1.14, whose new display in §9.2 moved every later one up
   const words = await sec.locator('.mr-prose').first().evaluate(el => { const c = el.cloneNode(true); c.querySelectorAll('.katex, code').forEach(x => x.remove()); return c.textContent })
   expect(words, 'no LaTeX command or stray dollar in the text').not.toMatch(/\\[a-zA-Z]+|\$/)
   expect(words).toContain('covered interest parity')
@@ -104,7 +104,7 @@ test('methodology: a section reads as the document does, with its evidence, a wo
   await expect(rail.locator('.mr-sub')).toHaveCount(5)
   await rail.getByTestId('mr-go-10').click()
   await expect(app.getByTestId('mr-worked-cva').getByTestId('mr-cva-out')).not.toHaveText('—')
-  await expect(app.getByTestId('mr-section').locator('.mr-eq').first()).toContainText('(14)')
+  await expect(app.getByTestId('mr-section').locator('.mr-eq').first()).toContainText('(15)')      // (14) until v1.14
 
   // the reference table, the workbooks and the document's own page
   await rail.getByTestId('mr-go-18').click()
