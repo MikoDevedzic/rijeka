@@ -1,7 +1,56 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.13). Commits on `main` are the detail.
+methodology document carries its own version (v1.14). Commits on `main` are the detail.
+
+## 0.23.0 · 11 November 2026
+
+**The margin on a digital-asset ticket is no longer read low.** First step of finishing the XVA on digital assets,
+asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", then "go ahead with 11 and the rest."
+
+- **What was wrong.** Collateral and initial margin read the value a margin period before each date. The engine
+  took it from a bridge between the grid VALUES, which is Gaussian. A forward's value is a multiple of a lognormal
+  level, and at a digital asset's vol the difference is not small: against a simulation that draws the level at both
+  dates (200,000 paths, no grid, no bridge) the margin we would call read 1 % low at 8 % vol, 9 to 11 % low at 55 %,
+  13 to 15 % at 80 % and 16 to 18 % at 110 %. The documents said 7 to 15 %.
+- **What it is now.** On currency and digital-asset tickets (a forward, an option of any style, a package) the
+  pair's forward is bridged between grid dates in logs, where it is a Brownian motion and the bridge is exact, and
+  every leg is valued on that level with the time it then has left (`pricing/fx_xva.exact_lag`). A leg that has
+  settled stands at what it paid; a margin period of a whole step reads the grid. The estimate now agrees with the
+  simulation to its sampling error at every vol from 8 to 110 % (`tests/test_fx_xva_lag.py`, 17 tests; the old
+  bridge fails the same test at 55 % and above).
+- **Numbers that moved, each in `GOLDEN_CHANGES.md`.** A 6-month BTCUSD forward, 10 BTC, 55 % vol, bilateral CSA:
+  KVA −150.7 → −134.8, MVA −615.5 → −622.1, CVA −2.8 → −3.6, total −769.1 → −760.4. Why each: the initial margin
+  we call is 9 % larger at the first date and 10 % on average (259,784 → 284,311), so the set is further
+  over-collateralised and SA-CCR's multiplier falls from 0.305 to 0.275: the add-on (104,127) and the replacement
+  cost (nothing) are unchanged and the exposure at default goes 44,462 → 40,098, which is the fall in KVA. The
+  variation margin does not rise. The margin we post is lower at the first date and 3 to 8 % higher later, 2 % on
+  average, which is MVA. What is left beyond the margin is the lognormal's tail, fatter than the bridge's: the peak
+  expected exposure beyond margin goes 952 → 1,382, which is CVA.
+  On chain: KVA −113.6 → −98.7, MVA −448.2 → −463.3, total −563.1 → −564.1. At 80 % vol the total moves −1,003 →
+  −1,031 bilateral and −743 → −786 on chain. (These are runs of the engine on stated inputs, 2,000 paths, seed 42;
+  the pinned book's BTCUSD forward is on the local stack's own market and reads differently.) The pinned EURUSD
+  forward (8 % vol) moves 1.4 %: MVA −845.74 → −832.08. Nothing without margin moves, and no rates figure.
+- **A margined digital-asset forward is in the pinned book** from today (`xva.BTCUSD.bilateral`), so the next
+  changes to its engine show there.
+- **The Excel replications rebuild the new lag in cells:** the forward a margin period earlier, then the trade valued
+  on it. 51 checks in each of the currency and digital-asset books pass under every CSA preset, evaluated cell by
+  cell (the `formulas` library; the unit tests do not evaluate cells).
+- **The methodology is v1.14** (§9.2, §9.3) and `docs/xva.md` and the model inventory say what changed.
+- **Limits, unchanged and stated:** the rates ticket and the netting-set engine (the credit page, the reserves, the
+  incremental charge) still bridge between values, so a margined digital-asset position is charged a little
+  differently there and on its ticket; a margined CVA is still the 1 % tail of the model's own move (no jumps, no
+  gap risk: the next step). Found by the validator and stated in `docs/xva.md`: a barrier or a touch that is beyond
+  its barrier a margin period earlier but has not knocked on the grid is valued as knocked there, which overstates
+  the move near the barrier (about 13 % of the margin called at one date of her case) until the paths monitor
+  between grid dates; in the expiry's own step the time left runs to the grid date; the option's lag has no
+  workbook and no reference row.
+- **Reviewed.** The numbers guardian reproduced every figure above to the decimal from the two engines and found
+  the first wording of the KVA reason loose (it is the multiplier, through the initial margin, not the variation
+  margin): rewritten as above. The validator's own simulation, sharing no code with the engine: a forward's margin within 1.1 %
+  date by date and a European call's within 1.6 % at 80 % vol, through margin periods shorter and longer than a
+  step; the old bridge 16 to 21 % low on the call. A cold read found the XVA tab's margin-period note still
+  describing the old method and naming SIMM: corrected.
 
 ## 0.22.1 · 11 November 2026
 

@@ -303,7 +303,7 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
     T = eng["T"]; vb = blocks["V"]; n0, n1 = nrows
     ws = wb.create_sheet("Exposure")
     ws["A1"] = "THE CSA AND THE EXPOSURE"; ws["A1"].font = W.F_TITLE
-    ws["A2"] = "V lagged by the margin period (a Brownian bridge between grid points), the collateral it calls, the residual, and EE / ENE / PFE per step. Choose a preset or set the terms."; ws["A2"].font = W.F_SUB
+    ws["A2"] = "V a margin period earlier (the forward bridged between grid dates where it is lognormal, the trade valued on it), the collateral it calls, the residual, and EE / ENE / PFE per step. Choose a preset or set the terms."; ws["A2"].font = W.F_SUB
     rows = [("Preset", DEFAULT_PRESET, "@"), ("Collateralised (1/0)", '=IF(Preset="UNCOLLATERALISED",0,1)', "0"),
             ("Threshold, counterparty", 0.0, "#,##0"), ("Threshold, own", 0.0, "#,##0"), ("Minimum transfer amount", 0.0, "#,##0"),
             ("MPoR (business days)", f'=IF(Preset="ON_CHAIN",{MPOR_FLOOR_CLEARED_BD},{MPOR_FLOOR_BILATERAL_BD})', "0"),
@@ -324,12 +324,16 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
                 "IMx": "Exposure!B10", "Pickup": "Exposure!B11", "Wlag": "Exposure!B14", "IMq": "Exposure!B16", "IM0": "Exposure!B18", "CarryPost": "Exposure!B19", "CarryRecv": "Exposure!B20"})
     rs = 23
     ws.cell(row=rs - 1, column=1, value="PER STEP").font = W.F_SECTION
-    W.header(ws, rs, ["step", "t", "s² = VARP(ΔV)", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM we call (t)", "mean received", "mean posted", "IM we post (t)"])
+    W.header(ws, rs, ["step", "t", "t − δ", "EE", "ENE", "PFE 95%", "EE gross", "ENE gross", "mean collateral", "mean residual", "IM we call (t)", "mean received", "mean posted", "IM we post (t)"])
     top = rs + T + 3
-    dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=Paths!{L(c)}{vb[0] + p}-V0" if j == 1 else f"=Paths!{L(c)}{vb[0] + p}-Paths!{L(c - 1)}{vb[0] + p}"), "#,##0", "ΔV = V(t_i) − V(t_{i−1})")
+    fb = blocks["F"]
+    # ln F between two grid dates is a Brownian bridge: its mean on the line between the two levels, its variance σ²·w(1−w)·Δ
+    dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,EXP(LN({'F0' if j == 1 else f'Paths!{L(c - 1)}{fb[0] + p}'})+Wlag*(LN(Paths!{L(c)}{fb[0] + p})-LN({'F0' if j == 1 else f'Paths!{L(c - 1)}{fb[0] + p}'}))"
+                                                          f"+Normals!{L(c)}{n0 + p}*Sigma*SQRT(Wlag*(1-Wlag)*Dt)),Paths!{L(c)}{fb[0] + p})"),
+                 case["spot_fmt"], "F(t − δ): exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ)), the forward a margin period earlier (LIVE mode re-rolls N too)")
     top = dvb[1] + 3
-    lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,{'V0' if j == 1 else f'Paths!{L(c - 1)}{vb[0] + p}'}+Wlag*{L(c)}{dvb[0] + p}+Normals!{L(c)}{n0 + p}*SQRT(Wlag*(1-Wlag)*$C${rs + j}),Paths!{L(c)}{vb[0] + p})"),
-                  "#,##0", "V(t − δ): lo + w·ΔV + N·√(w(1−w)·s²) (the Brownian bridge; LIVE mode re-rolls N too)")
+    lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=IF(Coll=1,Sgn*Nbase*({L(c)}{dvb[0] + p}-Kfx)*DFqT/EXP(-Rq*$C${rs + j}),Paths!{L(c)}{vb[0] + p})",
+                  "#,##0", "V(t − δ) = side·N·(F(t − δ) − K)·DF_q(t − δ, T): the forward valued on that level")
     top = lagb[1] + 3
     mvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Paths!{L(c)}{vb[0] + p}-{L(c)}{lagb[0] + p}", "#,##0",
                  "Move over the margin period: V(t) − V(t − δ). Initial margin is its 99th percentile rise (what we call) and fall (what we post), about its mean")
@@ -342,7 +346,7 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
         r = rs + j; col = L(1 + j)
         ws.cell(row=r, column=1, value=j)
         ws.cell(row=r, column=2, value=f"=Model!B{grid_r0 + j}").number_format = "0.000000"
-        ws.cell(row=r, column=3, value=f"=VARP({col}{dvb[0]}:{col}{dvb[1]})").number_format = "#,##0"
+        ws.cell(row=r, column=3, value=f"=B{r}-$B$12").number_format = "0.000000"
         res = f"{col}{resb[0]}:{col}{resb[1]}"; vcol = f"Paths!{col}{vb[0]}:{col}{vb[1]}"; ccol = f"{col}{cb[0]}:{col}{cb[1]}"
         ws.cell(row=r, column=4, value=f"=SUMPRODUCT(({res}-K{r}>0)*({res}-K{r}))/Npaths").number_format = "#,##0.00"
         ws.cell(row=r, column=5, value=f"=SUMPRODUCT(({res}+N{r}<0)*({res}+N{r}))/Npaths").number_format = "#,##0.00"
@@ -561,7 +565,8 @@ def _xva_forward_workbook(mkt, case: dict):
         ("W", "ΣZ·√Δ", f"Paths!B{blocks['W'][0]}", "path 1, step 1", "0.000000"),
         ("F_t", "F₀·exp(−σ²t/2 + σ·W)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"]),
         ("V", "side·N·(F_t − K)·DF_q(t,T)", f"Paths!B{blocks['V'][0]}", "the forward's value on path 1 at step 1", "#,##0"),
-        ("V(t−δ)", "lo + w·ΔV + N·√(w(1−w)·VARP(ΔV))", f"Exposure!B{blocks_exp['LAG'][0]}", "the Brownian bridge over the margin period", "#,##0"),
+        ("F(t−δ)", "exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ))", f"Exposure!B{blocks_exp['DV'][0]}", "the forward a margin period earlier: ln F is a Brownian bridge between two grid dates", case["spot_fmt"]),
+        ("V(t−δ)", "side·N·(F(t−δ) − K)·DF_q(t−δ, T)", f"Exposure!B{blocks_exp['LAG'][0]}", "the trade valued on that level", "#,##0"),
         ("C", "max(V_lag − TH_cp, 0) − max(−V_lag − TH_own, 0), zeroed under the MTA", f"Exposure!B{blocks_exp['C'][0]}", "", "#,##0"),
         ("IM₀", "99th percentile fall of V over the margin period, about its mean", "Exposure!B18", "the first date; not ISDA SIMM", "#,##0.00"),
         ("EE, ENE, PFE", "mean(max(V−C−IM,0)), mean(min(V−C+IM,0)), 95th percentile of V−C", f"Exposure!D{rs + 1}", "step 1", "#,##0.00"),

@@ -14,7 +14,7 @@ Variation margin held against the lagged MtM, from our side (+ = we hold theirs)
 
     C(t) = max(V(t−δ) − TH_cp, 0) − max(−V(t−δ) − TH_own, 0),   zeroed when |C| < MTA
 
-δ is the margin period of risk in years (mpor_days / 250); V(t−δ) is taken on the path by a Brownian bridge between grid points. Initial margin is exchanged each way: the desk's own amount, held for the life of the trade, or the engine's estimate from the paths at each date (Initial margin, below). The residuals are
+δ is the margin period of risk in years (mpor_days / 250); V(t−δ) is taken on the path between grid points: on a currency or digital-asset ticket exactly (the pair's forward bridged in logs, where it is a Brownian motion, and every leg valued on it: `fx_xva.exact_lag`, since 0.23.0); on a rates ticket and in the netting-set engine by a Brownian bridge between the grid values (`xva_engine.lagged_values`). Initial margin is exchanged each way: the desk's own amount, held for the life of the trade, or the engine's estimate from the paths at each date (Initial margin, below). The residuals are
 
     E⁺(t) = max(V − C − IM, 0)        EE(t)  = mean over paths
     E⁻(t) = min(V − C + IM, 0)        ENE(t) = mean over paths
@@ -83,11 +83,19 @@ period gives a smaller estimate, by about √(5/10) from bilateral to on chain. 
 model's current volatility, not one calibrated to a period of stress, so it reads lower than a stressed
 regulatory figure (about half of the weights-based figure this engine carried until 0.18.0, on the pinned 5-year swap); it is a cross-section of the
 paths at each date, not a margin recomputed on each path (an option far out of the money carries the same margin
-as one in the money); one confidence for every asset class. The value a margin period earlier comes from the
-bridge between grid dates, which keeps the variance of the move but is Gaussian where the value is lognormal:
-against an exact simulation (the validator's, 10 November 2026) the margin we call is within about 1 % at
-currency vols and reads 7 to 15 % low at digital-asset vols, the margin we post within a few per cent either
-way. **A margined CVA is small by construction:** exposure beyond the margin is the 1 % tail of the same model's
+as one in the money); one confidence for every asset class. On currency and digital-asset tickets the value a
+margin period earlier is exact (0.23.0): against a simulation that draws the level at both dates, no grid and no
+bridge, the estimate agrees to sampling error at 8 to 110 % vol (`tests/test_fx_xva_lag.py`). Until then those
+tickets bridged between grid VALUES, which keeps the variance of the move but is Gaussian where the value is
+lognormal: the margin we call read within about 1 % at currency vols and 9 to 18 % low at 55 to 110 % (the
+validator's own figure on 10 November 2026 was 7 to 15 %). The rates ticket and the netting-set engine
+(`ccr/exposure.py`: the credit page, the reserves, the incremental charge) still bridge between values, so a
+margined digital-asset position is charged a little differently there and on its ticket. The validator's own
+simulation (11 November 2026, her code, a Garman–Kohlhagen formula of her own) puts the forward's margin within
+1.1 % date by date and a European call's within 1.6 %, at 80 % vol and both margin periods. Two approximations in the option's lag are the paths' own: in the step that ends on the expiry's grid date the time left runs to that date, where the paths fix the payoff, not to the expiry (they differ by a currency option's two days to settlement); and a barrier or a touch carries the knock state of the grid dates before t − δ and is then valued by a closed form that monitors continuously, so a path beyond the barrier at t − δ that has not knocked on the grid is valued as knocked, though about a third of those are back inside at the next grid date. Near the barrier that overstates the move (the validator, 11 November 2026: 9 % of paths at the second month of a six-month up-barrier at 115 % of spot and 80 % vol; valued at the barrier instead, the margin called moved 13 % at that date and 2 to 3 % later). It goes when the paths monitor between grid dates.
+The option's lag has no Excel replication (the workbooks are a forward) and no row in the reference suite: its
+evidence is the simulation in `tests/test_fx_xva_lag.py` (a forward and a European call; a digital, a barrier, a
+touch and a surface are held only to the package and one-leg identities). **A margined CVA is small by construction:** exposure beyond the margin is the 1 % tail of the same model's
 own move at the same percentile (on a six-month forward CVA falls from −71 uncollateralised to −0.24 bilateral),
 so gap risk, jumps, a fatter tail than the model's and a margin call that is not met are not in it; the figure
 says the margin covers the model's move, not that the counterparty risk is that small. A leg of a package that

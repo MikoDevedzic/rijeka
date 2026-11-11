@@ -85,7 +85,7 @@ PRODUCTS = [
      "replication": "xlsx"},
     {"id": "xva_fx", "name": "XVA on an FX forward: lognormal forward from the pair's surface, CSA, waterfall", "group": "Counterparty risk", "section": "9-10",
      "default": "Buy EUR 10m six months forward at the fair forward · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · σ from the EURUSD surface at K = F · presets uncollateralised / bilateral 10bd / on-chain 5bd",
-     "formula": "F_t = F₀·exp(−σ²t/2 + σ·W); V = side·N·(F_t − K)·DF_q(t,T); σ = ATM/RR/BF interpolated to T, Malz smile at Δ = N(½σ√T); C from V(t−δ) by Brownian bridge; EE/ENE/PFE; CVA, DVA, FVA, FBA, SA-CCR EAD on the FX class (4 %) → KVA, IM (the 99th percentile move over the margin period) → MVA",
+     "formula": "F_t = F₀·exp(−σ²t/2 + σ·W); V = side·N·(F_t − K)·DF_q(t,T); σ = ATM/RR/BF interpolated to T, Malz smile at Δ = N(½σ√T); C from V(t−δ), the forward bridged in logs a margin period earlier and the trade valued on it; EE/ENE/PFE; CVA, DVA, FVA, FBA, SA-CCR EAD on the FX class (4 %) → KVA, IM (the 99th percentile move over the margin period) → MVA",
      "replication": "xlsx"},
     {"id": "xva_crypto", "name": "XVA on a crypto NDF: lognormal forward from the pair's surface, CSA, waterfall", "group": "Counterparty risk", "section": "9-10",
      "default": "Buy 10 BTC six months forward, USD-settled, at the fair forward · monthly grid · 200 paths (ENGINE or LIVE) · σ from the BTCUSD surface at K = F, or the engine's default without one · presets uncollateralised / bilateral 10bd / on-chain 5bd",

@@ -24,11 +24,13 @@ describe('the methodology in the app', () => {
   })
   it('numbers the displays as the PDF does, and leaves no LaTeX on the page', () => {
     const text = JSON.stringify(built.sections)
-    // read off the PDF (v1.12, and §12 again at v1.13): the waterfall's four lines are (14) to (17), wrong-way risk (18) and (19), the
-    // parity forward of §12 is (20) and the digital-asset forward (21)
+    // read off the PDF (v1.12, §12 again at v1.13, and all of them again at v1.14, whose new display in §9.2 is (12) and
+    // moves every later one up by one): the waterfall's four lines are (15) to (18), wrong-way risk (19) and (20), the
+    // parity forward of §12 is (21) and the forward beyond the last quote (22)
     const tags = (sec) => built.sections[sec - 1].blocks.filter(b => b.t === 'eq').flatMap(b => [...b.html.matchAll(/<span class="mord">\(<\/span><span class="mord"><span class="mord">(\d+)<\/span>/g)].map(m => Number(m[1])))
-    expect(tags(10)).toEqual([14, 15, 16, 17, 18, 19])
-    expect(tags(12)).toEqual([20, 21, 22, 23])      // v1.13: the forward beyond the last quote is (21)
+    expect(tags(9)).toContain(12)                    // v1.14: the bridge in logs
+    expect(tags(10)).toEqual([15, 16, 17, 18, 19, 20])
+    expect(tags(12)).toEqual([21, 22, 23, 24])
     // prose with the maths taken out: no backslash command, no stray brace or dollar
     // the text with each formula taken out whole (a formula's own spans nest: counted, not guessed)
     const strip = (h) => {
