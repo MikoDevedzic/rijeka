@@ -111,10 +111,10 @@ anchored confirmations). In the register `trade_hash` is the hash the registry h
 package, the package's; the leg's own is `leg_hash`), so a link into the verifier or the registry is by
 `trade_hash`. The verifier's source is `chain/verify/index.html` in the repository; the page at
 rijeka.app/verify is the copy in `netlify_drop/verify`, which changes only when the owner deploys the
-landing site, on its own schedule and not with the app's release. On 11 November 2026 the two were made the same
-file: the live page checks a leg inside its package, and the source has the link handling the live page had
-gained on its own (`#p=` a shared proof pack, `#hash=` a bare hash from the public register). The source has since
-gained one rule the live page gets at the next deploy of the landing site: the page lists the registries it knows
+landing site, on its own schedule and not with the app's release. Since 11 November 2026 the two are the same
+file (read back byte for byte after that day's second deploy): the live page checks a leg inside its package, and
+the source has the link handling the live page had gained on its own (`#p=` a shared proof pack, `#hash=` a bare
+hash from the public register). The page lists the registries it knows
 by chain (`REGISTRIES`), and a proof or a link that names any other contract is read and reported in amber, never
 as VERIFIED or ANCHORED, because whoever wrote the proof or the link chose that address (anyone can deploy a
 registry and sign with keys of their own). A verdict is green only when the hash, both signatures and the chain

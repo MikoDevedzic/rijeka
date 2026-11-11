@@ -3,9 +3,10 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
-## Verifier source · 11 November 2026 (in the repository; on rijeka.app at the next deploy of the landing site)
+## Verifier · 11 November 2026 (rijeka.app/verify, deployed the same day and read back byte for byte)
 
-Found by the security review of the merged verifier, before it was pushed.
+Found by the security review of the merged verifier, before it was pushed to `main`; the flaw was on the public
+page until this deploy.
 
 - **A registry the page does not know never earns a green verdict.** A proof names the registry it was anchored in,
   and a `#hash=` link could name one too; the page read whichever it was given, so a forger with a contract and two
@@ -21,7 +22,8 @@ Found by the security review of the merged verifier, before it was pushed.
   signed record). Every verdict is written as text.
 - Checked in a browser against a stubbed chain, 27 cases, and the first 19 against the page as it was (the forged
   proof and the unsigned proof both read VERIFIED there). Not a test in CI: the page loads its library from a CDN.
-  Read twice by the security reviewer and twice by the independent reviewer.
+  The same 27 ran against the live page after the deploy. Read twice by the security reviewer and twice by the
+  independent reviewer.
 
 ## Public site · 11 November 2026
 

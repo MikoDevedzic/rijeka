@@ -19,7 +19,7 @@ Learned on 9 November 2026 (the evening; 10 November in UTC)
 
 Learned on 11 November 2026
 - A deploy of the public site (`netlify_drop/`, rijeka.app) is a deploy: the gates run before it, on the difference between the folder and the live site, as they would on a branch. On 11 November 2026 the landing site went out with a merged verifier that neither Vera nor Magnus had read; the reviews ran only afterwards, on the repository's copy, and Magnus found that a proof or a link could name a registry of its own and be shown VERIFIED (the flaw was older than the deploy, but the deploy was the moment to find it). Vera reads anything over a line; Magnus reads any change to the verifier or to anything that takes its input from a link.
-- A page that is live and a source that is ahead of it are two facts: say which rule is on which, in the map and in the report, until the owner's next deploy of the landing site makes them one.
+- A page that is live and a source that is ahead of it are two facts: say which rule is on which, in the map and in the report, until the owner's next deploy of the landing site makes them one, and correct those words in the same change as that deploy.
 
 Rules
 - Never print secrets, tokens, connection strings or `.env` contents. Never paste credentials into a hosted dashboard.
