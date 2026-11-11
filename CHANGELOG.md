@@ -1,7 +1,40 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.13). Commits on `main` are the detail.
+methodology document carries its own version (v1.14). Commits on `main` are the detail.
+
+## 0.23.0 · 11 November 2026
+
+**The margin on a digital-asset ticket is no longer read low.** First step of finishing the XVA on digital assets,
+asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", then "go ahead with 11 and the rest."
+
+- **What was wrong.** Collateral and initial margin read the value a margin period before each date. The engine
+  took it from a bridge between the grid VALUES, which is Gaussian. A forward's value is a multiple of a lognormal
+  level, and at a digital asset's vol the difference is not small: against a simulation that draws the level at both
+  dates (200,000 paths, no grid, no bridge) the margin we would call read 1 % low at 8 % vol, 9 to 11 % low at 55 %,
+  13 to 15 % at 80 % and 16 to 18 % at 110 %. The documents said 7 to 15 %.
+- **What it is now.** On currency and digital-asset tickets (a forward, an option of any style, a package) the
+  pair's forward is bridged between grid dates in logs, where it is a Brownian motion and the bridge is exact, and
+  every leg is valued on that level with the time it then has left (`pricing/fx_xva.exact_lag`). A leg that has
+  settled stands at what it paid; a margin period of a whole step reads the grid. The estimate now agrees with the
+  simulation to its sampling error at every vol from 8 to 110 % (`tests/test_fx_xva_lag.py`, 17 tests; the old
+  bridge fails the same test at 55 % and above).
+- **Numbers that moved, each in `GOLDEN_CHANGES.md`.** A 6-month BTCUSD forward, 10 BTC, 55 % vol, bilateral CSA:
+  KVA −150.7 → −134.8 (more margin called, less exposure to hold capital against), MVA −615.5 → −622.1, CVA −2.8 →
+  −3.6 (what is left beyond the margin is the lognormal's tail, fatter than the bridge's), total −769.1 → −760.4.
+  On chain: KVA −113.6 → −98.7, MVA −448.2 → −463.3, total −563.1 → −564.1. At 80 % vol the total moves −1,003 →
+  −1,031 bilateral and −743 → −786 on chain. The pinned EURUSD forward (8 % vol) moves 1.4 %: MVA −845.74 → −832.08.
+  Nothing uncollateralised moves, and no rates figure.
+- **A margined digital-asset forward is in the pinned book** from today (`xva.BTCUSD.bilateral`), so the next
+  changes to its engine show there.
+- **The Excel replications rebuild the new lag in cells:** the forward a margin period earlier, then the trade valued
+  on it. 51 checks in each of the currency and digital-asset books pass under every CSA preset, evaluated cell by
+  cell (the `formulas` library; the unit tests do not evaluate cells).
+- **The methodology is v1.14** (§9.2, §9.3) and `docs/xva.md` and the model inventory say what changed.
+- **Limits, unchanged and stated:** the rates ticket and the netting-set engine (the credit page, the reserves, the
+  incremental charge) still bridge between values, so a margined digital-asset position is charged a little
+  differently there and on its ticket; a margined CVA is still the 1 % tail of the model's own move (no jumps, no
+  gap risk: the next step); barriers are monitored at the grid dates.
 
 ## The logo · 11 November 2026 (frontend only)
 

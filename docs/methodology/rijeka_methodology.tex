@@ -25,7 +25,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.13 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.14 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -45,7 +45,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.13 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.14 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -56,6 +56,7 @@
 \section*{Version history}
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
+\item \textbf{1.14 (11 November 2026).} The value a margin period earlier on currency and digital-asset tickets (\S\ref{sec:exposure}). The forward's level is bridged between grid dates in logs, where it is a Brownian motion, and every leg is valued on it; until this version the value itself was bridged as if Gaussian, which read the margin called 9 to 18\% low at volatilities of 55 to 110\%. Margined figures on those tickets move: on a six-month BTCUSD forward at 55\% under a bilateral CSA, KVA $-150.7\to-134.8$, MVA $-615.5\to-622.1$, CVA $-2.8\to-3.6$; at a currency's volatility by about 1\%. The rates ticket and the netting-set engine are unchanged.
 \item \textbf{1.13 (11 November 2026).} Forward curves to ten years (\S\ref{sec:fx}). Beyond the last quoted tenor a forward is parity plus the basis that tenor shows, held flat as a rate; until this version the last points were held flat. Every forward says whether it is quoted, interpolated or implied, and how. A tenor can be switched off. One equation added, so the displays after it are numbered one higher.
 \item \textbf{1.12 (10 November 2026).} Typesetting, and one correction. No formula changed. The names of quantities are set upright, displays that ran past the margin are set on several lines, the longest paragraphs are divided, code names are printed as they are written, and this history follows the contents. Corrected: the known limitations of \S\ref{sec:capital} still described the initial-margin method that version 1.10 removed.
 \item \textbf{1.10 and 1.11 (10 November 2026).} Initial margin as the desk's own amount or the engine's estimate, with no ISDA SIMM computed or claimed, and the capital add-on of a currency or digital-asset ticket by its own SA-CCR class (\S\ref{sec:exposure}); wrong-way risk and a package of legs as one netting set (\S\ref{sec:xva}); a package of trades confirmed as one record (\S\ref{sec:chain}).
@@ -245,13 +246,19 @@ V(t-\delta)\,\big|\,V(t-\Delta t),V(t)\;\sim\;\N\!\big(V(t-\Delta t)+w\,\Delta V
 \end{equation}
 with $s^2$ the cross-path variance of $\Delta V$. This preserves the variance of the move over the margin period; linear interpolation would understate it by a factor $\delta/\Delta t$.
 
+The bridge above is between \emph{values} and is Gaussian whatever the value is. On a currency or digital-asset ticket (\S\ref{sec:fx}) the value is a function of one lognormal level, every forward of the pair being $F_i(0)\,M_t$, and the bridge is taken where it is exact (since v1.14). Inside a grid step $\ln M$ is a Brownian motion with that step's volatility $\sigma_j$, so
+\begin{equation}
+\ln M(t-\delta)\,\big|\,\ln M(t-\Delta t),\ln M(t)\;\sim\;\N\!\big(\ln M(t-\Delta t)+w\,\Delta\ln M,\;\sigma_j^2\,w(1-w)\,\Delta t\big),
+\end{equation}
+and each leg is valued on that level with the time it then has left: a forward as $\pm N\big(F_0\,M(t-\delta)-K\big)\,\mathrm{DF}_q(t-\delta,T)$, an option by its style's closed form, a barrier or a touch carrying what the grid dates before it have seen. A leg that has settled stands at the amount it paid; before today the value is today's. A margin period of a whole number of steps reads the grid itself. The rates ticket and the netting-set engine (\S\ref{sec:ccr}) keep the bridge between values. \emph{Functions \code{exact_lag}, \code{lagged_values}.}
+
 \subsection{Initial margin}
 Initial margin is one of two things. \textbf{An amount the desk sets}, in the trade's currency, exchanged each way and held for the life of the trade. Or \textbf{the engine's own estimate} from the simulated paths: at each grid date $t_i$, with $\Delta_i = V(t_i)-V(t_i-\delta)$ the change in the set's value over the margin period (the lagged value of the bridge above) and $\bar\Delta_i$ its mean across paths,
 \begin{equation}
 \mathrm{IM}_{\mathrm{recv}}(t_i) = \max\big(q_{0.99}(\Delta_i-\bar\Delta_i),\,0\big),\qquad
 \mathrm{IM}_{\mathrm{post}}(t_i) = \max\big(q_{0.99}(\bar\Delta_i-\Delta_i),\,0\big),
 \end{equation}
-the 99th percentile rise (the margin we call) and fall (the margin we post). The confidence is the one the margin rules for non-centrally cleared derivatives name (BCBS--IOSCO: a one-tailed 99 per cent interval over the margin horizon). The mean is removed because what every path does over the period (a scheduled payment, the passage of time) is not a risk. The estimate is at the model's current volatility, not one calibrated to a period of stress, so it can read lower than a regulatory margin model; it is a cross-section of the paths at each date, not a margin recomputed on each path. The bridge keeps the variance of the move but is Gaussian where the value is lognormal: the margin called is within about 1\% of an exact simulation at currency volatilities and reads 7 to 15\% low at digital-asset volatilities. Exposure beyond the margin is then the 1\% tail of the model's own move, so a margined CVA is small by construction: gap risk, jumps and a margin call that is not met are not in it. A leg of a package that settles is a payment, not a move, and is not margined. Received IM reduces exposure; posted IM is funded and drives MVA. \emph{Function \code{model_im}.}
+the 99th percentile rise (the margin we call) and fall (the margin we post). The confidence is the one the margin rules for non-centrally cleared derivatives name (BCBS--IOSCO: a one-tailed 99 per cent interval over the margin horizon). The mean is removed because what every path does over the period (a scheduled payment, the passage of time) is not a risk. The estimate is at the model's current volatility, not one calibrated to a period of stress, so it can read lower than a regulatory margin model; it is a cross-section of the paths at each date, not a margin recomputed on each path. On currency and digital-asset tickets the value a margin period earlier is exact (above), and against a simulation that draws the level at both dates, with no grid and no bridge, the estimate agrees to sampling error (about 1\% at 200{,}000 paths; \code{tests/test\_fx\_xva\_lag.py}). Bridging between values, as those tickets did until v1.14 and as the rates ticket and the netting-set engine still do, keeps the variance of the move but is Gaussian where the value is lognormal: within about 1\% at a currency's volatility, and 9 to 18\% low on the margin called at volatilities of 55 to 110\%. Exposure beyond the margin is then the 1\% tail of the model's own move, so a margined CVA is small by construction: gap risk, jumps and a margin call that is not met are not in it. A leg of a package that settles is a payment, not a move, and is not margined. Received IM reduces exposure; posted IM is funded and drives MVA. \emph{Function \code{model_im}.}
 
 \textbf{Rijeka does not compute ISDA SIMM.} SIMM is ISDA's licensed methodology and its risk weights are not in this engine. A firm with a SIMM licence enters its own figure as the amount.
 
@@ -703,7 +710,7 @@ Key-rate ladder & ladder total (par +1bp) vs ticket IR01 (zero +1bp) & 5 & -2.14
 
 The XVA book (\S\ref{sec:exposure}, \code{methodology/xva_workbook.py}) goes further: it carries the engine's own random draws, rebuilds every Hull--White path, the bond reconstitution, the margin-period bridge, the collateral and the waterfall in cells, shows the swaption calibration with the model's closed-form vol per basket point and an RMSE grid around the fit, and has a LIVE mode that re-rolls the simulation in the spreadsheet with a convergence sheet for the Monte Carlo error.
 
-The FX and digital-asset XVA books (\code{methodology/fx_xva_workbook.py}) do the same for a forward: the lognormal paths from the engine's draws, the pair's surface interpolated to the forward's tenor with the smile fixed point at $K=F$ shown iteration by iteration, the initial margin as the percentile move over the margin period, the add-on of the pair's own class, and the same CSA, bridge, waterfall and LIVE mode.
+The FX and digital-asset XVA books (\code{methodology/fx_xva_workbook.py}) do the same for a forward: the lognormal paths from the engine's draws, the pair's surface interpolated to the forward's tenor with the smile fixed point at $K=F$ shown iteration by iteration, the initial margin as the percentile move over the margin period, the add-on of the pair's own class, the forward a margin period earlier (bridged in logs) and the trade valued on it, and the same CSA, waterfall and LIVE mode.
 \item \textbf{Independent reference.} Every product is repriced in QuantLib on every commit (\S\ref{sec:quantlib}); a difference that grows past its stated tolerance fails the build.
 \item \textbf{Open items, stated plainly.} Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. Initial margin is the desk's amount or the engine's estimate at current volatility; ISDA SIMM is licensed and is not implemented.
 \item \textbf{Change control.} Every change to a pricing module is a commit in a public repository with its tests; this document is versioned with the code.

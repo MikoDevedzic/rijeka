@@ -96,6 +96,13 @@ def compute(client, auth, ids) -> dict:
                                                     "seed": 42, "valuation_date": ASOF, "csa": cases["bilateral"]}, headers=auth), "EURUSD xva")["xva"]
     for k in ("cva", "fva", "kva", "mva", "colva", "xva_total"):
         out[f"xva.EURUSD.bilateral.{k}"] = float(fx[k])
+    # a margined digital-asset forward, pinned from 11 November 2026: at its vol the margin estimate, the tail beyond
+    # the margin and the capital add-on are where a change to the engine shows first. One settlement only: the XVA
+    # routes take six runs a minute from one account, and this is the sixth
+    bx = _ok(client.post("/api/xva/currency", json={"pair": "BTCUSD", "base_notional": 10, "settlement_date": SETTLE, "direction": "BUY", "paths": 500,
+                                                    "seed": 42, "valuation_date": ASOF, "csa": cases["bilateral"]}, headers=auth), "BTCUSD xva")["xva"]
+    for k in ("cva", "dva", "fva", "fba", "kva", "mva", "xva_total"):
+        out[f"xva.BTCUSD.bilateral.{k}"] = float(bx[k])
 
     # the swap's capital stock alone, under three collateral regimes on stated terms (not the record's, which other tests edit)
     terms = {"preset": "BILATERAL", "threshold_cp": 0, "mta": 0, "im_exchanged": True}
