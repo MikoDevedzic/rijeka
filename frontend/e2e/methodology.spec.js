@@ -4,20 +4,24 @@
 import { test, expect, expectClean, expectNoHorizontalOverflow } from './fixtures.js'
 
 test('methodology: the system page follows a trade, names a piece, and shows the API\'s own health answer', async ({ app, problems }) => {
+  const asked = app.waitForResponse(r => r.url().endsWith('/api/ops/health'))
   await app.goto('/methodology')
   await expect(app.getByRole('heading', { level: 1, name: 'How the system is built' })).toBeVisible()
-  // the scene is drawn, or the page says it cannot be: never left loading
+  // the scene is drawn in this browser (it has WebGL): a scene that fails to build is a failure, not a fallback
   const stage = app.getByTestId('mr-stage')
-  await expect.poll(() => stage.getAttribute('data-scene'), { timeout: 20_000 }).not.toBe('loading')
-  const drawn = (await stage.getAttribute('data-scene')) === 'on'
-  if (drawn) await expect(stage.locator('canvas')).toHaveAttribute('data-ready', 'true')
-  else await expect(app.getByTestId('mr-no-scene')).toBeVisible()
+  await expect(stage).toHaveAttribute('data-scene', 'on', { timeout: 20_000 })
+  await expect(stage.locator('canvas')).toHaveAttribute('data-ready', 'true')
+  await expect(app.getByTestId('mr-no-scene')).toHaveCount(0)
+  // a name sits over its piece, not in the corner it starts from
+  const box = await app.getByTestId('mr-piece-api').boundingBox(), frame = await stage.boundingBox()
+  expect(box.x - frame.x, 'the API\'s name is placed in the scene').toBeGreaterThan(100)
   // every piece has its name, whichever way the scene is shown
   for (const id of ['app', 'land', 'api', 'auth', 'pg', 'chain', 'pub', 'venue', 'ai', 'tg']) await expect(app.getByTestId(`mr-piece-${id}`)).toBeVisible()
 
   // a step says what happens and names its routes
   const say = app.getByTestId('mr-say')
   await expect(say).toContainText('THE WHOLE MAP')
+  await expect(app.getByTestId('mr-step-7')).toContainText('THE BATCHES')
   await app.getByTestId('mr-step-5').click()
   await expect(app.getByTestId('mr-step-5')).toHaveAttribute('aria-pressed', 'true')
   await expect(say).toContainText('5 · CONFIRM')
@@ -39,7 +43,8 @@ test('methodology: the system page follows a trade, names a piece, and shows the
   // the strip is the API's own answer: the version it reports, and the batches by their own names
   const health = app.getByTestId('mr-health')
   await expect(health).toHaveAttribute('data-state', 'answered')
-  const answer = await (await app.request.get((await app.evaluate(() => performance.getEntriesByType('resource').map(r => r.name).find(n => n.endsWith('/api/ops/health')))))).json()
+  const res = await asked, answer = await res.json()
+  expect(res.request().headers().authorization, 'the health answer is public: the page sends no token for it').toBeUndefined()
   await expect(health).toContainText(answer.version)
   await expect(health).toContainText('MIGRATIONS')
   await expectNoHorizontalOverflow(app.getByTestId('mr'), 'the system page')
@@ -85,9 +90,13 @@ test('methodology: a section reads as the document does, with its evidence, a wo
   await expect(worked.getByTestId('mr-ndf-npv')).toHaveText('-499')
   await expectNoHorizontalOverflow(app.getByTestId('mr'), 'a section with its evidence')
 
-  // a reference in the text goes to the section it names
-  await sec.locator('a[data-sec="s13"]').first().click()
+  // a reference in the text is a link (it has an address and takes the keyboard) and goes to the section it names
+  const ref = sec.locator('a[data-sec="s13"]').first()
+  await expect(ref).toHaveAttribute('href', '/methodology/13')
+  await ref.focus()
+  await app.keyboard.press('Enter')
   await expect(app).toHaveURL(/\/methodology\/13$/)
+  await expect(app.locator('.ab-link', { hasText: 'METHODOLOGY' }), 'the top bar still says where you are').toHaveClass(/is-on/)
   await expect(app.getByRole('heading', { level: 1, name: 'FX options' })).toBeVisible()
   await expect(app.getByTestId('mr-evidence').getByTestId('mr-model')).toHaveCount(6)
   // the syllabus opens the section's own parts, and the pager walks on
@@ -111,4 +120,23 @@ test('methodology: a section reads as the document does, with its evidence, a wo
   await expect(app).toHaveURL(/\/methodology\/findings$/)
   await app.goBack()
   expectClean(problems)
+})
+
+test('methodology: a browser that cannot draw the scene is told so, and the pieces and steps are still there', async ({ app, problems }) => {
+  await app.addInitScript(() => {
+    const real = HTMLCanvasElement.prototype.getContext
+    HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return /webgl/i.test(kind) ? null : real.call(this, kind, ...rest) }
+  })
+  await app.goto('/methodology')
+  const stage = app.getByTestId('mr-stage')
+  await expect(stage).toHaveAttribute('data-scene', 'off', { timeout: 20_000 })
+  await expect(app.getByTestId('mr-no-scene')).toBeVisible()
+  for (const id of ['app', 'api', 'pg', 'chain', 'venue']) await expect(app.getByTestId(`mr-piece-${id}`)).toBeVisible()
+  await app.getByTestId('mr-step-4').click()
+  await expect(app.getByTestId('mr-say')).toContainText('POST /api/book/package')
+  await app.getByTestId('mr-piece-pg').click()
+  await expect(app.getByTestId('mr-piece')).toContainText('row-level security')
+  await expectNoHorizontalOverflow(app.getByTestId('mr'), 'the system page without the scene')
+  // three.js says in the console that it could not make a context: that is the case under test, and the only thing allowed
+  expect(problems.filter(x => !/WebGL|webgl|context/i.test(x)), `other problems:\n${problems.join('\n')}`).toEqual([])
 })

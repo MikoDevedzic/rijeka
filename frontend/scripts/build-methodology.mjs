@@ -95,7 +95,8 @@ function inline(text, ctx) {
   const secLink = (label) => {
     const l = ctx.labels[label] || fail(`an unknown label: ${label}`)
     if (l.eq) return String(l.eq)
-    return `<a data-sec="s${l.sec.split('.')[0]}"${l.sec.includes('.') ? ` data-sub="${l.sec}"` : ''}>${l.sec}</a>`
+    const top = l.sec.split('.')[0]
+    return `<a href="/methodology/${top}" data-sec="s${top}"${l.sec.includes('.') ? ` data-sub="${l.sec}"` : ''}>${l.sec}</a>`
   }
   while (i < n) {
     const c = text[i]
@@ -171,7 +172,7 @@ function blocks(text, ctx) {
   let m
   while ((m = re.exec(text))) {
     const before = text.slice(i, m.index)
-    const endsPara = /\n\s*\n\s*$/.test(before)
+    const endsPara = !before.trim() || /\n\s*\n\s*$/.test(before)       // nothing before it (a heading), or a paragraph ended
     para(before)
     if (m[0] === '\\subsection{') {
       const [title, k] = group(text, m.index + '\\subsection'.length)

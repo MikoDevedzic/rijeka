@@ -55,7 +55,7 @@
 .mr-prose ul, .mr-prose ol { margin: 0 0 13px; padding-left: 22px; }
 .mr-prose li { margin-bottom: 6px; }
 .mr-prose li p { margin-bottom: 6px; }
-.mr-prose a[data-sec] { color: var(--blue); cursor: pointer; text-decoration: underline; text-decoration-color: var(--blue-dim); text-underline-offset: 3px; }
+.mr-prose a[data-sec] { color: var(--blue); cursor: pointer; text-decoration: underline; text-decoration-color: var(--blue-dim); text-underline-offset: 3px; border-radius: 2px; }
 .mr-prose a[href] { color: var(--blue); text-underline-offset: 3px; }
 .mr-prose .sc { font-variant-caps: all-small-caps; letter-spacing: 0.04em; }
 .mr-eq { background: var(--panel); border: 1px solid var(--border); border-left: 2px solid var(--border-glow); border-radius: 0 var(--r-2) var(--r-2) 0; padding: 4px 14px; margin: 4px 0 16px; overflow-x: auto; overflow-y: hidden; color: var(--text-hi); }
@@ -132,6 +132,8 @@
 /* before the scene is drawn, and where it cannot be: the names in a plain wrapping row */
 .mr-stage[data-scene="loading"] .mr-labels, .mr-stage[data-scene="off"] .mr-labels { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; padding: 14px; overflow: auto; }
 .mr-l3.flow { position: static; }
+/* until the first frame has placed them, the names are not shown stacked in a corner */
+.mr-stage[data-scene="on"] canvas:not([data-ready]) + .mr-labels { visibility: hidden; }
 .mr-stage[data-scene="off"] canvas { display: none; }
 .mr-e3 { position: absolute; left: 0; top: 0; font-size: 11px; color: var(--text-hi); background: rgba(8, 23, 20, 0.82); border-radius: var(--r-1); padding: 1px 7px; white-space: nowrap; }
 .mr-e3.gold { color: var(--accent-hi); }

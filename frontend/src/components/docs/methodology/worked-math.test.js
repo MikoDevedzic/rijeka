@@ -8,6 +8,10 @@ describe('the worked tables', () => {
     expect(readNumber(' 4.00% ')).toBe(4)
     expect(readNumber('-3')).toBe(-3)
     for (const bad of ['', 'abc', '1,5', '1.2.3', '10 000', '1e5', null]) expect(readNumber(bad)).toBeNull()
+    // a rate takes no comma: 3,250 is more often a decimal comma than three thousand per cent
+    expect(readNumber('3,250', { grouped: false })).toBeNull()
+    expect(readNumber('3.25', { grouped: false })).toBe(3.25)
+    expect(readNumber('3,250')).toBe(3250)
   })
   it('the digital-asset forward of §12: F = S·exp((r_USD − r_c)·T), NPV = (F − K)·N·P', () => {
     const r = ndf({ S: 100000, rq: 4, rc: 3, days: 91, N: 10, K: 100300 })
@@ -30,7 +34,12 @@ describe('the worked tables', () => {
     expect(cvaLine({ ee: 250000, s: 150, lgd: 60, yrs: 2, r: 0 }).cva).toBeCloseTo(0.6 * 250000 * (1 - Math.exp(-0.05)), 6)
     expect(r.cva).toBeLessThan(0.6 * 250000 * (1 - Math.exp(-0.05)))
     expect(r.cva).toBeGreaterThan(0.6 * 250000 * (1 - Math.exp(-0.05)) * Math.exp(-0.08))
-    for (const bad of [{ lgd: 101 }, { yrs: 31 }, { s: 0 }, { ee: null }]) expect(cvaLine({ ee: 250000, s: 150, lgd: 60, yrs: 2, r: 4, ...bad })).toBeNull()
+    for (const bad of [{ lgd: 101 }, { yrs: 31 }, { s: 0 }, { ee: null }, { yrs: 0.03 }]) expect(cvaLine({ ee: 250000, s: 150, lgd: 60, yrs: 2, r: 4, ...bad })).toBeNull()
+    // the chance of default is over the months that were summed, not over the years as typed
+    const odd = cvaLine({ ee: 250000, s: 150, lgd: 60, yrs: 2.3, r: 0 })
+    expect(odd.months).toBe(28)
+    expect(odd.pd).toBeCloseTo(1 - Math.exp(-0.025 * 28 / 12), 12)
+    expect(odd.cva).toBeCloseTo(0.6 * 250000 * odd.pd, 6)
   })
 })
 

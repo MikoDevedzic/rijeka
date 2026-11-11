@@ -26,12 +26,14 @@ methodology document carries its own version (v1.12). Commits on `main` are the 
   is sample inputs and one formula, not the engine's run.
 - **How the system is built.** The pieces as solids in space (three.js, which the app already loads for its other
   scenes), coloured by kind with brass kept for what is on chain; light travels along each join the way the request
-  goes; FOLLOW A TRADE walks the seven steps from sign-in to the nightly batches; a piece says what it does when
+  goes; FOLLOW A TRADE walks the seven steps from sign-in to the batches (every two hours, one row a day); a piece says what it does when
   pressed; the scene turns when dragged. Under it, the API's own answer on `GET /api/ops/health`, read when the page
   opens: version, commit, migrations and each batch, amber when one is late. Where a browser cannot draw the scene
   the page says so and the names and steps remain.
 - New dependency: `katex` (MIT), for its stylesheet and fonts; the formulas are set when the pages are built, not in
   the browser.
+- The METHODOLOGY tab of the top bar stays lit on a section's page; the crypto option styles workbook is listed
+  under §13, where the document treats them.
 - Not in this change: notes in plain words beside each formula (the mock had two; they have no place in the source
   yet); a workbook's real cells shown in the page (the worked tables are the document's formulas, not the file);
   the formulas are not read out by a screen reader as mathematics (KaTeX's visual output only, to keep the page

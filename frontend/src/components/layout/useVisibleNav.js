@@ -13,7 +13,7 @@ const NAV = [
   { label: 'P&L',            path: '/pnl',            exact: true  },
   { label: 'RISK',           path: '/risk',           exact: false },
   { label: 'CONFIGURATIONS', path: '/configurations', exact: false },
-  { label: 'METHODOLOGY',    path: '/methodology',    exact: true  },
+  { label: 'METHODOLOGY',    path: '/methodology',    exact: false },      // its sections are pages under it
   { label: 'ROADMAP',        path: '/roadmap',        exact: true  },
 ]
 

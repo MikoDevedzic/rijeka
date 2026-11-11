@@ -14,6 +14,10 @@ this page is what to do, in order.
       book; any movement has a line in `backend/tests/integration/GOLDEN_CHANGES.md`.
 - [ ] **Vera**, for anything larger than a hotfix: a fresh review of `git diff main...HEAD`.
 - [ ] **Magnus**, when the change touches sign-in, roles, tenancy, keys, payments or a public endpoint.
+- [ ] A change to `docs/methodology/rijeka_methodology.tex` or `docs/model_inventory.md`: rebuild the three prints and
+      commit them with it: `cd docs/methodology && tectonic rijeka_methodology.tex`, copy the PDF to
+      `frontend/public/methodology/`, and `cd frontend && npm run methodology` (the unit run fails when the pages are
+      stale; nothing checks that the PDF is the source's, so read its first and last page).
 - [ ] `CHANGELOG.md` and `backend/version.py` for a release that changes behaviour. A frontend- or docs-only
       fix leaves `version.py` alone so the API does not restart.
 

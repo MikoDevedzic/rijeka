@@ -3,11 +3,13 @@
 // curve, a flat exposure where the engine simulates one. Each table says so. The formulas are the document's own
 // (§12: the digital-asset forward; §10: the first line of the waterfall).
 
-// A number as typed: digits, an optional en-US thousands grouping, an optional decimal part, an optional % at
-// the end. Anything else (a decimal comma, letters, an empty box) is not a number, and nothing is computed from it.
-export function readNumber(text) {
+// A number as typed: digits, an optional decimal part, an optional % at the end; and, for an amount, an optional
+// en-US thousands grouping. A rate takes no comma at all (`grouped: false`): "3,250" typed as a rate is a decimal
+// comma far more often than three thousand per cent, and is refused, not guessed. Anything else (letters, an
+// empty box) is not a number, and nothing is computed from it.
+export function readNumber(text, { grouped = true } = {}) {
   const s = String(text ?? '').trim().replace(/%$/, '').trim()
-  if (!/^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/.test(s)) return null
+  if (!(grouped ? /^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/ : /^-?\d+(\.\d+)?$/).test(s)) return null
   const n = Number(s.replace(/,/g, ''))
   return Number.isFinite(n) ? n : null
 }
@@ -24,12 +26,14 @@ export function ndf({ S, rq, rc, days, N, K } = {}) {
 
 // §10, the first line of the waterfall with the exposure held flat:
 //   h = s / LGD,  Q(t) = exp(−h·t),  CVA = LGD · Σ_i EE · (Q(t_{i−1}) − Q(t_i)) · exp(−r·t_i), monthly
-// Spread in basis points, LGD and the rate in %. Null unless the exposure, the spread, the LGD (at most 100 %)
-// and the years (at most 30) are above zero and the rate is a number.
+// Spread in basis points, LGD and the rate in %. The grid is monthly, so the life is a whole number of months:
+// `months` is what was summed over, and the chance of default is over the same months. Null unless the exposure,
+// the spread, the LGD (at most 100 %) and the years (a month at least, 30 at most) are above zero and the rate is a number.
 export function cvaLine({ ee, s, lgd, yrs, r } = {}) {
   if (![ee, s, lgd, yrs, r].every(Number.isFinite) || !(ee > 0 && s > 0 && lgd > 0 && lgd <= 100 && yrs > 0 && yrs <= 30)) return null
   const h = s / 10000 / (lgd / 100), n = Math.round(yrs * 12)
+  if (n < 1) return null
   let sum = 0
   for (let i = 1; i <= n; i++) sum += ee * (Math.exp(-h * (i - 1) / 12) - Math.exp(-h * i / 12)) * Math.exp(-r / 100 * i / 12)
-  return { h, pd: 1 - Math.exp(-h * yrs), cva: lgd / 100 * sum }
+  return { h, months: n, pd: 1 - Math.exp(-h * n / 12), cva: lgd / 100 * sum }
 }

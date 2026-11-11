@@ -30,12 +30,31 @@ describe('the methodology in the app', () => {
     expect(tags(10)).toEqual([14, 15, 16, 17, 18, 19])
     expect(tags(12)).toEqual([20, 21, 22])
     // prose with the maths taken out: no backslash command, no stray brace or dollar
-    const strip = (h) => h.replace(/<span class="katex">[\s\S]*?<\/span><\/span><\/span>(?=[^<]|<(?!\/span))/g, ' ')
-    for (const s of built.sections) for (const b of s.blocks) {
-      if (b.t !== 'p') continue
-      const prose = strip(b.html).replace(/<code>[\s\S]*?<\/code>/g, ' ').replace(/<[^>]+>/g, ' ')
-      expect(prose, `§${s.n}: ${prose.slice(0, 80)}`).not.toMatch(/\\[A-Za-z]+|\$/)
+    // the text with each formula taken out whole (a formula's own spans nest: counted, not guessed)
+    const strip = (h) => {
+      let out = '', i = 0
+      for (;;) {
+        const a = h.indexOf('<span class="katex">', i)
+        if (a < 0) return out + h.slice(i)
+        out += h.slice(i, a) + ' '
+        let depth = 0, k = a
+        const tag = /<(\/?)span\b[^>]*>/g; tag.lastIndex = a
+        for (let m; (m = tag.exec(h));) { depth += m[1] ? -1 : 1; k = tag.lastIndex; if (!depth) break }
+        i = k
+      }
     }
+    // every piece of text the page shows: paragraphs, list items, table cells, headings, the history, the references
+    const all = []
+    const walk = (x) => { if (typeof x === 'string') all.push(x); else if (Array.isArray(x)) x.forEach(walk); else if (x && typeof x === 'object') for (const [k, v] of Object.entries(x)) { if (k !== 't' && k !== 'id' && k !== 'n' && k !== 'evidence') walk(v) } }
+    walk(built.sections); walk(built.history); walk(built.references); walk(built.howto)
+    expect(all.length).toBeGreaterThan(600)
+    for (const h of all) {
+      if (h.includes('class="katex-display"')) continue          // a display is all maths
+      const prose = strip(h).replace(/<code>[\s\S]*?<\/code>/g, ' ').replace(/<[^>]+>/g, ' ')
+      expect(prose, prose.slice(0, 80)).not.toMatch(/\\[A-Za-z]+|[{}]/)          // (a dollar sign is the document's own: "$3 on a $10m"; an unclosed one stops the build)
+    }
+    // a reference in the text is a link with an address
+    expect(JSON.stringify(built.sections)).toMatch(/<a href=\\"\/methodology\/13\\" data-sec=\\"s13\\">/)
     expect(text).not.toContain('??')
   })
   it('puts every row of the model inventory beside a section the document has', () => {

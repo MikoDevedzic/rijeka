@@ -108,7 +108,8 @@ export default function Methodology() {
   const [docErr, setDocErr] = useState(null)
   const [products, setProducts] = useState(null)
   const [busy, setBusy] = useState(null)
-  const [err, setErr] = useState(null)
+  const [err, setErr] = useState(null)                   // a workbook that could not be built: said where it was asked for
+  const [listErr, setListErr] = useState(null)           // the list of workbooks that could not be read: said where the list is shown
   const top = useRef(null), anchor = useRef(null), shown = useRef(null)
   const id = ORDER.includes(section) ? section : 'architecture'
 
@@ -118,16 +119,17 @@ export default function Methodology() {
     authed('/api/methodology/products')
       .then(async r => { if (!r.ok) throw new Error((await r.json().catch(() => ({})))?.detail || `HTTP ${r.status}`); return r.json() })
       .then(p => { if (!dead) setProducts(p) })
-      .catch(e => { if (!dead) setErr(`Could not load the list of workbooks: ${e.message}`) })
+      .catch(e => { if (!dead) setListErr(`Could not load the list of workbooks: ${e.message}`) })
     return () => { dead = true }
   }, [])
   // a new section starts at its top; a link to a subsection goes on to it once the section is drawn
   // (the page as it first opens is left where the browser put it: its own bar stays in view)
   useEffect(() => {
     const to = anchor.current && document.getElementById(anchor.current)
+    if (doc) anchor.current = null                        // used once: a later Back does not land on it again
     const first = shown.current === null
     if (!to && (first || shown.current === id)) { shown.current = id; return }
-    shown.current = id; anchor.current = null
+    shown.current = id
     const el = to || top.current
     if (el && el.scrollIntoView) el.scrollIntoView({ block: 'start' })
   }, [id, doc])
@@ -147,7 +149,7 @@ export default function Methodology() {
   const byN = Object.fromEntries((doc?.sections || []).map(s => [s.n, s]))
   const titleOf = (x) => (EXTRA[x] ? EXTRA[x] : byN[x] ? <span dangerouslySetInnerHTML={html(byN[x].title)} /> : `Section ${x}`)
   const plain = (x) => (EXTRA[x] || (byN[x] ? byN[x].title.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&') : `Section ${x}`))
-  const go = (x, sub) => { anchor.current = sub || null; if (x === id) { const el = sub && document.getElementById(sub); if (el) el.scrollIntoView({ block: 'start' }) } else navigate(x === 'architecture' ? '/methodology' : `/methodology/${x}`) }
+  const go = (x, sub) => { setErr(null); anchor.current = sub || null; if (x === id) { const el = sub && document.getElementById(sub); if (el) el.scrollIntoView({ block: 'start' }) } else navigate(x === 'architecture' ? '/methodology' : `/methodology/${x}`) }
   // a "§12" inside the text goes to that section
   const onProse = (e) => {
     const a = e.target.closest && e.target.closest('a[data-sec]')
@@ -205,6 +207,7 @@ export default function Methodology() {
             {GROUPS.map(([g, ids]) => <optgroup key={g} label={g}>{ids.map(x => <option key={x} value={x}>{EXTRA[x] ? '' : `§${x}  `}{plain(x)}</option>)}</optgroup>)}
           </select>
           {err && <div className="doc-err" data-testid="mr-err">{err}</div>}
+          {listErr && (sec || id === 'replications') && <div className="doc-err" data-testid="mr-list-err">{listErr}</div>}
 
           {id === 'architecture' && <Suspense fallback={<div className="doc-note">Loading…</div>}><Architecture /></Suspense>}
 
@@ -228,7 +231,7 @@ export default function Methodology() {
               <div className="mr-eyebrow"><span className="mr-lbl">EVIDENCE</span></div>
               <h1 className="mr-title">Excel replications</h1>
               <p className="mr-lead">No black boxes. For each product: the model, the default trade, and an Excel workbook that rebuilds that trade with live formulas from <b>your</b> latest market data, beside the value Rijeka's engine produced. Change a yellow cell and it reprices. The curve's discount factors come from Rijeka's bootstrap as values; everything after that is a formula you can read.</p>
-              {!products && !err && <div className="doc-note">Loading…</div>}
+              {!products && !listErr && <div className="doc-note">Loading…</div>}
               {groups.map(g => (
                 <section key={g} className="doc-group">
                   <h2>{g.toUpperCase()}</h2>
@@ -244,6 +247,7 @@ export default function Methodology() {
                           {p.replication === 'doc' && <a className="doc-btn" href={`${GITHUB}${p.doc}`} target="_blank" rel="noopener noreferrer">VALIDATION REPORT ↗</a>}
                           {p.replication === 'verifier' && <a className="doc-btn" href={p.doc} target="_blank" rel="noopener noreferrer">OPEN THE VERIFIER ↗</a>}
                           {sectionsOf(p).length > 0 && <button type="button" className="doc-link" onClick={() => go(sectionsOf(p)[0])}>§{p.section} OF THE DOCUMENT</button>}
+                          <a className="doc-link" style={{ marginLeft: sectionsOf(p).length ? '0.6rem' : 'auto' }} href="https://github.com/MikoDevedzic/rijeka/tree/main/backend/pricing" target="_blank" rel="noopener noreferrer">SOURCE ↗</a>
                         </div>
                       </article>
                     ))}

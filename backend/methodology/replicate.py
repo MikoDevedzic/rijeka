@@ -75,7 +75,7 @@ PRODUCTS = [
      "default": "BTC/USD · 10 BTC · 3-month call · strike at the forward · ATM vol from the BTCUSD surface (60% without one) · funding 3%",
      "formula": "Black-76 on the forward F = S·e^(−r_c·T)/DF_USD: C = DF_USD·[F·N(d₁) − K·N(d₂)]; CRY01, IR01 (discounting), FUND01 and vega beside the engine's",
      "replication": "xlsx"},
-    {"id": "crypto_option_styles", "name": "Crypto option styles: digital, barrier, touch, double barrier", "group": "FX & digital assets", "section": "12",
+    {"id": "crypto_option_styles", "name": "Crypto option styles: digital, barrier, touch, double barrier", "group": "FX & digital assets", "section": "13",
      "default": "BTC/USD · 3 months · digitals USD 100k / 1 BTC · the eight single barriers at ±15% with a rebate · touches · double knock-out and knock-in",
      "formula": "the FX option styles' closed forms with the funding rate as the carry (Reiner–Rubinstein; the two-barrier image series); American is a tree",
      "replication": "xlsx"},

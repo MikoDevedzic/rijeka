@@ -5,11 +5,12 @@ import { cvaLine, ndf, readNumber } from './worked-math'
 const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—')
 const tone = (x) => (x > 0.005 ? ' pos' : x < -0.005 ? ' neg' : '')
 
-// rows: [key, what it is, decimals shown]; start: the sample values. Returns [texts, set, values (null where unreadable), reset].
-function useInputs(rows, start) {
+// rows: [key, what it is, decimals shown]; start: the sample values; rates: the keys read as a rate (no comma at all).
+// Returns [texts, set, values (null where unreadable), reset].
+function useInputs(rows, start, rates) {
   const first = () => Object.fromEntries(rows.map(([k, , d]) => [k, fmt(start[k], d)]))
   const [text, setText] = useState(first)
-  const values = Object.fromEntries(rows.map(([k]) => [k, readNumber(text[k])]))
+  const values = Object.fromEntries(rows.map(([k]) => [k, readNumber(text[k], { grouped: !rates.includes(k) })]))
   return [text, (k, v) => setText(t => ({ ...t, [k]: v })), values, () => setText(first())]
 }
 function InputRow({ id, addr, what, text, bad, onChange }) {
@@ -25,7 +26,7 @@ function InputRow({ id, addr, what, text, bad, onChange }) {
 const NDF_ROWS = [['S', 'Spot, USD per BTC', 2, 'B2'], ['rq', 'USD rate, % a year', 2, 'B3'], ['rc', 'BTC funding rate, % a year', 2, 'B4'], ['days', 'Days to settlement', 0, 'B5'], ['N', 'Notional, BTC', 2, 'B6'], ['K', 'Forward price agreed, USD', 2, 'B7']]
 const NDF_START = { S: 100000, rq: 4, rc: 3, days: 91, N: 10, K: 100300 }
 export function NdfCells() {
-  const [text, set, v, reset] = useInputs(NDF_ROWS, NDF_START)
+  const [text, set, v, reset] = useInputs(NDF_ROWS, NDF_START, ['rq', 'rc'])
   const r = ndf(v)
   const bad = (k) => v[k] == null || (k !== 'rq' && k !== 'rc' && !(v[k] > 0))
   const out = (id, x, d, coloured) => <td className={'v' + (r && coloured ? tone(x) : '')} data-testid={id} data-value={r ? x : ''}>{r ? fmt(x, d) : '—'}</td>
@@ -52,7 +53,7 @@ export function NdfCells() {
 const CVA_ROWS = [['ee', 'Expected exposure, USD, held flat', 0], ['s', 'Counterparty spread, basis points', 0], ['lgd', 'Loss given default, %', 0], ['yrs', 'Years', 0], ['r', 'Discount rate, % a year', 2]]
 const CVA_START = { ee: 250000, s: 150, lgd: 60, yrs: 2, r: 4 }
 export function CvaLine() {
-  const [text, set, v, reset] = useInputs(CVA_ROWS, CVA_START)
+  const [text, set, v, reset] = useInputs(CVA_ROWS, CVA_START, ['lgd', 'r', 'yrs'])
   const r = cvaLine(v)
   const bad = (k) => v[k] == null || (k !== 'r' && !(v[k] > 0)) || (k === 'lgd' && v[k] > 100) || (k === 'yrs' && v[k] > 30)
   const out = (id, x, d) => <td className="v" data-testid={id} data-value={r ? x : ''}>{r ? fmt(x, d) : '—'}</td>
@@ -65,7 +66,7 @@ export function CvaLine() {
         <tbody>
           {CVA_ROWS.map(([k, what]) => <InputRow key={k} id={`mr-cva-${k}`} what={what} text={text[k]} bad={bad(k)} onChange={x => set(k, x)} />)}
           <tr><td>Hazard rate, % a year</td><td className="f">h = s / LGD</td>{out('mr-cva-h', r ? r.h * 100 : NaN, 2)}</tr>
-          <tr><td>Chance of default over the life, %</td><td className="f">1 − e^(−h·T)</td>{out('mr-cva-pd', r ? r.pd * 100 : NaN, 2)}</tr>
+          <tr><td>Chance of default over {r ? `${r.months} ${r.months === 1 ? 'month' : 'months'}` : 'the life'}, %</td><td className="f">1 − e^(−h·T)</td>{out('mr-cva-pd', r ? r.pd * 100 : NaN, 2)}</tr>
           <tr className="out"><td>CVA, USD</td><td className="f">LGD · Σ EE · ΔQ · D, monthly</td>{out('mr-cva-out', r?.cva, 0)}</tr>
         </tbody>
       </table></div>

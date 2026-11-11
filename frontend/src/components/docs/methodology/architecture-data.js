@@ -1,6 +1,7 @@
 // How the system is built, as the methodology's first page draws it: the pieces, what joins them, and a trade's
 // way through. Every sentence here restates docs/architecture.md (the map the architect keeps); when the map
-// changes, this changes with it (architecture.test.js holds the names of the routes to the API's own).
+// changes, this changes with it. architecture.test.js holds each route named here to the API's own routers and
+// the batch cadences to the scheduler's defaults; the sentences themselves are held by the architect's reading.
 //
 // A colour says which kind of piece it is. Brass stays what it is everywhere in Rijeka: what is on chain.
 export const KINDS = {
@@ -19,7 +20,7 @@ export const PIECES = [
   { id: 'land', kind: 'people', name: 'PUBLIC SITE + VERIFIER', sub: 'rijeka.app', p: [-7.6, 3.4], shape: 'screen', small: true, h: 2.0, cy: 1.0,
     note: 'The landing pages, the public tools and the verifier, deployed separately from the app. The verifier reads the registry directly; nothing in it trusts Rijeka\'s servers.' },
   { id: 'api', kind: 'core', name: 'THE API', sub: 'FastAPI, one process', p: [0, 0], shape: 'core', h: 2.75, cy: 1.0,
-    note: 'One FastAPI process, in the same region as the database. Pricing is numpy and scipy on the request path, with curve and trade caches. The scheduler runs the batches inside the same process: digital-asset marks every ten minutes, spots and news every thirty, the day\'s marks, P&L, risk and credit once a day.' },
+    note: 'One FastAPI process, in the same region as the database. Pricing is numpy and scipy on the request path, with curve and trade caches. The scheduler runs the batches inside the same process: digital-asset marks every ten minutes; spots, news and digital-asset fixings every thirty; market data, marks, P&L, risk and credit every two hours, one row a day.' },
   { id: 'auth', kind: 'store', name: 'SIGN-IN', sub: 'Supabase Auth', p: [4.6, -5.8], shape: 'token', h: 0.95, cy: 0.4,
     note: 'Supabase Auth issues short-lived signed tokens. The API never sees a password: it checks each token against the public key.' },
   { id: 'pg', kind: 'store', name: 'DATABASE', sub: 'Postgres', p: [8.6, -2.6], shape: 'db', h: 1.85, cy: 0.75,
@@ -46,7 +47,7 @@ export const JOINS = [
   { id: 'api_chain', a: 'api', b: 'chain', says: 'anchor, amend, terminate' },
   { id: 'api_ai', a: 'api', b: 'ai', says: 'read-only tools' },
   { id: 'api_tg', a: 'api', b: 'tg', lift: 2.2, says: '' },
-  { id: 'api_pub', a: 'pub', b: 'api', says: 'daily rebuild, spots' },
+  { id: 'api_pub', a: 'pub', b: 'api', says: 'rebuilt every 2 hours, spots' },
   { id: 'api_venue', a: 'venue', b: 'api', says: 'every 10 minutes' },
   { id: 'land_api', a: 'land', b: 'api', says: 'pulse, calendar, register' },
   { id: 'land_chain', a: 'land', b: 'chain', lift: 5.2, says: 'reads the registry directly' },
@@ -69,8 +70,8 @@ export const STEPS = [
     routes: ['POST /api/chain/confirm/{id}', 'POST /api/chain/confirm-package'] },
   { k: '6', name: 'VERIFY', pieces: ['land', 'chain'], joins: ['land_chain'],
     say: 'Anyone with the proof can check it. The verifier is a static page: it re-derives the record\'s hash and reads the registry itself. It asks Rijeka\'s servers for nothing.' },
-  { k: '7', name: 'EVERY NIGHT', pieces: ['api', 'pub', 'venue', 'pg', 'ai'], joins: ['api_pub', 'api_venue', 'api_pg', 'api_ai'],
-    say: 'The scheduler rebuilds market data from public sources and the venue\'s marks, then stores a mark for each trade, the attributed P&L, the risk report and the counterparty-credit run. Prometheus reads the same tables through read-only tools.' },
+  { k: '7', name: 'THE BATCHES', pieces: ['api', 'pub', 'venue', 'pg', 'ai'], joins: ['api_pub', 'api_venue', 'api_pg', 'api_ai'],
+    say: 'Every two hours the scheduler rebuilds market data from public sources and stores, one row a day, a mark for each trade, the attributed P&L, the risk report and the counterparty-credit run. The venue\'s marks are read every ten minutes; spots, news and digital-asset fixings every thirty. Prometheus reads the same tables through read-only tools.' },
 ]
 
 // The API's health answer (GET /api/ops/health), as the strip under the scene words it.

@@ -15,8 +15,12 @@ const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia
 
 // Builds the scene on `canvas`, with `labels` (id → element) placed over it. Returns { set(step, picked), destroy() }.
 function makeStage(T, canvas, host, labels, tags, onPick) {
-  const reduce = reducedMotion()
   const renderer = legacyRenderer(T, { canvas, antialias: true, alpha: true })
+  try { return buildStage(T, renderer, canvas, host, labels, tags, onPick) }
+  catch (e) { renderer.dispose(); throw e }               // nothing half-built is left holding the canvas
+}
+function buildStage(T, renderer, canvas, host, labels, tags, onPick) {
+  const reduce = reducedMotion()
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   renderer.setClearColor(0x000000, 0)
   const scene = new T.Scene()
@@ -35,7 +39,7 @@ function makeStage(T, canvas, host, labels, tags, onPick) {
   g2.fillStyle = grad; g2.fillRect(0, 0, 64, 64)
   const glow = new T.CanvasTexture(dot)
 
-  const hit = [], nodes = {}, trash = [glow]
+  const hit = [], nodes = {}, trash = [glow, grid.geometry, grid.material]
   const keep = (x) => { trash.push(x); return x }
   for (const n of PIECES) {
     const kd = KINDS[n.kind], grp = new T.Group(); grp.position.set(n.p[0], 0, n.p[1]); world.add(grp)
@@ -130,6 +134,7 @@ function makeStage(T, canvas, host, labels, tags, onPick) {
   }
   const frame = (ms) => {
     raf = requestAnimationFrame(frame)
+    if (document.hidden) return                                         // a tab nobody is looking at draws nothing
     const t = reduce ? 0 : ms / 1000
     const k = Math.max(1, 1.9 / camera.aspect)                        // a narrow stage stands further back, so every piece stays in view
     scene.fog.near = 26 * k; scene.fog.far = 60 * k                     // and the haze stands back with it
@@ -184,9 +189,15 @@ export default function Architecture() {
   // the walk through a trade: one step every few seconds, to the last, then it rests there
   useEffect(() => {
     if (!touring) return
-    const id = setInterval(() => setStep(s => { if (s >= STEPS.length - 1) { setTouring(false); return s } return s + 1 }), 4200)
+    const id = setInterval(() => setStep(s => Math.min(s + 1, STEPS.length - 1)), 4200)
     return () => clearInterval(id)
   }, [touring])
+  const atLast = touring && step >= STEPS.length - 1
+  useEffect(() => {
+    if (!atLast) return
+    const id = setTimeout(() => setTouring(false), 4200)               // the last step is read like the others, then the walk rests
+    return () => clearTimeout(id)
+  }, [atLast])
 
   // the API's own account of itself: public, no sign-in, asked once when the page opens
   useEffect(() => {
