@@ -129,6 +129,9 @@
   color: var(--up);
   box-shadow: inset 0 -2px 0 var(--up);
 }
+/* what was chosen on a ticket that can no longer be changed: still said (its colour, its text), but flat, with
+   the dashed edge of a chip that cannot be pressed */
+.tbw-chip.is-on:disabled { background: transparent; }
 
 /* ── Tabs ──────────────────────────────────────────────────────────────── */
 

@@ -109,5 +109,17 @@ test('a side has its colour, a type has none, and the selected chip stands out',
   await app.mouse.move(5, 5)
   await expect.poll(() => css(rec, 'color')).toBe(UP)
   expect(await css(pay, 'color')).not.toBe(DOWN)
+  await win.locator('.tbw-light-r').click()
+
+  // a leg's side on DETAILS takes the same two colours
+  await app.getByText('+ NEW TRADE').first().click()
+  await win.waitFor()
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  await win.getByTestId('fx-legs-add').click()
+  const side = win.getByLabel('Side of leg 2')
+  const first = await css(side, 'color')
+  expect([UP, DOWN], 'a leg is bought or sold, in that colour').toContain(first)
+  await side.click()
+  await expect.poll(() => css(side, 'color')).toBe(first === UP ? DOWN : UP)
   expectClean(problems)
 })

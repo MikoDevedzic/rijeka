@@ -30,7 +30,7 @@ const pick = { ...box, fontFamily: 'var(--sans)', textAlign: 'left', padding: '5
 const brass = { borderColor: 'var(--accent-dim)', boxShadow: 'inset 0 -2px 0 var(--accent)' }
 const tool = { padding: '5px 10px', border: '1px solid var(--border-hi)', borderRadius: 'var(--r-2)', background: 'transparent', color: 'var(--text-dim)', fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 500, letterSpacing: '0.08em', cursor: 'pointer' }
 const sideBtn = (sell, off) => ({ width: 50, padding: '5px 0', borderRadius: 'var(--r-2)', fontFamily: 'var(--sans)', fontSize: 11, fontWeight: 500, letterSpacing: '0.06em', cursor: off ? 'default' : 'pointer',
-  border: `1px solid ${sell ? 'var(--down)' : 'var(--up)'}`, background: sell ? 'rgb(var(--down-rgb) / 0.16)' : 'rgb(var(--up-rgb) / 0.14)', color: sell ? 'var(--down)' : 'var(--up)' })
+  border: `1px solid ${sell ? 'var(--down)' : 'var(--up)'}`, background: off ? 'transparent' : sell ? 'rgb(var(--down-rgb) / 0.16)' : 'rgb(var(--up-rgb) / 0.14)', color: sell ? 'var(--down)' : 'var(--up)' })   // a side that is fixed is said, flat
 
 // What a style's terms say, in a sentence (the row under the leg, and the ticket's own row).
 function says(l, k, dp) {
