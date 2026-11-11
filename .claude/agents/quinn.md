@@ -39,6 +39,8 @@ Learned on 9 November 2026 (the scenario tab and the as-booked label)
 
 Learned on 11 November 2026
 - A journey that saves market data leaves it in the local database the integration tests share (`rijeka_test`). On 11 November 2026 the forwards journey's saved points failed two integration tests on the next run. Use a pair no other journey prices, and have the integration harness clear what a journey can leave (`backend/tests/integration/conftest.py`).
+- Read the run's own count of passed and failed, never the exit code of a command the run was piped through. On 11 November 2026 `npm run e2e | tail` exited 0 with one journey failed (93 passed, 1 failed) and the failure sat unread for an hour. Write the log to a file and print the lines that say how many passed, failed and were flaky.
+- A new display in `docs/methodology/rijeka_methodology.tex` moves every later equation number up. The methodology journey (`e2e/methodology.spec.js`) and the page's unit test (`build.test.js`) pin numbers read off the PDF: after any change to the .tex, run both and read the new numbers off the rebuilt PDF (`pdftotext -layout`), not off the page.
 
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
