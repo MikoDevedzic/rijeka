@@ -1,0 +1,37 @@
+# Production, looked at from the outside: the API's health (every batch current, the scheduler's loop alive, no
+# migration in trouble), the chain node and registry, the public register's rows in shape and free of markup, the
+# web app with every script it names, the methodology PDF, the public site with its verifier and register page.
+# One script, .github/scripts/watch.py: GET only, no sign-in, no secret. A failed run mails the owner.
+#
+# GitHub's schedule is best-effort: on this repository a half-hourly and a five-minute workflow have each run
+# once every five to eight hours. So this is the deep check a few times a day, by hand, and after a deploy
+# (`gh workflow run watch`), not a minute-by-minute alarm. docs/ops/monitoring.md says what covers the minutes.
+name: watch
+on:
+  schedule:
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+    inputs:
+      api_commit:
+        description: "the commit the API must report (optional; a prefix is enough)"
+        required: false
+      app_commit:
+        description: "the commit the web app must have been built from (optional)"
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: watch
+  cancel-in-progress: true
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - name: production from the outside
+        env:
+          API_COMMIT: ${{ inputs.api_commit }}
+          APP_COMMIT: ${{ inputs.app_commit }}
+        run: python3 .github/scripts/watch.py ${API_COMMIT:+--api-commit "$API_COMMIT"} ${APP_COMMIT:+--app-commit "$APP_COMMIT"}

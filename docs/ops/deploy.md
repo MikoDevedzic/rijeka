@@ -61,6 +61,11 @@ remains the second driver and the alarm: its last step fails the run when a batc
 and GitHub mails the owner. `GET /api/ops/health` shows both views: the data's freshness per
 batch and the scheduler's last cycle per step.
 
+`.github/workflows/watch.yml` looks at production from the outside with no secret (`.github/scripts/watch.py`):
+health, the chain node, the public register's shape, the app with every script it names, the public site and its
+verifier. It is also the read-back after a deploy. What it checks, and what covers the minutes between GitHub's
+runs: `docs/ops/monitoring.md`.
+
 The landing site rijeka.app is separate (root `netlify_drop/`, deployed with the CLI).
 
 ## The worker
