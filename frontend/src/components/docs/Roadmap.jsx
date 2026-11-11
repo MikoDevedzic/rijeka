@@ -28,7 +28,7 @@ const PHASES = [
     ['NEXT', 'A second venue beside the first and adapters for crypto OTC desks\' own marks; listed expiries beyond one year as they appear'],
     ['DONE', 'A trade as a package of legs on currency and digital-asset tickets: strips of forwards, every option style as a leg with collar, risk reversal, straddle and calendar presets; booked whole under one trade ID with a leg ID each, one XVA run and one confirmation on chain for the package'],
     ['DONE', 'Fixings for digital assets: the venue\'s daily delivery price stored once a day, a desk\'s own entry for a benchmark, an expired cash-settled trade settled on the fixing its record names'],
-    ['DONE', 'Forward curves to ten years: beyond the last quoted tenor a forward is parity plus that tenor\'s basis held as a rate, and says it is implied; a tenor can be switched off in Configurations'],
+    ['DONE', 'Forward curves to ten years: beyond the last quoted tenor a forward is parity plus that tenor\'s basis held as a rate, and says it is implied; a tenor can be switched off on the forwards page'],
     ['DONE', 'Wrong-way risk on currency and digital-asset tickets: a party\'s default intensity tied to the asset path by path (in the manner of Hull and White, 2012), CVA and DVA shown with the link and without. The multiple is the desk\'s input, not calibrated, and the netting-set charge does not see it'],
     ['NEXT', 'Wrong-way risk calibrated rather than set by the desk, and carried into the netting-set charge'],
   ]},
