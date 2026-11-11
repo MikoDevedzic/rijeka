@@ -43,10 +43,10 @@ function newEntry(type) {
   }
 }
 
-// Chip style for the BUY/SELL toggles. Amber for BUY (long option →
+// Chip style for the BUY/SELL toggles. Green for BUY (long option →
 // positive optionality value), coral for SELL (short option → negative
-// optionality value). Matches the trade-direction chip semantics used
-// elsewhere in the shell.
+// optionality value): the colours a side has everywhere in the ticket
+// (styles.css, "A side has a colour").
 function dirChipStyle(on, isSell) {
   return {
     padding: '6px 14px',
@@ -56,11 +56,11 @@ function dirChipStyle(on, isSell) {
     fontFamily:'var(--mono)',
     borderRadius: 2,
     cursor: 'pointer',
-    border: '1px solid ' + (on ? (isSell ? 'var(--red)' : 'var(--accent)') : 'var(--text-mute)'),
+    border: '1px solid ' + (on ? (isSell ? 'var(--down)' : 'var(--up)') : 'var(--text-mute)'),
     background: on
-      ? (isSell ? 'rgba(240,130,140,0.12)' : 'rgba(217,178,92,0.12)')
+      ? (isSell ? 'rgb(var(--down-rgb) / 0.16)' : 'rgb(var(--up-rgb) / 0.14)')
       : 'transparent',
-    color: on ? (isSell ? 'var(--red)' : 'var(--accent)') : 'var(--text-dim)',
+    color: on ? (isSell ? 'var(--down)' : 'var(--up)') : 'var(--text-dim)',
     transition: 'all 0.1s',
   }
 }

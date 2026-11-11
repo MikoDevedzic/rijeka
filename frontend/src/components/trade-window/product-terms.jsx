@@ -145,7 +145,7 @@ function SideField({ state, update }) {
   return (
     <Field label="SIDE">
       <div className="tbw-chip-row" style={{ gap: 4 }}>
-        <button type="button" className={`tbw-chip ${side === 'BUY' ? 'is-on' : ''}`}
+        <button type="button" className={`tbw-chip tbw-chip-dir-rec ${side === 'BUY' ? 'is-on' : ''}`}
                 title="BUY: we hold the right and pay the premium"
                 onClick={() => update({ optionSide: 'BUY' })}>BUY</button>
         <button type="button" className={`tbw-chip tbw-chip-dir-pay ${side === 'SELL' ? 'is-on' : ''}`}

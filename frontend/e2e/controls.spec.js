@@ -66,3 +66,48 @@ test('buttons are raised, fields are wells with a ring in focus, and the row und
   expect(await css(app.locator('.mr-btn').first(), 'backgroundColor')).toBe(RAISED)
   expectClean(problems)
 })
+
+// Reported by the owner on 11 November 2026: on the new trade's front page BUY and SELL were the same colour, and
+// the same as CALL and PUT. A side has a colour (selling or paying coral, buying or receiving green); a type has
+// none; and the chip that is selected is told from the one that is not by more than a shade.
+test('a side has its colour, a type has none, and the selected chip stands out', async ({ app, problems }) => {
+  const UP = 'rgb(143, 224, 174)', DOWN = 'rgb(240, 130, 140)'
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'CRYPTO', exact: true }).click()
+  await win.getByRole('button', { name: /^CRYPTO OPTION$/i }).click()
+  const buy = win.getByRole('button', { name: /^Buy /i }).first(), sell = win.getByRole('button', { name: /^Sell /i }).first()
+  const call = win.getByRole('button', { name: 'CALL', exact: true }), put = win.getByRole('button', { name: 'PUT', exact: true })
+  await app.mouse.move(5, 5)
+  await expect(buy).toHaveClass(/is-on/)
+  await expect.poll(() => css(buy, 'color'), { message: 'buying is green' }).toBe(UP)
+  expect(await css(sell, 'color'), 'the side not chosen has no colour').not.toBe(DOWN)
+  await sell.click()
+  await app.mouse.move(5, 5)
+  await expect.poll(() => css(sell, 'color'), { message: 'selling is coral' }).toBe(DOWN)
+  expect(await css(buy, 'color')).not.toBe(UP)
+  // a type is not a side: the selected one is lit and ruled, in no colour of a sign
+  await expect(call).toHaveClass(/is-on/)
+  const [onFace, offFace] = [await css(call, 'backgroundColor'), await css(put, 'backgroundColor')]
+  expect(onFace, 'the selected type has a face of its own').not.toBe(offFace)
+  expect(await css(call, 'boxShadow'), 'and a rule under it').toMatch(/inset/)
+  expect(await css(put, 'boxShadow')).not.toMatch(/inset/)
+  for (const c of [UP, DOWN]) expect(await css(call, 'color')).not.toBe(c)
+  await win.locator('.tbw-light-r').click()
+
+  // the swap's direction: paying coral, receiving green
+  await app.getByText('+ NEW TRADE').first().click()
+  await win.waitFor()
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()
+  await win.getByRole('button', { name: /^IR SWAP$/i }).click()
+  const pay = win.getByRole('button', { name: /^PAY/ }).first(), rec = win.getByRole('button', { name: /^RECEIVE/ }).first()
+  await app.mouse.move(5, 5)
+  await expect.poll(() => css(pay, 'color')).toBe(DOWN)
+  await rec.click()
+  await app.mouse.move(5, 5)
+  await expect.poll(() => css(rec, 'color')).toBe(UP)
+  expect(await css(pay, 'color')).not.toBe(DOWN)
+  expectClean(problems)
+})

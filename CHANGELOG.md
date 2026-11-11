@@ -3,6 +3,20 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
+## The ticket's sides have their colours · 11 November 2026 (frontend only)
+
+Reported by the owner: on a new trade BUY and SELL were the same colour, and the same as CALL and PUT.
+
+- **A side has a colour, the same wherever it is chosen.** Selling or paying is coral, buying or receiving is green:
+  the forward's and the option's BUY and SELL, the swap's PAY and RECEIVE, a swaption's or a cap's side, a leg's
+  side on DETAILS, an embedded option's. Before, only the swap's PAY and a leg's SELL were coloured; the forward's
+  and the option's sides had none, and an embedded option's BUY was brass (brass is an action).
+- **The chip that is selected stands out.** A lighter face, a bright edge and a rule under it. Since 0.21.0 an
+  unselected chip had a clear edge of its own, which left the selected one a shade apart and no more. CALL and PUT,
+  a product, a style: selected in no colour of a sign.
+- A journey reads the colours from the page (`e2e/controls.spec.js`); pictures before and after by
+  `e2e/perf/sides.spec.js`.
+
 ## Verifier · 11 November 2026 (rijeka.app/verify, deployed the same day and read back byte for byte)
 
 Found by the security review of the merged verifier, before it was pushed to `main`; the flaw was on the public

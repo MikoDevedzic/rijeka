@@ -99,10 +99,13 @@
 }
 
 .tbw-chip.is-on {
-  /* selected: a lighter panel and the full text colour. Colour is kept for meaning. */
-  border-color: var(--border-glow);
-  background: var(--panel-3);
-  color: var(--text-hi);
+  /* selected: a lighter face, a bright edge and a rule under it, so the one that is on is told at a glance from
+     the ones that are not (a lighter fill alone was not enough beside a raised, unselected chip). Colour is kept
+     for meaning. */
+  border-color: var(--text-dim);
+  background: var(--btn-bg-hover);
+  color: #fff;
+  box-shadow: inset 0 -2px 0 var(--text-dim);
 }
 
 .tbw-chip.is-on-amber {
@@ -111,11 +114,20 @@
   color: var(--amber);
 }
 
+/* A side has a colour, the same wherever it is chosen (the swap's direction, an option's side, a forward's, a
+   leg's): paying or selling in the colour of a number that goes out, receiving or buying in the colour of one
+   that comes in. Tinted, not filled. A type (call or put) is not a side and keeps the plain selected look. */
 .tbw-chip.tbw-chip-dir-pay.is-on {
-  /* paying is the sign of a cashflow: tinted, not filled */
   border-color: var(--down);
-  background: rgb(var(--down-rgb) / 0.14);
+  background: rgb(var(--down-rgb) / 0.16);
   color: var(--down);
+  box-shadow: inset 0 -2px 0 var(--down);
+}
+.tbw-chip.tbw-chip-dir-rec.is-on {
+  border-color: var(--up);
+  background: rgb(var(--up-rgb) / 0.14);
+  color: var(--up);
+  box-shadow: inset 0 -2px 0 var(--up);
 }
 
 /* ── Tabs ──────────────────────────────────────────────────────────────── */

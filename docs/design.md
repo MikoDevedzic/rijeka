@@ -9,7 +9,7 @@ code that draws on a canvas, and `theme.test.js` holds the two together.
 | Token | Means | Never |
 |---|---|---|
 | `--accent` (brass), `--accent-hi` | the action of the view (BOOK TRADE, + NEW TRADE), the selected tab's rule, what is sealed on chain, the saving on chain, the name RIJEKA | a label, a typed value, a positive number |
-| `--up`, `--down` | the sign of a number; the paying or selling side; a state that is good or bad in itself (live, calibrated, a verify that passed; defaulted, a failed check) | a selection, an action |
+| `--up`, `--down` | the sign of a number; a side that is chosen (coral for paying or selling, green for receiving or buying, the same in the swap's direction, an option's side, a forward's and a leg's); a state that is good or bad in itself (live, calibrated, a verify that passed; defaulted, a failed check) | a selection, an action |
 | `--amber` | a caution, something provisional, the PFE tail | an action |
 | `--blue` | the counterpart series on a chart (ENE), a link on paper | a selection; a figure in a table (it takes the colour of its sign) |
 | `--text-hi`, `--text`, `--text-dim`, `--text-mute`, `--text-faint` | limestone, in five steps. Contrast on `--bg` / `--panel` / `--panel-2`: `--text-mute` 6.2 / 5.6 / 4.8, `--text-faint` 5.3 / 4.8 / 4.1 | `--text-faint` on `--panel-2` or lighter |
@@ -84,6 +84,10 @@ pressed, typed into or pointed at"; tokens `--btn-*`, `--fld-*`, `--row-*`).
   a view and stands on the same foot. A button whose colour says something (BUY or SELL, a selected mode, a
   warning) keeps its colour and gains only the foot and the lift (`rj-press`). An icon or a link with no edge is
   not a button in this sense and has neither.
+- **The chip that is selected is told at a glance.** A lighter face, a bright edge and a rule under it; a shade of
+  fill alone is not enough beside an unselected chip that is itself raised. A side takes its colour when chosen
+  (`tbw-chip-dir-pay` coral, `tbw-chip-dir-rec` green); a type (call or put, a style, a product) is not a side and
+  is selected in no colour of a sign.
 - **A field is a well.** Lighter than the panel, with the field's own edge; lighter still under the pointer; a
   brass ring and its lightest fill while it is typed in. The fill is set for every input, select and textarea
   wherever it is, so a new field needs nothing to look right. A value that is computed, or a field that cannot

@@ -661,7 +661,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
           <Cell label={option ? 'SIDE' : 'DIRECTION'} sub={option ? undefined : (cur?.base || undefined)}>
             <div className="tbw-chip-row tbw-fx-chips">
               {['BUY', 'SELL'].map(d => (
-                <button key={d} className={`tbw-chip ${direction === d ? 'is-on' : ''}`} aria-label={`${d === 'BUY' ? 'Buy' : 'Sell'} ${option ? 'option' : (cur?.base || 'base')}`}
+                <button key={d} className={`tbw-chip ${d === 'SELL' ? 'tbw-chip-dir-pay' : 'tbw-chip-dir-rec'} ${direction === d ? 'is-on' : ''}`} aria-label={`${d === 'BUY' ? 'Buy' : 'Sell'} ${option ? 'option' : (cur?.base || 'base')}`}
                         onClick={() => setDirection(d)}>{d}</button>
               ))}
             </div>

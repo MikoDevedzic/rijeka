@@ -164,7 +164,7 @@ export function PrimaryEconomics({
                     onClick={() => onDirectionChange('PAY')}>
               {directionLabels.pay}
             </button>
-            <button className={`tbw-chip ${direction === 'RECEIVE' ? 'is-on' : ''}`}
+            <button className={`tbw-chip tbw-chip-dir-rec ${direction === 'RECEIVE' ? 'is-on' : ''}`}
                     onClick={() => onDirectionChange('RECEIVE')}>
               {directionLabels.receive}
             </button>
