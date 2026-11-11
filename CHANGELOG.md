@@ -3,7 +3,9 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
-## The app follows `main` when the API has nothing to deploy · 11 November 2026
+## 0.21.1 · 11 November 2026
+
+**The app follows `main` when the API has nothing to deploy.**
 
 - The API's host builds from `backend/` and deploys only for a change there. The release move (the API's own at
   startup, and the `release-sync` workflow) listed the folders it knew to be outside the API and took everything
@@ -12,9 +14,7 @@ methodology document carries its own version (v1.12). Commits on `main` are the 
   but Markdown lets the app follow `main`. A file moved out of `backend/` counts as a change there, and a list of
   changes GitHub may have cut short (300 files) is not read as "nothing in the API changed".
 
-## The ticket's sides have their colours · 11 November 2026 (frontend only)
-
-Reported by the owner: on a new trade BUY and SELL were the same colour, and the same as CALL and PUT.
+**The ticket's sides have their colours.** Reported by the owner: on a new trade BUY and SELL were the same colour, and the same as CALL and PUT.
 
 - **A side has a colour, the same wherever it is chosen.** Selling or paying is coral, buying or receiving is green:
   the forward's and the option's BUY and SELL, the swap's PAY and RECEIVE, a swaption's or a cap's side, a leg's
