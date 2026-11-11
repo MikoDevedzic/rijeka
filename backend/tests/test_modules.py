@@ -187,16 +187,14 @@ def test_capital_is_held_for_the_admin_role_on_a_hosted_demo(monkeypatch):
     assert M.catalogue()["presets"]["DEALER"]["desc"] == "everything on"
     assert not any(m.get("on_request") for m in M.catalogue()["definitions"]) and all(M.catalogue()["presets"]["DEALER"]["modules"].values())
     assert not any("on_request" in m for m in M.MODULES)                           # the catalogue marks a copy, never the definitions
-    # what a user has: on in the firm's row and not held from that user; the role is read only for a held module
+    # what a batch is run on: the firm's row, and no role
     asked = []
     monkeypatch.setattr(M, "firm_of_user", lambda db, uid: "firm")
     monkeypatch.setattr(M, "for_firm", lambda db, firm_id: {"modules": {**M.all_on(), "IPV": False}, "preset": "DEALER", "source": "firm"})
     monkeypatch.setattr(M, "locked", lambda db, user: asked.append(user["sub"]) or (("CAPITAL",) if user["sub"] == "demo" else ()))
-    assert M.is_on(db, "demo", "PNL") is True and M.is_on(db, "demo", "IPV") is False and asked == []      # a module that is not held: the role is not read
-    assert M.is_on(db, "demo", "CAPITAL") is False and M.is_on(db, "boss", "CAPITAL") is True and asked == ["demo", "boss"]
     assert M.for_user(db, "demo")["modules"]["CAPITAL"] is True                                           # the row, as it is
     # a batch follows the row alone: a held module's batch still runs, and no role is read for it
-    asked.clear()
+    assert not hasattr(M, "is_on"), "the held-aware answer for a user is composed in routes/modules._view and nowhere else"
     assert M.runs_batch(db, "demo", "CAPITAL") is True and M.runs_batch(db, "demo", "PNL") is True and M.runs_batch(db, "demo", "IPV") is False and asked == []
 
 

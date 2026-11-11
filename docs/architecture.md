@@ -315,10 +315,11 @@ the account counts as a `viewer`). One list and one function decide, and this fo
   when the firm's row cannot be read, a save by someone a module is held from answers 503 and writes nothing,
   because a failed read would otherwise pass for on. A save whose write fails also answers 503 and writes nothing,
   for any caller.
-- `modules.is_on(uid, key)` is false for a held module unless the account has the admin role (`profiles.role`,
-  read by the user id). No batch asks about capital today; were P&L, market risk or counterparty credit held, their
-  nightly ticks would skip every account without the admin role. The role is read only for a held module, so the
-  nightly ticks cost what they did.
+- A nightly batch follows the firm's own switch and nothing else: `modules.runs_batch(uid, key)` is the row's value
+  and reads no role. Holding a module hides its pages and tabs and does not stop its batch. Since 0.23.2 P&L, market
+  risk and counterparty credit are held on a demo by default; the health page's checks for the three read the latest
+  stored day across every account, so skipping everyone but an administrator would have turned them red. A launch
+  workspace has them off in its row, and its batches do not run.
 - Provisioning writes a new firm's row as the signup preset has it (there is nothing before it to keep).
 
 The frontend has no rule of its own: the tab, the Risk section and the route follow the answer as for any switch,

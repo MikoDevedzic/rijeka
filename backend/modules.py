@@ -189,16 +189,8 @@ def firm_of_user(db, uid: str):
 
 
 def for_user(db, uid: str) -> dict[str, Any]:
-    """The switches of the user's firm, as the row has them (what the user is answered: is_on, or the route's view)."""
+    """The switches of the user's firm, as the row has them (what the user is answered is the route's view, routes/modules._view)."""
     return for_firm(db, firm_of_user(db, uid))
-
-
-def is_on(db, uid: str, key: str) -> bool:
-    """Whether this user has the module: on in the firm's row and, for a module the instance holds for the admin
-    role, not held from this user. The role is read only for a held module whose row says on."""
-    if not for_user(db, uid)["modules"].get(key, True):
-        return False
-    return key not in held() or key not in locked(db, {"sub": str(uid)})
 
 
 def runs_batch(db, uid: str, key: str) -> bool:
