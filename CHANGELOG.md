@@ -21,7 +21,8 @@ security review of sign-up, roles, modules and the register (item 6 of the Phase
   with none as it always was (leaving the field out used to be an internal error).
 - **The register answers in shapes.** `GET /api/public/confirmations` gives a hash only when it is a hash, an
   address only when it is an address, an LEI only when it is an LEI, a link only when it is an https address
-  without markup, and a product only in letters, digits and a few marks. Anything else is left out of the row.
+  without markup, and a product only in letters, digits and a few marks. Anything else is left out of the row,
+  and a row whose hash is not a hash is not listed.
 - **A counterparty is linked only to its owner's legal entity.** The route refuses another account's entity named
   by its id, and a confirmation or a trade card's countersigning reads such a link (the page can write one) as no
   link.

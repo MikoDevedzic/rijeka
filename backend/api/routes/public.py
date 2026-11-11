@@ -213,9 +213,12 @@ def _register(db: Session, n: int) -> dict:
                 seen.add(pkg_hash)
             parties = att.get("parties") or {}
             own, cp = parties.get("own") or {}, parties.get("counterparty") or {}
+            # the hash the registry holds: for a leg of a package, the package's (one row for the package: below)
+            the_hash = _shaped((att.get("package") or {}).get("hash") or att.get("trade_hash"), _HASH)
+            if the_hash is None:
+                continue                     # a row is its hash: without one there is nothing to check on chain
             rows.append({
-                # the hash the registry holds: for a leg of a package, the package's (one row for the package: below)
-                "trade_hash": _shaped((att.get("package") or {}).get("hash") or att.get("trade_hash"), _HASH),
+                "trade_hash": the_hash,
                 "package": bool((att.get("package") or {}).get("hash")),
                 "block_number": anchor.get("block_number") if isinstance(anchor.get("block_number"), int) else None,
                 "tx_hash": _shaped(anchor.get("tx_hash"), _HASH),

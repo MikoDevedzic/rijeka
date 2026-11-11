@@ -107,12 +107,13 @@ def test_the_register_gives_out_nothing_that_is_not_in_the_shape_its_field_must_
     wrote it into the page as markup. A demo key signs for any LEI that begins DEMO, so such a row could be anchored."""
     evil = '<img src=x onerror="alert(1)">'
     att = _att(own={"lei": "DEMO" + evil, "address": evil, "key_source": evil})
-    att["trade_hash"] = H1 + evil
     att["anchor"].update(tx_hash=evil, registry='"><script>1</script>', explorer_tx="javascript:alert(1)", chain_id=evil, block_number=evil)
-    b = _register_of([_row(att, asset_class=evil, instrument_type="IR_SWAP" + evil, structure=evil)])
+    no_hash = _att(); no_hash["trade_hash"] = H1 + evil
+    b = _register_of([_row(att, asset_class=evil, instrument_type="IR_SWAP" + evil, structure=evil), _row(no_hash)])
+    assert len(b["confirmations"]) == 1, "a row whose hash is not a hash is not listed: there is nothing to check on chain"
     c = b["confirmations"][0]
-    assert c["parties"] == [LEI_B], "the party that is not an LEI is left out; the row stays (it is anchored)"
-    for k in ("trade_hash", "tx_hash", "registry", "explorer_tx", "chain_id", "block_number", "asset_class", "instrument_type", "structure"):
+    assert c["trade_hash"] == H1 and c["parties"] == [LEI_B], "the party that is not an LEI is left out; the row stays (it is anchored)"
+    for k in ("tx_hash", "registry", "explorer_tx", "chain_id", "block_number", "asset_class", "instrument_type", "structure"):
         assert c[k] is None, k
     assert c["addresses"] == [None, ADDR_B] and c["key_sources"] == [None, "registered"]
     import json
