@@ -645,9 +645,15 @@ def book_mirror(db: Session, source: Trade, signer: FirmMember) -> dict:
 
     own, cp, cp_id, legs = trade_parts(db, source)
     try:
-        cp_le = db.get(LegalEntity, cp.legal_entity_id) if cp.legal_entity_id else None
+        # the booker's own record of the counterparty, and nothing of another account's: the page can write a link
+        # to any entity's id, and its LEI and name are copied into the signer's book below
+        from api.routes.legal_entities import LEI_RE
+        cp_le = (db.query(LegalEntity).filter(LegalEntity.id == cp.legal_entity_id, LegalEntity.user_id == cp.user_id).first()
+                 if cp.legal_entity_id else None)
         if cp_le is None or not cp_le.lei:
             raise HTTPException(status_code=422, detail="The trade's counterparty has no legal entity with an LEI.")
+        if not LEI_RE.fullmatch(str(cp_le.lei)):
+            raise HTTPException(status_code=422, detail="The LEI of the trade's counterparty is not an LEI (20 capital letters and digits).")
         mine = _entity(db, signer.user_id, cp_le, own=True)       # the signer's firm, from the booker's record of it
         theirs = _entity(db, signer.user_id, own, own=False)      # the booker's firm
         their_cp = _counterparty(db, signer.user_id, theirs, cp)

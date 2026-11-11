@@ -52,6 +52,73 @@ asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", t
   step; the old bridge 16 to 21 % low on the call. A cold read found the XVA tab's margin-period note still
   describing the old method and naming SIMM: corrected.
 
+## 0.22.1 · 11 November 2026
+
+**Nothing but an LEI is signed, and the public register gives out nothing but what its fields must be.** From the
+security review of sign-up, roles, modules and the register (item 6 of the Phase 1 exit list).
+
+- **What was wrong.** The public register page wrote what the API gave it into the page as markup, and the API
+  gave it the two parties' LEIs as typed. A legal entity's LEI was free text, and on a demo instance a signing key is
+  held for any LEI that begins DEMO, so an account could name its entity DEMO followed by markup, confirm a trade
+  with the demo counterparty and have it anchored and listed: a script on rijeka.app/confirmations for every
+  visitor. Found by reading the code; the 21 rows listed on 11 November carried none. The page was corrected and
+  deployed the same day (it writes every field as text). This release closes it on the server.
+- **A confirmation signs nothing but an LEI.** Twenty capital letters and digits (ISO 17442), checked where every
+  confirmation, amendment and termination resolves its parties, before a key is looked up. The Legal Entities page
+  writes its rows straight to the database, so the rule is held there and not only in the route. The route
+  (`POST` and `PUT /api/legal-entities`) refuses anything else too, stores an LEI in capitals, and stores an entity
+  with none as it always was (leaving the field out used to be an internal error).
+- **The register answers in shapes.** `GET /api/public/confirmations` gives a hash only when it is a hash, an
+  address only when it is an address, an LEI only when it is an LEI, a link only when it is an https address
+  without markup, and a product only in letters, digits and a few marks. Anything else is left out of the row,
+  and a row whose hash is not a hash is not listed.
+- **A counterparty is linked only to its owner's legal entity.** The route refuses another account's entity named
+  by its id, and a confirmation or a trade card's countersigning reads such a link (the page can write one) as no
+  link.
+- **An administrator cannot take another role with the role switch.** `PUT /api/me/role` never grants admin, so
+  there was no way back but the database, and a lone administrator could lock the Users page for good. It is
+  refused, and an administrator is not offered the switch.
+- **Checked:** 1,319 unit and reference tests, 122 integration tests on the local stack; hostile rows through the
+  register answer leave no markup in it.
+- **Reviewed twice by the security reviewer.** The second read found that `$` in the shape rules let a final
+  newline through and that a trade card still read a linked entity without its owner: every rule now matches the
+  whole string, and that read is scoped.
+- **What changes for a desk, stated:** a trade already confirmed whose party's LEI is not twenty capitals and digits
+  can still be read, verified and proved, and can no longer be amended or terminated until the LEI is corrected
+  (which changes what a new record hashes to); a party with no LEI at all is as before. The register leaves out an
+  explorer link that carries a query string or an underscore in its host. An administrator on the hosted demo no
+  longer has the role switch.
+- **Not in this release, stated:** the rule is not yet a constraint in the database (a migration, on the owner's
+  word), so a row written directly can still hold other text, which is then never signed or listed; the modules
+  answer still fails open in the browser (the held pages show if it does not arrive; their routes answer either
+  way); a role changed on the Users page is honoured up to 30 seconds late, and the Users page itself can still
+  demote the last administrator; a legal entity's name is free text (it is signed and shown to the counterparty,
+  not on the public register); `docs/schema.sql` is an older export than the policies production runs.
+## The tenancy tests run on the local stack · 11 November 2026 (tests only)
+
+**No test signs in to a hosted service any more.** Item 9 of the Phase 1 exit list.
+
+- **What was wrong.** `tests/test_rls_isolation.py` (25 tests: one account must never read, change or delete what
+  belongs to another) ran against a server on localhost:8000 with tokens fetched by signing in to the hosted auth
+  service, so on a developer's machine it wrote to whatever database that server was on. It was skipped in CI and
+  had to be deselected by hand locally.
+- **What it is now.** The same checks are `tests/integration/test_tenancy_isolation.py` (24 tests; the one that only
+  tested the hosted sign-in is gone): the stack's own tokens, the stack's database, in CI with every other
+  integration test. Market data, vol skew and SABR parameters, the XVA calibration, counterparties, legal
+  entities, trades, legs and confirmations are each tried from the other account.
+- **They clean up.** A calibration they save is dated 2099; left behind it is the "latest" one and the pinned
+  book's swap XVA then runs on it the next time the same database is used (seen on the first local run: CVA −2,090
+  → −2,733). The file removes what the harness does not truncate, before and after; the suite passes twice in a
+  row on one database. Its trades, legs and events stay until the harness truncates them at the start of the next
+  session (an event cannot be deleted by a row).
+- **What these tests hold, said plainly:** the routes' own filter on the caller's id. The API connects to the
+  stack as the tables' owner, so row-level security is not exercised by them, here or before.
+- **Removed:** the fixtures in `tests/conftest.py` that read `.env.test` and signed in; the mentions of them in
+  `pytest.ini`, `CONTRIBUTING.md` and the CI file's comment.
+- **Checked:** the integration suite on the local stack, twice: 144 passed each time, with `test_migrate.py`'s 22
+  deselected (it runs only on the default database name; CI runs it). 1,299 unit and reference tests; ruff. A cold
+  read compared every call of the old file with the new one: nothing weaker.
+
 ## What Phase 1 is, said one way · 11 November 2026 (frontend only)
 
 **The home page and the roadmap say what the sign-in page says.** Asked for by the owner as the first line of the

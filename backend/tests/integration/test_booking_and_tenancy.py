@@ -86,3 +86,29 @@ def test_idempotency_key_returns_the_same_trade(client, auth_a, ids):
     r2 = client.post("/api/book/trade", json=body, headers={**auth_a, "Idempotency-Key": key})
     assert r1.status_code == 201 and r2.status_code == 201
     assert r1.json()["trade"]["id"] == r2.json()["trade"]["id"] and r2.json()["idempotent_replay"] is True
+
+
+
+def test_a_legal_entity_takes_only_an_lei_and_a_counterparty_only_its_owners_entity(client, auth_a, auth_b):
+    """The LEI and the name a confirmation signs come from the counterparty's linked legal entity. The entity must be
+    the caller's own, and its LEI twenty capitals and digits: both reach the public register."""
+    tag = uuid.uuid4().hex[:6].upper()
+    bad = client.post("/api/legal-entities/", json={"name": f"IT-{tag}", "home_currency": "USD", "jurisdiction": "US", "lei": "DEMO<img src=x onerror=1>"}, headers=auth_a)
+    assert bad.status_code == 422 and "20 capital letters and digits" in bad.text
+    mine = client.post("/api/legal-entities/", json={"name": f"IT-{tag}-A", "home_currency": "USD", "jurisdiction": "US", "lei": f"demo00000000it{tag}".lower()}, headers=auth_a)
+    assert mine.status_code == 200 and mine.json()["lei"] == f"DEMO00000000IT{tag}", mine.text
+    assert client.put(f"/api/legal-entities/{mine.json()['id']}", json={"lei": "not an lei"}, headers=auth_a).status_code == 422
+    theirs = client.post("/api/legal-entities/", json={"name": f"IT-{tag}-B", "home_currency": "USD", "jurisdiction": "US"}, headers=auth_b)
+    assert theirs.status_code == 200, theirs.text
+    try:
+        r = client.post("/api/counterparties/", json={"name": f"IT-CP-{tag}", "csa_type": "NO_CSA", "legal_entity_id": theirs.json()["id"]}, headers=auth_a)
+        assert r.status_code == 422 and "of yours" in r.text, "another account's entity, named by its id, is refused"
+        assert client.post("/api/counterparties/", json={"name": f"IT-CP-{tag}", "csa_type": "NO_CSA", "legal_entity_id": "nope"}, headers=auth_a).status_code == 422
+        cp = client.post("/api/counterparties/", json={"name": f"IT-CP-{tag}", "csa_type": "NO_CSA", "legal_entity_id": mine.json()["id"]}, headers=auth_a)
+        assert cp.status_code == 200 and cp.json()["legal_entity_id"] == mine.json()["id"], cp.text
+        moved = client.put(f"/api/counterparties/{cp.json()['id']}", json={"legal_entity_id": theirs.json()["id"]}, headers=auth_a)
+        assert moved.status_code == 422, "nor can a counterparty be moved onto it"
+        assert client.delete(f"/api/counterparties/{cp.json()['id']}", headers=auth_a).status_code == 200
+    finally:
+        client.delete(f"/api/legal-entities/{mine.json()['id']}", headers=auth_a)
+        client.delete(f"/api/legal-entities/{theirs.json()['id']}", headers=auth_b)

@@ -19,6 +19,9 @@ For the diff under review check, with file and line for each finding:
 Learned on 9 November 2026 (0.14.0)
 - A privileged route is only as safe as the way an account comes by the role. Before accepting "admin only", trace the role back: the sign-up function, the token's claim (`middleware/auth.py`: the claim is never the role), every fallback when a profile row is missing or unreadable, and the row-level policies that let an account edit its own profile. A route that writes rows every account relies on needs a gate that does not depend on the role alone.
 - A public endpoint that reports whether a fix is applied is an oracle: counts in public, names for the admin role.
+- Ask where the page writes before trusting a rule in a route. The Legal Entities and Counterparties pages write their rows straight to the database through PostgREST under row-level security; on 11 November 2026 an LEI rule added to `POST /api/legal-entities` covered no real user, and the rule had to be held where a confirmation resolves its parties and in the public register's answer. For every field that is signed, anchored or shown to someone else, find every writer (routes, pages through Supabase, seeds, the demo provisioning) and put the rule at the point of use or in the database.
+- A pattern that ends in `$` accepts a final newline. Shape rules on outside text use `fullmatch` (found on the second read of the same change).
+- A public page that draws an API's rows with innerHTML is read with the API that feeds it, in one pass: on 11 November 2026 the register page and its route were each fine to a reader of one file, and together a stored script for every visitor.
 
 Rules
 - Read-only: never edit, commit, push or run anything against production.

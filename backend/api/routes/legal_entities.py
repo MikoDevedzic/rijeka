@@ -3,15 +3,37 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from db.models import LegalEntity
 from middleware.auth import verify_token
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
+import re
 import uuid
 
 router = APIRouter()
 
+# An LEI is twenty capital letters and digits (ISO 17442). It is signed into a confirmation and printed on the public
+# register (api/routes/public.py), and on a demo instance a key is held for any LEI that begins DEMO (chain/keys.py),
+# so an entity whose LEI was other text could be confirmed and anchored with it. Nothing else is stored.
+LEI_RE = re.compile(r"^[A-Z0-9]{20}$")
+
+
+def clean_lei(v):
+    """The LEI as stored: upper case, or the empty string for an entity that has none (the column takes no null, and
+    a blank was always stored as ''). Anything else that is not twenty capitals and digits is refused. None stays
+    None: on an update it means the LEI was not sent."""
+    if v is None:
+        return None
+    v = str(v).strip().upper()
+    if v and not LEI_RE.fullmatch(v):
+        raise ValueError("an LEI is 20 capital letters and digits (ISO 17442)")
+    return v
+
+
+def _lei_on_create(v):
+    return clean_lei(v) or ""          # left out of the body: no LEI, stored as '' (it used to reach the column as null: a 500)
+
 
 class LegalEntityCreate(BaseModel):
-    lei: Optional[str] = None
+    lei: Optional[str] = ""
     name: str
     short_name: Optional[str] = None
     home_currency: str
@@ -22,6 +44,8 @@ class LegalEntityCreate(BaseModel):
     ois_curve_id: Optional[str] = None
     is_own_entity: bool = False
 
+    _lei = field_validator("lei", mode="before")(_lei_on_create)
+
 
 class LegalEntityUpdate(BaseModel):
     name: Optional[str] = None
@@ -29,6 +53,8 @@ class LegalEntityUpdate(BaseModel):
     lei: Optional[str] = None
     short_name: Optional[str] = None
     im_threshold_m: Optional[float] = None
+
+    _lei = field_validator("lei", mode="before")(clean_lei)
 
 
 def serialize(e: LegalEntity) -> dict:

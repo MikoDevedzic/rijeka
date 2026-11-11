@@ -67,3 +67,38 @@ def test_set_role_changes_the_row_and_the_copy_the_api_holds(client, auth_a):
         assert client.post("/price", json=nothing, headers=auth_a).status_code != 403
     finally:
         set_role(USER_A, "trader")
+
+
+
+def test_an_administrator_is_not_offered_the_role_switch_and_cannot_take_another_role_with_it(client, stack, monkeypatch):
+    """PUT /api/me/role never grants admin, so an administrator who took another role there had no way back but the
+    database (the security review of 11 November 2026). On a demo instance, where everyone else has the switch."""
+    import os
+    from middleware.auth import forget_role
+    monkeypatch.setattr("api.routes.demo.enabled", lambda: True)
+    uid = str(uuid.uuid4())
+    eng = sa.create_engine(os.environ["DATABASE_URL"])
+    try:
+        with eng.begin() as c:
+            c.execute(sa.text("INSERT INTO auth.users (id, aud, role, email, raw_app_meta_data, raw_user_meta_data) "
+                              "VALUES (:id, 'authenticated', 'authenticated', :e, '{}'::jsonb, '{}'::jsonb)"), {"id": uid, "e": f"{uid[:8]}@rijeka.test"})
+            c.execute(sa.text("UPDATE profiles SET role = 'admin' WHERE id = :id"), {"id": uid})
+        forget_role(uid)
+        auth = _bearer(uid, "admin")
+        me = client.get("/api/me/role", headers=auth).json()
+        assert me["role"] == "admin" and me["self_service"] is False
+        r = client.put("/api/me/role", json={"role": "trader"}, headers=auth)
+        assert r.status_code == 409 and "Users page" in r.text
+        forget_role(uid)
+        assert client.get("/api/me/role", headers=auth).json()["role"] == "admin", "still an administrator"
+        with eng.begin() as c:
+            c.execute(sa.text("UPDATE profiles SET role = 'trader' WHERE id = :id"), {"id": uid})
+        forget_role(uid)
+        took = client.put("/api/me/role", json={"role": "risk"}, headers=auth)        # anyone else still switches as before
+        assert took.status_code == 200 and took.json()["role"] == "risk", took.text
+    finally:
+        with eng.begin() as c:
+            c.execute(sa.text("DELETE FROM profiles WHERE id = :id"), {"id": uid})
+            c.execute(sa.text("DELETE FROM auth.users WHERE id = :id"), {"id": uid})
+        eng.dispose()
+        forget_role(uid)
