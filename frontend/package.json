@@ -21,7 +21,7 @@
     "@tailwindcss/vite": "^4.2.2",
     "dompurify": "^3.4.17",
     "exceljs": "^4.4.0",
-    "katex": "^0.16.11",
+    "katex": "^0.18.2",
     "marked": "^15.0.12",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
