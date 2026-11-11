@@ -3,6 +3,22 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.13). Commits on `main` are the detail.
 
+## What Phase 1 is, said one way · 11 November 2026 (frontend only)
+
+**The home page and the roadmap say what the sign-in page says.** Asked for by the owner as the first line of the
+Phase 1 exit list ("as recommended, then we'll review").
+
+- **The home page's footer** said RATES ONLY IN PHASE 1 while the sign-in page said rates, FX and crypto forwards
+  and options are live. It now reads PHASE 1 · RATES, FX & CRYPTO FORWARDS AND OPTIONS.
+- **The roadmap was behind the app.** FX and digital assets are listed as Phase 1 beside rates, with FX options
+  (which sat under Phase 2). Wrong-way risk was listed as next in two places although it shipped in 0.17.0 on
+  currency and digital-asset tickets: it is now DONE with its limits (the multiple is the desk's input, the
+  netting-set charge does not see it), and what is still next says so (calibrated, and on the netting set). Added
+  as DONE: a trade as a package of legs (0.19.0), fixings for digital assets (0.14.0), forward curves to ten years
+  (0.22.0), the methodology read in the app (0.20.0). Phase 2 is credit and cross-currency, and is PLANNED.
+- **Checked:** lint, 587 unit tests, the design check (no count moved), both screens looked at in pictures at
+  1440 wide. **Not changed:** the names FUND01 and CRYBASIS01 on the roadmap's older lines; the sign-in page.
+
 ## The logo · 11 November 2026 (frontend only)
 
 **A logo that simulates, and a confirmation you can watch.** Asked for by the owner: "our Rijeka logo needs to be
