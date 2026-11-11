@@ -10,7 +10,7 @@ const RAISED = 'rgb(33, 73, 63)', WELL = 'rgb(26, 58, 51)', WELL_FOCUS = 'rgb(34
 test('buttons are raised, fields are wells with a ring in focus, and the row under the pointer is lit', async ({ app, problems }) => {
   // the blotter: the trade under the pointer is a band with a rule at its edge; the search box is a well
   await app.goto('/blotter')
-  const row = app.locator('.bl-row').nth(1)
+  const row = app.locator('.bl-row').first()                // the seed's own trade: a fresh stack may have no second one yet
   await expect(row).toBeVisible()
   expect(await css(row, 'backgroundColor'), 'a row at rest has no band').not.toBe(BAND)
   await row.hover()
