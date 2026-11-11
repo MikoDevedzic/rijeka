@@ -21,7 +21,7 @@
     "@tailwindcss/vite": "^4.2.2",
     "dompurify": "^3.4.17",
     "exceljs": "^4.4.0",
-    "katex": "^0.16.11",
+    "katex": "^0.18.11",
     "marked": "^15.0.12",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -41,7 +41,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
     "vite": "^6.4.5",
-    "vitest": "3.2.4"
+    "vitest": "4.1.12"
   },
   "license": "BUSL-1.1"
 }

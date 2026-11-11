@@ -121,6 +121,11 @@ test('a figure that changes rolls to its new value and flashes once; with less m
   await priced(win)
   const spot = win.locator('.tbw-footer .tbw-footer-metric', { hasText: 'CRY01' }).locator('[data-roll]')
   await expect(spot).toHaveText(/\d/)
+  // the figure rolls to its first value too (and again when the counterparty is chosen): wait until what is shown
+  // is the figure itself, or a frame of that first roll is read as a frame of the one under test
+  await expect.poll(async () => (await spot.textContent()) === (await spot.getAttribute('data-roll')), { message: 'the first roll has ended' }).toBe(true)
+  await app.waitForTimeout(400)
+  await expect.poll(async () => (await spot.textContent()) === (await spot.getAttribute('data-roll'))).toBe(true)
   const before = await spot.getAttribute('data-roll')
   // watch the figure while the notional doubles: every frame it shows is a well-formed figure between the two
   await spot.evaluate(el => { window.__frames = []; new MutationObserver(() => window.__frames.push(el.textContent)).observe(el, { childList: true, characterData: true, subtree: true }) })

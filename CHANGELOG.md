@@ -3,6 +3,20 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
+## Dependencies · 11 November 2026 (frontend only)
+
+Eight of GitHub's nine open alerts closed; none was reachable in the app as deployed.
+
+- **The test runner** (vitest 3.2.4 to 4.1.12): three alerts marked critical and three medium, all in tools that run
+  only on a developer's machine and in CI, and only with the runner's UI or API server listening, which the project
+  never starts. 568 unit tests pass on the new version.
+- **KaTeX** (0.16.11 to 0.18.11): a medium and a low. KaTeX runs when the methodology's pages are built, on the
+  project's own `.tex`, without the `trust` option the flaws need; the app ships its stylesheet. The pages were
+  rebuilt and read.
+- **Left open: `uuid` under `exceljs`** (medium). The flaw is in `v3`/`v5`/`v6` with a caller's buffer; exceljs calls
+  `v4()` only, and its latest release still asks for the old version.
+- A journey that read the footer's first roll as the one under test now waits for the first to end.
+
 ## 0.21.1 · 11 November 2026
 
 **The app follows `main` when the API has nothing to deploy.**
