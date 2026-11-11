@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from pricing.forward_points import FWD_TENORS, IMPLIED, INTERPOLATED, QUOTED, TENOR_DAYS, basis_rate, interp_points, last_quoted, points_at
+from pricing.forward_points import FWD_TENORS, IMPLIED, INTERPOLATED, QUOTED, TENOR_DAYS, TENOR_SLACK_DAYS, basis_rate, interp_points, last_quoted, points_at
 
 S, PIP = 1.0850, 1e-4
 R_USD, R_EUR = 0.040, 0.025
@@ -54,8 +54,10 @@ def test_the_curve_is_continuous_at_the_last_quote():
     pts = {"6M": 74.5, "2Y": 186.5}
     at = points_at(pts, 730, spot=S, pip=PIP, parity_forward=parity)
     just_after = points_at(pts, 731, spot=S, pip=PIP, parity_forward=parity)
-    assert at.kind == QUOTED and just_after.kind == IMPLIED
     assert just_after.points == pytest.approx(at.points, abs=0.6)      # one day's carry, not a jump
+    assert at.kind == QUOTED and not at.beyond
+    far = points_at(pts, 800, spot=S, pip=PIP, parity_forward=parity)
+    assert far.kind == IMPLIED and far.beyond
 
 
 def test_with_no_basis_the_extension_is_parity_itself():
@@ -126,3 +128,41 @@ def test_a_tenor_the_feed_filled_beyond_its_last_listed_expiry_prices_as_before_
     par = lambda d: 100_000.0 * math.exp(0.02 * d / 365.0)
     far = points_at(pts, 1825, spot=100_000.0, pip=1.0, parity_forward=par, extrapolated=tagged)
     assert far.kind == IMPLIED and far.last_tenor == "2Y" and far.basis_rate == pytest.approx(math.log(106_500.0 / par(730)) / 2.0)
+
+
+def test_a_ticket_at_a_quoted_tenor_is_quoted_though_its_date_is_not_the_round_day_count():
+    """Emmy, 11 November 2026: a 2Y ticket settles two calendar years from the spot date, rolled to a business day:
+    731 to 734 days against the tenor's 730. It was called implied beyond the last quote, on a pair quoted at 2Y."""
+    pts = {"1Y": 123.1, "2Y": 186.5}
+    assert TENOR_SLACK_DAYS == 7
+    for days in (731, 733, 737):
+        r = points_at(pts, days, spot=S, pip=PIP, parity_forward=parity)
+        assert r.kind == QUOTED and not r.beyond and r.basis_rate is None, days
+        assert f"{days - 730} day" in r.method and "past the tenor's 730 days" in r.method
+        # the figure is still the curve's at that day count: the tenor carried those days, not the quote repeated
+        b = basis_rate(S, PIP, 186.5, parity(730), 730)
+        assert S + r.points * PIP == pytest.approx(parity(days) * math.exp(b * days / 365.0), rel=1e-12)
+    assert points_at(pts, 738, spot=S, pip=PIP, parity_forward=parity).kind == IMPLIED
+    # inside the curve: a one-year ticket at 366 or 368 days is the one-year tenor, read off the line at its own day
+    r = points_at(pts, 368, spot=S, pip=PIP, parity_forward=parity)
+    assert r.kind == QUOTED and r.points == pytest.approx(interp_points(pts, 368)) and "3 days past the tenor's 365 days" in r.method
+    assert points_at(pts, 362, spot=S, pip=PIP, parity_forward=parity).method == "quoted at 1Y (the date is 3 days short of the tenor's 365 days)"
+    assert points_at(pts, 365, spot=S, pip=PIP, parity_forward=parity).method == "quoted at 1Y"
+    assert points_at(pts, 500, spot=S, pip=PIP, parity_forward=parity).kind == INTERPOLATED
+
+
+def test_a_curve_the_feed_filled_throughout_is_implied_throughout():
+    """Emmy: with every tenor beyond the venue's last listed expiry nothing is a quote, and nothing is called one."""
+    pts = {"1Y": 3100.0, "2Y": 6500.0}
+    never = lambda d: (_ for _ in ()).throw(AssertionError("inside the grid parity is not asked for"))
+    for days in (100, 365, 367, 600, 730):
+        r = points_at(pts, days, spot=100_000.0, pip=1.0, parity_forward=never, extrapolated=frozenset(pts))
+        assert r.kind == IMPLIED and r.points == pytest.approx(interp_points(pts, days)) and r.last_tenor is None
+        assert "no tenor of this curve is a listed expiry" in r.method
+
+
+def test_a_feed_filled_tenor_is_not_made_a_quote_by_being_near_it():
+    pts = {"6M": 1500.0, "1Y": 3100.0, "2Y": 6500.0}
+    r = points_at(pts, 732, spot=100_000.0, pip=1.0, parity_forward=lambda d: 100_000.0 * math.exp(0.02 * d / 365.0), extrapolated=frozenset({"2Y"}))
+    assert r.kind == IMPLIED and r.beyond            # two days past a tenor the feed filled: carried on, and implied
+    assert points_at(pts, 729, spot=100_000.0, pip=1.0, parity_forward=None, extrapolated=frozenset({"2Y"})).kind == IMPLIED

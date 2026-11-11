@@ -26,8 +26,18 @@ implied and how... in configurations, user should be able to turn on/off tenors 
 - A tenor the venue feed fills beyond the venue's last listed expiry is named as implied (it prices as before).
 - Checked: 12 rows against QuantLib's parity with the basis done by hand (EURUSD, USDJPY, a digital asset, at 3Y, 5Y
   and 10Y), unit tests of the rule, an API test on a real database, a browser journey. Methodology v1.13, §12.
-- Limits: one number read off the last quote stands in for the basis beyond it; nothing trades that far out on a
-  digital asset, and the screen says so; a scenario's shock of the points is still flat beyond the last tenor.
+- A ticket at a quoted tenor is that tenor: a two-year ticket settles two calendar years from spot, a few days past
+  the tenor's 730, and is priced a few days of carry from the quote and called quoted, not implied (seven days'
+  slack). A row changed on the forwards page and not yet saved says NOT SAVED. Saving over a feed's curve keeps
+  what the feed filled named as implied unless the desk types over it. The scenario tab draws a ticket's own carry
+  when its date is beyond the quotes.
+- Reviewed by the model validator (one figure re-derived by hand to nine decimals), the independent reviewer and
+  the design keeper; their findings are in this release.
+- Limits: one number read off the last quote stands in for the basis beyond it, with no band of uncertainty, and an
+  error in a curve is inside that number; while the points are held a parallel move of a curve leaves a forward
+  beyond the quotes where it was; nothing trades that far out on a digital asset, and the screen says so; a
+  scenario's shock of the points is still flat beyond the last tenor; the reference rows check the parity against
+  QuantLib and restate the rule.
 
 ## 0.21.2 · 11 November 2026
 

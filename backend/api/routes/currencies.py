@@ -178,20 +178,27 @@ def _save_pairs(db: Session, user_id, prices: dict[str, float]) -> int:
 
 def forward_curve(db: Session, user_id, pair: str) -> Optional[dict]:
     """Latest {PAIR}_FWD snapshot: {valuation_date, source, points: {tenor: pips}}."""
+    return forward_row(db, user_id, pair)[0]
+
+
+def forward_row(db: Session, user_id, pair: str) -> tuple[Optional[dict], dict[str, float]]:
+    """(the pair's forward curve or None, the points of its switched-off tenors), from one read of the latest
+    {PAIR}_FWD row. The switched-off points are returned even when too few tenors are on to make a curve, so the
+    forwards page never loses sight of them."""
     row = latest_snapshot(db, user_id, f"{pair}_FWD")
     if not row or not row.quotes:
-        return None
+        return None, {}
     known = [q for q in row.quotes if q.get("rate") is not None and q.get("tenor") in TENOR_DAYS]
+    off = {q["tenor"]: float(q["rate"]) for q in known if not q.get("enabled", True)}
     # a tenor the desk switched off is kept on the row and is not a pillar: its date is priced like any unquoted
     # one. A tenor a feed filled beyond its venue's last listed expiry (`extrapolated`) stays a pillar, as it
     # always was (the feed holds the last listed basis flat as a rate), and is named so the page and the ticket
     # can say it is implied.
     pts = {q["tenor"]: float(q["rate"]) for q in known if q.get("enabled", True)}
     if len(pts) < 2:
-        return None
-    return {"valuation_date": row.valuation_date.isoformat(), "source": row.source, "points": pts,
-            "off": {q["tenor"]: float(q["rate"]) for q in known if not q.get("enabled", True)},
-            "extrapolated": sorted((q["tenor"] for q in known if q.get("enabled", True) and q.get("extrapolated")), key=TENOR_DAYS.get)}
+        return None, off
+    return {"valuation_date": row.valuation_date.isoformat(), "source": row.source, "points": pts, "off": off,
+            "extrapolated": sorted((q["tenor"] for q in known if q.get("enabled", True) and q.get("extrapolated")), key=TENOR_DAYS.get)}, off
 
 
 def marks_label(source: Optional[str]) -> Optional[str]:
@@ -237,13 +244,13 @@ def pair_state(db: Session, user_id, pair: str, settlement: bool = True) -> dict
     if is_crypto(base) and settlement:
         out["fixing_sources"] = offered_sources(db, pair)
         out["settlement_default"] = settlement_default(db, pair, out["fixing_sources"])
-    fc = forward_curve(db, user_id, pair)
+    fc, fc_off = forward_row(db, user_id, pair)
     out.update(forward_curve=fc and {"valuation_date": fc["valuation_date"], "source": fc["source"], "label": short_label(fc["source"], fc["valuation_date"], "points"),
                                      "tenors": sorted(fc["points"], key=TENOR_DAYS.get)},
                forward_points=fc["points"] if fc else None,
                # tenors the desk switched off (their points kept, for switching back on) and tenors a feed filled
                # beyond its last listed expiry: neither is a quote, both are priced as implied
-               forward_points_off=fc["off"] if fc else {}, forward_points_extrapolated=fc["extrapolated"] if fc else [])
+               forward_points_off=fc_off, forward_points_extrapolated=fc["extrapolated"] if fc else [])
     vs = latest_snapshot(db, user_id, f"{pair}_VOL")
     if vs:
         grid: dict[str, dict[str, float]] = {}
@@ -318,6 +325,13 @@ def save_forward_curve(req: ForwardCurveIn, db: Session = Depends(get_db), user:
     from sqlalchemy import text
     uid, today = uuid.UUID(user["sub"]), req.valuation_date or date.today()
     quotes = [{"tenor": t, "quote_type": "FWD_POINTS", "rate": v, "enabled": t not in off} for t, v in sorted(pts.items(), key=lambda kv: TENOR_DAYS[kv[0]])]
+    # A tenor a feed filled beyond its venue's last listed expiry keeps that name when the desk saves the curve
+    # without changing it (to switch another tenor off, say): it is still not a quote. A value the desk typed is.
+    held = latest_snapshot(db, uuid.UUID(user["sub"]), f"{pair}_FWD")
+    fed = {q["tenor"]: float(q["rate"]) for q in ((held.quotes if held else None) or []) if q.get("extrapolated") and q.get("rate") is not None}
+    for q in quotes:
+        if q["tenor"] in fed and abs(fed[q["tenor"]] - q["rate"]) < 1e-9:
+            q["extrapolated"] = True
     for cid, q in ((f"{pair}_FWD", None if spot_only else quotes), (f"{pair}_SPOT", [{"tenor": "SPOT", "quote_type": "SPOT", "rate": float(req.spot), "enabled": True}] if req.spot else None)):
         if q is None:
             continue
@@ -774,7 +788,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     f_src = (f"spot carried at the funding rate ({b_src})" if crypto else "implied from the two OIS curves (interest-rate parity)")
     # what kind of forward this is and how it was reached, for the ticket and the forwards page to say
     # (pricing/forward_points.py): IMPLIED from the curves unless quoted points price it below
-    f_kind, f_method, f_basis_rate = "IMPLIED", ("parity on the two curves" + (" (the desk prices from yields)" if fc else " (no points quoted)")), None
+    f_kind, f_method, f_basis_rate, f_beyond = "IMPLIED", ("parity on the two curves" + (" (the desk prices from yields)" if fc else " (no points quoted)")), None, False
     if crypto:
         f_method = f"spot carried at the dollar curve less the asset's rate ({b_src})"
     mkt_pts = None
@@ -795,7 +809,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
         f_mkt = S + mkt_pts * st["pip"]
         basis_pts = mkt_pts - implied.forward_points
         if mode == "MARKET" and shape != "SPOT" and f_mkt > 0:
-            f_kind, f_method, f_basis_rate = at.kind, at.method, at.basis_rate
+            f_kind, f_method, f_basis_rate, f_beyond = at.kind, at.method, at.basis_rate, at.beyond
             # the market forward implies the base-currency rate over spot -> settlement
             from pricing.currency_forward import implied_base_rate, year_fraction
             sd = fx_spot or val_date
@@ -806,7 +820,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                                        base_rate=rate_b)
             kw.pop("base_curve", None)          # on quoted points the second currency is the one rate the points imply, not its curve
             f_src = f"market points ({pair}_FWD {st['forward_curve']['valuation_date']}, {marks_label(st['forward_curve']['source'])}), basis {basis_pts:+.1f} pts vs parity"
-            if at.kind == "IMPLIED":
+            if at.kind == "IMPLIED" and at.beyond:
                 # no tenor is quoted this far out: the forward is the model's, and the ticket says so
                 f_src = f"implied beyond the last quoted tenor ({at.last_tenor}, {pair}_FWD {st['forward_curve']['valuation_date']}, {marks_label(st['forward_curve']['source'])}): {at.method}"
     out = r.__dict__.copy()
@@ -816,6 +830,9 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                forward_mode=mode, forward_source=f_src, implied_forward=implied.forward, implied_points=implied.forward_points,
                market_points=mkt_pts, basis_points=basis_pts,
                forward_kind=f_kind, forward_method=f_method, forward_basis_rate_bp=(f_basis_rate * 1e4 if f_basis_rate is not None else None),
+               # the date lies beyond every tenor of the pair's curve: the forward is carried there, not read off points
+               # (the scenario tab then draws the ticket's own carry, as for a pair with no points)
+               forward_beyond_quotes=f_beyond,
                model="F = S·DF_base/DF_quote from the spot date (parity) or S + quoted points (market); NPV_quote = ±N_base·(F−K)·DF_quote; ACT/365")
     # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the
     # funding rate's is FUND01; on a currency pair both legs are rate curves and IR01 is their sum

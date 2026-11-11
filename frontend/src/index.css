@@ -510,6 +510,10 @@ button, input, select, textarea { font-family: inherit; }
 .tog:checked        { background: var(--accent-dim); }
 .tog::after         { content: ''; position: absolute; width: 10px; height: 10px; border-radius: 50%; background: #43544a; top: 2px; left: 2px; transition: transform .2s; }
 .tog:checked::after { transform: translateX(14px); background: var(--accent); }
+.tog:disabled       { opacity: .35; cursor: default; }      /* nothing to switch: a row with no value of its own */
+/* a quote field showing what is implied where nothing is typed: the figure is not the desk's, and reads so */
+.qi::placeholder    { font-style: italic; color: var(--text-dim); opacity: 1; }
+.qi.is-off          { text-decoration: line-through; color: var(--text-mute); }   /* typed and switched off: kept, not priced on */
 
 /* Inline quote input */
 .qi {

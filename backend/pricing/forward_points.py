@@ -41,6 +41,10 @@ TENOR_DAYS = {"ON": 1, "1W": 7, "2W": 14, "1M": 30, "2M": 61, "3M": 91, "6M": 18
 FWD_TENORS = ("1W", "2W", "1M", "2M", "3M", "6M", "9M", "1Y", "18M", "2Y", "3Y", "4Y", "5Y", "7Y", "10Y")
 
 QUOTED, INTERPOLATED, IMPLIED = "QUOTED", "INTERPOLATED", "IMPLIED"
+# A tenor's pillar is a round count of days (2Y is 730) and a ticket's 2Y date is two calendar years from the spot
+# date, rolled to a business day: 731 to 734 days. A date this close to a quoted tenor IS that tenor: it is named
+# QUOTED (the figure is still read off the curve at its own day count, a few days of carry from the quote).
+TENOR_SLACK_DAYS = 7
 
 
 def interp_points(points: dict[str, float], days: int) -> float:
@@ -65,6 +69,7 @@ class PointsAt:
     method: str                   # how, in words a ticket can print
     last_tenor: Optional[str]     # the last quoted tenor the answer leans on (IMPLIED beyond it), else None
     basis_rate: Optional[float]   # b above, a year, continuously compounded; None unless IMPLIED beyond a quote
+    beyond: bool = False          # the date lies beyond every tenor of the curve: the figure is carried, not read off points
 
 
 def last_quoted(points: dict[str, float]) -> Optional[tuple[str, int]]:
@@ -100,15 +105,18 @@ def points_at(points: Optional[dict[str, float]], days: int, *, spot: float, pip
         return PointsAt((f - spot) / pip, IMPLIED, "parity on the two curves (no points quoted)", None, None)
     tenor_l, days_l = last_quoted(points)
     true = {t: v for t, v in points.items() if t not in extrapolated}
-    if true and days <= days_l:
-        tenor_t, days_t = last_quoted(true)
-        if days > days_t:
-            return PointsAt(interp_points(points, days), IMPLIED,
-                            f"the feed's last listed basis held flat as a rate (nothing is listed beyond {tenor_t})", tenor_t, None)
+    # the quoted tenor this date is, if it is one: the nearest true quote within the slack
+    near = min((t for t in true if abs(TENOR_DAYS[t] - days) <= TENOR_SLACK_DAYS), key=lambda t: abs(TENOR_DAYS[t] - days), default=None)
     if days <= days_l:
-        at_pillar = next((t for t in points if TENOR_DAYS[t] == days), None)
-        if at_pillar:
-            return PointsAt(points[at_pillar], QUOTED, f"quoted at {at_pillar}", None, None)
+        days_t = last_quoted(true)[1] if true else 0
+        if days > days_t and not near:
+            tenor_t = last_quoted(true)[0] if true else None
+            where = f"nothing is listed beyond {tenor_t}" if tenor_t else "no tenor of this curve is a listed expiry"
+            return PointsAt(interp_points(points, days), IMPLIED, f"the feed's last listed basis held flat as a rate ({where})", tenor_t, None)
+        if near:
+            off = days - TENOR_DAYS[near]
+            how = f"quoted at {near}" + ("" if off == 0 else f" (the date is {abs(off)} day{'s' if abs(off) != 1 else ''} {'past' if off > 0 else 'short of'} the tenor's {TENOR_DAYS[near]} days)")
+            return PointsAt(interp_points(points, days), QUOTED, how, None, None)
         before = [t for t in points if TENOR_DAYS[t] < days]
         after = [t for t in points if TENOR_DAYS[t] > days]
         lo = max(before, key=lambda k: TENOR_DAYS[k]) if before else "spot"
@@ -119,7 +127,11 @@ def points_at(points: Optional[dict[str, float]], days: int, *, spot: float, pip
     if b is None:
         # the last quote cannot be read as a rate over parity: carry its basis in points, and say so
         pts = (f_par - spot) / pip + (points[tenor_l] - (f_par_l - spot) / pip)
-        return PointsAt(pts, IMPLIED, f"parity plus the {tenor_l} basis in points (its rate could not be read)", tenor_l, None)
+        return PointsAt(pts, IMPLIED, f"parity plus the {tenor_l} basis in points (its rate could not be read)", tenor_l, None, True)
     f = f_par * math.exp(b * days / 365.0)
+    if near == tenor_l:
+        # a few days past the last quoted tenor's round day count: the tenor itself, carried those days
+        off = days - days_l
+        return PointsAt((f - spot) / pip, QUOTED, f"quoted at {near} (the date is {off} day{'s' if off != 1 else ''} past the tenor's {days_l} days)", None, None)
     return PointsAt((f - spot) / pip, IMPLIED,
-                    f"parity plus the {tenor_l} basis held flat as a rate ({b * 1e4:+.1f} bp a year)", tenor_l, b)
+                    f"parity plus the {tenor_l} basis held flat as a rate ({b * 1e4:+.1f} bp a year)", tenor_l, b, True)

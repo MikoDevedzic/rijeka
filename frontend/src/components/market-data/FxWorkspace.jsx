@@ -26,7 +26,10 @@ const GROUPS = [
 const TENOR_DAYS = { '1W': 7, '2W': 14, '1M': 30, '2M': 61, '3M': 91, '6M': 182, '9M': 273, '1Y': 365, '18M': 547, '2Y': 730, '3Y': 1095, '4Y': 1460, '5Y': 1825, '7Y': 2555, '10Y': 3650 }
 const CRYPTO = ['BTC', 'ETH', 'SOL']
 const dp = (pair) => CRYPTO.includes(pair.slice(0, 3)) ? 2 : pair === 'USDJPY' ? 3 : 5
-const fmt = (n, d = 2) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
+const fmt = (n, d = 2) => n == null || isNaN(n) ? '—' : (Number(Number(n).toFixed(d)) === 0 ? 0 : Number(n)).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
+// saved points as the page shows them: at least the pair's decimals for points (two for a digital asset, one for pips),
+// and every decimal that was saved, so a figure is never rounded by being looked at
+const shownPoints = (v, crypto) => { const s = String(v); const d = (s.split('.')[1] || '').length; return Number(v).toFixed(Math.max(d, crypto ? 2 : 1)) }
 const iso = (d) => d.toISOString().slice(0, 10)
 
 async function call(path, opts = {}) {
@@ -171,7 +174,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
 
   const savedCurve = JSON.stringify([p.forward_points || null, p.forward_points_off || null])     // what the pricer's answers below were made on
   useEffect(() => {
-    setPts({ ...(p.forward_points || {}), ...(p.forward_points_off || {}) })
+    setPts(Object.fromEntries(Object.entries({ ...(p.forward_points || {}), ...(p.forward_points_off || {}) }).map(([t, v]) => [t, shownPoints(v, p.crypto)])))
     setOff(Object.fromEntries(Object.keys(p.forward_points_off || {}).map(t => [t, true])))
   }, [pair, savedCurve])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { setSpotIn(''); setAskFeed(false); setFund(p.funding_pct ?? ''); setFlat(p.base_flat_pct ?? '') }, [pair, p.forward_curve?.valuation_date, p.spot_as_of])   // eslint-disable-line react-hooks/exhaustive-deps
@@ -306,52 +309,58 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
       </DescBox>
       <FxForwardChart p={p} tenors={tenors} pts={pts} off={off} parity={parity} />
       <div data-testid="fwd-table" style={{ display: 'grid', gridTemplateColumns: '40px 56px 56px 1fr 1fr 1fr 1fr 1fr 118px', minWidth: 720 }}>
-        <div style={thL} title="Switch a tenor off to keep its points on the row without pricing on them">USE</div><div style={thL}>TENOR</div><div style={thR}>DAYS</div><div style={thR}>{p.crypto ? `POINTS (${p.quote})` : 'POINTS (PIPS)'}</div><div style={thR}>OUTRIGHT</div><div style={thR}>PARITY PTS</div><div style={thR}>PARITY FWD</div><div style={thR}>BASIS</div><div style={thL}>SRC</div>
+        <div style={thL} title="Switch a tenor off to keep its points on the row without pricing on them">USE</div><div style={thL}>TENOR</div><div style={thR}>DAYS</div><div style={thR}>{p.crypto ? `POINTS (${p.quote})` : 'POINTS (PIPS)'}</div><div style={thR}>OUTRIGHT</div><div style={thR}>PARITY PTS</div><div style={thR}>PARITY FWD</div><div style={thR}>BASIS</div><div style={{ ...thL, paddingLeft: 12 }}>SRC</div>
         {tenors.map(t => {
           const q = parity[t]; const v = pts[t]; const n = parseFloat(v)
           const typed = !isNaN(n), on = typed && !off[t]
+          // what is saved for this tenor, and whether the row on screen is that: the pricer's answers below were made
+          // on the saved curve, so a row that was changed shows its own points and says it is not saved yet
+          const savedOn = p.forward_points?.[t], savedOff = p.forward_points_off?.[t]
+          const dirty = typed ? (on ? Number(savedOn) !== n : Number(savedOff) !== n) : (savedOn != null || savedOff != null)
           // a tenor the feed filled beyond its venue's last listed expiry prices as a pillar and is not a quote
-          const fed = on && (p.forward_points_extrapolated || []).includes(t) && Number(p.forward_points?.[t]) === n
+          const fed = on && !dirty && (p.forward_points_extrapolated || []).includes(t)
           const quoted = on && !fed
           const outright = p.spot != null && on ? p.spot + n * p.pip : null
-          // where nothing is quoted the row shows what the pricer uses there (of the curve as saved), dimmed and named
-          const used = !on && q && q.forward != null ? q : null
-          const kind = quoted ? 'QUOTED' : fed ? 'IMPLIED' : (used?.forward_kind || null)
-          const how = fed ? "the feed's last listed basis held flat as a rate: nothing is listed this far out" : (used?.forward_method || '')
+          // where nothing is quoted the row shows what the pricer uses there, dimmed and named
+          const used = !on && !dirty && q && q.forward != null ? q : null
+          const kind = dirty ? 'NOT SAVED' : quoted ? 'QUOTED' : fed ? 'IMPLIED' : (used?.forward_kind || null)
+          const how = dirty ? 'changed on this page and not saved: save to see what the pricer uses here'
+            : fed ? "the feed's last listed basis held flat as a rate: nothing is listed this far out" : (used?.forward_method || '')
           return [
-            <div key={t + 'u'} style={td}><input type="checkbox" data-testid={`fwd-use-${t}`} aria-label={`Price on the ${t} point`} checked={on} disabled={!typed}
-              style={{ accentColor: 'var(--text-dim)', cursor: typed ? 'pointer' : 'default' }} onChange={() => setOff(o => ({ ...o, [t]: !o[t] }))} /></div>,
+            <div key={t + 'u'} style={td}><input type="checkbox" className="tog" data-testid={`fwd-use-${t}`} aria-label={`Price on the ${t} point`} checked={on} disabled={!typed}
+              onChange={() => setOff(o => ({ ...o, [t]: !o[t] }))} /></div>,
             <div key={t + 'a'} style={td}>{t}</div>,
             <div key={t + 'b'} style={{ ...tdR, color: 'var(--text-dim)' }}>{TENOR_DAYS[t]}</div>,
-            <div key={t + 'c'} style={tdR}><input className="qi" inputMode="decimal" aria-label={`${t} points`} style={{ width: 84, opacity: typed && !on ? 0.5 : 1 }} value={v ?? ''}
+            <div key={t + 'c'} style={tdR}><input className={`qi${typed && !on ? ' is-off' : ''}`} inputMode="decimal" aria-label={`${t} points`} style={{ width: 84 }} value={v ?? ''}
               placeholder={used ? fmt(used.forward_points, p.crypto ? 2 : 1) : '—'} onChange={e => setPts({ ...pts, [t]: e.target.value })} /></div>,
             <div key={t + 'd'} data-testid={`fwd-outright-${t}`} data-kind={kind || ''} title={how || undefined}
               style={{ ...tdR, color: on ? 'var(--text-hi)' : 'var(--text-dim)', fontStyle: on ? 'normal' : 'italic' }}>{outright != null ? fmt(outright, dp(pair)) : used ? fmt(used.forward, dp(pair)) : '—'}</div>,
             <div key={t + 'e'} style={{ ...tdR, color: 'var(--text-dim)' }}>{q ? fmt(q.implied_points, 1) : '…'}</div>,
             <div key={t + 'f'} style={{ ...tdR, color: 'var(--text-dim)' }}>{q ? fmt(q.implied_forward, dp(pair)) : '…'}</div>,
             <div key={t + 'g'} style={{ ...tdR, color: q && on ? (n - q.implied_points >= 0 ? 'var(--up)' : 'var(--down)') : 'var(--text-mute)' }}>{q && on ? fmt(n - q.implied_points, 1) : '—'}</div>,
-            <div key={t + 'h'} style={td} data-testid={`fwd-src-${t}`}>
-              {quoted ? <SourceBadge src={p.forward_curve?.source || 'MANUAL'} />
+            <div key={t + 'h'} style={{ ...td, paddingLeft: 12 }} data-testid={`fwd-src-${t}`}>
+              {quoted && !dirty ? <SourceBadge src={p.forward_curve?.source || 'MANUAL'} />
                 : kind ? <span className={`pill ${kind === 'IMPLIED' ? 'p-amber' : 'p-dim'}`} style={{ whiteSpace: 'nowrap' }} title={how}>{kind}</span>
                   : <span className="pill p-dim" style={{ whiteSpace: 'nowrap' }}>…</span>}
             </div>,
           ]
         })}
       </div>
-      {/* how the rows that are not quotes were reached, in words: the method the pricer names at the longest tenor */}
+      {/* how the rows that are not quotes were reached: the method the pricer names at the longest tenor. Kept clear
+          of the help button at the corner of the page. */}
       {(() => {
         const far = [...tenors].reverse().map(t => parity[t]).find(q => q && q.forward_kind === 'IMPLIED' && q.forward_method)
         if (!far) return null
         return (
-          <div data-testid="fwd-implied-note" style={{ marginTop: 8, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5 }}>
-            <span className="pill p-amber" style={{ marginRight: 6 }}>IMPLIED</span>
-            A figure in italics is not a quote: it is what the pricer uses at that tenor, on the curve as saved. Where no tenor is quoted: {far.forward_method}.
-            {p.crypto ? ' Nothing trades that far out on a digital asset: the forward there is a model\'s.' : ''} Switch a tenor off to keep its points without pricing on them; its date is then interpolated or implied like any other.
+          <div data-testid="fwd-implied-note" style={{ marginTop: 8, paddingRight: 72, fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            Italics: not a quote, but what the pricer uses there on the saved curve. Beyond the quoted tenors: {far.forward_method}.
+            {p.crypto ? ' Nothing trades that far out on a digital asset: the forward there is a model\'s.' : ''} A tenor switched off keeps its points and is priced like any unquoted date.
           </div>
         )
       })()}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10 }}>
-        <button className="btn" onClick={() => { const q = {}; tenors.forEach(t => { if (parity[t]) q[t] = parity[t].implied_points.toFixed(2) }); setPts(q) }} disabled={!Object.keys(parity).length}>FILL FROM PARITY</button>
+        <button className="btn" title="Types parity into every tenor. Saved, each becomes this account's own quote (MANUAL), the long tenors too."
+          onClick={() => { const q = {}; tenors.forEach(t => { if (parity[t]) q[t] = parity[t].implied_points.toFixed(2) }); setPts(q); setOff({}); flash('ok', 'Every tenor filled with parity. Saving makes each one this account\'s own quote.') }} disabled={!Object.keys(parity).length}>FILL FROM PARITY</button>
         <button className="btn" onClick={snapBbg} disabled={!!busy || !bbg?.available} title={bbg?.available ? 'Spot and points from the Bloomberg Desktop API (self-host)' : 'Self-host only: no Bloomberg Desktop API on this server (self-host only)'}>{busy === 'bbg' ? 'SNAPPING…' : '▶ SNAP BLOOMBERG'}</button>
         <button className="btn primary" onClick={() => save('MANUAL')} disabled={!!busy}>{busy === 'save' ? 'SAVING…' : '▶ SAVE TO DB (MANUAL)'}</button>
       </div>

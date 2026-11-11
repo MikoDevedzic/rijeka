@@ -713,7 +713,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
     const t = option ? quote.t_settle : quote.t
     const settleX = daysBetween(quote.valuation_date, quote.settlement_date) ?? (Number.isFinite(t) ? Math.round(t * 365) : null)
     if (settleX == null) return null
-    const quoted = quote.forward_mode === 'MARKET' && quote.market_points != null && !!row?.forward_points && Object.keys(row.forward_points).length > 0
+    const quoted = quote.forward_mode === 'MARKET' && quote.market_points != null && !quote.forward_beyond_quotes && !!row?.forward_points && Object.keys(row.forward_points).length > 0
     // points are quoted from the spot date: the lag the quote itself implies, else the market's convention
     const lag = spotLagDays({ points: quoted ? row.forward_points : null, settleDays: settleX, marketPoints: quote.market_points, crypto, tSpot: quote.t_spot, tenorDays }) ?? (crypto ? 0 : FX_SPOT_LAG_DAYS)
     const days = Math.max(settleX - lag, 0)

@@ -39,16 +39,25 @@ test('a forward curve to ten years: quoted and implied rows, a tenor switched of
   await expect(app.getByTestId('fwd-implied-note')).toContainText('model')
   await app.screenshot({ path: 'e2e/.out/shots/forwards-10y.png' })
 
-  // the two-year switched off: its points stay on the row, its date is implied from the one-year, and it survives a reload
+  // a quoted figure and an implied one are set alike but for what says which is which: italics on the implied one
+  expect(await app.getByLabel('5Y points', { exact: true }).evaluate(el => getComputedStyle(el, '::placeholder').fontStyle), 'an implied point is shown in italics in its field').toBe('italic')
+  await expect(app.getByLabel('2Y points', { exact: true }), 'saved points are shown to the pair\'s decimals').toHaveValue('11.40')
+  expect(await app.getByTestId('fwd-outright-1W').textContent(), 'zero is not minus zero').not.toMatch(/^-0\.0+$/)
+
+  // the two-year switched off: until it is saved the row says so, and shows no figure of the old curve
   await app.getByTestId('fwd-use-2Y').click()
+  await expect(src('2Y').locator('.pill')).toHaveText('NOT SAVED')
+  await expect(outright('2Y')).toHaveText('—')
+  expect(await app.getByLabel('2Y points', { exact: true }).evaluate(el => getComputedStyle(el).textDecorationLine), 'a point switched off is struck through').toBe('line-through')
+  // saved: its points stay on the row, its date is implied from the one-year, and it survives a reload
   await save()
   await expect(src('2Y').locator('.pill')).toHaveText('IMPLIED', { timeout: 20_000 })
   await expect(src('2Y').locator('.pill')).toHaveAttribute('title', /parity plus the 1Y basis held flat as a rate/)
-  await expect(app.getByLabel('2Y points', { exact: true })).toHaveValue('11.4')
+  await expect(app.getByLabel('2Y points', { exact: true })).toHaveValue('11.40')
   await app.reload()
   await app.locator('.crv-item', { hasText: 'SOLUSD' }).click()
   await expect(app.getByTestId('fwd-use-2Y')).not.toBeChecked()
-  await expect(app.getByLabel('2Y points', { exact: true })).toHaveValue('11.4')
+  await expect(app.getByLabel('2Y points', { exact: true })).toHaveValue('11.40')
   await expect(app.getByTestId('fwd-use-1Y')).toBeChecked()
   // and back on
   await app.getByTestId('fwd-use-2Y').click()
@@ -70,6 +79,15 @@ test('a forward curve to ten years: quoted and implied rows, a tenor switched of
   await expect(kind).toContainText('implied, not quoted')
   await expect(kind).toContainText('2Y basis held flat as a rate')
   await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)
+  // the scenario tab starts from the engine's own forward: with nothing moved, nothing has changed
+  await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+  await expect(win.getByTestId('fx-scenario-change')).toBeVisible({ timeout: 20_000 })
+  expect(Math.abs(num((await win.getByTestId('fx-scenario-change').textContent()).replace(/[^0-9.,-]/g, '')) || 0), 'no shock, no change').toBeLessThan(0.01)
+  await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+  // a ticket at the two-year tenor is the two-year quote, though its date is a few days past the tenor's 730
+  await tenor.selectOption('2Y')
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)
+  await expect(kind, 'a quoted tenor is not called implied').toHaveCount(0, { timeout: 30_000 })
   await tenor.selectOption('6M')
   await expect(kind, 'a forward inside the quotes carries no mark').toHaveCount(0, { timeout: 30_000 })
   // an option on a digital asset still stops at its last vol tenor
