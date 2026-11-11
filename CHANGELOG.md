@@ -1,7 +1,26 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.11). Commits on `main` are the detail.
+methodology document carries its own version (v1.12). Commits on `main` are the detail.
+
+## 0.19.2 · 10 November 2026
+
+**The methodology document, set properly (v1.12).** No formula changed.
+
+- **Names of quantities are upright.** NPV, CVA, LGD, EAD and the like were set as italic letters side by side, which
+  reads as a product of letters; 152 of them, of 53 kinds, are now set as names.
+- **Nothing runs past the margin.** Seven displays did (the two option prices with their d, the VaR statistics, the
+  bond on the paths, the two readings of collateral, SA-CCR, CVA capital, ColVA beside the waterfall), by up to four
+  centimetres, and the reference table's last column by seven millimetres. Each is now set on several lines.
+- **Paragraphs are divided.** Twelve ran to a page or more (digital assets: two pages in one paragraph); they are broken
+  where the subject changes, in the order they were written. Three formulas that sat inside a sentence are displayed.
+- **Code names are printed as written.** Twenty-one showed a backslash before each underscore or brace.
+- **The front.** The title said version 1.9 under a header that said 1.11; the history of versions, which filled the
+  first page, follows the contents, and gains the entry for 1.10 and 1.11 it lacked.
+- **One correction of substance.** The known limitations of §16 still described initial margin as a delta margin per
+  risk class with a cryptoasset weight, the method 0.18.0 removed; they now say what §9 says.
+- Checked: the build reports no line past the margin; every word of the old and new PDFs compared (the differences are
+  the ones above and how a PDF reader orders a table).
 
 ## 0.19.1 · 10 November 2026
 
