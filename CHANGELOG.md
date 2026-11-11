@@ -3,6 +3,28 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.14). Commits on `main` are the detail.
 
+## 0.23.1 · 11 November 2026
+
+**Two migrations are written out, and a table that arrives is seen at once.** Call D of the Phase 1 exit list.
+Nothing is applied by this release: neither file is on the approved list, and each goes there only on the owner's
+words for it.
+
+- **`2026-11-11_pending_anchors.sql`**: the pending-anchors table on its own. It was a section of the 3 November
+  jobs file, bundled with the worker's tables, which are safe to apply only when the worker is alive; so the
+  confirm path waited on the worker. Applied, a slow block answers at once and the trade reads ANCHORING until
+  the receipt is applied. An empty table, row-level security on, no policy and no grant: only the API reads it.
+- **`2026-11-11_sync_role_search_path.sql`**: the function that copies a profile's role into the sign-in record
+  runs with its owner's rights and named no search path. It names one, as `is_admin()` has since 0.14.2. Its body
+  and what it does are unchanged.
+- **Read by the database keeper** on scratch databases: both files run twice without error, with and without
+  the jobs file applied and in either order; nothing is readable by a signed-in or anonymous role; the role is
+  still copied; the runner's guard accepts both without a flag.
+- **A presence check keeps only a yes.** The checks for pending anchors and for the jobs table remembered a "no"
+  for five minutes, so a confirm would still have waited in the request for up to five minutes after the table
+  was applied. A "no" is now asked again every time.
+- **Health** names the new file for pending anchors (`schema` on `GET /api/ops/health`).
+- **Checked:** 1,340 unit and reference tests; both files applied twice on a fresh local database.
+
 ## 0.23.0 · 11 November 2026
 
 **The margin on a digital-asset ticket is no longer read low.** First step of finishing the XVA on digital assets,
