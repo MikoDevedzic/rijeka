@@ -45,6 +45,30 @@ security review of sign-up, roles, modules and the register (item 6 of the Phase
   way); a role changed on the Users page is honoured up to 30 seconds late, and the Users page itself can still
   demote the last administrator; a legal entity's name is free text (it is signed and shown to the counterparty,
   not on the public register); `docs/schema.sql` is an older export than the policies production runs.
+## The tenancy tests run on the local stack · 11 November 2026 (tests only)
+
+**No test signs in to a hosted service any more.** Item 9 of the Phase 1 exit list.
+
+- **What was wrong.** `tests/test_rls_isolation.py` (25 tests: one account must never read, change or delete what
+  belongs to another) ran against a server on localhost:8000 with tokens fetched by signing in to the hosted auth
+  service, so on a developer's machine it wrote to whatever database that server was on. It was skipped in CI and
+  had to be deselected by hand locally.
+- **What it is now.** The same checks are `tests/integration/test_tenancy_isolation.py` (24 tests; the one that only
+  tested the hosted sign-in is gone): the stack's own tokens, the stack's database, in CI with every other
+  integration test. Market data, vol skew and SABR parameters, the XVA calibration, counterparties, legal
+  entities, trades, legs and confirmations are each tried from the other account.
+- **They clean up.** A calibration they save is dated 2099; left behind it is the "latest" one and the pinned
+  book's swap XVA then runs on it the next time the same database is used (seen on the first local run: CVA −2,090
+  → −2,733). The file removes what the harness does not truncate, before and after; the suite passes twice in a
+  row on one database. Its trades, legs and events stay until the harness truncates them at the start of the next
+  session (an event cannot be deleted by a row).
+- **What these tests hold, said plainly:** the routes' own filter on the caller's id. The API connects to the
+  stack as the tables' owner, so row-level security is not exercised by them, here or before.
+- **Removed:** the fixtures in `tests/conftest.py` that read `.env.test` and signed in; the mentions of them in
+  `pytest.ini`, `CONTRIBUTING.md` and the CI file's comment.
+- **Checked:** the integration suite on the local stack, twice: 144 passed each time, with `test_migrate.py`'s 22
+  deselected (it runs only on the default database name; CI runs it). 1,299 unit and reference tests; ruff. A cold
+  read compared every call of the old file with the new one: nothing weaker.
 
 ## What Phase 1 is, said one way · 11 November 2026 (frontend only)
 

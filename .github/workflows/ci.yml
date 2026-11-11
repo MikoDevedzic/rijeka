@@ -30,7 +30,7 @@ jobs:
         run: ruff check .
       - name: pytest
         # No database in CI: db/session.py only needs the variable to exist, and
-        # every test that would touch Postgres skips without .env.test.
+        # the tests that touch Postgres (tests/integration) skip here and run in the integration job on the stack.
         env:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:1/ci
           RIJEKA_CHAIN_DEV_SEED: ci

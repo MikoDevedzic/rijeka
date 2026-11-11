@@ -1,4 +1,4 @@
 pytest>=8
-psycopg[binary]>=3.1   # tests open direct connections for RLS checks (skipped without .env.test, but imported at module level)
+psycopg[binary]>=3.1   # nothing imports this since the old RLS tests moved to the stack (11 Nov 2026; the tests use psycopg2): kept until the next dependency pass
 QuantLib==1.44          # tests/reference: independent QuantLib cross-checks (docs/methodology, "Independent reference")
 ruff==0.17.3            # lint: ruff check . (config in ruff.toml); CI runs it before pytest
