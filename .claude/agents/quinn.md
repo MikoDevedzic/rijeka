@@ -37,6 +37,9 @@ Learned on 9 November 2026 (the scenario tab and the as-booked label)
 - A figure that animates has a moment when it is not yet itself. The roll journey read the footer's figure as soon as it held a digit; on a busy machine that was a frame of the first roll (or of the reprice when the counterparty is chosen), and it failed three runs in four on 11 November 2026 with nothing in the product changed. Before measuring an animation, wait until what is shown equals what it is rolling to.
 - When a block of figures moves from one tab to another, read what the tab it left and the footer still say. On 10 November 2026 the swap's valuation moved from TRADE to CASHFLOWS; the footer kept the net alone, and the owner asked the next day where the per-leg values had gone. A journey now reads each leg's figure in the footer and adds them up to the net.
 
+Learned on 11 November 2026
+- A journey that saves market data leaves it in the local database the integration tests share (`rijeka_test`). On 11 November 2026 the forwards journey's saved points failed two integration tests on the next run. Use a pair no other journey prices, and have the integration harness clear what a journey can leave (`backend/tests/integration/conftest.py`).
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.
