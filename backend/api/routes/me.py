@@ -78,8 +78,9 @@ class RoleBody(BaseModel):
 @router.get("/role")
 def get_role(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     from api.routes.demo import enabled as demo_enabled
-    return {"role": db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "viewer",
-            "self_service": bool(demo_enabled()), "roles": list(SELF_ROLES)}
+    role = db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "viewer"
+    # an administrator is not offered the switch: it cannot give the role back (put_role)
+    return {"role": role, "self_service": bool(demo_enabled()) and role != "admin", "roles": list(SELF_ROLES)}
 
 
 @router.put("/role")
@@ -92,7 +93,11 @@ def put_role(body: RoleBody, db: Session = Depends(get_db), user: dict = Depends
     if role not in SELF_ROLES:
         raise HTTPException(status_code=422, detail=f"role must be one of {', '.join(SELF_ROLES)}")
     current = db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "viewer"
-    if not demo_enabled() and current != "admin":
+    if current == "admin":
+        # this route never grants admin, so an administrator who took another role here had no way back but the
+        # database, and the last one locked the instance out of its Users page
+        raise HTTPException(status_code=409, detail="An administrator's role is changed on the Users page by another administrator: this switch cannot give it back.")
+    if not demo_enabled():
         raise HTTPException(status_code=403, detail="Roles are assigned by your firm's admin.")
     uid = user["sub"]
     db.execute(text("UPDATE profiles SET role = :r WHERE id = :id"), {"r": role, "id": uid})

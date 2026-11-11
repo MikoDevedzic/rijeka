@@ -3,6 +3,38 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.13). Commits on `main` are the detail.
 
+## 0.22.1 · 11 November 2026
+
+**Nothing but an LEI is signed, and the public register gives out nothing but what its fields must be.** From the
+security review of sign-up, roles, modules and the register (item 6 of the Phase 1 exit list).
+
+- **What was wrong.** The public register page wrote what the API gave it into the page as markup, and the API
+  gave it the two parties' LEIs as typed. A legal entity's LEI was free text, and on a demo instance a signing key is
+  held for any LEI that begins DEMO, so an account could name its entity DEMO followed by markup, confirm a trade
+  with the demo counterparty and have it anchored and listed: a script on rijeka.app/confirmations for every
+  visitor. Found by reading the code; the 21 rows listed on 11 November carried none. The page was corrected and
+  deployed the same day (it writes every field as text). This release closes it on the server.
+- **A confirmation signs nothing but an LEI.** Twenty capital letters and digits (ISO 17442), checked where every
+  confirmation, amendment and termination resolves its parties, before a key is looked up. The Legal Entities page
+  writes its rows straight to the database, so the rule is held there and not only in the route. The route
+  (`POST` and `PUT /api/legal-entities`) refuses anything else too, stores an LEI in capitals, and stores an entity
+  with none as it always was (leaving the field out used to be an internal error).
+- **The register answers in shapes.** `GET /api/public/confirmations` gives a hash only when it is a hash, an
+  address only when it is an address, an LEI only when it is an LEI, a link only when it is an https address
+  without markup, and a product only in letters, digits and a few marks. Anything else is left out of the row.
+- **A counterparty is linked only to its owner's legal entity.** The route refuses another account's entity named
+  by its id, and a confirmation reads such a link (the page can write one) as no link.
+- **An administrator cannot take another role with the role switch.** `PUT /api/me/role` never grants admin, so
+  there was no way back but the database, and a lone administrator could lock the Users page for good. It is
+  refused, and an administrator is not offered the switch.
+- **Checked:** 1,319 unit and reference tests, 122 integration tests on the local stack; hostile rows through the
+  register answer leave no markup in it.
+- **Not in this release, stated:** the rule is not yet a constraint in the database (a migration, on the owner's
+  word), so a row written directly can still hold other text, which is then never signed or listed; the modules
+  answer still fails open in the browser (the held pages show if it does not arrive; their routes answer either
+  way); a role changed on the Users page is honoured up to 30 seconds late; `docs/schema.sql` is an older export
+  than the policies production runs.
+
 ## What Phase 1 is, said one way · 11 November 2026 (frontend only)
 
 **The home page and the roadmap say what the sign-in page says.** Asked for by the owner as the first line of the

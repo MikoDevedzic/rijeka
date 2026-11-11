@@ -91,9 +91,11 @@ def _load_parties(db: Session, trade: Trade, user_id) -> tuple[LegalEntity, Coun
 
 
 def _cp_identity(db: Session, cp: Counterparty) -> dict:
-    """Counterparty LEI/name: from its linked legal entity when it has one."""
+    """Counterparty LEI/name: from its linked legal entity when it has one, and only when that entity is the
+    counterparty's owner's: a link to another account's entity (the page writes the row directly, so the API's own
+    check does not see it) is read as no link."""
     if cp.legal_entity_id:
-        le = db.query(LegalEntity).filter(LegalEntity.id == cp.legal_entity_id).first()
+        le = db.query(LegalEntity).filter(LegalEntity.id == cp.legal_entity_id, LegalEntity.user_id == cp.user_id).first()
         if le is not None:
             return {"lei": le.lei, "name": le.name}
     return {"lei": None, "name": cp.name}
@@ -170,6 +172,14 @@ def _resolve_parties(db: Session, trade: Trade, parts: Optional[tuple] = None):
     """(own_key, cp_key, own_identity, cp_identity). Raises 422 with a usable message."""
     own, cp, cp_id, _ = parts or trade_parts(db, trade)
     own_id = {"lei": own.lei, "name": own.name}
+    # An LEI is signed into the record and printed on the public register. The Legal Entities page writes its rows
+    # straight to the database, so the rule is held here, where every confirmation, amendment and termination passes:
+    # a demo key signs for anything that begins DEMO, and nothing but an LEI may be signed.
+    from api.routes.legal_entities import LEI_RE
+    for who, ident in (("your own entity", own_id), ("the counterparty", cp_id)):
+        if ident.get("lei") and not LEI_RE.match(str(ident["lei"])):
+            raise HTTPException(status_code=422, detail=f"The LEI of {who} is not an LEI (20 capital letters and digits). "
+                                                        "Correct it under Configurations › Legal Entities, then confirm.")
     try:
         k_own = resolve_key(own_id)
         # A counterparty that registered a signing wallet on Rijeka signs with

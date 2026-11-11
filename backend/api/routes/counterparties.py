@@ -166,6 +166,20 @@ def get_counterparties(db: Session = Depends(get_db), user: dict = Depends(verif
     return [serialize(c, attrs.get(str(c.id))) for c in cps]
 
 
+def own_legal_entity(db: Session, user: dict, value) -> uuid.UUID:
+    """The legal entity a counterparty is linked to, which must be the caller's own: a confirmation takes the
+    counterparty's LEI and name from that record (api/routes/chain.py), so another account's entity, named by its id,
+    would be signed into this account's trades."""
+    from db.models import LegalEntity
+    try:
+        eid = uuid.UUID(str(value))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="legal_entity_id must be a UUID")
+    if db.query(LegalEntity.id).filter(LegalEntity.id == eid, LegalEntity.user_id == uuid.UUID(user["sub"])).first() is None:
+        raise HTTPException(status_code=422, detail="No legal entity of yours has that id.")
+    return eid
+
+
 @router.post("/")
 def create_counterparty(body: CounterpartyCreate, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     data = body.dict()
@@ -175,7 +189,7 @@ def create_counterparty(body: CounterpartyCreate, db: Session = Depends(get_db),
     if cap and not capital_columns_present(db):
         raise HTTPException(status_code=409, detail="Counterparty capital attributes need docs/migrations/2026-11-04_counterparty_capital.sql applied first")
     if data.get("legal_entity_id"):
-        data["legal_entity_id"] = uuid.UUID(data["legal_entity_id"])
+        data["legal_entity_id"] = own_legal_entity(db, user, data["legal_entity_id"])
     cp = Counterparty(
         id=uuid.uuid4(),
         **data,
@@ -203,10 +217,7 @@ def update_counterparty(
     if patch.get("csa_type") is not None and str(patch["csa_type"]).upper() not in ("VM_ONLY", "VM_IM", "NO_CSA"):
         raise HTTPException(status_code=422, detail="csa_type must be VM_ONLY, VM_IM or NO_CSA")
     if patch.get("legal_entity_id"):
-        try:
-            patch["legal_entity_id"] = uuid.UUID(str(patch["legal_entity_id"]))
-        except ValueError:
-            raise HTTPException(status_code=422, detail="legal_entity_id must be a UUID")
+        patch["legal_entity_id"] = own_legal_entity(db, user, patch["legal_entity_id"])
     cap = {k: patch.pop(k) for k in CAPITAL_FIELDS if k in patch}
     for k, v in patch.items():
         setattr(cp, k, v)

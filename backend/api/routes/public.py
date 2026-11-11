@@ -12,6 +12,7 @@ hours of Market News. Cached in-process for a minute; every field is
 optional so a slow RPC or an empty table never breaks the page.
 """
 import logging
+import re
 import threading
 import time
 from typing import Any, Optional
@@ -181,6 +182,20 @@ ORDER BY e.created_at DESC LIMIT :n
 _reg_cache: dict[str, Any] = {"at": 0.0, "body": None, "n": 0}
 
 
+# What the register prints came from what desks typed (an LEI, a product) and from the chain. Each field is given
+# out only in the shape it must have; anything else is left out of the row, so no page that draws the register
+# depends on escaping it (the public page escapes as well).
+_LEI = re.compile(r"^[A-Z0-9]{20}$")
+_WORD = re.compile(r"^[A-Za-z0-9_ ·./+-]{1,48}$")
+_HASH = re.compile(r"^0x[0-9a-fA-F]{64}$")
+_ADDRESS = re.compile(r"^0x[0-9a-fA-F]{40}$")
+_HTTPS = re.compile(r"^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._~/-]*)?$")
+
+
+def _shaped(v, rx):
+    return v if isinstance(v, str) and rx.match(v) else None
+
+
 def _register(db: Session, n: int) -> dict:
     rows = []
     seen: set = set()            # a package's legs each carry the package's record: the register lists it once
@@ -199,17 +214,21 @@ def _register(db: Session, n: int) -> dict:
             own, cp = parties.get("own") or {}, parties.get("counterparty") or {}
             rows.append({
                 # the hash the registry holds: for a leg of a package, the package's (one row for the package: below)
-                "trade_hash": (att.get("package") or {}).get("hash") or att.get("trade_hash"),
+                "trade_hash": _shaped((att.get("package") or {}).get("hash") or att.get("trade_hash"), _HASH),
                 "package": bool((att.get("package") or {}).get("hash")),
-                "block_number": anchor.get("block_number"), "tx_hash": anchor.get("tx_hash"),
-                "explorer_tx": anchor.get("explorer_tx"), "chain_id": anchor.get("chain_id"), "registry": anchor.get("registry"),
+                "block_number": anchor.get("block_number") if isinstance(anchor.get("block_number"), int) else None,
+                "tx_hash": _shaped(anchor.get("tx_hash"), _HASH),
+                "explorer_tx": _shaped(anchor.get("explorer_tx"), _HTTPS),
+                "chain_id": anchor.get("chain_id") if isinstance(anchor.get("chain_id"), int) else None,
+                "registry": _shaped(anchor.get("registry"), _ADDRESS),
                 "confirmed_at": anchor.get("confirmed_at"),
-                "parties": sorted([x for x in (own.get("lei"), cp.get("lei")) if x]),
-                "addresses": [own.get("address"), cp.get("address")],
+                "parties": sorted([x for x in (own.get("lei"), cp.get("lei")) if _shaped(x, _LEI)]),
+                "addresses": [_shaped(own.get("address"), _ADDRESS), _shaped(cp.get("address"), _ADDRESS)],
                 "bilateral": bool(att.get("bilateral")),
-                "key_sources": [own.get("key_source"), cp.get("key_source")],
-                "asset_class": r.asset_class, "instrument_type": r.instrument_type, "structure": r.structure,
-                "schema_version": att.get("schema_version"),
+                "key_sources": [_shaped(own.get("key_source"), _WORD), _shaped(cp.get("key_source"), _WORD)],
+                "asset_class": _shaped(r.asset_class, _WORD), "instrument_type": _shaped(r.instrument_type, _WORD),
+                "structure": _shaped(r.structure, _WORD),
+                "schema_version": att.get("schema_version") if isinstance(att.get("schema_version"), (int, str)) and _shaped(str(att.get("schema_version")), _WORD) else None,
             })
     except Exception as e:
         log.debug("register failed: %s", e)
