@@ -3,6 +3,26 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.13). Commits on `main` are the detail.
 
+## The tenancy tests run on the local stack · 11 November 2026 (tests only)
+
+**No test signs in to a hosted service any more.** Item 9 of the Phase 1 exit list.
+
+- **What was wrong.** `tests/test_rls_isolation.py` (25 tests: one account must never read, change or delete what
+  belongs to another) ran against a server on localhost:8000 with tokens fetched by signing in to the hosted auth
+  service, so on a developer's machine it wrote to whatever database that server was on. It was skipped in CI and
+  had to be deselected by hand locally.
+- **What it is now.** The same checks are `tests/integration/test_tenancy_isolation.py` (24 tests; the one that only
+  tested the hosted sign-in is gone): the stack's own tokens, the stack's database, in CI with every other
+  integration test. Market data, vol skew and SABR parameters, the XVA calibration, counterparties, legal
+  entities, trades, legs and confirmations are each tried from the other account.
+- **They clean up.** A calibration they save is dated 2099; left behind it is the "latest" one and the pinned
+  book's swap XVA then runs on it the next time the same database is used (seen on the first local run: CVA −2,090
+  → −2,733). The file removes what the harness does not truncate, before and after; the suite passes twice in a
+  row on one database and leaves nothing.
+- **Removed:** the fixtures in `tests/conftest.py` that read `.env.test` and signed in; the mentions of them in
+  `pytest.ini`, `CONTRIBUTING.md` and the CI file's comment.
+- **Checked:** 144 integration tests on the local stack, twice; 1,299 unit and reference tests; ruff.
+
 ## What Phase 1 is, said one way · 11 November 2026 (frontend only)
 
 **The home page and the roadmap say what the sign-in page says.** Asked for by the owner as the first line of the

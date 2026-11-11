@@ -44,7 +44,7 @@ python -m pytest -q -m integration tests/integration                # 59 tests, 
 ```
 
 They are skipped without `RIJEKA_STACK_DATABASE_URL`; CI runs them on a `postgres:16` service
-(`backend/stack/README.md`). The older `.env.test` RLS tests still want a Supabase project of your own.
+(`backend/stack/README.md`).
 Never point tests at a shared database: both suites write rows.
 
 ## Review
