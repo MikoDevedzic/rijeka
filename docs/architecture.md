@@ -428,6 +428,12 @@ journeys`): PostgREST on the stack database serves the reads the app makes throu
 the stack's key signs the browser in, and the journeys open every page, take the rates, FX and digital-asset tickets
 from pricing through XVA, capital, booking and confirmation, and assert the layout (results on screen, nothing
 clipped). A journey fails on any uncaught error, console error or failed API call (`frontend/e2e/README.md`).
+The stack has no chain, so those journeys end at a record that is signed and not anchored. `npm run e2e:chain` (the
+same CI job, after them) runs the stack with Foundry's `anvil` beside it and the committed registry deployed to it
+(`backend/stack/chain.py`, which refuses any node that is not a local test chain): a trade is confirmed through the
+API's own `EvmBackend`, and the journey reads the transaction, the registry's event and `isConfirmed` from the node
+itself, then the public register's row. It is the only test of the whole path from the button to a block; the
+hosted chain (Sepolia) is not touched by any test.
 
 `tests/integration/test_golden_book.py` is the pinned sample book: a fixed book on the stack's fixed market, valued
 with fixed seeds, 66 figures compared with `golden_book.json`; a figure moves only with a dated line in

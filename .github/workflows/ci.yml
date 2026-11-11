@@ -137,8 +137,15 @@ jobs:
           postgrest --version
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
+      - uses: foundry-rs/foundry-toolchain@v1      # anvil, for the journey that confirms on a chain
+        with: { version: stable }
       - name: journeys
         run: npm run e2e
+        working-directory: frontend
+      - name: journeys on a chain
+        # the same stack with a local test chain (anvil) and the registry deployed to it: a trade is confirmed, the
+        # transaction is read back from the node, and the public register lists it (frontend/e2e/chain)
+        run: npm run e2e:chain
         working-directory: frontend
       - name: logs and screenshots on failure
         if: failure()

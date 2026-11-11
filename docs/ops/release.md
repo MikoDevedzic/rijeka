@@ -10,6 +10,8 @@ this page is what to do, in order.
 - [ ] Frontend: `cd frontend && npm run lint -- --quiet && npm test && npm run build` (the lint is the one CI runs: `src`, the journeys and the config).
 - [ ] Backend: `cd backend && python -m pytest -q --ignore=tests/integration --ignore=tests/reference`.
 - [ ] **Quinn**: `cd frontend && npm run e2e` on the local stack. A new screen, tab or button has a journey.
+      A change to confirmation, the chain code, the CONFIRM tab or the public register also runs `npm run e2e:chain`
+      (a confirmation anchored on a local test chain; CI runs it on every pull request).
 - [ ] **Ada**, for a numbers change: `tests/reference`, the engine and replication tests, the pinned sample
       book; any movement has a line in `backend/tests/integration/GOLDEN_CHANGES.md`.
 - [ ] **Vera**, for anything larger than a hotfix: a fresh review of `git diff main...HEAD`.

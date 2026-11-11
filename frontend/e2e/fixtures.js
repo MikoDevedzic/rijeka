@@ -137,3 +137,32 @@ export async function simulateWithComparison(page, win, urlEnd) {
   const [a, b] = await Promise.all([own, cmp])
   return { run: await a.json(), onChain: await b.json(), request: a.request().postDataJSON() }
 }
+
+// how much of a canvas is drawn at full strength, in its left part (the river) and its right part (the letter and
+// ring), and a number that changes when the drawing does (`shape`: where the ink is, not only how much). The
+// waiting outline of the letter is faint and is not counted.
+export const ink = (canvas) => canvas.evaluate(cv => {
+  const { width: w, height: h } = cv, d = cv.getContext('2d').getImageData(0, 0, w, h).data
+  let river = 0, letter = 0, shape = 0
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 150) { if (x < w * 0.62) river++; else letter++; shape = (shape * 31 + y * w + x) % 2147483647 }
+  return { river, letter, shape }
+})
+
+// a swap against the demo bank, priced and booked, with its CONFIRM tab open
+export async function bookedSwap(app) {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()
+  await win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
+  const priced = app.waitForResponse(r => r.url().startsWith(API) && r.url().endsWith('/price/preview') && r.request().method() === 'POST')
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  await priced
+  const booked = app.waitForResponse(r => r.url().includes('/api/book/trade'))
+  await win.getByRole('button', { name: /BOOK TRADE/ }).click()
+  expect((await booked).status()).toBe(201)
+  await win.getByRole('button', { name: '◆ CONFIRM' }).click()
+  await expect(win).toContainText('PENDING')
+  return win
+}

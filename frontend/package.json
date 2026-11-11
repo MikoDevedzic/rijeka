@@ -13,6 +13,7 @@
     "design": "node scripts/check-design.mjs",
     "preview": "vite preview",
     "e2e": "playwright test",
+    "e2e:chain": "playwright test -c playwright.chain.config.js",
     "e2e:serve": "bash e2e/serve.sh"
   },
   "dependencies": {
