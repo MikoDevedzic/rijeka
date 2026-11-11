@@ -134,6 +134,41 @@ el("example").addEventListener("click", () => {
   el("run").click();
 });
 
+// ── Links ─────────────────────────────────────────────────────────────
+// #p=<base64url(deflate-raw(JSON))>  a shared proof pack: loaded and verified at once
+// #hash=0x…[&chain=11155111][&registry=0x…]  a bare hash from the public register:
+//        the registry is read for status, parties and block; full verification
+//        (recomputing the hash, checking the signatures) still needs the proof pack.
+const REGISTRIES = { 11155111: "0x920AE5AC65f72CB58af5bD3eF48168d9151dEd6e" };
+function b64urlToBytes(s){ s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; const bin = atob(s); const out = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i); return out; }
+async function inflate(bytes){
+  try { const ds = new DecompressionStream("deflate-raw"); const w = ds.writable.getWriter(); w.write(bytes); w.close();
+        return new TextDecoder().decode(await new Response(ds.readable).arrayBuffer()); }
+  catch (e) { return new TextDecoder().decode(bytes); }     // link was plain base64 JSON
+}
+async function checkHashOnly(hash, chainId, registry){
+  reset(); el("proof").value = "";
+  el("status").textContent = "reading the chain…";
+  const sel = el("rpc").value.split("|"); const url = sel[0] === "custom" ? el("rpcCustom").value.trim() : sel[0];
+  try {
+    const provider = new ethers.JsonRpcProvider(url);
+    const net = await provider.getNetwork();
+    if (chainId && Number(net.chainId) !== Number(chainId)) { add("fail", "wrong network", `link says chainId ${chainId}, this node is ${net.chainId}`); return; }
+    const c = new ethers.Contract(registry, ABI, provider);
+    const rec = await c.getConfirmation(hash);
+    const st = STATUS[Number(rec.status)] || "Unknown";
+    add(st === "Confirmed" ? "pass" : "fail", "registry status: " + st,
+        st === "None" ? "no confirmation exists on this chain for this hash"
+                      : `block ${rec.blockNumber} · ${new Date(Number(rec.confirmedAt) * 1000).toISOString()} · registry ${registry}`);
+    if (st !== "None") add("pass", "signing parties on-chain", rec.partyA + "  /  " + rec.partyB);
+    add("skip", "terms and signatures not checked", "this link carries only the hash. Ask either party for the proof pack to recompute the hash and recover both signatures.");
+    el("verdict").innerHTML = st === "Confirmed"
+      ? `<div class="verdict ok"><b>ANCHORED</b><span class="note">This hash is recorded as a confirmed trade on chain ${net.chainId}, in block ${rec.blockNumber}, between the two addresses above. To prove what was signed, verify the proof pack.</span></div>`
+      : `<div class="verdict bad"><b>NOT FOUND</b><span class="note">No confirmed record for this hash on this chain.</span></div>`;
+  } catch (e) { add("fail", "could not read the chain", e.message); }
+  el("status").textContent = "";
+}
+
 el("rpc").addEventListener("change", e => {
   el("rpcCustom").style.display = e.target.value.startsWith("custom") ? "block" : "none";
 });
@@ -283,6 +318,17 @@ el("run").addEventListener("click", async () => {
   }
   el("verdict").appendChild(v);
 });
+// link handling runs last, after every helper above is defined
+(async () => {
+  const h = new URLSearchParams(location.hash.replace(/^#/, ""));
+  if (h.get("p")) {
+    try { el("proof").value = JSON.stringify(JSON.parse(await inflate(b64urlToBytes(h.get("p")))), null, 2); el("run").click(); }
+    catch (e) { add("fail", "the proof link could not be decoded", e.message); }
+  } else if (h.get("hash")) {
+    const chain = h.get("chain") || "11155111";
+    checkHashOnly(h.get("hash"), chain, h.get("registry") || REGISTRIES[chain] || REGISTRIES[11155111]);
+  }
+})();
 </script>
 </body>
 </html>

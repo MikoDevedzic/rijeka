@@ -3,6 +3,21 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.12). Commits on `main` are the detail.
 
+## Public site · 11 November 2026
+
+Redeployed (rijeka.app is deployed on its own, not with the app).
+
+- **The verifier checks a leg inside its package.** rijeka.app/verify re-derives a leg's own record, finds its hash
+  among the package's legs and re-derives the package's hash. The live page had share links the repository's
+  source lacked (`#p=`, `#hash=`); the two were merged, not overwritten, and `chain/verify/index.html` is now the
+  same file as the live page.
+- **No SIMM on the public site.** The SIMM estimator page and its sample workbook are taken down (404), and every
+  mention is gone or reworded: the XVA simulator's margin input is "initial margin" from your own margin model.
+  One sentence says why: ISDA SIMM is ISDA's licensed methodology and is not included.
+- **Also carried by the deploy**, because a deploy replaces the whole site: the methodology PDF (v1.0 was still
+  live; now v1.12), the privacy notice v1.1 of 2 November (the app already showed it), and the home page's headline
+  naming options.
+
 ## 0.21.0 · 11 November 2026
 
 **What can be pressed, typed into or pointed at looks like it, across the app.**

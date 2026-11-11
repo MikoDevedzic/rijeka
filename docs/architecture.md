@@ -105,15 +105,19 @@ attestation. For a leg of a package `canonical` is the package record and `trade
 leg's own record and hash travel in `leg`.
 
 **The landing site** (`netlify_drop/`, git-ignored, deployed with the Netlify CLI): rijeka.app, the
-public tools (IRS pricer, XVA simulator and waterfall, SABR surface, Bermudan tree, attribution, SIMM),
+public tools (IRS pricer, XVA simulator and waterfall, SABR surface, Bermudan tree, attribution),
 the verifier, terms and privacy. It reads the API's public endpoints (pulse, calendar, the register of
 anchored confirmations). In the register `trade_hash` is the hash the registry holds (for a leg of a
 package, the package's; the leg's own is `leg_hash`), so a link into the verifier or the registry is by
 `trade_hash`. The verifier's source is `chain/verify/index.html` in the repository; the page at
 rijeka.app/verify is the copy in `netlify_drop/verify`, which changes only when the owner deploys the
-landing site, on its own schedule and not with the app's release. **Until the copy that knows packages
-is deployed, the live verifier proves a package's record (its hash, both signatures, its anchor) and
-does not check a leg's own terms inside it:** it ignores the proof's `leg` block.
+landing site, on its own schedule and not with the app's release. Since 11 November 2026 the two are the same
+file: the live page checks a leg inside its package, and the source has the link handling the live page had
+gained on its own (`#p=` a shared proof pack, `#hash=` a bare hash from the public register). A change to the
+verifier is made in the source and copied to `netlify_drop/verify`; before a deploy of the landing site the two
+are compared, and a difference that is not the change being shipped is resolved first, never overwritten. The
+public site carries no SIMM tool and no SIMM claim (taken down the same day): ISDA SIMM is licensed and is not
+included.
 
 ## Market data, source by source
 
