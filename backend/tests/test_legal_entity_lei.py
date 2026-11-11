@@ -36,7 +36,9 @@ def test_anything_else_is_refused_on_create_and_on_update(bad):
 
 @pytest.mark.parametrize("own_lei, cp_lei, who", [("DEMO<img src=x onerror=1>", "DEMO0000RIJEKABANK01", "your own entity"),
                                                   ("DEMO0000000A00004000", 'DEMO"><script>1</script>', "the counterparty"),
-                                                  ("demo0000000a00004000", "DEMO0000RIJEKABANK01", "your own entity")])
+                                                  ("demo0000000a00004000", "DEMO0000RIJEKABANK01", "your own entity"),
+                                                  ("DEMO0000000A00004000\n", "DEMO0000RIJEKABANK01", "your own entity"),
+                                                  ("DEMO0000000A00004000", "DEMO0000RIJEKABANK01\n", "the counterparty")])
 def test_a_confirmation_signs_nothing_but_an_lei(own_lei, cp_lei, who):
     """The Legal Entities page writes its rows straight to the database, past the route's rule, so the rule is held
     where every confirmation passes: before a key is looked up."""

@@ -23,17 +23,27 @@ security review of sign-up, roles, modules and the register (item 6 of the Phase
   address only when it is an address, an LEI only when it is an LEI, a link only when it is an https address
   without markup, and a product only in letters, digits and a few marks. Anything else is left out of the row.
 - **A counterparty is linked only to its owner's legal entity.** The route refuses another account's entity named
-  by its id, and a confirmation reads such a link (the page can write one) as no link.
+  by its id, and a confirmation or a trade card's countersigning reads such a link (the page can write one) as no
+  link.
 - **An administrator cannot take another role with the role switch.** `PUT /api/me/role` never grants admin, so
   there was no way back but the database, and a lone administrator could lock the Users page for good. It is
   refused, and an administrator is not offered the switch.
 - **Checked:** 1,319 unit and reference tests, 122 integration tests on the local stack; hostile rows through the
   register answer leave no markup in it.
+- **Reviewed twice by the security reviewer.** The second read found that `$` in the shape rules let a final
+  newline through and that a trade card still read a linked entity without its owner: every rule now matches the
+  whole string, and that read is scoped.
+- **What changes for a desk, stated:** a trade already confirmed whose party's LEI is not twenty capitals and digits
+  can still be read, verified and proved, and can no longer be amended or terminated until the LEI is corrected
+  (which changes what a new record hashes to); a party with no LEI at all is as before. The register leaves out an
+  explorer link that carries a query string or an underscore in its host. An administrator on the hosted demo no
+  longer has the role switch.
 - **Not in this release, stated:** the rule is not yet a constraint in the database (a migration, on the owner's
   word), so a row written directly can still hold other text, which is then never signed or listed; the modules
   answer still fails open in the browser (the held pages show if it does not arrive; their routes answer either
-  way); a role changed on the Users page is honoured up to 30 seconds late; `docs/schema.sql` is an older export
-  than the policies production runs.
+  way); a role changed on the Users page is honoured up to 30 seconds late, and the Users page itself can still
+  demote the last administrator; a legal entity's name is free text (it is signed and shown to the counterparty,
+  not on the public register); `docs/schema.sql` is an older export than the policies production runs.
 
 ## What Phase 1 is, said one way · 11 November 2026 (frontend only)
 

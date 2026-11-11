@@ -117,6 +117,14 @@ def test_the_register_gives_out_nothing_that_is_not_in_the_shape_its_field_must_
     assert c["addresses"] == [None, ADDR_B] and c["key_sources"] == [None, "registered"]
     import json
     assert not any(ch in json.dumps(b["confirmations"]) for ch in "<>") and "javascript" not in json.dumps(b), "no markup anywhere in the answer"
+    # a final newline is not part of any shape (a row written straight to the database can end in one)
+    nl = _att(own={"lei": LEI_A + "\n"})
+    nl["anchor"].update(explorer_tx="https://sepolia.etherscan.io/tx/" + H2 + "\n")
+    c = _register_of([_row(nl, instrument_type="IR_SWAP\n")])["confirmations"][0]
+    assert c["parties"] == [LEI_B] and c["explorer_tx"] is None and c["instrument_type"] is None
+    # a self-hosted explorer on its own port is kept
+    port = _att(); port["anchor"].update(explorer_tx="https://explorer.desk.example:8443/tx/" + H2)
+    assert _register_of([_row(port)])["confirmations"][0]["explorer_tx"] == "https://explorer.desk.example:8443/tx/" + H2
     # the labels the app writes today all pass: an option's structure, a package's
     ok = _register_of([_row(_att(), asset_class="FX", instrument_type="FX_OPTION", structure="DOUBLE_BARRIER")])["confirmations"][0]
     assert (ok["asset_class"], ok["instrument_type"], ok["structure"]) == ("FX", "FX_OPTION", "DOUBLE_BARRIER")

@@ -23,7 +23,7 @@ def clean_lei(v):
     if v is None:
         return None
     v = str(v).strip().upper()
-    if v and not LEI_RE.match(v):
+    if v and not LEI_RE.fullmatch(v):
         raise ValueError("an LEI is 20 capital letters and digits (ISO 17442)")
     return v
 

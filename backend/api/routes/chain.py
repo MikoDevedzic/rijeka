@@ -177,7 +177,7 @@ def _resolve_parties(db: Session, trade: Trade, parts: Optional[tuple] = None):
     # a demo key signs for anything that begins DEMO, and nothing but an LEI may be signed.
     from api.routes.legal_entities import LEI_RE
     for who, ident in (("your own entity", own_id), ("the counterparty", cp_id)):
-        if ident.get("lei") and not LEI_RE.match(str(ident["lei"])):
+        if ident.get("lei") and not LEI_RE.fullmatch(str(ident["lei"])):      # the whole string: `$` alone lets a final newline through
             raise HTTPException(status_code=422, detail=f"The LEI of {who} is not an LEI (20 capital letters and digits). "
                                                         "Correct it under Configurations › Legal Entities, then confirm.")
     try:

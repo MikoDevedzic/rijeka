@@ -189,11 +189,12 @@ _LEI = re.compile(r"^[A-Z0-9]{20}$")
 _WORD = re.compile(r"^[A-Za-z0-9_ ·./+-]{1,48}$")
 _HASH = re.compile(r"^0x[0-9a-fA-F]{64}$")
 _ADDRESS = re.compile(r"^0x[0-9a-fA-F]{40}$")
-_HTTPS = re.compile(r"^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._~/-]*)?$")
+_HTTPS = re.compile(r"^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$")
 
 
 def _shaped(v, rx):
-    return v if isinstance(v, str) and rx.match(v) else None
+    # the whole string, to its very end: `$` alone would let a final newline through
+    return v if isinstance(v, str) and rx.fullmatch(v) else None
 
 
 def _register(db: Session, n: int) -> dict:
