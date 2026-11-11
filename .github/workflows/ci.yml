@@ -37,7 +37,9 @@ jobs:
         run: python -m pytest -q -p no:cacheprovider
       - name: the production watch's own tests
         # .github/scripts/watch.py must fail when production is wrong: each check is given a good answer, then a broken one
-        run: python -m pytest -q -p no:cacheprovider ../.github/scripts
+        run: |
+          ruff check --config ruff.toml ../.github/scripts
+          python -m pytest -q -p no:cacheprovider ../.github/scripts
   frontend:
     name: frontend build
     runs-on: ubuntu-latest

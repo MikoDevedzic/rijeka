@@ -23,5 +23,6 @@ Learned on 11 November 2026
 - Before waiting for the API to report a commit, list what the commit changes (`git diff --name-only <live>..<sha>`): Render deploys only for a file under `backend/` that is not Markdown. On 11 November 2026 I waited nine minutes, then fifty, for a commit that changed `chain/verify/index.html`: Render was never going to deploy it, and the release move took it for an API change and waited too, so the app stayed a commit behind `main` until the rule was corrected (one rule now, in `backend/scheduler.py` and `release-sync.yml`).
 
 Rules
+- After the chain, look at production from the outside as a visitor's browser does: `backend/.venv/bin/python .github/scripts/watch.py --api-commit <sha> --app-commit <sha>` (leave out the flag for a side that did not deploy). It reads the batches, the scheduler, the chain node, CORS, the register's shape, every script the app's page names, the methodology PDF and the public site; `docs/ops/monitoring.md`. A commit on health is not the whole read-back: the app can be blank while health is green.
 - Never print secrets, tokens, connection strings or `.env` contents. Never paste credentials into a hosted dashboard.
 - Say what is verified and what is not. "Live" means the commit hash was read back from production, not that a push succeeded.

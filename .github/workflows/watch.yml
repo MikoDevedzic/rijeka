@@ -1,7 +1,8 @@
 # Production, looked at from the outside: the API's health (every batch current, the scheduler's loop alive, no
 # migration in trouble), the chain node and registry, the public register's rows in shape and free of markup, the
 # web app with every script it names, the methodology PDF, the public site with its verifier and register page.
-# One script, .github/scripts/watch.py: GET only, no sign-in, no secret. A failed run mails the owner.
+# One script, .github/scripts/watch.py: GET only, no sign-in, no secret. A failed run is mailed by GitHub to whoever
+# its notification settings name for this workflow (the owner, as for news-tick).
 #
 # GitHub's schedule is best-effort: on this repository a half-hourly and a five-minute workflow have each run
 # once every five to eight hours. So this is the deep check a few times a day, by hand, and after a deploy
@@ -26,7 +27,7 @@ concurrency:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12        # the script stops trying again after six minutes, so it ends with its report before this
     steps:
       - uses: actions/checkout@v4
         with: { persist-credentials: false }

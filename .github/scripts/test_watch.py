@@ -27,7 +27,7 @@ def health():
         "checks": {"news": {"ok": True, "last": "2026-11-11T23:28:59+00:00", "rule": "within 3h", "feeds": "the NEWS room"},
                    "pnl": {"ok": True, "last": "2026-11-11", "rule": "on or after 2026-11-10", "feeds": "P&L"}},
         "client_errors": {"last_24h": 0},
-        "scheduler": {"enabled": True, "last_cycle": (NOW - timedelta(seconds=20)).isoformat(),
+        "scheduler": {"enabled": True, "started_at": (NOW - timedelta(hours=5)).isoformat(), "last_cycle": (NOW - timedelta(seconds=20)).isoformat(),
                       "steps": {"news": {"at": "2026-11-11T23:28:59+00:00", "ok": True, "detail": {"posted": 2}}}},
         "migrations": {"enabled": True, "approved": 4, "applied": 4, "pending": 0, "problems": 0},
         "version": "0.23.0", "commit": SHA,
@@ -51,7 +51,7 @@ class TestHealth:
         (lambda d: d.update(checks={}), "no batch checks"),
         (lambda d: d["scheduler"].update(enabled=False), "scheduler: not enabled"),
         (lambda d: d["scheduler"].update(last_cycle=(NOW - timedelta(minutes=40)).isoformat()), "its loop last passed"),
-        (lambda d: d["scheduler"].update(last_cycle=None), "no last cycle"),
+        (lambda d: d["scheduler"].update(last_cycle=None), "has not passed its loop once"),
         (lambda d: d["scheduler"]["steps"]["news"].update(ok=False), "scheduler step failed: news"),
         (lambda d: d["migrations"].update(problems=1), "migrations: 1 in trouble"),
         (lambda d: d["client_errors"].update(last_24h=watch.CLIENT_ERRORS_MAX + 1), "browser errors"),
@@ -60,6 +60,18 @@ class TestHealth:
     def test_each_thing_that_can_be_wrong_is_said(self, change, says):
         found = watch.check_health(answer(broken(health, change)), NOW)
         assert any(says in f for f in found), found
+
+    def test_a_process_that_has_just_started_is_given_time(self):
+        just = lambda d: d["scheduler"].update(started_at=(NOW - timedelta(minutes=10)).isoformat(), last_cycle=None, steps={})   # noqa: E731
+        assert watch.check_health(answer(broken(health, just)), NOW) == []
+        late = lambda d: d["scheduler"].update(started_at=(NOW - timedelta(minutes=40)).isoformat(), last_cycle=None, steps={})   # noqa: E731
+        assert any("has not passed its loop once" in f for f in watch.check_health(answer(broken(health, late)), NOW))
+        # a pass with the daily batches in it is longer than a minute and is not an alarm; an hour is
+        slow = lambda d: d["scheduler"].update(last_cycle=(NOW - timedelta(minutes=20)).isoformat())                             # noqa: E731
+        assert watch.check_health(answer(broken(health, slow)), NOW) == []
+
+    def test_steps_in_a_shape_not_expected_do_not_end_the_run(self):
+        assert watch.check_health(answer(broken(health, lambda d: d["scheduler"].update(steps=["news"]))), NOW) == []
 
     def test_the_wrong_commit_is_said(self):
         assert watch.check_health(answer(health()), NOW, api_commit="deadbee") == ["the API runs ea5422c, not deadbee"]
@@ -122,7 +134,8 @@ class TestRegister:
 
     @pytest.mark.parametrize("change,says", [
         (lambda r: r.update(trade_hash="0x12"), "hash"),
-        (lambda r: r.update(tx_hash=None), "transaction"),
+        (lambda r: r.update(tx_hash="0x12"), "transaction"),
+        (lambda r: r.update(tx_hash=None), "explorer link"),            # no transaction, yet a link to one
         (lambda r: r.update(registry="registry"), "registry"),
         (lambda r: r.update(block_number=0), "block"),
         (lambda r: r.update(chain_id=31337), "chain 31337"),
@@ -131,11 +144,20 @@ class TestRegister:
         (lambda r: r.update(parties=["254900OPPU84GM83MG36", "short"]), "parties"),
         (lambda r: r.update(parties=["254900OPPU84GM83MG36\n", "DEMO0000RIJEKABANK01"]), "parties"),
         (lambda r: r.update(asset_class="CRYPTO; DROP"), "asset_class"),
+        (lambda r: r.update(tx_hash=None, explorer_tx="https://sepolia.etherscan.io/address/0x" + "ab" * 20), "explorer link"),
         (lambda r: r.update(bilateral="yes"), "bilateral"),
     ])
     def test_a_row_out_of_shape_is_said(self, change, says):
         found = watch.check_register(answer(register(rows=[broken(row, change)])))
         assert len(found) == 1 and says in found[0], found
+
+    def test_a_record_the_registry_already_held_has_no_transaction_and_links_to_the_registry(self):
+        recorded = broken(row, lambda r: r.update(tx_hash=None, explorer_tx=f"https://sepolia.etherscan.io/address/{REGISTRY}"))
+        assert watch.check_register(answer(register(rows=[recorded]))) == []
+        assert watch.check_register(answer(register(rows=[broken(row, lambda r: r.update(tx_hash=None, explorer_tx=None))]))) == []
+
+    def test_a_word_is_what_the_register_itself_allows(self):
+        assert watch.check_register(answer(register(rows=[broken(row, lambda r: r.update(structure="RISK REVERSAL", instrument_type="FX/NDF"))]))) == []
 
     def test_markup_anywhere_is_said(self):
         found = watch.check_register(answer(register(rows=[broken(row, lambda r: r.update(structure="<img src=x>"))])))
@@ -245,7 +267,7 @@ class TestRun:
     @pytest.mark.parametrize("url,a,what", [
         (f"{watch.API}/api/ops/health", Answer(0, "", b"refused", {}), "API health"),
         (f"{watch.API}/api/public/pulse", answer(pulse()), "the app and the site may read the API"),
-        (f"{watch.API}/api/public/confirmations?limit=200", answer({}, status=500), "public register"),
+        (f"{watch.API}/api/public/confirmations?limit={watch.REGISTER_ROWS}", answer({}, status=500), "public register"),
         (f"{watch.APP}/", answer("", status=503, type_="text/html"), "web app"),
         (f"{watch.SITE}/verify/", answer("gone", status=404, type_="text/html"), "public site"),
     ])
@@ -254,9 +276,10 @@ class TestRun:
         assert results[what], results
         assert [k for k, v in results.items() if v] == [what]
 
-    def test_a_node_that_does_not_answer_is_asked_once_more(self):
+    @pytest.mark.parametrize("blip", [lambda d: d["chain"].update(latest_block=None), lambda d: d.update(chain={"anchored": False})])
+    def test_a_node_that_does_not_answer_is_asked_once_more(self, blip):
         calls = []
-        slow = answer(broken(pulse, lambda d: d["chain"].update(latest_block=None)), headers={"access-control-allow-origin": watch.APP})
+        slow = answer(broken(pulse, blip), headers={"access-control-allow-origin": watch.APP})
         base = world()
 
         def get_(url, headers=None, **kw):
@@ -266,6 +289,16 @@ class TestRun:
             return base(url, headers=headers)
         assert all(p == [] for _, p in watch.run(get_=get_, now=NOW, pause_s=0))
         assert len(calls) == 2
+
+    def test_what_production_sent_cannot_give_the_runner_a_command(self, monkeypatch, capsys):
+        hostile = broken(row, lambda r: r.update(trade_hash="::error::x", chain_id="\n::stop-commands::t\x1b[31m" + "9" * 900))
+        found = watch.check_register(answer(register(rows=[hostile])))
+        monkeypatch.setattr(watch, "run", lambda *a, **k: [("public register", found)])
+        assert watch.main([]) == 1
+        out = capsys.readouterr().out
+        assert "::" not in out and "\x1b" not in out
+        assert all(len(line) <= 408 for line in out.splitlines())
+        assert out.count("\n") == 4                       # the line, its one problem, a blank, the count: nothing more
 
     def test_the_exit_code(self, monkeypatch, capsys):
         monkeypatch.setattr(watch, "run", lambda *a, **k: [("API health", []), ("web app", [])])
@@ -282,12 +315,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         _Handler.seen.append(self.path)
         n = sum(1 for p in _Handler.seen if p == self.path)
-        status = 404 if self.path == "/missing" else 500 if (self.path == "/flaky" and n < 3) or self.path == "/down" else 200
+        status = (404 if self.path == "/missing" else 500 if (self.path == "/flaky" and n < 3) or self.path == "/down"
+                  else 302 if self.path == "/moved" else 200)
         self.send_response(status)
+        if status == 302:
+            self.send_header("Location", "/ok")
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin") or "none")
         self.end_headers()
-        self.wfile.write(b'{"ok": true}')
+        self.wfile.write(b"x" * 300_000 if self.path == "/long" else b'{"ok": true}')
 
     def log_message(self, *a):
         pass
@@ -313,6 +349,25 @@ class TestGet:
         assert watch.get(f"{server}/flaky", wait_s=0).status == 200 and _Handler.seen.count("/flaky") == 3
         assert watch.get(f"{server}/down", wait_s=0).status == 500 and _Handler.seen.count("/down") == 3
         assert watch.get(f"{server}/missing", wait_s=0).status == 404 and _Handler.seen.count("/missing") == 1
+
+    def test_a_redirect_is_not_followed(self, server):
+        a = watch.get(f"{server}/moved", wait_s=0)
+        assert a.status == 302 and _Handler.seen == ["/moved"]
+
+    def test_an_answer_too_long_or_too_slow_is_no_answer(self, server, monkeypatch):
+        monkeypatch.setattr(watch, "BODY_MAX", 100_000)
+        a = watch.get(f"{server}/long", tries=1)
+        assert a.status == 0 and "longer than" in a.said
+        monkeypatch.setattr(watch, "BODY_MAX", 20_000_000)
+        monkeypatch.setattr(watch, "ANSWER_MAX_S", -1.0)
+        a = watch.get(f"{server}/long", tries=1)
+        assert a.status == 0 and "took longer" in a.said
+
+    def test_a_run_that_is_already_long_stops_trying_again(self, server, monkeypatch):
+        monkeypatch.setattr(watch, "_budget_ends", watch.time.monotonic() - 1)
+        assert watch.get(f"{server}/down", wait_s=0).status == 500 and _Handler.seen.count("/down") == 1
+        monkeypatch.setattr(watch, "_budget_ends", watch.time.monotonic() + 60)
+        assert watch.get(f"{server}/flaky", wait_s=0).status == 200 and _Handler.seen.count("/flaky") == 3
 
     def test_nothing_listening_is_no_answer_with_its_reason(self, server):
         a = watch.get(server.rsplit(":", 1)[0] + ":9", tries=2, wait_s=0, timeout=2)

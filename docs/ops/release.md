@@ -9,6 +9,8 @@ this page is what to do, in order.
       files are not yours.
 - [ ] Frontend: `cd frontend && npm run lint -- --quiet && npm test && npm run build` (the lint is the one CI runs: `src`, the journeys and the config).
 - [ ] Backend: `cd backend && python -m pytest -q --ignore=tests/integration --ignore=tests/reference`.
+      A change to `.github/scripts/` (the production watch): `ruff check --config ruff.toml ../.github/scripts &&
+      python -m pytest -q ../.github/scripts`, as CI's `backend tests` job runs them.
 - [ ] **Quinn**: `cd frontend && npm run e2e` on the local stack. A new screen, tab or button has a journey.
 - [ ] **Ada**, for a numbers change: `tests/reference`, the engine and replication tests, the pinned sample
       book; any movement has a line in `backend/tests/integration/GOLDEN_CHANGES.md`.

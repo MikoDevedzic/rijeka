@@ -16,7 +16,7 @@ What it reads (GET only, no sign-in, no secret, nothing written):
                the methodology PDF      the page itself by the host, so the type is read, not only the status)
   the site     /, /verify/, /confirmations/   they open; the verifier lists the registry the API anchors to
 
-The workflow `watch` runs it on GitHub's schedule and by hand; a failed run mails the owner. GitHub's schedule is
+The workflow `watch` runs it on GitHub's schedule and by hand; GitHub mails a failed run. GitHub's schedule is
 best-effort (a half-hourly workflow here has run every five to eight hours), so this is the deep check a few times a
 day and after every deploy, not a minute-by-minute alarm: docs/ops/monitoring.md says what covers the minutes.
 Standard library only, so it runs anywhere Python does.
@@ -39,14 +39,20 @@ API = "https://rijeka-api.onrender.com"
 APP = "https://app.rijeka.app"
 SITE = "https://rijeka.app"
 
-LOOP_MAX_AGE_S = 15 * 60          # the scheduler passes its loop every minute
+LOOP_MAX_AGE_S = 30 * 60          # the scheduler passes its loop every minute; a pass with the daily batches in it is longer
+STARTING_S = 25 * 60              # a new process waits, may wait on its own release (up to 15 minutes), then makes its first pass
+BODY_MAX = 20_000_000             # bytes read of one answer (the app's largest script is a few million)
+ANSWER_MAX_S = 90.0               # one answer, start to end, however slowly it is sent
+RUN_BUDGET_S = 6 * 60             # after this a run stops trying again and waits less, so it ends with its report
+REGISTER_ROWS = 100               # the size the public register page itself asks for: the same cached answer, not another
+_budget_ends: Optional[float] = None
 CLIENT_ERRORS_MAX = 25            # errors the browsers reported in 24 hours
 CHAINS = {1: "https://etherscan.io/", 11155111: "https://sepolia.etherscan.io/"}
 
 HASH = re.compile(r"0x[0-9a-fA-F]{64}")
 ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}")
 LEI = re.compile(r"[A-Z0-9]{20}")
-WORD = re.compile(r"[A-Za-z0-9_.-]{1,40}")
+WORD = re.compile(r"[A-Za-z0-9_ ·./+-]{1,48}")      # as the register's own rule (api/routes/public.py _WORD)
 COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
@@ -84,16 +90,43 @@ def _tls() -> ssl.SSLContext:
     return ctx
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect is not followed: the answer read is the named host's own, or it is a failure (HTTP 301, 302…)."""
+
+    def redirect_request(self, *a, **k):
+        return None
+
+
+def _read(r, deadline: float) -> bytes:
+    """The body, to BODY_MAX and to the deadline: an answer that is too long or too slow is no answer."""
+    chunks, size = [], 0
+    while True:
+        chunk = r.read(65536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+        size += len(chunk)
+        if size > BODY_MAX:
+            raise ValueError(f"the answer is longer than {BODY_MAX} bytes")
+        if time.monotonic() > deadline:
+            raise TimeoutError(f"the answer took longer than {ANSWER_MAX_S:.0f} seconds")
+
+
 def get(url: str, headers: Optional[dict] = None, tries: int = 3, wait_s: float = 8.0, timeout: float = 30.0) -> Answer:
     """One GET, tried again on no answer or a 5xx (a deploy in progress, a node restarting)."""
     last = Answer(0, "", b"", {})
+    opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=_tls()), _NoRedirect)
+    if _budget_ends is not None and time.monotonic() > _budget_ends:      # a run that is already long: one try, a short wait
+        tries, timeout = 1, min(timeout, 10.0)
     for attempt in range(tries):
         if attempt:
+            if _budget_ends is not None and time.monotonic() > _budget_ends:
+                break
             time.sleep(wait_s)
         req = urllib.request.Request(url, headers={"User-Agent": "rijeka-watch", **(headers or {})})
         try:
-            with urllib.request.urlopen(req, timeout=timeout, context=_tls()) as r:
-                return Answer(r.status, r.headers.get_content_type(), r.read(), {k.lower(): v for k, v in r.headers.items()})
+            with opener.open(req, timeout=timeout) as r:
+                return Answer(r.status, r.headers.get_content_type(), _read(r, time.monotonic() + ANSWER_MAX_S), {k.lower(): v for k, v in r.headers.items()})
         except urllib.error.HTTPError as e:
             last = Answer(e.code, e.headers.get_content_type() if e.headers else "", e.read() or b"", {})
             if e.code < 500:
@@ -138,12 +171,15 @@ def check_health(a: Answer, now: datetime, api_commit: Optional[str] = None) -> 
     if sch.get("enabled") is not True:
         out.append("scheduler: not enabled")
     else:
-        last = _when(sch.get("last_cycle"))
+        last, started = _when(sch.get("last_cycle")), _when(sch.get("started_at"))
+        starting = started is not None and (now - started).total_seconds() <= STARTING_S      # just deployed or restarted
         if last is None:
-            out.append("scheduler: no last cycle reported")
+            if not starting:
+                out.append(f"scheduler: started at {sch.get('started_at')} and has not passed its loop once")
         elif (now - last).total_seconds() > LOOP_MAX_AGE_S:
             out.append(f"scheduler: its loop last passed at {sch.get('last_cycle')} (more than {LOOP_MAX_AGE_S // 60} minutes ago)")
-        for name, s in (sch.get("steps") or {}).items():
+        steps = sch.get("steps") if isinstance(sch.get("steps"), dict) else {}
+        for name, s in steps.items():
             if isinstance(s, dict) and s.get("ok") is False:
                 out.append(f"scheduler step failed: {name} at {s.get('at')}: {str(s.get('detail'))[:200]}")
     mig = d.get("migrations") if isinstance(d.get("migrations"), dict) else {}
@@ -209,7 +245,10 @@ def _row_problems(r: dict) -> list[str]:
     bad = []
     if not _is(HASH, r.get("trade_hash")):
         bad.append("hash")
-    if not _is(HASH, r.get("tx_hash")):
+    # a record the registry already held when its transaction was retried is anchored with no transaction of its own
+    # (chain/attestation.py _recorded): no hash, and the link is to the registry
+    tx = r.get("tx_hash")
+    if tx is not None and not _is(HASH, tx):
         bad.append("transaction")
     if not _is(ADDRESS, r.get("registry")):
         bad.append("registry")
@@ -218,7 +257,8 @@ def _row_problems(r: dict) -> list[str]:
     explorer = CHAINS.get(r.get("chain_id"))
     if explorer is None:
         bad.append(f"chain {r.get('chain_id')}")
-    if r.get("explorer_tx") is not None and not (explorer and isinstance(r["explorer_tx"], str) and r["explorer_tx"] == f"{explorer}tx/{r.get('tx_hash')}"):
+    links = {f"{explorer}tx/{tx}"} if tx else {f"{explorer}address/{r.get('registry')}"}
+    if r.get("explorer_tx") is not None and not (explorer and r["explorer_tx"] in links):
         bad.append("explorer link")
     parties = r.get("parties")
     if not (isinstance(parties, list) and len(parties) <= 2 and all(_is(LEI, p) for p in parties)):
@@ -305,13 +345,13 @@ def run(api_commit: Optional[str] = None, app_commit: Optional[str] = None, get_
 
     pulse = get_(f"{API}/api/public/pulse", headers={"Origin": APP})
     found = check_pulse(pulse)
-    if any("node did not answer" in f for f in found):          # the pulse is cached a minute: one slow node is not an outage
+    if any(f.startswith("chain:") for f in found):              # the pulse is cached a minute: one slow node is not an outage
         time.sleep(pause_s)
         pulse = get_(f"{API}/api/public/pulse", headers={"Origin": APP})
         found = check_pulse(pulse)
     results.append(("chain and published market", found))
     cors = check_cors(pulse, APP) if pulse.status == 200 else []
-    from_site = get_(f"{API}/api/public/confirmations?limit=200", headers={"Origin": SITE})
+    from_site = get_(f"{API}/api/public/confirmations?limit={REGISTER_ROWS}", headers={"Origin": SITE})
     if from_site.status == 200:
         cors += check_cors(from_site, SITE)
     results.append(("the app and the site may read the API", cors))
@@ -323,18 +363,27 @@ def run(api_commit: Optional[str] = None, app_commit: Optional[str] = None, get_
     return results
 
 
+def plain(line: str, limit: int = 400) -> str:
+    """A line of the report, safe to print in a public log: what production sent is in it, so only printable ASCII
+    is kept, its length is bounded, and it cannot hold the `::` that begins a command to the workflow runner."""
+    kept = "".join(c if 32 <= ord(c) < 127 else "?" for c in str(line))
+    return kept.replace("::", ": :")[:limit]
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Production, looked at from the outside. Exit 1 when a check fails.")
     p.add_argument("--api-commit", help="the commit the API must report (a prefix is enough)")
     p.add_argument("--app-commit", help="the commit the web app must have been built from (a prefix is enough)")
     a = p.parse_args(argv)
+    global _budget_ends
+    _budget_ends = time.monotonic() + RUN_BUDGET_S
     results = run(a.api_commit, a.app_commit)
     failed = 0
     for what, problems in results:
         print(("FAIL  " if problems else "ok    ") + what)
         for line in problems:
             failed += 1
-            print("        " + line)
+            print("        " + plain(line))
     print(f"\n{failed} problem(s)" if failed else "\nnothing wrong")
     return 1 if failed else 0
 

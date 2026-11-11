@@ -3,7 +3,9 @@
 # current and fails the run (which mails the owner) when one is stale.
 # The API runs the same sequence in-process on Render (backend/scheduler.py), on time; GitHub's
 # schedule is best-effort (three runs on 2026-10-30 instead of 48), so this is the second driver
-# and the alarm. Every batch is idempotent for a day: two drivers cost time, not correctness.
+# and the alarm for a stale batch. Every batch is idempotent for a day: two drivers cost time, not correctness.
+# What "stale" means is decided in one place, the API (api/routes/ops.py); this workflow and the `watch`
+# workflow (which looks at the rest of production from outside) both read it from /api/ops/health.
 # Secrets: RIJEKA_API_URL (e.g. https://rijeka-api.onrender.com),
 #          RIJEKA_CRON_SECRET (same value as the backend's env var).
 name: news-tick
