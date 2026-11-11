@@ -166,7 +166,7 @@
 .ms-compose-row { display: flex; gap: 6px; }
 .ms-compose textarea {
   flex: 1; resize: none; min-height: 40px; max-height: 140px; background: var(--panel-2);
-  border: 1px solid var(--border-hi); color: var(--text); border-radius: 2px; outline: none;
+  border: 1px solid var(--fld-bd); color: var(--text); border-radius: 2px; outline: none;
   font-family: inherit; font-size: 13px; line-height: 1.45; padding: 9px 11px;
 }
 .ms-compose textarea:focus { border-color: var(--accent); }
@@ -200,7 +200,7 @@
 .ms-label { display: flex; flex-direction: column; gap: 5px; font-family: 'IBM Plex Mono', var(--mono); font-size: 12px; letter-spacing: 0.08em; color: var(--text-dim); }
 .ms-label .ms-sub { font-family: 'IBM Plex Sans', system-ui, sans-serif; letter-spacing: 0; }
 .ms-label input, .ms-label select {
-  background: var(--bg); border: 1px solid var(--border-hi); color: var(--text); border-radius: 2px;
+  background: var(--bg); border: 1px solid var(--fld-bd); color: var(--text); border-radius: 2px;
   font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; padding: 8px 10px; outline: none; letter-spacing: 0;
 }
 .ms-label input:focus, .ms-label select:focus { border-color: var(--accent); }

@@ -129,6 +129,10 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   })
   await expect.poll(inked, { message: 'the seal is drawn after the tab comes back into view', timeout: 15_000 }).toBeGreaterThan(5000)
   await expectNoHorizontalOverflow(cert, 'the certificate')
+  // the certificate is paper with its own inks: the app's raised buttons and wells stop at its edge
+  const paper = await cert.locator('button').evaluateAll(els => els.map(e => getComputedStyle(e).backgroundColor))
+  expect(paper.length, 'the certificate has buttons').toBeGreaterThan(0)
+  expect(paper, 'none of them is the app\'s raised face').not.toContain('rgb(33, 73, 63)')
   await app.screenshot({ path: 'e2e/.out/shots/rates-confirmed.png' })
 
   expectClean(problems)

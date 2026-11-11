@@ -15,7 +15,7 @@ test('buttons are raised, fields are wells with a ring in focus, and the row und
   expect(await css(row, 'backgroundColor'), 'a row at rest has no band').not.toBe(BAND)
   await row.hover()
   await expect.poll(() => css(row, 'backgroundColor')).toBe(BAND)
-  expect(await css(row, 'boxShadow'), 'and a rule at its edge').toMatch(/inset/)
+  expect(await css(row.locator('td').first(), 'boxShadow'), 'and a rule at the edge of its first cell').toMatch(/inset/)
   expect(await css(app.locator('.bl-search'), 'backgroundColor')).toBe(WELL)
 
   // the ticket: the legs' buttons are raised and go down when pressed; a strike is a well, ringed in brass while typed in
@@ -29,15 +29,18 @@ test('buttons are raised, fields are wells with a ring in focus, and the row und
   const add = win.getByTestId('fx-legs-add')
   expect(await css(add, 'backgroundColor')).toBe(RAISED)
   expect(await css(add, 'boxShadow'), 'it stands on a foot').not.toBe('none')
+  // a button that cannot be pressed is flat: BOOK on a ticket with no counterparty is not this case (it is brass),
+  // so the rule is read where it is: a disabled raised button has no face
+  expect(await win.locator('.tbw-btn-price').evaluate(el => { const c = el.cloneNode(true); c.disabled = true; el.parentNode.appendChild(c); const s = getComputedStyle(c); const out = [s.backgroundColor, s.boxShadow]; c.remove(); return out })).toEqual(['rgba(0, 0, 0, 0)', 'none'])
   await add.hover()
   await expect.poll(() => css(add, 'backgroundColor'), { message: 'it lifts under the pointer' }).not.toBe(RAISED)
   await add.click()
   const strike = win.getByTestId('fx-leg').nth(0).getByLabel('Strike of leg 2')
   await app.mouse.move(5, 5)
-  expect(await css(strike, 'backgroundColor')).toBe(WELL)
+  await expect.poll(() => css(strike, 'backgroundColor')).toBe(WELL)
   await strike.focus()
-  expect(await css(strike, 'backgroundColor')).toBe(WELL_FOCUS)
-  expect(await css(strike, 'outlineColor')).toBe(BRASS_HI)
+  await expect.poll(() => css(strike, 'backgroundColor')).toBe(WELL_FOCUS)
+  await expect.poll(() => css(strike, 'outlineColor')).toBe(BRASS_HI)
   expect(await css(strike, 'outlineStyle')).toBe('solid')
   // the row of a leg answers the pointer too
   const leg = win.getByTestId('fx-leg').nth(0)
@@ -50,9 +53,12 @@ test('buttons are raised, fields are wells with a ring in focus, and the row und
 
   // the other families: a P&L button, a workbook button, the methodology's own
   await app.goto('/pnl')
-  const pnl = app.locator('.pnl-btn:not(.ghost)').first()
+  const pnl = app.locator('.pnl-btn:not(.ghost):not(:disabled)').first()
   await expect(pnl).toBeVisible()
   expect(await css(pnl, 'backgroundColor')).toBe(RAISED)
+  // one that cannot be pressed just now is flat
+  const off = app.locator('.pnl-btn:not(.ghost):disabled').first()
+  if (await off.count()) expect(await css(off, 'boxShadow')).toBe('none')
   await app.goto('/methodology/replications')
   const doc = app.locator('.doc-btn').first()
   await expect(doc).toBeVisible({ timeout: 20_000 })

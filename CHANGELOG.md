@@ -22,6 +22,8 @@ methodology document carries its own version (v1.12). Commits on `main` are the 
   side, a selected state, a warning). Icons and links without an edge are left as they are.
 - Not changed: the sign-in pages (their own scene) and the certificate (paper). Tabs and the rail's filters keep
   their look; a chip that is not selected has a clearer edge.
+- A button that cannot be pressed is flat: no face and no foot. A colour set on one button (a red TERMINATE)
+  stands over the family's look. The rule at a row's edge is drawn on its first cell, where every browser paints it.
 
 ## 0.20.0 · 10 November 2026
 

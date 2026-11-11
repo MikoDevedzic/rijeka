@@ -105,7 +105,7 @@
 .mr-wb td.v { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--text-hi); white-space: nowrap; }
 .mr-wb td.v.pos { color: var(--up); } .mr-wb td.v.neg { color: var(--down); }
 .mr-wb tr.out td { background: var(--panel); }
-.mr-wb input { width: 124px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-2); padding: 4px 7px; font-family: var(--mono); font-size: 13px; text-align: right; color: var(--text-hi); box-shadow: inset 0 -2px 0 var(--accent-dim); }
+.mr-wb input { width: 124px; background: var(--bg); border: 1px solid var(--fld-bd); border-radius: var(--r-2); padding: 4px 7px; font-family: var(--mono); font-size: 13px; text-align: right; color: var(--text-hi); box-shadow: inset 0 -2px 0 var(--accent-dim); }
 .mr-wb input[aria-invalid="true"] { border-color: var(--amber); color: var(--amber); box-shadow: none; }
 .mr-wb-foot { padding: 8px 12px; font-size: 12px; line-height: 1.5; color: var(--text-mute); border-top: 1px solid var(--border); }
 

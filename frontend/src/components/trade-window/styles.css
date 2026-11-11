@@ -45,7 +45,7 @@
 .tbw-window input, .tbw-window select {
   background: var(--bg);
   color: var(--text-hi);
-  border: 1px solid var(--border);
+  border: 1px solid var(--fld-bd);
   border-radius: var(--r-2);
   padding: 7px 9px;
   font-size: 12.5px;

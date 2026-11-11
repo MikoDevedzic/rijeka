@@ -70,7 +70,7 @@
   background: var(--panel);
   flex-shrink: 0;
 }
-.bl-search { flex: 1; background: var(--bg); border: 1px solid var(--border);
+.bl-search { flex: 1; background: var(--bg); border: 1px solid var(--fld-bd);
   color: var(--text); font-family: var(--sans); font-size: 0.9rem;
   padding: 7px 10px; border-radius: var(--r-2); outline: none;
   transition: border-color 0.15s; }
@@ -96,9 +96,10 @@
                         of half-lit rows behind a moving pointer and four times the painting */
 }
 /* the trade under the pointer: a band, a rule at its edge, its text at full strength; the selected one in brass */
-.bl-row:hover { background: var(--row-hover); box-shadow: inset 3px 0 0 var(--row-rule); }
+.bl-row:hover { background: var(--row-hover); }
 .bl-row:hover td { color: var(--text-hi); }
-.bl-row-selected { background: var(--row-sel) !important; box-shadow: inset 3px 0 0 var(--accent) !important; }
+.bl-row-selected { background: var(--row-sel) !important; }
+.bl-row-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent) !important; }
 .bl-table td { height: 32px; padding: 0 8px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bl-td-ref { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text-hi); }
 .bl-td-dim         { color: var(--text-dim) !important; }
