@@ -20,6 +20,8 @@ the repository.
 |---|---|---|---|
 | `RIJEKA_JWKS_FILE` | `middleware/auth.py` | empty (fetch from `SUPABASE_URL`) | Opt-in: verify tokens against the ES256 key set in this JSON file instead of the project's published keys. `backend/stack/keys.py` writes it; `stack/token.py` signs with its private half. Logged once at first use. The local stack and CI only; never in `render.yaml`. |
 | `RIJEKA_STACK_DATABASE_URL` | `backend/stack/*.py`, `tests/integration/conftest.py` | empty (the integration tests skip) | The disposable Postgres the stack scripts build and the integration tests truncate and run against. The harness refuses a Supabase host. |
+| `RIJEKA_E2E_CHAIN` | `frontend/e2e/serve.sh` | empty (no chain: a record is signed, not anchored) | `1` starts Foundry's `anvil` on `127.0.0.1:8546` beside the journeys' stack, deploys the committed registry to it (`backend/stack/chain.py`) and gives the API its three chain settings; a developer's other chain settings (`RIJEKA_CHAIN_RPC_FALLBACK`, `_EXPLORER`, `_MAX_FEE_GWEI`, the daily limits, `_SYNC_WAIT_S`, every `RIJEKA_CHAIN_KEY_*`) are unset for the run. Set by `playwright.chain.config.js` (`npm run e2e:chain`). |
+| `RIJEKA_E2E_BUILD_FLAGS` | `frontend/e2e/serve.sh` | empty | Extra flags for the journeys' `vite build`; `playwright.perf.config.js` sets `--minify false` so a slow frame names its function. |
 
 ### Hosted demo
 

@@ -10,6 +10,7 @@ npm run e2e                 # starts the stack, builds the app against it, runs 
 npm run e2e -- pages        # one file
 npm run e2e:chain           # the journeys that need a chain: the same stack with a local test chain beside it (below)
 npm run e2e:serve           # the stack alone, to click through by hand at http://127.0.0.1:4174 (signed out: see below)
+npx playwright test -c playwright.perf.config.js   # the smoothness profile (e2e/perf): a measurement, local only (docs/design.md)
 ```
 
 Nothing here touches production. `serve.sh` refuses a hosted database.
@@ -22,7 +23,6 @@ Nothing here touches production. `serve.sh` refuses a hosted database.
 | REST | `127.0.0.1:3010` | PostgREST on that database, for the reads the app makes through supabase-js (profiles, trades, counterparties, legal entities, org nodes); row-level security applies as on Supabase (`backend/stack/rest.sql`) |
 | API | `127.0.0.1:8010` | `uvicorn main:app` with the stack's environment; rate limits off (`RIJEKA_RATE_LIMITS=0`, honoured only on the stack) |
 | Web | `127.0.0.1:4174` | `vite build` against the two above, served by `vite preview` |
-
 | Chain | `127.0.0.1:8546`, only under `npm run e2e:chain` | Foundry's `anvil` with the committed registry deployed to it (`backend/stack/chain.py`), and the API told where it is. Without it the stack has no chain, as a self-hosted instance may not: a record is signed and not anchored |
 
 Sign-in: there is no hosted auth server. `serve.sh` mints a four-hour token per seed user with the stack's key

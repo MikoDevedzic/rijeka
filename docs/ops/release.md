@@ -22,6 +22,9 @@ this page is what to do, in order.
       stale; nothing checks that the PDF is the source's, so read its first and last page).
 - [ ] `CHANGELOG.md` and `backend/version.py` for a release that changes behaviour. A fix with nothing under
       `backend/` (frontend, docs, the verifier's page) leaves `version.py` alone so the API does not restart.
+      The other way round: any file under `backend/` that is not Markdown restarts the API and the worker, a test or
+      a stack script included (`render.yaml`: `rootDir: backend`), with or without a version: wait for health to
+      report the commit before the app's release is moved.
 
 ## 2. Freeze windows
 

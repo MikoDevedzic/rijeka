@@ -104,7 +104,8 @@ jobs:
     name: browser journeys
     # Quinn (.claude/agents/quinn.md): the built app on the local stack, in a real browser. Every page opens without
     # an error; the rates, FX and digital-asset tickets are priced, run through XVA with the on-chain comparison,
-    # capital, booking and confirmation; the results fit a laptop screen. frontend/e2e/README.md.
+    # capital, booking and confirmation; the results fit a laptop screen. Then the same stack with a local test chain
+    # (anvil): a confirmation anchored for real and read back from the node. frontend/e2e/README.md.
     runs-on: ubuntu-latest
     services:
       postgres:

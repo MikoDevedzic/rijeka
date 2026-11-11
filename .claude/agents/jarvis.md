@@ -23,5 +23,7 @@ Learned on 11 November 2026
 - Before waiting for the API to report a commit, list what the commit changes (`git diff --name-only <live>..<sha>`): Render deploys only for a file under `backend/` that is not Markdown. On 11 November 2026 I waited nine minutes, then fifty, for a commit that changed `chain/verify/index.html`: Render was never going to deploy it, and the release move took it for an API change and waited too, so the app stayed a commit behind `main` until the rule was corrected (one rule now, in `backend/scheduler.py` and `release-sync.yml`).
 
 Rules
+- A change to confirmation, the chain code, the CONFIRM tab or the public register has `npm run e2e:chain` green as well as `npm run e2e` (`docs/ops/release.md`): the plain journeys have no chain and end at a record that is signed, not anchored.
+- A change that touches only tests or stack scripts under `backend/` still restarts the API and the worker (any file under `backend/` that is not Markdown does): wait for health to report the commit.
 - Never print secrets, tokens, connection strings or `.env` contents. Never paste credentials into a hosted dashboard.
 - Say what is verified and what is not. "Live" means the commit hash was read back from production, not that a push succeeded.
