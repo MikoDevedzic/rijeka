@@ -69,24 +69,30 @@ const cubic = (a, b, d, e, n = 20) => {
   }
   return out
 }
-// The letter and its ring as strokes, in the order a pen would make them: stem, bowl, leg, then the ring from the
-// gap round to the gap.
+// The letter as strokes, in the order a pen would make them (stem, bowl, leg), and the ring from the gap round to
+// the gap. They are drawn apart: the letter is the name's, the ring is the seal, and a seal can wait for the chain.
 const LETTER = [
   { w: 3.6, pts: [[STEM, 84], [STEM, 57]] },
   { w: 3.6, pts: [[STEM, 57], [167, 57], ...cubic([167, 57], [178, 57], [178, 70], [167, 70]), [STEM, 70]] },
   { w: 3.6, pts: [[166, 70], [177, 84]] },
-  { w: 2.6, pts: Array.from({ length: 73 }, (_, i) => { const a = Math.PI + GAP + (2 * Math.PI - 2 * GAP) * i / 72; return [RING_X + RING_R * Math.cos(a), 70 + RING_R * Math.sin(a)] }) },
 ]
-const LETTER_LEN = LETTER.reduce((sum, st) => {
+const RING = [{ w: 2.6, pts: Array.from({ length: 73 }, (_, i) => { const a = Math.PI + GAP + (2 * Math.PI - 2 * GAP) * i / 72; return [RING_X + RING_R * Math.cos(a), 70 + RING_R * Math.sin(a)] }) }]
+const lengthOf = (strokes) => strokes.reduce((sum, st) => {
   st.len = 0
   for (let i = 1; i < st.pts.length; i++) st.len += Math.hypot(st.pts[i][0] - st.pts[i - 1][0], st.pts[i][1] - st.pts[i - 1][1])
   return sum + st.len
 }, 0)
+const LETTER_LEN = lengthOf(LETTER), RING_LEN = lengthOf(RING)
+/** One progress for both, by length: how much of the letter, then how much of the ring. */
+export const letterThenRing = (p) => {
+  const drawn = clamp(p) * (LETTER_LEN + RING_LEN)
+  return { letter: clamp(drawn / LETTER_LEN), ring: clamp((drawn - LETTER_LEN) / RING_LEN) }
+}
 
-function letter(c, X, Y, sc, frac, colour) {
-  let left = LETTER_LEN * clamp(frac)
+function strokes(c, X, Y, sc, list, total, frac, colour) {
+  let left = total * clamp(frac)
   c.strokeStyle = colour
-  for (const st of LETTER) {
+  for (const st of list) {
     if (left <= 0) break
     c.lineWidth = Math.max(1.1, st.w * sc)
     c.beginPath(); c.moveTo(X(st.pts[0][0]), Y(st.pts[0][1]))
@@ -104,7 +110,8 @@ function letter(c, X, Y, sc, frac, colour) {
  *   pal       palette()                           spread   how far apart the paths start, in units (46)
  *   x0        where the paths start (18)          box      the unit height the drawing is fitted to (140)
  *   progress  how much of each path is drawn      trunk    how much of the single line
- *   letter    how much of the R and its ring      ghost    0..1: the R and ring as a faint outline, waiting
+ *   letter    how much of the R, and of its ring unless `ring` says otherwise
+ *   ring      how much of the ring alone (a seal that waits)  ghost  0..1: the R and ring as a faint outline, waiting
  *   alpha     of the whole                        minw     the least width of a path, in pixels
  *   amin      how faint the outermost path is (0.4)  mono  every path in the line's colour (one-colour uses)
  * Returns the scale used (pixels per unit) and the left edge, so a caller can set type beside it.
@@ -131,12 +138,14 @@ export function drawMark(c, w, h, o) {
     c.strokeStyle = g; c.lineWidth = Math.max(o.minw || 0.8, 1.6 * sc); c.globalAlpha = A * (amin + (1 - amin) * (1 - Math.abs(off))); c.stroke()
   }
   c.globalAlpha = A
-  const trunk = o.trunk == null ? 1 : o.trunk, lt = o.letter == null ? 1 : o.letter
+  const trunk = o.trunk == null ? 1 : o.trunk
+  const both = letterThenRing(o.letter == null ? 1 : o.letter), lt = o.ring == null ? both.letter : clamp(o.letter == null ? 1 : o.letter), rg = o.ring == null ? both.ring : clamp(o.ring)
   // while the letter is not drawn the line stops at the ring's gap; it runs on to the stem as the letter is drawn
   const reach = (RING_X - RING_R) + (STEM - (RING_X - RING_R)) * clamp(lt * 3)
   if (trunk > 0) { c.beginPath(); c.moveTo(X(MEET), Y(70)); c.lineTo(X(MEET + (reach - MEET) * trunk), Y(70)); c.strokeStyle = pal.line; c.lineWidth = Math.max(1.4, 3.6 * sc); c.stroke() }
-  if (o.ghost > 0) { c.globalAlpha = A * 0.16 * o.ghost; letter(c, X, Y, sc, 1, pal.letter); c.globalAlpha = A }
-  if (lt > 0) letter(c, X, Y, sc, lt, pal.letter)
+  if (o.ghost > 0) { c.globalAlpha = A * 0.16 * o.ghost; strokes(c, X, Y, sc, LETTER, LETTER_LEN, 1, pal.letter); strokes(c, X, Y, sc, RING, RING_LEN, 1, pal.letter); c.globalAlpha = A }
+  if (lt > 0) strokes(c, X, Y, sc, LETTER, LETTER_LEN, lt, pal.letter)
+  if (rg > 0) strokes(c, X, Y, sc, RING, RING_LEN, rg, pal.letter)
   c.restore()
   return { sc, ox, oy }
 }

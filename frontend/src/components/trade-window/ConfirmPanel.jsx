@@ -28,6 +28,7 @@ import { chainName } from '../../lib/wallet'
 import Seal from './Seal'
 import ConfirmMark from '../brand/ConfirmMark'
 import { seedOf } from '../brand/mark'
+import { confirmCaption, confirmPhase } from '../brand/confirm-phase'
 
 const STATUS_COLORS = {
   PENDING:    'var(--text-hi)',     // waiting: no colour of its own
@@ -206,7 +207,7 @@ function ConfirmBody({
   // A transaction in flight for this trade (a 202 from CONFIRM ON-CHAIN, or found again after a reload).
   const anchor = useAnchoring(pendingId, confirming, onRemoteConfirmed)
   const anchoring = !!anchor?.pending
-  const anchorFailed = !!anchor?.failed
+  const anchorFailed = !!anchor?.failed || !!anchor?.timedOut      // not taken in time is not in progress either
   useEffect(() => { onAnchor({ pending: anchoring, failed: anchorFailed }) }, [anchoring, anchorFailed, onAnchor])
 
   // State 1: no booked trade
@@ -494,30 +495,33 @@ function ConfirmBody({
   )
 }
 
-const MARK_CAPTION = { running: 'SIGNING AND ANCHORING', done: 'CONFIRMED', failed: 'NOT CONFIRMED' }
-
 // The logo is the picture of the confirmation (brand/ConfirmMark.jsx): the river runs while the trade is being
-// signed and anchored, and the R and its ring are drawn when the trade is confirmed. It sits above the panel's body
-// and is ONE element across the panel's states, so the river that ran while the trade was PENDING is the one that
-// completes when it is CONFIRMED. It appears only for a confirmation made while this ticket is open: a trade that
-// was confirmed earlier shows its certificate and seal as before.
-export function ConfirmPanel(props) {
+// signed and anchored, the R is drawn when the trade is confirmed, and its ring when the record is anchored on a
+// chain. It sits above the panel's body and is ONE element across the panel's states, so the river that ran while
+// the trade was PENDING is the one that completes. It appears only for a confirmation made on this trade while
+// this ticket is open (brand/confirm-phase.js): a trade confirmed earlier shows its certificate and seal as
+// before, and the panel starts afresh for each trade (the key), so nothing carries over to the next one booked.
+function ConfirmFor(props) {
   const [anchor, setAnchor] = useState({ pending: false, failed: false })
-  const [ran, setRan] = useState(false)                 // a confirmation was started while this ticket was open
+  const [started, setStarted] = useState(false)          // a confirmation was asked for while this ticket was open
   const busy = !!props.confirming || anchor.pending
-  if (busy && !ran) setRan(true)                        // remembered from an earlier render (React's own pattern for this)
-  const status = props.bookedTrade?.status
-  const phase = busy ? 'running' : !ran ? null : status === 'CONFIRMED' ? 'done' : (props.confirmErr || anchor.failed) ? 'failed' : 'running'
+  if (busy && !started) setStarted(true)                 // remembered from an earlier render (React's own pattern for this)
+  const phase = confirmPhase({ busy, started, status: props.bookedTrade?.status, failed: !!props.confirmErr || anchor.failed })
+  const sealed = !!props.attestation?.attestation?.anchor?.anchored
+  const caption = confirmCaption(phase, sealed)
   return (
     <>
       {phase && (
-        <div className="tbw-sec" data-testid="confirm-mark-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <ConfirmMark phase={phase} seed={seedOf(String(props.bookedTrade?.id || ''))} />
-          <div className="tbw-lbl" data-testid="confirm-mark-caption" aria-live="polite"
-               style={{ color: phase === 'done' ? 'var(--accent)' : phase === 'failed' ? 'var(--down)' : undefined }}>{MARK_CAPTION[phase]}</div>
+        <div className="tbw-sec" data-testid="confirm-mark-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+          <ConfirmMark phase={phase} sealed={sealed} seed={seedOf(String(props.bookedTrade?.id || ''))} />
+          <div className="tbw-lbl" data-testid="confirm-mark-caption" aria-live="polite" style={{ color: phase === 'failed' ? 'var(--amber)' : undefined }}>{caption}</div>
         </div>
       )}
       <ConfirmBody {...props} onAnchor={setAnchor} />
     </>
   )
+}
+
+export function ConfirmPanel(props) {
+  return <ConfirmFor key={props.bookedTrade?.id || 'none'} {...props} />
 }

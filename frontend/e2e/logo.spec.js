@@ -1,7 +1,7 @@
 // The logo, where it lives in the app: in the top bar (a river of simulated paths running into the ringed R that
 // begins the name), and as the picture of a confirmation: the river runs while a trade is being signed and
-// anchored, and the R and its ring are drawn only when the trade is confirmed. A confirmation that fails never
-// draws the letter.
+// anchored, the R is drawn when the trade is confirmed, and its ring only when the record is anchored on a chain.
+// A confirmation that fails never draws the letter, and nothing carries over to the next trade.
 import { test, expect, expectClean, API } from './fixtures.js'
 
 // how much of a canvas is drawn at full strength, in its left part (the river) and its right part (the letter and
@@ -53,8 +53,8 @@ test('the top bar carries the logo: drawn, named, and a way home', async ({ app,
   expectClean(problems)
 })
 
-test('a confirmation is the logo being drawn: the river while it is in progress, the R when it is confirmed', async ({ app, problems }) => {
-  await app.emulateMedia({ reducedMotion: 'no-preference' })      // this journey watches the drawing move
+// a swap against the demo bank, priced and booked, with its CONFIRM tab open
+async function bookedSwap(app) {
   await app.goto('/blotter')
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
@@ -69,6 +69,12 @@ test('a confirmation is the logo being drawn: the river while it is in progress,
   expect((await booked).status()).toBe(201)
   await win.getByRole('button', { name: '◆ CONFIRM' }).click()
   await expect(win).toContainText('PENDING')
+  return win
+}
+
+test('a confirmation is the logo being drawn: the river while it is in progress, the R when it is confirmed', async ({ app, problems }) => {
+  await app.emulateMedia({ reducedMotion: 'no-preference' })      // this journey watches the drawing move
+  const win = await bookedSwap(app)
   const mark = win.getByTestId('confirm-mark'), caption = win.getByTestId('confirm-mark-caption')
   await expect(mark, 'nothing is drawn before a confirmation is asked for').toHaveCount(0)
 
@@ -108,14 +114,47 @@ test('a confirmation is the logo being drawn: the river while it is in progress,
 
   await expect(win).toContainText('CONFIRMED', { timeout: 60_000 })
   await expect(mark, 'the same drawing completes: it is not replaced').toHaveAttribute('data-phase', 'done')
-  await expect(caption).toHaveText('CONFIRMED')
-  await expect(mark).toHaveAttribute('aria-label', /Confirmed/)
-  await expect.poll(async () => (await ink(mark)).letter, { timeout: 6000, message: 'the R and its ring are drawn once the trade is confirmed' }).toBeGreaterThan(250)
-  await app.waitForTimeout(4500)
+  // the stack has no chain: the trade is confirmed and its record is signed, not anchored. The R is drawn; the ring,
+  // which is the seal on chain, stays an outline, and the words say which it is
+  await expect(caption).toHaveText('CONFIRMED · NOT ANCHORED')
+  await expect(mark).toHaveAttribute('data-sealed', 'no')
+  await expect(mark).toHaveAttribute('aria-label', /signed and not anchored/)
+  await expect.poll(async () => (await ink(mark)).letter, { timeout: 6000, message: 'the R is drawn once the trade is confirmed' }).toBeGreaterThan(90)
+  await app.waitForTimeout(4200)
   const held = await ink(mark)
+  expect(held.letter, 'the ring is not drawn for a record that is not on a chain').toBeLessThan(330)
   await app.waitForTimeout(500)
-  expect(await ink(mark), 'the finished logo holds still').toEqual(held)
+  expect(await ink(mark), 'the finished drawing holds still').toEqual(held)
   await expect(win.getByTestId('confirm-certificate'), 'the certificate and its seal are there as before').toBeVisible()
   await app.screenshot({ path: 'e2e/.out/shots/confirm-mark-done.png' })
+  // the next trade in the same ticket starts with no picture: nothing carries over
+  await win.getByRole('button', { name: 'NEW TRADE', exact: true }).click()
+  await expect(win.getByTestId('confirm-mark')).toHaveCount(0)
+  await win.getByRole('button', { name: '◆ CONFIRM' }).click()
+  await expect(win).toContainText('Nothing to confirm yet')
+  await expect(win.getByTestId('confirm-mark'), 'a new ticket has no confirmation in progress').toHaveCount(0)
+  expectClean(problems)
+})
+
+test('the ring is the seal: it is drawn when the record is anchored on a chain', async ({ app, problems }) => {
+  await app.emulateMedia({ reducedMotion: 'no-preference' })
+  const win = await bookedSwap(app)
+  // The stack has no chain, so this journey says the record was anchored, to look at what an anchored confirmation
+  // draws: the attestation the ticket reads is the stack's own, with its anchor marked as taken by a block.
+  await app.route(`${API}/api/chain/attestation/**`, async route => {
+    const resp = await route.fetch(), body = await resp.json()
+    if (body?.attestation) body.attestation.anchor = { ...(body.attestation.anchor || {}), anchored: true, chain_id: 11155111, block_number: 12112656, tx_hash: '0x' + 'ab'.repeat(32) }
+    await route.fulfill({ response: resp, json: body })
+  })
+  const mark = win.getByTestId('confirm-mark'), caption = win.getByTestId('confirm-mark-caption')
+  await win.getByRole('button', { name: /CONFIRM ON-CHAIN/ }).click()
+  await expect(mark).toHaveAttribute('data-phase', 'running')
+  await expect(win).toContainText('CONFIRMED', { timeout: 60_000 })
+  await expect(mark).toHaveAttribute('data-phase', 'done')
+  await expect(mark).toHaveAttribute('data-sealed', 'yes', { timeout: 15_000 })
+  await expect(caption).toHaveText('CONFIRMED ON CHAIN')
+  await expect(mark).toHaveAttribute('aria-label', /Confirmed on chain/)
+  await expect.poll(async () => (await ink(mark)).letter, { timeout: 8000, message: 'the R and its ring are both drawn for an anchored record' }).toBeGreaterThan(380)
+  await app.screenshot({ path: 'e2e/.out/shots/confirm-mark-sealed.png' })
   expectClean(problems)
 })

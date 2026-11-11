@@ -17,7 +17,7 @@ export default function RijekaLogo({ height = 28, paths = 5, className = '', onC
     const cv = ref.current
     if (!cv) return
     const f = field(OFFICIAL_SEED + 3, paths), still = reducedMotion()
-    let raf = 0, start = performance.now(), pal = palette(cv)
+    let raf = 0, start = performance.now(), pal = palette(cv), gone = false
     const measure = () => {
       pal = palette(cv)
       const u = lockupUnits(cv.getContext('2d'), { ...SHAPE, pal })
@@ -29,14 +29,14 @@ export default function RijekaLogo({ height = 28, paths = 5, className = '', onC
       if (g.w && g.h) drawLockup(g.c, g.w, g.h, { ...SHAPE, f, pal, t: still ? 0 : Math.min(ms, 3800) / 1000, progress: p.progress, trunk: p.trunk, letter: p.letter })
       raf = p.done ? 0 : requestAnimationFrame(frame)
     }
-    const wake = () => { if (!raf) raf = requestAnimationFrame(frame) }                 // draws the state it is in: mid-run, or complete
+    const wake = () => { if (!raf && !gone) raf = requestAnimationFrame(frame) }                 // draws the state it is in: mid-run, or complete
     const run = () => { start = performance.now(); wake() }
     measure(); run()
-    document.fonts?.ready?.then(() => { measure(); wake() })                             // the type's width is only right once the face has loaded
+    document.fonts?.ready?.then(() => { if (!gone) { measure(); wake() } })                             // the type's width is only right once the face has loaded
     const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(wake) : null    // a new width clears the canvas
     ro?.observe(cv)
     window.addEventListener('rijeka:confirmed', run)
-    return () => { cancelAnimationFrame(raf); ro?.disconnect(); window.removeEventListener('rijeka:confirmed', run) }
+    return () => { gone = true; cancelAnimationFrame(raf); ro?.disconnect(); window.removeEventListener('rijeka:confirmed', run) }
   }, [height, paths])
   const press = onClick ? { role: 'link', tabIndex: 0, onClick, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e) } } } : { role: 'img' }
   return <canvas ref={ref} className={`rj-logo ${className}`.trim()} data-testid="rijeka-logo" aria-label={title} title={title} {...press} style={{ width, height }} />
