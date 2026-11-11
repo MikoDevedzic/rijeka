@@ -8,8 +8,8 @@
 
 /* ── AppBar ── */
 .cc-bar { position:relative; z-index:2; display:flex; align-items:center; gap:0; height:44px; padding:0 1.5rem; border-bottom:1px solid var(--border); background:var(--bg-deep); }
-/* the name's own look is .rj-wordmark (index.css); here only its place in this bar */
-.cc-logo { padding-right:1.5rem; border-right:1px solid var(--border); margin-right:0.65rem; white-space:nowrap; }
+/* the logo's own look is .rj-logo (index.css, brand/RijekaLogo.jsx); here only its place in this bar */
+.cc-logo { display:flex; align-items:center; padding-right:1.5rem; border-right:1px solid var(--border); margin-right:0.65rem; white-space:nowrap; }
 
 /* ── Nav ── */
 .cc-nav { display:flex; align-items:center; gap:0; flex:1; }

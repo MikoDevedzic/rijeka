@@ -8,6 +8,7 @@ import { openAppWindow } from '../../lib/windows'
 import './AppBar.css'
 import { Keycap } from '../common/Shortcuts'
 import { shortcutForPath } from '../../lib/shortcuts'
+import RijekaLogo from '../brand/RijekaLogo'
 
 export default function AppBar() {
   const navigate  = useNavigate()
@@ -33,7 +34,7 @@ export default function AppBar() {
       borderBottom:'1px solid var(--border)',
       flexShrink:0, gap:'1.5rem', zIndex:10,
     }}>
-      <div className="rj-wordmark" onClick={()=>navigate('/command-center')}>RIJEKA</div>
+      <RijekaLogo onClick={()=>navigate('/command-center')} />
 
       <div style={{width:'1px',height:'20px',background:'var(--border)',flexShrink:0}}/>
 

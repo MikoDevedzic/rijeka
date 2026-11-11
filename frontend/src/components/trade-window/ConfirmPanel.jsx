@@ -21,11 +21,13 @@
 // button below takes them without naming a colour. Uses the same tbw-btn classes as the footer.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { SendForConfirmation } from './SendForConfirmation'
 import { useSendStatus, useAnchoring } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
 import Seal from './Seal'
+import ConfirmMark from '../brand/ConfirmMark'
+import { seedOf } from '../brand/mark'
 
 const STATUS_COLORS = {
   PENDING:    'var(--text-hi)',     // waiting: no colour of its own
@@ -173,7 +175,8 @@ const TERMINAL_COPY = {
   LIVE:      'Trade is live. Terminate or amend via their respective actions.',
 }
 
-export function ConfirmPanel({
+function ConfirmBody({
+  onAnchor = () => {},     // tells the panel whether a transaction is in flight or has failed (for the logo above)
   bookedTrade = null,
   confirming  = false,
   cancelling  = false,
@@ -203,6 +206,8 @@ export function ConfirmPanel({
   // A transaction in flight for this trade (a 202 from CONFIRM ON-CHAIN, or found again after a reload).
   const anchor = useAnchoring(pendingId, confirming, onRemoteConfirmed)
   const anchoring = !!anchor?.pending
+  const anchorFailed = !!anchor?.failed
+  useEffect(() => { onAnchor({ pending: anchoring, failed: anchorFailed }) }, [anchoring, anchorFailed, onAnchor])
 
   // State 1: no booked trade
   if (!bookedTrade || !bookedTrade.id) {
@@ -486,5 +491,33 @@ export function ConfirmPanel({
         )}
       </div>
     </div>
+  )
+}
+
+const MARK_CAPTION = { running: 'SIGNING AND ANCHORING', done: 'CONFIRMED', failed: 'NOT CONFIRMED' }
+
+// The logo is the picture of the confirmation (brand/ConfirmMark.jsx): the river runs while the trade is being
+// signed and anchored, and the R and its ring are drawn when the trade is confirmed. It sits above the panel's body
+// and is ONE element across the panel's states, so the river that ran while the trade was PENDING is the one that
+// completes when it is CONFIRMED. It appears only for a confirmation made while this ticket is open: a trade that
+// was confirmed earlier shows its certificate and seal as before.
+export function ConfirmPanel(props) {
+  const [anchor, setAnchor] = useState({ pending: false, failed: false })
+  const [ran, setRan] = useState(false)                 // a confirmation was started while this ticket was open
+  const busy = !!props.confirming || anchor.pending
+  if (busy && !ran) setRan(true)                        // remembered from an earlier render (React's own pattern for this)
+  const status = props.bookedTrade?.status
+  const phase = busy ? 'running' : !ran ? null : status === 'CONFIRMED' ? 'done' : (props.confirmErr || anchor.failed) ? 'failed' : 'running'
+  return (
+    <>
+      {phase && (
+        <div className="tbw-sec" data-testid="confirm-mark-row" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <ConfirmMark phase={phase} seed={seedOf(String(props.bookedTrade?.id || ''))} />
+          <div className="tbw-lbl" data-testid="confirm-mark-caption" aria-live="polite"
+               style={{ color: phase === 'done' ? 'var(--accent)' : phase === 'failed' ? 'var(--down)' : undefined }}>{MARK_CAPTION[phase]}</div>
+        </div>
+      )}
+      <ConfirmBody {...props} onAnchor={setAnchor} />
+    </>
   )
 }

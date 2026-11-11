@@ -68,8 +68,28 @@ A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX
 
 ## The name, the top bar, a rail
 
-The name RIJEKA (`.rj-wordmark`) is brass and the one thing that glows: nothing else on a page carries a light
-of its own. The pages on the top bar (`.ab-link`) are buttons; the one you are on is the lighter panel over the
+The logo (`brand/RijekaLogo.jsx`, `.rj-logo`) is a river of simulated paths running into a ringed R, and that R is
+the first letter of the name: after it only IJEKA is set in type. Rijeka means river. The paths start apart, one
+desk's in limestone and the other's in blue, turn brass as they meet (brass is what is sealed), and run as one
+line into the letter. The ring is left open where the river enters: a letter in a closed circle reads as the
+registered-trademark sign. It is the one thing that carries a light of its own.
+
+- **It moves for a reason, and then stops.** In a bar it runs once when it appears and once more each time a
+  trade is confirmed, and holds still in between: a mark that restarts in the header of a trading screen would
+  pull the eye from the numbers. With "reduce motion" set it is drawn complete and does not move.
+- **A confirmation is the logo being drawn** (`brand/ConfirmMark.jsx`, on the ticket's CONFIRM tab). While a trade
+  is being signed and anchored the river runs and the letter is only a faint outline; the R and its ring are
+  drawn when the trade is confirmed, and never if it fails. It is drawn only for a confirmation made while the
+  ticket is open; a trade confirmed earlier shows its certificate and seal.
+- **Where a new reader might stumble, the name is also spelled out.** A ringed letter followed by IJEKA takes a
+  moment the first time. The sign-in pages keep the plain name (`.au-mark`), a heading says it in words, and a
+  link preview or a first slide uses the whole word with the river beneath it.
+- **Small, and in one colour.** Under about 32 pixels it is one line running into the ringed R (the favicon). Where
+  colour cannot be used every stroke is one colour (`mono` in `brand/mark.js`).
+- The drawing reads its colours from the tokens (`palette()`), so it holds no literal and follows the theme. The
+  letter is built from strokes by code and is to be redrawn by a type designer with the rest of the name.
+
+The pages on the top bar (`.ab-link`) are buttons; the one you are on is the lighter panel over the
 brass rule. In a rail of filters (the blotter's left pane) a section's heading is the size of its choices and
 reads as their heading by weight, the bright text colour and a rule above it; the choices sit a step in, in the
 quieter colour, and the selected one is the lighter panel with the brass rule at its edge.

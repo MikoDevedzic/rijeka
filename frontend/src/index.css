@@ -187,21 +187,11 @@ button, input, select, textarea { font-family: inherit; }
 .rj-menu-sep { height: 1px; margin: 5px 4px; background: var(--border-hi); }
 .rj-menu-head { padding: 4px 10px 3px; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; color: var(--text-mute); }
 
-/* The name. Brass, and the one thing on the page that glows: a soft light that breathes slowly (still, with
-   "reduce motion" set). Every bar that carries the name uses this class. */
-.rj-wordmark {
-  font-family: var(--sans); font-size: 1.0625rem; font-weight: 700; letter-spacing: 0.34em; line-height: 1;
-  color: var(--accent-hi); cursor: pointer; flex-shrink: 0; user-select: none;
-  text-shadow: 0 0 14px rgb(var(--accent-rgb) / 0.45), 0 0 2px rgb(var(--accent-rgb) / 0.35);
-  animation: rj-wordmark 5s ease-in-out infinite alternate;
-  transition: color .15s;
-}
-.rj-wordmark:hover { color: var(--text-hi); }
-@keyframes rj-wordmark {
-  from { text-shadow: 0 0 10px rgb(var(--accent-rgb) / 0.30), 0 0 2px rgb(var(--accent-rgb) / 0.30); }
-  to   { text-shadow: 0 0 22px rgb(var(--accent-rgb) / 0.65), 0 0 3px rgb(var(--accent-rgb) / 0.50); }
-}
-@media (prefers-reduced-motion: reduce) { .rj-wordmark { animation: none; } }
+/* The logo (brand/RijekaLogo.jsx): a river of simulated paths running into the ringed R that begins the name. It
+   is drawn on a canvas from the tokens; here only how it sits in a bar. It is the one thing that carries a light. */
+.rj-logo { display: block; flex-shrink: 0; user-select: none; filter: drop-shadow(0 0 6px rgb(var(--accent-rgb) / 0.28)); }
+.rj-logo[role="link"] { cursor: pointer; }
+.rj-logo[role="link"]:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 3px; border-radius: var(--r-1); }
 
 /* The pages on the top bar: each a button; the one you are on is a lighter panel over the brass rule, as a
    selected tab on the ticket is. */

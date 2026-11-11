@@ -1,3 +1,4 @@
+import RijekaLogo from './brand/RijekaLogo'
 import { Keycap } from './common/Shortcuts'
 import { shortcutForPath } from '../lib/shortcuts'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -32,7 +33,7 @@ export default function CommandCenter() {
   return (
     <div className="cc-root">
       <div className="cc-bar">
-        <span className="cc-logo rj-wordmark">RIJEKA</span>
+        <span className="cc-logo"><RijekaLogo /></span>
         <nav className="cc-nav">
           {nav.map(n => (
             <button
