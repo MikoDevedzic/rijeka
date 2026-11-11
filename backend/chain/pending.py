@@ -15,7 +15,7 @@ Two reconcilers may look at one row at once: the row is taken FOR UPDATE and fli
 in the same transaction as the CONFIRMED event, so the transition is applied once, and the loser
 finds the row no longer PENDING.
 
-Without the table (docs/migrations/2026-11-03_jobs.sql) `sync_wait()` is None and confirm waits
+Without the table (docs/migrations/2026-11-11_pending_anchors.sql) `sync_wait()` is None and confirm waits
 the full RECEIPT_TIMEOUT in the request, as before this module existed.
 """
 from __future__ import annotations
