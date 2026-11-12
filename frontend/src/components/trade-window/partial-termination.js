@@ -55,5 +55,5 @@ export function partialDone(pt) {
   if (!pt) return null
   const fee = pt.fee ? ` · unwind fee ${pt.fee.direction === 'RECEIVE' ? 'received' : 'paid'} ${fmtNotional(pt.fee.amount)} ${pt.fee.currency} on ${pt.fee.date}` : ''
   return `Reduced from ${fmtNotional(pt.from_notional)} to ${fmtNotional(pt.to_notional)} ${pt.notional_ccy || ''}`.trimEnd() + fee
-    + (pt.anchored ? ' · the signed record was superseded on-chain, both parties signing' : ' · the booking changed; no record on a chain was signed for it')
+    + (pt.anchored ? ' · the signed record was replaced on-chain, both parties signing' : ' · the booking changed; no record on a chain was signed for it')
 }

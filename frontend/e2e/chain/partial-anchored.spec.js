@@ -26,7 +26,7 @@ test('an anchored trade is partially terminated: the record is superseded on the
   // reduce it to a quarter, paying a fee
   const block = win.getByTestId('partial-termination')
   await win.getByTestId('partial-open').click()
-  await expect(block).toContainText('superseded on-chain')
+  await expect(block).toContainText('replaced on-chain')
   const now = num((await block.innerText()).match(/now\s+([\d,.]+)/)[1])
   await win.getByTestId('partial-remaining').fill(String(now / 4))
   await win.getByTestId('partial-fee-amount').fill('900')
@@ -40,7 +40,7 @@ test('an anchored trade is partially terminated: the record is superseded on the
   expect(num(j.trade.notional)).toBe(now / 4)
   expect(j.trade.status).toBe('CONFIRMED')
   expect(j.partial_termination.anchored).toBe(true)
-  await expect(win.getByTestId('partial-done')).toContainText('the signed record was superseded on-chain')
+  await expect(win.getByTestId('partial-done')).toContainText('the signed record was replaced on-chain')
 
   const att = (await (await reread).json()).attestation
   expect(att.trade_hash).not.toBe(before.trade_hash)

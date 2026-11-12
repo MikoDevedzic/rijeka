@@ -43,13 +43,20 @@ test('a booked swap is partially terminated from its CONFIRM tab: the notional t
   const fee = j.trade.terms.fees.at(-1)
   expect([fee.type, fee.direction, fee.amount]).toEqual(['UNWIND', 'RECEIVE', 12500])
 
-  // the ticket says what was done, and now stands on the notional that remains
+  // the ticket is opened again on the trade as it now stands, on this tab, and says what was done
   const done = win.getByTestId('partial-done')
   await expect(done).toContainText(`Reduced from ${now.toLocaleString('en-US')} to ${remains.toLocaleString('en-US')}`)
   await expect(done).toContainText('unwind fee received 12,500')
   await expect(done).toContainText('no record on a chain was signed for it')
+  await expect(app.locator('.tbw-window'), 'one ticket, not two').toHaveCount(1)
   await win.getByTestId('partial-open').click()
   await expect(win.getByTestId('partial-now')).toContainText(`now ${remains.toLocaleString('en-US')}`)
   await app.screenshot({ path: 'e2e/.out/shots/partial-termination-done.png' })
+  // and its own fields and figures are the reduced trade's: the notional on TRADE, and a value that is 40 % of what it was
+  await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+  const typed = await win.locator('input').evaluateAll(els => els.map(e => e.value))
+  expect(typed, 'the TRADE tab shows the notional that remains').toContain(remains.toLocaleString('en-US'))
+  expect(typed, 'and not the one before').not.toContain(now.toLocaleString('en-US'))
+  await app.screenshot({ path: 'e2e/.out/shots/partial-termination-trade-tab.png' })
   expectClean(problems)
 })

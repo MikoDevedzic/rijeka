@@ -87,7 +87,7 @@ def test_a_confirmed_digital_asset_forward_is_reduced_in_its_record_and_priced_o
     t = r.json()["trade"]
     assert t["status"] == "CONFIRMED" and float(t["notional"]) == 2.5 and float(t["terms"]["notional_amount"]) == 2.5
     assert t["terms"]["fees"][-1] == {"type": "UNWIND", "direction": "PAY", "amount": 900.0, "currency": "USD", "date": date.today().isoformat(),
-                                      "note": "partial termination 10 to 2.5"}
+                                      "note": "partial termination"}
     assert [e["event_type"] for e in client.get(f"/api/trade-events/{tid}", headers=auth_a).json()][:2] == ["PARTIAL_TERMINATION", "CONFIRMED"]
     after = _price(client, auth_a, tid)
     assert abs(before["npv"]) > 1.0, "a value to scale"
@@ -123,3 +123,21 @@ def test_a_touch_and_a_terminal_trade_are_refused(client, auth_a, ids, pairs, bo
     assert client.post(f"/api/trade-events/cancel/{j['trade']['id']}", headers={**auth_a, "Idempotency-Key": str(uuid.uuid4())}).status_code in (200, 201)
     gone = _partial(client, auth_a, j["trade"]["id"], new_notional="1")
     assert gone.status_code == 422 and "only a pending or confirmed trade" in gone.text
+
+
+def test_one_leg_of_a_package_is_refused_before_and_after_it_is_confirmed(client, auth_a, ids, pairs):
+    from tests.integration.test_chain import _package
+    pk = _package(client, auth_a, ids, pairs, n=2, structure="CUSTOM", tag="PTP")
+    tids = [t["id"] for t in pk["trades"]]
+    r = _partial(client, auth_a, tids[0], new_notional="1")
+    assert r.status_code == 409 and "one leg of a package" in r.text, r.text[:300]           # pending: the tag alone says so
+    assert client.post("/api/chain/confirm-package", json={"trade_ids": tids}, headers={**auth_a, "Idempotency-Key": str(uuid.uuid4())}).status_code == 201
+    r = _partial(client, auth_a, tids[1], new_notional="1")
+    assert r.status_code == 409 and "package" in r.text, r.text[:300]
+
+
+def test_a_number_no_trade_has_is_refused_and_costs_nothing(client, auth_a, booked):
+    for bad in ("1E-999999999", "1E+25", "NaN", "Infinity"):
+        r = _partial(client, auth_a, booked["IR_SWAP"]["id"], new_notional=bad)
+        assert r.status_code == 422, (bad, r.status_code, r.text[:200])
+

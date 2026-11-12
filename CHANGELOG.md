@@ -9,22 +9,31 @@ methodology document carries its own version (v1.18). Commits on `main` are the 
 The event type and a route that stored it existed; nothing reduced a trade and the ticket offered nothing.
 
 - **On the ticket.** A booked trade's CONFIRM tab has PARTIALLY TERMINATE: the notional that remains and, if one
-  was agreed, the fee for the unwind (pay or receive, amount, date). The trade stays; the ticket, the blotter, the
-  price and the XVA then read the notional that remains, and the fee is among the trade's fees as UNWIND.
+  was agreed, the fee for the unwind (pay or receive, amount, date). The trade stays; the blotter, the price and the
+  XVA then read the notional that remains, and the fee is among the trade's fees as UNWIND. The ticket is opened
+  again on the trade as it now stands, on the same tab, saying what was done: its own fields and figures were the
+  trade's as it was.
 - **What changes is worked out by the API from the booking** (`chain/partial_termination.py`), never taken from
   the request: the trade's notional, every leg's in the same proportion, and for a currency or digital-asset trade
   the notional its signed record carries (`base_notional` and `quote_notional`, or `notional_amount`).
 - **A trade confirmed on a chain** has its record superseded there by the reduced one, with a signature from each
   party, as an amendment is (`POST /api/chain/partial-terminate/{id}`; `/partial-termination-request/{id}` gives a
-  counterparty that signs for itself the digest). VERIFY then passes on the reduced booking. A journey on a local
+  counterparty that signs for itself the digest). The relayer's budget is charged when a transaction is about to be
+  sent, not for a request refused before. VERIFY then passes on the reduced booking. A journey on a local
   chain asks the node: the registry raised `Amended(prev, new)`, no longer holds the first record as confirmed and
   holds the new one.
 - **A trade with no anchored record** (pending, or signed on an instance with no chain) is reduced on the booking
   alone; the event is PARTIAL_TERMINATION and claims no signature. On an instance with no chain a confirmed trade's
   old signed record then no longer matches the booking, and VERIFY says so.
 - **Refused, in words:** the whole notional or more (terminate it), a cancelled, terminated or matured trade, one
-  leg of a package, an option sized by a payout (a digital, a touch), a leg with a notional schedule, a fee dated
-  before today, a confirmation still being anchored, another firm's trade (404).
+  leg of a package (confirmed or still pending), an option sized by a payout (a digital, a touch), a leg with a
+  notional schedule, a fee dated before today or more than five years out, a number no trade has (what remains is
+  rounded to the six decimals the booking keeps), a confirmation still being anchored, another firm's trade (404).
+- **After the reviews (Vera, Magnus, Iris).** The trade's row is locked while it is reduced, so two reductions
+  cannot both start from the same notional. The request routes that hand out the firm's signature
+  (`amend-request`, `terminate-request` and the new one) now need a writing role: a viewer could ask for one
+  before. The button that reduces is set as the terminate button is, not in the brass of BOOK. A replay of the
+  same `Idempotency-Key` answers the trade without the `partial_termination` block.
 - **Not done.** The realised P&L of the part terminated (fees are not yet in P&L or settlement: backlog 124); the
   unwind fee is not part of the signed record (no fee is); an option's premium is left as booked; a partial
   termination of a package, of a payout option or of an amortising leg; an effective date other than today.

@@ -49,7 +49,7 @@ describe('what is sent and what is said after', () => {
   })
   it('says what was done, and whether a record on a chain was superseded', () => {
     const pt = { from_notional: '10', to_notional: '2.5', notional_ccy: 'BTC', anchored: true, fee: { direction: 'PAY', amount: 900, currency: 'USD', date: '2026-11-12' } }
-    expect(partialDone(pt)).toBe('Reduced from 10 to 2.5 BTC · unwind fee paid 900 USD on 2026-11-12 · the signed record was superseded on-chain, both parties signing')
+    expect(partialDone(pt)).toBe('Reduced from 10 to 2.5 BTC · unwind fee paid 900 USD on 2026-11-12 · the signed record was replaced on-chain, both parties signing')
     expect(partialDone({ from_notional: '10000000', to_notional: '4000000', notional_ccy: 'USD', anchored: false, fee: null }))
       .toBe('Reduced from 10,000,000 to 4,000,000 USD · the booking changed; no record on a chain was signed for it')
     expect(partialDone(null)).toBeNull()

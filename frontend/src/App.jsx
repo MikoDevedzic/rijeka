@@ -106,6 +106,8 @@ function PersistentBookingWindow() {
             initialProduct={w.productKey || 'IR_SWAP'}
             initialTrade={w.trade || null}
             initialPos={{ x: w.x, y: w.y }}
+            initialTab={w.opts?.tab || null}
+            initialNotice={w.opts?.notice || null}
             onClose={() => close(w.id)}
             onBook={() => {
               // No-op: booking.js::executeBooking books, and TradeWindow

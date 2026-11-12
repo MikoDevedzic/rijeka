@@ -45,6 +45,7 @@ import { TENOR_Y, EXPIRY_Y } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import { useTabStore }    from '../../store/useTabStore'
+import useBookingStore from '../../store/useBookingStore'
 
 // Import all product modules to register them at load time.
 // Adding FX/credit = add one import line here.
@@ -221,7 +222,7 @@ const SECTION_ORDER = [
   'footer',
 ]
 
-export default function TradeWindow({ onClose, onBook, onViewTrade, initialProduct = 'IR_SWAP', initialTrade = null, initialPos = null }) {
+export default function TradeWindow({ onClose, onBook, onViewTrade, initialProduct = 'IR_SWAP', initialTrade = null, initialPos = null, initialTab = null, initialNotice = null }) {
   // View mode: initialTrade is a stored trade (blotter row). Fixed for the
   // window's life; a window never switches between a new and a stored trade.
   const viewMode = !!initialTrade
@@ -496,7 +497,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const [cancelErr,  setCancelErr]  = useState('')
 
   // ── Window chrome state (Patch 8): active tab + drag position ──────────
-  const [activeTab, setActiveTab] = useState('TRADE')
+  const [activeTab, setActiveTab] = useState(initialTab || 'TRADE')
 
   // Sprint 12 item 6 follow-up (L29): lazy-init tab mounting.
   // On first activation, the tab is marked visited; once visited the panel
@@ -986,17 +987,18 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // true when it is done, so the form can close; the ticket, the blotter and the attestation then read the booking.
   const [partialBusy, setPartialBusy] = useState(false)
   const [partialErr, setPartialErr] = useState('')
-  const [partialDone, setPartialDone] = useState(null)
+  const [partialDone] = useState(initialNotice)      // what the reduction that reopened this ticket did
   const handlePartial = useCallback(async (body) => {
     if (!bookedTrade?.id || partialBusy) return false
     setPartialBusy(true); setPartialErr('')
     try {
       const r = await partialTerminate(bookedTrade.id, body)
-      setBookedTrade(r.trade)
-      setPartialDone(r.partial_termination || null)
-      try { setAttestation(await getAttestation(r.trade.id)) } catch (e) { console.warn('[chain] attestation fetch failed', e) }
       await useTradesStore.getState().fetchTrades()
       useTabStore.getState().refreshTrade(r.trade.id, r.trade)
+      // This ticket's fields and figures are the trade's as it was (its notional, its legs, the last price). It is
+      // opened again on the trade as it now stands, on this tab, saying what was done; this one closes.
+      useBookingStore.getState().open(r.trade, { tab: '◆ CONFIRM', notice: r.partial_termination || null })
+      onClose?.()
       return true
     } catch (e) {
       setPartialErr(e.message || String(e))
@@ -1004,7 +1006,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     } finally {
       setPartialBusy(false)
     }
-  }, [bookedTrade, partialBusy])
+  }, [bookedTrade, partialBusy, onClose])
 
   const handleDownloadProof = useCallback(async () => {
     if (!bookedTrade?.id) return

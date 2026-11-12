@@ -884,7 +884,7 @@ def amendment_request(trade_id: str, body: AmendRequestBody, db: Session = Depen
     new record and hash, then rolled back. Deterministic, so /amend with the
     same `changes` re-derives the identical new hash.
     """
-    user_id = user.get("sub")
+    user_id = _check_write_role(user)       # our signature is made here: not for a viewer (Magnus, 12 Nov 2026)
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
@@ -1035,11 +1035,17 @@ def _preview_partial(db: Session, trade: Trade, changes: dict, att: dict):
     return prev, payload, new
 
 
-def _partial_trade(db: Session, trade_id: str, user_id) -> Trade:
-    trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
+def _partial_trade(db: Session, trade_id: str, user_id, lock: bool = False) -> Trade:
+    """The caller's trade, or 404; refused when it is a leg of a package or its confirmation is in flight. `lock`
+    takes the row for the transaction, so two reductions of one trade cannot both start from the same notional
+    (Vera, 12 Nov 2026: the second would have overwritten the first, and the first's fee with it)."""
+    q = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id)
+    trade = (q.with_for_update() if lock else q).first()
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
     refuse_package_leg(db, trade, "Partially terminating")
+    if read_package_tag(getattr(trade, "strategy", None)) is not None:      # a leg not yet confirmed carries the tag alone
+        raise HTTPException(status_code=409, detail=f"{trade.trade_ref} is one leg of a package; a partial termination of a package is not built yet.")
     if P.tables_present(db) and P.open_for_trade(db, trade.id) is not None:
         raise HTTPException(status_code=409, detail=f"{trade.trade_ref}'s confirmation is still being anchored; reduce it once that has landed.")
     return trade
@@ -1050,7 +1056,7 @@ def partial_termination_request(trade_id: str, body: PartialTerminationRequestBo
                                 user: dict = Depends(verify_token)):
     """Our half of a partial termination of an anchored trade, for the counterparty to countersign. Nothing is
     stored or anchored. Deterministic: /partial-terminate with the same body re-derives the same new hash."""
-    trade = _partial_trade(db, trade_id, user.get("sub"))
+    trade = _partial_trade(db, trade_id, _check_write_role(user))       # our signature is made here: not for a viewer
     att, _ = _current_record(db, trade)
     changes, summary = _partial_changes(db, trade, body)
     prev, payload, new = _preview_partial(db, trade, changes, att)
@@ -1094,7 +1100,7 @@ def partial_terminate(trade_id: str, body: PartialTerminationBody,
     cached = _lookup_idempotent(db, user_id, idempotency_key)
     if cached:
         return cached
-    trade = _partial_trade(db, trade_id, user_id)
+    trade = _partial_trade(db, trade_id, user_id, lock=True)
     att = anchored_attestation(db, trade.id)
     if is_terminated(att):
         raise HTTPException(status_code=409, detail=f"{trade.trade_ref} is terminated on-chain; nothing further can change.")
@@ -1116,7 +1122,6 @@ def partial_terminate(trade_id: str, body: PartialTerminationBody,
                                     confirmation_hash=None, idempotency_key=idempotency_key, mutate=_mutate,
                                     counterparty_confirmed=False)
     else:
-        _check_chain_quota(db, user_id, kind="amend")
         prev, payload, new = _preview_partial(db, trade, changes, att)
         k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
         be, chain_id, registry = _eip712_ctx()
@@ -1124,6 +1129,7 @@ def partial_terminate(trade_id: str, body: PartialTerminationBody,
         td_cp  = amendment_typed_data(chain_id, registry, prev, new, k_own.address)
         sig_own, sig_cp, bilateral = _cp_signature_or_ours(db, trade, k_own, k_cp, td_cp, td_own,
                                                            body.address, body.signature, "partial termination")
+        _check_chain_quota(db, user_id, kind="amend")     # charged when a transaction is about to be sent, not for a request refused before
         try:
             receipt = be.amend(prev, new, sig_own, sig_cp)
         except Exception as e:
@@ -1163,7 +1169,7 @@ class TerminateBody(BaseModel):
 @router.get("/terminate-request/{trade_id}")
 def termination_request(trade_id: str, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     """Our half of a termination: our signature and the digest the counterparty must sign."""
-    user_id = user.get("sub")
+    user_id = _check_write_role(user)       # our signature is made here: not for a viewer
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")

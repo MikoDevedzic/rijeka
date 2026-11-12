@@ -25,6 +25,10 @@ OPEN_STATUSES = ("PENDING", "CONFIRMED")           # a trade that is cancelled, 
 PAYOUT_STRUCTURES = ("DIGITAL", "TOUCH")
 _SCALED_WITH_THE_NOTIONAL = ("quote_notional",)      # stated in the record as notional × rate: moves in proportion
 _THE_NOTIONAL_ITSELF = ("notional_amount", "base_notional")
+SIX_DECIMALS = Decimal("0.000001")                # trades.notional and trade_legs.notional are Numeric(24, 6)
+FEE_MAX = 1e13                                       # no unwind fee is larger; a float can be 1e308
+FEE_MAX_DAYS_OUT = 366 * 5                           # nor is one paid more than five years out
+FEE_NOTE = "partial termination"                    # the figures are in the event's partial_termination block
 
 
 def _dec(x) -> Decimal:
@@ -32,7 +36,9 @@ def _dec(x) -> Decimal:
         d = Decimal(str(x))
     except (InvalidOperation, ValueError, TypeError):
         raise ValueError("the notional is a number") from None
-    if not d.is_finite():
+    if not d.is_finite() or (d != 0 and not (-30 <= d.adjusted() <= 18)):
+        # a number no trade has (the booking's column holds eighteen digits before the point): 1E-999999999 is finite
+        # and would be written out a billion digits long, and 1E+25 cannot be rounded to six decimals
         raise ValueError("the notional is a number")
     return d
 
@@ -71,7 +77,8 @@ def changes_for(trade, legs: list, new_notional, fee: Optional[dict], today: dat
     terms = deepcopy(dict(trade.terms or {}))
     if str(trade.structure or "").upper() in PAYOUT_STRUCTURES or terms.get("payout") not in (None, ""):
         raise ValueError("this option's size is a payout, not a notional: a partial termination of it is not built yet")
-    old, new = _dec(trade.notional), _dec(new_notional)
+    # the booking keeps a notional to six decimals: what remains is rounded to that before anything is compared or written
+    old, new = _dec(trade.notional), _dec(new_notional).quantize(SIX_DECIMALS)
     if not (Decimal(0) < new < old):
         raise ValueError(f"the new notional is above zero and below the trade's {plain(old)} (to close the whole trade, terminate it)")
     for k in _THE_NOTIONAL_ITSELF:
@@ -86,11 +93,13 @@ def changes_for(trade, legs: list, new_notional, fee: Optional[dict], today: dat
     if fee is not None:
         ccy = fee_currency(trade)
         raw = {"type": "UNWIND", "direction": fee.get("direction"), "amount": fee.get("amount"), "currency": fee.get("currency") or ccy,
-               "date": fee.get("date"), "note": fee.get("note") or f"partial termination {plain(old)} to {plain(new)}"}
+               "date": fee.get("date"), "note": fee.get("note") or FEE_NOTE}
         every = F.normalise(list(terms.get("fees") or []) + [raw], ccy)       # ValueError in the fee's own words
         unwind = every[-1]
         if date.fromisoformat(unwind["date"]) < today:
             raise ValueError("the unwind fee is paid today or later")
+        if (date.fromisoformat(unwind["date"]) - today).days > FEE_MAX_DAYS_OUT or unwind["amount"] > FEE_MAX:
+            raise ValueError("the unwind fee is paid within five years and is an amount a trade could carry")
         terms["fees"] = every
     leg_changes = []
     for leg in legs:
@@ -98,7 +107,7 @@ def changes_for(trade, legs: list, new_notional, fee: Optional[dict], today: dat
             raise ValueError("a leg of this trade has a notional schedule of its own: a partial termination of it is not built yet")
         if leg.notional is None:
             continue
-        leg_changes.append({"id": str(leg.id), "notional": plain((_dec(leg.notional) * new / old).quantize(Decimal("0.000001")))})
+        leg_changes.append({"id": str(leg.id), "notional": plain((_dec(leg.notional) * new / old).quantize(SIX_DECIMALS))})
     trade_changes = {"notional": plain(new)}
     if terms != dict(trade.terms or {}):
         trade_changes["terms"] = terms

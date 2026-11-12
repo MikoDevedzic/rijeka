@@ -45,7 +45,7 @@ def test_a_currency_forwards_record_carries_the_new_notional_and_the_cash_in_pro
     new = changes["trade"]["terms"]
     assert new["base_notional"] == "2500000" and new["quote_notional"] == "2912500" and new["forward_rate"] == "1.165"
     assert new["fees"] == [{"type": "UNWIND", "direction": "RECEIVE", "amount": 18000.0, "currency": "USD", "date": "2026-11-16",
-                            "note": "partial termination 10000000 to 2500000"}]
+                            "note": "partial termination"}]
     assert s["fee"] == new["fees"][0] and s["terminated_notional"] == "7500000"
     assert terms["base_notional"] == "10000000" and "fees" not in terms, "the booking's own terms are not touched until apply"
     PT.apply(t, [], changes)
@@ -69,6 +69,14 @@ def test_a_digital_asset_trade_keeps_the_type_its_record_held_and_its_other_fees
     ({}, "0", None, "above zero"),
     ({}, "-5", None, "above zero"),
     ({}, "abc", None, "the notional is a number"),
+    ({}, "1E-999999999", None, "the notional is a number"),
+    ({}, "1E+999999999", None, "the notional is a number"),
+    ({}, "1E+25", None, "the notional is a number"),
+    ({}, "NaN", None, "the notional is a number"),
+    ({}, "0.0000001", None, "above zero"),                       # rounds to nothing at the booking's six decimals
+    ({}, "9999999.9999999", None, "below the trade's"),          # rounds to the whole notional
+    ({}, "5000000", {"direction": "PAY", "amount": 1e300, "date": "2026-11-13"}, "an amount a trade could carry"),
+    ({}, "5000000", {"direction": "PAY", "amount": 1, "date": "9999-12-31"}, "within five years"),
     ({"status": "TERMINATED"}, "5000000", None, "only a pending or confirmed trade"),
     ({"status": "CANCELLED"}, "5000000", None, "only a pending or confirmed trade"),
     ({"notional": None}, "5", None, "has no notional to reduce"),
@@ -107,3 +115,23 @@ def test_the_event_replays_like_an_amendment_and_the_older_shape_still_reads():
     assert p["trade"]["notional"] == "6" and p["trade"]["terms"] == {"notional_amount": "6"} and p["legs"][0]["notional"] == "6"
     old = EventLike(event_seq=2, event_type="PARTIAL_TERMINATION", payload={"leg_id": leg_id, "new_notional": 4})
     assert project([booked, old])["legs"][0]["notional"] == 4
+
+
+def test_what_remains_is_rounded_to_the_six_decimals_the_booking_keeps():
+    """Magnus, 12 Nov 2026: a seventh decimal went into the record unrounded while the trade's own column rounded
+    it, and the next reduction then found the booking out of step with itself."""
+    terms = {"digital_asset": "BTC", "notional_amount": "10", "forward_price": "108600", "price_currency": "USD"}
+    t = _trade(notional=Decimal("10"), notional_ccy="BTC", terms=terms)
+    changes, s = PT.changes_for(t, [], "2.50000049", None, TODAY)
+    assert changes["trade"]["notional"] == "2.5" and changes["trade"]["terms"]["notional_amount"] == "2.5" and s["to_notional"] == "2.5"
+    PT.apply(t, [], changes)
+    again, _ = PT.changes_for(t, [], "1.2345675", None, TODAY)          # and the next one starts from a booking in step
+    assert again["trade"]["notional"] == again["trade"]["terms"]["notional_amount"] == "1.234568"
+
+
+def test_the_default_note_fits_whatever_the_notional():
+    terms = {"digital_asset": "BTC", "notional_amount": "123456789.123456", "price_currency": "USD"}
+    t = _trade(notional=Decimal("123456789.123456"), notional_ccy="BTC", terms=terms)
+    changes, _ = PT.changes_for(t, [], "98765432.654321", {"direction": "PAY", "amount": 5, "date": TODAY.isoformat()}, TODAY)
+    assert changes["trade"]["terms"]["fees"][-1]["note"] == "partial termination"
+

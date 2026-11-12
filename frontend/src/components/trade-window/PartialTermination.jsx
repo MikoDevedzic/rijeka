@@ -26,22 +26,28 @@ export default function PartialTermination({ trade, pkg = null, terminated = fal
   }
   return (
     <div data-testid="partial-termination" style={{ marginTop: 12, maxWidth: 520 }}>
+      {/* what the reduction that reopened this ticket did: above the control, where it is read first */}
+      {done && <div className="tbw-mut" data-testid="partial-done" style={{ marginBottom: 8, color: 'var(--text)' }}>{partialDone(done)}</div>}
       {!open ? (
         <button className="tbw-btn" data-testid="partial-open" onClick={() => setOpen(true)}>◆ PARTIALLY TERMINATE</button>
       ) : (
         <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid var(--border-hi)', borderRadius: 'var(--r-2)' }}>
-          <div className="tbw-lbl">PARTIAL TERMINATION · THE TRADE STAYS ON THE NOTIONAL THAT REMAINS</div>
+          <div className="tbw-lbl">PARTIAL TERMINATION</div>
           <div className="tbw-mut" style={{ lineHeight: 1.5, margin: '6px 0 10px' }}>
+            The trade stays, on the notional that remains.{' '}
             {anchored
-              ? 'The signed record is superseded on-chain by the reduced one, with a signature from each party. When the counterparty signs for themselves this needs their signature; Rijeka signs both only if it holds their key.'
+              ? 'The signed record is replaced on-chain by the reduced one, with a signature from each party. When the counterparty signs for themselves this needs their signature; Rijeka signs both only if it holds their key.'
               : 'This trade has no record anchored on a chain: the booking is reduced and the event says so.'}
-            {' '}The fee joins the trade's fees as UNWIND.
+            {' '}A fee is recorded with the trade as an UNWIND fee.
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, alignItems: 'end' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, alignItems: 'start' }}>
             <label style={{ gridColumn: 'span 2' }}>
               <div className="tbw-lbl">NOTIONAL THAT REMAINS</div>
               <input className="tbw-mono" data-testid="partial-remaining" inputMode="decimal" value={remaining} disabled={busy}
                      onChange={e => setRemaining(e.target.value)} placeholder={fmtNotional(Number(trade.notional) / 2)} style={{ width: '100%' }} />
+              <div className="tbw-mut" data-testid="partial-now" style={{ marginTop: 4 }}>
+                now <span className="tbw-mono" style={{ color: 'var(--text)' }}>{fmtNotional(trade.notional)}</span> {trade.notional_ccy || ''}
+              </div>
             </label>
             <div style={{ gridColumn: 'span 2' }}>
               <div className="tbw-lbl">UNWIND FEE · OPTIONAL</div>
@@ -64,20 +70,16 @@ export default function PartialTermination({ trade, pkg = null, terminated = fal
                      onChange={e => setFeeDate(e.target.value)} style={{ width: '100%' }} />
             </label>
           </div>
-          <div className="tbw-mut" data-testid="partial-now" style={{ marginTop: 6 }}>
-            now <span className="tbw-mono" style={{ color: 'var(--text)' }}>{fmtNotional(trade.notional)}</span> {trade.notional_ccy || ''}
-          </div>
           {remaining !== '' && problem && <div className="tbw-mut" data-testid="partial-problem" style={{ marginTop: 8, color: 'var(--amber)' }}>{problem}</div>}
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 10 }}>
             <button className="tbw-btn" onClick={() => setOpen(false)} disabled={busy}>Dismiss</button>
-            <button className="tbw-btn tbw-btn-book" data-testid="partial-submit" onClick={submit} disabled={busy || !!problem}>
+            <button className="tbw-btn tbw-btn-cancel" data-testid="partial-submit" onClick={submit} disabled={busy || !!problem}>
               {busy ? (anchored ? '⏳ SIGNING & ANCHORING…' : '⏳ REDUCING…') : '✓ REDUCE THE TRADE'}
             </button>
           </div>
         </div>
       )}
       {error && <div className="tbw-error" data-testid="partial-error" style={{ marginTop: 8 }}>{error}</div>}
-      {done && <div className="tbw-mut" data-testid="partial-done" style={{ marginTop: 8 }}>{partialDone(done)}</div>}
     </div>
   )
 }
