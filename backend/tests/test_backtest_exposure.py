@@ -45,8 +45,38 @@ def _shares(histories: np.ndarray, table: np.ndarray, h: int) -> np.ndarray:
 
 
 def _outside(observed: np.ndarray, reference: np.ndarray) -> np.ndarray:
-    lo, hi = np.percentile(reference, 2.5, axis=0), np.percentile(reference, 97.5, axis=0)
+    lo, hi = bt.band(reference)
     return (observed < lo) | (observed > hi)
+
+
+def test_a_days_forecast_does_not_see_the_move_it_is_compared_with():
+    # 200 days of exactly 1 % a day, then one day of +7.5 % and nine of nothing. On the vol of the days before, a
+    # ten-day 99th percentile is (2.326 - s/2) s = 7.3 % with s = 1 % x sqrt(10): the move is beyond it. A vol that
+    # saw the move's own days (1.23 % a day) would put the percentile at 9.0 % and count nothing.
+    r = np.concatenate([0.01 * np.where(np.arange(200) % 2 == 0, 1.0, -1.0), [0.075], np.zeros(9)])
+    share, n = bt.exceedances(r, 10, bt.quantile_table(None), start=200)
+    assert n == 1 and share.tolist() == [0.0, 0.0, 1.0, 1.0]
+    quiet = r.copy()
+    quiet[200] = 0.070                                                   # 7.0 %: inside the 99th, beyond the 95th
+    assert bt.exceedances(quiet, 10, bt.quantile_table(None), start=200)[0].tolist() == [0.0, 0.0, 1.0, 0.0]
+
+
+def test_the_band_is_where_95_percent_of_the_models_own_histories_fall():
+    ref = np.arange(1000, dtype=float).reshape(-1, 1) / 999.0
+    lo, hi = bt.band(ref)
+    assert lo[0] == pytest.approx(0.025) and hi[0] == pytest.approx(0.975)
+    # and the table's band is that band of the same procedure on the model's own histories, redone here by hand
+    r = bt.simulate_history(BTC, 0.55, 700, 1, seed=2)[0]
+    rows = bt.backtest(r, BTC, sims=30, seed=3)
+    vol = float(r.std() * math.sqrt(365.0))
+    sim = bt.simulate_history(None, vol, len(r), 30, 3)
+    for x in (y for y in rows if y["model"] == "one vol"):
+        ref = np.array([bt.exceedances(s, x["days"], bt.quantile_table(None))[0] for s in sim])
+        assert x["low"] == pytest.approx(np.percentile(ref, 2.5, axis=0).tolist())
+        assert x["high"] == pytest.approx(np.percentile(ref, 97.5, axis=0).tolist())
+        got = bt.exceedances(r, x["days"], bt.quantile_table(None))[0]
+        assert x["share"] == pytest.approx(got.tolist())
+        assert x["inside"] == [bool(a <= g <= b) for g, a, b in zip(got, x["low"], x["high"])]
 
 
 def test_the_band_is_a_95_percent_band_and_one_vol_fails_a_history_the_regimes_made():
@@ -59,10 +89,11 @@ def test_the_band_is_a_95_percent_band_and_one_vol_fails_a_history_the_regimes_m
     made = bt.simulate_history(BTC, 0.55, days, 240, seed=9)
     one, reg = bt.quantile_table(None), bt.quantile_table(bt.clock_multipliers(BTC, h))
     a, b, c = _shares(gauss, one, h), _shares(made, reg, h), _shares(made, one, h)
-    assert _outside(a[:40], a[40:]).mean() < 0.10                       # one vol on lognormal histories: about 0.04
-    assert _outside(b[:40], b[40:]).mean() < 0.12                       # the regimes on their own histories: about 0.06
+    # the figures docs/xva.md §8e quotes: 4 and 6 % of cells, and about six histories of ten
+    assert _outside(a[:40], a[40:]).mean() == pytest.approx(0.04, abs=0.015)   # one vol on lognormal histories
+    assert _outside(b[:40], b[40:]).mean() == pytest.approx(0.055, abs=0.015)  # the regimes on their own histories
     wrong = _outside(c[:40], a[40:])
-    assert (wrong[:, 0] | wrong[:, 3]).mean() > 0.45                    # a tail outside in most histories: about 0.6
+    assert (wrong[:, 0] | wrong[:, 3]).mean() == pytest.approx(0.62, abs=0.07) # a tail outside in most histories
     assert c[:40, 0].mean() > 0.017 and c[:40, 3].mean() > 0.017        # about 2 % of days beyond a percentile called 1 %
     assert wrong[:, 1].mean() < 0.25 and wrong[:, 2].mean() < 0.25      # the 5th and 95th hardly tell them apart
 

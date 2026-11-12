@@ -12,12 +12,17 @@ them all in order and deploy"). No figure the engine computes changes; methodolo
   backtesting counterparty credit risk models (2010), on five years of public daily closes of BTC, ETH and SOL: on
   every day the model is asked for the 1st, 5th, 95th and 99th percentile of the move over the next 5 to 91 days and
   the move that followed is counted. Against the band the model's own simulated histories give, the vol regimes are
-  outside in 1 cell of 60 and one vol in 17. Refitted on the first three years and tested on the last two, the
-  regimes are outside in none (nor is one vol: two quiet years cannot tell them apart).
+  outside in 1 cell of 60 and one vol in 17 (in sample: the regimes were fitted to the same five years). Refitted on
+  the first three years and tested on the last two, the regimes are outside in none (nor is one vol: two quiet years
+  cannot tell them apart).
 - **What it does not show, on the page with it** (`docs/xva.md` §8e, methodology §9.3, the model inventory): the vol
   in the test is the realised vol of the 90 days before, not a ticket's implied vol; BTC's 14-day move went above the
-  99th percentile on 2.96 % of days, at the very edge of its band, and SOL's on 2.44 %: the up side reads low
-  against this history; five years cannot certify a 1st percentile; an option's exposure is not backtested.
+  99th percentile on 2.96 % of days, at the very edge of its band, and SOL's on 2.44 %: the margin the desk calls on a
+  position worth more to it when the coin rises was the one exceeded most often; five years cannot certify a 1st
+  percentile, and the test cannot reject tails that are too wide; an option's exposure is not backtested.
+- After the reviews (Emmy, Vera): the band's own construction and the forecast's blindness to the move it is compared
+  with are each held by a test (a 90 % band had passed the first tests); the figures the documents quote from the
+  procedure's own check are asserted, not commented; the inventory no longer says the fit has no holdout.
 - **One MVA figure derived apart from the engine** by the model validator, from the written method alone: a
   margined three-month BTC forward, −326.78 against the engine's −326.17 on one vol and −356.95 against −356.66 on
   the regimes. Kept in the reference suite (`tests/reference/test_ref_mva_forward.py`). §7 now says what she found

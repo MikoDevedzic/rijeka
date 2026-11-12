@@ -248,9 +248,10 @@ period, each way) and the 95 % rows of the PFE the ticket draws.
 
 Days overlap and the vol is itself an estimate, so a binomial band would be wrong. The same procedure is run on 500
 histories simulated from the model itself (same length, warm-up and overlap); the band is where 95 % of those counts
-fall. Run on histories of known law the band behaves as a 95 % band should (a model given its own histories is
-outside it in 4 to 6 % of cells), and one vol given five-year histories the regimes made is caught in a tail at ten
-days in about 6 histories of 10: five years is a short record for a 1st percentile (`tests/test_backtest_exposure.py`).
+fall. Run on histories of known law (`tests/test_backtest_exposure.py`, forty five-year histories at ten days) the
+band behaves as a 95 % band should: a model given its own histories is outside it in 4 % of cells (one vol) and 6 %
+(the regimes). One vol given histories the regimes made is caught in a tail in 25 histories of 40: five years is a
+short record for a 1st percentile.
 
 Share of days on which the 14-day move went beyond the model's percentile (in brackets the model's own band):
 
@@ -264,9 +265,11 @@ Share of days on which the 14-day move went beyond the model's percentile (in br
 | SOL | regimes | 1.51 (0.23–3.02) | 4.88 (2.90–9.41) | 8.13 (2.76–8.82) | 2.44 (0.23–2.93) |
 
 In per cent of about 1,720 days each; bold is outside the band. Over all five horizons and four percentiles (60
-cells): one vol is outside its band in 17, the regimes in 1 (BTC's 91-day move above the 95th percentile, 16.3 % of
-days against a band that ends at 16.2 %: a coin that rose, forecast with the martingale's drift). A 95 % band leaves
-about 3 of 60 outside when the model is true, and the cells are not independent.
+cells): one vol is outside its band in 17 (8 on BTC, 7 on SOL, 2 on ETH; all but one at 5 to 30 days), the regimes
+in 1 (BTC's 91-day move above the 95th percentile, 16.3 % of days against a band that ends at 16.2 %: a coin that
+rose, forecast with the martingale's drift). This run is in sample for the regimes: their six parameters per coin
+were fitted to the same five years. A 95 % band leaves about 3 of 60 outside when the model is true; the cells are
+not independent, and neither are the coins, which share one market.
 
 Out of sample: the regimes refitted on the first three years (to 10 November 2024) and tested on the two after, 60
 cells again: the regimes outside in none, and one vol outside in none either. Those two years were quieter, and 720
@@ -276,12 +279,17 @@ fail later, not that they were needed.
 What this is not. (1) The vol the model is given is the realised vol of the 90 days before: the history of the
 implied vols a ticket carries is not held. (2) The up side is not as comfortable as the down side: BTC's 14-day
 move went above the 99th percentile on 2.96 % of days, at the very edge of the band, and SOL's on 2.44 %; the model is
-close to symmetric in logs and these coins' rallies were not. A margin called on a position that gains when the coin
-rises reads low by that much against this history. (3) The band is wide because five years are short: at the 1st and
-99th percentile it runs from about 0.2 to 3 %, so the test rejects a bad model, it does not certify a good one. (4)
+close to symmetric in logs and these coins' rallies were not. That percentile is the margin the desk calls on a
+position worth more to it when the coin rises (a forward bought, a call bought): it is the side on which the margin
+was exceeded most often, inside the band but not by much. (3) The band is wide because five years are short: at the
+1st and 99th percentile it runs from about 0.2 to 3 %, and its lower edge is at or near zero, so the test rejects a
+model whose tails are too thin; it does not certify a good one, and it cannot reject one whose tails are too wide
+(BTC's 91-day move never went below the regimes' 1st percentile). (4)
 It tests the level, not a portfolio: an option's exposure also depends on the vol the paths carry, which is not
 backtested. (5) The engine's ten-business-day margin period is 10/250 of a year, 14.6 days on the regimes' 365-day
 clock; the test's 14 days is a little short of it. (6) The in-sample run uses regimes fitted to the same five years.
+(7) The realised vol of the last 90 days already carries the slow regime of the moment, and the regimes then add
+their slow variation on top of it: in a high-vol spell the test's forecast may lean wide. Not measured.
 
 ## 8c. Fees (0.25.0)
 

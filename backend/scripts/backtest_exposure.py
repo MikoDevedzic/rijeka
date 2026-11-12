@@ -95,6 +95,14 @@ def simulate_history(reg, vol: float, days: int, n: int, seed: int) -> np.ndarra
     return -0.5 * var + np.sqrt(var) * rng.standard_normal((n, days))
 
 
+BAND = (2.5, 97.5)                        # the band: where 95 % of the model's own histories fall
+
+
+def band(reference: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The band of each percentile's exceedance share over the model's own histories: (low, high)."""
+    return np.percentile(reference, BAND[0], axis=0), np.percentile(reference, BAND[1], axis=0)
+
+
 def backtest(r: np.ndarray, reg, sims: int = 500, start: int = WARM_UP, seed: int = 7) -> list[dict]:
     """Every horizon, both models: the history's exceedance shares and the band the model's own histories give."""
     vol = float(r.std() * math.sqrt(365.0))
@@ -105,7 +113,7 @@ def backtest(r: np.ndarray, reg, sims: int = 500, start: int = WARM_UP, seed: in
             table = quantile_table(None if model is None else clock_multipliers(model, h))
             got, n = exceedances(r, h, table, start)
             ref = np.array([exceedances(sim[i], h, table, start)[0] for i in range(sims)])
-            lo, hi = np.percentile(ref, 2.5, axis=0), np.percentile(ref, 97.5, axis=0)
+            lo, hi = band(ref)
             rows.append({"model": name, "days": h, "n": n, "share": got.tolist(), "low": lo.tolist(), "high": hi.tolist(),
                          "inside": [bool(a <= g <= b) for g, a, b in zip(got, lo, hi)]})
     return rows
