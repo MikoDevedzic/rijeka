@@ -91,6 +91,24 @@ def test_under_a_margin_agreement_todays_exposure_is_what_the_collateral_leaves(
     assert abs(avg.cva) < abs(end.cva)
 
 
+def test_a_step_does_not_start_with_what_was_paid_on_its_date():
+    """A package leg stands at the amount it settled on its grid date and is gone after (the waterfall's `settled`).
+    The step after starts from the set without it: the paid amount is exposure up to its date and not beyond."""
+    T, dt, n = 4, 1.0 / 52, 50
+    paths = np.tile(np.array([100.0, 100.0, 40.0, 40.0]), (n, 1))        # a leg worth 60 is paid on the second date
+    settled = np.tile(np.array([0.0, 0.0, 60.0, 60.0]), (n, 1))
+    p0 = [math.exp(-0.04 * k * dt) for k in range(T + 1)]
+    P = WaterfallParams(notional=1e6, maturity_y=T * dt, dt=dt, theta=0.04)
+    wf = run_waterfall(paths, 100.0, p0, P, CSA.uncollateralised(), average_exposure=True, settled=settled)
+    q = lambda k: math.exp(-(P.cp_cds_bp / 1e4 / P.lgd) * k * dt)
+    mid = [100.0, 100.0, 0.5 * ((100.0 - 60.0) + 40.0), 40.0]              # the third step starts at 40, not at 100
+    assert wf.cva == pytest.approx(-P.lgd * sum(mid[i] * (q(i) - q(i + 1)) * p0[i + 1] for i in range(T)), rel=1e-12)
+    assert wf.fva == pytest.approx(-P.ftp_bp / 1e4 * sum(mid[i] * dt * p0[i + 1] for i in range(T)), rel=1e-12)
+    assert wf.ee == [100.0, 100.0, 40.0, 40.0]                             # the profile shown is still the value at each date
+    naive = run_waterfall(paths, 100.0, p0, P, CSA.uncollateralised(), average_exposure=True)
+    assert abs(naive.fva) > abs(wf.fva), "without the settlement the third step would start at 100"
+
+
 @pytest.mark.parametrize("pair", ["BTCUSD", "EURUSD"])
 @pytest.mark.parametrize("t", [1.0 / 12, 0.25, 1.0])
 def test_the_grid_the_app_runs_agrees_with_daily_steps(pair, t):
@@ -112,3 +130,56 @@ def test_a_margin_period_of_two_weekly_steps_is_still_the_exact_lag():
     assert fx_xva.exposure_grid(0.25)[0] == 13
     check(55, 10, 0.25)
     check(80, 5, 0.25)
+
+
+# ── what the monthly-pinned modules check at monthly dates, on the grid the app runs ──────────────────────────────
+
+def test_a_fee_between_two_weekly_dates_is_exposure_until_it_is_paid():
+    from tests.test_fees import Q, _fwd as fee_fwd
+    csa = CSA.uncollateralised()
+    base, mb = fx_xva.forward_xva(fee_fwd(), csa, n_paths=4000)
+    owed, mo = fx_xva.forward_xva(fee_fwd(), csa, n_paths=4000, fees=[(0.26, 80_000.0)])       # received between week 13 (0.25) and week 14
+    assert mb["steps"] == 26
+    grid = np.arange(1, 27) * mb["dt"]
+    before = grid < 0.26
+    assert before.sum() == 13
+    assert np.all(np.array(owed.ee)[before] > np.array(base.ee)[before]) and np.array(owed.ee)[~before] == pytest.approx(np.array(base.ee)[~before])
+    assert abs(owed.cva) > abs(base.cva)
+    assert mo["fees"]["on_grid"][:13] == pytest.approx([80_000 * math.exp(-Q * (0.26 - g)) for g in grid[:13]]) and not any(mo["fees"]["on_grid"][13:])
+
+
+def test_a_leg_that_settles_between_two_weekly_dates_stands_at_the_later_one_and_is_gone_after():
+    from tests.test_package_xva import _fwd as pk_fwd, _opt as pk_opt
+    nz = {}
+    off = pk_fwd(t=0.2, strike=1.16)                       # settles between week 10 (0.1923) and week 11 (0.2115)
+    V, _, _, rows = fx_xva.simulate_package_paths([off, pk_fwd(t=1.0)], n_paths=300, keep_leg_paths=True, noise_out=nz)
+    assert nz["steps"] == 52
+    k = int(math.ceil(0.2 / nz["dt"] - 1e-9)) - 1
+    assert k == 10
+    leg = rows[0]["paths"]
+    assert leg[:, k] == pytest.approx(1e7 * (1.17 * nz["m"][:, k] - 1.16)), "week 11: the settled amount, nothing left to discount"
+    assert leg[:, k - 1].any() and not leg[:, k + 1:].any()
+    assert nz["settled"][:, k + 1:] == pytest.approx(np.repeat(leg[:, [k]], 52 - k - 1, axis=1)) and not nz["settled"][:, :k + 1].any()
+    assert V == pytest.approx(rows[0]["paths"] + rows[1]["paths"])
+    # an option expiring at 0.10 and settling at 0.12, between week 6 and week 7: its payoff stands at week 7, then nothing
+    opt = pk_opt("CALL", "BUY", 1.17, t=0.12)
+    V, _, _, rows = fx_xva.simulate_package_paths([opt, pk_fwd(t=0.5)], n_paths=300, keep_leg_paths=True, noise_out=nz)
+    k = int(math.ceil(0.12 / nz["dt"] - 1e-9)) - 1
+    o = rows[0]["paths"]
+    assert (o[:, k] >= 0).all() and o[:, k].any() and (o[:, k] == 0).any() and not o[:, k + 1:].any()
+
+
+def test_the_size_limit_counts_the_steps_the_run_takes():
+    """A package of 24 option legs at 10,000 paths took 5.6 s on monthly steps and 23.6 s on a year of weekly ones.
+    The limit is on legs × paths × the run's own steps, so that package is told how many paths fit; a ticket and an
+    ordinary package are not touched."""
+    from fastapi import HTTPException
+    from api.routes.xva import CURRENCY_RUN_MAX_WORK, _run_fits
+    for legs, paths in ((1, 10000), (2, 10000), (7, 10000), (24, 3200)):
+        _run_fits(legs, paths, 1.0)
+    with pytest.raises(HTTPException) as e:
+        _run_fits(24, 10000, 1.0)
+    assert e.value.status_code == 422 and "3200 paths fit" in e.value.detail
+    assert 24 * 3200 * 52 <= CURRENCY_RUN_MAX_WORK < 24 * 3300 * 52
+    _run_fits(24, 10000, 1.2)          # beyond a year the steps are monthly, as before: 24 × 10,000 × 15
+

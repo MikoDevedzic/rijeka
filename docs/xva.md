@@ -63,6 +63,14 @@ BTC forward dealt at fair value, 55 % vol, 20,000 paths, CVA against the same ru
 | now: weekly steps, averaged exposure, uncollateralised | −2 % | +1 % | −3 % | 0 % |
 | the same under a ten-day margin period | −3 % | 0 % | −2 % | 0 % |
 
+The daily figures above carry the averaged charge and the asset's vol regimes. Against continuous time, by closed
+form on one vol (EE(t) of a forward dealt at K is a call's undiscounted value; CVA = LGD ∫ EE(t) e^{−rt} h e^{−ht} dt),
+the rule until 0.28.0 read +28 % at one month and +20 % at three, and the engine now reads −2.7 % and −1.7 %
+(`tests/reference/test_ref_exposure_grid.py`). The averaged rule is a trapezoid: on a profile that grows like √t it
+reads low, 2.6 % at one month, 0.7 % at three, 0.1 % at a year by the rule alone; monthly steps beyond a year read
+0.8 % low at 1.03 years and 0.4 % at two. A step starts from the set less what was paid on that date, so a leg of a
+package that has settled is not charged for one more step.
+
 The charge was overstated, not understated. The profiles on the chart (EE, ENE, PFE) are still the values at the
 grid dates. KVA's replacement cost, MVA's margin and ColVA are read at each step's end. A swap's waterfall and
 the credit page's netting-set engine keep monthly steps and the step's end (not measured there), so the
@@ -295,7 +303,8 @@ it follows the legs as they settle: a calendar spread posts little while both le
 once the near one has settled. The capital add-on is SA-CCR's on the legs together (below): inside one hedging
 set a bought and a sold forward of the same terms carry none; under the older CEM choice each leg's add-on is
 added while it is alive. One run takes up to 24 legs, settlements up to ten years out, and
-legs × paths × months to the longest settlement up to four million (the route says how many paths fit).
+legs × paths × steps up to four million (the route says how many paths fit; the steps are the run's own, so a
+year of weekly steps lets 24 legs run at 3,200 paths and seven legs at 10,000).
 A package of one leg is that leg's own run, draw for draw (`tests/test_package_xva.py`). The answer has the shape
 of the single-trade routes plus a row per leg (its value, when it settles, its own peak expected exposure), which
 the tab shows as what netting is worth. `POST /api/xva/incremental` takes the same `trades` list, so the charge

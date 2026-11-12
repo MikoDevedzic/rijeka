@@ -4,7 +4,20 @@
 // cannot be mistaken for one another: EE in limestone (the line the charges are computed from), ENE in blue, the
 // PFE tail in amber; a simulated path is a hair of limestone or blue by where it ends.
 import { T, alpha, MONO } from '../../theme'
-export function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths) {
+// The label under grid point i of n, on steps of `dt` years (a twelfth when the run does not say: a swap's monthly
+// grid). The time is the point's own, (i + 1)·dt, never its index: a currency or digital-asset ticket steps weekly
+// to a year since 0.28.0, and an index read as months put "4.4Y" under the last point of a one-year forward.
+// Days up to about three months, months up to two years, years beyond.
+export function axisLabel(i, n, dt) {
+  const step = Number(dt) > 0 ? Number(dt) : 1 / 12
+  const t = (i + 1) * step, total = n * step
+  const whole = (x, unit) => (Math.abs(x - Math.round(x)) < 0.05 ? String(Math.round(x)) : x.toFixed(1)) + unit
+  if (total <= 0.26) return Math.round(t * 365) + 'D'
+  if (total <= 2.01) return whole(t * 12, 'M')
+  return whole(t, 'Y')
+}
+
+export function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePaths, dt) {
   if (!canvas || !ee || !ee.length) return
   const ctx = canvas.getContext('2d')
   const dpr = window.devicePixelRatio || 2
@@ -83,8 +96,7 @@ export function drawExposureChart(canvas, ee, ene, pfe, highlightCurve, samplePa
   drawCurve(eeArr,  T.textHi, [],   7, 2.0, true)
   ctx.fillStyle = T.textFaint; ctx.textAlign='center'; ctx.font = `10px ${MONO}`
   ;[0,0.25,0.5,0.75,1].forEach(frac => {
-    const i=Math.round(frac*(n-1)); const m=i+1
-    const lab = n <= 24 ? m+'M' : (m % 12 === 0 ? (m/12)+'Y' : (m/12).toFixed(1)+'Y')   // months on a short grid, years otherwise
-    ctx.fillText(lab, xS(i), H-PAD.b+10)
+    const i=Math.round(frac*(n-1))
+    ctx.fillText(axisLabel(i, n, dt), xS(i), H-PAD.b+10)
   })
 }

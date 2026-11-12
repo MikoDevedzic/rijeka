@@ -711,8 +711,10 @@ def simulate(
 
 # ── FX / crypto forwards: same waterfall, lognormal forward exposure ─────────────
 
-CURRENCY_RUN_MAX_WORK = 4_000_000    # legs × paths × months to the horizon: what one currency or digital-asset run may cost (a run of a year
-                                     # or less steps weekly since 0.28.0, which is small beside the day-by-day clock this guards)
+CURRENCY_RUN_MAX_WORK = 4_000_000    # legs × paths × steps: what one currency or digital-asset run may cost. The steps are the run's own
+                                     # (weekly to a year since 0.28.0). Measured 12 Nov 2026 on a laptop: 24 option and barrier legs at
+                                     # 10,000 paths took 5.6 s on 12 monthly steps and 23.6 s on 52 weekly ones (445 MB), so a package that
+                                     # large is told how many paths fit (3,200); one ticket at 10,000 paths is 0.5 s
 CURRENCY_RUN_MAX_YEARS = 50.0        # the longest settlement a single ticket's run takes
 
 
@@ -723,7 +725,7 @@ def _run_fits(legs: int, paths: int, horizon_years: float) -> None:
     from pricing import fx_xva
     if horizon_years > CURRENCY_RUN_MAX_YEARS:
         raise HTTPException(status_code=422, detail=f"an XVA run takes settlements up to {CURRENCY_RUN_MAX_YEARS:.0f} years out; this one settles in {horizon_years:.1f}")
-    steps = fx_xva.exposure_grid(horizon_years, 12)[0]      # months to the horizon: the measure the limit was set in
+    steps = fx_xva.exposure_grid(horizon_years)[0]          # the steps the run will take: weekly to a year, monthly beyond
     if legs * paths * steps > CURRENCY_RUN_MAX_WORK:
         fits = max(200, int(CURRENCY_RUN_MAX_WORK / (legs * steps) // 100 * 100))
         raise HTTPException(status_code=422, detail=f"a settlement {horizon_years:.1f} years out at {paths} paths is more than one run takes; {fits} paths fit")
@@ -1056,7 +1058,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
 
 from api.routes._package import PACKAGE_MAX_LEGS      # noqa: E402  (one definition: api/routes/_package.py)
 PACKAGE_MAX_YEARS = 10.0             # the longest settlement a package run takes
-PACKAGE_MAX_WORK = CURRENCY_RUN_MAX_WORK      # legs × paths × monthly steps: what one run may cost
+PACKAGE_MAX_WORK = CURRENCY_RUN_MAX_WORK      # legs × paths × steps (the run's own): what one run may cost
 PACKAGE_FORWARDS = ("FX_FORWARD", "NDF", "CRYPTO_FORWARD")
 PACKAGE_OPTIONS = ("FX_OPTION", "CRYPTO_OPTION")
 
@@ -1138,9 +1140,9 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     horizon = max(fx_xva._horizon(i) for i in inputs)
     if horizon > PACKAGE_MAX_YEARS:
         raise HTTPException(status_code=422, detail=f"a package run takes settlements up to {PACKAGE_MAX_YEARS:.0f} years out; the longest leg settles in {horizon:.1f}")
-    work = len(inputs) * min(body.paths, 10000) * fx_xva.exposure_grid(horizon, 12)[0]
+    work = len(inputs) * min(body.paths, 10000) * fx_xva.exposure_grid(horizon)[0]
     if work > PACKAGE_MAX_WORK:
-        fits = max(200, int(PACKAGE_MAX_WORK / (len(inputs) * fx_xva.exposure_grid(horizon, 12)[0]) // 100 * 100))
+        fits = max(200, int(PACKAGE_MAX_WORK / (len(inputs) * fx_xva.exposure_grid(horizon)[0]) // 100 * 100))
         raise HTTPException(status_code=422, detail=f"{len(inputs)} legs to {horizon:.1f} years at {body.paths} paths is more than one run takes; {fits} paths fit")
     import time as _time
     _t0 = _time.perf_counter()

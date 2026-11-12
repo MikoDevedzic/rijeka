@@ -27,6 +27,9 @@ def monthly_steps(monkeypatch):
     that does not depend on the grid (the margin-period lag, a leg settling inside a package, the capital add-on by
     hand at a monthly date, wrong-way risk against a quadrature) and whose hand figures were worked on monthly
     dates. The grid the app runs (weekly to a year) has its own tests in tests/test_exposure_grid.py."""
+    import os
+    if os.getenv("RIJEKA_TESTS_ON_THE_APP_GRID") == "1":      # to see which of these tests need monthly steps: they run on the app's grid
+        return
     from pricing import fx_xva
     real = fx_xva.exposure_grid
     monkeypatch.setattr(fx_xva, "exposure_grid", lambda t_years, per_year=None: real(t_years, per_year or 12))

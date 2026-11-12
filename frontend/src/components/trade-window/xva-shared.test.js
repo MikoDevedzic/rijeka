@@ -333,6 +333,13 @@ describe('what the steps of a run are called', () => {
     expect(stepWord(1 / 365)).toBe('daily')
     expect([stepUnit(1 / 52), stepUnit(1 / 12), stepUnit(1 / 365)]).toEqual(['w', 'm', 'd'])
     for (const none of [undefined, null, 0, NaN, -1]) { expect(stepWord(none)).toBe(''); expect(stepUnit(none)).toBe('') }
+    // the steps of real tickets: one month is five steps of six days, 29 days five of 5.8, 372 days 53 of seven
+    for (const [days, steps] of [[30.4, 5], [29, 5], [91, 13], [183, 27], [365, 52], [372, 53], [14, 2], [22, 4]]) expect(stepWord(days / steps / 365)).toBe('weekly')
+    for (const [days, steps] of [[395, 13], [730, 24], [3650, 120]]) expect(stepWord(days / steps / 365)).toBe('monthly')
+    // a ten-day ticket has two five-day steps and a five-day one two of two and a half: said as they are, with no unit on the strip
+    expect(stepWord(10 / 2 / 365)).toBe('5-day')
+    expect(stepWord(5 / 2 / 365)).toBe('3-day')
+    expect(stepUnit(10 / 2 / 365)).toBe('')
   })
   it('shows every step vol up to thirteen, and every fourth and the last beyond', () => {
     const vols = (n) => Array.from({ length: n }, (_, i) => 50 + i)

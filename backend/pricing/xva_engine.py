@@ -359,8 +359,17 @@ def run_waterfall(
     if average_exposure and T:
         r0 = float(v0) - float(collateral_held(np.array([[float(v0)]]), csa)[0, 0]) if csa.collateralised else float(v0)
         p0_, n0_ = max(r0 - float(im_recv[0]), 0.0), min(r0 + float(im_post[0]), 0.0)
-        c_pos = 0.5 * (np.column_stack((np.full(n_paths, p0_), e_pos[:, :-1])) + e_pos)
-        c_neg = 0.5 * (np.column_stack((np.full(n_paths, n0_), e_neg[:, :-1])) + e_neg)
+        # A step starts where the last one ended, less what was paid on that date: a leg of a package stands at the
+        # amount it settled on its date and is gone after, so the step after it must not start with it still owed
+        # (Emmy, 12 Nov 2026: half the paid leg would have been charged for one more step).
+        if settled is not None and T > 1:
+            start = resid[:, :-1] - (settled[:, 1:] - settled[:, :-1])
+            s_pos = np.maximum(start - im_recv[None, :-1], 0.0)
+            s_neg = np.minimum(start + im_post[None, :-1], 0.0)
+        else:
+            s_pos, s_neg = e_pos[:, :-1], e_neg[:, :-1]
+        c_pos = 0.5 * (np.column_stack((np.full(n_paths, p0_), s_pos)) + e_pos)
+        c_neg = 0.5 * (np.column_stack((np.full(n_paths, n0_), s_neg)) + e_neg)
         ee_c, ene_c = np.mean(c_pos, axis=0), np.mean(c_neg, axis=0)
     else:
         c_pos, c_neg, ee_c, ene_c = e_pos, e_neg, ee, ene

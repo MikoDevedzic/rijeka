@@ -91,7 +91,15 @@ export const TIPS = {
 
 // What a run's steps are called, read from the run's own step length (years) so the words cannot disagree with the
 // run: a currency or digital-asset ticket steps weekly to a year and monthly beyond (pricing/fx_xva.exposure_grid).
-export const stepWord = (dt) => !(Number(dt) > 0) ? '' : dt < 0.012 ? 'daily' : dt < 0.05 ? 'weekly' : 'monthly'
+// A step that is none of the three is named by its days (a ten-day ticket has two five-day steps).
+export function stepWord(dt) {
+  if (!(Number(dt) > 0)) return ''
+  const days = dt * 365
+  if (days < 1.5) return 'daily'
+  if (days >= 5.5 && days <= 8.5) return 'weekly'
+  if (days >= 27 && days <= 32) return 'monthly'
+  return `${Math.round(days)}-day`
+}
 export const stepUnit = (dt) => ({ daily: 'd', weekly: 'w', monthly: 'm' })[stepWord(dt)] || ''
 // The step vols a strip shows, as [step number, vol]: all of them up to thirteen, else every fourth and the last
 // (a year of weekly steps is fifty-two).

@@ -343,7 +343,7 @@ def test_a_run_too_large_for_one_request_is_refused():
         _run_fits(1, 10_000, 45.0)
     assert e.value.status_code == 422 and "3300 paths fit" not in e.value.detail and "paths fit" in e.value.detail
     fits = int(e.value.detail.split(";")[1].split()[0])
-    assert fits * fx_xva.exposure_grid(45.0, 12)[0] <= CURRENCY_RUN_MAX_WORK < (fits + 100) * fx_xva.exposure_grid(45.0, 12)[0]
+    assert fits * fx_xva.exposure_grid(45.0)[0] <= CURRENCY_RUN_MAX_WORK < (fits + 100) * fx_xva.exposure_grid(45.0)[0]
     with pytest.raises(HTTPException) as e:
         _run_fits(1, 200, 60.0)
     assert e.value.status_code == 422 and "up to 50 years" in e.value.detail

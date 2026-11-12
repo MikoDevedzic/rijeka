@@ -45,7 +45,7 @@ export default function ExposureCanvas({ result, height = 230, placeholder = 'EE
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr)
     canvas.style.width = w + 'px'; canvas.style.height = h + 'px'
     canvas.getContext('2d').scale(dpr, dpr)
-    drawExposureChart(canvas, result.ee, result.ene, result.pfe, hl, result.sample_paths)
+    drawExposureChart(canvas, result.ee, result.ene, result.pfe, hl, result.sample_paths, result.dt)
   }, [result, hl, height, fill, tick])
 
   // The readouts the tabs pass as children sit in a row UNDER the drawing area, never over it: an

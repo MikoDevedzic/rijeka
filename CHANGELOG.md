@@ -10,26 +10,41 @@ step.** Item 11(c) of the Phase 1 exit list, on the owner's word ("weekly and av
 
 - **What was wrong.** Every run stepped monthly and charged CVA, DVA, FVA and FBA on the exposure at each step's
   end. A forward's exposure grows like the square root of time, so on two or three steps the charge was overstated.
-  BTC forward dealt at fair value, 55 % vol, 20,000 paths, CVA against the same run on daily steps: +31 % at one
-  month, +23 % at three, +8 % at six, +9 % at a year uncollateralised; +23 %, +6 %, +3 %, +2 % under a ten-day
-  margin period.
+  BTC forward dealt at fair value, 55 % vol, vol regimes on, 20,000 paths, CVA against the same run on daily steps
+  with the averaged charge: +31 % at one month, +23 % at three, +8 % at six, +9 % at a year uncollateralised;
+  +23 %, +6 %, +3 %, +2 % under a ten-day margin period. Against continuous time, by a closed form on one vol
+  (no random numbers, none of the engine's code): +28 % at one month and +20 % at three.
 - **Now.** A ticket of a year or less steps weekly (monthly beyond), and the four exposure charges read the mean
   of each step's two ends, the first step starting from today's exposure (`pricing/fx_xva.exposure_grid`,
-  `run_waterfall(average_exposure=True)`). Against daily steps: within 4 % at every one of those tenors, both
-  ways. The ticket names its steps from the run ("26 weekly steps"), and a long strip of step vols shows every
-  fourth.
+  `run_waterfall(average_exposure=True)`). Against daily steps with the same averaged charge: within 4 % at every
+  one of those tenors, both ways. Against continuous time: 2.7 % low at one month and 1.7 % at three. The averaged
+  rule is a trapezoid, and on a profile that grows like the square root of time a trapezoid reads low: 2.6 % at one
+  month, 0.7 % at three, 0.1 % at a year by the rule alone, where the step's end read 28 % high. A step starts from
+  the set less what was paid on that date, so a package's settled leg is not charged for one more step.
+- **On the ticket.** The XVA tab names its steps from the run ("26 weekly steps"), a long strip of step vols shows
+  every fourth, and the chart's axis is each point's own time (it read the point's index as months: a one-year
+  forward on weekly steps would have ended at "4.4Y").
+- **Size.** The limit on a run counts the steps it takes. Measured: 24 option and barrier legs at 10,000 paths
+  took 5.6 s on monthly steps and 23.6 s on a year of weekly ones, so a package that large is told how many paths
+  fit (3,200); seven legs still run at 10,000, and one ticket at 10,000 paths takes half a second.
 - **What moves.** CVA, DVA, FVA and FBA on every currency and digital-asset ticket and package, down by about the
   figures above. KVA and MVA of a margined ticket move with the finer steps (six-month BTC forward with initial
   margin, 20,000 paths: KVA −124 to −130 against −135 on daily steps, MVA −815 to −802 against −795). No price,
   no sensitivity, nothing on a swap, nothing on the credit page.
-- **Checked.** The averaged charge by hand on the waterfall; the wrong-way quadrature (no random numbers, none of
+- **Checked.** Emmy re-derived CVA against continuous time by closed form (31.25 and 160.75 at one and three
+  months; the engine 30.4 to 30.6 and 158.0 to 159.7 at 40,000 paths): now `tests/reference/test_ref_exposure_grid.py`
+  at 4 %. The averaged charge by hand on the waterfall; the wrong-way quadrature (no random numbers, none of
   the engine's code) redone for the averaged definition and agreeing at 2 %; the margin the engine calls when the
   margin period spans two weekly steps against a simulation that draws both dates; the two workbooks, with the
   averaged charge in their cells, 51 of 51 under every preset.
 - **Not done.** A swap's waterfall and the credit page's engine keep monthly steps and the step's end: not
   measured there, and the incremental charge on a ticket is therefore on another grid than its stand-alone figure.
   The workbooks run monthly steps. A barrier is still watched only at the grid dates (weekly now to a year). A
-  margined KVA is still about 4 % below daily steps at six months.
+  margined KVA is still about 4 % below daily steps at six months. Ten test modules whose hand figures were worked
+  at monthly dates run on monthly steps (`tests/conftest.py::monthly_steps`); run on the app's grid
+  (`RIJEKA_TESTS_ON_THE_APP_GRID=1`) what fails there is those dates, with one exception that is the engine's: on
+  weekly steps a knock-out call is marked up to 0.2 % above its vanilla at one date two weeks before expiry (three
+  cents on a deep out-of-the-money option; the cause is not established).
 
 ## 0.27.1 · 12 November 2026
 
