@@ -57,13 +57,27 @@ for (const c of CASES) {
     if (c.asset === 'CRYPTO') {
       expect(regimes.lowest_vol_pct, 'the calmest day is below the vol used').toBeLessThan(usdc.params.vol_pct)
       expect(regimes.highest_vol_pct, 'and the most stressed above it').toBeGreaterThan(usdc.params.vol_pct)
-      await expect(proof).toContainText('REGIMES')
-      await expect(proof).toContainText(`between ${regimes.lowest_vol_pct.toFixed(1)} % and ${regimes.highest_vol_pct.toFixed(1)} %`)
-      await expect(proof).toContainText(`daily closes to ${regimes.as_of}`)
+      const row = proof.locator('tr', { has: app.locator('td', { hasText: /^REGIMES$/ }) })      // the row by its own label: MODEL's sentence has the word too
+      await expect(row).toContainText(`the vol runs from ${regimes.lowest_vol_pct.toFixed(2)} % to ${regimes.highest_vol_pct.toFixed(2)} % day by day`)
+      await expect(row).toContainText(`daily closes to ${regimes.as_of}`)
+      // each figure is set in mono, as the lines under the results set theirs
+      expect(await row.locator('span').first().evaluate(el => getComputedStyle(el).fontFamily)).toMatch(/mono/i)
+      // the whole line can be read: opened, the proof runs below the fold, and the ticket scrolls to it. Scrolled to its
+      // end, the line is fully on screen and above the ticket's footer (which stays at the bottom, over what is under it)
+      const scrolls = await row.evaluate(el => {
+        let p = el.parentElement
+        while (p && !(p.scrollHeight > p.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(p).overflowY))) p = p.parentElement
+        if (p) p.scrollTop = p.scrollHeight
+        return p ? p.className : null
+      })
+      expect(scrolls, 'the ticket itself scrolls').toContain('tbw-window')
+      await expectFullyInView(row, `${c.name}: the REGIMES line`)
+      const foot = await win.locator('.tbw-footer').boundingBox(), box = await row.boundingBox()
+      expect(box.y + box.height, 'above the footer, not under it').toBeLessThanOrEqual(foot.y + 1)
       await expectNoHorizontalOverflow(win.getByTestId('xva-left'), `${c.name}: XVA left column with the proof open`)
     } else {
       expect(regimes, 'a currency pair has one vol').toBeNull()
-      await expect(proof).not.toContainText('REGIMES')
+      await expect(proof.locator('td', { hasText: /^REGIMES$/ })).toHaveCount(0)
     }
     await app.screenshot({ path: `e2e/.out/shots/${c.name.replace(/ /g, '-')}-proof.png` })
     expectClean(problems)

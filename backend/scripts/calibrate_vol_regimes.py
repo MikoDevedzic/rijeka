@@ -132,7 +132,7 @@ def report(asset: str, closes: dict[str, float], out=None) -> dict:
     (kf, af, bf), (ks, as_, bs) = f["fast"], f["slow"]
     print(f"\n{asset}: {n} daily returns to {last}; sample vol {r.std() * math.sqrt(365):.1%}, the fit's {f['total_vol']:.1%}", file=out)
     print(f"  log-likelihood: one vol {f['ll_one_vol']:.1f}; the fast chain alone {f['ll_fast_only']:.1f} (+{f['ll_fast_only'] - f['ll_one_vol']:.1f}); "
-          f"fast x slow {f['ll']:.1f} (+{f['ll'] - f['ll_fast_only']:.1f} for three more parameters; chance gives about 4 at 5 %)", file=out)
+          f"fast x slow {f['ll']:.1f} (+{f['ll'] - f['ll_fast_only']:.1f} for three more parameters, in-sample; a regular chi-squared bar is about 4 at 5 %, the true one higher: the slow chain is not identified at ratio 1)", file=out)
     print(f"  fast: stressed vol {kf:.2f} x calm; a calm spell {1 / (1 - af):.1f} days, a stressed one {1 / (1 - bf):.1f}", file=out)
     print(f"  slow: high vol {ks:.2f} x low; a low spell {1 / (1 - as_):.0f} days, a high one {1 / (1 - bs):.0f}", file=out)
     print(f'  paste:    "{asset}": Regimes(fast=Chain(ratio={kf:.2f}, stay_low={af:.3f}, stay_high={bf:.3f}), '

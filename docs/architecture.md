@@ -78,7 +78,10 @@ credit every 2 hours) and moves the `release` branch after a deploy.
 The vol regimes' parameters (six per asset) are dated constants in `pricing/vol_regimes.py`, fitted by
 `backend/scripts/calibrate_vol_regimes.py` to public daily closes (Coinbase's public candles, the source
 `risk/history.py` reads). The script is run by hand, never by the app, and reads nothing but those prices; a refit
-is a change to the constants, reviewed like any other (`docs/model_inventory.md`).
+is a change to the constants, reviewed like any other (`docs/model_inventory.md`). The owner refits: once a year, and
+sooner when a run's own line (`params.vol_regimes.as_of`, shown on the XVA tab) is more than a year old or the market
+has plainly changed character; nothing in the app checks the date. When the source is silent the script stops with
+the error and nothing changes.
 
 **The database**: a Supabase project. Auth issues ES256 tokens; the API verifies them against the
 project's published keys (no shared secret) and then reads the caller's role from `profiles.role`: an account
@@ -147,6 +150,9 @@ The table describes the template account, the one the feeds write to.
 | Digital-asset fixings | table `fixings` (not a snapshot curve): pair, date, source, value | Deribit's daily delivery price at 08:00 UTC (`market_data/deribit.py`), shared by every account; a desk's own entry for a benchmark (`POST /api/currency/fixings`), its own only | every 30 minutes while a date among the last ten is missing: every pass for six hours after 08:10 UTC for the day's own, then, as for an older hole, every third hour; nothing once every date is stored. `?force=1&count=N` on the tick backfills | a price is stored only within 15 % of the template's stored spot for that date (the day before or after where it has none), and only for dates the venue can have published; a stored fixing is never overwritten by the feed: a re-read that differs stores nothing and marks the date disputed. Health (`crypto_fixings`) is red when the latest is more than 36 hours behind, when any of the seven dates before it is missing, or while a date is disputed. An administrator fills or corrects a date (`POST /api/currency/fixings/correct`). Before the table exists nothing is stored and an expired trade is valued on the stored spot, marked provisional |
 | Rates vols | `USD_SWVOL_ATM`; skew and cap tables | parametric (`market_data/demo_feed.py`); the ATM grid's level scaled by realised vol (`risk/vols.py`), skew and caps as built | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
 | G10 FX vols | `{PAIR}_VOL` for six pairs | parametric, level scaled by realised vol | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
+
+Coinbase is read two ways: spot, in the table above, and daily closes (its public candles), by `risk/history.py` for the
+market-risk history and by `backend/scripts/calibrate_vol_regimes.py` when the owner refits the vol regimes.
 
 A run of the marks makes three requests to the venue and three for the spot. Every writer and what it may replace:
 

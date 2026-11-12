@@ -215,7 +215,7 @@ def _lagged_driver(m: np.ndarray, sv: np.ndarray, dt: float, lag_y: float, rng: 
         else:
             from pricing.vol_regimes import share_before
             om = share_before(ck, j - 1, w)
-            var_j = float(sv[j - 1]) ** 2 * dt * ck[:, j - 1, :].mean(axis=1, dtype=np.float64)
+            var_j = float(sv[j - 1]) ** 2 * dt * ck.u[:, j - 1]
             out[:, i] = np.exp(lo + om * (hi - lo) + z * np.sqrt(var_j * om * (1.0 - om)))
     return out, t_lag, j_of
 
@@ -365,7 +365,7 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
             "step_vols_pct": [round(float(v) * 100, 3) for v in nz["step_vols"]] if inp.pillars else None,
             "im_basis": wf.im_basis, "capital_basis": cap["basis"], "crypto_group": cap["group"],
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward at the surface's ATM vol to settlement, same waterfall as rates"
-                                                                           + ("; day by day the vol moves between regimes (a stress of days on a level of weeks) whose variance on average is the ticket's" if _regimes(inp) else ""),
+                                                                           + ("; on the clock of the asset's vol regimes" if _regimes(inp) else ""),
             "vol_regimes": regimes_meta(inp, inp.vol_pct if inp.vol_pct is not None else default_vol_pct(inp.pair)),
             "p0_grid": [float(x) for x in p0], "_paths": paths,       # the MtM paths, for the ticket's chart (not serialised as such)
             "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
@@ -494,7 +494,7 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
             "model": f"lognormal spot{' with the surface' + chr(39) + 's term structure' if inp.pillars else ' at the option' + chr(39) + 's vol'}; {spec.style.replace('_', ' ').lower()} valued on each path with the style's closed form "
                      f"(the credit engine's model); payoff fixed at expiry, discounted to settlement"
                      + ("; barriers monitored at the grid points" if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else "")
-                     + ("; day by day the spot's vol moves between regimes (a stress of days on a level of weeks) whose variance on average is the surface's; the option is still marked at the surface's vol" if _regimes(inp) else "")
+                     + ("; the spot on the clock of the asset's vol regimes, the option still marked at the surface's vol" if _regimes(inp) else "")
                      + ("; American valued as European on the paths (a lower bound)" if spec.style == "AMERICAN" else ""),
             "vol_regimes": regimes_meta(inp, inp.vol * 100.0),
             "_paths": paths, "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
@@ -699,6 +699,6 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
                      "a leg stays to the first grid date at or after its settlement and is nothing after"
                      + ("; barriers monitored at the grid points" if any(s in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") for s in styles) else "")
                      + ("; American valued as European on the paths (a lower bound)" if "AMERICAN" in styles else "")
-                     + ("; day by day the driver's vol moves between regimes (a stress of days on a level of weeks) with the same variance on average" if noise_out.get("clock") is not None else ""),
+                     + ("; the driver on the clock of the asset's vol regimes" if noise_out.get("clock") is not None else ""),
             "vol_regimes": regimes_meta(longest, sigma * 100.0) if noise_out.get("clock") is not None else None}
     return wf, meta

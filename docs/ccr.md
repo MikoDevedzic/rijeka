@@ -11,7 +11,7 @@ Pricing and risk management ask different questions of the same model, so the en
 
 ## Joint simulation
 
-One Hull-White factor per currency, one lognormal factor per spot, monthly steps to the netting set's last maturity, Brownian motions correlated by the calibration's matrix (identity in the risk-neutral run). Grid times are each grid date's distance from the as-of date in 365.25-day years, the clock every trade date is read on, so a fixing or an expiry on a grid date is at that grid point; each step uses its own length. The short rate is r(t) = f(0,t) + φ(t) + x(t), with x the driftless Ornstein-Uhlenbeck deviation and φ(t) = σ²/(2a²)·(1 − e^{−at})². Bond prices are affine in x + φ (that is, in r − f(0,t)) and reproduce today's curve:
+One Hull-White factor per currency, one lognormal factor per spot (a digital asset's too: one vol here; the ticket's stand-alone XVA runs the same asset on vol regimes since 0.24.0, `docs/xva.md` §8b, so a margined figure there and one computed on these paths are not like for like), monthly steps to the netting set's last maturity, Brownian motions correlated by the calibration's matrix (identity in the risk-neutral run). Grid times are each grid date's distance from the as-of date in 365.25-day years, the clock every trade date is read on, so a fixing or an expiry on a grid date is at that grid point; each step uses its own length. The short rate is r(t) = f(0,t) + φ(t) + x(t), with x the driftless Ornstein-Uhlenbeck deviation and φ(t) = σ²/(2a²)·(1 − e^{−at})². Bond prices are affine in x + φ (that is, in r − f(0,t)) and reproduce today's curve:
 
     P(t,T) = P(0,T)/P(0,t) · exp(−B(t,T)·(x_t + φ(t)) − σ²/(4a)·B(t,T)²·(1 − e^{−2at})),   B(t,T) = (1 − e^{−a(T−t)})/a
 

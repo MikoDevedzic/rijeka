@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from pricing import fx_xva
-from pricing.vol_regimes import REGIMES, Chain, clock, regimes_of, share_before, step_variance
+from pricing.vol_regimes import REGIMES, Chain, Clock, clock, regimes_of, share_before, step_variance
 from pricing.xva_engine import IM_CONFIDENCE, model_im
 
 Q = 0.038
@@ -70,12 +70,11 @@ def test_the_clock_is_the_two_chains_that_were_fitted():
     n, steps, dt = 20_000, 12, 1 / 12
     ck = clock(BTC, n, steps, dt, seed=42)
     (calm, stressed), (low, high) = BTC.fast.scales, BTC.slow.scales
-    assert ck.shape == (n, steps, 30) and ck.dtype == np.float32
-    four = sorted((f * s) ** 2 for f in (calm, stressed) for s in (low, high))
-    assert sorted(float(x) for x in np.unique(ck)) == pytest.approx(four, rel=1e-5)
-    flat = ck.reshape(n, -1).astype(np.float64)
-    is_ = lambda f, s: np.isclose(flat, (f * s) ** 2, rtol=1e-4)                     # noqa: E731
-    for chain, state in ((BTC.fast, is_(stressed, low) | is_(stressed, high)), (BTC.slow, is_(calm, high) | is_(stressed, high))):
+    assert ck.shape == (n, steps, 30) and ck.codes.dtype == np.uint8, "a byte a day: a ten-year run at ten thousand paths is 36 MB"
+    assert list(ck.values) == pytest.approx([(f * s) ** 2 for s in (low, high) for f in (calm, stressed)], rel=1e-6)
+    assert set(np.unique(ck.codes)) == {0, 1, 2, 3}
+    flat = ck.codes.reshape(n, -1)
+    for chain, state in ((BTC.fast, (flat & 1) == 1), (BTC.slow, (flat & 2) == 2)):
         assert state.mean() == pytest.approx(chain.high_share, abs=0.012), "the long-run share, from the first day"
         assert state[:, 0].mean() == pytest.approx(chain.high_share, abs=0.012)
         # a sub-step is 365/360 of a day here: the chance a state is followed by itself is the chain's over that length
@@ -83,11 +82,12 @@ def test_the_clock_is_the_two_chains_that_were_fitted():
         assert (state[:, 1:] & state[:, :-1]).sum() / state[:, :-1].sum() == pytest.approx(stay_high, abs=0.004)
         assert (~state[:, 1:] & ~state[:, :-1]).sum() / (~state[:, :-1]).sum() == pytest.approx(stay_low, abs=0.004)
     assert step_variance(ck).mean() == pytest.approx(1.0, abs=0.012), "the variance expected is the ticket's"
-    assert np.array_equal(ck, clock(BTC, n, steps, dt, seed=42)) and not np.array_equal(ck, clock(BTC, n, steps, dt, seed=43))
+    assert np.array_equal(ck.codes, clock(BTC, n, steps, dt, seed=42).codes) and not np.array_equal(ck.codes, clock(BTC, n, steps, dt, seed=43).codes)
 
 
 def test_the_share_of_a_steps_variance_before_a_date():
-    ck = np.array([[[1.0, 3.0, 1.0, 3.0]], [[2.0, 2.0, 2.0, 2.0]]], dtype=np.float32)       # two paths, one step, four sub-steps
+    # two paths, one step, four days: the first path's days are worth 1, 3, 1, 3 and the second's 2 each
+    ck = Clock(np.array([[[0, 1, 0, 1]], [[2, 2, 2, 2]]], dtype=np.uint8), np.array([1.0, 3.0, 2.0, 6.0]))
     assert share_before(ck, 0, 0.0) == pytest.approx([0.0, 0.0])
     assert share_before(ck, 0, 1.0) == pytest.approx([1.0, 1.0])
     assert share_before(ck, 0, 0.5) == pytest.approx([0.5, 0.5])
@@ -246,6 +246,107 @@ def test_an_options_margin_estimate_with_regimes_agrees_with_a_simulation_day_by
         ref_call, ref_post = _pct(v(m_t, day) - v(m_lag, day - lag_days))
         assert call_im[i] == pytest.approx(ref_call, rel=0.06), f"the margin we call at step {i + 1}"
         assert post_im[i] == pytest.approx(ref_post, rel=0.06), f"the margin we post at step {i + 1}"
+
+
+# ── what else rides the clock: an uncollateralised ticket, wrong-way risk, a package, a barrier ─────────────
+
+def test_an_uncollateralised_ticket_moves_little_and_the_way_the_mixture_says():
+    """An exposure at the money is lower when the variance to a date is uncertain than when it is fixed at the same
+    average (the square root is concave). The same normals drive both runs, so the difference is the clock's."""
+    from pricing.csa import CSA
+    for t_years, low, high in ((0.25, 0.015, 0.045), (0.5, 0.010, 0.030), (2.0, 0.000, 0.012)):
+        on, _ = fx_xva.forward_xva(_fwd(55, t=t_years), CSA.uncollateralised(), n_paths=40_000)
+        off, _ = fx_xva.forward_xva(_fwd(55, t=t_years, regimes=False), CSA.uncollateralised(), n_paths=40_000)
+        for name in ("cva", "fva"):
+            fall = 1.0 - getattr(on, name) / getattr(off, name)
+            assert low < fall < high, f"{name} at {t_years}y falls {fall:.2%}"
+        total = lambda w: w.cva + w.dva + w.fva + w.fba + w.kva + w.mva       # noqa: E731
+        assert abs(total(on) / total(off) - 1.0) < 0.015, "and the total by about 1 % or less (1.1 % at three months)"
+
+
+def test_wrong_way_risk_on_the_regimes_paths_still_reprices_the_credit_curve():
+    """The default intensity tied to the level (Hull and White) is calibrated on the sample so that the mean
+    survival is the curve's: no normality is assumed, and it holds on a level with regimes. With the intensity
+    rising as the asset falls, a sold forward (exposure when the asset falls) has a larger CVA than with default
+    independent, and a bought one a smaller."""
+    from pricing.csa import CSA
+    from pricing.xva_engine import hazard_beta, path_survival
+    n, steps, dt, sigma = 60_000, 12, 1 / 12, 0.6
+    _, _, _, m, ck = fx_xva._driver(n, steps, dt, 42, sigma, None, BTC)
+    assert ck is not None
+    q_mkt = [math.exp(-0.05 * (k + 1) * dt) for k in range(steps)]
+    q = path_survival(np.log(m), hazard_beta(3.0), q_mkt, dt)
+    assert q.shape == (n, steps + 1) and q[:, 1:].mean(axis=0) == pytest.approx(q_mkt, rel=1e-6), "the mean survival is the curve's at every date"
+    assert np.all(np.diff(q, axis=1) <= 1e-12) and q.min() >= 0.0
+    low = np.log(m[:, -1]) < np.percentile(np.log(m[:, -1]), 10)
+    assert q[low, -1].mean() < q[~low, -1].mean(), "paths where the asset fell have survived less"
+    sold, _ = fx_xva.forward_xva(_fwd(60, t=1.0, direction="SELL"), CSA.uncollateralised(), n_paths=20_000, cp_hazard_if_halves=3.0)
+    bought, _ = fx_xva.forward_xva(_fwd(60, t=1.0), CSA.uncollateralised(), n_paths=20_000, cp_hazard_if_halves=3.0)
+    assert abs(sold.cva) > abs(sold.cva_independent) * 1.2 and abs(bought.cva) < abs(bought.cva_independent)
+
+
+def _call(style="EUROPEAN", regimes=True, **kw):
+    from pricing.fx_exotic import ExoticSpec
+    t = 0.5
+    return fx_xva.OptionXvaInput(pair="BTCUSD", base_notional=10.0, spot=108250.0, forward=108465.61, t_expiry=t, t_settle=t, df_quote_t=math.exp(-Q * t),
+                                 quote_zero=Q, vol=0.8, spec=ExoticSpec(style, "CALL", strike=110000.0, **kw), direction="BUY", regimes=regimes)
+
+
+def test_a_package_on_a_digital_asset_runs_on_one_clock_and_says_so():
+    from pricing.csa import CSA
+    fwd, opt = _fwd(80), _call()
+    alone, both = {}, {}
+    p_fwd, _, v_fwd = fx_xva.simulate_paths(fwd, n_paths=3000, seed=42, noise_out=alone)
+    one, _, v_one, _ = fx_xva.simulate_package_paths([fwd], n_paths=3000, seed=42)
+    assert np.array_equal(one, p_fwd) and v_one == v_fwd, "a package of one leg is that leg's run, draw for draw, regimes and all"
+    p_opt, _, _ = fx_xva.simulate_option_paths(opt, n_paths=3000, seed=42)
+    two, _, _, _ = fx_xva.simulate_package_paths([fwd, opt], n_paths=3000, seed=42, noise_out=both)
+    assert np.allclose(two, p_fwd + p_opt, rtol=1e-12, atol=1e-6), "and two legs are the sum of the two on one clock"
+    assert np.array_equal(both["clock"].codes, alone["clock"].codes)
+    _, meta = fx_xva.package_xva([fwd, opt], CSA.from_request({"preset": "BILATERAL"}), n_paths=1000)
+    assert meta["vol_regimes"]["as_of"] == BTC.as_of and "regimes" in meta["model"]
+    # one leg that turns the regimes off puts the whole package on one vol, and the run says it has none
+    mixed = {}
+    off_leg = _call(regimes=False)
+    p_mixed, _, _, _ = fx_xva.simulate_package_paths([fwd, off_leg], n_paths=3000, seed=42, noise_out=mixed)
+    p_off, _, _, _ = fx_xva.simulate_package_paths([_fwd(80, regimes=False), off_leg], n_paths=3000, seed=42)
+    assert mixed["clock"] is None and np.array_equal(p_mixed, p_off)
+    _, meta_off = fx_xva.package_xva([fwd, off_leg], CSA.from_request({"preset": "BILATERAL"}), n_paths=1000)
+    assert meta_off["vol_regimes"] is None and "regimes" not in meta_off["model"]
+
+
+def test_a_barrier_on_the_regimes_paths_is_worth_what_it_was_today_and_never_more_than_its_vanilla():
+    """An up-and-out call: its value today is the closed form's, regimes or not; on every path and date it is worth
+    no more than the same call without the barrier; once the level has been seen above the barrier on a grid date it
+    is worth nothing for good. (The size of the gap between a mark at the surface's vol and what the regime paths
+    pay is not measured here: docs/model_inventory.md states it as a limit.)"""
+    barrier = _call("BARRIER", barrier=150000.0, barrier_type="UP_OUT")
+    on, off = {}, {}
+    v_on, _, v0_on = fx_xva.simulate_option_paths(barrier, n_paths=20_000, seed=42, noise_out=on)
+    _, _, v0_off = fx_xva.simulate_option_paths(_call("BARRIER", regimes=False, barrier=150000.0, barrier_type="UP_OUT"), n_paths=20_000, seed=42, noise_out=off)
+    assert v0_on == v0_off and on["clock"] is not None and off["clock"] is None
+    vanilla, _, _ = fx_xva.simulate_option_paths(_call(), n_paths=20_000, seed=42)
+    assert np.all(v_on <= vanilla + 1e-6) and np.all(v_on >= -1e-9)
+    above = np.maximum.accumulate(on["s_t"] >= 150000.0, axis=1)
+    assert above.any() and np.all(v_on[above] == 0.0), "knocked out on a grid date: nothing from then on"
+    assert (on["s_t"] >= 150000.0).mean() != (off["s_t"] >= 150000.0).mean(), "the regimes change how often the barrier is seen"
+
+
+def test_a_run_too_large_for_one_request_is_refused():
+    from fastapi import HTTPException
+    from api.routes.xva import CURRENCY_RUN_MAX_WORK, _run_fits
+    _run_fits(1, 10_000, 10.0)                 # the largest ticket the app itself makes: ten years at ten thousand paths
+    _run_fits(1, 10_000, 30.0)
+    with pytest.raises(HTTPException) as e:
+        _run_fits(1, 10_000, 45.0)
+    assert e.value.status_code == 422 and "3300 paths fit" not in e.value.detail and "paths fit" in e.value.detail
+    fits = int(e.value.detail.split(";")[1].split()[0])
+    assert fits * fx_xva.monthly_grid(45.0)[0] <= CURRENCY_RUN_MAX_WORK < (fits + 100) * fx_xva.monthly_grid(45.0)[0]
+    with pytest.raises(HTTPException) as e:
+        _run_fits(1, 200, 60.0)
+    assert e.value.status_code == 422 and "up to 50 years" in e.value.detail
+    # what the limit buys: the clock of the largest run that fits is a byte per path and day
+    assert CURRENCY_RUN_MAX_WORK * 30 <= 125_000_000
 
 
 def test_the_lagged_level_on_the_clock_is_a_martingale_and_the_rest_of_the_step_is_its_own():

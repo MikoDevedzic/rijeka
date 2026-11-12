@@ -94,6 +94,8 @@ def engine_runs(fi: dict) -> dict:
         from pricing.vol_regimes import share_before, step_variance
         u = step_variance(ck)
         for preset in ("BILATERAL", "ON_CHAIN"):
+            if runs[preset][0].mpor_years >= dt:
+                raise ValueError("the workbook's bridge is written for a margin period shorter than a grid step")
             w = 1.0 - runs[preset][0].mpor_years / dt
             omega[preset] = np.stack([share_before(ck, k, w) for k in range(steps)], axis=1)
     return {"noise": noise, "runs": runs, "T": steps, "dt": dt, "sigma": float(noise["sigma"]), "v0": float(runs[DEFAULT_PRESET][2]["v0"]),

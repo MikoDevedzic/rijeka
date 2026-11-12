@@ -699,6 +699,23 @@ def simulate(
 
 # ── FX / crypto forwards: same waterfall, lognormal forward exposure ─────────────
 
+CURRENCY_RUN_MAX_WORK = 4_000_000    # legs × paths × monthly steps: what one currency or digital-asset run may cost
+CURRENCY_RUN_MAX_YEARS = 50.0        # the longest settlement a single ticket's run takes
+
+
+def _run_fits(legs: int, paths: int, horizon_years: float) -> None:
+    """Refuse (422) a run larger than one request may cost. A single ticket had no limit until 0.24.0, when a
+    digital asset's run began to carry a day-by-day clock (pricing/vol_regimes: a byte per path and day): a
+    settlement far enough out would have taken the instance's memory."""
+    from pricing import fx_xva
+    if horizon_years > CURRENCY_RUN_MAX_YEARS:
+        raise HTTPException(status_code=422, detail=f"an XVA run takes settlements up to {CURRENCY_RUN_MAX_YEARS:.0f} years out; this one settles in {horizon_years:.1f}")
+    steps = fx_xva.monthly_grid(horizon_years)[0]
+    if legs * paths * steps > CURRENCY_RUN_MAX_WORK:
+        fits = max(200, int(CURRENCY_RUN_MAX_WORK / (legs * steps) // 100 * 100))
+        raise HTTPException(status_code=422, detail=f"a settlement {horizon_years:.1f} years out at {paths} paths is more than one run takes; {fits} paths fit")
+
+
 class CurrencyXvaRequest(BaseModel):
     pair: str
     base_notional: float = 1_000_000.0
@@ -843,6 +860,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                                vol_pct=body.vol_pct, vol_mode=body.vol_mode)
     inp.regimes = bool(body.vol_regimes)
     csa = _csa_of(db, user["sub"], body.csa, body.collateral)
+    _run_fits(1, min(body.paths, 10000), inp.t_years)
     import time as _time
     _t0 = _time.perf_counter()
     wf, meta = fx_xva.forward_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
@@ -969,6 +987,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
     inp.regimes = bool(body.vol_regimes)
     spec = inp.spec
     csa = _csa_of(db, user["sub"], body.csa, body.collateral)
+    _run_fits(1, min(body.paths, 10000), inp.t_settle)
     import time as _time
     _t0 = _time.perf_counter()
     wf, meta = fx_xva.option_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
@@ -1004,7 +1023,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
 
 from api.routes._package import PACKAGE_MAX_LEGS      # noqa: E402  (one definition: api/routes/_package.py)
 PACKAGE_MAX_YEARS = 10.0             # the longest settlement a package run takes
-PACKAGE_MAX_WORK = 4_000_000         # legs × paths × monthly steps: what one run may cost
+PACKAGE_MAX_WORK = CURRENCY_RUN_MAX_WORK      # legs × paths × monthly steps: what one run may cost
 PACKAGE_FORWARDS = ("FX_FORWARD", "NDF", "CRYPTO_FORWARD")
 PACKAGE_OPTIONS = ("FX_OPTION", "CRYPTO_OPTION")
 

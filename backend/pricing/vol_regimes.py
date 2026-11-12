@@ -94,7 +94,7 @@ class Regimes:
 
     def describe(self, vol_pct: float) -> dict:
         (calm, stressed), (low, high) = self.fast.scales, self.slow.scales
-        return {"lowest_vol_pct": round(vol_pct * calm * low, 1), "highest_vol_pct": round(vol_pct * stressed * high, 1),
+        return {"lowest_vol_pct": round(vol_pct * calm * low, 2), "highest_vol_pct": round(vol_pct * stressed * high, 2),
                 "fast": {"ratio": self.fast.ratio, "stressed_share_pct": round(self.fast.high_share * 100, 1),
                          "calm_spell_days": round(self.fast.spells[0], 1), "stressed_spell_days": round(self.fast.spells[1], 1)},
                 "slow": {"ratio": self.slow.ratio, "high_share_pct": round(self.slow.high_share * 100, 1),
@@ -118,38 +118,71 @@ def regimes_of(pair: str) -> Optional[Regimes]:
     return REGIMES.get(str(pair)[:3].upper())
 
 
-def clock(reg: Regimes, n_paths: int, steps: int, dt: float, seed: int) -> np.ndarray:
-    """The variance clock: for every path, grid step and sub-step inside it, the day's variance as a multiple of
-    the ticket's (fast^2 * slow^2: one of four values), shape (n_paths, steps, n_sub), float32. Each path starts in
-    each state with its long-run share, since today's regime is not read. Drawn from a generator of its own
-    (seeded from `seed`) so that the level's own standard normals are the ones a run without regimes would draw."""
+class Clock:
+    """The variance clock of a run: for every path, grid step and sub-step inside it, which of the four states the
+    day was in (`codes`, one byte each: fast state + 2 × slow state) and the day's variance in each state as a
+    multiple of the ticket's (`values`: fast^2 × slow^2). One byte a day and not the multiplier itself, because a
+    ten-year run at ten thousand paths is 36 million days: 36 MB so, 144 MB as float32 multipliers."""
+
+    def __init__(self, codes: np.ndarray, values: np.ndarray):
+        self.codes, self.values = codes, values
+        self._u: Optional[np.ndarray] = None
+
+    @property
+    def shape(self) -> tuple:
+        return self.codes.shape
+
+    def step(self, k: int) -> np.ndarray:
+        """The multipliers of grid step k: (n_paths, n_sub)."""
+        return self.values[self.codes[:, k, :]]
+
+    @property
+    def u(self) -> np.ndarray:
+        """The variance each grid step accumulated, as a multiple of the ticket's: (n_paths, steps), mean one.
+        Worked out once, a step at a time."""
+        if self._u is None:
+            self._u = np.stack([self.step(k).mean(axis=1) for k in range(self.codes.shape[1])], axis=1)
+        return self._u
+
+
+def clock(reg: Regimes, n_paths: int, steps: int, dt: float, seed: int) -> Clock:
+    """The variance clock: both chains stepped about once a day on every path, shape (n_paths, steps, n_sub). Each
+    path starts in each state with its long-run share, since today's regime is not read. Drawn from a generator of
+    its own (seeded from `seed`) so that the level's own standard normals are the ones a run without regimes would
+    draw."""
     n_sub = max(1, int(round(dt * 365.0 / SUB_STEP_DAYS)))
     rng = np.random.default_rng([int(seed), 0x7265676D])
-    out = np.ones((n_paths, steps, n_sub), dtype=np.float32)
-    for chain in (reg.fast, reg.slow):
+    codes = np.zeros((n_paths, steps, n_sub), dtype=np.uint8)
+    levels = []
+    for bit, chain in ((1, reg.fast), (2, reg.slow)):
         stay_low, stay_high = chain.stay(dt * 365.0 / n_sub)
         low, high = chain.scales
+        levels.append((np.float32(low * low), np.float32(high * high)))
         state = rng.random(n_paths) < chain.high_share
         for k in range(steps):
             u = rng.random((n_paths, n_sub))
             for s in range(n_sub):
                 state = np.where(state, u[:, s] < stay_high, u[:, s] >= stay_low)
-                out[:, k, s] *= np.where(state, high * high, low * low).astype(np.float32)
-    return out
+                codes[:, k, s] += np.where(state, bit, 0).astype(np.uint8)
+    (f_low, f_high), (s_low, s_high) = levels
+    # single precision products, as the multipliers were first held: the figures of 0.24.0's first build stand
+    values = np.array([f_low * s_low, f_high * s_low, f_low * s_high, f_high * s_high], dtype=np.float64)
+    return Clock(codes, values)
 
 
-def step_variance(ck: np.ndarray) -> np.ndarray:
+def step_variance(ck: Clock) -> np.ndarray:
     """The variance each grid step accumulated, as a multiple of the ticket's: (n_paths, steps), mean one."""
-    return ck.mean(axis=2, dtype=np.float64)
+    return ck.u
 
 
-def share_before(ck: np.ndarray, step: int, w: float) -> np.ndarray:
+def share_before(ck: Clock, step: int, w: float) -> np.ndarray:
     """Of the variance the step accumulated on each path, the share that came in the first `w` of its time
     (0 <= w <= 1): what the fraction of the step's time becomes on the variance clock."""
-    n_sub = ck.shape[2]
+    day = ck.step(step)
+    n_sub = day.shape[1]
     x = min(max(w, 0.0), 1.0) * n_sub
     whole = int(math.floor(x + 1e-12))
-    part = ck[:, step, :whole].sum(axis=1, dtype=np.float64)
+    part = day[:, :whole].sum(axis=1)
     if whole < n_sub and x - whole > 1e-12:
-        part = part + (x - whole) * ck[:, step, whole].astype(np.float64)
-    return part / ck[:, step, :].sum(axis=1, dtype=np.float64)
+        part = part + (x - whole) * day[:, whole]
+    return part / day.sum(axis=1)

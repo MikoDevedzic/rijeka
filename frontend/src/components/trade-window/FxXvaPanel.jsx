@@ -27,7 +27,7 @@ import {
 } from './xva-shared.jsx'
 import {
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS,
-  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine, regimesWords,
+  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine, regimesParts,
 } from './xva-shared'
 import { Note } from '../common/Note'
 
@@ -58,8 +58,10 @@ function SurfaceProof({ result }) {
     ['MODE', p.vol_mode || '—'],
     ...(p.style ? [['STYLE', String(p.style).replace(/_/g, ' ')]] : []),
     ['MODEL', p.model || '—'],
-    ...(regimesWords(p.vol_regimes) ? [['REGIMES', regimesWords(p.vol_regimes)]] : []),
   ]
+  // a digital asset's vol regimes, in the run's own figures: each figure in mono, as the lines under the results set theirs
+  const regimes = regimesParts(p.vol_regimes)
+  if (regimes) rows.push(['REGIMES', regimes.map((x, i) => (typeof x === 'string' ? x : <span key={i} style={{ fontFamily: 'var(--mono)', color: 'var(--text-hi)', whiteSpace: 'nowrap' }}>{x.fig}</span>))])
   return (
     <ProofExpander title='SURFACE PROOF' right={right} open={open} onToggle={() => setOpen(o => !o)}>
       <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed',fontFamily:'var(--mono)',fontSize:'0.8rem'}}>
