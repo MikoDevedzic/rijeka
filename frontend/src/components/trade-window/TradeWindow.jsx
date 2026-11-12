@@ -30,7 +30,6 @@ import {
   CounterpartyBlock,
   PrimaryEconomics,
   ProductTerms,
-  OptionFeeBlock,
   AnalyticsBlock,
   XVASummary,
   TradeFooter,
@@ -52,6 +51,8 @@ import { useTabStore }    from '../../store/useTabStore'
 import './products/rates'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { getSessionMaybe } from '../../lib/session'
+import FeesBlock from './FeesBlock'
+import { cleanFees, withFees, rowsFromTerms } from './fees'
 import FxCryptoPanel from './FxCryptoPanel'
 import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
 import FxXvaPanel from './FxXvaPanel'
@@ -244,6 +245,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     if (el) { el.style.height = ''; el.style.width = '' }
   }, [assetClass, curInst, productKey])
   const [fxQuote, setFxQuote]          = useState(null)
+  // the trade's fees, as rows being typed (fees.js): one list for the ticket, whatever the product
+  const [feeRows, setFeeRows]          = useState(() => (initialTrade ? rowsFromTerms(initialTrade.terms) : []))
   // where the currency panel draws its valuation block: under the flows on the CASHFLOWS tab, once that tab has been opened
   const [valuationSlot, setValuationSlot] = useState(null)
   // the quote a trade was booked from in this window: the term sheet reads AS BOOKED only while it is still the one shown
@@ -636,6 +639,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const state = useMemo(() => ({
     productKey, structure, direction, readOnly: viewMode, ...economics, ...productState,
   }), [productKey, structure, direction, viewMode, economics, productState])
+  // the fees in the trade's own currency, as the API takes them: a list, or null while a row is not complete
+  const feeCcy  = isCurrency ? (fxQuote?.quote_currency || initialTrade?.terms?.premium_currency || 'USD') : (state.ccy || 'USD')
+  const feesOut = useMemo(() => cleanFees(feeRows, feeCcy), [feeRows, feeCcy])
 
   // Fields that belong in `economics` (shell-level). Everything else is
   // routed to productState. Descriptors call update() with either kind
@@ -784,6 +790,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       const r = await executeBooking({
         state, direction,
         extras: {
+          fees:            feesOut,
           ownEntityId:     economics.ownEntityId   || null,
           counterpartyId:  economics.counterpartyId || null,
           desk:            economics.desk || null,
@@ -805,7 +812,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     } finally {
       setBooking(false)
     }
-  }, [booking, pricing, state, direction, product, productKey, onBook, economics, result])
+  }, [booking, pricing, state, direction, product, productKey, onBook, economics, result, feesOut])
 
   const handleBookCurrency = useCallback(async () => {
     if (booking || pricing) return
@@ -820,7 +827,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       const decision = await fxRef.current?.book?.()
       if (!decision || decision.action !== 'book') return
       // the quote travels with the key of the terms it priced; the body is built only if those are still the terms
-      const body = fxRef.current.payload(decision.quote, decision.key)
+      if (feesOut === null) throw new Error('A fee on the TRADE tab is not complete: finish or remove it before booking.')
+      // the trade's fees go on the ticket's own trade (the first leg of a package)
+      const body = withFees(fxRef.current.payload(decision.quote, decision.key), feesOut)
       if (!body) throw new Error('the terms changed: reprice')
       const today = new Date().toISOString().slice(0, 10)
       const session = await getSessionWithCache(sessionCacheRef)
@@ -872,7 +881,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       setBooking(false)
     }
   // the legs as they stand when BOOK is pressed, not as they were when the window opened
-  }, [booking, pricing, economics, onBook, fxLegs, legQuotes, legsFor, fxQuoteId, legContext])      // eslint-disable-line react-hooks/exhaustive-deps
+  }, [booking, pricing, economics, onBook, fxLegs, legQuotes, legsFor, fxQuoteId, legContext, feesOut])      // eslint-disable-line react-hooks/exhaustive-deps
 
   // Incremental XVA (XVA tab): the counterparty's netting set with and without
   // this trade. A stored or just-booked trade goes by id (the marginal effect of
@@ -887,9 +896,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     [refData.counterparties, economics.counterpartyId, initialTrade])
   const buildRatesTrade = useCallback(() => buildBookingBody(state, direction, {
     ownEntityId: economics.ownEntityId || null, counterpartyId: economics.counterpartyId || null,
-    desk: economics.desk || null, book: economics.book || null, priced: result,
-  }), [state, direction, economics, result])
-  const buildCurrencyTrade = useCallback(() => fxRef.current?.bookBody ? fxRef.current.bookBody() : null, [])
+    desk: economics.desk || null, book: economics.book || null, priced: result, fees: feesOut,
+  }), [state, direction, economics, result, feesOut])
+  const buildCurrencyTrade = useCallback(() => withFees(fxRef.current?.bookBody ? fxRef.current.bookBody() : null, feesOut), [feesOut])
 
   // The package the booked trade is a leg of, from the blotter's trades: { tradeId, structure, n, legs }. `pendingPackage`
   // is it when every leg is still PENDING (then CONFIRM confirms the package as one record); else a leg goes alone.
@@ -1036,6 +1045,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const handleNewTrade = () => {
     setBookedTrade(null); setBookedFxQuote(null); setResult(null); setError(''); setBookErr('')
     setFxLegs([]); setLegQuotes({}); setBookedLegs(null)        // a package that was booked is not carried into the next ticket
+    setFeeRows([])                                              // nor are its fees
     // Sprint 12 item 3 — also clear lifecycle state
     setConfirmErr(''); setCancelErr('')
     setConfirming(false); setCancelling(false)
@@ -1217,14 +1227,17 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           update={updateProductState}
         />
 
-        {product.optionFee && (
-          <OptionFeeBlock
-            spec={product.optionFee}
-            state={state}
-            update={updateProductState}
-          />
-        )}
         </>)}
+        <FeesBlock
+          rows={feeRows} onChange={(rows) => { setFeeRows(rows); setBookErr('') }} currency={feeCcy} disabled={viewMode}
+          npv={isCurrency ? (fxQuote?.npv ?? null) : (result?.npv ?? result?.net_npv ?? null)}
+          valuationDate={isCurrency ? (fxQuote?.valuation_date || null) : (state.valDate || null)}
+          premium={isCurrency
+            ? (fxQuote?.shape === 'OPTION' && Number.isFinite(Number(fxQuote.npv))
+                ? { amount: Math.abs(Number(fxQuote.npv)), direction: fxQuote.direction === 'SELL' ? 'RECEIVE' : 'PAY', date: fxQuote.valuation_date || '' } : null)
+            : (product.optionFee && Number.isFinite(Number(result?.npv ?? result?.net_npv))
+                ? { amount: Math.abs(Number(result?.npv ?? result?.net_npv)), direction: state.optionSide === 'SELL' ? 'RECEIVE' : 'PAY', date: state.effDate || state.valDate || '' } : null)}
+        />
         </fieldset>
 
         {/* View mode, currency trade: the term sheet as booked and the
@@ -1307,6 +1320,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             stale={fxStale}
             legs={xvaLegs}
             crypto={assetClass === 'CRYPTO'}
+            fees={feesOut}
           />
         </div>
       )}
@@ -1324,6 +1338,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             counterpartyName={counterpartyName}
             buildTrade={buildRatesTrade}
             tradeId={incrementalTradeId}
+            fees={feesOut}
           />
         </div>
       )}

@@ -25,6 +25,7 @@ export default function XvaPanel({
   counterpartyName,
   buildTrade,
   tradeId,
+  fees = [],
 }) {
   // Adapter refs: read-only snapshots of current state, rebuilt on change.
   const notionalRef = useMemo(() => ({
@@ -44,6 +45,7 @@ export default function XvaPanel({
     <XVATab
       // Trade context — null for new trades (XVATab tolerates this)
       trade={null}
+      fees={fees}
 
       // Adapter refs
       notionalRef={notionalRef}

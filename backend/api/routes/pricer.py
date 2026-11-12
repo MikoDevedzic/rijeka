@@ -24,7 +24,7 @@ from datetime import date, timedelta
 from typing import List, Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -1013,6 +1013,32 @@ class SwaptionRequest(BaseModel):
     structure:           Optional[str]         = "EUROPEAN"
     exercise_schedule_y: Optional[List[float]] = None
     compute_greeks:      bool                  = True
+
+
+class FeesRequest(BaseModel):
+    fees: list[dict] = Field(default_factory=list)
+    currency: str = "USD"
+    valuation_date: Optional[date] = None
+
+
+@router.post("/api/price/fees")
+def price_fees(body: FeesRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """The fees of a trade valued today: each one's discount factor and present value on its currency's curve, and
+    the total from our side (+ received, − paid). The ticket adds the total to the trade's value."""
+    from api.routes.currencies import CURVE_FOR, _curve
+    from pricing.fees import normalise, present_values
+    ccy = str(body.currency or "").upper()
+    curve_id = CURVE_FOR.get(ccy)
+    if curve_id is None:
+        raise HTTPException(status_code=422, detail=f"no discount curve for {ccy[:8]}")
+    try:
+        fees = normalise(body.fees, ccy)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    val_date = body.valuation_date or date.today()
+    curve = _curve(db, user["sub"], curve_id, val_date) if any(date.fromisoformat(f["date"]) > val_date for f in fees) else None
+    out = present_values(fees, val_date, lambda d: curve.df(d))
+    return {"currency": ccy, "curve_id": curve_id, "valuation_date": val_date.isoformat(), **out}
 
 
 @router.post("/api/price/swaption")

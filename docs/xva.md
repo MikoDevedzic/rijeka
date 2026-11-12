@@ -184,6 +184,24 @@ with no multiplier, does not move), and the total moves 1.5 to 6 % on BTC and ET
 on SOL. `vol_regimes: false` in the request runs one vol, for comparison; the answer's `params.vol_regimes` says
 what the regimes were. Limits: `docs/model_inventory.md`.
 
+## 8c. Fees (0.25.0)
+
+A trade's fees (`terms.fees`, `backend/pricing/fees.py`: any number of known payments, each a type, PAY or RECEIVE, an
+amount in the trade's currency and a date; an option's premium is one) are part of its value and of its exposure. At
+every date on every path the run adds the value of the fees dated after it, from our side (+ received, − paid),
+discounted on the flat zero the engine already uses along a path; today's value includes the fees still to come;
+and the value a margin period earlier includes the fees dated after THAT time, so a fee paid inside a margin period
+is a payment the collateral had not yet seen. A fee dated on a date or before it is paid. On all four runs
+(`/api/xva/simulate`, `/currency`, `/currency-option`, `/currency-package`: `fees` in the request, `fees` in the
+answer with their count, value today and value on the grid).
+
+A fee we are owed is exposure until it is paid; a premium we still owe lowers ours and raises the counterparty's.
+A known payment is not a risk: initial margin is the move about its mean and does not change. Checked exactly: a fee
+received at settlement gives the same paths, margin and every XVA as the same forward struck lower by that amount
+(`tests/test_fees.py`). Limits: one currency (the trade's); the rates run does not bridge a fee, so one paid inside
+a margin period is read as paid evenly over the step; a fee dated after the trade's last date is in its value and
+not in a simulated exposure beyond that date; the capital add-on does not see fees.
+
 ## Excel replication
 
 `xva_rates` in the Methodology tab (`backend/methodology/xva_workbook.py`): the same simulation on a 2-year pay-fixed swap at 200 paths, with the engine's random draws as values (ENGINE mode reproduces every EE, ENE, PFE and XVA to rounding; the Checks sheet says so) or Excel's own draws (LIVE mode, with a Convergence sheet). Sheets: Model (the exact-fit step, the grid, α(t)), Calibration (the basket, the closed-form model vol per point, the objective and RMSE, an RMSE grid around the fit), Bonds, Normals, Paths, Exposure (CSA preset or your terms, the Brownian-bridge lag, collateral, residuals), Waterfall, Engine, Convergence. The grid and calibration dates are written as values on the engine's own day count (valuation + round(t·365), the instruments at 365.25), so every discount factor matches the engine to the day; evaluated with a spreadsheet engine, all 86 checks pass at 6e-13 relative in ENGINE mode.

@@ -224,7 +224,7 @@ const PLACES = [
   ['FX spot, forwards, NDFs', 's12'], ['Forward beyond the last quoted tenor', 's12'], ['Crypto NDF', 's12'], ['Digital-asset vol surface and forward points', 's13'], ['Settlement of digital-asset forwards', 's13'],
   ['Scenario tab in the browser', 's13'], ['FX option, European', 's13'], ['FX option styles', 's13'], ['Crypto options', 's13'],
   ['Market risk: full-revaluation VaR', 's14'], ['Counterparty credit: real-world paths', 's15'], ['Initial margin:', 's9'], ['Capital add-on of a currency', 's9'],
-  ['XVA of a package', 's10'], ['Wrong-way risk', 's10'], ['Vol regimes of a digital asset', 's9'], ['Canonical record, EIP-712, registry', 's17'], ['Package record', 's17'],
+  ['XVA of a package', 's10'], ['Wrong-way risk', 's10'], ['Vol regimes of a digital asset', 's9'], ['Fees on a trade', 's9'], ['Canonical record, EIP-712, registry', 's17'], ['Package record', 's17'],
 ]
 function md(s) {                                           // the inventory's own light markup
   return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')

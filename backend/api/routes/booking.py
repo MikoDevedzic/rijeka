@@ -218,6 +218,15 @@ class BookingRequest(BaseModel):
             raise ValueError("notional must be > 0")
         return v
 
+    @field_validator("terms")
+    @classmethod
+    def fees_as_the_record_keeps_them(cls, v):
+        """`terms.fees`: any number of known payments (pricing/fees.py). Checked and stored in one shape."""
+        if isinstance(v, dict) and "fees" in v:
+            from pricing.fees import normalise
+            v = {**v, "fees": normalise(v["fees"])}
+        return v
+
     @field_validator("legs")
     @classmethod
     def at_least_one_leg(cls, v, info):

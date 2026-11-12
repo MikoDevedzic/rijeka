@@ -66,7 +66,7 @@ to be made one.
 as the database). Sync routes run in Starlette's thread pool; pricing is numpy/scipy on the request
 path with curve and trade caches. Routers by area: `api/routes/` (trades, booking, legs, events,
 cashflows, pricer, xva, risk, ccr, capital, collateral, modules, ipv, pnl, chain, chat, trade cards, market data, demo provisioning,
-methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every product, XVA, initial margin, SA-CCR, a digital asset's vol regimes),
+methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every product, XVA, initial margin, SA-CCR, a digital asset's vol regimes, a trade's fees),
 `risk/` (ladder, VaR, stress, backtest, limits, vol history), `ccr/` (exposure paths, calibration,
 options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the firm's instrument list, the schedule per counterparty, the regime and the
 yields derived from them, the ticket's collateral onto a CSA, the book's collateral page; `docs/collateral.md`), `chain/` (canonical record, EIP-712

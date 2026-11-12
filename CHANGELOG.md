@@ -3,6 +3,33 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.15). Commits on `main` are the detail.
 
+## 0.25.0 · 12 November 2026
+
+**Fees are entered with the trade.** Asked for by the owner: "the fee can also be multiple dates or have multiple
+fees. the user should be able to just enter fee cashflow or maybe even some sort of other event type of fee as part
+of the trade", for trade entry, pricing and XVA.
+
+- **What was missing.** A currency or digital-asset option booked the model's own price as its premium, dated
+  today, with nowhere to type the premium agreed; a rates option took one amount and one date; nothing else could
+  carry a fee at all; and no premium reached the value or the exposure.
+- **The FEES block** on the TRADE tab of every ticket (rates, FX, digital assets): any number of rows, each a type
+  (PREMIUM, UPFRONT, BROKERAGE, UNWIND, OTHER), PAY or RECEIVE, an amount in the trade's currency and a date. A
+  premium in instalments is several rows. On an option one press adds a PREMIUM row at the model's price, to change
+  as agreed. A row that is not complete says why, and nothing is booked while one stands.
+- **Valued.** Each fee's value today on its currency's curve and the total (`POST /api/price/fees`); the block shows
+  the fees today and the trade's value net of them. A fee dated before the valuation date is paid.
+- **In the XVA.** The fees still to come are part of the trade's value on every path and of the value a margin period
+  earlier, on all four runs (rates, currency forward, option, package): a fee we are owed is exposure until it is
+  paid, a premium we still owe lowers ours. A known payment is not a risk, so initial margin does not move. Checked
+  exactly: a fee received at settlement gives the same paths, margin and every XVA as the same forward struck lower
+  by that amount.
+- **Booked.** `terms.fees` on the trade, checked and stored in one shape by both booking routes; the confirmation's
+  premium (one amount, one currency, one date) is the PREMIUM rows added up on the first of their dates, so the
+  on-chain record's shape is unchanged. A trade booked before this shows its premium as one row.
+- **Not yet.** A fee in a currency other than the trade's; fees in P&L, in the CASHFLOWS tab and in settlement; the
+  other fees in the on-chain record (it carries the premium only). The rates run reads a fee paid inside a margin
+  period as paid evenly over the step.
+
 ## 0.24.0 · 12 November 2026
 
 Released together with 0.23.1 and 0.23.2 below, which were built and reviewed on 11 November and reached production

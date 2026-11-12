@@ -95,7 +95,7 @@ function SurfaceProof({ result }) {
 
 // `legs`: the further legs of a package (the DETAILS tab), or null: {count, ready, failed, key, bodies, quotes}. With legs the
 // run is the whole package as one netting set (POST /api/xva/currency-package): every leg on the same paths.
-export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId, stale = false, legs = null, crypto = false }) {
+export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, buildTrade, tradeId, stale = false, legs = null, crypto = false, fees = [] }) {
   const pkg = legs && legs.count > 0 ? legs : null
   const pkgWaiting = !!pkg && !pkg.ready          // a leg is still being priced: the run waits for it
   // the terms a result was simulated for: the ticket's and, in a package, every leg's
@@ -200,6 +200,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         capital_model: capModel, wwr_multiplier: wwr, im_usd: imUsdValue(imUsd), crypto_group: cryptoGroup || null,
         cp_hazard_if_halves: Number(cpLink) || 1, own_hazard_if_halves: Number(ownLink) || 1,
         csa: fxCsaBody(settlement, imExchanged),
+        ...(fees && fees.length ? { fees } : {}),      // the trade's fees still to come are part of its value and its exposure
         collateral: collateralBody(collateral),
       }
       const body = pkg

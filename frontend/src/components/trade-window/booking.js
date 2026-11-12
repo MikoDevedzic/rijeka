@@ -23,6 +23,7 @@
 // operation can pass the same key via extras.idempotencyKey.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { withFees } from './fees'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from './schedule_translator'
 import { getSessionMaybe } from '../../lib/session'
 import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, addDays, expiryShiftDays } from './product-defaults'
@@ -424,6 +425,12 @@ export function buildCapFloorBookingBody(state, direction, extras = {}) {
  * Dispatches on state.productKey; the IR_SWAP body is unchanged since Sprint 12.
  */
 export function buildBookingBody(state, direction, extras = {}) {
+  // extras.fees: the ticket's fees as cleanFees gives them (fees.js): a list, or null while a row is not complete
+  if (extras.fees === null) throw new Error('A fee on the TRADE tab is not complete: finish or remove it before booking.')
+  return withFees(bodyWithoutFees(state, direction, extras), extras.fees)
+}
+
+function bodyWithoutFees(state, direction, extras = {}) {
   if (state.productKey === 'IR_SWAPTION') return buildSwaptionBookingBody(state, direction, extras)
   if (CAP_LIKE.has(state.productKey))     return buildCapFloorBookingBody(state, direction, extras)
   if (state.productKey !== 'IR_SWAP') {

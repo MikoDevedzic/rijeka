@@ -135,6 +135,7 @@ class SimulateRequest(BaseModel):
     fixed_rate: float = 0.03643
     paths: int = Field(default=2000, ge=100, le=10_000)
     seed: int = Field(default=42, ge=0, le=2**31 - 1)   # 42 repeats exactly; the ticket's RE-ROLL sends a fresh one
+    fees: Optional[list[dict]] = None    # the trade's fees still to come (pricing/fees.py)
     # Trade TV from the pricer. XVA is an ADJUSTMENT to this, not a
     # standalone value — all_in = npv + Σ XVA. If the caller does not
     # supply it we return npv=None rather than silently reporting 0.0,
@@ -596,6 +597,16 @@ def simulate(
     csa = _with_collateral(db, user["sub"], csa, body.collateral)
 
     v0 = body.npv if body.npv is not None else anchor_v0
+    # the trade's fees still to come (pricing/fees.py): on every path the fees dated after each date, on the flat
+    # curve the simulation runs off; a fee is not bridged, so one paid inside a margin period is read as paid evenly
+    fee_meta = None
+    cash = _fee_cash(body.fees, None, date.today())
+    if cash:
+        from pricing.fees import value_at
+        on_grid = value_at(cash, (np.arange(T) + 1) * DT, theta)
+        paths = paths + on_grid[None, :]
+        v0 = v0 + float(value_at(cash, 0.0, theta)[0])
+        fee_meta = {"count": len(cash), "pv": float(value_at(cash, 0.0, theta)[0]), "on_grid": [float(x) for x in on_grid]}
     wf = run_waterfall(
         paths, v0, p0_grid,
         WaterfallParams(
@@ -638,6 +649,7 @@ def simulate(
         "collateral":   [round(v, 2) for v in wf.collateral_mean],
         "im_profile":   [round(v, 2) for v in wf.im_profile],
         "csa":          csa.to_dict(),
+        "fees":         fee_meta,
         "sample_paths": [[round(v, 0) for v in p] for p in sample_paths],
         "seed":         int(body.seed), "engine_ms": round((_time.perf_counter() - _t0) * 1000.0, 1), "path_steps": int(n_paths) * int(T),
         "steps":        T,
@@ -716,6 +728,17 @@ def _run_fits(legs: int, paths: int, horizon_years: float) -> None:
         raise HTTPException(status_code=422, detail=f"a settlement {horizon_years:.1f} years out at {paths} paths is more than one run takes; {fits} paths fit")
 
 
+def _fee_cash(fees, currency: Optional[str], val_date: date) -> Optional[list]:
+    """The request's fees as the engines take them: [(years from the valuation date, signed amount)], or 422."""
+    if not fees:
+        return None
+    from pricing.fees import in_years, normalise
+    try:
+        return in_years(normalise(fees, currency), val_date) or None
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
 class CurrencyXvaRequest(BaseModel):
     pair: str
     base_notional: float = 1_000_000.0
@@ -745,6 +768,7 @@ class CurrencyXvaRequest(BaseModel):
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
     vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
+    fees: Optional[list[dict]] = None    # the trade's fees still to come (pricing/fees.py): they are part of its value and of its exposure
     # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
     # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
     # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
@@ -868,7 +892,8 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
                                   hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
                                   counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
                                   cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
-                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
+                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves,
+                                  fees=_fee_cash(body.fees, q["quote_currency"], val_date))
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(q["npv"])
     # a fan of simulated MtM paths behind the profiles, as the rates tab draws: residual paths under a CSA, gross without
@@ -891,7 +916,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "step_vols_pct", "vol_regimes")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "step_vols_pct", "vol_regimes", "fees")},
     }
 
 
@@ -922,6 +947,7 @@ class CurrencyOptionXvaRequest(BaseModel):
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
     vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
+    fees: Optional[list[dict]] = None    # the trade's fees still to come (pricing/fees.py): they are part of its value and of its exposure
     # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
     # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
     # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
@@ -994,7 +1020,8 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
                                  ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                  capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
-                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
+                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves,
+                                  fees=_fee_cash(body.fees, q["quote_currency"], val_date))
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(q["npv"])
     raw = wf.exposure_paths if csa.collateralised else meta["_paths"]
@@ -1015,7 +1042,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "style", "vol_mode", "vol_regimes")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "style", "vol_mode", "vol_regimes", "fees")},
     }
 
 
@@ -1051,6 +1078,7 @@ class CurrencyPackageXvaRequest(BaseModel):
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"
     vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
+    fees: Optional[list[dict]] = None    # the trade's fees still to come (pricing/fees.py): they are part of its value and of its exposure
     # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
     # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
     # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
@@ -1114,7 +1142,8 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
                                   ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                   capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
                                   cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
-                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves)
+                                  cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves,
+                                  fees=_fee_cash(body.fees, quotes[0]["quote_currency"], val_date))
     _ms = (_time.perf_counter() - _t0) * 1000.0
     npv = float(sum(float(q["npv"]) for q in quotes))
     raw = wf.exposure_paths if csa.collateralised else meta["_paths"]
@@ -1138,7 +1167,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "vol_regimes")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "vol_regimes", "fees")},
     }
 
 

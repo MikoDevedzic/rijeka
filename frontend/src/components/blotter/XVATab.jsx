@@ -167,7 +167,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null, counterpartyName = null }) {
+export default function XVATab({ fees = null, trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null, counterpartyName = null }) {
   // 'simple' shows settlement, SIMULATE and a line on what the run assumes; 'advanced' is the whole tab. Every input's
   // state lives here in both, so hiding an input never changes what SIMULATE sends.
   const [view, setView] = useXvaView()
@@ -346,6 +346,8 @@ export default function XVATab({ trade, notionalRef, rateRef, effDate, matDate, 
           fixed_rate: swaptionResult?.forward_rate || (isNaN(fixedRate) ? 0.0365 : fixedRate),
         } : {}),
       }
+      // the trade's fees still to come are part of its value and of its exposure (the ticket's FEES block)
+      if (fees && fees.length) body.fees = fees
       const res = await fetch(API + '/api/xva/simulate', {
         method:'POST', headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
         body: JSON.stringify(body)

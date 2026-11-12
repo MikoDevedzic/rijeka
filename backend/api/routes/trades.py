@@ -120,6 +120,15 @@ class TradeCreate(BaseModel):
     class Config:
         extra = "ignore"
 
+    @field_validator("terms")
+    @classmethod
+    def fees_as_the_record_keeps_them(cls, v):
+        """`terms.fees`: any number of known payments (pricing/fees.py). Checked and stored in one shape."""
+        if isinstance(v, dict) and "fees" in v:
+            from pricing.fees import normalise
+            v = {**v, "fees": normalise(v["fees"])}
+        return v
+
     @field_validator("instrument_type", mode="before")
     @classmethod
     def _normalize_instrument_type(cls, v):

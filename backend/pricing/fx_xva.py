@@ -90,6 +90,23 @@ def regimes_meta(leg, vol_pct: float) -> Optional[dict]:
     return reg.describe(vol_pct) if reg is not None else None
 
 
+def with_fees(paths: np.ndarray, v0: float, lag, cash: Optional[list], steps: int, dt: float, zero: float):
+    """The set's value with its fees still to come (pricing/fees.py): on every path at every date the fees dated
+    after it, discounted on the flat quote zero; today's value with them; and the value a margin period earlier with
+    the fees dated after THAT time, so a fee paid inside a margin period is a payment the collateral had not yet
+    seen. `cash` is [(years from today, signed amount)]; None or empty changes nothing. Returns the three and what
+    the run says about its fees."""
+    if not cash:
+        return paths, v0, lag, None
+    from pricing.fees import value_at
+    t = np.arange(1, steps + 1) * dt
+    on_grid, today = value_at(cash, t, zero), float(value_at(cash, 0.0, zero)[0])
+
+    def lag_with_fees(lag_y: float, rng: np.random.Generator, noise_out: Optional[np.ndarray] = None) -> np.ndarray:
+        return lag(lag_y, rng, noise_out) + value_at(cash, np.maximum(t - lag_y, 0.0), zero)[None, :]
+    return paths + on_grid[None, :], v0 + today, lag_with_fees, {"count": len(cash), "pv": today, "on_grid": [float(x) for x in on_grid]}
+
+
 def _regimes(leg):
     """The vol regimes of the leg's asset, when it has them and the leg has not turned them off."""
     from pricing.vol_regimes import regimes_of
@@ -341,11 +358,12 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
                 counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None, own_cds_curve=None,
                 ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
                 im_amount: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0,
-                crypto_group: Optional[str] = None) -> tuple[WaterfallResult, dict]:
+                crypto_group: Optional[str] = None, fees: Optional[list] = None) -> tuple[WaterfallResult, dict]:
     noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0 = simulate_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     wwr = wwr_of(np.log(noise_out["f_t"] / inp.forward), cp_hazard_if_halves, own_hazard_if_halves)
     steps, dt = monthly_grid(inp.t_years)
+    paths, v0, noise_out["lag"], fee_meta = with_fees(paths, v0, noise_out["lag"], fees, steps, dt, inp.quote_zero)
     cap = capital_inputs([inp], csa, steps, dt, capital_model, crypto_group)
     params = WaterfallParams(
         notional=abs(inp.base_notional * inp.forward), maturity_y=inp.t_years, dt=dt, theta=max(inp.quote_zero, 1e-6),
@@ -367,6 +385,7 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
             "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward at the surface's ATM vol to settlement, same waterfall as rates"
                                                                            + ("; on the clock of the asset's vol regimes" if _regimes(inp) else ""),
             "vol_regimes": regimes_meta(inp, inp.vol_pct if inp.vol_pct is not None else default_vol_pct(inp.pair)),
+            "fees": fee_meta,
             "p0_grid": [float(x) for x in p0], "_paths": paths,       # the MtM paths, for the ticket's chart (not serialised as such)
             "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
     return wf, meta
@@ -470,11 +489,12 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
                capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
                own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
                im_amount: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0,
-               crypto_group: Optional[str] = None) -> tuple[WaterfallResult, dict]:
+               crypto_group: Optional[str] = None, fees: Optional[list] = None) -> tuple[WaterfallResult, dict]:
     noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0 = simulate_option_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     wwr = wwr_of(np.log(noise_out["f_t"] / inp.forward), cp_hazard_if_halves, own_hazard_if_halves)
     steps, dt = monthly_grid(inp.t_settle)
+    paths, v0, noise_out["lag"], fee_meta = with_fees(paths, v0, noise_out["lag"], fees, steps, dt, inp.quote_zero)
     cap = capital_inputs([inp], csa, steps, dt, capital_model, crypto_group)
     spec = inp.spec
     notional = abs(inp.base_notional * inp.forward) if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else abs(float(spec.payout or 0.0))
@@ -496,7 +516,7 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
                      + ("; barriers monitored at the grid points" if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else "")
                      + ("; the spot on the clock of the asset's vol regimes, the option still marked at the surface's vol" if _regimes(inp) else "")
                      + ("; American valued as European on the paths (a lower bound)" if spec.style == "AMERICAN" else ""),
-            "vol_regimes": regimes_meta(inp, inp.vol * 100.0),
+            "vol_regimes": regimes_meta(inp, inp.vol * 100.0), "fees": fee_meta,
             "_paths": paths, "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
     return wf, meta
 
@@ -665,7 +685,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
                 capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
                 own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
                 im_amount: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0,
-                crypto_group: Optional[str] = None) -> tuple[WaterfallResult, dict]:
+                crypto_group: Optional[str] = None, fees: Optional[list] = None) -> tuple[WaterfallResult, dict]:
     """XVA of a package of legs on one pair as one netting set: the summed paths through the same waterfall.
     Initial margin is the desk's amount or the engine's estimate from the package's own paths, so it follows the
     legs as they settle; the capital add-on is SA-CCR's on the legs together (capital_inputs)."""
@@ -674,6 +694,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
     wwr = wwr_of(np.log(noise_out["m"]), cp_hazard_if_halves, own_hazard_if_halves)
     longest = max(legs, key=_horizon)
     steps, dt = monthly_grid(_horizon(longest))
+    paths, v0, noise_out["lag"], fee_meta = with_fees(paths, v0, noise_out["lag"], fees, steps, dt, float(longest.quote_zero))
     cap = capital_inputs(legs, csa, steps, dt, capital_model, crypto_group)
     params = WaterfallParams(
         notional=sum(_leg_notional(l) for l in legs), maturity_y=_horizon(longest), dt=dt, theta=max(float(longest.quote_zero), 1e-6),
@@ -700,5 +721,5 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
                      + ("; barriers monitored at the grid points" if any(s in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") for s in styles) else "")
                      + ("; American valued as European on the paths (a lower bound)" if "AMERICAN" in styles else "")
                      + ("; the driver on the clock of the asset's vol regimes" if noise_out.get("clock") is not None else ""),
-            "vol_regimes": regimes_meta(longest, sigma * 100.0) if noise_out.get("clock") is not None else None}
+            "vol_regimes": regimes_meta(longest, sigma * 100.0) if noise_out.get("clock") is not None else None, "fees": fee_meta}
     return wf, meta
