@@ -232,7 +232,13 @@ class TestSite:
         assert "front door" in watch.check_site(site_host(**{"/": answer("", status=404, type_="text/html")}), REGISTRY)[0]
         # the door answering with a page of its own, or sending a visitor somewhere that is not the app, is a failure
         assert "front door" in watch.check_site(site_host(**{"/": answer("<title>Rijeka</title>", type_="text/html")}), REGISTRY)[0]
-        assert "front door" in watch.check_site(site_host(**{"/": answer("", status=302, type_="text/plain", headers={"location": "https://example.com/"})}), REGISTRY)[0]
+        for elsewhere in ("https://example.com/", "https://app.rijeka.app.example.com/", "https://app.rijeka.appx/", "https://app.rijeka.app@example.com/",
+                          "https://app.rijeka.app:8443/", "http://app.rijeka.app/", "/login", ""):
+            assert "front door" in watch.check_site(site_host(**{"/": answer("", status=302, type_="text/plain", headers={"location": elsewhere})}), REGISTRY)[0], elsewhere
+
+    def test_the_door_may_be_any_redirect_to_the_app(self):
+        for status, to in ((301, "https://app.rijeka.app"), (302, "https://app.rijeka.app/"), (307, "https://app.rijeka.app/login"), (308, "https://app.rijeka.app/?from=site")):
+            assert watch.check_site(site_host(**{"/": answer("", status=status, type_="text/plain", headers={"location": to})}), REGISTRY) == [], (status, to)
         assert "landing page" in watch.check_site(site_host(**{"/about": answer("", status=404, type_="text/html")}), REGISTRY)[0]
         assert "does not list the registry" in watch.check_site(site_host(**{"/verify/": answer("<p>verifier</p>", type_="text/html")}), REGISTRY)[0]
         assert "verifier" in watch.check_site(site_host(**{"/verify/": Answer(0, "", b"refused", {})}), REGISTRY)[0]
@@ -275,6 +281,8 @@ class TestRun:
         (f"{watch.API}/api/public/confirmations?limit={watch.REGISTER_ROWS}", answer({}, status=500), "public register"),
         (f"{watch.APP}/", answer("", status=503, type_="text/html"), "web app"),
         (f"{watch.SITE}/verify/", answer("gone", status=404, type_="text/html"), "public site"),
+        (f"{watch.SITE}/", answer("<title>Rijeka</title>", type_="text/html"), "public site"),          # the door answering with a page
+        (f"{watch.SITE}/about", answer("gone", status=404, type_="text/html"), "public site"),
     ])
     def test_one_thing_wrong_fails_its_own_line_only(self, url, a, what):
         results = dict(watch.run(get_=world(**{url: a}), now=NOW, pause_s=0))

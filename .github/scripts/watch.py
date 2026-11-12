@@ -30,6 +30,7 @@ import ssl
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from html.parser import HTMLParser
@@ -323,7 +324,12 @@ def check_site(fetch: Callable[[str], Answer], registry: Optional[str]) -> list[
     # rijeka.app is the door (since 12 November 2026): it sends a visitor to the app's sign-in, and the landing is /about
     door = fetch("/")
     to = door.headers.get("location", "")
-    if door.status not in (301, 302) or not to.startswith(APP):
+    try:                                                 # the app's own host and nothing that only begins like it
+        at = urllib.parse.urlsplit(to)
+        app = at.scheme == "https" and at.netloc == urllib.parse.urlsplit(APP).netloc
+    except ValueError:
+        app = False
+    if door.status not in (301, 302, 307, 308) or not app:
         out.append(f"site: the front door: {door.said}{' to ' + to if to else ''}, not a redirect to {APP}")
     home = fetch("/about")
     if home.status != 200 or "Rijeka" not in home.text:
