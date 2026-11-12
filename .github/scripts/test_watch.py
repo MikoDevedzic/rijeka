@@ -215,7 +215,8 @@ class TestApp:
 
 
 def site_host(**replace):
-    pages = {"/": answer("<title>Rijeka | Where the trading desk meets the chain</title>", type_="text/html"),
+    pages = {"/": answer("", status=302, type_="text/plain", headers={"location": "https://app.rijeka.app/"}),
+             "/about": answer("<title>Rijeka | Where the trading desk meets the chain</title>", type_="text/html"),
              "/verify/": answer(f"<script>const REGISTRIES = ['{REGISTRY.lower()}']</script>", type_="text/html"),
              "/confirmations/": answer("<script>fetch('https://rijeka-api.onrender.com/api/public/confirmations')</script>", type_="text/html")}
     pages.update(replace)
@@ -228,7 +229,11 @@ class TestSite:
         assert watch.check_site(site_host(), None) == []
 
     def test_broken(self):
-        assert "front page" in watch.check_site(site_host(**{"/": answer("", status=404, type_="text/html")}), REGISTRY)[0]
+        assert "front door" in watch.check_site(site_host(**{"/": answer("", status=404, type_="text/html")}), REGISTRY)[0]
+        # the door answering with a page of its own, or sending a visitor somewhere that is not the app, is a failure
+        assert "front door" in watch.check_site(site_host(**{"/": answer("<title>Rijeka</title>", type_="text/html")}), REGISTRY)[0]
+        assert "front door" in watch.check_site(site_host(**{"/": answer("", status=302, type_="text/plain", headers={"location": "https://example.com/"})}), REGISTRY)[0]
+        assert "landing page" in watch.check_site(site_host(**{"/about": answer("", status=404, type_="text/html")}), REGISTRY)[0]
         assert "does not list the registry" in watch.check_site(site_host(**{"/verify/": answer("<p>verifier</p>", type_="text/html")}), REGISTRY)[0]
         assert "verifier" in watch.check_site(site_host(**{"/verify/": Answer(0, "", b"refused", {})}), REGISTRY)[0]
         assert "no longer reads the API" in watch.check_site(site_host(**{"/confirmations/": answer("<p>soon</p>", type_="text/html")}), REGISTRY)[0]

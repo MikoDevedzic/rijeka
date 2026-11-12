@@ -14,7 +14,7 @@ What it reads (GET only, no sign-in, no secret, nothing written):
                /api/public/confirmations  every row is the shape the register promises and carries no markup
   the app      /, /version.json         the page, every script and stylesheet it names (a missing one is answered with
                the methodology PDF      the page itself by the host, so the type is read, not only the status)
-  the site     /, /verify/, /confirmations/   they open; the verifier lists the registry the API anchors to
+  the site     /, /about, /verify/, /confirmations/   / sends a visitor to the app; the others open; the verifier lists the registry the API anchors to
 
 The workflow `watch` runs it on GitHub's schedule and by hand; GitHub mails a failed run. GitHub's schedule is
 best-effort (a half-hourly workflow here has run every five to eight hours), so this is the deep check a few times a
@@ -128,7 +128,7 @@ def get(url: str, headers: Optional[dict] = None, tries: int = 3, wait_s: float 
             with opener.open(req, timeout=timeout) as r:
                 return Answer(r.status, r.headers.get_content_type(), _read(r, time.monotonic() + ANSWER_MAX_S), {k.lower(): v for k, v in r.headers.items()})
         except urllib.error.HTTPError as e:
-            last = Answer(e.code, e.headers.get_content_type() if e.headers else "", e.read() or b"", {})
+            last = Answer(e.code, e.headers.get_content_type() if e.headers else "", e.read() or b"", {k.lower(): v for k, v in (e.headers.items() if e.headers else [])})
             if e.code < 500:
                 return last
         except Exception as e:                       # noqa: BLE001  (refused, timed out, DNS, TLS: all "no answer")
@@ -320,9 +320,14 @@ def check_app(page: Answer, fetch: Callable[[str], Answer], app_commit: Optional
 
 def check_site(fetch: Callable[[str], Answer], registry: Optional[str]) -> list[str]:
     out = []
-    home = fetch("/")
+    # rijeka.app is the door (since 12 November 2026): it sends a visitor to the app's sign-in, and the landing is /about
+    door = fetch("/")
+    to = door.headers.get("location", "")
+    if door.status not in (301, 302) or not to.startswith(APP):
+        out.append(f"site: the front door: {door.said}{' to ' + to if to else ''}, not a redirect to {APP}")
+    home = fetch("/about")
     if home.status != 200 or "Rijeka" not in home.text:
-        out.append(f"site: the front page: {home.said}")
+        out.append(f"site: the landing page (/about): {home.said}")
     verify = fetch("/verify/")
     if verify.status != 200:
         out.append(f"site: the verifier: {verify.said}")

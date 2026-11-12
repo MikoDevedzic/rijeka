@@ -34,7 +34,7 @@ It prints one line per thing looked at and exits 1 when anything is wrong:
 | the app and the site may read the API | the API allows `https://app.rijeka.app` and `https://rijeka.app` to read it (CORS): without this the app is a blank screen while health is green |
 | public register | every row is the shape the register promises (hashes, the registry, a block, a transaction and the explorer's link to it, or neither and a link to the registry for a record the registry already held, at most two LEIs of twenty characters, plain words); no `<` or `>` anywhere in the answer; the total is not below the rows |
 | web app | the page opens and has its root; every script and stylesheet it names is answered as a script or a stylesheet (the host answers a missing file with the page itself, status 200, so the type is read); `version.json` carries a commit; the methodology PDF is a PDF |
-| public site | the front page, the verifier and the register page open; the verifier lists the registry the API anchors to; the register page still reads the API |
+| public site | rijeka.app sends a visitor to the app (a redirect to app.rijeka.app, since 12 November 2026); the landing page (/about), the verifier and the register page open; the verifier lists the registry the API anchors to; the register page still reads the API |
 
 Its own tests (`.github/scripts/test_watch.py`, run by CI in the `backend tests` job) give each check a good answer
 and then the same answer broken one way, so a check that could not fail is caught there.
