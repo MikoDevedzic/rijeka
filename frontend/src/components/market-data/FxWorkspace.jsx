@@ -95,7 +95,7 @@ export default function FxWorkspace() {
                 </div>
                 <div className="ccy-items">
                   {items.map(p => (
-                    <div key={p.pair} className={`crv-item${sel === p.pair ? ' sel' : ''}`} style={{ borderLeftColor: sel === p.pair ? (p.crypto ? 'var(--chain)' : 'var(--accent)') : 'transparent' }} onClick={() => setSel(p.pair)}>
+                    <div key={p.pair} className={`crv-item${sel === p.pair ? ' sel' : ''}`} style={{ borderLeftColor: sel === p.pair ? 'var(--accent)' : 'transparent' }} onClick={() => setSel(p.pair)}>
                       <span className={`type-badge ${p.forward_curve ? (p.crypto ? 'tb-funding' : 'tb-ois') : 'tb-basis'}`}>{p.forward_curve ? 'FWD' : 'SPOT'}</span>
                       <div className="ci-body"><div className="ci-name">{p.pair}</div><div className="ci-sub">{p.forward_curve ? `${sourceWord(p.forward_curve)} · ${p.forward_curve.tenors.length} tenors` : p.crypto ? `${baseRateWords(p, md?.forward_mode)} · no forward curve` : 'no forward curve'}</div></div>
                       <div className={`ci-val ${p.crypto ? 'am' : 'ac'}`}>{fmt(p.spot, dp(p.pair))}</div>
@@ -107,7 +107,7 @@ export default function FxWorkspace() {
       </div>
 
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-        {msg && <div style={{ margin: '8px 14px 0', padding: '7px 10px', borderRadius: 4, fontSize: '0.84rem', border: '1px solid', color: msg.kind === 'ok' ? 'var(--accent)' : 'var(--red)', borderColor: msg.kind === 'ok' ? 'var(--accent-dim)' : 'rgba(240,130,140,.4)', background: msg.kind === 'ok' ? 'var(--accent-glow)' : 'rgba(240,130,140,.08)' }}>{msg.text}</div>}
+        {msg && <div style={{ margin: '8px 14px 0', padding: '7px 10px', borderRadius: 4, fontSize: '12px', border: '1px solid', color: msg.kind === 'ok' ? 'var(--up)' : 'var(--red)', borderColor: msg.kind === 'ok' ? 'var(--border-hi)' : 'rgba(240,130,140,.4)', background: msg.kind === 'ok' ? 'transparent' : 'rgba(240,130,140,.08)' }}>{msg.text}</div>}
         {cur ? <PairDetail p={cur} md={md} reload={load} flash={flash} busy={busy} setBusy={setBusy} bbg={bbg} />
              : <div className="empty-state"><div className="empty-icon">⟨/⟩</div><div className="empty-title">Select a pair</div><div className="empty-sub">{pairs.length} pairs — 6 G10 · 3 digital assets</div></div>}
       </div>
@@ -131,7 +131,7 @@ function FxForwardChart({ p, tenors, pts, off, parity }) {
   if (par.length >= 1) series.push({ label: 'PARITY', color: THEME.blue, dash: [5, 3], points: [{ t: 0, v: p.spot }, ...par] })
   return (
     <div style={{ margin: '8px 0 12px', background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 2, padding: 8 }}>
-      <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 5 }}>
+      <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 5 }}>
         {p.pair} · OUTRIGHT FORWARD BY TENOR{p.crypto ? ' (USD)' : ''}
       </div>
       <RateCurveCanvas series={series} unit="" decimals={dp(p.pair)} height={170} />
@@ -264,7 +264,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const hasFixings = !!p.crypto && Array.isArray(p.fixing_sources)
   if (hasFixings) tabs.splice(3, 0, { id: 'fixings', label: 'Fixings' })
   const mode = md?.forward_mode || 'MARKET'
-  const thL = { fontSize: '0.78rem', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 6px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
+  const thL = { fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 6px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
   const thR = { ...thL, textAlign: 'right' }
   // a cell of the tables below: a figure, a tenor or a count, set as every figure is (index.css, "Figures")
   const td = { fontFamily: 'var(--mono)', fontSize: 12.5, fontVariantNumeric: 'tabular-nums', color: 'var(--text)', padding: '5px 6px 5px 0', borderBottom: '1px solid var(--panel-2)' }
@@ -366,12 +366,12 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
       </div>
       {ownPoints && (
         <div data-testid="use-feed" style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 10, display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)' }}>
+          <span style={{ fontSize: '11.5px', color: 'var(--text-dim)' }}>
             {pair} prices on forward points saved in this account ({p.forward_curve.source}, {p.forward_curve.valuation_date}), not on the venue's forwards, which refresh every ten minutes.
           </span>
           {askFeed
             ? <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ fontSize: '0.8125rem' }}>Hand {pair} back to the feed? Your saved points stay in the history; the venue's forwards replace them from the next refresh.</span>
+                <span style={{ fontSize: '11.5px' }}>Hand {pair} back to the feed? Your saved points stay in the history; the venue's forwards replace them from the next refresh.</span>
                 <button className="btn" onClick={() => setAskFeed(false)} disabled={!!busy}>KEEP MINE</button>
                 <button className="btn primary" onClick={backToFeed} disabled={!!busy}>{busy === 'feed' ? 'SWITCHING…' : 'USE THE FEED'}</button>
               </span>
@@ -431,7 +431,7 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
             <div className="crv-hdr-sub">{NAME[pair]} · {p.quote} per 1 {p.base} · {p.crypto ? 'digital asset' : 'G10'}</div>
           </div>
           <div className="crv-rate-block">
-            <div className="crv-rate-val" style={{ color: p.crypto ? 'var(--chain)' : 'var(--accent)' }}>{fmt(p.spot, dp(pair))}</div>
+            <div className="crv-rate-val" style={{ color: 'var(--text-hi)' }}>{fmt(p.spot, dp(pair))}</div>
             <div className="crv-rate-lbl">spot · {p.spot_as_of || 'no snapshot'}</div>
           </div>
         </div>

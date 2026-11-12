@@ -83,7 +83,7 @@ export default function XCCYDetail({ curve }) {
           <div className="crv-hdr-info">
             <div className="crv-hdr-name">{curve.fullName}</div>
             <div className="crv-hdr-sub">
-              <span style={{ color: 'var(--accent)' }}>{curve.parentCurves[0]}</span>
+              <span style={{ color: 'var(--text-hi)' }}>{curve.parentCurves[0]}</span>
               {' ↔ '}
               <span style={{ color: 'var(--blue)' }}>{curve.parentCurves[1]}</span>
               {' · roadmap'}

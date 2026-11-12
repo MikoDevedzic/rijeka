@@ -58,6 +58,7 @@
   --accent-ink:   #1b1403;
   --accent-glow:  rgba(217, 178, 92, 0.10);
   --accent-rgb:   217 178 92;
+  --accent-hi-rgb: 241 212 136;
 
   /* The sign of a number */
   --up:           #8fe0ae;
@@ -399,10 +400,9 @@ button, input, select, textarea { font-family: inherit; }
 .ci-name  { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ci-sub   { font-size: 12px; color: var(--text-dim); }
 .ci-val   { font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
-.ci-val.ac { color: var(--accent); }
-.ci-val.am { color: var(--amber); }
-.ci-val.bl { color: var(--blue); }
-.ci-val.pu { color: var(--purple); }
+/* a figure in a list is limestone whatever its curve's class: the class is the badge beside it (docs/design.md: brass is an
+   action or a seal, amber a caution, blue a chart's second series; none is a rate or a spot) */
+.ci-val.ac, .ci-val.am, .ci-val.bl, .ci-val.pu { color: var(--text); }
 
 /* ── Main pane ──────────────────────────────────────────────── */
 .main-pane { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }

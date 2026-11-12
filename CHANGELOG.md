@@ -3,6 +3,25 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.30.4 · 12 November 2026
+
+**The look on the Configurations pages and the messenger.** Item 2 of the Phase 1 exit list, on the owner's word
+("do them all in order and deploy"). No figure changes; nothing moves.
+
+- **Type on the scale.** 210 sizes that were set in rem on the market-data, configuration, onboarding and messenger
+  pages are steps of the px scale now (`docs/design.md`): none moves by more than half a pixel. The count of sizes
+  in rem fell from 622 to 412, of distinct sizes from 53 to 50.
+- **Colour means what the rules say** on the curve, swaption, cap and floor and pair pages, the HW1F calibration,
+  counterparties and legal entities: a rate, a vol or a spot is limestone whatever its curve's class; a tenor or a
+  strike at the head of a row is a label; saved, loaded, connected, quoted and a close fit are green; a selected
+  chip is the lighter panel; brass is left to the page's actions and the selected rule. A typed value is no longer
+  brass.
+- The messenger's colour literals are tokens (twelve fewer hex colours in the source); a firm's name is limestone.
+- **Left as it was, for a decision:** the colour of a curve's class in its badge, and the messenger's two warm
+  colours (its own brass against Prometheus's lighter gold). A mock comes before either changes.
+- Pictures before and after of nine Configurations pages and the messenger are taken by the picture pass
+  (`e2e/perf/look.spec.js`, `LOOK_TAG`).
+
 ## 0.30.3 · 12 November 2026
 
 **The closing pass before the announcement.** Item 12 of the Phase 1 exit list, with items 10 and 3, on the owner's

@@ -18,7 +18,7 @@ function SourceBadge({ src }) {
   const s = map[src] || map.MANUAL;
   return (
     <span style={{background:s.bg,border:`1px solid ${s.bd}`,color:s.c,
-      fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',
+      fontSize:'11.5px',fontWeight:700,letterSpacing:'0.06em',
       padding:'1px 5px',borderRadius:'2px',fontFamily: 'var(--mono)',whiteSpace:'nowrap'}}>
       {src}
     </span>
@@ -29,7 +29,7 @@ function SourceBadge({ src }) {
 function CurveCanvas({ instruments, hasData, title }) {
   if (!hasData) return (
     <div style={{background:"var(--panel)",border:"1px solid var(--border)",borderRadius:"2px",padding:"8px",marginTop:"6px",height:"96px",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <span style={{fontSize:"0.75rem",color:"var(--text-dim)",letterSpacing:"0.08em"}}>SNAP OR SAVE TO VIEW CURVE</span>
+      <span style={{fontSize:"11px",color:"var(--text-dim)",letterSpacing:"0.08em"}}>SNAP OR SAVE TO VIEW CURVE</span>
     </div>
   );
   const points = instruments
@@ -37,7 +37,7 @@ function CurveCanvas({ instruments, hasData, title }) {
     .map(i => ({ t: i.tenor === 'ON' ? 1 / 365 : tenorToYears(i.tenor), v: Number(i.quote) }));
   return (
     <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',padding:'8px',marginTop:'6px'}}>
-      <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'5px'}}>
+      <div style={{fontSize:'11.5px',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'5px'}}>
         {title}
       </div>
       <RateCurveCanvas points={points} unit="%" color="#d9b25c" height={190} />
@@ -223,7 +223,7 @@ function OISInstruments({ curve }) {
   const colW = { tog:'32px', tenor:'44px', ticker:'1fr', src:'88px', mid:'68px', zero:'68px', df:'80px', fwd:'68px' };
   const gridTemplate = `${colW.tog} ${colW.tenor} ${colW.ticker} ${colW.src} ${colW.mid} ${colW.zero} ${colW.df} ${colW.fwd}`;
 
-  const thStyle = { fontSize:'0.8125rem', fontWeight:400, letterSpacing:'0.08em', color:'var(--text-dim)',
+  const thStyle = { fontSize:'11.5px', fontWeight:400, letterSpacing:'0.08em', color:'var(--text-dim)',
     padding:'3px 4px 5px 0', borderBottom:'1px solid var(--border)', textAlign:'left' };
   const thR = { ...thStyle, textAlign:'right' };
 
@@ -251,7 +251,7 @@ function OISInstruments({ curve }) {
             const src = quoteSources[i] || (isOn ? 'FED' : 'MANUAL');
             const bs = bootstrap[inst.tenor] || {};
             const rowBg = isOn ? 'rgba(192,165,238,0.06)' : 'transparent';
-            const tdBase = { fontSize:'0.875rem', color:'var(--text)', padding:'5px 4px 5px 0',
+            const tdBase = { fontSize:'12.5px', color:'var(--text)', padding:'5px 4px 5px 0',
               borderBottom:'1px solid var(--panel-2)', background:rowBg };
             const tdR = { ...tdBase, textAlign:'right', fontVariantNumeric:'tabular-nums' };
 
@@ -261,10 +261,10 @@ function OISInstruments({ curve }) {
                   onChange={e => toggleInstrument(curve.id, i, e.target.checked)}
                   style={{cursor:'pointer', accentColor:'#d9b25c'}} />
               </div>,
-              <div key={`t-${i}`} style={{...tdBase, color: isOn?'#c0a5ee':'var(--accent)', fontWeight: isOn?700:400}}>
+              <div key={`t-${i}`} style={{...tdBase, color: isOn?'var(--text-hi)':'var(--text)', fontWeight: isOn?700:400}}>
                 {inst.tenor}
               </div>,
-              <div key={`tk-${i}`} style={{...tdBase, fontSize:'0.8125rem', color:'var(--text-dim)'}}>
+              <div key={`tk-${i}`} style={{...tdBase, fontSize:'11.5px', color:'var(--text-dim)'}}>
                 {blpTickers[inst.tenor] ? blpTickers[inst.tenor].replace(' BGN Curncy','') : inst.ticker}
               </div>,
               <div key={`src-${i}`} style={tdBase}><SourceBadge src={src} /></div>,
@@ -287,10 +287,10 @@ function OISInstruments({ curve }) {
         <div style={{display:'flex',gap:'4px',marginBottom:'8px'}}>
           {['MANUAL','BLOOMBERG','IMPORT'].map(src => (
             <button className="rj-press" key={src} onClick={() => handleBlpSourceChange(src)} style={{
-              flex:1,padding:'5px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
-              cursor:'pointer',fontFamily: 'var(--mono)',background:'transparent',borderRadius:'2px',
-              border:blpSource===src?'1px solid var(--accent)':'1px solid var(--border)',
-              color:blpSource===src?'var(--accent)':'var(--text-dim)',
+              flex:1,padding:'5px 0',fontSize:'12.5px',fontWeight:700,letterSpacing:'0.08em',
+              cursor:'pointer',fontFamily: 'var(--mono)',background:blpSource===src?'var(--panel-3)':'transparent',borderRadius:'2px',
+              border:blpSource===src?'1px solid var(--border-hi)':'1px solid var(--border)',
+              color:blpSource===src?'var(--text-hi)':'var(--text-dim)',
             }}>{src === 'BLOOMBERG' ? 'BLOOMBERG · SELF-HOST' : src}</button>
           ))}
         </div>
@@ -300,21 +300,21 @@ function OISInstruments({ curve }) {
           <div style={{display:'flex',alignItems:'center',gap:'0.75rem'}}>
             <input type="date" value={saveDate} onChange={e => setSaveDate(e.target.value)}
               style={{background:'var(--panel-2)',border:'1px solid var(--border)',color:'var(--text)',
-                fontFamily: 'var(--mono)',fontSize:'1rem',padding:'0.25rem 0.45rem',borderRadius:2,outline:'none'}} />
+                fontFamily: 'var(--mono)',fontSize:'14px',padding:'0.25rem 0.45rem',borderRadius:2,outline:'none'}} />
             <button className="rj-press"
               onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
               style={{padding:'0.25rem 0.85rem',background:'rgba(217,178,92,0.07)',
                 border:'1px solid var(--accent)',borderRadius:2,fontFamily: 'var(--mono)',
-                fontSize:'1rem',fontWeight:700,letterSpacing:'0.1em',color:'var(--accent)',cursor:'pointer'}}
+                fontSize:'14px',fontWeight:700,letterSpacing:'0.1em',color:'var(--accent)',cursor:'pointer'}}
             >{snapshotSaving?.[curve.id] ? 'SAVING...' : '▶ SAVE TO DB'}</button>
             {snapshotSaved?.[curve.id] && (
-              <span style={{fontSize:'0.9375rem',color:'var(--accent)',fontFamily: 'var(--mono)'}}>
+              <span style={{fontSize:'13px',color:'var(--up)',fontFamily: 'var(--mono)'}}>
                 ✓ saved {snapshotSaved[curve.id].date}
               </span>
             )}
             {snapshotError?.[curve.id] && (
-              <span style={{fontSize:'0.9375rem',color:'var(--red)',fontFamily: 'var(--mono)'}}>
+              <span style={{fontSize:'13px',color:'var(--red)',fontFamily: 'var(--mono)'}}>
                 ✗ {snapshotError[curve.id]}
               </span>
             )}
@@ -330,7 +330,7 @@ function OISInstruments({ curve }) {
               const onInst = curve.instruments.find(i => i.type === 'OISDeposit' || i.type === 'BasisDeposit')
               if (!onInst) return null
               return (
-                <div style={{fontSize:'0.875rem',color:'#c0a5ee',background:'rgba(192,165,238,0.06)',
+                <div style={{fontSize:'12.5px',color:'#c0a5ee',background:'rgba(192,165,238,0.06)',
                   border:'1px solid rgba(192,165,238,0.2)',borderRadius:'2px',
                   padding:'4px 7px',marginBottom:'8px',lineHeight:1.6}}>
                   O/N fixing: <strong>{onInst.ticker}</strong>
@@ -342,12 +342,12 @@ function OISInstruments({ curve }) {
             {/* Connection status */}
             <div style={{display:'flex',alignItems:'center',gap:'6px',marginBottom:'8px'}}>
               <div style={{width:'6px',height:'6px',borderRadius:'50%',flexShrink:0,
-                background:blpStatus===null?'var(--text-dim)':blpStatus.connected?'var(--accent)':'var(--red)'}}/>
-              <span style={{fontSize:'0.875rem',color:blpStatus?.connected?'var(--accent)':'var(--text-dim)'}}>
+                background:blpStatus===null?'var(--text-dim)':blpStatus.connected?'var(--up)':'var(--red)'}}/>
+              <span style={{fontSize:'12.5px',color:blpStatus?.connected?'var(--up)':'var(--text-dim)'}}>
                 {blpStatus===null?'CHECKING...':blpStatus.connected?'BLOOMBERG CONNECTED':
                   blpStatus.installed?'TERMINAL NOT CONNECTED':'BLPAPI NOT INSTALLED'}
               </span>
-              <button className="rj-btn" onClick={fetchBlpStatus} style={{marginLeft:'auto',fontSize:'0.875rem',
+              <button className="rj-btn" onClick={fetchBlpStatus} style={{marginLeft:'auto',fontSize:'12.5px',
                 background:'transparent',border:'1px solid var(--border)',color:'var(--text-dim)',
                 padding:'2px 6px',cursor:'pointer',fontFamily: 'var(--mono)',borderRadius:'2px'}}>
                 REFRESH
@@ -355,7 +355,7 @@ function OISInstruments({ curve }) {
             </div>
 
             {blpStatus && !blpStatus.connected && blpStatus.error && (
-              <div style={{fontSize:'0.875rem',color:'var(--amber)',marginBottom:'8px',lineHeight:1.5}}>
+              <div style={{fontSize:'12.5px',color:'var(--amber)',marginBottom:'8px',lineHeight:1.5}}>
                 {blpStatus.installed === false ? 'No Bloomberg terminal on this server: Bloomberg snaps are for a self-hosted deployment beside a terminal.' : blpStatus.error}
               </div>
             )}
@@ -364,16 +364,16 @@ function OISInstruments({ curve }) {
             <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'8px'}}>
               <input type="date" value={blpSnapDate} onChange={e => setBlpSnapDate(e.target.value)}
                 style={{background:'var(--panel)',border:'1px solid var(--border)',color:'var(--text)',
-                  fontFamily: 'var(--mono)',fontSize:'1rem',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
+                  fontFamily: 'var(--mono)',fontSize:'14px',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
               <button className="rj-press" onClick={() => snapBloomberg('live')} disabled={!blpStatus?.connected||blpSnapping}
-                style={{flex:1,padding:'6px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
+                style={{flex:1,padding:'6px 0',fontSize:'12.5px',fontWeight:700,letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed',background:'transparent',
                   borderRadius:'2px',fontFamily: 'var(--mono)',border:'1px solid var(--accent)',
                   color:'var(--accent)',opacity:blpStatus?.connected?1:0.4}}>
                 {blpSnapping?'SNAPPING...':'▶ SNAP LIVE'}
               </button>
               <button className="rj-press" onClick={() => snapBloomberg('historical')} disabled={!blpStatus?.connected||blpSnapping}
-                style={{flex:1,padding:'6px 0',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
+                style={{flex:1,padding:'6px 0',fontSize:'12.5px',fontWeight:700,letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed',background:'transparent',
                   borderRadius:'2px',fontFamily: 'var(--mono)',border:'1px solid var(--border)',
                   color:'var(--text-dim)',opacity:blpStatus?.connected?1:0.4}}>
@@ -383,8 +383,8 @@ function OISInstruments({ curve }) {
 
             {/* Result / error */}
             {blpSnapResult && (
-              <div style={{fontSize:'0.875rem',color:'var(--accent)',marginBottom:'6px',
-                background:'rgba(217,178,92,0.05)',border:'1px solid rgba(217,178,92,0.2)',
+              <div style={{fontSize:'12.5px',color:'var(--up)',marginBottom:'6px',
+                background:'transparent',border:'1px solid var(--border)',
                 padding:'5px 7px',borderRadius:'2px',lineHeight:1.7}}>
                 ✓ SNAPPED & SAVED TO DB · {blpSnapResult.quotes_saved} TENORS · {blpSnapResult.snap_date}
                 
@@ -396,7 +396,7 @@ function OISInstruments({ curve }) {
               </div>
             )}
             {blpSnapError && (
-              <div style={{fontSize:'0.875rem',color:'var(--red)',marginBottom:'6px',
+              <div style={{fontSize:'12.5px',color:'var(--red)',marginBottom:'6px',
                 background:'rgba(240,130,140,0.05)',border:'1px solid rgba(240,130,140,0.2)',
                 padding:'5px 7px',borderRadius:'2px'}}>✗ {blpSnapError}</div>
             )}
@@ -404,13 +404,13 @@ function OISInstruments({ curve }) {
             {/* Tickers collapsible */}
             {Object.keys(blpTickers).length > 0 && (
               <details style={{marginTop:'6px'}}>
-                <summary style={{fontSize:'0.875rem',color:'var(--text-dim)',cursor:'pointer',
+                <summary style={{fontSize:'12.5px',color:'var(--text-dim)',cursor:'pointer',
                   letterSpacing:'0.08em',userSelect:'none',listStyle:'none',
                   display:'flex',justifyContent:'space-between'}}>
                   <span>TICKERS ({Object.keys(blpTickers).length}) — BGN Curncy mid</span>
                   {blpTickersEdited && (
                     <button className="rj-press" onClick={e=>{e.preventDefault();saveTickerOverrides();}}
-                      style={{fontSize:'0.875rem',background:'transparent',border:'1px solid var(--blue)',
+                      style={{fontSize:'12.5px',background:'transparent',border:'1px solid var(--blue)',
                         color:'var(--blue)',padding:'1px 6px',cursor:'pointer',
                         fontFamily: 'var(--mono)',borderRadius:'2px'}}>SAVE OVERRIDES</button>
                   )}
@@ -419,23 +419,23 @@ function OISInstruments({ curve }) {
                   <table style={{width:'100%',borderCollapse:'collapse',tableLayout:'fixed'}}>
                     <thead>
                       <tr>
-                        <th style={{fontSize:'0.875rem',color:'var(--text-dim)',textAlign:'left',
+                        <th style={{fontSize:'12.5px',color:'var(--text-dim)',textAlign:'left',
                           paddingBottom:'3px',width:'22%',fontWeight:400}}>TENOR</th>
-                        <th style={{fontSize:'0.875rem',color:'var(--text-dim)',textAlign:'left',
+                        <th style={{fontSize:'12.5px',color:'var(--text-dim)',textAlign:'left',
                           paddingBottom:'3px',fontWeight:400}}>TICKER</th>
                       </tr>
                     </thead>
                     <tbody>
                       {Object.entries(blpTickers).map(([tenor, ticker]) => (
                         <tr key={tenor}>
-                          <td style={{fontSize:'0.875rem',color:'var(--text-dim)',padding:'2px 0',
+                          <td style={{fontSize:'12.5px',color:'var(--text-dim)',padding:'2px 0',
                             borderBottom:'1px solid var(--panel-2)'}}>{tenor}</td>
                           <td style={{padding:'2px 0',borderBottom:'1px solid var(--panel-2)'}}>
                             <input value={ticker}
                               onChange={e=>{setBlpTickers(prev=>({...prev,[tenor]:e.target.value}));setBlpTickersEdited(true);}}
                               style={{width:'100%',background:'transparent',border:'none',
                                 borderBottom:'1px solid var(--border)',color:'var(--text)',
-                                fontFamily: 'var(--mono)',fontSize:'0.875rem',padding:'1px 2px',outline:'none'}} />
+                                fontFamily: 'var(--mono)',fontSize:'12.5px',padding:'1px 2px',outline:'none'}} />
                           </td>
                         </tr>
                       ))}
@@ -450,33 +450,33 @@ function OISInstruments({ curve }) {
         {/* IMPORT */}
         {blpSource === 'IMPORT' && (
           <div style={{border:'1px solid var(--border)',borderRadius:'2px',padding:'8px'}}>
-            <div style={{fontSize:'0.875rem',color:'var(--text-dim)',marginBottom:'6px',lineHeight:1.6}}>
+            <div style={{fontSize:'12.5px',color:'var(--text-dim)',marginBottom:'6px',lineHeight:1.6}}>
               Format: <span style={{color:'var(--text)'}}>tenor,rate</span> per line &nbsp;·&nbsp;
-              Example: <span style={{color:'var(--accent)'}}>5Y,3.641</span>
+              Example: <span style={{color:'var(--text-hi)'}}>5Y,3.641</span>
             </div>
             <div style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'8px'}}>
               <input type="date" value={blpSnapDate} onChange={e => setBlpSnapDate(e.target.value)}
                 style={{background:'var(--panel)',border:'1px solid var(--border)',color:'var(--text)',
-                  fontFamily: 'var(--mono)',fontSize:'1rem',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
+                  fontFamily: 'var(--mono)',fontSize:'14px',padding:'4px 6px',borderRadius:'2px',outline:'none'}} />
               <input type="file" accept=".csv,.txt" onChange={handleCsvUpload}
-                style={{flex:1,fontSize:'0.875rem',color:'var(--text-dim)',cursor:'pointer'}} />
+                style={{flex:1,fontSize:'12.5px',color:'var(--text-dim)',cursor:'pointer'}} />
             </div>
-            {csvError && <div style={{fontSize:'0.875rem',color:'var(--red)',marginBottom:'6px'}}>✗ {csvError}</div>}
+            {csvError && <div style={{fontSize:'12.5px',color:'var(--red)',marginBottom:'6px'}}>✗ {csvError}</div>}
             {csvParsed.length > 0 && (
               <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                <span style={{fontSize:'0.875rem',color:'var(--accent)'}}>✓ {csvParsed.length} rows parsed</span>
+                <span style={{fontSize:'12.5px',color:'var(--up)'}}>✓ {csvParsed.length} rows parsed</span>
                 <button className="rj-press" onClick={saveCsvImport}
-                  style={{padding:'5px 14px',fontSize:'0.875rem',fontWeight:700,letterSpacing:'0.08em',
+                  style={{padding:'5px 14px',fontSize:'12.5px',fontWeight:700,letterSpacing:'0.08em',
                     cursor:'pointer',background:'transparent',border:'1px solid var(--accent)',
                     color:'var(--accent)',borderRadius:'2px',fontFamily: 'var(--mono)'}}>SAVE IMPORT</button>
               </div>
             )}
             {blpSnapResult?.source === 'IMPORT' && (
-              <div style={{fontSize:'0.875rem',color:'var(--accent)',marginTop:'6px'}}>
+              <div style={{fontSize:'12.5px',color:'var(--up)',marginTop:'6px'}}>
                 ✓ SAVED {blpSnapResult.quotes_saved} TENORS · {blpSnapResult.snap_date}
               </div>
             )}
-            {blpSnapError && <div style={{fontSize:'0.875rem',color:'var(--red)',marginTop:'6px'}}>✗ {blpSnapError}</div>}
+            {blpSnapError && <div style={{fontSize:'12.5px',color:'var(--red)',marginTop:'6px'}}>✗ {blpSnapError}</div>}
           </div>
         )}
 
@@ -577,7 +577,7 @@ export default function OISDetail({ curve }) {
             <div className="crv-hdr-sub">{curve.qlIndex} · {curve.dayCounter} · {curve.calendar}</div>
           </div>
           <div className="crv-rate-block">
-            <div className="crv-rate-val" style={{ color: 'var(--accent)' }}>{onRate.toFixed(8)}%</div>
+            <div className="crv-rate-val" style={{ color: 'var(--text-hi)' }}>{onRate.toFixed(8)}%</div>
             <div className="crv-rate-lbl">ON rate</div>
           </div>
         </div>

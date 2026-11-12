@@ -63,7 +63,7 @@ function RatesHW1FTab(){
   const mono = { fontFamily:'var(--mono)' };
   const methodSection = (title, color, children) => (
     <div style={{ marginBottom:'12px' }}>
-      <div style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
+      <div style={{ fontSize:'11px', fontWeight:700, letterSpacing:'0.12em',
         color, ...mono, marginBottom:'5px', paddingBottom:'3px',
         borderBottom:`1px solid ${color}22` }}>{title}</div>
       {children}
@@ -72,10 +72,10 @@ function RatesHW1FTab(){
   const row = (label, value, note) => (
     <div style={{ display:'grid', gridTemplateColumns:'180px 1fr', gap:'8px',
       marginBottom:'4px', alignItems:'baseline' }}>
-      <span style={{ fontSize:'0.75rem', color:'var(--text-dim)', ...mono }}>{label}</span>
-      <span style={{ fontSize:'0.8125rem', color:'var(--text-hi)', ...mono, lineHeight:1.5 }}>
+      <span style={{ fontSize:'11px', color:'var(--text-dim)', ...mono }}>{label}</span>
+      <span style={{ fontSize:'11.5px', color:'var(--text-hi)', ...mono, lineHeight:1.5 }}>
         {value}
-        {note && <span style={{ color:'var(--text-mute)', fontSize:'0.8rem', marginLeft:'6px' }}>{note}</span>}
+        {note && <span style={{ color:'var(--text-mute)', fontSize:'11px', marginLeft:'6px' }}>{note}</span>}
       </span>
     </div>
   );
@@ -91,27 +91,27 @@ function RatesHW1FTab(){
             padding:'7px 12px', cursor:'pointer',
             borderBottom: showMethod ? '1px solid var(--border)' : 'none' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
-              color:'var(--accent)', ...mono }}>WHAT IS BEING CALIBRATED AND WHY</span>
-            <span style={{ fontSize:'0.8rem', color:'var(--text-mute)', ...mono }}>
+            <span style={{ fontSize:'11px', fontWeight:700, letterSpacing:'0.12em',
+              color:'var(--text-hi)', ...mono }}>WHAT IS BEING CALIBRATED AND WHY</span>
+            <span style={{ fontSize:'11px', color:'var(--text-mute)', ...mono }}>
               Hull-White 1-Factor · Q-measure · ATM swaption basket
             </span>
           </div>
-          <span style={{ color:'var(--text-mute)', fontSize:'0.75rem' }}>{showMethod ? '▲' : '▼'}</span>
+          <span style={{ color:'var(--text-mute)', fontSize:'11px' }}>{showMethod ? '▲' : '▼'}</span>
         </div>
 
         {showMethod && (
           <div style={{ padding:'12px 14px', display:'grid', gridTemplateColumns:'1fr 1fr',
             gap:'0 24px' }}>
 
-            {methodSection('THE MODEL — Hull-White 1-Factor (HW1F)', 'var(--accent)',
-              <div style={{ fontSize:'0.8125rem', color:'var(--text-dim)', lineHeight:1.7,
+            {methodSection('THE MODEL — Hull-White 1-Factor (HW1F)', 'var(--text-hi)',
+              <div style={{ fontSize:'11.5px', color:'var(--text-dim)', lineHeight:1.7,
                 fontFamily:'var(--sans)' }}>
                 HW1F simulates the evolution of the short rate <em>r(t)</em> under the risk-neutral
                 measure Q. The stochastic differential equation is:
                 <div style={{ margin:'6px 0', padding:'6px 10px', background:'var(--border)',
                   border:'1px solid var(--border)', borderRadius:'2px', ...mono,
-                  fontSize:'0.8125rem', color:'var(--amber)', letterSpacing:'0.02em' }}>
+                  fontSize:'11.5px', color:'var(--amber)', letterSpacing:'0.02em' }}>
                   dr = (θ − a·r) dt + σ dW
                 </div>
                 This gives us the distribution of rates at every future time step, from which we
@@ -128,7 +128,7 @@ function RatesHW1FTab(){
                   'Higher σ → wider paths → larger all XVA components')}
                 {row('θ  (long-run level)', 'Fixed from 5Y SOFR OIS rate',
                   'Not calibrated — taken directly from your bootstrapped curve')}
-                <div style={{ fontSize:'0.75rem', color:'var(--text-mute)', marginTop:'6px', lineHeight:1.6,
+                <div style={{ fontSize:'11px', color:'var(--text-mute)', marginTop:'6px', lineHeight:1.6,
                   fontFamily:'var(--sans)' }}>
                   Note: Full HW1F uses time-dependent θ(t) to exactly reprice the yield curve.
                   Flat θ is adequate for XVA — the error on CVA is second-order.
@@ -137,7 +137,7 @@ function RatesHW1FTab(){
             )}
 
             {methodSection('CALIBRATION TARGET — Why ATM swaptions?', 'var(--amber)',
-              <div style={{ fontSize:'0.8125rem', color:'var(--text-dim)', lineHeight:1.7,
+              <div style={{ fontSize:'11.5px', color:'var(--text-dim)', lineHeight:1.7,
                 fontFamily:'var(--sans)' }}>
                 XVA depends on the <strong style={{color:'var(--text-hi)'}}>risk-neutral distribution</strong> of
                 future rates — not the statistical (P-measure) distribution. ATM swaption prices encode
@@ -146,7 +146,7 @@ function RatesHW1FTab(){
                 A swaption expiring at T_e on a swap of tenor T_s has normal vol:
                 <div style={{ margin:'6px 0', padding:'6px 10px', background:'var(--border)',
                   border:'1px solid var(--border)', borderRadius:'2px', ...mono,
-                  fontSize:'0.8125rem', color:'var(--amber)' }}>
+                  fontSize:'11.5px', color:'var(--amber)' }}>
                   σ_N = σ · w(T_e, T_s) · √(V(T_e) / T_e)
                 </div>
                 where w is the annuity-weighted B* factor and V(T_e) = (1−e<sup>−2aT_e</sup>)/(2a).
@@ -156,7 +156,7 @@ function RatesHW1FTab(){
             )}
 
             {methodSection('CALIBRATION BASKET', 'var(--blue)',
-              <div style={{ fontSize:'0.8125rem', color:'var(--text-dim)', lineHeight:1.7,
+              <div style={{ fontSize:'11.5px', color:'var(--text-dim)', lineHeight:1.7,
                 fontFamily:'var(--sans)' }}>
                 <strong style={{color:'var(--text-hi)'}}>5Y-tenor diagonal</strong> (1Y×5Y, 2Y×5Y, 3Y×5Y, 5Y×5Y, 7Y×5Y, 10Y×5Y)
                 — spans the full expiry range with a single tenor, giving a stable identification of
@@ -168,11 +168,11 @@ function RatesHW1FTab(){
               </div>
             )}
 
-            {methodSection('HOW THIS FLOWS INTO XVA', 'var(--accent)',
-              <div style={{ fontSize:'0.8125rem', lineHeight:1.7,
+            {methodSection('HOW THIS FLOWS INTO XVA', 'var(--text-hi)',
+              <div style={{ fontSize:'11.5px', lineHeight:1.7,
                 fontFamily:'var(--sans)' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap',
-                  ...mono, fontSize:'0.75rem', color:'var(--text-dim)' }}>
+                  ...mono, fontSize:'11px', color:'var(--text-dim)' }}>
                   {['ATM vols (USSNA)', '→', 'HW1F calibration', '→', '(a, σ)',
                     '→', 'MC paths r(t)', '→', 'P(t,T), F(t), NPV(t)',
                     '→', 'EE / ENE / PFE', '→', 'CVA · DVA · FVA · KVA'
@@ -183,7 +183,7 @@ function RatesHW1FTab(){
                       s.includes('a, σ') ? 'var(--blue)' : 'var(--text-dim)' }}>{s}</span>
                   ))}
                 </div>
-                <div style={{ marginTop:'8px', color:'var(--text-mute)', fontSize:'0.75rem' }}>
+                <div style={{ marginTop:'8px', color:'var(--text-mute)', fontSize:'11px' }}>
                   <strong style={{color:'var(--text-hi)'}}>For IR_SWAPTION:</strong> same (a, σ) drive the paths.
                   Pre-expiry EE uses Bachelier(F(t), K, T_exp−t, σ_N) — the SABR surface vol at strike K.
                   Post-expiry EE filters to exercised paths only (Andersen-Piterbarg approximation).
@@ -196,7 +196,7 @@ function RatesHW1FTab(){
                 {row('RMSE < 1bp', '✓ Excellent', 'EE profiles closely match market swaption prices')}
                 {row('RMSE 1–3bp', '~ Acceptable', 'Small model error, standard for vanilla XVA')}
                 {row('RMSE > 5bp', '✗ Poor', 'Check vol data quality or basket composition')}
-                <div style={{ fontSize:'0.75rem', color:'var(--text-mute)', marginTop:'6px', lineHeight:1.6,
+                <div style={{ fontSize:'11px', color:'var(--text-mute)', marginTop:'6px', lineHeight:1.6,
                   fontFamily:'var(--sans)' }}>
                   HW1F cannot fit the full swaption surface (it has only 2 free parameters).
                   The 5Y-tenor column fit is the industry standard compromise for XVA purposes.
@@ -256,12 +256,12 @@ function RatesHW1FTab(){
           </button>
         </div>
       </div>
-      {calibErr&&<div style={{fontSize:'0.75rem',color:'var(--red)',padding:'4px 0'}}>✘ {calibErr}</div>}
+      {calibErr&&<div style={{fontSize:'11px',color:'var(--red)',padding:'4px 0'}}>✘ {calibErr}</div>}
       {calibResult&&(
         <div style={{padding:'8px 10px',background:'rgba(217,178,92,0.04)',
           border:'1px solid rgba(217,178,92,0.2)',borderRadius:'2px',marginTop:'6px'}}>
-          <div style={{fontSize:'0.8rem',fontWeight:700,letterSpacing:'0.10em',
-            color:'var(--accent)',fontFamily:'var(--mono)',marginBottom:'5px'}}>
+          <div style={{fontSize:'11px',fontWeight:700,letterSpacing:'0.10em',
+            color:'var(--up)',fontFamily:'var(--mono)',marginBottom:'5px'}}>
             ✔ CALIBRATION COMPLETE
           </div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'6px'}}>
@@ -271,32 +271,32 @@ function RatesHW1FTab(){
               {l:'Short rate vol σ', v:(calibResult.sigma_bp?.toFixed(2)||'—')+'bp',
                c:'var(--blue)', note:'Drives EE/ENE width'},
               {l:'Fit RMSE', v:(calibResult.fit_rmse_bp?.toFixed(3)||'—')+'bp',
-               c:calibResult.fit_rmse_bp<1?'var(--accent)':calibResult.fit_rmse_bp<3?'var(--amber)':'var(--red)',
+               c:calibResult.fit_rmse_bp<1?'var(--up)':calibResult.fit_rmse_bp<3?'var(--amber)':'var(--red)',
                note:calibResult.fit_rmse_bp<1?'Excellent':calibResult.fit_rmse_bp<3?'Acceptable':'Poor'},
               {l:'Basket size', v:calibResult.basket_size+' instruments',
                c:'var(--text-dim)', note:'5Y-tenor diagonal'},
             ].map(({l,v,c,note})=>(
               <div key={l} style={{background:'var(--bg)',border:'1px solid var(--border)',
                 borderRadius:'2px',padding:'5px 8px'}}>
-                <div style={{fontSize:'0.8rem',color:'var(--text-mute)',letterSpacing:'0.08em',
+                <div style={{fontSize:'11px',color:'var(--text-mute)',letterSpacing:'0.08em',
                   fontFamily:'var(--mono)',marginBottom:'2px'}}>{l}</div>
-                <div style={{fontSize:'0.875rem',fontWeight:700,color:c,
+                <div style={{fontSize:'12.5px',fontWeight:700,color:c,
                   fontFamily:'var(--mono)'}}>{v}</div>
-                <div style={{fontSize:'0.8rem',color:'var(--text-mute)',marginTop:'1px'}}>{note}</div>
+                <div style={{fontSize:'11px',color:'var(--text-mute)',marginTop:'1px'}}>{note}</div>
               </div>
             ))}
           </div>
-          <div style={{fontSize:'0.8rem',color:'var(--text-mute)',marginTop:'6px',
+          <div style={{fontSize:'11px',color:'var(--text-mute)',marginTop:'6px',
             fontFamily:'var(--mono)',lineHeight:1.6}}>
             Stored as master calibration · Auto-loads into all trade XVA simulations (IRS + IR_SWAPTION)
           </div>
         </div>
       )}
       <div className='xva-calib-note' style={{marginTop:'8px',lineHeight:1.7,
-        fontSize:'0.8125rem',color:'var(--text-mute)',fontFamily:'var(--sans)',
+        fontSize:'11.5px',color:'var(--text-mute)',fontFamily:'var(--sans)',
         background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'2px',padding:'8px 10px'}}>
         <strong style={{color:'var(--text-dim)'}}>Workflow:</strong> (1) Ensure vol surface is populated above.
-        (2) Hit <strong style={{color:'var(--accent)'}}>⎋ CALIBRATE HW1F</strong> to fit (a, σ) to the 5Y-tenor basket.
+        (2) Hit <strong style={{color:'var(--text-hi)'}}>⎋ CALIBRATE HW1F</strong> to fit (a, σ) to the 5Y-tenor basket.
         (3) Calibrated params auto-load into every XVA simulation — no manual entry needed.
         <br/>
         <strong style={{color:'var(--text-dim)'}}>For OTM swaption XVA:</strong> HW1F drives rate paths. 

@@ -24,8 +24,15 @@ side (the messenger's own messages against Prometheus's, the limit bar's warning
 PFE on Risk → Counterparty credit) the page has not been read yet, and that is in the list below.
 
 **This holds on the screens rebuilt so far** (the ticket's TRADE, XVA and CONFIRM tabs, the blotter, the top
-bar). Elsewhere brass still colours what the teal accent did: about four hundred uses remain, among them the
-CURVE SCENARIO and DETAILS tabs, the market-data pages and the configuration pages.
+bar), and since 0.30.4 on the pages behind CONFIGURATIONS a first user opens: the curve, swaption, cap and floor and
+pair pages, the HW1F calibration, counterparties and legal entities. There a figure is limestone whatever its curve's
+class, a row's own label (a tenor, an expiry, a strike) is a label, a state that is good in itself (saved, loaded,
+connected, quoted, a close fit) is green, a selected chip is the lighter panel, and brass is left to the page's
+actions and the selected rule. Elsewhere brass still colours what the teal accent did: about three hundred and
+twenty uses remain, among them the CURVE SCENARIO and DETAILS tabs, P&L and Risk. Two things on those pages are
+not decided and were left as they were: the colour a curve's CLASS takes in its badge (OIS brass, basis blue,
+cross-currency purple: a category, where the rule gives colour to a meaning), and the messenger's two warm
+colours (its own brass against Prometheus's lighter gold).
 
 ## Type
 
@@ -200,8 +207,11 @@ One rule for the whole app, held by Iris (`.claude/agents/iris.md`) and by a che
   amber, INTERPOLATED quiet) whose words say how it was reached. On a chart the implied part is dashed. On the
   ticket an implied forward beyond the quotes is said under the figure, in amber.
 - What is still set by hand is counted and may only go down (11 November 2026: 53 distinct sizes, 623 sizes in rem,
-  209 hex colours outside the tokens, 6 fonts named directly, all in canvas drawings). The next step is the sizes
-  in rem, page by page, each with pictures before and after.
+  209 hex colours outside the tokens, 6 fonts named directly, all in canvas drawings; 12 November, after the
+  Configurations and messenger pages in 0.30.4: 50 sizes, 412 in rem, 195 hex). A size in rem goes to the nearest
+  step of the scale at the fixed root of 14px, a tie upward (0.75rem, 10.5px, is a label's 11; 0.875rem, 12.25px,
+  is a value's 12.5; a rail's link is 12). The next pages are P&L and Risk, each with pictures before and after
+  (`LOOK_TAG=before npx playwright test -c playwright.perf.config.js look.spec.js`).
 
 ## Type on the ticket
 

@@ -25,7 +25,7 @@ function SourceBadge({ src }) {
   const s = map[src] || map.MANUAL;
   return (
     <span style={{background:s.bg,border:`1px solid ${s.bd}`,color:s.c,
-      fontSize:'0.8125rem',fontWeight:700,letterSpacing:'0.06em',
+      fontSize:'11.5px',fontWeight:700,letterSpacing:'0.06em',
       padding:'1px 5px',borderRadius:'2px',fontFamily: 'var(--mono)',whiteSpace:'nowrap'}}>
       {src}
     </span>
@@ -40,12 +40,12 @@ function BasisCanvas({ instruments, hasData, title }) {
   if (!hasData || points.length < 2) return (
     <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',
       padding:'8px',marginTop:'6px',height:'96px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-      <span style={{fontSize:'0.75rem',color:'var(--text-dim)',letterSpacing:'0.08em'}}>SNAP OR SAVE TO VIEW CURVE</span>
+      <span style={{fontSize:'11px',color:'var(--text-dim)',letterSpacing:'0.08em'}}>SNAP OR SAVE TO VIEW CURVE</span>
     </div>
   );
   return (
     <div style={{background:'var(--panel)',border:'1px solid var(--border)',borderRadius:'2px',padding:'8px',marginTop:'6px'}}>
-      <div style={{fontSize:'0.8125rem',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'5px'}}>{title}</div>
+      <div style={{fontSize:'11.5px',color:'var(--text-dim)',letterSpacing:'0.08em',marginBottom:'5px'}}>{title}</div>
       <RateCurveCanvas points={points} unit="bp" color="#8fc1e6" height={170} />
     </div>
   );
@@ -190,7 +190,7 @@ function BasisInstruments({ curve }) {
     finally { setBlpSnapping(false); }
   };
 
-  const thS = { fontSize:'0.8125rem', fontWeight:400, letterSpacing:'0.08em', color:'var(--text-dim)',
+  const thS = { fontSize:'11.5px', fontWeight:400, letterSpacing:'0.08em', color:'var(--text-dim)',
     padding:'3px 4px 5px 0', borderBottom:'1px solid var(--border)', textAlign:'left' };
   const thR = { ...thS, textAlign:'right' };
   const gridTemplate = '32px 44px 1fr 88px 80px';
@@ -211,7 +211,7 @@ function BasisInstruments({ curve }) {
           <div style={thR}>SPREAD</div>
           {liveInstruments.map((inst, i) => {
             const src = quoteSources[i] || 'MANUAL';
-            const tdS = { fontSize:'0.875rem', color:'var(--text)', padding:'5px 4px 5px 0',
+            const tdS = { fontSize:'12.5px', color:'var(--text)', padding:'5px 4px 5px 0',
               borderBottom:'1px solid var(--panel-2)' };
             const tdR = { ...tdS, textAlign:'right', fontVariantNumeric:'tabular-nums' };
             return [
@@ -221,7 +221,7 @@ function BasisInstruments({ curve }) {
                   style={{cursor:'pointer', accentColor:'#d9b25c'}} />
               </div>,
               <div key={`t-${i}`} style={{...tdS, color:'var(--blue)', fontWeight:400}}>{inst.tenor}</div>,
-              <div key={`tk-${i}`} style={{...tdS, fontSize:'0.8125rem', color:'var(--text-dim)'}}>
+              <div key={`tk-${i}`} style={{...tdS, fontSize:'11.5px', color:'var(--text-dim)'}}>
                 {blpTickers[inst.tenor]
                   ? blpTickers[inst.tenor].replace(' BGN Curncy','').replace(' Curncy','')
                   : inst.ticker}
@@ -248,10 +248,10 @@ function BasisInstruments({ curve }) {
         <div style={{display:'flex', gap:'4px', marginBottom:'8px'}}>
           {['MANUAL','BLOOMBERG'].map(src => (
             <button className="rj-press" key={src} onClick={() => handleBlpSourceChange(src)} style={{
-              flex:1, padding:'5px 0', fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.08em',
-              cursor:'pointer', fontFamily: 'var(--mono)', background:'transparent', borderRadius:'2px',
-              border:blpSource===src?'1px solid var(--accent)':'1px solid var(--border)',
-              color:blpSource===src?'var(--accent)':'var(--text-dim)',
+              flex:1, padding:'5px 0', fontSize:'12.5px', fontWeight:700, letterSpacing:'0.08em',
+              cursor:'pointer', fontFamily: 'var(--mono)', background:blpSource===src?'var(--panel-3)':'transparent', borderRadius:'2px',
+              border:blpSource===src?'1px solid var(--border-hi)':'1px solid var(--border)',
+              color:blpSource===src?'var(--text-hi)':'var(--text-dim)',
             }}>{src === 'BLOOMBERG' ? 'BLOOMBERG · SELF-HOST' : src}</button>
           ))}
         </div>
@@ -261,23 +261,23 @@ function BasisInstruments({ curve }) {
           <div style={{display:'flex', alignItems:'center', gap:'0.75rem'}}>
             <input type="date" value={saveDate} onChange={e => setSaveDate(e.target.value)}
               style={{background:'var(--panel-2)', border:'1px solid var(--border)', color:'var(--text)',
-                fontFamily: 'var(--mono)', fontSize:'1rem', padding:'0.25rem 0.45rem',
+                fontFamily: 'var(--mono)', fontSize:'14px', padding:'0.25rem 0.45rem',
                 borderRadius:2, outline:'none'}} />
             <button className="rj-press"
               onClick={async () => { try { await saveSnapshot(curve.id, saveDate); } catch { /* ignore: store already surfaces the save error */ } }}
               disabled={snapshotSaving?.[curve.id]}
               style={{padding:'0.25rem 0.85rem', background:'rgba(217,178,92,0.07)',
                 border:'1px solid var(--accent)', borderRadius:2,
-                fontFamily: 'var(--mono)', fontSize:'1rem', fontWeight:700,
+                fontFamily: 'var(--mono)', fontSize:'14px', fontWeight:700,
                 letterSpacing:'0.1em', color:'var(--accent)', cursor:'pointer'}}
             >{snapshotSaving?.[curve.id] ? 'SAVING...' : '▶ SAVE TO DB'}</button>
             {snapshotSaved?.[curve.id] && (
-              <span style={{fontSize:'0.9375rem', color:'var(--accent)', fontFamily: 'var(--mono)'}}>
+              <span style={{fontSize:'13px', color:'var(--up)', fontFamily: 'var(--mono)'}}>
                 ✓ saved {snapshotSaved[curve.id].date}
               </span>
             )}
             {snapshotError?.[curve.id] && (
-              <span style={{fontSize:'0.9375rem', color:'var(--red)', fontFamily: 'var(--mono)'}}>
+              <span style={{fontSize:'13px', color:'var(--red)', fontFamily: 'var(--mono)'}}>
                 ✗ {snapshotError[curve.id]}
               </span>
             )}
@@ -289,36 +289,36 @@ function BasisInstruments({ curve }) {
           <div style={{border:'1px solid var(--border)', borderRadius:'2px', padding:'8px'}}>
             <div style={{display:'flex', alignItems:'center', gap:'6px', marginBottom:'8px'}}>
               <div style={{width:'6px', height:'6px', borderRadius:'50%', flexShrink:0,
-                background:blpStatus===null?'var(--text-dim)':blpStatus.connected?'var(--accent)':'var(--red)'}}/>
-              <span style={{fontSize:'0.875rem', color:blpStatus?.connected?'var(--accent)':'var(--text-dim)'}}>
+                background:blpStatus===null?'var(--text-dim)':blpStatus.connected?'var(--up)':'var(--red)'}}/>
+              <span style={{fontSize:'12.5px', color:blpStatus?.connected?'var(--up)':'var(--text-dim)'}}>
                 {blpStatus===null?'CHECKING...':blpStatus.connected?'BLOOMBERG CONNECTED':
                   blpStatus.installed?'TERMINAL NOT CONNECTED':'BLPAPI NOT INSTALLED'}
               </span>
-              <button className="rj-btn" onClick={fetchBlpStatus} style={{marginLeft:'auto', fontSize:'0.875rem',
+              <button className="rj-btn" onClick={fetchBlpStatus} style={{marginLeft:'auto', fontSize:'12.5px',
                 background:'transparent', border:'1px solid var(--border)', color:'var(--text-dim)',
                 padding:'2px 6px', cursor:'pointer', fontFamily: 'var(--mono)', borderRadius:'2px'}}>
                 REFRESH
               </button>
             </div>
             {blpStatus && !blpStatus.connected && blpStatus.error && (
-              <div style={{fontSize:'0.875rem', color:'var(--amber)', marginBottom:'8px', lineHeight:1.5}}>
+              <div style={{fontSize:'12.5px', color:'var(--amber)', marginBottom:'8px', lineHeight:1.5}}>
                 {blpStatus.installed === false ? 'No Bloomberg terminal on this server: Bloomberg snaps are for a self-hosted deployment beside a terminal.' : blpStatus.error}
               </div>
             )}
             <div style={{display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px'}}>
               <input type="date" value={blpSnapDate} onChange={e => setBlpSnapDate(e.target.value)}
                 style={{background:'var(--panel)', border:'1px solid var(--border)', color:'var(--text)',
-                  fontFamily: 'var(--mono)', fontSize:'1rem', padding:'4px 6px',
+                  fontFamily: 'var(--mono)', fontSize:'14px', padding:'4px 6px',
                   borderRadius:'2px', outline:'none'}} />
               <button className="rj-press" onClick={() => snapBloomberg('live')} disabled={!blpStatus?.connected||blpSnapping}
-                style={{flex:1, padding:'6px 0', fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.08em',
+                style={{flex:1, padding:'6px 0', fontSize:'12.5px', fontWeight:700, letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed', background:'transparent', borderRadius:'2px',
                   fontFamily: 'var(--mono)', border:'1px solid var(--accent)',
                   color:'var(--accent)', opacity:blpStatus?.connected?1:0.4}}>
                 {blpSnapping?'SNAPPING...':'▶ SNAP LIVE'}
               </button>
               <button className="rj-press" onClick={() => snapBloomberg('historical')} disabled={!blpStatus?.connected||blpSnapping}
-                style={{flex:1, padding:'6px 0', fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.08em',
+                style={{flex:1, padding:'6px 0', fontSize:'12.5px', fontWeight:700, letterSpacing:'0.08em',
                   cursor:blpStatus?.connected?'pointer':'not-allowed', background:'transparent', borderRadius:'2px',
                   fontFamily: 'var(--mono)', border:'1px solid var(--border)',
                   color:'var(--text-dim)', opacity:blpStatus?.connected?1:0.4}}>
@@ -326,26 +326,26 @@ function BasisInstruments({ curve }) {
               </button>
             </div>
             {blpSnapResult && (
-              <div style={{fontSize:'0.875rem', color:'var(--accent)', marginBottom:'6px',
-                background:'rgba(217,178,92,0.05)', border:'1px solid rgba(217,178,92,0.2)',
+              <div style={{fontSize:'12.5px', color:'var(--up)', marginBottom:'6px',
+                background:'transparent', border:'1px solid var(--border)',
                 padding:'5px 7px', borderRadius:'2px', lineHeight:1.7}}>
                 ✓ SNAPPED & SAVED TO DB · {blpSnapResult.quotes_saved} TENORS · {blpSnapResult.snap_date}
               </div>
             )}
             {blpSnapError && (
-              <div style={{fontSize:'0.875rem', color:'var(--red)', marginBottom:'6px',
+              <div style={{fontSize:'12.5px', color:'var(--red)', marginBottom:'6px',
                 background:'rgba(240,130,140,0.05)', border:'1px solid rgba(240,130,140,0.2)',
                 padding:'5px 7px', borderRadius:'2px'}}>✗ {blpSnapError}</div>
             )}
             {Object.keys(blpTickers).length > 0 && (
               <details style={{marginTop:'6px'}}>
-                <summary style={{fontSize:'0.875rem', color:'var(--text-dim)', cursor:'pointer',
+                <summary style={{fontSize:'12.5px', color:'var(--text-dim)', cursor:'pointer',
                   letterSpacing:'0.08em', userSelect:'none', listStyle:'none',
                   display:'flex', justifyContent:'space-between'}}>
                   <span>TICKERS ({Object.keys(blpTickers).length})</span>
                   {blpTickersEdited && (
                     <button className="rj-press" onClick={e=>{e.preventDefault();saveTickerOverrides();}}
-                      style={{fontSize:'0.875rem', background:'transparent', border:'1px solid var(--blue)',
+                      style={{fontSize:'12.5px', background:'transparent', border:'1px solid var(--blue)',
                         color:'var(--blue)', padding:'1px 6px', cursor:'pointer',
                         fontFamily: 'var(--mono)', borderRadius:'2px'}}>SAVE OVERRIDES</button>
                   )}
@@ -353,10 +353,10 @@ function BasisInstruments({ curve }) {
                 <div style={{marginTop:'6px', display:'grid', gridTemplateColumns:'44px 1fr', gap:'2px 8px'}}>
                   {Object.entries(blpTickers).map(([tenor, ticker]) => (
                     <>
-                      <span key={tenor+'-t'} style={{fontSize:'0.8125rem', color:'var(--blue)', fontFamily: 'var(--mono)'}}>{tenor}</span>
+                      <span key={tenor+'-t'} style={{fontSize:'11.5px', color:'var(--blue)', fontFamily: 'var(--mono)'}}>{tenor}</span>
                       <input key={tenor+'-v'} defaultValue={ticker}
                         onBlur={e=>{ setBlpTickers(p=>({...p,[tenor]:e.target.value})); setBlpTickersEdited(true); }}
-                        style={{fontSize:'0.8125rem', fontFamily: 'var(--mono)',
+                        style={{fontSize:'11.5px', fontFamily: 'var(--mono)',
                           background:'var(--panel-2)', border:'1px solid var(--border)', color:'var(--text)',
                           padding:'1px 4px', borderRadius:'2px', outline:'none'}} />
                     </>
@@ -424,7 +424,7 @@ export default function BasisDetail({ curve }) {
           <div className="crv-hdr-info">
             <div className="crv-hdr-name">{curve.fullName}</div>
             <div className="crv-hdr-sub">
-              Basis over: <span style={{ color:'var(--accent)' }}>{curve.baseLabel}</span>
+              Basis over: <span style={{ color:'var(--text-hi)' }}>{curve.baseLabel}</span>
               {' · '}{curve.qlHelper}
             </div>
           </div>

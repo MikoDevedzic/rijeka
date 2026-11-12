@@ -173,7 +173,7 @@ export default function LegalEntities() {
       <div style={{ display:'flex', alignItems:'flex-start',
           justifyContent:'space-between', marginBottom:'20px' }}>
         <div>
-          <div style={{ fontSize:'12px', color:'var(--accent)', fontFamily: 'var(--mono)',
+          <div style={{ fontSize:'12px', color:'var(--text-mute)', fontFamily: 'var(--mono)',
               letterSpacing:'0.1em', marginBottom:'4px' }}>
             CONFIGURATIONS / ONBOARDING
           </div>
@@ -203,10 +203,10 @@ export default function LegalEntities() {
       {/* ── Add Form ── */}
       {showAdd && (
         <div style={{
-          border:'1px dashed var(--accent)', borderRadius:'4px',
+          border:'1px dashed var(--border-hi)', borderRadius:'4px',
           padding:'20px', marginBottom:'20px', background:'var(--panel)'
         }}>
-          <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily: 'var(--mono)',
+          <div style={{ fontSize: '12px', color:'var(--text-hi)', fontFamily: 'var(--mono)',
               letterSpacing:'0.08em', marginBottom:'16px' }}>
             NEW LEGAL ENTITY
           </div>

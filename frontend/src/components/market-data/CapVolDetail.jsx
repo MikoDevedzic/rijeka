@@ -27,7 +27,7 @@ function CapVolHeatmap({ atmRows, hasData }) {
     <div style={{ background: 'var(--panel)', border: '1px solid var(--border)',
       borderRadius: '2px', padding: '8px', marginTop: '6px', height: '60px',
       display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <span style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', letterSpacing: '0.08em' }}>
+      <span style={{ fontSize: '11.5px', color: 'var(--text-dim)', letterSpacing: '0.08em' }}>
         SNAP TO VIEW SURFACE
       </span>
     </div>
@@ -42,7 +42,7 @@ function CapVolHeatmap({ atmRows, hasData }) {
   return (
     <div style={{ background: 'var(--panel)', border: '1px solid var(--border)',
       borderRadius: '2px', padding: '8px', marginTop: '6px' }}>
-      <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)',
+      <div style={{ fontSize: '11.5px', color: 'var(--text-dim)',
         letterSpacing: '0.08em', marginBottom: '5px' }}>
         ATM NORMAL VOL SURFACE · bp · USD SOFR
       </div>
@@ -50,10 +50,10 @@ function CapVolHeatmap({ atmRows, hasData }) {
         gridTemplateColumns: '28px repeat(' + CAP_TENORS.length + ', 1fr)', gap: '2px' }}>
         <div />
         {CAP_TENORS.map(t => (
-          <div key={t} style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
+          <div key={t} style={{ fontSize: '11px', color: 'var(--text-dim)',
             textAlign: 'center' }}>{t}Y</div>
         ))}
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
+        <div style={{ fontSize: '11px', color: 'var(--text-dim)',
           textAlign: 'right', paddingRight: '3px', display: 'flex',
           alignItems: 'center', justifyContent: 'flex-end' }}>ATM</div>
         {CAP_TENORS.map(t => {
@@ -66,8 +66,8 @@ function CapVolHeatmap({ atmRows, hasData }) {
           return (
             <div key={t} style={{ height: '18px', borderRadius: '1px', background: bg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '0.76rem',
-              color: v !== null ? 'var(--accent)' : 'var(--text-dim)',
+              fontSize: '11px',
+              color: v !== null ? 'var(--text)' : 'var(--text-dim)',
               fontFamily: 'var(--mono)' }}>
               {v !== null ? v.toFixed(0) : '—'}
             </div>
@@ -210,7 +210,7 @@ function CapInstruments() {
   const fmtVol = v => v != null ? Number(v).toFixed(2) : '—';
 
   const thStyle = {
-    fontSize: '0.8125rem', fontWeight: 400, letterSpacing: '0.08em',
+    fontSize: '11.5px', fontWeight: 400, letterSpacing: '0.08em',
     color: 'var(--text-dim)', padding: '3px 6px 5px',
     borderBottom: '1px solid var(--border)', textAlign: 'right',
   };
@@ -230,25 +230,25 @@ function CapInstruments() {
           onChange={e => setValuationDate(e.target.value)}
           style={{ background: 'var(--panel-2)', border: '1px solid var(--border)',
             color: 'var(--text)', fontFamily: 'var(--mono)',
-            fontSize: '1rem', padding: '0.25rem 0.45rem', borderRadius: 2, outline: 'none' }}
+            fontSize: '14px', padding: '0.25rem 0.45rem', borderRadius: 2, outline: 'none' }}
         />
         <button className="rj-press"
           onClick={snapSurface}
           disabled={snapLoading}
           style={{ padding: '0.25rem 0.85rem', background: 'rgba(217,178,92,0.07)',
             border: '1px solid var(--accent)', borderRadius: 2,
-            fontFamily: 'var(--mono)', fontSize: '1rem',
+            fontFamily: 'var(--mono)', fontSize: '14px',
             fontWeight: 700, letterSpacing: '0.1em', color: 'var(--accent)',
             cursor: snapLoading ? 'not-allowed' : 'pointer',
             opacity: snapLoading ? 0.5 : 1 }}>
           {snapLoading ? 'SNAPPING...' : '▶ SNAP FULL SURFACE'}
         </button>
         {snapMsg && (
-          <span style={{ fontSize: '0.9375rem', color: 'var(--accent)',
+          <span style={{ fontSize: '13px', color: 'var(--up)',
             fontFamily: 'var(--mono)' }}>✓ {snapMsg}</span>
         )}
         {error && (
-          <span style={{ fontSize: '0.9375rem', color: 'var(--red)',
+          <span style={{ fontSize: '13px', color: 'var(--red)',
             fontFamily: 'var(--mono)' }}>✗ {error}</span>
         )}
       </div>
@@ -256,7 +256,7 @@ function CapInstruments() {
       {/* ATM strip */}
       {hasData && (
         <div style={{ marginBottom: '10px' }}>
-          <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)',
+          <div style={{ fontSize: '11.5px', color: 'var(--text-dim)',
             letterSpacing: '0.08em', marginBottom: '5px',
             fontFamily: 'var(--mono)' }}>
             ATM STRIP — USCNSQ
@@ -268,15 +268,15 @@ function CapInstruments() {
                 <div key={t} style={{ background: 'var(--panel)',
                   border: '1px solid var(--border)', borderRadius: '2px',
                   padding: '8px 12px', minWidth: '72px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
+                  <div style={{ fontSize: '11px', color: 'var(--text-dim)',
                     fontFamily: 'var(--mono)', marginBottom: '3px' }}>{t}Y</div>
-                  <div style={{ fontSize: '1rem', fontWeight: 700,
+                  <div style={{ fontSize: '14px', fontWeight: 700,
                     fontFamily: 'var(--mono)',
-                    color: row ? 'var(--accent)' : 'var(--text-dim)' }}>
+                    color: row ? 'var(--text-hi)' : 'var(--text-dim)' }}>
                     {row ? fmtVol(row.flat_vol_bp) : '—'}
                   </div>
                   {row && (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)',
+                    <div style={{ fontSize: '11px', color: 'var(--text-dim)',
                       fontFamily: 'var(--mono)', marginTop: '2px' }}>
                       {row.source}
                     </div>
@@ -304,7 +304,7 @@ function CapInstruments() {
               <tr>
                 <td colSpan={CAP_TENORS.length + 1}
                   style={{ padding: '20px', textAlign: 'center',
-                    color: 'var(--text-dim)', fontSize: '0.875rem',
+                    color: 'var(--text-dim)', fontSize: '12.5px',
                     fontFamily: 'var(--mono)' }}>
                   Loading...
                 </td>
@@ -313,7 +313,7 @@ function CapInstruments() {
               <tr>
                 <td colSpan={CAP_TENORS.length + 1}
                   style={{ padding: '20px', textAlign: 'center',
-                    color: 'var(--text-dim)', fontSize: '0.875rem',
+                    color: 'var(--text-dim)', fontSize: '12.5px',
                     fontFamily: 'var(--mono)' }}>
                   No data for {valuationDate} — snap to populate
                 </td>
@@ -321,7 +321,7 @@ function CapInstruments() {
             ) : (
               CAP_STRIKES.map(spread => (
                 <tr key={spread}>
-                  <td style={{ fontSize: '0.875rem', color: 'var(--accent)',
+                  <td style={{ fontSize: '12.5px', color: 'var(--text-dim)',
                     fontFamily: 'var(--mono)', fontWeight: 600,
                     padding: '4px 6px 4px 0', borderBottom: '1px solid var(--panel-2)' }}>
                     +{spread}bp
@@ -334,8 +334,8 @@ function CapInstruments() {
                           textAlign: 'right' }}>
                         <div style={{ padding: '1px 4px 3px',
                           fontFamily: 'var(--mono)',
-                          fontSize: '0.875rem',
-                          color: row ? 'var(--accent)' : 'var(--text-dim)' }}>
+                          fontSize: '12.5px',
+                          color: row ? 'var(--text)' : 'var(--text-dim)' }}>
                           {row ? fmtVol(row.flat_vol_bp) : '—'}
                         </div>
                       </td>
@@ -352,7 +352,7 @@ function CapInstruments() {
       <CapVolHeatmap atmRows={atmRows} smileRows={smileRows} hasData={hasData} />
 
       {/* Ticker note */}
-      <div style={{ marginTop: '8px', fontSize: '0.75rem', color: 'var(--text-dim)',
+      <div style={{ marginTop: '8px', fontSize: '11px', color: 'var(--text-dim)',
         fontFamily: 'var(--mono)', lineHeight: 1.7 }}>
         ATM: USCNSQ{'{N}'} ICPL Curncy · PX_MID&nbsp;&nbsp;
         Skew: USCNQ{'{letter}{N}'} ICPL Curncy · MID&nbsp;&nbsp;
@@ -407,7 +407,7 @@ function CapVolConfig() {
       </div>
       <div style={{ marginTop: '12px', padding: '8px 10px',
         background: 'rgba(143,193,230,0.04)', border: '1px solid rgba(143,193,230,0.15)',
-        borderRadius: '2px', fontSize: '0.8125rem', color: 'var(--text-dim)',
+        borderRadius: '2px', fontSize: '11.5px', color: 'var(--text-dim)',
         fontFamily: 'var(--mono)', lineHeight: 1.7 }}>
         Cap/floor pricing uses direct table lookup from the saved flat-vol surface.
         For standard strikes the quoted vol is used directly — no SABR required.

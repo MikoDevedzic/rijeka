@@ -2,12 +2,12 @@
 .ms-launcher {
   position: fixed; bottom: 28px; right: 28px; z-index: 1001;
   width: 50px; height: 50px; border-radius: 50%;
-  background: var(--panel); border: 1px solid rgba(241,212,136,0.55); color: #f1d488;
-  font-size: 1.15rem; cursor: pointer; box-shadow: 0 0 16px rgba(241,212,136,0.25);
+  background: var(--panel); border: 1px solid rgb(var(--accent-hi-rgb) / 0.55); color: var(--accent-hi);
+  font-size: 16px; cursor: pointer; box-shadow: 0 0 16px rgb(var(--accent-hi-rgb) / 0.25);
   display: flex; align-items: center; justify-content: center;
   transition: box-shadow 0.2s, transform 0.15s;
 }
-.ms-launcher:hover { box-shadow: 0 0 28px rgba(241,212,136,0.45); transform: scale(1.05); }
+.ms-launcher:hover { box-shadow: 0 0 28px rgb(var(--accent-hi-rgb) / 0.45); transform: scale(1.05); }
 .ms-launcher-badge {
   position: absolute; top: -4px; right: -4px; background: var(--accent); color: #000;
   font-family: var(--sans); font-size: 12px; font-weight: 700;
@@ -24,7 +24,7 @@
 /* Window */
 .ms-window {
   position: fixed; z-index: 1000; display: flex; flex-direction: column;
-  background: var(--panel); border: 1px solid rgba(241,212,136,0.28); border-radius: 3px;
+  background: var(--panel); border: 1px solid rgb(var(--accent-hi-rgb) / 0.28); border-radius: 3px;
   box-shadow: 0 12px 40px rgba(0,0,0,0.6); overflow: hidden;
   font-family: var(--sans); color: var(--text);
 }
@@ -40,7 +40,7 @@
   background: var(--bg-deep); border-bottom: 1px solid var(--border); cursor: move; user-select: none;
 }
 .ms-phone .ms-titlebar, .ms-expanded .ms-titlebar { cursor: default; }
-.ms-brand { color: #f1d488; font-size: 12px; font-weight: 700; letter-spacing: 0.14em; }
+.ms-brand { color: var(--accent-hi); font-size: 12px; font-weight: 700; letter-spacing: 0.14em; }
 .ms-title-actions { margin-left: auto; display: flex; gap: 2px; }
 .ms-icon {
   background: none; border: none; color: var(--text-dim); cursor: pointer; font-family: inherit;
@@ -61,11 +61,11 @@
 
 /* Buttons and tags */
 .ms-btn {
-  background: rgba(217,178,92,0.06); border: 1px solid rgba(217,178,92,0.4); color: var(--accent);
+  background: rgb(var(--accent-rgb) / 0.06); border: 1px solid rgb(var(--accent-rgb) / 0.4); color: var(--accent);
   font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
   padding: 6px 10px; border-radius: 2px; cursor: pointer; flex-shrink: 0;
 }
-.ms-btn:hover { background: rgba(217,178,92,0.12); }
+.ms-btn:hover { background: rgb(var(--accent-rgb) / 0.12); }
 .ms-btn:disabled { opacity: 0.4; cursor: default; }
 .ms-btn.ghost { background: none; border-color: var(--border-hi); color: var(--text-dim); }
 .ms-link {
@@ -79,9 +79,9 @@
   font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
   border: 1px solid; border-radius: 2px; padding: 1px 5px; flex-shrink: 0; vertical-align: middle;
 }
-.ms-tag.private    { color: #f1d488; border-color: rgba(241,212,136,0.5); }
+.ms-tag.private    { color: var(--accent-hi); border-color: rgb(var(--accent-hi-rgb) / 0.5); }
 .ms-tag.shared     { color: var(--blue); border-color: rgba(143,193,230,0.5); }
-.ms-tag.rijeka     { color: var(--accent); border-color: rgba(217,178,92,0.45); }
+.ms-tag.rijeka     { color: var(--accent); border-color: rgb(var(--accent-rgb) / 0.45); }
 .ms-tag.compliance { color: var(--amber); border-color: rgba(233,151,90,0.5); }
 .ms-tag.invite     { color: var(--amber); border-color: rgba(233,151,90,0.5); }
 .ms-badge {
@@ -93,7 +93,7 @@
 /* Conversation list */
 .ms-list { display: flex; flex-direction: column; min-height: 0; background: var(--bg-deep); }
 .ms-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-.ms-firm { color: var(--accent); font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; }
+.ms-firm { color: var(--text-hi); font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em; }
 .ms-list-scroll { overflow-y: auto; flex: 1; }
 .ms-conv {
   display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text);
@@ -101,11 +101,11 @@
 }
 .ms-conv:hover  { background: var(--row-hover); box-shadow: inset 3px 0 0 var(--row-rule); }
 .ms-conv.active { background: var(--panel-2); border-left-color: var(--accent); }
-.ms-conv.prom.active { border-left-color: #f1d488; }
+.ms-conv.prom.active { border-left-color: var(--accent-hi); }
 .ms-conv.invite { background: rgba(233,151,90,0.05); }
 .ms-conv-top, .ms-conv-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ms-conv-title { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-conv.prom .ms-conv-title, .ms-conv-title.support { color: #f1d488; }
+.ms-conv.prom .ms-conv-title, .ms-conv-title.support { color: var(--accent-hi); }
 .ms-conv-time { font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
 .ms-conv-preview { font-size: 12px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; display: block; }
 .ms-conv-book { font-family: var(--mono); font-size: 12px; color: var(--blue); margin-top: 3px; letter-spacing: 0.04em; }
@@ -127,14 +127,14 @@
 .ms-msg.mine { align-self: flex-end; }
 .ms-who { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); display: flex; gap: 8px; align-items: baseline; }
 .ms-msg.mine .ms-who { justify-content: flex-end; color: var(--accent); }
-.ms-msg.prometheus .ms-who { color: #f1d488; }
+.ms-msg.prometheus .ms-who { color: var(--accent-hi); }
 .ms-time { font-weight: 400; letter-spacing: 0; text-transform: none; }
 .ms-bubble {
   font-size: 13px; line-height: 1.55; padding: 9px 12px; border-radius: 2px; white-space: pre-wrap; word-break: break-word;
   background: var(--panel-2); border: 1px solid var(--border);
 }
-.ms-msg.mine .ms-bubble       { background: rgba(217,178,92,0.08); border-color: rgba(217,178,92,0.22); }
-.ms-msg.prometheus .ms-bubble { border-color: rgba(241,212,136,0.3); }
+.ms-msg.mine .ms-bubble       { background: rgb(var(--accent-rgb) / 0.08); border-color: rgb(var(--accent-rgb) / 0.22); }
+.ms-msg.prometheus .ms-bubble { border-color: rgb(var(--accent-hi-rgb) / 0.3); }
 .ms-msg.error .ms-bubble      { border-color: rgba(240,130,140,0.5); color: var(--red); }
 .ms-thinking { color: var(--text-dim); font-style: italic; }
 .ms-system { align-self: center; text-align: center; font-size: 12px; color: var(--text-dim); max-width: 520px; }
@@ -144,18 +144,18 @@
 .ms-meta { font-family: var(--mono); font-size: 12px; color: var(--text-dim); word-break: break-word; }
 .ms-sources { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .ms-sources > span { text-transform: uppercase; letter-spacing: 0.1em; font-size: 12px; font-weight: 700; }
-.ms-sources a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted rgba(217,178,92,0.4); }
+.ms-sources a { color: var(--accent); text-decoration: none; border-bottom: 1px dotted rgb(var(--accent-rgb) / 0.4); }
 .ms-deeper {
-  align-self: flex-start; background: none; cursor: pointer; border: 1px solid rgba(241,212,136,0.3); border-radius: 2px;
-  color: #f1d488; font-family: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px;
+  align-self: flex-start; background: none; cursor: pointer; border: 1px solid rgb(var(--accent-hi-rgb) / 0.3); border-radius: 2px;
+  color: var(--accent-hi); font-family: inherit; font-size: 12px; font-weight: 600; padding: 4px 10px;
 }
-.ms-deeper:hover { border-color: #f1d488; background: rgba(241,212,136,0.06); }
+.ms-deeper:hover { border-color: var(--accent-hi); background: rgb(var(--accent-hi-rgb) / 0.06); }
 .ms-starters { display: flex; flex-direction: column; gap: 6px; }
 .ms-starter {
-  text-align: left; background: none; cursor: pointer; border: 1px solid rgba(241,212,136,0.3); border-radius: 2px;
+  text-align: left; background: none; cursor: pointer; border: 1px solid rgb(var(--accent-hi-rgb) / 0.3); border-radius: 2px;
   color: var(--text); font-family: inherit; font-size: 12.5px; line-height: 1.4; padding: 8px 12px;
 }
-.ms-starter:hover { border-color: #f1d488; background: rgba(241,212,136,0.06); }
+.ms-starter:hover { border-color: var(--accent-hi); background: rgb(var(--accent-hi-rgb) / 0.06); }
 
 .ms-invite { margin: auto; max-width: 420px; padding: 24px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.5; text-align: center; }
 .ms-invite-actions { display: flex; gap: 8px; justify-content: center; }
@@ -174,19 +174,19 @@
   align-self: flex-end; height: 40px; flex-shrink: 0; cursor: pointer; border-radius: 2px;
   font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;
 }
-.ms-send { padding: 0 14px; background: rgba(217,178,92,0.06); border: 1px solid rgba(217,178,92,0.4); color: var(--accent); }
-.ms-send:hover { background: rgba(217,178,92,0.12); }
+.ms-send { padding: 0 14px; background: rgb(var(--accent-rgb) / 0.06); border: 1px solid rgb(var(--accent-rgb) / 0.4); color: var(--accent); }
+.ms-send:hover { background: rgb(var(--accent-rgb) / 0.12); }
 .ms-send:disabled { opacity: 0.4; cursor: default; }
 .ms-trade { padding: 0 10px; background: rgba(143,193,230,0.06); border: 1px solid rgba(143,193,230,0.45); color: var(--blue); }
 .ms-trade:hover { background: rgba(143,193,230,0.14); }
-.ms-ask { width: 40px; font-size: 14px; background: rgba(241,212,136,0.06); border: 1px solid rgba(241,212,136,0.4); color: #f1d488; }
-.ms-ask:hover { background: rgba(241,212,136,0.14); }
+.ms-ask { width: 40px; font-size: 14px; background: rgb(var(--accent-hi-rgb) / 0.06); border: 1px solid rgb(var(--accent-hi-rgb) / 0.4); color: var(--accent-hi); }
+.ms-ask:hover { background: rgb(var(--accent-hi-rgb) / 0.14); }
 .ms-mention {
   display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left; margin-bottom: 6px;
-  background: var(--panel-2); border: 1px solid rgba(241,212,136,0.45); border-radius: 2px; padding: 8px 10px; cursor: pointer; font-family: inherit;
+  background: var(--panel-2); border: 1px solid rgb(var(--accent-hi-rgb) / 0.45); border-radius: 2px; padding: 8px 10px; cursor: pointer; font-family: inherit;
 }
 .ms-mention .ms-sub:first-of-type { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ms-mention-name { color: #f1d488; font-weight: 700; font-size: 12.5px; flex-shrink: 0; }
+.ms-mention-name { color: var(--accent-hi); font-weight: 700; font-size: 12.5px; flex-shrink: 0; }
 
 /* Compose panel */
 .ms-compose-panel { display: flex; flex-direction: column; min-height: 0; flex: 1; }
@@ -210,7 +210,7 @@
   border-bottom: 1px solid var(--border); padding: 9px 10px; color: var(--text); font-family: inherit; font-size: 13px; cursor: pointer;
 }
 .ms-pick:hover { background: var(--panel-2); }
-.ms-pick.on { background: rgba(217,178,92,0.06); }
+.ms-pick.on { background: rgb(var(--accent-rgb) / 0.06); }
 .ms-pick-name { flex: 1; }
 .ms-check { color: var(--accent); width: 12px; }
 .ms-compose-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }

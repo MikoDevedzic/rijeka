@@ -14,9 +14,9 @@ const fmt = (n, d = 2) => n == null || isNaN(n) ? '—' : Number(n).toLocaleStri
 const utcToday = () => new Date().toISOString().slice(0, 10)
 const ORIGIN_TITLE = { FEED: 'stored by the feed', MANUAL: 'entered by a desk', SPOT: 'a stored spot price, not a fixing' }
 
-const thL = { fontSize: '0.78rem', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 10px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
+const thL = { fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 10px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
 const thR = { ...thL, textAlign: 'right' }
-const td = { fontSize: '0.875rem', color: 'var(--text)', padding: '5px 10px 5px 0', borderBottom: '1px solid var(--panel-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }
+const td = { fontSize: '12.5px', color: 'var(--text)', padding: '5px 10px 5px 0', borderBottom: '1px solid var(--panel-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }
 const tdR = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
 
 export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
@@ -88,9 +88,9 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
 
       <SectionLabel sub={`newest first · ${p.quote} per 1 ${p.base}`}>LAST {DAYS} DAYS</SectionLabel>
       {data && data.stored === false && (
-        <div style={{ fontSize: '0.8125rem', color: 'var(--amber)', margin: '0 0 8px' }}>Fixings are not stored on this instance yet; these are stored spot prices.</div>
+        <div style={{ fontSize: '11.5px', color: 'var(--amber)', margin: '0 0 8px' }}>Fixings are not stored on this instance yet; these are stored spot prices.</div>
       )}
-      {error && <div style={{ fontSize: '0.8125rem', color: 'var(--red)', margin: '0 0 8px' }}>Fixings could not be read: {error}</div>}
+      {error && <div style={{ fontSize: '11.5px', color: 'var(--red)', margin: '0 0 8px' }}>Fixings could not be read: {error}</div>}
       <div style={{ overflowX: 'auto' }}>
         <div data-testid="fixings-table" style={{ display: 'grid', gridTemplateColumns: '110px minmax(180px, 1fr) 130px 150px 90px', minWidth: 660 }}>
           <div style={thL}>DATE</div><div style={thL}>SOURCE</div><div style={thL}>TIME</div><div style={thR}>VALUE</div><div style={thL}>ORIGIN</div>
@@ -107,7 +107,7 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
         </div>
       </div>
       {!rows.length && !error && (
-        <div style={{ fontSize: '0.8125rem', color: 'var(--text-dim)', padding: '8px 0' }}>{data ? `No fixing is stored for ${pair} in the last ${DAYS} days.` : 'Reading the fixings…'}</div>
+        <div style={{ fontSize: '11.5px', color: 'var(--text-dim)', padding: '8px 0' }}>{data ? `No fixing is stored for ${pair} in the last ${DAYS} days.` : 'Reading the fixings…'}</div>
       )}
     </div>
   )

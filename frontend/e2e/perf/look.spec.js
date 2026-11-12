@@ -36,6 +36,28 @@ test('the pages behind the top bar', async ({ app }) => {
   }
 })
 
+// The pages behind CONFIGURATIONS a first user opens to see where a price comes from, and the messenger: read after a
+// change to their type or colour. LOOK_TAG names the set (LOOK_TAG=before, then after), so two runs sit side by side.
+test('configurations and the messenger', async ({ app }) => {
+  const tag = process.env.LOOK_TAG ? `-${process.env.LOOK_TAG}` : ''
+  for (const [name, path, wait] of [
+    ['cfg-curves', '/configurations/market-data/curves', 1500], ['cfg-swvol', '/configurations/market-data/swvol', 1500],
+    ['cfg-capfloor', '/configurations/market-data/capfloor', 1500], ['cfg-pairs', '/configurations/market-data/crypto', 1500],
+    ['cfg-hw1f', '/configurations/xva-parameters/hw1f', 1200], ['cfg-counterparties', '/configurations/counterparties', 800],
+    ['cfg-legal-entities', '/configurations/legal-entities', 800], ['cfg-collateral', '/configurations/collateral/instruments', 800],
+    ['cfg-system', '/configurations/system', 1000],
+  ]) {
+    await app.goto(path)
+    await app.waitForLoadState('networkidle').catch(() => {})
+    await app.waitForTimeout(wait)
+    await shot(app, `${name}${tag}`)
+  }
+  await app.goto('/blotter')
+  await app.locator('.ms-launcher').click()
+  await app.waitForTimeout(1200)
+  await shot(app, `messenger${tag}`)
+})
+
 test('the rates ticket: trade, details, cashflows, XVA, scenario, booked, confirmed', async ({ app }) => {
   test.setTimeout(300_000)
   const win = await ticket(app, 'RATES', /^IR SWAP$/i)

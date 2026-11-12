@@ -33,7 +33,7 @@ function SourceBadge({ src }) {
   const s = map[src] || map.MANUAL;
   return (
     <span style={{ background:s.bg, border:`1px solid ${s.bd}`, color:s.c,
-      fontSize:'0.8125rem', fontWeight:700, letterSpacing:'0.06em',
+      fontSize:'11.5px', fontWeight:700, letterSpacing:'0.06em',
       padding:'1px 5px', borderRadius:'2px',
       fontFamily: 'var(--mono)', whiteSpace:'nowrap' }}>
       {src}
@@ -47,7 +47,7 @@ function VolSurface({ grid, hasData }) {
     <div style={{ background:'var(--panel)', border:'1px solid var(--border)',
       borderRadius:'2px', padding:'8px', marginTop:'6px', height:'96px',
       display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <span style={{ fontSize:'0.8125rem', color:'var(--text-dim)', letterSpacing:'0.08em' }}>
+      <span style={{ fontSize:'11.5px', color:'var(--text-dim)', letterSpacing:'0.08em' }}>
         SNAP OR SAVE TO VIEW SURFACE
       </span>
     </div>
@@ -62,16 +62,16 @@ function VolSurface({ grid, hasData }) {
   return (
     <div style={{ background:'var(--panel)', border:'1px solid var(--border)',
       borderRadius:'2px', padding:'8px', marginTop:'6px' }}>
-      <div style={{ fontSize:'0.8125rem', color:'var(--text-dim)', letterSpacing:'0.08em', marginBottom:'5px' }}>
+      <div style={{ fontSize:'11.5px', color:'var(--text-dim)', letterSpacing:'0.08em', marginBottom:'5px' }}>
         ATM NORMAL VOL SURFACE · bp · SOFR
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'28px repeat(' + SWAPTION_TENORS.length + ',1fr)', gap:'2px' }}>
         <div />
         {SWAPTION_TENORS.map((t) => (
-          <div key={t} style={{ fontSize:'0.8rem', color:'var(--text-dim)', textAlign:'center' }}>{t}</div>
+          <div key={t} style={{ fontSize:'11px', color:'var(--text-dim)', textAlign:'center' }}>{t}</div>
         ))}
         {grid.map((row) => [
-          <div key={row.expiry + '_lbl'} style={{ fontSize:'0.8rem', color:'var(--text-dim)', textAlign:'right', paddingRight:'3px', display:'flex', alignItems:'center', justifyContent:'flex-end' }}>{row.expiry}</div>,
+          <div key={row.expiry + '_lbl'} style={{ fontSize:'11px', color:'var(--text-dim)', textAlign:'right', paddingRight:'3px', display:'flex', alignItems:'center', justifyContent:'flex-end' }}>{row.expiry}</div>,
           ...row.cells.map((cell) => {
             const v = cell.vol_bp;
             const intensity = v !== null ? (v - minV) / rng : 0;
@@ -81,7 +81,7 @@ function VolSurface({ grid, hasData }) {
             return (
               <div key={cell.tenor} style={{ height:'18px', borderRadius:'1px', background:bg,
                 display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize:'0.76rem', color:v !== null ? 'var(--accent)' : 'var(--text-dim)',
+                fontSize:'11px', color:v !== null ? 'var(--text)' : 'var(--text-dim)',
                 fontFamily: 'var(--mono)' }}>
                 {v !== null ? v.toFixed(0) : '—'}
               </div>
@@ -204,7 +204,7 @@ function SwvInstruments() {
 
   // Column header style
   const thStyle = {
-    fontSize:'0.8125rem', fontWeight:400, letterSpacing:'0.08em',
+    fontSize:'11.5px', fontWeight:400, letterSpacing:'0.08em',
     color:'var(--text-dim)', padding:'3px 6px 5px',
     borderBottom:'1px solid var(--border)', textAlign:'right',
   };
@@ -227,7 +227,7 @@ function SwvInstruments() {
           <tbody>
             {grid.map((row) => (
               <tr key={row.expiry}>
-                <td style={{ fontSize:'0.875rem', color:'var(--accent)',
+                <td style={{ fontSize:'12.5px', color:'var(--text-dim)',
                   fontFamily: 'var(--mono)', fontWeight:600,
                   padding:'4px 6px 4px 0', borderBottom:'1px solid var(--panel-2)' }}>
                   {row.expiry}
@@ -238,7 +238,7 @@ function SwvInstruments() {
                       borderBottom:'1px solid var(--panel-2)',
                       background: isBasket(row.expiry, cell.tenor)
                         ? 'rgba(217,178,92,0.03)' : 'transparent' }}>
-                    <div style={{ fontSize:'0.8rem', color:'var(--text-dim)',
+                    <div style={{ fontSize:'11px', color:'var(--text-dim)',
                       fontFamily: 'var(--mono)', padding:'1px 4px 0',
                       letterSpacing:'0.02em', lineHeight:1 }}>
                       {cell.ticker.replace(' Curncy', '')}
@@ -252,7 +252,7 @@ function SwvInstruments() {
                         borderBottom:'1px solid transparent', outline:'none',
                         textAlign:'right', padding:'1px 4px 3px',
                         fontFamily: 'var(--mono)',
-                        fontSize:'0.875rem', color:'var(--accent)',
+                        fontSize:'12.5px', color:'var(--text)',
                         caretColor:'var(--accent)' }}
                       onFocus={(e) => e.target.style.borderBottom='1px solid var(--accent)'}
                       onBlur={(e)  => e.target.style.borderBottom='1px solid transparent'}
@@ -267,7 +267,7 @@ function SwvInstruments() {
 
       {/* ── Basket legend ── */}
       <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'6px',
-        fontSize:'0.8125rem', color:'var(--text-dim)' }}>
+        fontSize:'11.5px', color:'var(--text-dim)' }}>
         <div style={{ width:'10px', height:'10px', borderRadius:'1px',
           background:'rgba(217,178,92,0.15)', border:'1px solid rgba(217,178,92,0.3)', flexShrink:0 }} />
         HW1F calibration basket — co-terminal + diagonal + long-end anchors
@@ -283,11 +283,11 @@ function SwvInstruments() {
         <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
           {['MANUAL','BLOOMBERG','IMPORT'].map((src) => (
             <button className="rj-press" key={src} onClick={() => handleSourceChange(src)} style={{
-              flex:1, padding:'5px 0', fontSize:'0.875rem', fontWeight:700,
+              flex:1, padding:'5px 0', fontSize:'12.5px', fontWeight:700,
               letterSpacing:'0.08em', cursor:'pointer',
               fontFamily: 'var(--mono)', background:'transparent', borderRadius:'2px',
-              border: source===src ? '1px solid var(--accent)' : '1px solid var(--border)',
-              color:  source===src ? 'var(--accent)' : 'var(--text-dim)',
+              border: source===src ? '1px solid var(--border-hi)' : '1px solid var(--border)',
+              color:  source===src ? 'var(--text-hi)' : 'var(--text-dim)',
             }}>{src}</button>
           ))}
         </div>
@@ -298,26 +298,26 @@ function SwvInstruments() {
             <input type="date" value={saveDate} onChange={(e) => setSaveDate(e.target.value)}
               style={{ background:'var(--panel-2)', border:'1px solid var(--border)',
                 color:'var(--text)', fontFamily: 'var(--mono)',
-                fontSize:'1rem', padding:'0.25rem 0.45rem', borderRadius:2, outline:'none' }} />
+                fontSize:'14px', padding:'0.25rem 0.45rem', borderRadius:2, outline:'none' }} />
             <button className="rj-press"
               onClick={() => saveSnapshot(saveDate, 'MANUAL')}
               disabled={snapshotSaving || filled === 0}
               style={{ padding:'0.25rem 0.85rem', background:'rgba(217,178,92,0.07)',
                 border:'1px solid var(--accent)', borderRadius:2,
-                fontFamily: 'var(--mono)', fontSize:'1rem',
+                fontFamily: 'var(--mono)', fontSize:'14px',
                 fontWeight:700, letterSpacing:'0.1em', color:'var(--accent)',
                 cursor: filled > 0 ? 'pointer' : 'not-allowed',
                 opacity: filled > 0 ? 1 : 0.4 }}>
               {snapshotSaving ? 'SAVING...' : '▶ SAVE TO DB'}
             </button>
             {snapshotSaved && (
-              <span style={{ fontSize:'0.9375rem', color:'var(--accent)',
+              <span style={{ fontSize:'13px', color:'var(--up)',
                 fontFamily: 'var(--mono)' }}>
                 ✔ saved {snapshotSaved.date}
               </span>
             )}
             {snapshotError && (
-              <span style={{ fontSize:'0.9375rem', color:'var(--red)',
+              <span style={{ fontSize:'13px', color:'var(--red)',
                 fontFamily: 'var(--mono)' }}>
                 ✘ {snapshotError}
               </span>
@@ -328,7 +328,7 @@ function SwvInstruments() {
         {/* BLOOMBERG */}
         {source === 'BLOOMBERG' && (
           <div style={{ border:'1px solid var(--border)', borderRadius:'2px', padding:'8px' }}>
-            <div style={{ fontSize:'0.875rem', color:'var(--blue)',
+            <div style={{ fontSize:'12.5px', color:'var(--blue)',
               background:'rgba(143,193,230,0.06)', border:'1px solid rgba(143,193,230,0.2)',
               borderRadius:'2px', padding:'4px 7px', marginBottom:'8px', lineHeight:1.6 }}>
               Tickers: <strong>USSNA[expiry][tenor] Curncy</strong> · Normal vol bp · ATM straddle ·
@@ -339,16 +339,16 @@ function SwvInstruments() {
             <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'8px' }}>
               <div style={{ width:'6px', height:'6px', borderRadius:'50%', flexShrink:0,
                 background: blpStatus===null ? 'var(--text-dim)'
-                  : blpStatus.connected ? 'var(--accent)' : 'var(--red)' }} />
-              <span style={{ fontSize:'0.875rem',
-                color: blpStatus?.connected ? 'var(--accent)' : 'var(--text-dim)' }}>
+                  : blpStatus.connected ? 'var(--up)' : 'var(--red)' }} />
+              <span style={{ fontSize:'12.5px',
+                color: blpStatus?.connected ? 'var(--up)' : 'var(--text-dim)' }}>
                 {blpStatus===null ? 'CHECKING...'
                   : blpStatus.connected ? 'BLOOMBERG CONNECTED'
                   : blpStatus.installed ? 'TERMINAL NOT CONNECTED'
                   : 'BLPAPI NOT INSTALLED'}
               </span>
               <button className="rj-btn" onClick={fetchBlpStatus}
-                style={{ marginLeft:'auto', fontSize:'0.875rem', background:'transparent',
+                style={{ marginLeft:'auto', fontSize:'12.5px', background:'transparent',
                   border:'1px solid var(--border)', color:'var(--text-dim)',
                   padding:'2px 6px', cursor:'pointer',
                   fontFamily: 'var(--mono)', borderRadius:'2px' }}>
@@ -360,10 +360,10 @@ function SwvInstruments() {
               <input type="date" value={snapDate} onChange={(e) => setSnapDate(e.target.value)}
                 style={{ background:'var(--panel)', border:'1px solid var(--border)',
                   color:'var(--text)', fontFamily: 'var(--mono)',
-                  fontSize:'1rem', padding:'4px 6px', borderRadius:'2px', outline:'none' }} />
+                  fontSize:'14px', padding:'4px 6px', borderRadius:'2px', outline:'none' }} />
               <button className="rj-press" onClick={snapBloomberg}
                 disabled={!blpStatus?.connected || blpSnapping}
-                style={{ flex:1, padding:'6px 0', fontSize:'0.875rem', fontWeight:700,
+                style={{ flex:1, padding:'6px 0', fontSize:'12.5px', fontWeight:700,
                   letterSpacing:'0.08em',
                   cursor: blpStatus?.connected ? 'pointer' : 'not-allowed',
                   background:'transparent', borderRadius:'2px',
@@ -375,7 +375,7 @@ function SwvInstruments() {
             </div>
 
             {blpSnapResult && (
-              <div style={{ fontSize:'0.875rem', color:'var(--accent)', marginBottom:'6px',
+              <div style={{ fontSize:'12.5px', color:'var(--up)', marginBottom:'6px',
                 background:'rgba(217,178,92,0.05)', border:'1px solid rgba(217,178,92,0.2)',
                 padding:'5px 7px', borderRadius:'2px', lineHeight:1.7 }}>
                 ✔ SNAPPED & SAVED · {blpSnapResult.quotes_saved} CELLS · {blpSnapResult.snap_date}
@@ -387,7 +387,7 @@ function SwvInstruments() {
               </div>
             )}
             {blpSnapError && (
-              <div style={{ fontSize:'0.875rem', color:'var(--red)',
+              <div style={{ fontSize:'12.5px', color:'var(--red)',
                 background:'rgba(240,130,140,0.05)', border:'1px solid rgba(240,130,140,0.2)',
                 padding:'5px 7px', borderRadius:'2px' }}>
                 ✘ {blpSnapError}
@@ -399,28 +399,28 @@ function SwvInstruments() {
         {/* IMPORT */}
         {source === 'IMPORT' && (
           <div style={{ border:'1px solid var(--border)', borderRadius:'2px', padding:'8px' }}>
-            <div style={{ fontSize:'0.875rem', color:'var(--text-dim)', marginBottom:'6px', lineHeight:1.6 }}>
+            <div style={{ fontSize:'12.5px', color:'var(--text-dim)', marginBottom:'6px', lineHeight:1.6 }}>
               Format: <span style={{ color:'var(--text)' }}>expiry,tenor,vol_bp</span> per line ·
-              Example: <span style={{ color:'var(--accent)' }}>1Y,5Y,88.4</span>
+              Example: <span style={{ color:'var(--text-hi)' }}>1Y,5Y,88.4</span>
             </div>
             <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px' }}>
               <input type="date" value={snapDate} onChange={(e) => setSnapDate(e.target.value)}
                 style={{ background:'var(--panel)', border:'1px solid var(--border)',
                   color:'var(--text)', fontFamily: 'var(--mono)',
-                  fontSize:'1rem', padding:'4px 6px', borderRadius:'2px', outline:'none' }} />
+                  fontSize:'14px', padding:'4px 6px', borderRadius:'2px', outline:'none' }} />
               <input type="file" accept=".csv,.txt" onChange={handleCsvUpload}
-                style={{ flex:1, fontSize:'0.875rem', color:'var(--text-dim)', cursor:'pointer' }} />
+                style={{ flex:1, fontSize:'12.5px', color:'var(--text-dim)', cursor:'pointer' }} />
             </div>
             {csvError && (
-              <div style={{ fontSize:'0.875rem', color:'var(--red)', marginBottom:'6px' }}>✘ {csvError}</div>
+              <div style={{ fontSize:'12.5px', color:'var(--red)', marginBottom:'6px' }}>✘ {csvError}</div>
             )}
             {csvParsed.length > 0 && (
               <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                <span style={{ fontSize:'0.875rem', color:'var(--accent)' }}>
+                <span style={{ fontSize:'12.5px', color:'var(--up)' }}>
                   ✔ {csvParsed.length} rows parsed
                 </span>
                 <button className="rj-press" onClick={saveCsvImport}
-                  style={{ padding:'5px 14px', fontSize:'0.875rem', fontWeight:700,
+                  style={{ padding:'5px 14px', fontSize:'12.5px', fontWeight:700,
                     letterSpacing:'0.08em', cursor:'pointer', background:'transparent',
                     border:'1px solid var(--accent)', color:'var(--accent)',
                     borderRadius:'2px', fontFamily: 'var(--mono)' }}>
@@ -644,13 +644,13 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
     width: '100%', background: 'transparent', border: 'none',
     borderBottom: `1px solid ${dirty ? 'var(--amber)' : 'transparent'}`,
     outline: 'none', textAlign: 'right', padding: '2px 4px',
-    ...mono, fontSize: '0.875rem',
+    ...mono, fontSize: '12.5px',
     color: dirty ? 'var(--amber)' : 'var(--blue)',
     caretColor: 'var(--accent)',
   });
 
   const thS = {
-    ...mono, fontSize: '0.8rem', fontWeight: 400, letterSpacing: '0.06em',
+    ...mono, fontSize: '11px', fontWeight: 400, letterSpacing: '0.06em',
     color: 'var(--text-dim)', padding: '3px 5px', textAlign: 'right',
     borderBottom: '1px solid var(--border)',
   };
@@ -660,13 +660,13 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
       <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
         <button className="rj-btn" onClick={() => setShow(!show)} style={{
           background: 'transparent', border: '1px solid var(--border)',
-          color: 'var(--text-dim)', padding: '3px 10px', fontSize: '0.8125rem',
+          color: 'var(--text-dim)', padding: '3px 10px', fontSize: '11.5px',
           ...mono, cursor: 'pointer', borderRadius: '2px',
         }}>
           {show ? '▲' : '▼'} SABR PARAMS · {sabrParams.valuation_date}
         </button>
         {anyDirty && (
-          <span style={{ fontSize: '0.75rem', color: 'var(--amber)', ...mono }}>
+          <span style={{ fontSize: '11px', color: 'var(--amber)', ...mono }}>
             ● unsaved edits
           </span>
         )}
@@ -675,7 +675,7 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
       {show && (
         <div style={{ marginTop: '6px' }}>
           {/* Header note */}
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', ...mono,
+          <div style={{ fontSize: '11px', color: 'var(--text-dim)', ...mono,
             marginBottom: '6px', lineHeight: 1.6 }}>
             Edit α, ρ, ν directly. Amber = modified from calibrated value.
             AUTO = from SABR calibration · MANUAL = user override.
@@ -683,7 +683,7 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
           </div>
 
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
               <thead>
                 <tr>
                   {['TEN', 'α (bp)', 'ρ', 'ν', 'ATM vol', 'RMSE', 'SRC', ''].map(h => (
@@ -704,8 +704,8 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
                     <tr key={p.tenor_label}
                       style={{ background: dirt ? 'rgba(233,151,90,0.03)' : 'transparent' }}>
                       {/* Tenor */}
-                      <td style={{ ...mono, fontSize:'0.875rem', fontWeight:600,
-                        color:'var(--accent)', padding:'3px 5px',
+                      <td style={{ ...mono, fontSize:'12.5px', fontWeight:600,
+                        color:'var(--text-dim)', padding:'3px 5px',
                         borderBottom:'1px solid var(--panel-2)', textAlign:'left' }}>
                         {p.tenor_label}
                       </td>
@@ -748,25 +748,25 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
                       </td>
                       {/* ATM vol — read only */}
                       <td style={{ ...mono, padding:'3px 5px', textAlign:'right',
-                        color:'var(--text-dim)', fontSize:'0.8125rem',
+                        color:'var(--text-dim)', fontSize:'11.5px',
                         borderBottom:'1px solid var(--panel-2)' }}>
                         {p.atm_vol_bp?.toFixed(1)}
                       </td>
                       {/* RMSE */}
                       <td style={{ ...mono, padding:'3px 5px', textAlign:'right',
-                        fontSize:'0.8125rem', borderBottom:'1px solid var(--panel-2)',
+                        fontSize:'11.5px', borderBottom:'1px solid var(--panel-2)',
                         color: rmse == null ? 'var(--text-dim)'
-                          : rmse < 0.5 ? 'var(--accent)'
+                          : rmse < 0.5 ? 'var(--up)'
                           : rmse < 2.0 ? 'var(--amber)'
                           : 'var(--red)' }}>
                         {rmse != null ? rmse.toFixed(3) : src === 'MANUAL' ? '—' : '—'}
                       </td>
                       {/* Source badge */}
                       <td style={{ ...mono, padding:'3px 5px', textAlign:'right',
-                        fontSize:'0.8rem', borderBottom:'1px solid var(--panel-2)',
+                        fontSize:'11px', borderBottom:'1px solid var(--panel-2)',
                         color: dirt ? 'var(--amber)'
                              : src === 'MANUAL' ? 'var(--amber)'
-                             : src === 'AUTO' ? 'var(--accent)'
+                             : src === 'AUTO' ? 'var(--text)'
                              : src === 'INTERPOLATED' ? 'var(--amber)'
                              : 'var(--text-dim)' }}>
                         {dirt ? 'MANUAL*' : src}
@@ -778,7 +778,7 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
                           <button onClick={() => reset(p.tenor_label)} style={{
                             background:'transparent', border:'none',
                             color:'var(--text-dim)', cursor:'pointer',
-                            fontSize:'0.75rem', padding:'0 2px',
+                            fontSize:'11px', padding:'0 2px',
                             ...mono,
                           }} title="Reset to calibrated value">↺</button>
                         )}
@@ -798,22 +798,22 @@ function SabrParamsEditor({ sabrParams, activeExpiry, saveDate, onSaved }) {
               style={{ padding:'4px 14px', background:'transparent', borderRadius:'2px',
                 border: anyDirty ? '1px solid var(--amber)' : '1px solid var(--border)',
                 color:  anyDirty ? 'var(--amber)' : 'var(--text-dim)',
-                ...mono, fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.08em',
+                ...mono, fontSize:'12.5px', fontWeight:700, letterSpacing:'0.08em',
                 cursor: anyDirty ? 'pointer' : 'not-allowed', opacity: anyDirty ? 1 : 0.4 }}>
               {saving ? 'SAVING...' : '▶ SAVE MANUAL PARAMS'}
             </button>
             {saved && (
-              <span style={{ fontSize:'0.875rem', color:'var(--accent)', ...mono }}>
+              <span style={{ fontSize:'12.5px', color:'var(--up)', ...mono }}>
                 ✔ saved
               </span>
             )}
             {err && (
-              <span style={{ fontSize:'0.875rem', color:'var(--red)', ...mono }}>
+              <span style={{ fontSize:'12.5px', color:'var(--red)', ...mono }}>
                 ✘ {err}
               </span>
             )}
             {anyDirty && !saved && (
-              <span style={{ fontSize:'0.75rem', color:'var(--text-dim)', ...mono }}>
+              <span style={{ fontSize:'11px', color:'var(--text-dim)', ...mono }}>
                 {Object.keys(edits).filter(isDirty).length} bucket(s) modified
               </span>
             )}
@@ -1092,7 +1092,7 @@ function sabrQuality(offsets) {
   if (n === 0)                            return { level:'none',    color:'var(--text-dim)',  label:'NO DATA',    desc:'α from ATM only · ρ and ν are initial guesses · flat smile' };
   if (!hasNeg || !hasPos)                 return { level:'partial', color:'var(--amber)',      label:'SKEW ONLY',  desc:'Need points on both sides of ATM to identify ρ (skew)' };
   if (hasNeg && hasPos && !hasWing)       return { level:'ok',      color:'var(--blue)',       label:'SABR FIT',   desc:'ρ identified · add ±100bp or ±200bp to identify ν (curvature)' };
-  if (hasNeg && hasPos && hasWing && n >= 4) return { level:'good', color:'var(--accent)',     label:'QUOTED',     desc:'Market quotes · α + ρ + ν fully identified · reliable smile' };
+  if (hasNeg && hasPos && hasWing && n >= 4) return { level:'good', color:'var(--up)',     label:'QUOTED',     desc:'Market quotes · α + ρ + ν fully identified · reliable smile' };
   return                                         { level:'ok',      color:'var(--blue)',       label:'SABR FIT',   desc:'Add more strike points for a full calibration' };
 }
 
@@ -1313,7 +1313,7 @@ function SwvOTMSkew({ atmGrid }) {
 
   const mono = { fontFamily: 'var(--mono)' };
   const dim  = { color:'var(--text-dim)' };
-  const thS  = { ...mono, fontSize:'0.8rem', fontWeight:400, letterSpacing:'0.06em',
+  const thS  = { ...mono, fontSize:'11px', fontWeight:400, letterSpacing:'0.06em',
                  ...dim, padding:'3px 5px', textAlign:'right',
                  borderBottom:'1px solid var(--border)', whiteSpace:'nowrap' };
 
@@ -1330,9 +1330,9 @@ function SwvOTMSkew({ atmGrid }) {
       <div style={{ background:'rgba(217,178,92,0.04)', border:'1px solid rgba(217,178,92,0.15)',
         borderRadius:'2px', padding:'7px 12px', marginBottom:'10px',
         display:'flex', alignItems:'baseline', gap:'12px', flexWrap:'wrap' }}>
-        <span style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
-          color:'var(--accent)', ...mono, whiteSpace:'nowrap' }}>RIJEKA β=0 NORMAL SABR</span>
-        <span style={{ fontSize:'0.8125rem', color:'var(--text-dim)', ...mono }}>
+        <span style={{ fontSize:'11px', fontWeight:700, letterSpacing:'0.12em',
+          color:'var(--text-hi)', ...mono, whiteSpace:'nowrap' }}>RIJEKA β=0 NORMAL SABR</span>
+        <span style={{ fontSize:'11.5px', color:'var(--text-dim)', ...mono }}>
           Market vol quotes (snapped from SMKO tickers when self-hosting, or entered by hand) as
           <strong style={{color:'var(--text)'}}> input data.</strong>
           &nbsp;Rijeka calibrates α, ρ, ν independently.
@@ -1343,24 +1343,24 @@ function SwvOTMSkew({ atmGrid }) {
       {/* SABR minimum requirements panel */}
       <div style={{ background:'rgba(143,193,230,0.04)', border:'1px solid rgba(143,193,230,0.15)',
         borderRadius:'2px', padding:'8px 10px', marginBottom:'10px', lineHeight:1.8 }}>
-        <div style={{ fontSize:'0.8125rem', fontWeight:700, color:'var(--blue)',
+        <div style={{ fontSize:'11.5px', fontWeight:700, color:'var(--blue)',
           letterSpacing:'0.08em', ...mono, marginBottom:'4px' }}>
           SABR CALIBRATION REQUIREMENTS
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', gap:'2px 12px',
-          fontSize:'0.8125rem', ...mono }}>
+          fontSize:'11.5px', ...mono }}>
           <span style={{ color:'var(--text-dim)' }}>α (vol level)</span>
-          <span style={{ color:'var(--accent)' }}>ATM vol from Instruments tab — always available, no OTM data needed</span>
+          <span style={{ color:'var(--text)' }}>ATM vol from Instruments tab — always available, no OTM data needed</span>
           <span style={{ color:'var(--text-dim)' }}>ρ (skew)</span>
           <span style={{ color:'var(--amber)' }}>Minimum: one point each side of ATM — e.g. -25bp AND +25bp</span>
           <span style={{ color:'var(--text-dim)' }}>ν (curvature)</span>
           <span style={{ color:'var(--red)' }}>Minimum: one wing — e.g. -100bp OR +100bp · wings needed to see smile shape</span>
         </div>
-        <div style={{ marginTop:'6px', display:'flex', gap:'16px', fontSize:'0.8125rem', ...mono, flexWrap:'wrap' }}>
+        <div style={{ marginTop:'6px', display:'flex', gap:'16px', fontSize:'11.5px', ...mono, flexWrap:'wrap' }}>
           <span style={{ color:'var(--text-dim)' }}>● NO DATA — flat smile</span>
           <span style={{ color:'var(--amber)' }}>● SKEW ONLY — one side missing</span>
           <span style={{ color:'var(--blue)' }}>● SABR FIT — ρ fit, ν guessed</span>
-          <span style={{ color:'var(--accent)' }}>● QUOTED — market data, fully calibrated</span>
+          <span style={{ color:'var(--up)' }}>● QUOTED — market data, fully calibrated</span>
           <span style={{ color:'var(--amber)', opacity:0.8 }}>● INTERP — no market data, bilinear from anchors</span>
         </div>
         {/* Surface completeness summary */}
@@ -1369,9 +1369,9 @@ function SwvOTMSkew({ atmGrid }) {
           if (!total) return null;
           return (
             <div style={{ marginTop:'6px', paddingTop:'6px', borderTop:'1px solid rgba(143,193,230,0.1)',
-              fontSize:'0.8125rem', ...mono, color:'var(--text-dim)' }}>
+              fontSize:'11.5px', ...mono, color:'var(--text-dim)' }}>
               Surface coverage: &nbsp;
-              <span style={{ color:'var(--accent)' }}>{goodBuckets} QUOTED</span> &nbsp;·&nbsp;
+              <span style={{ color:'var(--up)' }}>{goodBuckets} QUOTED</span> &nbsp;·&nbsp;
               <span style={{ color:'var(--blue)' }}>{okBuckets} SABR FIT</span> &nbsp;·&nbsp;
               <span style={{ color:'var(--text-dim)' }}>{emptyBuckets} empty</span>
               &nbsp;of {total} ATM-filled buckets for {activeExpiry} expiry
@@ -1381,7 +1381,7 @@ function SwvOTMSkew({ atmGrid }) {
       </div>
 
       {loadedDate && (
-        <div style={{ fontSize:'0.8125rem', color:'var(--accent)', ...mono, marginBottom:'6px' }}>
+        <div style={{ fontSize:'11.5px', color:'var(--up)', ...mono, marginBottom:'6px' }}>
           ✔ loaded {loadedDate}
         </div>
       )}
@@ -1390,11 +1390,11 @@ function SwvOTMSkew({ atmGrid }) {
       <div style={{ display:'flex', gap:'4px', marginBottom:'8px' }}>
         {SWAPTION_EXPIRIES.map(exp => (
           <button className="rj-press" key={exp} onClick={() => setActiveExpiry(exp)} style={{
-            flex:1, padding:'4px 0', fontSize:'0.8125rem', fontWeight:700,
+            flex:1, padding:'4px 0', fontSize:'11.5px', fontWeight:700,
             letterSpacing:'0.06em', cursor:'pointer', borderRadius:'2px',
             ...mono, background:'transparent',
-            border: activeExpiry===exp ? '1px solid var(--accent)' : '1px solid var(--border)',
-            color:  activeExpiry===exp ? 'var(--accent)' : 'var(--text-dim)',
+            border: activeExpiry===exp ? '1px solid var(--border-hi)' : '1px solid var(--border)',
+            color:  activeExpiry===exp ? 'var(--text-hi)' : 'var(--text-dim)',
           }}>{exp}</button>
         ))}
       </div>
@@ -1404,7 +1404,7 @@ function SwvOTMSkew({ atmGrid }) {
         <table style={{ width:'100%', borderCollapse:'collapse', minWidth:'680px' }}>
           <thead>
             <tr>
-              <th colSpan={9 + 1} style={{ ...mono, fontSize:'0.8rem', color:'var(--text-dim)',
+              <th colSpan={9 + 1} style={{ ...mono, fontSize:'11px', color:'var(--text-dim)',
                 textAlign:'left', padding:'2px 0 4px', letterSpacing:'0.08em',
                 borderBottom:'1px solid var(--border)' }}>
                 SWAP TENOR ↓ &nbsp;·&nbsp; STRIKE vs ATM FORWARD (bp) →
@@ -1446,8 +1446,8 @@ function SwvOTMSkew({ atmGrid }) {
                                 ?.cells?.find(c => c.tenor === ten)?.vol_bp ?? null;
               return (
                 <tr key={ten}>
-                  <td style={{ ...mono, fontSize:'0.875rem', fontWeight:600,
-                    color:'var(--accent)', padding:'3px 6px 3px 0',
+                  <td style={{ ...mono, fontSize:'12.5px', fontWeight:600,
+                    color:'var(--text-dim)', padding:'3px 6px 3px 0',
                     borderBottom:'1px solid var(--panel-2)' }}>
                     {ten}
                   </td>
@@ -1464,7 +1464,7 @@ function SwvOTMSkew({ atmGrid }) {
                       <td key={off} style={{ padding:'2px',
                         borderBottom:'1px solid var(--panel-2)' }}>
                         {ticker && (
-                          <div style={{ fontSize:'0.72rem', color:'rgba(143,193,230,0.5)',
+                          <div style={{ fontSize:'10px', color:'rgba(143,193,230,0.5)',
                             ...mono, padding:'0 4px', lineHeight:1, letterSpacing:'0.01em' }}>
                             {ticker.replace(' SMKO Curncy','')}
                           </div>
@@ -1477,8 +1477,8 @@ function SwvOTMSkew({ atmGrid }) {
                           style={{ width:'100%', background:'transparent', border:'none',
                             borderBottom:'1px solid transparent', outline:'none',
                             textAlign:'right', padding:'2px 4px',
-                            ...mono, fontSize:'0.875rem',
-                            color: isNeg ? 'var(--red)' : displayVal !== null ? 'var(--accent)' : 'var(--text-dim)',
+                            ...mono, fontSize:'12.5px',
+                            color: isNeg ? 'var(--red)' : displayVal !== null ? 'var(--text)' : 'var(--text-dim)',
                             caretColor:'var(--accent)' }}
                           onFocus={e => e.target.style.borderBottom='1px solid var(--accent)'}
                           onBlur={e  => e.target.style.borderBottom='1px solid transparent'}
@@ -1492,7 +1492,7 @@ function SwvOTMSkew({ atmGrid }) {
                     background:'rgba(143,193,230,0.04)',
                     borderLeft:'1px solid rgba(143,193,230,0.15)',
                     borderRight:'1px solid rgba(143,193,230,0.15)',
-                    ...mono, fontSize:'0.875rem', fontWeight:700,
+                    ...mono, fontSize:'12.5px', fontWeight:700,
                     color: atmVol !== null ? 'var(--blue)' : 'var(--text-dim)' }}>
                     {atmVol !== null ? atmVol.toFixed(1) : '—'}
                   </td>
@@ -1504,7 +1504,7 @@ function SwvOTMSkew({ atmGrid }) {
                       <td key={off} style={{ padding:'2px',
                         borderBottom:'1px solid var(--panel-2)' }}>
                         {ticker && (
-                          <div style={{ fontSize:'0.72rem', color:'rgba(217,178,92,0.5)',
+                          <div style={{ fontSize:'10px', color:'rgba(217,178,92,0.5)',
                             ...mono, padding:'0 4px', lineHeight:1, letterSpacing:'0.01em' }}>
                             {ticker.replace(' SMKO Curncy','')}
                           </div>
@@ -1517,8 +1517,8 @@ function SwvOTMSkew({ atmGrid }) {
                           style={{ width:'100%', background:'transparent', border:'none',
                             borderBottom:'1px solid transparent', outline:'none',
                             textAlign:'right', padding:'2px 4px',
-                            ...mono, fontSize:'0.875rem',
-                            color: val !== null ? 'var(--accent)' : 'var(--text-dim)',
+                            ...mono, fontSize:'12.5px',
+                            color: val !== null ? 'var(--text)' : 'var(--text-dim)',
                             caretColor:'var(--accent)' }}
                           onFocus={e => e.target.style.borderBottom='1px solid var(--accent)'}
                           onBlur={e  => e.target.style.borderBottom='1px solid transparent'}
@@ -1534,7 +1534,7 @@ function SwvOTMSkew({ atmGrid }) {
                       <td style={{ padding:'3px 5px', borderBottom:'1px solid var(--panel-2)',
                         textAlign:'center', whiteSpace:'nowrap' }}
                         title={q.desc}>
-                        <span style={{ ...mono, fontSize:'0.8rem', fontWeight:700,
+                        <span style={{ ...mono, fontSize:'11px', fontWeight:700,
                           color: q.color,
                           padding:'1px 5px', borderRadius:'2px',
                           background: q.level==='good' ? 'rgba(217,178,92,0.08)'
@@ -1556,11 +1556,11 @@ function SwvOTMSkew({ atmGrid }) {
               <td colSpan={10 + 1} style={{ padding:'4px 6px',
                 borderTop:'1px solid var(--border)', borderBottom:'1px solid var(--panel-2)',
                 background:'rgba(143,193,230,0.03)' }}>
-                <span style={{ fontSize:'0.8rem', color:'var(--blue)',
+                <span style={{ fontSize:'11px', color:'var(--blue)',
                   fontFamily: 'var(--mono)', letterSpacing:'0.08em' }}>
                   SABR INTERPOLATED — no market tickers for these tenors
                 </span>
-                <span style={{ fontSize:'0.8rem', color:'var(--text-dim)',
+                <span style={{ fontSize:'11px', color:'var(--text-dim)',
                   fontFamily: 'var(--mono)', marginLeft:'8px' }}>
                   {OTM_INTERP_TENORS.join(' · ')} — params derived from {OTM_SNAP_TENORS.join('/')} anchor points
                 </span>
@@ -1575,7 +1575,7 @@ function SwvOTMSkew({ atmGrid }) {
               );
               return (
                 <tr key={ten} style={{ background:'rgba(143,193,230,0.02)', opacity:0.7 }}>
-                  <td style={{ fontFamily: 'var(--mono)', fontSize:'0.875rem',
+                  <td style={{ fontFamily: 'var(--mono)', fontSize:'12.5px',
                     fontWeight:600, color:'var(--blue)', padding:'3px 6px 3px 0',
                     borderBottom:'1px solid var(--panel-2)' }}>
                     {ten}
@@ -1583,7 +1583,7 @@ function SwvOTMSkew({ atmGrid }) {
                   {/* ATM col */}
                   <td colSpan={4} style={{ padding:'3px 6px', textAlign:'right',
                     borderBottom:'1px solid var(--panel-2)',
-                    fontFamily: 'var(--mono)', fontSize:'0.75rem',
+                    fontFamily: 'var(--mono)', fontSize:'11px',
                     color:'var(--text-dim)' }}>
                     {sp ? `α=${(sp.alpha*10000).toFixed(1)}bp  ρ=${sp.rho.toFixed(3)}  ν=${sp.nu.toFixed(3)}` : '—'}
                   </td>
@@ -1592,19 +1592,19 @@ function SwvOTMSkew({ atmGrid }) {
                     background:'rgba(143,193,230,0.04)',
                     borderLeft:'1px solid rgba(143,193,230,0.15)',
                     borderRight:'1px solid rgba(143,193,230,0.15)',
-                    fontFamily: 'var(--mono)', fontSize:'0.875rem',
+                    fontFamily: 'var(--mono)', fontSize:'12.5px',
                     fontWeight:700, color:'var(--blue)' }}>
                     {atmVol !== null ? atmVol.toFixed(1) : '—'}
                   </td>
                   <td colSpan={4} style={{ padding:'3px 6px',
                     borderBottom:'1px solid var(--panel-2)',
-                    fontFamily: 'var(--mono)', fontSize:'0.75rem',
+                    fontFamily: 'var(--mono)', fontSize:'11px',
                     color:'var(--text-dim)', textAlign:'center' }}>
                     SABR interpolated from {OTM_SNAP_TENORS[0]} + {OTM_SNAP_TENORS[OTM_SNAP_TENORS.length-1]} anchors
                   </td>
                   <td style={{ padding:'3px 5px', borderBottom:'1px solid var(--panel-2)',
                     textAlign:'center' }}>
-                    <span style={{ fontFamily: 'var(--mono)', fontSize:'0.8rem',
+                    <span style={{ fontFamily: 'var(--mono)', fontSize:'11px',
                       color:'var(--blue)', padding:'1px 5px', borderRadius:'2px',
                       background:'rgba(143,193,230,0.08)', border:'1px solid rgba(143,193,230,0.2)' }}>
                       INTERP
@@ -1638,11 +1638,11 @@ function SwvOTMSkew({ atmGrid }) {
         <div style={{ border:'1px solid rgba(143,193,230,0.2)', borderRadius:'2px',
           padding:'8px 10px', marginBottom:'8px',
           background:'rgba(143,193,230,0.04)' }}>
-          <div style={{ fontSize:'0.8125rem', fontWeight:700, color:'var(--blue)',
+          <div style={{ fontSize:'11.5px', fontWeight:700, color:'var(--blue)',
             letterSpacing:'0.08em', ...mono, marginBottom:'6px' }}>
             SNAP MARKET DATA — Full OTM Surface (all 8 strikes)
           </div>
-          <div style={{ fontSize:'0.75rem', color:'var(--text-dim)', ...mono, marginBottom:'6px', lineHeight:1.6 }}>
+          <div style={{ fontSize:'11px', color:'var(--text-dim)', ...mono, marginBottom:'6px', lineHeight:1.6 }}>
             Snaps absolute vol quotes (bp) for all 8 OTM strikes (±25/±50/±100/±200bp).
             These are <strong style={{color:'var(--text)'}}>market input quotes</strong> — Rijeka's SABR calibration runs on save.<br/>
             Self-host snap: SMKO tickers · field MID · normal vol bp absolute
@@ -1654,14 +1654,14 @@ function SwvOTMSkew({ atmGrid }) {
             <button className="rj-press" onClick={snapSmko} disabled={blpSnapping} style={{
               padding:'5px 14px', background:'transparent', borderRadius:'2px',
               border:'1px solid var(--blue)', color:'var(--blue)',
-              ...mono, fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.08em',
+              ...mono, fontSize:'12.5px', fontWeight:700, letterSpacing:'0.08em',
               cursor: blpSnapping ? 'not-allowed' : 'pointer',
               opacity: blpSnapping ? 0.5 : 1,
             }}>
               {blpSnapping ? 'FETCHING QUOTES...' : '▶ SNAP MARKET QUOTES'}
             </button>
             {blpSnapResult && (
-              <span style={{ fontSize:'0.875rem', color:'var(--accent)', ...mono }}>
+              <span style={{ fontSize:'12.5px', color:'var(--up)', ...mono }}>
                 ✔ {blpSnapResult.count} vols snapped
                 {blpSnapResult.failed?.length > 0 && (
                   <span style={{ color:'var(--amber)', marginLeft:'6px' }}>
@@ -1671,7 +1671,7 @@ function SwvOTMSkew({ atmGrid }) {
               </span>
             )}
             {blpSnapErr && (
-              <span style={{ fontSize:'0.875rem', color:'var(--red)', ...mono }}>
+              <span style={{ fontSize:'12.5px', color:'var(--red)', ...mono }}>
                 ✘ {blpSnapErr}
               </span>
             )}
@@ -1684,36 +1684,36 @@ function SwvOTMSkew({ atmGrid }) {
         display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
         <input type="date" value={saveDate} onChange={e => setSaveDate(e.target.value)}
           style={{ background:'var(--panel-2)', border:'1px solid var(--border)',
-            color:'var(--text)', ...mono, fontSize:'1rem',
+            color:'var(--text)', ...mono, fontSize:'14px',
             padding:'0.25rem 0.45rem', borderRadius:2, outline:'none' }} />
         <button className="rj-press"
           onClick={saveSkew}
           disabled={saving || filledCells === 0}
           style={{ padding:'0.25rem 0.85rem', background:'rgba(217,178,92,0.07)',
             border:'1px solid var(--accent)', borderRadius:2,
-            ...mono, fontSize:'1rem', fontWeight:700,
+            ...mono, fontSize:'14px', fontWeight:700,
             letterSpacing:'0.1em', color:'var(--accent)',
             cursor: filledCells > 0 ? 'pointer' : 'not-allowed',
             opacity: filledCells > 0 ? 1 : 0.4 }}>
           {saving ? 'SAVING + CALIBRATING...' : '▶ SAVE TO DB + CALIBRATE SABR'}
         </button>
         {saved && (
-          <span style={{ fontSize:'0.9375rem', color:'var(--accent)', ...mono }}>
+          <span style={{ fontSize:'13px', color:'var(--up)', ...mono }}>
             ✔ saved {saved.date} · {saved.saved} cells · {saved.calibrated} SABR fits · {saved.interpolated} interpolated
           </span>
         )}
         {saved && saved.errors?.length > 0 && (
-          <div style={{ fontSize:'0.75rem', color:'var(--red)', ...mono, marginTop:'4px' }}>
+          <div style={{ fontSize:'11px', color:'var(--red)', ...mono, marginTop:'4px' }}>
             ✘ {saved.errors.length} errors: {saved.errors.slice(0,2).join(' | ')}
           </div>
         )}
         {saveErr && (
-          <span style={{ fontSize:'0.9375rem', color:'var(--red)', ...mono }}>
+          <span style={{ fontSize:'13px', color:'var(--red)', ...mono }}>
             ✘ {saveErr}
           </span>
         )}
       </div>
-      <div style={{ fontSize:'0.75rem', color:'var(--text-dim)', marginTop:'6px', ...mono }}>
+      <div style={{ fontSize:'11px', color:'var(--text-dim)', marginTop:'6px', ...mono }}>
         SABR calibration runs automatically on save — α, ρ, ν fitted per (expiry, tenor) bucket.
         OTM swaption pricing uses SABR vol when surface is loaded.
         Falls back to user-entered ATM vol if surface not available.
@@ -1855,7 +1855,7 @@ export default function SwaptionVolDetail() {
             </div>
           </div>
           <div className="crv-rate-block">
-            <div className="crv-rate-val" style={{ color:'var(--accent)' }}>
+            <div className="crv-rate-val" style={{ color:'var(--text-hi)' }}>
               {filled}/{total}
             </div>
             <div className="crv-rate-lbl">cells filled</div>
@@ -1867,42 +1867,42 @@ export default function SwaptionVolDetail() {
           background:'rgba(217,178,92,0.04)', border:'1px solid rgba(217,178,92,0.15)',
           borderRadius:'2px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'1px' }}>
-            <span style={{ fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.12em',
-              color:'var(--accent)', ...mono }}>UNIFIED SURFACE SNAP</span>
-            <span style={{ fontSize:'0.75rem', color:'var(--text-dim)', ...mono }}>
+            <span style={{ fontSize:'11px', fontWeight:700, letterSpacing:'0.12em',
+              color:'var(--text-hi)', ...mono }}>UNIFIED SURFACE SNAP</span>
+            <span style={{ fontSize:'11px', color:'var(--text-dim)', ...mono }}>
               ATM + OTM from same timestamp → spread = abs_vol − ATM → Rijeka SABR calibration
             </span>
           </div>
           <button className="rj-press" onClick={handleMasterSnap} disabled={masterSnapping} style={{
             padding:'6px 16px', background:'rgba(217,178,92,0.07)',
             border:'1px solid var(--accent)', borderRadius:'2px',
-            ...mono, fontSize:'0.875rem', fontWeight:700, letterSpacing:'0.10em',
+            ...mono, fontSize:'12.5px', fontWeight:700, letterSpacing:'0.10em',
             color:'var(--accent)', cursor: masterSnapping ? 'not-allowed' : 'pointer',
             opacity: masterSnapping ? 0.6 : 1, whiteSpace:'nowrap', flexShrink:0,
           }}>
             {masterSnapping ? '⟳  SNAPPING...' : '▶  SNAP FULL SURFACE'}
           </button>
           {masterSnapping && (
-            <span style={{ fontSize:'0.8125rem', color:'var(--text-dim)', ...mono }}>
+            <span style={{ fontSize:'11.5px', color:'var(--text-dim)', ...mono }}>
               Step 1: ATM vols → Step 2: OTM vols → Step 3: SABR calibration
             </span>
           )}
           {masterResult && (
-            <div style={{ fontSize:'0.8125rem', color:'var(--accent)', ...mono, lineHeight:1.8 }}>
+            <div style={{ fontSize:'11.5px', color:'var(--up)', ...mono, lineHeight:1.8 }}>
               ✔ {masterResult.snapDate} &nbsp;·&nbsp;
-              <span style={{ color:'var(--accent)' }}>{masterResult.atm} ATM</span>
+              <span style={{ color:'var(--text-hi)' }}>{masterResult.atm} ATM</span>
               {masterResult.atmFailed > 0 && <span style={{ color:'var(--amber)' }}> ({masterResult.atmFailed} failed)</span>}
               &nbsp;·&nbsp;
               <span style={{ color:'var(--blue)' }}>{masterResult.otm} OTM quotes</span>
               {masterResult.otmFailed > 0 && <span style={{ color:'var(--amber)' }}> ({masterResult.otmFailed} not in SMKO)</span>}
               &nbsp;·&nbsp;
-              <span style={{ color:'var(--accent)' }}>{masterResult.sabrFits} SABR fits</span>
+              <span style={{ color:'var(--text-hi)' }}>{masterResult.sabrFits} SABR fits</span>
               &nbsp;·&nbsp;
               <span style={{ color:'var(--amber)' }}>{masterResult.interpolated} interpolated</span>
             </div>
           )}
           {masterErr && (
-            <span style={{ fontSize:'0.8125rem', color:'var(--red)', ...mono }}>✘ {masterErr}</span>
+            <span style={{ fontSize:'11.5px', color:'var(--red)', ...mono }}>✘ {masterErr}</span>
           )}
         </div>
 

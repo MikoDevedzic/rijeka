@@ -328,7 +328,7 @@ export default function Counterparties() {
       <div style={{ display:'flex', alignItems:'flex-start',
           justifyContent:'space-between', marginBottom:'20px' }}>
         <div>
-          <div style={{ fontSize:'12px', color:'var(--accent)', fontFamily: 'var(--mono)',
+          <div style={{ fontSize:'12px', color:'var(--text-mute)', fontFamily: 'var(--mono)',
               letterSpacing:'0.1em', marginBottom:'4px' }}>
             CONFIGURATIONS / ONBOARDING
           </div>
@@ -360,10 +360,10 @@ export default function Counterparties() {
       {/* ── Add Form ── */}
       {showAdd && (
         <div style={{
-          border:'1px dashed var(--accent)', borderRadius:'4px',
+          border:'1px dashed var(--border-hi)', borderRadius:'4px',
           padding:'20px', marginBottom:'20px', background:'var(--panel)'
         }}>
-          <div style={{ fontSize: '12px', color:'var(--accent)', fontFamily: 'var(--mono)',
+          <div style={{ fontSize: '12px', color:'var(--text-hi)', fontFamily: 'var(--mono)',
               letterSpacing:'0.08em', marginBottom:'16px' }}>
             {editCp ? 'EDIT TERMS · ' + editCp.name : 'NEW COUNTERPARTY'}
           </div>
@@ -499,8 +499,8 @@ export default function Counterparties() {
                     return (
                       <button className="rj-press" key={i.code} type="button" title={i.name + ' · ' + i.cls + (i.yield_today_bp != null ? ' · ' + Math.round(i.yield_today_bp) + ' bp' : '')}
                         onClick={function() { setSched(function(p) { return Object.assign({}, p, { rows: on ? p.rows.filter(function(r) { return r.instrument !== i.code }) : p.rows.concat([rowFor(i.code)]) }) }) }}
-                        style={{ background: on ? 'color-mix(in srgb, var(--accent) 14%, transparent)' : 'transparent', border:'1px solid ' + (on ? 'var(--accent)' : 'var(--panel-3)'),
-                          color: on ? 'var(--accent)' : 'var(--text-dim)', fontFamily: 'var(--mono)', fontSize:'10px', padding:'3px 8px', borderRadius:'2px', cursor:'pointer', letterSpacing:'0.05em' }}>
+                        style={{ background: on ? 'var(--panel-3)' : 'transparent', border:'1px solid ' + (on ? 'var(--border-hi)' : 'var(--panel-3)'),
+                          color: on ? 'var(--text-hi)' : 'var(--text-dim)', fontFamily: 'var(--mono)', fontSize:'10px', padding:'3px 8px', borderRadius:'2px', cursor:'pointer', letterSpacing:'0.05em' }}>
                         {i.code}
                       </button>
                     )

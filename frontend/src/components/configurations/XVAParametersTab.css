@@ -11,7 +11,7 @@
 .xva-header-title{font-family: var(--sans);font-size:12px;font-weight:700;letter-spacing:.10em;color:var(--text-hi);}
 .xva-header-sub{font-family: var(--mono);font-size:12px;color:var(--border-hi);letter-spacing:.03em;}
 .xva-header-right{display:flex;align-items:center;gap:10px;}
-.xva-saved-badge{font-family: var(--mono);font-size:12px;color:var(--accent);padding:1px 6px;background:rgba(217,178,92,.08);border:1px solid rgba(217,178,92,.2);border-radius:2px;}
+.xva-saved-badge{font-family: var(--mono);font-size:12px;color:var(--up);padding:1px 6px;background:transparent;border:1px solid var(--border-hi);border-radius:2px;}
 .xva-filled-badge{font-family: var(--mono);font-size:12px;color:var(--text-mute);}
 .xva-grid-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:2px;scrollbar-width:thin;scrollbar-color:var(--border) var(--bg);}
 .xva-grid{width:100%;border-collapse:collapse;min-width:560px;}
@@ -24,7 +24,7 @@
 .xva-td.basket{background:rgba(217,178,92,.025);}
 .xva-td.basket:hover{background:rgba(217,178,92,.055);}
 .xva-ticker{font-family: var(--mono);font-size:12px;color:var(--text-mute);letter-spacing:.03em;padding:2px 5px 1px;line-height:1;}
-.xva-vol-input{font-family: var(--mono);font-size:12px;color:var(--accent);background:transparent;border:none;outline:none;text-align:right;width:100%;padding:3px 6px 4px;caret-color:var(--accent);}
+.xva-vol-input{font-family: var(--mono);font-size:12px;color:var(--text);background:transparent;border:none;outline:none;text-align:right;width:100%;padding:3px 6px 4px;caret-color:var(--accent);}
 .xva-vol-input:focus{background:rgba(217,178,92,.04);}
 .xva-vol-input::placeholder{color:var(--border);}
 .xva-legend{display:flex;align-items:center;gap:6px;font-family: var(--sans);font-size:12px;color:var(--text-mute);}
