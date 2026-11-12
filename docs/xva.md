@@ -1,12 +1,12 @@
 # XVA: every component, as the engine computes it
 
-Engine: `backend/pricing/xva_engine.py` (`run_waterfall`), collateral model `backend/pricing/csa.py`, rates exposure from the HW1F Monte Carlo (`xva.py`), FX and digital-asset exposure from a lognormal forward (`fx_xva.py`). Signs follow the desk convention: costs negative, benefits positive, and
+Engine: `backend/pricing/xva_engine.py` (`run_waterfall`), collateral model `backend/pricing/csa.py`, rates exposure from the HW1F Monte Carlo (`xva.py`), FX and digital-asset exposure from a lognormal forward (`fx_xva.py`), a digital asset's on the clock of its vol regimes (§8b). Signs follow the desk convention: costs negative, benefits positive, and
 
     ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA.
 
 ## 1. Exposure paths
 
-Rates: Monte Carlo MtM paths V(t) of the trade under a Hull-White one-factor model calibrated to the swaption surface, on a monthly grid to maturity; `n_paths` paths. FX and digital assets: V(t) = ±N·(F_t − K)·DF_q(t,T) with F_t lognormal at a flat vol σ under the T-forward measure (driftless), σ a desk input per pair (no public vol surface, said so on the ticket). Both hand the same shape to the waterfall: paths from our side (positive = the counterparty owes us), V(0), and the discount factors P(0, t_k).
+Rates: Monte Carlo MtM paths V(t) of the trade under a Hull-White one-factor model calibrated to the swaption surface, on a monthly grid to maturity; `n_paths` paths. FX and digital assets: V(t) = ±N·(F_t − K)·DF_q(t,T) with F_t driftless under the T-forward measure: for a currency pair lognormal at the pair's vol (the surface's ATM term structure, or a desk input, named on the ticket); for a digital asset lognormal over each grid step given the variance the step accumulated under the asset's vol regimes (§8b), with the same variance on average. Both hand the same shape to the waterfall: paths from our side (positive = the counterparty owes us), V(0), and the discount factors P(0, t_k).
 
 ## 2. Collateral: the CSA turns V into a residual exposure
 
@@ -88,7 +88,7 @@ margin period earlier is exact (0.23.0): against a simulation that draws the lev
 bridge, the estimate agrees to sampling error at 8 to 110 % vol (`tests/test_fx_xva_lag.py`). Until then those
 tickets bridged between grid VALUES, which keeps the variance of the move but is Gaussian where the value is
 lognormal: the margin we call read within about 1 % at currency vols and 9 to 18 % low at 55 to 110 % (the
-validator's own figure on 10 November 2026 was 7 to 15 %). The rates ticket and the netting-set engine
+validator's own figure on 10 November 2026 was 7 to 15 %). On a digital asset the level also has vol regimes since 0.24.0 (below), and the margin estimate is checked against a simulation day by day (`tests/test_vol_regimes.py`). The rates ticket and the netting-set engine
 (`ccr/exposure.py`: the credit page, the reserves, the incremental charge) still bridge between values, so a
 margined digital-asset position is charged a little differently there and on its ticket. The validator's own
 simulation (11 November 2026, her code, a Garman–Kohlhagen formula of her own) puts the forward's margin within
@@ -145,13 +145,62 @@ replications carry the two carries as inputs and ColVA as a column.
 
 Same trade, same model, three CSAs: uncollateralised, bilateral (10bd MPoR), on-chain (5bd MPoR, continuous VM, no threshold, no MTA). CVA falls with the residual exposure; MVA falls with √(5/10) on the IM; KVA falls through the smaller RC and MF. The ticket's XVA tab runs the on-chain comparison by default on every panel (rates, FX, digital assets): the same paths and the same collateral under atomic settlement, each adjustment side by side, and the saving in money and in bp of notional, upfront and running over the grid's annuity Σ DF·Δt (returned with the XVA block). The difference is the business case for confirming and margining on chain, in the counterparty's own numbers.
 
+## 8b. Vol regimes of a digital asset (0.24.0)
+
+A digital asset's daily returns are not draws from one bell curve: violent days come together and pass in two or
+three days, and under that the whole level is higher for a couple of months and then lower. One vol reads the move
+over a margin period too small. On a digital-asset ticket a day's vol is the ticket's × a fast state (calm or
+stressed) × a slow state (low or high), two independent two-state Markov chains, each scaled so that its squared
+multiplier averages one (`pricing/vol_regimes.py`). The regimes change the clock, not the law given the clock: over
+a grid step the level is lognormal given the variance the step accumulated on the path (`U`, mean one), with the
+same standard normals a run on one vol draws. So the level is still a martingale, the variance expected to any
+date is the ticket's (today's value of a forward or an option does not change; an option on the paths is still
+marked at the surface's vol, which for an option at the money is about 3.6 % above what the regime paths pay on average
+one month from expiry, 1.2 % at six months and 0.4 % at two years), and an uncollateralised ticket moves little. What changes is the move over days and
+weeks: and, less, the spread at one date, since an at-the-money exposure is lower when the variance is uncertain
+than when it is fixed at the same average (uncollateralised CVA and FVA fall 1 to 3 % on tickets of a year or less).
+The value a margin period earlier is the same bridge on the clock: the share of the step's variance before
+the date takes the place of the share of its time.
+
+Fitted by maximum likelihood (Hamilton's filter) to five years of public daily closes, by
+`backend/scripts/calibrate_vol_regimes.py`, which prints the constants and the tails they imply against the
+history's own and its sampling band. BTC: stressed 2.62 × calm, a stress of 2.0 days; high 1.80 × low, a high spell
+of 54 days. Against one vol the fast chain raises the log-likelihood by 164 to 190 on the three assets and the slow
+chain by 36 to 41 more for three parameters (in-sample; a regular chi-squared bar would be about 4, and the true bar
+is higher because the slow chain is not identified at ratio 1, but not by that much). The 1st percentile of a ten-day log move: BTC −22.6 % (history −24.1 %,
+whose band on resampling is −30.0 to −18.2; a Gaussian −19.8 %), ETH −31.1 % (−31.1 %; −26.8 %), SOL −42.4 %
+(−44.6 %; −35.7 %).
+
+Tried on the same closes and not kept: Merton's jumps by maximum likelihood (about 230 small jumps a year on BTC,
+which average out, leaving the ten-day tail within a point of a Gaussian's), and the fast chain alone (its stress
+is over in days; ten-day tail −21.3 % on BTC).
+
+On a ticket (forwards of about a million of notional, 40,000 paths, against the same run on one vol):
+uncollateralised, CVA and FVA fall by up to 3 % on tickets of a year or less (less than half a per cent at two
+years) and the total moves by about 1 % or less; under a bilateral or an on-chain CSA the margin at the first
+date rises 7 to 13 % (called 9 to 13 %, posted 7 to 11 %), MVA 2 to 10 % on BTC and ETH, CVA 15 to 45 % (on small
+figures), KVA falls 4 to 13 % on BTC and ETH where the larger margin lowers the SA-CCR multiplier (SOL's, Group 2b
+with no multiplier, does not move), and the total moves 1.5 to 6 % on BTC and ETH and within about 1 %
+on SOL. `vol_regimes: false` in the request runs one vol, for comparison; the answer's `params.vol_regimes` says
+what the regimes were. Limits: `docs/model_inventory.md`.
+
 ## Excel replication
 
 `xva_rates` in the Methodology tab (`backend/methodology/xva_workbook.py`): the same simulation on a 2-year pay-fixed swap at 200 paths, with the engine's random draws as values (ENGINE mode reproduces every EE, ENE, PFE and XVA to rounding; the Checks sheet says so) or Excel's own draws (LIVE mode, with a Convergence sheet). Sheets: Model (the exact-fit step, the grid, α(t)), Calibration (the basket, the closed-form model vol per point, the objective and RMSE, an RMSE grid around the fit), Bonds, Normals, Paths, Exposure (CSA preset or your terms, the Brownian-bridge lag, collateral, residuals), Waterfall, Engine, Convergence. The grid and calibration dates are written as values on the engine's own day count (valuation + round(t·365), the instruments at 365.25), so every discount factor matches the engine to the day; evaluated with a spreadsheet engine, all 86 checks pass at 6e-13 relative in ENGINE mode.
 
 `xva_fx` and `xva_crypto` (`backend/methodology/fx_xva_workbook.py`, one builder for both): the forward engine on a 6-month EURUSD forward (buy EUR 10m) and a 6-month BTCUSD NDF (buy 10 BTC), struck at the fair forward from the same parity formulas as the forward books, 200 paths with the engine's draws (ENGINE) or Excel's (LIVE). Sheets: Model (the forward, DF_q(T) and the quote zero from the curve, the monthly grid with DF_q(t,T) on the flat quote zero as the engine has it, V(0)), Calibration (the pair's surface as quoted; ATM, RR25 and BF25 interpolated to the forward's tenor and the Malz smile fixed point at K = F laid out iteration by iteration, exactly as `fx_vol.vol_at` does it; the engine's default, labelled, when the account has no surface for the pair), Normals, Paths (ΣZ, W, F_t, V), Exposure (the same presets and margin-period bridge; the move over the margin period per path, and the initial margin as its 99th percentile rise and fall about the mean, each way), Waterfall (the add-on of the pair's own class: 4 % for the currency pair, 32 % for the Group 2a digital asset, on the notional at spot), Engine, Convergence. Evaluated with a spreadsheet engine on 10 November 2026 after the margin and capital change, all 51 checks pass in each book and all 87 in the rates book, under every preset.
+Since 0.24.0 the `xva_crypto` book also carries the engine's vol regimes: on its Normals sheet, the variance each step
+accumulated on each path (U) and the share of it before the margin-period date for each preset (Ω), as the engine
+drew them; the forward is built step by step on U and the bridge runs on Ω. Its 51 checks pass under every preset;
+a margin period typed by hand keeps the preset's Ω. Its Paths sheet has Z, F_t and V (no ΣZ and W: the forward is built
+from the step before). `xva_fx` is unchanged.
 
 ## Incremental XVA on the ticket
+
+On a digital asset the two figures on the XVA tab are not like for like since 0.24.0: the stand-alone run has the
+asset's vol regimes (§8b), and the incremental figure below is computed on the credit engine's paths, which carry one
+vol per factor. A margined digital-asset trade's stand-alone margin and MVA are therefore a few per cent above what
+the same trade adds on the credit engine's paths.
 
 The number a desk quotes pre-trade is not the trade's stand-alone XVA but the change in the counterparty's
 reserves: the netting set valued on the credit engine's risk-neutral paths with the trade and without it,
@@ -168,7 +217,7 @@ trade shows the marginal form. Limits stated in the engine's notes: vol held fla
 risk-neutral measure's calibration, the CSA as recorded.
 
 The stand-alone option XVA (`/api/xva/currency-option`, `pricing/fx_xva.option_xva`) gives an FX or
-digital-asset option of any style the same tab as the forward: the spot is simulated lognormal at the option's
+digital-asset option of any style the same tab as the forward: the spot is simulated lognormal (a digital asset's on the clock of its vol regimes, §8b, the option still marked at the surface's vol) at the option's
 vol and, on every path, the option is valued with its closed form exactly as the credit engine values it
 (`ccr/options.value_fx_option`): before expiry the holder's value with the time left, barriers and touches
 carrying which paths have knocked (monitored at the grid points), an American option as its European (a lower

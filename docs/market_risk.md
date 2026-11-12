@@ -60,7 +60,7 @@ The 95 % VaR and the ladder VaR are backtested alongside the headline. Nothing n
 ## Roadmap for VaR
 
 - Parametric (variance-covariance) VaR from the factor covariance, with the same ladder; a cross-check, not a replacement.
-- Monte Carlo VaR on the calibrated HW1F and lognormal spot models the XVA engine already uses.
+- Monte Carlo VaR on the calibrated HW1F and lognormal spot models the XVA engine uses (for a digital asset the ticket's XVA adds vol regimes, `docs/xva.md` §8b).
 - Filtered historical simulation (EWMA / GARCH volatility scaling) so a calm window does not understate a stressed present.
 - Stressed VaR on a chosen crisis window, and expected shortfall at 97.5 % with liquidity horizons in the FRTB sense.
 - The smile's own moves (risk reversal and butterfly) on the ladder VaR; they are in the full revaluation already.

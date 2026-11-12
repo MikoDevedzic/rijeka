@@ -13,7 +13,7 @@ import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
-  ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS,
+  ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS, regimesWords, regimesParts,
 } from './xva-shared'
 
 const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fva: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
@@ -236,6 +236,16 @@ describe('the simple view', () => {
     expect(fxModelWords({ volPct: '', volMode: 'SURFACE' })).toBe("the pair's vol surface")
     expect(fxModelWords({ volPct: '', volMode: 'FLAT' })).toBe("one flat vol from the pair's surface")
     expect(fxModelWords({ volPct: '12.5', volMode: 'SURFACE' })).toBe('your own vol of 12.5%')
+  })
+  it('says what a digital asset\'s vol regimes are, in the run\'s own figures, and nothing when there are none', () => {
+    const r = { lowest_vol_pct: 22.03, highest_vol_pct: 103.81, fast: { stressed_spell_days: 2.05 }, slow: { high_spell_days: 54, low_spell_days: 71 }, as_of: '2026-11-11', days: 1826 }
+    expect(regimesWords(r)).toBe('the vol runs from 22.03 % to 103.81 % day by day · a stress lasts about 2.1 days · the level under it holds about 54 days high, 71 low · fitted to 1,826 daily closes to 2026-11-11')
+    // every figure is its own part, for the panel to set in mono; the words between them are plain strings
+    const parts = regimesParts(r)
+    expect(parts.filter(x => typeof x !== 'string').map(x => x.fig)).toEqual(['22.03 %', '103.81 %', '2.1', '54', '71', '1,826', '2026-11-11'])
+    expect(parts.filter(x => typeof x === 'string').join('')).not.toMatch(/\d/)
+    expect(regimesParts({ ...r, lowest_vol_pct: 22, highest_vol_pct: 1000 }).filter(x => x.fig).slice(0, 2).map(x => x.fig)).toEqual(['22.00 %', '1,000.00 %'])
+    for (const none of [null, undefined, { lowest_vol_pct: 1 }]) { expect(regimesParts(none)).toBe(null); expect(regimesWords(none)).toBe(null) }
   })
   it('rates with no stored calibration: says there is none, unless both parameters are typed', () => {
     expect(ratesModelWords({ aOverride: '', sigOverride: '', hasCalibration: false })).toBeNull()

@@ -1,7 +1,59 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.14). Commits on `main` are the detail.
+methodology document carries its own version (v1.15). Commits on `main` are the detail.
+
+## 0.24.0 · 12 November 2026
+
+**A digital asset's vol is not one level.** Second step of finishing the XVA on digital assets ("has to be full
+XVA"). It was planned as jumps; fitted to the data, jumps were the wrong model, and this is what the data support.
+
+- **What the data say.** Five years of public daily closes of BTC, ETH and SOL, fitted by maximum likelihood.
+  Merton's jumps put about 230 small jumps a year on BTC: the day-to-day clustering read as jumps. Being independent
+  from day to day they average out, and the ten-day tail comes out within a point of a Gaussian's, so the margin
+  would not have moved. Two vol regimes twice over fit the days far better and carry the tail to a margin period: a
+  fast state (calm or stressed, a stress of two or three days) and a slow one (low or high, about two months). The
+  slow chain alone adds 36 to 41 to the log-likelihood for three parameters (a regular chi-squared bar would be about
+  4; the true bar is higher, and this clears it by a wide margin; the comparison is in-sample).
+- **What it is.** On a digital-asset ticket a day's vol is the ticket's × the fast state × the slow state, each
+  chain scaled so the variance expected over any period is the ticket's (`pricing/vol_regimes.py`). Over a grid step
+  the level is lognormal given the variance the step accumulated on the path, on the same standard normals as before,
+  and the margin-period bridge of 0.23.0 runs on that clock. Today's value of a forward or an option does not
+  change. A currency pair keeps one vol and is the same draw for draw.
+- **What it does to a ticket** (forwards of about a million of notional, 40,000 paths): uncollateralised, CVA and
+  FVA fall by up to 3 % on tickets of a year or less (an at-the-money exposure is lower when the variance is
+  uncertain than when it is fixed at the same average) and the total moves by about 1 % or less. Under a bilateral or an on-chain CSA the margin at the first date rises 7 to 13 % (what we call 9 to 13 %, what we
+  post 7 to 11 %), MVA 2 to 10 % on BTC and ETH, the small CVA beyond margin 15 to 45 %, and KVA falls 4 to 13 % on BTC
+  and ETH, where the larger margin lowers the SA-CCR multiplier (SOL's, a Group 2b asset with no multiplier, does not
+  move). The total moves 1.5 to 6 % on BTC and ETH and within about 1 % on SOL. Against the
+  history: the 1st percentile of a ten-day BTC move is −22.6 % in the model, −24.1 % in the five years (a figure
+  whose own sampling band is −30 to −18) and −19.8 % for a Gaussian.
+- **Numbers that moved, in `GOLDEN_CHANGES.md`.** The pinned 6-month BTCUSD forward under a bilateral CSA, 500
+  paths: KVA −136.69 → −110.01, MVA −657.45 → −676.86, CVA −3.38 → −4.02, DVA 1.33 → 1.86, total −797.42 →
+  −790.30, each with its reason. Nothing else pinned moved: no swap, no EURUSD. No uncollateralised digital-asset figure is pinned; a unit test
+  holds the size of that move.
+- **How it is checked.** The margin estimate with the regimes on agrees to sampling, at every date, with a
+  simulation written apart from the engine that redraws both chains and steps the level every day (BTC, ETH, SOL),
+  and with the model validator's own implementation, written from the methodology alone (kept in `tests/reference`).
+  The 5-, 10- and 14-day tails the calibration printed are pinned. The calibration's likelihood equals the sum over
+  every path of hidden states. The `xva_crypto` workbook carries the engine's step variances and rebuilds every
+  path and the bridge in cells: 51 of 51 checks under each CSA preset.
+- **Where it shows.** The XVA tab's SURFACE PROOF has a REGIMES line with the run's own figures; the answer carries
+  `params.vol_regimes`; `vol_regimes: false` in a request runs one vol, for comparison. The fit is
+  `backend/scripts/calibrate_vol_regimes.py`: dated constants, and a refit is a reviewed change.
+- **Limits, stated.** Two states a chain is coarse: the worst weeks of the five years are worse than the model
+  makes them. Today's state is not inferred. The parameters are held for the life of the trade, and on long tickets
+  the regimes understate. An option on the paths is still marked at the surface's vol: at the money that mark is
+  about 3.6 % above what the regime paths pay one month from expiry, 1.2 % at six months. Default and the regimes are
+  independent. The credit page's
+  netting-set simulation and the market-risk history are unchanged. The methodology is v1.15 (§9.3); the model
+  inventory has the row.
+- **A run has a size limit.** A single ticket's XVA run had none; with a clock that holds a byte for every path and
+  day, a settlement decades out could have taken the instance's memory. One run takes paths × monthly steps up to
+  four million (ten years at 10,000 paths is 1.2 million) and settlements up to 50 years out; beyond that the answer
+  is a 422 that says how many paths fit.
+- **Also.** A test that compared two figures rounded to a cent with a tolerance of a millionth failed on the day the
+  cents fell the other way; it compares to a cent now.
 
 ## 0.23.2 · 11 November 2026
 

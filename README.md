@@ -143,7 +143,7 @@ One set of names on every ticket. Rate factors are per basis point; spot factors
 | VEGA | swaption / cap surface, +1 bp normal vol | — | — | +1 vol point | +1 vol point |
 | THETA | one day's carry | one day's carry | one day's carry | one calendar day | one calendar day |
 | GAMMA | dollar convexity to ±1 bp | — (a forward is linear in spot) | — | spot gamma | spot gamma |
-| XVA | HW1F Monte Carlo exposure → waterfall | lognormal forward exposure → the same waterfall | the same, with the Basel cryptoasset add-on (SCO60.98 / 60.99) | on the exposure paths (ccr) | on the exposure paths (ccr) |
+| XVA | HW1F Monte Carlo exposure → waterfall | lognormal forward exposure → the same waterfall | the same on the clock of the asset's vol regimes (a stress of days on a level of weeks), with the Basel cryptoasset add-on (SCO60.98 / 60.99) | on the exposure paths (ccr) | on the exposure paths (ccr) |
 
 The names on screen: `IR01 DISC` is the key `IR01_DISC`; `SPOT01` in the limits catalogue is FX01 or CRY01 by asset.
 

@@ -204,6 +204,9 @@ One rule for the whole app, held by Iris (`.claude/agents/iris.md`) and by a che
 
 One rule on every tab: a label is 11px in capitals; a value is 12.5px, a number, a date or a formula in mono and
 words in the interface face; a headline figure is 13 to 16px in mono. A tab does not pick its own sizes.
+A sentence that carries figures keeps its words in the interface face and sets each figure, date or code in mono,
+unbroken, as the capital, margin and netting lines under the XVA results do and the REGIMES line of SURFACE PROOF
+does; a figure is not set in the face of the words around it.
 
 ## The XVA results
 

@@ -25,7 +25,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.14 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.15 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -45,7 +45,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.14 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.15 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -56,6 +56,7 @@
 \section*{Version history}
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
+\item \textbf{1.15 (12 November 2026).} Volatility regimes of a digital asset (\S\ref{sec:exposure}). A digital asset's volatility on any day is the ticket's times a fast state (calm or stressed, a stress of two or three days) times a slow state (low or high, held about two months), each scaled so that the variance expected over any period is the ticket's. Today's value of a forward or an option does not change and an uncollateralised ticket moves little (CVA and FVA 1 to 3\% lower on short tickets); over a margin period the tails are fatter, as five years of daily closes show them, and on a margined ticket the margin at the first date rises 7 to 13\%. Currency pairs keep one volatility. Three equations added, so the displays after them are numbered three higher.
 \item \textbf{1.14 (11 November 2026).} The value a margin period earlier on currency and digital-asset tickets (\S\ref{sec:exposure}). The forward's level is bridged between grid dates in logs, where it is a Brownian motion, and every leg is valued on it; until this version the value itself was bridged as if Gaussian, which read the margin called 9 to 18\% low at volatilities of 55 to 110\%. Margined figures on those tickets move: on a six-month BTCUSD forward at 55\% under a bilateral CSA, KVA $-150.7\to-134.8$, MVA $-615.5\to-622.1$, CVA $-2.8\to-3.6$; at a currency's volatility by about 1\%. The rates ticket and the netting-set engine are unchanged.
 \item \textbf{1.13 (11 November 2026).} Forward curves to ten years (\S\ref{sec:fx}). Beyond the last quoted tenor a forward is parity plus the basis that tenor shows, held flat as a rate; until this version the last points were held flat. Every forward says whether it is quoted, interpolated or implied, and how. A tenor can be switched off. One equation added, so the displays after it are numbered one higher.
 \item \textbf{1.12 (10 November 2026).} Typesetting, and one correction. No formula changed. The names of quantities are set upright, displays that ran past the margin are set on several lines, the longest paragraphs are divided, code names are printed as they are written, and this history follows the contents. Corrected: the known limitations of \S\ref{sec:capital} still described the initial-margin method that version 1.10 removed.
@@ -251,6 +252,63 @@ The bridge above is between \emph{values} and is Gaussian whatever the value is.
 \ln M(t-\delta)\,\big|\,\ln M(t-\Delta t),\ln M(t)\;\sim\;\N\!\big(\ln M(t-\Delta t)+w\,\Delta\ln M,\;\sigma_j^2\,w(1-w)\,\Delta t\big),
 \end{equation}
 and each leg is valued on that level with the time it then has left: a forward as $\pm N\big(F_0\,M(t-\delta)-K\big)\,\mathrm{DF}_q(t-\delta,T)$, an option by its style's closed form, a barrier or a touch carrying what the grid dates before it have seen. A leg that has settled stands at the amount it paid; before today the value is today's. A margin period of a whole number of steps reads the grid itself. Two approximations are the paths' own. In the step that ends on the expiry's grid date the time left runs to that date, where the paths fix the payoff, not to the expiry. And a barrier or a touch carries the knock state of the grid dates before $t-\delta$ and is then valued by a closed form that monitors continuously: a path beyond the barrier at $t-\delta$ that has not knocked on the grid is valued as knocked, though about a third of such paths are back inside at the next grid date, which overstates the move near the barrier (by about 13\% of the margin called at one date of a six-month up-barrier at 115\% of spot and 80\% volatility) until the paths monitor between grid dates. The rates ticket and the netting-set engine (\S\ref{sec:ccr}) keep the bridge between values. \emph{Functions \code{exact_lag}, \code{lagged_values}.}
+
+\subsection{Volatility regimes of a digital asset}\label{sec:regimes}
+A digital asset's daily returns are not draws from one bell curve. Violent days come together and pass within two or three days, and under that the whole level of activity is higher for a couple of months and then lower. One volatility reads the moves over a margin period too small, which is where collateral and initial margin are measured. On a digital-asset ticket (since v1.15) the volatility of day $d$ is
+\begin{equation}
+\sigma_d \;=\; \sigma\; f_d\; s_d ,
+\end{equation}
+where $\sigma$ is the volatility the ticket carries (the surface's, or the desk's) and $f$ and $s$ are two independent two-state Markov chains: $f$ calm or stressed, $s$ low or high. A chain with high-to-low ratio $\rho$ and daily probabilities $a$ of staying low and $b$ of staying high spends a share $p=(1-a)/(2-a-b)$ of its days high, and its two levels are
+\begin{equation}
+\ell_{\mathrm{low}}=\big(1-p+p\,\rho^2\big)^{-1/2},\qquad \ell_{\mathrm{high}}=\rho\,\ell_{\mathrm{low}},\qquad\text{so that}\quad (1-p)\,\ell_{\mathrm{low}}^2+p\,\ell_{\mathrm{high}}^2=1 .
+\end{equation}
+Each path starts in each state with its long-run share; today's regime is not read.
+
+The regimes change the clock and not the law given the clock. With $U_j$ the average of $f_d^2 s_d^2$ over the days of grid step $j$ (the variance the step accumulated on the path, as a multiple of $\sigma_j^2\Delta t$), the level of \S\ref{sec:fx} steps as
+\begin{equation}
+\ln M(t_j)-\ln M(t_{j-1}) \;=\; -\tfrac12\,\sigma_j^2\,\Delta t\,U_j \;+\; \sigma_j\sqrt{\Delta t\,U_j}\;Z_j ,\qquad \E[U_j]=1 ,
+\end{equation}
+with the same standard normals $Z_j$ a run on one volatility draws. Three things follow. $M$ is still a martingale, so every forward starts at its own price. The variance expected to any date is $\sigma^2 t$, so today's value of a forward or an option is unchanged and the volatility on the ticket means what it says. An option on the paths is still marked at the surface's volatility, which is not what the regime paths pay on average: an option at the money pays less than its mark when the variance to expiry is uncertain, by about 3.6\% one month from expiry, 1.2\% at six months and 0.4\% at two years. To that extent an option's simulated value is not a martingale, and its exposure carries a bias of that size. And an uncollateralised ticket's exposure, which is set by the spread of the level at each date, moves little: an exposure at the money is lower when the variance to a date is uncertain than when it is fixed at the same average, by 1 to 3\% on tickets of a year or less. What changes most is the move over days and weeks. The value a margin period earlier is the bridge of \S\ref{sec:exposure} on the clock: the share $\Omega$ of the step's variance that came before $t-\delta$ takes the place of the share $w$ of its time, and the step's variance is the path's own, $\ln M(t-\delta)\mid\cdot\sim\N\big(\ln M(t_{j-1})+\Omega\,\Delta\ln M,\;\sigma_j^2\,\Delta t\,U_j\,\Omega(1-\Omega)\big)$. The bridge draws nothing more than it did.
+
+\textbf{The fit.} The six parameters of an asset (a ratio and two probabilities per chain) are fitted by maximum likelihood, with Hamilton's filter, to five years of public daily closes (\code{backend/scripts/calibrate_vol_regimes.py}; 1,826 returns to 11 November 2026). They are dated constants in \code{pricing/vol_regimes.py}; a refit is a reviewed change. The fast chain is calm or stressed, the slow one low or high; a ratio is the higher volatility over the lower, and the other columns are how long a spell in each state lasts on average. The chains are named by how long their high state lasts. SOL's fast chain is calm for 37 days at a time, close to the spells of its slow chain, so its two chains are less clearly told apart than BTC's or ETH's.
+
+\begin{longtable}{l r r r r r r}
+\toprule
+Asset & Fast ratio & Calm & Stressed & Slow ratio & Low & High\\
+\midrule
+\endhead
+BTC & 2.62 & 3.3 days & 2.0 days & 1.80 & 71 days & 54 days \\
+ETH & 2.58 & 3.4 days & 2.6 days & 1.91 & 46 days & 46 days \\
+SOL & 2.59 & 37 days & 2.9 days & 1.77 & 46 days & 47 days \\
+\bottomrule
+\end{longtable}
+
+Against one volatility the fast chain alone raises the log-likelihood by 164 to 190; the slow chain adds 36 to 41 more for three parameters. A regular chi-squared reference would put the 5\% bar at about 4; the true bar is higher, because the slow chain's two probabilities mean nothing when its ratio is one, but not by that much. The comparison is in-sample: there is no holdout, and no standard errors are reported for the parameters. What the fit implies for the move that matters, the 1st percentile of a log move over a margin period, against the history's own figure, the band that figure has when the five years are resampled in blocks of sixty days, and a Gaussian of the same volatility:
+
+\begin{longtable}{l l r r r r}
+\toprule
+Asset & Period & History & Its band (5\% to 95\%) & Regimes & Gaussian\\
+\midrule
+\endhead
+BTC & 5 days & $-16.7\%$ & $-20.7$ to $-14.0$ & $-16.2\%$ & $-14.0\%$ \\
+BTC & 10 days & $-24.1\%$ & $-30.0$ to $-18.2$ & $-22.6\%$ & $-19.8\%$ \\
+BTC & 14 days & $-27.8\%$ & $-37.3$ to $-20.3$ & $-26.7\%$ & $-23.4\%$ \\
+ETH & 5 days & $-23.6\%$ & $-27.5$ to $-19.6$ & $-22.2\%$ & $-18.9\%$ \\
+ETH & 10 days & $-31.1\%$ & $-37.9$ to $-24.7$ & $-31.1\%$ & $-26.8\%$ \\
+ETH & 14 days & $-35.8\%$ & $-47.0$ to $-29.0$ & $-36.6\%$ & $-31.7\%$ \\
+SOL & 5 days & $-27.1\%$ & $-39.6$ to $-22.9$ & $-29.8\%$ & $-25.2\%$ \\
+SOL & 10 days & $-44.6\%$ & $-74.4$ to $-30.9$ & $-42.4\%$ & $-35.7\%$ \\
+SOL & 14 days & $-50.3\%$ & $-80.9$ to $-35.2$ & $-50.2\%$ & $-42.2\%$ \\
+\bottomrule
+\end{longtable}
+
+The bands are wide: five years hold about 180 ten-day periods that do not overlap, and a 1st percentile of those is two observations. The tail figures alone would not tell the regimes from a Gaussian; the daily likelihood does. The mean move beyond the percentile is still smaller in the fit than in the history (for BTC over ten days $-27.4\%$ against $-31.3\%$, a Gaussian's being $-22.7\%$): the worst weeks of the five years are worse than two chains make them.
+
+\textbf{What was tried and not kept}, on the same closes. Merton's jump-diffusion by maximum likelihood puts about 230 jumps a year on BTC, each of 3\%: the day-to-day clustering read as jumps. Being independent from day to day they average out, and the ten-day tail comes out within a point of a Gaussian's. The fast chain alone fits the days better than jumps do but its stress is over in two or three days, and its ten-day tail is still thin ($-21.3\%$ for BTC).
+
+\textbf{What it does to a ticket.} Measured on forwards of about one million of notional at 55, 70 and 95\% volatility, six months and two years, 40,000 paths, against the same run on one volatility: uncollateralised, CVA and FVA fall by up to 3\% on tickets of a year or less and the total moves by about 1\% or less; under a bilateral or an on-chain CSA the margin at the first date rises 7 to 13\% (what is called 9 to 13\%, what is posted 7 to 11\%), MVA with it by 2 to 10\% on BTC and ETH, the exposure left beyond the margin by more (CVA 15 to 45\% higher, on figures that are small), and KVA falls 4 to 13\% on BTC and ETH, where the larger margin lowers the SA-CCR multiplier; SOL's, a Group 2b asset with no multiplier, does not move. The total moves by 1.5 to 6\% on BTC and ETH and within about 1\% either way on SOL, whose capital charge dominates. The engine's margin estimate with the regimes on agrees to sampling, at every date, with a simulation written apart from it that redraws both chains and steps the level every day (\code{tests/test_vol_regimes.py}).
+
+\textbf{Limits.} Two states a chain is a coarse picture of volatility; the stress the chains produce is milder than the worst the history has. The spells are of days and of months: nothing here makes the level of volatility itself uncertain over years, so the uncertainty in the variance to a date falls with the tenor (its coefficient of variation is about a half at one month, a third at six months and a sixth at two years) and a ten-year ticket's tails are close to a lognormal's again: on long tickets the regimes understate. Default and the regimes are independent: a stressed state does not make default likelier, which understates wrong-way risk when stress and default come together. A barrier or a touch is watched on the grid dates of the regime paths and marked by a closed form that watches continuously at the surface's volatility; the difference that was there before is carried over and has not been measured again on these paths. The closes the fit read are fetched, not kept in the repository: the table is reproduced by running the script, on whatever the source then returns. The parameters are fitted to spot returns and held fixed over the life of the trade, to ten years on the longest tickets. Today's state is not inferred, though the last weeks' returns say something about it: a ticket priced in a stressed month and one priced in a calm month start from the same mix. The volatility on the ticket is read as the average over the trade's life. The regimes drive the level of a ticket's XVA only: the counterparty-credit simulation of \S\ref{sec:ccr} and the market-risk history of \S\ref{sec:mr} are unchanged, the first on one volatility per factor and the second on the history itself. A currency pair keeps one volatility.
 
 \subsection{Initial margin}
 Initial margin is one of two things. \textbf{An amount the desk sets}, in the trade's currency, exchanged each way and held for the life of the trade. Or \textbf{the engine's own estimate} from the simulated paths: at each grid date $t_i$, with $\Delta_i = V(t_i)-V(t_i-\delta)$ the change in the set's value over the margin period (the lagged value of the bridge above) and $\bar\Delta_i$ its mean across paths,
@@ -729,6 +787,9 @@ The FX and digital-asset XVA books (\code{methodology/fx_xva_workbook.py}) do th
 \item ISDA (2023). \emph{Digital Asset Derivatives Definitions}.
 \item BCBS (2022, in force 2026). \emph{Prudential treatment of cryptoasset exposures}, Basel Framework SCO60.
 \item Hull, J. and White, A. (2012). CVA and wrong-way risk. \emph{Financial Analysts Journal} 68(5).
+\item Hamilton, J.\ D.\ (1989). A new approach to the economic analysis of nonstationary time series and the business cycle. \emph{Econometrica} 57(2), 357--384.
+\item Clark, P.\ K.\ (1973). A subordinated stochastic process model with finite variance for speculative prices. \emph{Econometrica} 41(1), 135--155.
+\item Merton, R.\ C.\ (1976). Option pricing when underlying stock returns are discontinuous. \emph{Journal of Financial Economics} 3, 125--144.
 \item Ethereum Improvement Proposal 712: Typed structured data hashing and signing.
 \end{itemize}
 

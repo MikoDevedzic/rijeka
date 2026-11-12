@@ -425,6 +425,26 @@ export function fxModelWords({ volPct, volMode, params = null } = {}) {
   return volMode === 'FLAT' ? "one flat vol from the pair's surface" : "the pair's vol surface"
 }
 
+// What a run says about a digital asset's vol regimes (the answer's params.vol_regimes, pricing/vol_regimes.py), for
+// the SURFACE PROOF table: the figures only (the MODEL row says what regimes are), as parts, so the panel sets each
+// figure in mono as the tab's other lines do. Null when the run had one vol (a currency pair, or regimes switched off).
+export function regimesParts(r) {
+  if (!r || !r.fast || !r.slow) return null
+  const n = (v, dp = 0) => Number(v).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
+  const fig = (s) => ({ fig: s })
+  return [
+    'the vol runs from ', fig(`${n(r.lowest_vol_pct, 2)} %`), ' to ', fig(`${n(r.highest_vol_pct, 2)} %`), ' day by day · a stress lasts about ',
+    fig(n(r.fast.stressed_spell_days, 1)), ' days · the level under it holds about ', fig(n(r.slow.high_spell_days)), ' days high, ',
+    fig(n(r.slow.low_spell_days)), ' low · fitted to ', fig(n(r.days)), ' daily closes to ', fig(String(r.as_of)),
+  ]
+}
+
+// The same line as one string.
+export function regimesWords(r) {
+  const parts = regimesParts(r)
+  return parts ? parts.map(x => (typeof x === 'string' ? x : x.fig)).join('') : null
+}
+
 // The simple view's line on what a run assumes, from the current values of the inputs it hides:
 // "2,000 paths on the stored model calibration and default credit and funding spreads". With no model to run on
 // (rates without a stored calibration) it is the line that says so.
