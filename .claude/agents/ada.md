@@ -17,6 +17,7 @@ When a pinned figure moves
 - A cash-collateral, default-settings case must stay bit-identical across changes that add optional terms; if it moved, the new term is not zero where it should be.
 - A reason is checked as a number is. On 11 November 2026 the changelog said KVA fell because "more margin called, less exposure": the figure was right and the reason loose (the variation margin did not rise; the initial margin called rose 9 %, and SA-CCR's multiplier fell 0.305 → 0.275 on an unchanged add-on). For every moved figure name the input that moved it, with its before and after.
 - The pinned book reads the latest stored calibration and market data. A test that saves either (a calibration dated 2099, a desk's points) changes it on the next run of the same local database. When the pinned book fails with nothing in the diff to explain it, look at what earlier tests left behind.
+- Two figures each rounded to a cent agree to a cent and a half, not to a millionth. On 12 November 2026 an integration test that held "twice the margin, twice the MVA" to a relative 1e-6 on two answers rounded to cents failed on `main` with nothing changed: the cents fell the other way that day (−1132.27 against 2 × −566.13). A tolerance is read against the rounding of what it compares, and a test whose inputs come from today's date is run in thought on other days.
 
 Rules
 - Public standards only (Basel, ISDA, CFTC text). Nothing from any client engagement enters formulas, tests or fixtures.
