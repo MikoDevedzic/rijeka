@@ -61,7 +61,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   const own = att.parties?.own || {}
   const cp  = att.parties?.counterparty || {}
   const row = (k, v, color) => (
-    <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 10, fontSize: 12, lineHeight: 1.7 }}>
+    <div className="cert-row" style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 10, fontSize: 12, lineHeight: 1.7 }}>
       <span className="tbw-mut" style={{ letterSpacing: '0.06em' }}>{k}</span>
       <span style={{ fontFamily: MONO, color: color || 'var(--text-hi)', wordBreak: 'break-all' }}>{v}</span>
     </div>
@@ -109,7 +109,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
         row('ANCHOR', att.anchor?.note || 'No chain configured', 'var(--text-dim)')
       )}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+      <div className="cert-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
         <button className="tbw-btn cert-go" onClick={onVerify} disabled={verifying} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116 }}>
           {verifying ? '⏳ VERIFYING…' : '⟳ VERIFY'}
         </button>

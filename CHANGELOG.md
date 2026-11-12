@@ -25,6 +25,26 @@ wide and could not be used; nothing is wider than the screen now.
   "standalone"), and the icon's mark comes alive once as it opens.
 - Journeys at 390 by 844 on Chromium, Firefox and WebKit. Not tried on a real phone.
 
+**After the reviews** (Vera, Iris, Magnus) and a second look at every screen in pictures:
+
+- `/news` typed on a monitor showed an unstyled list: its rules lived only in the phone's block. They hold on any
+  screen now, and the page is in the journey that opens every page.
+- The DETAILS tab's term sheet stood one letter to a line: the phone's two-across rule caught a grid that already
+  folds by itself. Such grids are left alone. The CASHFLOWS tab's legs ran their columns into each other; the legs
+  and their net now scroll sideways together. On the XVA tab the spread curves sit over the assumptions, each the
+  width of the screen, where six tenors shared half of it and showed one digit each.
+- The certificate keeps its hashes and its buttons inside the paper. The mark above it and its caption are centred.
+- Fields in the ticket are one height (40px). The tab strip and the row of figures at the foot fade at the edge
+  where there is more to scroll to. The NOTES switch and the booked ticket's two shortcuts are a monitor's.
+- The home loses its sub-headings and the chain's health tiles; a recent trade is two lines, read whole. A positive
+  figure in the book is green, not brass, on every screen (`docs/design.md`: brass is not a figure's colour).
+- The bar's five icons sit in one box each; the unread count is limestone, not brass. A trade card's third line is
+  quieter. The search field says "Search trades".
+- The sheet that explains Add to Home Screen closes on Escape. The status bar on an installed iPhone is solid, so
+  the app's bar is not under the clock. A headline's link must begin `http://` or `https://`.
+- Left as it is: the XVA results strip scrolls sideways on a phone; a booked ticket's foot still offers PRICE (it
+  reprices); the opening animation also plays on an installed desktop app.
+
 ## 0.31.1 · 12 November 2026
 
 **The door's way to the site points at /about.** On the owner's word ("deploy everything"). The public site now

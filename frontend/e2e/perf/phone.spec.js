@@ -26,27 +26,50 @@ const note = async (app, name) => {
   fs.writeFileSync(`${DIR}/measure${TAG}.json`, JSON.stringify(out, null, 1))
 }
 
-test('the phone: home, trades, a ticket tab by tab, chat', async ({ app }) => {
-  test.setTimeout(240_000)
-  await app.goto('/command-center'); await app.waitForTimeout(2500); await note(app, 'home')
+test('the phone: home, trades, a ticket tab by tab (priced, costed, booked, confirmed), news, chat', async ({ app }) => {
+  test.setTimeout(420_000)
+  await app.goto('/command-center'); await app.waitForTimeout(3000); await note(app, 'home')
+  await app.evaluate(() => window.scrollTo(0, 560)); await app.waitForTimeout(400); await note(app, 'home-2')
+  await app.evaluate(() => window.scrollTo(0, 99999)); await app.waitForTimeout(400); await note(app, 'home-3')
   await app.goto('/blotter'); await app.waitForTimeout(1500); await note(app, 'trades')
-  const plus = app.getByRole('navigation', { name: 'Rijeka' }).getByRole('button', { name: 'New trade' })
-  if (await plus.count()) await plus.click(); else await app.getByText('+ NEW TRADE').first().click({ force: true }).catch(() => {})
-  const win = app.locator('.tbw-window')
-  if (await win.count()) {
-    await app.waitForTimeout(2500); await note(app, 'ticket-trade')
-    for (const tab of ['DETAILS', 'CASHFLOWS', 'XVA', 'CURVE SCENARIO', '◆ CONFIRM']) {
-      const b = win.getByRole('button', { name: tab, exact: tab !== 'XVA' && tab !== '◆ CONFIRM' ? true : false }).first()
-      if (await b.count()) { await b.click({ force: true }).catch(() => {}); await app.waitForTimeout(1200); await note(app, `ticket-${tab.replace(/[^A-Z]+/g, '-').toLowerCase().replace(/^-|-$/g, '')}`) }
-    }
-  } else out['ticket'] = 'the trade window did not open'
-  await app.goto('/blotter'); await app.waitForTimeout(800)
   const nav = app.getByRole('navigation', { name: 'Rijeka' })
-  if (await nav.count()) {
-    await nav.getByRole('button', { name: /NEWS/ }).click(); await app.waitForTimeout(1200); await note(app, 'news')
-    await nav.getByRole('button', { name: /CHAT/ }).click(); await app.waitForTimeout(1200); await note(app, 'chat')
-  } else {
-    const chat = app.locator('.ms-launcher')
-    if (await chat.count()) { await chat.click({ force: true }).catch(() => {}); await app.waitForTimeout(1200); await note(app, 'chat') }
+  await nav.getByRole('button', { name: 'New trade' }).click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  const tab = async (name, file, wait = 1500) => {
+    const b = win.locator(`.tbw-tab[data-tab="${name}"]`)
+    if (!(await b.count())) { out[file] = 'no such tab'; return }
+    await b.scrollIntoViewIfNeeded(); await b.click(); await app.waitForTimeout(wait); await note(app, file)
+    // and the foot of the tab, where it is longer than the screen
+    const more = await win.evaluate(el => { let m = 0, box = null; for (const e of [el, ...el.querySelectorAll('*')]) { const d = e.scrollHeight - e.clientHeight; if (d > m && e.clientHeight > 200 && getComputedStyle(e).overflowY !== 'visible' && getComputedStyle(e).overflowY !== 'hidden') { m = d; box = e } } if (box) box.scrollTop = box.scrollHeight; return m })
+    out[`${file}-more`] = more
+    if (more > 60) { await app.waitForTimeout(300); await note(app, `${file}-foot`) }
   }
+  await note(app, 'ticket-empty')
+  await win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
+  await app.waitForTimeout(2500)
+  await win.getByRole('button', { name: /PRICE/ }).click().catch(() => {})
+  await app.waitForTimeout(3500)
+  await tab('TRADE', 'ticket-trade')
+  await tab('DETAILS', 'ticket-details')
+  await tab('CASHFLOWS', 'ticket-cashflows')
+  await tab('CURVE SCENARIO', 'ticket-scenario')
+  await tab('XVA', 'ticket-xva-before')
+  const asked = app.waitForResponse(r => r.url().includes('/api/xva/') && r.request().method() === 'POST', { timeout: 120_000 }).catch(() => null)
+  await win.getByRole('button', { name: /SIMULATE/ }).click().catch(() => {})
+  await asked; await app.waitForTimeout(2500)
+  await tab('XVA', 'ticket-xva')
+  await win.locator('.tbw-tab[data-tab="TRADE"]').scrollIntoViewIfNeeded(); await win.locator('.tbw-tab[data-tab="TRADE"]').click()
+  await win.getByRole('button', { name: /BOOK TRADE/ }).click().catch(() => {})
+  await app.waitForTimeout(3500); await note(app, 'ticket-booked')
+  await tab('DETAILS', 'ticket-booked-details')
+  await tab('◆ CONFIRM', 'ticket-confirm')
+  const done = app.waitForResponse(r => r.url().includes('/api/chain/confirm/'), { timeout: 60_000 }).catch(() => null)
+  await win.getByRole('button', { name: /CONFIRM ON-CHAIN/ }).click().catch(() => {})
+  await done; await app.waitForTimeout(6000)
+  await tab('◆ CONFIRM', 'ticket-confirmed')
+  await win.locator('.tbw-light-r').click().catch(() => {})
+  await app.waitForTimeout(1200); await note(app, 'trades-after')
+  await nav.getByRole('button', { name: /NEWS/ }).click(); await app.waitForTimeout(1500); await note(app, 'news')
+  await nav.getByRole('button', { name: /CHAT/ }).click(); await app.waitForTimeout(1500); await note(app, 'chat')
 })

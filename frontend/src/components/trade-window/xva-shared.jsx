@@ -319,7 +319,7 @@ export function RunReadout({ result }) {
   if (!result) return null
   const seed = result.seed ?? 42
   return (
-    <div style={{fontSize:'0.7rem',color:'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
+    <div className="xva-run-readout" style={{fontSize:'0.7rem',color:'var(--text-mute)',fontFamily:'var(--mono)',whiteSpace:'nowrap'}}>
       seed {seed}{seed===42?' (repeats exactly)':' (re-rolled)'} · {result.path_steps?.toLocaleString()} path-steps simulated in {result.engine_ms} ms
     </div>
   )

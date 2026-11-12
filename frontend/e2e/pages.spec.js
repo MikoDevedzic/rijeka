@@ -8,6 +8,7 @@ const TITLE = '.pnl-title, h1, h2'
 const PAGES = [
   ['/command-center', /./, 'body'],
   ['/blotter', /\+ NEW TRADE/, 'body'],
+  ['/news', /MARKET NEWS/, 'body'],                 // the phone's NEWS tab; on a monitor a plain column, by its address
   ['/pnl', /P&L · ATTRIBUTION/, TITLE],
   ['/pnl/xva', /XVA RESERVES/, TITLE],
   ['/pnl/ipv', /INDEPENDENT PRICE VERIFICATION/, TITLE],

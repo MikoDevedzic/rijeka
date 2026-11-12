@@ -16,6 +16,13 @@ export default function InstallButton() {
     window.addEventListener('appinstalled', done)
     return () => { window.removeEventListener('beforeinstallprompt', offer); window.removeEventListener('appinstalled', done) }
   }, [])
+  // Escape closes the sheet, as a tap outside it does
+  useEffect(() => {
+    if (!sheet) return undefined
+    const key = (e) => { if (e.key === 'Escape') setSheet(false) }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [sheet])
   if (!phone || installed) return null
   const press = async () => {
     if (!prompt) { setSheet(true); return }

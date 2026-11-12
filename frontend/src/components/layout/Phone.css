@@ -4,6 +4,14 @@
    app's layouts are set inline, which a stylesheet can only overrule with !important: that is why it appears. */
 :root { --phone-nav-h: 0px; }
 
+/* The headlines as a page (/news): the phone's NEWS tab, and a plain column on a monitor that types the address. */
+.np { height: 100%; overflow: auto; padding: 18px max(16px, calc(50% - 380px)) 24px; }
+.np-title { margin: 0 0 10px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; font-weight: 500; color: var(--text-dim); }
+.np-note { font-size: 13px; color: var(--amber); margin-bottom: 8px; }
+.np .np-list { height: auto; overflow: visible; flex: none; padding: 0; }
+.np .np-list li { padding: 12px 0; }
+.np .np-list a { font-size: 14px; }
+
 @media (max-width: 640px) {
   :root { --phone-nav-h: calc(56px + env(safe-area-inset-bottom, 0px)); }
 
@@ -12,11 +20,11 @@
     display: grid; grid-template-columns: repeat(5, 1fr); background: var(--bg-deep); border-top: 1px solid var(--border-hi); }
   .ph-nav button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: none; border: 0; border-top: 2px solid transparent;
     color: var(--text-dim); font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; cursor: pointer; }
-  .ph-nav button i { font-style: normal; font-size: 16px; line-height: 1; color: inherit; }
+  .ph-nav button i { display: grid; place-items: center; height: 26px; font-style: normal; font-size: 16px; line-height: 1; color: inherit; }
   .ph-nav button.on { color: var(--text-hi); border-top-color: var(--accent); background: var(--panel-2); }
   .ph-nav button.new { color: var(--accent); }
-  .ph-nav button.new i { display: grid; place-items: center; width: 34px; height: 26px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font-size: 20px; }
-  .ph-badge { position: absolute; top: 6px; right: calc(50% - 20px); min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 10px; line-height: 16px; font-weight: 700; }
+  .ph-nav button.new i { width: 34px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font-size: 20px; }
+  .ph-badge { position: absolute; top: 5px; right: calc(50% - 26px); min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--text-hi); color: var(--bg-deep); font-size: 10px; line-height: 16px; font-weight: 700; }
 
   /* ── the frame of every page: the bar at the top, the page, the navigation's height left free ── */
   .app-frame { height: calc(100vh - var(--phone-nav-h)) !important; height: calc(100dvh - var(--phone-nav-h)) !important; }
@@ -47,14 +55,14 @@
   .dh-kpis { flex-wrap: wrap; gap: 12px 22px; }
   .dh .rk, .dh .lf-health { grid-template-columns: 1fr 1fr !important; }      /* four figures as two rows of two, each readable */
   .dh .rk > div, .dh .lf-health > div { padding: 9px 11px; }
+  .dh-h-sub, .dh .lf-health { display: none !important; }      /* a heading is its word; the chain's health tiles are a monitor's */
+  /* a recent trade: its reference and state on one line, what it is under them, whole */
+  .dh-list li { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "ref st" "mid mid"; gap: 3px 10px; padding: 10px 0; }
+  .dh-list .dh-ref { grid-area: ref; } .dh-list .dh-st { grid-area: st; }
+  .dh-list .dh-mid { grid-area: mid; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ── news ── */
-  .np { height: 100%; overflow: auto; padding: 14px 14px 20px; }
-  .np-title { margin: 0 0 8px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; font-weight: 500; color: var(--text-dim); }
-  .np-note { font-size: 13px; color: var(--amber); margin-bottom: 8px; }
-  .np .np-list { height: auto; overflow: visible; flex: none; padding: 0; }
-  .np .np-list li { padding: 12px 0; }
-  .np .np-list a { font-size: 14px; }
+  .np { padding: 14px 14px 20px; }
 
   /* ── trades: every trade a card ── */
   .bl-left, .bl-right { display: none !important; }
@@ -67,17 +75,33 @@
   .bl-row td { display: none; height: auto !important; padding: 0 !important; border: 0 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bl-row td:nth-child(2) { display: block; grid-area: ref; font-weight: 600; color: var(--text-hi); }
   .bl-row td:nth-child(4) { display: block; grid-area: inst; }
-  .bl-row td:nth-child(6) { display: block; grid-area: cp; color: var(--text-dim); }
+  .bl-row td:nth-child(6) { display: block; grid-area: cp; color: var(--text-mute); font-size: 11px; }
   .bl-row td:nth-child(8) { display: block; grid-area: notional; text-align: right; }
-  .bl-row td:nth-child(9) { display: block; grid-area: tenor; text-align: right; color: var(--text-dim); }
+  .bl-row td:nth-child(9) { display: block; grid-area: tenor; text-align: right; color: var(--text-mute); font-size: 11px; }
   .bl-row td:nth-child(11) { display: block; grid-area: status; text-align: right; }
 
   /* ── the trade window: the whole screen ── */
   .tbw-window { left: 0 !important; top: 0 !important; width: 100vw !important; max-width: 100vw !important; min-width: 0 !important; height: 100vh !important; height: 100dvh !important;
     max-height: none !important; min-height: 0 !important; border-radius: 0 !important; resize: none !important; z-index: 1000; }
-  .tbw-tabs { max-width: 100%; overflow-x: auto; }
+  .tbw-tabs { max-width: 100%; overflow-x: auto; -webkit-mask-image: linear-gradient(90deg, black 88%, transparent); mask-image: linear-gradient(90deg, black 88%, transparent); }
+  .tbw-tab { padding-left: 10px !important; padding-right: 10px !important; }
+  .tbw-tabbar > :not(.tbw-tabs) { display: none !important; }      /* NOTES is a monitor's switch: the strip takes the width */
+  /* a field is a thumb high, and the boxes of a row sit on one line whatever their labels */
+  .tbw-window select, .tbw-window input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 40px !important; box-sizing: border-box; }
+  /* after booking: the reference on one line; VIEW IN BLOTTER and NEW TRADE are the bar at the foot and the close button */
+  .tbw-booked-actions { display: none !important; }
+  .tbw-header { flex-wrap: nowrap; }
+  /* a table of fixed columns keeps them, and scrolls sideways with its headings */
+  /* the spread curves, then the assumptions under them: each the width of the screen */
+  [data-testid="xva-assumptions"] { grid-template-columns: minmax(0, 1fr) !important; }
+  [data-testid="xva-assumptions"] input { padding-left: 4px !important; padding-right: 4px !important; }
+  .tbw-xscroll { overflow-x: auto; }
+  .tbw-xscroll-in { min-width: 640px; }
+  .xva-run-readout { white-space: normal !important; overflow-wrap: anywhere; }
+  [data-testid="confirm-mark-row"] { align-items: center !important; }
+  .cert canvas, .cert svg { max-width: 140px; max-height: 140px; }
   .tbw-footer { grid-template-columns: minmax(0, 1fr) !important; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) !important; }
-  .tbw-footer-metrics { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .tbw-footer-metrics { min-width: 0; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, black 86%, transparent); mask-image: linear-gradient(90deg, black 86%, transparent); }
   .tbw-footer-metrics > * { flex: 0 0 auto; }
   .tbw-footer-metrics::-webkit-scrollbar { display: none; }
   /* the foot: CANCEL, then PRICE and BOOK sharing the width; what the structure is called and the keys are a monitor's */
@@ -91,7 +115,7 @@
   .tbw-light-r::after { content: "✕"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-hi); font-size: 14px; }
   /* its grids are two across: six fields in a row is a monitor's row */
   .tbw-window .tbw-grid-6, .tbw-window .tbw-fx-grid-6, .tbw-window .tbw-fx-grid-expiry, .tbw-window .tbw-grid,
-  .tbw-window [style*="grid-template-columns: repeat("] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .tbw-window [style*="grid-template-columns: repeat("]:not([style*="auto-fit"]):not([style*="auto-fill"]) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }      /* a grid that already folds by itself is left to */
   .tbw-window .tbw-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .tbw-window .tbw-sec { padding-left: 14px; padding-right: 14px; }
   /* CAPITAL is not part of the phone view */
@@ -100,14 +124,18 @@
   /* the XVA tab and the scenario tab: the inputs, then the results under them */
   .xva-row { flex-direction: column !important; overflow: visible !important; }
   .xva-row > * { width: 100% !important; min-width: 0 !important; max-width: none !important; border-right: 0 !important; flex: none !important; }
-  /* a table keeps its columns and scrolls sideways inside its own box */
-  .tbw-window table { display: block; max-width: 100%; overflow-x: auto; }
+  /* a wide table (one that names a least width) keeps its columns and scrolls sideways inside its own box; the
+     others are as wide as the screen and stay tables */
+  .tbw-window table[style*="min-width"] { display: block; max-width: 100%; overflow-x: auto; }
 
   /* ── chat: the whole screen above the navigation ── */
   .ms-window.ms-phone { inset: 0 0 var(--phone-nav-h) 0 !important; }
 
   /* the certificate: the seal, then the words under it */
-  .cert { flex-direction: column !important; align-items: flex-start !important; }
+  .cert { flex-direction: column !important; align-items: stretch !important; gap: 14px !important; padding: 18px 16px !important; }
+  .cert > :first-child { align-self: flex-start; }
+  .cert-row { grid-template-columns: 104px minmax(0, 1fr) !important; }      /* a hash breaks inside the paper, not past its edge */
+  .cert-actions { flex-wrap: wrap; }
   .cert-title { font-size: 20px !important; }
 
   /* links on the home that lead to pages laid out for a monitor are not offered on a phone */
@@ -121,7 +149,7 @@
   .au-sheet-icon { display: flex; align-items: center; gap: 14px; }
   .au-sheet-icon img { border-radius: 13px; }
   .au-sheet-icon b { display: block; font-size: 16px; color: var(--text-hi); }
-  .au-sheet-icon span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--text-mute); }
+  .au-sheet-icon span { font-size: 13px; color: var(--text-dim); }
   .au-sheet ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; font-size: 14px; color: var(--text-dim); }
   .au-sheet ol b { color: var(--text-hi); font-weight: 600; }
 }

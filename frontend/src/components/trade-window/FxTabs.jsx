@@ -530,6 +530,8 @@ function LegCashflows({ quote, crypto }) {
         <Tile label={`${legs[1].name} PV · ${qc}`} value={signed(legs[1].pv, 0)} color={tone(legs[1].pv)} sub={ndf ? 'against K, not exchanged' : undefined} />
         <Tile label={ndf ? 'SETTLES · CASH' : 'SETTLES · PHYSICAL'} value={quote.settlement_date} sub={ndf ? `one net payment in ${qc}` : 'both principals exchange'} />
       </div>
+      {/* the legs and their net keep one set of columns: on a phone they scroll sideways together (Phone.css) */}
+      <div className="tbw-xscroll"><div className="tbw-xscroll-in">
       {legs.map(l => (
         <div key={l.key} style={{ marginBottom: 12 }} data-testid={`fx-cf-leg-${l.key}`}>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 8px', padding: '8px 0 6px' }}>
@@ -560,6 +562,7 @@ function LegCashflows({ quote, crypto }) {
           <td style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none', fontWeight: 600, color: tone(pv) }}>{signed(pv, 0)}</td>
         </tr></tbody>
       </table>
+      </div></div>
     </div>
   )
 }

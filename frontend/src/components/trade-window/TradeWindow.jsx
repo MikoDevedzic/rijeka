@@ -1214,7 +1214,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           </span>
         )}
         {bookedTrade && !viewMode && (
-          <div className="tbw-no-drag" style={{ display: 'flex', gap: '8px', marginLeft: 'auto', marginRight: '12px' }}>
+          <div className="tbw-no-drag tbw-booked-actions" style={{ display: 'flex', gap: '8px', marginLeft: 'auto', marginRight: '12px' }}>
             <button className="rj-press"
               type="button"
               onMouseDown={e => e.stopPropagation()}

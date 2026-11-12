@@ -9,6 +9,7 @@ import { ASSET_FACTOR, RISK_FACTORS } from '../../lib/risk-factors'
 import ContextMenu from '../common/ContextMenu'
 import { rowMenu } from './row-menu'
 import { readPackageTag } from '../trade-window/fx-legs'
+import { usePhone } from '../../lib/phone'
 
 const TH = ({ col, label, sortCol, sortDir, onSort }) => (
   <th className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)}>
@@ -56,6 +57,7 @@ const STATUSES      = ['PENDING', 'LIVE', 'MATURED', 'CANCELLED']
 const STORES        = ['WORKING', 'PRODUCTION', 'HISTORY']
 
 export default function BlotterShell() {
+  const phone = usePhone()
   const { trades, theirRefs, loading, error, fetchTrades, startLive, filters, setFilter, resetFilters, filteredTrades } = useTradesStore()
   const [sortCol, setSortCol]        = useState('trade_date')
   const [sortDir, setSortDir]        = useState('desc')
@@ -174,7 +176,7 @@ export default function BlotterShell() {
         <div className="bl-centre-header">
           <input
             className="bl-search"
-            placeholder="Search — ref, their ref, UTI, counterparty, instrument..."
+            placeholder={phone ? 'Search trades' : 'Search — ref, their ref, UTI, counterparty, instrument...'}
             value={filters.search || ''}
             onChange={e => setFilter('search', e.target.value)}
           />

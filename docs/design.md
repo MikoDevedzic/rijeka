@@ -291,6 +291,9 @@ capital. Those pages still open by their address but are not in the phone's navi
 - **The trade window is the whole screen**: its fields two across, its tabs scrolling sideways (no CAPITAL), the
   XVA tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can hit. A table
   keeps its columns and scrolls sideways inside its own box; the page itself never does.
+  A strip that scrolls sideways (the tabs, the figures at the foot) fades at its right edge. A grid that folds by
+  itself (`auto-fit`) is left to; a table of fixed columns sits in `.tbw-xscroll` and scrolls with its headings.
+  A field is 40px high.
 - **A target for a thumb is about 40px high.** Keys (F4, ⌘↵) are not shown: a phone has none.
 - **From the home screen.** The door offers ADD TO HOME SCREEN. An iPhone does not let a page install itself, so
   the button shows the two taps; Android installs directly. The icon is the mark at rest; opened from it, the

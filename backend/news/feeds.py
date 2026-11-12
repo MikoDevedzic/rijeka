@@ -116,7 +116,7 @@ def parse(xml_bytes: bytes, source: str) -> list[Item]:
             when = _parse_date(_text(fields.get("published")) or _text(fields.get("updated")))
             desc = blurb(_text(fields.get("summary")) or _text(fields.get("content")))
         url = (url or "").strip()
-        if not title or not url.startswith("http"):
+        if not title or not url.startswith(("http://", "https://")):      # a link a browser opens as a page, nothing else
             continue
         out.append(Item(source, title[:300], url[:2000], when, tag(title + " " + desc), desc))
     return out
