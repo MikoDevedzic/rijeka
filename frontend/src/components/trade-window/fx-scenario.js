@@ -310,7 +310,9 @@ export function reprice(q, { spotPct = 0, quoteBp = 0, baseBp = 0, volPts = 0, d
   const S = q.spot * k
   const tSpot = finite(q.t_spot) && q.t_spot > 0 ? q.t_spot : 0
   const carry = Math.exp((quoteBp - baseBp) / 10000 * Math.max(T - tSpot, 0))
-  const dfq = q.df_quote * Math.exp(-quoteBp / 10000 * T)
+  // a forward that fixes before it is paid carries to its fixing date (T) and is discounted from its payment date (t_pay)
+  const tPay = !option && finite(q.t_pay) && q.t_pay > T ? q.t_pay : T
+  const dfq = q.df_quote * Math.exp(-quoteBp / 10000 * tPay)
   // The engine's own forward, moved by the shocks, in both forward modes and for an option as for a forward. It is
   // never rebuilt here as S·DF_base/DF_quote: the two discount factors the quote names run from today, so on a
   // pair whose spot settles later that product is off by the carry over the spot lag (1.6 pips of forward on a

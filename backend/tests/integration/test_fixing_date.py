@@ -35,6 +35,11 @@ def test_a_forward_is_read_at_its_fixing_date_and_discounted_from_its_settlement
     # the same amount, paid thirty days later: smaller by the discounting between the two dates, and by nothing else
     ratio = early["npv"] / at_fix["npv"]
     assert ratio == pytest.approx(plain["df_quote"] / at_fix["df_quote"], rel=1e-9) and 0.99 < ratio < 1.0
+    # what the answer calls df_quote is the factor its NPV is discounted with (to the settlement date): every screen
+    # rebuilds N (F - K) df_quote. The factor to the fixing date is beside it, and so are the two times
+    assert early["df_quote"] == plain["df_quote"] and early["df_fixing"] == at_fix["df_quote"] and plain["df_fixing"] is None
+    assert early["npv"] == pytest.approx(10 * (early["forward"] - 100_000) * early["df_quote"], rel=1e-12)
+    assert early["t_pay"] == plain["t"] and early["t"] == at_fix["t"] and plain["t_pay"] == plain["t"]
     # dealt at the fair forward of its fixing date it is worth nothing
     fair = _price(client, auth_a, fixing_date=fix.isoformat(), forward_rate=None).json()
     assert fair["npv"] == pytest.approx(0.0, abs=1e-6) and fair["forward_rate"] == pytest.approx(early["forward"], rel=1e-12)
@@ -44,3 +49,18 @@ def test_a_forward_is_read_at_its_fixing_date_and_discounted_from_its_settlement
     assert late.status_code == 422 and "cannot be after the settlement date" in late.text
     past = _price(client, auth_a, fixing_date=ASOF.isoformat()).json()
     assert past["fixing_date"] is None and past["npv"] == plain["npv"]
+
+
+def test_an_xva_run_on_such_a_forward_starts_from_the_tickets_value_and_runs_to_the_payment(client, auth_a):
+    fix = SETTLE - timedelta(days=30)
+    ticket = _price(client, auth_a, fixing_date=fix.isoformat(), valuation_date=ASOF.isoformat()).json()
+    body = {"pair": "BTCUSD", "base_notional": 10, "direction": "BUY", "settlement_date": SETTLE.isoformat(), "forward_rate": 100_000,
+            "valuation_date": ASOF.isoformat(), "paths": 400}
+    plain = client.post("/api/xva/currency", json=body, headers=auth_a)
+    early = client.post("/api/xva/currency", json={**body, "fixing_date": fix.isoformat()}, headers=auth_a)
+    assert plain.status_code == 200 and early.status_code == 200, (plain.text[:300], early.text[:300])
+    plain, early = plain.json(), early.json()
+    assert early["xva"]["npv"] == pytest.approx(ticket["npv"], abs=0.006)             # the run starts from the ticket's own value, to the cent
+    assert abs(plain["xva"]["npv"] - ticket["npv"]) > 1.0                             # which a run without the fixing date does not
+    assert early["steps"] == plain["steps"] and len(early["ee"]) == len(plain["ee"])  # exposed until it is paid: the same dates
+    assert early["xva"]["cva"] == pytest.approx(plain["xva"]["cva"], rel=0.05)        # and nearly the same charge: the carry over thirty days

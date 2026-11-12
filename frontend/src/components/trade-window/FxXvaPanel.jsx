@@ -101,7 +101,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // the terms a result was simulated for: the ticket's and, in a package, every leg's
   const runKey = quote ? xvaTermsKey(quote) + (pkg ? '|' + pkg.key : '') : null
   const payload = quote ? { pair: `${quote.base_currency}${quote.quote_currency}`, base_notional: quote.base_notional,
-    settlement_date: quote.settlement_date, forward_rate: quote.forward_rate, direction: quote.direction } : null
+    settlement_date: quote.settlement_date, forward_rate: quote.forward_rate, direction: quote.direction,
+    fixing_date: quote.fixing_date || null } : null
   const isOption = quote?.shape === 'OPTION'
   const ccy = quote?.quote_currency || 'USD'
   const fmt = (v) => fmtMoney(v, ccy)
@@ -209,7 +210,8 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         : isOption
         ? { trade: buildTrade?.(), ...common }
         : { pair: payload.pair, base_notional: Number(payload.base_notional), settlement_date: payload.settlement_date,
-            forward_rate: payload.forward_rate ?? null, direction: payload.direction || 'BUY', ...common }
+            forward_rate: payload.forward_rate ?? null, direction: payload.direction || 'BUY',
+            ...(payload.fixing_date ? { fixing_date: payload.fixing_date } : {}), ...common }
       if (pkg && !body.trades.every(Boolean)) throw new Error('Price every leg first')
       if (!pkg && isOption && !body.trade) throw new Error('Price the option first')
       const post = async (b) => {

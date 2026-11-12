@@ -853,6 +853,12 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                      "base": ({"id": st["base_curve"], "pillars": curve_points(kw["base_curve"], val_date)} if kw.get("base_curve") is not None else None)}
     # a forward priced to its fixing date says so: the date it is read at, and that the amount is paid on settlement
     out["fixing_date"] = read_at.isoformat() if read_at != settle else None
+    # what the answer calls df_quote is the factor its NPV is discounted with: to the settlement date, where the amount
+    # is paid. Every reader rebuilds N·(F − K)·df_quote (the ticket's line, the cashflow row, the scenario tab, an XVA
+    # run). The factor to the fixing date, which the forward itself was read with, is beside it; `t` stays the time the
+    # forward carries over (to the fixing date) and `t_pay` the time the amount is discounted over.
+    out["df_fixing"] = out["df_quote"] if read_at != settle else None
+    out["df_quote"] = out["df_pay"]
     if read_at != settle:
         out["model"] += f"; the forward is read at the fixing date ({read_at.isoformat()}) and the amount paid on {settle.isoformat()} is discounted from there"
     out["crypto"] = crypto
@@ -1133,7 +1139,9 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
         if itype == "CRYPTO_FORWARD":
             k = rule.parse(trade)             # the one reading of a digital asset's terms
             pair, notional, K, settle, shape = k["pair"], k["notional"], k["strike"], k["settle"], "NDF"
-            booked_fixing = k["fixing_date"]  # before it is reached the forward is priced to it (_price)
+            # before it is reached the forward is priced to it (_price). A record older than the booking rule may
+            # carry a fixing date after its settlement date: it is priced to the settlement date, as it always was
+            booked_fixing = k["fixing_date"] if (k["fixing_date"] is not None and k["fixing_date"] <= k["settle"]) else None
         else:
             pair = str(t.get("currency_pair") or f"{t.get('base_currency','')}{t.get('quote_currency','')}").upper()
             notional = float(t.get("base_notional") or trade.notional)

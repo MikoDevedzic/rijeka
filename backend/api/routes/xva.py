@@ -746,6 +746,7 @@ class CurrencyXvaRequest(BaseModel):
     forward_rate: Optional[float] = None       # contract K; None = struck at the fair forward
     direction: str = "BUY"                     # of the base currency
     valuation_date: Optional[date] = None
+    fixing_date: Optional[date] = None         # a cash-settled forward that fixes before it settles: priced to it, as the ticket is
     vol_pct: Optional[float] = None            # flat annualised; None = demo default for the pair
     paths: int = 2000
     cp_cds_bp: float = 85.0
@@ -841,14 +842,18 @@ def _surface_pillars(db, uid: str, pair: str):
 
 
 def forward_xva_input(db, uid: str, pair: str, *, base_notional: float, settlement, forward_rate, direction: str, val_date: date,
-                      vol_pct: Optional[float], vol_mode: str):
+                      vol_pct: Optional[float], vol_mode: str, fixing_date: Optional[date] = None):
     """The forward priced today and its engine input: (ForwardXvaInput, quote). One reading for POST /currency and
-    for a forward leg of POST /currency-package."""
+    for a forward leg of POST /currency-package.
+    `fixing_date`: a forward that fixes before it is paid starts the run at the ticket's own value (the forward of the
+    fixing date, discounted from the settlement date) and is exposed until it is paid. The level is simulated on to
+    the settlement date, where in fact the amount is known from the fixing date: over a gap of days that is small."""
     from api.routes.currencies import _price, split_pair
     from pricing import fx_xva
     split_pair(pair)
     q = _price(db, uid, pair, shape="FORWARD", base_notional=base_notional, settlement=settlement,
-               val_date=val_date, K=forward_rate, direction=direction, spot_override=None, base_rate_pct=None)
+               val_date=val_date, K=forward_rate, direction=direction, spot_override=None, base_rate_pct=None,
+               fixing_date=fixing_date if (fixing_date is not None and settlement is not None and fixing_date <= settlement) else None)
     vol_source = "desk input" if vol_pct is not None else None
     pillars = None
     if vol_pct is None:
@@ -856,7 +861,7 @@ def forward_xva_input(db, uid: str, pair: str, *, base_notional: float, settleme
         if str(vol_mode).upper() != "FLAT":
             pillars = _surface_pillars(db, uid, pair)
     inp = fx_xva.ForwardXvaInput(pair=pair, base_notional=base_notional, forward=float(q["forward"]),
-                                 strike=float(q["forward_rate"]), t_years=float(q["t"]), df_quote_t=float(q["df_quote"]),
+                                 strike=float(q["forward_rate"]), t_years=float(q.get("t_pay") or q["t"]), df_quote_t=float(q["df_quote"]),
                                  quote_zero=float(q["quote_rate"]), direction=direction, vol_pct=vol_pct, vol_source=vol_source,
                                  spot01=float(q.get("spot01", q.get("delta_quote_per_pct", 0.0))), pillars=pillars or None,
                                  spot=float(q["spot"]) if q.get("spot") else None)
@@ -881,7 +886,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
     val_date = body.valuation_date or date.today()
     inp, q = forward_xva_input(db, user["sub"], pair, base_notional=body.base_notional, settlement=body.settlement_date,
                                forward_rate=body.forward_rate, direction=body.direction, val_date=val_date,
-                               vol_pct=body.vol_pct, vol_mode=body.vol_mode)
+                               vol_pct=body.vol_pct, vol_mode=body.vol_mode, fixing_date=body.fixing_date)
     inp.regimes = bool(body.vol_regimes)
     csa = _csa_of(db, user["sub"], body.csa, body.collateral)
     _run_fits(1, min(body.paths, 10000), inp.t_years)

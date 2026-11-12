@@ -217,11 +217,18 @@ test('a settled crypto forward opened from the blotter shows the fixing and the 
   await cp.selectOption({ label: 'RIJEKA DEMO BANK AG' })
   const priced = app.waitForResponse(r => /\/api\/currency\/forward\/price$/.test(r.url()) && r.request().method() === 'POST')
   await win.getByRole('button', { name: '▶ PRICE' }).click()
-  const quote = await (await priced).json()
-  // a fixing date of our own, three days before settlement: the record must carry exactly it
-  const chosen = iso(Date.parse(quote.settlement_date) - 3 * DAY)
+  const first = await (await priced).json()
+  // a fixing date of our own, three days before settlement: the record must carry exactly it. The forward is priced to
+  // its fixing date, so the price made for the other date is no longer the ticket's: it is priced again before it books
+  const chosen = iso(Date.parse(first.settlement_date) - 3 * DAY)
   await win.getByTestId('fixing-date').fill(chosen)
   await win.getByTestId('fixing-date').blur()
+  const repriced = app.waitForResponse(r => /\/api\/currency\/forward\/price$/.test(r.url()) && r.request().method() === 'POST' && r.request().postDataJSON()?.fixing_date === chosen)
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  const quote = await (await repriced).json()
+  expect(quote.fixing_date, 'the price is made for the fixing date chosen').toBe(chosen)
+  expect(quote.settlement_date).toBe(first.settlement_date)
+  expect(Math.abs(quote.forward - first.forward), 'three days less carry: another forward').toBeGreaterThan(0)
   const booking = app.waitForResponse(r => /\/api\/trades\/$/.test(r.url()) && r.request().method() === 'POST')
   await win.getByRole('button', { name: /BOOK TRADE/ }).click()
   const booked = await booking

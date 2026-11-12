@@ -13,12 +13,23 @@ methodology document carries its own version (v1.16). Commits on `main` are the 
 - **Now.** The forward is read at the fixing date and the amount is discounted from the settlement date:
   V = ±N (F(T_fix) − K) D(T_pay). One rule in `pricing/currency_forward.py` (`payment_date`), used by the ticket
   (`fixing_date` on `POST /api/currency/forward/price`), by a booked trade's price and by the P&L valuation. The
-  limit of seven days is gone: any date from tomorrow to the settlement date. The ticket's line says "priced to the
-  fixing date". One day before the fixing, theta is the day's carry, not the whole value.
+  limit of seven days is gone: any date after the trade date, up to the settlement date. The ticket's line says
+  "priced to the fixing date", and a change of fixing date asks for the price again. One day before the fixing,
+  theta is the day's carry, not the whole value. Risk (the ladder, VaR, stress), the P&L explain and IPV value a
+  booked trade through the same valuation and follow. The answer's `df_quote` is the factor the NPV is discounted
+  with (to the settlement date); `df_fixing`, `t` and `t_pay` are beside it.
+- **XVA.** A run on such a forward (`fixing_date` on `POST /api/xva/currency`) starts from the ticket's own value
+  and is exposed until the payment.
 - **What moves.** A booked forward whose fixing date is before its settlement date: by the carry over the gap (the
   benchmark's default is one day: about 1.4bp of notional at a 5 % basis). A forward that fixes on its settlement
   date (the venue's morning price, and every currency pair) does not move, and neither does any option.
-- **Not done.** An XVA run on such a forward still simulates the level to the settlement date.
+- **Checked.** Emmy re-derived the value, the three sensitivities and theta in closed form on a case of her own
+  (agreement to 1e-9), including the day before the fixing.
+- **Not done.** The XVA run simulates the level on to the settlement date, where the amount is in fact known from
+  the fixing date (small over days; not a model of a forward that fixes months before it is paid). A forward leg of
+  a package's XVA, the counterparty exposure report and the capital built on it (`ccr/valuation.py`), and the older
+  route `POST /api/crypto/forward/price` still carry a forward to its settlement date. The Excel replication of a
+  forward has no fixing date. On the fixing date itself the settlement rule takes over, as before.
 
 ## 0.25.0 · 12 November 2026
 
