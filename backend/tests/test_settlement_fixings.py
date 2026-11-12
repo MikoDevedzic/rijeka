@@ -579,20 +579,19 @@ def test_booking_takes_the_pairs_feed_source_or_a_desk_source_at_the_time_that_s
     for inst, terms in bad:
         with pytest.raises(ValueError):
             SRC.check_booked(inst, terms)
-    # a forward's fixing date: after the trade date, on or before the settlement date, at most seven days before it; without one it is the settlement date
+    # a forward's fixing date: after the trade date, on or before the settlement date (any time before it, since 0.26.0 prices the forward to its fixing date); without one it is the settlement date
     dated = lambda **kw: (_terms(settlement_date="2027-01-30", **kw)[1], date(2026, 11, 2), "2027-01-30")
     for fine in (dated(), dated(valuation_date=None), dated(valuation_date=""), dated(valuation_date="2027-01-30"), dated(valuation_date="2027-01-29"),
-                 dated(valuation_date="2027-01-23"), dated(valuation_date=date(2027, 1, 25))):                # the 23rd: seven days before, the most there may be
+                 dated(valuation_date="2027-01-23"), dated(valuation_date=date(2027, 1, 25)),
+                 dated(valuation_date="2027-01-22"), dated(valuation_date="2026-11-03")):                     # eight days before, and months: no limit on the gap now
         SRC.check_booked("CRYPTO_FORWARD", *fine)
-    assert SRC.MAX_FIXING_GAP_DAYS == 7
+    assert not hasattr(SRC, "MAX_FIXING_GAP_DAYS")
     SRC.check_booked("CRYPTO_FORWARD", _terms(valuation_date="2027-01-29")[1], None, "2027-01-30")              # the settlement date from the trade's maturity
     SRC.check_booked("CRYPTO_OPTION", _terms("CRYPTO_OPTION", valuation_date="2030-01-01", settlement_date="2027-01-30")[1], "2026-11-02", "2027-01-30")    # an option's date is its expiry's affair
     near = lambda **kw: (_terms(settlement_date="2026-11-05", **kw)[1], date(2026, 11, 2), "2026-11-05")
     SRC.check_booked("CRYPTO_FORWARD", *near(valuation_date="2026-11-03"))
     for wrong, why in ((dated(valuation_date="2027-01-31"), "cannot be after the settlement date"), (near(valuation_date="2026-11-01"), "the fixing date must be after the trade date"),
                        (near(valuation_date="2026-11-02"), "the fixing date must be after the trade date"),      # a fixing dated the trade date may be published already
-                       (dated(valuation_date="2027-01-22"), "the fixing date can be at most 7 days before the settlement date"),
-                       (dated(valuation_date="2026-11-03"), "the fixing date can be at most 7 days before the settlement date"),
                        (dated(valuation_date="soon"), "is not a date"), (dated(valuation_date=20270129), "is not a date")):
         with pytest.raises(ValueError, match=why):
             SRC.check_booked("CRYPTO_FORWARD", *wrong)
@@ -616,8 +615,7 @@ def test_booking_takes_the_pairs_feed_source_or_a_desk_source_at_the_time_that_s
         assert model(**common, **extra, terms=_terms(valuation_date="2027-01-29", settlement_date="2027-01-30")[1])             # fixed the day before it is paid
         for wrong, why in ((_terms(settlement_price_source="Deribit BTC delivery price.")[1], "reads like it"), (_terms(valuation_time="08:00 UTC")[1], "valuation_time must be 16:00 London"),
                            (_terms(settlement_price_source="BRR\u200b")[1], "non-printing"), (_terms(valuation_date="2027-01-31")[1], "cannot be after the settlement date"),
-                           (_terms(valuation_date="2026-11-01", settlement_date="2027-01-30")[1], "must be after the trade date"),
-                           (_terms(valuation_date="2027-01-20", settlement_date="2027-01-30")[1], "at most 7 days before the settlement date")):
+                           (_terms(valuation_date="2026-11-01", settlement_date="2027-01-30")[1], "must be after the trade date")):
             with pytest.raises(ValueError, match=why):
                 model(**common, **extra, terms=wrong)
         assert model(**{**common, "asset_class": "FX", "instrument_type": "NDF"}, **extra, terms={"fixing_source": "Deribit BTC delivery price."})       # not this rule's
@@ -995,9 +993,12 @@ def _value(trade, on, spot=104_000.0, fixings=None):
 # the same market: BTC spot 104,000, funding 3 %, discounting flat 4 %, the vol surface of tests/test_crypto_option.py).
 # crybasis01 = −fund01 everywhere (0.16.0).
 # 0.16.0: a digital asset's spot date is T+0 (one convention across the API); the option's forward carries one more day, which moves ir01, fund01 and theta by a day's carry and leaves npv unchanged (was 11.9406 / −15.2723 / −643.030; on 28 Jan 0.2318 / −0.2547 / theta unchanged). The barrier (ko) rows use the exotic pricer, which carries from the valuation date already: unchanged.
+# 0.26.0: the forward here fixes three days before it is paid, and is now read at its fixing date and discounted from its
+# payment date: N (S e^{(r_q - r_b) t_fix} - K) e^{-r_q t_pay}, re-derived by hand for both dates (and one day later, for theta).
+# Until then it was carried to the payment date (42,173.43 and 40,096.40). The options are untouched.
 BEFORE_THE_RULE = {
-    ("fwd", "BUY", date(2026, 11, 2)): dict(npv=42173.42864466559, ir01=24.683802775594813, fund01=-25.73523679364007, crybasis01=25.73523679364007, spot01=10322.50387418387, theta=-23.6615456630243),
-    ("fwd", "BUY", date(2027, 1, 28)): dict(npv=40096.398491646345, ir01=1.0954095256820437, fund01=-1.1393507602406316, crybasis01=1.1393507602406316, spot01=10396.58138391289, theta=-24.0921494222639),
+    ("fwd", "BUY", date(2026, 11, 2)): dict(npv=42088.589633651995, ir01=23.835447878969717, fund01=-24.88478721224965, crybasis01=24.88478721224965, spot01=10321.655484073735, theta=-23.66851901897462),
+    ("fwd", "BUY", date(2027, 1, 28)): dict(npv=40010.950649409155, ir01=0.24096656962501584, fund01=-0.28481439676397713, crybasis01=0.28481439676397713, spot01=10395.726905490517, theta=-24.09917282112292),
     ("opt", "BUY", date(2026, 11, 2)): dict(npv=136671.42092108683, ir01=12.114207700826228, fund01=-15.445877403952181, crybasis01=15.445877403952181, spot01=6403.759579531441, theta=-642.8323876024806, vega=1939.849432718387),
     ("opt", "BUY", date(2027, 1, 28)): dict(npv=41752.38171746718, ir01=0.48653927875420777, fund01=-0.5094154971156968, crybasis01=0.5094154971156968, spot01=9557.325579448378, theta=-1704.1725064992643, vega=100.83026597686694),
     ("ko", "SELL", date(2026, 11, 2)): dict(npv=-15579.620873842141, ir01=-0.2481630272250186, fund01=0.6238784300257976, crybasis01=-0.6238784300257976, spot01=250.8999137690098, theta=-203.8800250762597, vega=595.9248887312278),
@@ -1013,10 +1014,12 @@ def test_before_the_fixing_date_a_valuation_is_what_it_was_before_the_rule_exist
         assert {k: now[k] for k in was} == pytest.approx(was, rel=1e-12, abs=1e-9), (kind, on)
         assert not {"fixing", "provisional", "settled", "settlement_amount", "provisional_reason"} & set(now), (kind, on)
     sell = _value(_forward("SELL"), date(2026, 11, 2), fixings=stored)
-    assert sell["npv"] == pytest.approx(-42173.42864466559, rel=1e-12) and sell["spot01"] == pytest.approx(-10322.50387418387, rel=1e-12)
-    # and by hand, the forward: F = S·e^(−0.03 t)/e^(−0.04 t), NPV = 10 × (F − K) × e^(−0.04 t), t = 91/365 from 2 November to 1 February
-    t = (FIX_DAY + timedelta(days=3) - date(2026, 11, 2)).days / 365.0
-    assert BEFORE_THE_RULE[("fwd", "BUY", date(2026, 11, 2))]["npv"] == pytest.approx(10 * (104_000.0 * math.exp(0.01 * t) - K) * math.exp(-0.04 * t), rel=1e-12)
+    assert sell["npv"] == pytest.approx(-42088.589633651995, rel=1e-12) and sell["spot01"] == pytest.approx(-10321.655484073735, rel=1e-12)
+    # and by hand, the forward: read at its fixing date (88 days, 29 January), paid three days later (91 days, 1 February):
+    # F = S·e^(−0.03 t_fix)/e^(−0.04 t_fix), NPV = 10 × (F − K) × e^(−0.04 t_pay)
+    t_fix, t_pay = (FIX_DAY - date(2026, 11, 2)).days / 365.0, (FIX_DAY + timedelta(days=3) - date(2026, 11, 2)).days / 365.0
+    assert (t_fix, t_pay) == (88 / 365.0, 91 / 365.0)
+    assert BEFORE_THE_RULE[("fwd", "BUY", date(2026, 11, 2))]["npv"] == pytest.approx(10 * (104_000.0 * math.exp(0.01 * t_fix) - K) * math.exp(-0.04 * t_pay), rel=1e-12)
     assert stored.asked == []                                                                        # the store is not read before the fixing date
 
 
@@ -1276,10 +1279,15 @@ def test_a_forward_fixed_the_day_before_it_is_paid_is_live_then_fixed_then_settl
     pay = FIX_DAY + timedelta(days=1)
     stored = _Fixings(shared=dict(STORED))
     early, usual = _forward(fixing=FIX_DAY, settle=pay), _forward(fixing=pay, settle=pay)
-    # live before the fixing date: priced exactly as the forward that fixes on its settlement date (the pricer carries to the settlement date)
+    # live before the fixing date: the forward of the fixing date, discounted from the payment date (0.26.0; until then it was
+    # carried to the payment date and priced exactly as the forward that fixes there)
     for on in (date(2026, 11, 2), FIX_DAY - timedelta(days=1)):
         a, b = _value(early, on, fixings=stored), _value(usual, on, fixings=stored)
-        assert a == b and a["spot01"] > 0 and "fixing" not in a and "settled" not in a, on
+        yf = lambda d, on=on: (d - on).days / 365.0
+        assert a["npv"] == pytest.approx(10 * (104_000.0 * math.exp(0.01 * yf(FIX_DAY)) - 100_000.0) * math.exp(-0.04 * yf(pay)), rel=1e-12), on
+        assert b["npv"] == pytest.approx(10 * (104_000.0 * math.exp(0.01 * yf(pay)) - 100_000.0) * math.exp(-0.04 * yf(pay)), rel=1e-12), on
+        assert 0 < b["npv"] - a["npv"] < 40 and abs(a["theta"]) < 30                     # one day of carry on 10 BTC; and tomorrow it is not gone
+        assert a["spot01"] > 0 and "fixing" not in a and "settled" not in a, on
     assert stored.asked == []
     # the fixing date: the amount is known and discounted the one day to its payment
     for side, sign in (("BUY", 1.0), ("SELL", -1.0)):

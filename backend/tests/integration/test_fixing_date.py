@@ -1,0 +1,46 @@
+"""A digital-asset forward that fixes before it is paid, over the API: the forward is read at the fixing date and the
+amount is discounted from the settlement date (0.26.0). No fixing date, or one on the settlement date, is the price
+it always was."""
+from datetime import date, timedelta
+
+import pytest
+
+pytestmark = pytest.mark.integration
+
+ASOF = date(2026, 11, 2)               # the stack's market (backend/stack/seed.py)
+SETTLE = ASOF + timedelta(days=120)
+
+
+def _price(client, auth, **over):
+    body = {"pair": "BTCUSD", "shape": "NDF", "base_notional": 10, "direction": "BUY", "settlement_date": SETTLE.isoformat(), "forward_rate": 100_000, **over}
+    return client.post("/api/currency/forward/price", json=body, headers=auth)
+
+
+def test_a_forward_is_read_at_its_fixing_date_and_discounted_from_its_settlement_date(client, auth_a):
+    plain = _price(client, auth_a)
+    assert plain.status_code == 200, plain.text[:300]
+    plain = plain.json()
+    assert plain["fixing_date"] is None and "fixing date" not in plain["model"]
+    same = _price(client, auth_a, fixing_date=SETTLE.isoformat()).json()
+    assert {k: same[k] for k in ("forward", "npv", "spot01", "ir01", "theta", "fixing_date", "model")} == {k: plain[k] for k in ("forward", "npv", "spot01", "ir01", "theta", "fixing_date", "model")}
+
+    fix = SETTLE - timedelta(days=30)
+    early = _price(client, auth_a, fixing_date=fix.isoformat())
+    assert early.status_code == 200, early.text[:300]
+    early = early.json()
+    at_fix = _price(client, auth_a, settlement_date=fix.isoformat()).json()          # the forward that fixes and settles on the fixing date
+    assert early["fixing_date"] == fix.isoformat() and early["settlement_date"] == SETTLE.isoformat()
+    assert f"read at the fixing date ({fix.isoformat()})" in early["model"] and SETTLE.isoformat() in early["model"]
+    assert early["forward"] == pytest.approx(at_fix["forward"], rel=1e-12) and early["forward"] != pytest.approx(plain["forward"], rel=1e-5)
+    # the same amount, paid thirty days later: smaller by the discounting between the two dates, and by nothing else
+    ratio = early["npv"] / at_fix["npv"]
+    assert ratio == pytest.approx(plain["df_quote"] / at_fix["df_quote"], rel=1e-9) and 0.99 < ratio < 1.0
+    # dealt at the fair forward of its fixing date it is worth nothing
+    fair = _price(client, auth_a, fixing_date=fix.isoformat(), forward_rate=None).json()
+    assert fair["npv"] == pytest.approx(0.0, abs=1e-6) and fair["forward_rate"] == pytest.approx(early["forward"], rel=1e-12)
+
+    # a fixing date after the settlement date is refused; one on or before the valuation date is priced to the settlement date
+    late = _price(client, auth_a, fixing_date=(SETTLE + timedelta(days=1)).isoformat())
+    assert late.status_code == 422 and "cannot be after the settlement date" in late.text
+    past = _price(client, auth_a, fixing_date=ASOF.isoformat()).json()
+    assert past["fixing_date"] is None and past["npv"] == plain["npv"]

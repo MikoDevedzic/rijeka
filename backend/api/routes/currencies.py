@@ -661,6 +661,7 @@ class CurrencyPriceRequest(BaseModel):
     settlement_date: Optional[date] = Field(None, description="SPOT: the spot date (T+2, USDCAD T+1); omitted on a digital asset: the first New York business day after today, said in date_notes")
     valuation_date: Optional[date] = None
     forward_rate: Optional[float] = Field(None, description="contract rate K; omitted = at the fair forward")
+    fixing_date: Optional[date] = Field(None, description="a cash-settled forward's fixing date, when it is before the settlement date: the forward is priced to it")
     direction: str = "BUY"
     spot: Optional[float] = Field(None, gt=0)
     base_rate_pct: Optional[float] = Field(None, description="digital asset only: funding override, % p.a.")
@@ -719,14 +720,19 @@ def spot_date(val_date: date, crypto: bool, base: Optional[str] = None, quote: O
 
 def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: float, settlement: Optional[date],
            val_date: date, K: Optional[float], direction: str, spot_override: Optional[float],
-           base_rate_pct: Optional[float], strike_dp: Optional[int] = None) -> dict:
+           base_rate_pct: Optional[float], strike_dp: Optional[int] = None, fixing_date: Optional[date] = None) -> dict:
     """`strike_dp`: with no K, the fair forward rounded to that many decimals is the contract rate, so one request
-    prices the strike the ticket books; `forward` stays the unrounded fair forward."""
+    prices the strike the ticket books; `forward` stays the unrounded fair forward.
+    `fixing_date`: a forward settled in cash against a fixing read before its settlement date is priced to that
+    fixing: the forward, its points and its carry are the fixing date's, and the amount is discounted from the
+    settlement date. A fixing date that is not after the valuation date (the settlement rule's ground) or not before
+    the settlement date changes nothing."""
     if K is None and strike_dp is not None:
         fair = _price(db, user_id, pair, shape=shape, base_notional=base_notional, settlement=settlement, val_date=val_date, K=None,
-                      direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct)
+                      direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct, fixing_date=fixing_date)
         return _price(db, user_id, pair, shape=shape, base_notional=base_notional, settlement=settlement, val_date=val_date,
-                      K=round(float(fair["forward"]), int(strike_dp)), direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct)
+                      K=round(float(fair["forward"]), int(strike_dp)), direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct,
+                      fixing_date=fixing_date)
     st = pair_state(db, user_id, pair, settlement=False)
     base, quote, crypto = st["base"], st["quote"], st["crypto"]
     shape = (shape or "FORWARD").upper()
@@ -749,6 +755,12 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
         S, s_src = st["spot"], f"snapshot {st['spot_as_of']}"
     else:
         raise HTTPException(status_code=422, detail=f"No {pair} spot saved. Click SNAP SPOT or pass spot.")
+    # the date the forward is read at: the settlement date, or the fixing date of a forward that fixes before it
+    # settles (the amount is then paid on the settlement date: price_currency_forward's payment_date)
+    if fixing_date is not None and fixing_date > settle:
+        raise HTTPException(status_code=422, detail=f"the fixing date ({fixing_date}) cannot be after the settlement date ({settle})")
+    read_at = fixing_date if (fixing_date is not None and shape != "SPOT" and val_date < fixing_date < settle) else settle
+    paid = {"payment_date": settle} if read_at != settle else {}
     q_curve = _curve(db, user_id, st["quote_curve"], val_date)
     kw: dict[str, Any] = {}
     if crypto:
@@ -776,8 +788,8 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     fx_spot = None if crypto else spot_date(val_date, False, base, quote)
     try:
         implied = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
-                                         forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
-                                         quote_curve=q_curve, direction=direction, pip=st["pip"], spot_date=fx_spot, **kw)
+                                         forward_rate=K, spot=S, valuation_date=val_date, settlement_date=read_at,
+                                         quote_curve=q_curve, direction=direction, pip=st["pip"], spot_date=fx_spot, **paid, **kw)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     mode = forward_mode(db, user_id)          # digital assets too: futures / forward prices by expiry are a quoted curve
@@ -794,7 +806,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     mkt_pts = None
     if fc:
         sd0 = fx_spot or val_date
-        days = (settle - sd0).days          # forward points are quoted from the spot date
+        days = (read_at - sd0).days         # forward points are quoted from the spot date, to the date the forward is read at
 
         def parity_forward(d: int) -> float:
             # the two curves' forward d days from spot: the price already made for the settlement date, or one more
@@ -815,9 +827,9 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
             sd = fx_spot or val_date
             rate_b = implied_base_rate(f_mkt, S, implied.df_quote, float(q_curve.df(sd)), implied.t, year_fraction(val_date, sd))
             r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=base_notional,
-                                       forward_rate=K, spot=S, valuation_date=val_date, settlement_date=settle,
+                                       forward_rate=K, spot=S, valuation_date=val_date, settlement_date=read_at,
                                        quote_curve=q_curve, direction=direction, pip=st["pip"], spot_date=fx_spot,
-                                       base_rate=rate_b)
+                                       base_rate=rate_b, **paid)
             kw.pop("base_curve", None)          # on quoted points the second currency is the one rate the points imply, not its curve
             f_src = f"market points ({pair}_FWD {st['forward_curve']['valuation_date']}, {marks_label(st['forward_curve']['source'])}), basis {basis_pts:+.1f} pts vs parity"
             if at.kind == "IMPLIED" and at.beyond:
@@ -839,6 +851,10 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     # the curves the price was built on, pillar by pillar (a flat rate has none of its own: its name is in base_discounting)
     out["curves"] = {"quote": {"id": st["quote_curve"], "pillars": curve_points(q_curve, val_date)},
                      "base": ({"id": st["base_curve"], "pillars": curve_points(kw["base_curve"], val_date)} if kw.get("base_curve") is not None else None)}
+    # a forward priced to its fixing date says so: the date it is read at, and that the amount is paid on settlement
+    out["fixing_date"] = read_at.isoformat() if read_at != settle else None
+    if read_at != settle:
+        out["model"] += f"; the forward is read at the fixing date ({read_at.isoformat()}) and the amount paid on {settle.isoformat()} is discounted from there"
     out["crypto"] = crypto
     out["fund01"] = out.get("ir01_base") if crypto else None
     out["crybasis01"] = crybasis01(out["fund01"])
@@ -878,7 +894,7 @@ def price_forward(req: CurrencyPriceRequest, db: Session = Depends(get_db), user
     val_date = req.valuation_date or date.today()
     return _price(db, user["sub"], pair, shape=req.shape, base_notional=req.base_notional, settlement=req.settlement_date,
                   val_date=val_date, K=req.forward_rate, direction=req.direction, spot_override=req.spot,
-                  base_rate_pct=req.base_rate_pct, strike_dp=req.strike_dp)
+                  base_rate_pct=req.base_rate_pct, strike_dp=req.strike_dp, fixing_date=req.fixing_date)
 
 
 class CurrencyOptionRequest(BaseModel):
@@ -1112,10 +1128,12 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
         if live:
             out["state"] = "LIVE"
         return out
+    booked_fixing = None
     try:
         if itype == "CRYPTO_FORWARD":
             k = rule.parse(trade)             # the one reading of a digital asset's terms
             pair, notional, K, settle, shape = k["pair"], k["notional"], k["strike"], k["settle"], "NDF"
+            booked_fixing = k["fixing_date"]  # before it is reached the forward is priced to it (_price)
         else:
             pair = str(t.get("currency_pair") or f"{t.get('base_currency','')}{t.get('quote_currency','')}").upper()
             notional = float(t.get("base_notional") or trade.notional)
@@ -1127,7 +1145,7 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
     split_pair(pair)
     out = _price(db, user["sub"], pair, shape="FORWARD" if shape == "SPOT" else shape, base_notional=notional,
                  settlement=settle, val_date=val_date, K=K, direction=str(t.get("direction") or "BUY"),
-                 spot_override=None, base_rate_pct=None)
+                 spot_override=None, base_rate_pct=None, fixing_date=booked_fixing)
     out.update(trade_id=str(trade.id), trade_ref=trade.trade_ref, instrument_type=itype, npv_ccy=out["quote_currency"],
                legs=[], shape=shape)
     if live:

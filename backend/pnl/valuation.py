@@ -62,7 +62,7 @@ def _currency_terms(trade) -> tuple[str, dict]:
         k = rule.parse(trade)
         pair = k["pair"]
         if k["shape"] == "FORWARD":
-            terms = {"notional": k["notional"], "K": k["strike"], "settle": k["settle"], "shape": "NDF"}
+            terms = {"notional": k["notional"], "K": k["strike"], "settle": k["settle"], "shape": "NDF", "fixing_date": k["fixing_date"]}
         else:
             terms = {"notional": k["notional"], "K": k["strike"], "shape": "OPTION", "option_type": k["option_type"], "expiry": k["expiry"],
                      "settle": k["settle"], "settlement_type": "NON_DELIVERABLE", "style_fields": k["style_fields"]}
@@ -252,8 +252,13 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
                           "asof": {qid: mkt.snapshot_date(qid)}, "fallback": fallback, "settled": False,
                           "model": f"{on}: the settlement amount, paid {settle}", **rule.report(fix)}, crypto)
     fx_spot = None if crypto else spot_date(val_date, False, base, quote)   # an FX spot quote settles T+2; the forward carries from there
+    # a forward that fixes before it settles is read at its fixing date and paid on its settlement date, as the ticket
+    # prices it (api/routes/currencies._price)
+    fixing = t.get("fixing_date")
+    read_at = fixing if (fixing is not None and t["shape"] not in ("OPTION", "SPOT") and val_date < fixing < settle) else settle
+    paid = {"payment_date": settle} if read_at != settle else {}
     r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,
-                               valuation_date=val_date, settlement_date=settle, quote_curve=q_curve, direction=t["direction"], pip=pip,
+                               valuation_date=val_date, settlement_date=read_at, quote_curve=q_curve, direction=t["direction"], pip=pip, **paid,
                                spot_date=fx_spot, **kw)
     # The desk's forward mode: on MARKET, quoted forward points ({PAIR}_FWD, as of the market date)
     # replace parity, exactly as the ticket prices (currencies._price). Points are a curve in
@@ -261,7 +266,7 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
     pts = forward_points(mkt, pair)
     if pts and t["shape"] != "SPOT" and market_mode(mkt):
         sd0 = fx_spot or val_date
-        days = (settle - sd0).days                             # points are quoted from the spot date
+        days = (read_at - sd0).days                            # points are quoted from the spot date, to the date the forward is read at
         parity_at_settle = r.forward
 
         def parity_forward(d: int) -> float:
@@ -279,8 +284,8 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
             sd = fx_spot or val_date
             rate_b = implied_base_rate(f_mkt, S, r.df_quote, float(q_curve.df(sd)), r.t, year_fraction(val_date, sd))
             r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,
-                                       valuation_date=val_date, settlement_date=settle, quote_curve=q_curve, direction=t["direction"], pip=pip,
-                                       spot_date=fx_spot, base_rate=rate_b)
+                                       valuation_date=val_date, settlement_date=read_at, quote_curve=q_curve, direction=t["direction"], pip=pip,
+                                       spot_date=fx_spot, base_rate=rate_b, **paid)
     if t["shape"] == "OPTION":
         return _taxonomy(_value_fx_option(t, pair, base, quote, S, r, val_date, mkt, qid, fallback, q_curve, kw, fix), crypto)
     out = {"npv": float(r.npv), "ccy": quote, "ir01": getattr(r, "ir01", None), "ir01_disc": getattr(r, "ir01_disc", None),

@@ -1,7 +1,24 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.15). Commits on `main` are the detail.
+methodology document carries its own version (v1.16). Commits on `main` are the detail.
+
+## 0.26.0 · 12 November 2026
+
+**A forward is priced to its fixing date.** Item 5 of the Phase 1 exit list.
+
+- **What was wrong.** A digital-asset forward fixes on its valuation date and is paid on its settlement date. Until
+  now it was priced as if it fixed on the settlement date: the carry between the two dates was counted, about 1.4bp
+  of notional per day at a 5 % basis, and the gap was limited to seven days to bound the error.
+- **Now.** The forward is read at the fixing date and the amount is discounted from the settlement date:
+  V = ±N (F(T_fix) − K) D(T_pay). One rule in `pricing/currency_forward.py` (`payment_date`), used by the ticket
+  (`fixing_date` on `POST /api/currency/forward/price`), by a booked trade's price and by the P&L valuation. The
+  limit of seven days is gone: any date from tomorrow to the settlement date. The ticket's line says "priced to the
+  fixing date". One day before the fixing, theta is the day's carry, not the whole value.
+- **What moves.** A booked forward whose fixing date is before its settlement date: by the carry over the gap (the
+  benchmark's default is one day: about 1.4bp of notional at a 5 % basis). A forward that fixes on its settlement
+  date (the venue's morning price, and every currency pair) does not move, and neither does any option.
+- **Not done.** An XVA run on such a forward still simulates the level to the settlement date.
 
 ## 0.25.0 · 12 November 2026
 

@@ -385,6 +385,8 @@ export function priceRequest(t) {
   if (n.strike.given) body.forward_rate = n.strike.value; else blankK(body, 'forward_rate')
   if (n.spotOv.given) body.spot = n.spotOv.value
   if (n.fundOv.given && t.crypto) body.base_rate_pct = n.fundOv.value
+  // a forward that fixes before it settles is priced to its fixing date: the price is of both dates
+  if (t.shape !== 'SPOT' && t.fixingDate && t.settlement && t.fixingDate < t.settlement) body.fixing_date = t.fixingDate
   return { path: '/api/currency/forward/price', body }
 }
 

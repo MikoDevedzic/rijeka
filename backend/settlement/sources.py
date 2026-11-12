@@ -35,7 +35,6 @@ SETTLEMENT_SOURCES = {
 INSTRUMENTS = ("CRYPTO_FORWARD", "CRYPTO_OPTION")
 SETTLEMENT_FIELDS = ("digital_asset", "settlement_price_source", "valuation_time", "valuation_date", "settlement_date")     # what the rule reads
 SOURCE_MAX = 80
-MAX_FIXING_GAP_DAYS = 7                  # a forward's fixing date is at most this many days before its settlement date
 TYPO_DISTANCE = 2                        # a name this close to the feed's or the venue's is taken for it
 TYPO_TOKEN_MIN = 5                       # only a word this long is compared with the venue's name, so short real names pass
 # What an option ticket older than 0.14.0 writes beside the benchmark. Countersigning depends on it too: booking the
@@ -137,9 +136,10 @@ def check_booked(instrument_type, terms, trade_date=None, maturity_date=None) ->
     published at one time, and a record that says another could not be settled on it. A trade that names no
     source is left to the confirmation, which requires one.
 
-    A forward's fixing date (terms.valuation_date) lies after the trade date and on or before the settlement date,
-    and at most MAX_FIXING_GAP_DAYS before the settlement date; a record without one fixes on its
-    settlement date, as every forward did before the ticket could say otherwise."""
+    A forward's fixing date (terms.valuation_date) lies after the trade date and on or before the settlement date;
+    a record without one fixes on its settlement date, as every forward did before the ticket could say otherwise.
+    (Until 0.26.0 it could be at most seven days before the settlement date, because the forward was carried to the
+    settlement date; it is priced to its fixing date now.)"""
     itype = str(instrument_type or "").upper()
     if itype not in INSTRUMENTS or not isinstance(terms, dict):
         return
@@ -156,10 +156,6 @@ def check_booked(instrument_type, terms, trade_date=None, maturity_date=None) ->
             # a fixing dated the trade date may be published already (the venue's is, from 08:10 UTC): a price known
             # when the trade is struck is not a fixing of it
             raise ValueError(f"the fixing date must be after the trade date (valuation_date {fixing}, trade date {traded})")
-        if settle is not None and (settle - fixing).days > MAX_FIXING_GAP_DAYS:
-            # before its fixing date the forward is carried to the settlement date, not to the fixing date: an
-            # overstatement of the carry over the gap, small at a few days and not at months
-            raise ValueError(f"the fixing date can be at most {MAX_FIXING_GAP_DAYS} days before the settlement date")
     source = terms.get("settlement_price_source")
     if source is None or source == "":
         return

@@ -224,3 +224,48 @@ def test_forward_points_interpolation_and_market_mode():
     assert b["forward"] == pytest.approx(1.1133 + expect_pts * 1e-4)
     assert b["basis_points"] == pytest.approx(expect_pts - b["implied_points"])
     assert b["forward_source"].startswith("market points (EURUSD_FWD")
+
+
+# ── a forward that fixes before it is paid ─────────────────────────────────
+
+def _fwd(settle, pay=None, k=None, **over):
+    kw = dict(base_currency="BTC", quote_currency="USD", base_notional=25, forward_rate=k, spot=104_000.0, valuation_date=VAL,
+              settlement_date=settle, quote_curve=_c(0.04), base_curve=_c(0.01), direction="BUY")
+    return price_currency_forward(**{**kw, **over}, **({"payment_date": pay} if pay is not None else {}))
+
+
+def test_no_payment_date_or_the_same_date_changes_nothing():
+    plain, same = _fwd(SET, k=100_000.0), _fwd(SET, SET, k=100_000.0)
+    for f in ("forward", "npv", "spot01", "ir01", "ir01_disc", "ir01_base", "theta", "df_quote", "df_base", "quote_rate", "forward_points", "delta_base_units"):
+        assert getattr(same, f) == getattr(plain, f), f
+    assert plain.df_pay == plain.df_quote and plain.t_pay == plain.t
+
+
+def test_fixed_before_it_is_paid_reads_the_forward_at_the_fixing_and_discounts_from_the_payment():
+    fix, pay = date(2026, 12, 29), SET                      # fixes a month before it is paid
+    usd, btc = _c(0.04), _c(0.01)
+    r = _fwd(fix, pay, k=100_000.0)
+    f_fix = 104_000.0 * btc.df(fix) / usd.df(fix)
+    assert r.forward == pytest.approx(f_fix, rel=1e-12)                              # the forward of the fixing date, not of the payment date
+    assert r.forward != pytest.approx(_fwd(pay, k=100_000.0).forward, rel=1e-6)
+    assert r.npv == pytest.approx(25 * (f_fix - 100_000.0) * usd.df(pay), rel=1e-12)  # an amount known at the fixing, paid at the settlement
+    assert r.df_quote == pytest.approx(usd.df(fix), rel=1e-12) and r.df_pay == pytest.approx(usd.df(pay), rel=1e-12)
+    assert r.t_pay > r.t > 0
+    assert r.npv / _fwd(fix, k=100_000.0).npv == pytest.approx(usd.df(pay) / usd.df(fix), rel=1e-12)   # against one paid on its fixing date
+    assert _fwd(fix, pay).npv == pytest.approx(0.0, abs=1e-9)                        # dealt at the fair forward of its fixing date
+    assert _fwd(fix, pay, k=100_000.0, direction="SELL").npv == pytest.approx(-r.npv, rel=1e-12)
+    # the rate sensitivity is the bump of both curves: the forward moves over the time to the fixing, the discount over the time to the payment
+    up = price_currency_forward(base_currency="BTC", quote_currency="USD", base_notional=25, forward_rate=100_000.0, spot=104_000.0, valuation_date=VAL,
+                                settlement_date=fix, payment_date=pay, quote_curve=_c(0.0401), base_curve=btc, direction="BUY")
+    assert r.ir01_disc == pytest.approx(up.npv - r.npv, rel=2e-3)
+    # the day before the fixing, tomorrow's value is the amount at today's spot, still to be paid: not nothing
+    eve = _fwd(fix, pay, k=100_000.0, valuation_date=date(2026, 12, 28))
+    c = Curve(valuation_date=date(2026, 12, 28), flat_rate=0.04)
+    eve = _fwd(fix, pay, k=100_000.0, valuation_date=date(2026, 12, 28), quote_curve=c, base_curve=Curve(valuation_date=date(2026, 12, 28), flat_rate=0.01))
+    assert eve.npv + eve.theta == pytest.approx(25 * (104_000.0 - 100_000.0) * c.df(pay) / c.df(fix), rel=1e-12)
+    assert abs(eve.theta) < 0.01 * abs(eve.npv)
+
+
+def test_a_payment_before_the_fixing_is_refused():
+    with pytest.raises(ValueError):
+        _fwd(SET, date(2027, 1, 27), k=100_000.0)

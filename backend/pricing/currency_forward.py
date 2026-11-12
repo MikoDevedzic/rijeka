@@ -69,6 +69,8 @@ class CurrencyForwardResult:
     spot01: float = 0.0             # dNPV for +1 % spot: FX01 for a pair, CRY01 for a digital asset
     theta: float = 0.0              # one day's carry: NPV one day later, same spot and curves
     t_spot: float = 0.0             # T_s: valuation date to the spot date the forward is carried from; 0 when spot settles at once
+    df_pay: float = 0.0             # DF_q to the date the amount is paid: df_quote unless the forward is read at an earlier fixing date
+    t_pay: float = 0.0              # the time to that date
 
 
 def year_fraction(valuation_date: date, settlement_date: date) -> float:
@@ -102,9 +104,15 @@ def price_currency_forward(
     direction: str = "BUY",
     pip: float = 1e-4,
     spot_date: Optional[date] = None,
+    payment_date: Optional[date] = None,
 ) -> CurrencyForwardResult:
     """Exactly one of base_curve / base_rate gives the base-currency discounting. spot_date: the date the
-    quoted spot settles (FX pairs); None for an asset whose quoted spot settles at once."""
+    quoted spot settles (FX pairs); None for an asset whose quoted spot settles at once.
+
+    payment_date: for a forward settled in cash against a fixing read BEFORE the cash is paid. `settlement_date` is
+    then the date the forward is read at (the fixing date): F, the points, t and the carry all run to it; and the
+    amount N·(F − K) is paid on `payment_date`, so every value is discounted from there. None, or the same date:
+    the forward is read and paid on one date, as every forward was before 0.26.0."""
     d = str(direction or "BUY").upper()
     if d not in DIRECTIONS:
         raise ValueError("direction must be BUY or SELL (of the base currency)")
@@ -116,6 +124,8 @@ def price_currency_forward(
         raise ValueError("settlement_date must be after the valuation date")
     if (base_curve is None) == (base_rate is None):
         raise ValueError("give base_curve or base_rate, not both")
+    if payment_date is not None and payment_date < settlement_date:
+        raise ValueError("payment_date cannot be before the date the forward is read at")
 
     sign = 1.0 if d == "BUY" else -1.0
     t = year_fraction(valuation_date, settlement_date)
@@ -140,15 +150,24 @@ def price_currency_forward(
     fq, fb = dfs(valuation_date, sd)            # spot to settlement
     F = spot * fb / fq
     K = float(forward_rate) if forward_rate is not None else F
+    # the amount is paid on the payment date: the discount factor to it, and the time to it for a shift of the curve
+    paid_later = payment_date is not None and payment_date > settlement_date
+    df_pay = float(quote_curve.df(payment_date)) if paid_later else df_q
+    if df_pay <= 0:
+        raise ValueError("discount factors must be positive")
+    t_pay = year_fraction(valuation_date, payment_date) if paid_later else t
+    df_read = df_q                              # to the date the forward is read at
+    df_q = df_pay                               # every value below is discounted from the payment date
     npv = sign * base_notional * (F - K) * df_q
 
     tau = max(t - t_s, 0.0)
     npv_b = sign * base_notional * (F * math.exp(-1e-4 * tau) - K) * df_q                          # base curve +1bp
-    npv_q = sign * base_notional * (F * math.exp(1e-4 * tau) - K) * df_q * math.exp(-1e-4 * t)      # quote curve +1bp
+    npv_q = sign * base_notional * (F * math.exp(1e-4 * tau) - K) * df_q * math.exp(-1e-4 * t_pay)  # quote curve +1bp
 
     # One day later, same spot and the same curves: discount factors unwind by one day, and so does the spot date.
     d1 = valuation_date + timedelta(days=1)
-    if settlement_date > d1:
+    # A forward read tomorrow and paid later is not gone tomorrow: it is the amount at the same spot, still to be paid.
+    if (payment_date if paid_later else settlement_date) > d1:
         df_q1 = df_q / max(float(quote_curve.df(d1)), 1e-12)
         sd1 = sd + timedelta(days=1) if spot_date is not None and sd > valuation_date else d1
         fq1, fb1 = dfs(d1, sd1)
@@ -162,8 +181,8 @@ def price_currency_forward(
         base_currency=str(base_currency).upper(), quote_currency=str(quote_currency).upper(), direction=d,
         base_notional=float(base_notional), quote_notional=float(base_notional) * K,
         spot=float(spot), forward=F, forward_rate=K, forward_points=(F - spot) / pip if pip else F - spot,
-        npv=npv, df_base=df_b, df_quote=df_q, t=t,
-        base_rate=_zero(df_b, t), quote_rate=_zero(df_q, t), implied_carry=(F / spot - 1.0) / t,
+        npv=npv, df_base=df_b, df_quote=df_read, t=t, df_pay=df_pay, t_pay=t_pay,
+        base_rate=_zero(df_b, t), quote_rate=_zero(df_read, t), implied_carry=(F / spot - 1.0) / t,
         delta_quote_per_pct=sign * base_notional * df_q * F * 0.01,
         delta_base_units=sign * base_notional * df_q * F / spot,
         rho_base_per_bp=npv_b - npv, rho_quote_per_bp=npv_q - npv, t_spot=t_s,

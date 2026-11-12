@@ -27,7 +27,7 @@ const fmt = (n, d = 2) => formatRead(n, d)
 const rateDp = (pair) => !pair ? 2 : CRYPTO_BASES.includes(pair.slice(0, 3)) ? 2 : pair === 'USDJPY' ? 3 : 5
 const iso = (d) => d.toISOString().slice(0, 10)
 import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
-import { settlementOptions, settlementTerms, settlementLabel, settlementNote, defaultFixingDate, clampFixingDate, earliestFixingDate, fixingCaption, MAX_FIXING_GAP_DAYS } from './fx-settlement'
+import { settlementOptions, settlementTerms, settlementLabel, settlementNote, defaultFixingDate, clampFixingDate, earliestFixingDate, fixingCaption } from './fx-settlement'
 import { TENORS, CRYPTO_LIMIT_NOTE, CRYPTO_FORWARD_LIMIT_NOTE, tenorsFor, priceRequest, priceable, styleFields as styleFieldsOf, styleSends, seedLevels, seedVolPct, yearsTo, forwardCaption, ticketToday,
          tenorDate, tenorOf, tenorLabel, firstDate, lastDate, holdToLast, formatRead, formatInput, readNumbers, unreadable, overrideNote, quoteFor, createTicketPricer,
          tenorDates, tenorDateFor, tenorSettlement, rollDate, rollRule, rolledTag, spotDateFor, spotLagLabel, bookedNotional, dateCap, closedWhy,
@@ -170,8 +170,12 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   if (onScreen && onScreen.fwdKey === fwdKey) knownK.current = { fwdKey, K: onScreen.defaultK ?? bookedStrike(quote.forward, dp) }
   const strikeTyped = readNumbers({ strike }).strike.given
   const defaultK = !apiRounds.current && !strikeTyped && knownK.current && knownK.current.fwdKey === fwdKey ? knownK.current.K : null
+  // the fixing date the price is made for: a digital-asset forward that fixes before it settles is priced to its fixing date
+  const priceFixing = (crypto && !option && settlementOptions(cur).length > 0)
+    ? ((fixEdit ? clampFixingDate({ date: fixEdit, settlementDate: settlement, today: todayIso }) : null)
+       || defaultFixingDate({ settlementDate: settlement, source: settlementTerms(cur, settleSrc, 'FORWARD'), today: todayIso })) : null
   // every term the price depends on, as fx-ticket.js reads them
-  const ticket = { option, shape, crypto, pair, notional, direction, settlement, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv,
+  const ticket = { fixingDate: priceFixing, option, shape, crypto, pair, notional, direction, settlement, strike, spotOv, fundOv, optType, expiry, optSettle, cashSettled, volOv,
                    style, payout, payoutCcy, barrierType, barrier, lowerB, upperB, rebate, touchType, payAtHit, strikeDp: dp, defaultK }
   const nums = readNumbers(ticket)                        // every number of the form, read once by the ticket's one parser
   // Digital assets only: the sources the pair settles on (absent in an older API answer: no choice, the default as before).
@@ -180,7 +184,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const settle = settlementTerms(cur, crypto ? settleSrc : '', option ? 'OPTION' : 'FORWARD')
   const settleShown = settleOptions.find(s => s.source === settle.source)
   // The fixing date of a digital-asset forward (the record's valuation_date), given the date it settles: the user's own
-  // date held inside its limits (tomorrow or seven days before settlement, whichever is later, to settlement), else the default for the source. Without listed sources (an older API
+  // date held inside its limits (tomorrow to settlement), else the default for the source. Without listed sources (an older API
   // answer) there is no field and the trade fixes on its settlement date, as it always did.
   const hasFixingDate = crypto && !option && settleOptions.length > 0
   // null when no fixing date is possible (the trade settles today or earlier)
@@ -524,8 +528,8 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         <div className="tbw-fx-cell" style={{ flex: '0 1 150px' }}>
           <div className="tbw-lbl tbw-fx-lbl">FIXING DATE</div>
           {/* bound to the date that will be booked: a typed date is held inside its limits as it is typed, and again on blur */}
-          <input type="date" data-testid="fixing-date" value={fixingShown || ''} min={earliestFixingDate({ settlementDate: settlesShown, today: todayIso }) || undefined} max={settlesShown || undefined}
-                 title={`at most ${MAX_FIXING_GAP_DAYS} days before the settlement date`}
+          <input type="date" data-testid="fixing-date" value={fixingShown || ''} min={earliestFixingDate({ today: todayIso }) || undefined} max={settlesShown || undefined}
+                 title="after today, up to the settlement date; the forward is priced to this date"
                  onChange={e => setFixEdit(clampFixingDate({ date: e.target.value, settlementDate: settlesShown, today: todayIso }) || '')}
                  onBlur={() => { if (fixEdit) setFixEdit(clampFixingDate({ date: fixEdit, settlementDate: settlesShown, today: todayIso }) || '') }} />
         </div>

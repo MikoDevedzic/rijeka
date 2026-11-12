@@ -68,17 +68,12 @@ export function addDays(date, n) {
   return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + n)).toISOString().slice(0, 10) : null
 }
 
-// Between the fixing date and the settlement date the pricer carries the forward to the settlement date, an error
-// that grows with the gap, so the gap is capped (the API refuses a larger one with 422).
-export const MAX_FIXING_GAP_DAYS = 7
-
-// The first fixing date a ticket accepts: the later of tomorrow and the settlement date less the largest gap.
-// Tomorrow, not today: the fixing date is strictly after the trade date (today's fixing of a venue's source is
-// already published, and the API refuses a valuation date on or before the trade date). `today` is the UTC day.
-export function earliestFixingDate({ settlementDate, today }) {
-  const first = addDays(today, 1), floor = addDays(settlementDate, -MAX_FIXING_GAP_DAYS)
-  if (!first) return floor
-  return floor && floor > first ? floor : first
+// The first fixing date a ticket accepts: tomorrow. The fixing date is strictly after the trade date (today's fixing
+// of a venue's source is already published, and the API refuses a valuation date on or before the trade date).
+// `today` is the UTC day. There is no limit on how long before the settlement date a forward may fix: it is priced
+// to its fixing date (until 0.26.0 it was carried to the settlement date and the gap was capped at seven days).
+export function earliestFixingDate({ today }) {
+  return addDays(today, 1) || null
 }
 
 // A fixing date held inside its limits: not before the earliest date above, not after the settlement date.
@@ -104,11 +99,11 @@ export function defaultFixingDate({ settlementDate, source, today }) {
 }
 
 // The muted line that says when the trade fixes: the forward on its fixing date, the option at its expiry.
-// A forward that fixes before it settles is still priced to its settlement date, and the line says so.
+// A forward that fixes before it settles is priced to its fixing date and paid on its settlement date, and the line says so.
 export function fixingCaption({ product, fixingDate, expiryDate, settlementDate, time }) {
   const at = time ? ` at ${time}` : ''
   if (product === 'OPTION') return expiryDate ? `fixes at expiry, ${expiryDate}${at}` : ''
   if (!fixingDate) return settlementDate ? 'no fixing date is possible: the settlement date must be after today' : ''
   if (!settlementDate) return `fixes on ${fixingDate}${at}`
-  return `fixes on ${fixingDate}${at}, settles ${settlementDate}${fixingDate !== settlementDate ? '; priced to the settlement date' : ''}`
+  return `fixes on ${fixingDate}${at}, settles ${settlementDate}${fixingDate !== settlementDate ? '; priced to the fixing date' : ''}`
 }

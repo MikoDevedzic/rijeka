@@ -198,11 +198,11 @@ valuation from the fixing date on:
   does not itself decide (the amount is the one that holds if the barrier was never touched).
 
 A forward's fixing date is a field on the ticket (the record's `valuation_date`): the settlement date for the
-venue's morning price, one day earlier for a benchmark, editable from tomorrow, and no earlier than seven days
-before settlement, to the settlement date (before its fixing date a forward is priced to the settlement date, an
-error that grows with the gap). An option fixes at its expiry. Booking checks the pairing
+venue's morning price, one day earlier for a benchmark, editable from tomorrow to the settlement date. A forward that fixes before it settles is priced to its fixing date:
+the forward is read there and the amount is discounted from the settlement date (`payment_date` in
+`pricing/currency_forward.py`; the ticket, a booked trade's price and the P&L valuation share it). An option fixes at its expiry. Booking checks the pairing
 (`settlement/sources.check_booked`, called by both booking routes and when a trade's terms are edited): trade
-date < fixing date ≤ settlement date, at most seven days before it; a source the pair lists is booked with that
+date < fixing date ≤ settlement date; a source the pair lists is booked with that
 source's time; a name that reads like the venue's is refused for a desk's own source.
 
 Each pair has two sources (`settlement/sources.py`): the venue's delivery price, stored automatically, and a

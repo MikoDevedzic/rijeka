@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { settlementDefault, settlementOptions, settlementTerms, settlementLabel, settlementNote, addDays, defaultFixingDate, clampFixingDate, earliestFixingDate, fixingCaption, MAX_FIXING_GAP_DAYS } from './fx-settlement'
+import { settlementDefault, settlementOptions, settlementTerms, settlementLabel, settlementNote, addDays, defaultFixingDate, clampFixingDate, earliestFixingDate, fixingCaption } from './fx-settlement'
 
 // synthetic pair rows in the shape of GET /api/currency/pairs
 const SOURCES = [
@@ -121,31 +121,21 @@ describe('the fixing date of a digital-asset forward', () => {
     expect(defaultFixingDate({ settlementDate: '2026-02-30', source: AUTO, today })).toBeNull()
     expect(defaultFixingDate({ settlementDate: '2026-06-10', source: undefined, today })).toBe('2026-06-09')
   })
-  it('clamps a typed date above the settlement date, and leaves one inside the last seven days alone', () => {
+  it('clamps a typed date above the settlement date and leaves any date from tomorrow to the settlement date alone', () => {
     const settlementDate = '2026-06-10'
-    expect(MAX_FIXING_GAP_DAYS).toBe(7)
     expect(clampFixingDate({ date: '2026-06-11', settlementDate, today })).toBe('2026-06-10')
     expect(clampFixingDate({ date: '2027-01-01', settlementDate, today })).toBe('2026-06-10')
-    for (const inside of ['2026-06-03', '2026-06-07', settlementDate]) expect(clampFixingDate({ date: inside, settlementDate, today })).toBe(inside)
+    // no limit on the gap since 0.26.0 (the forward is priced to its fixing date): months before the settlement date stands
+    for (const inside of ['2026-06-03', '2026-06-07', settlementDate, '2026-06-02', '2026-04-01']) expect(clampFixingDate({ date: inside, settlementDate, today })).toBe(inside)
   })
-  it('caps the gap to the settlement date at seven days: a date eight days before clamps to seven', () => {
+  it('the first fixing date is tomorrow, whatever the settlement date; today and earlier are never accepted', () => {
     const settlementDate = '2026-06-10'
-    expect(clampFixingDate({ date: '2026-06-02', settlementDate, today })).toBe('2026-06-03')
-    expect(clampFixingDate({ date: '2026-04-01', settlementDate, today })).toBe('2026-06-03')
-    expect(clampFixingDate({ date: '2025-12-31', settlementDate, today })).toBe('2026-06-03')
-    expect(clampFixingDate({ date: '2026-02-20', settlementDate: '2026-03-05', today: '2026-01-15' })).toBe('2026-02-26')      // across a month end
-    expect(earliestFixingDate({ settlementDate, today })).toBe('2026-06-03')
-  })
-  it('tomorrow still wins when it is later than seven days before the settlement date; today is never accepted', () => {
-    const settlementDate = '2026-03-13'                                   // three days from today
     expect(earliestFixingDate({ settlementDate, today })).toBe(tomorrow)
-    expect(clampFixingDate({ date: '2026-03-06', settlementDate, today })).toBe(tomorrow)
+    expect(earliestFixingDate({ today })).toBe(tomorrow)
+    expect(earliestFixingDate({ today: null })).toBeNull()
     expect(clampFixingDate({ date: today, settlementDate, today })).toBe(tomorrow)
-    expect(clampFixingDate({ date: '2026-03-12', settlementDate, today })).toBe('2026-03-12')
-    expect(earliestFixingDate({ settlementDate: '2026-03-18', today })).toBe(tomorrow)          // seven days before is tomorrow exactly
-    expect(earliestFixingDate({ settlementDate: '2026-03-19', today })).toBe('2026-03-12')
-    expect(earliestFixingDate({ settlementDate: null, today })).toBe(tomorrow)
-    expect(earliestFixingDate({ settlementDate: '2026-06-10', today: null })).toBe('2026-06-03')
+    expect(clampFixingDate({ date: '2025-12-31', settlementDate, today })).toBe(tomorrow)
+    expect(clampFixingDate({ date: '2026-03-12', settlementDate: '2026-03-13', today })).toBe('2026-03-12')
   })
   it('a trade settling tomorrow can only fix tomorrow; one settling today or earlier has no fixing date', () => {
     for (const date of [today, tomorrow, '2026-03-20']) expect(clampFixingDate({ date, settlementDate: tomorrow, today })).toBe(tomorrow)
@@ -162,8 +152,8 @@ describe('the fixing date of a digital-asset forward', () => {
     expect(fixingCaption({ product: 'OPTION', expiryDate: '2026-06-10', time: '08:00 UTC' })).toBe('fixes at expiry, 2026-06-10 at 08:00 UTC')
     expect(fixingCaption({ product: 'OPTION', expiryDate: '', time: '08:00 UTC' })).toBe('')
   })
-  it('says a forward that fixes before it settles is priced to the settlement date', () => {
-    expect(fixingCaption({ product: 'FORWARD', fixingDate: '2026-06-09', settlementDate: '2026-06-10', time: '16:00 London' })).toBe('fixes on 2026-06-09 at 16:00 London, settles 2026-06-10; priced to the settlement date')
+  it('says a forward that fixes before it settles is priced to the fixing date', () => {
+    expect(fixingCaption({ product: 'FORWARD', fixingDate: '2026-06-09', settlementDate: '2026-06-10', time: '16:00 London' })).toBe('fixes on 2026-06-09 at 16:00 London, settles 2026-06-10; priced to the fixing date')
   })
   it('says so when no fixing date is possible, and nothing without a settlement date', () => {
     expect(fixingCaption({ product: 'FORWARD', fixingDate: null, settlementDate: '2026-03-10', time: '08:00 UTC' })).toBe('no fixing date is possible: the settlement date must be after today')

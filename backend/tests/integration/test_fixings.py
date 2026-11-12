@@ -136,10 +136,11 @@ def test_fixings_from_the_feed_to_the_settled_trade(client, auth_a, auth_b, ids,
             refused = client.post("/api/book/trade", json=_forward_body(a, pairs, f"IT-FIX-X-{tag}", today, later, **wrong), headers=auth_a)
             assert refused.status_code == 422 and why in refused.text, (wrong, refused.text[:300])
         for fixing, settle, why in ((later + timedelta(days=1), later, "cannot be after the settlement date"), (day(3), later, "the fixing date must be after the trade date"),
-                                    (day(4), later, "the fixing date must be after the trade date"), (today, today + timedelta(days=8), "the fixing date can be at most 7 days before the settlement date")):
+                                    (day(4), later, "the fixing date must be after the trade date")):
             refused = client.post("/api/book/trade", json=_forward_body(a, pairs, f"IT-FIX-X-{tag}", fixing, settle), headers=auth_a)
             assert refused.status_code == 422 and why in refused.text, refused.text[:300]
-        week = _book(client, auth_a, _forward_body(a, pairs, f"IT-FIX-W-{tag}", today, today + timedelta(days=7)))        # seven days: the most there may be
+        week = _book(client, auth_a, _forward_body(a, pairs, f"IT-FIX-W-{tag}", today, today + timedelta(days=7)))        # a week between fixing and payment
+        made.append(_book(client, auth_a, _forward_body(a, pairs, f"IT-FIX-M-{tag}", tomorrow, today + timedelta(days=40))))   # and more than a month: no limit since 0.26.0
         made.append(week)
         fwd = _book(client, auth_a, _forward_body(a, pairs, f"IT-FIX-A-{tag}", today, later))                 # fixed today, paid in two days
         early = _book(client, auth_a, _forward_body(a, pairs, f"IT-FIX-E-{tag}", today, tomorrow))            # the ticket's fixing date: the day before it is paid
@@ -150,12 +151,13 @@ def test_fixings_from_the_feed_to_the_settled_trade(client, auth_a, auth_b, ids,
         made += [fwd, early, same, opt, ko, venue]
 
         # ── LIVE: before the fixing date the body is the live quote, with its state ──
+        # both forwards here fix today: before that the booked trade is priced to its fixing date, as a ticket sending the fixing date is (0.26.0)
         quote = lambda on, settle=later: client.post("/api/currency/forward/price", json={"pair": "BTCUSD", "shape": "NDF", "base_notional": 10, "direction": "BUY", "forward_rate": K,
-                                                                                         "settlement_date": settle.isoformat(), "valuation_date": on.isoformat()}, headers=auth_a).json()
+                                                                                         "settlement_date": settle.isoformat(), "valuation_date": on.isoformat(), "fixing_date": today.isoformat()}, headers=auth_a).json()
         before = _price(client, auth_a, fwd, yesterday)
         assert before.status_code == 200, before.text
         live = before.json()
-        assert live["state"] == "LIVE" and live["npv"] == quote(yesterday)["npv"] and live["df_quote"] < 1 and live["spot01"] > 0 and live["forward"] > 0
+        assert live["state"] == "LIVE" and live["npv"] == quote(yesterday)["npv"] and live["fixing_date"] == today.isoformat() and live["df_quote"] < 1 and live["spot01"] > 0 and live["forward"] > 0
         assert not {"fixing", "provisional", "settled", "settlement_amount"} & set(live)
         assert set(live) - {"state", "trade_id", "trade_ref", "instrument_type", "npv_ccy", "legs"} == set(quote(yesterday))        # the quote as it was, plus the state
         live_early = _price(client, auth_a, early, yesterday).json()                                          # the fixing date does not change how a live forward is priced
@@ -357,7 +359,7 @@ def test_fixings_from_the_feed_to_the_settled_trade(client, auth_a, auth_b, ids,
         put = lambda **change: client.put(f"/api/trades/{week}", json={"terms": {**terms, **change}}, headers=auth_a)
         for change, why in ((dict(settlement_price_source="Deribit BTC delivery price."), "reads like it"), (dict(settlement_price_source="Derbit BTC"), "reads like it"),
                             (dict(valuation_time="08:00 UTC"), "valuation_time must be 16:00 London"), (dict(valuation_date=(today - timedelta(days=3)).isoformat()), "must be after the trade date"),
-                            (dict(settlement_date=(today + timedelta(days=9)).isoformat()), "at most 7 days")):
+                            (dict(valuation_date=(today + timedelta(days=8)).isoformat()), "cannot be after the settlement date")):
             refused = put(**change)
             assert refused.status_code == 422 and why in refused.text, (change, refused.text[:200])
         assert put(calculation_agent="Rijeka").status_code == 200                                                  # nothing the rule reads has changed
