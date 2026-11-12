@@ -4,11 +4,16 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <!-- on a phone's home screen: the mark at rest (scripts/build-icons.mjs). The manifest says "browser": the app
-         opens full screen from its icon only once the desk fits a phone -->
+         opens full screen from its icon ("standalone") now that the desk has a phone view (0.32.0) -->
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="apple-mobile-web-app-title" content="Rijeka" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: opened from a phone's home screen the app runs to the edges, and the bar at the foot
+         keeps clear of the home indicator by the safe-area inset (layout/Phone.css) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       <!-- RIJEKA-SEO:BEGIN (managed by seo_patch.cjs — do not hand-edit) -->
     <title>Rijeka | Where the trading desk meets the chain</title>
     <meta name="description" content="An open-source derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects. Rates, credit, FX, equities, commodities and crypto, free for everyone." />

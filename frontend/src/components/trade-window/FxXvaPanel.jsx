@@ -272,7 +272,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
 
   return (
     <div className="tbw-no-drag" style={{ fontFamily: 'var(--sans)' }}>
-      <div style={XVA_ROW}>
+      <div className="xva-row" style={XVA_ROW}>
 
         {/* LEFT PANEL */}
         <div style={XVA_LEFT} data-testid="xva-left">

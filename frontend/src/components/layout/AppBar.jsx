@@ -28,7 +28,7 @@ export default function AppBar() {
     mod.exact ? location.pathname === mod.path : location.pathname.startsWith(mod.path)
 
   return (
-    <header style={{
+    <header className="ab-bar" style={{
       display:'flex', alignItems:'center', padding:'0 1.5rem',
       height:'var(--appbar-h)', background:'var(--bg-deep)',
       borderBottom:'1px solid var(--border)',
@@ -36,9 +36,9 @@ export default function AppBar() {
     }}>
       <RijekaLogo onClick={()=>navigate('/command-center')} />
 
-      <div style={{width:'1px',height:'20px',background:'var(--border)',flexShrink:0}}/>
+      <div className="ab-desk" style={{width:'1px',height:'20px',background:'var(--border)',flexShrink:0}}/>
 
-      <nav style={{display:'flex',alignItems:'stretch',height:'100%'}}>
+      <nav className="ab-desk" style={{display:'flex',alignItems:'stretch',height:'100%'}}>
         {shown.map(mod=>{
           // The active tab pops out exactly the page you're on; others open at their start.
           const target = isActive(mod) ? location.pathname + location.search : mod.to
@@ -55,7 +55,7 @@ export default function AppBar() {
 
       <div style={{flex:1}}/>
 
-      <div style={{display:'flex',alignItems:'center',gap:'0.75rem',fontFamily:'var(--sans)',fontSize:'0.875rem',letterSpacing:'0.06em',flexShrink:0}}>
+      <div className="ab-right" style={{display:'flex',alignItems:'center',gap:'0.75rem',fontFamily:'var(--sans)',fontSize:'0.875rem',letterSpacing:'0.06em',flexShrink:0}}>
         {demo?.enabled && (
           <span title="Hosted demo on the Sepolia testnet. Your workspace was set up automatically: an own entity, RIJEKA DEMO BANK AG as counterparty (Rijeka holds its key, so solo confirmations are marked not bilateral) and a copy of the demo market data. Data may be reset."
                 style={{color:'var(--amber)',border:'1px solid var(--amber-dim)',fontWeight:500,padding:'0.15rem 0.5rem',borderRadius:'var(--r-1)',cursor:'help'}}>DEMO · SEPOLIA</span>

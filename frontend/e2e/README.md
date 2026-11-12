@@ -26,6 +26,10 @@ Nothing here touches production. `serve.sh` refuses a hosted database.
 | Web | `127.0.0.1:4174` | `vite build` against the two above, served by `vite preview` |
 | Chain | `127.0.0.1:8546`, only under `npm run e2e:chain` | Foundry's `anvil` with the committed registry deployed to it (`backend/stack/chain.py`), and the API told where it is. Without it the stack has no chain, as a self-hosted instance may not: a record is signed and not anchored |
 
+The phone: `phone.spec.js` runs at 390 by 844 (the pages from the bar at the foot; a trade priced, costed, booked
+and confirmed in the full-screen trade window; the home-screen button; the opening from the icon), and
+`PHONE_TAG=x npx playwright test -c playwright.perf.config.js phone.spec.js` takes a picture of every phone screen.
+
 Engines: the everyday run and CI's required check are on Chromium. `npm run e2e:engines` runs the same journeys on
 Firefox and WebKit (`playwright.engines.config.js`; install them once with `npx playwright install firefox webkit`).
 Run it before an announcement and after a change to layout, a canvas, the keyboard or the clipboard. The first run

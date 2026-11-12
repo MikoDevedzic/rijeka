@@ -4,7 +4,7 @@
   "description": "An open-source derivatives desk: price it, see what it costs, confirm it on chain.",
   "start_url": "/",
   "scope": "/",
-  "display": "browser",
+  "display": "standalone",
   "background_color": "#081714",
   "theme_color": "#0b1d1a",
   "icons": [

@@ -3,6 +3,28 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.32.0 · 12 November 2026
+
+**The phone view.** On the owner's word ("build the phone view and deploy it right away"), in the scope he set on
+11 November: the home, booking a trade through the trade window, chat and news. At 390px the app was about 1,070px
+wide and could not be used; nothing is wider than the screen now.
+
+- **A bar at the foot**: HOME, TRADES, NEW, CHAT, NEWS. P&L, risk, configurations and the methodology are not in
+  it: they are laid out for a monitor.
+- **The home is a few things.** The market line, the book's counts and four figures, the latest trades, the state
+  of the chain. The first build stacked the monitor's home (about 3,700px tall) and the owner called it messy,
+  the policy path most of all; it is about 1,400px now, and the policy path, the calendar, the clocks and the
+  globe stay on a larger screen.
+- **Trades are cards**, and a tap opens the trade.
+- **The trade window is the whole screen**: fields two across, tabs that scroll (no CAPITAL), the XVA tab's inputs
+  above its results, PRICE and BOOK at the foot, a close button a thumb can hit. A journey prices a digital-asset
+  forward, runs its XVA, books it and confirms it at phone size.
+- **Chat** fills the screen above the bar; **news** is a page of its own (`/news`).
+- **From the home screen.** The door has ADD TO HOME SCREEN: on Android it installs; on an iPhone it shows the two
+  taps, since a page cannot install itself there. The app then opens full screen from its icon (the manifest says
+  "standalone"), and the icon's mark comes alive once as it opens.
+- Journeys at 390 by 844 on Chromium, Firefox and WebKit. Not tried on a real phone.
+
 ## 0.31.1 · 12 November 2026
 
 **The door's way to the site points at /about.** On the owner's word ("deploy everything"). The public site now

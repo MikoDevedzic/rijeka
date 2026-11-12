@@ -1,0 +1,132 @@
+/* The phone view (0.32.0): a screen up to 640px wide. What a phone offers is the home, the trades, the trade
+   window, chat and news; P&L, risk, configurations and the methodology are laid out for a monitor and are not in
+   its navigation. Everything here is inside one media query, so a larger screen reads none of it. Many of the
+   app's layouts are set inline, which a stylesheet can only overrule with !important: that is why it appears. */
+:root { --phone-nav-h: 0px; }
+
+@media (max-width: 640px) {
+  :root { --phone-nav-h: calc(56px + env(safe-area-inset-bottom, 0px)); }
+
+  /* ── the navigation at the foot ── */
+  .ph-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 900; height: var(--phone-nav-h); padding-bottom: env(safe-area-inset-bottom, 0px);
+    display: grid; grid-template-columns: repeat(5, 1fr); background: var(--bg-deep); border-top: 1px solid var(--border-hi); }
+  .ph-nav button { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; background: none; border: 0; border-top: 2px solid transparent;
+    color: var(--text-dim); font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; cursor: pointer; }
+  .ph-nav button i { font-style: normal; font-size: 16px; line-height: 1; color: inherit; }
+  .ph-nav button.on { color: var(--text-hi); border-top-color: var(--accent); background: var(--panel-2); }
+  .ph-nav button.new { color: var(--accent); }
+  .ph-nav button.new i { display: grid; place-items: center; width: 34px; height: 26px; border-radius: 4px; background: var(--accent); color: var(--accent-ink); font-size: 20px; }
+  .ph-badge { position: absolute; top: 6px; right: calc(50% - 20px); min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-size: 10px; line-height: 16px; font-weight: 700; }
+
+  /* ── the frame of every page: the bar at the top, the page, the navigation's height left free ── */
+  .app-frame { height: calc(100vh - var(--phone-nav-h)) !important; height: calc(100dvh - var(--phone-nav-h)) !important; }
+  .ab-bar { padding: 0 12px !important; gap: 10px !important; }
+  .ab-desk { display: none !important; }
+  .ab-right > *:not(.rj-btn):not(:nth-last-child(2)) { display: none !important; }      /* the name and EXIT stay */
+  .ms-launcher { display: none !important; }         /* CHAT is in the navigation */
+
+  /* ── home: a few things, clean ──
+     A phone's home is the book and what it needs from you: the market line, the book's counts and value, the
+     latest trades, and the state of the chain. The policy path, the calendar, the clocks, the globe, the ladder
+     and the written brief are a monitor's: on a phone they made a page four screens long. */
+  .cc-root { width: 100%; min-height: 0; padding-bottom: var(--phone-nav-h); }
+  .cc-bar { padding: 0 14px; }
+  .cc-nav { display: none; }
+  .cc-bar-right > *:not(.cc-exit):not(.cc-user) { display: none; }
+  .cc-logo { border-right: 0; margin-right: 0; padding-right: 0; }
+  .cc-bar-right { gap: 10px; }
+  .dh { padding: 0 14px; min-width: 0; }
+  .dh-clocks, .dh-hero, .dh-ladder, .dh .bb, .dg-wrap, .lf-explain, .dh-newscard, .cc-footer, .dh-modules-note { display: none !important; }
+  .dh-strip { overflow-x: auto; scrollbar-width: none; gap: 14px; }
+  .dh-strip::-webkit-scrollbar { display: none; }
+  .dh-strip-right { margin-left: 0; }
+  .dh-grid { grid-template-columns: 1fr; gap: 12px; padding: 12px 0 16px; }
+  .dh-grid > * { min-width: 0; }
+  .dh-card { padding: 14px; gap: 12px; }
+  .dh-card header { flex-wrap: wrap; gap: 4px 10px; }
+  .dh-kpis { flex-wrap: wrap; gap: 12px 22px; }
+  .dh .rk, .dh .lf-health { grid-template-columns: 1fr 1fr !important; }      /* four figures as two rows of two, each readable */
+  .dh .rk > div, .dh .lf-health > div { padding: 9px 11px; }
+
+  /* ── news ── */
+  .np { height: 100%; overflow: auto; padding: 14px 14px 20px; }
+  .np-title { margin: 0 0 8px; font-family: var(--mono); font-size: 12px; letter-spacing: 0.14em; font-weight: 500; color: var(--text-dim); }
+  .np-note { font-size: 13px; color: var(--amber); margin-bottom: 8px; }
+  .np .np-list { height: auto; overflow: visible; flex: none; padding: 0; }
+  .np .np-list li { padding: 12px 0; }
+  .np .np-list a { font-size: 14px; }
+
+  /* ── trades: every trade a card ── */
+  .bl-left, .bl-right { display: none !important; }
+  .bl-centre { min-width: 0; width: 100%; }
+  .bl-centre-header { padding: 10px 12px !important; gap: 8px; }
+  .bl-table { min-width: 0 !important; display: block; }
+  .bl-table thead { display: none; }
+  .bl-table tbody { display: block; }
+  .bl-row { display: grid !important; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "ref status" "inst notional" "cp tenor"; gap: 3px 12px; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  .bl-row td { display: none; height: auto !important; padding: 0 !important; border: 0 !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bl-row td:nth-child(2) { display: block; grid-area: ref; font-weight: 600; color: var(--text-hi); }
+  .bl-row td:nth-child(4) { display: block; grid-area: inst; }
+  .bl-row td:nth-child(6) { display: block; grid-area: cp; color: var(--text-dim); }
+  .bl-row td:nth-child(8) { display: block; grid-area: notional; text-align: right; }
+  .bl-row td:nth-child(9) { display: block; grid-area: tenor; text-align: right; color: var(--text-dim); }
+  .bl-row td:nth-child(11) { display: block; grid-area: status; text-align: right; }
+
+  /* ── the trade window: the whole screen ── */
+  .tbw-window { left: 0 !important; top: 0 !important; width: 100vw !important; max-width: 100vw !important; min-width: 0 !important; height: 100vh !important; height: 100dvh !important;
+    max-height: none !important; min-height: 0 !important; border-radius: 0 !important; resize: none !important; z-index: 1000; }
+  .tbw-tabs { max-width: 100%; overflow-x: auto; }
+  .tbw-footer { grid-template-columns: minmax(0, 1fr) !important; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) !important; }
+  .tbw-footer-metrics { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .tbw-footer-metrics > * { flex: 0 0 auto; }
+  .tbw-footer-metrics::-webkit-scrollbar { display: none; }
+  /* the foot: CANCEL, then PRICE and BOOK sharing the width; what the structure is called and the keys are a monitor's */
+  .tbw-footer-actions { display: grid !important; grid-template-columns: auto 1fr 1fr; gap: 8px; align-items: stretch; }
+  .tbw-footer-actions > * { min-width: 0; white-space: nowrap; }
+  .tbw-footer-actions button { min-height: 42px; }
+  .tbw-struct-label, .tbw-window .kc, .ph-nav .kc, .bl-new-trade-btn .kc { display: none !important; }
+  /* closing it: one button a thumb can hit, where a monitor has three small lights */
+  .tbw-light-y, .tbw-light-g { display: none !important; }
+  .tbw-light-r { width: 34px !important; height: 34px !important; border-radius: 6px !important; background: var(--panel-2) !important; border: 1px solid var(--border-hi) !important; position: relative; }
+  .tbw-light-r::after { content: "✕"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-hi); font-size: 14px; }
+  /* its grids are two across: six fields in a row is a monitor's row */
+  .tbw-window .tbw-grid-6, .tbw-window .tbw-fx-grid-6, .tbw-window .tbw-fx-grid-expiry, .tbw-window .tbw-grid,
+  .tbw-window [style*="grid-template-columns: repeat("] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .tbw-window .tbw-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .tbw-window .tbw-sec { padding-left: 14px; padding-right: 14px; }
+  /* CAPITAL is not part of the phone view */
+  .tbw-tab[data-tab="CAPITAL"] { display: none; }
+  .tbw-tabbar { padding-left: 10px; padding-right: 10px; }
+  /* the XVA tab and the scenario tab: the inputs, then the results under them */
+  .xva-row { flex-direction: column !important; overflow: visible !important; }
+  .xva-row > * { width: 100% !important; min-width: 0 !important; max-width: none !important; border-right: 0 !important; flex: none !important; }
+  /* a table keeps its columns and scrolls sideways inside its own box */
+  .tbw-window table { display: block; max-width: 100%; overflow-x: auto; }
+
+  /* ── chat: the whole screen above the navigation ── */
+  .ms-window.ms-phone { inset: 0 0 var(--phone-nav-h) 0 !important; }
+
+  /* the certificate: the seal, then the words under it */
+  .cert { flex-direction: column !important; align-items: flex-start !important; }
+  .cert-title { font-size: 20px !important; }
+
+  /* links on the home that lead to pages laid out for a monitor are not offered on a phone */
+  .dh-card header button.dh-link, .dh-card .pt { display: none !important; }
+
+  /* the door: the button that puts Rijeka on the home screen, and the sheet that says how */
+  .au-install { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; max-width: 380px; min-height: 44px; padding: 10px 14px; border-radius: 4px; cursor: pointer;
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--text-hi); background: var(--panel-2); border: 1px solid var(--border-hi); }
+  .au-sheet { position: fixed; inset: 0; z-index: 50; display: grid; align-items: end; background: rgb(4 12 10 / 0.72); }
+  .au-sheet > div { display: grid; gap: 12px; padding: 18px 20px calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--panel-2); border-top: 1px solid var(--border-hi); border-radius: 18px 18px 0 0; }
+  .au-sheet-icon { display: flex; align-items: center; gap: 14px; }
+  .au-sheet-icon img { border-radius: 13px; }
+  .au-sheet-icon b { display: block; font-size: 16px; color: var(--text-hi); }
+  .au-sheet-icon span { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--text-mute); }
+  .au-sheet ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; font-size: 14px; color: var(--text-dim); }
+  .au-sheet ol b { color: var(--text-hi); font-weight: 600; }
+}
+
+/* the app opening from its icon (brand/LaunchMark.jsx): any width, since a tablet has a home screen too */
+.launch-mark { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; background: var(--bg-deep); transition: opacity .35s ease; }
+.launch-mark.leaving { opacity: 0; }
+.launch-mark canvas { width: min(86vw, 520px); height: min(46vh, 300px); }

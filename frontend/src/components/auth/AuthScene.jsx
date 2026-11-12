@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom'
 import './Auth.css'
 import Scenes from './Scenes'
 import RijekaLogo from '../brand/RijekaLogo'
+import InstallButton from './InstallButton'
 
 // The public site: how it works, the verifier, the tools, working with us. Its first page is /about: rijeka.app
 // itself opens this door (0.31.1), so a link to the bare address would only come back here.
@@ -85,6 +86,7 @@ export default function AuthScene({ children, eyebrow, mode }) {
           {eyebrow && !mode && <div className="au-eyebrow">{eyebrow}</div>}
           {children}
         </div>
+        {mode && <InstallButton />}
         <div className="au-legal">
           <Link to="/terms" target="_blank">Terms</Link> · <Link to="/privacy" target="_blank">Privacy</Link> · Hosted demo on the Sepolia testnet · not investment advice
         </div>

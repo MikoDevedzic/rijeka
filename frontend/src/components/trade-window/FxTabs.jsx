@@ -1121,7 +1121,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   )
   return (
     <div className="tbw-no-drag" style={{ fontFamily: 'var(--sans)' }}>
-      <div style={XVA_ROW}>
+      <div className="xva-row" style={XVA_ROW}>
         {left}
         <div style={XVA_RIGHT}>
           <div style={{ padding: '10px 16px 6px', borderBottom: '1px solid var(--border)' }}>

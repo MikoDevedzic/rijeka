@@ -8,6 +8,10 @@ import { useModulesStore, ROUTE_MODULES } from './store/useModulesStore'
 import { useAuthStore } from './store/useAuthStore'
 import AuthGuard        from './components/auth/AuthGuard'
 import LoginPage        from './components/auth/LoginPage'
+import PhoneNav from './components/layout/PhoneNav'
+import LaunchMark from './components/brand/LaunchMark'
+import NewsPage from './components/home/NewsPage'
+import './components/layout/Phone.css'
 import SignupPage       from './components/auth/SignupPage'
 import ConfirmPage      from './components/auth/ConfirmPage'
 import ResetPage        from './components/auth/ResetPage'
@@ -59,7 +63,7 @@ const CollateralInstruments = lazy(() => import('./components/configurations/Col
 
 function BlotterLayout() {
   return (
-    <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
+    <div className="app-frame" style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
       <div style={{flex:1,overflow:'hidden'}}><Suspense fallback={<Loading />}><AuthGuard /></Suspense></div>
     </div>
@@ -68,7 +72,7 @@ function BlotterLayout() {
 
 function DocLayout() {
   return (
-    <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
+    <div className="app-frame" style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
       <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><Suspense fallback={<Loading />}><AuthGuard /></Suspense></main>
     </div>
@@ -77,7 +81,7 @@ function DocLayout() {
 
 function ConfigLayout() {
   return (
-    <div style={{display:'flex',height:'100vh',flexDirection:'column'}}>
+    <div className="app-frame" style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
         <CfgNav />
@@ -183,6 +187,8 @@ export default function App() {
           <Route path="/messenger" element={<MessengerPage />} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
+            {/* the headlines whole: the phone's NEWS tab (a monitor has them in a card on the home) */}
+            <Route path="/news" element={<NewsPage />} />
             {gated('/pnl',             <PnlPage />)}
             {gated('/pnl/xva',         <XvaReservesPage />)}
             {gated('/pnl/ipv',         <IpvPage />)}
@@ -228,6 +234,10 @@ export default function App() {
       <Shortcuts />
       {/* One messenger for every tab: private Prometheus, support, and rooms. */}
       <ErrorBoundary scope="widget"><Messenger /></ErrorBoundary>
+      {/* a phone's navigation, at the foot of the screen (layout/PhoneNav.jsx); nothing on a larger screen */}
+      <PhoneNav />
+      {/* opened from a phone's home screen: the icon's mark comes alive once, then the app (brand/LaunchMark.jsx) */}
+      <LaunchMark />
     </BrowserRouter>
   )
 }

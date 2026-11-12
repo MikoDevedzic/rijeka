@@ -275,3 +275,25 @@ screen; widths under 1440px, where the blotter scrolls sideways.
 ticket's tabs, the pages behind the top bar; not yet every state: an anchored or terminated certificate needs a
 chain), for a person to read after a
 change to the look: `npx playwright test -c playwright.perf.config.js look.spec.js`, then `e2e/.out/look/*.png`.
+
+## The phone
+
+A screen up to 640px wide (`frontend/src/lib/phone.js`, `components/layout/Phone.css`; since 0.32.0). The owner's
+scope, 11 November 2026: the home, booking a trade through the trade window, chat and news; no P&L, no risk, no
+capital. Those pages still open by their address but are not in the phone's navigation.
+
+- **One bar at the foot**: HOME, TRADES, NEW, CHAT, NEWS. NEW is brass: it is the phone's one action. The bar keeps
+  clear of the home indicator by the safe-area inset.
+- **The home is a few things**: the market line, the book's counts and four figures two by two, the latest trades,
+  the state of the chain. The policy path, the calendar, the clocks, the globe, the ladder and the written brief
+  are a monitor's; stacked on a phone they made a page four screens long, and the owner called it messy.
+- **A trade is a card**: the reference and its state, the instrument and its size, the counterparty and the tenor.
+- **The trade window is the whole screen**: its fields two across, its tabs scrolling sideways (no CAPITAL), the
+  XVA tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can hit. A table
+  keeps its columns and scrolls sideways inside its own box; the page itself never does.
+- **A target for a thumb is about 40px high.** Keys (F4, ⌘↵) are not shown: a phone has none.
+- **From the home screen.** The door offers ADD TO HOME SCREEN. An iPhone does not let a page install itself, so
+  the button shows the two taps; Android installs directly. The icon is the mark at rest; opened from it, the
+  mark comes alive once (`brand/LaunchMark.jsx`), not at all with "reduce motion" set.
+- Checked by `e2e/phone.spec.js` at 390 by 844 on Chromium, Firefox and WebKit; pictures by
+  `PHONE_TAG=x npx playwright test -c playwright.perf.config.js phone.spec.js`.

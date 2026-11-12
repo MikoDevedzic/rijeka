@@ -452,7 +452,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
   )
 
   return (
-    <div style={XVA_ROW}>
+    <div className="xva-row" style={XVA_ROW}>
 
       {/* LEFT PANEL */}
       <div style={XVA_LEFT} data-testid="xva-left">

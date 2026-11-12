@@ -44,7 +44,10 @@ flowchart LR
 user's Supabase JWT and subscribes to the `trades` table over Supabase realtime (filtered by row-level
 security) so the blotter follows bookings and confirmations without a reload. Heavy libraries
 (three.js, ExcelJS) and the secondary pages are code-split; the first screen after sign-in is the
-blotter, the command centre and the messenger.
+blotter, the command centre and the messenger. On a screen up to 640px wide the same app shows its phone view
+(`frontend/src/lib/phone.js`, `components/layout/Phone.css`, `PhoneNav.jsx`): the home, the trades, the trade window,
+chat and news, from a bar at the foot. It is installable from a phone's home screen (`public/manifest.webmanifest`,
+"standalone"); there is no service worker and nothing is cached for use offline.
 
 The Methodology page reads the methodology document in place. Its pages are not written in the app:
 `frontend/scripts/build-methodology.mjs` (`npm run methodology`) makes
