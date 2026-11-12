@@ -77,7 +77,7 @@ export default function IncrementalXva({ counterpartyId, counterpartyName, build
     <div className="tbw-sec tbw-no-drag" style={{ borderBottom: 'none' }}>
       {/* the heading and the button share a row, the sentence under them: closed, the block is short enough to sit
           under the results on a laptop without scrolling the window */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+      <div className="tbw-sec-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 0 }}>
         <div className="tbw-lbl" style={{ cursor: 'default', marginBottom: 0 }}>
           {view ? 'MARGINAL XVA · REMOVING THIS TRADE' : `INCREMENTAL XVA · ${cpLabel}'S NETTING SET`}
         </div>
@@ -100,7 +100,7 @@ export default function IncrementalXva({ counterpartyId, counterpartyName, build
 
       {res && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 1fr) minmax(220px, 1fr)', gap: 16, alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, alignItems: 'start' }}>
             <table style={{ borderCollapse: 'collapse', width: '100%' }}>
               <thead>
                 <tr>

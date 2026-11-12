@@ -20,6 +20,9 @@ all in order and deploy"). No figure changes.
   notes the swap's does not.
 - Journeys hold it: the left column ends above the footer, the tab does not scroll, the charge's button is wholly in
   view on both tabs, the two switches sit on one row.
+- After the reviews (Vera, Iris): the incremental heading keeps the tab's section-heading style (the new row had
+  dropped it); opened, the two halves of its table stack in a narrow window instead of being cut by the column. A
+  journey now presses CHARGE THIS TRADE for the first time and holds the heading, the answer and the table's width.
 
 ## 0.30.0 · 12 November 2026
 

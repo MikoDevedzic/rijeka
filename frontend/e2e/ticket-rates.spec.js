@@ -98,6 +98,24 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   await expectFullyInView(win.getByTestId('xva-outputs'), 'XVA results after the collateral change')
   await app.screenshot({ path: 'e2e/.out/shots/rates-xva.png' })
 
+  // the incremental charge, opened in the results column: its heading is set as the tab's other section headings
+  // are, the engine answers, and neither half of its table is cut by the column's edge
+  const inc = win.getByTestId('xva-below')
+  const heads = await win.evaluate(w => {
+    const style = e => { const s = getComputedStyle(e); return `${s.fontSize} ${s.fontWeight} ${s.color}` }
+    const curves = [...w.querySelectorAll('*')].find(e => !e.children.length && /^SPREAD CURVES/.test(e.textContent))
+    return { incremental: style(w.querySelector('[data-testid="xva-below"] .tbw-lbl')), curves: style(curves) }
+  })
+  expect(heads.incremental, 'the incremental heading reads as SPREAD CURVES does').toBe(heads.curves)
+  const charged = app.waitForResponse(r => r.url().includes('/api/xva/incremental'), { timeout: 120_000 })
+  await inc.getByRole('button', { name: /CHARGE THIS TRADE/ }).click()
+  expect((await charged).status(), 'the incremental charge answers').toBe(200)
+  await expect(inc.getByRole('button', { name: 'RECOMPUTE' })).toBeVisible()
+  await expect(inc).toContainText('WITHOUT')
+  await expectNoHorizontalOverflow(inc, 'the incremental charge, opened')
+  await inc.scrollIntoViewIfNeeded()
+  await app.screenshot({ path: 'e2e/.out/shots/rates-xva-incremental.png' })
+
   // CAPITAL: regulatory stock only, chips whole, no sideways scroll
   await win.getByRole('button', { name: 'CAPITAL', exact: true }).click()
   await expectNoHorizontalOverflow(win.getByTestId('capital-left'), 'CAPITAL left column')

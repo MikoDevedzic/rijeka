@@ -218,7 +218,7 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
       <div data-testid="xva-switches" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'10px',marginTop:'6px'}}>
         <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer'}}>
           <input type='checkbox' aria-label='Initial margin exchanged' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
-          <span style={{...LBL,marginBottom:0,borderBottom:'none',whiteSpace:'nowrap'}} title='Initial margin is exchanged, each way'>Initial margin</span>
+          <span style={{...LBL,marginBottom:0,borderBottom:'none',whiteSpace:'nowrap',cursor:'pointer'}} title='Initial margin is exchanged, each way'>Initial margin</span>
         </label>
         {settlement!=='ON_CHAIN' && (
           <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer'}}>
