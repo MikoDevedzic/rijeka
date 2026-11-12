@@ -65,8 +65,8 @@ def test_the_cva_capital_leg_adds_to_kva_and_scales_with_the_weight():
     hy = _run(csa, capital=CapitalInputs.for_counterparty("BANK", "BB_B"))
     assert hy.kva_cva == pytest.approx(bank.kva_cva * 0.12 / 0.05, rel=1e-9)
     assert hy.rwa_0 == pytest.approx(hy.ead_0 * 1.0) and bank.rwa_0 == pytest.approx(bank.ead_0 * 0.30)
-    # K_CVA at the first grid point (one step in) by hand from the engine's own EAD
-    m = 5.0 - 1.0 / 12
+    # K_CVA over the first step by hand from the engine's own EAD: the remaining life is read at the middle of the step (0.27.0)
+    m = 5.0 - 0.5 / 12
     df = (1 - math.exp(-0.05 * m)) / (0.05 * m)
     assert bank.k_cva_0 == pytest.approx(0.65 / 1.4 * 0.05 * m * bank.ead_0 * df, rel=1e-9)
 

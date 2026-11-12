@@ -445,7 +445,7 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
         ws.cell(row=r, column=11, value=f"=LGDown*ABS(I{r})*G{r}*C{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=12, value=f"=FTP/10000*H{r}*Dt*C{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=13, value=f"=FTP/10000*FBAr*ABS(I{r})*Dt*C{r}").number_format = "#,##0.00"
-        ws.cell(row=r, column=14, value=f"=MAX(Tyrs-B{r},0)").number_format = "0.000000"
+        ws.cell(row=r, column=14, value=f"=MAX(Tyrs-B{r}+Dt/2,0)").number_format = "0.000000"
         ws.cell(row=r, column=15, value=f"=(1-EXP(-0.05*N{r}))/0.05").number_format = "0.000000"
         # CRE52.48 (unmargined: sqrt(min(M, 1)), M floored at ten business days) and CRE52.52 (margined)
         ws.cell(row=r, column=16, value=f"=IF(Coll=1,1.5*SQRT(MAX(MPoR,IF(Preset=\"ON_CHAIN\",{MPOR_FLOOR_CLEARED_BD},{MPOR_FLOOR_BILATERAL_BD}))/{BUSINESS_DAYS_PER_YEAR}),SQRT(MIN(MAX(N{r},1/25),1)))").number_format = "0.0000"
@@ -475,7 +475,7 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
     for i, (label, f) in enumerate(totals):
         ws.cell(row=rt + i, column=1, value=label).font = Font(bold=True)
         ws.cell(row=rt + i, column=2, value=f).number_format = "#,##0.00"
-    ws.cell(row=rt + len(totals) + 1, column=1, value="The last step lands on settlement itself (m = 0), where the engine books no capital or IM funding; the add-on is SA-CCR's for the pair's class: the supervisory factor × the notional in the quote currency at spot × the maturity factor (one trade, δ = ±1).").font = Font(color=W.MUTED)
+    ws.cell(row=rt + len(totals) + 1, column=1, value="Capital and initial margin are held through a step, so the remaining life m is read at the middle of it (t − Δ/2): the step that ends on settlement is charged like the others; the add-on is SA-CCR's for the pair's class: the supervisory factor × the notional in the quote currency at spot × the maturity factor (one trade, δ = ±1).").font = Font(color=W.MUTED)
     W.widths(ws, [44, 10, 12, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 10, 10, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11, 11])
     ws.freeze_panes = "C20"
     return r0, r1, rt

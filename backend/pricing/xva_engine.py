@@ -360,7 +360,7 @@ def run_waterfall(
     nica_arr = im_recv if reg.im_exchanged else np.zeros(T)      # the margin we hold: independent collateral
     if saccr is not None:
         from pricing.sa_ccr import addon_profile
-        grid_t = [(i + 1) * DT for i in range(T)]
+        grid_t = [(i + 0.5) * DT for i in range(T)]            # the middle of each step: see the capital profile below
         addon_grid = addon_profile(saccr, reg, grid_t)
         addon_grid_unm = addon_profile(saccr, CSA.uncollateralised(), grid_t) if reg.sa_ccr_margined else None
         addon_cem = addon_profiles[2] if addon_profiles is not None and len(addon_profiles) > 2 else None
@@ -432,7 +432,11 @@ def run_waterfall(
         fba -= fba_s   * abs(ene[i]) * DT * disc
 
         # ── Capital profile → KVA ────────────────────────────────────────────
-        m_t = max(M0 - t, 0.0)
+        # Capital and initial margin are held through the step, so the remaining life is read at the middle of it:
+        # the step that ends on the maturity is charged like every other. (Until 0.27.0 it was read at the step's
+        # end, where it is zero on the last step: that step carried no capital and no margin funding, which on a
+        # monthly grid is half the KVA of a one-month trade whose add-on does not shrink to nothing at maturity.)
+        m_t = max(M0 - t + 0.5 * DT, 0.0)
         if m_t > 0:
             sd_t  = (1.0 - math.exp(-0.05 * m_t)) / 0.05          # supervisory duration
             mf_t  = reg.sa_ccr_maturity_factor(m_t)

@@ -75,7 +75,7 @@ def legacy_waterfall(paths, p0_grid, P: WaterfallParams, im_0):
         dva -= P.own_lgd * abs(ene[i]) * (qow - nqow) * disc
         fva += ftp_t * ee[i] * DT * disc
         fba -= fba_s * abs(ene[i]) * DT * disc
-        m_t = max(M0 - t, 0.0)
+        m_t = max(M0 - t + 0.5 * DT, 0.0)          # the remaining life at the middle of the step (0.27.0)
         if m_t > 0:
             sd_t = (1 - math.exp(-0.05 * m_t)) / 0.05
             mf_t = math.sqrt(min(m_t, 1.0))
@@ -111,7 +111,8 @@ class TestUncollateralisedParity:
 
     def test_mva_of_a_margin_the_desk_sets_is_its_funding_cost_over_the_life(self):
         """IM without VM, the amount set by the desk and held for the life: MVA is that amount funded at the
-        spread, step by step to the step before maturity (no capital or margin is booked at maturity itself)."""
+        spread over every step of the life, the one that ends on maturity included (0.27.0: until then that step
+        was not charged)."""
         paths, p0, theta, T = make_paths()
         P = default_params(theta, im_amount=250_000.0)
         csa = CSA(preset="UNCOLLATERALISED", collateralised=False, im_exchanged=True,
@@ -119,7 +120,7 @@ class TestUncollateralisedParity:
         wf  = run_waterfall(paths, 0.0, p0, P, csa)
         assert wf.im_0 == 250_000.0 and set(wf.im_profile) == {250_000.0} and wf.im_received_profile == wf.im_profile
         assert "desk" in wf.im_basis
-        by_hand = -sum(250_000.0 * (P.ftp_bp / 1e4) * P.dt * p0[i + 1] for i in range(T) if P.maturity_y - (i + 1) * P.dt > 0)
+        by_hand = -sum(250_000.0 * (P.ftp_bp / 1e4) * P.dt * p0[i + 1] for i in range(T))
         assert wf.mva == pytest.approx(by_hand, rel=1e-12)
         # no margin exchanged: none charged, whatever was typed
         assert run_waterfall(paths, 0.0, p0, P, CSA.uncollateralised()).mva == 0.0

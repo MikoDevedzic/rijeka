@@ -52,10 +52,11 @@ def test_rows_are_the_legs_in_their_class_at_their_supervisory_delta():
 
 
 def test_group_2a_is_the_crypto_class_at_32_percent():
-    """One bought 6M forward, uncollateralised. At the first monthly date 5 months are left: the add-on is
-    32 % × the notional in fiat × sqrt(5/12) (the unmargined maturity factor, CRE52.48)."""
+    """One bought 6M forward, uncollateralised. Over the first monthly step five and a half months are left (the
+    remaining life is read at the middle of a step, 0.27.0): the add-on is 32 % × the notional in fiat ×
+    sqrt(5.5/12) (the unmargined maturity factor, CRE52.48)."""
     wf, meta = fx_xva.forward_xva(_fwd(), CSA.uncollateralised(), n_paths=500)
-    assert wf.addon_0 == pytest.approx(0.32 * 10 * 98_000.0 * math.sqrt(5 / 12), rel=1e-9)
+    assert wf.addon_0 == pytest.approx(0.32 * 10 * 98_000.0 * math.sqrt(5.5 / 12), rel=1e-9)
     assert meta["crypto_group"] == "2a" and "32 %" in meta["capital_basis"] and "SCO60.98" in meta["capital_basis"]
     # whose choice the group was is in the words: the default is the engine's reading, and says what the rule requires
     assert "the engine's default for BTC" in meta["capital_basis"] and "SCO60.55" in meta["capital_basis"] and "Group 2b unless" in meta["capital_basis"]
@@ -85,7 +86,7 @@ def test_group_2b_is_half_the_gross_notional_per_trade_with_no_netting_and_no_mu
     as_2b, m = fx_xva.forward_xva(_fwd(), CSA.uncollateralised(), n_paths=500, crypto_group="2b")
     assert m["crypto_group"] == "2b" and as_2b.addon_0 == pytest.approx(0.5 * 10 * 98_000.0)
     sol_2a, m = fx_xva.forward_xva(buy, CSA.uncollateralised(), n_paths=500, crypto_group="2a")
-    assert m["crypto_group"] == "2a" and sol_2a.addon_0 == pytest.approx(0.32 * 1000.0 * 195.0 * math.sqrt(5 / 12), rel=1e-9)
+    assert m["crypto_group"] == "2a" and sol_2a.addon_0 == pytest.approx(0.32 * 1000.0 * 195.0 * math.sqrt(5.5 / 12), rel=1e-9)
 
 
 def test_a_group_2b_leg_stops_counting_when_it_settles():
@@ -93,14 +94,16 @@ def test_a_group_2b_leg_stops_counting_when_it_settles():
     cap = fx_xva.capital_inputs([near, far], CSA.uncollateralised(), 6, 0.5 / 6, "sa_ccr", None)
     grid = cap["kwargs"]["addon_profiles"][0]
     one = 0.5 * 1000.0 * 195.0
-    assert grid[:2] == pytest.approx([2 * one, 2 * one]) and grid[2:5] == pytest.approx([one] * 3) and grid[5] == 0.0
+    # a leg counts over every step it is alive through, the one that ends on its settlement included (0.27.0: until then
+    # that step was not charged, and the last step of the set carried nothing)
+    assert grid[:3] == pytest.approx([2 * one] * 3) and grid[3:] == pytest.approx([one] * 3)
     assert cap["kwargs"]["apply_multiplier"] is False
 
 
 def test_a_currency_pair_is_the_fx_class_at_4_percent():
     inp = _fwd("EURUSD", n=1e7, F=1.17, spot=1.165, t=1.0)
     wf, meta = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=500)
-    assert wf.addon_0 == pytest.approx(0.04 * 1e7 * 1.165 * math.sqrt(11 / 12), rel=1e-9)
+    assert wf.addon_0 == pytest.approx(0.04 * 1e7 * 1.165 * math.sqrt(11.5 / 12), rel=1e-9)
     assert "CRE52.72" in meta["capital_basis"] and meta["crypto_group"] is None
 
 
@@ -108,7 +111,7 @@ def test_an_option_enters_at_its_delta_and_a_margined_set_takes_the_margined_fac
     put = _opt("PUT", "BUY", 90_000.0)
     wf, _ = fx_xva.option_xva(put, CSA.uncollateralised(), n_paths=400)
     d = supervisory_delta("PUT", True, 98_000.0, 90_000.0, 0.48, 1.20)
-    m_left = 0.5 - 0.5 / 6
+    m_left = 0.5 - 0.25 / 6                       # the middle of the first of six steps
     assert wf.addon_0 == pytest.approx(0.32 * abs(d) * 10 * 98_000.0 * math.sqrt(m_left), rel=1e-9)
     csa = CSA.bilateral()
     wfm, _ = fx_xva.forward_xva(_fwd(), csa, n_paths=400)
@@ -122,3 +125,38 @@ def test_the_other_capital_models_are_as_they_were():
     assert "CEM" in m["capital_basis"] and "internal model" in m2["capital_basis"]
     assert cem.kva < 0 and imm.kva < 0 and imm.ead_0 == pytest.approx(1.4 * imm.ee[0])
     assert np.isfinite([cem.kva, imm.kva]).all()
+
+
+# ── the whole life is charged, on any grid (0.27.0) ────────────────────────
+
+def _on_grid(monkeypatch, per_year):
+    monkeypatch.setattr(fx_xva, "monthly_grid", lambda ty: (max(2, int(math.ceil(ty * per_year))), ty / max(2, int(math.ceil(ty * per_year)))))
+
+
+def test_kva_charges_the_whole_life_of_a_short_trade():
+    """A one-month forward is two monthly steps. Capital is held through both: by hand, a Group 2b asset's add-on
+    alone (50 % of the notional, at α = 1.4, 8 % capital, the hurdle) over the whole month is a floor for KVA. Until
+    0.27.0 the step that ends on the settlement was not charged and KVA was about half of this floor's month."""
+    from pricing.xva_engine import ALPHA, CAP_R
+    t = 1.0 / 12
+    wf, meta = fx_xva.forward_xva(_fwd("SOLUSD", t=t, n=1000.0, F=200.0, spot=195.0), CSA.uncollateralised(), n_paths=1000, hurdle_rate=0.12)
+    assert meta["steps"] == 2 and meta["crypto_group"] == "2b"
+    floor = 0.12 * CAP_R * ALPHA * 0.5 * 1000.0 * 195.0 * t * math.exp(-0.04 * t)
+    assert -wf.kva > floor and -wf.kva < 1.6 * floor                 # the add-on over the month, plus the replacement cost's share
+    # and MVA of a margin the desk sets is funded over both steps
+    csa = CSA(preset="UNCOLLATERALISED", collateralised=False, im_exchanged=True, mpor_days=10.0)
+    m, _ = fx_xva.forward_xva(_fwd("SOLUSD", t=t, n=1000.0, F=200.0, spot=195.0), csa, n_paths=1000, im_amount=10_000.0, ftp_bp=55.0)
+    assert -m.mva == pytest.approx(10_000.0 * 0.0055 * (t / 2) * (math.exp(-0.04 * t / 2) + math.exp(-0.04 * t)), rel=1e-9)
+
+
+@pytest.mark.parametrize("pair,kw", [("BTCUSD", {}), ("SOLUSD", dict(n=1000.0, F=200.0, spot=195.0)), ("EURUSD", dict(n=1e7, F=1.17, spot=1.165))])
+@pytest.mark.parametrize("t", [1.0 / 12, 0.25, 1.0])
+def test_kva_does_not_depend_on_the_grid(monkeypatch, pair, kw, t):
+    """Uncollateralised, the same trade on monthly, weekly and daily steps: KVA agrees within ten per cent (each grid
+    draws its own paths, and the replacement cost is read at each step's end). Before 0.27.0 the monthly figure of a
+    one-month trade was 45 % of the daily one (the last of two steps uncharged)."""
+    out = {}
+    for per_year in (12, 52, 365):
+        _on_grid(monkeypatch, per_year)
+        out[per_year] = fx_xva.forward_xva(_fwd(pair, t=t, **kw), CSA.uncollateralised(), n_paths=2000)[0].kva
+    assert out[12] == pytest.approx(out[365], rel=0.10) and out[52] == pytest.approx(out[365], rel=0.10), out

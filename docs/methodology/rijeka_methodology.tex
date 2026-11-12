@@ -25,7 +25,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.16 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.17 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -45,7 +45,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.16 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.17 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -56,6 +56,7 @@
 \section*{Version history}
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
+\item \textbf{1.17 (12 November 2026).} KVA and MVA charge the whole life of a trade (\S\ref{sec:xva}): the remaining life is read at the middle of each grid step, not at its end. Short currency and digital-asset trades were undercharged (a one-month trade by half).
 \item \textbf{1.16 (12 November 2026).} A digital-asset forward that fixes before it is paid is priced to its fixing date and discounted from its payment date (\S\ref{sec:fxo}, fixings and settlement); the limit of seven days between the two dates is gone.
 \item \textbf{1.15 (12 November 2026).} Volatility regimes of a digital asset (\S\ref{sec:exposure}). A digital asset's volatility on any day is the ticket's times a fast state (calm or stressed, a stress of two or three days) times a slow state (low or high, held about two months), each scaled so that the variance expected over any period is the ticket's. Today's value of a forward or an option does not change and an uncollateralised ticket moves little (CVA and FVA 1 to 3\% lower on short tickets); over a margin period the tails are fatter, as five years of daily closes show them, and on a margined ticket the margin at the first date rises 7 to 13\%. Currency pairs keep one volatility. Three equations added, so the displays after them are numbered three higher.
 \item \textbf{1.14 (11 November 2026).} The value a margin period earlier on currency and digital-asset tickets (\S\ref{sec:exposure}). The forward's level is bridged between grid dates in logs, where it is a Brownian motion, and every leg is valued on it; until this version the value itself was bridged as if Gaussian, which read the margin called 9 to 18\% low at volatilities of 55 to 110\%. Margined figures on those tickets move: on a six-month BTCUSD forward at 55\% under a bilateral CSA, KVA $-150.7\to-134.8$, MVA $-615.5\to-622.1$, CVA $-2.8\to-3.6$; at a currency's volatility by about 1\%. The rates ticket and the netting-set engine are unchanged.
@@ -371,7 +372,7 @@ Default probabilities come from the credit triangle: hazard rate $h = s/\mathrm{
 \begin{equation}
 \mathrm{ColVA} = \sum_i \big(\mathrm{VM}^{\mathrm{post}}_i\,s^{\mathrm{post}} + \mathrm{VM}^{\mathrm{recv}}_i\,s^{\mathrm{recv}}\big)\,\Delta t\,D_i,
 \end{equation}
-where $\omega_i$ is an optional wrong-way-risk multiplier, $\kappa$ the capital hurdle rate, $K_i$ the SA-CCR capital on the exposure path, and $\pi$ a yield pick-up on posted collateral (tokenised collateral that earns a return reduces MVA). ColVA is the carry of the variation margin against cash at the OIS the discounting assumes: $\mathrm{VM}^{\mathrm{post}}_i$ and $\mathrm{VM}^{\mathrm{recv}}_i$ are the mean margin posted and held at step $i$ (the two sides of $C$ in \S\ref{sec:exposure}), $s^{\mathrm{post}}$ and $s^{\mathrm{recv}}$ the carries over OIS of what each side is held in (\S\ref{sec:capital}); cash on both sides gives zero, so every figure that predates instruments is unchanged. Signs follow the convention that costs are positive. The waterfall is reported gross and under the CSA, so the benefit of collateral is visible term by term.
+where $\omega_i$ is an optional wrong-way-risk multiplier, $\kappa$ the capital hurdle rate, $K_i$ the SA-CCR capital on the exposure path with the trade's remaining life read at the middle of step $i$ (capital and margin are held through the step, so the step that ends on the maturity is charged like every other; until 0.27.0 the life was read at the step's end, where it is zero, and a one-month trade on its two monthly steps was charged for one), and $\pi$ a yield pick-up on posted collateral (tokenised collateral that earns a return reduces MVA). ColVA is the carry of the variation margin against cash at the OIS the discounting assumes: $\mathrm{VM}^{\mathrm{post}}_i$ and $\mathrm{VM}^{\mathrm{recv}}_i$ are the mean margin posted and held at step $i$ (the two sides of $C$ in \S\ref{sec:exposure}), $s^{\mathrm{post}}$ and $s^{\mathrm{recv}}$ the carries over OIS of what each side is held in (\S\ref{sec:capital}); cash on both sides gives zero, so every figure that predates instruments is unchanged. Signs follow the convention that costs are positive. The waterfall is reported gross and under the CSA, so the benefit of collateral is visible term by term.
 
 
 \textbf{The charge on the ticket.} Every ticket's XVA tab carries, under the trade's stand-alone number, the incremental charge: the counterparty's netting set valued on the credit engine's risk-neutral paths (\S\ref{sec:ccr}) with the trade and without it, the same paths for both runs, the difference per component. That is the number a desk quotes; the stand-alone figure is the trade on its own under a chosen CSA preset. An opened or freshly booked trade shows the marginal form, the set with and without it. The route is \code{POST /api/xva/incremental}; the hypothetical trade is the ticket's booking body with its legs completed as the booking route would store them, so what is charged is what would be booked.

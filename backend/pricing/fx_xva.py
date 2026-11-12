@@ -607,7 +607,7 @@ def package_addons(legs: list, csa: CSA, steps: int, dt: float) -> tuple[list[fl
     from pricing.xva_engine import SF_IR
     grid, unm, cem = [], [], []
     for i in range(steps):
-        t = (i + 1) * dt
+        t = (i + 0.5) * dt                  # the middle of the step, as run_waterfall reads a trade's remaining life
         a = u = c = 0.0
         for leg in legs:
             m_t = max(_horizon(leg) - t, 0.0)
@@ -672,7 +672,7 @@ def capital_inputs(legs: list, csa: CSA, steps: int, dt: float, capital_model: s
                 "basis": "CEM as this engine has it (0.5 % of notional × maturity factor)" if model == "cem" else "internal model: α × expected exposure"}
     rows = saccr_rows(legs)
     if group == "2b":
-        grid = [sum(0.5 * r.notional for r in rows if r.maturity_y - (i + 1) * dt > 0) for i in range(steps)]
+        grid = [sum(0.5 * r.notional for r in rows if r.maturity_y - (i + 0.5) * dt > 0) for i in range(steps)]   # alive at the middle of the step
         return {"kwargs": {"addon_profiles": (grid, grid, cem), "apply_multiplier": False}, "group": group,
                 "basis": "Group 2b cryptoasset: exposure = α × (replacement cost + 50 % of each trade's gross notional), no hedging set, no multiplier (SCO60.99)" + whose}
     return {"kwargs": {"saccr": rows, **({"addon_profiles": (None, None, cem)} if cem is not None else {})}, "group": group,

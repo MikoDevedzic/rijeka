@@ -172,7 +172,8 @@ def test_the_add_on_is_each_legs_own_while_it_is_alive():
     assert unm is None and len(grid) == 12
     assert grid[0] > alone[0] and grid[1] > alone[1], "both legs alive in months 1 and 2"
     assert grid[3:] == pytest.approx(alone[3:]), "the 3M leg has settled: the long leg's add-on alone"
-    assert grid[-1] == 0.0
+    assert grid[-1] > 0.0, "the step that ends on the last settlement is charged like the others (0.27.0)"
+    assert grid[2] > alone[2], "and so is the step that ends on the short leg's settlement"
     g2, u2, _ = fx_xva.package_addons([short, long_], CSA.from_request({"preset": "BILATERAL"}), 12, 1.0 / 12)
     assert u2 is not None and len(u2) == 12, "a margined set also carries the unmargined add-on, for the CRE52.2 cap"
 

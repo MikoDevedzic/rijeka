@@ -62,6 +62,11 @@ Capital held over the life, charged at the hurdle rate. Exposure at default by t
     K(t) = 8 % · RW_cp · EAD(t)
     KVA  = − hurdle · Σ_i K(t_i) · Δt · P(0,t_i)
 
+The remaining life `M − t` in the add-on, the maturity factor and the CVA-capital leg is read at the middle of step
+`i` (0.27.0): capital is held through the step, so the step that ends on the maturity is charged like the others.
+Until then it was read at the step's end, where it is zero on the last step: a one-month trade on two monthly steps
+was charged for one. The replacement cost is read at the step's end, as the exposure is. MVA follows the same rule.
+
 ## 7. MVA
 
 Initial margin posted is funded at the funding spread less whatever the collateral earns:
