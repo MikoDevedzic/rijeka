@@ -25,5 +25,7 @@ Learned on 11 November 2026
 - Ask the freeze question once per sitting of deploys, naming each deploy in the one question, and take the answer for those deploys only.
 
 Rules
+- A change to confirmation, the chain code, the CONFIRM tab or the public register has `npm run e2e:chain` green as well as `npm run e2e` (`docs/ops/release.md`): the plain journeys have no chain and end at a record that is signed, not anchored.
+- A change that touches only tests or stack scripts under `backend/` still restarts the API and the worker (any file under `backend/` that is not Markdown does): wait for health to report the commit.
 - Never print secrets, tokens, connection strings or `.env` contents. Never paste credentials into a hosted dashboard.
 - Say what is verified and what is not. "Live" means the commit hash was read back from production, not that a push succeeded.

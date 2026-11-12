@@ -7,14 +7,22 @@
 #   REST  http://127.0.0.1:3010   PostgREST on the stack database (row-level security applies as on Supabase)
 #   API   http://127.0.0.1:8010   uvicorn main:app with the stack's environment
 #   WEB   http://127.0.0.1:4174   vite build + vite preview, built against the two above
+#   CHAIN http://127.0.0.1:8546   only with RIJEKA_E2E_CHAIN=1: Foundry's anvil with the registry deployed to it, so a
+#                                 confirmation is anchored for real (e2e/chain, `npm run e2e:chain`). Without it the
+#                                 stack has no chain, as a self-hosted instance may not: a record is signed, not anchored.
 #
-# Playwright starts this (playwright.config.js) and waits for WEB. Ctrl-C stops all three.
+# Playwright starts this (playwright.config.js) and waits for WEB. Ctrl-C stops them all.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 FRONTEND="$(dirname "$HERE")"
 BACKEND="$(cd "$FRONTEND/../backend" && pwd)"
 export PATH="/opt/homebrew/opt/postgresql@16/bin:/opt/homebrew/bin:/usr/lib/postgresql/16/bin:$PATH"
-REST_PORT=3010; API_PORT=8010; WEB_PORT=4174
+REST_PORT=3010; API_PORT=8010; WEB_PORT=4174; CHAIN_PORT=8546
+CHAIN="${RIJEKA_E2E_CHAIN:-}"
+if [ "$CHAIN" = "1" ]; then
+  export PATH="$HOME/.foundry/bin:$PATH"
+  command -v anvil >/dev/null || { echo "RIJEKA_E2E_CHAIN=1 needs Foundry's anvil on PATH (https://getfoundry.sh)" >&2; exit 1; }
+fi
 OUT="$HERE/.out"; mkdir -p "$OUT"
 
 cd "$BACKEND"
@@ -27,8 +35,12 @@ HOSTPART="$(printf '%s' "$TARGET" | sed -E 's#^[a-z]+://##; s#/.*$##; s#^.*@##; 
 case "$HOSTPART" in ""|localhost|127.0.0.1) ;; *) echo "refusing a database that is not local (host '$HOSTPART'): the journeys never run on a hosted database" >&2; exit 1 ;; esac
 
 # nothing stale: a server left on these ports from another run would be tested in place of this build
-for port in $REST_PORT $API_PORT $WEB_PORT; do
-  if (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then echo "port $port is already in use: stop the earlier stack (a stale server would be tested instead of this build)" >&2; exit 1; fi
+# (a run that has just ended is given five seconds to let go of its ports: `npm run e2e:chain` follows `npm run e2e`)
+in_use() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+PORTS="$REST_PORT $API_PORT $WEB_PORT"; if [ "$CHAIN" = "1" ]; then PORTS="$PORTS $CHAIN_PORT"; fi
+for port in $PORTS; do
+  for _ in 1 2 3 4 5 6 7 8 9 10; do in_use "$port" || break; sleep 0.5; done
+  if in_use "$port"; then echo "port $port is already in use: stop the earlier stack (a stale server would be tested instead of this build)" >&2; exit 1; fi
 done
 
 # 1. database: schema, migrations, seed, keys (a no-op when current), then the PostgREST grants
@@ -45,6 +57,19 @@ PGRST_DB_URI="$DATABASE_URL" PGRST_DB_SCHEMAS=public PGRST_DB_ANON_ROLE=anon PGR
 PGRST_JWT_SECRET="@$RIJEKA_JWKS_FILE" PGRST_JWT_AUD=authenticated PGRST_LOG_LEVEL=warn \
   postgrest > "$OUT/postgrest.log" 2>&1 &
 pids+=($!)
+
+# 2a. a chain, when the run asks for one: anvil, the registry deployed to it, and the API told where it is. The key
+#     is anvil's published first account (backend/stack/chain.py, which refuses any node that is not local)
+if [ "$CHAIN" = "1" ]; then
+  # nothing of a developer's own chain settings comes along: the stack's environment empties the node, the registry
+  # and the relayer (up.sh --env); the rest are taken away here (a second node, an explorer, limits, a party's key)
+  unset RIJEKA_CHAIN_RPC_FALLBACK RIJEKA_CHAIN_EXPLORER RIJEKA_CHAIN_MAX_FEE_GWEI RIJEKA_CHAIN_FIRM_DAILY_LIMIT RIJEKA_CHAIN_GLOBAL_DAILY_LIMIT RIJEKA_CHAIN_SYNC_WAIT_S
+  for name in $(env | sed -n 's/^\(RIJEKA_CHAIN_KEY_[A-Za-z0-9_]*\)=.*/\1/p'); do unset "$name"; done
+  anvil --port $CHAIN_PORT --silent > "$OUT/anvil.log" 2>&1 &
+  pids+=($!)
+  CHAIN_ENV="$("$PY" -m stack.chain --rpc "http://127.0.0.1:$CHAIN_PORT" 2> "$OUT/chain-deploy.log")" || { cat "$OUT/chain-deploy.log" >&2; exit 1; }
+  eval "$CHAIN_ENV"
+fi
 
 # 3. the API on the stack's environment
 RIJEKA_NO_DOTENV=1 CORS_ORIGINS="http://127.0.0.1:$WEB_PORT,http://localhost:$WEB_PORT" RIJEKA_RATE_LIMITS=0 \
@@ -75,5 +100,5 @@ cd "$FRONTEND"
 VITE_API_URL="http://127.0.0.1:$API_PORT" VITE_SUPABASE_URL="http://stack.local" VITE_SUPABASE_ANON_KEY="stack-anon" \
   npx vite build --outDir "$OUT/dist" --emptyOutDir ${RIJEKA_E2E_BUILD_FLAGS:-} > "$OUT/build.log" 2>&1 || { tail -30 "$OUT/build.log"; exit 1; }
 npx vite preview --outDir "$OUT/dist" --host 127.0.0.1 --port $WEB_PORT --strictPort &
-pids+=($!)
-wait "${pids[2]}"          # the web server; when it stops (or this script is told to), the trap stops the other two
+WEB_PID=$!; pids+=($WEB_PID)
+wait "$WEB_PID"            # the web server; when it stops (or this script is told to), the trap stops the others

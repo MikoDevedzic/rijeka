@@ -2,17 +2,7 @@
 // begins the name), and as the picture of a confirmation: the river runs while a trade is being signed and
 // anchored, the R is drawn when the trade is confirmed, and its ring only when the record is anchored on a chain.
 // A confirmation that fails never draws the letter, and nothing carries over to the next trade.
-import { test, expect, expectClean, API } from './fixtures.js'
-
-// how much of a canvas is drawn at full strength, in its left part (the river) and its right part (the letter and
-// ring), and a number that changes when the drawing does (`shape`: where the ink is, not only how much). The
-// waiting outline of the letter is faint and is not counted.
-const ink = (canvas) => canvas.evaluate(cv => {
-  const { width: w, height: h } = cv, d = cv.getContext('2d').getImageData(0, 0, w, h).data
-  let river = 0, letter = 0, shape = 0
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 150) { if (x < w * 0.62) river++; else letter++; shape = (shape * 31 + y * w + x) % 2147483647 }
-  return { river, letter, shape }
-})
+import { test, expect, expectClean, API, bookedSwap, ink } from './fixtures.js'
 
 test('the top bar carries the logo: drawn, named, and a way home', async ({ app, problems }) => {
   await app.goto('/blotter')
@@ -52,25 +42,6 @@ test('the top bar carries the logo: drawn, named, and a way home', async ({ app,
   await expect(app.getByTestId('rijeka-logo')).toBeVisible()
   expectClean(problems)
 })
-
-// a swap against the demo bank, priced and booked, with its CONFIRM tab open
-async function bookedSwap(app) {
-  await app.goto('/blotter')
-  await app.getByText('+ NEW TRADE').first().click()
-  const win = app.locator('.tbw-window')
-  await win.waitFor()
-  await win.getByRole('button', { name: 'RATES', exact: true }).click()
-  await win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
-  const priced = app.waitForResponse(r => r.url().startsWith(API) && r.url().endsWith('/price/preview') && r.request().method() === 'POST')
-  await win.getByRole('button', { name: '▶ PRICE' }).click()
-  await priced
-  const booked = app.waitForResponse(r => r.url().includes('/api/book/trade'))
-  await win.getByRole('button', { name: /BOOK TRADE/ }).click()
-  expect((await booked).status()).toBe(201)
-  await win.getByRole('button', { name: '◆ CONFIRM' }).click()
-  await expect(win).toContainText('PENDING')
-  return win
-}
 
 test('a confirmation is the logo being drawn: the river while it is in progress, the R when it is confirmed', async ({ app, problems }) => {
   await app.emulateMedia({ reducedMotion: 'no-preference' })      // this journey watches the drawing move

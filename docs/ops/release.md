@@ -10,6 +10,8 @@ this page is what to do, in order.
 - [ ] Frontend: `cd frontend && npm run lint -- --quiet && npm test && npm run build` (the lint is the one CI runs: `src`, the journeys and the config).
 - [ ] Backend: `cd backend && python -m pytest -q --ignore=tests/integration --ignore=tests/reference`.
 - [ ] **Quinn**: `cd frontend && npm run e2e` on the local stack. A new screen, tab or button has a journey.
+      A change to confirmation, the chain code, the CONFIRM tab or the public register also runs `npm run e2e:chain`
+      (a confirmation anchored on a local test chain; CI runs it on every pull request).
 - [ ] **Ada**, for a numbers change: `tests/reference`, the engine and replication tests, the pinned sample
       book; any movement has a line in `backend/tests/integration/GOLDEN_CHANGES.md`.
 - [ ] **Vera**, for anything larger than a hotfix: a fresh review of `git diff main...HEAD`.
@@ -20,6 +22,9 @@ this page is what to do, in order.
       stale; nothing checks that the PDF is the source's, so read its first and last page).
 - [ ] `CHANGELOG.md` and `backend/version.py` for a release that changes behaviour. A fix with nothing under
       `backend/` (frontend, docs, the verifier's page) leaves `version.py` alone so the API does not restart.
+      The other way round: any file under `backend/` that is not Markdown restarts the API and the worker, a test or
+      a stack script included (`render.yaml`: `rootDir: backend`), with or without a version: wait for health to
+      report the commit before the app's release is moved.
 
 ## 2. Freeze windows
 

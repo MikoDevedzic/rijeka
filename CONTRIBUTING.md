@@ -47,6 +47,10 @@ They are skipped without `RIJEKA_STACK_DATABASE_URL`; CI runs them on a `postgre
 (`backend/stack/README.md`).
 Never point tests at a shared database: both suites write rows.
 
+The browser journeys (`cd frontend && npm run e2e`, `frontend/e2e/README.md`) run the built app on the same stack and
+need PostgREST; `npm run e2e:chain` adds a local test chain and needs Foundry's `anvil`
+([getfoundry.sh](https://getfoundry.sh)), as the contract tests in `chain/` do.
+
 ## Review
 
 One maintainer review for docs and UI; two for anything under `pricing/`, `chain/` or the registry

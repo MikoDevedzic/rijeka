@@ -8,7 +8,6 @@ import os
 import shutil
 import socket
 import subprocess
-import time
 from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
@@ -337,16 +336,9 @@ def anvil():
     url = f"http://127.0.0.1:{port}"
     try:
         from web3 import Web3
-        w3 = Web3(Web3.HTTPProvider(url))
-        for _ in range(50):
-            if w3.is_connected(): break
-            time.sleep(0.1)
-        deployer = w3.eth.account.from_key("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-        c = w3.eth.contract(abi=art["abi"], bytecode=art["bytecode"])
-        tx = c.constructor().build_transaction({"from": deployer.address, "nonce": w3.eth.get_transaction_count(deployer.address), "chainId": w3.eth.chain_id})
-        h = w3.eth.send_raw_transaction(deployer.sign_transaction(tx).raw_transaction)
-        addr = w3.eth.wait_for_transaction_receipt(h).contractAddress
-        yield {"url": url, "registry": addr, "relayer": deployer.key.hex(), "w3": w3}
+        from stack import chain as stack_chain      # one way to put the registry on a local test chain, and one copy of anvil's key
+        addr = stack_chain.deploy(url)
+        yield {"url": url, "registry": addr, "relayer": stack_chain.ANVIL_FIRST_ACCOUNT_KEY, "w3": Web3(Web3.HTTPProvider(url))}
     finally:
         proc.terminate(); proc.wait(timeout=5)
 

@@ -33,6 +33,7 @@ Postgres is Homebrew's `postgresql@16` on macOS (the script adds its `bin` to `P
 | `keys.py` | An ES256 keypair in `.local/` (git-ignored): `signing_key.pem`, `jwks.json` (for `RIJEKA_JWKS_FILE`) and `gotrue_keys.json` (the private JWK list `GOTRUE_JWT_KEYS` takes). Idempotent; `--rotate` replaces. |
 | `token.py` | `mint(user_id, email, role, expires_in=3600)`: a Supabase-shaped ES256 token (`sub`, `email`, `aud` and `role` `authenticated`, `user_metadata.role`, `exp`, header `kid`). The tests use it; the CLI prints one. |
 | `up.sh` | The one command above; `--env` prints the exports. |
+| `chain.py` | A chain of the stack's own, for the journeys that confirm on one (`frontend/e2e/chain`, `npm run e2e:chain`): deploys the committed registry to a local test node (Foundry's `anvil`) and prints `RIJEKA_CHAIN_RPC`, `RIJEKA_CHAIN_REGISTRY` and `RIJEKA_CHAIN_RELAYER_KEY` for the API. It refuses any node that is not on this machine with anvil's chain id (31337); the key it prints is anvil's published first account. Without it the stack has no chain. |
 
 Run the scripts as `python -m stack.apply` (and `seed`, `keys`, `token`) from `backend/`; run as
 `python stack/x.py` they put `backend/` on `sys.path` themselves because `stack/token.py` would

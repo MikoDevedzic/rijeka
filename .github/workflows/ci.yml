@@ -104,7 +104,8 @@ jobs:
     name: browser journeys
     # Quinn (.claude/agents/quinn.md): the built app on the local stack, in a real browser. Every page opens without
     # an error; the rates, FX and digital-asset tickets are priced, run through XVA with the on-chain comparison,
-    # capital, booking and confirmation; the results fit a laptop screen. frontend/e2e/README.md.
+    # capital, booking and confirmation; the results fit a laptop screen. Then the same stack with a local test chain
+    # (anvil): a confirmation anchored for real and read back from the node. frontend/e2e/README.md.
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -137,8 +138,15 @@ jobs:
           postgrest --version
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
+      - uses: foundry-rs/foundry-toolchain@v1      # anvil, for the journey that confirms on a chain
+        with: { version: stable }
       - name: journeys
         run: npm run e2e
+        working-directory: frontend
+      - name: journeys on a chain
+        # the same stack with a local test chain (anvil) and the registry deployed to it: a trade is confirmed, the
+        # transaction is read back from the node, and the public register lists it (frontend/e2e/chain)
+        run: npm run e2e:chain
         working-directory: frontend
       - name: logs and screenshots on failure
         if: failure()
