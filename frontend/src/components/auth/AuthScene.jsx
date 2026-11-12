@@ -10,9 +10,9 @@ import './Auth.css'
 import Scenes from './Scenes'
 import RijekaLogo from '../brand/RijekaLogo'
 
-// The public site: how it works, the verifier, the tools. One address, so the day the site's first page moves it
-// moves here once.
-export const SITE_URL = 'https://rijeka.app/'
+// The public site: how it works, the verifier, the tools, working with us. Its first page is /about: rijeka.app
+// itself opens this door (0.31.1), so a link to the bare address would only come back here.
+export const SITE_URL = 'https://rijeka.app/about'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -54,7 +54,7 @@ export default function AuthScene({ children, eyebrow, mode }) {
 
         <div className="au-explore">
           <a className="au-explore-btn" href={SITE_URL} aria-label="Explore Rijeka: the public site">EXPLORE<span className="au-explore-long"> RIJEKA</span> →</a>
-          <span>HOW IT WORKS · VERIFY · TOOLS</span>
+          <span>HOW IT WORKS · VERIFY · TOOLS · WORK WITH US</span>
         </div>
 
         {/* a drawing of the desk at work, with nothing in it to read or press */}

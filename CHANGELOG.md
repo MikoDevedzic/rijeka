@@ -3,6 +3,13 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.31.1 · 12 November 2026
+
+**The door's way to the site points at /about.** On the owner's word ("deploy everything"). The public site now
+serves its landing page at rijeka.app/about, and rijeka.app itself is to open the door; EXPLORE RIJEKA goes to
+/about so the two do not send a visitor round in a circle. The line beside it names what is there: how it works,
+verify, tools, work with us.
+
 ## 0.31.0 · 12 November 2026
 
 **The front door.** On the owner's word after two mocks ("when you type rijeka.app it should bring you to login

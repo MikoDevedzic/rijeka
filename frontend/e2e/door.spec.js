@@ -17,7 +17,7 @@ test('a visitor with no session lands on the door: sign in or create a desk, the
   await expect(page.getByTestId('rijeka-logo'), 'the logo, not the name in type').toBeVisible()
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Confirm it on chain.')
   const explore = page.getByRole('link', { name: /Explore Rijeka/ })
-  await expect(explore).toHaveAttribute('href', 'https://rijeka.app/')
+  await expect(explore).toHaveAttribute('href', 'https://rijeka.app/about')
   const seg = page.getByRole('navigation', { name: 'Sign in or create a desk' })
   await expect(seg.getByRole('link', { name: 'SIGN IN' })).toHaveAttribute('aria-current', 'page')
   await expect(page.getByLabel('Email')).toBeVisible()
