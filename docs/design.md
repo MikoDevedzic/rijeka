@@ -25,8 +25,8 @@ PFE on Risk → Counterparty credit) the page has not been read yet, and that is
 
 **This holds on the screens rebuilt so far** (the ticket's TRADE, XVA and CONFIRM tabs, the blotter, the top
 bar), and since 0.30.4 on the pages behind CONFIGURATIONS a first user opens: the curve, swaption, cap and floor and
-pair pages, the HW1F calibration, counterparties and legal entities. There a figure is limestone whatever its curve's
-class, a row's own label (a tenor, an expiry, a strike) is a label, a state that is good in itself (saved, loaded,
+pair pages, the HW1F calibration, counterparties and legal entities. There a figure (in a list, in a table, at the head of the page, or typed into a field) is limestone whatever its
+curve's class, a convention's value is a value and not a colour by kind, a row's own label (a tenor, an expiry, a strike) is a label, a state that is good in itself (saved, loaded,
 connected, quoted, a close fit) is green, a selected chip is the lighter panel, and brass is left to the page's
 actions and the selected rule. Elsewhere brass still colours what the teal accent did: about three hundred and
 twenty uses remain, among them the CURVE SCENARIO and DETAILS tabs, P&L and Risk. Two things on those pages are

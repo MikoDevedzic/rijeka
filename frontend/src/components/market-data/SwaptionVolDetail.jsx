@@ -285,7 +285,7 @@ function SwvInstruments() {
             <button className="rj-press" key={src} onClick={() => handleSourceChange(src)} style={{
               flex:1, padding:'5px 0', fontSize:'12.5px', fontWeight:700,
               letterSpacing:'0.08em', cursor:'pointer',
-              fontFamily: 'var(--mono)', background:'transparent', borderRadius:'2px',
+              fontFamily: 'var(--mono)', background: source===src ? 'var(--panel-3)' : 'transparent', borderRadius:'2px',
               border: source===src ? '1px solid var(--border-hi)' : '1px solid var(--border)',
               color:  source===src ? 'var(--text-hi)' : 'var(--text-dim)',
             }}>{src}</button>
@@ -376,7 +376,7 @@ function SwvInstruments() {
 
             {blpSnapResult && (
               <div style={{ fontSize:'12.5px', color:'var(--up)', marginBottom:'6px',
-                background:'rgba(217,178,92,0.05)', border:'1px solid rgba(217,178,92,0.2)',
+                background:'transparent', border:'1px solid var(--border)',
                 padding:'5px 7px', borderRadius:'2px', lineHeight:1.7 }}>
                 ✔ SNAPPED & SAVED · {blpSnapResult.quotes_saved} CELLS · {blpSnapResult.snap_date}
                 {blpSnapResult.failed?.length > 0 && (
@@ -1392,7 +1392,7 @@ function SwvOTMSkew({ atmGrid }) {
           <button className="rj-press" key={exp} onClick={() => setActiveExpiry(exp)} style={{
             flex:1, padding:'4px 0', fontSize:'11.5px', fontWeight:700,
             letterSpacing:'0.06em', cursor:'pointer', borderRadius:'2px',
-            ...mono, background:'transparent',
+            ...mono, background: activeExpiry===exp ? 'var(--panel-3)' : 'transparent',
             border: activeExpiry===exp ? '1px solid var(--border-hi)' : '1px solid var(--border)',
             color:  activeExpiry===exp ? 'var(--text-hi)' : 'var(--text-dim)',
           }}>{exp}</button>
@@ -1537,11 +1537,10 @@ function SwvOTMSkew({ atmGrid }) {
                         <span style={{ ...mono, fontSize:'11px', fontWeight:700,
                           color: q.color,
                           padding:'1px 5px', borderRadius:'2px',
-                          background: q.level==='good' ? 'rgba(217,178,92,0.08)'
-                                    : q.level==='ok'   ? 'rgba(233,151,90,0.08)'
-                                    : q.level==='partial' ? 'rgba(240,130,140,0.08)'
-                                    : 'transparent',
-                          border: `1px solid ${q.color}33`,
+                          // the state is the word's colour; its frame is a quiet edge (the old one appended an alpha to a
+                          // var(), which no browser reads, and tinted a good state in brass)
+                          background: 'transparent',
+                          border: '1px solid var(--border-hi)',
                         }}>
                           {q.label}
                         </span>

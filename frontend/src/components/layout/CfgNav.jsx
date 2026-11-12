@@ -438,7 +438,7 @@ const S = {
   }),
   sprintBadge: {
     flexShrink:0,
-    fontSize:'10px', letterSpacing:'0.06em',
+    fontSize:'10px', letterSpacing:'0.06em',      // a step under a label's 11: at 11 the longer rail items wrap
     color:'var(--border)', fontWeight:600,
   },
 }

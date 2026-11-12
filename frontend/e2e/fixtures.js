@@ -38,9 +38,12 @@ export const test = base.extend({
   // who is signed in: 'USER.A' (firm ADMIN, the template account with market data) unless a journey says otherwise
   who: ['USER.A', { option: true }],
 
-  problems: async ({ page }, use) => {
+  problems: async ({ page, browserName }, use) => {
     const problems = []
-    page.on('pageerror', e => problems.push(`uncaught: ${e.message}`))
+    // Safari words a fetch the page left behind when it navigated as a failed access check, and raises it as an
+    // uncaught error; a real refusal by the API's CORS would stop every engine, and Chromium's run would say so
+    const leftBehind = (m) => browserName === 'webkit' && /due to access control checks\.?$/.test(m)
+    page.on('pageerror', e => { if (!leftBehind(e.message)) problems.push(`uncaught: ${e.message}`) })
     page.on('console', m => {
       if (m.type() !== 'error') return
       const t = m.text()

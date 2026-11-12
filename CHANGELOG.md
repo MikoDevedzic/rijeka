@@ -17,6 +17,10 @@ methodology document carries its own version (v1.20). Commits on `main` are the 
   chip is the lighter panel; brass is left to the page's actions and the selected rule. A typed value is no longer
   brass.
 - The messenger's colour literals are tokens (twelve fewer hex colours in the source); a firm's name is limestone.
+- After the reviews (Iris, Vera): a selected chip is filled the same way on every page; a figure in the lists at the
+  left is mono 12.5 like the tables beside it; a convention's value (a day count, a discounting curve, a ticker) is
+  limestone, where its kind coloured it amber or blue; a good state's frame is a quiet edge, where it was a brass
+  tint (and one border that no browser could read is a border now).
 - **Left as it was, for a decision:** the colour of a curve's class in its badge, and the messenger's two warm
   colours (its own brass against Prometheus's lighter gold). A mock comes before either changes.
 - Pictures before and after of nine Configurations pages and the messenger are taken by the picture pass

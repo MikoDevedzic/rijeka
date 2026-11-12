@@ -399,7 +399,7 @@ button, input, select, textarea { font-family: inherit; }
 .ci-body  { flex: 1; min-width: 0; }
 .ci-name  { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ci-sub   { font-size: 12px; color: var(--text-dim); }
-.ci-val   { font-size: 12px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+.ci-val   { font-family: var(--mono); font-size: 12.5px; font-weight: 600; white-space: nowrap; flex-shrink: 0; }   /* a figure: mono 12.5, as in the tables beside it */
 /* a figure in a list is limestone whatever its curve's class: the class is the badge beside it (docs/design.md: brass is an
    action or a seal, amber a caution, blue a chart's second series; none is a rate or a spot) */
 .ci-val.ac, .ci-val.am, .ci-val.bl, .ci-val.pu { color: var(--text); }
@@ -448,10 +448,8 @@ button, input, select, textarea { font-family: inherit; }
 .pc  { background: var(--panel); padding: 6px 10px; }
 .pl  { font-size: 12px; color: var(--text-dim); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 2px; }
 .pv  { font-size: 12px; color: var(--text-hi); font-family: var(--sans); }
-.pv.ac { color: var(--accent); }
-.pv.bl { color: var(--blue); }
-.pv.am { color: var(--amber); }
-.pv.pu { color: var(--purple); }
+/* a convention's value is a value: limestone like any other, not a colour by kind (docs/design.md) */
+.pv.ac, .pv.bl, .pv.am, .pv.pu { color: var(--text-hi); }
 
 /* ── Code block ─────────────────────────────────────────────── */
 .cb {
