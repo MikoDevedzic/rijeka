@@ -23,6 +23,27 @@ Every change goes through the same gates. Each gate has a name and an agent defi
 
 A one-line hotfix asked for by name may skip Vera; it never skips lint, tests and Jarvis's checklist.
 
+### Who runs each gate (since 12 November 2026)
+
+The owner's rule of 12 November 2026: "yes make leaner review". In five days the review agents ran 199 times and
+reported 53 high findings among 776, two thirds of them low, for about 11.7 million tokens. Every gate above stays;
+what changes is who runs it.
+
+- **A fresh agent** (sonnet, one round, a narrow brief):
+  - **Vera** on every change larger than a one-line hotfix. Her brief: report only what would break production,
+    mislead a user, move or misstate money, or open a security hole; and say where a document states something the
+    code does not do. Where no specialist below is run, their questions for that change go into her brief.
+  - **Iris** when a screen changes.
+  - **Emmy** when a formula, a product, a risk measure or the construction of a market input is added or changed.
+  - **Magnus** when sign-in, roles, tenancy, keys, payments or a public endpoint change. Text a user types that does
+    not reach a public page is a question in Vera's brief.
+  - **Edgar** when a migration, the runner or the approved list is in the diff.
+- **The builder, who says so in the report**: **Ada** (`tests/reference`, the engine and replication tests, the
+  pinned book, and a reason in `GOLDEN_CHANGES.md` for every number that moved), **Nikola** (the map against the
+  diff), **Quinn** (the journeys), **Jarvis** (the release checklist), **Petra** (the backlog). A moved number the
+  builder cannot explain goes to Ada as an agent.
+- The owner can ask for any role as an agent on any change.
+
 ## Standing rules
 
 - **Production is shared.** The local `.env` points at the production database. A script that writes is a
