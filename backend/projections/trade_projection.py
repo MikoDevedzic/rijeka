@@ -247,9 +247,14 @@ def _h_store_change(p: Projection, payload: dict) -> Projection:
 
 def _h_partial_termination(p: Projection, payload: dict) -> Projection:
     """
-    PARTIAL_TERMINATION payload:
+    PARTIAL_TERMINATION payload, either:
+      {"changes": {"trade": {...}, "legs": [{"id", "notional"}]}, "partial_termination": {...}}
+          what POST /api/chain/partial-terminate writes (chain/partial_termination.py): replayed as an amendment is
       {"leg_id": "<uuid>", "new_notional": <number>}
+          the older shape: one leg's notional
     """
+    if isinstance(payload.get("changes"), dict):
+        return _h_amended(p, payload)
     leg_id = payload.get("leg_id")
     new_notional = payload.get("new_notional")
     if leg_id is None or new_notional is None:

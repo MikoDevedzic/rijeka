@@ -40,7 +40,7 @@ import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, INDEX_CURVE } from './booking'
+import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, INDEX_CURVE } from './booking'
 import { TENOR_Y, EXPIRY_Y } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
@@ -982,6 +982,30 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   }, [bookedTrade, terminating])
 
+  // PARTIALLY TERMINATE: the trade stays on the notional that remains (ConfirmPanel → PartialTermination). Answers
+  // true when it is done, so the form can close; the ticket, the blotter and the attestation then read the booking.
+  const [partialBusy, setPartialBusy] = useState(false)
+  const [partialErr, setPartialErr] = useState('')
+  const [partialDone, setPartialDone] = useState(null)
+  const handlePartial = useCallback(async (body) => {
+    if (!bookedTrade?.id || partialBusy) return false
+    setPartialBusy(true); setPartialErr('')
+    try {
+      const r = await partialTerminate(bookedTrade.id, body)
+      setBookedTrade(r.trade)
+      setPartialDone(r.partial_termination || null)
+      try { setAttestation(await getAttestation(r.trade.id)) } catch (e) { console.warn('[chain] attestation fetch failed', e) }
+      await useTradesStore.getState().fetchTrades()
+      useTabStore.getState().refreshTrade(r.trade.id, r.trade)
+      return true
+    } catch (e) {
+      setPartialErr(e.message || String(e))
+      return false
+    } finally {
+      setPartialBusy(false)
+    }
+  }, [bookedTrade, partialBusy])
+
   const handleDownloadProof = useCallback(async () => {
     if (!bookedTrade?.id) return
     try {
@@ -1385,6 +1409,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             onCopyProofLink={handleCopyProofLink}
             onTerminate={handleTerminate}
             terminating={terminating}
+            onPartial={handlePartial}
+            partialBusy={partialBusy}
+            partialErr={partialErr}
+            partialDone={partialDone}
             verifying={verifying}
             verifyResult={verifyResult}
             onCancelTrade={handleCancelTrade}

@@ -3,6 +3,32 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.18). Commits on `main` are the detail.
 
+## 0.29.0 · 12 November 2026
+
+**Partial termination.** Asked by the owner ("do we have partial termination process?" ... "build it, deploy it").
+The event type and a route that stored it existed; nothing reduced a trade and the ticket offered nothing.
+
+- **On the ticket.** A booked trade's CONFIRM tab has PARTIALLY TERMINATE: the notional that remains and, if one
+  was agreed, the fee for the unwind (pay or receive, amount, date). The trade stays; the ticket, the blotter, the
+  price and the XVA then read the notional that remains, and the fee is among the trade's fees as UNWIND.
+- **What changes is worked out by the API from the booking** (`chain/partial_termination.py`), never taken from
+  the request: the trade's notional, every leg's in the same proportion, and for a currency or digital-asset trade
+  the notional its signed record carries (`base_notional` and `quote_notional`, or `notional_amount`).
+- **A trade confirmed on a chain** has its record superseded there by the reduced one, with a signature from each
+  party, as an amendment is (`POST /api/chain/partial-terminate/{id}`; `/partial-termination-request/{id}` gives a
+  counterparty that signs for itself the digest). VERIFY then passes on the reduced booking. A journey on a local
+  chain asks the node: the registry raised `Amended(prev, new)`, no longer holds the first record as confirmed and
+  holds the new one.
+- **A trade with no anchored record** (pending, or signed on an instance with no chain) is reduced on the booking
+  alone; the event is PARTIAL_TERMINATION and claims no signature. On an instance with no chain a confirmed trade's
+  old signed record then no longer matches the booking, and VERIFY says so.
+- **Refused, in words:** the whole notional or more (terminate it), a cancelled, terminated or matured trade, one
+  leg of a package, an option sized by a payout (a digital, a touch), a leg with a notional schedule, a fee dated
+  before today, a confirmation still being anchored, another firm's trade (404).
+- **Not done.** The realised P&L of the part terminated (fees are not yet in P&L or settlement: backlog 124); the
+  unwind fee is not part of the signed record (no fee is); an option's premium is left as booked; a partial
+  termination of a package, of a payout option or of an amortising leg; an effective date other than today.
+
 ## 0.28.0 · 12 November 2026
 
 **XVA on a currency or digital-asset ticket: weekly steps, and the charge on the exposure averaged across each

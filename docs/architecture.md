@@ -107,6 +107,18 @@ The four ways a trade is confirmed, side by side:
 | the chat trade card | the counterparty's wallet | waits in the request | amend and terminate on chain |
 | `POST /api/chain/confirm-package` | Rijeka, a key it holds; refused (422) for a counterparty with its own wallet, whose legs go one by one | waits in the request, up to the backend's three minutes; no 202, no pending row | one leg cannot be amended or terminated yet (409) |
 
+**After a confirmation: what can change, and how.** A full termination closes the record
+(`POST /api/chain/terminate/{id}`). An amendment supersedes it (`POST /api/chain/amend/{id}`). A partial
+termination (`POST /api/chain/partial-terminate/{id}`, since 0.29.0) keeps the trade on a smaller notional:
+`chain/partial_termination.py` works out what changes from the booking itself (the trade's notional, each leg's in
+proportion, the notional a currency or digital-asset record carries in `terms`) and adds the unwind fee to
+`terms.fees`. An anchored trade's record is superseded on the registry as for an amendment, both parties signing
+(`/partial-termination-request/{id}` gives the counterparty the digest when Rijeka does not hold its key), and the
+event is AMENDED with a `partial_termination` block. A trade with no anchored record (pending, or signed on an
+instance with no chain) is reduced on the booking alone, and the event is PARTIAL_TERMINATION. Refused: a leg of a
+package, an option sized by a payout, a leg with a notional schedule, a confirmation still being anchored. No
+table, setting or scheduled job; the fee is not part of the signed record (no fee is).
+
 A proof pack (`GET /api/chain/proof/{id}`) carries `canonical` (what was signed), `trade_hash` and the
 attestation. For a leg of a package `canonical` is the package record and `trade_hash` its hash, and the
 leg's own record and hash travel in `leg`.

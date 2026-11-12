@@ -781,8 +781,8 @@ def _preview_amendment(db: Session, trade: Trade, changes: dict):
 
 
 def _apply_attested_event(db: Session, trade: Trade, *, event_type: str, new_status: str,
-                          payload: dict, confirmation_hash: str, idempotency_key: Optional[str],
-                          mutate=None) -> dict:
+                          payload: dict, confirmation_hash: Optional[str], idempotency_key: Optional[str],
+                          mutate=None, counterparty_confirmed: bool = True) -> dict:
     """
     Like trade_events._apply_lifecycle_transition, but the audit post_state is
     the real projection AFTER this event (so an AMENDED snapshot shows the
@@ -812,7 +812,7 @@ def _apply_attested_event(db: Session, trade: Trade, *, event_type: str, new_sta
             event_date=_d.today(), effective_date=_d.today(),
             payload=payload, pre_state=pre_state, post_state=post_state,
             user_id=trade.user_id, created_by=trade.user_id,
-            confirmation_hash=confirmation_hash, counterparty_confirmed=True,
+            confirmation_hash=confirmation_hash, counterparty_confirmed=counterparty_confirmed,
         ))
         db.flush()
         trade.status = new_status
@@ -976,6 +976,182 @@ def amend_on_chain(trade_id: str, body: AmendBody,
     return _apply_attested_event(db, trade, event_type="AMENDED", new_status="CONFIRMED",
                                  payload={"changes": body.changes, "attestation": attestation},
                                  confirmation_hash=_hexb(new), idempotency_key=idempotency_key, mutate=_mutate)
+
+
+# ── Partial termination ──────────────────────────────────────────────────────
+#
+# The trade stays, on a smaller notional (chain/partial_termination.py works out what changes, from the booking and
+# never from the request). When the trade's record is anchored the registry is told as for an amendment: the old
+# record is superseded by the new one with both signatures, and the event is AMENDED with the new attestation and a
+# `partial_termination` block. When it is not anchored (pending, or signed on an instance with no chain) the booking
+# changes, the event is PARTIAL_TERMINATION, and nothing is claimed about a signature.
+
+class PartialFee(BaseModel):
+    direction: str
+    amount:    float
+    date:      _date
+    currency:  Optional[str] = None
+    note:      Optional[str] = None
+
+
+class PartialTerminationRequestBody(BaseModel):
+    new_notional: Decimal
+    fee:          Optional[PartialFee] = None
+
+
+class PartialTerminationBody(PartialTerminationRequestBody):
+    address:   Optional[str] = None
+    signature: Optional[str] = None
+
+
+def _partial_changes(db: Session, trade: Trade, body) -> tuple[dict, dict]:
+    """(changes, summary) for this request on the booking as it stands, or 422 in the rule's own words."""
+    from chain import partial_termination as PT
+    legs = db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
+    fee = None if body.fee is None else {"direction": body.fee.direction, "amount": body.fee.amount, "date": body.fee.date.isoformat(),
+                                         "currency": body.fee.currency, "note": body.fee.note}
+    try:
+        return PT.changes_for(trade, legs, body.new_notional, fee, datetime.now(timezone.utc).date())
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+def _preview_partial(db: Session, trade: Trade, changes: dict, att: dict):
+    """The record and hash the trade will have once `changes` are on it: applied in a savepoint, rolled back."""
+    from chain import partial_termination as PT
+    prev = bytes.fromhex(att["trade_hash"][2:])
+    sp = db.begin_nested()
+    try:
+        legs = db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
+        PT.apply(trade, legs, changes)
+        db.flush()
+        db.expire(trade); [db.expire(leg) for leg in legs]
+        payload, new = _canonical_for(db, trade, attested_version(att))
+    finally:
+        sp.rollback()
+        db.expire_all()
+    if new == prev:
+        raise HTTPException(status_code=422, detail="This reduction does not alter any signed term; nothing to supersede.")
+    return prev, payload, new
+
+
+def _partial_trade(db: Session, trade_id: str, user_id) -> Trade:
+    trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    refuse_package_leg(db, trade, "Partially terminating")
+    if P.tables_present(db) and P.open_for_trade(db, trade.id) is not None:
+        raise HTTPException(status_code=409, detail=f"{trade.trade_ref}'s confirmation is still being anchored; reduce it once that has landed.")
+    return trade
+
+
+@router.post("/partial-termination-request/{trade_id}")
+def partial_termination_request(trade_id: str, body: PartialTerminationRequestBody, db: Session = Depends(get_db),
+                                user: dict = Depends(verify_token)):
+    """Our half of a partial termination of an anchored trade, for the counterparty to countersign. Nothing is
+    stored or anchored. Deterministic: /partial-terminate with the same body re-derives the same new hash."""
+    trade = _partial_trade(db, trade_id, user.get("sub"))
+    att, _ = _current_record(db, trade)
+    changes, summary = _partial_changes(db, trade, body)
+    prev, payload, new = _preview_partial(db, trade, changes, att)
+    k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+    be, chain_id, registry = _eip712_ctx()
+    td_own = amendment_typed_data(chain_id, registry, prev, new, k_cp.address)
+    td_cp  = amendment_typed_data(chain_id, registry, prev, new, k_own.address)
+    return {
+        "format": "rijeka-partial-termination-request", "format_version": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "trade_ref": trade.trade_ref, "trade_id": str(trade.id),
+        "partial_termination": summary, "changes": changes,
+        "prev_hash": _hexb(prev), "new_hash": _hexb(new), "canonical": payload,
+        "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": chain_id, "verifying_contract": registry},
+        "from": {"lei": k_own.lei, "name": own_id.get("name"), "address": k_own.address,
+                 "signature": _hexb(sign(td_own, k_own.private_key))},
+        "to":   {"lei": k_cp.lei, "name": cp_id.get("name"), "address": k_cp.address,
+                 "digest_to_sign": _hexb(eip712_digest(td_cp)), "can_sign_locally": k_cp.private_key is not None},
+        "how_to_countersign": [
+            "1. Reduce YOUR booking of this trade to partial_termination.to_notional (and the record's own notional terms "
+            "with it) and re-hash it. It must equal new_hash. Check prev_hash is the record you signed.",
+            "2. Sign EIP-712 TradeAmendment(bytes32 prevHash,bytes32 newHash,address counterparty) with "
+            "counterparty = from.address. The digest is to.digest_to_sign.",
+            f"3. Return {{address, signature}} with the same new_notional and fee to POST /api/chain/partial-terminate/{trade.id}.",
+        ],
+    }
+
+
+@router.post("/partial-terminate/{trade_id}", status_code=201)
+def partial_terminate(trade_id: str, body: PartialTerminationBody,
+                      idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
+                      db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """
+    Reduce a trade's notional and book the fee for the unwind. An anchored trade's record is superseded on-chain
+    with both signatures (an AMENDED event carrying the new attestation); one that is not anchored is changed on
+    the booking alone (a PARTIAL_TERMINATION event). Rows and event commit together.
+    """
+    from chain import partial_termination as PT
+    user_id = _check_write_role(user)
+    _validate_idempotency_header(idempotency_key)
+    cached = _lookup_idempotent(db, user_id, idempotency_key)
+    if cached:
+        return cached
+    trade = _partial_trade(db, trade_id, user_id)
+    att = anchored_attestation(db, trade.id)
+    if is_terminated(att):
+        raise HTTPException(status_code=409, detail=f"{trade.trade_ref} is terminated on-chain; nothing further can change.")
+    changes, summary = _partial_changes(db, trade, body)
+
+    def _mutate(expect: Optional[bytes] = None):
+        legs = db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
+        PT.apply(trade, legs, changes)
+        db.flush()
+        if expect is not None:
+            db.expire(trade); [db.expire(leg) for leg in legs]
+            _, h2 = _canonical_for(db, trade, attested_version(att))
+            if h2 != expect:   # cannot happen unless the booking changed between preview and apply
+                raise HTTPException(status_code=409, detail="The booking changed while the record was being anchored; re-run the request.")
+
+    if att is None:
+        out = _apply_attested_event(db, trade, event_type="PARTIAL_TERMINATION", new_status=trade.status,
+                                    payload={"changes": changes, "partial_termination": {**summary, "anchored": False}},
+                                    confirmation_hash=None, idempotency_key=idempotency_key, mutate=_mutate,
+                                    counterparty_confirmed=False)
+    else:
+        _check_chain_quota(db, user_id, kind="amend")
+        prev, payload, new = _preview_partial(db, trade, changes, att)
+        k_own, k_cp, own_id, cp_id = _resolve_parties(db, trade)
+        be, chain_id, registry = _eip712_ctx()
+        td_own = amendment_typed_data(chain_id, registry, prev, new, k_cp.address)
+        td_cp  = amendment_typed_data(chain_id, registry, prev, new, k_own.address)
+        sig_own, sig_cp, bilateral = _cp_signature_or_ours(db, trade, k_own, k_cp, td_cp, td_own,
+                                                           body.address, body.signature, "partial termination")
+        try:
+            receipt = be.amend(prev, new, sig_own, sig_cp)
+        except Exception as e:
+            log.exception("on-chain partial termination failed")
+            raise internal(502, "Chain anchoring failed", e)
+        attestation = {
+            "schema_version": attested_version(att),
+            "trade_hash":     _hexb(new),
+            "prev_hash":      _hexb(prev),
+            "canonical_bytes_len": len(canonical_bytes(payload)),
+            "bilateral":      bilateral,
+            "parties": {
+                "own":          {"lei": k_own.lei, "address": k_own.address, "signature": _hexb(sig_own), "key_source": k_own.source},
+                "counterparty": {"lei": k_cp.lei,  "address": k_cp.address,  "signature": _hexb(sig_cp),
+                                 "key_source": "countersigned" if bilateral else k_cp.source},
+            },
+            "eip712": {"name": "Rijeka Trade Confirmation", "version": "1", "chain_id": chain_id, "verifying_contract": registry},
+            "anchor": receipt.to_dict(),
+        }
+        out = _apply_attested_event(db, trade, event_type="AMENDED", new_status=trade.status,
+                                    payload={"changes": changes, "attestation": attestation,
+                                             "partial_termination": {**summary, "anchored": True}},
+                                    confirmation_hash=_hexb(new), idempotency_key=idempotency_key,
+                                    mutate=lambda: _mutate(new))
+    from api.routes.pricer import invalidate_trade_cache
+    invalidate_trade_cache()
+    # what was done, beside the trade as it now stands (a replay of the same Idempotency-Key answers the trade alone)
+    return {**out, "partial_termination": {**summary, "anchored": att is not None}}
 
 
 class TerminateBody(BaseModel):

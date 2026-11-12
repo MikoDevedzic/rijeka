@@ -26,6 +26,7 @@ import { SendForConfirmation } from './SendForConfirmation'
 import { useSendStatus, useAnchoring } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
 import Seal from './Seal'
+import PartialTermination from './PartialTermination'
 import ConfirmMark from '../brand/ConfirmMark'
 import { seedOf } from '../brand/mark'
 import { confirmCaption, confirmPhase } from '../brand/confirm-phase'
@@ -194,6 +195,10 @@ function ConfirmBody({
   onRemoteConfirmed = () => {},
   onTerminate = null,
   terminating = false,
+  onPartial = null,       // (body) => Promise<boolean>: reduce the trade's notional (PartialTermination.jsx)
+  partialBusy = false,
+  partialErr = '',
+  partialDone = null,
   pkg = null,             // the package this trade is a leg of: { tradeId, structure, n, legs: [trade, ...] } (fx-legs.js packageOf)
   pkgPending = false,     // every leg still PENDING: CONFIRM confirms the package as one record
 }) {
@@ -284,6 +289,10 @@ function ConfirmBody({
             <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying}
               verifyResult={verifyResult} onDownloadProof={onDownloadProof} onCopyProofLink={onCopyProofLink}
               onTerminate={status === 'CONFIRMED' && attestation?.attestation && !attestation.attestation.package ? onTerminate : null} terminating={terminating} confirmErr={confirmErr} />
+          )}
+          {status === 'CONFIRMED' && (
+            <PartialTermination trade={bookedTrade} pkg={pkg || (attestation?.attestation?.package ? {} : null)} terminated={!!attestation?.attestation?.terminated}
+              anchored={!!attestation?.attestation?.anchor?.anchored} busy={partialBusy} error={partialErr} done={partialDone} onSubmit={onPartial} />
           )}
         </div>
       </div>
@@ -383,6 +392,10 @@ function ConfirmBody({
             ▶ CANCEL TRADE
           </button>
         </div>
+
+        {!anchoring && !confirming && (
+          <PartialTermination trade={bookedTrade} pkg={pkg} busy={partialBusy} error={partialErr} done={partialDone} onSubmit={onPartial} />
+        )}
 
         {anchoring && (
           <div style={{ padding: 12, background: 'var(--panel)', border: '1px solid rgba(233,151,90,0.4)', borderRadius: 2, maxWidth: 560 }}>

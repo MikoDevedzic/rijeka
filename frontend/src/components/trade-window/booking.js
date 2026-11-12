@@ -751,6 +751,11 @@ export function amendRequest(tradeId, changes) { return _authedJson('/api/chain/
 export function amendOnChain(tradeId, changes, sig = {}) {
   return _authedJson('/api/chain/amend/' + tradeId, 'POST', { changes, ...sig }, { 'Idempotency-Key': crypto.randomUUID() })
 }
+/** A partial termination: the trade stays on the notional that remains, with the unwind fee among its fees. The
+ *  API works out what changes; an anchored trade's record is superseded on-chain with both signatures. */
+export function partialTerminate(tradeId, body, sig = {}) {
+  return _authedJson('/api/chain/partial-terminate/' + tradeId, 'POST', { ...body, ...sig }, { 'Idempotency-Key': crypto.randomUUID() })
+}
 export function terminateRequest(tradeId) { return _authed('/api/chain/terminate-request/' + tradeId) }
 export function terminateOnChain(tradeId, sig = {}, reason = null) {
   return _authedJson('/api/chain/terminate/' + tradeId, 'POST', { ...sig, reason }, { 'Idempotency-Key': crypto.randomUUID() })
