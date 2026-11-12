@@ -282,7 +282,9 @@ The stand-alone option XVA (`/api/xva/currency-option`, `pricing/fx_xva.option_x
 digital-asset option of any style the same tab as the forward: the spot is simulated lognormal (a digital asset's on the clock of its vol regimes, §8b, the option still marked at the surface's vol) at the option's
 vol and, on every path, the option is valued with its closed form exactly as the credit engine values it
 (`ccr/options.value_fx_option`): before expiry the holder's value with the time left, barriers and touches
-carrying which paths have knocked (monitored at the grid points), an American option as its European (a lower
+carrying which paths have knocked (watched on the grid dates and between them since 0.30.0: `pricing/fx_xva.knocked_by`,
+the Brownian bridge's crossing probability on each step's own variance; the credit engine still watches on its
+dates alone), an American option as its European (a lower
 bound); at and after expiry the payoff fixed at the expiry grid point and discounted to settlement. A bought
 option's exposure is one-sided after the premium (CVA, no DVA); a sold one the reverse. The ticket draws the
 simulated paths behind EE, ENE and PFE, and the on-chain comparison runs the same paths under atomic settlement.

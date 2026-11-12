@@ -1126,8 +1126,24 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
     if itype in OPTION_INSTRUMENTS:
         try:
             a = _booked_option_args(t, trade)
+            fields, became = t, None
+            if digital and not reached:
+                # the desk's record that the barrier was touched (settlement/knock.py): knocked in, the plain option is
+                # priced; anything else is an amount that is known, answered as a fixed trade is
+                from settlement import knock
+                became = knock.after_touch(t, spec_from(t, a["option_type"], a.get("strike")), str(t.get("direction") or "BUY"))
+                if became and became[0] == "fixed" and states:
+                    from pnl.market import Market
+                    when = date.fromisoformat(str(t.get("knock_date"))) if t.get("knock_date") else val_date
+                    return _booked_fixed(trade, db, user, val_date, Market(db, user["sub"], val_date),
+                                         {"fixing_date": when, "source": "the desk's record of the barrier"})
+                if became and became[0] == "vanilla":
+                    fields = {**t, "style": "EUROPEAN"}
             out = _price_option(db, user["sub"], a.pop("pair"), direction=str(t.get("direction") or "BUY"), val_date=val_date, vol_pct=None,
-                                spot_override=None, style_fields=t, **a)
+                                spot_override=None, style_fields=fields, **a)
+            if became and became[0] == "vanilla":
+                out["model"] = f"{became[2]}; {out.get('model') or ''}".rstrip("; ")
+                out["knock"] = {"knocked": True, "date": t.get("knock_date"), "level": t.get("knock_level")}
         except (KeyError, TypeError, ValueError) as e:
             raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
         out.update(trade_id=str(trade.id), trade_ref=trade.trade_ref, instrument_type=itype, npv_ccy=out["quote_currency"], legs=[], shape="OPTION")
@@ -1159,6 +1175,45 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
     if live:
         out["state"] = "LIVE"
     return out
+
+
+class KnockBody(BaseModel):
+    knocked: Optional[bool] = None       # true: the barrier was touched; false: it never was (once expired); null: take the record off
+    on:      Optional[date] = None       # the day the level traded
+    level:   Optional[float] = None      # the price seen, if the desk keeps it
+
+
+@router.post("/knock/{trade_id}")
+def record_knock(trade_id: str, body: KnockBody, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """Record that a digital-asset barrier or touch option's level traded, with its date (settlement/knock.py), or
+    that it never did once the option has expired, or take the record off. The settlement rule and the valuation
+    read it: the option then settles on a final amount, and a touched barrier is valued for what it has become.
+    The signed record of the confirmation does not cover it and does not change."""
+    from api.routes.trade_events import _check_write_role
+    from api.routes.booking import _serialize_trade
+    from api.routes.pricer import invalidate_trade_cache
+    from settlement import knock
+    user_id = _check_write_role(user)
+    try:
+        tid = uuid.UUID(str(trade_id))
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    trade = db.query(Trade).filter(Trade.id == tid, Trade.user_id == user_id).with_for_update().first()
+    if trade is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    now = datetime.now(timezone.utc)
+    try:
+        terms = knock.record(trade.terms or {}, instrument_type=trade.instrument_type, status=trade.status, knocked=body.knocked, when=body.on,
+                             level=body.level, trade_date=trade.trade_date or now.date(), today=now.date(), by=str(user_id), now=now)
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
+    trade.terms = terms
+    trade.version_seq = (trade.version_seq or 0) + 1
+    db.commit()
+    db.refresh(trade)
+    invalidate_trade_cache()
+    return {"trade": _serialize_trade(trade)}
 
 
 # What a live quote carries and a fixed or settled view does not: there, each is null, so a reader that tests

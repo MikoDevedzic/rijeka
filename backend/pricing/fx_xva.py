@@ -292,7 +292,7 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
     paths at the second month of a six-month up-barrier at 115 % of spot and 80 % vol; valued instead at the
     barrier the margin called moved 13 % at that date and 2 to 3 % later). It goes when the paths monitor between
     grid dates."""
-    from pricing.fx_exotic import knocked_so_far, value_on_paths, value_on_paths_vols
+    from pricing.fx_exotic import value_on_paths, value_on_paths_vols
     from pricing.fx_vol import path_vols
     n_paths = m_lag.shape[0]
     sigma = float(inp.vol)
@@ -303,6 +303,7 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
     spec = inp.spec
     scale = inp.base_notional if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else 1.0
     barrier_like = spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH")
+    touched = x["knocked"]                                                     # (paths, steps + 1): knocked_by, the same record the values read
     out = np.empty_like(m_lag)
     for i in range(steps):
         j = int(j_of[i])                                                       # t_lag in (t_{j−1}, t_j]; grid date t_j is column j − 1
@@ -314,13 +315,11 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
             continue
         knocked = np.zeros(n_paths, dtype=bool)
         if barrier_like:
-            seen = min(j - 2, i_exp)                                           # the last grid column at or before t_{j−1}
-            hist = np.concatenate([np.full((n_paths, 1), inp.spot), s_t[:, :seen + 1]], axis=1) if seen >= 0 else np.full((n_paths, 1), inp.spot)
-            knocked = knocked_so_far(spec, hist)
+            knocked = touched[:, max(min(j - 2, i_exp) + 1, 0)]               # by the last grid date at or before t_{j−1}
         tl = float(t_lag[i])
         df = inp.df_quote_t / math.exp(-r_q * min(tl, inp.t_settle))
         if j - 1 > i_exp:                                                      # after the expiry's grid date: the payoff is fixed
-            out[:, i] = sign * scale * _payoff_at_expiry(spec, s_t[:, i_exp], knocked_so_far(spec, np.concatenate([np.full((n_paths, 1), inp.spot), s_t[:, :i_exp + 1]], axis=1)) if barrier_like else knocked) * df
+            out[:, i] = sign * scale * _payoff_at_expiry(spec, s_t[:, i_exp], touched[:, i_exp + 1] if barrier_like else knocked) * df
             continue
         s_lag = inp.forward * m_lag[:, i] * math.exp(-(r_q - r_b) * (inp.t_settle - tl))
         tau = (float(t[i_exp]) if j - 1 == i_exp else inp.t_expiry) - tl       # in the expiry's own step: to the date the paths fix the payoff on
@@ -437,6 +436,7 @@ class OptionXvaInput:
     pillars: Optional[list] = None   # the pair's surface: term structure for the paths, the smile at each path's moneyness
     regimes: bool = True             # a digital asset's vol regimes (pricing/vol_regimes)   ; False: one vol, for comparison
     grid_per_year: Optional[int] = None   # steps a year for the run; None = exposure_grid's rule (weekly to a year, monthly beyond)
+    watch_between: bool = True       # a barrier is watched between the grid dates as well as on them (knocked_by); False: on the dates alone
 
 
 def _payoff_at_expiry(spec, S_T: np.ndarray, knocked: np.ndarray) -> np.ndarray:
@@ -452,11 +452,53 @@ def _payoff_at_expiry(spec, S_T: np.ndarray, knocked: np.ndarray) -> np.ndarray:
     return np.where(knocked, 0.0, v) if spec.pay_at_hit else v
 
 
-def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray) -> tuple[np.ndarray, float, dict]:
+def knocked_by(spec, spot0: float, s_t: np.ndarray, var, i_exp: int, seed: int, between: bool = True) -> np.ndarray:
+    """(paths, steps + 1) booleans: column j says whether the barrier has been touched by grid point j (0 is today).
+
+    The pricer watches a barrier continuously; a grid watches it on its dates. Between two dates on which the level
+    stood inside, it may have gone out and come back: given both ends a and b and the variance v the step
+    accumulated, a lognormal level crossed B with probability exp(−2 ln(a/B) ln(b/B) / v) (the Brownian bridge's
+    crossing probability; with vol regimes v is the step's own on each path, and the probability depends on the
+    step's variance alone). One uniform per path and step, from a generator of its own, decides it. A corridor adds
+    the two sides' probabilities, capped at one: the chance of touching both inside one step is left out. Watching
+    stops at the expiry's grid date. `between` False is the grid alone, as it was until 0.30.0."""
+    n, steps = s_t.shape
+    if spec.style == "BARRIER":
+        lo, up = (None, spec.barrier) if str(spec.barrier_type).startswith("UP") else (spec.barrier, None)
+    elif spec.style == "DOUBLE_BARRIER" or (spec.style == "TOUCH" and str(spec.touch_type or "").startswith("DOUBLE")):
+        lo, up = spec.lower, spec.upper
+    elif spec.style == "TOUCH":
+        lo, up = (None, spec.barrier) if spec.barrier > spot0 else (spec.barrier, None)
+    else:
+        return np.zeros((n, steps + 1), dtype=bool)
+    last = min(int(i_exp), steps - 1)
+    pts = np.concatenate([np.full((n, 1), float(spot0)), s_t[:, :last + 1]], axis=1)
+    at = np.zeros(pts.shape, dtype=bool)
+    if up is not None:
+        at |= pts >= up
+    if lo is not None:
+        at |= pts <= lo
+    hit = at[:, 1:].copy()
+    if between:
+        a, b = pts[:, :-1], pts[:, 1:]
+        v = np.maximum(np.broadcast_to(np.asarray(var, dtype=float), (n, steps))[:, :last + 1], 1e-18)
+        p = np.zeros(a.shape)
+        for level in (lo, up):
+            if level is not None:
+                p += np.exp(np.minimum(-2.0 * np.log(a / level) * np.log(b / level) / v, 0.0))
+        u = np.random.default_rng([int(seed), 0x6B6E6F63]).random(a.shape)
+        hit |= (u < np.minimum(p, 1.0)) & ~at[:, :-1] & ~at[:, 1:]
+    out = np.zeros((n, steps + 1), dtype=bool)
+    out[:, :last + 2] = np.logical_or.accumulate(np.column_stack([at[:, 0], hit]), axis=1)
+    out[:, last + 2:] = out[:, [last + 1]]
+    return out
+
+
+def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray, sv=None, ck=None, seed: int = 42) -> tuple[np.ndarray, float, dict]:
     """An option's value from our side on a grid of `steps` × dt driven by M, and V0. On a grid longer than the
     option (a package, simulate_package_paths) it stays to the first grid date at or after its settlement, where it
     is its payoff, and is nothing after: an expiry or a settlement between two grid dates is read at the later one."""
-    from pricing.fx_exotic import knocked_so_far, value, value_on_paths, value_on_paths_vols
+    from pricing.fx_exotic import value, value_on_paths, value_on_paths_vols
     from pricing.fx_vol import path_vols
     n_paths = m.shape[0]
     sigma = float(inp.vol)
@@ -474,10 +516,12 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray) ->
     i_exp = next((k for k in range(steps) if t[k] >= inp.t_expiry - 1e-9), steps - 1)
     k_set = _settle_step(t, inp.t_settle)
     V = np.zeros((n_paths, steps))
+    # which paths have touched the barrier by each grid point, watched between the dates as well (knocked_by)
+    var = (np.full(steps, sigma) if sv is None else np.asarray(sv, dtype=float)) ** 2 * dt
+    var = var[None, :] * ck.u if ck is not None else var
+    seen = knocked_by(spec, inp.spot, s_t, var, i_exp, seed, getattr(inp, "watch_between", True)) if barrier_like else np.zeros((n_paths, steps + 1), dtype=bool)
     for k in range(k_set + 1):                                                  # nothing after it has settled
-        j_last = min(k, i_exp)
-        hist = np.concatenate([np.full((n_paths, 1), inp.spot), s_t[:, :j_last + 1]], axis=1)
-        knocked = knocked_so_far(spec, hist) if barrier_like else np.zeros(n_paths, dtype=bool)
+        knocked = seen[:, min(k, i_exp) + 1]
         if t[k] < inp.t_expiry - 1e-9:
             tau = inp.t_expiry - t[k]
             if inp.pillars:
@@ -490,7 +534,7 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray) ->
         else:
             V[:, k] = sign * scale * _payoff_at_expiry(spec, s_t[:, i_exp], knocked) * (df_t_T[k] if t[k] <= inp.t_settle + 1e-9 else 1.0)
     v0 = sign * scale * float(value(spec, inp.spot, r_q, r_b, sigma, inp.t_expiry, 1.0))
-    return V, v0, {"f_t": f_t, "s_t": s_t, "df_t_T": df_t_T, "p0": p0, "r_b": r_b, "i_exp": i_exp}
+    return V, v0, {"f_t": f_t, "s_t": s_t, "df_t_T": df_t_T, "p0": p0, "r_b": r_b, "i_exp": i_exp, "knocked": seen}
 
 
 def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
@@ -498,7 +542,7 @@ def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 
     steps, dt = _grid_of(inp, inp.t_settle)
     sigma = float(inp.vol)
     z, _, sv, m, ck = _driver(n_paths, steps, dt, seed, sigma, inp.pillars, _regimes(inp))
-    V, v0, x = _option_values(inp, steps, dt, m)
+    V, v0, x = _option_values(inp, steps, dt, m, sv, ck, seed)
     if noise_out is not None:
         noise_out.update(z=z, f_t=x["f_t"], s_t=x["s_t"], df_t_T=x["df_t_T"], sigma=sigma, steps=steps, dt=dt, r_b=x["r_b"], i_exp=x["i_exp"], step_vols=sv, clock=ck,
                          lag=exact_lag([inp], [(V, v0, x)], steps, dt, m, sv, V, v0, ck))
@@ -601,12 +645,14 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
     settled = np.zeros((n_paths, steps))          # the cash that has settled out of the set by each date, per path
     v0, rows, parts = 0.0, [], []
     for leg in legs:
-        Vi, v0i, xi = (_option_values if _is_option(leg) else _forward_values)(leg, steps, dt, m)
+        # every option leg reads the same uniforms for a touch between dates, so two legs on one barrier agree on
+        # which paths touched it (a knock-in and a knock-out of the same terms still add up to the plain option)
+        Vi, v0i, xi = _option_values(leg, steps, dt, m, sv, ck, seed) if _is_option(leg) else _forward_values(leg, steps, dt, m)
         k_last = _settle_step(t, _horizon(leg))
         # what the lag needs of this leg: its value on its settlement's grid date (one column, not the matrix) and, for
         # an option, its spots on the grid (a matrix per option leg, held until the run's noise_out is dropped)
         parts.append((Vi if keep_leg_paths else _ColumnOnly(Vi[:, k_last].copy(), k_last), v0i,
-                      {k: xi[k] for k in ("r_b", "s_t", "i_exp") if k in xi}))
+                      {k: xi[k] for k in ("r_b", "s_t", "i_exp", "knocked") if k in xi}))
         V = V + Vi
         v0 += v0i
         k_set = _settle_step(t, _horizon(leg))

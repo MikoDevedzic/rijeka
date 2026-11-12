@@ -119,6 +119,13 @@ instance with no chain) is reduced on the booking alone, and the event is PARTIA
 package, an option sized by a payout, a leg with a notional schedule, a confirmation still being anchored. No
 table, setting or scheduled job; the fee is not part of the signed record (no fee is).
 
+**A barrier's touch.** `POST /api/currency/knock/{id}` records on a digital-asset barrier or touch option that
+its level traded (the day, the level seen), that it never did (once expired), or takes the record off
+(`settlement/knock.py`). It is written to the trade's `terms` (`knocked`, `knock_date`, `knock_level`,
+`knock_recorded`), which the settlement rule and the valuations read; it is not a signed term, so the record of
+the confirmation is untouched and no chain route is involved. No event is written: the events table allows a
+fixed list of types, and a new one is a migration.
+
 A proof pack (`GET /api/chain/proof/{id}`) carries `canonical` (what was signed), `trade_hash` and the
 attestation. For a leg of a package `canonical` is the package record and `trade_hash` its hash, and the
 leg's own record and hash travel in `leg`.

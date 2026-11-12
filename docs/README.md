@@ -19,7 +19,7 @@ Live documents, the ones kept current with the code:
 | [schema.sql](schema.sql) | The database schema as first laid down |
 | [migrations/](migrations/) | SQL to apply, dated; `applied-before-2026-10/` holds the early ones already in every database |
 
-Papers: the methodology (v1.18) is `methodology/rijeka_methodology.pdf` with its `.tex`; `blockchain_derivatives_paper_v5.pdf` (and `.tex`) is the design paper.
+Papers: the methodology (v1.19) is `methodology/rijeka_methodology.pdf` with its `.tex`; `blockchain_derivatives_paper_v5.pdf` (and `.tex`) is the design paper.
 
 [archive/](archive/) holds dated documents kept for the record: the launch audit, briefs and
 handovers, the April 2026 product taxonomy and sensitivity framework that the code's comments

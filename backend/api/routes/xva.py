@@ -986,10 +986,19 @@ def option_xva_input(db, uid: str, pair: str, terms: dict, *, val_date: date, vo
     and for an option leg of POST /currency-package."""
     from api.routes.currencies import _price_option, spec_from
     from pricing import fx_xva
+    from settlement import knock
+    # the desk's record that the barrier was touched: knocked in, the run is of the plain option; anything else is an
+    # amount that is known, and there is no exposure path to simulate
+    fields = terms.get("style_fields") or {}
+    became = knock.after_touch(fields, spec_from(fields, terms["option_type"], terms.get("K")), terms["direction"]) if terms["expiry"] > val_date else None
+    if became and became[0] == "fixed":
+        raise HTTPException(status_code=422, detail=f"this option's barrier is recorded as touched ({became[2]}): there is nothing left to simulate")
+    if became:
+        fields = {**fields, "style": "EUROPEAN"}
     q = _price_option(db, uid, pair, option_type=terms["option_type"], base_notional=float(terms["notional"]), expiry=terms["expiry"],
                       settlement=terms["settle"], strike=terms["K"], direction=terms["direction"], val_date=val_date, vol_pct=vol_pct,
-                      spot_override=None, settlement_type=terms.get("settlement_type", "DELIVERABLE"), style_fields=terms.get("style_fields") or {})
-    spec = spec_from(terms.get("style_fields") or {}, terms["option_type"], float(q["strike"]) if q.get("strike") is not None else None)
+                      spot_override=None, settlement_type=terms.get("settlement_type", "DELIVERABLE"), style_fields=fields)
+    spec = spec_from(fields, terms["option_type"], float(q["strike"]) if q.get("strike") is not None else None)
     if spec.strike is None and spec.style != "TOUCH":
         spec.strike = float(q["forward"])
     t_s = float(q.get("t_settle") or ((terms["settle"] - val_date).days / 365.0))

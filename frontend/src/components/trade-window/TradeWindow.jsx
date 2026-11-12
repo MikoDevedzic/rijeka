@@ -40,7 +40,7 @@ import XvaPanel      from './xva-panel'
 import ScenarioPanel from './scenario-panel'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, INDEX_CURVE } from './booking'
+import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, recordKnock, INDEX_CURVE } from './booking'
 import { TENOR_Y, EXPIRY_Y } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
@@ -1008,6 +1008,28 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
   }, [bookedTrade, partialBusy, onClose])
 
+  // BARRIER: the desk's record that an option's level traded (ConfirmPanel → KnockRecord). The trade is then valued
+  // for what it has become, so the ticket is opened again on it, as after a partial termination.
+  const [knockBusy, setKnockBusy] = useState(false)
+  const [knockErr, setKnockErr] = useState('')
+  const handleKnock = useCallback(async (body) => {
+    if (!bookedTrade?.id || knockBusy) return false
+    setKnockBusy(true); setKnockErr('')
+    try {
+      const r = await recordKnock(bookedTrade.id, body)
+      await useTradesStore.getState().fetchTrades()
+      useTabStore.getState().refreshTrade(r.trade.id, r.trade)
+      useBookingStore.getState().open(r.trade, { tab: '◆ CONFIRM' })
+      onClose?.()
+      return true
+    } catch (e) {
+      setKnockErr(e.message || String(e))
+      return false
+    } finally {
+      setKnockBusy(false)
+    }
+  }, [bookedTrade, knockBusy, onClose])
+
   const handleDownloadProof = useCallback(async () => {
     if (!bookedTrade?.id) return
     try {
@@ -1415,6 +1437,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             partialBusy={partialBusy}
             partialErr={partialErr}
             partialDone={partialDone}
+            onKnock={handleKnock}
+            knockBusy={knockBusy}
+            knockErr={knockErr}
             verifying={verifying}
             verifyResult={verifyResult}
             onCancelTrade={handleCancelTrade}

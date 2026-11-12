@@ -337,11 +337,24 @@ def _value_fx_option(t: dict, pair: str, base: str, quote: str, S: float, fwd, v
     from pricing.fx_vol import lookup_vol
     expiry, settle = t["expiry"], t["settle"]
     spec = spec_from(t.get("style_fields") or {}, t["option_type"], t["K"])
+    # the desk's record that the barrier was touched, before expiry (settlement/knock.py): knocked in, it is the plain
+    # option from here; anything else is an amount that is known
+    from settlement import knock as _knock
+    touched = _knock.after_touch(t.get("style_fields") or {}, spec, t["direction"]) if expiry > val_date else None
+    if touched and touched[0] == "vanilla":
+        spec = spec_from({**(t.get("style_fields") or {}), "style": "EUROPEAN"}, t["option_type"], t["K"])
     if spec.strike is None and spec.style != "TOUCH":
         spec.strike = float(fwd.forward)
     K = spec.strike if spec.strike is not None else float(fwd.forward)
     vol_cid = f"{pair}_VOL"
     asof = {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT"), vol_cid: mkt.snapshot_date(vol_cid)}
+    if touched and touched[0] == "fixed":
+        from settlement import rule as _rule
+        amount = float(touched[1])
+        figures = (_rule.fixed_cash(amount, val_date, settle, q_curve.df) if q_curve is not None
+                   else {"npv": amount * float(fwd.df_quote) + 0.0, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0})
+        return {**figures, "ccy": quote, "vega": 0.0, "asof": asof, "fallback": fallback, "settled": False, "model": touched[2],
+                "knock": "recorded", "settlement_amount": amount, "provisional": False}
     if expiry <= val_date:
         from settlement import rule
         if fix is not None and fix["price"] is not None:

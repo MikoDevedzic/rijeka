@@ -27,6 +27,7 @@ import { useSendStatus, useAnchoring } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
 import Seal from './Seal'
 import PartialTermination from './PartialTermination'
+import KnockRecord from './KnockRecord'
 import ConfirmMark from '../brand/ConfirmMark'
 import { seedOf } from '../brand/mark'
 import { confirmCaption, confirmPhase } from '../brand/confirm-phase'
@@ -199,6 +200,9 @@ function ConfirmBody({
   partialBusy = false,
   partialErr = '',
   partialDone = null,
+  onKnock = null,         // (body) => Promise<boolean>: record a barrier touched, never touched, or neither (KnockRecord.jsx)
+  knockBusy = false,
+  knockErr = '',
   pkg = null,             // the package this trade is a leg of: { tradeId, structure, n, legs: [trade, ...] } (fx-legs.js packageOf)
   pkgPending = false,     // every leg still PENDING: CONFIRM confirms the package as one record
 }) {
@@ -294,6 +298,7 @@ function ConfirmBody({
             <PartialTermination trade={bookedTrade} pkg={pkg || (attestation?.attestation?.package ? {} : null)} terminated={!!attestation?.attestation?.terminated}
               anchored={!!attestation?.attestation?.anchor?.anchored} busy={partialBusy} error={partialErr} done={partialDone} onSubmit={onPartial} />
           )}
+          {status === 'CONFIRMED' && <KnockRecord trade={bookedTrade} busy={knockBusy} error={knockErr} onSubmit={onKnock} />}
         </div>
       </div>
     )
@@ -396,6 +401,7 @@ function ConfirmBody({
         {!anchoring && !confirming && (
           <PartialTermination trade={bookedTrade} pkg={pkg} busy={partialBusy} error={partialErr} done={partialDone} onSubmit={onPartial} />
         )}
+        {!anchoring && !confirming && <KnockRecord trade={bookedTrade} busy={knockBusy} error={knockErr} onSubmit={onKnock} />}
 
         {anchoring && (
           <div style={{ padding: 12, background: 'var(--panel)', border: '1px solid rgba(233,151,90,0.4)', borderRadius: 2, maxWidth: 560 }}>

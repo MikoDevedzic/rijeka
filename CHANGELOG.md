@@ -1,7 +1,34 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.18). Commits on `main` are the detail.
+methodology document carries its own version (v1.19). Commits on `main` are the detail.
+
+## 0.30.0 · 12 November 2026
+
+**Barriers: watched between the grid's dates, and a touch the desk can record.** Items 11(c) and 5 of the Phase 1
+exit list, on the owner's word ("do them all in order and deploy").
+
+- **Watched between dates.** On a ticket's exposure paths a barrier was watched on the grid's dates alone, so a
+  level that went out and came back between two dates was never seen. Against the continuous closed forms on a
+  six-month knock-out at 55 % vol (40,000 paths): weekly steps missed 16 % of the touches and the knock-out paid
+  63 % more on the paths than its price; monthly steps 29 % and 126 %. Now, where the level stood inside at both
+  ends of a step, it is taken to have crossed with the Brownian bridge's probability
+  exp(−2 ln(a/B) ln(b/B) / v), v the variance that step accumulated on that path (`pricing/fx_xva.knocked_by`).
+  The share of paths that touch is within 0.2 % of the closed form on weekly and on monthly steps, and the
+  knock-out's payoff within about 1 % of its price. XVA of barrier and touch options moves: a six-month knock-out
+  call's CVA falls about 10 %. Plain options, forwards and swaps do not move.
+- **A touch recorded.** A booked digital-asset barrier or touch option's CONFIRM tab has BARRIER: the day the
+  level traded and, if kept, the level seen; once the option has expired, NEVER TOUCHED; and the record can be
+  taken off (`POST /api/currency/knock/{id}`, `settlement/knock.py`). The settlement rule always read
+  `terms.knocked` and nothing wrote it, so such an option settled on a provisional amount. With a touch recorded
+  it is valued for what it has become before expiry: a knock-in as the plain option, a knock-out or a no-touch as
+  nothing outstanding (a fixed view on the ticket), a one-touch as its payout. An XVA run on an option that is
+  over says there is nothing left to simulate. The signed record of the confirmation does not cover the knock
+  state and still verifies.
+- **Not done.** The record is on the trade's terms with who and when, not an event (the events table's allowed
+  types would need a migration); a rebate or payout paid at the hit is not booked as cash; currency-pair options
+  take no record; a corridor's chance of touching both sides inside one step is left out; the credit page's engine
+  still watches on its dates alone; a recorded touch is not checked against any price history.
 
 ## 0.29.0 · 12 November 2026
 

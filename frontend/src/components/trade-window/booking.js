@@ -756,6 +756,9 @@ export function amendOnChain(tradeId, changes, sig = {}) {
 export function partialTerminate(tradeId, body, sig = {}) {
   return _authedJson('/api/chain/partial-terminate/' + tradeId, 'POST', { ...body, ...sig }, { 'Idempotency-Key': crypto.randomUUID() })
 }
+/** The desk's record that a digital-asset option's barrier was touched ({knocked: true, on, level?}), never was
+ *  ({knocked: false}, once expired), or neither ({knocked: null}). The settlement and the valuation read it. */
+export function recordKnock(tradeId, body) { return _authedJson('/api/currency/knock/' + tradeId, 'POST', body) }
 export function terminateRequest(tradeId) { return _authed('/api/chain/terminate-request/' + tradeId) }
 export function terminateOnChain(tradeId, sig = {}, reason = null) {
   return _authedJson('/api/chain/terminate/' + tradeId, 'POST', { ...sig, reason }, { 'Idempotency-Key': crypto.randomUUID() })
