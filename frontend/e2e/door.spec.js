@@ -16,7 +16,7 @@ test('a visitor with no session lands on the door: sign in or create a desk, the
   await expect(page).toHaveURL(/\/login$/)
   await expect(page.getByTestId('rijeka-logo'), 'the logo, not the name in type').toBeVisible()
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Confirm it on chain.')
-  const explore = page.getByRole('link', { name: /EXPLORE RIJEKA/ })
+  const explore = page.getByRole('link', { name: /Explore Rijeka/ })
   await expect(explore).toHaveAttribute('href', 'https://rijeka.app/')
   const seg = page.getByRole('navigation', { name: 'Sign in or create a desk' })
   await expect(seg.getByRole('link', { name: 'SIGN IN' })).toHaveAttribute('aria-current', 'page')
@@ -37,20 +37,26 @@ test('a visitor with no session lands on the door: sign in or create a desk, the
   expectClean(problems)
 })
 
-for (const [name, width, height] of [['a current phone', 390, 844], ['a small phone', 375, 667]]) {
+for (const [name, width, height] of [['a current phone', 390, 844], ['a small phone', 375, 667], ['the narrowest phone', 320, 568]]) {
   test(`the door on ${name} is one screen: nothing to scroll, the form and the way to the site in view`, async ({ page, problems }) => {
     await signedOut(page)
     await page.setViewportSize({ width, height })
     await page.goto('/login')
     await expect(page.getByLabel('Email')).toBeVisible()
-    await page.waitForTimeout(800)
+    await page.evaluate(() => document.fonts.ready)      // the logo is measured again once its face has loaded
+    await page.waitForTimeout(400)
     const at = await scrolls(page)
     expect(at.down, `the sign-in door is taller than a ${width} by ${height} screen by ${at.down}px`).toBeLessThanOrEqual(0)
     expect(at.across).toBeLessThanOrEqual(0)
-    for (const part of [page.getByTestId('rijeka-logo'), page.getByRole('link', { name: /EXPLORE RIJEKA/ }), page.getByRole('button', { name: 'ENTER SYSTEM' })]) {
+    const boxes = []
+    for (const part of [page.getByTestId('rijeka-logo'), page.getByRole('link', { name: /Explore Rijeka/ }), page.getByRole('button', { name: 'ENTER SYSTEM' })]) {
       const box = await part.boundingBox()
       expect(box && box.y >= 0 && box.y + box.height <= height, 'in view without scrolling').toBe(true)
+      boxes.push(box)
     }
+    // the logo and the way to the site share the top row and do not touch; the button is tall enough for a thumb
+    expect(boxes[1].x - (boxes[0].x + boxes[0].width), 'the logo runs into the EXPLORE button').toBeGreaterThanOrEqual(6)
+    expect(boxes[1].height, 'a thumb\'s height').toBeGreaterThanOrEqual(36)
     await page.screenshot({ path: `e2e/.out/shots/door-phone-${width}.png` })
     if (height >= 800) {      // the longer form, on the taller screen
       await page.goto('/signup')

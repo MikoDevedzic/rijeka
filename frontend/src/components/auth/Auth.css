@@ -3,7 +3,7 @@
 .au-shell { display:grid; grid-template-columns: minmax(0, 1.25fr) minmax(380px, 0.85fr); min-height:100vh; background:var(--bg); color:var(--text); }
 
 /* ── scene ── */
-.au-scene { position:relative; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; padding:clamp(20px, 3.4vw, 44px) clamp(20px, 4vw, 56px); border-right:1px solid var(--border); }
+.au-scene { position:relative; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; padding:clamp(16px, 2.2vw, 30px) clamp(20px, 4vw, 56px); border-right:1px solid var(--border); }      /* 30px above and below on a laptop: at 44 the page was 24px taller than a 900px screen */
 .au-scene::before { content:''; position:absolute; inset:0; pointer-events:none; background:
   radial-gradient(900px 520px at 20% 30%, rgba(217,178,92,0.13), transparent 65%),
   radial-gradient(700px 400px at 90% 100%, rgba(143,193,230,0.07), transparent 60%),
@@ -28,8 +28,8 @@
 .au-live i { width:6px; height:6px; border-radius:50%; background:var(--border-glow); }
 .au-live.on { color:var(--accent); }
 .au-live.on i { background:var(--accent); box-shadow:0 0 10px var(--accent); animation:auPulse 2s ease-in-out infinite; }
-.au-vol { width:100%; height:clamp(170px, 22vh, 300px); display:block; animation:auFade 1.2s ease .2s both; }
-.au-stage { height:clamp(170px, 22vh, 300px); position:relative; animation:auFade .7s ease both; }
+.au-vol { width:100%; height:clamp(200px, 32vh, 300px); display:block; animation:auFade 1.2s ease .2s both; }
+.au-stage { height:clamp(200px, 32vh, 300px); position:relative; animation:auFade .7s ease both; }
 .au-stage > * { position:absolute; inset:0; }
 .au-dots { display:flex; gap:14px; margin-top:10px; }
 .au-dots button { background:none; border:none; padding:4px 0; cursor:pointer; display:flex; flex-direction:column; gap:5px; align-items:flex-start; color:var(--text-mute); font-family:var(--mono); font-size:0.86rem; letter-spacing:0.22em; transition:color .2s; }
@@ -130,6 +130,7 @@
 @keyframes auPop { 0% { transform:scale(.6); opacity:0 } 60% { transform:scale(1.15) } 100% { transform:scale(1); opacity:1 } }
 
 @media (max-width: 960px) {
+  .au-explore > span { display:none; }
   .au-shell { grid-template-columns:1fr; }
   .au-scene { border-right:none; border-bottom:1px solid var(--border); min-height:0; }
   .au-headline h1 { font-size:1.6rem; }
@@ -150,12 +151,13 @@
 .au-notice { font-size:0.86rem; line-height:1.45; color:var(--accent); border:1px solid var(--accent-dim); background:var(--accent-glow); padding:0.5rem 0.7rem; border-radius:3px; }
 
 /* ── the front door (0.31.0): the way on to the public site, and the choice between the two forms ── */
-.au-explore { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:0 0 clamp(10px, 2vh, 22px); animation:auIn .7s ease .15s both; }
+/* in the scene's top row, at the right, level with the logo: it takes no height from the drawing under the headline */
+.au-explore { position:absolute; top:clamp(16px, 2.2vw, 30px); right:clamp(20px, 4vw, 56px); display:flex; flex-direction:row-reverse; align-items:center; gap:14px; animation:auIn .7s ease .15s both; }
 .au-explore-btn { font-family:var(--mono); font-size:12px; letter-spacing:0.14em; padding:9px 14px; border-radius:3px; text-decoration:none; white-space:nowrap;
-  color:var(--text-hi); background:var(--panel-2); border:1px solid var(--border-hi); box-shadow:0 2px 0 rgb(0 0 0 / 0.35); transition:background .15s, border-color .15s; }
+  color:var(--text-hi); background:var(--panel-2); border:1px solid var(--border-hi); box-shadow:var(--btn-shadow); transition:background .15s, border-color .15s; }
 .au-explore-btn:hover { background:var(--panel-3); border-color:var(--border-glow); }
-.au-explore-btn:active { transform:translateY(1px); box-shadow:0 1px 0 rgb(0 0 0 / 0.35); }
-.au-explore span { font-family:var(--mono); font-size:11px; letter-spacing:0.14em; color:var(--text-mute); }
+.au-explore-btn:active { transform:translateY(1px); box-shadow:none; }
+.au-explore > span { font-family:var(--mono); font-size:11px; letter-spacing:0.14em; color:var(--text-mute); }
 .au-seg { display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--border-hi); border-radius:4px; overflow:hidden; }
 .au-seg a { font-family:var(--mono); font-size:12px; letter-spacing:0.12em; text-align:center; padding:9px 6px; text-decoration:none; color:var(--text-dim); border-bottom:2px solid transparent; }
 .au-seg a:hover { color:var(--text-hi); }
@@ -166,18 +168,24 @@
 @media (max-width: 640px) {
   .au-shell { grid-template-rows:auto 1fr; min-height:100vh; min-height:100dvh; }
   .au-scene { padding:16px 18px 4px; border-bottom:none; gap:0; justify-content:flex-start; }
-  .au-sub, .au-phase, .au-scenes, .au-pulse, .au-foot, .au-explore span { display:none; }
+  .au-sub, .au-phase, .au-scenes, .au-pulse, .au-foot, .au-explore > span, .au-explore-long { display:none; }
   .au-scene-top { flex-direction:row; align-items:center; justify-content:space-between; }
   .au-headline { margin:14px 0 0; }
   .au-headline h1 { font-size:20px; line-height:1.15; margin:0; }
   .au-headline h1 br:first-of-type { display:none; }      /* two lines: "Price it. See what it costs." and the line in brass */
-  .au-explore { position:absolute; top:14px; right:18px; margin:0; }
-  .au-explore-btn { padding:6px 10px; font-size:11px; }
-  .au-panel { padding:12px 14px 14px; justify-content:center; gap:10px; }
+  .au-explore { top:10px; right:14px; }
+  .au-explore-btn { padding:12px 12px; font-size:11px; }      /* a thumb's height */
+  .au-panel { padding:18px 14px 14px; justify-content:flex-start; gap:10px; }
   .au-card { padding:16px 16px 14px; gap:10px; }
   .au-lead { display:none; }
   .au-title { font-size:16px; }
   .au-form { gap:9px; }
   .au-field input { padding-top:9px; padding-bottom:9px; }
   .au-legal { font-size:10px; letter-spacing:0.04em; line-height:1.5; }
+  .au-alt .au-inline { padding:10px 2px; }      /* a thumb's height for the two small links under the form */
+  .au-alt { margin:0; }
+}
+/* the shortest phones: the card's own title goes, the switch above it already says which form this is */
+@media (max-width: 640px) and (max-height: 600px) {
+  .au-title { display:none; }
 }

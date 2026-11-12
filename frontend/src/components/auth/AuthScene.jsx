@@ -53,7 +53,7 @@ export default function AuthScene({ children, eyebrow, mode }) {
         </div>
 
         <div className="au-explore">
-          <a className="au-explore-btn" href={SITE_URL}>EXPLORE RIJEKA →</a>
+          <a className="au-explore-btn" href={SITE_URL} aria-label="Explore Rijeka: the public site">EXPLORE<span className="au-explore-long"> RIJEKA</span> →</a>
           <span>HOW IT WORKS · VERIFY · TOOLS</span>
         </div>
 

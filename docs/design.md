@@ -94,7 +94,7 @@ registered-trademark sign. It is the one thing that carries a light of its own.
   (`brand/confirm-phase.js`): a trade confirmed earlier, or cancelled, or terminated, has none, and its
   certificate and seal say what it is. The words under it are a label: the quiet colour, amber when it failed.
 - **Where a new reader might stumble, the name is also spelled out.** A ringed letter followed by IJEKA takes a
-  moment the first time. The sign-in pages keep the plain name (`.au-mark`), a heading says it in words, and a
+  moment the first time. The sign-in pages, the front door since 0.31.0, carry the logo too (`.au-mark` holds it), a heading says it in words, and a
   link preview or a first slide uses the whole word with the river beneath it.
 - **Small, and in one colour.** Under about 32 pixels it is one line running into the ringed R (the favicon). Where
   colour cannot be used every stroke is one colour (`mono` in `brand/mark.js`).

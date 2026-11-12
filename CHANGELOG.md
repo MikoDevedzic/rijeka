@@ -24,6 +24,11 @@ side is here; the public site's side is staged and waits for its own word.
 - Links that sat inside a part of the page hidden from screen readers are reachable now; only the drawing is hidden.
 - Journeys: a visitor with no session lands on the door and can move between the two forms; the door does not
   scroll on a laptop or on two phones; a signed-in visitor goes to the desk.
+- After the reviews (Magnus: nothing to fix; Iris; Vera): the way to the site sits in the top row beside the logo, so
+  the drawing under the headline keeps its height (a shorter box had let it run over the scene's tabs); on a phone
+  the card sits under the headline, the EXPLORE button and the two small links under the form are a thumb's height,
+  and the narrowest phone (320 by 568) is covered: the logo and the button do not touch and the page still does not
+  scroll.
 - **Not here:** rijeka.app still opens the landing page. Sending it to the door is a change to the public site
   (the landing moves to /about, the root redirects), staged in two steps and deployed only on the owner's word.
   A look without an account is undecided and not built.

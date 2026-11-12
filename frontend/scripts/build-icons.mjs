@@ -15,7 +15,7 @@ import { chromium } from '@playwright/test'
 
 const PUBLIC = join(dirname(fileURLToPath(import.meta.url)), '..', 'public')
 // the favicon's own strokes, without its rounded ground
-const strokes = readFileSync(join(PUBLIC, 'favicon.svg'), 'utf8').match(/<path[^>]*\/>/g).join('')
+const strokes = (readFileSync(join(PUBLIC, 'favicon.svg'), 'utf8').match(/<path[^>]*\/>/g) || []).join('')
 if (!strokes) throw new Error('public/favicon.svg has no strokes to draw')
 const svg = (scale) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none" stroke-linecap="round" stroke-linejoin="round" style="display:block;width:100vw;height:100vh">
   <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1d4039"/><stop offset="1" stop-color="#081714"/></linearGradient></defs>
