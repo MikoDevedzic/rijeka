@@ -52,7 +52,7 @@ export default function ExposureCanvas({ result, height = 230, placeholder = 'EE
   // overlay collided with the axis labels and with each other on a narrow window (3 November 2026).
   return (
     <div style={{ display: 'flex', flexDirection: 'column', ...(fill ? {} : {}), background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 3, overflow: 'hidden', ...style }}>
-    <div style={{ position: 'relative', ...(fill ? { flex: 1, minHeight: 160 } : { height }) }}>
+    <div style={{ position: 'relative', ...(fill ? { flex: 1, minHeight: 148 } : { height }) }}>
       <canvas ref={ref} style={{ position: 'absolute', inset: 0, display: 'block' }} />
       {!result && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>

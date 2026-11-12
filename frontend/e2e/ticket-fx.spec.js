@@ -42,6 +42,8 @@ for (const c of CASES) {
     expect(first.dt * 365).toBeLessThan(8.5)
     expect(first.ee.length, 'one exposure per step').toBe(first.steps)
     await expect(win.getByTestId('xva-outputs').locator('..').locator('..'), `${c.name}: the steps are named`).toContainText(`${first.steps} weekly steps`)
+    // the incremental charge is directly under the results, in view on a laptop after a run with the on-chain comparison
+    await expectFullyInView(win.getByTestId('xva-below').getByRole('button', { name: /CHARGE THIS/ }), `${c.name}: the incremental charge`)
     await expectNoHorizontalOverflow(win.getByTestId('xva-left'), `${c.name}: XVA left column`)
     expect(await win.getByTestId('xva-outputs').innerText(), 'one sign per figure, a rounded zero unsigned').not.toMatch(/\+\+|--|−−|\+-|\+−|-\+|−\+/)
 

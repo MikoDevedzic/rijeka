@@ -84,16 +84,16 @@ export default function XvaPanel({
       swaptionTenor={state.tenor || '5Y'}
       swaptionVol={state.volBp || '86.5'}
       swaptionResult={productKey === 'IR_SWAPTION' ? result : null}
+      below={<IncrementalXva
+        counterpartyId={counterpartyId}
+        counterpartyName={counterpartyName}
+        buildTrade={buildTrade}
+        tradeId={tradeId}
+        priced={!!result}
+        ccy={state.ccy || 'USD'}
+      />}
     />
     </Suspense>
-    <IncrementalXva
-      counterpartyId={counterpartyId}
-      counterpartyName={counterpartyName}
-      buildTrade={buildTrade}
-      tradeId={tradeId}
-      priced={!!result}
-      ccy={state.ccy || 'USD'}
-    />
     </>
   )
 }

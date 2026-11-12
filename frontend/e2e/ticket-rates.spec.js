@@ -71,6 +71,19 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   const tops = await saving.locator('span:visible').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().bottom)))
   expect(Math.max(...tops) - Math.min(...tops), 'the saving line wraps').toBeLessThanOrEqual(6)
   await expectFullyInView(win.getByTestId('xva-outputs'), 'XVA results (strip, saving, comparison) under BILATERAL')
+  // a swap under a CSA on a laptop (1440 by 900): the inputs fit the window, so nothing scrolls, and the incremental
+  // charge is in view under the results, not under the fold (it sat below the whole tab until 0.30.1)
+  const fits = await win.evaluate(w => {
+    const left = w.querySelector('[data-testid="xva-left"]').getBoundingClientRect(), foot = w.querySelector('.tbw-footer').getBoundingClientRect()
+    const body = [...w.querySelectorAll('*')].find(e => /auto|scroll/.test(getComputedStyle(e).overflowY) && e.contains(w.querySelector('[data-testid="xva-left"]')))
+    const last = [...w.querySelector('[data-testid="xva-left"]').children].filter(c => c.getBoundingClientRect().height > 0).at(-1).getBoundingClientRect()
+    return { inputsEnd: Math.round(last.bottom), leftBottom: Math.round(left.bottom), footTop: Math.round(foot.top), scrolls: body ? body.scrollHeight - body.clientHeight : 0 }
+  })
+  expect(fits.inputsEnd, 'the XVA inputs under a CSA end above the footer').toBeLessThanOrEqual(fits.footTop)
+  expect(fits.scrolls, `the XVA tab fits the window after a run with the comparison (${JSON.stringify(fits)})`).toBeLessThanOrEqual(2)
+  await expectFullyInView(win.getByTestId('xva-below').getByRole('button', { name: /CHARGE THIS TRADE/ }), 'the incremental charge, under BILATERAL')
+  const sw = await win.getByTestId('xva-switches').locator('label').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)))
+  expect(Math.max(...sw) - Math.min(...sw), 'the two switches share one row').toBeLessThanOrEqual(3)
   await expectNoHorizontalOverflow(win.getByTestId('xva-left'), 'XVA left column')
 
   // collateral: the margin we post held in a stablecoin that pays its holder nothing → a carry cost in ColVA

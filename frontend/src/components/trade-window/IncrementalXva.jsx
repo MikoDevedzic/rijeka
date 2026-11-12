@@ -75,23 +75,26 @@ export default function IncrementalXva({ counterpartyId, counterpartyName, build
 
   return (
     <div className="tbw-sec tbw-no-drag" style={{ borderBottom: 'none' }}>
-      <div className="tbw-lbl" style={{ cursor: 'default' }}>
-        {view ? 'MARGINAL XVA · REMOVING THIS TRADE' : `INCREMENTAL XVA · ${cpLabel}'S NETTING SET`}
+      {/* the heading and the button share a row, the sentence under them: closed, the block is short enough to sit
+          under the results on a laptop without scrolling the window */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div className="tbw-lbl" style={{ cursor: 'default', marginBottom: 0 }}>
+          {view ? 'MARGINAL XVA · REMOVING THIS TRADE' : `INCREMENTAL XVA · ${cpLabel}'S NETTING SET`}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button className="rj-press" onClick={run} disabled={busy || !!reason} title={reason || undefined}
+            style={{ padding: '7px 14px', ...mono, fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: busy || reason ? 'default' : 'pointer',
+              background: 'rgba(217,178,92,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1 }}>
+            {busy ? 'RUNNING…' : res ? 'RECOMPUTE' : legs > 1 && !view ? 'CHARGE THIS PACKAGE' : 'CHARGE THIS TRADE'}
+          </button>
+          {reason && <span style={{ ...mono, fontSize: '0.75rem', color: 'var(--text-mute)', letterSpacing: '0.04em' }}>— {reason}</span>}
+          {busy && <span style={{ ...mono, fontSize: '0.75rem', color: 'var(--text-mute)' }}>credit engine valuing the netting set twice…</span>}
+        </div>
       </div>
-      <div style={{ fontSize: '0.75rem', color: 'var(--text-mute)', lineHeight: 1.45, marginBottom: 10 }}>
+      <div style={{ fontSize: '0.75rem', color: 'var(--text-mute)', lineHeight: 1.45, marginTop: 6 }}>
         {legs > 1 && !view
           ? <>The credit engine's risk-neutral run with this package of {legs} legs and without it, same paths. This is the charge the desk would quote; the number above is the package on its own.</>
           : <>The credit engine's risk-neutral run with this trade and without it, same paths. This is the charge the desk would quote; the number above is the trade on its own.</>}
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <button className="rj-press" onClick={run} disabled={busy || !!reason} title={reason || undefined}
-          style={{ padding: '7px 14px', ...mono, fontSize: '0.8125rem', fontWeight: 700, letterSpacing: '0.1em', cursor: busy || reason ? 'default' : 'pointer',
-            background: 'rgba(217,178,92,0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', borderRadius: 3, opacity: reason ? 0.45 : 1 }}>
-          {busy ? 'RUNNING…' : res ? 'RECOMPUTE' : legs > 1 && !view ? 'CHARGE THIS PACKAGE' : 'CHARGE THIS TRADE'}
-        </button>
-        {reason && <span style={{ ...mono, fontSize: '0.75rem', color: 'var(--text-mute)', letterSpacing: '0.04em' }}>— {reason}</span>}
-        {busy && <span style={{ ...mono, fontSize: '0.75rem', color: 'var(--text-mute)' }}>credit engine valuing the netting set twice…</span>}
       </div>
       {err && <div className="tc-err" style={{ ...mono, color: 'var(--red)', fontSize: 12, marginTop: 8 }}>{err}</div>}
 

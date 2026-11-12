@@ -135,7 +135,9 @@ export const XVA_BAND = { display:'grid', gridTemplateColumns:'minmax(0, 1.25fr)
 // figures, so the run and the on-chain row are always alike.
 export const moneySize = (texts) => { const n = Math.max(0, ...texts.map(t => String(t ?? '').length)); return n <= 9 ? 13.5 : n <= 10 ? 12.5 : n <= 11 ? 11.5 : 11 }
 
-export const XVA_CHART_HEIGHT = 'clamp(220px, 27vh, 440px)'
+// 23vh: on a laptop (900 high) the chart and its two readout lines are 207px, which leaves the results, the curves
+// and the incremental charge above the fold after a run with the on-chain comparison; it was 27vh (243px) until 0.30.1
+export const XVA_CHART_HEIGHT = 'clamp(200px, 23vh, 440px)'
 
 export const SETTLEMENT_PRESETS = [
   ['UNCOLLATERALISED', 'NO CSA', 'var(--text-hi)'],

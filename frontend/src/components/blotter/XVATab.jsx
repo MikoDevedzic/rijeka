@@ -167,7 +167,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null, counterpartyName = null }) {
+export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null, counterpartyName = null, below = null }) {
   // 'simple' shows settlement, SIMULATE and a line on what the run assumes; 'advanced' is the whole tab. Every input's
   // state lives here in both, so hiding an input never changes what SIMULATE sends.
   const [view, setView] = useXvaView()
@@ -591,6 +591,9 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
           <OnChainCompareRow rows={cmpRows} current={simResult} compare={compareResult} fmt={fmtDollar} saving={saving} />
           <VaFooter>ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA~ · Click any VA to expand · bp = VA / IR01</VaFooter>
         </div>
+          {/* what the ticket puts under the results (the incremental charge): above the curves and the assumptions,
+              so it is in view on a laptop without scrolling the window */}
+          {below && <div data-testid="xva-below" style={{ borderTop: '1px solid var(--border)' }}>{below}</div>}
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">
               <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>

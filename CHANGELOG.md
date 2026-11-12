@@ -3,6 +3,24 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.19). Commits on `main` are the detail.
 
+## 0.30.1 · 12 November 2026
+
+**The ticket's XVA tab on a laptop.** The rest of item 4 of the Phase 1 exit list, on the owner's word ("do them
+all in order and deploy"). No figure changes.
+
+- **The incremental charge is in view.** The counterparty's netting set with and without the trade (CHARGE THIS
+  TRADE) sat below the whole tab, under the fold on a laptop. It is now directly under the results, above the
+  spread curves and the assumptions, on the swap's tab and on the currency and digital-asset tab alike; its heading
+  and its button share one line.
+- **A swap under a CSA no longer scrolls.** At 1440 by 900, after a run with the on-chain comparison, the swap's tab
+  fits the window: the two switches (initial margin, compare on-chain) share one row, and the exposure chart is a
+  little shorter on a laptop (it grows with a taller window as before).
+- **Not changed, and said:** on the digital-asset tab the last two rows of the assumptions (below the incremental
+  charge) are still under the fold at that size, a short scroll: that tab carries the capital and initial-margin
+  notes the swap's does not.
+- Journeys hold it: the left column ends above the footer, the tab does not scroll, the charge's button is wholly in
+  view on both tabs, the two switches sit on one row.
+
 ## 0.30.0 · 12 November 2026
 
 **Barriers: watched between the grid's dates, and a touch the desk can record.** Items 11(c) and 5 of the Phase 1

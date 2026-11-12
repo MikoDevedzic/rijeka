@@ -393,6 +393,10 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
               </div>
             )}
           </div>
+          {/* Incremental XVA: the counterparty's netting set with and without this trade, which is the charge the desk
+              would quote. Directly under the results, above the curves and the assumptions the run was made on, so
+              it is in view on a laptop without scrolling the window (it sat below the whole tab until 0.30.1) */}
+          <div data-testid="xva-below" style={{ borderTop:'1px solid var(--border)' }}>{incremental}</div>
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">
               <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
@@ -411,9 +415,6 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
 
         <FloatingTip tooltip={tooltip} onLeave={untip} />
       </div>
-
-      {/* Incremental XVA: the counterparty's netting set with and without this trade */}
-      <div style={{ borderTop:'1px solid var(--border)' }}>{incremental}</div>
     </div>
   )
 }

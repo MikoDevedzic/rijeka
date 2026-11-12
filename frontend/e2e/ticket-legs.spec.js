@@ -386,7 +386,7 @@ test('margin and capital on a digital-asset ticket: no SIMM anywhere; a typed do
   await expect(toggle).toBeVisible()
   if (!/HIDE/.test(await toggle.innerText())) await toggle.click()
   // nothing on the tab is called SIMM except the note that says it is not computed
-  await expect(win.getByText('Initial margin exchanged', { exact: true })).toBeVisible()
+  await expect(win.getByLabel('Initial margin exchanged')).toBeVisible()
   await expect(win.getByText(/SIMM IM/)).toHaveCount(0)
 
   // on chain with margin exchanged, the amount left blank: the engine's estimate, named as that

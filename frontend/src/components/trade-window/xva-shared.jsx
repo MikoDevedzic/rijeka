@@ -213,16 +213,19 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
             <input type='text' value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...INP,textAlign:'right'}}/>
           </div>
         ))}
-        <div style={{...LBL,alignSelf:'center',marginBottom:0,borderBottom:'none',cursor:'default'}}>Initial margin exchanged</div>
-        <label style={{display:'flex',justifyContent:'flex-end',alignItems:'center',cursor:'pointer'}}>
-          <input type='checkbox' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
+      </div>
+      {/* the two switches share one row: a row each made a swap under a CSA taller than a laptop's window */}
+      <div data-testid="xva-switches" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'10px',marginTop:'6px'}}>
+        <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer'}}>
+          <input type='checkbox' aria-label='Initial margin exchanged' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
+          <span style={{...LBL,marginBottom:0,borderBottom:'none',whiteSpace:'nowrap'}} title='Initial margin is exchanged, each way'>Initial margin</span>
         </label>
-        {settlement!=='ON_CHAIN' && (<>
-          <TipLabel tipKey='compare' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Compare on-chain</TipLabel>
-          <label style={{display:'flex',justifyContent:'flex-end',alignItems:'center',cursor:'pointer'}}>
-            <input type='checkbox' checked={compareOnChain} onChange={e=>setCompareOnChain(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
+        {settlement!=='ON_CHAIN' && (
+          <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer'}}>
+            <input type='checkbox' aria-label='Compare on-chain' checked={compareOnChain} onChange={e=>setCompareOnChain(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
+            <TipLabel tipKey='compare' tip={tip} untip={untip} style={{ marginBottom:0, whiteSpace:'nowrap' }}>Compare on-chain</TipLabel>
           </label>
-        </>)}
+        )}
       </div>
       {setCollateral && settlement!=='UNCOLLATERALISED' && (
         <CollateralBlock collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} tip={tip} untip={untip} />
