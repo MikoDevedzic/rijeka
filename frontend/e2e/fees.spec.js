@@ -34,6 +34,7 @@ test('a digital-asset option: its premium and another fee are entered, valued, s
   await expect(rows).toHaveCount(1)
   await expect(block.getByLabel('Fee 1 type')).toHaveValue('PREMIUM')
   await expect(block.getByRole('button', { name: 'Fee 1: we pay' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(block.getByRole('button', { name: 'Fee 1: we pay' }), 'a side takes its colour').toHaveClass(/tbw-chip-dir-pay/)
   expect(num(await block.getByLabel('Fee 1 amount').inputValue())).toBeCloseTo(quote.npv, 1)
   await expect(block.getByLabel('Fee 1 date')).toHaveValue(quote.valuation_date)
   let pv = await (await answer).json()
@@ -55,8 +56,9 @@ test('a digital-asset option: its premium and another fee are entered, valued, s
   await block.getByLabel('Fee 2 type').selectOption('BROKERAGE')
   const later = iso(Date.now() + 40 * DAY)
   answer = valued()
-  await block.getByLabel('Fee 2 amount').fill('2,500')
+  await block.getByLabel('Fee 2 amount').fill('2500')
   await block.getByLabel('Fee 2 date').fill(later)
+  await expect(block.getByLabel('Fee 2 amount'), 'left, the amount is written with its thousands separated').toHaveValue('2,500')
   pv = await (await answer).json()
   expect(pv.fees).toHaveLength(2)
   expect(pv.fees[1].df, 'a later fee is discounted').toBeLessThan(1)
@@ -68,7 +70,7 @@ test('a digital-asset option: its premium and another fee are entered, valued, s
   await block.getByTestId('fee-add').click()
   await block.getByLabel('Fee 3 amount').fill('abc')
   await expect(rows.nth(2).getByTestId('fee-pv')).toContainText('the amount is a number')
-  await expect(block.getByTestId('fees-summary')).toHaveText('a row is not complete')
+  await expect(block.getByTestId('fees-summary')).toHaveText('finish or remove the incomplete row')
   await expect(block.getByTestId('fees-pv')).toHaveCount(0)
   let posted = 0
   app.on('request', r => { if (r.url() === `${API}/api/trades/` && r.method() === 'POST') posted += 1 })
@@ -90,12 +92,28 @@ test('a digital-asset option: its premium and another fee are entered, valued, s
   const sent = run.request().postDataJSON()
   expect(sent.fees.map(f => [f.type, f.direction, f.amount, f.date])).toEqual([['PREMIUM', 'PAY', agreed, quote.valuation_date], ['BROKERAGE', 'PAY', 2500, later]])
   const out = await run.json()
-  expect(out.params.fees.count).toBe(2)
-  expect(out.params.fees.pv, 'the premium is paid today; the fee still to come is owed').toBeLessThan(0)
+  // the premium is paid today: it is in the ticket's value and not in the run; the fee still to come is in the run
+  expect(out.params.fees.count).toBe(1)
+  expect(out.params.fees.pv).toBeLessThan(-2400)
   expect(out.params.fees.pv).toBeGreaterThan(-2500)
 
-  // 5. booked: the trade keeps its fees, and the confirmation's premium is the PREMIUM row
+  // an incomplete row stops SIMULATE too, and says so: a run without the ticket's fees is not that ticket's run
   await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+  await block.getByTestId('fee-add').click()
+  await block.getByLabel('Fee 3 date').fill(later)
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()
+  let runs = 0
+  const count = r => { if (r.url() === `${API}/api/xva/currency-option` && r.method() === 'POST') runs += 1 }
+  app.on('request', count)
+  await win.getByRole('button', { name: /SIMULATE/ }).first().click()
+  await expect(win).toContainText('A fee on the TRADE tab is not complete: finish or remove it before simulating.')
+  expect(runs).toBe(0)
+  app.off('request', count)
+  await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+  await block.getByRole('button', { name: 'Remove fee 3' }).click()
+  await expect(rows).toHaveCount(2)
+
+  // 5. booked: the trade keeps its fees, and the confirmation's premium is the PREMIUM row
   const booked = app.waitForResponse(r => r.url() === `${API}/api/trades/` && r.request().method() === 'POST')
   await win.getByRole('button', { name: /BOOK TRADE|RETRY BOOK/ }).click()      // after a refused attempt the button says RETRY
   const res = await booked
@@ -128,7 +146,7 @@ test('a swap: an upfront payment received in a month is a fee, valued on the swa
   expect(pv.pv).toBeGreaterThan(9900)
   expect(pv.pv).toBeLessThan(10000)
   await expect(block.getByTestId('fees-pv')).toContainText('+9,9')
-  await expect(block.getByTestId('fees-summary')).toHaveText('1 fee · receive 10,000.00 USD')
+  await expect(block.getByTestId('fees-summary')).toHaveText('1 fee · receive 10,000.00 USD · face value')
   await app.screenshot({ path: 'e2e/.out/shots/fees-swap.png' })
   expectClean(problems)
 })

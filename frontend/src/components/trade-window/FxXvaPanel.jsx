@@ -188,6 +188,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
     if (!quote || !payload || stale || pkgWaiting) return
     const imBad = imUsdProblem(imUsd)
     if (imBad) { setErr(imBad); return }
+    if (fees === null) { setErr('A fee on the TRADE tab is not complete: finish or remove it before simulating.'); return }
     const termsAtRun = runKey
     setSeed(useSeed)
     setBusy(true); setErr(null)

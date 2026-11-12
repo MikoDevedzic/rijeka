@@ -53,7 +53,7 @@ def test_what_the_fees_are_worth_today():
     assert not today["paid"] and today["df"] == 1.0 and today["pv"] == -12500.5
     assert later["pv"] == pytest.approx(4000 * math.exp(-0.04)) and later["df"] == pytest.approx(math.exp(-0.04))
     assert out["pv"] == pytest.approx(-12500.5 + 4000 * math.exp(-0.04)) and out["pay"] == -12500.5 and out["receive"] == pytest.approx(later["pv"])
-    assert F.in_years(fees, TODAY) == [(0.0, -12500.5), (1.0, 4000.0)], "a fee already paid is not carried into a simulation"
+    assert F.in_years(fees, TODAY) == [(1.0, 4000.0)], "a fee paid before today or today is not carried into a simulation: neither side can still fail to pay it"
 
 
 def test_the_value_of_the_fees_still_to_come():
@@ -113,12 +113,28 @@ def test_a_fee_we_are_owed_is_exposure_until_it_is_paid_and_one_we_owe_is_the_co
     assert mo["fees"]["on_grid"][:3] == pytest.approx([80_000 * math.exp(-Q * (0.26 - g)) for g in grid[:3]]) and mo["fees"]["on_grid"][3:] == [0.0, 0.0, 0.0]
 
 
-def test_a_known_payment_is_not_a_risk_so_the_margin_does_not_move():
+@pytest.mark.parametrize("cash", [[(0.26, 80_000.0), (0.40, -15_000.0)],
+                                  [(0.245, 80_000.0)],                 # inside the margin period that ends on the 0.25 grid date
+                                  [(1 / 12 - 0.001, -500_000.0), (0.495, 200_000.0)]])
+def test_a_known_payment_is_not_a_risk_so_the_margin_does_not_move(cash):
+    """Also when the fee is paid inside a margin period: the value then drops by the fee between the lagged date and
+    the grid date on every path alike, which is the move's mean, and initial margin is the move about its mean."""
     csa = CSA.from_request({"preset": "BILATERAL"})
+    assert any(any(g - csa.mpor_years < when <= g for g in np.arange(1, 7) * (0.5 / 6)) for when, _ in cash) or cash[0][0] == 0.26
     base, _ = fx_xva.forward_xva(_fwd(), csa, n_paths=4000)
-    fee, _ = fx_xva.forward_xva(_fwd(), csa, n_paths=4000, fees=[(0.26, 80_000.0), (0.40, -15_000.0)])
+    fee, _ = fx_xva.forward_xva(_fwd(), csa, n_paths=4000, fees=cash)
     assert fee.im_profile == pytest.approx(base.im_profile, rel=1e-9), "initial margin is the move about its mean: a scheduled payment is the mean's"
     assert fee.mva == pytest.approx(base.mva, rel=1e-9)
+
+
+def test_a_fee_dated_today_is_in_the_tickets_value_and_not_in_a_run():
+    fees = F.normalise([{**GOOD, "date": TODAY.isoformat()}, {**GOOD, "direction": "RECEIVE", "amount": 4000, "date": "2027-02-12"}])
+    assert F.present_values(fees, TODAY, lambda d: 1.0)["pv"] == pytest.approx(-12500.5 + 4000)
+    cash = F.in_years(fees, TODAY)
+    assert cash == [(92 / 365.0, 4000.0)]
+    _, meta = fx_xva.forward_xva(_fwd(), CSA.uncollateralised(), n_paths=500, fees=cash)
+    assert meta["fees"]["count"] == 1 and meta["fees"]["pv"] == pytest.approx(4000 * math.exp(-Q * 92 / 365.0))
+    assert F.in_years(F.normalise([{**GOOD, "date": TODAY.isoformat()}]), TODAY) == []
 
 
 def test_an_option_and_a_package_carry_their_fees_too():

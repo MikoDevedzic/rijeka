@@ -4,11 +4,10 @@
 // trade's value net of them. The same rows go into the booking's terms and into the XVA run.
 import { useEffect, useMemo, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
-import { FEE_TYPES, MAX_FEES, feeRow, feeProblem, feeIsBlank, cleanFees, feesSummary } from './fees'
+import { FEE_TYPES, MAX_FEES, feeRow, feeProblem, feeIsBlank, cleanFees, feesSummary, amountShown } from './fees'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const money = (v) => (v == null || !Number.isFinite(Number(v)) ? '—' : (Number(v) < 0 ? '−' : Number(v) > 0 ? '+' : '') + Math.abs(Number(v)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
-const SLIM = { padding: '0 10px', lineHeight: '18px' }      // the two buttons that add a fee sit in the block's one-line header
 const tone = (v) => (Number(v) < 0 ? 'var(--red)' : Number(v) > 0 ? 'var(--green)' : 'var(--text-hi)')
 
 export default function FeesBlock({ rows, onChange, currency = 'USD', npv = null, valuationDate = null, premium = null, disabled = false }) {
@@ -34,42 +33,44 @@ export default function FeesBlock({ rows, onChange, currency = 'USD', npv = null
   const error = answer && answer.key === key ? (answer.error || '') : ''
 
   // where each complete row sits in the list that was sent, to read its own line of the answer
-  const place = useMemo(() => { const m = {}; let k = 0; for (const r of rows) { if (!feeIsBlank(r) && !feeProblem(r)) { m[r.id] = k; k += 1 } } return m }, [rows])
-  const set = (id, patch) => onChange(rows.map(r => (r.id === id ? { ...r, ...patch } : r)))
-  const add = (seed) => onChange([...rows, feeRow(seed)])
-  const remove = (id) => onChange(rows.filter(r => r.id !== id))
+  const place = useMemo(() => { const m = {}; let k = 0; for (const r of rows) { if (!feeIsBlank(r) && !feeProblem(r, currency)) { m[r.id] = k; k += 1 } } return m }, [rows, currency])
+  // every change is made on the rows as they are when it lands, not as they were when the row was drawn: leaving the
+  // amount (which rewrites it with its thousands) and typing the date arrive together
+  const set = (id, patch) => onChange(prev => prev.map(r => (r.id === id ? { ...r, ...patch } : r)))
+  const add = (seed) => onChange(prev => [...prev, feeRow({ ...seed, currency })])
+  const remove = (id) => onChange(prev => prev.filter(r => r.id !== id))
   const net = pv && npv != null && Number.isFinite(Number(npv)) ? Number(npv) + Number(pv.pv) : null
   // the premium the model prices, offered as a row when the trade is an option and has no PREMIUM fee yet
   const offer = premium && Number(premium.amount) > 0 && !rows.some(r => r.type === 'PREMIUM') ? premium : null
 
   return (
-    <div className="tbw-sec" data-testid="fees-block" style={rows.length ? undefined : { paddingTop: 0, paddingBottom: 0 }}>
+    <div className={`tbw-sec ${rows.length ? '' : 'tbw-sec-line'}`} data-testid="fees-block">
       {/* with no fee yet the block is one line: its name, the buttons that add one, and "none entered" */}
-      <div className="tbw-sec-header" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: rows.length ? undefined : 0, lineHeight: rows.length ? undefined : '20px' }}>
+      <div className="tbw-sec-header" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
         <span className="tbw-lbl" style={{ marginBottom: 0 }}>FEES</span>
         {!disabled && rows.length < MAX_FEES && (
-          <button type="button" className="tbw-chip" style={SLIM} data-testid="fee-add" onClick={() => add({ type: rows.length ? 'OTHER' : (premium ? 'PREMIUM' : 'UPFRONT'), direction: premium?.direction || 'PAY', date: premium?.date || '' })}>+ ADD FEE</button>
+          <button type="button" className="tbw-chip tbw-chip-sm" data-testid="fee-add" onClick={() => add({ type: rows.length ? 'OTHER' : (premium ? 'PREMIUM' : 'UPFRONT'), direction: premium?.direction || 'PAY', date: premium?.date || '' })}>+ ADD FEE</button>
         )}
         {!disabled && offer && (
-          <button type="button" className="tbw-chip" style={SLIM} data-testid="fee-premium" title="A PREMIUM row at the price the model gives, to change as agreed"
-                  onClick={() => add({ type: 'PREMIUM', direction: offer.direction, amount: (Math.round(offer.amount * 100) / 100).toFixed(2), date: offer.date || '' })}>+ PREMIUM AT THE MODEL'S PRICE</button>
+          <button type="button" className="tbw-chip tbw-chip-sm" data-testid="fee-premium" title="A PREMIUM row at the price the model gives, to change as agreed"
+                  onClick={() => add({ type: 'PREMIUM', direction: offer.direction, amount: amountShown((Math.round(offer.amount * 100) / 100).toFixed(2)), date: offer.date || '' })}>+ MODEL PREMIUM</button>
         )}
         <span className="tbw-helper-text" data-testid="fees-summary" style={{ marginLeft: 'auto' }}>
-          {fees == null ? 'a row is not complete' : feesSummary(fees, currency)}
+          {fees == null ? 'finish or remove the incomplete row' : feesSummary(fees, currency) + (fees.length ? ' · face value' : '')}
         </span>
       </div>
       {rows.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 8 }}>
+        <table style={{ borderCollapse: 'collapse', marginBottom: 8 }}>
           <thead>
             <tr>
               {['TYPE', 'WE', `AMOUNT ${currency}`, 'DATE', 'VALUE TODAY', ''].map((h, i) => (
-                <th key={i} className="tbw-lbl" style={{ textAlign: i === 2 || i === 4 ? 'right' : 'left', padding: '0 8px 6px 0', fontWeight: 500 }}>{h}</th>
+                <th key={i} className="tbw-lbl" style={{ textAlign: i === 2 || i === 4 ? 'right' : 'left', padding: '0 8px 6px 0' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((r, i) => {
-              const problem = feeProblem(r)
+              const problem = feeProblem(r, currency)
               const valued = !problem && pv && fees ? pv.fees?.[place[r.id]] : null
               return (
                 <tr key={r.id} data-testid="fee-row" className="rj-row">
@@ -81,12 +82,13 @@ export default function FeesBlock({ rows, onChange, currency = 'USD', npv = null
                   <td style={{ padding: '3px 8px 3px 0', width: 170, whiteSpace: 'nowrap' }}>
                     {['PAY', 'RECEIVE'].map(d => (
                       <button key={d} type="button" disabled={disabled} aria-pressed={r.direction === d} aria-label={`Fee ${i + 1}: we ${d.toLowerCase()}`}
-                              className={`tbw-chip ${r.direction === d ? 'is-on' : ''}`} style={{ marginRight: 4 }} onClick={() => set(r.id, { direction: d })}>{d}</button>
+                              className={`tbw-chip ${d === 'PAY' ? 'tbw-chip-dir-pay' : 'tbw-chip-dir-rec'} ${r.direction === d ? 'is-on' : ''}`} style={{ marginRight: 4 }} onClick={() => set(r.id, { direction: d })}>{d}</button>
                     ))}
                   </td>
-                  <td style={{ padding: '3px 8px 3px 0' }}>
+                  <td style={{ padding: '3px 8px 3px 0', width: 190 }}>
                     <input aria-label={`Fee ${i + 1} amount`} className="tbw-mono" style={{ textAlign: 'right', width: '100%' }} inputMode="decimal" placeholder="0.00"
-                           value={r.amount} disabled={disabled} onChange={e => set(r.id, { amount: e.target.value })} />
+                           value={r.amount} disabled={disabled} onChange={e => set(r.id, { amount: e.target.value })}
+                           onBlur={e => { const shown = amountShown(e.target.value); if (shown !== e.target.value) set(r.id, { amount: shown }) }} />
                   </td>
                   <td style={{ padding: '3px 8px 3px 0', width: 160 }}>
                     <input aria-label={`Fee ${i + 1} date`} type="date" value={r.date} disabled={disabled} onChange={e => set(r.id, { date: e.target.value })} />
@@ -96,7 +98,7 @@ export default function FeesBlock({ rows, onChange, currency = 'USD', npv = null
                     {problem ? <span style={{ color: 'var(--amber)', fontFamily: 'var(--sans)' }}>{problem}</span> : valued ? (valued.paid ? 'paid' : money(valued.pv)) : '—'}
                   </td>
                   <td style={{ width: 34, textAlign: 'right' }}>
-                    {!disabled && <button type="button" className="tbw-chip" aria-label={`Remove fee ${i + 1}`} onClick={() => remove(r.id)}>✕</button>}
+                    {!disabled && <button type="button" className="tbw-chip tbw-chip-sm" aria-label={`Remove fee ${i + 1}`} onClick={() => remove(r.id)}>×</button>}
                   </td>
                 </tr>
               )
@@ -108,8 +110,8 @@ export default function FeesBlock({ rows, onChange, currency = 'USD', npv = null
         {error && <span className="tbw-helper-text" style={{ color: 'var(--amber)' }}>{error}</span>}
         {pv && (
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 18, alignItems: 'baseline' }}>
-            <span><span className="tbw-lbl">FEES TODAY</span>{' '}<span className="tbw-mono" data-testid="fees-pv" style={{ color: tone(pv.pv) }}>{money(pv.pv)}</span></span>
-            {net != null && <span><span className="tbw-lbl">VALUE NET OF FEES</span>{' '}<span className="tbw-mono" data-testid="fees-net" style={{ color: tone(net) }}>{money(net)}</span>{' '}<span className="tbw-helper-text">{currency}</span></span>}
+            <span><span className="tbw-lbl">PV OF FEES {currency}</span>{' '}<span className="tbw-mono" data-testid="fees-pv" style={{ color: tone(pv.pv) }}>{money(pv.pv)}</span></span>
+            {net != null && <span><span className="tbw-lbl">VALUE NET OF FEES {currency}</span>{' '}<span className="tbw-mono" data-testid="fees-net" style={{ color: tone(net) }}>{money(net)}</span></span>}
           </span>
         )}
       </div>

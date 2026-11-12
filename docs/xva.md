@@ -191,7 +191,8 @@ amount in the trade's currency and a date; an option's premium is one) are part 
 every date on every path the run adds the value of the fees dated after it, from our side (+ received, − paid),
 discounted on the flat zero the engine already uses along a path; today's value includes the fees still to come;
 and the value a margin period earlier includes the fees dated after THAT time, so a fee paid inside a margin period
-is a payment the collateral had not yet seen. A fee dated on a date or before it is paid. On all four runs
+is a payment the collateral had not yet seen. A fee dated on a date or before it is paid; one dated on the valuation date is paid that day, so it is in the
+ticket's value net of fees and not in a run. On all four runs
 (`/api/xva/simulate`, `/currency`, `/currency-option`, `/currency-package`: `fees` in the request, `fees` in the
 answer with their count, value today and value on the grid).
 

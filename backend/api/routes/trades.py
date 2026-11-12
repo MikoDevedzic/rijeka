@@ -193,6 +193,15 @@ class TradeUpdate(BaseModel):
     book: Optional[str] = None
     strategy: Optional[str] = None
 
+    @field_validator("terms")
+    @classmethod
+    def fees_as_the_record_keeps_them(cls, v):
+        """An update's `terms.fees` is checked as a new trade's is (pricing/fees.py)."""
+        if isinstance(v, dict) and "fees" in v:
+            from pricing.fees import normalise
+            v = {**v, "fees": normalise(v["fees"])}
+        return v
+
 def serialize(t, cp=None):
     return {
         "id": str(t.id),

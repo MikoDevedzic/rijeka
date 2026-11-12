@@ -167,7 +167,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ fees = null, trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null, counterpartyName = null }) {
+export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null, counterpartyName = null }) {
   // 'simple' shows settlement, SIMULATE and a line on what the run assumes; 'advanced' is the whole tab. Every input's
   // state lives here in both, so hiding an input never changes what SIMULATE sends.
   const [view, setView] = useXvaView()
@@ -283,6 +283,9 @@ export default function XVATab({ fees = null, trade, notionalRef, rateRef, effDa
     // a margin entry that is not an amount is said to be that: no run starts on the engine's estimate under it
     const imBad = imUsdProblem(imUsd)
     if (imBad) { setSimErr(imBad); return }
+    // the fees of the ticket (a list, or null while a row is not complete); of a booked trade, the ones it was booked with
+    const feeList = fees === undefined ? (Array.isArray(trade?.terms?.fees) ? trade.terms.fees : []) : fees
+    if (feeList === null) { setSimErr('A fee on the TRADE tab is not complete: finish or remove it before simulating.'); return }
     setSimulating(true); setSimErr(null)
     try {
       const session = await getSession()
@@ -347,7 +350,7 @@ export default function XVATab({ fees = null, trade, notionalRef, rateRef, effDa
         } : {}),
       }
       // the trade's fees still to come are part of its value and of its exposure (the ticket's FEES block)
-      if (fees && fees.length) body.fees = fees
+      if (feeList.length) body.fees = feeList
       const res = await fetch(API + '/api/xva/simulate', {
         method:'POST', headers:{ Authorization:'Bearer '+session.access_token, 'Content-Type':'application/json' },
         body: JSON.stringify(body)

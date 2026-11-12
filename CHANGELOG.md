@@ -22,11 +22,16 @@ of the trade", for trade entry, pricing and XVA.
   earlier, on all four runs (rates, currency forward, option, package): a fee we are owed is exposure until it is
   paid, a premium we still owe lowers ours. A known payment is not a risk, so initial margin does not move. Checked
   exactly: a fee received at settlement gives the same paths, margin and every XVA as the same forward struck lower
-  by that amount.
+  by that amount. A fee dated on the valuation date is paid that day: it is in the ticket's value and not in a run,
+  since neither side can still fail to pay it.
 - **Booked.** `terms.fees` on the trade, checked and stored in one shape by both booking routes; the confirmation's
-  premium (one amount, one currency, one date) is the PREMIUM rows added up on the first of their dates, so the
-  on-chain record's shape is unchanged. A trade booked before this shows its premium as one row.
-- **Not yet.** A fee in a currency other than the trade's; fees in P&L, in the CASHFLOWS tab and in settlement; the
+  premium (one amount, one currency, one date) is the PREMIUM rows that go the option's way (paid when bought,
+  received when sold) less any against it, on the first of their dates, so the on-chain record's shape is unchanged.
+  A trade booked before this shows its premium as one row. A rates option's premium is now a fee row: the OPTION FEE
+  block it replaces is gone. A fee keeps the currency it was typed in: if the pair changes under it, the row says so
+  and nothing is priced, simulated or booked until it is entered again or removed.
+- **Not yet.** A fee in a currency other than the trade's; a package's fees sit on its first leg, and each option leg
+  keeps the model's price as its own premium; fees in P&L, in the CASHFLOWS tab and in settlement; the
   other fees in the on-chain record (it carries the premium only). The rates run reads a fee paid inside a margin
   period as paid evenly over the step.
 

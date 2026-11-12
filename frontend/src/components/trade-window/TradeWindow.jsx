@@ -1229,7 +1229,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
         </>)}
         <FeesBlock
-          rows={feeRows} onChange={(rows) => { setFeeRows(rows); setBookErr('') }} currency={feeCcy} disabled={viewMode}
+          rows={feeRows} onChange={(next) => { setFeeRows(next); setBookErr('') }} currency={feeCcy} disabled={viewMode}
           npv={isCurrency ? (fxQuote?.npv ?? null) : (result?.npv ?? result?.net_npv ?? null)}
           valuationDate={isCurrency ? (fxQuote?.valuation_date || null) : (state.valDate || null)}
           premium={isCurrency

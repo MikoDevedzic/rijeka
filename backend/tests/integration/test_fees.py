@@ -56,6 +56,15 @@ def test_an_xva_run_carries_the_trades_fees(client, auth_a):
                                                    "fees": [_fee(direction="RECEIVE", amount=50_000, date=(date.today() + timedelta(days=200)).isoformat(), type="UPFRONT")]}, headers=auth_a)
     assert rates.status_code == 200, rates.text[:300]
     assert rates.json()["fees"]["count"] == 1 and 48_000 < rates.json()["fees"]["pv"] < 50_000
+    # the rates run measures a fee from its own valuation date, as its curve is: a fee three months after a valuation
+    # date in the past is still to come on that date (it used to be read from the server's today and dropped as paid)
+    old = client.post("/api/xva/simulate", json={"notional": 10_000_000, "maturity_y": 2.0, "paths": 300, "valuation_date": ASOF,
+                                                 "fees": [_fee(direction="RECEIVE", amount=50_000, date="2027-02-02", type="UPFRONT")]}, headers=auth_a)
+    assert old.status_code == 200, old.text[:300]
+    assert old.json()["fees"]["count"] == 1 and 49_000 < old.json()["fees"]["pv"] < 50_000
+    # a fee dated on the valuation date is paid that day: in the ticket's value, not in a run
+    today = client.post("/api/xva/currency", json={**body, "fees": [_fee(date=ASOF)]}, headers=auth_a).json()
+    assert today["params"]["fees"] is None and today["xva"]["cva"] == plain["xva"]["cva"]
 
 
 def test_a_booked_trade_keeps_its_fees_in_one_shape(client, auth_a, ids, pairs):
@@ -77,6 +86,10 @@ def test_a_booked_trade_keeps_its_fees_in_one_shape(client, auth_a, ids, pairs):
     r = client.post("/api/book/trade", json=swap, headers=auth_a)
     assert r.status_code == 201, r.text[:400]
     assert r.json()["trade"]["terms"]["fees"][0] == {"type": "UPFRONT", "direction": "RECEIVE", "amount": 10000.0, "currency": "USD", "date": "2026-12-04"}
+    # an update of a booked trade's terms is checked as the booking was
+    tid = r.json()["trade"]["id"]
+    assert client.put(f"/api/trades/{tid}", json={"terms": {**swap["terms"], "fees": [{"type": "UPFRONT", "direction": "PAY", "amount": 1, "currency": "USD", "date": "not a date"}]}}, headers=auth_a).status_code == 422
+    assert client.put(f"/api/trades/{tid}", json={"terms": {**swap["terms"], "fees": [{"type": "UPFRONT"}] * 30}}, headers=auth_a).status_code == 422
     swap2 = B.swap(ids["a"], "FEES-4")
     swap2["terms"] = {**(swap2.get("terms") or {}), "fees": [{"type": "TIP", "direction": "PAY", "amount": 1, "currency": "USD", "date": "2026-12-04"}]}
     assert client.post("/api/book/trade", json=swap2, headers=auth_a).status_code == 422

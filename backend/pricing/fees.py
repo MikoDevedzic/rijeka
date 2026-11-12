@@ -88,8 +88,10 @@ def present_values(fees: list[dict], val_date: date, df: Callable[[date], float]
 
 
 def in_years(fees: list[dict], val_date: date) -> list[tuple[float, float]]:
-    """(years from today, signed amount) for the fees still to come: what a simulation needs of them."""
-    return [((date.fromisoformat(f["date"]) - val_date).days / 365.0, signed(f)) for f in fees if date.fromisoformat(f["date"]) >= val_date]
+    """(years from the valuation date, signed amount) for the fees dated AFTER it: what a simulation needs of them.
+    A fee dated on the valuation date is paid that day: it is in the trade's value today (present_values) and is
+    not something either side can still fail to pay, so it is not in an exposure."""
+    return [((date.fromisoformat(f["date"]) - val_date).days / 365.0, signed(f)) for f in fees if date.fromisoformat(f["date"]) > val_date]
 
 
 def value_at(cash: list[tuple[float, float]], t, zero: float) -> np.ndarray:

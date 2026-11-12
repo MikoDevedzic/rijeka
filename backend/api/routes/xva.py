@@ -600,7 +600,7 @@ def simulate(
     # the trade's fees still to come (pricing/fees.py): on every path the fees dated after each date, on the flat
     # curve the simulation runs off; a fee is not bridged, so one paid inside a margin period is read as paid evenly
     fee_meta = None
-    cash = _fee_cash(body.fees, None, date.today())
+    cash = _fee_cash(body.fees, None, val_date)          # from the run's own valuation date, as its curve is
     if cash:
         from pricing.fees import value_at
         on_grid = value_at(cash, (np.arange(T) + 1) * DT, theta)

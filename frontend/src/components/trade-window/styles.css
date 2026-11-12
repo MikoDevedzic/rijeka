@@ -693,3 +693,12 @@
 .cert .tbw-btn.cert-go { background: var(--text-hi); border-color: var(--text-hi); color: #fafbf7; }
 .cert .tbw-btn.cert-go:hover:not(:disabled) { background: var(--accent); border-color: var(--accent); color: #fafbf7; }
 .cert input { background: #ffffff; color: var(--text-hi); border-color: var(--border-hi); }
+
+/* A compact chip: a small raised control inside a line of text or a table row (the FEES block's add and remove). */
+.tbw-chip.tbw-chip-sm { padding: 1px 10px; line-height: 16px; }
+
+/* A section that is one line: a block with nothing in it yet but its name and the control that starts it (FEES with
+   no fee). It keeps the section's sides and gives up its height, so the TRADE tab still fits the window. */
+.tbw-sec.tbw-sec-line { padding-top: 3px; padding-bottom: 3px; }
+.tbw-sec.tbw-sec-line .tbw-sec-header { margin-bottom: 0; }
+.tbw-sec.tbw-sec-line .tbw-lbl { margin-bottom: 0; }
