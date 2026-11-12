@@ -116,6 +116,7 @@ Read at build time by Vite; set them in Netlify's build environment or a local `
 |---|---|
 | `RIJEKA_CRON_SECRET` | `news-tick.yml`, `risk-backfill.yml` (the same value as the API's). |
 | `RIJEKA_API_URL` (optional) | `release-sync.yml`; defaults to the hosted API. |
+| none | `watch.yml` (`.github/scripts/watch.py`): public addresses only, read with GET. `docs/ops/monitoring.md`. |
 
 ## Worker tier and asynchronous confirm (added 3 November 2026)
 

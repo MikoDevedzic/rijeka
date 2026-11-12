@@ -27,5 +27,6 @@ Learned on 11 November 2026
 Rules
 - A change to confirmation, the chain code, the CONFIRM tab or the public register has `npm run e2e:chain` green as well as `npm run e2e` (`docs/ops/release.md`): the plain journeys have no chain and end at a record that is signed, not anchored.
 - A change that touches only tests or stack scripts under `backend/` still restarts the API and the worker (any file under `backend/` that is not Markdown does): wait for health to report the commit.
+- After the chain, look at production from the outside as a visitor's browser does: `backend/.venv/bin/python .github/scripts/watch.py --api-commit <sha> --app-commit <sha>` (leave out the flag for a side that did not deploy). It reads the batches, the scheduler, the chain node, CORS, the register's shape, every script the app's page names, the methodology PDF and the public site; `docs/ops/monitoring.md`. A commit on health is not the whole read-back: the app can be blank while health is green.
 - Never print secrets, tokens, connection strings or `.env` contents. Never paste credentials into a hosted dashboard.
 - Say what is verified and what is not. "Live" means the commit hash was read back from production, not that a push succeeded.

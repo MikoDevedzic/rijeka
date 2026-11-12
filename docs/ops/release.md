@@ -9,6 +9,8 @@ this page is what to do, in order.
       files are not yours.
 - [ ] Frontend: `cd frontend && npm run lint -- --quiet && npm test && npm run build` (the lint is the one CI runs: `src`, the journeys and the config).
 - [ ] Backend: `cd backend && python -m pytest -q --ignore=tests/integration --ignore=tests/reference`.
+      A change to `.github/scripts/` (the production watch): `ruff check --config ruff.toml ../.github/scripts &&
+      python -m pytest -q ../.github/scripts`, as CI's `backend tests` job runs them.
 - [ ] **Quinn**: `cd frontend && npm run e2e` on the local stack. A new screen, tab or button has a journey.
       A change to confirmation, the chain code, the CONFIRM tab or the public register also runs `npm run e2e:chain`
       (a confirmation anchored on a local test chain; CI runs it on every pull request).
@@ -69,6 +71,7 @@ git push origin <sha>:main             # retry on a transient refusal
 curl -s https://rijeka-api.onrender.com/api/ops/health   # until "commit" is the sha (only when the commit changes a file under backend/ that is not Markdown: Render deploys nothing else)
 gh workflow run release-sync
 curl -s https://app.rijeka.app/version.json              # until "commit" is the sha
+backend/.venv/bin/python .github/scripts/watch.py --api-commit <sha> --app-commit <sha>   # everything a visitor touches, from outside (docs/ops/monitoring.md); leave a flag out when that side did not deploy
 ```
 
 A failed check is read from the job log (`gh api repos/<owner>/<repo>/actions/jobs/<id>/logs`), fixed on the

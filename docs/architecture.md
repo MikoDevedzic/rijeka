@@ -401,7 +401,9 @@ Markdown. The app builds from `release`, which is moved to the commit the live A
 `release-sync` workflow; a push with nothing under `backend/` (the frontend, docs, the verifier's page
 under `chain/`, a workflow) lets `release` follow `main`'s head, by the one rule both of them use. The
 full account, with the failure modes seen so far, is `docs/ops/deploy.md`. Environment variables:
-`docs/ops/environment.md`. Versions: `CHANGELOG.md`; the API reports its version and commit on
+`docs/ops/environment.md`. Production is looked at from the outside by the `watch` workflow
+(`.github/scripts/watch.py`: public addresses, GET only, no secret), on GitHub's schedule, by hand and after a
+deploy; what it checks and what it cannot is `docs/ops/monitoring.md`. Versions: `CHANGELOG.md`; the API reports its version and commit on
 `/api/ops/health`.
 
 ## Local stack and tests
