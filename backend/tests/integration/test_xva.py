@@ -196,7 +196,7 @@ def test_margin_is_the_desks_amount_or_the_engines_estimate_and_nothing_is_calle
     assert typed["capital"]["im_0"] == 250_000.0 and set(typed["im_profile"]) == {250_000.0} and "desk" in typed["capital"]["im_basis"]
     # MVA of an amount held for the life is that amount funded at the spread: more margin, more cost, in proportion
     double = client.post("/api/xva/currency", json={**body, "im_usd": 500_000}, headers=auth_a).json()
-    assert double["xva"]["mva"] == pytest.approx(2 * typed["xva"]["mva"], rel=1e-6)
+    assert double["xva"]["mva"] == pytest.approx(2 * typed["xva"]["mva"], abs=0.011)      # each is rounded to a cent
     # the old name of the input (in millions) is still read, so a page loaded before the release keeps working
     old = client.post("/api/xva/currency", json={**body, "simm_im_m": 0.25}, headers=auth_a).json()
     assert old["xva"]["mva"] == typed["xva"]["mva"]

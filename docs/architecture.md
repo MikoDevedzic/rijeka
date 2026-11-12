@@ -66,7 +66,7 @@ to be made one.
 as the database). Sync routes run in Starlette's thread pool; pricing is numpy/scipy on the request
 path with curve and trade caches. Routers by area: `api/routes/` (trades, booking, legs, events,
 cashflows, pricer, xva, risk, ccr, capital, collateral, modules, ipv, pnl, chain, chat, trade cards, market data, demo provisioning,
-methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every product, XVA, initial margin, SA-CCR),
+methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every product, XVA, initial margin, SA-CCR, a digital asset's vol regimes),
 `risk/` (ladder, VaR, stress, backtest, limits, vol history), `ccr/` (exposure paths, calibration,
 options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the firm's instrument list, the schedule per counterparty, the regime and the
 yields derived from them, the ticket's collateral onto a CSA, the book's collateral page; `docs/collateral.md`), `chain/` (canonical record, EIP-712
@@ -75,6 +75,10 @@ signing, attestation, keys, lifecycle guard, Telegram), `settlement/` (the fixin
 replications). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; digital-asset fixings, news,
 summaries and spots every 30 minutes; demo market data, end-of-day P&L, market risk and counterparty
 credit every 2 hours) and moves the `release` branch after a deploy.
+The vol regimes' parameters (six per asset) are dated constants in `pricing/vol_regimes.py`, fitted by
+`backend/scripts/calibrate_vol_regimes.py` to public daily closes (Coinbase's public candles, the source
+`risk/history.py` reads). The script is run by hand, never by the app, and reads nothing but those prices; a refit
+is a change to the constants, reviewed like any other (`docs/model_inventory.md`).
 
 **The database**: a Supabase project. Auth issues ES256 tokens; the API verifies them against the
 project's published keys (no shared secret) and then reads the caller's role from `profiles.role`: an account

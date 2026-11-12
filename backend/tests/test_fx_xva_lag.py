@@ -8,7 +8,10 @@ itself at that time and values every leg on it.
 The reference here shares no code with it: for each grid date the level is drawn at t − δ and then again at t
 (two independent steps of the same geometric Brownian motion, no grid and no bridge), the trade is valued at
 both, and the 99th percentile of the move about its mean is read. The engine's estimate must agree to sampling;
-the old bridge must not, at a digital asset's vol, or this change did nothing."""
+the old bridge must not, at a digital asset's vol, or this change did nothing.
+
+These tests are of the bridge itself, on one vol: the legs here turn the digital asset's vol regimes off
+(regimes=False). The same agreement with the regimes on, against a simulation day by day, is tests/test_vol_regimes.py."""
 import math
 
 import numpy as np
@@ -35,13 +38,13 @@ def _call(s, k, r_q, r_b, sigma, tau):
 
 def _fwd(vol_pct, t=0.5, direction="BUY", n=10.0, f=108465.61, k=108465.61, pair="BTCUSD"):
     return fx_xva.ForwardXvaInput(pair=pair, base_notional=n, forward=f, strike=k, t_years=t, df_quote_t=math.exp(-Q * t),
-                                  quote_zero=Q, direction=direction, vol_pct=vol_pct)
+                                  quote_zero=Q, direction=direction, vol_pct=vol_pct, regimes=False)
 
 
 def _opt(vol, t=0.5, style="EUROPEAN", direction="BUY", strike=110000.0, **kw):
     spec = ExoticSpec(style, "CALL", strike=strike, **kw)
     return fx_xva.OptionXvaInput(pair="BTCUSD", base_notional=10.0, spot=108250.0, forward=108465.61, t_expiry=t, t_settle=t,
-                                 df_quote_t=math.exp(-Q * t), quote_zero=Q, vol=vol, spec=spec, direction=direction)
+                                 df_quote_t=math.exp(-Q * t), quote_zero=Q, vol=vol, spec=spec, direction=direction, regimes=False)
 
 
 def _two_dates(sigma, t, lag, n, seed):
@@ -138,7 +141,7 @@ def test_before_today_the_value_is_todays():
 
 def test_the_lagged_level_has_the_bridges_mean_and_variance_and_the_draws_are_the_ones_recorded():
     n, steps, dt, sigma, lag = 400_000, 6, 1 / 12, 0.8, 10 / 250.0
-    z, t, sv, m = fx_xva._driver(n, steps, dt, 42, sigma, None)
+    z, t, sv, m, _ = fx_xva._driver(n, steps, dt, 42, sigma, None)
     rec = np.zeros((n, steps))
     m_lag, t_lag, j_of = fx_xva._lagged_driver(m, sv, dt, lag, np.random.default_rng(43), rec)
     assert list(j_of) == [1, 2, 3, 4, 5, 6] and t_lag == pytest.approx(t - lag)

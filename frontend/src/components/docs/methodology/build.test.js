@@ -28,9 +28,12 @@ describe('the methodology in the app', () => {
     // moves every later one up by one): the waterfall's four lines are (15) to (18), wrong-way risk (19) and (20), the
     // parity forward of §12 is (21) and the forward beyond the last quote (22)
     const tags = (sec) => built.sections[sec - 1].blocks.filter(b => b.t === 'eq').flatMap(b => [...b.html.matchAll(/<span class="mord">\(<\/span><span class="mord"><span class="mord">(\d+)<\/span>/g)].map(m => Number(m[1])))
+    // v1.15: three displays in the new §9.3 (the day's vol, a chain's two levels, the step on the clock) are (13) to
+    // (15) and move every later one up by three
     expect(tags(9)).toContain(12)                    // v1.14: the bridge in logs
-    expect(tags(10)).toEqual([15, 16, 17, 18, 19, 20])
-    expect(tags(12)).toEqual([21, 22, 23, 24])
+    expect(tags(9)).toEqual(expect.arrayContaining([13, 14, 15]))
+    expect(tags(10)).toEqual([18, 19, 20, 21, 22, 23])
+    expect(tags(12)).toEqual([24, 25, 26, 27])
     // prose with the maths taken out: no backslash command, no stray brace or dollar
     // the text with each formula taken out whole (a formula's own spans nest: counted, not guessed)
     const strip = (h) => {

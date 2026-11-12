@@ -74,6 +74,7 @@ class ForwardXvaInput:
     spot: Optional[float] = None     # today's spot, for the SA-CCR notional (CRE52.35); None = the forward stands in
     vol_source: Optional[str] = None # where vol_pct came from (the pair's surface, a desk input); None = the demo default
     pillars: Optional[list] = None   # the pair's surface (fx_vol.parse_surface): the paths step with its ATM term structure
+    regimes: bool = True             # a digital asset's vol regimes (pricing/vol_regimes)   ; False: one vol, for comparison
 
 
 def monthly_grid(t_years: float) -> tuple[int, float]:
@@ -82,14 +83,38 @@ def monthly_grid(t_years: float) -> tuple[int, float]:
     return steps, t_years / steps
 
 
-def _driver(n_paths: int, steps: int, dt: float, seed: int, sigma: float, pillars: Optional[list]):
-    """The standard normals drawn, the grid, the step vols and M: the driftless lognormal every forward of the pair
-    rides (F_t = F_0 · M_t, E[M_t] = 1). With a surface, the step vols give Var(ln M_t) the ATM variance at every
-    grid date; without one, a flat sigma."""
+def regimes_meta(leg, vol_pct: float) -> Optional[dict]:
+    """What a run says about its vol regimes: the two levels at this ticket's vol, how often and how long, and where
+    the parameters come from. None when the level has one vol (a currency pair, or regimes turned off)."""
+    reg = _regimes(leg)
+    return reg.describe(vol_pct) if reg is not None else None
+
+
+def _regimes(leg):
+    """The vol regimes of the leg's asset, when it has them and the leg has not turned them off."""
+    from pricing.vol_regimes import regimes_of
+    return regimes_of(leg.pair) if getattr(leg, "regimes", True) else None
+
+
+def _driver(n_paths: int, steps: int, dt: float, seed: int, sigma: float, pillars: Optional[list], regimes=None):
+    """The standard normals drawn, the grid, the step vols, M and the variance clock: the driftless level every
+    forward of the pair rides (F_t = F_0 · M_t, E[M_t] = 1). With a surface, the step vols give Var(ln M_t) the ATM
+    variance at every grid date; without one, a flat sigma. With `regimes` (a digital asset: pricing/vol_regimes)
+    the variance a step accumulates is the step vol's times what the path's days in each regime add up to, mean
+    one: given that clock the level is lognormal as before, and the same standard normals drive it. The clock is
+    None without regimes."""
     rng = np.random.default_rng(seed)
     z = rng.standard_normal((n_paths, steps))
     t = np.arange(1, steps + 1) * dt
-    if pillars:
+    ck = None
+    if regimes is not None:
+        from pricing.vol_regimes import clock, step_variance
+        from pricing.fx_vol import step_vols
+        ck = clock(regimes, n_paths, steps, dt, seed)
+        sv = np.array(step_vols(pillars, t)) if pillars else np.full(steps, sigma)
+        var = (sv ** 2 * dt)[None, :] * step_variance(ck)
+        m = np.exp(np.cumsum(-0.5 * var + np.sqrt(var) * z, axis=1))
+    elif pillars:
         from pricing.fx_vol import step_vols
         sv = np.array(step_vols(pillars, t))
         m = np.exp(np.cumsum(-0.5 * sv ** 2 * dt + sv * math.sqrt(dt) * z, axis=1))
@@ -97,7 +122,7 @@ def _driver(n_paths: int, steps: int, dt: float, seed: int, sigma: float, pillar
         sv = np.full(steps, sigma)
         w = np.cumsum(z, axis=1) * math.sqrt(dt)
         m = np.exp(-0.5 * sigma ** 2 * t + sigma * w)
-    return z, t, sv, m
+    return z, t, sv, m, ck
 
 
 def _settle_step(t: np.ndarray, t_settle: float) -> int:
@@ -158,13 +183,16 @@ def wwr_meta(wf: WaterfallResult, cp_hazard_if_halves: float, own_hazard_if_halv
 # (tests/test_fx_xva_lag.py). Here the level itself is drawn where it is exact, and every leg is valued on it.
 
 def _lagged_driver(m: np.ndarray, sv: np.ndarray, dt: float, lag_y: float, rng: np.random.Generator,
-                   noise_out: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                   noise_out: Optional[np.ndarray] = None, ck: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """M at t_i − δ for every grid date t_i = (i+1)·dt, the time itself, and j: t_i − δ lies strictly inside
     (t_{j−1}, t_j), t_k = k·dt (j ≤ 0: before today). For a margin period that is not a whole number of steps
     (exact_lag sends the other case to the grid values themselves). Inside a step ln M is a Brownian motion with
     the step's vol, so given the two grid levels either side it is a bridge: mean on the straight line between
     them, variance σ_j²·w(1−w)·dt. Before today the level is today's (1). One standard normal per path and date
-    is drawn from `rng`, as lagged_values draws them."""
+    is drawn from `rng`, as lagged_values draws them.
+    With a variance clock `ck` (a digital asset's vol regimes) the bridge is the same one on the clock: the share
+    of the step's variance that came before the date takes the place of the share of its time, per path, and the
+    step's variance is the path's own. Nothing more is drawn."""
     n_paths, T = m.shape
     lnm = np.concatenate([np.zeros((n_paths, 1)), np.log(m)], axis=1)          # lnm[:, k] = ln M(k·dt)
     steps_back = lag_y / dt
@@ -182,7 +210,13 @@ def _lagged_driver(m: np.ndarray, sv: np.ndarray, dt: float, lag_y: float, rng: 
             continue                                                           # before today: the level of today
         w = 1.0 - frac
         lo, hi = lnm[:, j - 1], lnm[:, j]
-        out[:, i] = np.exp(lo + w * (hi - lo) + z * float(sv[j - 1]) * math.sqrt(w * (1.0 - w) * dt))
+        if ck is None:
+            out[:, i] = np.exp(lo + w * (hi - lo) + z * float(sv[j - 1]) * math.sqrt(w * (1.0 - w) * dt))
+        else:
+            from pricing.vol_regimes import share_before
+            om = share_before(ck, j - 1, w)
+            var_j = float(sv[j - 1]) ** 2 * dt * ck[:, j - 1, :].mean(axis=1, dtype=np.float64)
+            out[:, i] = np.exp(lo + om * (hi - lo) + z * np.sqrt(var_j * om * (1.0 - om)))
     return out, t_lag, j_of
 
 
@@ -264,7 +298,8 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
     return out
 
 
-def exact_lag(legs: list, parts: list, steps: int, dt: float, m: np.ndarray, sv: np.ndarray, whole: np.ndarray, v0: float):
+def exact_lag(legs: list, parts: list, steps: int, dt: float, m: np.ndarray, sv: np.ndarray, whole: np.ndarray, v0: float,
+              ck: Optional[np.ndarray] = None):
     """The set's value a margin period before every grid date, for run_waterfall(lag_values=): the driver drawn
     at that time (_lagged_driver), every leg valued on it (_forward_lag, _option_lag), and the legs added. `parts`
     is, per leg, (its value paths, its value today, what its engine returned beside them). A leg that has settled
@@ -277,7 +312,7 @@ def exact_lag(legs: list, parts: list, steps: int, dt: float, m: np.ndarray, sv:
         back = lag_y / dt
         if lag_y <= 0 or back - math.floor(back + 1e-12) < 1e-12:
             return lagged_values(whole, v0, dt, lag_y, rng, noise_out=noise_out)
-        m_lag, t_lag, j_of = _lagged_driver(m, sv, dt, lag_y, rng, noise_out)
+        m_lag, t_lag, j_of = _lagged_driver(m, sv, dt, lag_y, rng, noise_out, ck)
         total = np.zeros_like(m)
         for leg, (vi, v0i, x) in zip(legs, parts):
             total = total + (_option_lag(leg, vi, v0i, x, steps, dt, m_lag, t_lag, j_of) if _is_option(leg)
@@ -292,11 +327,11 @@ def simulate_paths(inp: ForwardXvaInput, n_paths: int = 2000, seed: int = 42, no
     so the Excel replication can rebuild every path from the engine's own draws."""
     steps, dt = monthly_grid(inp.t_years)
     sigma = _forward_sigma(inp)
-    z, _, sv, m = _driver(n_paths, steps, dt, seed, sigma, inp.pillars)
+    z, _, sv, m, ck = _driver(n_paths, steps, dt, seed, sigma, inp.pillars, _regimes(inp))
     paths, v0, x = _forward_values(inp, steps, dt, m)
     if noise_out is not None:
-        noise_out.update(z=z, f_t=x["f_t"], df_t_T=x["df_t_T"], sigma=sigma, steps=steps, dt=dt, step_vols=sv,
-                         lag=exact_lag([inp], [(paths, v0, x)], steps, dt, m, sv, paths, v0))
+        noise_out.update(z=z, f_t=x["f_t"], df_t_T=x["df_t_T"], sigma=sigma, steps=steps, dt=dt, step_vols=sv, clock=ck,
+                         lag=exact_lag([inp], [(paths, v0, x)], steps, dt, m, sv, paths, v0, ck))
     return paths, x["p0"], v0
 
 
@@ -329,7 +364,9 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
             "vol_mode": "ATM term structure of the surface (step vols)" if inp.pillars else "flat",
             "step_vols_pct": [round(float(v) * 100, 3) for v in nz["step_vols"]] if inp.pillars else None,
             "im_basis": wf.im_basis, "capital_basis": cap["basis"], "crypto_group": cap["group"],
-            "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward at the surface's ATM vol to settlement, same waterfall as rates",
+            "steps": steps, "dt": dt, "n_paths": n_paths, "v0": v0, "model": "lognormal forward at the surface's ATM vol to settlement, same waterfall as rates"
+                                                                           + ("; day by day the vol moves between regimes (a stress of days on a level of weeks) whose variance on average is the ticket's" if _regimes(inp) else ""),
+            "vol_regimes": regimes_meta(inp, inp.vol_pct if inp.vol_pct is not None else default_vol_pct(inp.pair)),
             "p0_grid": [float(x) for x in p0], "_paths": paths,       # the MtM paths, for the ticket's chart (not serialised as such)
             "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
     return wf, meta
@@ -359,6 +396,7 @@ class OptionXvaInput:
     spot01: Optional[float] = None
     vol_source: Optional[str] = None
     pillars: Optional[list] = None   # the pair's surface: term structure for the paths, the smile at each path's moneyness
+    regimes: bool = True             # a digital asset's vol regimes (pricing/vol_regimes)   ; False: one vol, for comparison
 
 
 def _payoff_at_expiry(spec, S_T: np.ndarray, knocked: np.ndarray) -> np.ndarray:
@@ -419,11 +457,11 @@ def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 
     """Option value paths from our side on the monthly grid to settlement, P(0, k·dt) on the quote curve, V0."""
     steps, dt = monthly_grid(inp.t_settle)
     sigma = float(inp.vol)
-    z, _, sv, m = _driver(n_paths, steps, dt, seed, sigma, inp.pillars)
+    z, _, sv, m, ck = _driver(n_paths, steps, dt, seed, sigma, inp.pillars, _regimes(inp))
     V, v0, x = _option_values(inp, steps, dt, m)
     if noise_out is not None:
-        noise_out.update(z=z, f_t=x["f_t"], s_t=x["s_t"], df_t_T=x["df_t_T"], sigma=sigma, steps=steps, dt=dt, r_b=x["r_b"], i_exp=x["i_exp"], step_vols=sv,
-                         lag=exact_lag([inp], [(V, v0, x)], steps, dt, m, sv, V, v0))
+        noise_out.update(z=z, f_t=x["f_t"], s_t=x["s_t"], df_t_T=x["df_t_T"], sigma=sigma, steps=steps, dt=dt, r_b=x["r_b"], i_exp=x["i_exp"], step_vols=sv, clock=ck,
+                         lag=exact_lag([inp], [(V, v0, x)], steps, dt, m, sv, V, v0, ck))
     return V, x["p0"], v0
 
 
@@ -456,7 +494,9 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
             "model": f"lognormal spot{' with the surface' + chr(39) + 's term structure' if inp.pillars else ' at the option' + chr(39) + 's vol'}; {spec.style.replace('_', ' ').lower()} valued on each path with the style's closed form "
                      f"(the credit engine's model); payoff fixed at expiry, discounted to settlement"
                      + ("; barriers monitored at the grid points" if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else "")
+                     + ("; day by day the spot's vol moves between regimes (a stress of days on a level of weeks) whose variance on average is the surface's; the option is still marked at the surface's vol" if _regimes(inp) else "")
                      + ("; American valued as European on the paths (a lower bound)" if spec.style == "AMERICAN" else ""),
+            "vol_regimes": regimes_meta(inp, inp.vol * 100.0),
             "_paths": paths, "wwr": wwr_meta(wf, cp_hazard_if_halves, own_hazard_if_halves)}
     return wf, meta
 
@@ -514,7 +554,7 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
     steps, dt = monthly_grid(_horizon(longest))
     pillars = next((l.pillars for l in legs if l.pillars), None)
     sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)
-    z, t, sv, m = _driver(n_paths, steps, dt, seed, sigma, pillars)
+    z, t, sv, m, ck = _driver(n_paths, steps, dt, seed, sigma, pillars, None if any(not getattr(l, "regimes", True) for l in legs) else _regimes(longest))
     p0 = [math.exp(-float(longest.quote_zero) * k * dt) for k in range(steps + 2)]
     V = np.zeros((n_paths, steps))
     settled = np.zeros((n_paths, steps))          # the cash that has settled out of the set by each date, per path
@@ -534,8 +574,8 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
         rows.append({"v0": float(v0i), "horizon": _horizon(leg), "option": _is_option(leg),
                      "ee_gross_peak": float(np.max(np.mean(np.maximum(Vi, 0.0), axis=0))), **({"paths": Vi} if keep_leg_paths else {})})
     if noise_out is not None:
-        noise_out.update(z=z, m=m, sigma=sigma, steps=steps, dt=dt, step_vols=sv, settled=settled if settled.any() else None,
-                         lag=exact_lag(legs, parts, steps, dt, m, sv, V + settled, v0))
+        noise_out.update(z=z, m=m, sigma=sigma, steps=steps, dt=dt, step_vols=sv, clock=ck, settled=settled if settled.any() else None,
+                         lag=exact_lag(legs, parts, steps, dt, m, sv, V + settled, v0, ck))
     return V, p0, v0, rows
 
 
@@ -658,5 +698,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
                      "so the legs net path by path; each leg valued as on its own (a forward's mark, an option's style in closed form); "
                      "a leg stays to the first grid date at or after its settlement and is nothing after"
                      + ("; barriers monitored at the grid points" if any(s in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") for s in styles) else "")
-                     + ("; American valued as European on the paths (a lower bound)" if "AMERICAN" in styles else "")}
+                     + ("; American valued as European on the paths (a lower bound)" if "AMERICAN" in styles else "")
+                     + ("; day by day the driver's vol moves between regimes (a stress of days on a level of weeks) with the same variance on average" if noise_out.get("clock") is not None else ""),
+            "vol_regimes": regimes_meta(longest, sigma * 100.0) if noise_out.get("clock") is not None else None}
     return wf, meta

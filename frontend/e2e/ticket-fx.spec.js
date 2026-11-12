@@ -48,6 +48,24 @@ for (const c of CASES) {
     expect(usdc.xva.cva).toBeCloseTo(first.xva.cva, 1)
     await expect(saving).toContainText(Math.abs(Math.round(two.onChain.xva.all_in - usdc.xva.all_in)).toLocaleString('en-US'))
     await app.screenshot({ path: `e2e/.out/shots/${c.name.replace(/ /g, '-')}-xva.png` })
+
+    // what the run says about its vol: a digital asset's regimes in the run's own figures; a currency pair has one vol
+    const regimes = usdc.params.vol_regimes
+    await win.getByText('SURFACE PROOF').click()
+    const proof = win.locator('table', { hasText: 'VOL USED' })
+    await expect(proof).toContainText('MODEL')
+    if (c.asset === 'CRYPTO') {
+      expect(regimes.lowest_vol_pct, 'the calmest day is below the vol used').toBeLessThan(usdc.params.vol_pct)
+      expect(regimes.highest_vol_pct, 'and the most stressed above it').toBeGreaterThan(usdc.params.vol_pct)
+      await expect(proof).toContainText('REGIMES')
+      await expect(proof).toContainText(`between ${regimes.lowest_vol_pct.toFixed(1)} % and ${regimes.highest_vol_pct.toFixed(1)} %`)
+      await expect(proof).toContainText(`daily closes to ${regimes.as_of}`)
+      await expectNoHorizontalOverflow(win.getByTestId('xva-left'), `${c.name}: XVA left column with the proof open`)
+    } else {
+      expect(regimes, 'a currency pair has one vol').toBeNull()
+      await expect(proof).not.toContainText('REGIMES')
+    }
+    await app.screenshot({ path: `e2e/.out/shots/${c.name.replace(/ /g, '-')}-proof.png` })
     expectClean(problems)
   })
 }

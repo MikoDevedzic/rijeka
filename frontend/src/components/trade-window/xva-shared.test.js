@@ -13,7 +13,7 @@ import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
-  ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS,
+  ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS, regimesWords,
 } from './xva-shared'
 
 const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fva: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
@@ -236,6 +236,14 @@ describe('the simple view', () => {
     expect(fxModelWords({ volPct: '', volMode: 'SURFACE' })).toBe("the pair's vol surface")
     expect(fxModelWords({ volPct: '', volMode: 'FLAT' })).toBe("one flat vol from the pair's surface")
     expect(fxModelWords({ volPct: '12.5', volMode: 'SURFACE' })).toBe('your own vol of 12.5%')
+  })
+  it('says what a digital asset\'s vol regimes are, in the run\'s own figures, and nothing when there are none', () => {
+    const r = { lowest_vol_pct: 24.1, highest_vol_pct: 141.62, fast: { stressed_spell_days: 2.05 }, slow: { high_spell_days: 54 }, as_of: '2026-11-11', days: 1826 }
+    expect(regimesWords(r)).toBe('day by day the vol is between 24.1 % and 141.6 %: a stress that lasts 2.1 days at a time, on a level that holds about 54 days. ' +
+      "Its variance on average is the vol used, so today's value is unchanged and the moves over a margin period are wider. Fitted to 1,826 daily closes to 2026-11-11.")
+    expect(regimesWords(null)).toBe(null)
+    expect(regimesWords(undefined)).toBe(null)
+    expect(regimesWords({ lowest_vol_pct: 1 })).toBe(null)
   })
   it('rates with no stored calibration: says there is none, unless both parameters are typed', () => {
     expect(ratesModelWords({ aOverride: '', sigOverride: '', hasCalibration: false })).toBeNull()

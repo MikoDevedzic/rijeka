@@ -87,7 +87,17 @@ def engine_runs(fi: dict) -> dict:
         wf, meta = forward_xva(fi["inp"], csa, n_paths=N_PATHS, seed=42, noise_out=noise, waterfall_rng=np.random.default_rng(43))
         runs[preset] = (csa, wf, meta)
     steps, dt = monthly_grid(fi["inp"].t_years)
+    # a digital asset's vol regimes (pricing/vol_regimes): the variance each step accumulated on each path, as a
+    # multiple of σ²Δ, and the share of it that came before the date a margin period earlier, for each preset's period
+    ck, u, omega = noise.get("clock"), None, {}
+    if ck is not None:
+        from pricing.vol_regimes import share_before, step_variance
+        u = step_variance(ck)
+        for preset in ("BILATERAL", "ON_CHAIN"):
+            w = 1.0 - runs[preset][0].mpor_years / dt
+            omega[preset] = np.stack([share_before(ck, k, w) for k in range(steps)], axis=1)
     return {"noise": noise, "runs": runs, "T": steps, "dt": dt, "sigma": float(noise["sigma"]), "v0": float(runs[DEFAULT_PRESET][2]["v0"]),
+            "u": u, "omega": omega, "regimes": runs[DEFAULT_PRESET][2].get("vol_regimes"),
             "sf": SUPERVISORY["CRYPTO" if is_crypto(fi["inp"].pair) else "FX"]["sf"], "im_basis": runs[DEFAULT_PRESET][2]["im_basis"]}
 
 
@@ -268,7 +278,17 @@ def _normals_sheet(wb, eng, wf_noise):
     ws["A2"] = "Standard normals, path by path and step by step, exactly as numpy drew them (seed 42 for the forward, 43 for the margin-period bridge). ENGINE mode uses these; LIVE mode ignores them."; ws["A2"].font = W.F_SUB
     z0, z1 = _block(ws, 4, N_PATHS, T, lambda p, j, r, c: float(z[p, j - 1]), "0.000000", "Z: the forward step's normal")
     n0, n1 = _block(ws, z1 + 3, N_PATHS, T, lambda p, j, r, c: float(wf_noise[p, j - 1]), "0.000000", "N: the margin-period bridge's normal")
-    for row in ws.iter_rows(min_row=z0, max_row=n1, min_col=2, max_col=1 + T):
+    last, clock_rows = n1, None
+    if eng["u"] is not None:
+        u0, u1 = _block(ws, n1 + 3, N_PATHS, T, lambda p, j, r, c: float(eng["u"][p, j - 1]), "0.000000",
+                        "U: the variance the step accumulated on the path, as a multiple of σ²Δ (the asset's vol regimes, day by day; its mean over many paths is 1)")
+        b0, b1 = _block(ws, u1 + 3, N_PATHS, T, lambda p, j, r, c: float(eng["omega"]["BILATERAL"][p, j - 1]), "0.000000",
+                        "Ω, BILATERAL: of the step's variance, the share that came before the date a margin period (10 business days) earlier")
+        c0, c1 = _block(ws, b1 + 3, N_PATHS, T, lambda p, j, r, c: float(eng["omega"]["ON_CHAIN"][p, j - 1]), "0.000000",
+                        "Ω, ON_CHAIN: the same for its margin period (5 business days)")
+        last, clock_rows = c1, {"U": (u0, u1), "BILATERAL": (b0, b1), "ON_CHAIN": (c0, c1)}
+    eng["clock_rows"] = clock_rows
+    for row in ws.iter_rows(min_row=z0, max_row=last, min_col=2, max_col=1 + T):
         for c in row:
             if isinstance(c.value, float):
                 c.fill = W.FILL_RJ
@@ -286,6 +306,19 @@ def _paths_sheet(wb, case, eng, grid_r0, zrows):
     top = 4
     zb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=IF(Mode=\"ENGINE\",Normals!{L(c)}{z0 + p},NORMSINV(RAND()))", "0.000000", "Z (ENGINE: the engine's draw; LIVE: NORMSINV(RAND()))")
     blocks["Z"] = zb; top = zb[1] + 3
+    if eng.get("clock_rows"):
+        # a digital asset: each step's variance is the path's own (U·σ²Δ), so the forward is built step by step
+        u0 = eng["clock_rows"]["U"][0]
+        ws["A2"] = "Z and U (the step's variance on the path, the asset's vol regimes) → F_t = F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z) → V = side·N·(F_t − K)·DF_q(t,T). Every cell is a formula."
+        fb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"={'F0' if j == 1 else f'{L(c - 1)}{r}'}*EXP(-0.5*Sigma^2*Dt*Normals!{L(c)}{u0 + p}"
+                                                             f"+Sigma*SQRT(Dt*Normals!{L(c)}{u0 + p})*{L(c)}{zb[0] + p})"),
+                    case["spot_fmt"], "F_t = F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z): the forward on the path, lognormal over the step given the variance the step accumulated")
+        blocks["F"] = fb; top = fb[1] + 3
+        vb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Sgn*Nbase*({L(c)}{fb[0] + p}-Kfx)*Model!$E${grid_r0 + j}", case["mtm_fmt"], "V = side·N·(F_t − K)·DF_q(t,T): the forward's value from our side")
+        blocks["V"] = vb
+        W.widths(ws, [10] + [13] * T)
+        ws.freeze_panes = "B6"
+        return blocks
     sb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"={L(c)}{zb[0] + p}" if j == 1 else f"={L(c - 1)}{r}+{L(c)}{zb[0] + p}"), "0.000000", "ΣZ: the running sum of the draws (numpy's cumsum, in the same order)")
     blocks["S"] = sb; top = sb[1] + 3
     wbk = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"={L(c)}{sb[0] + p}*SQRT(Dt)", "0.000000", "W = ΣZ·√Δ")
@@ -328,9 +361,20 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
     top = rs + T + 3
     fb = blocks["F"]
     # ln F between two grid dates is a Brownian bridge: its mean on the line between the two levels, its variance σ²·w(1−w)·Δ
-    dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,EXP(LN({'F0' if j == 1 else f'Paths!{L(c - 1)}{fb[0] + p}'})+Wlag*(LN(Paths!{L(c)}{fb[0] + p})-LN({'F0' if j == 1 else f'Paths!{L(c - 1)}{fb[0] + p}'}))"
-                                                          f"+Normals!{L(c)}{n0 + p}*Sigma*SQRT(Wlag*(1-Wlag)*Dt)),Paths!{L(c)}{fb[0] + p})"),
-                 case["spot_fmt"], "F(t − δ): exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ)), the forward a margin period earlier (LIVE mode re-rolls N too)")
+    cr = eng.get("clock_rows")
+    if cr:
+        # on the clock of a digital asset's vol regimes it is the same bridge: the share of the step's variance before the
+        # date (Ω) in place of the share of its time (w), and the step's own variance (U·σ²Δ)
+        om = lambda p, c: f'IF(Preset="ON_CHAIN",Normals!{L(c)}{cr["ON_CHAIN"][0] + p},Normals!{L(c)}{cr["BILATERAL"][0] + p})'      # noqa: E731
+        lo = lambda p, j, c: "F0" if j == 1 else f"Paths!{L(c - 1)}{fb[0] + p}"                                                    # noqa: E731
+        dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,EXP(LN({lo(p, j, c)})+{om(p, c)}*(LN(Paths!{L(c)}{fb[0] + p})-LN({lo(p, j, c)}))"
+                                                              f"+Normals!{L(c)}{n0 + p}*Sigma*SQRT({om(p, c)}*(1-{om(p, c)})*Dt*Normals!{L(c)}{cr['U'][0] + p})),Paths!{L(c)}{fb[0] + p})"),
+                     case["spot_fmt"], "F(t − δ): exp(ln F_lo + Ω·(ln F_hi − ln F_lo) + N·σ·√(Ω(1−Ω)·Δ·U)), the forward a margin period earlier: the bridge on the regimes' clock "
+                                       "(Ω is the engine's for the preset's own margin period: a period typed by hand keeps the preset's Ω)")
+    else:
+        dvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,EXP(LN({'F0' if j == 1 else f'Paths!{L(c - 1)}{fb[0] + p}'})+Wlag*(LN(Paths!{L(c)}{fb[0] + p})-LN({'F0' if j == 1 else f'Paths!{L(c - 1)}{fb[0] + p}'}))"
+                                                              f"+Normals!{L(c)}{n0 + p}*Sigma*SQRT(Wlag*(1-Wlag)*Dt)),Paths!{L(c)}{fb[0] + p})"),
+                     case["spot_fmt"], "F(t − δ): exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ)), the forward a margin period earlier (LIVE mode re-rolls N too)")
     top = dvb[1] + 3
     lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=IF(Coll=1,Sgn*Nbase*({L(c)}{dvb[0] + p}-Kfx)*DFqT/EXP(-Rq*$C${rs + j}),Paths!{L(c)}{vb[0] + p})",
                   "#,##0", "V(t − δ) = side·N·(F(t − δ) − K)·DF_q(t − δ, T): the forward valued on that level")
@@ -527,6 +571,11 @@ def _xva_forward_workbook(mkt, case: dict):
         f"monthly grid, {N_PATHS} paths; the engine's own random draws on the Normals sheet.",
         "Model: the forward is lognormal and driftless under the settlement-date forward measure at the vol the pair's surface gives at K = F for this tenor (Calibration sheet); "
         "V(t) = side·N·(F_t − K)·DF_q(t,T) with DF_q between today and settlement on the flat quote zero, the engine's own proxy (pricing/fx_xva.py, docs/xva.md §1).",
+        *([f"Vol regimes: a digital asset's vol is not one level. On each path a day's vol is σ × a fast state (calm or stressed, {eng['regimes']['fast']['stressed_spell_days']:g} days of stress at a time) × a slow state "
+           f"(low or high, about {eng['regimes']['slow']['high_spell_days']:g} days at a time), scaled so the variance expected over any period is σ²: between {eng['regimes']['lowest_vol_pct']:g} % and "
+           f"{eng['regimes']['highest_vol_pct']:g} % here. Given the variance a step accumulated (U on the Normals sheet, the engine's own) the forward is lognormal over the step, so today's value is unchanged and the "
+           f"tails over a margin period are fatter. Fitted to {eng['regimes']['days']} public daily closes to {eng['regimes']['as_of']} (pricing/vol_regimes.py, backend/scripts/calibrate_vol_regimes.py). "
+           "LIVE mode re-rolls the normals and keeps the engine's U and Ω."] if eng.get("regimes") else []),
         "ENGINE mode (Model sheet) reproduces the engine to rounding: the Checks sheet compares the vol, the forward on a few paths, V(0), every EE, ENE and PFE and every XVA. LIVE mode re-rolls the normals with NORMSINV(RAND()) on each recalculation; "
         "the Convergence sheet shows the Monte Carlo error and the Checks read LIVE instead of PASS. Switch Excel to manual calculation before going LIVE.",
         "CSA: a preset (UNCOLLATERALISED, BILATERAL with a 10-day margin period, ON_CHAIN with a 5-day one) or your own thresholds and MTA; the Engine sheet holds the engine's run under each preset. "
@@ -534,7 +583,7 @@ def _xva_forward_workbook(mkt, case: dict):
         "It is not ISDA SIMM, which is ISDA's licensed methodology and is not computed here; a desk with its own figure types it on the ticket.",
         f"The capital add-on is {case['sf_basis']}: the supervisory factor on the notional in the quote currency at spot.",
         case["rate_note"],
-    ], mkt, summary=[("Model", f"lognormal forward, σ = {eng['sigma']:.4%} from {fi['vol_source']}"), ("Paths", f"{N_PATHS} on {T} monthly steps (Δ = {eng['dt']:.5f}y)")])
+    ], mkt, summary=[("Model", f"lognormal forward{' on the clock of its vol regimes' if eng.get('regimes') else ''}, σ = {eng['sigma']:.4%} from {fi['vol_source']}"), ("Paths", f"{N_PATHS} on {T} monthly steps (Δ = {eng['dt']:.5f}y)")])
     _curve_sheet(wb, mkt)
     grid_r0 = _model_sheet(wb, mkt, case, fi, eng)
     _calibration_sheet(wb, mkt, case, fi, eng)
@@ -562,10 +611,12 @@ def _xva_forward_workbook(mkt, case: dict):
         ("σ", "the smile vol at K = F for the forward's tenor: the fixed point of σ = ATM − 2·RR·x + 16·BF·x², x = N(½σ√T) − ½", "Calibration!B5", "ATM, RR25, BF25 linear in time between quoted tenors, flat beyond", "0.0000%"),
         ("Δ, steps", "steps = max(2, ⌈12T⌉), Δ = T/steps", "Model!B18", "the monthly grid", "0.00000000"),
         ("DF_q(t,T)", "DF_q(0,T)/e^(−r_q·t)", f"Model!E{grid_r0 + 1}", "step 1", "0.00000000"),
-        ("W", "ΣZ·√Δ", f"Paths!B{blocks['W'][0]}", "path 1, step 1", "0.000000"),
-        ("F_t", "F₀·exp(−σ²t/2 + σ·W)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"]),
+        *([("U", "the variance a step accumulated on the path, as a multiple of σ²Δ", f"Normals!B{eng['clock_rows']['U'][0]}", "path 1, step 1: the asset's vol regimes, day by day (pricing/vol_regimes.py)", "0.000000"),
+           ("F_t", "F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"])] if eng.get("clock_rows") else
+          [("W", "ΣZ·√Δ", f"Paths!B{blocks['W'][0]}", "path 1, step 1", "0.000000"),
+           ("F_t", "F₀·exp(−σ²t/2 + σ·W)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"])]),
         ("V", "side·N·(F_t − K)·DF_q(t,T)", f"Paths!B{blocks['V'][0]}", "the forward's value on path 1 at step 1", "#,##0"),
-        ("F(t−δ)", "exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ))", f"Exposure!B{blocks_exp['DV'][0]}", "the forward a margin period earlier: ln F is a Brownian bridge between two grid dates", case["spot_fmt"]),
+        ("F(t−δ)", "exp(ln F_lo + Ω·(ln F_hi − ln F_lo) + N·σ·√(Ω(1−Ω)·Δ·U)), Ω the share of the step's variance before the date" if eng.get("clock_rows") else "exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ))", f"Exposure!B{blocks_exp['DV'][0]}", "the forward a margin period earlier: ln F is a Brownian bridge between two grid dates", case["spot_fmt"]),
         ("V(t−δ)", "side·N·(F(t−δ) − K)·DF_q(t−δ, T)", f"Exposure!B{blocks_exp['LAG'][0]}", "the trade valued on that level", "#,##0"),
         ("C", "max(V_lag − TH_cp, 0) − max(−V_lag − TH_own, 0), zeroed under the MTA", f"Exposure!B{blocks_exp['C'][0]}", "", "#,##0"),
         ("IM₀", "99th percentile fall of V over the margin period, about its mean", "Exposure!B18", "the first date; not ISDA SIMM", "#,##0.00"),

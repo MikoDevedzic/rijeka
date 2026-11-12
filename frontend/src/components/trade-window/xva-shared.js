@@ -425,6 +425,17 @@ export function fxModelWords({ volPct, volMode, params = null } = {}) {
   return volMode === 'FLAT' ? "one flat vol from the pair's surface" : "the pair's vol surface"
 }
 
+// What a run says about a digital asset's vol regimes (the answer's params.vol_regimes, pricing/vol_regimes.py), in
+// one sentence for the SURFACE PROOF table. Null when the run had one vol (a currency pair, or regimes switched off).
+export function regimesWords(r) {
+  if (!r || !r.fast || !r.slow) return null
+  const n = (v, dp = 0) => Number(v).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
+  return `day by day the vol is between ${n(r.lowest_vol_pct, 1)} % and ${n(r.highest_vol_pct, 1)} %: a stress that lasts ` +
+    `${n(r.fast.stressed_spell_days, 1)} days at a time, on a level that holds about ${n(r.slow.high_spell_days)} days. ` +
+    `Its variance on average is the vol used, so today's value is unchanged and the moves over a margin period are wider. ` +
+    `Fitted to ${n(r.days)} daily closes to ${r.as_of}.`
+}
+
 // The simple view's line on what a run assumes, from the current values of the inputs it hides:
 // "2,000 paths on the stored model calibration and default credit and funding spreads". With no model to run on
 // (rates without a stored calibration) it is the line that says so.

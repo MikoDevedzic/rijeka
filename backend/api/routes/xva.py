@@ -727,6 +727,7 @@ class CurrencyXvaRequest(BaseModel):
     collateral: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
+    vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
     # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
     # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
     # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
@@ -840,6 +841,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
     inp, q = forward_xva_input(db, user["sub"], pair, base_notional=body.base_notional, settlement=body.settlement_date,
                                forward_rate=body.forward_rate, direction=body.direction, val_date=val_date,
                                vol_pct=body.vol_pct, vol_mode=body.vol_mode)
+    inp.regimes = bool(body.vol_regimes)
     csa = _csa_of(db, user["sub"], body.csa, body.collateral)
     import time as _time
     _t0 = _time.perf_counter()
@@ -871,7 +873,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "step_vols_pct")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "step_vols_pct", "vol_regimes")},
     }
 
 
@@ -901,6 +903,7 @@ class CurrencyOptionXvaRequest(BaseModel):
     collateral: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
+    vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
     # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
     # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
     # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
@@ -963,6 +966,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
     val_date = body.valuation_date or date.today()
     pair, terms = currency_terms_of(d)
     inp, q = option_xva_input(db, user["sub"], pair, terms, val_date=val_date, vol_pct=body.vol_pct, vol_mode=body.vol_mode)
+    inp.regimes = bool(body.vol_regimes)
     spec = inp.spec
     csa = _csa_of(db, user["sub"], body.csa, body.collateral)
     import time as _time
@@ -992,7 +996,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "style", "vol_mode")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "style", "vol_mode", "vol_regimes")},
     }
 
 
@@ -1027,6 +1031,7 @@ class CurrencyPackageXvaRequest(BaseModel):
     collateral: Optional[dict] = None
     seed: int = Field(default=42, ge=0, le=2**31 - 1)
     vol_mode: str = "SURFACE"
+    vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
     # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
     # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
     # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
@@ -1074,6 +1079,8 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     from pricing import fx_xva
     val_date = body.valuation_date or date.today()
     inputs, quotes, pair = package_inputs(db, user["sub"], body.trades, val_date=val_date, vol_pct=body.vol_pct, vol_mode=body.vol_mode)
+    for leg in inputs:
+        leg.regimes = bool(body.vol_regimes)
     csa = _csa_of(db, user["sub"], body.csa, body.collateral)
     horizon = max(fx_xva._horizon(i) for i in inputs)
     if horizon > PACKAGE_MAX_YEARS:
@@ -1112,7 +1119,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
-        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode")},
+        "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "vol_regimes")},
     }
 
 
