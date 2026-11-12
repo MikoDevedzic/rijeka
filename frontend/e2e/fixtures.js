@@ -32,7 +32,7 @@ const NOT_THE_APPS = [/stack\.local/, /ERR_NAME_NOT_RESOLVED/, /WebSocket connec
   /downloadable font: download failed.*status=2152398850/]
 // a request the page itself cancelled (a newer one replaced it, or the page navigated), as each engine words it:
 // Chromium, Firefox, WebKit
-const CANCELLED = /ERR_ABORTED|NS_BINDING_ABORTED|cancelled|Load request cancelled/i
+const CANCELLED = /ERR_ABORTED|NS_BINDING_ABORTED|^(cancelled|Load request cancelled)\.?$/i
 
 export const test = base.extend({
   // who is signed in: 'USER.A' (firm ADMIN, the template account with market data) unless a journey says otherwise

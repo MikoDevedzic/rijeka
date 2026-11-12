@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { atRest } from './schedule-format'
+import { atRest, plain } from './schedule-format'
+import { parseNumber } from '../trade-window/fx-ticket'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -54,20 +55,33 @@ const S = {
   dropZone:(active)=>({ border:'1px dashed '+(active?C.accent:'var(--text-mute)'), borderRadius:'3px', padding:'10px', textAlign:'center', fontSize:'12px', color:active?C.accent:C.dim, background:active?'rgba(217,178,92,0.04)':'transparent', transition:'all 0.15s', cursor:'pointer', letterSpacing:'0.05em' }),
 }
 
+// One cell of a period schedule. What is kept is always a plain number as text ("10000000", "3.5"). While it is
+// typed in, the field holds the typing itself, read by the ticket's one parser (fx-ticket.js parseNumber): grouping
+// commas are understood, a comma used as a decimal ("3,5") is refused and marked, never read as 35. A refused
+// typing changes nothing, and leaving the field puts back the figure that is kept.
 function EditCell({ value, original, onChange, placeholder='', kind='rate', label }) {
-  const [typing, setTyping] = useState(false)
+  const [typing, setTyping] = useState(null)                 // the text being typed, or null at rest
   const changed = original !== undefined && String(value) !== String(original)
-  return <input type='text' inputMode='decimal' aria-label={label} placeholder={placeholder} style={changed?S.cellAmber:S.cell}
-    value={typing ? value : atRest(value, kind)} onFocus={()=>setTyping(true)} onBlur={()=>setTyping(false)}
-    onChange={e=>onChange(e.target.value.replace(/,/g,'').replace(/[^0-9.eE+-]/g,''))} />
+  const refused = typing != null && parseNumber(typing, { signed: true }).state === 'invalid'
+  const take = (text) => {
+    setTyping(text)
+    const p = parseNumber(text, { signed: true })
+    if (p.state === 'ok') onChange(String(p.value))
+    else if (p.state === 'empty') onChange('')
+  }
+  return <input type='text' inputMode='decimal' aria-label={label} aria-invalid={refused || undefined} placeholder={placeholder}
+    title={refused ? 'Not a number as the ticket reads one: digits, one point, commas only between thousands' : undefined}
+    style={refused ? { ...S.cellAmber, borderColor:'var(--down)', color:'var(--down)' } : changed ? S.cellAmber : S.cell}
+    value={typing != null ? typing : atRest(value, kind)} onFocus={()=>setTyping(String(value ?? ''))} onBlur={()=>setTyping(null)}
+    onChange={e=>take(e.target.value)} />
 }
 
 function parsePaste(text, isFloat=false) {
   return text.trim().split('\n').map(line => {
     const cols = line.split('\t').map(c=>c.trim())
     return isFloat
-      ? { period_start:cols[0]||'', period_end:cols[1]||'', payment_date:cols[2]||'', notional:cols[3]||'', spread_bps:cols[4]||'0', orig_notional:cols[3]||'', orig_spread_bps:cols[4]||'0' }
-      : { period_start:cols[0]||'', period_end:cols[1]||'', payment_date:cols[2]||'', notional:cols[3]||'', rate:cols[4]||'0', orig_notional:cols[3]||'', orig_rate:cols[4]||'0' }
+      ? { period_start:cols[0]||'', period_end:cols[1]||'', payment_date:cols[2]||'', notional:plain(cols[3]), spread_bps:plain(cols[4]||'0'), orig_notional:plain(cols[3]), orig_spread_bps:plain(cols[4]||'0') }
+      : { period_start:cols[0]||'', period_end:cols[1]||'', payment_date:cols[2]||'', notional:plain(cols[3]), rate:plain(cols[4]||'0'), orig_notional:plain(cols[3]), orig_rate:plain(cols[4]||'0') }
   }).filter(r=>r.period_start)
 }
 
@@ -294,8 +308,8 @@ export default function LegDetailsTab({
     if (!file) return
     try {
       const {fixed,float} = await parseExcelFile(file)
-      if (fixed.length) setFixedRows(fixed.map(r=>({ period_start:r['ACCRUAL START']||'', period_end:r['ACCRUAL END']||'', payment_date:r['PAY DATE']||'', notional:String(r['NOTIONAL']||''), rate:String(r['COUPON %']||'0'), orig_notional:String(r['NOTIONAL']||''), orig_rate:String(r['COUPON %']||'0') })))
-      if (float.length) setFloatRows(float.map(r=>({ period_start:r['ACCRUAL START']||'', period_end:r['ACCRUAL END']||'', payment_date:r['PAY DATE']||'', notional:String(r['NOTIONAL']||''), spread_bps:String(r['SPREAD BP']||'0'), orig_notional:String(r['NOTIONAL']||''), orig_spread_bps:String(r['SPREAD BP']||'0') })))
+      if (fixed.length) setFixedRows(fixed.map(r=>({ period_start:r['ACCRUAL START']||'', period_end:r['ACCRUAL END']||'', payment_date:r['PAY DATE']||'', notional:plain(r['NOTIONAL']||''), rate:plain(r['COUPON %']||'0'), orig_notional:plain(r['NOTIONAL']||''), orig_rate:plain(r['COUPON %']||'0') })))
+      if (float.length) setFloatRows(float.map(r=>({ period_start:r['ACCRUAL START']||'', period_end:r['ACCRUAL END']||'', payment_date:r['PAY DATE']||'', notional:plain(r['NOTIONAL']||''), spread_bps:plain(r['SPREAD BP']||'0'), orig_notional:plain(r['NOTIONAL']||''), orig_spread_bps:plain(r['SPREAD BP']||'0') })))
     } catch(e) { alert('Import failed: '+e.message) }
   }
   const handleDrop = async (e, isFloat) => { e.preventDefault(); isFloat?setDropFloat(false):setDropFixed(false); const file=e.dataTransfer.files[0]; if(file)await handleFileImport(file) }

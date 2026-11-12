@@ -45,11 +45,18 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   const n1 = win.getByLabel('Fixed leg notional, period 1'), c1 = win.getByLabel('Coupon %, period 1')
   await expect(n1).toHaveValue('10,000,000')
   await expect(c1).toHaveValue(/^\d\.\d{1,6}$/)
+  const coupon = await c1.inputValue()                  // at rest
   await n1.focus()
   await expect(n1, 'the field being typed in holds the plain number').toHaveValue('10000000')
   await c1.focus()
   await expect(n1).toHaveValue('10,000,000')
   await expect(win.getByLabel('Float leg notional, period 1')).toHaveValue('10,000,000')
+  // a comma typed as a decimal is refused and marked, never read as 35; leaving the field puts the coupon back
+  await c1.fill('3,5')
+  await expect(c1).toHaveAttribute('aria-invalid', 'true')
+  await n1.focus()
+  await expect(c1, 'the coupon is what it was').toHaveValue(coupon)
+  await expect(c1).not.toHaveAttribute('aria-invalid', 'true')
   await win.getByRole('button', { name: 'TRADE', exact: true }).click()
 
   // a field reached by keyboard shows where the focus is: the app's ring, which the ticket's own styles leave alone

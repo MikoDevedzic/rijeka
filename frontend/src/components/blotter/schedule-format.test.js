@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { atRest } from './schedule-format'
+import { atRest, plain } from './schedule-format'
 
 describe('a schedule figure at rest', () => {
   it('groups an amount and keeps its cents', () => {
@@ -17,5 +17,19 @@ describe('a schedule figure at rest', () => {
     expect(atRest('', 'amount')).toBe('')
     expect(atRest(null, 'rate')).toBe('')
     expect(atRest('abc', 'amount')).toBe('abc')
+  })
+})
+
+describe('a figure pasted or imported', () => {
+  it('is kept as the plain number the pricer reads', () => {
+    expect(plain('10,000,000')).toBe('10000000')          // parseFloat of the pasted text would read 10
+    expect(plain(10000000)).toBe('10000000')
+    expect(plain('3.50')).toBe('3.5')
+    expect(plain('-12.5')).toBe('-12.5')
+    expect(plain('')).toBe('')
+  })
+  it('leaves what is not a number as it came, a comma decimal among them', () => {
+    expect(plain('3,5')).toBe('3,5')
+    expect(plain('n/a')).toBe('n/a')
   })
 })

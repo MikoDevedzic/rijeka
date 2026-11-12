@@ -131,7 +131,12 @@ function PathChart({ d, loading }) {
           {ticks.map(v => <g key={v}><line x1={padL} x2={W - padR} y1={Y(v)} y2={Y(v)} className="dh-grid-line" /><text x={padL - 8} y={Y(v) + 3} className="dh-ax" textAnchor="end">{v.toFixed(2)}%</text></g>)}
           {xt.map(m => { const dte = pts[0]?.date ? new Date(pts[0].date + 'T00:00:00') : new Date(); dte.setMonth(dte.getMonth() + m)
             return <text key={m} x={X(m)} y={H - 7} className="dh-ax" textAnchor="middle">{m === 0 ? 'NOW' : fmtMon(dte.toISOString().slice(0, 10)).toUpperCase()}</text> })}
-          {lr && <g><line x1={padL} x2={W - padR} y1={Y(lr.rate)} y2={Y(lr.rate)} className="pp-lr" /><text x={padL + 4} y={Y(lr.rate) + 13} className="dh-ax pp-lr-t" textAnchor="start">LONGER RUN {lr.rate.toFixed(2)}%</text></g>}
+          {lr && <g><line x1={padL} x2={W - padR} y1={Y(lr.rate)} y2={Y(lr.rate)} className="pp-lr" />{(() => {      // at the right, over its line; where a dot sits in that corner, to the left of the dot
+              const text = `LONGER RUN ${lr.rate.toFixed(2)}%`, y = Y(lr.rate) - 5
+              const inTheWay = dots.filter(x => X(x.m) > W - padR - labelW(text) - 8 && Math.abs(Y(x.r) - (y - 4)) < 13)
+              const right = inTheWay.length ? Math.min(...inTheWay.map(x => X(x.m))) - 10 : W - padR
+              return <text x={right} y={y} className="dh-ax pp-lr-t" textAnchor="end">{text}</text>
+            })()}</g>}
           <path d={area} fill="url(#ppArea)" />
           <path d={path} className="dh-line" />
           {pts.filter((p, i) => p.fixing || i % 6 === 0 || i === pts.length - 1).map(p => (

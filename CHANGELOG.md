@@ -9,12 +9,16 @@ methodology document carries its own version (v1.20). Commits on `main` are the 
 word ("do them all in order and deploy"). Every screen a new user meets was pictured on the local stack and read
 (89 pictures); what was found is fixed here or listed below.
 
-- **A strip's legs were all struck at the first leg's forward.** Since 0.26.0 a forward is priced to its fixing date;
-  a further leg of a package was priced to the TICKET's fixing date, not its own. A three-month strip therefore put
-  one strike on every leg, called each worth nothing, and booked legs that were worth something (about 5 and 10 bp
-  of notional on the second and third). Each leg is now priced to the fixing date it is booked with, and the
-  package's XVA run starts from the same value (it carried the legs to their settlement dates and showed +1,648
-  beside a footer of 0). Journeys and an integration test hold both.
+- **A strip's legs were all struck at the first leg's forward.** Since 0.26.0 a forward that fixes before it settles
+  is priced to its fixing date; a further leg of a package was priced to the TICKET's fixing date, not its own. A
+  monthly strip therefore put one strike on every leg, called each worth nothing, and booked legs that were worth
+  something: on the local stack's market +540 and +1,053 on the second and third legs of about 1.085m each (5 and
+  10 bp: one and two months of carry; the validator's own figure at a flat three-month carry is 6.5 and 13). It
+  shows where the settlement source fixes before the settlement date (a benchmark such as CME CF BRR); where the
+  venue's own price is the source, the fixing is on the settlement date and the legs were priced right. Each leg is
+  now priced to the fixing date it is booked with. Separately, the package's XVA run carried every leg to its
+  settlement date (a day or two of carry more, about 20 a leg here) and so started from a value the ticket did
+  not show; it now starts from the ticket's. Journeys and an integration test hold both.
 - **No screen names ISDA SIMM as the margin's basis.** The counterparty record's old default read "SIMM" in the table
   and the form; it is now MODEL (the engine's estimate or the desk's amount), records made before read the same
   way, and the legal entity's SIMM VERSION field and column are off the screen. The database's own column defaults
@@ -23,7 +27,8 @@ word ("do them all in order and deploy"). Every screen a new user meets was pict
   caption below, the rate labels were cut by 2px at the left, and the Fed's dots, the path's first figure and the
   longer-run label ran into each other. Each label now has its own place and a journey measures it.
 - Smaller: the period schedule on a swap's DETAILS writes 10,000,000 and 3.480003 where it wrote 10000000 and
-  3.48000300 (the plain number while typing); a coin's option delta reads 5.55 BTC, not 6; the forward-curve chart
+  3.48000300 (the plain number while typing; a comma typed as a decimal is refused and marked, as on the ticket,
+  and a figure pasted with its thousands grouped is kept as the number it is, where it was read as 10); a coin's option delta reads 5.55 BTC, not 6; the forward-curve chart
   groups thousands; a roadmap badge in the Configurations rail no longer touches its label; the strip chart's first
   strike label clears the axis.
 - **Safari: the logo was never drawn, and two switches had no box.** Item 10: the journeys now run on Firefox and on
@@ -41,6 +46,12 @@ word ("do them all in order and deploy"). Every screen a new user meets was pict
   quarter of it, no frame over 34 ms (three between 20 and 34: two on a wheel over the blotter, one on the home at
   quarter speed), nothing rewritten under a moving pointer on the blotter or the ticket, a drag writes only the
   window's own position.
+- A journey now holds the smoothness (`e2e/smooth.spec.js`): what the page rewrites while the pointer moves, which
+  is the same on any machine where a frame time is not. Nothing on the blotter or a ticket; a drag, the window's
+  own position.
+- After the reviews (Vera, Iris, Emmy): the schedule's cells read typing with the ticket's own parser; the chart's
+  longer-run label is back over its line; the account of the strip above names the legs, the figures and the
+  settlement sources it shows on; the journeys' word for a cancelled request is exact for each engine.
 - Left, recorded in the backlog: P&L and Risk pages (a wrapped counterparty name, FUND01 where CRYBASIS01 is meant, a
   minus zero), the blotter's STRUCTURE column truncating long styles, the ticker cut at the right edge when the
   market data is stale.

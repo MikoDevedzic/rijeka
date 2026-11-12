@@ -69,7 +69,8 @@ def test_an_xva_run_on_such_a_forward_starts_from_the_tickets_value_and_runs_to_
 def test_a_package_prices_each_forward_leg_to_its_fixing_date_as_the_ticket_does(client, auth_a, ids, pairs):
     """A strip dealt at the fair forward of each leg's fixing date is worth nothing on the ticket, and nothing at the
     start of its XVA run. Until 0.30.3 the package's run carried each leg to its settlement date and reported a
-    value (about 5 bp of notional over two days of carry) that the ticket's own footer did not."""
+    value the ticket's own footer did not: two days of carry a leg, a few tens of dollars on 10 BTC. (The larger
+    figure of that release, 5 and 10 bp, was the ticket's: each leg struck at the first leg's forward.)"""
     from tests.integration import bodies as B
     btc = pairs["BTCUSD"]
     legs, fair = [], []
@@ -93,7 +94,8 @@ def test_a_package_prices_each_forward_leg_to_its_fixing_date_as_the_ticket_does
     for body, q in zip(legs, fair):
         body["terms"]["valuation_date"] = q["settlement_date"]
     late = client.post("/api/xva/currency-package", json={"trades": legs, "paths": 300}, headers=auth_a).json()
-    assert abs(late["xva"]["npv"]) > 50.0
+    # two days of carry a leg on the stack's market: 40, 38 and 32 on 12 November 2026
+    assert all(15.0 < x["npv"] < 90.0 for x in late["legs"]) and late["xva"]["npv"] == pytest.approx(sum(x["npv"] for x in late["legs"]), abs=0.05)
     # one leg of a package is the ticket's own run with that fixing date
     legs[0]["terms"]["valuation_date"] = (ASOF + timedelta(days=90)).isoformat()
     one = client.post("/api/xva/currency", json={"pair": "BTCUSD", "base_notional": 10, "settlement_date": fair[0]["settlement_date"], "forward_rate": fair[0]["forward"],
