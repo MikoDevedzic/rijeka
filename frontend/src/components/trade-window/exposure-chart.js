@@ -7,13 +7,14 @@ import { T, alpha, MONO } from '../../theme'
 // The label under grid point i of n, on steps of `dt` years (a twelfth when the run does not say: a swap's monthly
 // grid). The time is the point's own, (i + 1)·dt, never its index: a currency or digital-asset ticket steps weekly
 // to a year since 0.28.0, and an index read as months put "4.4Y" under the last point of a one-year forward.
-// Days up to about three months, months up to two years, years beyond.
+// Whole tenors, as the app writes them everywhere (7D, 13W, 6M): days up to about three months; then weeks on weekly
+// steps and months on monthly ones, up to two years; years beyond.
 export function axisLabel(i, n, dt) {
   const step = Number(dt) > 0 ? Number(dt) : 1 / 12
   const t = (i + 1) * step, total = n * step
   const whole = (x, unit) => (Math.abs(x - Math.round(x)) < 0.05 ? String(Math.round(x)) : x.toFixed(1)) + unit
   if (total <= 0.26) return Math.round(t * 365) + 'D'
-  if (total <= 2.01) return whole(t * 12, 'M')
+  if (total <= 2.01) return step * 365 < 20 ? Math.round(t * 365 / 7) + 'W' : whole(t * 12, 'M')
   return whole(t, 'Y')
 }
 

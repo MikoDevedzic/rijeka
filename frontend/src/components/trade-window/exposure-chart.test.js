@@ -16,14 +16,12 @@ describe('the exposure chart labels a point with its own time', () => {
     expect(five(60, undefined)).toEqual(['0.1Y', '1.3Y', '2.6Y', '3.8Y', '5Y'])
     expect(five(120, 1 / 12).at(-1)).toBe('10Y')
   })
-  it('a one-year ticket on 52 weekly steps ends at twelve months, not at 4.3 years', () => {
-    const labels = five(52, 1 / 52)
-    expect(labels.at(-1)).toBe('12M')
-    expect(labels).toEqual(['0.2M', '3.2M', '6.2M', '9M', '12M'])
-    expect(five(53, 372 / 365 / 53).at(-1)).toBe('12.2M')
+  it('a one-year ticket on 52 weekly steps ends at fifty-two weeks, not at 4.3 years', () => {
+    expect(five(52, 1 / 52)).toEqual(['1W', '14W', '27W', '39W', '52W'])
+    expect(five(53, 372 / 365 / 53).at(-1)).toBe('53W')
   })
-  it('six months on 27 weekly steps ends at six months; three and one month are read in days', () => {
-    expect(five(27, 183 / 365 / 27).at(-1)).toBe('6M')
+  it('six months on 27 weekly steps ends at twenty-six weeks; three and one month are read in days', () => {
+    expect(five(27, 183 / 365 / 27)).toEqual(['1W', '8W', '14W', '20W', '26W'])
     expect(five(13, 91 / 365 / 13)).toEqual(['7D', '28D', '49D', '70D', '91D'])
     expect(five(5, 1 / 12 / 5)).toEqual(['6D', '12D', '18D', '24D', '30D'])
   })

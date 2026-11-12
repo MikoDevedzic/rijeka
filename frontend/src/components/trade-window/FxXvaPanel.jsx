@@ -78,7 +78,7 @@ function SurfaceProof({ result }) {
       {steps && (
         <div style={{marginTop:'6px',paddingTop:'6px',borderTop:'1px solid var(--border)'}}>
           <div style={{fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--mono)',fontWeight:700,letterSpacing:'.08em',marginBottom:'4px'}}>
-            STEP VOLS (%) · {steps.length} {stepWord(result?.dt)} steps{steps.length > 13 ? ' · every fourth shown' : ''}
+            STEP VOLS (%) · {[steps.length, stepWord(result?.dt), 'steps'].filter(Boolean).join(' ')}{steps.length > 13 ? ' · every 4th shown' : ''}
           </div>
           <div style={{display:'flex',flexWrap:'wrap',gap:'3px'}}>
             {stepsShown(steps).map(([n, v]) => (
@@ -350,7 +350,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             style={{flex:'0 0 auto',height:XVA_CHART_HEIGHT,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
             <RunReadout result={res} />
             <ChartReadout result={res} fmt={fmt}
-              model={<>{res?.package ? `${res.legs?.length} legs, one netting set` : res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {res?.steps} {stepWord(res?.dt)} steps · {ccy}</>} />
+              model={<>{res?.package ? `${res.legs?.length} legs, one netting set` : res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {[res?.steps, stepWord(res?.dt), 'steps'].filter(Boolean).join(' ')} · {ccy}</>} />
           </ExposureCanvas>
 
           <div style={{flexShrink:0,overflowX:'auto'}} data-testid="xva-outputs">
