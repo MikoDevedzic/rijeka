@@ -10,6 +10,8 @@ from pricing import fees as F
 from pricing import fx_xva
 from pricing.csa import CSA
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 TODAY = date(2026, 11, 12)
 GOOD = {"type": "premium", "direction": "pay", "amount": "12500.5", "currency": "usd", "date": "2026-11-16"}
 

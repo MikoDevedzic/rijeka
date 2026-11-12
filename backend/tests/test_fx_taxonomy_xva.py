@@ -10,6 +10,8 @@ from pricing.csa import CSA
 from pricing.currency_forward import price_currency_forward
 from pricing.curve import Curve
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 
 def _flat(val, r):
     # a flat continuous curve as a Curve with DF pillars

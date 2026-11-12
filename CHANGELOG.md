@@ -1,7 +1,35 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.17). Commits on `main` are the detail.
+methodology document carries its own version (v1.18). Commits on `main` are the detail.
+
+## 0.28.0 · 12 November 2026
+
+**XVA on a currency or digital-asset ticket: weekly steps, and the charge on the exposure averaged across each
+step.** Item 11(c) of the Phase 1 exit list, on the owner's word ("weekly and average, build it, deploy it").
+
+- **What was wrong.** Every run stepped monthly and charged CVA, DVA, FVA and FBA on the exposure at each step's
+  end. A forward's exposure grows like the square root of time, so on two or three steps the charge was overstated.
+  BTC forward dealt at fair value, 55 % vol, 20,000 paths, CVA against the same run on daily steps: +31 % at one
+  month, +23 % at three, +8 % at six, +9 % at a year uncollateralised; +23 %, +6 %, +3 %, +2 % under a ten-day
+  margin period.
+- **Now.** A ticket of a year or less steps weekly (monthly beyond), and the four exposure charges read the mean
+  of each step's two ends, the first step starting from today's exposure (`pricing/fx_xva.exposure_grid`,
+  `run_waterfall(average_exposure=True)`). Against daily steps: within 4 % at every one of those tenors, both
+  ways. The ticket names its steps from the run ("26 weekly steps"), and a long strip of step vols shows every
+  fourth.
+- **What moves.** CVA, DVA, FVA and FBA on every currency and digital-asset ticket and package, down by about the
+  figures above. KVA and MVA of a margined ticket move with the finer steps (six-month BTC forward with initial
+  margin, 20,000 paths: KVA −124 to −130 against −135 on daily steps, MVA −815 to −802 against −795). No price,
+  no sensitivity, nothing on a swap, nothing on the credit page.
+- **Checked.** The averaged charge by hand on the waterfall; the wrong-way quadrature (no random numbers, none of
+  the engine's code) redone for the averaged definition and agreeing at 2 %; the margin the engine calls when the
+  margin period spans two weekly steps against a simulation that draws both dates; the two workbooks, with the
+  averaged charge in their cells, 51 of 51 under every preset.
+- **Not done.** A swap's waterfall and the credit page's engine keep monthly steps and the step's end: not
+  measured there, and the incremental charge on a ticket is therefore on another grid than its stand-alone figure.
+  The workbooks run monthly steps. A barrier is still watched only at the grid dates (weekly now to a year). A
+  margined KVA is still about 4 % below daily steps at six months.
 
 ## 0.27.1 · 12 November 2026
 

@@ -86,7 +86,18 @@ export const TIPS = {
   fxSurface: { title: 'Surface proof',
     body: 'Where the vol came from on the last run: the surface (or the demo default or a desk input), the mode, the vol used and, in SURFACE mode on a forward, the step vols the paths were drawn with.' },
   fxPaths: { title: 'Monte Carlo paths',
-    body: 'Number of simulated spot scenarios, monthly time steps to settlement.\n\nEE(t) = (1/N) x Sum[ max(V_i(t), 0) ], ENE(t) likewise on the negative side; PFE 95th percentile needs ~2,000 paths for a stable tail.\n\nSIMULATE uses seed 42, so it repeats exactly; RE-ROLL draws a fresh seed and the numbers move within the Monte Carlo error.' },
+    body: 'Number of simulated spot scenarios. The steps to settlement are weekly for a trade of a year or less and monthly beyond; CVA, DVA, FVA and FBA are charged on the exposure averaged across each step.\n\nEE(t) = (1/N) x Sum[ max(V_i(t), 0) ], ENE(t) likewise on the negative side; PFE 95th percentile needs ~2,000 paths for a stable tail.\n\nSIMULATE uses seed 42, so it repeats exactly; RE-ROLL draws a fresh seed and the numbers move within the Monte Carlo error.' },
+}
+
+// What a run's steps are called, read from the run's own step length (years) so the words cannot disagree with the
+// run: a currency or digital-asset ticket steps weekly to a year and monthly beyond (pricing/fx_xva.exposure_grid).
+export const stepWord = (dt) => !(Number(dt) > 0) ? '' : dt < 0.012 ? 'daily' : dt < 0.05 ? 'weekly' : 'monthly'
+export const stepUnit = (dt) => ({ daily: 'd', weekly: 'w', monthly: 'm' })[stepWord(dt)] || ''
+// The step vols a strip shows, as [step number, vol]: all of them up to thirteen, else every fourth and the last
+// (a year of weekly steps is fifty-two).
+export function stepsShown(vols) {
+  const all = (vols || []).map((v, i) => [i + 1, v])
+  return all.length <= 13 ? all : all.filter(([n]) => n % 4 === 0 || n === all.length)
 }
 
 // ── styles every XVA tab uses ────────────────────────────────────────────────────

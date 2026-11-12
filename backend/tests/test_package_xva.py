@@ -10,6 +10,8 @@ from pricing.csa import CSA
 from pricing.fx_exotic import ExoticSpec
 from pricing.fx_vol import parse_surface
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 SMILE = parse_surface([{"tenor": "1M", "quote_type": "ATM", "rate": 7.0}, {"tenor": "1M", "quote_type": "RR25", "rate": 1.0}, {"tenor": "1M", "quote_type": "BF25", "rate": 0.3},
                        {"tenor": "1Y", "quote_type": "ATM", "rate": 9.0}, {"tenor": "1Y", "quote_type": "RR25", "rate": 1.5}, {"tenor": "1Y", "quote_type": "BF25", "rate": 0.4}])
 

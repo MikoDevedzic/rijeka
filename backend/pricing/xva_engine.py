@@ -275,6 +275,7 @@ def run_waterfall(
     wrong_way: Optional[dict] = None,
     settled: Optional[np.ndarray] = None,
     lag_values=None,
+    average_exposure: bool = False,
 ) -> WaterfallResult:
     """
     Exposure profiles and XVA under `csa`. `paths` are MtM from our side
@@ -302,6 +303,13 @@ def run_waterfall(
     the asset bridged between grid dates where it is lognormal, the trade valued there); None is the bridge
     between the grid values themselves (lagged_values), which is Gaussian whatever the value is. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
     hurdle replace the params' and the BA-CVA capital leg joins KVA; None keeps today's KVA exactly.
+
+    `average_exposure`: CVA, DVA, FVA and FBA are charged on the exposure averaged across each step (the mean of
+    the step's two ends, the first step starting from today's exposure) and not on the exposure at the step's end.
+    The exposure of a forward grows like the square root of time, and reading it at each step's end overstates
+    the charge: by a quarter on a one-month trade on two steps. The profiles reported (ee, ene, pfe) stay the
+    values at the grid dates. Currency and digital-asset tickets pass True (pricing/fx_xva.py, 0.28.0); a swap's
+    waterfall and the netting-set engine keep the step's end.
     """
     n_paths, T = paths.shape
     reg = reg_csa if reg_csa is not None else csa
@@ -345,6 +353,17 @@ def run_waterfall(
 
     ee   = np.mean(e_pos, axis=0)
     ene  = np.mean(e_neg, axis=0)
+    # What the four exposure charges read at step i: the step's end, or the mean of its two ends. Today's exposure
+    # is today's value less the collateral that value calls (there is no earlier value to lag to), with the first
+    # date's initial margin.
+    if average_exposure and T:
+        r0 = float(v0) - float(collateral_held(np.array([[float(v0)]]), csa)[0, 0]) if csa.collateralised else float(v0)
+        p0_, n0_ = max(r0 - float(im_recv[0]), 0.0), min(r0 + float(im_post[0]), 0.0)
+        c_pos = 0.5 * (np.column_stack((np.full(n_paths, p0_), e_pos[:, :-1])) + e_pos)
+        c_neg = 0.5 * (np.column_stack((np.full(n_paths, n0_), e_neg[:, :-1])) + e_neg)
+        ee_c, ene_c = np.mean(c_pos, axis=0), np.mean(c_neg, axis=0)
+    else:
+        c_pos, c_neg, ee_c, ene_c = e_pos, e_neg, ee, ene
     pfe  = np.percentile(resid, 95, axis=0)
     ee_g = np.mean(np.maximum(paths, 0.0), axis=0)
     ene_g= np.mean(np.minimum(paths, 0.0), axis=0)
@@ -426,12 +445,12 @@ def run_waterfall(
         # costs the shortfall. Cash on both sides: zero.
         if s_post != 0.0 or s_recv != 0.0:
             colva += (post_mean[i] * s_post + recv_mean[i] * s_recv) * DT * disc
-        cva_ind += lgd     * ee[i]       * (qcp - nqcp) * disc * wwr
-        dva_ind -= own_lgd * abs(ene[i]) * (qow - nqow) * disc
-        cva += (lgd * float(np.mean(e_pos[:, i] * dpd_cp[:, i])) * disc * wwr) if dpd_cp is not None else (lgd * ee[i] * (qcp - nqcp) * disc * wwr)
-        dva -= (own_lgd * float(np.mean(np.abs(e_neg[:, i]) * dpd_ow[:, i])) * disc) if dpd_ow is not None else (own_lgd * abs(ene[i]) * (qow - nqow) * disc)
-        fva += ftp_t   * ee[i]       * DT * disc
-        fba -= fba_s   * abs(ene[i]) * DT * disc
+        cva_ind += lgd     * ee_c[i]       * (qcp - nqcp) * disc * wwr
+        dva_ind -= own_lgd * abs(ene_c[i]) * (qow - nqow) * disc
+        cva += (lgd * float(np.mean(c_pos[:, i] * dpd_cp[:, i])) * disc * wwr) if dpd_cp is not None else (lgd * ee_c[i] * (qcp - nqcp) * disc * wwr)
+        dva -= (own_lgd * float(np.mean(np.abs(c_neg[:, i]) * dpd_ow[:, i])) * disc) if dpd_ow is not None else (own_lgd * abs(ene_c[i]) * (qow - nqow) * disc)
+        fva += ftp_t   * ee_c[i]       * DT * disc
+        fba -= fba_s   * abs(ene_c[i]) * DT * disc
 
         # ── Capital profile → KVA ────────────────────────────────────────────
         # Capital and initial margin are held through the step, so the remaining life is read at the middle of it:

@@ -22,6 +22,8 @@ from pricing.csa import CSA
 from pricing.fx_exotic import ExoticSpec
 from pricing.xva_engine import IM_CONFIDENCE, lagged_values, model_im
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 Q = 0.038          # the quote currency's zero rate
 
 

@@ -14,6 +14,8 @@ import pytest
 from pricing import fx_xva
 from pricing.xva_engine import model_im
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 # BTC, as the methodology's table has it: (ratio, stay low, stay high) of the fast chain and of the slow one
 FAST, SLOW = (2.62, 0.700, 0.512), (1.80, 0.9860, 0.9814)
 

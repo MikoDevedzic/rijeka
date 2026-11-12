@@ -75,12 +75,32 @@ class ForwardXvaInput:
     vol_source: Optional[str] = None # where vol_pct came from (the pair's surface, a desk input); None = the demo default
     pillars: Optional[list] = None   # the pair's surface (fx_vol.parse_surface): the paths step with its ATM term structure
     regimes: bool = True             # a digital asset's vol regimes (pricing/vol_regimes)   ; False: one vol, for comparison
+    grid_per_year: Optional[int] = None   # steps a year for the run; None = exposure_grid's rule (weekly to a year, monthly beyond)
 
 
-def monthly_grid(t_years: float) -> tuple[int, float]:
-    """Monthly steps to settlement; a short forward still gets at least two steps."""
-    steps = max(2, int(math.ceil(t_years * 12)))
+WEEKLY_TO_YEARS = 1.02           # a one-year ticket is still on weekly steps: 372 days, with a leap day and a roll over a weekend
+
+
+def exposure_grid(t_years: float, per_year: Optional[int] = None) -> tuple[int, float]:
+    """(steps, dt) to the settlement: weekly steps for a trade of up to a year, monthly beyond; at least two.
+
+    Weekly since 0.28.0. The exposure of a short trade is far from flat over a month, and on two or three monthly
+    steps CVA and FVA depended on the grid (a one-month digital-asset forward read 31 % above the same run on
+    daily steps). With weekly steps and the charge taken on the exposure averaged across each step
+    (run_waterfall's average_exposure) the figure is within 4 % of daily steps from one month to a year. Beyond a
+    year the steps stay monthly: at one year the averaged charge on monthly steps is within 3 % of daily steps (not
+    measured further out), and ten years of weekly steps at ten
+    thousand paths is more than one run may cost. `per_year` sets the steps a year whatever the tenor (the
+    replication workbook runs monthly steps: `grid_per_year` on an input)."""
+    if per_year is None:
+        per_year = 52 if t_years <= WEEKLY_TO_YEARS else 12
+    steps = max(2, int(math.ceil(t_years * per_year)))
     return steps, t_years / steps
+
+
+def _grid_of(leg, t_years: float) -> tuple[int, float]:
+    """The grid of a run on this leg: the rule, or the steps a year the input asks for."""
+    return exposure_grid(t_years, getattr(leg, "grid_per_year", None))
 
 
 def regimes_meta(leg, vol_pct: float) -> Optional[dict]:
@@ -339,10 +359,10 @@ def exact_lag(legs: list, parts: list, steps: int, dt: float, m: np.ndarray, sv:
 
 
 def simulate_paths(inp: ForwardXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
-    """MtM paths from our side on the monthly grid, P(0, k·dt) on the quote curve, and V0.
+    """MtM paths from our side on the run's grid (exposure_grid), P(0, k·dt) on the quote curve, and V0.
     noise_out, when given, receives the standard normals drawn (z, n_paths × steps) and the forward paths (f_t),
     so the Excel replication can rebuild every path from the engine's own draws."""
-    steps, dt = monthly_grid(inp.t_years)
+    steps, dt = _grid_of(inp, inp.t_years)
     sigma = _forward_sigma(inp)
     z, _, sv, m, ck = _driver(n_paths, steps, dt, seed, sigma, inp.pillars, _regimes(inp))
     paths, v0, x = _forward_values(inp, steps, dt, m)
@@ -362,7 +382,7 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
     noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0 = simulate_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     wwr = wwr_of(np.log(noise_out["f_t"] / inp.forward), cp_hazard_if_halves, own_hazard_if_halves)
-    steps, dt = monthly_grid(inp.t_years)
+    steps, dt = _grid_of(inp, inp.t_years)
     paths, v0, noise_out["lag"], fee_meta = with_fees(paths, v0, noise_out["lag"], fees, steps, dt, inp.quote_zero)
     cap = capital_inputs([inp], csa, steps, dt, capital_model, crypto_group)
     params = WaterfallParams(
@@ -372,7 +392,7 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         im_amount=im_amount,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, lag_values=noise_out["lag"], **cap["kwargs"],
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, lag_values=noise_out["lag"], average_exposure=True, **cap["kwargs"],
                        **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     nz = {}
     if inp.pillars:
@@ -416,6 +436,7 @@ class OptionXvaInput:
     vol_source: Optional[str] = None
     pillars: Optional[list] = None   # the pair's surface: term structure for the paths, the smile at each path's moneyness
     regimes: bool = True             # a digital asset's vol regimes (pricing/vol_regimes)   ; False: one vol, for comparison
+    grid_per_year: Optional[int] = None   # steps a year for the run; None = exposure_grid's rule (weekly to a year, monthly beyond)
 
 
 def _payoff_at_expiry(spec, S_T: np.ndarray, knocked: np.ndarray) -> np.ndarray:
@@ -473,8 +494,8 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray) ->
 
 
 def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
-    """Option value paths from our side on the monthly grid to settlement, P(0, k·dt) on the quote curve, V0."""
-    steps, dt = monthly_grid(inp.t_settle)
+    """Option value paths from our side on the run's grid (exposure_grid) to settlement, P(0, k·dt) on the quote curve, V0."""
+    steps, dt = _grid_of(inp, inp.t_settle)
     sigma = float(inp.vol)
     z, _, sv, m, ck = _driver(n_paths, steps, dt, seed, sigma, inp.pillars, _regimes(inp))
     V, v0, x = _option_values(inp, steps, dt, m)
@@ -493,7 +514,7 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
     noise_out = noise_out if noise_out is not None else {}
     paths, p0, v0 = simulate_option_paths(inp, n_paths=n_paths, seed=seed, noise_out=noise_out)
     wwr = wwr_of(np.log(noise_out["f_t"] / inp.forward), cp_hazard_if_halves, own_hazard_if_halves)
-    steps, dt = monthly_grid(inp.t_settle)
+    steps, dt = _grid_of(inp, inp.t_settle)
     paths, v0, noise_out["lag"], fee_meta = with_fees(paths, v0, noise_out["lag"], fees, steps, dt, inp.quote_zero)
     cap = capital_inputs([inp], csa, steps, dt, capital_model, crypto_group)
     spec = inp.spec
@@ -505,7 +526,7 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         im_amount=im_amount,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, lag_values=noise_out["lag"], **cap["kwargs"],
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, lag_values=noise_out["lag"], average_exposure=True, **cap["kwargs"],
                        **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     meta = {"vol_pct": inp.vol * 100.0, "vol_source": inp.vol_source or "the pair's surface at the option's expiry and strike",
             "vol_mode": "ATM term structure for the paths, the smile at each path's moneyness (sticky-delta)" if inp.pillars else "flat (today's vol at the strike, held along the path)",
@@ -556,7 +577,7 @@ def _leg_notional(leg) -> float:
 def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None,
                            keep_leg_paths: bool = False) -> tuple[np.ndarray, list[float], float, list[dict]]:
     """The package's value paths from our side: every leg valued by its own engine (a forward's MtM, an option's
-    style in closed form) on ONE grid, monthly to the longest settlement, and ONE driver M, so the legs net
+    style in closed form) on ONE grid, to the longest settlement (exposure_grid), and ONE driver M, so the legs net
     path by path. Each leg's forward is F_i(0)·M_t: one factor, carry deterministic, so every forward of the pair
     is a martingale and each leg starts at its own price. The driver's vol is the surface's ATM term structure
     when a leg carries the surface, else the longest leg's own vol held flat; an option is valued at its own vol
@@ -571,7 +592,7 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
     if len({str(l.pair).upper() for l in legs}) != 1:
         raise ValueError("every leg of a package is on the same pair")
     longest = max(legs, key=_horizon)
-    steps, dt = monthly_grid(_horizon(longest))
+    steps, dt = _grid_of(longest, _horizon(longest))
     pillars = next((l.pillars for l in legs if l.pillars), None)
     sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)
     z, t, sv, m, ck = _driver(n_paths, steps, dt, seed, sigma, pillars, None if any(not getattr(l, "regimes", True) for l in legs) else _regimes(longest))
@@ -693,7 +714,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
     paths, p0, v0, rows = simulate_package_paths(legs, n_paths=n_paths, seed=seed, noise_out=noise_out)
     wwr = wwr_of(np.log(noise_out["m"]), cp_hazard_if_halves, own_hazard_if_halves)
     longest = max(legs, key=_horizon)
-    steps, dt = monthly_grid(_horizon(longest))
+    steps, dt = _grid_of(longest, _horizon(longest))
     paths, v0, noise_out["lag"], fee_meta = with_fees(paths, v0, noise_out["lag"], fees, steps, dt, float(longest.quote_zero))
     cap = capital_inputs(legs, csa, steps, dt, capital_model, crypto_group)
     params = WaterfallParams(
@@ -703,7 +724,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         im_amount=im_amount,
     )
-    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, settled=noise_out.get("settled"), lag_values=noise_out["lag"], **cap["kwargs"],
+    wf = run_waterfall(paths, v0, p0, params, csa, wrong_way=wwr, settled=noise_out.get("settled"), lag_values=noise_out["lag"], average_exposure=True, **cap["kwargs"],
                        **({"rng": waterfall_rng} if waterfall_rng is not None else {}))
     pillars = next((l.pillars for l in legs if l.pillars), None)
     sigma = float(longest.vol) if _is_option(longest) else _forward_sigma(longest)

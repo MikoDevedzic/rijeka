@@ -13,6 +13,8 @@ from pricing.csa import CSA
 from pricing.fx_exotic import ExoticSpec
 from pricing.xva_engine import hazard_beta, path_survival
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 
 def _fwd(direction="BUY", t=1.0, vol=60.0, n=10.0, F=100_000.0):
     return fx_xva.ForwardXvaInput(pair="BTCUSD", base_notional=n, forward=F, strike=F, t_years=t, df_quote_t=math.exp(-0.04 * t),
@@ -94,7 +96,10 @@ def _quadrature_cva(sign, n, F, K, r, sigma, T, steps, spread_bp, lgd, beta, ord
     q1 = q0 * np.exp(-solve(q0, wt1, Q[0]) * wt1)
     q2 = q1 * np.exp(-solve(q1, wt2, Q[1]) * wt2)
     disc = [math.exp(-r * dt), math.exp(-r * 2 * dt)]
-    return -lgd * (float((w2 * e1 * (q0 - q1)).sum()) * disc[0] + float((w2 * e2 * (q1 - q2)).sum()) * disc[1])
+    # the charge is on the exposure averaged across each step (0.28.0): the mean of the step's two ends, the first step
+    # starting from today's exposure
+    e0 = max(sign * n * (F - K) * df_T, 0.0)
+    return -lgd * (float((w2 * 0.5 * (e0 + e1) * (q0 - q1)).sum()) * disc[0] + float((w2 * 0.5 * (e1 + e2) * (q1 - q2)).sum()) * disc[1])
 
 
 @pytest.mark.parametrize("direction,k", [("BUY", 3.0), ("SELL", 3.0), ("SELL", 0.5), ("BUY", 1.0)])

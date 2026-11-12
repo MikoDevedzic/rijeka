@@ -19,3 +19,15 @@ def _fixings_presence_is_not_carried_between_unit_tests(request):
     yield
     store._tables.clear()
     store._tables.update(saved)
+
+
+@pytest.fixture
+def monthly_steps(monkeypatch):
+    """Currency and digital-asset XVA runs on monthly steps, as they ran until 0.28.0. For tests of a mechanism
+    that does not depend on the grid (the margin-period lag, a leg settling inside a package, the capital add-on by
+    hand at a monthly date, wrong-way risk against a quadrature) and whose hand figures were worked on monthly
+    dates. The grid the app runs (weekly to a year) has its own tests in tests/test_exposure_grid.py."""
+    from pricing import fx_xva
+    real = fx_xva.exposure_grid
+    monkeypatch.setattr(fx_xva, "exposure_grid", lambda t_years, per_year=None: real(t_years, per_year or 12))
+

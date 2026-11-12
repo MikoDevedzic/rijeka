@@ -14,6 +14,7 @@ import {
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
   ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS, regimesWords, regimesParts,
+  stepWord, stepUnit, stepsShown,
 } from './xva-shared'
 
 const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fva: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
@@ -319,5 +320,27 @@ describe('wrong-way risk on the XVA tab', () => {
     expect(assumptionsAreDefault({ ...D, ownLink: '0.5' })).toBe(false)
     expect(CREDIT_LINKS[0][0]).toBe('1')
     expect(CREDIT_LINKS.every(([k]) => Number(k) >= 0.1 && Number(k) <= 20)).toBe(true)
+  })
+})
+
+describe('what the steps of a run are called', () => {
+  it('reads the word from the step length of the run itself: weekly to a year, monthly beyond', () => {
+    expect(stepWord(0.25 / 13)).toBe('weekly')
+    expect(stepWord(1 / 52)).toBe('weekly')
+    expect(stepWord(183 / 365 / 27)).toBe('weekly')
+    expect(stepWord(1 / 12)).toBe('monthly')
+    expect(stepWord(2 / 24)).toBe('monthly')
+    expect(stepWord(1 / 365)).toBe('daily')
+    expect([stepUnit(1 / 52), stepUnit(1 / 12), stepUnit(1 / 365)]).toEqual(['w', 'm', 'd'])
+    for (const none of [undefined, null, 0, NaN, -1]) { expect(stepWord(none)).toBe(''); expect(stepUnit(none)).toBe('') }
+  })
+  it('shows every step vol up to thirteen, and every fourth and the last beyond', () => {
+    const vols = (n) => Array.from({ length: n }, (_, i) => 50 + i)
+    expect(stepsShown(vols(6)).map(([n]) => n)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(stepsShown(vols(13))).toHaveLength(13)
+    expect(stepsShown(vols(26)).map(([n]) => n)).toEqual([4, 8, 12, 16, 20, 24, 26])
+    expect(stepsShown(vols(52)).map(([n]) => n)).toEqual([4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52])
+    expect(stepsShown(vols(26))[0]).toEqual([4, 53])
+    expect(stepsShown(null)).toEqual([])
   })
 })

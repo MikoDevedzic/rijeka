@@ -26,6 +26,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from './xva-shared.jsx'
 import {
+  stepWord, stepUnit, stepsShown,
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS,
   buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine, regimesParts,
 } from './xva-shared'
@@ -77,13 +78,13 @@ function SurfaceProof({ result }) {
       {steps && (
         <div style={{marginTop:'6px',paddingTop:'6px',borderTop:'1px solid var(--border)'}}>
           <div style={{fontSize:'0.8rem',color:'var(--text-mute)',fontFamily:'var(--mono)',fontWeight:700,letterSpacing:'.08em',marginBottom:'4px'}}>
-            STEP VOLS (%) · {steps.length} monthly steps
+            STEP VOLS (%) · {steps.length} {stepWord(result?.dt)} steps{steps.length > 13 ? ' · every fourth shown' : ''}
           </div>
           <div style={{display:'flex',flexWrap:'wrap',gap:'3px'}}>
-            {steps.map((v, i) => (
-              <span key={i} style={{fontSize:'0.75rem',fontFamily:'var(--mono)',color:'var(--accent)',background:'rgba(217,178,92,0.05)',
+            {stepsShown(steps).map(([n, v]) => (
+              <span key={n} data-testid="xva-step-vol" style={{fontSize:'0.75rem',fontFamily:'var(--mono)',color:'var(--accent)',background:'rgba(217,178,92,0.05)',
                 border:'1px solid rgba(217,178,92,0.15)',borderRadius:'2px',padding:'1px 4px'}}>
-                <span style={{color:'var(--text-mute)'}}>{i + 1}m </span>{Number(v).toFixed(2)}
+                <span style={{color:'var(--text-mute)'}}>{n}{stepUnit(result?.dt)} </span>{Number(v).toFixed(2)}
               </span>
             ))}
           </div>
@@ -349,7 +350,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             style={{flex:'0 0 auto',height:XVA_CHART_HEIGHT,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
             <RunReadout result={res} />
             <ChartReadout result={res} fmt={fmt}
-              model={<>{res?.package ? `${res.legs?.length} legs, one netting set` : res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {res?.steps} monthly steps · {ccy}</>} />
+              model={<>{res?.package ? `${res.legs?.length} legs, one netting set` : res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {res?.steps} {stepWord(res?.dt)} steps · {ccy}</>} />
           </ExposureCanvas>
 
           <div style={{flexShrink:0,overflowX:'auto'}} data-testid="xva-outputs">

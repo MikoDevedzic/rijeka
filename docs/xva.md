@@ -6,7 +6,7 @@ Engine: `backend/pricing/xva_engine.py` (`run_waterfall`), collateral model `bac
 
 ## 1. Exposure paths
 
-Rates: Monte Carlo MtM paths V(t) of the trade under a Hull-White one-factor model calibrated to the swaption surface, on a monthly grid to maturity; `n_paths` paths. FX and digital assets: V(t) = ±N·(F_t − K)·DF_q(t,T) with F_t driftless under the T-forward measure: for a currency pair lognormal at the pair's vol (the surface's ATM term structure, or a desk input, named on the ticket); for a digital asset lognormal over each grid step given the variance the step accumulated under the asset's vol regimes (§8b), with the same variance on average. Both hand the same shape to the waterfall: paths from our side (positive = the counterparty owes us), V(0), and the discount factors P(0, t_k).
+Rates: Monte Carlo MtM paths V(t) of the trade under a Hull-White one-factor model calibrated to the swaption surface, on a monthly grid to maturity; `n_paths` paths. FX and digital assets (weekly steps for a ticket of a year or less, monthly beyond: §8d): V(t) = ±N·(F_t − K)·DF_q(t,T) with F_t driftless under the T-forward measure: for a currency pair lognormal at the pair's vol (the surface's ATM term structure, or a desk input, named on the ticket); for a digital asset lognormal over each grid step given the variance the step accumulated under the asset's vol regimes (§8b), with the same variance on average. Both hand the same shape to the waterfall: paths from our side (positive = the counterparty owes us), V(0), and the discount factors P(0, t_k).
 
 ## 2. Collateral: the CSA turns V into a residual exposure
 
@@ -46,6 +46,31 @@ Funding the uncollateralised positive exposure at the funds-transfer price, and 
     FBA = + Σ_i ftp(t_i) · fba_ratio · |ENE(t_i)| · Δt · P(0,t_i)
 
 ftp is the desk's funding spread (flat or a term curve); fba_ratio (0.55 by default) is the share of the funding spread credited on benefit.
+
+## 5b. The grid of a currency or digital-asset ticket, and the exposure a charge reads (§8d, 0.28.0)
+
+    steps = max(2, ⌈52·T⌉) for T ≤ 372 days, else max(2, ⌈12·T⌉);   Δ = T / steps        (pricing/fx_xva.exposure_grid)
+    CVA, DVA, FVA, FBA at step i read  ½·(EE_{i−1} + EE_i)   (ENE likewise; per path under wrong-way risk)
+    EE_0 = max(V_0 − C(V_0) − IM_1, 0),  ENE_0 = min(V_0 − C(V_0) + IM_1, 0)             (run_waterfall(average_exposure=True))
+
+A forward's exposure grows like √t. Read at each step's end on two or three monthly steps it overstated the charge.
+BTC forward dealt at fair value, 55 % vol, 20,000 paths, CVA against the same run on daily steps:
+
+| | 1M | 3M | 6M | 1Y |
+|---|---|---|---|---|
+| until 0.28.0: monthly steps, exposure at the step's end, uncollateralised | +31 % | +23 % | +8 % | +9 % |
+| the same under a ten-day margin period | +23 % | +6 % | +3 % | +2 % |
+| now: weekly steps, averaged exposure, uncollateralised | −2 % | +1 % | −3 % | 0 % |
+| the same under a ten-day margin period | −3 % | 0 % | −2 % | 0 % |
+
+The charge was overstated, not understated. The profiles on the chart (EE, ENE, PFE) are still the values at the
+grid dates. KVA's replacement cost, MVA's margin and ColVA are read at each step's end. A swap's waterfall and
+the credit page's netting-set engine keep monthly steps and the step's end (not measured there), so the
+incremental charge on a ticket (`CHARGE THIS TRADE`) and the ticket's stand-alone figure are on different grids.
+Still grid-dependent on a margined ticket: KVA about 4 % below daily steps at six months, MVA 1 % above. The
+replication workbooks run monthly steps (`grid_per_year` on the input) with the averaged charge in their cells;
+that the grids agree is tested on the engine (`tests/test_exposure_grid.py`). The independent quadrature of
+wrong-way risk (`tests/test_wrong_way_risk.py`) is of the averaged definition.
 
 ## 6. KVA
 
@@ -257,7 +282,7 @@ simulated paths behind EE, ENE and PFE, and the on-chain comparison runs the sam
 **A package of legs as one netting set** (`/api/xva/currency-package`, `pricing/fx_xva.package_xva`; 10 November
 2026). A ticket with further legs on its DETAILS tab (a strip, a collar, a forward with an option) is run as one
 set: the body of every leg goes in `trades`, each is read exactly as its own route reads it, and all are valued
-on one grid (monthly to the longest settlement) and one driver. Every forward of the pair is its own forward
+on one grid (to the longest settlement: weekly when that is a year or less, monthly beyond, §8d) and one driver. Every forward of the pair is its own forward
 today times the same driftless lognormal M_t (one factor, carry deterministic), so each leg starts at its own
 price and the legs move together; a forward leg is marked ±N·(F_i·M_t − K)·DF, an option leg is valued in its
 style's closed form as on its own. A leg stays to the first grid date at or after its settlement, where it is
@@ -270,7 +295,7 @@ it follows the legs as they settle: a calendar spread posts little while both le
 once the near one has settled. The capital add-on is SA-CCR's on the legs together (below): inside one hedging
 set a bought and a sold forward of the same terms carry none; under the older CEM choice each leg's add-on is
 added while it is alive. One run takes up to 24 legs, settlements up to ten years out, and
-legs × paths × monthly steps up to four million (the route says how many paths fit).
+legs × paths × months to the longest settlement up to four million (the route says how many paths fit).
 A package of one leg is that leg's own run, draw for draw (`tests/test_package_xva.py`). The answer has the shape
 of the single-trade routes plus a row per leg (its value, when it settles, its own peak expected exposure), which
 the tab shows as what netting is worth. `POST /api/xva/incremental` takes the same `trades` list, so the charge
@@ -322,7 +347,7 @@ behind its own validation gate. A pair without a surface uses the demo default, 
 
 ## Parameters and defaults
 
-CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; ftp 55bp; fba_ratio 0.55; hurdle 12 %; capital model SA-CCR; counterparty risk weight 100 %; WWR 1. Monthly grid; `n_paths` from the ticket (2000 default).
+CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; ftp 55bp; fba_ratio 0.55; hurdle 12 %; capital model SA-CCR; counterparty risk weight 100 %; WWR 1. Monthly grid for a swap; for a currency or digital-asset ticket weekly to a year and monthly beyond (§8d); `n_paths` from the ticket (2000 default).
 
 ## Limits, stated
 

@@ -18,6 +18,8 @@ from pricing.csa import CSA
 from pricing.fx_exotic import ExoticSpec
 from pricing.sa_ccr import supervisory_delta
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 
 def _fwd(pair="BTCUSD", direction="BUY", t=0.5, n=10.0, F=100_000.0, spot=98_000.0, K=None):
     return fx_xva.ForwardXvaInput(pair=pair, base_notional=n, forward=F, strike=K if K is not None else F, t_years=t, df_quote_t=math.exp(-0.04 * t),
@@ -130,7 +132,7 @@ def test_the_other_capital_models_are_as_they_were():
 # ── the whole life is charged, on any grid (0.27.0) ────────────────────────
 
 def _on_grid(monkeypatch, per_year):
-    monkeypatch.setattr(fx_xva, "monthly_grid", lambda ty: (max(2, int(math.ceil(ty * per_year))), ty / max(2, int(math.ceil(ty * per_year)))))
+    monkeypatch.setattr(fx_xva, "exposure_grid", lambda ty, _=None: (max(2, int(math.ceil(ty * per_year))), ty / max(2, int(math.ceil(ty * per_year)))))
 
 
 def test_kva_charges_the_whole_life_of_a_short_trade():

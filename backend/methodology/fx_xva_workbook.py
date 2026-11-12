@@ -1,7 +1,7 @@
 """The XVA replication for an FX or digital-asset forward: the lognormal forward Monte Carlo, the CSA, the
 waterfall and the vol calibration, cell by cell. The sibling of xva_workbook.py (the swap).
 
-    Model        the trade, the forward from parity, DF_q(T) and the quote zero, the monthly grid, V(0)
+    Model        the trade, the forward from parity, DF_q(T) and the quote zero, the grid (monthly steps here), V(0)
     Calibration  the pair's surface as quoted (tenor, ATM, RR25, BF25), the interpolation to the forward's
                  tenor and the smile fixed point at K = F, exactly as pricing/fx_vol.vol_at does it; or the
                  engine's default when the account has no surface for the pair
@@ -14,7 +14,12 @@ waterfall and the vol calibration, cell by cell. The sibling of xva_workbook.py 
     Engine       what the engine computed on the same draws, per CSA preset (for the Checks)
 
 ENGINE mode reproduces pricing/fx_xva.forward_xva to rounding (the Checks sheet says so); LIVE mode re-rolls
-the simulation on every recalculation. A 6-month forward on a monthly grid at 200 paths is a small book."""
+the simulation on every recalculation. A 6-month forward on a monthly grid at 200 paths is a small book.
+
+The grid. A ticket of a year or less runs weekly steps in the app (pricing/fx_xva.exposure_grid, 0.28.0); this book
+runs the same engine on monthly steps (GRID_PER_YEAR, the grid of a ticket beyond a year), so that a margin period
+lies inside one step and the book stays small. The arithmetic is the same on either grid; that the two grids agree
+is tested on the engine itself (tests/test_exposure_grid.py), not here."""
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -28,12 +33,13 @@ from methodology import workbook as W
 from pricing.csa import CSA, BUSINESS_DAYS_PER_YEAR, MPOR_FLOOR_BILATERAL_BD, MPOR_FLOOR_CLEARED_BD
 from pricing.currency_forward import price_currency_forward
 from pricing.fx_vol import TENOR_YEARS, parse_surface, vol_at
-from pricing.fx_xva import ForwardXvaInput, default_vol_pct, forward_xva, is_crypto, monthly_grid
+from pricing.fx_xva import ForwardXvaInput, default_vol_pct, exposure_grid, forward_xva, is_crypto
 from pricing.sa_ccr import SUPERVISORY
 from pricing.xva_engine import IM_CONFIDENCE
 from pricing.xva_engine import ALPHA, CAP_R, SF_IR
 
 N_PATHS, MONTHS, DIRECTION = 200, 6, "BUY"
+GRID_PER_YEAR = 12                 # this book's steps a year: monthly (see the note on the grid above)
 PRESETS = ("UNCOLLATERALISED", "BILATERAL", "ON_CHAIN")
 DEFAULT_PRESET = "BILATERAL"
 SMILE_ITERATIONS = 8          # pricing/fx_vol.vol_at's fixed point
@@ -74,7 +80,8 @@ def forward_inputs(mkt, case: dict) -> dict:
     else:
         vol_pct, src = None, f"the engine's default {default_vol_pct(case['pair']):g}% flat (no {case['pair']}_VOL surface saved; pricing/fx_xva.DEFAULT_VOL_PCT)"
     inp = ForwardXvaInput(pair=case["pair"], base_notional=case["notional"], forward=r.forward, strike=r.forward_rate, t_years=r.t, df_quote_t=r.df_quote,
-                          quote_zero=r.quote_rate, direction=DIRECTION, vol_pct=vol_pct, spot01=r.spot01, vol_source=src, spot=case["spot"])
+                          quote_zero=r.quote_rate, direction=DIRECTION, vol_pct=vol_pct, spot01=r.spot01, vol_source=src, spot=case["spot"],
+                          grid_per_year=GRID_PER_YEAR)
     return {"fwd": r, "inp": inp, "pillars": pillars, "settle": T, "vol_source": src}
 
 
@@ -86,7 +93,7 @@ def engine_runs(fi: dict) -> dict:
         csa = CSA.from_request({"preset": preset})
         wf, meta = forward_xva(fi["inp"], csa, n_paths=N_PATHS, seed=42, noise_out=noise, waterfall_rng=np.random.default_rng(43))
         runs[preset] = (csa, wf, meta)
-    steps, dt = monthly_grid(fi["inp"].t_years)
+    steps, dt = exposure_grid(fi["inp"].t_years, GRID_PER_YEAR)
     # a digital asset's vol regimes (pricing/vol_regimes): the variance each step accumulated on each path, as a
     # multiple of σ²Δ, and the share of it that came before the date a margin period earlier, for each preset's period
     ck, u, omega = noise.get("clock"), None, {}
@@ -425,6 +432,14 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
         ws.cell(row=i, column=1, value=label); c = ws.cell(row=i, column=2, value=v); c.fill = W.FILL_IN
         c.number_format = "0.00%" if label in ("LGD", "Own LGD", "Hurdle rate", "Counterparty risk weight") else "0.00##"
     W.dropdown(ws, "B11", ["SA_CCR", "CEM", "IMM"])
+    # today's exposure, where the first step's average starts: today's value less the collateral that value calls
+    # (no earlier value to lag to), with the first date's initial margin
+    c0 = "IF(Coll=1,IF(ABS(MAX(V0-THcp,0)-MAX(-V0-THown,0))<MTA,0,MAX(V0-THcp,0)-MAX(-V0-THown,0)),0)"
+    ws["A18"] = "Exposure today, EE(0) (the first step's average starts here)"
+    ws["B18"] = f"=MAX(V0-{c0}-Exposure!K{rs + 1},0)"; ws["B18"].number_format = "#,##0.00"
+    ws["C18"] = "ENE(0)"
+    ws["D18"] = f"=MIN(V0-{c0}+Exposure!N{rs + 1},0)"; ws["D18"].number_format = "#,##0.00"
+    _names(wb, {"EE0": "Waterfall!B18", "ENE0": "Waterfall!D18"})
     _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBAr": "Waterfall!B9",
                 "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFsa": "Waterfall!B15", "CapR": "Waterfall!B16", "SFcem": "Waterfall!B17"})
     r0 = 20
@@ -441,10 +456,14 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
         ws.cell(row=r, column=7, value=(f"=1-F{r}" if j == 1 else f"=F{r - 1}-F{r}")).number_format = "0.000000"
         ws.cell(row=r, column=8, value=f"=Exposure!D{e}").number_format = "#,##0.00"
         ws.cell(row=r, column=9, value=f"=Exposure!E{e}").number_format = "#,##0.00"
-        ws.cell(row=r, column=10, value=f"=LGDcp*H{r}*E{r}*C{r}*WWR").number_format = "#,##0.00"
-        ws.cell(row=r, column=11, value=f"=LGDown*ABS(I{r})*G{r}*C{r}").number_format = "#,##0.00"
-        ws.cell(row=r, column=12, value=f"=FTP/10000*H{r}*Dt*C{r}").number_format = "#,##0.00"
-        ws.cell(row=r, column=13, value=f"=FTP/10000*FBAr*ABS(I{r})*Dt*C{r}").number_format = "#,##0.00"
+        # the four exposure charges are on the exposure averaged across the step: the mean of its two ends, the first
+        # step starting from today's exposure (EE0, ENE0)
+        ee_c = f"(EE0+H{r})/2" if j == 1 else f"(H{r - 1}+H{r})/2"
+        ene_c = f"(ENE0+I{r})/2" if j == 1 else f"(I{r - 1}+I{r})/2"
+        ws.cell(row=r, column=10, value=f"=LGDcp*{ee_c}*E{r}*C{r}*WWR").number_format = "#,##0.00"
+        ws.cell(row=r, column=11, value=f"=LGDown*ABS({ene_c})*G{r}*C{r}").number_format = "#,##0.00"
+        ws.cell(row=r, column=12, value=f"=FTP/10000*{ee_c}*Dt*C{r}").number_format = "#,##0.00"
+        ws.cell(row=r, column=13, value=f"=FTP/10000*FBAr*ABS({ene_c})*Dt*C{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=14, value=f"=MAX(Tyrs-B{r}+Dt/2,0)").number_format = "0.000000"
         ws.cell(row=r, column=15, value=f"=(1-EXP(-0.05*N{r}))/0.05").number_format = "0.000000"
         # CRE52.48 (unmargined: sqrt(min(M, 1)), M floored at ten business days) and CRE52.52 (margined)
@@ -570,7 +589,7 @@ def _xva_forward_workbook(mkt, case: dict):
     wb = Workbook()
     _readme(wb, case["title"], [
         f"Default trade: buy {base} {case['notional']:,.10g} {MONTHS} months forward against {quote} at the fair forward ({'cash-settled in USD against the settlement price source, a non-deliverable forward' if crypto else 'deliverable'}), "
-        f"monthly grid, {N_PATHS} paths; the engine's own random draws on the Normals sheet.",
+        f"monthly grid (a ticket of a year or less runs weekly steps in the app: the same arithmetic on more dates), {N_PATHS} paths; the engine's own random draws on the Normals sheet.",
         "Model: the forward is lognormal and driftless under the settlement-date forward measure at the vol the pair's surface gives at K = F for this tenor (Calibration sheet); "
         "V(t) = side·N·(F_t − K)·DF_q(t,T) with DF_q between today and settlement on the flat quote zero, the engine's own proxy (pricing/fx_xva.py, docs/xva.md §1).",
         *([f"Vol regimes: a digital asset's vol is not one level. On each path a day's vol is σ × a fast state (calm or stressed, {eng['regimes']['fast']['stressed_spell_days']:g} days of stress at a time) × a slow state "
@@ -611,7 +630,7 @@ def _xva_forward_workbook(mkt, case: dict):
         ("F₀", f"S·DF_{base}(T)/DF_q(T)", "Model!B13", "covered interest parity; DF_q from the curve, log-linear", case["spot_fmt"]),
         ("r_q", "−ln DF_q(0,T)/T", "Model!B15", "the engine's flat quote zero between today and settlement", "0.000000%"),
         ("σ", "the smile vol at K = F for the forward's tenor: the fixed point of σ = ATM − 2·RR·x + 16·BF·x², x = N(½σ√T) − ½", "Calibration!B5", "ATM, RR25, BF25 linear in time between quoted tenors, flat beyond", "0.0000%"),
-        ("Δ, steps", "steps = max(2, ⌈12T⌉), Δ = T/steps", "Model!B18", "the monthly grid", "0.00000000"),
+        ("Δ, steps", "steps = max(2, ⌈12T⌉), Δ = T/steps", "Model!B18", "this book's monthly grid; the app steps weekly to a year", "0.00000000"),
         ("DF_q(t,T)", "DF_q(0,T)/e^(−r_q·t)", f"Model!E{grid_r0 + 1}", "step 1", "0.00000000"),
         *([("U", "the variance a step accumulated on the path, as a multiple of σ²Δ", f"Normals!B{eng['clock_rows']['U'][0]}", "path 1, step 1: the asset's vol regimes, day by day (pricing/vol_regimes.py)", "0.000000"),
            ("F_t", "F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"])] if eng.get("clock_rows") else

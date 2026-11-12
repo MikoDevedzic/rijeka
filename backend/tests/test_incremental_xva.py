@@ -8,6 +8,8 @@ from fastapi import HTTPException
 
 from api.routes.xva import align_ee, hypothetical_trade, xva_levels
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 
 def _swap_body(**kw):
     body = {"instrument_type": "INTEREST_RATE_SWAP", "structure": "VANILLA", "notional": 1e7, "notional_ccy": "USD",

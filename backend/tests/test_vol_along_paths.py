@@ -9,6 +9,8 @@ import pytest
 
 from pricing.fx_vol import Pillar, atm_variance, forward_vol, parse_surface, path_vols, step_vols, vol_at
 
+pytestmark = pytest.mark.usefixtures("monthly_steps")     # monthly steps, as these figures were worked (tests/conftest.py)
+
 FLAT = [Pillar(0.25, 0.08, 0.0, 0.0, False), Pillar(1.0, 0.08, 0.0, 0.0, False)]
 RISING = [Pillar(1 / 12, 0.06, 0.0, 0.0, False), Pillar(0.5, 0.08, 0.0, 0.0, False), Pillar(1.0, 0.10, 0.0, 0.0, False)]
 SMILE = parse_surface([{"tenor": "1M", "quote_type": "ATM", "rate": 7.0}, {"tenor": "1M", "quote_type": "RR25", "rate": 1.0}, {"tenor": "1M", "quote_type": "BF25", "rate": 0.3},
