@@ -37,6 +37,11 @@ for (const c of CASES) {
     await expect(saving).toContainText('SAVING ON CHAIN')
     await expect(saving).toContainText(Math.abs(Math.round(one.onChain.xva.all_in - first.xva.all_in)).toLocaleString('en-US'))
     await expectFullyInView(win.getByTestId('xva-outputs'), `${c.name}: XVA results`)
+    // the tab names its steps from the run itself: a ticket of a year or less steps weekly (0.28.0), and says so
+    expect(first.dt * 365, `${c.name}: the run's step is about a week`).toBeGreaterThan(5.5)
+    expect(first.dt * 365).toBeLessThan(8.5)
+    expect(first.ee.length, 'one exposure per step').toBe(first.steps)
+    await expect(win.getByTestId('xva-outputs').locator('..').locator('..'), `${c.name}: the steps are named`).toContainText(`${first.steps} weekly steps`)
     await expectNoHorizontalOverflow(win.getByTestId('xva-left'), `${c.name}: XVA left column`)
     expect(await win.getByTestId('xva-outputs').innerText(), 'one sign per figure, a rounded zero unsigned').not.toMatch(/\+\+|--|−−|\+-|\+−|-\+|−\+/)
 
