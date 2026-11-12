@@ -12,7 +12,7 @@
 .au-scene > * { position:relative; }
 
 .au-scene-top { display:flex; flex-direction:column; gap:6px; animation:auIn .6s ease both; }
-.au-mark { font-size:clamp(1.3rem, 2.2vw, 1.7rem); font-weight:800; letter-spacing:0.42em; color:var(--accent); text-shadow:0 0 36px rgba(217,178,92,0.35); }
+.au-mark { line-height:0; }      /* the logo: the river running into the ringed R that begins the name */
 .au-sub { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.3em; color:var(--text-dim); }
 .au-phase { display:inline-flex; align-items:center; gap:8px; margin-top:6px; padding:4px 10px; border:1px solid var(--border-hi); border-radius:999px; font-family:var(--mono); font-size:0.86rem; letter-spacing:0.18em; color:var(--text-dim); width:max-content; max-width:100%; }
 .au-phase i { width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); flex-shrink:0; }
@@ -28,8 +28,8 @@
 .au-live i { width:6px; height:6px; border-radius:50%; background:var(--border-glow); }
 .au-live.on { color:var(--accent); }
 .au-live.on i { background:var(--accent); box-shadow:0 0 10px var(--accent); animation:auPulse 2s ease-in-out infinite; }
-.au-vol { width:100%; height:clamp(200px, 32vh, 300px); display:block; animation:auFade 1.2s ease .2s both; }
-.au-stage { height:clamp(200px, 32vh, 300px); position:relative; animation:auFade .7s ease both; }
+.au-vol { width:100%; height:clamp(170px, 22vh, 300px); display:block; animation:auFade 1.2s ease .2s both; }
+.au-stage { height:clamp(170px, 22vh, 300px); position:relative; animation:auFade .7s ease both; }
 .au-stage > * { position:absolute; inset:0; }
 .au-dots { display:flex; gap:14px; margin-top:10px; }
 .au-dots button { background:none; border:none; padding:4px 0; cursor:pointer; display:flex; flex-direction:column; gap:5px; align-items:flex-start; color:var(--text-mute); font-family:var(--mono); font-size:0.86rem; letter-spacing:0.22em; transition:color .2s; }
@@ -148,3 +148,36 @@
 .au-inline { background:none; border:none; padding:0; color:var(--accent); font:inherit; cursor:pointer; text-decoration:none; }
 .au-inline:hover { text-decoration:underline; }
 .au-notice { font-size:0.86rem; line-height:1.45; color:var(--accent); border:1px solid var(--accent-dim); background:var(--accent-glow); padding:0.5rem 0.7rem; border-radius:3px; }
+
+/* ── the front door (0.31.0): the way on to the public site, and the choice between the two forms ── */
+.au-explore { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:0 0 clamp(10px, 2vh, 22px); animation:auIn .7s ease .15s both; }
+.au-explore-btn { font-family:var(--mono); font-size:12px; letter-spacing:0.14em; padding:9px 14px; border-radius:3px; text-decoration:none; white-space:nowrap;
+  color:var(--text-hi); background:var(--panel-2); border:1px solid var(--border-hi); box-shadow:0 2px 0 rgb(0 0 0 / 0.35); transition:background .15s, border-color .15s; }
+.au-explore-btn:hover { background:var(--panel-3); border-color:var(--border-glow); }
+.au-explore-btn:active { transform:translateY(1px); box-shadow:0 1px 0 rgb(0 0 0 / 0.35); }
+.au-explore span { font-family:var(--mono); font-size:11px; letter-spacing:0.14em; color:var(--text-mute); }
+.au-seg { display:grid; grid-template-columns:1fr 1fr; border:1px solid var(--border-hi); border-radius:4px; overflow:hidden; }
+.au-seg a { font-family:var(--mono); font-size:12px; letter-spacing:0.12em; text-align:center; padding:9px 6px; text-decoration:none; color:var(--text-dim); border-bottom:2px solid transparent; }
+.au-seg a:hover { color:var(--text-hi); }
+.au-seg a[aria-current="page"] { color:var(--text-hi); background:var(--panel-3); border-bottom-color:var(--accent); }
+
+/* A phone: the door is one screen. The logo, the line, the way to the site, then the form; the drawing of the
+   desk, the counts and the small print about phases stay on a larger screen. */
+@media (max-width: 640px) {
+  .au-shell { grid-template-rows:auto 1fr; min-height:100vh; min-height:100dvh; }
+  .au-scene { padding:16px 18px 4px; border-bottom:none; gap:0; justify-content:flex-start; }
+  .au-sub, .au-phase, .au-scenes, .au-pulse, .au-foot, .au-explore span { display:none; }
+  .au-scene-top { flex-direction:row; align-items:center; justify-content:space-between; }
+  .au-headline { margin:14px 0 0; }
+  .au-headline h1 { font-size:20px; line-height:1.15; margin:0; }
+  .au-headline h1 br:first-of-type { display:none; }      /* two lines: "Price it. See what it costs." and the line in brass */
+  .au-explore { position:absolute; top:14px; right:18px; margin:0; }
+  .au-explore-btn { padding:6px 10px; font-size:11px; }
+  .au-panel { padding:12px 14px 14px; justify-content:center; gap:10px; }
+  .au-card { padding:16px 16px 14px; gap:10px; }
+  .au-lead { display:none; }
+  .au-title { font-size:16px; }
+  .au-form { gap:9px; }
+  .au-field input { padding-top:9px; padding-bottom:9px; }
+  .au-legal { font-size:10px; letter-spacing:0.04em; line-height:1.5; }
+}

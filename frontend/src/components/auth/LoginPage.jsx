@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { supabase } from '../../lib/supabase'
 import AuthScene, { Field, SubmitBtn } from './AuthScene'
@@ -48,7 +48,7 @@ export default function LoginPage() {
   }
 
   return (
-    <AuthScene eyebrow="SIGN IN">
+    <AuthScene eyebrow="SIGN IN" mode="in">
       <h2 className="au-title">Enter the desk</h2>
       <p className="au-lead">Your blotter, market data and confirmations are private to your account.</p>
       <form onSubmit={handleSubmit} className="au-form">
@@ -63,7 +63,6 @@ export default function LoginPage() {
         <SubmitBtn state={btnState} labels={{ idle: 'ENTER SYSTEM', loading: 'AUTHENTICATING…', success: 'ACCESS GRANTED ✓' }} />
       </form>
       <p className="au-alt"><button type="button" className="au-inline" onClick={forgot}>Forgot password?</button> · <button type="button" className="au-inline" onClick={resend}>Resend confirmation email</button></p>
-      <p className="au-alt">No account? <Link to="/signup">Create a demo account</Link></p>
     </AuthScene>
   )
 }

@@ -3,6 +3,31 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.31.0 · 12 November 2026
+
+**The front door.** On the owner's word after two mocks ("when you type rijeka.app it should bring you to login
+screen right away ... or you can click from there to go into site"; "go with recommendation, build it"). The app
+side is here; the public site's side is staged and waits for its own word.
+
+- **The sign-in page is the door.** It carries the logo (the river into the ringed R) where the name was set in
+  type, the line "Price it. See what it costs. Confirm it on chain.", a button on to the public site (EXPLORE
+  RIJEKA), and a switch at the top of the card between SIGN IN and CREATE A DESK. Signing in, signing up, the reset
+  and the confirmation are untouched. A visitor who is signed in never sees it: the app's address opens the desk.
+- **On a phone it is one screen.** The logo, the line, the way to the site and the form, with nothing to scroll at
+  390 by 844 and at 375 by 667 (it was 1,325px tall). The drawing of the desk and the counts stay on a larger screen.
+  On a laptop the door is one screen too.
+- **The icon for a phone's home screen**: the small form of the logo, the river as one line into the R in its open
+  ring, on the app's ground (`frontend/scripts/build-icons.mjs` draws it from the favicon). A home screen's icon is
+  a still picture on every phone; the mark moves when the app opens. A manifest names the app and its icons. It
+  says "browser", not "standalone": the app opens full screen from its icon only once the desk fits a phone, and
+  the button that offers the icon comes with that work.
+- Links that sat inside a part of the page hidden from screen readers are reachable now; only the drawing is hidden.
+- Journeys: a visitor with no session lands on the door and can move between the two forms; the door does not
+  scroll on a laptop or on two phones; a signed-in visitor goes to the desk.
+- **Not here:** rijeka.app still opens the landing page. Sending it to the door is a change to the public site
+  (the landing moves to /about, the root redirects), staged in two steps and deployed only on the owner's word.
+  A look without an account is undecided and not built.
+
 ## 0.30.4 · 12 November 2026
 
 **The look on the Configurations pages and the messenger.** Item 2 of the Phase 1 exit list, on the owner's word

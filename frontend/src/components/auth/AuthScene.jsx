@@ -1,4 +1,5 @@
-// The frame around sign-in, sign-up and confirmation: the live desk on the
+// The front door (rijeka.app opens here) and the frame around sign-in, sign-up
+// and confirmation: the live desk on the
 // left (a par curve drawing itself from today's public SOFR snapshot, the
 // registry's pulse), the form on the right. It uses the same grid, glow,
 // curve stroke and type as the boot sequence that follows, so the three
@@ -7,12 +8,19 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import './Auth.css'
 import Scenes from './Scenes'
+import RijekaLogo from '../brand/RijekaLogo'
+
+// The public site: how it works, the verifier, the tools. One address, so the day the site's first page moves it
+// moves here once.
+export const SITE_URL = 'https://rijeka.app/'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
 const fmtN = (n) => n == null ? '—' : Number(n).toLocaleString()
 
-export default function AuthScene({ children, eyebrow }) {
+// `mode`: 'in' or 'up' on the two pages a visitor chooses between (the switch at the top of the card); none on the
+// pages that follow an email link.
+export default function AuthScene({ children, eyebrow, mode }) {
   const [pulse, setPulse] = useState(null)
   const [failed, setFailed] = useState(false)
 
@@ -32,19 +40,25 @@ export default function AuthScene({ children, eyebrow }) {
 
   return (
     <div className="au-shell" data-no-shortcuts>
-      <section className="au-scene" aria-hidden="true">
+      <section className="au-scene">
         <div className="au-scene-top">
-          <div className="au-mark">RIJEKA</div>
+          <div className="au-mark"><RijekaLogo height={30} title="Rijeka" /></div>
           <div className="au-sub">WHERE THE TRADING DESK MEETS THE CHAIN</div>
           <div className="au-phase"><i />PHASE 1 · RATES, FX & CRYPTO FORWARDS AND OPTIONS LIVE · CREDIT, EQUITY, COMMODITY NEXT</div>
         </div>
 
         <div className="au-headline">
-          <h1>Price it.<br />Confirm it on-chain.<br /><span>Verify it without us.</span></h1>
+          <h1>Price it.{' '}<br />See what it costs.{' '}<br /><span>Confirm it on chain.</span></h1>
           <p>An open-source derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects. Rates, credit, FX, equities, commodities and crypto, free for everyone.</p>
         </div>
 
-        <Scenes pulse={pulse} failed={failed} />
+        <div className="au-explore">
+          <a className="au-explore-btn" href={SITE_URL}>EXPLORE RIJEKA →</a>
+          <span>HOW IT WORKS · VERIFY · TOOLS</span>
+        </div>
+
+        {/* a drawing of the desk at work, with nothing in it to read or press */}
+        <div className="au-scenes" aria-hidden="true"><Scenes pulse={pulse} failed={failed} /></div>
 
         <div className="au-pulse">
           <div><b>{fmtN(pulse?.curves)}</b><span>CURVES</span></div>
@@ -54,7 +68,6 @@ export default function AuthScene({ children, eyebrow }) {
         </div>
 
         <div className="au-foot">
-          <a href="https://rijeka.app" target="_blank" rel="noopener noreferrer">rijeka.app</a>
           <a href="https://github.com/MikoDevedzic/rijeka" target="_blank" rel="noopener noreferrer">Source</a>
           <a href="/methodology/rijeka_methodology.pdf" target="_blank" rel="noopener noreferrer">Methodology</a>
           {chain.registry && <a href={`${chain.explorer || 'https://sepolia.etherscan.io'}/address/${chain.registry}`} target="_blank" rel="noopener noreferrer">Registry</a>}
@@ -63,7 +76,13 @@ export default function AuthScene({ children, eyebrow }) {
 
       <section className="au-panel">
         <div className="au-card">
-          {eyebrow && <div className="au-eyebrow">{eyebrow}</div>}
+          {mode && (
+            <nav className="au-seg" aria-label="Sign in or create a desk">
+              <Link to="/login" aria-current={mode === 'in' ? 'page' : undefined}>SIGN IN</Link>
+              <Link to="/signup" aria-current={mode === 'up' ? 'page' : undefined}>CREATE A DESK</Link>
+            </nav>
+          )}
+          {eyebrow && !mode && <div className="au-eyebrow">{eyebrow}</div>}
           {children}
         </div>
         <div className="au-legal">

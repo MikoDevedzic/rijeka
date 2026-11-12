@@ -35,7 +35,9 @@ journey written for it must not assume Chromium: a cancelled request has another
 
 Sign-in: there is no hosted auth server. `serve.sh` mints a four-hour token per seed user with the stack's key
 (`backend/stack/token.py`); `fixtures.js` places it where supabase-js keeps its session, so the app starts signed in.
-The auth host and realtime are quiet stubs in `fixtures.js`. The sign-in form itself is not covered yet.
+The auth host and realtime are quiet stubs in `fixtures.js`. The door a visitor with no session meets is covered
+(`door.spec.js`: the page, the switch between the two forms, one screen on a phone); pressing its submit is not,
+because there is no auth server on the stack.
 
 Needs: PostgreSQL 16, PostgREST (`brew install postgrest`; CI downloads the static binary), the backend's virtualenv,
 `npx playwright install chromium`; for `npm run e2e:chain`, Foundry's `anvil` (on `PATH` or in `~/.foundry/bin`).
