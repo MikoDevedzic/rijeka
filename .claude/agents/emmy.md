@@ -30,3 +30,8 @@ Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
 - Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.
 - A gap honestly stated passes; a gap not stated does not. You do not block a release for a missing workbook, you make sure the inventory says it is missing.
+
+Learned on 12 November 2026 (KVA's last step)
+- A sum over a time grid is validated by running the same trade on a finer grid. KVA charged nothing for the last grid step from the day it was written: the workbook stated the convention and reproduced it cell by cell, every reference row passed, and a one-month trade on its two monthly steps carried half its KVA. A figure that moves by more than the paths' noise when the steps are refined is not converged, whatever reproduces it. On any change to exposure, a charge or a profile: monthly, weekly, daily, one short trade and one long.
+- Where a closed form exists for a corner (a trade dealt at fair value has no replacement cost, so its KVA is the add-on's integral), ask for it as a tight test, not a band.
+

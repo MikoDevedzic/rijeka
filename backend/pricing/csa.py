@@ -95,14 +95,14 @@ class CSA:
     def sa_ccr_maturity_factor(self, residual_maturity_y: float) -> float:
         """
         Margined: 1.5 × sqrt(MPoR / 250), MPoR floored per settlement type.
-        Unmargined: sqrt(min(M, 1)).
+        Unmargined: sqrt(min(M, 1)), M floored at ten business days (CRE52.48).
         """
         if self.sa_ccr_margined:
             floor = (MPOR_FLOOR_CLEARED_BD if self.settlement == "on_chain"
                      else MPOR_FLOOR_BILATERAL_BD)
             mpor = max(self.mpor_days, floor)
             return 1.5 * math.sqrt(mpor / BUSINESS_DAYS_PER_YEAR)
-        return math.sqrt(min(max(residual_maturity_y, 0.0), 1.0))
+        return math.sqrt(min(max(residual_maturity_y, 10.0 / BUSINESS_DAYS_PER_YEAR), 1.0))
 
     def to_dict(self) -> dict:
         d = asdict(self)

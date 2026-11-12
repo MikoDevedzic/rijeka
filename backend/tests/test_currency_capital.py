@@ -141,8 +141,12 @@ def test_kva_charges_the_whole_life_of_a_short_trade():
     t = 1.0 / 12
     wf, meta = fx_xva.forward_xva(_fwd("SOLUSD", t=t, n=1000.0, F=200.0, spot=195.0), CSA.uncollateralised(), n_paths=1000, hurdle_rate=0.12)
     assert meta["steps"] == 2 and meta["crypto_group"] == "2b"
-    floor = 0.12 * CAP_R * ALPHA * 0.5 * 1000.0 * 195.0 * t * math.exp(-0.04 * t)
-    assert -wf.kva > floor and -wf.kva < 1.6 * floor                 # the add-on over the month, plus the replacement cost's share
+    # dealt at the fair forward the mean value is about nothing, so the replacement cost is too and KVA is the add-on's
+    # integral: κ · 8 % · α · 0.5 N S · ∫ e^(−rt) dt over the month (Emmy's closed form, 12 Nov 2026: −109.02 against the
+    # engine's −108.93 at 4,000 paths; the convention before 0.27.0 gave −54.51, half)
+    closed = 0.12 * CAP_R * ALPHA * 0.5 * 1000.0 * 195.0 * (1.0 - math.exp(-0.04 * t)) / 0.04
+    assert closed == pytest.approx(109.02, abs=0.005)
+    assert -wf.kva == pytest.approx(closed, rel=0.01)
     # and MVA of a margin the desk sets is funded over both steps
     csa = CSA(preset="UNCOLLATERALISED", collateralised=False, im_exchanged=True, mpor_days=10.0)
     m, _ = fx_xva.forward_xva(_fwd("SOLUSD", t=t, n=1000.0, F=200.0, spot=195.0), csa, n_paths=1000, im_amount=10_000.0, ftp_bp=55.0)

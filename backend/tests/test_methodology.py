@@ -297,7 +297,7 @@ def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
         es = wb["Engine"]
         assert es["C4"].value == "BILATERAL"
         got = {es.cell(row=r, column=1).value: es.cell(row=r, column=3).value for r in range(5, 17)}
-        for label, attr in (("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("XVA total", "xva_total"), ("IM₀", "im_0"), ("EAD at t = 0", "ead_0")):
+        for label, attr in (("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("XVA total", "xva_total"), ("IM₀", "im_0"), ("EAD over the first step", "ead_0")):
             assert got[label] == pytest.approx(getattr(wf, attr))
         # the margin is the engine's estimate (the first date's 99th percentile fall), and the workbook rebuilds it in cells
         assert total == pytest.approx(wf.xva_total) and wf.im_0 == wf.im_profile[0] > 0 and "not ISDA SIMM" in wf.im_basis

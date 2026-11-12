@@ -272,6 +272,8 @@ class TestCSAEffects:
     def test_sa_ccr_maturity_factor(self):
         assert CSA.uncollateralised().sa_ccr_maturity_factor(4.0) == pytest.approx(1.0)
         assert CSA.uncollateralised().sa_ccr_maturity_factor(0.25) == pytest.approx(0.5)
+        # CRE52.48: M is floored at ten business days (0.27.0; the mid-step reading reaches lives this short on a fine grid)
+        assert CSA.uncollateralised().sa_ccr_maturity_factor(0.01) == CSA.uncollateralised().sa_ccr_maturity_factor(0.0) == pytest.approx(0.2)
         assert CSA.bilateral().sa_ccr_maturity_factor(4.0) == pytest.approx(1.5 * math.sqrt(10 / 250))
         assert CSA.on_chain().sa_ccr_maturity_factor(4.0) == pytest.approx(1.5 * math.sqrt(5 / 250))
         # bilateral floor: asking for 5bd on a bilateral CSA still gets 10bd

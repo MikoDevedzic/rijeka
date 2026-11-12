@@ -471,7 +471,7 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
     rt = r1 + 2
     totals = [("CVA", f"=-SUM(J{r0}:J{r1})"), ("DVA", f"=SUM(K{r0}:K{r1})"), ("FVA", f"=-SUM(L{r0}:L{r1})"), ("FBA", f"=SUM(M{r0}:M{r1})"),
               ("KVA", f"=-SUM(W{r0}:W{r1})"), ("MVA", f"=-SUM(Y{r0}:Y{r1})"), ("ColVA", f"=SUM(AE{r0}:AE{r1})"), ("XVA total", f"=SUM(B{rt}:B{rt + 6})"),
-              ("EAD at t = 0", f"=U{r0}"), ("Capital at t = 0", f"=V{r0}"), ("IM₀", "=IM0"), ("Peak EE", f"=MAX(H{r0}:H{r1})"), ("Peak PFE", f"=MAX(Exposure!F{rs + 1}:F{rs + T})")]
+              ("EAD over the first step", f"=U{r0}"), ("Capital over the first step", f"=V{r0}"), ("IM₀", "=IM0"), ("Peak EE", f"=MAX(H{r0}:H{r1})"), ("Peak PFE", f"=MAX(Exposure!F{rs + 1}:F{rs + T})")]
     for i, (label, f) in enumerate(totals):
         ws.cell(row=rt + i, column=1, value=label).font = Font(bold=True)
         ws.cell(row=rt + i, column=2, value=f).number_format = "#,##0.00"
@@ -488,7 +488,7 @@ def _engine_sheet(wb, case, eng, blocks, rs, rt):
     ws["A2"] = "pricing/fx_xva.forward_xva (simulate_paths, then pricing/xva_engine.run_waterfall) under each CSA preset, written at export. The 'selected' column follows the preset chosen on the Exposure sheet and feeds the Checks."; ws["A2"].font = W.F_SUB
     W.header(ws, 4, ["Metric"] + list(PRESETS) + ["selected"])
     metrics = [("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("ColVA", "colva"), ("XVA total", "xva_total"),
-               ("EAD at t = 0", "ead_0"), ("Capital at t = 0", "capital_0"), ("IM₀", "im_0"), ("Peak EE", None), ("Peak PFE", None)]
+               ("EAD over the first step", "ead_0"), ("Capital over the first step", "capital_0"), ("IM₀", "im_0"), ("Peak EE", None), ("Peak PFE", None)]
     r = 5
     for label, attr in metrics:
         ws.cell(row=r, column=1, value=label)

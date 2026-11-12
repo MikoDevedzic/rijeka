@@ -436,7 +436,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
         ws.cell(row=r, column=13, value=f"=FTP/10000*FBAr*ABS(I{r})*Dt*C{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=14, value=f"=MAX(Nsteps*Dt-B{r}+Dt/2,0)").number_format = "0.0000"
         ws.cell(row=r, column=15, value=f"=(1-EXP(-0.05*N{r}))/0.05").number_format = "0.0000"
-        ws.cell(row=r, column=16, value=f"=IF(Coll=1,1.5*SQRT(MAX(MPoR,IF(Preset=\"ON_CHAIN\",{MPOR_FLOOR_CLEARED_BD},{MPOR_FLOOR_BILATERAL_BD}))/{BUSINESS_DAYS_PER_YEAR}),SQRT(MIN(N{r},1)))").number_format = "0.0000"
+        ws.cell(row=r, column=16, value=f"=IF(Coll=1,1.5*SQRT(MAX(MPoR,IF(Preset=\"ON_CHAIN\",{MPOR_FLOOR_CLEARED_BD},{MPOR_FLOOR_BILATERAL_BD}))/{BUSINESS_DAYS_PER_YEAR}),SQRT(MIN(MAX(N{r},1/25),1)))").number_format = "0.0000"
         ws.cell(row=r, column=17, value=f"=SFir*Notl*O{r}*P{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=18, value=f"=IF(Coll=1,Exposure!K{e},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=19, value=f"=IF(Coll=1,MAX(Exposure!J{e},THcp+MTA-R{r},0),MAX(Exposure!J{e},0))").number_format = "#,##0.00"
@@ -458,7 +458,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     rt = r1 + 2
     totals = [("CVA", f"=-SUM(J{r0}:J{r1})"), ("DVA", f"=SUM(K{r0}:K{r1})"), ("FVA", f"=-SUM(L{r0}:L{r1})"), ("FBA", f"=SUM(M{r0}:M{r1})"),
               ("KVA", f"=-SUM(W{r0}:W{r1})"), ("MVA", f"=-SUM(Y{r0}:Y{r1})"), ("ColVA", f"=SUM(AE{r0}:AE{r1})"), ("XVA total", f"=SUM(B{rt}:B{rt + 6})"),
-              ("EAD at t = 0", f"=U{r0}"), ("Capital at t = 0", f"=V{r0}"), ("IM₀", "=IM0"), ("Peak EE", f"=MAX(H{r0}:H{r1})"), ("Peak PFE", f"=MAX(Exposure!F{rs + 1}:F{rs + T})")]
+              ("EAD over the first step", f"=U{r0}"), ("Capital over the first step", f"=V{r0}"), ("IM₀", "=IM0"), ("Peak EE", f"=MAX(H{r0}:H{r1})"), ("Peak PFE", f"=MAX(Exposure!F{rs + 1}:F{rs + T})")]
     for i, (label, f) in enumerate(totals):
         ws.cell(row=rt + i, column=1, value=label).font = Font(bold=True)
         ws.cell(row=rt + i, column=2, value=f).number_format = "#,##0.00"
@@ -474,7 +474,7 @@ def _engine_sheet(wb, eng, rs, rt, fit):
     ws["A2"] = "pricing/xva_engine.run_waterfall under each CSA preset, written at export. The 'selected' column follows the preset chosen on the Exposure sheet and feeds the Checks."; ws["A2"].font = W.F_SUB
     W.header(ws, 4, ["Metric"] + list(PRESETS) + ["selected"])
     metrics = [("CVA", "cva"), ("DVA", "dva"), ("FVA", "fva"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("ColVA", "colva"), ("XVA total", "xva_total"),
-               ("EAD at t = 0", "ead_0"), ("Capital at t = 0", "capital_0"), ("IM₀", "im_0"), ("Peak EE", None), ("Peak PFE", None)]
+               ("EAD over the first step", "ead_0"), ("Capital over the first step", "capital_0"), ("IM₀", "im_0"), ("Peak EE", None), ("Peak PFE", None)]
     r = 5
     for label, attr in metrics:
         ws.cell(row=r, column=1, value=label)

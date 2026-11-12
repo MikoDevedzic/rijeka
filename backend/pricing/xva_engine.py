@@ -121,15 +121,17 @@ class WaterfallResult:
     ead_0: float
     capital_0: float
     im_0: float
-    mf_0: float                     # SA-CCR maturity factor at t=0
+    mf_0: float                     # SA-CCR maturity factor over the first step
     bridge_noise: Optional[np.ndarray] = None   # the standard normals drawn for the margin-period bridge (n_paths, T)
     # the capital legs (pricing/capital.py): zero unless `capital` was passed
     kva_ccr: float = 0.0            # the CCR-capital leg of KVA (today's KVA when no CVA weight is given)
     kva_cva: float = 0.0            # the BA-CVA capital leg (MAR50.14–50.15) along the path
-    k_cva_0: float = 0.0            # K_CVA at t = 0
-    rwa_0: float = 0.0              # RW × EAD at t = 0
-    addon_0: float = 0.0            # the aggregate SA-CCR add-on at t = 0
-    rc_0: float = 0.0               # the replacement cost at t = 0
+    # The capital stock: the first grid step's figures, with the remaining life read at the middle of that step and
+    # the replacement cost and margin at its end. Not the valuation date's: on a short trade they depend on the grid.
+    k_cva_0: float = 0.0            # K_CVA over the first step
+    rwa_0: float = 0.0              # RW × EAD over the first step
+    addon_0: float = 0.0            # the aggregate SA-CCR add-on over the first step
+    rc_0: float = 0.0               # the replacement cost at the first grid point
     multiplier_0: float = 1.0
     v_mean_0: float = 0.0           # mean mark at the first grid point (for the leverage exposure)
     coll_mean_0: float = 0.0        # mean variation margin held at the first grid point

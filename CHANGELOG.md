@@ -18,19 +18,27 @@ of the Phase 1 exit list).
 - **Now.** Capital and margin are held through a step, so the remaining life is read at the middle of it
   (`pricing/xva_engine.run_waterfall`; the add-on profiles in `pricing/fx_xva.py`). The step that ends on the
   settlement is charged like every other. The same trade on monthly, weekly and daily steps now gives the same KVA
-  within the noise of the paths (one-month BTC forward: −83.5, −84.2, −82.9).
+  within the noise of the paths (one-month BTC forward: −83.5, −84.2, −82.9). The quoted runs: 10 BTC bought at
+  the fair forward of 105,000, 55 % vol, flat 4 %, counterparty weight 100 %, hurdle 12 %, 4,000 to 5,000 paths.
+- **Checked.** Emmy, by a closed form of her own on a Group 2b forward dealt at the fair forward (KVA is then the
+  add-on's integral): −109.02 against the engine's −108.93, and −54.51, half, under the old convention. That closed
+  form is now a test at 1 %. The unmargined maturity factor floors the remaining life at ten business days
+  (CRE52.48), which the mid-step reading reaches on a fine grid; no monthly figure moves with it.
 - **What moves.** KVA and MVA, and the totals that carry them. Short currency and digital-asset trades most: KVA
   about ×2.2 at one month, +45 % at three months, +9 % at a year, uncollateralised; a margined six-month forward
   KVA +12 %, MVA +16 to 18 %. A five-year swap: KVA +2 to 3 %, MVA +0.4 %. The capital stock shown for a trade
-  (EAD, RWA, capital at the first step) rises 1 to 2 %: the first step is read half a month in, not a month in. CVA,
+  (EAD, RWA, capital at the first step) rises 1 to 2 % on the swap: the first step is read half a month in, not a
+  month in. It is the first step's figure, not the valuation date's, and on a short trade it depends on the grid
+  (the workbooks now label it "over the first step"). CVA,
   DVA, FVA, FBA and ColVA do not move; no price or sensitivity moves. The pinned book's lines are in
   `GOLDEN_CHANGES.md`.
 - **Workbooks.** The three XVA workbooks read the remaining life the same way and reproduce the engine cell by
   cell under every CSA preset (51, 51 and 87 checks, evaluated outside CI).
-- **Still open (backlog 127).** Measured the same day: CVA and FVA are taken at each step's end, which on the
-  monthly grid reads 9 to 16 % high on an uncollateralised digital-asset forward of one to six months against
-  weekly steps, and a margined KVA and MVA still differ by grid (the margin profile is coarse). A weekly grid for
-  digital assets is the fix; it is not in this release.
+- **Still open (backlog 127).** Measured the same day: CVA and FVA are taken at each step's end. On the monthly
+  grid an uncollateralised one-month digital-asset forward's CVA reads 9 to 12 % above weekly steps and 28 % above
+  daily ones (three months: 12 to 15 % and 19 %); the charge is overstated, not understated. A margined KVA and
+  MVA still differ by grid (the margin profile is coarse). A finer grid for digital assets, or the exposure taken
+  at the middle of each step, is the fix; it is not in this release.
 
 ## 0.26.0 · 12 November 2026
 

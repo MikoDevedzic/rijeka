@@ -60,12 +60,17 @@ Capital held over the life, charged at the hurdle rate. Exposure at default by t
     IMM:     EAD(t) = α · EE(t)
 
     K(t) = 8 % · RW_cp · EAD(t)
-    KVA  = − hurdle · Σ_i K(t_i) · Δt · P(0,t_i)
+    KVA  = − hurdle · Σ_i K_i · Δt · P(0,t_i),   K_i = K with the remaining life M − (t_i − Δt/2)
 
 The remaining life `M − t` in the add-on, the maturity factor and the CVA-capital leg is read at the middle of step
 `i` (0.27.0): capital is held through the step, so the step that ends on the maturity is charged like the others.
 Until then it was read at the step's end, where it is zero on the last step: a one-month trade on two monthly steps
-was charged for one. The replacement cost is read at the step's end, as the exposure is. MVA follows the same rule.
+was charged for one. The replacement cost is read at the step's end, as the exposure is, and so is the discount factor (about r·Δt/2
+low: 0.2 % at a monthly step and 4 %). The unmargined maturity factor floors M at ten business days (CRE52.48).
+MVA: the margin itself is still the one at each step's end; what changed is that the last step is funded too.
+The figures reported as the capital stock (EAD, RWA, capital, add-on) are the first step's, read the same way: not
+the valuation date's, and on a short trade they depend on the grid (a one-month BTC forward's first-step EAD is
+15 % higher on daily steps than on monthly ones).
 
 ## 7. MVA
 
