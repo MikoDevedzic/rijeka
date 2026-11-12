@@ -8,7 +8,8 @@ methodology document carries its own version (v1.20). Commits on `main` are the 
 **The door's way to the site points at /about.** On the owner's word ("deploy everything"). The public site now
 serves its landing page at rijeka.app/about, and rijeka.app itself is to open the door; EXPLORE RIJEKA goes to
 /about so the two do not send a visitor round in a circle. The line beside it names what is there: how it works,
-verify, tools, work with us.
+verify, tools, work with us. The app's page names its own address (app.rijeka.app) as its canonical one, where it
+named rijeka.app, which is about to be a redirect to it.
 
 ## 0.31.0 · 12 November 2026
 
