@@ -61,7 +61,9 @@ The same on every product. **TRADE** is what the user sets. **DETAILS** is the d
 schedule; for a forward or an option, the record as it will be booked beside the market it was priced on.
 **CASHFLOWS** is what comes back: the flows as legs with their present values and their net, then the valuation
 (each figure with its formula, and what the price was built from). The **footer** carries the headline figures
-on every tab. On TRADE the only computed things are a field that shows its default (dashed), an option's
+on every tab. On TRADE the only computed things are the forward (a figure at full strength in a field's solid edge, with no
+well: it cannot be typed over), a field that shows its default (a brass rule under it once typed over, a dash
+in place of a number that is not there yet), an option's
 premium line and the notes that say why there is no price. A stored currency trade opened from the blotter has
 no valuation block (it never had).
 A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX, RATES.
@@ -114,8 +116,9 @@ pressed, typed into or pointed at"; tokens `--btn-*`, `--fld-*`, `--row-*`).
 - **A field is a well.** Lighter than the panel, with the field's own edge; lighter still under the pointer; a
   brass ring and its lightest fill while it is typed in. The fill is set for every input, select and textarea
   wherever it is, so a new field needs nothing to look right. A value that is computed, or a field that cannot
-  be changed, has no well: what can be typed and what cannot are told apart at a glance. Dashes still mean "this
-  is the default: type over it"; amber still means "this cannot be read".
+  be changed, has no well: what can be typed and what cannot are told apart at a glance. A dash in place of a number
+  means there is none yet; a brass rule under a number means it was typed over the default; amber still means
+  "this cannot be read".
 - **A row answers the pointer.** The row under it is a band with a limestone rule at its left edge; the cell
   under it a shade lighter; on the blotter its text comes to full strength. The selected row is the brass band
   with the brass rule. This is every `tbody tr`, so a new table needs nothing.

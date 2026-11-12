@@ -22,3 +22,7 @@ When a pinned figure moves
 Rules
 - Public standards only (Basel, ISDA, CFTC text). Nothing from any client engagement enters formulas, tests or fixtures.
 - Report in numbers: before, after, difference, tolerance, cause.
+
+Learned on 12 November 2026 (PR 140)
+- The whole `npm test` runs before every push, not the folder that changed. The methodology reader's pages are built from `docs/model_inventory.md` as well as from the `.tex`: an inventory edit after the last `npm run methodology` failed CI's frontend check, while the docs folder's own tests had passed an hour earlier.
+

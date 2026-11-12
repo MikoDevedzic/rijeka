@@ -3,6 +3,15 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.17). Commits on `main` are the detail.
 
+## 0.27.1 · 12 November 2026
+
+**The forward on the TRADE tab no longer reads as switched off.** Asked by the owner on 10 November ("the forward
+reads as greyed out"); item 4 of the Phase 1 exit list, first part. The forward is a computed figure, and it sat in
+a dashed box: the only other dashed edge on the ticket is a chip that cannot be pressed. It now has a field's own
+solid edge and no well, as every value that cannot be changed has (`docs/design.md`); the figure was and is at
+full strength. Styles only; `docs/design.md` now says what marks a default (a brass rule once typed over, a dash
+in place of a number that is not there yet), where it said "dashed". Also: Ada's lesson of the day is in her definition.
+
 ## 0.27.0 · 12 November 2026
 
 **KVA and MVA charge the whole life of a trade.** Found while measuring a finer grid for digital assets (item 11(c)

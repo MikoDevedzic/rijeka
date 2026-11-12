@@ -609,13 +609,16 @@
 .tbw-window .tbw-fx-snap:hover:not(:disabled) { text-decoration: underline; }
 .tbw-window .tbw-fx-snap:disabled { color: var(--text-mute); cursor: default; }
 
-/* The forward: read-only, the mono face at the size of an input's text, in a box the height of an input. */
+/* The forward: read-only, the mono face at the size of an input's text, in a box the height of an input. It is a
+   computed figure, so it has no well and a field's own solid edge, as a field that cannot be changed has
+   (docs/design.md). Until 0.27.1 its box was dashed, the edge a chip that cannot be pressed has, and it read as
+   switched off. */
 .tbw-fx-fwd {
   box-sizing: border-box;
   padding: 7px 9px;
   font-size: 12.5px;
   color: var(--text-hi);
-  border: 1px dashed var(--border-hi);
+  border: 1px solid var(--fld-bd);
   border-radius: var(--r-2);
   white-space: nowrap;
   overflow: hidden;
