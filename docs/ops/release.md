@@ -35,7 +35,8 @@ the file and what it gates.
 - A deploy may run ahead of its migration: the feature degrades (a seed, a default, a 409 on write), it does
   not crash.
 - List what is pending and what else lives in the same file. One feature per file from now on; the 3 November
-  jobs file bundles the worker tables with `pending_anchors`, which is why the confirm path waited on the worker.
+  jobs file bundles the worker tables with `pending_anchors`, which is why the confirm path waited on the worker;
+  `2026-11-11_pending_anchors.sql` is that table on its own.
 - A production write happens only on the user's own words. Show the exact statements first.
 - **The runner applies it** (`backend/db/migrate.py`, `docs/architecture.md` → Migrations in production). To
   approve a migration: quote the owner's words; `cd backend && python -m db.migrate --stage <file>` copies the file

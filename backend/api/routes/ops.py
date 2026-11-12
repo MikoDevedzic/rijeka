@@ -152,7 +152,7 @@ OPTIONAL_MIGRATIONS = (
     ("ipv", "2026-11-05_ipv.sql", "IPV tolerances, runs, overrides", "ipv.store", "tables_present"),
     ("collateral", "2026-11-05_collateral.sql", "a firm's own collateral instruments and the schedule per counterparty (the seed is served without it)",
      "collateral.store", "tables_present"),
-    ("pending_anchors", "2026-11-03_jobs.sql (the pending_anchors section)",
+    ("pending_anchors", "2026-11-11_pending_anchors.sql (or the pending_anchors section of 2026-11-03_jobs.sql)",
      "a confirm that hands a slow block to ANCHORING instead of waiting in the request", "chain.pending", "tables_present"),
     ("jobs", "2026-11-03_jobs.sql (jobs and worker_heartbeat)",
      "heavy runs on the worker; apply only when the worker is alive, or runs queue for nobody", "jobs.queue", "tables_present"),

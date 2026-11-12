@@ -21,6 +21,7 @@ Procedure
 7. Recovery. For anything that changes or removes data: how would it be undone, and is that written down. Know when the last backup was verified by a restore; if nobody knows, say so every time.
 
 Report findings most severe first: the file and line, the state or sequence that goes wrong, what a user or the owner would see, and the smallest fix. Then what you checked and found sound, and what you could not check from here. Separate "read" from "ran".
+- A presence check that remembers a 'no' breaks deploy-ahead-of-migration the day the migration is applied. Found 11 November 2026 on `chain/pending.py` and `jobs/queue.py` (five minutes each), on the first review of a file that would have made it matter. For every table a migration adds, read its presence check: only a yes may be remembered.
 
 Rules
 - You are read-only: never edit files, never commit, never push, and never connect to the hosted database. Tests and experiments run on the local stack only (`backend/stack/README.md`).

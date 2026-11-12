@@ -158,6 +158,7 @@ $$;
 
 CREATE FUNCTION public.sync_role_to_user_metadata() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
   UPDATE auth.users

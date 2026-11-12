@@ -15,7 +15,7 @@ Two reconcilers may look at one row at once: the row is taken FOR UPDATE and fli
 in the same transaction as the CONFIRMED event, so the transition is applied once, and the loser
 finds the row no longer PENDING.
 
-Without the table (docs/migrations/2026-11-03_jobs.sql) `sync_wait()` is None and confirm waits
+Without the table (docs/migrations/2026-11-11_pending_anchors.sql) `sync_wait()` is None and confirm waits
 the full RECEIPT_TIMEOUT in the request, as before this module existed.
 """
 from __future__ import annotations
@@ -55,8 +55,10 @@ def _rollback(db) -> None:
 
 
 def tables_present(db) -> bool:
-    if _table["present"] is not None and time.time() - _table["at"] < 300:
-        return _table["present"]
+    """Whether pending_anchors exists. Only a yes is remembered (five minutes): a no is asked again every time, so
+    a migration applied while the API runs is seen at the next confirm and not up to five minutes late."""
+    if _table["present"] and time.time() - _table["at"] < 300:
+        return True
     try:
         ok = bool(db.execute(text("SELECT to_regclass('public.pending_anchors')")).scalar())
     except Exception:                    # noqa: BLE001

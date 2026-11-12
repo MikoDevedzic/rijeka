@@ -47,8 +47,8 @@ def _rollback(db) -> None:
 
 def tables_present(db) -> bool:
     """Whether the jobs table exists; cached for five minutes, False when the check itself fails."""
-    if _table["present"] is not None and time.time() - _table["at"] < 300:
-        return _table["present"]
+    if _table["present"] and time.time() - _table["at"] < 300:      # only a yes is remembered: a migration applied while the API runs is seen at once
+        return True
     try:
         ok = bool(db.execute(text("SELECT to_regclass('public.jobs')")).scalar())
     except Exception:                    # noqa: BLE001
