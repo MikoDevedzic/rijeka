@@ -112,6 +112,13 @@ Initial margin posted is funded at the funding spread less whatever the collater
     IM_post(t_i) = max( q₀.₉₉( mean(Δ_i) − Δ_i ), 0 ),   IM_recv(t_i) = max( q₀.₉₉( Δ_i − mean(Δ_i) ), 0 ),   Δ_i = V(t_i) − V(t_i − δ)
     MVA = − Σ_i IM_post(t_i) · max(ftp(t_i) − pickup, 0) · Δt · P(0,t_i)
 
+Before the first margin period has passed (t_i < δ) the value a margin period earlier is today's: the margin at the
+first date is the percentile of the move since today. δ is 10/250 of a year under the bilateral preset: 14.6 days on
+a digital asset's 365-day clock. One MVA figure is held against a derivation written apart from the engine by the
+model validator (12 November 2026, `tests/reference/test_ref_mva_forward.py`): long 10 BTC three months forward under
+the bilateral preset, −326.78 against the engine's −326.17 on one vol (0.19 %) and −356.95 against −356.66 on the
+regimes (0.08 %), the margin at the first date within 0.12 %.
+
 **Initial margin (10 November 2026).** Rijeka does not compute ISDA SIMM: SIMM is ISDA's licensed methodology,
 and its risk weights are not in this code. Initial margin is one of two things. An amount the desk sets (`im_usd`
 on every XVA route; `simm_im_m`, in millions, is the old name of the same input and is still read): exchanged
@@ -226,6 +233,55 @@ figures), KVA falls 4 to 13 % on BTC and ETH where the larger margin lowers the 
 with no multiplier, does not move), and the total moves 1.5 to 6 % on BTC and ETH and within about 1 %
 on SOL. `vol_regimes: false` in the request runs one vol, for comparison; the answer's `params.vol_regimes` says
 what the regimes were. Limits: `docs/model_inventory.md`.
+
+## 8e. The backtest: did the simulated level cover what the level did? (0.30.2)
+
+`backend/scripts/backtest_exposure.py`, after the Basel Committee's *Sound practices for backtesting counterparty
+credit risk models* (December 2010): forecast the distribution at a date, see where the realised move fell in it,
+count how often it fell in the tails, over several horizons. On every day of five years of public daily closes
+(BTC, ETH, SOL to 11 November 2026; the first 90 days are warm-up) the model is given a vol and asked for the 1st,
+5th, 95th and 99th percentile of the log move over the next 5, 10, 14, 30 and 91 days; the move that followed is
+counted as beyond each or not. Two models: one vol (a lognormal level), and the vol regimes of §8b, on the clock the
+exposure paths use, drawn by the engine's own code. A forward's value is monotone in the level, so the level's
+percentile is the trade's: the 14-day rows are the test of initial margin (the 99th percentile over the margin
+period, each way) and the 95 % rows of the PFE the ticket draws.
+
+Days overlap and the vol is itself an estimate, so a binomial band would be wrong. The same procedure is run on 500
+histories simulated from the model itself (same length, warm-up and overlap); the band is where 95 % of those counts
+fall. Run on histories of known law the band behaves as a 95 % band should (a model given its own histories is
+outside it in 4 to 6 % of cells), and one vol given five-year histories the regimes made is caught in a tail at ten
+days in about 6 histories of 10: five years is a short record for a 1st percentile (`tests/test_backtest_exposure.py`).
+
+Share of days on which the 14-day move went beyond the model's percentile (in brackets the model's own band):
+
+| | model | below 1 % | below 5 % | above 95 % | above 99 % |
+|---|---|---|---|---|---|
+| BTC | one vol | **2.55** (0.17–2.50) | 5.63 (2.73–8.36) | 6.62 (2.67–7.84) | **3.60** (0.20–2.38) |
+| BTC | regimes | 1.10 (0.17–3.02) | 5.63 (3.19–8.91) | 6.67 (2.96–9.00) | 2.96 (0.17–2.96) |
+| ETH | one vol | 2.03 (0.17–2.47) | 4.64 (2.73–8.36) | **7.89** (2.67–7.84) | 1.80 (0.20–2.38) |
+| ETH | regimes | 1.45 (0.23–2.87) | 4.29 (2.87–8.88) | 7.95 (2.84–8.76) | 1.16 (0.26–2.90) |
+| SOL | one vol | **2.55** (0.17–2.50) | 4.93 (2.73–8.42) | 7.72 (2.67–7.84) | **3.02** (0.17–2.41) |
+| SOL | regimes | 1.51 (0.23–3.02) | 4.88 (2.90–9.41) | 8.13 (2.76–8.82) | 2.44 (0.23–2.93) |
+
+In per cent of about 1,720 days each; bold is outside the band. Over all five horizons and four percentiles (60
+cells): one vol is outside its band in 17, the regimes in 1 (BTC's 91-day move above the 95th percentile, 16.3 % of
+days against a band that ends at 16.2 %: a coin that rose, forecast with the martingale's drift). A 95 % band leaves
+about 3 of 60 outside when the model is true, and the cells are not independent.
+
+Out of sample: the regimes refitted on the first three years (to 10 November 2024) and tested on the two after, 60
+cells again: the regimes outside in none, and one vol outside in none either. Those two years were quieter, and 720
+days cannot tell the two models apart; what the out-of-sample run shows is that parameters fitted earlier did not
+fail later, not that they were needed.
+
+What this is not. (1) The vol the model is given is the realised vol of the 90 days before: the history of the
+implied vols a ticket carries is not held. (2) The up side is not as comfortable as the down side: BTC's 14-day
+move went above the 99th percentile on 2.96 % of days, at the very edge of the band, and SOL's on 2.44 %; the model is
+close to symmetric in logs and these coins' rallies were not. A margin called on a position that gains when the coin
+rises reads low by that much against this history. (3) The band is wide because five years are short: at the 1st and
+99th percentile it runs from about 0.2 to 3 %, so the test rejects a bad model, it does not certify a good one. (4)
+It tests the level, not a portfolio: an option's exposure also depends on the vol the paths carry, which is not
+backtested. (5) The engine's ten-business-day margin period is 10/250 of a year, 14.6 days on the regimes' 365-day
+clock; the test's 14 days is a little short of it. (6) The in-sample run uses regimes fitted to the same five years.
 
 ## 8c. Fees (0.25.0)
 
@@ -363,6 +419,7 @@ CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; f
 ## Limits, stated
 
 - One factor for rates (HW1F) and a flat vol for forwards: no smile in the exposure.
+- A digital asset's simulated level is backtested against five years of closes (§8e): the regimes are inside their bands, one vol is not; the vol in that test is realised, not the implied vol a ticket carries; the up side sits at the edge of its band on BTC and SOL; five years cannot certify a 1st percentile.
 - CVA and DVA use the credit triangle with a flat LGD; no recovery uncertainty, no correlation between credit and market beyond the WWR multiplier.
 - Initial margin is the desk's amount or the engine's estimate at current volatility (above); ISDA SIMM is licensed and is not implemented.
 - KVA's SA-CCR add-on is by asset class since 4 November 2026 (`pricing/sa_ccr.py`: rates, FX, the cryptoasset class, options at their supervisory delta); the CVA-capital leg and the collateral regimes are described in `docs/capital.md`.

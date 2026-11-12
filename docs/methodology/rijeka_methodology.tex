@@ -25,7 +25,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.19 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.20 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -45,7 +45,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.19 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.20 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -56,6 +56,7 @@
 \section*{Version history}
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
+\item \textbf{1.20 (12 November 2026).} A backtest of the level a digital asset's exposure paths simulate, against five years of public daily closes (\S\ref{sec:regimes}): the regimes sit inside the bands their own histories give, one volatility does not; and one MVA figure derived apart from the engine. No figure the engine computes changes.
 \item \textbf{1.19 (12 November 2026).} A barrier is watched between the exposure grid's dates as well as on them, by the Brownian bridge's crossing probability, and the desk's record that a barrier was touched is read by the settlement and the valuation (\S\ref{sec:fxo}).
 \item \textbf{1.18 (12 November 2026).} Currency and digital-asset tickets step weekly to a year, and CVA, DVA, FVA and FBA read the exposure averaged across each step (\S\ref{sec:xva}). On monthly steps with the exposure at each step's end, a one-month digital-asset forward's CVA read 31\% above daily steps; it is now within 4\%.
 \item \textbf{1.17 (12 November 2026).} KVA and MVA charge the whole life of a trade (\S\ref{sec:xva}): the remaining life is read at the middle of each grid step, not at its end. Short currency and digital-asset trades were undercharged (a one-month trade by half).
@@ -311,6 +312,25 @@ The bands are wide: five years hold about 180 ten-day periods that do not overla
 \textbf{What was tried and not kept}, on the same closes. Merton's jump-diffusion by maximum likelihood puts about 230 jumps a year on BTC, each of 3\%: the day-to-day clustering read as jumps. Being independent from day to day they average out, and the ten-day tail comes out within a point of a Gaussian's. The fast chain alone fits the days better than jumps do but its stress is over in two or three days, and its ten-day tail is still thin ($-21.3\%$ for BTC).
 
 \textbf{What it does to a ticket.} Measured on forwards of about one million of notional at 55, 70 and 95\% volatility, six months and two years, 40,000 paths, against the same run on one volatility: uncollateralised, CVA and FVA fall by up to 3\% on tickets of a year or less and the total moves by about 1\% or less; under a bilateral or an on-chain CSA the margin at the first date rises 7 to 13\% (what is called 9 to 13\%, what is posted 7 to 11\%), MVA with it by 2 to 10\% on BTC and ETH, the exposure left beyond the margin by more (CVA 15 to 45\% higher, on figures that are small), and KVA falls 4 to 13\% on BTC and ETH, where the larger margin lowers the SA-CCR multiplier; SOL's, a Group 2b asset with no multiplier, does not move. The total moves by 1.5 to 6\% on BTC and ETH and within about 1\% either way on SOL, whose capital charge dominates. The engine's margin estimate with the regimes on agrees to sampling, at every date, with a simulation written apart from it that redraws both chains and steps the level every day (\code{tests/test_vol_regimes.py}).
+
+\textbf{The backtest.} Does the simulated level cover what the level did? After the Basel Committee's sound practices for backtesting counterparty credit risk models (December 2010): on every day of the five years (the first 90 are warm-up) the model is given a volatility and asked for the 1st, 5th, 95th and 99th percentile of the log move over the next 5, 10, 14, 30 and 91 days, and the move that followed is counted as beyond each or not. The volatility given is the realised volatility of the 90 days before, since the history of the implied volatilities a ticket carries is not held; the drift is the martingale's. Days overlap and the volatility is itself an estimate, so a binomial band would be wrong: the same procedure is run on 500 histories simulated from the model itself, and the band is where 95\% of those counts fall. A forward's value is monotone in the level, so the level's percentile is the trade's: the 14-day rows test the initial margin (the 99th percentile over the margin period, each way).
+
+\begin{longtable}{l l r r r r}
+\toprule
+ & model & below 1\% & below 5\% & above 95\% & above 99\% \\
+\midrule
+BTC & one volatility & \textbf{2.55} (0.17--2.50) & 5.63 (2.73--8.36) & 6.62 (2.67--7.84) & \textbf{3.60} (0.20--2.38) \\
+BTC & regimes & 1.10 (0.17--3.02) & 5.63 (3.19--8.91) & 6.67 (2.96--9.00) & 2.96 (0.17--2.96) \\
+ETH & one volatility & 2.03 (0.17--2.47) & 4.64 (2.73--8.36) & \textbf{7.89} (2.67--7.84) & 1.80 (0.20--2.38) \\
+ETH & regimes & 1.45 (0.23--2.87) & 4.29 (2.87--8.88) & 7.95 (2.84--8.76) & 1.16 (0.26--2.90) \\
+SOL & one volatility & \textbf{2.55} (0.17--2.50) & 4.93 (2.73--8.42) & 7.72 (2.67--7.84) & \textbf{3.02} (0.17--2.41) \\
+SOL & regimes & 1.51 (0.23--3.02) & 4.88 (2.90--9.41) & 8.13 (2.76--8.82) & 2.44 (0.23--2.93) \\
+\bottomrule
+\end{longtable}
+
+The table is the share of days, in per cent of about 1,720, on which the 14-day move went beyond the model's percentile, with the model's own band in brackets; bold is outside the band. Over the five horizons and four percentiles (60 cells) one volatility is outside its band in 17 and the regimes in 1: BTC's 91-day move above the 95th percentile, 16.3\% of days against a band that ends at 16.2\%, a coin that rose forecast with the martingale's drift. A 95\% band leaves about 3 of 60 outside when the model is true, and the cells are not independent. With the regimes refitted on the first three years and tested on the two after, they are outside in none of the 60; nor is one volatility, for those two years were quieter and 720 days cannot tell the two apart. Run on histories of known law, the procedure puts a model given its own histories outside the band in 4 to 6\% of cells, and catches one volatility in a tail, on five-year histories the regimes made, in about six histories of ten.
+
+What the backtest is not. The volatility in it is realised, not the implied volatility of a ticket. The up side is less comfortable than the down side: BTC's 14-day move went above the 99th percentile on 2.96\% of days, at the very edge of the band, and SOL's on 2.44\%; the model is close to symmetric in logs and these coins' rallies were not, so a margin called on a position that gains when the coin rises reads low by that much against this history. The bands are wide, from about 0.2 to 3\% at the 1st percentile: the test rejects a bad model and does not certify a good one. It tests the level and not a portfolio: an option's exposure also depends on the volatility the paths carry, which is not backtested. The margin period of ten business days is $10/250$ of a year, 14.6 days on the regimes' clock of 365; the test's 14 days are a little short of it.
 
 \textbf{Limits.} Two states a chain is a coarse picture of volatility; the stress the chains produce is milder than the worst the history has. The spells are of days and of months: nothing here makes the level of volatility itself uncertain over years, so the uncertainty in the variance to a date falls with the tenor (its coefficient of variation is about a half at one month, a third at six months and a sixth at two years) and a ten-year ticket's tails are close to a lognormal's again: on long tickets the regimes understate. Default and the regimes are independent: a stressed state does not make default likelier, which understates wrong-way risk when stress and default come together. A barrier or a touch is watched on the grid dates of the regime paths and marked by a closed form that watches continuously at the surface's volatility; the difference that was there before is carried over and has not been measured again on these paths. The closes the fit read are fetched, not kept in the repository: the table is reproduced by running the script, on whatever the source then returns. The parameters are fitted to spot returns and held fixed over the life of the trade, to ten years on the longest tickets. Today's state is not inferred, though the last weeks' returns say something about it: a ticket priced in a stressed month and one priced in a calm month start from the same mix. The volatility on the ticket is read as the average over the trade's life. The regimes drive the level of a ticket's XVA only: the counterparty-credit simulation of \S\ref{sec:ccr} and the market-risk history of \S\ref{sec:mr} are unchanged, the first on one volatility per factor and the second on the history itself. A currency pair keeps one volatility.
 

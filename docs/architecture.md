@@ -77,7 +77,8 @@ summaries and spots every 30 minutes; demo market data, end-of-day P&L, market r
 credit every 2 hours) and moves the `release` branch after a deploy.
 The vol regimes' parameters (six per asset) are dated constants in `pricing/vol_regimes.py`, fitted by
 `backend/scripts/calibrate_vol_regimes.py` to public daily closes (Coinbase's public candles, the source
-`risk/history.py` reads). The script is run by hand, never by the app, and reads nothing but those prices; a refit
+`risk/history.py` reads). `backend/scripts/backtest_exposure.py` reads the same closes and prints the backtest of
+the simulated level (`docs/xva.md` §8e). Both scripts are run by hand, never by the app, and read nothing but those prices; a refit
 is a change to the constants, reviewed like any other (`docs/model_inventory.md`). The owner refits: once a year, and
 sooner when a run's own line (`params.vol_regimes.as_of`, shown on the XVA tab) is more than a year old or the market
 has plainly changed character; nothing in the app checks the date. When the source is silent the script stops with
@@ -171,7 +172,7 @@ The table describes the template account, the one the feeds write to.
 | G10 FX vols | `{PAIR}_VOL` for six pairs | parametric, level scaled by realised vol | rebuilt every 2 hours, one row a day | n/a: built, and labelled synthetic |
 
 Coinbase is read two ways: spot, in the table above, and daily closes (its public candles), by `risk/history.py` for the
-market-risk history and by `backend/scripts/calibrate_vol_regimes.py` when the owner refits the vol regimes.
+market-risk history and by `backend/scripts/calibrate_vol_regimes.py` and `backend/scripts/backtest_exposure.py` when the owner refits the vol regimes or reruns their backtest.
 
 A run of the marks makes three requests to the venue and three for the spot. Every writer and what it may replace:
 
