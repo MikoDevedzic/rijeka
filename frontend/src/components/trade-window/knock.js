@@ -19,22 +19,28 @@ export const knockExpiry = (trade) => (isDate(trade?.terms?.expiration_date) ? t
 export const knockLastDay = (trade, today) => { const e = knockExpiry(trade); return e && e < today ? e : today }
 export const hasExpired = (trade, today) => { const e = knockExpiry(trade); return !!e && today >= e }
 
-// What the trade's record says, in words.
-export function knockLine(terms) {
+// What the trade's record says, as parts: [text, isFigure]. A figure is set in the mono face, the words around it in
+// the interface's (docs/design.md, a figure in a sentence).
+export function knockParts(terms) {
   const t = terms || {}
-  if (t.knocked === true) return `Touched on ${t.knock_date || 'a date not recorded'}` + (t.knock_level != null ? ` at ${Number(t.knock_level).toLocaleString('en-US', { maximumFractionDigits: 6 })}` : '')
-  if (t.knocked === false) return 'Never touched: said at expiry'
-  return 'Nothing recorded: at expiry the amount is provisional until the desk says whether the level traded'
+  if (t.knocked === true) {
+    const parts = [['Touched on ', false], [t.knock_date || 'a date not recorded', !!t.knock_date]]
+    if (t.knock_level != null) parts.push([' at ', false], [Number(t.knock_level).toLocaleString('en-US', { maximumFractionDigits: 6 }), true])
+    return parts
+  }
+  if (t.knocked === false) return [['Never touched, as the desk said at expiry', false]]
+  return [['Nothing recorded: at expiry the amount is provisional until the desk says whether the level traded', false]]
 }
+export const knockLine = (terms) => knockParts(terms).map(([s]) => s).join('')
 
 export function knockProblem({ on, level, trade, today }) {
-  if (!isDate(on)) return 'the date the level traded'
+  if (!isDate(on)) return 'Enter the date the level traded'
   const first = isDate(trade?.trade_date) ? trade.trade_date : null
-  if (first && on < first) return `not before the trade date (${first})`
+  if (first && on < first) return `The level cannot have traded before the trade date (${first})`
   const last = knockLastDay(trade, today)
-  if (on > last) return `not after ${last}, the earlier of today and the expiry`
+  if (on > last) return `The date cannot be after ${last}, the earlier of today and the expiry`
   const x = num(level)
-  if (x !== null && !(x > 0)) return 'the level is a price'
+  if (x !== null && !(x > 0)) return 'The level must be a positive price'
   return null
 }
 

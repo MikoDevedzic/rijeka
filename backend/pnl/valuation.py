@@ -352,7 +352,7 @@ def _value_fx_option(t: dict, pair: str, base: str, quote: str, S: float, fwd, v
         from settlement import rule as _rule
         amount = float(touched[1])
         figures = (_rule.fixed_cash(amount, val_date, settle, q_curve.df) if q_curve is not None
-                   else {"npv": amount * float(fwd.df_quote) + 0.0, "ir01": 0.0, "ir01_disc": 0.0, "spot01": 0.0, "theta": 0.0})
+                   else {"npv": amount * float(fwd.df_quote) + 0.0, "ir01": 0.0, "ir01_disc": 0.0, "ir01_base": 0.0, "spot01": 0.0, "theta": 0.0})
         return {**figures, "ccy": quote, "vega": 0.0, "asof": asof, "fallback": fallback, "settled": False, "model": touched[2],
                 "knock": "recorded", "settlement_amount": amount, "provisional": False}
     if expiry <= val_date:

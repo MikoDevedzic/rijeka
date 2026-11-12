@@ -1135,15 +1135,21 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
                 if became and became[0] == "fixed" and states:
                     from pnl.market import Market
                     when = date.fromisoformat(str(t.get("knock_date"))) if t.get("knock_date") else val_date
-                    return _booked_fixed(trade, db, user, val_date, Market(db, user["sub"], val_date),
-                                         {"fixing_date": when, "source": "the desk's record of the barrier"})
+                    fixed = _booked_fixed(trade, db, user, val_date, Market(db, user["sub"], val_date),
+                                          {"fixing_date": when, "source": "the desk's record of the barrier"})
+                    fixed["knock"] = {"knocked": True, "date": t.get("knock_date"), "level": t.get("knock_level"), "outstanding": became[1]}
+                    return fixed
                 if became and became[0] == "vanilla":
                     fields = {**t, "style": "EUROPEAN"}
             out = _price_option(db, user["sub"], a.pop("pair"), direction=str(t.get("direction") or "BUY"), val_date=val_date, vol_pct=None,
                                 spot_override=None, style_fields=fields, **a)
-            if became and became[0] == "vanilla":
-                out["model"] = f"{became[2]}; {out.get('model') or ''}".rstrip("; ")
-                out["knock"] = {"knocked": True, "date": t.get("knock_date"), "level": t.get("knock_level")}
+            if became:
+                # knocked in: the plain option, and the answer says so. An option that is over, asked for by a client
+                # that does not read states (the web app before 0.14.0), is still answered as a quote of the option as
+                # it was booked: the answer says that too, since the mark is not the trade's
+                words = became[2] if became[0] == "vanilla" else f"{became[2]} (this answer is the option as booked, for a client that does not read trade states)"
+                out["model"] = f"{words}; {out.get('model') or ''}".rstrip("; ")
+                out["knock"] = {"knocked": True, "date": t.get("knock_date"), "level": t.get("knock_level"), "outstanding": None if became[0] == "vanilla" else became[1]}
         except (KeyError, TypeError, ValueError) as e:
             raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
         out.update(trade_id=str(trade.id), trade_ref=trade.trade_ref, instrument_type=itype, npv_ccy=out["quote_currency"], legs=[], shape="OPTION")

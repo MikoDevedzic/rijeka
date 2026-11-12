@@ -52,6 +52,16 @@ test('a booked knock-out: the touch is recorded with its date, the trade is over
   await expect(win, 'one ticket, not two').toHaveCount(1)
   await expect(win.getByTestId('knock-line')).toHaveText(`Touched on ${today} at 151,200.5`)
   await app.screenshot({ path: 'e2e/.out/shots/knock-record-done.png' })
+  // the other tabs of a trade that is over: the scenario has no forward to shock and says why
+  await win.getByRole('button', { name: 'CURVE SCENARIO' }).click()
+  const fixedView = win.getByTestId('fx-settled-view')
+  await expect(fixedView).toBeVisible()
+  await expect(fixedView).toHaveAttribute('data-state', 'FIXED')
+  await expect(win.getByTestId('fx-settled-knock')).toContainText(`knocked out on ${today}`)
+  await expect(win.getByTestId('fx-scenario-forward')).toHaveCount(0)
+  expect(await fixedView.innerText()).not.toMatch(/NaN|undefined|Infinity/)
+  await app.screenshot({ path: 'e2e/.out/shots/knock-record-scenario.png' })
+  await win.getByRole('button', { name: '◆ CONFIRM' }).click()
 
   // taken off again: the option is live once more
   const live = app.waitForResponse(async r => r.url() === `${API}/price` && r.request().method() === 'POST' && (await r.json().catch(() => null))?.state === 'LIVE')

@@ -184,7 +184,9 @@ function SettledView({ quote, terms, crypto, rows, sources, ready }) {
   return (
     <div className="tbw-no-drag" style={wrap} data-testid="fx-settled-view" data-state={f.state}>
       <div style={{ padding: '8px 0 0', fontSize: '0.8125rem', color: 'var(--text-dim)', lineHeight: 1.5 }}>
-        {f.state === 'SETTLED' ? 'This trade has settled' : 'This trade has fixed and is not yet settled'}: there is no forward left to shock.
+        {quote.knock?.knocked && f.state === 'FIXED' && f.model
+          ? <span data-testid="fx-settled-knock">The desk recorded this option's barrier as touched ({f.model}). There is no forward left to shock.</span>
+          : <>{f.state === 'SETTLED' ? 'This trade has settled' : 'This trade has fixed and is not yet settled'}: there is no forward left to shock.</>}
       </div>
       <div style={secHdr}>FIXINGS · {quote.pair}</div>
       <FxScenarioChart today={quote.valuation_date} curve={null} fixings={fixingSeries(rows, f.source)} tradeSource={f.source} strike={strikeAsBooked(quote, terms, rateDp(quote))} levels={chartLevels(quote)}

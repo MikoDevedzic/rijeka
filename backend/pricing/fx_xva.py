@@ -458,8 +458,9 @@ def knocked_by(spec, spot0: float, s_t: np.ndarray, var, i_exp: int, seed: int, 
     The pricer watches a barrier continuously; a grid watches it on its dates. Between two dates on which the level
     stood inside, it may have gone out and come back: given both ends a and b and the variance v the step
     accumulated, a lognormal level crossed B with probability exp(−2 ln(a/B) ln(b/B) / v) (the Brownian bridge's
-    crossing probability; with vol regimes v is the step's own on each path, and the probability depends on the
-    step's variance alone). One uniform per path and step, from a generator of its own, decides it. A corridor adds
+    crossing probability, which no constant drift inside the step changes; with vol regimes v is the step's own on
+    each path, and the probability depends on the step's variance alone because the regimes' clock is drawn
+    independently of the level: it would not if the vol moved with the level). One uniform per path and step, from a generator of its own, decides it. A corridor adds
     the two sides' probabilities, capped at one: the chance of touching both inside one step is left out. Watching
     stops at the expiry's grid date. `between` False is the grid alone, as it was until 0.30.0."""
     n, steps = s_t.shape

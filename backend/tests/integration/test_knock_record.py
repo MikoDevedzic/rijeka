@@ -49,6 +49,10 @@ def test_a_knock_out_recorded_as_touched_is_over_and_the_record_can_be_taken_off
     after = _price(client, auth_a, tid)
     assert after["state"] == "FIXED" and after["npv"] == 0 and after["spot01"] is None and after["vega"] is None
     assert "knocked out" in after["model"] and "rebate was paid at the hit" in after["model"] and after["fixing_date"] == today.isoformat()
+    assert after["knock"] == {"knocked": True, "date": today.isoformat(), "level": 151_200.5, "outstanding": 0.0} and after["settlement_amount"] == 0
+    # a client that does not read states is answered the option as booked, and told the trade is over
+    old = client.post("/price", json={"trade_id": tid, "valuation_date": today.isoformat(), "curves": [{"curve_id": "USD_SOFR"}]}, headers=auth_a).json()
+    assert old.get("state") != "FIXED" and old["npv"] > 0 and "knocked out" in old["model"] and "option as booked" in old["model"] and old["knock"] == {"knocked": True, "date": today.isoformat(), "level": 151_200.5, "outstanding": 0.0}
     # the signed record of the confirmation does not cover the knock state: it still verifies
     v = client.post(f"/api/chain/verify/{tid}", headers=auth_a).json()
     assert v["hash_matches"] is True

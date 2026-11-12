@@ -16,7 +16,11 @@ exit list, on the owner's word ("do them all in order and deploy").
   exp(−2 ln(a/B) ln(b/B) / v), v the variance that step accumulated on that path (`pricing/fx_xva.knocked_by`).
   The share of paths that touch is within 0.2 % of the closed form on weekly and on monthly steps, and the
   knock-out's payoff within about 1 % of its price. XVA of barrier and touch options moves: a six-month knock-out
-  call's CVA falls about 10 %. Plain options, forwards and swaps do not move.
+  call's CVA falls about 10 % (−38.6 to −34.5 at 20,000 paths; held in a test between 6 and 15 %). The tests hold
+  the touches to 2 % and the payoff to 4 %, which is what one seed's sampling error allows. Emmy's own simulation on
+  a fine grid (twenty steps a day) agrees: 0.4112 against the engine's 0.4191 and the closed form's 0.4197 for the
+  level above, and for a corridor 0.9463 against 0.9493, so the capped sum of its two sides is not measurably off.
+  Plain options, forwards and swaps do not move.
 - **A touch recorded.** A booked digital-asset barrier or touch option's CONFIRM tab has BARRIER: the day the
   level traded and, if kept, the level seen; once the option has expired, NEVER TOUCHED; and the record can be
   taken off (`POST /api/currency/knock/{id}`, `settlement/knock.py`). The settlement rule always read
@@ -28,7 +32,12 @@ exit list, on the owner's word ("do them all in order and deploy").
 - **Not done.** The record is on the trade's terms with who and when, not an event (the events table's allowed
   types would need a migration); a rebate or payout paid at the hit is not booked as cash; currency-pair options
   take no record; a corridor's chance of touching both sides inside one step is left out; the credit page's engine
-  still watches on its dates alone; a recorded touch is not checked against any price history.
+  still watches on its dates alone; a recorded touch is not checked against any price history; "today" is the UTC
+  day, in the browser and on the server; a package with a leg recorded as over is refused by the XVA run as a whole
+  (take the leg out); a client that does not read trade states is answered the option as booked, with a sentence
+  saying the trade is over. Two older inconsistencies on the paths, found by Emmy and not changed here: a
+  knock-out's rebate is paid at the hit by the pricer and at expiry by the paths' payoff, and a double one-touch
+  paid at the hit is priced by the closed form and zeroed on the paths (backlog 133).
 
 ## 0.29.0 · 12 November 2026
 

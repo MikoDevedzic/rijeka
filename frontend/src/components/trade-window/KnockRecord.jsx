@@ -4,7 +4,7 @@
 // it traded, or, once the option has expired, that it never did. The settlement and the valuation read it. The
 // helpers are in knock.js; the rule is the API's.
 import { useState } from 'react'
-import { canRecordKnock, knockLine, knockProblem, knockBody, knockLastDay, hasExpired } from './knock'
+import { canRecordKnock, knockParts, knockProblem, knockBody, knockLastDay, hasExpired } from './knock'
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
@@ -19,7 +19,9 @@ export default function KnockRecord({ trade, busy = false, error = '', onSubmit 
   return (
     <div data-testid="knock-record" style={{ marginTop: 12, maxWidth: 520 }}>
       <div className="tbw-lbl">BARRIER</div>
-      <div className={`tbw-mut${trade.terms?.knocked === true ? ' tbw-mono' : ''}`} data-testid="knock-line" style={{ color: recorded ? 'var(--text)' : undefined, marginBottom: 8 }}>{knockLine(trade.terms)}</div>
+      <div className="tbw-mut" data-testid="knock-line" style={{ color: recorded ? 'var(--text)' : undefined, marginBottom: 10 }}>
+        {knockParts(trade.terms).map(([s, figure], i) => figure ? <span key={i} className="tbw-mono">{s}</span> : s)}
+      </div>
       {!open ? (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="tbw-btn" data-testid="knock-open" onClick={() => setOpen(true)} disabled={busy}>◆ RECORD A TOUCH</button>
