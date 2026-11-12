@@ -5,6 +5,11 @@ methodology document carries its own version (v1.15). Commits on `main` are the 
 
 ## 0.24.0 · 12 November 2026
 
+Released together with 0.23.1 and 0.23.2 below, which were built and reviewed on 11 November and reached production
+with this version, not before; and with two changes that carry no version of their own: a browser journey that
+confirms a trade on a local test chain and reads the transaction back from the node (`npm run e2e:chain`), and a
+watch on production from the outside (`.github/scripts/watch.py`, `docs/ops/monitoring.md`).
+
 **A digital asset's vol is not one level.** Second step of finishing the XVA on digital assets ("has to be full
 XVA"). It was planned as jumps; fitted to the data, jumps were the wrong model, and this is what the data support.
 
