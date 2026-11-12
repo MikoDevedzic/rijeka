@@ -116,6 +116,7 @@ function DeskHome({ demo, navigate }) {
   const modules = useModulesStore(s => s.modules)          // the P&L tile follows the firm's switches
   const launch  = useModulesStore(s => s.launch)           // a launch workspace gets the next-step home, whatever its preset is called now
   const canEdit = useModulesStore(s => s.canEdit)
+  const onRequest = useModulesStore(s => s.onRequest)       // what this instance holds back from this user: the home does not promise a switch for it
   const firmKnown = useModulesStore(s => !!s.catalogue?.firm_id)
   const loadModules = useModulesStore(s => s.load)
   const provisioned = demo != null                         // POST /api/demo/provision has answered (also when provisioning is off)
@@ -199,9 +200,11 @@ function DeskHome({ demo, navigate }) {
             <Kpi label="CONFIRMED" value={confirmed} tone={confirmed ? 'accent' : ''} />
           </div>
         )}
-        {canEdit
-          ? <Link className="lh-more" data-testid="launch-more" to="/configurations/modules">{'Switch on P&L, risk and more'}</Link>
-          : <span className="lh-more" data-testid="launch-more">{"More modules can be switched on by your firm's admin"}</span>}
+        {onRequest.includes('PNL') || onRequest.includes('MARKET_RISK')
+          ? <Link className="lh-more" data-testid="launch-more" to="/configurations/modules">{'P&L, risk and more are on request'}</Link>
+          : canEdit
+            ? <Link className="lh-more" data-testid="launch-more" to="/configurations/modules">{'Switch on P&L, risk and more'}</Link>
+            : <span className="lh-more" data-testid="launch-more">{"More modules can be switched on by your firm's admin"}</span>}
       </div>
       {footer}
     </div>

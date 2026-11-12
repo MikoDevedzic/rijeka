@@ -297,9 +297,9 @@ means every module on in the firm's row, which is what a firm that has never cho
 9 November 2026 started that way); what a user
 is answered is that, less what a demo holds for the admin role (next paragraph).
 
-**Held for the admin role on a demo.** Capital is not part of the hosted demo. `modules.held()` names the modules
-an instance keeps for the admin role: `RIJEKA_HELD_MODULES`, or `modules.ON_REQUEST` (capital) when it is unset; a
-name in it that is not a module key holds the default as well, so a mistake never releases capital.
+**Held for the admin role on a demo.** The hosted demo is the launch set (book, value, the XVA charge, confirm, the messenger): P&L, market risk, counterparty credit, capital, collateral, the XVA reserves and IPV are not part of it. `modules.held()` names the modules
+an instance keeps for the admin role: `RIJEKA_HELD_MODULES`, or `modules.ON_REQUEST` (those seven; capital alone until 0.23.2) when it is unset; a
+name in it that is not a module key holds the default as well, so a mistake never releases a held module.
 Where `RIJEKA_DEMO_PROVISION` is on (the default when the variable is unset), `modules.locked` answers those
 modules for every user without the admin role (`profiles.role`, read on the request; when that read fails, the role
 `verify_token` read up to 30 seconds earlier, else `viewer`; `is_on` has only the user id, so when that read fails
@@ -315,10 +315,11 @@ the account counts as a `viewer`). One list and one function decide, and this fo
   when the firm's row cannot be read, a save by someone a module is held from answers 503 and writes nothing,
   because a failed read would otherwise pass for on. A save whose write fails also answers 503 and writes nothing,
   for any caller.
-- `modules.is_on(uid, key)` is false for a held module unless the account has the admin role (`profiles.role`,
-  read by the user id). No batch asks about capital today; were P&L, market risk or counterparty credit held, their
-  nightly ticks would skip every account without the admin role. The role is read only for a held module, so the
-  nightly ticks cost what they did.
+- A nightly batch follows the firm's own switch and nothing else: `modules.runs_batch(uid, key)` is the row's value
+  and reads no role. Holding a module hides its pages and tabs and does not stop its batch. Since 0.23.2 P&L, market
+  risk and counterparty credit are held on a demo by default; the health page's checks for the three read the latest
+  stored day across every account, so skipping everyone but an administrator would have turned them red. A launch
+  workspace has them off in its row, and its batches do not run.
 - Provisioning writes a new firm's row as the signup preset has it (there is nothing before it to keep).
 
 The frontend has no rule of its own: the tab, the Risk section and the route follow the answer as for any switch,

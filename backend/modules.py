@@ -6,7 +6,7 @@ firm (or the column missing: a deploy ahead of docs/migrations/2026-11-04_firm_m
 on in the firm's row. Every change is a module_events row with who, when, before and after.
 
 What a user is answered is the firm's row less what the instance holds for the admin role (`held()`:
-RIJEKA_HELD_MODULES, capital by default; `locked`): that is decided here and nowhere else."""
+RIJEKA_HELD_MODULES, by default everything outside the launch set; `locked`): that is decided here and nowhere else."""
 from __future__ import annotations
 
 import json
@@ -42,7 +42,10 @@ PRESETS: dict[str, dict[str, Any]] = {
     "CLASSROOM": {"label": "Classroom", "desc": "everything on; the chain stays on the test network (a deployment setting)", "off": ()},
 }
 
-# Modules a demo keeps for the admin role (9 November 2026: capital is out of the Phase 1 demo). Where every
+# Modules a demo keeps for the admin role. 9 November 2026: capital is out of the Phase 1 demo. 11 November 2026, the
+# owner on the Phase 1 exit list ("we're only going live with XVA... we're not gonig to publish capital or margin or
+# pnl or risk", then "as recommended"): P&L, market risk, counterparty credit, collateral, the XVA reserves and IPV
+# are held as capital is, so a demo is the launch set: book, value, the XVA charge, confirm, the messenger. Where every
 # sign-in gets its own sandbox workspace (RIJEKA_DEMO_PROVISION on, which is also what an unset variable means),
 # nobody but a profile admin is answered these as on, whatever the firm's row says, and nobody else can switch
 # them on (set_for_firm; a save that cannot read the row is turned away rather than trusted); the MODULES page shows them as available on request, with CONTACT. An instance with
@@ -52,7 +55,7 @@ PRESETS: dict[str, dict[str, Any]] = {
 # met by handing out the admin role: that role also opens the Users page, platform usage and the ops detail.
 # RIJEKA_HELD_MODULES names them for an instance that keeps sandboxes and wants something else (held()): unset is
 # ON_REQUEST, NONE (or empty) holds nothing back, a list of module keys holds those.
-ON_REQUEST: tuple[str, ...] = ("CAPITAL",)
+ON_REQUEST: tuple[str, ...] = ("PNL", "MARKET_RISK", "COUNTERPARTY_CREDIT", "CAPITAL", "COLLATERAL", "XVA_RESERVES", "IPV")      # in the order of MODULES, as held() answers
 CONTACT = "miko@rijeka.app"
 
 
@@ -186,17 +189,18 @@ def firm_of_user(db, uid: str):
 
 
 def for_user(db, uid: str) -> dict[str, Any]:
-    """The switches of the user's firm, as the row has them (what the user is answered: is_on, or the route's view)."""
+    """The switches of the user's firm, as the row has them (what the user is answered is the route's view, routes/modules._view)."""
     return for_firm(db, firm_of_user(db, uid))
 
 
-def is_on(db, uid: str, key: str) -> bool:
-    """Whether this user has the module: on in the firm's row and, for a module the instance holds for the admin
-    role, not held from this user. The role is read only for those modules, so the nightly ticks (which ask about
-    P&L, market risk and counterparty credit) cost what they did."""
-    if not for_user(db, uid)["modules"].get(key, True):
-        return False
-    return key not in held() or key not in locked(db, {"sub": str(uid)})
+def runs_batch(db, uid: str, key: str) -> bool:
+    """Whether the nightly batch of this module runs for this user's book: on in the firm's row, and nothing
+    else. What an instance holds for the admin role (held()) hides pages and tabs; it does not stop a batch. Since
+    0.23.2 a demo holds P&L, market risk and counterparty credit by default, and the health page's checks for the
+    three read the latest stored day across every account: skipping everyone but an administrator would have turned
+    them red on the first night no administrator's book ran. A launch workspace has them off in its row, so its
+    batches do not run, as before. No role is read."""
+    return bool(for_user(db, uid)["modules"].get(key, True))
 
 
 def set_for_firm(db, firm_id, uid: str, modules: Optional[dict] = None, preset: Optional[str] = None, note: Optional[str] = None,

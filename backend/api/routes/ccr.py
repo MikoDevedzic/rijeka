@@ -143,7 +143,7 @@ def daily_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Hea
     import modules as M
     for uid in users:
         try:
-            if not M.is_on(db, uid, "COUNTERPARTY_CREDIT"):
+            if not M.runs_batch(db, uid, "COUNTERPARTY_CREDIT"):
                 skipped.append(uid[:8] + " (module off)"); continue
             md = _market_date(db, uid)
             latest = R.latest_stored(db, uid)

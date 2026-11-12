@@ -6,7 +6,7 @@ PUT /api/modules       {preset} or {modules: {key: bool}}, optional note (the ad
                        503 when the write failed, or the firm's row could not be read and a module is held from the caller
 
 Where sign-ins get a sandbox (RIJEKA_DEMO_PROVISION on) a module held for the admin role (modules.held():
-RIJEKA_HELD_MODULES, capital by default) is off for everyone else in the answer and in the presets offered, and listed under `on_request` with
+RIJEKA_HELD_MODULES, by default everything outside the launch set) is off for everyone else in the answer and in the presets offered, and listed under `on_request` with
 `contact`; the changes listed leave it out (the audit rows themselves are whole). Someone it is held from can
 never switch it on: a map keeps what the row says about it, a preset can only switch it off (modules.set_for_firm).
 The answer for a user is composed here, in `_view`, and only here.

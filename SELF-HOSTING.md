@@ -115,8 +115,10 @@ What is not in the compose file:
    rows of the day for the curves they build.
    With provisioning on (which is also what leaving the variable unset means), a new workspace starts on
    the launch set of modules (`RIJEKA_SIGNUP_PRESET`; `NONE` for everything the instance offers) and its
-   owner switches the rest on under Configurations → Modules, except capital, which an instance with
-   provisioning on keeps for the admin role unless `RIJEKA_HELD_MODULES=NONE` is set (held, the page
+   owner switches modules under Configurations → Modules, except the ones an instance with provisioning
+   on keeps for the admin role: by default everything outside the launch set (P&L, market risk,
+   counterparty credit, capital, collateral, XVA reserves, IPV; capital alone until 0.23.2). Set
+   `RIJEKA_HELD_MODULES=NONE` to hold nothing, or a list of module keys to hold those (held, the page
    names the project's address as the one to write to; it is a constant in `backend/modules.py`); with
    provisioning off, only the admin role switches modules
    and nothing is held back.

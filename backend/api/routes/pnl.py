@@ -227,7 +227,7 @@ def eod_tick(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Heade
     import modules as M
     for uid in users:
         try:
-            if not M.is_on(db, uid, "PNL"):
+            if not M.runs_batch(db, uid, "PNL"):
                 skipped.append(uid[:8] + " (module off)"); continue
             md = _market_date(db, uid)
             if md is not None and R.stored_rows(db, uid, md)[0]:

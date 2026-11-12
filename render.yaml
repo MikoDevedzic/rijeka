@@ -34,7 +34,9 @@ services:
         value: 3.11.11
       # ── hosted demo ───────────────────────────────────────────────────
       - key: RIJEKA_DEMO_PROVISION
-        value: "1"           # every sign-in gets a sandbox workspace (api/routes/demo.py); capital is kept for the admin role (modules.py)
+        value: "1"           # every sign-in gets a sandbox workspace (api/routes/demo.py); everything outside the
+                             # launch set is kept for the admin role (modules.py ON_REQUEST, the default of
+                             # RIJEKA_HELD_MODULES: P&L, risk, credit, capital, collateral, XVA reserves, IPV)
       - key: RIJEKA_DEMO_TEMPLATE_EMAIL
         sync: false          # whose market data new visitors get a copy of
       - key: RIJEKA_CHAIN_DEV_SEED
