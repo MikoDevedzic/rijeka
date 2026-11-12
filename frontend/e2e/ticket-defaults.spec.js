@@ -8,6 +8,8 @@ import { test, expect, expectClean, expectFullyInView, expectNoHorizontalOverflo
 
 const DAY = 86400000
 const iso = (d) => new Date(d).toISOString().slice(0, 10)
+// the first weekday at or after a time (UTC): a date a journey types and expects back must be one the ticket keeps
+const weekday = (ms) => { const d = new Date(ms); while ([0, 6].includes(d.getUTCDay())) d.setUTCDate(d.getUTCDate() + 1); return d.getTime() }
 const num = async (loc, attr = 'data-value') => Number(await loc.getAttribute(attr))
 const plain = (s) => Number(String(s).replace(/,/g, ''))
 
@@ -86,7 +88,9 @@ test('crypto forward: the tenor follows the date, and a digital asset\'s forward
   const threeMonths = await mat.inputValue()
 
   // a typed date that is no standard tenor: the select says so, with its length
-  const odd = iso(Date.now() + 100 * DAY)
+  // (a weekday: typed on a Saturday or a Sunday the ticket settles the Monday after, as it should, and for two days
+  // in seven this step read the wrong date)
+  const odd = iso(weekday(Date.now() + 100 * DAY))
   await mat.fill(odd)
   await mat.blur()
   await expect(tenor).toHaveValue('CUSTOM')
