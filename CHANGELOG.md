@@ -3,6 +3,48 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.30.3 · 12 November 2026
+
+**The closing pass before the announcement.** Item 12 of the Phase 1 exit list, with items 10 and 3, on the owner's
+word ("do them all in order and deploy"). Every screen a new user meets was pictured on the local stack and read
+(89 pictures); what was found is fixed here or listed below.
+
+- **A strip's legs were all struck at the first leg's forward.** Since 0.26.0 a forward is priced to its fixing date;
+  a further leg of a package was priced to the TICKET's fixing date, not its own. A three-month strip therefore put
+  one strike on every leg, called each worth nothing, and booked legs that were worth something (about 5 and 10 bp
+  of notional on the second and third). Each leg is now priced to the fixing date it is booked with, and the
+  package's XVA run starts from the same value (it carried the legs to their settlement dates and showed +1,648
+  beside a footer of 0). Journeys and an integration test hold both.
+- **No screen names ISDA SIMM as the margin's basis.** The counterparty record's old default read "SIMM" in the table
+  and the form; it is now MODEL (the engine's estimate or the desk's amount), records made before read the same
+  way, and the legal entity's SIMM VERSION field and column are off the screen. The database's own column defaults
+  are unchanged (a migration, on the owner's word).
+- **The home page's policy path fits its box.** The drawing was 150px tall in a box of 126: its dates sat on the
+  caption below, the rate labels were cut by 2px at the left, and the Fed's dots, the path's first figure and the
+  longer-run label ran into each other. Each label now has its own place and a journey measures it.
+- Smaller: the period schedule on a swap's DETAILS writes 10,000,000 and 3.480003 where it wrote 10000000 and
+  3.48000300 (the plain number while typing); a coin's option delta reads 5.55 BTC, not 6; the forward-curve chart
+  groups thousands; a roadmap badge in the Configurations rail no longer touches its label; the strip chart's first
+  strike label clears the axis.
+- **Safari: the logo was never drawn, and two switches had no box.** Item 10: the journeys now run on Firefox and on
+  WebKit, Safari's engine (`npm run e2e:engines`, `frontend/playwright.engines.config.js`; the required check stays
+  on Chromium). WebKit failed all hundred at first, on two defects of the app. (1) The logo read its colours from
+  the page's tokens before Safari had applied the stylesheet, a gradient refused the empty colour, and the
+  exception stopped the drawing loop at its first frame: no logo in the top bar, and an error in the console on
+  every page. The mark now falls back to the theme's own colours and its loop survives a frame that throws. (2) The
+  two switches put on one row in 0.30.1 (initial margin, compare on-chain) showed their labels and no checkbox:
+  Safari shrinks a checkbox with no width of its own to nothing in a flex row. They have a size now, and a journey
+  measures it. Firefox failed ten journeys, none on a defect of the app: the journeys knew a cancelled request and a
+  clipboard permission only as Chromium words them, and a rate label on the home chart was a pixel wider. All
+  hundred pass on each engine. Not tried: real Safari or Firefox on a person's machine, Windows, Linux, a phone.
+- **Smoothness, measured again** (`e2e/perf`, local): every screen holds 60 frames a second at normal speed and at a
+  quarter of it, no frame over 34 ms (three between 20 and 34: two on a wheel over the blotter, one on the home at
+  quarter speed), nothing rewritten under a moving pointer on the blotter or the ticket, a drag writes only the
+  window's own position.
+- Left, recorded in the backlog: P&L and Risk pages (a wrapped counterparty name, FUND01 where CRYBASIS01 is meant, a
+  minus zero), the blotter's STRUCTURE column truncating long styles, the ticker cut at the right edge when the
+  market data is stale.
+
 ## 0.30.2 · 12 November 2026
 
 **The evidence behind the XVA on digital assets.** Item 11(e) of the Phase 1 exit list, on the owner's word ("do

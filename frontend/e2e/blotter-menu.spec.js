@@ -4,8 +4,10 @@ import { test, expect, expectClean } from './fixtures.js'
 
 const selectDemoBank = (app, win) => win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
 
-test('right-click a trade: open it, copy its reference, show only trades like it; ALL shows every trade again', async ({ app, problems }) => {
-  await app.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+test('right-click a trade: open it, copy its reference, show only trades like it; ALL shows every trade again', async ({ app, problems, browserName }) => {
+  // reading the clipboard back is a permission only Chromium grants a test; on Firefox and WebKit the journey reads
+  // what the page handed to the clipboard instead (below)
+  if (browserName === 'chromium') await app.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await app.goto('/blotter')
   // a trade of our own to work on
   await app.getByText('+ NEW TRADE').first().click()
@@ -39,10 +41,15 @@ test('right-click a trade: open it, copy its reference, show only trades like it
   await expect(app.locator('.tbw-window'), 'Escape opened nothing').toHaveCount(0)
 
   // copy the reference
+  await app.evaluate(() => {
+    const write = navigator.clipboard.writeText.bind(navigator.clipboard)
+    navigator.clipboard.writeText = text => { window.__copied = text; return write(text).catch(() => {}) }
+  })
   await row.click({ button: 'right' })
   await menu.getByRole('menuitem', { name: /^Copy reference/ }).click()
   await expect(menu).toHaveCount(0)
-  expect(await app.evaluate(() => navigator.clipboard.readText())).toBe(ref)
+  expect(await app.evaluate(() => window.__copied), 'what the page handed to the clipboard').toBe(ref)
+  if (browserName === 'chromium') expect(await app.evaluate(() => navigator.clipboard.readText())).toBe(ref)
 
   // show only this status, then the rail's ALL shows every trade again (it used to hide them all)
   const status = (await row.locator('.bl-status-txt').innerText()).trim()

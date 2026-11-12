@@ -26,7 +26,13 @@ export function sessions() {
 }
 
 // "Failed to load resource" is the browser's echo of a response; the response handler below judges those by status.
-const NOT_THE_APPS = [/stack\.local/, /ERR_NAME_NOT_RESOLVED/, /WebSocket connection/, /realtime/i, /Download the React DevTools/, /Failed to load resource/]
+// the last one is Firefox's: a web font still downloading when the page navigates away is reported as a failed
+// download with the status of a cancelled load (2152398850, NS_BINDING_ABORTED)
+const NOT_THE_APPS = [/stack\.local/, /ERR_NAME_NOT_RESOLVED/, /WebSocket connection/, /realtime/i, /Download the React DevTools/, /Failed to load resource/,
+  /downloadable font: download failed.*status=2152398850/]
+// a request the page itself cancelled (a newer one replaced it, or the page navigated), as each engine words it:
+// Chromium, Firefox, WebKit
+const CANCELLED = /ERR_ABORTED|NS_BINDING_ABORTED|cancelled|Load request cancelled/i
 
 export const test = base.extend({
   // who is signed in: 'USER.A' (firm ADMIN, the template account with market data) unless a journey says otherwise
@@ -53,7 +59,7 @@ export const test = base.extend({
     // cancels an in-flight request is not that
     page.on('requestfailed', r => {
       const why = r.failure()?.errorText || ''
-      if (r.url().startsWith(API) && !/ERR_ABORTED/.test(why)) problems.push(`no answer: ${r.method()} ${r.url()} (${why})`)
+      if (r.url().startsWith(API) && !CANCELLED.test(why)) problems.push(`no answer: ${r.method()} ${r.url()} (${why})`)
     })
     // an API path sent to the page's own host: the relative-path mistake, which the static host answers with HTML
     page.on('request', r => {
@@ -145,7 +151,9 @@ export const ink = (canvas) => canvas.evaluate(cv => {
   const { width: w, height: h } = cv, d = cv.getContext('2d').getImageData(0, 0, w, h).data
   let river = 0, letter = 0, shape = 0
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (d[(y * w + x) * 4 + 3] > 150) { if (x < w * 0.62) river++; else letter++; shape = (shape * 31 + y * w + x) % 2147483647 }
-  return { river, letter, shape }
+  // counted in the page's own pixels: a canvas on a screen of twice the density (the Safari profile) holds four times as many
+  const k = (window.devicePixelRatio || 1) ** 2
+  return { river: Math.round(river / k), letter: Math.round(letter / k), shape }
 })
 
 // a swap against the demo bank, priced and booked, with its CONFIRM tab open

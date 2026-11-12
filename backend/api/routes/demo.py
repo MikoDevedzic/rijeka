@@ -211,7 +211,7 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
     if cp is None:
         cp = Counterparty(id=uuid.uuid4(), legal_entity_id=bank.id, name=DEMO_BANK_NAME, isda_agreement="ISDA 2002 (demo)",
                           csa_type="VM_IM", csa_currency="USD", csa_threshold_m=0, csa_mta_k=500,
-                          discount_curve_id="USD_SOFR", im_model="SIMM", is_active=True, created_by=uid, user_id=uid)
+                          discount_curve_id="USD_SOFR", im_model="MODEL", is_active=True, created_by=uid, user_id=uid)
         db.add(cp); created["demo_bank_counterparty"] = True
 
     # 3. A firm of one, claiming the demo LEI, so rooms and trade cards work

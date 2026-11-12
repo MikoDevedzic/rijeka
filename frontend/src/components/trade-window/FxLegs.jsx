@@ -145,7 +145,10 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
               <rect x={X(p.t) - 9} y={H - 22 - h} width="18" height={h} rx="2" fill="var(--border-hi)" />
               <text x={X(p.t)} y={H - 26 - h} textAnchor="middle" fontFamily="var(--mono)" fontSize="11" fill={sell ? 'var(--down)' : 'var(--up)'}>{sell ? '−' : '+'}{fmt(p.notional, p.notional % 1 ? 2 : 0)}</text>
               <circle cx={X(p.t)} cy={Y(p.k)} r="5.5" fill="var(--bg)" stroke="var(--accent)" strokeWidth="2" />
-              <text x={X(p.t)} y={Y(p.k) - 10} textAnchor="middle" fontFamily="var(--mono)" fontSize="11" fill="var(--accent-hi)">{isOption(p) ? `${p.kind[0]} ` : ''}{fmt(p.k, dp)}</text>
+              {(() => {      // a strike's figure over its mark; at the plot's left edge it starts at the mark, clear of the axis's own figures
+                const text = `${isOption(p) ? `${p.kind[0]} ` : ''}${fmt(p.k, dp)}`, edge = X(p.t) - text.length * 3.4 < L + 6
+                return <text x={edge ? X(p.t) - 4 : X(p.t)} y={Y(p.k) - 10} textAnchor={edge ? 'start' : 'middle'} fontFamily="var(--mono)" fontSize="11" fill="var(--accent-hi)">{text}</text>
+              })()}
               <text x={X(p.t)} y={H - 6} textAnchor="middle" fontFamily="var(--mono)" fontSize="11" fill="var(--text-mute)">{p.date.slice(2, 7)}</text>
             </g>) })}
         </svg>

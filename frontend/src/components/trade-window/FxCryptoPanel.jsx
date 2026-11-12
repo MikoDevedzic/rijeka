@@ -375,7 +375,12 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       rebate: text(leg.rebate), touchType: leg.touchType || 'ONE_TOUCH', payAtHit: !!leg.payAtHit,
       // the surface's vol for the leg's own date and strike: a vol typed on the ticket is the ticket's
       // an option leg settles as the ticket's product does: in cash on a digital asset and on an NDF, else as the ticket's own option would
-      volOv: '', cashSettled: crypto || shape === 'NDF' ? true : !!cashSettled, defaultK: null }
+      volOv: '', cashSettled: crypto || shape === 'NDF' ? true : !!cashSettled, defaultK: null,
+      // a leg is priced to the fixing date it is booked with: the source's default for the leg's OWN settlement date
+      // (build, below), never the ticket's. Until 0.30.3 every leg of a strip was priced to the ticket's fixing date,
+      // so each was struck at the first leg's forward, called worth nothing, and booked worth something
+      fixingDate: (crypto && !opt && settlementOptions(cur).length > 0)
+        ? (defaultFixingDate({ settlementDate: leg.date, source: settlementTerms(cur, settleSrc, 'FORWARD'), today: todayIso }) || null) : null }
   }
   // The trade POST body minus what the window owns (parties, dates, desk, book).
   // Never from the quote of other terms. Called bare it is the quote of the terms on screen; BOOK hands back the
@@ -451,7 +456,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const optionDescriptor = { analytics: {
     metrics: (r) => { const m = mathOf(r); return [
       { label: 'OPTION NPV', value: money(r.npv), colorBy: sgn(r.npv), math: m.npv },
-      { label: 'DELTA', value: `${fmt(r.delta_base_units, 0)} ${r.base_currency}`, colorBy: sgn(r.delta_base_units), math: m.delta },
+      { label: 'DELTA', value: `${fmt(r.delta_base_units, Math.abs(r.delta_base_units) < 100 ? 2 : 0)} ${r.base_currency}`, colorBy: sgn(r.delta_base_units), math: m.delta },
       { label: sensLabel(DELTA_LABEL(crypto)), value: money(r.spot01), colorBy: sgn(r.spot01), math: m.spot01 },
       { label: sensLabel('VEGA'), value: money(r.vega), colorBy: sgn(r.vega), math: m.vega },
       ...(crypto

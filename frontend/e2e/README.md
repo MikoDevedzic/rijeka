@@ -9,6 +9,7 @@ cd frontend
 npm run e2e                 # starts the stack, builds the app against it, runs every journey
 npm run e2e -- pages        # one file
 npm run e2e:chain           # the journeys that need a chain: the same stack with a local test chain beside it (below)
+npm run e2e:engines         # every journey again on Firefox and on WebKit, Safari's engine (below); -- --project=webkit for one
 npm run e2e:serve           # the stack alone, to click through by hand at http://127.0.0.1:4174 (signed out: see below)
 npx playwright test -c playwright.perf.config.js   # the smoothness profile (e2e/perf): a measurement, local only (docs/design.md)
 ```
@@ -24,6 +25,13 @@ Nothing here touches production. `serve.sh` refuses a hosted database.
 | API | `127.0.0.1:8010` | `uvicorn main:app` with the stack's environment; rate limits off (`RIJEKA_RATE_LIMITS=0`, honoured only on the stack) |
 | Web | `127.0.0.1:4174` | `vite build` against the two above, served by `vite preview` |
 | Chain | `127.0.0.1:8546`, only under `npm run e2e:chain` | Foundry's `anvil` with the committed registry deployed to it (`backend/stack/chain.py`), and the API told where it is. Without it the stack has no chain, as a self-hosted instance may not: a record is signed and not anchored |
+
+Engines: the everyday run and CI's required check are on Chromium. `npm run e2e:engines` runs the same journeys on
+Firefox and WebKit (`playwright.engines.config.js`; install them once with `npx playwright install firefox webkit`).
+Run it before an announcement and after a change to layout, a canvas, the keyboard or the clipboard. The first run
+(12 November 2026) found two defects only Safari had: a logo that was never drawn, and two checkboxes with no box. A
+journey written for it must not assume Chromium: a cancelled request has another name on each engine (`CANCELLED` in
+`fixtures.js`), only Chromium grants a test the clipboard, and the Safari profile has twice the pixel density.
 
 Sign-in: there is no hosted auth server. `serve.sh` mints a four-hour token per seed user with the stack's key
 (`backend/stack/token.py`); `fixtures.js` places it where supabase-js keeps its session, so the app starts signed in.

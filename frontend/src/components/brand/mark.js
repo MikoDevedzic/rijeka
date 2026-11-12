@@ -11,6 +11,7 @@
 //
 // Geometry is in the mark's own units: paths run from x0 to the meeting point at x = 112 on the line y = 70, the
 // single line runs on to the R's stem at x = 160, the ring is centred at (167, 70) with radius 27.
+import { T } from '../../theme'
 
 export const MODES = 14
 const MEET = 112, STEM = 160, RING_X = 167, RING_R = 27, GAP = 0.44
@@ -55,10 +56,14 @@ export function phases(ms) {
   return { progress: ease(t / 2.2), trunk: ease((t - 2.1) / 0.5), letter: clamp((t - 2.6) / 1.1), done: t > 3.8 }
 }
 
-/** The colours of the mark from the page's own tokens (index.css), so it follows the theme and holds no literals. */
+/** The colours of the mark from the page's own tokens (index.css), so it follows the theme. Where a token is not
+ * there yet the theme's own copy stands in (theme.js): Safari runs the app's script before the stylesheet has
+ * applied, the tokens read as empty, and a gradient refuses an empty colour with an exception. Until 0.30.3 that
+ * exception stopped the logo's loop at its first frame and the top bar had no logo in Safari. */
 export function palette(el) {
-  const cs = getComputedStyle(el || document.documentElement), v = (n) => cs.getPropertyValue(n).trim()
-  return { line: v('--accent'), letter: v('--accent-hi'), pale: v('--text'), blue: v('--blue'), sans: v('--sans') }
+  const cs = getComputedStyle(el || document.documentElement), v = (n, or) => cs.getPropertyValue(n).trim() || or
+  return { line: v('--accent', T.accent), letter: v('--accent-hi', T.accentHi), pale: v('--text', T.text), blue: v('--blue', T.blue),
+           sans: v('--sans', 'system-ui, sans-serif'), fromPage: !!cs.getPropertyValue('--accent').trim() }
 }
 
 const cubic = (a, b, d, e, n = 20) => {

@@ -51,7 +51,7 @@ export default function Lifecycle({ demo, empty, reducedMotion }) {
     <section className="dh-card dh-life">
       <header>
         <span>LIFECYCLE <em className="dh-h-sub">your trades, from booking to the chain</em></span>
-        <span className="dh-sub">
+        <span className="dh-sub" style={{ whiteSpace: 'nowrap' }}>
           {chain?.anchored ? <><i className={`lf-beat${chain.reachable === false ? ' bad' : ''}`} />{chain.network}</> : d ? 'OFF-CHAIN' : ''}
           <a className="dh-link" href="https://rijeka.app/verify" target="_blank" rel="noopener noreferrer">VERIFIER ↗</a>
         </span>

@@ -221,7 +221,7 @@ A forward's fixing date is a field on the ticket (the record's `valuation_date`)
 venue's morning price, one day earlier for a benchmark, editable from tomorrow to the settlement date. A forward that fixes before it settles is priced to its fixing date:
 the forward is read there and the amount is discounted from the settlement date (`payment_date` in
 `pricing/currency_forward.py`; the ticket, a booked trade's price, the P&L valuation and what reads it (risk, IPV)
-share it, and an XVA run starts from it; `ccr/valuation.py` and a package's forward leg do not yet). An option fixes at its expiry. Booking checks the pairing
+share it, an XVA run starts from it, and since 0.30.3 so do a package's forward legs, each at its own fixing date; `ccr/valuation.py` does not yet). An option fixes at its expiry. Booking checks the pairing
 (`settlement/sources.check_booked`, called by both booking routes and when a trade's terms are edited): trade
 date < fixing date ≤ settlement date; a source the pair lists is booked with that
 source's time; a name that reads like the venue's is refused for a desk's own source.

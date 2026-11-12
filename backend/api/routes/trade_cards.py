@@ -547,7 +547,7 @@ def _counterparty(db: Session, user_id, le: LegalEntity, template: Counterparty)
                           isda_agreement=template.isda_agreement, csa_type=template.csa_type,
                           csa_currency=template.csa_currency, csa_threshold_m=template.csa_threshold_m,
                           csa_mta_k=template.csa_mta_k, discount_curve_id=template.discount_curve_id,
-                          im_model=template.im_model or "SIMM", user_id=user_id, created_by=user_id)
+                          im_model="MODEL" if (template.im_model or "SIMM") == "SIMM" else template.im_model, user_id=user_id, created_by=user_id)
         db.add(cp); db.flush()
     return cp
 

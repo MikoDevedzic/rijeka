@@ -42,7 +42,7 @@ class CounterpartyCreate(CapitalAttributes):
     csa_threshold_m: Optional[float] = None
     csa_mta_k: Optional[float] = None
     discount_curve_id: Optional[str] = None
-    im_model: Optional[str] = "SIMM"
+    im_model: Optional[str] = "MODEL"      # the desk's amount or the engine's estimate; ISDA SIMM is licensed and not computed (the column's own default is still the old word)
 
 
 class CounterpartyUpdate(CapitalAttributes):

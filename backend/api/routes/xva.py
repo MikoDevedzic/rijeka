@@ -1124,8 +1124,12 @@ def package_inputs(db, uid: str, trades: list[dict], *, val_date: date, vol_pct:
             if itype in PACKAGE_OPTIONS:
                 inp, q = option_xva_input(db, uid, pair, terms, val_date=val_date, vol_pct=vol_pct, vol_mode=vol_mode)
             else:
+                # a leg that fixes before it settles is priced to its fixing date, as the ticket prices it and as
+                # POST /currency does: until 0.30.3 a package's legs were carried to their settlement dates, and a
+                # strip dealt at fair forwards showed a value on its XVA tab that its own footer did not
                 inp, q = forward_xva_input(db, uid, pair, base_notional=float(terms["notional"]), settlement=terms["settle"], forward_rate=terms["K"],
-                                           direction=terms["direction"], val_date=val_date, vol_pct=vol_pct, vol_mode=vol_mode)
+                                           direction=terms["direction"], val_date=val_date, vol_pct=vol_pct, vol_mode=vol_mode,
+                                           fixing_date=terms.get("fixing_date"))
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=f"leg {n}: {e.detail}")
         inputs.append(inp)

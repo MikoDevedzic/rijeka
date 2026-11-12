@@ -186,6 +186,10 @@ export function SpreadCurvesGrid({ spreads, onChange, tip = noop, untip = noop }
 // (`fields`, the rates tab's threshold / MTA / MPoR / IM yield; none on FX) and the
 // "Initial margin exchanged" and "Compare on-chain" toggles. Picking a preset sets IM exchanged
 // on for the collateralised ones, as the rates tab always has.
+// A switch's box beside its label in a flex row: its own size, and never shrunk. Safari shrinks a checkbox with no
+// width of its own to nothing there (0.30.1 put the two switches on one row, and Safari showed two labels and no box).
+const SWITCH_BOX = { accentColor:'var(--accent)', width:'13px', height:'13px', flexShrink:0, margin:0 }
+
 export function SettlementBlock({ settlement, setSettlement, imExchanged, setImExchanged, compareOnChain, setCompareOnChain,
                                   fields = [], tip = noop, untip = noop, collateral = null, setCollateral = null, instruments = [], scheduleCollateral = null }) {
   return (
@@ -217,12 +221,12 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
       {/* the two switches share one row: a row each made a swap under a CSA taller than a laptop's window */}
       <div data-testid="xva-switches" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:'10px',marginTop:'6px'}}>
         <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer'}}>
-          <input type='checkbox' aria-label='Initial margin exchanged' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
+          <input type='checkbox' aria-label='Initial margin exchanged' checked={imExchanged} onChange={e=>setImExchanged(e.target.checked)} style={SWITCH_BOX}/>
           <span style={{...LBL,marginBottom:0,borderBottom:'none',whiteSpace:'nowrap',cursor:'pointer'}} title='Initial margin is exchanged, each way'>Initial margin</span>
         </label>
         {settlement!=='ON_CHAIN' && (
           <label style={{display:'flex',alignItems:'center',gap:'6px',cursor:'pointer'}}>
-            <input type='checkbox' aria-label='Compare on-chain' checked={compareOnChain} onChange={e=>setCompareOnChain(e.target.checked)} style={{accentColor:'var(--accent)'}}/>
+            <input type='checkbox' aria-label='Compare on-chain' checked={compareOnChain} onChange={e=>setCompareOnChain(e.target.checked)} style={SWITCH_BOX}/>
             <TipLabel tipKey='compare' tip={tip} untip={untip} style={{ marginBottom:0, whiteSpace:'nowrap' }}>Compare on-chain</TipLabel>
           </label>
         )}

@@ -64,3 +64,40 @@ def test_an_xva_run_on_such_a_forward_starts_from_the_tickets_value_and_runs_to_
     assert abs(plain["xva"]["npv"] - ticket["npv"]) > 1.0                             # which a run without the fixing date does not
     assert early["steps"] == plain["steps"] and len(early["ee"]) == len(plain["ee"])  # exposed until it is paid: the same dates
     assert early["xva"]["cva"] == pytest.approx(plain["xva"]["cva"], rel=0.05)        # and nearly the same charge: the carry over thirty days
+
+
+def test_a_package_prices_each_forward_leg_to_its_fixing_date_as_the_ticket_does(client, auth_a, ids, pairs):
+    """A strip dealt at the fair forward of each leg's fixing date is worth nothing on the ticket, and nothing at the
+    start of its XVA run. Until 0.30.3 the package's run carried each leg to its settlement date and reported a
+    value (about 5 bp of notional over two days of carry) that the ticket's own footer did not."""
+    from tests.integration import bodies as B
+    btc = pairs["BTCUSD"]
+    legs, fair = [], []
+    for n, days in enumerate((92, 122, 153), start=1):
+        settle = ASOF + timedelta(days=days)
+        fix = settle - timedelta(days=2)
+        q = _price(client, auth_a, settlement_date=settle.isoformat(), fixing_date=fix.isoformat(), forward_rate=None)
+        assert q.status_code == 200, q.text[:300]
+        q = q.json()
+        assert q["npv"] == pytest.approx(0.0, abs=1e-6)
+        body = B.crypto_forward(ids["a"], f"PKG-FIX-{n}", btc, q)
+        body["terms"]["valuation_date"] = fix.isoformat()                 # the record's Valuation Date is the fixing date
+        legs.append(body)
+        fair.append(q)
+    r = client.post("/api/xva/currency-package", json={"trades": legs, "paths": 300}, headers=auth_a)
+    assert r.status_code == 200, r.text[:500]
+    j = r.json()
+    assert [x["npv"] for x in j["legs"]] == pytest.approx([0.0, 0.0, 0.0], abs=0.02)
+    assert j["xva"]["npv"] == pytest.approx(0.0, abs=0.05)
+    # and carried to the settlement dates the same legs are not worth nothing: the difference this test is about
+    for body, q in zip(legs, fair):
+        body["terms"]["valuation_date"] = q["settlement_date"]
+    late = client.post("/api/xva/currency-package", json={"trades": legs, "paths": 300}, headers=auth_a).json()
+    assert abs(late["xva"]["npv"]) > 50.0
+    # one leg of a package is the ticket's own run with that fixing date
+    legs[0]["terms"]["valuation_date"] = (ASOF + timedelta(days=90)).isoformat()
+    one = client.post("/api/xva/currency", json={"pair": "BTCUSD", "base_notional": 10, "settlement_date": fair[0]["settlement_date"], "forward_rate": fair[0]["forward"],
+                                                  "direction": "BUY", "paths": 300, "fixing_date": (ASOF + timedelta(days=90)).isoformat()}, headers=auth_a)
+    pkg = client.post("/api/xva/currency-package", json={"trades": legs[:1], "paths": 300}, headers=auth_a)
+    assert one.status_code == 200 and pkg.status_code == 200, (one.text[:300], pkg.text[:300])
+    assert pkg.json()["xva"] == one.json()["xva"]

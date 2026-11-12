@@ -49,6 +49,24 @@ for (const [url, expected, where] of PAGES) {
     const text = await app.locator('body').innerText()
     expect(text, `${url} shows an error boundary`).not.toMatch(BOUNDARY)
     expect(app.url(), `${url} redirected away (signed out or a missing route)`).toContain(url)
+    // ISDA SIMM is licensed and not computed here: a record's page does not name it as the margin's basis (the
+    // local stack's counterparty carries the old default on purpose, and is read as MODEL)
+    if (/counterparties|legal-entities/.test(url)) expect(text, `${url} names SIMM`).not.toMatch(/\bSIMM\b/)
     expectClean(problems)
   })
 }
+
+test('the home page\'s policy path is drawn inside its own box, with its labels inside the plot', async ({ app, problems }) => {
+  await app.goto('/command-center')
+  const plot = app.locator('.dh-plot').first()
+  await expect(plot.locator('svg')).toBeVisible({ timeout: 30_000 })
+  const fit = await plot.evaluate(el => {
+    const box = el.getBoundingClientRect(), svg = el.querySelector('svg').getBoundingClientRect()
+    const labels = [...el.querySelectorAll('svg text')].map(t => t.getBoundingClientRect())
+    return { over: Math.round(svg.bottom - box.bottom), left: Math.round(Math.min(...labels.map(r => r.left)) - svg.left), right: Math.round(svg.right - Math.max(...labels.map(r => r.right))) }
+  })
+  expect(fit.over, 'the drawing ends where its box ends (it ran 24px into the decisions under it until 0.30.3)').toBeLessThanOrEqual(1)
+  expect(fit.left, 'no label is cut at the left').toBeGreaterThanOrEqual(0)
+  expect(fit.right, 'no label is cut at the right').toBeGreaterThanOrEqual(0)
+  expectClean(problems)
+})

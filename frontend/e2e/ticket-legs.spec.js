@@ -36,6 +36,17 @@ test('a strip of forwards: built on DETAILS, each leg priced, a strike and a sid
   expect(new Date(dates[1]) > new Date(dates[0]), 'a month apart, in order').toBe(true)
   // at its fair forward a leg is worth nothing, to the rounding of its strike
   for (const i of [0, 1]) expect(Math.abs(Number(await npv(i)))).toBeLessThan(100)
+  // each leg at its OWN fair forward: priced to a fixing date just before its own settlement date, so the two further
+  // legs are struck at two different forwards (every leg was priced to the ticket's fixing date until 0.30.3, and a
+  // strip had one strike on all its legs)
+  const further = dates.map(d => pricedLegs.filter(q => q.settlement_date === d).at(-1))
+  for (const q of further) {
+    expect(q, 'the leg was priced for its own settlement date').toBeTruthy()
+    const gap = (new Date(q.settlement_date) - new Date(q.fixing_date)) / 86_400_000
+    expect(gap, `a leg settling ${q.settlement_date} fixes just before it, not on ${q.fixing_date}`).toBeGreaterThan(0)
+    expect(gap).toBeLessThanOrEqual(5)
+  }
+  expect(further[0].forward, 'two dates, two fair forwards').not.toBeCloseTo(further[1].forward, 1)
   await expect(win.getByRole('button', { name: /BOOK 3 LEGS/ })).toBeVisible()
   await expect(win.getByTestId('fx-legs-chart')).toBeVisible()
 
@@ -309,6 +320,9 @@ test('XVA of a package: a strip on a digital asset runs as one netting set, and 
   expect(sent.trades.every(t => t.instrument_type === 'CRYPTO_FORWARD')).toBe(true)
   expect(got.package).toBe(true)
   expect(got.legs).toHaveLength(3)
+  // a strip dealt at each leg's fair forward is worth nothing on the ticket, and the run starts from that value:
+  // each leg is priced to its fixing date, as the ticket prices it (the run said +1,648 beside a footer of 0 until 0.30.3)
+  expect(Math.abs(got.xva.npv), 'the run starts at the ticket\'s value').toBeLessThan(1)
   // the legs settle a month apart: the grid runs to the last of them
   expect(got.legs[2].settles).toBeGreaterThan(got.legs[0].settles)
   await expect(win.getByTestId('va-strip')).toBeVisible()

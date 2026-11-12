@@ -424,7 +424,7 @@ const S = {
     padding:'0.3rem 1rem 0.2rem 1.5rem',
   },
   navLink: (isActive, live) => ({
-    display:'flex', alignItems:'center', justifyContent:'space-between',
+    display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px',
     padding:'0.3rem 0.75rem 0.3rem 2rem',
     fontFamily: 'var(--mono)',
     fontSize:'0.875rem', letterSpacing:'0.05em',
@@ -437,6 +437,7 @@ const S = {
     transition:'all 0.12s',
   }),
   sprintBadge: {
+    flexShrink:0,
     fontSize:'0.76rem', letterSpacing:'0.06em',
     color:'var(--border)', fontWeight:600,
   },

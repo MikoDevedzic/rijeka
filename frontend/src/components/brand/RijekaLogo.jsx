@@ -24,10 +24,12 @@ export default function RijekaLogo({ height = 28, paths = 5, className = '', onC
       setWidth(Math.ceil((u.right - (SHAPE.x0 - 4)) * height / SHAPE.box))
     }
     const frame = (now) => {
+      raf = 0                                      // first: a frame that throws must not leave the loop looking busy for ever
       const ms = now - start, p = still ? { progress: 1, trunk: 1, letter: 1, done: true } : phases(ms)
+      if (!pal.fromPage) measure()                 // the page's tokens were not there when the mark was first read (Safari): read again
       const g = fit(cv)
       if (g.w && g.h) drawLockup(g.c, g.w, g.h, { ...SHAPE, f, pal, t: still ? 0 : Math.min(ms, 3800) / 1000, progress: p.progress, trunk: p.trunk, letter: p.letter })
-      raf = p.done ? 0 : requestAnimationFrame(frame)
+      if (!p.done || (!pal.fromPage && ms < 5000)) raf = requestAnimationFrame(frame)      // done, and drawn in the page's own colours
     }
     const wake = () => { if (!raf && !gone) raf = requestAnimationFrame(frame) }                 // draws the state it is in: mid-run, or complete
     const run = () => { start = performance.now(); wake() }

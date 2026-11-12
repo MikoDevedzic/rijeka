@@ -237,8 +237,8 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
             facts.append(Fact(f"K{len(seen_cp)}", "csa", f"CSA with {cp.name}", thr, "m threshold" if thr is not None else "",
                               f"{cp.name}: {cp.csa_type or 'no CSA'}"
                               + (f", threshold {thr:g}m {cp.csa_currency or ''}".rstrip() if thr is not None else "")
-                              + (f", IM {cp.im_model}" if cp.im_model else ""),
-                              {"csa_type": cp.csa_type, "im_model": cp.im_model}))
+                              + (f", IM {'MODEL' if cp.im_model == 'SIMM' else cp.im_model}" if cp.im_model else ""),
+                              {"csa_type": cp.csa_type, "im_model": "MODEL" if cp.im_model == "SIMM" else cp.im_model}))
 
     # news tagged to what the book holds, last 48 hours, summaries only
     classes = {CLASS_TAG.get(str(t.asset_class or "").upper()) for t in trades} - {None}

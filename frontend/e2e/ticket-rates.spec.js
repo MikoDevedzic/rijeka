@@ -39,6 +39,19 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   const footer = win.locator('text=NET NPV').last().locator('xpath=ancestor::div[2]')
   await expect(footer).toContainText(/IR01\s*[+−-]\$[1-9]/)
 
+  // DETAILS: the period schedule writes its figures as the ticket does (a notional grouped, a coupon without spare
+  // zeros), shows the plain number in the field being typed in, and a look changes nothing: no amber, the same price
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  const n1 = win.getByLabel('Fixed leg notional, period 1'), c1 = win.getByLabel('Coupon %, period 1')
+  await expect(n1).toHaveValue('10,000,000')
+  await expect(c1).toHaveValue(/^\d\.\d{1,6}$/)
+  await n1.focus()
+  await expect(n1, 'the field being typed in holds the plain number').toHaveValue('10000000')
+  await c1.focus()
+  await expect(n1).toHaveValue('10,000,000')
+  await expect(win.getByLabel('Float leg notional, period 1')).toHaveValue('10,000,000')
+  await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+
   // a field reached by keyboard shows where the focus is: the app's ring, which the ticket's own styles leave alone
   await win.locator('.tbw-sec input').first().focus()
   await app.keyboard.press('Tab')
@@ -84,6 +97,9 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   await expectFullyInView(win.getByTestId('xva-below').getByRole('button', { name: /CHARGE THIS TRADE/ }), 'the incremental charge, under BILATERAL')
   const sw = await win.getByTestId('xva-switches').locator('label').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().top)))
   expect(Math.max(...sw) - Math.min(...sw), 'the two switches share one row').toBeLessThanOrEqual(3)
+  // and each has its box: Safari shrinks a checkbox with no width of its own to nothing in a flex row
+  const boxes = await win.getByTestId('xva-switches').locator('input[type=checkbox]').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().width)))
+  expect(Math.min(...boxes), `a switch's box is drawn (${boxes})`).toBeGreaterThanOrEqual(10)
   await expectNoHorizontalOverflow(win.getByTestId('xva-left'), 'XVA left column')
 
   // collateral: the margin we post held in a stablecoin that pays its holder nothing → a carry cost in ColVA

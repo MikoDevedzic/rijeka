@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { atRest } from './schedule-format'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -53,9 +54,12 @@ const S = {
   dropZone:(active)=>({ border:'1px dashed '+(active?C.accent:'var(--text-mute)'), borderRadius:'3px', padding:'10px', textAlign:'center', fontSize:'12px', color:active?C.accent:C.dim, background:active?'rgba(217,178,92,0.04)':'transparent', transition:'all 0.15s', cursor:'pointer', letterSpacing:'0.05em' }),
 }
 
-function EditCell({ value, original, onChange, placeholder='' }) {
+function EditCell({ value, original, onChange, placeholder='', kind='rate', label }) {
+  const [typing, setTyping] = useState(false)
   const changed = original !== undefined && String(value) !== String(original)
-  return <input type='number' placeholder={placeholder} style={changed?S.cellAmber:S.cell} value={value} onChange={e=>onChange(e.target.value)} />
+  return <input type='text' inputMode='decimal' aria-label={label} placeholder={placeholder} style={changed?S.cellAmber:S.cell}
+    value={typing ? value : atRest(value, kind)} onFocus={()=>setTyping(true)} onBlur={()=>setTyping(false)}
+    onChange={e=>onChange(e.target.value.replace(/,/g,'').replace(/[^0-9.eE+-]/g,''))} />
 }
 
 function parsePaste(text, isFloat=false) {
@@ -381,8 +385,8 @@ export default function LegDetailsTab({
                           <td style={S.td}><div style={S.cellRo}>{row.period_start}</div></td>
                           <td style={S.td}><div style={S.cellRo}>{row.period_end}</div></td>
                           <td style={S.td}><div style={S.cellRo}>{row.payment_date}</div></td>
-                          <td style={S.td}><EditCell value={row.notional} original={row.orig_notional} placeholder='10000000' onChange={v=>updateFixed(i,'notional',v)}/></td>
-                          <td style={S.td}><EditCell value={row.rate} original={row.orig_rate} placeholder='3.500' onChange={v=>updateFixed(i,'rate',v)}/></td>
+                          <td style={S.td}><EditCell kind='amount' label={`Fixed leg notional, period ${i+1}`} value={row.notional} original={row.orig_notional} placeholder='10,000,000' onChange={v=>updateFixed(i,'notional',v)}/></td>
+                          <td style={S.td}><EditCell label={`Coupon %, period ${i+1}`} value={row.rate} original={row.orig_rate} placeholder='3.500' onChange={v=>updateFixed(i,'rate',v)}/></td>
                           <td style={{...S.td,textAlign:'center'}}><button style={S.del} onClick={()=>setFixedRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
                         </tr>
                       ))}
@@ -466,9 +470,9 @@ export default function LegDetailsTab({
                           <td style={S.td}><div style={S.cellRo}>{row.period_start}</div></td>
                           <td style={S.td}><div style={S.cellRo}>{row.period_end}</div></td>
                           <td style={S.td}><div style={S.cellRo}>{row.payment_date}</div></td>
-                          <td style={S.td}><EditCell value={row.notional} original={row.orig_notional} placeholder='10000000' onChange={v=>updateFloat(i,'notional',v)}/></td>
+                          <td style={S.td}><EditCell kind='amount' label={`Float leg notional, period ${i+1}`} value={row.notional} original={row.orig_notional} placeholder='10,000,000' onChange={v=>updateFloat(i,'notional',v)}/></td>
                           <td style={S.td}><div style={S.cellRo}>{index}</div></td>
-                          <td style={S.td}><EditCell value={row.spread_bps} original={row.orig_spread_bps} placeholder='0' onChange={v=>updateFloat(i,'spread_bps',v)}/></td>
+                          <td style={S.td}><EditCell label={`Spread bp, period ${i+1}`} value={row.spread_bps} original={row.orig_spread_bps} placeholder='0' onChange={v=>updateFloat(i,'spread_bps',v)}/></td>
                           {isEmbedded && (
                             <td style={S.td}>
                               <input

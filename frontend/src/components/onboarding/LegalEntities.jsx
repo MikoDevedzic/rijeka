@@ -15,6 +15,8 @@ const CURRENCIES = [
 
 const EMPTY = {
   lei:'', name:'', short_name:'', home_currency:'USD',
+  // simm_version: a column from before 10 November 2026, when Rijeka stopped naming ISDA SIMM (it is licensed and not
+  // computed). The column is NOT NULL, so the value still travels; no screen shows or asks for it.
   jurisdiction:'US', regulatory_regime:'', simm_version:'v2.6',
   im_threshold_m:'', ois_curve_id:'', is_own_entity:false
 }
@@ -72,7 +74,7 @@ function Cell({ children, dim }) {
   )
 }
 
-const COLS = '150px 1fr 90px 55px 64px 56px 56px 108px'
+const COLS = '150px 1fr 90px 55px 64px 56px 108px'
 
 export default function LegalEntities() {
   const [rows,         setRows]         = useState([])
@@ -254,11 +256,6 @@ export default function LegalEntities() {
             </div>
 
             <div>
-              <label style={L}>SIMM VERSION</label>
-              <input style={INP} value={form.simm_version}
-                onChange={function(e) { f({ simm_version: e.target.value }) }} />
-            </div>
-            <div>
               <label style={L}>IM THRESHOLD (M)</label>
               <input style={INP} type="number" step="0.01" value={form.im_threshold_m}
                 placeholder="50.00"
@@ -312,7 +309,7 @@ export default function LegalEntities() {
           <div style={{ display:'grid', gridTemplateColumns:COLS,
               padding:'8px 12px', gap:'8px', background:'var(--panel-2)',
               borderBottom:'1px solid var(--panel-3)' }}>
-            {['LEI','NAME','SHORT','CCY','JURIS','SIMM','TYPE','ACTIONS'].map(function(h) {
+            {['LEI','NAME','SHORT','CCY','JURIS','TYPE','ACTIONS'].map(function(h) {
               return (
                 <div key={h} style={{ fontSize:'12px', fontFamily: 'var(--mono)',
                     color:'var(--text-dim)', letterSpacing:'0.08em' }}>{h}</div>
@@ -361,7 +358,6 @@ export default function LegalEntities() {
                 <Cell dim>{e.short_name}</Cell>
                 <Cell>{e.home_currency}</Cell>
                 <Cell dim>{e.jurisdiction}</Cell>
-                <Cell dim>{e.simm_version}</Cell>
 
                 <div>
                   <Badge color={e.is_own_entity ? 'var(--accent)' : 'var(--blue)'}>

@@ -83,8 +83,14 @@ function Meetings({ d }) {
   )
 }
 
+// The plot's floor, in px: the same figure CommandCenter.css gives `.dh-curve .dh-plot` as its min-height. The drawing
+// was 150 tall in a box of 126 until 0.30.3, and its dates sat on the caption of the decisions under it.
+const PLOT_MIN = 132
+// A label's width in the plot's type (12px mono, 0.06em tracking): to keep it inside the plot's edges
+const labelW = s => s.length * 7.95
+
 function PathChart({ d, loading }) {
-  const ref = useRef(null); const { w: W, h } = useSize(ref); const H = Math.max(150, Math.floor(h) || 0)   // the plot yields height when the hero row is fixed; 150px keeps the labels legible
+  const ref = useRef(null); const { w: W, h } = useSize(ref); const H = Math.max(PLOT_MIN, Math.floor(h) || 0)   // the plot yields height when the hero row is fixed; never less than its box's own floor, or its dates run into the row below
   const [hov, setHov] = useState(null)
   const model = useMemo(() => {
     if (!d?.path?.length) return null
@@ -102,12 +108,13 @@ function PathChart({ d, loading }) {
   }, [d])
   if (!model) return <div ref={ref} className="dh-plot dh-plot-empty">{loading ? 'Loading path…' : d?.fixing != null ? `${d.fixing_name} ${Number(d.fixing).toFixed(3)}% · no term structure for ${d.ccy} yet` : 'No curve for this currency yet.'}</div>
   const { pts, dots, lr, maxM, lo, hi } = model
-  const padL = 46, padR = 20, padT = 20, padB = 28
+  const padL = 52, padR = 20, padT = 22, padB = 24      // 52: a rate label ("4.25%") is 40px wide in Chromium, 41 in Firefox, and sits 8px off the plot
   const X = m => padL + (m / maxM) * (W - padL - padR)
   const Y = r => padT + (hi - r) / (hi - lo) * (H - padT - padB)
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${X(p.m).toFixed(1)},${Y(p.r).toFixed(1)}`).join(' ')
   const area = `${path} L${X(pts[pts.length - 1].m).toFixed(1)},${H - padB} L${X(pts[0].m).toFixed(1)},${H - padB} Z`
-  const step = (hi - lo) > 2 ? 0.5 : 0.25
+  // rate ticks a line of type apart at least: quarter points where the plot is tall enough, halves where it is not
+  const step = (hi - lo) > 2 || (H - padT - padB) / ((hi - lo) / 0.25) < 15 ? 0.5 : 0.25
   const ticks = []; for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) ticks.push(+v.toFixed(2))
   const xt = []; for (let m = 0; m <= maxM; m += 6) xt.push(m)
   const onMove = e => {
@@ -123,17 +130,25 @@ function PathChart({ d, loading }) {
           </defs>
           {ticks.map(v => <g key={v}><line x1={padL} x2={W - padR} y1={Y(v)} y2={Y(v)} className="dh-grid-line" /><text x={padL - 8} y={Y(v) + 3} className="dh-ax" textAnchor="end">{v.toFixed(2)}%</text></g>)}
           {xt.map(m => { const dte = pts[0]?.date ? new Date(pts[0].date + 'T00:00:00') : new Date(); dte.setMonth(dte.getMonth() + m)
-            return <text key={m} x={X(m)} y={H - 10} className="dh-ax" textAnchor="middle">{m === 0 ? 'NOW' : fmtMon(dte.toISOString().slice(0, 10)).toUpperCase()}</text> })}
-          {lr && <g><line x1={padL} x2={W - padR} y1={Y(lr.rate)} y2={Y(lr.rate)} className="pp-lr" /><text x={W - padR} y={Y(lr.rate) - 5} className="dh-ax pp-lr-t" textAnchor="end">LONGER RUN {lr.rate.toFixed(2)}%</text></g>}
+            return <text key={m} x={X(m)} y={H - 7} className="dh-ax" textAnchor="middle">{m === 0 ? 'NOW' : fmtMon(dte.toISOString().slice(0, 10)).toUpperCase()}</text> })}
+          {lr && <g><line x1={padL} x2={W - padR} y1={Y(lr.rate)} y2={Y(lr.rate)} className="pp-lr" /><text x={padL + 4} y={Y(lr.rate) + 13} className="dh-ax pp-lr-t" textAnchor="start">LONGER RUN {lr.rate.toFixed(2)}%</text></g>}
           <path d={area} fill="url(#ppArea)" />
           <path d={path} className="dh-line" />
           {pts.filter((p, i) => p.fixing || i % 6 === 0 || i === pts.length - 1).map(p => (
-            <g key={p.date}><circle cx={X(p.m)} cy={Y(p.r)} r={3.5} className="dh-marker" /><text x={X(p.m)} y={Y(p.r) - 10} className="dh-val" textAnchor="middle">{p.r.toFixed(2)}</text></g>
+            <g key={p.date}><circle cx={X(p.m)} cy={Y(p.r)} r={3.5} className="dh-marker" />
+              {p.m === 0
+                ? <text x={X(p.m) + 5} y={Y(p.r) + 17} className="dh-val" textAnchor="start">{p.r.toFixed(2)}</text>
+                : <text x={X(p.m)} y={Y(p.r) - 10} className="dh-val" textAnchor="middle">{p.r.toFixed(2)}</text>}
+            </g>
           ))}
           {dots.map(x => (
             <g key={x.label}>
               <circle cx={X(x.m)} cy={Y(x.r)} r={5.5} className="pp-dot" />
-              <text x={X(x.m)} y={Y(x.r) + 17} className="dh-ax pp-dot-t" textAnchor="middle">FED {x.label} {x.r.toFixed(1)}</text>
+              {(() => {
+                const text = `FED ${x.label} ${x.r.toFixed(1)}`, half = labelW(text) / 2
+                if (X(x.m) - half < padL + 2) return <text x={X(x.m) + 10} y={Y(x.r) + 4} className="dh-ax pp-dot-t" textAnchor="start">{text}</text>
+                return <text x={Math.min(X(x.m), W - padR - half)} y={Y(x.r) - 10} className="dh-ax pp-dot-t" textAnchor="middle">{text}</text>
+              })()}
             </g>
           ))}
           {hov && <g><line x1={X(hov.m)} x2={X(hov.m)} y1={padT} y2={H - padB} className="dh-cross" /><circle cx={X(hov.m)} cy={Y(hov.r)} r={5} className="dh-marker" /></g>}

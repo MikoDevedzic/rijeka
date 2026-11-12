@@ -18,7 +18,13 @@ const CSA_DISCOUNT_MAP = {
 }
 const CSA_CURRENCIES = ['USD','EUR','GBP','JPY','CHF','AUD','CAD']
 const CSA_TYPES      = ['VM_ONLY','VM_IM','NO_CSA']
-const IM_MODELS      = ['SIMM','GRID','SCHEDULE']
+// What the CSA's initial margin rests on. MODEL is what Rijeka does: the desk's amount or the engine's own estimate
+// (docs/xva.md §7). ISDA SIMM is ISDA's licensed methodology and is not computed here, so it is not a choice; a
+// record made before 0.30.3 carries the old default 'SIMM' and is read as MODEL (the column's own default is the
+// database's, and changing it is a migration).
+const IM_MODELS      = ['MODEL','GRID','SCHEDULE']
+const IM_OPTION      = { MODEL: "MODEL · the engine's estimate or the desk's amount", GRID: 'GRID', SCHEDULE: 'SCHEDULE' }
+const imModel        = m => (!m || m === 'SIMM' ? 'MODEL' : m)
 // capital attributes (pricing/capital.py, pricing/collateral.py); blank = the engine's defaults
 const CP_TYPES       = ['', 'BANK','BROKER_DEALER','CORPORATE','FUND','SOVEREIGN','CRYPTO_NATIVE']
 const RATINGS        = ['', 'AAA_AA','A','BBB','BB_B','BELOW_B','UNRATED']
@@ -33,7 +39,7 @@ const CSA_COLOR = {
 const EMPTY = {
   legal_entity_id:'', name:'', isda_agreement:'',
   csa_type:'VM_ONLY', csa_currency:'USD', csa_threshold_m:'',
-  csa_mta_k:'', discount_curve_id:'USD_SOFR', im_model:'SIMM',
+  csa_mta_k:'', discount_curve_id:'USD_SOFR', im_model:'MODEL',
   counterparty_type:'', rating_bucket:'', cva_sector:'', umr_in_scope:false,
   netting_enforceable:true,
   margin_frequency_days:'', mpor_disputed:false
@@ -225,7 +231,7 @@ export default function Counterparties() {
       legal_entity_id: cp.legal_entity_id || '', name: cp.name || '', isda_agreement: cp.isda_agreement || '',
       csa_type: cp.csa_type || 'NO_CSA', csa_currency: cp.csa_currency || 'USD',
       csa_threshold_m: cp.csa_threshold_m != null ? String(cp.csa_threshold_m) : '', csa_mta_k: cp.csa_mta_k != null ? String(cp.csa_mta_k) : '',
-      discount_curve_id: cp.discount_curve_id || 'USD_SOFR', im_model: cp.im_model || 'SIMM',
+      discount_curve_id: cp.discount_curve_id || 'USD_SOFR', im_model: imModel(cp.im_model),
       counterparty_type: cp.counterparty_type || '', rating_bucket: cp.rating_bucket || '', cva_sector: cp.cva_sector || '',
       umr_in_scope: !!cp.umr_in_scope,
       netting_enforceable: cp.netting_enforceable !== false,
@@ -429,11 +435,11 @@ export default function Counterparties() {
             </>}
 
             <div>
-              <label style={L}>IM MODEL</label>
+              <label style={L} title="What the initial margin rests on. ISDA SIMM is licensed and is not computed here: a firm with a licence types its own figure as the desk's amount on the ticket.">IM BASIS</label>
               <select style={Object.assign({}, INP, { cursor:'pointer' })}
                 value={form.im_model}
                 onChange={function(e) { f({ im_model: e.target.value }) }}>
-                {IM_MODELS.map(function(m) { return <option key={m}>{m}</option> })}
+                {IM_MODELS.map(function(m) { return <option key={m} value={m}>{IM_OPTION[m]}</option> })}
               </select>
             </div>
 
@@ -639,7 +645,7 @@ export default function Counterparties() {
 
                 <Cell dim>{cp.csa_currency}</Cell>
                 <Cell dim>{cp.discount_curve_id}</Cell>
-                <Cell dim>{cp.im_model}{cp.counterparty_type ? ' · ' + cp.counterparty_type + (cp.rating_bucket ? ' ' + cp.rating_bucket : '') : ''}{cp.csa_type && cp.csa_type !== 'NO_CSA' ? ' · thr ' + (cp.csa_threshold_m != null ? cp.csa_threshold_m + 'm' : '0') + ' · mta ' + (cp.csa_mta_k != null ? cp.csa_mta_k + 'k' : '0') + (cp.margin_frequency_days > 1 ? ' · every ' + cp.margin_frequency_days + 'bd' : '') + (cp.mpor_disputed ? ' · disputed' : '') : ''}{schedules[cp.id] ? ' · ' + summary(schedules[cp.id]) : ''}</Cell>
+                <Cell dim>{imModel(cp.im_model) + ' IM'}{cp.counterparty_type ? ' · ' + cp.counterparty_type + (cp.rating_bucket ? ' ' + cp.rating_bucket : '') : ''}{cp.csa_type && cp.csa_type !== 'NO_CSA' ? ' · thr ' + (cp.csa_threshold_m != null ? cp.csa_threshold_m + 'm' : '0') + ' · mta ' + (cp.csa_mta_k != null ? cp.csa_mta_k + 'k' : '0') + (cp.margin_frequency_days > 1 ? ' · every ' + cp.margin_frequency_days + 'bd' : '') + (cp.mpor_disputed ? ' · disputed' : '') : ''}{schedules[cp.id] ? ' · ' + summary(schedules[cp.id]) : ''}</Cell>
 
                 <div style={{ display:'flex', gap:'4px' }}>
                   {cp.is_active && (

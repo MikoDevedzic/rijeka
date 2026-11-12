@@ -35,6 +35,10 @@ function niceStep(range, target = 5) {
 
 const clean = (points) => (points || []).filter(p => Number.isFinite(p.t) && Number.isFinite(p.v)).sort((a, b) => a.t - b.t)
 
+// A figure on the chart as the table beside it writes it: thousands grouped (a BTC outright is 108,250.00, not
+// 108250.00). A rate or a currency pair has no thousands and reads as before.
+const grouped = (v, dp) => Number(v).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
+
 function draw(canvas, { series, unit = '%', decimals }) {
   const dpr = window.devicePixelRatio || 1
   const W = canvas.clientWidth, H = canvas.clientHeight
@@ -69,7 +73,7 @@ function draw(canvas, { series, unit = '%', decimals }) {
     const y = ys(v)
     ctx.strokeStyle = C.grid; ctx.lineWidth = 0.6
     ctx.beginPath(); ctx.moveTo(PAD.l, y); ctx.lineTo(W - PAD.r, y); ctx.stroke()
-    ctx.fillStyle = C.axis; ctx.fillText(v.toFixed(dp) + (unit === '%' ? '%' : ''), PAD.l - 8, y)
+    ctx.fillStyle = C.axis; ctx.fillText(grouped(v, dp) + (unit === '%' ? '%' : ''), PAD.l - 8, y)
   }
   if (vMin < 0 && vMax > 0) {
     ctx.strokeStyle = 'rgba(246,241,228,0.25)'; ctx.lineWidth = 0.8; ctx.setLineDash([3, 3])
@@ -87,7 +91,7 @@ function draw(canvas, { series, unit = '%', decimals }) {
     ctx.fillStyle = C.label; ctx.fillText(tick(t), x, H - PAD.b + 7)
   })
 
-  const fmt = v => v.toFixed(Math.max(dp, decimals ?? 2)) + suffix
+  const fmt = v => grouped(v, Math.max(dp, decimals ?? 2)) + suffix
   ss.forEach((s, si) => {
     const pts = s.points, color = s.color || '#d9b25c', rgb = hexToRgb(color)
     const path = () => { ctx.beginPath(); pts.forEach((p, i) => i === 0 ? ctx.moveTo(xs(p.t), ys(p.v)) : ctx.lineTo(xs(p.t), ys(p.v))) }
