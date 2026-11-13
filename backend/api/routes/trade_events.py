@@ -190,6 +190,17 @@ def append_trade_event(
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")
 
+    # An attestation is written by the routes that check both signatures and the registry (/api/chain). Taken from a
+    # caller here it was read back as the trade's confirmation: an invented record, shown as anchored.
+    if isinstance(body.payload, dict) and "attestation" in body.payload:
+        raise HTTPException(status_code=422, detail="An event appended here carries no attestation: a signed record is written by /api/chain.")
+    owned = {"CANCELLED": "/api/trade-events/cancel", "TERMINATED": "/api/chain/terminate", "AMENDED": "/api/chain/amend",
+             "PARTIAL_TERMINATION": "/api/chain/partial-terminate"}
+    if body.event_type in owned:
+        # each changes the trade as well as its history, in one transaction, in its own route; appended here the event
+        # and the trade disagreed (a CANCELLED event on a trade still PENDING)
+        raise HTTPException(status_code=409, detail=f"A {body.event_type} event is written by {owned[body.event_type]}, which changes the trade with it.")
+
     if body.event_type in ("AMENDED", "TERMINATED", "PARTIAL_TERMINATION", "NOVATED", "CONFIRMED"):
         # These change or close the signed terms. On an anchored trade they
         # must carry both signatures and supersede/close the registry record,
@@ -294,9 +305,23 @@ def _refuse_while_anchoring(db: Session, trade: Trade, what: str) -> None:
     does next: cancelled (or confirmed off chain) meanwhile, the registry would hold a confirmation of a trade the book
     calls cancelled, and the row that waits for the receipt would find the trade gone."""
     from chain import pending as P
-    if P.tables_present(db) and P.open_for_trade(db, trade.id) is not None:
+    if not P.tables_present(db) or P.open_for_trade(db, trade.id) is None:
+        return
+    try:                                                    # a transaction that has landed or failed is settled now, not at the next sweep
+        from chain.attestation import get_backend
+        P.reconcile_trade(db, trade, get_backend())
+        db.refresh(trade)
+    except HTTPException:
+        raise
+    except Exception:
+        logging.getLogger(__name__).exception("reconciling %s before %s", trade.trade_ref, what)
+        db.rollback()
+    if trade.status != "PENDING":
+        raise HTTPException(status_code=409, detail=f"Trade status is {trade.status}. Only PENDING trades can be confirmed or cancelled.")
+    if P.open_for_trade(db, trade.id) is not None:
         raise HTTPException(status_code=409, detail=(
-            f"A confirmation of {trade.trade_ref} is in flight on the registry. Let it finish (or fail) before {what}."))
+            f"A confirmation of {trade.trade_ref} is in flight on the registry. Let it finish (or fail) before {what}: "
+            f"POST /api/chain/reconcile/{trade.id} says where it stands."))
 
 
 def _load_pending_trade(db: Session, trade_id: UUID, user_id: UUID) -> Trade:
@@ -369,6 +394,19 @@ def _apply_lifecycle_transition(
     """
     event_id = uuid.uuid4()
     today = date.today()
+
+    # The status this transition leaves is the one its caller loaded. It is read again under a row lock, so a trade that
+    # another request has cancelled (or confirmed) since then is not flipped a second time. A confirmation waits on the
+    # chain for seconds between the two: until 13 November 2026 a cancel in that window was overwritten, and the trade's
+    # events read BOOKED, CANCELLED, CONFIRMED.
+    was, ref = trade.status, trade.trade_ref
+    db.flush()                  # what the caller has set on the trade and not yet written (the UTI a confirmation issues) is written first: the re-read replaces the object
+    db.query(Trade).filter(Trade.id == trade.id).with_for_update().populate_existing().first()
+    if trade.status != was:
+        now_is = trade.status
+        db.rollback()
+        raise HTTPException(status_code=409, detail=(
+            f"{ref} changed while this was in progress and is no longer {str(was).lower()}: it is {now_is}. Nothing was written."))
 
     # Build audit snapshots: current projection, then status-flipped copy.
     pre_state = project_from_db(db, trade.id)

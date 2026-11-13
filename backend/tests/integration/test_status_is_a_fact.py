@@ -90,3 +90,63 @@ def test_a_trade_is_not_cancelled_or_confirmed_off_chain_while_its_confirmation_
         db.execute(text("DELETE FROM pending_anchors WHERE trade_id = :t"), {"t": tid}); db.commit()      # leave the trade free for the runs after
         db.close()
     assert client.post(f"/api/trade-events/cancel/{tid}", headers=_key(auth_a), json={}).status_code == 201, "with nothing in flight it cancels"
+
+
+def test_a_trade_is_booked_pending_whatever_the_request_says(client, auth_a, ids):
+    body = {**B.swap(ids["a"], f"IT-ST-{uuid.uuid4().hex[:6].upper()}"), "status": "CONFIRMED"}
+    r = client.post("/api/book/trade", json=body, headers=auth_a)
+    assert r.status_code in (201, 422), r.text[:200]
+    if r.status_code == 201:
+        assert r.json()["trade"]["status"] == "PENDING", "a status sent with a booking is not taken"
+
+
+def test_a_cancel_that_lands_while_a_confirmation_waits_is_not_overwritten(client, auth_a, ids):
+    """The confirm route loads the trade, then waits on the chain. A cancel in between used to be overwritten by the
+    confirmation that followed. The flip is held to the status its caller loaded, read again under a lock."""
+    from api.routes.trade_events import _apply_lifecycle_transition
+    from db.models import Trade
+    from db.session import SessionLocal
+    from fastapi import HTTPException
+    tid = _booked(client, auth_a, ids)["id"]
+    db = SessionLocal()
+    try:
+        stale = db.query(Trade).filter(Trade.id == tid).first()          # what the confirm route holds while it waits
+        assert stale.status == "PENDING"
+        assert client.post(f"/api/trade-events/cancel/{tid}", headers=_key(auth_a), json={}).status_code == 201      # another request, meanwhile
+        with pytest.raises(HTTPException) as e:
+            _apply_lifecycle_transition(db=db, user_id=stale.user_id, trade=stale, event_type="CONFIRMED", new_status="CONFIRMED", payload={}, idempotency_key=None)
+        assert e.value.status_code == 409 and "no longer pending" in e.value.detail and "CANCELLED" in e.value.detail
+    finally:
+        db.close()
+    assert _status(client, auth_a, tid) == "CANCELLED" and _events(client, auth_a, tid) == ["CANCELLED", "BOOKED"]
+
+
+def test_the_terms_and_the_legs_of_a_trade_that_is_not_pending_are_not_edited(client, auth_a, ids):
+    j = client.post("/api/book/trade", json=B.swap(ids["a"], f"IT-ST-{uuid.uuid4().hex[:6].upper()}"), headers=auth_a).json()
+    tid, leg, terms = j["trade"]["id"], j["legs"][0], dict(j["trade"].get("terms") or {})
+    # pending: its terms are edited
+    r = client.put(f"/api/trades/{tid}", json={"terms": {**terms, "note": "as agreed on the call"}}, headers=auth_a)
+    assert r.status_code == 200, r.text[:200]
+    assert client.post(f"/api/trade-events/cancel/{tid}", headers=_key(auth_a), json={}).status_code == 201
+    r = client.put(f"/api/trades/{tid}", json={"terms": {**terms, "note": "changed after the cancel"}}, headers=auth_a)
+    assert r.status_code == 409 and "its terms are not edited" in r.text, r.text[:200]
+    r = client.put(f"/api/trade-legs/leg/{leg['id']}", json={"payment_calendar": "LONDON"}, headers=auth_a)
+    assert r.status_code == 409 and "while its trade is PENDING" in r.text, r.text[:200]
+    assert _trade(client, auth_a, tid)["terms"].get("note") == "as agreed on the call"
+    # the desk it sits on is not a term: that is still an edit
+    assert client.put(f"/api/trades/{tid}", json={"desk": "RATES LDN"}, headers=auth_a).status_code == 200
+
+
+def test_the_generic_event_route_takes_no_signed_record_and_no_event_another_route_owns(client, auth_a, ids):
+    from datetime import date
+    tid = _booked(client, auth_a, ids)["id"]
+    base = {"trade_id": tid, "event_date": date.today().isoformat(), "effective_date": date.today().isoformat()}
+    forged = {"attestation": {"trade_hash": "0x" + "11" * 32, "anchor": {"anchored": True, "block_number": 1}}}
+    r = client.post("/api/trade-events/", json={**base, "event_type": "STORE_CHANGE", "payload": forged}, headers=auth_a)
+    assert r.status_code == 422 and "carries no attestation" in r.text, r.text[:200]
+    for kind, route in (("CANCELLED", "/api/trade-events/cancel"), ("TERMINATED", "/api/chain/terminate"), ("AMENDED", "/api/chain/amend")):
+        r = client.post("/api/trade-events/", json={**base, "event_type": kind, "payload": {}}, headers=auth_a)
+        assert r.status_code == 409 and route in r.text, (kind, r.text[:200])
+    assert _status(client, auth_a, tid) == "PENDING" and _events(client, auth_a, tid) == ["BOOKED"]
+    att = client.get(f"/api/chain/attestation/{tid}", headers=auth_a)
+    assert att.status_code != 200 or not (att.json() or {}).get("anchor"), "no confirmation was invented"

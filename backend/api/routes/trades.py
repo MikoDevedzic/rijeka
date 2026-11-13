@@ -350,6 +350,15 @@ def update_trade(trade_id: uuid.UUID, body: TradeUpdate, db: Session = Depends(g
                 f"{t.trade_ref} is {t.status}, and a trade's status is not edited. It is confirmed, cancelled or terminated "
                 "through /api/trade-events and /api/chain, where the change is an event."))
         updates.pop("status")
+    if "terms" in updates and updates["terms"] != (t.terms or {}):
+        # The terms are what both parties confirm. They are edited while the trade is PENDING and nothing is in flight; after
+        # that they change by an amendment, which is an event (and, on chain, signed). Until 13 November 2026 a confirmed,
+        # cancelled or terminated trade's terms were edited here with no event.
+        if t.status != "PENDING":
+            raise HTTPException(status_code=409, detail=(
+                f"{t.trade_ref} is {t.status}: its terms are not edited. A confirmed trade's terms change by an amendment (/api/chain/amend)."))
+        from api.routes.trade_events import _refuse_while_anchoring
+        _refuse_while_anchoring(db, t, "editing its terms")
     if "terms" in updates:
         # the fields the settlement rule reads are held to the booking rule when an edit changes them; an edit that
         # leaves them as they are is not a re-validation of an older record

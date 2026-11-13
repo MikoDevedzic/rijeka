@@ -305,6 +305,18 @@ def get_leg(
     return leg
 
 
+def _pending_parent(db: Session, trade_id, user_id, what: str) -> None:
+    """409 unless the leg's trade is the caller's and PENDING. A leg is part of the record both parties confirm: it is
+    written while the trade is being booked and changed afterwards by an amendment. A trade that is not the caller's
+    is not found (a leg written here under another firm's trade would be read into that firm's record)."""
+    from db.models import Trade as _Trade
+    parent = db.query(_Trade).filter(_Trade.id == trade_id, _Trade.user_id == user_id).first()
+    if parent is None:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if parent.status != "PENDING":
+        raise HTTPException(status_code=409, detail=f"{what} while its trade is PENDING; {parent.trade_ref} is {parent.status}.")
+
+
 @router.post("/", response_model=TradeLegOut, status_code=201)
 def create_leg(
     body: TradeLegCreate,
@@ -322,6 +334,7 @@ def create_leg(
     existing = db.query(TradeLeg).filter(TradeLeg.id == body.id, TradeLeg.user_id == uuid.UUID(user["sub"])).first()
     if existing:
         raise HTTPException(status_code=409, detail=f"Leg {body.id} already exists.")
+    _pending_parent(db, body.trade_id, uuid.UUID(user["sub"]), "A leg is added")
 
     # Sprint 13 Patch 3 — materialize embedded_options as [] rather than NULL
     # so the ORM sees a non-None JSONB default. The DB column is NOT NULL
@@ -379,6 +392,7 @@ def update_leg(
         parent = db.get(_Trade, leg.trade_id)
         if parent is not None:
             refuse_offchain_mutation(db, parent, f"Editing leg {leg.leg_ref} ({', '.join(updates)})")
+        _pending_parent(db, leg.trade_id, uuid.UUID(user["sub"]), f"Leg {leg.leg_ref} is edited")
     for field, value in updates.items():
         setattr(leg, field, value)
 

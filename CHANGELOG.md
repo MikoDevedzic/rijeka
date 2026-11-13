@@ -16,11 +16,24 @@ trade and then confirm it. can you check logic on this."
   pending trade was set to CONFIRMED with no event and no signature; "NONSENSE" was stored as a status.
 - `PUT /api/trades/{id}` now refuses any change of status, 409, on every trade. An edit that carries the status
   the trade already has is an edit of the rest, as before.
-- A trade is not cancelled, or confirmed off chain, while its confirmation is in flight on the registry (409):
-  the transaction lands whatever the book does next, and the registry would hold a confirmation of a trade the
-  book calls cancelled.
+- **A second way to the same sequence, found in review:** the confirm route loads the trade and then waits on
+  the chain for up to 25 seconds; a cancel from another window in that time went through, and the confirmation
+  that followed set the trade CONFIRMED over it. A status is now flipped only from the status its caller loaded,
+  read again under a row lock: the later of the two is refused, 409, and nothing is written. (If the transaction
+  has already landed, the registry holds a confirmation of a trade the book calls cancelled; the book says so.)
+- A trade is not cancelled, or confirmed off chain, while a confirmation of it is recorded as in flight; what has
+  landed or failed is settled first, and the refusal names the route that says where it stands.
+- The terms of a trade are edited while it is PENDING and nothing is in flight; a leg is added or edited while its
+  trade is PENDING and is the caller's. After that they change by an amendment. (A confirmed, cancelled or
+  terminated trade's terms and legs were edited by `PUT` with no event; an anchored one then failed `verify`,
+  one confirmed off chain had nothing to fail.) The desk, book and store are not terms and are still edited.
+- The generic `POST /api/trade-events/` takes no `attestation` in a payload (one sent there was read back as the
+  trade's confirmation: an invented record shown as anchored) and none of the events another route writes
+  together with the trade (CANCELLED, TERMINATED, AMENDED, PARTIAL_TERMINATION).
 - The trades store's three writers that went straight to the table from the browser (add, set a status,
   delete) were used by nothing and are removed.
+- Seven integration tests (`test_status_is_a_fact.py`). The existing confirmation tests caught the lock dropping
+  the UTI a confirmation issues before it was written; it is written first.
 - **Not closed by this change, and the owner's to decide:** the database lets a signed-in user write their own
   rows of `trades` and `trade_legs` directly (one policy for every command, `docs/schema.sql`), which is the
   same way round, outside the API. Seen on the local stack, which carries the same policy and the grants a
