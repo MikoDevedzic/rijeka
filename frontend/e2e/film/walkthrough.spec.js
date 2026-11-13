@@ -35,9 +35,10 @@ const OVERLAY = () => {
     #film-card .l i { color: #d9b25c; font-style: italic; }
     #film-card .s { font: 400 19px/1.5 'Instrument Sans', system-ui, sans-serif; color: #a9b9ae; max-width: 900px; }
     #film-card .f { font: 400 14px/1.5 'DM Mono', ui-monospace, monospace; color: #7b9388; letter-spacing: .04em; margin-top: 14px; }
-    .ms-launcher { display: none !important; }
+    html.film-quiet .ms-launcher { display: none !important; }
   `
   document.documentElement.appendChild(style)
+  document.documentElement.classList.add('film-quiet')
   const add = (id, html = '') => { const e = document.createElement('div'); e.id = id; e.innerHTML = html; document.documentElement.appendChild(e); return e }
   const ptr = add('film-ptr', '<svg width="26" height="26" viewBox="0 0 26 26"><path d="M4 2.5 21 13.2l-7.6 1.5 4.3 7.6-3 1.7-4.3-7.7L4.6 22z" fill="#f6f1e4" stroke="#081714" stroke-width="1.6" stroke-linejoin="round"/></svg>')
   const ring = add('film-ring'); add('film-cap'); add('film-card')
@@ -52,14 +53,17 @@ test('the walkthrough', async ({ app }) => {
 
   // ── the camera: what the browser paints, written at a steady 30 frames a second ──
   const cdp = await app.context().newCDPSession(app)
-  let latest = null, written = 0, started = 0, rolling = false
+  let latest = null, written = 0, started = 0, rolling = false, cutMs = 0
+  const scenes = []
   cdp.on('Page.screencastFrame', (f) => { latest = Buffer.from(f.data, 'base64'); cdp.send('Page.screencastFrameAck', { sessionId: f.sessionId }).catch(() => {}) })
   const tick = setInterval(() => {
     if (!rolling || !latest) return
-    const due = Math.floor((Date.now() - started) / 1000 * FPS)
+    const due = Math.floor((Date.now() - started - cutMs) / 1000 * FPS)
     while (written < due) { written++; fs.writeFileSync(`${FRAMES}/f-${String(written).padStart(6, '0')}.jpg`, latest) }
   }, 1000 / FPS / 2)
   const roll = async () => { await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 93, everyNthFrame: 1 }); started = Date.now(); rolling = true }
+  // a wait left out of the film: nothing is written while it lasts, and the caption after it says how long it was
+  const skip = async (waiting) => { const t0 = Date.now(); rolling = false; try { await waiting } finally { cutMs += Date.now() - t0; rolling = true } return (Date.now() - t0) / 1000 }
   const cut = async () => { rolling = false; clearInterval(tick); await cdp.send('Page.stopScreencast').catch(() => {}) }
 
   // ── the hand and the voice ──
@@ -73,7 +77,7 @@ test('the walkthrough', async ({ app }) => {
   const to = async (loc, ms) => { await loc.scrollIntoViewIfNeeded(); const b = await loc.boundingBox(); await glide(b.x + b.width / 2, b.y + b.height / 2, ms) }
   const press = async (loc, after = 500) => { console.log('  press', String(loc).slice(0, 110)); await to(loc); await hold(180); await app.mouse.down(); await hold(70); await app.mouse.up(); await hold(after) }
   // at the top, over a ticket's title bar; at the foot where the top of the page is what the scene shows (the menu, the paper's own buttons)
-  const say = async (html, foot = false) => { console.log('SCENE', String(html).replace(/<[^>]+>/g, '').slice(0, 60), written); await app.evaluate(OVERLAY); await app.evaluate(([h, f]) => { const c = document.getElementById('film-cap'); c.classList.remove('on'); setTimeout(() => { c.innerHTML = h; c.classList.toggle('foot', f); if (h) c.classList.add('on') }, 420) }, [html, foot]); await hold(600) }
+  const say = async (html, foot = false) => { console.log('SCENE', String(html).replace(/<[^>]+>/g, '').slice(0, 60), written); scenes.push({ at: +(written / FPS).toFixed(2), caption: String(html).replace(/<[^>]+>/g, '') }); await app.evaluate(OVERLAY); await app.evaluate(([h, f]) => { const c = document.getElementById('film-cap'); c.classList.remove('on'); setTimeout(() => { c.innerHTML = h; c.classList.toggle('foot', f); if (h) c.classList.add('on') }, 420) }, [html, foot]); await hold(600) }
   const card = async (html) => { await app.evaluate(OVERLAY); await app.evaluate((h) => { const c = document.getElementById('film-card'), p = document.getElementById('film-ptr'); p.style.opacity = h ? '0' : '1'; if (h) { c.innerHTML = h; c.classList.add('on') } else c.classList.remove('on') }, html); await hold(750) }      // no pointer over a card
   const still = (name) => app.screenshot({ path: `${STILLS}/${name}.png` })
   const tab = (win, name) => win.locator(`.tbw-tab[data-tab="${name}"]`)
@@ -162,16 +166,40 @@ test('the walkthrough', async ({ app }) => {
   await press(tab(win, 'CASHFLOWS'), 2600); await still('08-swap-cashflows')
   await press(tab(win, 'CURVE SCENARIO'), 3000); await still('08-swap-scenario')
 
-  // ── 9. written down ──
+  // ── 9. Prometheus, asked about the trade just confirmed. The stack calls the model only when the run was given a key
+  //       (RIJEKA_STACK_ASSISTANT_KEY, e2e/serve.sh); without one the scene is left out. The answer is the model's own;
+  //       the wait for it is cut from the film and the caption says how long it was ──
   await press(win.locator('.tbw-light-r'), 500)
+  if (process.env.RIJEKA_STACK_ASSISTANT_KEY) {
+    await say('Ask Prometheus, <b>the desk\'s read-only assistant</b>', true)
+    await app.evaluate(() => document.documentElement.classList.remove('film-quiet')); await hold(500)
+    await press(app.locator('.ms-launcher'), 1200)
+    await press(app.locator('.ms-list-scroll').getByText('✦ Prometheus'), 2600); await still('09-prometheus')
+    await press(app.locator('.ms-compose textarea'), 250)
+    await app.keyboard.type('Is the bitcoin forward I just confirmed still what was signed?', { delay: 38 }); await hold(500)
+    await press(app.locator('.ms-send'), 300)
+    await hold(2400); await still('09-prometheus-asked')
+    const waited = await skip(app.locator('.ms-thinking').waitFor({ state: 'hidden', timeout: 200_000 }))
+    console.log('  prometheus answered after', (waited + 2.7).toFixed(1), 's; cut from the film:', waited.toFixed(1), 's')
+    const answer = app.locator('.ms-thread .ms-msg').last()
+    console.log('  ANSWER: ' + (await answer.innerText()).replace(/\n+/g, ' | ').slice(0, 1800))
+    await say(`Its answer, ${Math.round(waited + 2.7)} seconds later. <b>It reads; it never changes anything.</b>`, true)
+    await answer.evaluate(el => el.scrollIntoView({ block: 'start', behavior: 'smooth' })); await glide(1010, 470, 700)      // the pointer beside the panel, not over the answer
+    await hold(7200); await still('09-prometheus-answer')
+    await app.locator('.ms-thread').evaluate(el => el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })); await hold(2600); await still('09-prometheus-answer-2')
+    await press(app.locator('.ms-titlebar .ms-icon[title="Close"]'), 500)
+    await app.evaluate(() => document.documentElement.classList.add('film-quiet'))
+  }
+
+  // ── 10. written down ──
   await say('Every model is written down and <b>checked against QuantLib</b>', true)
   await press(app.getByRole('link', { name: /METHODOLOGY/ }).or(app.getByRole('button', { name: /METHODOLOGY/ })).first(), 2800); await still('09-methodology')
   await app.mouse.wheel(0, 500); await hold(2600); await still('09-methodology-2')
 
-  // ── 10. the close ──
+  // ── 11. the close ──
   await say('')
   await card('<div class="n">RIJEKA</div><div class="l">Where the trading desk <i>meets the chain</i></div><div class="s">rijeka.app · open source · a hosted demonstration on the Sepolia test network</div><div class="f">Recorded on a local demonstration stack: its parties and market data are sample data, its chain a local test chain</div>')
   await hold(5200); await still('10-close')
   await cut()
-  fs.writeFileSync(`${OUT}/take.json`, JSON.stringify({ frames: written, seconds: +(written / FPS).toFixed(1), at: new Date().toISOString() }))
+  fs.writeFileSync(`${OUT}/take.json`, JSON.stringify({ frames: written, seconds: +(written / FPS).toFixed(1), cutSeconds: +(cutMs / 1000).toFixed(1), at: new Date().toISOString(), scenes }, null, 1))
 })
