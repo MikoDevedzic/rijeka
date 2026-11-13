@@ -5,7 +5,7 @@ vi.mock('../lib/session', () => ({ getSessionSafe: async () => ({ access_token: 
 vi.mock('../lib/supabase', () => ({ supabase: {} }))
 vi.mock('../lib/windows', () => ({ broadcast: () => {}, onBroadcast: () => () => {} }))
 
-const { useChatStore, selectUnreadTotal } = await import('./useChatStore')
+const { useChatStore, selectUnreadTotal, PROMETHEUS_TIMEOUT_MS } = await import('./useChatStore')
 const ROOMS = [{ id: 'a', my_access: 'JOINED', unread: 2 }, { id: 'b', my_access: 'INVITED', unread: 0 }]
 
 describe('chat rooms: an answer that is not a list', () => {
@@ -91,5 +91,50 @@ describe('chat catches up on what the live stream did not deliver', () => {
     await useChatStore.getState().catchUp()
     expect(useChatStore.getState().messages.a).toHaveLength(1)
     expect(useChatStore.getState()._catching).toBe(false)
+  })
+})
+
+describe('the private Prometheus conversation waits for its answer', () => {
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); useChatStore.setState({ prom: [], promLoading: false }) })
+  // a request that answers only when told to, and rejects as fetch does when its signal aborts
+  const slow = () => {
+    let answer
+    const fetch = vi.fn((url, init) => new Promise((resolve, reject) => {
+      answer = () => resolve({ ok: true, status: 200, json: async () => ({ content: [{ text: 'Yes: the hash matches.' }], tools_used: [], sources: [] }) })
+      init.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })))
+    }))
+    return { fetch, answer: () => answer() }
+  }
+
+  it('is still waiting after the twenty seconds every other request is given, and shows the answer when it comes', async () => {
+    vi.useFakeTimers()
+    const s = slow(); vi.stubGlobal('fetch', s.fetch)
+    const asked = useChatStore.getState().askPrometheus('Is the forward I just confirmed still what was signed?')
+    await vi.advanceTimersByTimeAsync(45_000)
+    expect(useChatStore.getState().promLoading).toBe(true)
+    expect(useChatStore.getState().prom).toHaveLength(1)
+    s.answer(); await asked
+    const last = useChatStore.getState().prom.at(-1)
+    expect(last).toMatchObject({ role: 'assistant', content: 'Yes: the hash matches.' })
+    expect(last.error).toBeUndefined()
+    expect(useChatStore.getState().promLoading).toBe(false)
+  })
+
+  it('gives up at its own limit, and says so', async () => {
+    vi.useFakeTimers()
+    const s = slow(); vi.stubGlobal('fetch', s.fetch)
+    const asked = useChatStore.getState().askPrometheus('Summarise my book')
+    await vi.advanceTimersByTimeAsync(PROMETHEUS_TIMEOUT_MS + 1)
+    await asked
+    expect(useChatStore.getState().prom.at(-1)).toMatchObject({ role: 'assistant', error: true, content: "Rijeka didn't answer in time. Try again." })
+    expect(useChatStore.getState().promLoading).toBe(false)
+  })
+
+  it('leaves every other chat request at twenty seconds', async () => {
+    vi.useFakeTimers()
+    const s = slow(); vi.stubGlobal('fetch', s.fetch)
+    const people = useChatStore.getState().people({ q: 'x' }).catch(e => e)
+    await vi.advanceTimersByTimeAsync(20_001)
+    expect((await people).message).toBe("Rijeka didn't answer in time. Try again.")
   })
 })

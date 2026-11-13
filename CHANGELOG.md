@@ -3,6 +3,20 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.33.2 · 13 November 2026
+
+**Prometheus is given time to answer.** Found while recording the walkthrough film on the local stack.
+
+- The private Prometheus conversation gave up after twenty seconds, the limit every chat request has, and said
+  "Rijeka didn't answer in time. Try again." A question about the book is several look-ups, each a call to the
+  model: the one asked for the film ("Is the bitcoin forward I just confirmed still what was signed?") took about
+  thirty-five seconds, and the server went on to finish an answer nobody was waiting for. Asking again started it
+  again.
+- The private conversation now waits three minutes. Every other chat request keeps twenty seconds.
+- Not changed: an answer in a chat room (`@prometheus`) was never held to this limit; it is posted when it is
+  ready and reaches the room by the stream or the catch-up of 0.33.1.
+- Not checked: how long answers take on production, where the model and the book differ from the local stack's.
+
 ## 0.33.1 · 13 November 2026
 
 **Chat fetches what its live stream did not deliver.** The owner, in a chat with another firm: "when i send him

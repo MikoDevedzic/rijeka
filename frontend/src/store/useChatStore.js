@@ -18,10 +18,14 @@ const byTime = (a, b) => String(a.created_at || '').localeCompare(String(b.creat
 // safe getter; and give up on the request after REQUEST_TIMEOUT_MS so a
 // card or panel can offer a retry instead of loading forever.
 const REQUEST_TIMEOUT_MS = 20_000
-async function api(path, opts = {}) {
+// Prometheus reads before it answers: a question about the book is several look-ups, each a call to the model, and
+// half a minute is ordinary (up to twelve rounds on the server, prometheus/agent.py). Given up on at twenty seconds,
+// the answer was still being written and the panel said Rijeka had not answered.
+export const PROMETHEUS_TIMEOUT_MS = 180_000
+async function api(path, { timeoutMs = REQUEST_TIMEOUT_MS, ...opts } = {}) {
   const session = await getSessionSafe()
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS)
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   let res
   try {
     res = await fetch(API + path, {
@@ -322,6 +326,7 @@ export const useChatStore = create((set, get) => ({
     try {
       const data = await api('/api/analyse/', {
         method: 'POST',
+        timeoutMs: PROMETHEUS_TIMEOUT_MS,
         // Error bubbles are UI only; never sent back as assistant turns.
         body: JSON.stringify({ messages: next.filter(m => !m.error).map(m => ({ role: m.role, content: m.content })) }),
       })
