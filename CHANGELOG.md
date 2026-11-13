@@ -15,7 +15,11 @@ methodology document carries its own version (v1.20). Commits on `main` are the 
 - The private conversation now waits three minutes. Every other chat request keeps twenty seconds.
 - Not changed: an answer in a chat room (`@prometheus`) was never held to this limit; it is posted when it is
   ready and reaches the room by the stream or the catch-up of 0.33.1.
-- Not checked: how long answers take on production, where the model and the book differ from the local stack's.
+- Still so: past three minutes the panel gives up as before, and the server finishes regardless (its own limit is
+  three minutes a model call, twelve rounds of look-ups); a second window can ask while the first waits, within the
+  ten asks a minute and the day's allowance.
+- Not checked: how long answers take on production, where the model and the book differ from the local stack's;
+  whether anything between the browser and the API closes a request that is open for minutes.
 
 ## 0.33.1 · 13 November 2026
 
