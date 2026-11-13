@@ -18,6 +18,9 @@ behind a press and hold on the address bar (27).
   and a web view that names Safari but no version; the steps name the address bar, not Safari, since a browser
   that sends Safari's user agent reads the same sheet; the line under the list names the icon it shows; focus
   goes into the sheet and back to the button; the journey measures the sheet's text against the sheet.
+- After the design review: each step on one line (a button's name and its glyph are not split, "Tap Add"
+  and "Open Rijeka" are two steps), bold in the line under the list set as in the list, that line's glyph
+  at its line's size, numbers quieter than the words, the in-app sheet a sentence and two steps.
 - Left: an in-app browser on Android is still sent to a menu it may not have.
 - Not possible, and so not built: a button that does the steps. An iPhone gives a page no way to add itself to
   the home screen; Android does, and there the button already asks the browser in one tap.

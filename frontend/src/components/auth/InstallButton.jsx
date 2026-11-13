@@ -7,11 +7,14 @@ import { usePhone, standalone, installWay } from '../../lib/phone'
 
 // the glyphs as Safari draws them, beside the words that name them (so they are not read out twice)
 const Glyph = ({ children }) => (
-  <svg className="au-glyph" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+  <svg className="au-glyph" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
 )
 const ShareGlyph = () => <Glyph><path d="M8 9.5v-8M5.2 4 8 1.5 10.8 4M5 6.5H3.5v8h9v-8H11" /></Glyph>
 const AddGlyph = () => <Glyph><rect x="2" y="2" width="12" height="12" rx="3" /><path d="M8 5v6M5 8h6" /></Glyph>
-const DotsGlyph = () => <Glyph><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" strokeWidth="2.2" /></Glyph>
+// the three dots have no word on Safari's screen, so this glyph carries its own name for a reader
+const DotsGlyph = () => (
+  <svg className="au-glyph" viewBox="0 0 16 16" width="16" height="16" role="img" aria-label="the three dots" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" /></svg>
+)
 
 const share = <span className="au-nb"><b>Share</b> <ShareGlyph /></span>            // a glyph stays on its word's line
 const inBar = <>If the bar shows {share}, tap that instead.</>
@@ -19,9 +22,9 @@ const inBar = <>If the bar shows {share}, tap that instead.</>
 // They name the address bar and the bar, not Safari: a browser that sends Safari's user agent reads the same sheet.
 const WAYS = {
   'safari-27': { first: <>Press and hold the <b>address bar</b>, then tap {share}.</>, note: inBar },
-  'safari-26': { first: <>Tap the three dots <DotsGlyph /> beside the address bar, then {share}.</>, note: inBar },
+  'safari-26': { first: <>Tap <DotsGlyph /> beside the address bar, then {share}.</>, note: inBar },
   safari: { first: <>Tap {share} in the browser's bar.</> },
-  'other-browser': { first: <>Open your browser's {share} menu.</>, note: <>Not in the list? Open <b>app.rijeka.app</b> in Safari and press this button there.</> },
+  'other-browser': { first: <>Open your browser's {share} menu.</>, note: <>Not listed? Open <b>app.rijeka.app</b> in Safari and press this button.</> },
 }
 
 export default function InstallButton() {
@@ -64,10 +67,12 @@ export default function InstallButton() {
         <div className="au-sheet" role="dialog" aria-modal="true" aria-label="Add Rijeka to your home screen" data-way={way} onClick={close}>
           <div onClick={e => e.stopPropagation()}>
             <div className="au-sheet-icon"><img src="/apple-touch-icon.png" alt="" width="58" height="58" /><div><b>Rijeka</b><span>opens full screen, like an app</span></div></div>
+            {way === 'in-app' && <p className="au-sheet-lead">This page is inside another app, which cannot add it.</p>}
             {way === 'in-app'
-              ? <ol><li>This page is open inside another app, which cannot add it.</li><li>Open <b>app.rijeka.app</b> in Safari.</li><li>Press <b>Add to Home Screen</b> there.</li></ol>
+              ? <ol><li>Open <b>app.rijeka.app</b> in Safari.</li><li>Tap <b>Add to Home Screen</b> there.</li></ol>
               : taps
-                ? <ol><li>{taps.first}</li><li>Scroll down the list and tap <b>Add to Home</b> <span className="au-nb"><b>Screen</b> <AddGlyph /></span>.</li><li>Tap <b>Add</b>. Open <b>Rijeka</b> from its icon.</li></ol>
+                ? <ol><li>{taps.first}</li><li>Scroll down and tap <span className="au-nb"><b>Add to Home Screen</b> <AddGlyph /></span>.</li><li>Tap <b>Add</b>.</li><li>Open <b>Rijeka</b> from its icon.</li></ol>
+                /* Android's own words: Chrome writes "Add to Home screen" */
                 : <ol><li>Open your browser's menu.</li><li>Choose <b>Add to Home screen</b> or <b>Install app</b>.</li><li>Open <b>Rijeka</b> from its icon.</li></ol>}
             {taps?.note && <p className="au-sheet-note">{taps.note}</p>}
             <button type="button" className="au-install" autoFocus onClick={close}>GOT IT</button>

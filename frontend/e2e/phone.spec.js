@@ -211,10 +211,10 @@ test('a phone: the door offers the home screen, says how, and still fits one scr
 const IPHONE = (rest) => `Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ${rest}`
 const SAFARIS = [
   ['safari', IPHONE('Version/18.6 Mobile/15E148 Safari/604.1'), "Tap Share in the browser's bar."],
-  ['safari-26', IPHONE('Version/26.1 Mobile/15E148 Safari/604.1'), 'Tap the three dots beside the address bar, then Share.'],
+  ['safari-26', IPHONE('Version/26.1 Mobile/15E148 Safari/604.1'), 'Tap beside the address bar, then Share.'],
   ['safari-27', IPHONE('Version/27.0 Mobile/15E148 Safari/604.1'), 'Press and hold the address bar, then tap Share.'],
   ['other-browser', IPHONE('CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1'), "Open your browser's Share menu."],
-  ['in-app', IPHONE('Mobile/15E148'), 'This page is open inside another app, which cannot add it.'],
+  ['in-app', IPHONE('Mobile/15E148'), 'Open app.rijeka.app in Safari.'],
 ]
 test('a phone: the sheet says the taps this browser has, and stays on the screen', async ({ page, problems }) => {
   await signedOut(page)
@@ -225,10 +225,12 @@ test('a phone: the sheet says the taps this browser has, and stays on the screen
     const sheet = page.getByRole('dialog', { name: 'Add Rijeka to your home screen' })
     await expect(sheet).toHaveAttribute('data-way', way)
     const steps = sheet.locator('ol > li')
-    await expect(steps).toHaveCount(3)
+    await expect(steps).toHaveCount(way === 'in-app' ? 2 : 4)
     expect((await steps.first().innerText()).replace(/\s+/g, ' ').replace(/ ([.,])/g, '$1').trim(), `${way}: the first tap`).toBe(first)      // a glyph sits between a word and its full stop
     if (way !== 'in-app') await expect(steps.nth(1)).toContainText('Add to Home Screen')
-    if (way !== 'in-app') await expect(steps.nth(2)).toContainText('Tap Add. Open Rijeka from its icon.')
+    if (way !== 'in-app') { await expect(steps.nth(2)).toHaveText('Tap Add.'); await expect(steps.nth(3)).toHaveText('Open Rijeka from its icon.') }
+    if (way === 'in-app') await expect(sheet.locator('.au-sheet-lead')).toHaveText('This page is inside another app, which cannot add it.')
+    if (way === 'safari-26') await expect(steps.first().getByRole('img', { name: 'the three dots' })).toBeVisible()      // the one glyph with no word beside it is named
     if (way.startsWith('safari-')) await expect(sheet.locator('.au-sheet-note')).toContainText('If the bar shows Share')
     await expect(sheet.getByRole('button', { name: 'GOT IT' }), `${way}: focus is in the sheet`).toBeFocused()
     // a fixed sheet does not widen the page, so what it holds is measured against the sheet itself

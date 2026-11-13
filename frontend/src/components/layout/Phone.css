@@ -191,11 +191,13 @@
   .au-sheet-icon b { display: block; font-size: 16px; color: var(--text-hi); }
   .au-sheet-icon span { font-size: 13px; color: var(--text-dim); }
   .au-sheet ol { margin: 0; padding-left: 22px; display: grid; gap: 8px; list-style: decimal; font-size: 14px; line-height: 20px; color: var(--text-dim); }
-  .au-sheet ol li::marker { font-family: var(--mono); font-size: 12.5px; color: var(--text-hi); }
-  .au-sheet ol b { color: var(--text-hi); font-weight: 600; }
+  .au-sheet ol li::marker { font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); }      /* the words lead, not their numbers */
+  .au-sheet ol b, .au-sheet-note b { color: var(--text-hi); font-weight: 600; }
   .au-glyph { display: inline-block; vertical-align: -3px; color: var(--text-hi); }                /* Safari's own glyphs, beside the words that name them */
   .au-nb { white-space: nowrap; }
   .au-sheet-note { margin: 0; font-size: 12px; line-height: 18px; color: var(--text-dim); }
+  .au-sheet-note .au-glyph { width: 13px; height: 13px; vertical-align: -2px; }      /* the glyph at the size of the line it is in */
+  .au-sheet-lead { margin: 0; font-size: 14px; line-height: 20px; color: var(--text-dim); }
 }
 
 /* the app opening from its icon (brand/LaunchMark.jsx): any width, since a tablet has a home screen too */
