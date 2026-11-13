@@ -8,6 +8,7 @@
 // stack. The stack's parties and market data are its seed (demonstration data), and its chain is a local test chain;
 // the closing card says so.
 import fs from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { test } from '../fixtures.js'
 
 const OUT = 'e2e/.out/film', FRAMES = `${OUT}/frames`, STILLS = `${OUT}/stills`, FPS = 30
@@ -33,15 +34,21 @@ const OVERLAY = () => {
     #film-card .n { font: 600 34px/1 'Instrument Sans', system-ui, sans-serif; letter-spacing: .5em; margin-right: -.5em; color: #f1d488; }
     #film-card .l { font: italic 500 46px/1.15 'Bodoni Moda', Didot, serif; max-width: 980px; }
     #film-card .l i { color: #d9b25c; font-style: italic; }
-    #film-card .s { font: 400 19px/1.5 'Instrument Sans', system-ui, sans-serif; color: #a9b9ae; max-width: 900px; }
+    #film-card .s { font: 400 19px/1.5 'Instrument Sans', system-ui, sans-serif; color: #a9b9ae; max-width: 1180px; }
     #film-card .f { font: 400 14px/1.5 'DM Mono', ui-monospace, monospace; color: #7b9388; letter-spacing: .04em; margin-top: 14px; }
     html.film-quiet .ms-launcher { display: none !important; }
+    #film-sheet { position: fixed; inset: 0; z-index: 2147483596; display: grid; place-content: center; gap: 14px; background: #07140f; opacity: 0; transition: opacity .45s ease; pointer-events: none; }
+    #film-sheet.on { opacity: 1; }
+    #film-sheet .h { display: flex; gap: 16px; font: 400 13px/1 'DM Mono', ui-monospace, monospace; letter-spacing: .06em; color: #a9b9ae; }
+    #film-sheet .h b { color: #f1d488; font-weight: 500; }
+    #film-sheet .p { position: relative; width: 1380px; height: 640px; overflow: hidden; background: #fff; border-radius: 4px; box-shadow: 0 24px 60px rgba(0, 0, 0, .55); }
+    #film-sheet .p img { position: absolute; width: 108%; left: -40px; top: -46px; }
   `
   document.documentElement.appendChild(style)
   document.documentElement.classList.add('film-quiet')
   const add = (id, html = '') => { const e = document.createElement('div'); e.id = id; e.innerHTML = html; document.documentElement.appendChild(e); return e }
   const ptr = add('film-ptr', '<svg width="26" height="26" viewBox="0 0 26 26"><path d="M4 2.5 21 13.2l-7.6 1.5 4.3 7.6-3 1.7-4.3-7.7L4.6 22z" fill="#f6f1e4" stroke="#081714" stroke-width="1.6" stroke-linejoin="round"/></svg>')
-  const ring = add('film-ring'); add('film-cap'); add('film-card')
+  const ring = add('film-ring'); add('film-cap'); add('film-card'); add('film-sheet')
   document.addEventListener('mousemove', (e) => { ptr.style.transform = `translate(${e.clientX - 4}px, ${e.clientY - 2}px)` }, true)
   document.addEventListener('mousedown', (e) => { ring.style.left = e.clientX + 'px'; ring.style.top = e.clientY + 'px'; ring.classList.remove('go'); void ring.offsetWidth; ring.classList.add('go') }, true)
 }
@@ -63,7 +70,7 @@ test('the walkthrough', async ({ app }) => {
   }, 1000 / FPS / 2)
   const roll = async () => { await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 93, everyNthFrame: 1 }); started = Date.now(); rolling = true }
   // a wait left out of the film: nothing is written while it lasts, and the caption after it says how long it was
-  const skip = async (waiting) => { const t0 = Date.now(); rolling = false; try { await waiting } finally { cutMs += Date.now() - t0; rolling = true } return (Date.now() - t0) / 1000 }
+  const skip = async (waiting) => { const t0 = Date.now(); rolling = false; try { await (typeof waiting === 'function' ? waiting() : waiting) } finally { cutMs += Date.now() - t0; rolling = true } return (Date.now() - t0) / 1000 }      // a function is started only once the camera has stopped
   const cut = async () => { rolling = false; clearInterval(tick); await cdp.send('Page.stopScreencast').catch(() => {}) }
 
   // ── the hand and the voice ──
@@ -79,6 +86,8 @@ test('the walkthrough', async ({ app }) => {
   // at the top, over a ticket's title bar; at the foot where the top of the page is what the scene shows (the menu, the paper's own buttons)
   const say = async (html, foot = false) => { console.log('SCENE', String(html).replace(/<[^>]+>/g, '').slice(0, 60), written); scenes.push({ at: +(written / FPS).toFixed(2), caption: String(html).replace(/<[^>]+>/g, '') }); await app.evaluate(OVERLAY); await app.evaluate(([h, f]) => { const c = document.getElementById('film-cap'); c.classList.remove('on'); setTimeout(() => { c.innerHTML = h; c.classList.toggle('foot', f); if (h) c.classList.add('on') }, 420) }, [html, foot]); await hold(600) }
   const card = async (html) => { await app.evaluate(OVERLAY); await app.evaluate((h) => { const c = document.getElementById('film-card'), p = document.getElementById('film-ptr'); p.style.opacity = h ? '0' : '1'; if (h) { c.innerHTML = h; c.classList.add('on') } else c.classList.remove('on') }, html); await hold(750) }      // no pointer over a card
+  // one sheet of a workbook over the page: the file's name, the sheet's, and its picture as the spreadsheet printed it
+  const showSheet = async (file, name, png) => { await app.evaluate(OVERLAY); await app.evaluate(([f, n, src]) => { const s = document.getElementById('film-sheet'); if (!f) { s.classList.remove('on'); return } s.innerHTML = `<div class="h"><span>${f}</span><span>sheet <b>${n}</b></span><span>as Numbers computes and prints it</span></div><div class="p"><img src="${src}"></div>`; s.classList.add('on') }, [file, name, png]); await hold(650) }
   const still = (name) => app.screenshot({ path: `${STILLS}/${name}.png` })
   const tab = (win, name) => win.locator(`.tbw-tab[data-tab="${name}"]`)
 
@@ -191,15 +200,46 @@ test('the walkthrough', async ({ app }) => {
     await app.evaluate(() => document.documentElement.classList.add('film-quiet'))
   }
 
-  // ── 10. written down ──
+  // ── 10. written down: the map, then a chapter with what stands behind it ──
   await say('Every model is written down and <b>checked against QuantLib</b>', true)
-  await press(app.getByRole('link', { name: /METHODOLOGY/ }).or(app.getByRole('button', { name: /METHODOLOGY/ })).first(), 2800); await still('09-methodology')
-  await app.mouse.wheel(0, 500); await hold(2600); await still('09-methodology-2')
+  await press(app.getByRole('link', { name: /METHODOLOGY/ }).or(app.getByRole('button', { name: /METHODOLOGY/ })).first(), 2600); await still('10-methodology')
+  const chapter = (t) => app.locator('.mr-item', { hasText: t }).first()
+  await press(chapter('Linear interest-rate products'), 2400); await still('10-chapter')
+  await say('Each chapter, <b>with what stands behind it</b>', true)
+  await glide(1078, 246, 800); await hold(3000)                     // beside the count of reference comparisons
+  await app.mouse.wheel(0, 460); await hold(2800); await still('10-chapter-2')
 
-  // ── 11. the close ──
+  // ── 11. rebuilt in Excel: the swap's workbook, exported here and opened. Numbers computes its formulas and prints its
+  //       sheets (e2e/film/workbook.sh); the caption says what the cover's own verdict cell says, and no more. The
+  //       seconds Numbers takes are cut ──
+  await say('And rebuilt in Excel: <b>live formulas beside the engine\'s values</b>', true)
+  await press(chapter('Excel replications'), 2800); await still('11-replications')
+  const swapCard = app.locator('.doc-card').filter({ has: app.locator('h3', { hasText: /^Interest rate swap$/ }) }).first()
+  const exported = app.waitForEvent('download', { timeout: 120_000 })
+  await press(swapCard.locator('.doc-btn'), 300)
+  const file = await exported; const book = `${OUT}/${file.suggestedFilename()}`; await file.saveAs(book); await hold(1500)
+  let opened = null
+  await skip(async () => {
+    try {
+      const said = execFileSync('bash', ['e2e/film/workbook.sh', book, `${OUT}/book`], { encoding: 'utf8', timeout: 150_000 })
+      const names = (/^SHEETS (.*)$/m.exec(said)?.[1] || '').split('|'), verdict = /^VERDICT (.*)$/m.exec(said)?.[1] || ''
+      const png = (name) => { const i = names.indexOf(name); return i < 0 ? null : 'data:image/png;base64,' + fs.readFileSync(`${OUT}/book/page-${i + 1}.png`).toString('base64') }
+      opened = { verdict, pages: ['Cover', 'Ticket', 'Checks'].map(n => [n, png(n)]).filter(([, src]) => src) }
+      console.log('  workbook', file.suggestedFilename(), '| sheets', names.join(', '), '| verdict', verdict)
+    } catch (e) { console.log('  the workbook was not opened (the scene goes without its sheets):', String(e.message).slice(0, 300)) }
+  })
+  if (opened?.pages.length) {
+    const proven = opened.verdict === 'EVERY FORMULA REPRODUCES THE ENGINE'
+    await say(proven ? 'The workbook, opened: <b>every formula reproduces the engine</b>' : 'The workbook, opened', true)
+    await glide(1470, 800, 500)
+    for (const [name, src] of opened.pages) { await showSheet(file.suggestedFilename(), name, src); await hold(name === 'Ticket' ? 3600 : 4800); await still(`11-book-${name.toLowerCase()}`) }
+    await showSheet(null); await hold(500)
+  }
+
+  // ── 12. the close ──
   await say('')
-  await card('<div class="n">RIJEKA</div><div class="l">Where the trading desk <i>meets the chain</i></div><div class="s">rijeka.app · open source · a hosted demonstration on the Sepolia test network</div><div class="f">Recorded on a local demonstration stack: its parties and market data are sample data, its chain a local test chain</div>')
-  await hold(5200); await still('10-close')
+  await card('<div class="n">RIJEKA</div><div class="l">Where the trading desk <i>meets the chain</i></div><div class="s">Open-source engine · free to run for your own organisation</div><div class="s">Phase 1: a hosted demonstration on the Sepolia test network, with public market data · rijeka.app</div><div class="f">Recorded on a local demonstration stack: its parties and market data are sample data, its chain a local test chain</div>')
+  await hold(11500); await still('12-close')
   await cut()
   fs.writeFileSync(`${OUT}/take.json`, JSON.stringify({ frames: written, seconds: +(written / FPS).toFixed(1), cutSeconds: +(cutMs / 1000).toFixed(1), at: new Date().toISOString(), scenes }, null, 1))
 })
