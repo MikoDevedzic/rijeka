@@ -21,11 +21,13 @@
 // button below takes them without naming a colour. Uses the same tbw-btn classes as the footer.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { SendForConfirmation } from './SendForConfirmation'
 import { useSendStatus, useAnchoring } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
-import Seal from './Seal'
+import CertMark from '../brand/CertMark'
+import PaperConfirmation from './PaperConfirmation'
+import { getProofPack } from './booking'
 import PartialTermination from './PartialTermination'
 import KnockRecord from './KnockRecord'
 import ConfirmMark from '../brand/ConfirmMark'
@@ -48,7 +50,15 @@ const MONO = 'var(--mono)'
 const short = (h) => (h && h.length > 18) ? h.slice(0, 10) + '…' + h.slice(-6) : (h || '—')
 
 /** Attestation block: what was signed, by whom, and where it is anchored. */
-function AttestationView({ attestation, onVerify, verifying, verifyResult, onDownloadProof, onCopyProofLink, onTerminate, terminating, confirmErr }) {
+function AttestationView({ attestation, onVerify, verifying, verifyResult, onDownloadProof, onCopyProofLink, onTerminate, terminating, confirmErr, tradeId = null, ownName = null, counterpartyName = null }) {
+  // PAPER CONFIRMATION: the proof pack (the signed record) is fetched when it is asked for, and the sheet is made from it
+  const [paper, setPaper] = useState(null)        // null | { busy } | { proof } | { error }
+  const closePaper = useCallback(() => setPaper(null), [])
+  const openPaper = async () => {
+    if (!tradeId || paper?.busy) return
+    setPaper({ busy: true })
+    try { setPaper({ proof: await getProofPack(tradeId) }) } catch (e) { setPaper({ error: e.message || String(e) }) }
+  }
   const [showTerminate, setShowTerminate] = useState(false)
   const [reason, setReason] = useState('')
   if (!attestation) return null
@@ -75,8 +85,9 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
     : 'The terms are signed, not anchored'
   return (
     <div className="cert" data-testid="confirm-certificate" style={{ marginTop: 18 }}>
-      {/* the paper's stamp blue and red (styles.css .cert) for a record that stands on chain; grey, and without its centre point, for one that is not anchored or is closed */}
-      <Seal hash={att.trade_hash} complete={anchored && !terminated} ink={anchored && !terminated ? '#2a3b98' : '#646b88'} ink2={anchored && !terminated ? '#bf261d' : '#646b88'} />
+      {/* the logo, as this trade draws it: its river from the record's hash into the ringed R. The ring is the seal: closed for a record that stands
+          on chain, a faint outline and the whole in grey for one that is not anchored or is closed (brand/CertMark.jsx) */}
+      <CertMark hash={att.trade_hash} stands={anchored && !terminated} />
       <div className="cert-body">
       <p className="cert-caps">Certificate of confirmation</p>
       <h5 className="cert-title">{title}</h5>
@@ -109,7 +120,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
         row('ANCHOR', att.anchor?.note || 'No chain configured', 'var(--text-dim)')
       )}
 
-      <div className="cert-actions" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12 }}>
+      <div className="cert-actions" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 12 }}>
         <button className="tbw-btn cert-go" onClick={onVerify} disabled={verifying} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116 }}>
           {verifying ? '⏳ VERIFYING…' : '⟳ VERIFY'}
         </button>
@@ -121,12 +132,21 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
             ⛓ COPY PROOF LINK
           </button>
         )}
+        {tradeId && (
+          <button className="tbw-btn" data-testid="paper-open" onClick={openPaper} disabled={!!paper?.busy} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'var(--border-hi)' }}>
+            {paper?.busy ? 'PREPARING…' : '▤ PAPER CONFIRMATION'}
+          </button>
+        )}
         <span className="tbw-mut" style={{ fontSize: 12.5 }}>
           VERIFY recomputes the hash from the trade as stored now. PROOF PACK downloads
           everything a counterparty or auditor needs to check it themselves, without Rijeka.
+          PAPER CONFIRMATION is the signed terms as a page to print.
         </span>
       </div>
       {vr && vr.info && <div className="tbw-mut" style={{ marginTop: 8, color: 'var(--accent)' }}>{vr.info}</div>}
+      {paper?.error && <div className="tbw-mut" data-testid="paper-error" style={{ marginTop: 8, color: 'var(--amber)' }}>The paper could not be made: {paper.error}</div>}
+      {paper?.proof && <PaperConfirmation proof={paper.proof} onClose={closePaper}
+        names={{ ...(own.lei && ownName ? { [own.lei]: ownName } : {}), ...(cp.lei && counterpartyName ? { [cp.lei]: counterpartyName } : {}) }} />}
       {anchored && !terminated && onTerminate && (
         <div style={{ marginTop: 12 }}>
           {!showTerminate ? (
@@ -187,6 +207,8 @@ function ConfirmBody({
   cancelErr   = null,
   onConfirm   = () => {},
   onCopyProofLink = null,
+  ownName = null,         // the two parties' names as the book knows them, for the paper confirmation: the signed
+  counterpartyName = null, // record holds each party's LEI and no name
   onCancelTrade = () => {},
   attestation = null,
   onVerify    = () => {},
@@ -290,7 +312,7 @@ function ConfirmBody({
           </div>
 
           {(status === 'CONFIRMED' || status === 'TERMINATED') && (
-            <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying}
+            <AttestationView attestation={attestation} onVerify={onVerify} verifying={verifying} tradeId={bookedTrade?.id} ownName={ownName} counterpartyName={counterpartyName}
               verifyResult={verifyResult} onDownloadProof={onDownloadProof} onCopyProofLink={onCopyProofLink}
               onTerminate={status === 'CONFIRMED' && attestation?.attestation && !attestation.attestation.package ? onTerminate : null} terminating={terminating} confirmErr={confirmErr} />
           )}

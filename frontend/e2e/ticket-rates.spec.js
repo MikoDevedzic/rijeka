@@ -176,18 +176,43 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   await expect(cert).toContainText('Certificate of confirmation')
   await expect(cert).toContainText('The terms are signed, not anchored')
   await expect(cert).not.toContainText('Both sides signed')
-  const inked = () => win.getByTestId('confirm-seal').evaluate(cv => {
+  const inked = () => win.getByTestId('cert-mark').evaluate(cv => {
     const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data
     let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++
     return n
   })
-  await expect.poll(inked, { message: 'the seal is drawn after the tab comes back into view', timeout: 15_000 }).toBeGreaterThan(5000)
+  await expect.poll(inked, { message: 'the mark is drawn after the tab comes back into view', timeout: 15_000 }).toBeGreaterThan(900)
+  await expect(win.getByTestId('cert-mark'), 'the ring is the seal: not closed where nothing is anchored').toHaveAttribute('data-stands', 'no')
   await expectNoHorizontalOverflow(cert, 'the certificate')
   // the certificate is paper with its own inks: the app's raised buttons and wells stop at its edge
   const paper = await cert.locator('button').evaluateAll(els => els.map(e => getComputedStyle(e).backgroundColor))
   expect(paper.length, 'the certificate has buttons').toBeGreaterThan(0)
   expect(paper, 'none of them is the app\'s raised face').not.toContain('rgb(33, 73, 63)')
   await app.screenshot({ path: 'e2e/.out/shots/rates-confirmed.png' })
+
+  // the paper confirmation: the signed record as a sheet, over the app, and the only thing that prints
+  await cert.getByTestId('paper-open').click()
+  const sheet = app.getByTestId('paper-confirmation')
+  await expect(sheet).toBeVisible()
+  await expect(sheet).toHaveAttribute('data-state', 'signed')                         // the stack has no chain
+  await expect(sheet).toContainText('Trade confirmation')
+  await expect(sheet).toContainText('Interest rate swap')
+  await expect(sheet).toContainText('Not anchored on a registry')
+  await expect(app.getByTestId('paper-demo'), 'a record signed by Rijeka for both sides says so on paper').toContainText('not a confirmation between two parties')
+  await expect(sheet.locator('.paper-stamp'), 'the stamp does not say both parties signed where Rijeka signed for both').toHaveText(/Signed with demonstration keys\s*Not anchored on a registry/i)
+  await expect(sheet.locator('.paper-party b'), 'both parties are named, as the book knows them').toHaveCount(2)
+  for (const word of ['Parties', 'Pays fixed', 'Pays floating', 'Fixed rate', 'Floating rate', 'Record hash', 'Signatures', 'Booked by', 'not a master agreement']) await expect(sheet).toContainText(word)
+  const hash = (await cert.textContent()).match(/0x[0-9a-f]{64}/)[0]
+  await expect(sheet, 'the hash on the paper is the certificate\'s').toContainText(hash)
+  await expectNoHorizontalOverflow(sheet, 'the paper')
+  await app.screenshot({ path: 'e2e/.out/shots/paper-confirmation-screen.png' })
+  await app.emulateMedia({ media: 'print' })
+  expect(await app.evaluate(() => [...document.body.children].filter(e => getComputedStyle(e).display !== 'none').map(e => e.className)), 'printed: the sheet and nothing else').toEqual(['paper-view'])
+  await expect(app.getByTestId('paper-print')).toBeHidden()
+  await app.screenshot({ path: 'e2e/.out/shots/paper-confirmation.png', fullPage: true })
+  await app.emulateMedia({ media: 'screen' })
+  await app.keyboard.press('Escape')
+  await expect(sheet).toHaveCount(0)
 
   expectClean(problems)
 })

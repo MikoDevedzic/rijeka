@@ -483,6 +483,55 @@
 }
 /* ── Section header hierarchy (Patch 14) ──────────────────────────────── */
 
+/* The paper confirmation (PaperConfirmation.jsx): the signed record as a sheet. A `.cert`, so the certificate's inks. */
+.paper-view { position: fixed; inset: 0; z-index: 3000; overflow: auto; background: var(--bg-deep); padding: 0 16px 40px; }
+.paper-bar { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between;
+  max-width: 794px; margin: 0 auto; padding: 14px 0; background: var(--bg-deep); }
+.paper-bar .tbw-lbl { margin: 0; cursor: default; }
+.paper-bar-go { display: flex; gap: 8px; }
+.paper-bar .rj-btn { min-height: 34px; padding: 6px 14px; font-size: 12px; letter-spacing: 0.08em; }
+.cert.paper-sheet { display: grid; gap: 22px; max-width: 794px; margin: 0 auto; padding: 44px 48px; font-size: 13px; line-height: 1.5; }
+.paper-sheet .fig { color: var(--text-hi); overflow-wrap: anywhere; }
+.paper-head { display: grid; gap: 14px; padding-bottom: 18px; border-bottom: 1px solid var(--border-hi); }
+.paper-top { display: flex; flex-wrap: wrap; gap: 14px 24px; justify-content: space-between; align-items: center; }
+.paper-title { display: flex; gap: 18px; align-items: center; min-width: 0; }
+.paper-title .cert-title { margin: 4px 0 0; }
+.paper-dim { margin: 0; font-size: 12px; color: var(--text-dim); }
+.paper-ids { display: flex; flex-wrap: wrap; gap: 10px 40px; min-width: 0; }
+.paper-ids > div { min-width: 0; }
+.paper-stamp { margin: 0; padding: 6px 10px; border: 1.5px solid var(--accent); border-radius: 2px; color: var(--accent); display: grid;
+  font-size: 10px; font-weight: 600; line-height: 1.35; letter-spacing: 0.14em; text-transform: uppercase; text-align: center; }
+.paper-stamp.is-quiet { border-color: var(--text-faint); color: var(--text-faint); }
+.paper-demo { margin: 0; padding: 10px 12px; border: 1px solid var(--amber); border-radius: 2px; color: var(--text); font-size: 12.5px; }
+.paper-sec { display: grid; gap: 8px; min-width: 0; }
+.paper-sec > .cert-caps { padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.paper-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px 32px; }
+.paper-party, .paper-sig { display: grid; gap: 3px; min-width: 0; }
+.paper-party b { font-size: 14px; color: var(--text-hi); }
+.paper-sig { padding-top: 10px; border-top: 1.5px solid var(--text-hi); }
+.paper-hex { font-family: var(--mono); font-size: 11px; line-height: 1.5; color: var(--text-dim); overflow-wrap: anywhere; }
+.paper-rows { margin: 0; display: grid; }
+.paper-rows > div { display: grid; grid-template-columns: minmax(120px, 210px) minmax(0, 1fr); column-gap: 20px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.paper-rows dt { color: var(--text-dim); }
+.paper-rows dd { margin: 0; min-width: 0; }
+.paper-foot { display: grid; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border-hi); font-size: 12px; color: var(--text-dim); }
+.paper-foot p { margin: 0; }
+.paper-made { display: flex; flex-wrap: wrap; gap: 4px 20px; justify-content: space-between; font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+@media (max-width: 640px) {
+  .cert.paper-sheet { gap: 18px; }
+  .paper-rows > div { grid-template-columns: minmax(0, 1fr); }
+}
+/* printed: the sheet and nothing else, at the paper's own margins */
+@media print {
+  html.paper-open body > :not(.paper-view) { display: none !important; }
+  html.paper-open, html.paper-open body { background: white !important; height: auto !important; overflow: visible !important; }
+  .paper-view { position: static !important; padding: 0 !important; background: none !important; overflow: visible !important; }
+  .paper-bar { display: none !important; }
+  .cert.paper-sheet { max-width: none !important; margin: 0 !important; padding: 0 !important; box-shadow: none !important; background: white !important; }
+  .paper-sec, .paper-sig, .paper-party, .paper-rows > div { break-inside: avoid; }
+  @page { size: A4; margin: 16mm 15mm; }
+}
+
 /* First .tbw-lbl inside each .tbw-sec becomes the section header. */
 .tbw-sec > .tbw-lbl:first-child, .tbw-sec > .tbw-sec-header > .tbw-lbl, .tbw-sec > .tbw-terms-header > .tbw-lbl {
   font-size: 11.5px;

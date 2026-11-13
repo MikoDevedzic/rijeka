@@ -1433,6 +1433,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             onVerify={handleVerify}
             onDownloadProof={handleDownloadProof}
             onCopyProofLink={handleCopyProofLink}
+            ownName={refData.entities.find(x => x.id === (bookedTrade?.own_legal_entity_id || economics.ownEntityId))?.name || null}
+            counterpartyName={counterpartyName}
             onTerminate={handleTerminate}
             terminating={terminating}
             onPartial={handlePartial}

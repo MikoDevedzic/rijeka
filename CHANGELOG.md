@@ -3,6 +3,35 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.33.0 · 13 November 2026
+
+**A paper confirmation from the signed record, and the Rijeka mark on the certificate.** The owner: "we also need
+paper confirm....when trade is confiemd and proof pack is avaialble i think there hsould be button that generates
+paper confirm of the trad edetails like currently markets do", and of the certificate's seal: "that should be that
+rijeka logo and not random circle thing".
+
+- **PAPER CONFIRMATION** on the certificate, beside the proof pack. It opens the signed record as a sheet over the
+  app, with one button, PRINT OR SAVE AS PDF; printed, the sheet is the only thing on the page. On it: what the
+  trade is, its reference and UTI, the two parties by LEI (and by name where the book knows one), the terms, each
+  leg with who pays whom, the record's hash and where it is anchored, both signatures, and a statement that it is
+  evidence of the terms and not a master agreement.
+- Everything on it comes from the proof pack: the record the parties signed, not the booking as it stands. A
+  number is printed as the record holds it, grouped in thousands and never rounded; a date is written out; a
+  field the record leaves empty is left off (`trade-window/paper-confirmation.js`, with tests).
+- It says what the record is. One whose two signatures Rijeka produced (the demonstration) is stamped "signed
+  with demonstration keys" and carries a line saying it is not a confirmation between two parties; one that is
+  not anchored says so; one since closed says so.
+- It is Rijeka's own sheet, not an ISDA form: ISDA's confirmation templates and definitions are licensed text.
+- Not built: a paper for a trade confirmed off chain. There is no signed record to print from; the mock showed
+  one marked unsigned, and that waits for the owner's answer. No QR code: the app bundles no library for one.
+- **The certificate's mark is the logo**: this trade's river (drawn from the record's hash, so each trade's is
+  its own) running into the ringed R, in the paper's inks. The ring is the seal, as everywhere the mark is drawn:
+  closed where the record stands on a chain, a faint outline and the whole in grey where it is not anchored or
+  is closed (`brand/CertMark.jsx`). The interlaced-rings seal and its code are removed.
+- Checked on the local stack, which has no chain: the swap's journey opens the paper, reads it, and prints it.
+  Not seen: an anchored record's paper and mark in the app (the journeys with a local chain run in CI), a digital
+  asset's or a currency trade's paper on screen (their mapping is unit-tested), the paper on a phone.
+
 ## 0.32.4 · 13 November 2026
 
 **A trade's status is changed by an event and by nothing else.** The owner: "i think you are able to cancel the

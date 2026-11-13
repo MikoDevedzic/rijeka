@@ -50,12 +50,20 @@ ticket). The certificate's corner is 2px: it is paper.
 
 The signed record on the CONFIRM tab is the one light surface (`.cert` in `trade-window/styles.css`). Inside it
 the colour tokens are redefined as the paper's inks, so its rows, links and buttons take them without naming a
-colour. The seal (`trade-window/Seal.jsx`, `seal-rings.js`) is drawn from the trade's hash: the same hash always
-draws the same seal. Only a record that stands on chain has the stamp's blue and red and the centre point: one
-that is signed and not anchored, or closed, has a grey seal without it. The ticket keeps a visited tab mounted
-and hidden, where a canvas has no size, so the seal is drawn when it first has one and again whenever it comes
-back into view. The heading says "Both sides signed the same terms" only where the record itself says it is
+colour. Its mark is the logo (`brand/CertMark.jsx`; the owner, 13 November 2026: "that should be that rijeka logo and not
+random circle thing"): this trade's river, drawn from the record's hash so that the same hash always draws the
+same one, running into the ringed R, in the paper's inks. The ring is the seal, as everywhere the mark is drawn:
+closed only for a record that stands on chain; one that is signed and not anchored, or closed, has the ring as a
+faint outline and the whole in the paper's grey. The ticket keeps a visited tab mounted and hidden, where a canvas
+has no size, so the mark is drawn when it first has one and again whenever it comes back into view.
+The heading says "Both sides signed the same terms" only where the record itself says it is
 bilateral.
+
+The paper confirmation (`trade-window/PaperConfirmation.jsx`) is the same paper as a sheet: a `.cert`, so the same
+inks, the certificate's caps and title, figures in mono, rows ruled like the certificate's. It is the one thing
+the app prints: printed, the sheet stands alone on white at the page's own margins. What it says of a record it
+says in words on the sheet (a stamp and, for a record Rijeka signed for both sides, a boxed line): never by colour
+alone, since paper may be printed in one ink.
 
 ## The exposure chart
 
