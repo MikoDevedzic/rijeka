@@ -80,6 +80,7 @@ export const useChatStore = create((set, get) => ({
       await get().refreshRooms()
       get().subscribe()
       set({ status: 'ready' })
+      get().watch()
     } catch (e) {
       set({ status: 'error', error: e.message })
     }
@@ -120,9 +121,56 @@ export const useChatStore = create((set, get) => ({
       // Invites, joins and leaves change the room list.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_room_members' },
         () => get().refreshRooms().catch(() => {}))
-      .subscribe()
+      .subscribe((status) => { if (status === 'SUBSCRIBED') get().catchUp() })      // joined, or joined again: what was sent while it was not is fetched
     set({ channel })
   },
+
+  // Behind the live stream. Realtime tells a window nothing while its socket is down and replays nothing when it is
+  // back: a phone that slept, a laptop that changed network or a socket that never joined left the other person's
+  // messages, and Prometheus's answer, unseen until the page was reloaded (the owner, 13 November 2026: "when i send
+  // him message he has to refresh to get the messages", "i asked prometheus soemthing in chat and it didnt return me
+  // answer"). So what was missed is fetched: when the socket joins, when the page comes back into view or online,
+  // and on a slow tick while the page is in view (faster while the chat is open, fastest while an answer is awaited).
+  catchUp: async () => {
+    if (get().status !== 'ready' || get()._catching) return
+    set({ _catching: true })
+    try {
+      await get().refreshRooms()                       // the rooms, their last message and their unread counts, as the server holds them
+      const { activeId, messages } = get()
+      if (!activeId || activeId === PROMETHEUS || !messages[activeId]) return
+      const list = await chatApi(`/rooms/${activeId}/messages`)
+      if (!Array.isArray(list)) return
+      const have = new Set((get().messages[activeId] || []).map(m => m.id))
+      const fresh = list.filter(m => !have.has(m.id))
+      if (!fresh.length) return
+      const answered = fresh.some(m => m.sender_kind === 'PROMETHEUS' || m.sender_kind === 'SYSTEM')
+      set(s => ({
+        messages: { ...s.messages, [activeId]: [...(s.messages[activeId] || []), ...fresh] },
+        pending: answered && s.pending[activeId] ? { ...s.pending, [activeId]: false } : s.pending,
+      }))
+      for (const m of fresh) if (m.card?.type === 'trade_event') get().bumpCard(m.card.trade_id)
+      const me = get().me
+      if (get().open && get().activeId === activeId && fresh.some(m => m.sender_user_id !== me?.user_id)) get().markRead(activeId)
+    } catch { /* the next tick tries again */ } finally { set({ _catching: false }) }
+  },
+  _catching: false,
+
+  watch: () => {
+    if (get()._unwatch || typeof document === 'undefined') return
+    const seen = () => { if (document.visibilityState === 'visible') get().catchUp() }
+    document.addEventListener('visibilitychange', seen)
+    window.addEventListener('focus', seen)
+    window.addEventListener('online', seen)
+    let n = 0
+    const tick = setInterval(() => {
+      n += 1
+      if (document.visibilityState !== 'visible') return
+      const awaiting = Object.values(get().pending).some(Boolean)
+      if (awaiting || (get().open && n % 3 === 0) || n % 12 === 0) get().catchUp()      // every 4 s, 12 s, 48 s
+    }, 4000)
+    set({ _unwatch: () => { clearInterval(tick); document.removeEventListener('visibilitychange', seen); window.removeEventListener('focus', seen); window.removeEventListener('online', seen); set({ _unwatch: null }) } })
+  },
+  _unwatch: null,
 
   // One path for every new message, from realtime or our own POST; dedupe by id.
   receive: (m) => {
@@ -163,6 +211,8 @@ export const useChatStore = create((set, get) => ({
     if (!get().messages[roomId]) {
       const list = await chatApi(`/rooms/${roomId}/messages`)
       set(s => ({ messages: { ...s.messages, [roomId]: list } }))
+    } else {
+      get().catchUp()                                  // a room opened again shows what arrived while it was closed
     }
     get().markRead(roomId)
   },

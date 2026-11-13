@@ -29,3 +29,47 @@ describe('chat rooms: an answer that is not a list', () => {
     expect(selectUnreadTotal({ rooms: null })).toBe(0)
   })
 })
+
+// Behind the live stream: what a window missed while its socket was down is fetched, once, without counting it twice.
+describe('chat catches up on what the live stream did not deliver', () => {
+  const ME = { user_id: 'me' }
+  const m = (id, over = {}) => ({ id, room_id: 'a', sender_user_id: 'them', sender_kind: 'USER', body: id, created_at: `2026-11-13T12:0${id.slice(-1)}:00Z`, ...over })
+  const serve = (rooms, messages) => vi.fn(async (url, init) => ({ ok: true, status: 200,
+    json: async () => (String(url).endsWith('/rooms') ? rooms : String(url).includes('/messages') ? messages : init?.method === 'POST' ? {} : {}) }))
+  afterEach(() => { vi.unstubAllGlobals(); useChatStore.setState({ rooms: [], messages: {}, pending: {}, activeId: null, open: false, status: 'idle', me: null, _catching: false }) })
+
+  it('adds the messages it does not have, in order, takes the unread count from the server, and clears a wait for Prometheus', async () => {
+    useChatStore.setState({ status: 'ready', me: ME, activeId: 'a', open: false, rooms: [{ id: 'a', my_access: 'JOINED', unread: 0 }],
+      messages: { a: [m('m1'), m('m2', { sender_user_id: 'me' })] }, pending: { a: true } })
+    const fetch = serve([{ id: 'a', my_access: 'JOINED', unread: 2 }], [m('m1'), m('m2', { sender_user_id: 'me' }), m('m3'), m('m4', { sender_kind: 'PROMETHEUS', sender_user_id: null })])
+    vi.stubGlobal('fetch', fetch)
+    await useChatStore.getState().catchUp()
+    const s = useChatStore.getState()
+    expect(s.messages.a.map(x => x.id)).toEqual(['m1', 'm2', 'm3', 'm4'])
+    expect(s.rooms[0].unread, 'the server\'s count, not the server\'s plus one for each message fetched').toBe(2)
+    expect(s.pending.a).toBe(false)
+    await useChatStore.getState().catchUp()
+    expect(useChatStore.getState().messages.a).toHaveLength(4)                // a second pass adds nothing
+  })
+  it('marks the room read when its window is open, and fetches no messages for a room it has not loaded', async () => {
+    useChatStore.setState({ status: 'ready', me: ME, activeId: 'a', open: true, rooms: [{ id: 'a', my_access: 'JOINED', unread: 1 }], messages: { a: [m('m1')] } })
+    const fetch = serve([{ id: 'a', my_access: 'JOINED', unread: 1 }], [m('m1'), m('m2')])
+    vi.stubGlobal('fetch', fetch)
+    await useChatStore.getState().catchUp()
+    expect(fetch.mock.calls.some(([url, init]) => String(url).includes('/rooms/a/read') || (init?.method === 'POST' && String(url).includes('/rooms/a'))), 'the room is marked read').toBe(true)
+    useChatStore.setState({ activeId: 'b', messages: {} })
+    fetch.mockClear()
+    await useChatStore.getState().catchUp()
+    expect(fetch.mock.calls.map(([url]) => String(url)).filter(u => u.includes('/messages'))).toEqual([])
+  })
+  it('does nothing before the chat is ready, and a failed fetch leaves what it has', async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+    await useChatStore.getState().catchUp()
+    expect(fetch).not.toHaveBeenCalled()
+    useChatStore.setState({ status: 'ready', me: ME, activeId: 'a', rooms: [{ id: 'a', my_access: 'JOINED', unread: 0 }], messages: { a: [m('m1')] } })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')))
+    await useChatStore.getState().catchUp()
+    expect(useChatStore.getState().messages.a).toHaveLength(1)
+    expect(useChatStore.getState()._catching).toBe(false)
+  })
+})

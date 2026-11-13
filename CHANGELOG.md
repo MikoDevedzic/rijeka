@@ -3,6 +3,25 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.33.1 · 13 November 2026
+
+**Chat fetches what its live stream did not deliver.** The owner, in a chat with another firm: "when i send him
+message he has to refresh to get the messages", and "i asked prometheus soemthing in chat and it didnt return me
+answer".
+
+- A message reached another window only through the realtime socket, and so did Prometheus's answer. A socket
+  that is down (a phone that slept, a network that changed, a socket that never joined) is told nothing, and
+  nothing is replayed when it comes back: the message was on the server and not on the screen until a reload.
+  The blotter has had a fetch behind its stream since 0.12; chat had none.
+- Chat now catches up: when the socket joins or joins again, when the page comes back into view or online, when
+  a room is opened again, and on a tick while the page is in view (every 4 seconds while an answer from
+  Prometheus is awaited, 12 while the chat is open, 48 otherwise). It fetches the rooms (their unread counts as
+  the server holds them) and the open room's messages, adds the ones it does not have, and counts none twice.
+- Not found: why the socket did not deliver in the first place. The site's security policy allows it (read from
+  the live headers); the cause is on a device or in the realtime service, which was not seen from here.
+- Not checked: that Prometheus answered on the server. If the answer is still missing after this, it failed
+  there (the server's log would say), not on the screen.
+
 ## 0.33.0 · 13 November 2026
 
 **A paper confirmation from the signed record, and the Rijeka mark on the certificate.** The owner: "we also need
