@@ -11,6 +11,7 @@ import PnlTile from './home/PnlTile'
 import { useModulesStore } from '../store/useModulesStore'
 import WeekAhead from './home/WeekAhead'
 import RoleSwitch from './layout/RoleSwitch'
+import { DeskNoteHome } from './layout/DeskNote'
 import { useVisibleNav } from './layout/useVisibleNav'
 import { getSessionMaybe } from '../lib/session'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
@@ -224,6 +225,8 @@ function DeskHome({ demo, navigate }) {
                 : d.loading ? <span className="dh-asof">LOADING…</span> : <span className="dh-asof stale">NO CURVES LOADED</span>}
         </span>
       </div>
+
+      <DeskNoteHome />
 
       <WorldClock />
 

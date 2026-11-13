@@ -56,6 +56,16 @@ test('a phone: the home, the trades, chat and news, each within the screen, from
   await expect(app.locator('.ms-launcher'), 'chat is in the bar, not a floating button').toBeHidden()
   await fits(app, 'the home')
   await shot(app, 'home')
+  // the app says what it is on a phone, once: the note closes and stays closed on that phone
+  const note = app.getByTestId('desk-note-home')
+  await expect(note).toContainText('This is the phone view.')
+  await expect(note).toContainText('on a monitor, at app.rijeka.app')
+  expect((await note.getByRole('button', { name: 'Close this note' }).boundingBox()).height, 'a thumb high').toBeGreaterThanOrEqual(40)
+  await note.getByRole('button', { name: 'Close this note' }).click()
+  await expect(note).toHaveCount(0)
+  await app.reload()
+  await expect(app.locator('.dh-kpis').first()).toBeVisible({ timeout: 30_000 })
+  await expect(note, 'closed once, it stays closed').toHaveCount(0)
 
   await nav.getByRole('button', { name: /TRADES/ }).click()
   await expect(app).toHaveURL(/\/blotter$/)
@@ -203,6 +213,7 @@ test('a phone: the door offers the home screen, says how, and still fits one scr
   expect(at.down, 'the door with its button is one screen').toBeLessThanOrEqual(0)
   expect(at.across).toBeLessThanOrEqual(0)
   expect((await add.boundingBox()).height, 'a thumb high').toBeGreaterThanOrEqual(40)
+  await expect(page.getByTestId('desk-note-door'), 'the door says it is a desk\'s screen').toContainText('Built for a monitor.')
   // an iPhone enlarges the page for a field with type under 16px and leaves it enlarged after sign-in
   for (const label of ['Email', 'Password']) expect(await page.getByLabel(label).evaluate(e => parseFloat(getComputedStyle(e).fontSize)), `${label} is typed at 16px or more`).toBeGreaterThanOrEqual(16)
   await add.click()

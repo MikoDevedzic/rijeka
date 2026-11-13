@@ -207,6 +207,15 @@
   .scn-surface { height: 300px; }
   .scn-tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; }      /* three figures in two columns: the third takes the row, not half of it */
 
+  /* the app says what it is on a phone (layout/DeskNote.jsx): a line on the door, a note on the home that closes */
+  .dn { display: flex; align-items: flex-start; gap: 9px; margin: 0; font-size: 12px; line-height: 18px; color: var(--text-dim); text-align: left; }
+  .dn b { color: var(--text-hi); font-weight: 600; }
+  .dn-glyph { flex: none; margin-top: 1px; color: var(--text-dim); }
+  .dn-door { width: 100%; max-width: 380px; padding: 0 2px; }
+  .dn-home { margin: 10px 0 2px; padding: 9px 4px 9px 11px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; }
+  .dn-home > span { flex: 1; min-width: 0; }
+  .dn-close { flex: none; width: 40px; height: 40px; margin: -9px 0; background: none; border: 0; color: var(--text-dim); font-size: 13px; cursor: pointer; }
+
   /* the door: the button that puts Rijeka on the home screen, and the sheet that says how */
   .au-install { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; max-width: 380px; min-height: 44px; padding: 10px 14px; border-radius: 4px; cursor: pointer;
     font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--text-hi); background: var(--panel-2); border: 1px solid var(--border-hi); }
