@@ -5,16 +5,32 @@
 -- that takes admin away without a way back was the role chip, open to an administrator from 29 October until
 -- 0.22.1 (11 November). No migration applied by the runner changes the role of an existing account.
 --
--- One row, by the address of an account whose address was confirmed: an account that only claims the address
--- (sign-up without confirmation) is not touched. Where there is no such account (a new database, a self-hosted
--- desk) it changes nothing; the confirmation is read through to_jsonb so that a database whose auth.users has no
--- such column (the local stack's) runs the statement and changes nothing. The trigger on profiles.role carries the role into the account's metadata, as it does
--- for a change made on the Users page.
+-- This list is applied by every desk that runs the software, so the statement must do nothing anywhere but on
+-- the hosted one (Magnus, 13 November: on a self-hosted desk where someone had signed up at this address, it
+-- would have made that account an administrator). It acts only where both hold:
+--   * the runner's ledger has an entry applied before 11 November 2026. The runner first shipped on 9 November
+--     and applied its first files to the hosted desk that day; a desk set up later, or one that has no ledger
+--     (the local stack), is not touched. Not closed: a self-hosted desk that deployed the runner in those two days;
+--   * the account at the address has confirmed it (read through to_jsonb, so a database whose auth.users has no
+--     such column runs this and changes nothing).
+-- Where they do not hold it changes nothing and is recorded as applied. The trigger on profiles.role carries the
+-- role into the account's metadata, as it does for a change made on the Users page.
 --
--- Idempotent: an account that is already an administrator is left as it is.
+-- Idempotent: an account that is already an administrator is left as it is. To undo it, set the role back on the
+-- Users page; the role the account held before is not recorded anywhere.
 
-UPDATE public.profiles
-   SET role = 'admin'
- WHERE role IS DISTINCT FROM 'admin'
-   AND id IN (SELECT u.id FROM auth.users u
-               WHERE lower(u.email) = 'miko@rijeka.app' AND to_jsonb(u) ->> 'email_confirmed_at' IS NOT NULL);
+DO $$
+BEGIN
+  IF to_regclass('public.schema_migrations') IS NULL THEN
+    RETURN;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.schema_migrations WHERE applied_at < TIMESTAMPTZ '2026-11-11 00:00:00+00') THEN
+    RETURN;
+  END IF;
+  UPDATE public.profiles
+     SET role = 'admin'
+   WHERE role IS DISTINCT FROM 'admin'
+     AND id IN (SELECT u.id FROM auth.users u
+                 WHERE lower(u.email) = 'miko@rijeka.app' AND to_jsonb(u) ->> 'email_confirmed_at' IS NOT NULL);
+END
+$$;

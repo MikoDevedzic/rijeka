@@ -10,7 +10,12 @@ view", and, asked how: "i never manually removed it. so it must have been you. y
 
 - No account of the owner's held the admin role on the hosted desk, so nobody could open the Users page to give
   it back. One migration (`2026-11-13_restore_owner_admin.sql`), applied by the runner, sets it on the one
-  account at the owner's confirmed address. On any other database it changes nothing.
+  account at the owner's confirmed address.
+- After its reviews (Edgar, Magnus): the approved list is applied by every desk that runs the software, and on
+  a self-hosted desk where someone had signed up at that address the statement would have made that account
+  an administrator. It now acts only where the runner's ledger began before 11 November 2026 (the runner
+  first shipped on 9 November, to the hosted desk); a desk set up later, or one with no ledger, is not
+  touched. Not closed: a self-hosted desk that deployed the runner in those two days.
 - How it was lost is not known: nothing records a role change. The one path in the code that took admin away
   with no way back was the role chip, which an administrator could press from 29 October until 0.22.1 (11
   November). No migration applied by the runner changes the role of an existing account, and no record of a

@@ -37,4 +37,4 @@
 2026-11-10_fixings.sql  21db1287c97342979b54b2b91401eeb19b36b4a2d790e4fa3cca0ff79b3836ba  -  # Miko Devedzic, 2026-11-09: "you have to fix both" (the role of a new account, and the fixings table)
 2026-10-31_profiles_policies.sql  ed2b3e2bb81e91b6a1bd17850bb38aabb8ee798693887b2985f94bdbe07b780f  -  # Miko Devedzic, 2026-11-09: "apply profiles policy"
 2026-11-09_is_admin_search_path.sql  ffce77dd418cec51198960390c0ca6d6030666e3d0ee289dc7b15e907951a123  -  # Miko Devedzic, 2026-11-09: "apply the admin fix."
-2026-11-13_restore_owner_admin.sql  d38ea54c1bea6599c616f4a0980b08c96efc4efb518b462b599ddc68c9c3b520  -  # Miko Devedzic, 2026-11-13: "i never manually removed it. so it must have been you. you add it back."
+2026-11-13_restore_owner_admin.sql  f2f26a8af6c8307a6d6f4a147996b7bd71d87661b53855d807a8fc2369dcc563  -  # Miko Devedzic, 2026-11-13: "i never manually removed it. so it must have been you. you add it back."
