@@ -2,7 +2,7 @@
 // asks it to. An iPhone does not let a page do that, so the button shows the taps instead, and shows the ones this
 // browser has (lib/phone.js installWay): Safari has kept its Share button in three places. Once the app is running
 // from its icon the button is not shown.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePhone, standalone, installWay } from '../../lib/phone'
 
 // the glyphs as Safari draws them, beside the words that name them (so they are not read out twice)
@@ -14,12 +14,13 @@ const AddGlyph = () => <Glyph><rect x="2" y="2" width="12" height="12" rx="3" />
 const DotsGlyph = () => <Glyph><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" strokeWidth="2.2" /></Glyph>
 
 const share = <span className="au-nb"><b>Share</b> <ShareGlyph /></span>            // a glyph stays on its word's line
-const inBar = <>If Safari shows <ShareGlyph /> in its bar, tap that instead.</>
-// the first step and the line under the list, by the way this browser has; the steps after Share are the same everywhere
+const inBar = <>If the bar shows {share}, tap that instead.</>
+// the first step and the line under the list, by the way this browser has; the steps after Share are the same everywhere.
+// They name the address bar and the bar, not Safari: a browser that sends Safari's user agent reads the same sheet.
 const WAYS = {
-  'safari-27': { first: <>Press and hold Safari's <b>address bar</b>, then tap {share}.</>, note: inBar },
-  'safari-26': { first: <>Tap the three dots <DotsGlyph /> beside Safari's address bar, then {share}.</>, note: inBar },
-  safari: { first: <>Tap {share} in Safari's bar.</> },
+  'safari-27': { first: <>Press and hold the <b>address bar</b>, then tap {share}.</>, note: inBar },
+  'safari-26': { first: <>Tap the three dots <DotsGlyph /> beside the address bar, then {share}.</>, note: inBar },
+  safari: { first: <>Tap {share} in the browser's bar.</> },
   'other-browser': { first: <>Open your browser's {share} menu.</>, note: <>Not in the list? Open <b>app.rijeka.app</b> in Safari and press this button there.</> },
 }
 
@@ -28,6 +29,8 @@ export default function InstallButton() {
   const [prompt, setPrompt] = useState(null)        // Android's own install prompt, when it offers one
   const [sheet, setSheet] = useState(false)
   const [installed, setInstalled] = useState(standalone)
+  const opener = useRef(null)
+  const close = () => { setSheet(false); opener.current?.focus() }      // focus goes back to the button that opened the sheet
   useEffect(() => {
     const offer = (e) => { e.preventDefault(); setPrompt(e) }
     const done = () => { setInstalled(true); setSheet(false) }
@@ -38,7 +41,7 @@ export default function InstallButton() {
   // Escape closes the sheet, as a tap outside it does
   useEffect(() => {
     if (!sheet) return undefined
-    const key = (e) => { if (e.key === 'Escape') setSheet(false) }
+    const key = (e) => { if (e.key === 'Escape') close() }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
   }, [sheet])
@@ -49,15 +52,16 @@ export default function InstallButton() {
     try { await prompt.userChoice } catch { /* dismissed */ }
     setPrompt(null)
   }
-  const way = installWay(window.navigator?.userAgent || '')
+  const nav = window.navigator || {}
+  const way = installWay(nav.userAgent || '', nav.platform || '', nav.maxTouchPoints || 0)
   const taps = WAYS[way]
   return (
     <>
-      <button type="button" className="au-install" data-testid="add-to-home" onClick={press}>
+      <button type="button" className="au-install" data-testid="add-to-home" ref={opener} onClick={press}>
         <img src="/favicon.svg" alt="" width="20" height="20" />ADD TO HOME SCREEN
       </button>
       {sheet && (
-        <div className="au-sheet" role="dialog" aria-modal="true" aria-label="Add Rijeka to your home screen" data-way={way} onClick={() => setSheet(false)}>
+        <div className="au-sheet" role="dialog" aria-modal="true" aria-label="Add Rijeka to your home screen" data-way={way} onClick={close}>
           <div onClick={e => e.stopPropagation()}>
             <div className="au-sheet-icon"><img src="/apple-touch-icon.png" alt="" width="58" height="58" /><div><b>Rijeka</b><span>opens full screen, like an app</span></div></div>
             {way === 'in-app'
@@ -66,7 +70,7 @@ export default function InstallButton() {
                 ? <ol><li>{taps.first}</li><li>Scroll down the list and tap <b>Add to Home</b> <span className="au-nb"><b>Screen</b> <AddGlyph /></span>.</li><li>Tap <b>Add</b>. Open <b>Rijeka</b> from its icon.</li></ol>
                 : <ol><li>Open your browser's menu.</li><li>Choose <b>Add to Home screen</b> or <b>Install app</b>.</li><li>Open <b>Rijeka</b> from its icon.</li></ol>}
             {taps?.note && <p className="au-sheet-note">{taps.note}</p>}
-            <button type="button" className="au-install" onClick={() => setSheet(false)}>GOT IT</button>
+            <button type="button" className="au-install" autoFocus onClick={close}>GOT IT</button>
           </div>
         </div>
       )}

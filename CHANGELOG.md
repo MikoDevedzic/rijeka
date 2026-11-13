@@ -14,6 +14,11 @@ behind a press and hold on the address bar (27).
   beside the words, the steps numbered, and one line for a Safari laid out with Share in its bar. Another browser
   on an iPhone is sent to its Share menu; a page opened inside another app is told to open in Safari
   (`installWay` in `lib/phone.js`, with tests; a journey reads the sheet under five browsers).
+- After the review: an iPad that says it is a Mac is told to look in the bar; more in-app browsers are known,
+  and a web view that names Safari but no version; the steps name the address bar, not Safari, since a browser
+  that sends Safari's user agent reads the same sheet; the line under the list names the icon it shows; focus
+  goes into the sheet and back to the button; the journey measures the sheet's text against the sheet.
+- Left: an in-app browser on Android is still sent to a menu it may not have.
 - Not possible, and so not built: a button that does the steps. An iPhone gives a page no way to add itself to
   the home screen; Android does, and there the button already asks the browser in one tap.
 - Not checked: any of it on a real iPhone. Where Share sits in Safari 26 and 27 is taken from published

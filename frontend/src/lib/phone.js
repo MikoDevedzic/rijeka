@@ -46,12 +46,17 @@ export function keepScaleOnFocus() {
 // How this browser puts a page on a home screen. Android's browser can be asked to (beforeinstallprompt, read by the
 // door's button); an iPhone gives a page no way to do it, so the door says the taps, and they differ by browser and by
 // Safari's version: Share sat in Safari's bar to iOS 18, went behind the three dots beside the address bar in 26, and
-// behind a press and hold on the address bar in 27. From 26 Safari's user agent keeps the OS at 18_x; its own
-// Version/ is the number that moves. A page opened inside another app (a link tapped in a message) has no way at all.
-export function installWay(ua = '') {
-  if (!/iPad|iPhone|iPod/.test(ua)) return 'menu'
-  if (/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/.test(ua)) return 'other-browser'
-  if (!/Safari\//.test(ua) || /FBAN|FBAV|Instagram|LinkedInApp|Line\/|GSA\//.test(ua)) return 'in-app'
+// behind a press and hold on the address bar in 27 (published descriptions; not seen on a device). From 26 Safari's
+// user agent keeps the OS at 18_x; its own Version/ is the number that moves. An iPad is told to look in the bar.
+// A page opened inside another app (a link tapped in a message) has no way at all: a web view is known by one of
+// these names, or by naming no Safari or no Version. A browser that sends Safari's own user agent (Brave does)
+// cannot be told from Safari, which is why the steps name the address bar and not Safari.
+const IN_APP = /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|Line\/|GSA\/|Snapchat|Twitter|TikTok|musical_ly|Bytedance|MicroMessenger|WhatsApp|Pinterest/
+export function installWay(ua = '', platform = '', touchPoints = 0) {
+  if (!isIos(ua, platform, touchPoints)) return 'menu'
+  if (/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo|Focus\//.test(ua)) return 'other-browser'
+  if (!/Safari\//.test(ua) || !/Version\//.test(ua) || IN_APP.test(ua)) return 'in-app'
+  if (!/iPhone|iPod/.test(ua)) return 'safari'
   const v = Number((ua.match(/Version\/(\d+)/) || [])[1] || 0)
   return v >= 27 ? 'safari-27' : v >= 26 ? 'safari-26' : 'safari'
 }
