@@ -43,6 +43,19 @@ export function keepScaleOnFocus() {
 // On a phone a wide table is read downwards: each row a block, each cell under its column's heading (Phone.css,
 // table[data-stack]). The heading's words are written onto the cell here, since a stylesheet cannot reach them.
 // A table of four columns or fewer fits and stays a table; one that says data-stack="no" is left alone.
+// How this browser puts a page on a home screen. Android's browser can be asked to (beforeinstallprompt, read by the
+// door's button); an iPhone gives a page no way to do it, so the door says the taps, and they differ by browser and by
+// Safari's version: Share sat in Safari's bar to iOS 18, went behind the three dots beside the address bar in 26, and
+// behind a press and hold on the address bar in 27. From 26 Safari's user agent keeps the OS at 18_x; its own
+// Version/ is the number that moves. A page opened inside another app (a link tapped in a message) has no way at all.
+export function installWay(ua = '') {
+  if (!/iPad|iPhone|iPod/.test(ua)) return 'menu'
+  if (/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/.test(ua)) return 'other-browser'
+  if (!/Safari\//.test(ua) || /FBAN|FBAV|Instagram|LinkedInApp|Line\/|GSA\//.test(ua)) return 'in-app'
+  const v = Number((ua.match(/Version\/(\d+)/) || [])[1] || 0)
+  return v >= 27 ? 'safari-27' : v >= 26 ? 'safari-26' : 'safari'
+}
+
 export const STACK_FROM = 5
 const said = (th) => { const c = th.cloneNode(true); c.querySelectorAll('.rj-note, .kc').forEach(n => n.remove()); return (c.textContent || '').replace(/\s+/g, ' ').trim() }
 // The heading each cell of a row stands under: `spans` is the row's cells' column spans. A cell that runs across

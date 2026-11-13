@@ -207,6 +207,38 @@ test('a phone: the door offers the home screen, says how, and still fits one scr
   expectClean(problems)
 })
 
+// an iPhone cannot be asked to add the page, so the sheet says the taps this Safari has: Share has sat in three places
+const IPHONE = (rest) => `Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ${rest}`
+const SAFARIS = [
+  ['safari', IPHONE('Version/18.6 Mobile/15E148 Safari/604.1'), "Tap Share in Safari's bar."],
+  ['safari-26', IPHONE('Version/26.1 Mobile/15E148 Safari/604.1'), "Tap the three dots beside Safari's address bar, then Share."],
+  ['safari-27', IPHONE('Version/27.0 Mobile/15E148 Safari/604.1'), "Press and hold Safari's address bar, then tap Share."],
+  ['other-browser', IPHONE('CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1'), "Open your browser's Share menu."],
+  ['in-app', IPHONE('Mobile/15E148'), 'This page is open inside another app, which cannot add it.'],
+]
+test('a phone: the sheet says the taps this browser has, and stays on the screen', async ({ page, problems }) => {
+  await signedOut(page)
+  for (const [way, ua, first] of SAFARIS) {
+    await page.addInitScript(u => Object.defineProperty(window.navigator, 'userAgent', { get: () => u, configurable: true }), ua)
+    await page.goto('/login')
+    await page.getByTestId('add-to-home').click()
+    const sheet = page.getByRole('dialog', { name: 'Add Rijeka to your home screen' })
+    await expect(sheet).toHaveAttribute('data-way', way)
+    const steps = sheet.locator('ol > li')
+    await expect(steps).toHaveCount(3)
+    expect((await steps.first().innerText()).replace(/\s+/g, ' ').replace(/ ([.,])/g, '$1').trim(), `${way}: the first tap`).toBe(first)      // a glyph sits between a word and its full stop
+    if (way !== 'in-app') await expect(steps.nth(1)).toContainText('Add to Home Screen')
+    const box = await sheet.locator(':scope > div').boundingBox()
+    const view = page.viewportSize()
+    expect(box.y, `${way}: the sheet's top is on the screen`).toBeGreaterThanOrEqual(0)
+    expect(box.y + box.height, `${way}: and its foot`).toBeLessThanOrEqual(view.height + 1)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${way}: nothing pushed sideways`).toBeLessThanOrEqual(0)
+    await page.screenshot({ path: `e2e/.out/shots/phone-add-to-home-${way}.png` })
+    await sheet.getByRole('button', { name: 'GOT IT' }).click()
+  }
+  expectClean(problems)
+})
+
 test('opened from its icon the mark comes alive once, the door has no install button, and then the app is there', async ({ page, problems }) => {
   await signedOut(page)
   await page.emulateMedia({ reducedMotion: 'no-preference' })       // the journeys ask for less motion; this one watches the opening

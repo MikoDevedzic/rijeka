@@ -3,6 +3,22 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.32.2 · 13 November 2026
+
+**"Add to Home Screen" says the taps the visitor's own browser has.** The owner, on his phone: "i'm having hard
+time following instrucitons to add to home screen". The sheet said "Tap Share in Safari's bar", which is where
+Share sat until iOS 18. Safari has since moved it twice: behind the three dots beside the address bar (26), then
+behind a press and hold on the address bar (27).
+
+- The sheet reads Safari's version and gives that version's first step, with Safari's Share and Add glyphs drawn
+  beside the words, the steps numbered, and one line for a Safari laid out with Share in its bar. Another browser
+  on an iPhone is sent to its Share menu; a page opened inside another app is told to open in Safari
+  (`installWay` in `lib/phone.js`, with tests; a journey reads the sheet under five browsers).
+- Not possible, and so not built: a button that does the steps. An iPhone gives a page no way to add itself to
+  the home screen; Android does, and there the button already asks the browser in one tap.
+- Not checked: any of it on a real iPhone. Where Share sits in Safari 26 and 27 is taken from published
+  descriptions, not from a device.
+
 ## 0.32.1 · 12 November 2026
 
 **On a phone nothing is pushed sideways, and signing in no longer leaves the page enlarged.** The owner, the same
