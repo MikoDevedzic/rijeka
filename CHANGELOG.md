@@ -3,6 +3,23 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.33.2 · 13 November 2026
+
+**The owner's account on the hosted desk is an administrator again.** The owner: "looks like i lost my 'admin'
+view", and, asked how: "i never manually removed it. so it must have been you. you add it back."
+
+- No account of the owner's held the admin role on the hosted desk, so nobody could open the Users page to give
+  it back. One migration (`2026-11-13_restore_owner_admin.sql`), applied by the runner, sets it on the one
+  account at the owner's confirmed address. On any other database it changes nothing.
+- How it was lost is not known: nothing records a role change. The one path in the code that took admin away
+  with no way back was the role chip, which an administrator could press from 29 October until 0.22.1 (11
+  November). No migration applied by the runner changes the role of an existing account, and no record of a
+  role written by hand was found.
+- Still so: an administrator can change their own row on the Users page, and a role change leaves no record.
+  Both are proposed, not built.
+- Not checked: the role as the hosted database holds it, before or after (an agent does not read it). The owner
+  signs out and in, and looks.
+
 ## 0.33.1 · 13 November 2026
 
 **Chat fetches what its live stream did not deliver.** The owner, in a chat with another firm: "when i send him
