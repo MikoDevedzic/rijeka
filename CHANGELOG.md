@@ -8,10 +8,11 @@ methodology document carries its own version (v1.20). Commits on `main` are the 
 **On a phone the app says it is built for a monitor.** The owner, after the phone fixes: "we do need to have some
 sort of message that this is meant for desktop viewing and not phone viewing".
 
-- On the door, under ADD TO HOME SCREEN, one line: "Built for a monitor. A phone shows the home, trades, a new
-  trade, chat and news." The door is still one screen on the narrowest phone.
-- On the home, under the market line, a note: "This is the phone view. Risk, P&L, market data and the full
-  ticket are on a monitor, at app.rijeka.app." It closes, and stays closed on that phone.
+- On the door, under ADD TO HOME SCREEN, one line: "Built for a monitor. A phone shows the essentials." The door
+  is still one screen on the narrowest phone.
+- On the home, under the market line, a note: "This is the phone view. Risk, P&L and market data are on a
+  monitor, at app.rijeka.app." It closes, and stays closed on that phone. (The first wording said "the full
+  ticket" was a monitor's; the phone has the whole ticket but CAPITAL, so it does not say that.)
 - A monitor is told neither (`components/layout/DeskNote.jsx`; journeys for the door, the home and a monitor).
 - Seen in Safari on iOS 27 in the simulator, on the local stack. Not seen on a physical iPhone.
 

@@ -312,8 +312,8 @@ capital. Those pages still open by their address but are not in the phone's navi
 - **A target for a thumb is about 40px high.** Keys (F4, ⌘↵) are not shown: a phone has none.
 - **The app says what it is** (the owner, 13 November 2026: "meant for desktop viewing and not phone viewing"): one
   quiet line on the door ("Built for a monitor."), and a note on the home that closes and stays closed on that
-  phone (`layout/DeskNote.jsx`). Label size, the text's quieter colour, a monitor glyph; never a banner, never a
-  colour, and nothing on a monitor.
+  phone (`layout/DeskNote.jsx`). The size of a sheet's note (12px), the text's quieter colour, a monitor glyph; never
+  a banner, never a colour, and nothing on a monitor. A note on a phone closes by a bare ✕ in a 40px target.
 - **From the home screen.** The door offers ADD TO HOME SCREEN. An iPhone does not let a page install itself, so
   the button shows the taps that visitor's browser has (Safari has kept Share in three places: `installWay` in
   `lib/phone.js`), numbered, with Safari's glyphs beside the words; Android installs directly. The icon is the mark at rest; opened from it, the
