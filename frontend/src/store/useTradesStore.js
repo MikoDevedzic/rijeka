@@ -79,41 +79,8 @@ export const useTradesStore = create((set, get) => ({
     return stop
   },
 
-  addTrade: async (trade) => {
-    // Generate UUID client-side — Supabase free tier may not have gen_random_uuid() default
-    const id = crypto.randomUUID ? crypto.randomUUID()
-      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-          const r = Math.random() * 16 | 0
-          return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
-        })
-    const { data, error } = await supabase
-      .from('trades')
-      .insert([{ ...trade, id }])
-      .select(`*,
-        counterparty:counterparties(id, name, csa_type),
-        own_entity:legal_entities(id, name, short_name)`)
-      .single()
-    if (error) return { error }
-    set(s => ({ trades: [data, ...s.trades] }))
-    return { data }
-  },
-
-  updateTradeStatus: async (id, status) => {
-    const { error } = await supabase.from('trades').update({ status }).eq('id', id)
-    if (error) return { error }
-    set(s => ({ trades: s.trades.map(t => t.id === id ? { ...t, status } : t) }))
-    return {}
-  },
-
-  deleteTrade: async (id) => {
-    const t = get().trades.find(x => x.id === id)
-    if (!['PENDING','CANCELLED'].includes(t?.status))
-      return { error: { message: 'Only PENDING or CANCELLED trades can be deleted' } }
-    const { error } = await supabase.from('trades').delete().eq('id', id)
-    if (error) return { error }
-    set(s => ({ trades: s.trades.filter(x => x.id !== id) }))
-    return {}
-  },
+  // A trade is written only through the API (booking, /api/trade-events, /api/chain), where a change is an event. The
+  // three writers that went straight to the table from here (add, set a status, delete) were used by nothing and are gone.
 
   filteredTrades: () => {
     const { trades, filters } = get()

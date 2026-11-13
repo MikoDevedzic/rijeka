@@ -340,12 +340,16 @@ def update_trade(trade_id: uuid.UUID, body: TradeUpdate, db: Session = Depends(g
     if "strategy" in updates:
         from api.routes._package import refuse_client_tag
         refuse_client_tag(updates["strategy"], was=t.strategy)
-    if "status" in updates and updates["status"] != t.status:
-        # Status is a lifecycle fact, not a field: PENDING->CONFIRMED etc. go
-        # through /api/trade-events and /api/chain so an event and, where
-        # anchored, both signatures exist for the change.
-        from chain.lifecycle import refuse_offchain_mutation
-        refuse_offchain_mutation(db, t, f"Setting status to {updates['status']} via PUT")
+    if "status" in updates:
+        # Status is a lifecycle fact, not a field: it changes through /api/trade-events and /api/chain, where the change is
+        # an event and, on chain, signed by both parties. Until 13 November 2026 this refused only a trade already
+        # anchored: a cancelled trade could be set back to PENDING here and then confirmed, a pending one set to CONFIRMED
+        # with no event and no signature, and any word at all was stored as a status.
+        if updates["status"] != t.status:
+            raise HTTPException(status_code=409, detail=(
+                f"{t.trade_ref} is {t.status}, and a trade's status is not edited. It is confirmed, cancelled or terminated "
+                "through /api/trade-events and /api/chain, where the change is an event."))
+        updates.pop("status")
     if "terms" in updates:
         # the fields the settlement rule reads are held to the booking rule when an edit changes them; an edit that
         # leaves them as they are is not a re-validation of an older record

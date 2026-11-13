@@ -3,6 +3,30 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.32.4 · 13 November 2026
+
+**A trade's status is changed by an event and by nothing else.** The owner: "i think you are able to cancel the
+trade and then confirm it. can you check logic on this."
+
+- What was checked. In the trade window a cancelled trade offers nothing to confirm, and the three routes that
+  confirm (`/api/chain/confirm`, `/api/chain/countersign` and the chat card, `/api/trade-events/confirm`) refuse a
+  trade that is not PENDING. The way round them was `PUT /api/trades/{id}`: it refused a change of status only on
+  a trade already anchored on chain, so on any other it stored whatever it was sent. A cancelled trade set back
+  to PENDING there was then confirmed by the confirm route (its events read BOOKED, CANCELLED, CONFIRMED); a
+  pending trade was set to CONFIRMED with no event and no signature; "NONSENSE" was stored as a status.
+- `PUT /api/trades/{id}` now refuses any change of status, 409, on every trade. An edit that carries the status
+  the trade already has is an edit of the rest, as before.
+- A trade is not cancelled, or confirmed off chain, while its confirmation is in flight on the registry (409):
+  the transaction lands whatever the book does next, and the registry would hold a confirmation of a trade the
+  book calls cancelled.
+- The trades store's three writers that went straight to the table from the browser (add, set a status,
+  delete) were used by nothing and are removed.
+- **Not closed by this change, and the owner's to decide:** the database lets a signed-in user write their own
+  rows of `trades` and `trade_legs` directly (one policy for every command, `docs/schema.sql`), which is the
+  same way round, outside the API. Seen on the local stack, which carries the same policy and the grants a
+  hosted project has by default; production's grants were not read. Closing it is a migration (the browser
+  reads, only the API writes), and a migration reaches production only on his words.
+
 ## 0.32.3 · 13 November 2026
 
 **On a phone the app says it is built for a monitor.** The owner, after the phone fixes: "we do need to have some

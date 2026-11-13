@@ -289,6 +289,16 @@ def _lookup_idempotent(
     return None
 
 
+def _refuse_while_anchoring(db: Session, trade: Trade, what: str) -> None:
+    """409 while a confirmation of this trade is in flight on the registry. The transaction lands whatever the book
+    does next: cancelled (or confirmed off chain) meanwhile, the registry would hold a confirmation of a trade the book
+    calls cancelled, and the row that waits for the receipt would find the trade gone."""
+    from chain import pending as P
+    if P.tables_present(db) and P.open_for_trade(db, trade.id) is not None:
+        raise HTTPException(status_code=409, detail=(
+            f"A confirmation of {trade.trade_ref} is in flight on the registry. Let it finish (or fail) before {what}."))
+
+
 def _load_pending_trade(db: Session, trade_id: UUID, user_id: UUID) -> Trade:
     """
     Fetch the trade iff it belongs to this user.
@@ -461,6 +471,7 @@ def confirm_trade(
 
     trade_uuid = _parse_trade_uuid(trade_id)
     trade = _load_pending_trade(db, trade_uuid, user_id)
+    _refuse_while_anchoring(db, trade, "confirming it off chain")
 
     return _apply_lifecycle_transition(
         db=db,
@@ -495,6 +506,7 @@ def cancel_trade(
 
     trade_uuid = _parse_trade_uuid(trade_id)
     trade = _load_pending_trade(db, trade_uuid, user_id)
+    _refuse_while_anchoring(db, trade, "cancelling it")
 
     payload: dict = {}
     if body and body.reason:
