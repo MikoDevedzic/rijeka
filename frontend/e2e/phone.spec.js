@@ -19,13 +19,21 @@ const pastEdge = (page) => page.evaluate(() => {
     const o = getComputedStyle(e).overflowX, r = e.getBoundingClientRect()
     if ((o === 'auto' || o === 'scroll') && e.scrollWidth > e.clientWidth + 2 && r.width > 0 && r.height > 0) sideways.push(`${e.dataset.testid || ''} ${e.tagName.toLowerCase()}.${String(e.className?.baseVal ?? e.className).split(' ')[0]} +${e.scrollWidth - e.clientWidth}`)
   }
-  return { across: document.documentElement.scrollWidth - vw, out: out.slice(0, 5), sideways }
+  // a box that clips across and holds more than it shows: a panel squeezed to a sliver hides its figures behind its edge, and
+  // neither check above sees it (0.32.1 went out with a swap's scenario chart 30px wide). A label that ends in an ellipsis says so itself.
+  const hidden = []
+  for (const e of document.querySelectorAll('body *')) {
+    const s = getComputedStyle(e), r = e.getBoundingClientRect()
+    if ((s.overflowX === 'hidden' || s.overflowX === 'clip') && s.textOverflow !== 'ellipsis' && e.children.length && e.scrollWidth > e.clientWidth + 8 && r.width > 0 && r.height > 0) hidden.push(`${e.dataset.testid || ''} ${e.tagName.toLowerCase()}.${String(e.className?.baseVal ?? e.className).split(' ')[0]} shows ${e.clientWidth} of ${e.scrollWidth}`)
+  }
+  return { across: document.documentElement.scrollWidth - vw, out: out.slice(0, 5), sideways, hidden }
 })
 const fits = async (page, what) => {
   const m = await pastEdge(page)
   expect(m.across, `${what} scrolls sideways`).toBeLessThanOrEqual(0)
   expect(m.out, `${what}: wider than the screen`).toEqual([])
   expect(m.sideways, `${what}: a box that has to be pushed sideways`).toEqual([])
+  expect(m.hidden, `${what}: a box that hides part of what it holds behind its edge`).toEqual([])
 }
 // every tab of the trade window, all in view at once: two rows of three, none to scroll to
 const tabsInView = async (win) => {

@@ -917,13 +917,13 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
       </div>
 
       {/* Two-column body */}
-      <div style={{flex:1,display:'grid',gridTemplateColumns:'360px 1fr',minHeight:0,overflow:'hidden'}}>
+      <div className="scn-body" style={{flex:1,display:'grid',gridTemplateColumns:'360px 1fr',minHeight:0,overflow:'hidden'}}>
 
         {/* LEFT PANEL */}
-        <div style={{borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+        <div className="scn-left" style={{borderRight:'1px solid var(--border)',display:'flex',flexDirection:'column',overflow:'hidden'}}>
 
           {/* Controls */}
-          <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+          <div className="scn-controls" style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
             <div style={{...secHdr,marginBottom:'12px'}}>SCENARIO CONTROLS</div>
             <div style={{display:'flex',flexDirection:'column',gap:'8px'}}>
               <select value={presetKey} onChange={e=>applyPreset(e.target.value)}
@@ -1082,7 +1082,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
           </div>
 
           {/* PAR RATES table */}
-          <div style={{padding:'10px 16px 6px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+          <div className="scn-rates-head" style={{padding:'10px 16px 6px',borderBottom:'1px solid var(--border)',flexShrink:0}}>
             <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
               <span style={secHdr}>
                 PAR RATES · {curveId.replace('_',' ')}
@@ -1099,7 +1099,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
           </div>
 
           {/* Scrollable rate rows */}
-          <div style={{flex:1,overflowY:'auto',padding:'0 16px 12px'}}>
+          <div className="scn-rates" style={{flex:1,overflowY:'auto',padding:'0 16px 12px'}}>
             <div style={{display:'grid',gridTemplateColumns:'30px 76px 58px 72px 1fr',gap:'6px',padding:'4px 0 5px',
               fontSize:'12px',letterSpacing:'0.1em',color:'var(--text-mute)',fontFamily:'var(--sans)',borderBottom:'1px solid var(--border-hi)'}}>
               <span>TENOR</span><span style={{textAlign:'right'}}>PAR %</span><span style={{textAlign:'right'}}>SHIFT bp</span>
@@ -1138,10 +1138,10 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
         </div>
 
         {/* RIGHT PANEL — chart + stats */}
-        <div style={{display:'flex',flexDirection:'column',overflow:'hidden',flex:1,minHeight:0}}>
+        <div className="scn-right" style={{display:'flex',flexDirection:'column',overflow:'hidden',flex:1,minHeight:0}}>
 
           {/* Stats cards */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'var(--border)',borderBottom:'1px solid var(--border)',flexShrink:0}}>
+          <div className="scn-tiles" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'1px',background:'var(--border)',borderBottom:'1px solid var(--border)',flexShrink:0}}>
             {[
               {label:'30Y DISCOUNT FACTOR', value:df30.toFixed(4), color:'var(--blue)'},
               {label:'5Y ZERO RATE',         value:zero5.toFixed(3)+'%', color:'var(--accent)'},
@@ -1156,9 +1156,9 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
           </div>
 
           {/* Charts container — rate + vol stacked */}
-          <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
+          <div className="scn-charts" style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
           {/* Chart — rate curve */}
-          <div style={{flex:IS_SWPN?'0 0 52%':'1',position:'relative',background:'var(--panel)',overflow:'hidden',minHeight:'160px'}}>
+          <div className="scn-chart" style={{flex:IS_SWPN?'0 0 52%':'1',position:'relative',background:'var(--panel)',overflow:'hidden',minHeight:'160px'}}>
             <canvas ref={canvasRef} style={{display:'block',cursor:'crosshair'}}/>
             {dragTip&&(
               <div style={{position:'absolute',left:dragTip.x,top:dragTip.y,pointerEvents:'none',zIndex:10,
@@ -1200,7 +1200,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
           {/* Impact analytics */}
           {/* 3D Vol surface — swaption SABR or cap vol surface */}
           {IS_SWPN && (
-            <div ref={volWrapRef}
+            <div className="scn-chart scn-surface" ref={volWrapRef}
               style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'var(--panel)',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}
 >
@@ -1267,7 +1267,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
             </div>
           )}
           {IS_CAPFLOOR && (
-            <div ref={capVolWrapRef}
+            <div className="scn-chart scn-surface" ref={capVolWrapRef}
               style={{flex:'1 1 0',borderTop:'1px solid var(--border)',background:'var(--panel)',
                 position:'relative',minHeight:'180px',overflow:'hidden'}}>
               <div style={{position:'absolute',top:5,left:8,fontSize:'0.8rem',

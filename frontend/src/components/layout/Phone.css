@@ -181,6 +181,25 @@
   /* links on the home that lead to pages laid out for a monitor are not offered on a phone */
   .dh-card header button.dh-link, .dh-card .pt { display: none !important; }
 
+  /* An iPhone gives a date field a width of its own and centres its value, so in a row of two it can run over the field
+     beside it. Held to its cell, its value at the left like every other field's. Written from Safari's known behaviour:
+     not seen on a device. */
+  input:is([type="date"], [type="time"], [type="datetime-local"]) { -webkit-appearance: none; appearance: none; min-width: 0 !important; max-width: 100%; box-sizing: border-box; }
+  input::-webkit-date-and-time-value { text-align: left; }
+
+  /* a swap's CURVE SCENARIO (blotter/ScenarioTab.jsx): its two panels side by side left the figures and the curve a sliver at
+     the edge. One column, read downwards: the controls, what the shock did, the curve, then the rates it is drawn from. */
+  .scn-body { display: flex !important; flex-direction: column; overflow-x: hidden !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  .scn-left { display: contents !important; }
+  .scn-controls { order: 1; }
+  .scn-right { order: 2; flex: none !important; overflow: visible !important; }
+  .scn-rates-head { order: 3; }
+  .scn-rates { order: 4; flex: none !important; overflow: visible !important; }
+  .scn-charts { flex: none !important; overflow: visible !important; }
+  .scn-chart { flex: none !important; height: 260px; }
+  .scn-surface { height: 300px; }
+  .scn-tiles > :last-child:nth-child(odd) { grid-column: 1 / -1; }      /* three figures in two columns: the third takes the row, not half of it */
+
   /* the door: the button that puts Rijeka on the home screen, and the sheet that says how */
   .au-install { display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%; max-width: 380px; min-height: 44px; padding: 10px 14px; border-radius: 4px; cursor: pointer;
     font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; color: var(--text-hi); background: var(--panel-2); border: 1px solid var(--border-hi); }

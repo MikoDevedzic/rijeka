@@ -22,6 +22,16 @@ behind a press and hold on the address bar (27).
   and "Open Rijeka" are two steps), bold in the line under the list set as in the list, that line's glyph
   at its line's size, numbers quieter than the words, the in-app sheet a sentence and two steps.
 - Left: an in-app browser on Android is still sent to a menu it may not have.
+- Also, after the owner reported fields and text overlapping in the new trade window on his phone ("can i connect
+  the phone to you somehow"): a scan of the trade window (`e2e/perf/overlap.spec.js`: five kinds of ticket, every
+  tab, before and after pricing, 320 to 440 wide) for boxes that cross, text that is cut, and panels hidden behind
+  an edge. It found one, live since 0.32.0: **a swap's CURVE SCENARIO kept its two panels side by side, so its
+  figures and its curve were a sliver 30px wide at the edge of the screen.** They are one column now: controls,
+  what the shock did, the curve, the rates. The phone journey fails on any box that hides what it holds behind
+  its edge (checked: it fails on the old layout).
+- A guard for iPhone date fields, which Safari sizes and centres by its own rule and which can run over the field
+  beside them in a row of two. Written from Safari's known behaviour as the likely cause of what the owner saw;
+  not seen on a device, and to be confirmed or replaced when his pictures arrive.
 - Not possible, and so not built: a button that does the steps. An iPhone gives a page no way to add itself to
   the home screen; Android does, and there the button already asks the browser in one tap.
 - Not checked: any of it on a real iPhone. Where Share sits in Safari 26 and 27 is taken from published
