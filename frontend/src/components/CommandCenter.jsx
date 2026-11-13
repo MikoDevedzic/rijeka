@@ -215,7 +215,7 @@ function DeskHome({ demo, navigate }) {
     <div className="dh">
       <div className="dh-strip">
         <span className="dh-strip-k">USD SOFR</span>
-        {['ON', '2Y', '5Y', '10Y', '30Y'].map(t => <span key={t} className="dh-q"><b>{t}</b>{d.sofr?.exists ? fmtN(quote(d.sofr, t), 3) : '—'}</span>)}
+        {['ON', '2Y', '5Y', '10Y', '30Y'].map(t => <span key={t} className={`dh-q${t === '30Y' ? ' dh-q-far' : ''}`}><b>{t}</b>{d.sofr?.exists ? fmtN(quote(d.sofr, t), 3) : '—'}</span>)}
         <span className="dh-sep" />
         <span className="dh-strip-k">ATM VOL</span>
         {[['1Y5Y', '1Yx5Y'], ['5Y5Y', '5Yx5Y'], ['5Y9Y', '5Yx9Y']].map(([l, k]) => <span key={k} className="dh-q"><b>{l}</b>{d.vol?.exists ? `${fmtN(quote(d.vol, k), 1)}bp` : '—'}</span>)}

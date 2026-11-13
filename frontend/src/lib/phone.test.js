@@ -1,6 +1,6 @@
 // lib/phone.js: which devices are told not to enlarge the page on focus, and what their viewport then says.
 import { describe, it, expect } from 'vitest'
-import { isIos, viewportOnIos, STACK_FROM } from './phone'
+import { isIos, viewportOnIos, STACK_FROM, labelsFor } from './phone'
 
 describe('an iPhone does not enlarge the page when a field is tapped', () => {
   it('knows an iPhone, an iPad, and an iPad that says it is a Mac', () => {
@@ -21,4 +21,15 @@ describe('an iPhone does not enlarge the page when a field is tapped', () => {
     expect(viewportOnIos('')).toBe('maximum-scale=1')
   })
   it('a table of four columns stays a table', () => { expect(STACK_FROM).toBe(5) })
+})
+
+describe('a wide table read downwards: the heading each cell stands under', () => {
+  const names = ['#', 'TYPE', 'STYLE', 'SIDE', 'NOTIONAL EUR', 'SETTLES']
+  it('a plain row takes its headings in order', () => { expect(labelsFor(names, [1, 1, 1, 1, 1, 1])).toEqual(names) })
+  it('a cell across several columns takes none, and the cells after it still find theirs', () => {
+    expect(labelsFor(names, [3, 1, 1, 1])).toEqual(['', 'SIDE', 'NOTIONAL EUR', 'SETTLES'])      // a total: its name across three, then the figures
+    expect(labelsFor(names, [1, 5])).toEqual(['#', ''])                                           // a leg's own terms, or a message, across the rest
+    expect(labelsFor(names, [6])).toEqual([''])
+  })
+  it('a cell past the last heading has no label', () => { expect(labelsFor(names, [1, 1, 1, 1, 1, 1, 1])[6]).toBe('') })
 })

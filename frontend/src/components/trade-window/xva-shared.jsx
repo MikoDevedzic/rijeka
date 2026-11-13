@@ -441,7 +441,7 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
           <span style={{fontSize:'11px',letterSpacing:'0.1em',color:'var(--accent)',fontWeight:600,fontFamily:'var(--sans)'}}>SAVING ON CHAIN</span>
           <span style={{fontSize:'18px',lineHeight:1.1,fontWeight:500,letterSpacing:'-0.01em',color:saving.money>=0?'var(--accent-hi)':'var(--down)'}}><Roll>{fmt(saving.money)}</Roll></span>
           {saving.bpUpfront!=null && <span style={{fontSize:'12px',color:'var(--text-dim)'}}>{bp(saving.bpUpfront)} upfront</span>}
-          {saving.bpRunning!=null && <span style={{fontSize:'12px',color:'var(--text-dim)'}}>· {bp(saving.bpRunning)} running</span>}
+          {saving.bpRunning!=null && <span style={{fontSize:'12px',color:'var(--text-dim)'}}><span className="ph-no">· </span>{bp(saving.bpRunning)} running</span>}
           <Note inline>against {preset}, on the same paths with the same collateral; basis points are of the notional</Note>
         </div>
       )}

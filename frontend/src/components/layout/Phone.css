@@ -50,8 +50,9 @@
   .dh-clocks, .dh-hero, .dh-ladder, .dh .bb, .dg-wrap, .lf-explain, .dh-newscard, .cc-footer, .dh-modules-note { display: none !important; }
   /* the market line: the curve's four points on one line and the day they are of under it; nothing to push sideways */
   .dh-strip { flex-wrap: wrap; height: auto; gap: 4px 14px; padding: 10px 0 9px; overflow: visible; }
-  .dh-strip > .dh-sep, .dh-strip > .dh-sep ~ .dh-strip-k, .dh-strip > .dh-sep ~ .dh-q, .dh-strip > span:nth-of-type(6) { display: none; }      /* ATM vol and the 30Y point are a monitor's */
-  .dh-strip-right { margin-left: 0; flex-basis: 100%; white-space: normal; }
+  .dh-strip > .dh-sep, .dh-strip > .dh-sep ~ .dh-strip-k, .dh-strip > .dh-sep ~ .dh-q, .dh-strip > .dh-q-far { display: none; }      /* ATM vol and the 30Y point are a monitor's */
+  .dh-strip-right { margin-left: 0; flex-basis: 100%; white-space: normal; text-wrap: balance; }
+  .ph-no { display: none; }      /* a separator between two things that a phone sets on two lines */
   .dh-grid { grid-template-columns: 1fr; gap: 12px; padding: 12px 0 16px; }
   .dh-grid > * { min-width: 0; }
   .dh-card { padding: 14px; gap: 12px; }
@@ -90,11 +91,12 @@
   /* NOTHING IN THE TRADE WINDOW SCROLLS SIDEWAYS (the owner, 12 November 2026): what does not fit the width is
      folded onto more lines or read downwards. The tabs are two rows of three, all in view. */
   .tbw-tabs { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; width: 100%; overflow: hidden; background: var(--border-hi); }
-  .tbw-tab { padding: 9px 2px 8px !important; border-left: 0 !important; font-size: 11px; letter-spacing: 0.04em; text-align: center; overflow: hidden; text-overflow: ellipsis; }
+  .tbw-tab { padding: 12px 2px 10px !important; border-left: 0 !important; font-size: 11px; letter-spacing: 0.04em; text-align: center; overflow: hidden; text-overflow: ellipsis; }
   .tbw-tab:not(.is-active) { background: var(--bg); }
   .tbw-tabbar > :not(.tbw-tabs) { display: none !important; }      /* NOTES is a monitor's switch: the strip takes the width */
   /* a field is a thumb high, and the boxes of a row sit on one line whatever their labels */
   .tbw-window select, .tbw-window input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) { min-height: 40px !important; box-sizing: border-box; }
+  .tbw-window select { text-overflow: ellipsis; padding-right: 26px !important; }      /* a long name ends in an ellipsis, not under the arrow */
   /* after booking: the reference on one line; VIEW IN BLOTTER and NEW TRADE are the bar at the foot and the close button */
   .tbw-booked-actions { display: none !important; }
   .tbw-header { flex-wrap: nowrap; }
@@ -108,11 +110,11 @@
      nine or ten columns is read down the screen. The XVA strip (an adjustment to a line: its value, its basis
      points), the on-chain comparison, the scenario's results and its ladder. */
   .ph-flip { display: grid !important; grid-auto-flow: column; grid-template-rows: repeat(var(--ph-n), auto); grid-template-columns: max-content; grid-auto-columns: minmax(0, 1fr);
-    column-gap: 10px; padding: 0 14px 6px !important; overflow: visible !important; min-width: 0 !important; }
+    column-gap: 0; padding: 0 14px 6px !important; overflow: visible !important; min-width: 0 !important; }      /* no gap: a line's rule runs unbroken under its name and its figures */
   .ph-flip > *, .ph-flip > .ph-only { display: contents !important; }
-  .ph-flip > * > * { display: block; min-width: 0 !important; padding: 7px 0 !important; border: 0; border-bottom: 1px solid var(--border); background: transparent !important; box-shadow: none !important;
+  .ph-flip > * > * { display: block; min-width: 0 !important; padding: 7px 0 7px 12px !important; line-height: 18px !important; border: 0; border-bottom: 1px solid var(--border); background: transparent !important; box-shadow: none !important;
     white-space: normal !important; overflow-wrap: anywhere; text-align: right !important; }
-  .ph-flip > :first-child > * { text-align: left !important; }                                   /* the names, down the left */
+  .ph-flip > :first-child > * { text-align: left !important; padding-left: 0 !important; }                                   /* the names, down the left */
   .ph-flip > * > :first-child { align-self: end; font-size: 10px !important; line-height: 1.3; color: var(--text-mute); border-bottom-color: var(--border-hi); }      /* what each column is */
   .ph-flip > * > :last-child { border-bottom: 0; }
 
@@ -129,16 +131,22 @@
   .tbw-window table[data-stack] > * > tr > [data-label]:not([data-label=""])::before { content: attr(data-label); display: block; margin-bottom: 2px; font-family: var(--sans); font-size: 10px; font-weight: 400;
     letter-spacing: 0.08em; line-height: 1.3; color: var(--text-mute); }
   .tbw-window table[data-stack] input, .tbw-window table[data-stack] select { width: 100% !important; min-width: 0 !important; }
+  /* the schedule: a date that cannot be typed over is a figure, not a box; the mark that removes a period is a thumb wide */
+  .ldt-ro { padding: 0 !important; border: 0 !important; background: transparent !important; min-height: 0 !important; color: var(--text-hi); }
+  .ldt-del { min-width: 40px; min-height: 40px; }
+  .tbw-window table[data-stack] > * > tr > td:has(> .ldt-del) { align-self: end; text-align: right !important; }
   [data-testid="fx-legs-table"] > * > tr { padding-left: 14px !important; padding-right: 14px !important; }
   .xva-run-readout { white-space: normal !important; overflow-wrap: anywhere; }
   [data-testid="confirm-mark-row"] { align-items: center !important; }
   .cert canvas, .cert svg { max-width: 140px; max-height: 140px; }
   .tbw-footer { grid-template-columns: minmax(0, 1fr) !important; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)) !important; }
-  /* the figures at the foot: three across, on as many lines as they need, all in view */
-  .tbw-footer-metrics { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px 10px; min-width: 0; overflow: visible; }
+  /* the figures at the foot: three across, on as many lines as they need, all in view. A figure is never cut: a
+     column is at least as wide as its longest figure and the others give way. A label folds onto a second line
+     and counts for nothing in the column's width; the figures of a row sit on one line under their labels. */
+  .tbw-footer-metrics { display: grid !important; grid-template-columns: repeat(3, minmax(auto, 1fr)); align-items: end; gap: 5px 12px; min-width: 0; overflow: visible; }
   .tbw-footer-metric { min-width: 0; }
-  .tbw-footer-metric .tbw-lbl { font-size: 10px !important; margin-bottom: 1px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tbw-footer-metric .tbw-mono { font-size: 12.5px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tbw-footer-metric .tbw-lbl { width: 0; min-width: 100%; font-size: 10px !important; line-height: 1.25; margin-bottom: 1px !important; white-space: normal; letter-spacing: 0.04em; }
+  .tbw-footer-metric .tbw-mono { font-size: 12.5px !important; white-space: nowrap; }
   /* the foot: CANCEL, then PRICE and BOOK sharing the width; what the structure is called and the keys are a monitor's */
   .tbw-footer-actions { display: grid !important; grid-template-columns: auto 1fr 1fr; gap: 8px; align-items: stretch; }
   .tbw-footer-actions > * { min-width: 0; white-space: nowrap; }

@@ -45,6 +45,9 @@ export function keepScaleOnFocus() {
 // A table of four columns or fewer fits and stays a table; one that says data-stack="no" is left alone.
 export const STACK_FROM = 5
 const said = (th) => { const c = th.cloneNode(true); c.querySelectorAll('.rj-note, .kc').forEach(n => n.remove()); return (c.textContent || '').replace(/\s+/g, ' ').trim() }
+// The heading each cell of a row stands under: `spans` is the row's cells' column spans. A cell that runs across
+// several columns (a total's name, a leg's own terms, a message) is under no one heading and takes none.
+export const labelsFor = (names, spans) => { let at = 0; return spans.map(s => { const n = s > 1 ? '' : names[at] || ''; at += s; return n }) }
 export function labelTables(root) {
   for (const table of root.querySelectorAll('table')) {
     if (table.dataset.stack === 'no') continue
@@ -54,12 +57,8 @@ export function labelTables(root) {
     if (names.length < STACK_FROM) continue
     if (!table.dataset.stack) table.dataset.stack = 'yes'
     for (const tr of table.querySelectorAll(':scope > tbody > tr, :scope > tfoot > tr')) {
-      let at = 0
-      for (const cell of tr.children) {
-        const n = names[at] || ''
-        if (cell.dataset.label !== n && !cell.hasAttribute('data-label-own')) cell.dataset.label = n
-        at += cell.colSpan || 1
-      }
+      const cells = [...tr.children], labels = labelsFor(names, cells.map(c => c.colSpan || 1))
+      cells.forEach((cell, i) => { if (cell.dataset.label !== labels[i] && !cell.hasAttribute('data-label-own')) cell.dataset.label = labels[i] })
     }
   }
 }
@@ -70,8 +69,10 @@ export function useStackedTables(ref, on) {
     let frame = 0
     const run = () => { frame = 0; labelTables(el) }
     run()
-    const seen = new MutationObserver(() => { if (!frame) frame = requestAnimationFrame(run) })      // rows come and go; the labels are attributes, which are not watched
-    seen.observe(el, { childList: true, subtree: true })
+    // rows come and go, and a heading's words change in place (NOTIONAL EUR becomes NOTIONAL GBP); the labels
+    // themselves are attributes, which are not watched, so writing them cannot call this again
+    const seen = new MutationObserver(() => { if (!frame) frame = requestAnimationFrame(run) })
+    seen.observe(el, { childList: true, subtree: true, characterData: true })
     return () => { seen.disconnect(); if (frame) cancelAnimationFrame(frame) }
   }, [ref, on])
 }

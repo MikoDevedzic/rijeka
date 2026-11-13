@@ -396,12 +396,12 @@ export default function LegDetailsTab({
                       {fixedRows.length===0&&<tr><td colSpan={6} style={S.td}><div style={S.emptyRow}>Price the trade first or drag/paste a schedule.</div></td></tr>}
                       {fixedRows.map((row,i)=>(
                         <tr key={i}>
-                          <td style={S.td}><div style={S.cellRo}>{row.period_start}</div></td>
-                          <td style={S.td}><div style={S.cellRo}>{row.period_end}</div></td>
-                          <td style={S.td}><div style={S.cellRo}>{row.payment_date}</div></td>
+                          <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.period_start}</div></td>
+                          <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.period_end}</div></td>
+                          <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.payment_date}</div></td>
                           <td style={S.td}><EditCell kind='amount' label={`Fixed leg notional, period ${i+1}`} value={row.notional} original={row.orig_notional} placeholder='10,000,000' onChange={v=>updateFixed(i,'notional',v)}/></td>
                           <td style={S.td}><EditCell label={`Coupon %, period ${i+1}`} value={row.rate} original={row.orig_rate} placeholder='3.500' onChange={v=>updateFixed(i,'rate',v)}/></td>
-                          <td style={{...S.td,textAlign:'center'}}><button style={S.del} onClick={()=>setFixedRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
+                          <td style={{...S.td,textAlign:'center'}}><button className="ldt-del" style={S.del} onClick={()=>setFixedRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -481,11 +481,11 @@ export default function LegDetailsTab({
                       {floatRows.length===0&&<tr><td colSpan={isEmbedded?8:7} style={S.td}><div style={S.emptyRow}>Price the trade first or drag/paste a schedule.</div></td></tr>}
                       {floatRows.map((row,i)=>(
                         <tr key={i}>
-                          <td style={S.td}><div style={S.cellRo}>{row.period_start}</div></td>
-                          <td style={S.td}><div style={S.cellRo}>{row.period_end}</div></td>
-                          <td style={S.td}><div style={S.cellRo}>{row.payment_date}</div></td>
+                          <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.period_start}</div></td>
+                          <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.period_end}</div></td>
+                          <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.payment_date}</div></td>
                           <td style={S.td}><EditCell kind='amount' label={`Float leg notional, period ${i+1}`} value={row.notional} original={row.orig_notional} placeholder='10,000,000' onChange={v=>updateFloat(i,'notional',v)}/></td>
-                          <td style={S.td}><div style={S.cellRo}>{index}</div></td>
+                          <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{index}</div></td>
                           <td style={S.td}><EditCell label={`Spread bp, period ${i+1}`} value={row.spread_bps} original={row.orig_spread_bps} placeholder='0' onChange={v=>updateFloat(i,'spread_bps',v)}/></td>
                           {isEmbedded && (
                             <td style={S.td}>
@@ -498,7 +498,7 @@ export default function LegDetailsTab({
                               />
                             </td>
                           )}
-                          <td style={{...S.td,textAlign:'center'}}><button style={S.del} onClick={()=>setFloatRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
+                          <td style={{...S.td,textAlign:'center'}}><button className="ldt-del" style={S.del} onClick={()=>setFloatRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
                         </tr>
                       ))}
                     </tbody>

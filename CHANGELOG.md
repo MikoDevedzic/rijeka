@@ -27,6 +27,13 @@ zoomed in all the way to the edges".
 - On the home a size too small to be said in millions is written out: ten bitcoin read "BTC 0.0m".
 - The journeys now fail if any box on a phone's screen scrolls across, on every tab of a digital-asset forward
   and of a swap. Pictures of five kinds of ticket, tab by tab, were read before this went out.
+- After the reviews (Vera, Iris): a figure at the foot is never cut with an ellipsis (a column is as wide as its
+  longest figure; a long label folds instead); a cell's heading follows its column when the heading changes in
+  place (NOTIONAL EUR to NOTIONAL GBP), and a cell that runs across several columns (a total's name, a leg's own
+  terms, a message) takes no heading; the flipped tables' rules run unbroken; the schedule's dates are figures,
+  not boxes beside taller fields; the tabs are a thumb high; a long counterparty name ends in an ellipsis.
+- Left, and older than this change: in the swap's cashflows DCF and RATE are blue and the pay date amber, where
+  the colour rules want limestone; the ladder's negative steps use a hyphen for the minus.
 - Not checked: a real iPhone (there is no simulator on the machine this was built on); the enlargement is known
   Safari behaviour and the fix is the standard one, but it has not been watched happening and then not happening.
 
