@@ -79,7 +79,8 @@ async function get(path) {
 }
 
 const fmtN = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d })
-const fmtM = (n) => n == null ? '—' : Math.abs(n) >= 1e9 ? `${fmtN(n / 1e9, 2)}bn` : `${fmtN(n / 1e6, 1)}m`
+// a size in millions; one too small for that (ten bitcoin is not "0.0m") is written out
+const fmtM = (n) => n == null ? '—' : Math.abs(n) >= 1e9 ? `${fmtN(n / 1e9, 2)}bn` : Math.abs(n) >= 1e5 ? `${fmtN(n / 1e6, 1)}m` : fmtN(n, Number.isInteger(Number(n)) ? 0 : 2)
 const fmtD = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 const ago = (iso) => { if (!iso) return ''; const h = (Date.now() - new Date(iso)) / 36e5; return h < 1 ? `${Math.max(1, Math.round(h * 60))}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d` }
 const quote = (snap, tenor) => snap?.quotes?.find(q => q.tenor === tenor && q.enabled !== false)?.rate

@@ -288,12 +288,19 @@ capital. Those pages still open by their address but are not in the phone's navi
   the state of the chain. The policy path, the calendar, the clocks, the globe, the ladder and the written brief
   are a monitor's; stacked on a phone they made a page four screens long, and the owner called it messy.
 - **A trade is a card**: the reference and its state, the instrument and its size, the counterparty and the tenor.
-- **The trade window is the whole screen**: its fields two across, its tabs scrolling sideways (no CAPITAL), the
-  XVA tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can hit. A table
-  keeps its columns and scrolls sideways inside its own box; the page itself never does.
-  A strip that scrolls sideways (the tabs, the figures at the foot) fades at its right edge. A grid that folds by
-  itself (`auto-fit`) is left to; a table of fixed columns sits in `.tbw-xscroll` and scrolls with its headings.
-  A field is 40px high.
+- **Nothing is pushed sideways** (the owner, 12 November 2026: "either fit on one screen or scroll down to see
+  it"). What does not fit the width is folded onto more lines or read downwards, never put in a box that scrolls
+  across; `e2e/phone.spec.js` fails on any such box. The ways it is done:
+  - rows turned on their side (`.ph-flip`, with `--ph-n` cells to a row): the XVA strip, the on-chain comparison,
+    the scenario's results and ladder. Each row becomes a column, so an adjustment or a shock is a line;
+  - a wide table read downwards (`table[data-stack]`, set by `useStackedTables` in `lib/phone.js` for a table of
+    five columns or more): each row a block, each cell under its column's heading;
+  - a strip folded: the ticket's tabs two rows of three, the figures at the foot three across.
+- **The trade window is the whole screen**: its fields two across and 40px high, its tabs all in view (no
+  CAPITAL), the XVA tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can
+  hit. A grid that folds by itself (`auto-fit`) is left to.
+- **A field a person types in on the door is 16px**, and an iPhone is told not to enlarge the page on focus
+  (`keepScaleOnFocus`): Safari enlarges for smaller type and stays enlarged.
 - **A target for a thumb is about 40px high.** Keys (F4, ⌘↵) are not shown: a phone has none.
 - **From the home screen.** The door offers ADD TO HOME SCREEN. An iPhone does not let a page install itself, so
   the button shows the two taps; Android installs directly. The icon is the mark at rest; opened from it, the

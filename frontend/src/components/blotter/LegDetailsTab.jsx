@@ -354,7 +354,7 @@ export default function LegDetailsTab({
           ZERO COUPON
         </div>
       </div>
-      <div style={S.grid}>
+      <div className="ldt-legs" style={S.grid}>
 
         {/* FIXED LEG */}
         <div style={S.panel}>

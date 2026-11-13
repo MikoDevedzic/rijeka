@@ -180,7 +180,7 @@
   .au-lead { display:none; }
   .au-title { font-size:16px; }
   .au-form { gap:9px; }
-  .au-field input { padding-top:9px; padding-bottom:9px; }
+  .au-field input { padding-top:9px; padding-bottom:9px; font-size:16px; }      /* 16px: an iPhone enlarges the page for a field with smaller type, and leaves it enlarged after sign-in */
   .au-legal { font-size:10px; letter-spacing:0.04em; line-height:1.5; }
   .au-alt .au-inline { padding:10px 2px; }      /* a thumb's height for the two small links under the form */
   .au-alt { margin:0; }

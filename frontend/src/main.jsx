@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 import { install as installErrorReporting } from './lib/errors'
+import { keepScaleOnFocus } from './lib/phone'
+
+// An iPhone must not enlarge the page when a field is tapped (lib/phone.js)
+keepScaleOnFocus()
 
 // Uncaught errors are also reported to the operator (lib/errors.js): a blank page
 // nobody tells us about is the one failure mode that stays invisible.

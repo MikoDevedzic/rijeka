@@ -3,6 +3,33 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.32.1 · 12 November 2026
+
+**On a phone nothing is pushed sideways, and signing in no longer leaves the page enlarged.** The owner, the same
+day the phone view went out: "i dont love the phone version that you have to scroll headers to see and even scroll
+on output left/right... either fit on one screen or scroll down to see it", and "when first log in, it is sort of
+zoomed in all the way to the edges".
+
+- **The ticket's tabs are two rows of three**, all in view. They were one strip to scroll.
+- **The figures at the foot are three across**, on as many lines as they need. They were one row to scroll.
+- **The XVA results are a line to an adjustment** (its value and its basis points), and the on-chain comparison a
+  second block under them with the same names down the side. On a monitor they are still one strip across.
+- **The scenario's results and its ladder are turned the same way**: a curve or a shock to a line.
+- **A wide table is read downwards**: each row a block, each figure under its column's heading (the legs, the
+  cashflows of a forward and of a swap, the swap's period schedule, caplets). The schedule's two legs stand one
+  under the other. A table of four columns or fewer still fits and stays a table.
+- **The home's market line** is the curve's four points and, under them, the day they are of. It was a line of
+  some 1,300px to scroll.
+- **Signing in on an iPhone.** Safari enlarges the page when a field with type under 16px takes the focus and
+  leaves it enlarged, so the desk opened zoomed past the screen's edges. The door's fields are 16px on a phone,
+  and on an iPhone the page says it is not to be enlarged on focus (two fingers still zoom). Android does not
+  enlarge on focus and is left alone.
+- On the home a size too small to be said in millions is written out: ten bitcoin read "BTC 0.0m".
+- The journeys now fail if any box on a phone's screen scrolls across, on every tab of a digital-asset forward
+  and of a swap. Pictures of five kinds of ticket, tab by tab, were read before this went out.
+- Not checked: a real iPhone (there is no simulator on the machine this was built on); the enlargement is known
+  Safari behaviour and the fix is the standard one, but it has not been watched happening and then not happening.
+
 ## 0.32.0 · 12 November 2026
 
 **The phone view.** On the owner's word ("build the phone view and deploy it right away"), in the scope he set on

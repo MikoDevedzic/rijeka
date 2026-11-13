@@ -530,8 +530,6 @@ function LegCashflows({ quote, crypto }) {
         <Tile label={`${legs[1].name} PV · ${qc}`} value={signed(legs[1].pv, 0)} color={tone(legs[1].pv)} sub={ndf ? 'against K, not exchanged' : undefined} />
         <Tile label={ndf ? 'SETTLES · CASH' : 'SETTLES · PHYSICAL'} value={quote.settlement_date} sub={ndf ? `one net payment in ${qc}` : 'both principals exchange'} />
       </div>
-      {/* the legs and their net keep one set of columns: on a phone they scroll sideways together (Phone.css) */}
-      <div className="tbw-xscroll"><div className="tbw-xscroll-in">
       {legs.map(l => (
         <div key={l.key} style={{ marginBottom: 12 }} data-testid={`fx-cf-leg-${l.key}`}>
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2px 8px', padding: '8px 0 6px' }}>
@@ -552,17 +550,16 @@ function LegCashflows({ quote, crypto }) {
           </table>
         </div>
       ))}
-      <table style={fixed} data-testid="fx-cf-net">
+      <table style={fixed} data-testid="fx-cf-net" data-stack="yes">
         {cols}
         <tbody><tr>
           <td colSpan={3} style={{ ...tdL, fontWeight: 600, color: 'var(--text-hi)', borderTop: '2px solid var(--border-hi)', borderBottom: 'none' }}>{ndf ? `NET CASH SETTLEMENT · ${qc}` : `NET · ${qc}`}
             <Note inline>{ndf ? `(F − K) × N at today's forward; the fixing on ${quote.settlement_date} decides the actual amount` : 'the two legs at the fair forward'}</Note></td>
-          <td style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none', color: tone(net) }}>{signed(net, 0)}</td>
-          <td style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none' }}>{fmt(df, 6)}</td>
-          <td style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none', fontWeight: 600, color: tone(pv) }}>{signed(pv, 0)}</td>
+          <td data-label={`AMOUNT ${qc}`} style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none', color: tone(net) }}>{signed(net, 0)}</td>
+          <td data-label={'DF'} style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none' }}>{fmt(df, 6)}</td>
+          <td data-label={`PV ${qc}`} style={{ ...td, borderTop: '2px solid var(--border-hi)', borderBottom: 'none', fontWeight: 600, color: tone(pv) }}>{signed(pv, 0)}</td>
         </tr></tbody>
       </table>
-      </div></div>
     </div>
   )
 }
@@ -937,7 +934,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const rTot = { background: 'var(--panel)', boxShadow: 'inset 1px 0 0 var(--border-hi)' }
   const money = (v, key, style = rCell) => <div key={key} style={{ ...style, ...(style === rCell ? { color: tone(v) } : null), ...(key === 'total' ? { ...rTot, ...(style === rCell ? { fontWeight: 600 } : null) } : null) }}>{v == null ? '—' : signedChange(v)}</div>
   const results = european && (
-    <div data-testid="fx-scn-results" style={{ overflowX: 'auto', borderTop: '1px solid var(--border)', background: 'var(--bg)' }}>
+    <div data-testid="fx-scn-results" className="ph-flip" style={{ overflowX: 'auto', borderTop: '1px solid var(--border)', background: 'var(--bg)', '--ph-n': curves.length + 3 }}>
       <div style={{ ...rRow, background: 'var(--panel)', borderBottom: '1px solid var(--border)' }}>
         <div style={rName} />
         {curves.map(c => <div key={c.key} style={{ ...rCell, ...lbl, fontSize: 11 }}><span className="rf-mark" style={{ background: c.color }} />{c.key === 'spot' ? 'SPOT' : c.key === 'fwd' ? (crypto ? 'BASIS' : 'POINTS') : c.key === 'quote' ? `${qc} CURVE` : c.key === 'base' ? `${bc} RATE` : 'VOL'}</div>)}
@@ -986,6 +983,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const ladderBlock = ladder && (
     <div data-testid="fx-scn-ladder" style={{ overflowX: 'auto', paddingBottom: 12, background: 'var(--bg)' }}>
       <div style={{ ...secHdr, margin: '12px 16px 8px' }}>LADDER · {cur.name}<Note inline>Each column is this curve moved flat by that much, on top of the scenario, with every other shock held. The middle column is the scenario itself.</Note></div>
+      <div className="ph-flip" style={{ '--ph-n': lad.length + 1 }}>
       <div style={{ ...lRow, background: 'var(--panel)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
         <div style={{ ...lbl, padding: '7px 0' }}>{cur.key === 'spot' ? 'SPOT' : 'SHIFT'}</div>
         {lad.map(({ x, r }) => x === 0
@@ -995,6 +993,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
       <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>{whole ? 'FORWARD · LEG 1' : 'FORWARD'}</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, ...mid(x) }}>{fmt(r.forward, dp)}</div>)}</div>
       <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>{whole ? 'PACKAGE NPV' : 'NPV'} · {qc}</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, color: tone(r.npv), ...mid(x) }}>{fmt(r.npv)}</div>)}</div>
       <div style={lRow}><div style={{ ...lbl, padding: '7px 0' }}>CHANGE</div>{lad.map(({ x, r }) => <div key={x} style={{ ...lCell, color: x === 0 ? 'var(--text-mute)' : tone(r.npv == null ? null : r.npv - scenNpv), ...mid(x) }}>{x === 0 || r.npv == null ? '—' : signedChange(r.npv - scenNpv)}</div>)}</div>
+      </div>
     </div>
   )
 

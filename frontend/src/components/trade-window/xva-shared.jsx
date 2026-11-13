@@ -9,7 +9,7 @@
 // Pure helpers and constants live in xva-shared.js. The simple view's three pieces are here
 // too: the toggle, the counterparty line and the line on what a run assumes.
 // ────────────────────────────────────────────────────────────────────────────────────
-import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, fmtDollar, moneySize, imUsdProblem } from './xva-shared'
+import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, VA_DEFS, fmtDollar, moneySize, imUsdProblem } from './xva-shared'
 import { Keycap } from '../common/Shortcuts'
 import Roll from '../common/Roll'
 import { Note } from '../common/Note'
@@ -381,7 +381,8 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
   })
   return (
     <>
-      <div data-testid="va-strip" style={{background:'var(--bg)',borderTop:'1px solid var(--border)'}}>
+      {/* .ph-flip: on a phone each row here is a column, so every adjustment is a line of its own (Phone.css) */}
+      <div data-testid="va-strip" className="ph-flip" style={{background:'var(--bg)',borderTop:'1px solid var(--border)','--ph-n':rows.length+1}}>
         <div style={{...VA_ROW,gridTemplateColumns:cols,borderBottom:'1px solid var(--border)',background:'var(--panel)'}}>
           <div style={VA_NAME} />
           {rows.map(row => (
@@ -444,6 +445,12 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
           <Note inline>against {preset}, on the same paths with the same collateral; basis points are of the notional</Note>
         </div>
       )}
+      <div className="ph-flip" style={{'--ph-n':rows.length+1}}>
+      {/* the adjustments' names, for a phone: there this block stands under the strip, not in its columns */}
+      <div className="ph-only" style={{...VA_ROW,gridTemplateColumns:cols}}>
+        <div style={VA_NAME} />
+        {rows.map(({ key }) => <div key={key} style={{...VA_CELL,fontFamily:'var(--sans)',fontSize:'11px',fontWeight:key==='all_in'?600:500,letterSpacing:'0.08em',color:key==='all_in'?'var(--text-hi)':'var(--text-mute)'}}>{VA_DEFS[key]?.label || key}</div>)}
+      </div>
       <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-on-chain">
         <div style={{...VA_NAME,color:'var(--accent)',fontWeight:600}}>ON CHAIN<Note inline markOnly>{onChainNote}</Note></div>
         {rows.map(({ key, oc }) => {
@@ -460,6 +467,7 @@ export function OnChainCompareRow({ rows, current, compare, fmt = fmtDollar, sav
               style={{...VA_SMALL,color:text==='—'?'var(--text-mute)':signTone(delta, text),...(key==='all_in'?VA_TOTAL:null)}}>{text}</div>
           )
         })}
+      </div>
       </div>
       <div className="rj-notes-only" style={{padding:'0 16px 7px'}}>{onChainNote}</div>
     </div>

@@ -20,6 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
+import { usePhone, useStackedTables } from '../../lib/phone'
 import './styles.css'
 
 import { getProduct, listProductsByAssetClass, listAssetClasses } from './registry'
@@ -238,6 +239,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const isCurrency                     = assetClass === 'FX' || assetClass === 'CRYPTO'
   const fxRef                          = useRef(null)
   const winRef                         = useRef(null)
+  useStackedTables(winRef, usePhone())                 // a phone reads a wide table downwards (lib/phone.js, Phone.css)
   // A manual drag of the resize handle leaves an inline width/height on the
   // window; clear it when the instrument changes so the window fits the new
   // content again (up to max-height, after which it scrolls).
