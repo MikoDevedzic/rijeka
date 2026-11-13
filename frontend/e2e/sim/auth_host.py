@@ -1,11 +1,12 @@
 """auth_host.py — what Playwright stands in for in the journeys, as a server, so a browser Playwright does not drive
-(Safari in the iPhone simulator, a phone on the same network) can run the app on the local stack.
+(Safari in the iPhone simulator, which reaches this machine at 127.0.0.1) can run the app on the local stack.
 
 The journeys build the app against an auth host that does not exist (http://stack.local) and answer for it inside
 the browser (e2e/fixtures.js). This serves the same answers on a port:
 
-    /auth/v1/token      a sign-in or a refresh: the session e2e/serve.sh minted for that email (any password; the
-                        stack has no passwords), 400 for an email the stack does not know
+    /auth/v1/token      a sign-in: the session e2e/serve.sh minted for that email (any password; the stack has no
+                        passwords), 400 for an email the stack does not know. A refresh: the same user's session
+                        again, known by the refresh token this server gave it, 400 for any other
     /auth/v1/user       the user of the token presented
     /auth/v1/logout     nothing
     /rest/v1/*          passed to the stack's PostgREST with the caller's own token, so row-level security applies
@@ -15,7 +16,9 @@ the browser (e2e/fixtures.js). This serves the same answers on a port:
 
     cd frontend && bash e2e/sim/serve.sh            # starts the stack with this in front of it
 
-It reads only e2e/.out/session.json and talks only to 127.0.0.1. Local only: it signs anyone in as a seeded user.
+It reads only e2e/.out/session.json and talks only to 127.0.0.1. Local only: it signs anyone in as a seeded user,
+so it answers only a request addressed to this machine by name (not a name that was pointed at it) and lets only
+the app's own page read its answers.
 """
 from __future__ import annotations
 
@@ -26,17 +29,21 @@ import pathlib
 import httpx
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 REST = os.environ.get("RIJEKA_SIM_REST", "http://127.0.0.1:3010")
 WEB = os.environ.get("RIJEKA_SIM_WEB", "http://127.0.0.1:4174")
 SESSIONS = pathlib.Path(os.environ.get("RIJEKA_SIM_SESSIONS", pathlib.Path(__file__).resolve().parent.parent / ".out" / "session.json"))
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origin_regex=r"http://(127\.0\.0\.1|localhost)(:\d+)?", allow_methods=["*"], allow_headers=["*"], expose_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=[WEB], allow_methods=["*"], allow_headers=["*"], expose_headers=["*"])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost"])
 
 
 def sessions() -> dict:
-    return json.loads(SESSIONS.read_text())
+    """{trader: session}, each with a refresh token of its own (the journeys' sessions share one), so a refresh
+    returns the user it was given to and never another."""
+    return {k: {**v, "refresh_token": f"sim:{k}"} for k, v in json.loads(SESSIONS.read_text()).items()}
 
 
 def by_email(email: str):
@@ -52,7 +59,7 @@ def by_token(request: Request):
 async def token(request: Request):
     body = await request.json()
     if request.query_params.get("grant_type") == "refresh_token":
-        s = next((x for x in sessions().values()), None) if not by_token(request) else by_token(request)
+        s = next((x for x in sessions().values() if x["refresh_token"] == body.get("refresh_token")), None)
     else:
         s = by_email(body.get("email"))
     if s is None:

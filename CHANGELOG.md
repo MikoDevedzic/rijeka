@@ -40,6 +40,14 @@ behind a press and hold on the address bar (27).
   auth host lives inside Playwright, so a small local server stands in for it (`e2e/sim/auth_host.py`: 127.0.0.1
   only, signs in as a seeded user of the stack, passes reads to the stack's PostgREST). Chromium at a phone's
   width does not draw an iPhone's date field or dropdown, which is why the journeys and my pictures were clean.
+- After the reviews of these additions (code, design, security): chips (BUY, SELL, the instruments) are a thumb
+  high like the field beside them; the figures at the foot stand level when one label takes two lines; an empty
+  date field keeps its height; the swap scenario's third figure takes its row. The local sign-in server for the
+  simulator answers only requests addressed to this machine, lets only the app's own page read it, and a
+  refresh returns the user it was given to (it could have returned another). `docs/design.md` has the rules
+  for an iPhone's date field, dropdown and arrow.
+- Left, and older: the swap scenario's figures are in blue, brass and amber and in rem sizes, against the
+  colour and type rules; its chart does not redraw when a phone is turned; a minus at the foot is a hyphen.
 - Not possible, and so not built: a button that does the steps. An iPhone gives a page no way to add itself to
   the home screen; Android does, and there the button already asks the browser in one tap.
 - Not checked: any of it on a real iPhone. Where Share sits in Safari 26 and 27 is taken from published

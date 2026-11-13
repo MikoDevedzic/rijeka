@@ -299,11 +299,20 @@ capital. Those pages still open by their address but are not in the phone's navi
 - **The trade window is the whole screen**: its fields two across and 40px high, its tabs all in view (no
   CAPITAL), the XVA tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can
   hit. A grid that folds by itself (`auto-fit`) is left to.
+- **An iPhone draws a date field and a dropdown by its own rules** (Safari on iOS; seen in the simulator, 13 November
+  2026): a date field takes a width of its own and ran over the field beside it, and a dropdown is drawn shorter
+  than a field whatever height it is given. On a phone a date field is held to its cell with its value at the
+  left, and the trade window's dropdowns are drawn by the page: the height of every other field, with an arrow of
+  the page's own (a filled triangle 10px wide in `--text-dim`, 10px from the field's edge). A chip (BUY, SELL,
+  an instrument) is 40px high like the field beside it. A read-only field has no well, on a phone as on a monitor.
+  Chromium at a phone's width shows none of this: a change to a field is looked at in the simulator's Safari
+  (`frontend/e2e/sim/serve.sh`).
 - **A field a person types in on the door is 16px**, and an iPhone is told not to enlarge the page on focus
   (`keepScaleOnFocus`): Safari enlarges for smaller type and stays enlarged.
 - **A target for a thumb is about 40px high.** Keys (F4, ⌘↵) are not shown: a phone has none.
 - **From the home screen.** The door offers ADD TO HOME SCREEN. An iPhone does not let a page install itself, so
-  the button shows the two taps; Android installs directly. The icon is the mark at rest; opened from it, the
+  the button shows the taps that visitor's browser has (Safari has kept Share in three places: `installWay` in
+  `lib/phone.js`), numbered, with Safari's glyphs beside the words; Android installs directly. The icon is the mark at rest; opened from it, the
   mark comes alive once (`brand/LaunchMark.jsx`), not at all with "reduce motion" set.
 - Checked by `e2e/phone.spec.js` at 390 by 844 on Chromium, Firefox and WebKit; pictures by
   `PHONE_TAG=x npx playwright test -c playwright.perf.config.js phone.spec.js`.

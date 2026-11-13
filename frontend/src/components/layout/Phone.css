@@ -102,6 +102,7 @@
   .tbw-window select { -webkit-appearance: none; appearance: none; background-repeat: no-repeat !important;
     background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%), linear-gradient(135deg, var(--text-dim) 50%, transparent 50%) !important;
     background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50% !important; background-size: 5px 5px, 5px 5px !important; }      /* over the fields' own background, which is a shorthand */
+  .tbw-window .tbw-chip { min-height: 40px; box-sizing: border-box; }      /* BUY and SELL beside a dropdown, and every chip: a thumb high, like the fields */
   .tbw-window .tbw-lbl { line-height: 14px; }      /* a label with a unit after it is no taller than one without, so two fields in a row start level */
   /* after booking: the reference on one line; VIEW IN BLOTTER and NEW TRADE are the bar at the foot and the close button */
   .tbw-booked-actions { display: none !important; }
@@ -149,7 +150,7 @@
   /* the figures at the foot: three across, on as many lines as they need, all in view. A figure is never cut: a
      column is at least as wide as its longest figure and the others give way. A label folds onto a second line
      and counts for nothing in the column's width; the figures of a row sit on one line under their labels. */
-  .tbw-footer-metrics { display: grid !important; grid-template-columns: repeat(3, minmax(auto, 1fr)); align-items: end; gap: 5px 12px; min-width: 0; overflow: visible; }
+  .tbw-footer-metrics { display: grid !important; grid-template-columns: repeat(3, minmax(auto, 1fr)); align-items: end !important; gap: 5px 12px; min-width: 0; overflow: visible; }
   .tbw-footer-metric { min-width: 0; }
   .tbw-footer-metric .tbw-lbl { width: 0; min-width: 100%; font-size: 10px !important; line-height: 1.25; margin-bottom: 1px !important; white-space: normal; letter-spacing: 0.04em; }
   .tbw-footer-metric .tbw-mono { font-size: 12.5px !important; white-space: nowrap; }
@@ -191,7 +192,7 @@
      beside it. Held to its cell, its value at the left like every other field's. Written from Safari's known behaviour:
      not seen on a device. */
   input:is([type="date"], [type="time"], [type="datetime-local"]) { -webkit-appearance: none; appearance: none; min-width: 0 !important; max-width: 100%; box-sizing: border-box; }
-  input::-webkit-date-and-time-value { text-align: left; }
+  input::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }      /* an empty date field keeps its height */
 
   /* a swap's CURVE SCENARIO (blotter/ScenarioTab.jsx): its two panels side by side left the figures and the curve a sliver at
      the edge. One column, read downwards: the controls, what the shock did, the curve, then the rates it is drawn from. */
