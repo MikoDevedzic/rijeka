@@ -62,6 +62,26 @@ describe('chat catches up on what the live stream did not deliver', () => {
     await useChatStore.getState().catchUp()
     expect(fetch.mock.calls.map(([url]) => String(url)).filter(u => u.includes('/messages'))).toEqual([])
   })
+  it('puts a missed message where it belongs, not after one that arrived later', async () => {
+    useChatStore.setState({ status: 'ready', me: ME, activeId: 'a', rooms: [{ id: 'a', my_access: 'JOINED', unread: 0 }], messages: { a: [m('m3'), m('m5')] } })      // m4 was missed, m5 came by the socket
+    vi.stubGlobal('fetch', serve([{ id: 'a', my_access: 'JOINED', unread: 0 }], [m('m3'), m('m4'), m('m5')]))
+    await useChatStore.getState().catchUp()
+    expect(useChatStore.getState().messages.a.map(x => x.id)).toEqual(['m3', 'm4', 'm5'])
+  })
+  it('fetches the room that waits for Prometheus although another is open, and keeps a count that changed while the rooms were fetched', async () => {
+    useChatStore.setState({ status: 'ready', me: ME, activeId: 'b', open: true, rooms: [{ id: 'a', my_access: 'JOINED', unread: 0 }, { id: 'b', my_access: 'JOINED', unread: 0 }],
+      messages: { a: [m('m1')], b: [] }, pending: { a: true } })
+    const answer = m('m2', { sender_kind: 'PROMETHEUS', sender_user_id: null })
+    vi.stubGlobal('fetch', vi.fn(async (url) => ({ ok: true, status: 200, json: async () => {
+      if (String(url).endsWith('/rooms')) { useChatStore.getState().receive(m('m9', { room_id: 'a' })); return [{ id: 'a', my_access: 'JOINED', unread: 0 }, { id: 'b', my_access: 'JOINED', unread: 0 }] }
+      return String(url).includes('/rooms/a/messages') ? [m('m1'), answer, m('m9', { room_id: 'a' })] : []
+    } })))
+    await useChatStore.getState().catchUp()
+    const s = useChatStore.getState()
+    expect(s.messages.a.map(x => x.id)).toEqual(['m1', 'm2', 'm9'])
+    expect(s.pending.a).toBe(false)
+    expect(s.rooms.find(r => r.id === 'a').unread, 'the message that arrived during the fetch is still counted').toBe(1)
+  })
   it('does nothing before the chat is ready, and a failed fetch leaves what it has', async () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
     await useChatStore.getState().catchUp()

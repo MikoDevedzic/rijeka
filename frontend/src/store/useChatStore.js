@@ -8,6 +8,8 @@ const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 // The private Prometheus conversation is a pseudo-room: it never leaves
 // this browser except as a request to /api/analyse.
 export const PROMETHEUS = 'prometheus'
+// messages in the order they were sent: by time, then by id where two share one
+const byTime = (a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')) || String(a.id).localeCompare(String(b.id))
 
 // Writes go through the API (membership rules live there); new messages,
 // invites and joins arrive through Supabase realtime under the same RLS.
@@ -135,25 +137,33 @@ export const useChatStore = create((set, get) => ({
     if (get().status !== 'ready' || get()._catching) return
     set({ _catching: true })
     try {
-      await get().refreshRooms()                       // the rooms, their last message and their unread counts, as the server holds them
-      const { activeId, messages } = get()
-      if (!activeId || activeId === PROMETHEUS || !messages[activeId]) return
-      const list = await chatApi(`/rooms/${activeId}/messages`)
-      if (!Array.isArray(list)) return
-      const have = new Set((get().messages[activeId] || []).map(m => m.id))
-      const fresh = list.filter(m => !have.has(m.id))
-      if (!fresh.length) return
-      const answered = fresh.some(m => m.sender_kind === 'PROMETHEUS' || m.sender_kind === 'SYSTEM')
-      set(s => ({
-        messages: { ...s.messages, [activeId]: [...(s.messages[activeId] || []), ...fresh] },
-        pending: answered && s.pending[activeId] ? { ...s.pending, [activeId]: false } : s.pending,
-      }))
-      for (const m of fresh) if (m.card?.type === 'trade_event') get().bumpCard(m.card.trade_id)
-      const me = get().me
-      if (get().open && get().activeId === activeId && fresh.some(m => m.sender_user_id !== me?.user_id)) get().markRead(activeId)
+      // the rooms, their last message and their unread counts as the server holds them; not taken where a message
+      // arrived or a room was read while the answer was on its way (the answer is then the older of the two)
+      const seen = get()._touched
+      const rooms = await chatApi('/rooms')
+      if (Array.isArray(rooms) && get()._touched === seen) set({ rooms })
+      // the open room, and any room that waits for Prometheus: the messages this window does not have, in time order
+      const { activeId, messages, pending } = get()
+      const wanted = [...new Set([activeId, ...Object.keys(pending).filter(id => pending[id])])].filter(id => id && id !== PROMETHEUS && messages[id])
+      for (const roomId of wanted) {
+        const list = await chatApi(`/rooms/${roomId}/messages`)
+        if (!Array.isArray(list)) continue
+        const have = new Set((get().messages[roomId] || []).map(m => m.id))
+        const fresh = list.filter(m => !have.has(m.id))
+        if (!fresh.length) continue
+        const answered = fresh.some(m => m.sender_kind === 'PROMETHEUS' || m.sender_kind === 'SYSTEM')
+        set(s => ({
+          messages: { ...s.messages, [roomId]: [...(s.messages[roomId] || []), ...fresh].sort(byTime) },
+          pending: answered && s.pending[roomId] ? { ...s.pending, [roomId]: false } : s.pending,
+        }))
+        for (const m of fresh) if (m.card?.type === 'trade_event') get().bumpCard(m.card.trade_id)
+        const me = get().me
+        if (get().open && get().activeId === roomId && fresh.some(m => m.sender_user_id !== me?.user_id)) get().markRead(roomId)
+      }
     } catch { /* the next tick tries again */ } finally { set({ _catching: false }) }
   },
   _catching: false,
+  _touched: 0,           // counts the times this window changed its rooms itself (a message received, a room read)
 
   watch: () => {
     if (get()._unwatch || typeof document === 'undefined') return
@@ -174,6 +184,7 @@ export const useChatStore = create((set, get) => ({
 
   // One path for every new message, from realtime or our own POST; dedupe by id.
   receive: (m) => {
+    set(s => ({ _touched: s._touched + 1 }))
     const { messages, rooms, activeId, open, me, pending } = get()
     const list = messages[m.room_id]
     if (list && list.some(x => x.id === m.id)) return
@@ -228,7 +239,7 @@ export const useChatStore = create((set, get) => ({
   },
 
   markRead: async (roomId) => {
-    set(s => ({ rooms: s.rooms.map(r => r.id === roomId ? { ...r, unread: 0 } : r) }))
+    set(s => ({ _touched: s._touched + 1, rooms: s.rooms.map(r => r.id === roomId ? { ...r, unread: 0 } : r) }))
     broadcast({ type: 'chat:read', roomId })
     try { await post(`/rooms/${roomId}/read`) } catch { /* best effort */ }
   },

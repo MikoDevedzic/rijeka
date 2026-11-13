@@ -17,6 +17,9 @@ answer".
   a room is opened again, and on a tick while the page is in view (every 4 seconds while an answer from
   Prometheus is awaited, 12 while the chat is open, 48 otherwise). It fetches the rooms (their unread counts as
   the server holds them) and the open room's messages, adds the ones it does not have, and counts none twice.
+- After its review: a message that was missed is put where it belongs by time, not after one that arrived later;
+  a room that waits for Prometheus is fetched although another room is open; the rooms' counts are not replaced
+  by an answer that was already on its way when a message arrived or a room was read.
 - Not found: why the socket did not deliver in the first place. The site's security policy allows it (read from
   the live headers); the cause is on a device or in the realtime service, which was not seen from here.
 - Not checked: that Prometheus answered on the server. If the answer is still missing after this, it failed
