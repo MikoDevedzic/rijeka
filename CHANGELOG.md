@@ -36,6 +36,10 @@ zoomed in all the way to the edges".
   the colour rules want limestone; the ladder's negative steps use a hyphen for the minus.
 - Not checked: a real iPhone (there is no simulator on the machine this was built on); the enlargement is known
   Safari behaviour and the fix is the standard one, but it has not been watched happening and then not happening.
+- Tests only, found on the way out: three integration tests depended on the hour or the day they ran. Two
+  measured a date from New York's today while their routes read UTC's (wrong from 19:00 to midnight New York);
+  one asserted an option's default delivery is its tenor's forward date, which the documented fallback of a
+  holiday week does not give (13 November 2026, the EURUSD 3M). No product code changed for them.
 
 ## 0.32.0 · 12 November 2026
 

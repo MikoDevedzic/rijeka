@@ -80,7 +80,12 @@ def test_priced_forward_and_option_carry_the_date_check_and_crybasis01(client, a
     fxo = client.post("/api/currency/option/price", json={"pair": "EURUSD", "option_type": "CALL", "base_notional": 1_000_000, "direction": "BUY",
                                                            "expiry_date": e3["expiry"]}, headers=auth_a)
     assert fxo.status_code == 200, fxo.text
-    assert fxo.json()["settlement_date"] == e3["settlement"]              # the default delivery (expiry + 2 business days) is the tenor's forward date
+    # the default delivery is the expiry's spot date: the tenor's forward date, except in a holiday week, where no business day has that
+    # forward date as its spot date and the expiry is the fallback's (on 13 November 2026 the 3M delivery was 17 February, reached only
+    # from Presidents' Day; the expiry was Friday the 12th, whose spot date is the 16th, and the line this replaces failed for a day)
+    default = fxo.json()["settlement_date"]
+    assert default == TD.spot("EURUSD", date.fromisoformat(e3["expiry"])).isoformat()
+    assert default == e3["settlement"] if e3["expiry_rule"] == "spot" else default < e3["settlement"]
     assert fxo.json()["settlement_business_day"] is True and fxo.json()["date_notes"] == []
 
 
