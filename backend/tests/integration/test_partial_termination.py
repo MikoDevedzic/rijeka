@@ -3,7 +3,7 @@ changes and the event says so; the anchored path is the chain journey's, fronten
 smaller notional, the fee joins its fees, the price and the XVA read the new notional, and what cannot be reduced is
 refused in words."""
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -12,6 +12,11 @@ from tests.integration import bodies as B
 pytestmark = pytest.mark.integration
 
 ASOF = "2026-11-02"                    # the stack's market (backend/stack/seed.py)
+
+def _routes_today() -> date:
+    """Today as the route reads it: UTC's date. The process's clock is New York's (main.py), so between 19:00 and
+    midnight there date.today() is a day short of it, and a test that measured from date.today() was a day out in those hours."""
+    return datetime.now(timezone.utc).date()
 
 
 def _book(client, auth, body) -> dict:
@@ -82,11 +87,11 @@ def test_a_confirmed_digital_asset_forward_is_reduced_in_its_record_and_priced_o
     tid = j["trade"]["id"]
     assert client.post(f"/api/chain/confirm/{tid}", headers=auth_a).status_code == 201
     before = _price(client, auth_a, tid)
-    r = _partial(client, auth_a, tid, new_notional="2.5", fee={"direction": "PAY", "amount": 900, "date": date.today().isoformat()})
+    r = _partial(client, auth_a, tid, new_notional="2.5", fee={"direction": "PAY", "amount": 900, "date": _routes_today().isoformat()})
     assert r.status_code == 201, r.text[:400]
     t = r.json()["trade"]
     assert t["status"] == "CONFIRMED" and float(t["notional"]) == 2.5 and float(t["terms"]["notional_amount"]) == 2.5
-    assert t["terms"]["fees"][-1] == {"type": "UNWIND", "direction": "PAY", "amount": 900.0, "currency": "USD", "date": date.today().isoformat(),
+    assert t["terms"]["fees"][-1] == {"type": "UNWIND", "direction": "PAY", "amount": 900.0, "currency": "USD", "date": _routes_today().isoformat(),
                                       "note": "partial termination"}
     assert [e["event_type"] for e in client.get(f"/api/trade-events/{tid}", headers=auth_a).json()][:2] == ["PARTIAL_TERMINATION", "CONFIRMED"]
     after = _price(client, auth_a, tid)

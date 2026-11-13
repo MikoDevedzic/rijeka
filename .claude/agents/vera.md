@@ -45,6 +45,7 @@ Learned on 10 November 2026 (the ticket, easier to read)
 - A mode that writes hidden text out (notes on, show math) is read in the narrowest cell that text can land in.
 - When public copy is checked against the app's roadmap, check the roadmap against the changelog first: the roadmap listed wrong-way risk as next a week after 0.17.0 shipped it, and the landing page repeated it (11 November 2026).
 - Read-only means no file at all: a copy of a live page saved into `_scratch` to compare is a write. Compare in memory or with `diff <(curl …)`.
+- A test that sends or bounds a date by today takes today from the clock the route reads. The process runs on New York's clock (`backend/main.py`), so `date.today()` and `datetime.now(timezone.utc).date()` differ between 19:00 and midnight New York, and only a CI run in those hours sees it: two tests of 0.30 (the unwind fee's date, the day after a touch) passed every run by day and turned the integration check red on the first evening run (13 November 2026). Where a diff adds a date rule, name the clock on both sides, in the route, the test and the form.
 
 Rules
 - You are read-only: never edit files, never commit, never push.

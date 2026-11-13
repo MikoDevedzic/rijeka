@@ -1,7 +1,7 @@
 """Recording a barrier over the API, on the stack: the record on the trade, the booked price reading it (a knock-out
 is over, a knock-in is the plain option), the signed record untouched, and what is refused."""
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -10,6 +10,11 @@ from tests.integration import bodies as B
 pytestmark = pytest.mark.integration
 
 ASOF = date(2026, 11, 2)               # the stack's market (backend/stack/seed.py)
+
+def _routes_today() -> date:
+    """Today as the route reads it: UTC's date. The process's clock is New York's (main.py), so between 19:00 and
+    midnight there date.today() is a day short of it, and a test that measured from date.today() was a day out in those hours."""
+    return datetime.now(timezone.utc).date()
 
 
 def _book_option(client, auth, ids, pairs, style, **style_over):
@@ -65,7 +70,7 @@ def test_a_knock_out_recorded_as_touched_is_over_and_the_record_can_be_taken_off
     assert again["state"] == "LIVE" and again["npv"] == pytest.approx(before["npv"], rel=1e-9)
     # refused: another firm's trade, a date before the trade or after today, 'never touched' before expiry
     assert _knock(client, auth_b, tid, knocked=True, on=today.isoformat()).status_code == 404
-    for body, why in ((dict(knocked=True), "needs the date"), (dict(knocked=True, on=(today + timedelta(days=1)).isoformat()), "the earlier of today and the expiry"),
+    for body, why in ((dict(knocked=True), "needs the date"), (dict(knocked=True, on=(_routes_today() + timedelta(days=1)).isoformat()), "the earlier of today and the expiry"),
                       (dict(knocked=True, on="2020-01-01"), "between the trade date"), (dict(knocked=False), "once the option has expired")):
         bad = _knock(client, auth_a, tid, **body)
         assert bad.status_code == 422 and why in bad.text, bad.text[:300]
