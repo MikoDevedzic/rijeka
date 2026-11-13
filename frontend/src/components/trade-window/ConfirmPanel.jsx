@@ -21,7 +21,7 @@
 // button below takes them without naming a colour. Uses the same tbw-btn classes as the footer.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { SendForConfirmation } from './SendForConfirmation'
 import { useSendStatus, useAnchoring } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
@@ -53,7 +53,8 @@ const short = (h) => (h && h.length > 18) ? h.slice(0, 10) + '…' + h.slice(-6)
 function AttestationView({ attestation, onVerify, verifying, verifyResult, onDownloadProof, onCopyProofLink, onTerminate, terminating, confirmErr, tradeId = null, ownName = null, counterpartyName = null }) {
   // PAPER CONFIRMATION: the proof pack (the signed record) is fetched when it is asked for, and the sheet is made from it
   const [paper, setPaper] = useState(null)        // null | { busy } | { proof } | { error }
-  const closePaper = useCallback(() => setPaper(null), [])
+  const paperBtn = useRef(null)
+  const closePaper = useCallback(() => { setPaper(null); paperBtn.current?.focus() }, [])      // focus goes back to the button that opened the sheet
   const openPaper = async () => {
     if (!tradeId || paper?.busy) return
     setPaper({ busy: true })
@@ -132,8 +133,9 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
             ⛓ COPY PROOF LINK
           </button>
         )}
-        {tradeId && (
-          <button className="tbw-btn" data-testid="paper-open" onClick={openPaper} disabled={!!paper?.busy} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116, borderColor: 'var(--border-hi)' }}>
+        {/* not for a leg of a package: what was signed there is the package's record, which lists its legs by hash, and a sheet of one leg's terms would not be the signed record */}
+        {tradeId && !att.package && (
+          <button className="tbw-btn" data-testid="paper-open" ref={paperBtn} onClick={openPaper} disabled={!!paper?.busy} style={{ flexShrink: 0, whiteSpace: 'nowrap', minWidth: 116 }}>
             {paper?.busy ? 'PREPARING…' : '▤ PAPER CONFIRMATION'}
           </button>
         )}

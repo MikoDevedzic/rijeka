@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react'
 
 import { drawMark, ease, field, fit, palette, reducedMotion, seedOf } from './mark'
 
-const SHAPE = { x0: 58, spread: 36, box: 120 }       // a short river: on a certificate the letter and its ring are what is read
+const SHAPE = { x0: 78, spread: 30, box: 104 }       // a short river: on a certificate the letter and its ring are what is read, and are drawn large
 const clamp = (x) => Math.max(0, Math.min(1, x))
 
 export default function CertMark({ hash, stands = true, still = false, width = 164, height = 124 }) {
@@ -20,7 +20,7 @@ export default function CertMark({ hash, stands = true, still = false, width = 1
   useEffect(() => {
     const cv = ref.current
     if (!cv || !hash) return undefined
-    const f = field(seedOf(String(hash)), 9), atOnce = still || reducedMotion()
+    const f = field(seedOf(String(hash)), 7), atOnce = still || reducedMotion()
     let raf = 0, shown = false
     const paint = (p) => {
       const g = fit(cv)

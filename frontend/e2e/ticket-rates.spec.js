@@ -200,7 +200,9 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   await expect(sheet).toContainText('Not anchored on a registry')
   await expect(app.getByTestId('paper-demo'), 'a record signed by Rijeka for both sides says so on paper').toContainText('not a confirmation between two parties')
   await expect(sheet.locator('.paper-stamp'), 'the stamp does not say both parties signed where Rijeka signed for both').toHaveText(/Signed with demonstration keys\s*Not anchored on a registry/i)
-  await expect(sheet.locator('.paper-party b'), 'both parties are named, as the book knows them').toHaveCount(2)
+  await expect(sheet.locator('.paper-party b'), 'both parties are named, under Parties and under Signatures, as the book knows them').toHaveCount(4)
+  await expect(sheet, 'a choice the record holds in capitals is printed as words').toContainText('Modified following')
+  await expect(sheet, 'a term at its plain default is left off').not.toContainText('Leverage')
   for (const word of ['Parties', 'Pays fixed', 'Pays floating', 'Fixed rate', 'Floating rate', 'Record hash', 'Signatures', 'Booked by', 'not a master agreement']) await expect(sheet).toContainText(word)
   const hash = (await cert.textContent()).match(/0x[0-9a-f]{64}/)[0]
   await expect(sheet, 'the hash on the paper is the certificate\'s').toContainText(hash)
@@ -213,6 +215,7 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   await app.emulateMedia({ media: 'screen' })
   await app.keyboard.press('Escape')
   await expect(sheet).toHaveCount(0)
+  await expect(cert.getByTestId('paper-open'), 'focus goes back to the button that opened the sheet').toBeFocused()
 
   expectClean(problems)
 })

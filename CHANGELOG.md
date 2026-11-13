@@ -22,6 +22,18 @@ rijeka logo and not random circle thing".
   with demonstration keys" and carries a line saying it is not a confirmation between two parties; one that is
   not anchored says so; one since closed says so.
 - It is Rijeka's own sheet, not an ISDA form: ISDA's confirmation templates and definitions are licensed text.
+- After its reviews. A leg of a package has no paper: what was signed there is the package's record, which lists
+  its legs by hash, and the first build would have printed those hashes a character to a row. A rate is moved two
+  places in its text and never through a float (the first build could round one, or print "1e-10 %"). A signed
+  term is printed unless it is at its plain default (leverage of one, a bullet notional, a flat rate): the first
+  build hid a step-up's rate type, a calculation agent, the rate of a zero-coupon leg and a fixed leg's spread.
+  A choice held in capitals is printed as words in the interface face, a code as it is in mono. Each signature
+  is headed by its party's letter and name, as under Parties. One way of writing a date. The foot says where
+  the registry is a test network. PRINT is the sheet's one primary button, and closing returns focus to the
+  button that opened it. The mark is drawn with a shorter river and a larger R and ring. A counterparty's name
+  is the booked trade's, not the form's.
+- Left from the reviews: Tab can reach the app behind the open sheet and the function keys still act; the mark
+  is a canvas and prints at the screen's pixel density; a multi-page print carries no page numbers of its own.
 - Not built: a paper for a trade confirmed off chain. There is no signed record to print from; the mock showed
   one marked unsigned, and that waits for the owner's answer. No QR code: the app bundles no library for one.
 - **The certificate's mark is the logo**: this trade's river (drawn from the record's hash, so each trade's is

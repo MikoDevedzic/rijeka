@@ -15,8 +15,9 @@ const STAMP = {
   signed: (p) => [signed(p), 'Not anchored on a registry'],
   closed: (p) => [signed(p), 'Anchored, since closed on the registry'],
 }
+// a figure or a code in the mono face, words in the interface face (rows are [label, text, 'fig' | 'word'])
 const Rows = ({ rows }) => (
-  <dl className="paper-rows">{rows.map(([k, v]) => <div key={k}><dt>{k}</dt><dd className="fig">{v}</dd></div>)}</dl>
+  <dl className="paper-rows">{rows.map(([k, v, kind]) => <div key={k}><dt>{k}</dt><dd className={kind === 'word' ? 'paper-word' : 'fig'}>{v}</dd></div>)}</dl>
 )
 
 export default function PaperConfirmation({ proof, names = {}, onClose }) {
@@ -34,8 +35,8 @@ export default function PaperConfirmation({ proof, names = {}, onClose }) {
       <div className="paper-bar">
         <span className="tbw-lbl">PAPER CONFIRMATION · {p.ref}</span>
         <span className="paper-bar-go">
-          <button type="button" className="rj-btn" data-testid="paper-print" autoFocus onClick={() => window.print()}>PRINT OR SAVE AS PDF</button>
-          <button type="button" className="rj-btn" data-testid="paper-close" onClick={onClose}>CLOSE</button>
+          <button type="button" className="tbw-btn tbw-btn-book" data-testid="paper-print" autoFocus onClick={() => window.print()}>PRINT OR SAVE AS PDF</button>
+          <button type="button" className="tbw-btn" data-testid="paper-close" onClick={onClose}>CLOSE</button>
         </span>
       </div>
       <article className="cert paper-sheet" data-testid="paper-confirmation" data-state={p.state}>
@@ -64,7 +65,7 @@ export default function PaperConfirmation({ proof, names = {}, onClose }) {
               <div key={x.lei} className="paper-party">
                 <p className="cert-caps">Party {x.letter}{x.role ? ` · ${x.role}` : ''}</p>
                 {x.name && <b>{x.name}</b>}
-                <span>LEI <span className="fig">{x.lei}</span></span>
+                <span><span className="cert-caps">LEI</span> <span className="fig">{x.lei}</span></span>
               </div>
             ))}
           </div>
@@ -75,10 +76,11 @@ export default function PaperConfirmation({ proof, names = {}, onClose }) {
 
         <section className="paper-sec"><p className="cert-caps">The record</p>
           <Rows rows={[
-            ['Record hash', r.hash],
-            ['Signed as', `${r.form} · record schema v${r.schema}`],
-            ...(r.chain != null ? [['Registry', `${r.registry} · ${chainName(r.chain)} (chain ${r.chain})`], ['Block', `${r.block}${r.at ? ` · ${r.at}` : ''}`], ['Transaction', r.tx]] : [['Registry', r.note]]),
-            ...(r.closedTx ? [['Closed by', r.closedTx]] : []),
+            ['Record hash', r.hash, 'fig'],
+            ['Signed as', `${r.form}, record schema v${r.schema}`, 'word'],
+            ...(r.chain != null ? [['Registry', r.registry, 'fig'], ['Chain', `${chainName(r.chain)} (chain ${r.chain})`, 'word'], ['Block', `${r.block}${r.at ? `, ${r.at}` : ''}`, 'word'], ['Transaction', r.tx, 'fig']]
+              : [['Registry', r.note, 'word']]),
+            ...(r.closedTx ? [['Closed by', r.closedTx, 'fig']] : []),
           ]} />
           <p className="paper-dim">Anyone holding this trade's proof pack can check the terms, both signatures and the registry at rijeka.app/verify, without Rijeka.</p>
         </section>
@@ -86,9 +88,10 @@ export default function PaperConfirmation({ proof, names = {}, onClose }) {
         <section className="paper-sec"><p className="cert-caps">Signatures</p>
           <div className="paper-two">
             {p.signatures.map(s => (
-              <div key={s.label} className="paper-sig">
-                <span><b>{s.label}</b>{s.name ? ` · ${s.name}` : ''}</span>
-                <span>LEI <span className="fig">{s.lei}</span></span>
+              <div key={s.label} className="paper-sig paper-party">
+                <p className="cert-caps">{s.letter ? `Party ${s.letter} · ` : ''}{s.label}</p>
+                {s.name && <b>{s.name}</b>}
+                <span><span className="cert-caps">LEI</span> <span className="fig">{s.lei}</span></span>
                 <span>Signed with <span className="fig">{s.address}</span>{s.key ? `, ${s.key}` : ''}</span>
                 <span className="paper-hex">{s.signature}</span>
               </div>
@@ -97,7 +100,7 @@ export default function PaperConfirmation({ proof, names = {}, onClose }) {
         </section>
 
         <footer className="paper-foot">
-          <p>This sheet is produced from the record the parties signed, not from the booking as it stands today. It is evidence of the terms of this trade. It is not a master agreement and does not replace one: the agreement between the parties governs.</p>
+          <p>This sheet is produced from the record the parties signed, not from the booking as it stands today. It is evidence of the terms of this trade. It is not a master agreement and does not replace one: the agreement between the parties governs.{r.testnet ? ' The registry is on a test network: this is a demonstration, not a settled obligation.' : ''}</p>
           <p className="paper-made"><span>Produced by Rijeka{p.made ? ` · ${p.made}` : ''}</span><span>{p.ref}</span></p>
         </footer>
       </article>
