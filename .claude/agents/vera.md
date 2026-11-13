@@ -48,6 +48,11 @@ Learned on 10 November 2026 (the ticket, easier to read)
 - A test that sends or bounds a date by today takes today from the clock the route reads. The process runs on New York's clock (`backend/main.py`), so `date.today()` and `datetime.now(timezone.utc).date()` differ between 19:00 and midnight New York, and only a CI run in those hours sees it: two tests of 0.30 (the unwind fee's date, the day after a touch) passed every run by day and turned the integration check red on the first evening run (13 November 2026). Where a diff adds a date rule, name the clock on both sides, in the route, the test and the form. A date a test only sends may stay on the process's clock where the route's bound can never be earlier than it; the reason is written beside it.
 - A test that reads live dates from today meets a holiday week one day. `test_tenor_dates` asserted that an option's default delivery is its tenor's forward date, true except when no business day has that date as its spot date (the documented fallback); it failed for exactly one day, 13 November 2026, when the EURUSD 3M delivery could be reached only from Presidents' Day. Where a test takes its dates from today, ask what it asserts in the case the rule calls an exception.
 
+Learned on 13 November 2026
+- A guard on one route is read beside the other writers of the same column: the update route, the generic event route and the table's own policies each changed a trade's status in a way the lifecycle routes refuse (0.32.4). Grep for every assignment to the column and every policy on the table.
+- A screen that prints an API answer is read against each shape of that answer in the route's code, not the one in the test: a package leg's proof pack is not a plain record's (0.33.0).
+- A store that merges what a fetch returns with what a stream delivered is read for order and for the newer value: the first chat catch-up appended fetched messages out of time order and could put back an older unread count over a newer one (0.33.1).
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.

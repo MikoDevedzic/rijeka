@@ -66,13 +66,18 @@ the file and what it gates.
 
 ```bash
 gh pr create --base main --head <branch> ...
-gh pr checks <n>                       # backend tests, frontend build, integration tests, registry contract tests, self-host smoke
+gh pr checks <n>                       # backend tests, browser journeys, frontend build, integration tests, registry contract tests, self-host smoke
 git push origin <sha>:main             # retry on a transient refusal
-curl -s https://rijeka-api.onrender.com/api/ops/health   # until "commit" is the sha (only when the commit changes a file under backend/ that is not Markdown: Render deploys nothing else)
+curl -s https://rijeka-api.onrender.com/api/ops/health   # until "commit" is the sha three reads in a row (only when the commit changes a file under backend/ that is not Markdown: Render deploys nothing else)
 gh workflow run release-sync
+git ls-remote origin release           # at the sha; if it is not, dispatch release-sync again
 curl -s https://app.rijeka.app/version.json              # until "commit" is the sha
 backend/.venv/bin/python .github/scripts/watch.py --api-commit <sha> --app-commit <sha>   # everything a visitor touches, from outside (docs/ops/monitoring.md); leave a flag out when that side did not deploy
 ```
+
+One read of the new commit is not enough: while Render switches instances the old one still answers, and a
+release move dispatched then reads the old commit, moves nothing and exits green (13 November 2026: the app stayed a
+version behind for twenty-five minutes).
 
 A failed check is read from the job log (`gh api repos/<owner>/<repo>/actions/jobs/<id>/logs`), fixed on the
 branch and re-run. Nothing is pushed to `main` around a red check.
