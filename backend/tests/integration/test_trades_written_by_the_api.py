@@ -47,6 +47,9 @@ def test_a_signed_in_user_reads_their_trades_and_writes_none_of_them(client, aut
     j = client.post("/api/book/trade", json=B.swap(ids["a"], f"IT-WR-{uuid.uuid4().hex[:6].upper()}"), headers=auth_a).json()
     tid, a, b = j["trade"]["id"], ids["a"]["user_id"], ids["b"]["user_id"]
     writes = (("UPDATE public.trades SET status = 'CONFIRMED' WHERE id = :t", "a status"),
+              ("INSERT INTO public.trades SELECT (q.t).* FROM (SELECT jsonb_populate_record(NULL::public.trades, to_jsonb(x) || "
+               "jsonb_build_object('id', gen_random_uuid(), 'trade_ref', 'IT-WR-FORGED', 'status', 'CONFIRMED', 'uti', NULL)) AS t "
+               "FROM public.trades x WHERE x.id = :t) q", "a copy of the trade, booked already confirmed"),
               ("UPDATE public.trade_legs SET notional = 1 WHERE trade_id = :t", "a leg"),
               ("DELETE FROM public.trade_legs WHERE trade_id = :t", "a delete"),
               ("INSERT INTO public.trade_events (id, trade_id, user_id, event_type, event_date, effective_date, payload) "
@@ -56,6 +59,10 @@ def test_a_signed_in_user_reads_their_trades_and_writes_none_of_them(client, aut
     try:
         # as a hosted project stood before the migration: the way round the API is open
         conn.exec_driver_sql(AS_BEFORE)
+        from api.routes.ops import trades_written_by_the_api_applied
+        from sqlalchemy.orm import Session
+        with Session(bind=conn) as s:
+            assert trades_written_by_the_api_applied(s) is False, "health says it is not applied"
         _as(conn, a)
         for sql, what in writes:
             assert (_written(conn, sql, t=tid, u=a) or 0) >= 1, f"before the migration {what} is written straight to the table"
@@ -72,6 +79,12 @@ def test_a_signed_in_user_reads_their_trades_and_writes_none_of_them(client, aut
         for sql, what in writes:
             assert _written(conn, sql, t=tid, u=a) is None, f"after the migration {what} is refused"
         conn.execute(text("RESET ROLE"))
+        conn.execute(text("SET LOCAL ROLE anon"))                 # and a visitor who is not signed in writes none either
+        for sql, what in writes:
+            assert _written(conn, sql, t=tid, u=a) is None, f"{what} is refused to anon"
+        conn.execute(text("RESET ROLE"))
+        with Session(bind=conn) as s:
+            assert trades_written_by_the_api_applied(s) is True, "health says it is applied"
         _as(conn, b)
         for t in TABLES:
             col = "id" if t == "trades" else "trade_id"

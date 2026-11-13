@@ -158,6 +158,9 @@ OPTIONAL_MIGRATIONS = (
      "heavy runs on the worker; apply only when the worker is alive, or runs queue for nobody", "jobs.queue", "tables_present"),
     ("fixings", "2026-11-10_fixings.sql", "stored fixings for digital assets; without it an expired trade is valued on the stored spot, flagged provisional",
      "settlement.store", "tables_present"),
+    ("trades_written_by_the_api", "2026-11-13_trades_written_by_the_api.sql",
+     "the browser reads a firm's trades, legs and events and only the API writes them; without it a signed-in user can write those rows straight to the table",
+     "api.routes.ops", "trades_written_by_the_api_applied"),
 )
 
 
@@ -167,6 +170,19 @@ def signup_role_applied(db: Session) -> bool:
     src = db.execute(text("""SELECT p.prosrc FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
                              WHERE n.nspname = 'public' AND p.proname = 'handle_new_user'""")).scalar()
     return bool(src) and "raw_user_meta_data" not in src
+
+
+def trades_written_by_the_api_applied(db: Session) -> bool:
+    """True when trades, trade_legs and trade_events are as docs/migrations/2026-11-13_trades_written_by_the_api.sql
+    leaves them: each has its read-own policy and `authenticated` may not INSERT, UPDATE or DELETE it. Both halves:
+    the policy alone would say applied where the privileges were never revoked. Read from the catalogue each time."""
+    n = db.execute(text("""SELECT count(*) FROM pg_policies WHERE schemaname = 'public'
+                           AND (tablename, policyname) IN (('trades', 'trades_read_own'), ('trade_legs', 'trade_legs_read_own'),
+                                                           ('trade_events', 'trade_events_read_own'))""")).scalar()
+    writes = db.execute(text("""SELECT bool_or(has_table_privilege('authenticated', 'public.' || t, p))
+                                FROM unnest(ARRAY['trades', 'trade_legs', 'trade_events']) AS t,
+                                     unnest(ARRAY['INSERT', 'UPDATE', 'DELETE']) AS p""")).scalar()
+    return n == 3 and writes is False
 
 
 _schema_cache: dict = {"at": 0.0, "body": None}
