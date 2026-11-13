@@ -29,9 +29,17 @@ behind a press and hold on the address bar (27).
   figures and its curve were a sliver 30px wide at the edge of the screen.** They are one column now: controls,
   what the shock did, the curve, the rates. The phone journey fails on any box that hides what it holds behind
   its edge (checked: it fails on the old layout).
-- A guard for iPhone date fields, which Safari sizes and centres by its own rule and which can run over the field
-  beside them in a row of two. Written from Safari's known behaviour as the likely cause of what the owner saw;
-  not seen on a device, and to be confirmed or replaced when his pictures arrive.
+- **The overlap the owner saw, reproduced and fixed in Safari on iOS 27** (the iPhone simulator, once Xcode was
+  installed): an iPhone sizes a date field by its own rule, and TRADE DATE ran over DESK; it draws a dropdown
+  shorter than the field beside it (32 against 39), so no row of two was level. On a phone a date field is held
+  to its cell with its value at the left, the ticket's dropdowns are drawn by the page with an arrow of their
+  own at the height of every other field, and a label with a unit after it is no taller than one without.
+  Seen in the simulator before and after on the TRADE tab of a digital asset forward; the other tabs and
+  tickets were not walked there.
+- A way to run the app on the local stack in the simulator's Safari (`frontend/e2e/sim/serve.sh`): the journeys'
+  auth host lives inside Playwright, so a small local server stands in for it (`e2e/sim/auth_host.py`: 127.0.0.1
+  only, signs in as a seeded user of the stack, passes reads to the stack's PostgREST). Chromium at a phone's
+  width does not draw an iPhone's date field or dropdown, which is why the journeys and my pictures were clean.
 - Not possible, and so not built: a button that does the steps. An iPhone gives a page no way to add itself to
   the home screen; Android does, and there the button already asks the browser in one tap.
 - Not checked: any of it on a real iPhone. Where Share sits in Safari 26 and 27 is taken from published

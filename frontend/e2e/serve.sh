@@ -97,7 +97,9 @@ PYEOF
 
 # 5. the frontend, built against the stack and served as production serves it
 cd "$FRONTEND"
-VITE_API_URL="http://127.0.0.1:$API_PORT" VITE_SUPABASE_URL="http://stack.local" VITE_SUPABASE_ANON_KEY="stack-anon" \
+# (the auth host does not exist: Playwright answers for it in the browser. A browser Playwright does not drive, the iPhone
+#  simulator's Safari, is given a real one by e2e/sim/serve.sh, which names it here)
+VITE_API_URL="http://127.0.0.1:$API_PORT" VITE_SUPABASE_URL="${RIJEKA_E2E_AUTH_HOST:-http://stack.local}" VITE_SUPABASE_ANON_KEY="stack-anon" \
   npx vite build --outDir "$OUT/dist" --emptyOutDir ${RIJEKA_E2E_BUILD_FLAGS:-} > "$OUT/build.log" 2>&1 || { tail -30 "$OUT/build.log"; exit 1; }
 npx vite preview --outDir "$OUT/dist" --host 127.0.0.1 --port $WEB_PORT --strictPort &
 WEB_PID=$!; pids+=($WEB_PID)
