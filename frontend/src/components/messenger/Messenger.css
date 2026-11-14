@@ -96,6 +96,7 @@
 .ms-tag.rijeka     { color: var(--accent); border-color: rgb(var(--accent-rgb) / 0.45); }
 .ms-tag.compliance { color: var(--amber); border-color: rgba(233,151,90,0.5); }
 .ms-tag.invite     { color: var(--amber); border-color: rgba(233,151,90,0.5); }
+.ms-badge.quiet { background: none; color: var(--text-dim); border: 1px solid var(--border-hi); font-weight: 400; }
 .ms-badge {
   background: var(--accent); color: #000; font-size: 12px; font-weight: 700; flex-shrink: 0;
   min-width: 18px; height: 18px; border-radius: 9px; padding: 0 5px;
@@ -183,6 +184,8 @@
   font-family: inherit; font-size: 13px; line-height: 1.45; padding: 9px 11px;
 }
 .ms-compose textarea:focus { border-color: var(--accent); }
+/* the hint stays on the box's one line: wrapped, its second line was cut off by the box */
+.ms-compose textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ms-send, .ms-ask, .ms-trade {
   align-self: flex-end; height: 40px; flex-shrink: 0; cursor: pointer; border-radius: 2px;
   font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.1em;

@@ -565,8 +565,14 @@ function roomOrder(a, b) {
   return (b.last_message_at || '').localeCompare(a.last_message_at || '')
 }
 
+// The number on the messenger button: messages and invitations. The news room's headlines are not messages to
+// the person (the owner, 14 November 2026: "i see number below and its for news. 829 news...lets only make it
+// chat"); they count only for someone who has asked to be alerted for market news.
 export const selectUnreadTotal = s =>
-  (Array.isArray(s.rooms) ? s.rooms : []).reduce((n, r) => n + (r.my_access === 'INVITED' ? 1 : r.unread || 0), 0)
+  (Array.isArray(s.rooms) ? s.rooms : []).reduce((n, r) =>
+    n + (r.my_access === 'INVITED' ? 1 : r.kind === 'NEWS' && !s.alerts?.news ? 0 : r.unread || 0), 0)
+// A count as a badge shows it: past 99 the number says nothing more than "many".
+export const badge = (n) => (n > 99 ? '99+' : String(n))
 
 // Who can read a conversation, in words, for headers and the composer.
 export function audience(room, me) {

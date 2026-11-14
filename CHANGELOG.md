@@ -14,6 +14,16 @@ try of 0.34.0, both of his accounts side by side in one browser.
   names the person.
 - Two people on two machines, or in two browsers, were never affected.
 
+**The number on the messenger button is chat, and the message box fits.** The owner: "i see number below and
+its for news. 829 news...lets only make it chat", and "the chat box where you type messages also is not really
+fitting the default there fully and looks awkward".
+
+- The number on the messenger button (and on CHAT in a phone's bar) counts unread messages and invitations. The
+  news room's headlines no longer count, unless market news is switched on in the alert settings. The news room
+  keeps a count of its own in the list, set quietly. A count past 99 reads 99+.
+- The message box's hint ("To ...") stays on the box's one line; it wrapped, and its second line was cut off by
+  the box. The box is one line high and grows with what is typed, to its limit, then scrolls.
+
 ## 0.34.1 · 14 November 2026
 
 **Prometheus is given time to answer.** Found while recording the walkthrough film on the local stack.

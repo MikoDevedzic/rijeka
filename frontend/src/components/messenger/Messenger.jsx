@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
-import { useChatStore, PROMETHEUS, selectUnreadTotal, audience } from '../../store/useChatStore'
+import { useChatStore, PROMETHEUS, selectUnreadTotal, audience, badge } from '../../store/useChatStore'
 import Markdown from '../common/Markdown'
 import TradeCard, { TradePicker, WalletPanel } from './TradeCard'
 import NewsCard from './NewsCard'
@@ -150,7 +150,7 @@ export default function Messenger() {
       {!covered && (
         <button className={`ms-launcher${poppedOut ? ' out' : ''}${alerting ? ' alert' : ''}`} onClick={launch}
                 title={poppedOut ? 'Messenger is open in its own window — bring it forward' : 'Messages and Prometheus'}>
-          ✦{unread > 0 && <span className="ms-launcher-badge">{unread}</span>}
+          ✦{unread > 0 && <span className="ms-launcher-badge">{badge(unread)}</span>}
         </button>
       )}
     </>
@@ -177,7 +177,7 @@ export function MessengerPage() {
     if (opened.current || !wanted || !rooms?.length) return
     if (rooms.some(r => r.id === wanted)) { opened.current = true; show(wanted) }
   }, [wanted, rooms, show])
-  useEffect(() => { document.title = (unread ? `(${unread}) ` : '') + 'Rijeka · Messages' }, [unread])
+  useEffect(() => { document.title = (unread ? `(${badge(unread)}) ` : '') + 'Rijeka · Messages' }, [unread])
   useEffect(() => {
     const here = () => broadcast({ type: 'messenger:here' })
     here()
@@ -341,7 +341,7 @@ function ConversationList({ onCompose }) {
                   : 'No messages yet'}
               </span>
               {r.my_access === 'INVITED' ? <span className="ms-tag invite">INVITE</span>
-                : r.unread > 0 ? <span className="ms-badge">{r.unread}</span> : null}
+                : r.unread > 0 ? <span className={`ms-badge${r.kind === 'NEWS' ? ' quiet' : ''}`}>{badge(r.unread)}</span> : null}
             </div>
             {r.book_label && <div className="ms-conv-book">{r.book_label}</div>}
           </button>
@@ -384,7 +384,7 @@ function PrometheusThread({ back }) {
         {promLoading && <Thinking />}
         <div ref={endRef} />
       </div>
-      <Composer placeholder="Private — ask about your trades, a confirmation, or how Rijeka models something…"
+      <Composer placeholder="Ask about your trades, a confirmation, or a model…"
                 value={draft} onChange={setDraft} onSend={() => ask(draft)} busy={promLoading} />
     </>
   )
@@ -509,6 +509,7 @@ function RoomComposer({ room, value, onChange, onSend, err, busy, onTrade }) {
   const ref = useRef(null)
   const [mention, setMention] = useState(null)       // { start } while "@pro…" is typed
   const offerMention = room.kind !== 'SUPPORT'         // support: Prometheus always answers
+  useGrow(ref, value)
 
   const change = (e) => {
     const text = e.target.value
@@ -560,7 +561,18 @@ function RoomComposer({ room, value, onChange, onSend, err, busy, onTrade }) {
 function composerHint(room, me) {
   if (room.kind === 'SUPPORT') return 'To Rijeka Support…'
   const others = room.firms.filter(f => f !== me?.firm?.name)
-  return (others.length ? 'To ' + others.join(', ') : 'To your colleagues') + ' · @ for Prometheus'
+  return others.length ? 'To ' + others.join(', ') : 'To your colleagues'
+}
+
+// The message box is one line high until more is typed, then as high as its text, up to its limit (the stylesheet's
+// max-height), after which it scrolls.
+function useGrow(ref, value) {
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + 2}px`          // + the two borders, which scrollHeight leaves out
+  }, [ref, value])
 }
 
 // ── Compose: new direct chat, new group, invite ──────────────────────────────
@@ -789,11 +801,13 @@ function ThreadHead({ back, onBack, title, tag, line, book, actions }) {
 }
 
 function Composer({ placeholder, value, onChange, onSend, busy }) {
+  const ref = useRef(null)
+  useGrow(ref, value)
   const key = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (value.trim()) onSend() } }
   return (
     <div className="ms-compose">
       <div className="ms-compose-row">
-        <textarea rows={1} value={value} onChange={e => onChange(e.target.value)} onKeyDown={key} placeholder={placeholder} />
+        <textarea ref={ref} rows={1} value={value} onChange={e => onChange(e.target.value)} onKeyDown={key} placeholder={placeholder} />
         <button className="ms-send" onClick={onSend} disabled={busy || !value.trim()}>SEND</button>
       </div>
     </div>

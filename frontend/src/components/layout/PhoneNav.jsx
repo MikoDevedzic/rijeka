@@ -4,7 +4,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import useBookingStore from '../../store/useBookingStore'
-import { useChatStore, selectUnreadTotal } from '../../store/useChatStore'
+import { useChatStore, selectUnreadTotal, badge } from '../../store/useChatStore'
 import { usePhone } from '../../lib/phone'
 
 const OFF = ['/login', '/signup', '/confirm', '/reset', '/terms', '/privacy', '/messenger']
@@ -26,7 +26,7 @@ export default function PhoneNav() {
       <button className={at('/command-center') ? 'on' : ''} aria-current={at('/command-center') ? 'page' : undefined} onClick={go('/command-center')}><i aria-hidden="true">⌂</i>HOME</button>
       <button className={at('/blotter') ? 'on' : ''} aria-current={at('/blotter') ? 'page' : undefined} onClick={go('/blotter')}><i aria-hidden="true">≡</i>TRADES</button>
       <button className="new" onClick={() => { closeChat(); useBookingStore.getState().open() }} aria-label="New trade"><i aria-hidden="true">+</i>NEW</button>
-      <button className={(chatOpen ? 'on' : '') + (alerting ? ' alert' : '')} aria-pressed={chatOpen} onClick={() => useChatStore.getState().toggle()}><i aria-hidden="true">✦</i>CHAT{unread > 0 && <b className="ph-badge">{unread}</b>}</button>
+      <button className={(chatOpen ? 'on' : '') + (alerting ? ' alert' : '')} aria-pressed={chatOpen} onClick={() => useChatStore.getState().toggle()}><i aria-hidden="true">✦</i>CHAT{unread > 0 && <b className="ph-badge">{badge(unread)}</b>}</button>
       <button className={at('/news') ? 'on' : ''} aria-current={at('/news') ? 'page' : undefined} onClick={go('/news')}><i aria-hidden="true">◫</i>NEWS</button>
     </nav>
   )

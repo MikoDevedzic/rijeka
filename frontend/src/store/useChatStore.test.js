@@ -22,7 +22,7 @@ vi.mock('../lib/windows', () => ({ broadcast: () => {}, onBroadcast: () => () =>
 vi.mock('../lib/errors', () => ({ report: (...a) => sb.reported(...a) }))
 vi.mock('../lib/chatAlerts', async (orig) => ({ ...(await orig()), alert: (...a) => sb.raised(...a), prime: () => {} }))
 
-const { useChatStore, selectUnreadTotal, PROMETHEUS_TIMEOUT_MS } = await import('./useChatStore')
+const { useChatStore, selectUnreadTotal, badge, PROMETHEUS_TIMEOUT_MS } = await import('./useChatStore')
 const ROOMS = [{ id: 'a', my_access: 'JOINED', unread: 2 }, { id: 'b', my_access: 'INVITED', unread: 0 }]
 
 describe('chat rooms: an answer that is not a list', () => {
@@ -40,6 +40,13 @@ describe('chat rooms: an answer that is not a list', () => {
     await useChatStore.getState().refreshRooms()
     expect(useChatStore.getState().rooms).toEqual(ROOMS)
     expect(selectUnreadTotal(useChatStore.getState())).toBe(3)
+  })
+  it('the number on the messenger button is chat: the news room\'s headlines count only for someone who asked to be alerted for news', () => {
+    const rooms = [{ id: 'a', kind: 'DIRECT', my_access: 'JOINED', unread: 2 }, { id: 'n', kind: 'NEWS', my_access: 'JOINED', unread: 829 }, { id: 'i', kind: 'GROUP', my_access: 'INVITED', unread: 0 }]
+    expect(selectUnreadTotal({ rooms })).toBe(3)
+    expect(selectUnreadTotal({ rooms, alerts: { news: false } })).toBe(3)
+    expect(selectUnreadTotal({ rooms, alerts: { news: true } })).toBe(832)
+    expect([badge(3), badge(99), badge(100), badge(832)]).toEqual(['3', '99', '99+', '99+'])
   })
   it('a store that somehow holds something else still counts nothing, without throwing', () => {
     expect(selectUnreadTotal({ rooms: {} })).toBe(0)

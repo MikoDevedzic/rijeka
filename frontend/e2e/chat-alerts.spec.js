@@ -79,6 +79,21 @@ test('chat: a sent message shows at once, a reply arrives without the live strea
   await win.locator(`.ms-conv`, { hasText: 'User B' }).first().click()
   const thread = win.locator('.ms-thread')
 
+  // the message box: one line with its hint on that line, as high as what is typed, one line again once sent
+  const box = win.locator('.ms-compose textarea')
+  const height = async () => Math.round((await box.boundingBox()).height)
+  const oneLine = await height()
+  expect(oneLine, 'one line high when empty').toBeLessThanOrEqual(42)
+  expect(await box.evaluate(el => { const p = getComputedStyle(el, '::placeholder'); return p.whiteSpace }), 'the hint does not wrap').toBe('nowrap')
+  await shot(win, 'room')
+  await box.fill('one line\nand a second\nand a third, typed to see the box grow with its text')
+  expect(await height(), 'the box grows with what is typed').toBeGreaterThan(oneLine + 25)
+  expect(await box.evaluate(el => el.scrollHeight <= el.clientHeight + 1), 'and shows all of it').toBe(true)
+  await expectNoHorizontalOverflow(win.locator('.ms-compose'), 'the message box')
+  await shot(win, 'room-typing')
+  await box.fill('')
+  expect(await height()).toBe(oneLine)
+
   // on the screen as it is sent; the box is free for the next message at once
   const text = `from A ${Date.now()}`
   await win.locator('.ms-compose textarea').fill(text)
