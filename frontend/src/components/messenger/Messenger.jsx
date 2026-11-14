@@ -384,7 +384,7 @@ function PrometheusThread({ back }) {
         {promLoading && <Thinking />}
         <div ref={endRef} />
       </div>
-      <Composer placeholder="Ask about your trades, a confirmation, or a model…"
+      <Composer placeholder="Ask about your book or a model…"
                 value={draft} onChange={setDraft} onSend={() => ask(draft)} busy={promLoading} />
     </>
   )
@@ -565,14 +565,24 @@ function composerHint(room, me) {
 }
 
 // The message box is one line high until more is typed, then as high as its text, up to its limit (the stylesheet's
-// max-height), after which it scrolls.
+// max-height), after which it scrolls. It is measured again when its width changes (the window resized, a phone
+// turned, a box that was hidden shown): the same text then wraps differently.
 function useGrow(ref, value) {
-  useLayoutEffect(() => {
+  const fit = () => {
     const el = ref.current
-    if (!el) return
+    if (!el || !el.clientWidth) return                    // not on the screen: nothing to measure
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight + 2}px`          // + the two borders, which scrollHeight leaves out
-  }, [ref, value])
+  }
+  useLayoutEffect(fit, [ref, value])                      // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.clientWidth
+    const ro = new ResizeObserver(() => { if (el.clientWidth !== width) { width = el.clientWidth; fit() } })      // its own change of height is not a reason to measure again
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ref])                                               // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 // ── Compose: new direct chat, new group, invite ──────────────────────────────
