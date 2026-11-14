@@ -3,6 +3,31 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.35.0 · 14 November 2026
+
+**Rijeka opens as an app on a desktop: a window of its own, with no address bar.** The owner: "i want user to
+feel like they actualy entered seperate system and not just some website." A page cannot open a window with its
+address hidden (browsers stopped allowing it, against phishing), so Rijeka is installed instead, as it already
+could be on a phone.
+
+- On a monitor the sign-in page has one more button under the card, OPEN AS AN APP. Chrome and Edge are asked to
+  install it, in one press, where they have offered to; where they have not, the button shows the browser's own
+  menu steps (Chrome: Cast, save, and share, then Install page as app; Edge: Apps, then Install this site as an
+  app). Safari on a Mac cannot be asked, so it is shown its own (File, Add to Dock; Safari 17 or later).
+- Installed, Rijeka opens from its own icon in a window with no address bar and no tabs; the mark draws itself
+  once as it opens, as it does from a phone's home screen; and the sign-in page no longer shows the button.
+- Firefox cannot install a site, and is shown no button. Nothing else changes there.
+- An iPad, which is wider than a phone and was offered nothing, is shown the phone's button (ADD TO HOME SCREEN)
+  and its taps.
+- A phone is as it was: its button, its sheet and its styles are untouched, and the app's manifest is unchanged
+  (it already said "standalone").
+
+Not checked: that Chrome and Edge offer the install on the hosted site by themselves (the app has no service
+worker; current Chrome does not ask for one, and where it does not offer, the steps are shown); the installed
+window on a real Mac or Windows machine; an iPad itself. The menus' words are the makers' published ones, read on
+14 November 2026, and they do change them. Still so: sign-in is kept per window, so the app asks for it each time
+it is opened; a link in an email opens in the browser, not in the app.
+
 ## 0.34.2 · 14 November 2026
 
 **Two people signed in to one browser no longer silence each other's chat alerts.** Found from the owner's first

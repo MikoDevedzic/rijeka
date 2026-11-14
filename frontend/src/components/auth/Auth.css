@@ -185,6 +185,30 @@
   .au-alt .au-inline { padding:10px 2px; }      /* a thumb's height for the two small links under the form */
   .au-alt { margin:0; }
 }
+/* The door's install button and its sheet on a monitor and on an iPad. A phone's are in layout/Phone.css, under its
+   own width, and are not touched by these. On a monitor the sheet is a box in the middle of the page, not a drawer. */
+@media (min-width: 641px) {
+  .au-install-desk { width:100%; max-width:380px; display:flex; flex-direction:column; gap:6px; }
+  .au-install-desk small { font-size:12px; line-height:18px; color:var(--text-dim); text-align:center; }
+  .au-install { display:flex; align-items:center; justify-content:center; gap:9px; width:100%; max-width:380px; min-height:40px; padding:9px 14px; border-radius:6px; cursor:pointer;
+    font-family:var(--mono); font-size:12px; letter-spacing:0.12em; color:var(--accent-hi); background:rgb(var(--accent-hi-rgb) / 0.06); border:1px solid rgb(var(--accent-hi-rgb) / 0.45); }
+  .au-install:hover { background:rgb(var(--accent-hi-rgb) / 0.13); }
+  .au-install:focus-visible { outline:2px solid var(--accent-hi); outline-offset:2px; }
+  .au-sheet { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:20px; background:rgb(4 12 10 / 0.72); }
+  .au-sheet > div { display:grid; gap:12px; width:100%; max-width:380px; padding:22px; background:var(--panel-2); border:1px solid var(--border-hi); border-radius:10px; }
+  .au-sheet-icon { display:flex; align-items:center; gap:14px; }
+  .au-sheet-icon img { border-radius:13px; }
+  .au-sheet-icon b { display:block; font-size:16px; color:var(--text-hi); }
+  .au-sheet-icon span { font-size:13px; color:var(--text-dim); }
+  .au-sheet ol { margin:0; padding-left:22px; display:grid; gap:8px; list-style:decimal; font-size:14px; line-height:20px; color:var(--text-dim); }
+  .au-sheet ol li::marker { font-family:var(--mono); font-size:12.5px; color:var(--text-dim); }
+  .au-sheet ol b, .au-sheet-note b { color:var(--text-hi); font-weight:600; }
+  .au-glyph { display:inline-block; vertical-align:-3px; color:var(--text-hi); }
+  .au-nb { white-space:nowrap; }
+  .au-sheet-note { margin:0; font-size:12px; line-height:18px; color:var(--text-dim); }
+  .au-sheet-note .au-glyph { width:13px; height:13px; vertical-align:-2px; }
+  .au-sheet-lead { margin:0; font-size:14px; line-height:20px; color:var(--text-dim); }
+}
 /* the shortest phones: the card's own title goes, the switch above it already says which form this is */
 @media (max-width: 640px) and (max-height: 600px) {
   .au-title { display:none; }

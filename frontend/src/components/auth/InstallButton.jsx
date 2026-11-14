@@ -2,8 +2,14 @@
 // asks it to. An iPhone does not let a page do that, so the button shows the taps instead, and shows the ones this
 // browser has (lib/phone.js installWay): Safari has kept its Share button in three places. Once the app is running
 // from its icon the button is not shown.
+//
+// On a monitor the same button reads "Open as an app" (the owner, 14 November 2026: "i want user to feel like they
+// actualy entered seperate system and not just some website"). Installed, Rijeka opens in a window of its own with no
+// address bar and its own icon. Chrome and Edge are asked to do it; where they have not offered, and in Safari on a
+// Mac, the button shows the browser's own menu steps (lib/phone.js desktopInstallWay). A browser with no way to do
+// it (Firefox) is shown no button. An iPad, which is wider than a phone, is shown the phone's button and taps.
 import { useEffect, useRef, useState } from 'react'
-import { usePhone, standalone, installWay } from '../../lib/phone'
+import { usePhone, standalone, installWay, desktopInstallWay, isIos } from '../../lib/phone'
 
 // the glyphs as Safari draws them, beside the words that name them (so they are not read out twice)
 const Glyph = ({ children }) => (
@@ -27,6 +33,22 @@ const WAYS = {
   'other-browser': { first: <>Open your browser's {share} menu.</>, note: <>Not listed? Open <b>app.rijeka.app</b> in Safari and press this button.</> },
 }
 
+// the steps on a monitor, by browser, in the browser's own words; `note` is the line under them
+const DESK = {
+  chrome: {
+    steps: [<>Open the browser's menu: the three dots, top right.</>, <>Choose <b>Cast, save, and share</b>.</>, <>Choose <b>Install page as app…</b></>, <>Press <b>Install</b>. Rijeka opens in its own window.</>],
+    note: <>If the address bar shows an install button at its right end, press that instead. No such line in the menu? This browser may not install apps: Chrome and Edge do.</>,
+  },
+  edge: {
+    steps: [<>Open the browser's menu: the three dots, top right.</>, <>Choose <b>Apps</b>.</>, <>Choose <b>Install this site as an app</b>.</>, <>Press <b>Install</b>. Rijeka opens in its own window.</>],
+    note: <>If the address bar shows an install button at its right end, press that instead.</>,
+  },
+  'safari-mac': {
+    steps: [<>In the menu bar, open <b>File</b>.</>, <>Choose <b>Add to Dock…</b></>, <>Press <b>Add</b>.</>, <>Open <b>Rijeka</b> from the Dock.</>],
+    note: <>Add to Dock is also behind the <b>Share</b> button in Safari's toolbar.</>,
+  },
+}
+
 export default function InstallButton() {
   const phone = usePhone()
   const [prompt, setPrompt] = useState(null)        // Android's own install prompt, when it offers one
@@ -48,15 +70,41 @@ export default function InstallButton() {
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
   }, [sheet])
-  if (!phone || installed) return null
+  const nav = window.navigator || {}
+  const about = [nav.userAgent || '', nav.platform || '', nav.maxTouchPoints || 0]
+  // a monitor's browser that can give the app a window of its own; an iPad is wider than a phone and is not one
+  const desk = !phone && !isIos(...about) ? desktopInstallWay(...about) : null
+  if (installed || (!phone && !isIos(...about) && !desk)) return null
   const press = async () => {
     if (!prompt) { setSheet(true); return }
     prompt.prompt()
     try { await prompt.userChoice } catch { /* dismissed */ }
     setPrompt(null)
   }
-  const nav = window.navigator || {}
-  const way = installWay(nav.userAgent || '', nav.platform || '', nav.maxTouchPoints || 0)
+  if (desk) {
+    const how = DESK[desk]
+    return (
+      <>
+        <div className="au-install-desk">
+          <button type="button" className="au-install" data-testid="open-as-app" ref={opener} onClick={press}>
+            <img src="/favicon.svg" alt="" width="20" height="20" />OPEN AS AN APP
+          </button>
+          <small>Its own window and its own icon, with no browser around it.</small>
+        </div>
+        {sheet && (
+          <div className="au-sheet" role="dialog" aria-modal="true" aria-label="Open Rijeka as an app" data-way={desk} onClick={close}>
+            <div onClick={e => e.stopPropagation()}>
+              <div className="au-sheet-icon"><img src="/apple-touch-icon.png" alt="" width="58" height="58" /><div><b>Rijeka</b><span>opens in its own window, from its own icon</span></div></div>
+              <ol>{how.steps.map((step, i) => <li key={i}>{step}</li>)}</ol>
+              <p className="au-sheet-note">{how.note}</p>
+              <button type="button" className="au-install" autoFocus onClick={close}>GOT IT</button>
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+  const way = installWay(...about)
   const taps = WAYS[way]
   return (
     <>
