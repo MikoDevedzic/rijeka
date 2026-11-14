@@ -7,6 +7,7 @@ import TradeCard, { TradePicker, WalletPanel } from './TradeCard'
 import NewsCard from './NewsCard'
 import { broadcast, onBroadcast, popOutMessenger, focusMessengerWindow, MESSENGER_PATH } from '../../lib/windows'
 import { getSessionSafe } from '../../lib/session'
+import { TONES, VOLUMES, playTone, askDesktop, desktopState } from '../../lib/chatAlerts'
 import './Messenger.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -112,6 +113,7 @@ export default function Messenger() {
   const location = useLocation()
   const { open, expanded, toggle, init, poppedOut, setPoppedOut } = useChatStore()
   const unread = useChatStore(selectUnreadTotal)
+  const alerting = useChatStore(s => s.alertAt > 0)
 
   useEffect(() => { if (session) init() }, [session, init])
 
@@ -146,7 +148,7 @@ export default function Messenger() {
     <>
       {open && !poppedOut && <MessengerWindow />}
       {!covered && (
-        <button className={`ms-launcher${poppedOut ? ' out' : ''}`} onClick={launch}
+        <button className={`ms-launcher${poppedOut ? ' out' : ''}${alerting ? ' alert' : ''}`} onClick={launch}
                 title={poppedOut ? 'Messenger is open in its own window — bring it forward' : 'Messages and Prometheus'}>
           ✦{unread > 0 && <span className="ms-launcher-badge">{unread}</span>}
         </button>
@@ -206,6 +208,7 @@ export function MessengerPage() {
         <span className="ms-brand">✦ RIJEKA</span>
         <span className="ms-sub">messages · Prometheus</span>
         <div className="ms-title-actions">
+          <AlertsButton />
           {window.opener && <button className="ms-icon" onClick={dock} title="Put back into the main window">⇲</button>}
         </div>
       </header>
@@ -256,6 +259,7 @@ function MessengerWindow() {
         <span className="ms-brand">✦ RIJEKA</span>
         <span className="ms-sub">messages · Prometheus</span>
         <div className="ms-title-actions">
+          <AlertsButton />
           {!phone && <button className="ms-icon" onClick={popOut} title="Open in its own window — drag it to another screen">⧉</button>}
           {!phone && <button className="ms-icon" onClick={() => setExpanded(!expanded)} title={expanded ? 'Restore' : 'Expand'}>{expanded ? '⤡' : '⤢'}</button>}
           <button className="ms-icon" onClick={close} title="Close">✕</button>
@@ -278,7 +282,8 @@ function MessengerPanes({ width }) {
         {showList && <ConversationList onCompose={setCompose} />}
         {showMain && (
           <main className="ms-main">
-            {compose ? <Compose compose={compose} onDone={() => setCompose(null)} />
+            {compose?.mode === 'alerts' ? <AlertSettings onDone={() => setCompose(null)} />
+              : compose ? <Compose compose={compose} onDone={() => setCompose(null)} />
               : activeId === PROMETHEUS ? <PrometheusThread back={!twoPane} />
               : activeId ? <RoomThread roomId={activeId} back={!twoPane} onInvite={() => setCompose({ mode: 'invite' })} />
               : <div className="ms-empty"><div className="rj-empty-card">
@@ -460,7 +465,11 @@ function RoomThread({ roomId, back, onInvite }) {
           ) : joined ? (
             <RoomComposer room={room} value={draft} onChange={setDraft} err={err} busy={busy}
                           onTrade={room.kind !== 'SUPPORT' && room.firms.length === 2 ? () => setPicking(p => !p) : null}
-                          onSend={() => run(async () => { const b = draft.trim(); if (!b) return; await send(roomId, b); setDraft('') })} />
+                          onSend={() => {                      // on the screen at once; taken back, with the text returned to the box, if it could not be sent
+                            const b = draft.trim(); if (!b) return
+                            setDraft(''); setErr(null)
+                            send(roomId, b).catch(e => { setErr(e.message); setDraft(d => d || b) })
+                          }} />
           ) : (
             <div className="ms-readonly">Compliance view — you can read this room but not post in it.</div>
           )}
@@ -487,8 +496,8 @@ function RoomMessage({ m, mine }) {
   )
   const prom = m.sender_kind === 'PROMETHEUS'
   return (
-    <div className={`ms-msg${mine ? ' mine' : ''}${prom ? ' prometheus' : ''}`}>
-      <div className="ms-who">{prom ? '✦ PROMETHEUS' : mine ? 'YOU' : `${m.sender_name} · ${m.sender_firm || ''}`}<span className="ms-time">{fmtTime(m.created_at)}</span></div>
+    <div className={`ms-msg${mine ? ' mine' : ''}${prom ? ' prometheus' : ''}${m.sending ? ' sending' : ''}`}>
+      <div className="ms-who">{prom ? '✦ PROMETHEUS' : mine ? 'YOU' : `${m.sender_name} · ${m.sender_firm || ''}`}<span className="ms-time">{m.sending ? 'sending…' : fmtTime(m.created_at)}</span></div>
       <div className="ms-bubble">{prom ? <Markdown text={m.body} /> : m.body}</div>
       {prom && <Sources sources={m.card?.sources} />}
     </div>
@@ -651,6 +660,114 @@ function Compose({ compose, onDone }) {
                         onClick={() => run(() => invite(activeId, picked))}>INVITE</button>}
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Alerts: what tells you a message arrived, and the settings for it ────────
+
+function AlertsButton() {
+  const { compose, setCompose } = useChatStore()
+  const on = useChatStore(s => s.alerts.enabled)
+  const showing = compose?.mode === 'alerts'
+  return (
+    <button className={`ms-icon ms-alerts-btn${on ? '' : ' off'}${showing ? ' open' : ''}`} aria-pressed={showing}
+            aria-label={on ? 'Chat alerts' : 'Chat alerts, off'}
+            onClick={() => { useChatStore.setState({ open: true }); setCompose(showing ? null : { mode: 'alerts' }) }}
+            title={on ? 'Chat alerts: sound, blink and notifications when a message arrives' : 'Chat alerts are off'}>♪</button>
+  )
+}
+
+const ALERT_WAYS = [
+  ['sound', 'Play a sound'],
+  ['blink', 'Blink the messenger button'],
+  ['title', "Flash the browser tab's title", 'while Rijeka is not the window in front'],
+  ['desktop', 'Desktop notification', 'the sender and the room, never the text'],
+]
+const ALERT_KINDS = [
+  ['people', 'Messages from people, and invitations'],
+  ['prometheus', "Prometheus's answers in a room"],
+  ['events', 'Signatures and confirmations of a shared trade'],
+  ['news', 'Market news headlines'],
+]
+const STREAM_LINE = {
+  connecting: 'Live stream: connecting.',
+  live: 'Live stream: delivering.',
+  silent: 'Live stream: joined, not delivering. New messages are fetched every few seconds instead.',
+  down: 'Live stream: down. New messages are fetched every few seconds until it is back.',
+}
+
+function AlertSettings({ onDone }) {
+  const prefs = useChatStore(s => s.alerts)
+  const stream = useChatStore(s => s.stream)
+  const setAlerts = useChatStore(s => s.setAlerts)
+  const [perm, setPerm] = useState(desktopState())
+  const off = !prefs.enabled
+
+  const flip = async (key) => {
+    if (key === 'desktop' && !prefs.desktop) {                // the browser asks the person, once
+      const p = await askDesktop(); setPerm(p)
+      if (p !== 'granted') return
+    }
+    setAlerts({ [key]: !prefs[key] })
+  }
+  const test = () => {
+    if (prefs.sound) playTone(prefs.tone, prefs.volume)
+    if (prefs.blink) { useChatStore.setState({ alertAt: 0 }); requestAnimationFrame(() => useChatStore.setState({ alertAt: Date.now() })) }
+  }
+  const row = (id, label, note, disabled) => (
+    <button key={id} className={`ms-pick${prefs[id] ? ' on' : ''}`} role="switch" aria-checked={!!prefs[id]} disabled={off || disabled} onClick={() => flip(id)}>
+      <span className="ms-check">{prefs[id] ? '■' : '□'}</span>
+      <span className="ms-pick-name">{label}{note && <span className="ms-sub">{note}</span>}</span>
+    </button>
+  )
+  return (
+    <div className="ms-compose-panel ms-alerts">
+      <div className="ms-thread-head">
+        <div className="ms-head-main"><div className="ms-head-title">Chat alerts</div>
+          <div className="ms-sub">How this browser tells you a message arrived</div></div>
+        <div className="ms-seg" role="group" aria-label="Chat alerts">
+          <button className={prefs.enabled ? 'on' : ''} aria-pressed={prefs.enabled} onClick={() => setAlerts({ enabled: true })}>ON</button>
+          <button className={off ? 'on' : ''} aria-pressed={off} onClick={() => setAlerts({ enabled: false })}>OFF</button>
+        </div>
+        <button className="ms-icon" onClick={onDone} title="Close">✕</button>
+      </div>
+      <div className={`ms-compose-body ms-alerts-body${off ? ' off' : ''}`}>
+        <div className="ms-label">WHEN A MESSAGE ARRIVES</div>
+        <div className="ms-pick-list">
+          {ALERT_WAYS.map(([id, label, note]) => row(id, label,
+            id === 'desktop' && perm === 'denied' ? 'blocked in this browser’s settings for this site'
+              : id === 'desktop' && perm === 'unsupported' ? 'not offered by this browser' : note,
+            id === 'desktop' && (perm === 'denied' || perm === 'unsupported')))}
+        </div>
+        <div className="ms-alerts-sound">
+          <div className="ms-label"><span className="ms-alerts-k">SOUND</span>
+            <div className="ms-seg" role="group" aria-label="Sound">
+              {TONES.map(([id, label]) => (
+                <button key={id} className={prefs.tone === id ? 'on' : ''} aria-pressed={prefs.tone === id} disabled={off || !prefs.sound}
+                        onClick={() => { setAlerts({ tone: id }); playTone(id, prefs.volume) }}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="ms-label"><span className="ms-alerts-k">VOLUME</span>
+            <div className="ms-seg" role="group" aria-label="Volume">
+              {VOLUMES.map(([id, label]) => (
+                <button key={id} className={prefs.volume === id ? 'on' : ''} aria-pressed={prefs.volume === id} disabled={off || !prefs.sound}
+                        onClick={() => { setAlerts({ volume: id }); playTone(prefs.tone, id) }}>{label}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="ms-label">ALERT ME FOR</div>
+        <div className="ms-pick-list">
+          {ALERT_KINDS.map(([id, label]) => row(id, label))}
+        </div>
+        <div className="ms-compose-foot">
+          <span className="ms-sub">Never for your own messages, or the conversation you are looking at. Kept in this browser only.</span>
+          <button className="ms-btn" disabled={off} onClick={test}>TEST</button>
+        </div>
+        <div className="ms-sub ms-alerts-stream" data-stream={stream}>{STREAM_LINE[stream] || STREAM_LINE.connecting}</div>
       </div>
     </div>
   )

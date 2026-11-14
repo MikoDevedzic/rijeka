@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
 import { getSessionSafe } from '../lib/session'
 import { broadcast, onBroadcast } from '../lib/windows'
+import { alert as raiseAlert, loadPrefs, savePrefs, shouldAlert, prime } from '../lib/chatAlerts'
+import { report } from '../lib/errors'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -53,6 +55,47 @@ const post = (path, body) => chatApi(path, { method: 'POST', body: body ? JSON.s
 // How long to show "Prometheus is looking into it" before giving up on a reply.
 const PENDING_TIMEOUT_MS = 120_000
 
+// The live stream is trusted while it delivers. A message this window learned of another way (its own POST, a
+// fetch) while the stream was joined is expected on the stream within ECHO_MS; one that does not come says the
+// stream is joined and silent, and the chat fetches instead until the stream delivers again.
+const ECHO_MS = 8000
+// A fetch between catch-ups asks for messages newer than the last one held, less OVERLAP_MS; a catch-up on the
+// tick, less CATCH_OVERLAP_MS. The whole room (its latest 200) is read when the stream joins, when the page comes
+// back into view or online, and when a room is opened again: the moments a message in the middle can have been missed.
+const OVERLAP_MS = 30_000, CATCH_OVERLAP_MS = 5 * 60_000
+const streamed = new Set()    // ids the stream delivered
+const alerted = new Set()     // ids (and invitations) that already raised an alert
+const sending = {}            // roomId -> the last POST, so two messages sent quickly arrive in the order typed
+let tmpSeq = 0
+// The operator hears of a stream that is joined and silent (Configurations › System, browser errors): once a day
+// from a browser, so that one sleeping laptop does not fill the log.
+function reportSilentOnce() {
+  try {
+    const day = new Date().toISOString().slice(0, 10)
+    if (localStorage.getItem('rijeka.chat.silent-reported') === day) return
+    localStorage.setItem('rijeka.chat.silent-reported', day)
+  } catch { return }
+  report('chat: the live stream is joined and not delivering; messages are fetched instead', 'chat')
+}
+const keep = (setOfIds, id) => { setOfIds.add(id); if (setOfIds.size > 600) for (const x of [...setOfIds].slice(0, 300)) setOfIds.delete(x) }
+const attendingNow = () => typeof document === 'undefined' || (document.visibilityState === 'visible' && document.hasFocus())
+// Several Rijeka windows may be open (tabs, the messenger in a window of its own). The one in which a conversation
+// is being looked at says so, so that the others do not ring for a message its reader is already reading.
+const ATTEND_KEY = 'rijeka.chat.attending', ATTEND_MS = 6000
+const windowId = Math.random().toString(36).slice(2)
+function markAttending(roomId) {
+  try {
+    if (roomId) localStorage.setItem(ATTEND_KEY, JSON.stringify({ roomId, at: Date.now(), by: windowId }))
+    else if (JSON.parse(localStorage.getItem(ATTEND_KEY) || 'null')?.by === windowId) localStorage.removeItem(ATTEND_KEY)
+  } catch { /* no storage: each window answers for itself */ }
+}
+function attendedElsewhere(roomId) {
+  try {
+    const a = JSON.parse(localStorage.getItem(ATTEND_KEY) || 'null')
+    return !!a && a.by !== windowId && a.roomId === roomId && Date.now() - a.at < ATTEND_MS
+  } catch { return false }
+}
+
 export const useChatStore = create((set, get) => ({
   // ── Messenger window ──
   open:     false,
@@ -70,6 +113,10 @@ export const useChatStore = create((set, get) => ({
   pending:  {},          // roomId -> true while Prometheus is answering in a room
   cardVersion: {},       // tradeId -> n, bumped when that trade changes (cards refetch)
   channel:  null,
+  stream:   'connecting',  // connecting | live | silent (joined, not delivering) | down
+  delivered: { stream: 0, fetch: 0 },     // messages from other people, by the way they reached this window
+  alerts:   loadPrefs(),   // this browser's alert settings (lib/chatAlerts.js)
+  alertAt:  0,             // when the messenger button last began to blink; 0 once the messenger is looked at
 
   // ── Private Prometheus ──
   prom:        [],       // [{ role, content, checked?, sources?, error? }]
@@ -79,6 +126,7 @@ export const useChatStore = create((set, get) => ({
     if (get().status !== 'idle') return
     set({ status: 'loading' })
     get().listen()
+    prime()
     try {
       const me = await chatApi('/me')
       if (!me.firm) { set({ status: 'no-firm', me: null }); return }
@@ -98,7 +146,9 @@ export const useChatStore = create((set, get) => ({
     if (get().unlisten) return
     const unlisten = onBroadcast(msg => {
       if (msg.type === 'chat:read') {
-        set(s => ({ rooms: s.rooms.map(r => r.id === msg.roomId ? { ...r, unread: 0 } : r) }))
+        set(s => ({ alertAt: 0, rooms: s.rooms.map(r => r.id === msg.roomId ? { ...r, unread: 0 } : r) }))      // read in another window: this one stops blinking
+      } else if (msg.type === 'chat:alerts') {
+        set({ alerts: loadPrefs() })
       } else if (msg.type === 'prom:state' && !get().promLoading) {
         set({ prom: msg.prom })
       } else if (msg.type === 'prom:request' && get().prom.length) {
@@ -115,20 +165,103 @@ export const useChatStore = create((set, get) => ({
     // Only a list is the rooms. A 200 whose body could not be read comes back from `api` as {} (a request cut off
     // while its body was arriving); taken as the rooms, it crashed every page that shows the unread count
     // ("rooms.reduce is not a function", caught by the page's boundary). The rooms it has stay until a list arrives.
-    if (Array.isArray(rooms)) set({ rooms })
+    if (Array.isArray(rooms)) get().takeRooms(rooms)
+  },
+
+  // The rooms as the server holds them. What they show that this window had not seen alerts: an invitation, or a
+  // newer last message in a room whose messages this window does not fetch (the stream would have brought it).
+  takeRooms: (rooms) => {
+    const before = get().rooms, ready = get().status === 'ready', listedAt = get()._roomsAt, me = get().me
+    set({ rooms, _roomsAt: Date.now() })
+    if (!ready) return                                   // the first list is where the chat stands, not news
+    for (const r of rooms) {
+      const was = before.find(x => x.id === r.id)
+      if (r.my_access === 'INVITED' && was?.my_access !== 'INVITED') get().notify({ id: `invite:${r.id}`, sender_kind: 'USER', sender_name: r.invited_by }, r)
+      else if (r.last_message && r.last_message.id !== was?.last_message?.id && (r.unread || 0) > (was?.unread || 0)) {
+        // it appeared between two lists, both read while the stream was joined: it was the stream's to bring
+        if (listedAt && get()._liveSince && get()._liveSince < listedAt && r.last_message.sender_user_id !== me?.user_id) get().expectOnStream(r.last_message.id)
+        get().notify(r.last_message, r)
+      }
+    }
+  },
+  _roomsAt: 0,
+
+  // ── Alerts ──
+  setAlerts: (patch) => {
+    const alerts = { ...get().alerts, ...patch }
+    set({ alerts })
+    savePrefs(alerts)
+    broadcast({ type: 'chat:alerts' })
+  },
+  // Says which conversation, if any, is being looked at in this window (see ATTEND_KEY).
+  attend: () => {
+    const { open, activeId } = get()
+    markAttending(open && activeId && activeId !== PROMETHEUS && attendingNow() ? activeId : null)
+  },
+  // One alert for a message, whichever way it reached this window, and never twice.
+  notify: (m, room) => {
+    if (!m?.id || alerted.has(m.id)) return
+    keep(alerted, m.id)
+    const { alerts, me, open, activeId } = get()
+    const attending = (open && activeId === room?.id && attendingNow()) || attendedElsewhere(room?.id)
+    if (!shouldAlert(m, room, { meId: me?.user_id, attending, prefs: alerts })) return
+    if (alerts.blink) set({ alertAt: Date.now() })
+    raiseAlert(alerts, { who: m.sender_kind === 'PROMETHEUS' ? 'Prometheus' : m.sender_name || 'Rijeka', where: room.title || '', roomId: room.id,
+      onOpen: () => get().show(room.id) })
   },
 
   subscribe: () => {
     if (get().channel) return
+    const gen = get()._gen + 1
+    // A name of its own each time. The client hands back the channel it already has under a name, and a removed
+    // channel keeps its name until the server has acknowledged its leaving: a second 'chat' built in that moment
+    // would be the one being removed, which never joins again and never says so.
     const channel = supabase
-      .channel('chat')
+      .channel(`chat-${gen}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' },
-        payload => get().receive(payload.new))
+        payload => get().receive(payload.new, 'stream'))
       // Invites, joins and leaves change the room list.
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_room_members' },
         () => get().refreshRooms().catch(() => {}))
-      .subscribe((status) => { if (status === 'SUBSCRIBED') get().catchUp() })      // joined, or joined again: what was sent while it was not is fetched
-    set({ channel })
+      .subscribe((status) => {
+        if (get()._gen !== gen) return                                   // a channel that was replaced has nothing more to say
+        if (status === 'SUBSCRIBED') {                                   // joined, or joined again: what was sent while it was not is fetched
+          clearTimeout(get()._rejoin)
+          set({ stream: get()._distrust ? 'silent' : 'live', _liveSince: Date.now(), _retries: 0, _rejoin: null })
+          get().catchUp(true)
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          get().streamLost()
+        }
+      })
+    set({ channel, _gen: gen })
+  },
+  _gen: 0, _retries: 0, _rejoin: null, _liveSince: 0, _distrust: false, _fetchedAt: {},
+
+  // A channel that errored, timed out or closed was left as it was, and a window whose channel had died heard
+  // nothing until it was reloaded. It is built again, a little later each time it fails (2 s to 30 s).
+  streamLost: () => {
+    set({ stream: 'down' })
+    if (get()._rejoin) return
+    const wait = Math.min(30_000, 2000 * 2 ** get()._retries)
+    set({ _rejoin: setTimeout(() => { set({ _rejoin: null, _retries: get()._retries + 1 }); get().resubscribe() }, wait) })
+  },
+  resubscribe: () => {
+    const old = get().channel
+    set({ channel: null, _gen: get()._gen + 1 })
+    try { if (old) Promise.resolve(supabase.removeChannel(old)).catch(() => {}) } catch { /* already gone */ }
+    get().subscribe()
+  },
+  // A message the stream should have delivered: if it has not within ECHO_MS, the stream is joined and silent.
+  expectOnStream: (id) => {
+    if (get().stream !== 'live') return
+    const gen = get()._gen, asked = Date.now()
+    setTimeout(() => {
+      if (get()._gen !== gen || get().stream !== 'live' || streamed.has(id)) return
+      if (Date.now() - asked > ECHO_MS * 2) return       // the machine slept through the wait: nothing is proved
+      set({ stream: 'silent', _distrust: true })
+      reportSilentOnce()
+      get().resubscribe()
+    }, ECHO_MS)
   },
 
   // Behind the live stream. Realtime tells a window nothing while its socket is down and replays nothing when it is
@@ -137,7 +270,7 @@ export const useChatStore = create((set, get) => ({
   // him message he has to refresh to get the messages", "i asked prometheus soemthing in chat and it didnt return me
   // answer"). So what was missed is fetched: when the socket joins, when the page comes back into view or online,
   // and on a slow tick while the page is in view (faster while the chat is open, fastest while an answer is awaited).
-  catchUp: async () => {
+  catchUp: async (whole = false) => {
     if (get().status !== 'ready' || get()._catching) return
     set({ _catching: true })
     try {
@@ -145,78 +278,126 @@ export const useChatStore = create((set, get) => ({
       // arrived or a room was read while the answer was on its way (the answer is then the older of the two)
       const seen = get()._touched
       const rooms = await chatApi('/rooms')
-      if (Array.isArray(rooms) && get()._touched === seen) set({ rooms })
+      if (Array.isArray(rooms) && get()._touched === seen) get().takeRooms(rooms)
       // the open room, and any room that waits for Prometheus: the messages this window does not have, in time order
       const { activeId, messages, pending } = get()
       const wanted = [...new Set([activeId, ...Object.keys(pending).filter(id => pending[id])])].filter(id => id && id !== PROMETHEUS && messages[id])
-      for (const roomId of wanted) {
-        const list = await chatApi(`/rooms/${roomId}/messages`)
-        if (!Array.isArray(list)) continue
-        const have = new Set((get().messages[roomId] || []).map(m => m.id))
-        const fresh = list.filter(m => !have.has(m.id))
-        if (!fresh.length) continue
-        const answered = fresh.some(m => m.sender_kind === 'PROMETHEUS' || m.sender_kind === 'SYSTEM')
-        set(s => ({
-          messages: { ...s.messages, [roomId]: [...(s.messages[roomId] || []), ...fresh].sort(byTime) },
-          pending: answered && s.pending[roomId] ? { ...s.pending, [roomId]: false } : s.pending,
-        }))
-        for (const m of fresh) if (m.card?.type === 'trade_event') get().bumpCard(m.card.trade_id)
-        const me = get().me
-        if (get().open && get().activeId === roomId && fresh.some(m => m.sender_user_id !== me?.user_id)) get().markRead(roomId)
-      }
+      for (const roomId of wanted) await get().fetchRoom(roomId, whole ? 0 : CATCH_OVERLAP_MS)
     } catch { /* the next tick tries again */ } finally { set({ _catching: false }) }
+  },
+
+  // Between catch-ups, while the stream is not delivering: only the open room, and only what is newer than the
+  // last message held (one small request, where a catch-up reads every room).
+  quick: async () => {
+    const { status, activeId, messages, _catching } = get()
+    if (status !== 'ready' || _catching || !activeId || activeId === PROMETHEUS || !messages[activeId]) return
+    set({ _catching: true })
+    try { await get().fetchRoom(activeId, OVERLAP_MS) } catch { /* the next tick tries again */ } finally { set({ _catching: false }) }
+  },
+
+  // The messages of one room that this window does not have. With `overlap` (ms) only those sent after the last
+  // one held, less the overlap, are asked for; with 0 the room's latest 200.
+  fetchRoom: async (roomId, overlap = 0) => {
+    const held = (get().messages[roomId] || []).filter(m => !m.sending)
+    const lastAt = held.length ? Date.parse(held[held.length - 1].created_at) : NaN
+    const after = overlap && Number.isFinite(lastAt) ? `?after=${encodeURIComponent(new Date(lastAt - overlap).toISOString())}` : ''
+    const asked = Date.now(), before = get()._fetchedAt[roomId] || 0
+    const list = await chatApi(`/rooms/${roomId}/messages${after}`)
+    if (!Array.isArray(list)) return
+    set(s => ({ _fetchedAt: { ...s._fetchedAt, [roomId]: asked } }))
+    const have = new Set((get().messages[roomId] || []).map(m => m.id))
+    const fresh = list.filter(m => !have.has(m.id))
+    if (!fresh.length) return
+    const answered = fresh.some(m => m.sender_kind === 'PROMETHEUS' || m.sender_kind === 'SYSTEM')
+    set(s => ({
+      messages: { ...s.messages, [roomId]: [...(s.messages[roomId] || []), ...fresh].sort(byTime) },
+      pending: answered && s.pending[roomId] ? { ...s.pending, [roomId]: false } : s.pending,
+    }))
+    const me = get().me, room = get().rooms.find(r => r.id === roomId)
+    const theirs = fresh.filter(m => m.sender_user_id !== me?.user_id)
+    for (const m of fresh) if (m.card?.type === 'trade_event') get().bumpCard(m.card.trade_id)
+    if (theirs.length) {
+      set(s => ({ delivered: { ...s.delivered, fetch: s.delivered.fetch + theirs.filter(m => !streamed.has(m.id)).length } }))
+      // a message that appeared between two fetches, both made while the stream was joined, was the stream's to bring
+      if (before && get()._liveSince && get()._liveSince < before) for (const m of theirs) get().expectOnStream(m.id)
+      if (room) for (const m of theirs) get().notify(m, room)
+      if (get().open && get().activeId === roomId) get().markRead(roomId)
+    }
   },
   _catching: false,
   _touched: 0,           // counts the times this window changed its rooms itself (a message received, a room read)
 
   watch: () => {
     if (get()._unwatch || typeof document === 'undefined') return
-    const seen = () => { if (document.visibilityState === 'visible') get().catchUp() }
+    const seen = () => { get().attend(); if (document.visibilityState === 'visible') get().catchUp(true) }
+    const left = () => get().attend()
     document.addEventListener('visibilitychange', seen)
     window.addEventListener('focus', seen)
+    window.addEventListener('blur', left)
     window.addEventListener('online', seen)
     let n = 0
     const tick = setInterval(() => {
       n += 1
-      if (document.visibilityState !== 'visible') return
-      const awaiting = Object.values(get().pending).some(Boolean)
-      if (awaiting || (get().open && n % 3 === 0) || n % 12 === 0) get().catchUp()      // every 4 s, 12 s, 48 s
+      const s = get()
+      s.attend()
+      const fetching = s.stream !== 'live'
+      // A page that is not in view is told by the stream alone; where the stream is not delivering it still
+      // fetches, every 24 s, or a message would wait unannounced until the page was looked at again.
+      if (document.visibilityState !== 'visible') { if (fetching && n % 6 === 0) s.catchUp(); return }
+      const awaiting = Object.values(s.pending).some(Boolean)
+      // every 4 s while an answer is awaited, 12 s while the chat is open or the stream is not delivering, 48 s otherwise;
+      // and between those, while the stream is not delivering, the open room's new messages every 4 s
+      if (awaiting || ((s.open || fetching) && n % 3 === 0) || n % 12 === 0) s.catchUp()
+      else if (fetching && s.open) s.quick()
     }, 4000)
-    set({ _unwatch: () => { clearInterval(tick); document.removeEventListener('visibilitychange', seen); window.removeEventListener('focus', seen); window.removeEventListener('online', seen); set({ _unwatch: null }) } })
+    set({ _unwatch: () => { clearInterval(tick); document.removeEventListener('visibilitychange', seen); window.removeEventListener('focus', seen); window.removeEventListener('blur', left); window.removeEventListener('online', seen); set({ _unwatch: null }) } })
   },
   _unwatch: null,
 
   // One path for every new message, from realtime or our own POST; dedupe by id.
-  receive: (m) => {
+  receive: (m, via) => {
     set(s => ({ _touched: s._touched + 1 }))
+    if (via === 'stream') {                              // the stream delivers: it is trusted again
+      keep(streamed, m.id)
+      if (get()._distrust || get().stream !== 'live') set({ _distrust: false, stream: 'live' })
+    }
     const { messages, rooms, activeId, open, me, pending } = get()
     const list = messages[m.room_id]
-    if (list && list.some(x => x.id === m.id)) return
+    const known = !!list && list.some(x => x.id === m.id)
+    if (known && via !== 'post') return                  // the POST's answer for a message already here still tells the room's row
     const room = rooms.find(r => r.id === m.room_id)
     if (!room) { get().refreshRooms().catch(() => {}); return }
     const mine = !!m.sender_user_id && m.sender_user_id === me?.user_id
     const watching = open && activeId === m.room_id
+    if (via === 'stream' && !mine) set(s => ({ delivered: { ...s.delivered, stream: s.delivered.stream + 1 } }))
+    // one's own message, brought by the stream before its POST answered, takes the place of the copy on its way
+    const onItsWay = mine && !known && list ? list.findIndex(x => x.sending && x.body === m.body) : -1
+    const next = !list || known ? list : onItsWay >= 0 ? list.map((x, i) => i === onItsWay ? m : x) : [...list, m]
+    const newer = (r) => !r.last_message_at || !(Date.parse(m.created_at) < Date.parse(r.last_message_at))
     set({
-      rooms: rooms.map(r => r.id !== m.room_id ? r : {
-        ...r, last_message: m, last_message_at: m.created_at,
-        unread: watching || mine ? r.unread : r.unread + 1,
+      rooms: rooms.map(r => r.id !== m.room_id || (known && !newer(r)) ? r : {
+        ...r, ...(newer(r) ? { last_message: m, last_message_at: m.created_at } : {}),
+        unread: watching || mine || known ? r.unread : r.unread + 1,
       }).sort(roomOrder),
-      messages: list ? { ...messages, [m.room_id]: [...list, m] } : messages,
+      messages: list ? { ...messages, [m.room_id]: next } : messages,
       pending: (m.sender_kind === 'PROMETHEUS' || m.sender_kind === 'SYSTEM') && pending[m.room_id]
         ? { ...pending, [m.room_id]: false } : pending,
     })
+    if (known) return
     if (m.card?.type === 'trade_event') get().bumpCard(m.card.trade_id)
+    if (!mine) get().notify(m, room)
     if (watching && !mine) get().markRead(m.room_id)
   },
 
   // ── Window ──
-  toggle: () => set(s => ({ open: !s.open })),
+  toggle: () => set(s => ({ open: !s.open, alertAt: 0 })),
   setCompose: (compose) => set({ compose }),
   setExpanded: (expanded) => set({ expanded }),
   close:  () => set({ open: false }),
   // Open the messenger on a conversation (or the list).
   show: async (id = null) => {
-    set({ open: true, activeId: id })
+    set({ open: true, activeId: id, alertAt: 0 })
+    get().attend()
     if (id && id !== PROMETHEUS) await get().loadRoom(id)
   },
 
@@ -227,15 +408,33 @@ export const useChatStore = create((set, get) => ({
       const list = await chatApi(`/rooms/${roomId}/messages`)
       set(s => ({ messages: { ...s.messages, [roomId]: list } }))
     } else {
-      get().catchUp()                                  // a room opened again shows what arrived while it was closed
+      get().catchUp(true)                              // a room opened again shows what arrived while it was closed
     }
     get().markRead(roomId)
   },
 
   // ── Rooms ──
+  // The message is on the sender's screen as it is sent, marked as on its way; the server's copy takes its place
+  // when the POST answers, and it is taken back (and the error thrown to the composer) if the POST fails.
   send: async (roomId, body) => {
-    const r = await post(`/rooms/${roomId}/messages`, { body })
-    get().receive(r.message)
+    const me = get().me
+    const tmp = { id: `tmp-${++tmpSeq}`, room_id: roomId, sender_kind: 'USER', sender_user_id: me?.user_id || null, sender_name: me?.display_name,
+      sender_firm: me?.firm?.name || null, body, card: null, created_at: new Date().toISOString(), sending: true }
+    const without = (s) => (s.messages[roomId] ? { messages: { ...s.messages, [roomId]: s.messages[roomId].filter(x => x.id !== tmp.id) } } : {})
+    set(s => (s.messages[roomId] ? { messages: { ...s.messages, [roomId]: [...s.messages[roomId], tmp] } } : {}))
+    const turn = (sending[roomId] || Promise.resolve()).catch(() => {}).then(() => post(`/rooms/${roomId}/messages`, { body }))
+    sending[roomId] = turn
+    let r
+    try { r = await turn } catch (e) { set(without); throw e }
+    // the server's copy where the copy on its way stood (or where the stream already put it), not after whatever arrived since
+    set(s => {
+      const list = s.messages[roomId]
+      if (!list) return {}
+      const here = list.some(x => x.id === r.message.id)
+      return { messages: { ...s.messages, [roomId]: here ? list.filter(x => x.id !== tmp.id) : list.map(x => x.id === tmp.id ? r.message : x) } }
+    })
+    get().receive(r.message, 'post')
+    get().expectOnStream(r.message.id)
     if (r.prometheus_pending) {
       set(s => ({ pending: { ...s.pending, [roomId]: true } }))
       setTimeout(() => set(s => ({ pending: { ...s.pending, [roomId]: false } })), PENDING_TIMEOUT_MS)
@@ -243,7 +442,7 @@ export const useChatStore = create((set, get) => ({
   },
 
   markRead: async (roomId) => {
-    set(s => ({ _touched: s._touched + 1, rooms: s.rooms.map(r => r.id === roomId ? { ...r, unread: 0 } : r) }))
+    set(s => ({ _touched: s._touched + 1, alertAt: 0, rooms: s.rooms.map(r => r.id === roomId ? { ...r, unread: 0 } : r) }))
     broadcast({ type: 'chat:read', roomId })
     try { await post(`/rooms/${roomId}/read`) } catch { /* best effort */ }
   },

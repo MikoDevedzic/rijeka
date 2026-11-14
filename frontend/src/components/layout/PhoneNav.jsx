@@ -16,6 +16,7 @@ export default function PhoneNav() {
   const navigate = useNavigate()
   const chatOpen = useChatStore(s => s.open)
   const unread = useChatStore(selectUnreadTotal)
+  const alerting = useChatStore(s => s.alertAt > 0)
   if (!phone || !session || OFF.includes(pathname)) return null
   const closeChat = () => { if (useChatStore.getState().open) useChatStore.getState().close() }
   const go = (to) => () => { closeChat(); navigate(to) }
@@ -25,7 +26,7 @@ export default function PhoneNav() {
       <button className={at('/command-center') ? 'on' : ''} aria-current={at('/command-center') ? 'page' : undefined} onClick={go('/command-center')}><i aria-hidden="true">⌂</i>HOME</button>
       <button className={at('/blotter') ? 'on' : ''} aria-current={at('/blotter') ? 'page' : undefined} onClick={go('/blotter')}><i aria-hidden="true">≡</i>TRADES</button>
       <button className="new" onClick={() => { closeChat(); useBookingStore.getState().open() }} aria-label="New trade"><i aria-hidden="true">+</i>NEW</button>
-      <button className={chatOpen ? 'on' : ''} aria-pressed={chatOpen} onClick={() => useChatStore.getState().toggle()}><i aria-hidden="true">✦</i>CHAT{unread > 0 && <b className="ph-badge">{unread}</b>}</button>
+      <button className={(chatOpen ? 'on' : '') + (alerting ? ' alert' : '')} aria-pressed={chatOpen} onClick={() => useChatStore.getState().toggle()}><i aria-hidden="true">✦</i>CHAT{unread > 0 && <b className="ph-badge">{unread}</b>}</button>
       <button className={at('/news') ? 'on' : ''} aria-current={at('/news') ? 'page' : undefined} onClick={go('/news')}><i aria-hidden="true">◫</i>NEWS</button>
     </nav>
   )

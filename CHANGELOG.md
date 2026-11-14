@@ -3,7 +3,7 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
-## 0.33.2 · 13 November 2026
+## 0.34.1 · 14 November 2026
 
 **Prometheus is given time to answer.** Found while recording the walkthrough film on the local stack.
 
@@ -14,12 +14,82 @@ methodology document carries its own version (v1.20). Commits on `main` are the 
   again.
 - The private conversation now waits three minutes. Every other chat request keeps twenty seconds.
 - Not changed: an answer in a chat room (`@prometheus`) was never held to this limit; it is posted when it is
-  ready and reaches the room by the stream or the catch-up of 0.33.1.
+  ready and reaches the room by the stream or the fetch behind it (0.33.1, 0.34.0).
 - Still so: past three minutes the panel gives up as before, and the server finishes regardless (its own limit is
   three minutes a model call, twelve rounds of look-ups); a second window can ask while the first waits, within the
   ten asks a minute and the day's allowance.
 - Not checked: how long answers take on production, where the model and the book differ from the local stack's;
   whether anything between the browser and the API closes a request that is open for minutes.
+## 0.34.0 · 14 November 2026
+
+**Chat says a message arrived, and is no slower than a messenger.** The owner: "yesterday i messaged with Edis on
+our chat and there was seemingly more lag than typical message communcation", and then: "we also need alert system
+when you get message on there. maybe play sound or just blink...something unique. also there needs to bet settings
+for it when people can turn it off or set up setting chat alerts to how they want."
+
+Alerts:
+
+- A message from another person plays a sound, blinks the messenger button (CHAT in the bar on a phone) until the
+  messenger is looked at, and flashes the browser tab's title while Rijeka is not the window in front. A desktop
+  notification is offered and is off until it is switched on (the browser asks); it names the sender and the
+  room and never carries the text.
+- The sound is a chime of two rising notes, the owner's choice by ear of the four offered ("chime i think,
+  normal and blink isfine"); a ship's bell struck twice, a ping and a knock can be chosen instead, at three
+  volumes. They are made in the browser; no file is loaded.
+- The settings are behind ♪ in the messenger's title bar: alerts on or off altogether, each way of alerting, the
+  sound and its volume, and what alerts (messages from people and invitations, Prometheus's answers in a room,
+  signatures and confirmations of a shared trade, market news). Market news is off until asked for. They are kept
+  in the browser (a sound is a matter of the machine a person sits at), and a second Rijeka window follows them.
+- Nothing alerts for one's own message, or for the conversation being looked at, in this window or another. With
+  several windows open the sound is made by one of them, and a burst of messages is one sound.
+
+The lag:
+
+- Since 0.33.1 a message that the live stream did not deliver was fetched every 12 seconds with the chat open and
+  every 48 with it closed. That fetch standing in for a stream that is not delivering is the likeliest cause of
+  the lag; why the stream does not deliver on some machines is still not found.
+- The chat's channel was never built again once it errored, timed out or closed: a window whose channel had died
+  heard nothing more by the stream until it was reloaded. It is now replaced, 2 to 30 seconds later, under a name
+  of its own each time (the client hands back the channel it already has under a name, and a removed one keeps
+  its name until its leaving is acknowledged: found in review, before it shipped).
+- A stream can be joined and silent. The chat now tests it: a message it sent, or one that appeared between two
+  fetches, is expected on the stream within eight seconds (a machine that slept through the wait proves
+  nothing). If it does not come, the stream is not trusted until it delivers again; meanwhile the open room's
+  new messages are fetched every 4 seconds (one small request: `GET /api/chat/rooms/{id}/messages?after=`), the
+  rooms every 12, and every 24 while the page is not in view. The operator is told once a day from a browser
+  where this happens (Configurations › System, browser errors), and the alert settings show the stream's state.
+- The fetch on the tick asks for the last five minutes of the open room, not its latest 200 messages; the whole
+  room is read when the stream joins, when the page is looked at again, and when a room is opened again.
+- A message is on the sender's screen as it is sent, marked as on its way, and no longer waits for the server's
+  answer. If it cannot be sent it is taken back and its text returned to the box. Two messages sent quickly
+  arrive in the order typed, and one that arrives from the other person meanwhile does not push it out of place.
+
+Not checked: the sounds in the app itself (the owner heard them on a page that makes them from the same
+numbers); a desktop notification on a real desktop; the stream's behaviour on the hosted desk, which the local stack cannot show (its realtime delivers
+nothing, so the journeys run the fetch). Still so: a page that a browser has put to sleep fetches when the browser
+lets it.
+
+## 0.33.2 · 13 November 2026
+
+**The owner's account on the hosted desk is an administrator again.** The owner: "looks like i lost my 'admin'
+view", and, asked how: "i never manually removed it. so it must have been you. you add it back."
+
+- No account of the owner's held the admin role on the hosted desk, so nobody could open the Users page to give
+  it back. One migration (`2026-11-13_restore_owner_admin.sql`), applied by the runner, sets it on the one
+  account at the owner's confirmed address.
+- After its reviews (Edgar, Magnus): the approved list is applied by every desk that runs the software, and on
+  a self-hosted desk where someone had signed up at that address the statement would have made that account
+  an administrator. It now acts only where the runner's ledger began before 11 November 2026 (the runner
+  first shipped on 9 November, to the hosted desk); a desk set up later, or one with no ledger, is not
+  touched. Not closed: a self-hosted desk that deployed the runner in those two days.
+- How it was lost is not known: nothing records a role change. The one path in the code that took admin away
+  with no way back was the role chip, which an administrator could press from 29 October until 0.22.1 (11
+  November). No migration applied by the runner changes the role of an existing account, and no record of a
+  role written by hand was found.
+- Still so: an administrator can change their own row on the Users page, and a role change leaves no record.
+  Both are proposed, not built.
+- Not checked: the role as the hosted database holds it, before or after (an agent does not read it). The owner
+  signs out and in, and looks.
 
 ## 0.33.1 · 13 November 2026
 

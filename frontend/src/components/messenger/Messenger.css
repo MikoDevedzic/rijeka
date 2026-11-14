@@ -16,6 +16,16 @@
 }
 
 .ms-launcher.out { border-style: dashed; box-shadow: none; }
+/* A message arrived: the button blinks six times, then stays lit until the messenger is looked at. */
+.ms-launcher.alert {
+  border-color: var(--accent-hi); box-shadow: 0 0 0 2px rgb(var(--accent-hi-rgb) / 0.55), 0 0 28px rgb(var(--accent-hi-rgb) / 0.6);
+  animation: ms-alert 1.1s ease-in-out 6;
+}
+@keyframes ms-alert {
+  0%, 100% { box-shadow: 0 0 0 2px rgb(var(--accent-hi-rgb) / 0.55), 0 0 28px rgb(var(--accent-hi-rgb) / 0.6); transform: scale(1); }
+  50%      { box-shadow: 0 0 0 9px rgb(var(--accent-hi-rgb) / 0), 0 0 6px rgb(var(--accent-hi-rgb) / 0.15); transform: scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) { .ms-launcher.alert { animation: none; } }
 
 /* Popped out: the messenger is the whole browser window */
 .ms-page { height: 100vh; display: flex; flex-direction: column; background: var(--panel); color: var(--text); font-family: var(--sans); }
@@ -47,6 +57,8 @@
   font-size: 15px; line-height: 1; padding: 5px 8px; border-radius: 2px;
 }
 .ms-icon:hover { color: var(--text); background: var(--panel-2); }
+.ms-alerts-btn.open { color: var(--accent-hi); background: var(--panel-2); }
+.ms-alerts-btn.off  { text-decoration: line-through; }
 
 .ms-body { flex: 1; min-height: 0; display: flex; }
 .ms-body > * { flex: 1; min-width: 0; }
@@ -136,6 +148,7 @@
 .ms-msg.mine .ms-bubble       { background: rgb(var(--accent-rgb) / 0.08); border-color: rgb(var(--accent-rgb) / 0.22); }
 .ms-msg.prometheus .ms-bubble { border-color: rgb(var(--accent-hi-rgb) / 0.3); }
 .ms-msg.error .ms-bubble      { border-color: rgba(240,130,140,0.5); color: var(--red); }
+.ms-msg.sending .ms-bubble    { opacity: 0.6; }
 .ms-thinking { color: var(--text-dim); font-style: italic; }
 .ms-system { align-self: center; text-align: center; font-size: 12px; color: var(--text-dim); max-width: 520px; }
 .ms-system span { opacity: 0.7; }
@@ -214,3 +227,23 @@
 .ms-pick-name { flex: 1; }
 .ms-check { color: var(--accent); width: 12px; }
 .ms-compose-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+/* Chat alerts: the settings */
+.ms-alerts .ms-thread-head .ms-seg { margin-top: 0; flex-shrink: 0; }
+.ms-alerts-body { overflow-y: auto; }
+.ms-alerts-body .ms-pick-list { flex: none; min-height: 0; overflow: visible; }
+.ms-alerts-body .ms-pick-list .ms-pick:last-child { border-bottom: none; }
+.ms-alerts-body { gap: 8px; }
+.ms-alerts-body .ms-pick { padding: 7px 10px; }
+.ms-alerts-body .ms-pick .ms-sub { display: block; margin-top: 1px; }
+/* a row that cannot be pressed: its mark fades and its name goes quiet; the note that says why stays readable */
+.ms-alerts-body .ms-pick:disabled { cursor: default; background: none; }
+.ms-alerts-body .ms-pick:disabled .ms-check { opacity: 0.4; }
+.ms-alerts-body .ms-pick:disabled .ms-pick-name { color: var(--text-dim); }
+.ms-alerts-body .ms-seg button:disabled { opacity: 0.6; cursor: default; }
+.ms-alerts-sound { display: flex; flex-direction: column; gap: 8px; }
+.ms-alerts-sound .ms-label { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
+.ms-alerts-sound .ms-label > .ms-seg { margin-top: 0; }
+.ms-alerts-k { min-width: 54px; }
+.ms-alerts-stream { border-top: 1px solid var(--border); padding-top: 10px; }
+.ms-alerts-stream[data-stream="silent"], .ms-alerts-stream[data-stream="down"] { color: var(--amber); }

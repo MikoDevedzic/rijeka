@@ -537,11 +537,16 @@ def leave(room_id: str, db: Session = Depends(get_db), user: dict = Depends(veri
 
 @router.get("/rooms/{room_id}/messages")
 def messages(room_id: str, limit: int = Query(default=200, ge=1, le=500),
+             after: Optional[datetime] = Query(default=None),
              db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """The room's latest messages, oldest first. With `after` (a time), only those sent later: what a window
+    asks for every few seconds while its live stream is not delivering, instead of the whole room again."""
     me_m, _ = _my_firm(db, user)
     room, _ = _room_for(db, room_id, me_m, ("JOINED", "OBSERVER"))
-    rows = (db.query(ChatMessage).filter(ChatMessage.room_id == room.id)
-              .order_by(ChatMessage.created_at.desc()).limit(limit).all())
+    q = db.query(ChatMessage).filter(ChatMessage.room_id == room.id)
+    if after is not None:
+        q = q.filter(ChatMessage.created_at > (after if after.tzinfo else after.replace(tzinfo=timezone.utc)))
+    rows = q.order_by(ChatMessage.created_at.desc()).limit(limit).all()
     return [_serialize_msg(m) for m in reversed(rows)]
 
 
