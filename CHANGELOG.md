@@ -3,6 +3,50 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.34.0 · 14 November 2026
+
+**Chat says a message arrived, and is no slower than a messenger.** The owner: "yesterday i messaged with Edis on
+our chat and there was seemingly more lag than typical message communcation", and then: "we also need alert system
+when you get message on there. maybe play sound or just blink...something unique. also there needs to bet settings
+for it when people can turn it off or set up setting chat alerts to how they want."
+
+Alerts:
+
+- A message from another person plays a sound, blinks the messenger button (CHAT in the bar on a phone) until the
+  messenger is looked at, and flashes the browser tab's title while Rijeka is not the window in front. A desktop
+  notification is offered and is off until it is switched on (the browser asks); it names the sender and the
+  room and never carries the text.
+- The sound is Rijeka's own: a ship's bell, struck twice. Three others can be chosen (chime, ping, knock), at
+  three volumes. They are made in the browser; no file is loaded.
+- The settings are behind ♪ in the messenger's title bar: alerts on or off altogether, each way of alerting, the
+  sound and its volume, and what alerts (messages from people and invitations, Prometheus's answers in a room,
+  signatures and confirmations of a shared trade, market news). Market news is off until asked for. They are kept
+  in the browser (a sound is a matter of the machine a person sits at), and a second Rijeka window follows them.
+- Nothing alerts for one's own message, or for the conversation being looked at, in this window or another. With
+  several windows open the sound is made by one of them, and a burst of messages is one sound.
+
+The lag:
+
+- Since 0.33.1 a message that the live stream did not deliver was fetched every 12 seconds with the chat open and
+  every 48 with it closed. That fetch standing in for a stream that is not delivering is the likeliest cause of
+  the lag; why the stream does not deliver on some machines is still not found.
+- The chat's channel was never built again once it errored, timed out or closed: a window whose channel had died
+  heard nothing more by the stream until it was reloaded. It is now replaced, 2 to 30 seconds later.
+- A stream can be joined and silent. The chat now tests it: a message it sent, or one that appeared between two
+  fetches, is expected on the stream within six seconds. If it does not come, the stream is not trusted until it
+  delivers again; meanwhile the open room's new messages are fetched every 4 seconds (one small request:
+  `GET /api/chat/rooms/{id}/messages?after=`), the rooms every 12, also while the page is not in view. The
+  operator is told once a day from a browser where this happens (Configurations › System, browser errors), and
+  the alert settings show the stream's state.
+- A message is on the sender's screen as it is sent, marked as on its way, and no longer waits for the server's
+  answer. If it cannot be sent it is taken back and its text returned to the box. Two messages sent quickly
+  arrive in the order typed.
+
+Not checked: how any of the four sounds sounds (they were written, not heard); a desktop notification on a real
+desktop; the stream's behaviour on the hosted desk, which the local stack cannot show (its realtime delivers
+nothing, so the journeys run the fetch). Still so: a page that a browser has put to sleep fetches when the browser
+lets it.
+
 ## 0.33.2 · 13 November 2026
 
 **The owner's account on the hosted desk is an administrator again.** The owner: "looks like i lost my 'admin'
