@@ -186,13 +186,17 @@
   .au-alt { margin:0; }
 }
 /* The door's install button and its sheet on a monitor and on an iPad. A phone's are in layout/Phone.css, under its
-   own width, and are not touched by these. On a monitor the sheet is a box in the middle of the page, not a drawer. */
-@media (min-width: 641px) {
+   own width, and are not touched by these. On a monitor the sheet is a box in the middle of the page, not a drawer.
+   The query is the phone's own, turned round, so that every width has exactly one of the two sets: with
+   (min-width: 641px) a window 640.5px wide (a zoomed browser) had neither, and the button and sheet came out bare. */
+@media not all and (max-width: 640px) {
   .au-install-desk { width:100%; max-width:380px; display:flex; flex-direction:column; gap:6px; }
   .au-install-desk small { font-size:12px; line-height:18px; color:var(--text-dim); text-align:center; }
   .au-install { display:flex; align-items:center; justify-content:center; gap:9px; width:100%; max-width:380px; min-height:40px; padding:9px 14px; border-radius:6px; cursor:pointer;
-    font-family:var(--mono); font-size:12px; letter-spacing:0.12em; color:var(--accent-hi); background:rgb(var(--accent-hi-rgb) / 0.06); border:1px solid rgb(var(--accent-hi-rgb) / 0.45); }
+    font-family:var(--mono); font-size:12px; letter-spacing:0.12em; color:var(--accent-hi); background:rgb(var(--accent-hi-rgb) / 0.06); border:1px solid rgb(var(--accent-hi-rgb) / 0.45);
+    transition:background .2s, transform .1s; }
   .au-install:hover { background:rgb(var(--accent-hi-rgb) / 0.13); }
+  .au-install:active { transform:translateY(1px); }
   .au-install:focus-visible { outline:2px solid var(--accent-hi); outline-offset:2px; }
   .au-sheet { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:20px; background:rgb(4 12 10 / 0.72); }
   .au-sheet > div { display:grid; gap:12px; width:100%; max-width:380px; padding:22px; background:var(--panel-2); border:1px solid var(--border-hi); border-radius:10px; }

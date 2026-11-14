@@ -36,11 +36,11 @@ const WAYS = {
 // the steps on a monitor, by browser, in the browser's own words; `note` is the line under them
 const DESK = {
   chrome: {
-    steps: [<>Open the browser's menu: the three dots, top right.</>, <>Choose <b>Cast, save, and share</b>.</>, <>Choose <b>Install page as app…</b></>, <>Press <b>Install</b>. Rijeka opens in its own window.</>],
-    note: <>If the address bar shows an install button at its right end, press that instead. No such line in the menu? This browser may not install apps: Chrome and Edge do.</>,
+    steps: [<>Open the browser's menu (three dots, top right).</>, <>Choose <b>Cast, save, and share</b>.</>, <>Choose <b>Install page as app…</b></>, <>Press <b>Install</b>. Rijeka opens in its own window.</>],
+    note: <>If the address bar shows an install button at its right end, press that instead. If the menu has no such line, this browser cannot install apps; Chrome and Edge can.</>,
   },
   edge: {
-    steps: [<>Open the browser's menu: the three dots, top right.</>, <>Choose <b>Apps</b>.</>, <>Choose <b>Install this site as an app</b>.</>, <>Press <b>Install</b>. Rijeka opens in its own window.</>],
+    steps: [<>Open the browser's menu (three dots, top right).</>, <>Choose <b>Apps</b>.</>, <>Choose <b>Install this site as an app</b>.</>, <>Press <b>Install</b>. Rijeka opens in its own window.</>],
     note: <>If the address bar shows an install button at its right end, press that instead.</>,
   },
   'safari-mac': {
