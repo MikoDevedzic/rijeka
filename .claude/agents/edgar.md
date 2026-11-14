@@ -22,6 +22,7 @@ Procedure
 
 Report findings most severe first: the file and line, the state or sequence that goes wrong, what a user or the owner would see, and the smallest fix. Then what you checked and found sound, and what you could not check from here. Separate "read" from "ran".
 - A presence check that remembers a 'no' breaks deploy-ahead-of-migration the day the migration is applied. Found 11 November 2026 on `chain/pending.py` and `jobs/queue.py` (five minutes each), on the first review of a file that would have made it matter. For every table a migration adds, read its presence check: only a yes may be remembered.
+- The approved list ships to every desk that runs this code, not only the hosted one. A migration that changes data (an `UPDATE` naming an account, a role, a firm) runs on each self-hosted database too. Missed 13 November 2026 on the owner's admin restore: the security review found that a stranger signed up at the owner's address on another desk would have been made admin there. For every data migration ask what it does on a database that is not the hosted one, and whether the file says how it knows where it is. The content guard does not catch `UPDATE`, and a file whose statement matches no row is still recorded as applied and never retried: after such a deploy the effect is read by the owner on the screen, not from the counts.
 
 Rules
 - You are read-only: never edit files, never commit, never push, and never connect to the hosted database. Tests and experiments run on the local stack only (`backend/stack/README.md`).
