@@ -16,8 +16,9 @@ Alerts:
   messenger is looked at, and flashes the browser tab's title while Rijeka is not the window in front. A desktop
   notification is offered and is off until it is switched on (the browser asks); it names the sender and the
   room and never carries the text.
-- The sound is Rijeka's own: a ship's bell, struck twice. Three others can be chosen (chime, ping, knock), at
-  three volumes. They are made in the browser; no file is loaded.
+- The sound is a chime of two rising notes, the owner's choice by ear of the four offered ("chime i think,
+  normal and blink isfine"); a ship's bell struck twice, a ping and a knock can be chosen instead, at three
+  volumes. They are made in the browser; no file is loaded.
 - The settings are behind ♪ in the messenger's title bar: alerts on or off altogether, each way of alerting, the
   sound and its volume, and what alerts (messages from people and invitations, Prometheus's answers in a room,
   signatures and confirmations of a shared trade, market news). Market news is off until asked for. They are kept
@@ -46,8 +47,8 @@ The lag:
   answer. If it cannot be sent it is taken back and its text returned to the box. Two messages sent quickly
   arrive in the order typed, and one that arrives from the other person meanwhile does not push it out of place.
 
-Not checked: how any of the four sounds sounds (they were written, not heard); a desktop notification on a real
-desktop; the stream's behaviour on the hosted desk, which the local stack cannot show (its realtime delivers
+Not checked: the sounds in the app itself (the owner heard them on a page that makes them from the same
+numbers); a desktop notification on a real desktop; the stream's behaviour on the hosted desk, which the local stack cannot show (its realtime delivers
 nothing, so the journeys run the fetch). Still so: a page that a browser has put to sleep fetches when the browser
 lets it.
 

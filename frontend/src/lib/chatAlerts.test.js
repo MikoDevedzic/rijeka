@@ -20,8 +20,9 @@ describe('chat alerts: the settings', () => {
     expect(loadPrefs(box(JSON.stringify({ sound: 'yes', tone: 'siren', volume: 11, blink: false, stray: 1 }))))
       .toEqual({ ...DEFAULTS, blink: false })
   })
-  it('start with a sound, a blink and the tab title for people, Prometheus and trade events; news and desktop notifications are off', () => {
-    expect(DEFAULTS).toMatchObject({ enabled: true, sound: true, blink: true, title: true, desktop: false, people: true, prometheus: true, events: true, news: false })
+  it('start with the chime at normal volume, a blink and the tab title for people, Prometheus and trade events; news and desktop notifications are off', () => {
+    expect(DEFAULTS).toMatchObject({ enabled: true, sound: true, tone: 'chime', volume: 'normal', blink: true, title: true, desktop: false, people: true, prometheus: true, events: true, news: false })
+    expect(TONES[0][0], 'the default is the first offered').toBe('chime')
   })
   it('every sound offered is written down, and none can clip at the loudest setting', () => {
     for (const [id] of TONES) {

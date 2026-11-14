@@ -14,11 +14,11 @@ const KEY = 'rijeka.chat.alerts'
 
 export const DEFAULTS = Object.freeze({
   enabled: true,
-  sound: true, tone: 'bell', volume: 'normal',
+  sound: true, tone: 'chime', volume: 'normal',      // the owner's choice of the four, by ear (14 November 2026)
   blink: true, title: true, desktop: false,
   people: true, prometheus: true, events: true, news: false,
 })
-export const TONES = [['bell', "SHIP'S BELL"], ['chime', 'CHIME'], ['ping', 'PING'], ['knock', 'KNOCK']]
+export const TONES = [['chime', 'CHIME'], ['bell', "SHIP'S BELL"], ['ping', 'PING'], ['knock', 'KNOCK']]
 export const VOLUMES = [['quiet', 'QUIET'], ['normal', 'NORMAL'], ['loud', 'LOUD']]
 const GAIN = { quiet: 0.18, normal: 0.42, loud: 0.85 }
 
@@ -66,7 +66,7 @@ const SCORE = {
   ping:  [[0, 1568, 1, 0.38], [0, 3136, 0.22, 0.16]],
   knock: [[0, 174.6, 1, 0.1, 'triangle'], [0, 87.3, 0.7, 0.14], [0.17, 164.8, 1, 0.1, 'triangle'], [0.17, 82.4, 0.7, 0.14]],
 }
-export const score = (tone) => SCORE[tone] || SCORE.bell
+export const score = (tone) => SCORE[tone] || SCORE[DEFAULTS.tone]
 
 let ctx = null
 function audio() {
