@@ -24,6 +24,9 @@ $$;
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+-- ... except a firm's trades, legs and events, which the browser reads and only the API writes: the grant above is what a
+-- hosted project gives by default, and docs/migrations/2026-11-13_trades_written_by_the_api.sql takes these away there
+REVOKE INSERT, UPDATE, DELETE, REFERENCES, TRIGGER ON public.trades, public.trade_legs, public.trade_events FROM authenticated, anon;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA auth TO anon, authenticated;
