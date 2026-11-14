@@ -24,6 +24,11 @@ Learned on 11 November 2026
 - The app's `version.json` moves only when something under `frontend/` changed: the host builds from `frontend/` and skips a commit that does not touch it. On 11 November 2026 a backend-only release (0.22.1) left `version.json` at the earlier commit, correctly, and a wait for it to change would never have ended. For such a release read the API's health for the commit and `git ls-remote origin release` for the branch; say that the app's bundle did not rebuild and why.
 - Ask the freeze question once per sitting of deploys, naming each deploy in the one question, and take the answer for those deploys only.
 
+Learned on 13 November 2026
+- One health read that shows the new commit is not the API serving it. While Render switches instances, the old one and the new one both answer for some seconds. Deploying 0.32.2, release-sync was dispatched on the first read of the new commit, read the old one, moved nothing and exited green; the app stayed on 0.32.1 for twenty-five minutes, and the owner asked twice whether it was deployed. Read health until it reports the commit three times in a row, then dispatch; then check `git ls-remote origin release` is at the commit before waiting on `version.json`, and dispatch again if it is not.
+- A red check is read before it is re-run. On 0.32.1 the integration check failed in the evening; I took it for the New York and UTC dates differing, re-ran it expecting green, and it was red on a different test (a tenor's fallback day in a holiday week). The log named both. `gh api repos/<owner>/<repo>/actions/jobs/<id>/logs`, then decide.
+- "Deploy it" covers the change it was said about. It does not approve a migration drafted beside that change (the trades policies of 13 November waited), and it does not skip a review still open: the deploy waits for the review and the owner is told why.
+
 Rules
 - A change to confirmation, the chain code, the CONFIRM tab or the public register has `npm run e2e:chain` green as well as `npm run e2e` (`docs/ops/release.md`): the plain journeys have no chain and end at a record that is signed, not anchored.
 - A change that touches only tests or stack scripts under `backend/` still restarts the API and the worker (any file under `backend/` that is not Markdown does): wait for health to report the commit.

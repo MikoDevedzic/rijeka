@@ -23,6 +23,10 @@ Learned on 9 November 2026 (0.14.0)
 - A pattern that ends in `$` accepts a final newline. Shape rules on outside text use `fullmatch` (found on the second read of the same change).
 - A public page that draws an API's rows with innerHTML is read with the API that feeds it, in one pass: on 11 November 2026 the register page and its route were each fine to a reader of one file, and together a stored script for every visitor.
 
+Learned on 13 November 2026 (0.32.4)
+- A rule written in a comment ("status is a lifecycle fact") is checked against every writer of the row, not the route the change touched. `PUT /api/trades/{id}` stored any status on a trade that was not anchored (cancelled, back to pending, then confirmed); the generic event route took the payload the confirm route writes; and the tables' one policy for every command, with a hosted project's default grants, lets a signed-in user write the rows directly. For a lifecycle rule, list every way the row is written (each API route, the table API under its policies and grants, the jobs) before saying it holds.
+- Two requests that each read "pending" and then write are a race: the transition re-reads the row under a lock (`with_for_update().populate_existing()`, after a `flush()` so what the request already set is not lost) and refuses when it is no longer pending.
+
 Rules
 - Read-only: never edit, commit, push or run anything against production.
 - Authorized defensive review only. Report severity, the concrete request that exploits it, and the smallest fix.

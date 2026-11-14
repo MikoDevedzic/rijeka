@@ -8,8 +8,8 @@ export const REST = 'http://127.0.0.1:3010'
 export default defineConfig({
   testDir: './e2e',
   // the smoothness profile is a measurement with its own config, not a journey; the journeys that need a chain run
-  // on a stack that has one (playwright.chain.config.js)
-  testIgnore: ['perf/**', 'chain/**'],
+  // on a stack that has one (playwright.chain.config.js); the walkthrough film is a recording (playwright.film.config.js)
+  testIgnore: ['perf/**', 'chain/**', 'film/**'],
   outputDir: './e2e/.out/results',
   timeout: 240_000,
   expect: { timeout: 20_000 },
