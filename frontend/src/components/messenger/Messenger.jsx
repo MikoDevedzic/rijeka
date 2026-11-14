@@ -672,7 +672,8 @@ function AlertsButton() {
   const on = useChatStore(s => s.alerts.enabled)
   const showing = compose?.mode === 'alerts'
   return (
-    <button className={`ms-icon ms-alerts-btn${on ? '' : ' off'}${showing ? ' on' : ''}`} aria-pressed={showing}
+    <button className={`ms-icon ms-alerts-btn${on ? '' : ' off'}${showing ? ' open' : ''}`} aria-pressed={showing}
+            aria-label={on ? 'Chat alerts' : 'Chat alerts, off'}
             onClick={() => { useChatStore.setState({ open: true }); setCompose(showing ? null : { mode: 'alerts' }) }}
             title={on ? 'Chat alerts: sound, blink and notifications when a message arrives' : 'Chat alerts are off'}>♪</button>
   )

@@ -24,7 +24,7 @@ test('chat alerts: the settings are found in the messenger, do what they say, an
   await app.goto('/command-center')
   await app.locator('.ms-launcher').click()
   const win = app.locator('.ms-window')
-  await win.getByRole('button', { name: '♪' }).click()
+  await win.getByRole('button', { name: /^Chat alerts/ }).click()
   const panel = win.locator('.ms-alerts')
   await expect(panel.getByText('Chat alerts', { exact: true })).toBeVisible()
 
@@ -49,7 +49,7 @@ test('chat alerts: the settings are found in the messenger, do what they say, an
   await panel.getByRole('button', { name: 'OFF', exact: true }).click()
   await expect(sw(/Play a sound/)).toBeDisabled()
   await expect(panel.getByRole('button', { name: 'TEST' })).toBeDisabled()
-  await expect(win.getByRole('button', { name: '♪' })).toHaveClass(/off/)
+  await expect(win.getByRole('button', { name: /^Chat alerts/ })).toHaveClass(/off/)
   await shot(win, 'settings-off')
   await panel.getByRole('button', { name: 'ON', exact: true }).click()
   await expect(sw(/Play a sound/)).toBeEnabled()
@@ -57,14 +57,14 @@ test('chat alerts: the settings are found in the messenger, do what they say, an
   // kept by this browser
   await app.reload()
   await app.locator('.ms-launcher').click()
-  await app.locator('.ms-window').getByRole('button', { name: '♪' }).click()
+  await app.locator('.ms-window').getByRole('button', { name: /^Chat alerts/ }).click()
   const again = app.locator('.ms-alerts')
   await expect(again.getByRole('button', { name: 'CHIME' })).toHaveAttribute('aria-pressed', 'true')
   await expect(again.getByRole('button', { name: 'QUIET' })).toHaveAttribute('aria-pressed', 'true')
   await expect(again.getByRole('switch', { name: /Market news/ })).toHaveAttribute('aria-checked', 'true')
   await expect(again.getByRole('switch', { name: /Blink the messenger button/ })).toHaveAttribute('aria-checked', 'false')
   // the same button closes the settings
-  await app.locator('.ms-window').getByRole('button', { name: '♪' }).click()
+  await app.locator('.ms-window').getByRole('button', { name: /^Chat alerts/ }).click()
   await expect(again).toHaveCount(0)
   expectClean(problems)
 })
@@ -95,7 +95,7 @@ test('chat: a sent message shows at once, a reply arrives without the live strea
 
   // the stream is not delivering, and the settings say so (the stack's realtime never completes a join, so it is
   // "down" here; a stream that joins and stays silent is the unit tests': useChatStore.test.js)
-  await win.getByRole('button', { name: '♪' }).click()
+  await win.getByRole('button', { name: /^Chat alerts/ }).click()
   await expect(win.locator('.ms-alerts-stream')).toHaveAttribute('data-stream', /^(down|silent)$/, { timeout: 15_000 })
   await expect(win.locator('.ms-alerts-stream')).toContainText('fetched every few seconds')
   await win.locator('.ms-alerts .ms-thread-head').getByRole('button', { name: '✕' }).click()
@@ -127,7 +127,7 @@ test('a phone: the alert settings fit the screen, and CHAT in the bar blinks', a
   await nav.getByRole('button', { name: /CHAT/ }).click()
   await expect(nav.getByRole('button', { name: /CHAT/ })).not.toHaveClass(/alert/)
   const win = app.locator('.ms-window')
-  await win.getByRole('button', { name: '♪' }).click()
+  await win.getByRole('button', { name: /^Chat alerts/ }).click()
   await expect(win.locator('.ms-alerts')).toBeVisible()
   await expectNoHorizontalOverflow(win.locator('.ms-alerts'), 'the alert settings on a phone')
   expect(await app.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'nothing is pushed sideways').toBe(true)

@@ -57,8 +57,8 @@
   font-size: 15px; line-height: 1; padding: 5px 8px; border-radius: 2px;
 }
 .ms-icon:hover { color: var(--text); background: var(--panel-2); }
-.ms-alerts-btn.on  { color: var(--accent-hi); background: var(--panel-2); }
-.ms-alerts-btn.off { text-decoration: line-through; opacity: 0.6; }
+.ms-alerts-btn.open { color: var(--accent-hi); background: var(--panel-2); }
+.ms-alerts-btn.off  { text-decoration: line-through; }
 
 .ms-body { flex: 1; min-height: 0; display: flex; }
 .ms-body > * { flex: 1; min-width: 0; }
@@ -236,8 +236,11 @@
 .ms-alerts-body { gap: 8px; }
 .ms-alerts-body .ms-pick { padding: 7px 10px; }
 .ms-alerts-body .ms-pick .ms-sub { display: block; margin-top: 1px; }
-.ms-alerts-body .ms-pick:disabled, .ms-alerts-body .ms-seg button:disabled { opacity: 0.4; cursor: default; }
-.ms-alerts-body.off .ms-label { opacity: 0.4; }
+/* a row that cannot be pressed: its mark fades and its name goes quiet; the note that says why stays readable */
+.ms-alerts-body .ms-pick:disabled { cursor: default; background: none; }
+.ms-alerts-body .ms-pick:disabled .ms-check { opacity: 0.4; }
+.ms-alerts-body .ms-pick:disabled .ms-pick-name { color: var(--text-dim); }
+.ms-alerts-body .ms-seg button:disabled { opacity: 0.6; cursor: default; }
 .ms-alerts-sound { display: flex; flex-direction: column; gap: 8px; }
 .ms-alerts-sound .ms-label { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 5px 10px; }
 .ms-alerts-sound .ms-label > .ms-seg { margin-top: 0; }

@@ -1,14 +1,20 @@
 // The rooms are a list or they are left alone: an answer that could not be read is not the rooms.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// the realtime client as the store uses it: a channel takes handlers and a status callback; a removed channel says CLOSED
+// The realtime client as the store uses it, and as realtime-js 2.100 behaves: a channel takes handlers and a status
+// callback; asking for a name it already has returns that same channel (which does not join again); a removed
+// channel keeps its name until its leaving is acknowledged, a moment later, and then says CLOSED.
 const sb = vi.hoisted(() => {
-  const chans = []
+  const chans = [], byTopic = new Map()
   const supabase = {
-    channel: () => { const c = { handlers: [], on(_e, _f, h) { c.handlers.push(h); return c }, subscribe(cb) { c.cb = cb; return c } }; chans.push(c); return c },
-    removeChannel: (c) => { c.removed = true; c.cb?.('CLOSED') },
+    channel: (topic) => {
+      if (byTopic.has(topic)) return byTopic.get(topic)
+      const c = { topic, handlers: [], joins: 0, on(_e, _f, h) { c.handlers.push(h); return c }, subscribe(cb) { c.cb = cb; c.joins += 1; return c } }
+      byTopic.set(topic, c); chans.push(c); return c
+    },
+    removeChannel: (c) => { c.removed = true; return new Promise(r => setTimeout(() => { byTopic.delete(c.topic); c.cb?.('CLOSED'); r('ok') }, 100)) },
   }
-  return { chans, supabase, raised: vi.fn(), reported: vi.fn() }
+  return { chans, byTopic, supabase, raised: vi.fn(), reported: vi.fn() }
 })
 vi.mock('../lib/session', () => ({ getSessionSafe: async () => ({ access_token: 't' }) }))
 vi.mock('../lib/supabase', () => ({ supabase: sb.supabase }))
@@ -112,7 +118,7 @@ const msg = (id, over = {}) => ({ id, room_id: 'a', sender_user_id: 'them', send
 const reset = () => {
   const s = useChatStore.getState()
   clearTimeout(s._rejoin)
-  sb.chans.length = 0; sb.raised.mockClear(); sb.reported.mockClear()
+  sb.chans.length = 0; sb.byTopic.clear(); sb.raised.mockClear(); sb.reported.mockClear()
   useChatStore.setState({ rooms: [], messages: {}, pending: {}, activeId: null, open: false, status: 'idle', me: null, _catching: false, channel: null,
     stream: 'connecting', _gen: s._gen + 1, _retries: 0, _rejoin: null, _liveSince: 0, _distrust: false, _fetchedAt: {}, _roomsAt: 0, delivered: { stream: 0, fetch: 0 }, alertAt: 0 })
 }
@@ -151,9 +157,23 @@ describe('a message is on the sender\'s screen as it is sent', () => {
     await vi.waitFor(() => expect(answer).toBeTypeOf('function'))
     const real = msg('m2', { sender_user_id: 'me', body: 'twice?' })
     useChatStore.getState().receive(real, 'stream')                          // the stream is faster than the POST's answer
+    expect(useChatStore.getState().messages.a.map(m => m.id), 'the stream\'s copy stands where the copy on its way stood: one message, not two').toEqual(['m2'])
     answer(ok({ message: real, prometheus_pending: false }))
     await sent
     expect(useChatStore.getState().messages.a.map(m => m.id)).toEqual(['m2'])
+  })
+  it('keeps its place when another person\'s message arrives while it is being sent, and the room\'s row shows the later of the two', async () => {
+    ready()
+    let answer
+    vi.stubGlobal('fetch', vi.fn((url, init) => (init?.method === 'POST' && String(url).endsWith('/messages') ? new Promise(r => { answer = r }) : Promise.resolve(ok({})))))
+    const sent = useChatStore.getState().send('a', 'mine first')
+    await vi.waitFor(() => expect(answer).toBeTypeOf('function'))
+    useChatStore.getState().receive(msg('m9', { created_at: '2026-11-14T12:00:09Z' }), 'stream')
+    answer(ok({ message: msg('m3', { sender_user_id: 'me', body: 'mine first', created_at: '2026-11-14T12:00:03Z' }) }))
+    await sent
+    const s = useChatStore.getState()
+    expect(s.messages.a.map(m => m.id)).toEqual(['m3', 'm9'])
+    expect(s.rooms[0].last_message.id, 'not set back to the earlier message').toBe('m9')
   })
   it('sends two messages typed quickly in the order they were typed', async () => {
     ready()
@@ -185,9 +205,13 @@ describe('the live stream is rebuilt when it is lost, and is not trusted while i
     expect(useChatStore.getState().stream).toBe('live')
     first.cb('CHANNEL_ERROR')
     expect(useChatStore.getState().stream).toBe('down')
-    await vi.advanceTimersByTimeAsync(2100)
+    await vi.advanceTimersByTimeAsync(2050)
     expect(first.removed, 'the dead channel is removed').toBe(true)
-    expect(sb.chans).toHaveLength(2)
+    expect(sb.chans, 'and a new one is built at once, under a name of its own: the old name is still taken while the old channel leaves').toHaveLength(2)
+    expect(sb.chans[1]).not.toBe(first)
+    expect(sb.chans[1].topic).not.toBe(first.topic)
+    expect(sb.chans[1].joins).toBe(1)
+    await vi.advanceTimersByTimeAsync(200)                                   // the old channel's leaving is acknowledged: it says CLOSED
     expect(useChatStore.getState().stream, 'its CLOSED is not taken for the new channel\'s').toBe('down')
     sb.chans[1].cb('SUBSCRIBED')
     expect(useChatStore.getState().stream).toBe('live')
@@ -213,7 +237,7 @@ describe('the live stream is rebuilt when it is lost, and is not trusted while i
     useChatStore.getState().subscribe()
     sb.chans[0].cb('SUBSCRIBED')
     await useChatStore.getState().send('a', 'anyone?')
-    await vi.advanceTimersByTimeAsync(5000)
+    await vi.advanceTimersByTimeAsync(7000)
     expect(useChatStore.getState().stream, 'not before the wait is over').toBe('live')
     await vi.advanceTimersByTimeAsync(1500)
     expect(useChatStore.getState().stream).toBe('silent')
@@ -234,7 +258,20 @@ describe('the live stream is rebuilt when it is lost, and is not trusted while i
     sb.chans[0].cb('SUBSCRIBED')
     await useChatStore.getState().send('a', 'echo')
     sb.chans[0].handlers[0]({ new: mine })
-    await vi.advanceTimersByTimeAsync(7000)
+    await vi.advanceTimersByTimeAsync(9000)
+    expect(useChatStore.getState().stream).toBe('live')
+    expect(sb.chans).toHaveLength(1)
+    expect(sb.reported).not.toHaveBeenCalled()
+  })
+  it('a machine that slept through the wait proves nothing about the stream', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn(async (url, init) => ok(init?.method === 'POST' && String(url).endsWith('/messages') ? { message: msg('m1', { sender_user_id: 'me' }) } : String(url).endsWith('/rooms') ? [ROOM] : [])))
+    ready()
+    useChatStore.getState().subscribe()
+    sb.chans[0].cb('SUBSCRIBED')
+    await useChatStore.getState().send('a', 'then the lid closed')
+    vi.setSystemTime(Date.now() + 3_600_000)                                // an hour passes with the timers frozen
+    await vi.advanceTimersByTimeAsync(9000)
     expect(useChatStore.getState().stream).toBe('live')
     expect(sb.chans).toHaveLength(1)
     expect(sb.reported).not.toHaveBeenCalled()
@@ -259,6 +296,17 @@ describe('while the stream is not delivering, the open room is asked only for wh
     await useChatStore.getState().quick()
     expect(useChatStore.getState().messages.a).toHaveLength(3)
     expect(useChatStore.getState().delivered.fetch).toBe(1)
+  })
+  it('a catch-up on the tick asks for the last five minutes, and one made when the stream joins or the page is looked at again reads the whole room', async () => {
+    ready({ activeId: 'a', messages: { a: [msg('m1')] }, stream: 'silent' })
+    const fetch = vi.fn(async (url) => ok(String(url).endsWith('/rooms') ? [ROOM] : []))
+    vi.stubGlobal('fetch', fetch)
+    await useChatStore.getState().catchUp()
+    const light = fetch.mock.calls.map(([u]) => String(u)).find(u => u.includes('/messages'))
+    expect(decodeURIComponent(light.split('after=')[1])).toBe('2026-11-14T11:55:01.000Z')
+    fetch.mockClear()
+    await useChatStore.getState().catchUp(true)
+    expect(fetch.mock.calls.map(([u]) => String(u)).find(u => u.includes('/messages'))).toMatch(/\/rooms\/a\/messages$/)
   })
   it('does nothing with no room open, or in a room it has not loaded', async () => {
     const fetch = vi.fn(async () => ok([])); vi.stubGlobal('fetch', fetch)

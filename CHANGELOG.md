@@ -31,16 +31,20 @@ The lag:
   every 48 with it closed. That fetch standing in for a stream that is not delivering is the likeliest cause of
   the lag; why the stream does not deliver on some machines is still not found.
 - The chat's channel was never built again once it errored, timed out or closed: a window whose channel had died
-  heard nothing more by the stream until it was reloaded. It is now replaced, 2 to 30 seconds later.
+  heard nothing more by the stream until it was reloaded. It is now replaced, 2 to 30 seconds later, under a name
+  of its own each time (the client hands back the channel it already has under a name, and a removed one keeps
+  its name until its leaving is acknowledged: found in review, before it shipped).
 - A stream can be joined and silent. The chat now tests it: a message it sent, or one that appeared between two
-  fetches, is expected on the stream within six seconds. If it does not come, the stream is not trusted until it
-  delivers again; meanwhile the open room's new messages are fetched every 4 seconds (one small request:
-  `GET /api/chat/rooms/{id}/messages?after=`), the rooms every 12, also while the page is not in view. The
-  operator is told once a day from a browser where this happens (Configurations › System, browser errors), and
-  the alert settings show the stream's state.
+  fetches, is expected on the stream within eight seconds (a machine that slept through the wait proves
+  nothing). If it does not come, the stream is not trusted until it delivers again; meanwhile the open room's
+  new messages are fetched every 4 seconds (one small request: `GET /api/chat/rooms/{id}/messages?after=`), the
+  rooms every 12, and every 24 while the page is not in view. The operator is told once a day from a browser
+  where this happens (Configurations › System, browser errors), and the alert settings show the stream's state.
+- The fetch on the tick asks for the last five minutes of the open room, not its latest 200 messages; the whole
+  room is read when the stream joins, when the page is looked at again, and when a room is opened again.
 - A message is on the sender's screen as it is sent, marked as on its way, and no longer waits for the server's
   answer. If it cannot be sent it is taken back and its text returned to the box. Two messages sent quickly
-  arrive in the order typed.
+  arrive in the order typed, and one that arrives from the other person meanwhile does not push it out of place.
 
 Not checked: how any of the four sounds sounds (they were written, not heard); a desktop notification on a real
 desktop; the stream's behaviour on the hosted desk, which the local stack cannot show (its realtime delivers
