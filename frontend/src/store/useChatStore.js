@@ -80,19 +80,22 @@ function reportSilentOnce() {
 const keep = (setOfIds, id) => { setOfIds.add(id); if (setOfIds.size > 600) for (const x of [...setOfIds].slice(0, 300)) setOfIds.delete(x) }
 const attendingNow = () => typeof document === 'undefined' || (document.visibilityState === 'visible' && document.hasFocus())
 // Several Rijeka windows may be open (tabs, the messenger in a window of its own). The one in which a conversation
-// is being looked at says so, so that the others do not ring for a message its reader is already reading.
+// is being looked at says so, so that the same person's other windows do not ring for a message its reader is
+// already reading. The mark names the person: two people signed in to one browser (the owner trying both of his
+// accounts side by side, 14 November 2026) share its storage, and the sender's window, which is looking at the
+// room, silenced the alert in the receiver's.
 const ATTEND_KEY = 'rijeka.chat.attending', ATTEND_MS = 6000
 const windowId = Math.random().toString(36).slice(2)
-function markAttending(roomId) {
+function markAttending(roomId, userId) {
   try {
-    if (roomId) localStorage.setItem(ATTEND_KEY, JSON.stringify({ roomId, at: Date.now(), by: windowId }))
+    if (roomId) localStorage.setItem(ATTEND_KEY, JSON.stringify({ roomId, at: Date.now(), by: windowId, user: userId || null }))
     else if (JSON.parse(localStorage.getItem(ATTEND_KEY) || 'null')?.by === windowId) localStorage.removeItem(ATTEND_KEY)
   } catch { /* no storage: each window answers for itself */ }
 }
-function attendedElsewhere(roomId) {
+function attendedElsewhere(roomId, userId) {
   try {
     const a = JSON.parse(localStorage.getItem(ATTEND_KEY) || 'null')
-    return !!a && a.by !== windowId && a.roomId === roomId && Date.now() - a.at < ATTEND_MS
+    return !!a && a.by !== windowId && !!userId && a.user === userId && a.roomId === roomId && Date.now() - a.at < ATTEND_MS
   } catch { return false }
 }
 
@@ -196,14 +199,14 @@ export const useChatStore = create((set, get) => ({
   // Says which conversation, if any, is being looked at in this window (see ATTEND_KEY).
   attend: () => {
     const { open, activeId } = get()
-    markAttending(open && activeId && activeId !== PROMETHEUS && attendingNow() ? activeId : null)
+    markAttending(open && activeId && activeId !== PROMETHEUS && attendingNow() ? activeId : null, get().me?.user_id)
   },
   // One alert for a message, whichever way it reached this window, and never twice.
   notify: (m, room) => {
     if (!m?.id || alerted.has(m.id)) return
     keep(alerted, m.id)
     const { alerts, me, open, activeId } = get()
-    const attending = (open && activeId === room?.id && attendingNow()) || attendedElsewhere(room?.id)
+    const attending = (open && activeId === room?.id && attendingNow()) || attendedElsewhere(room?.id, me?.user_id)
     if (!shouldAlert(m, room, { meId: me?.user_id, attending, prefs: alerts })) return
     if (alerts.blink) set({ alertAt: Date.now() })
     raiseAlert(alerts, { who: m.sender_kind === 'PROMETHEUS' ? 'Prometheus' : m.sender_name || 'Rijeka', where: room.title || '', roomId: room.id,

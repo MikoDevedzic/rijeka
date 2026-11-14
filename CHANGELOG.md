@@ -3,6 +3,17 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.34.2 · 14 November 2026
+
+**Two people signed in to one browser no longer silence each other's chat alerts.** Found from the owner's first
+try of 0.34.0, both of his accounts side by side in one browser.
+
+- A window in which a conversation is being looked at says so, so that the same person's other windows do not
+  ring for it. The mark did not say whose window it was, and two accounts in one browser share its storage: the
+  sender's window, which is looking at the room as it sends, silenced the alert in the receiver's. The mark now
+  names the person.
+- Two people on two machines, or in two browsers, were never affected.
+
 ## 0.34.1 · 14 November 2026
 
 **Prometheus is given time to answer.** Found while recording the walkthrough film on the local stack.

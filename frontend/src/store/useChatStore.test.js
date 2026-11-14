@@ -389,6 +389,21 @@ describe('a message alerts once, whichever way it arrived', () => {
     useChatStore.getState().takeRooms([{ ...ROOM, unread: 0, last_message: msg('n3') }, { id: 'i', kind: 'GROUP', title: 'Desk', my_access: 'INVITED', invited_by: 'Ana' }])
     expect(sb.raised, 'the same list again is not news').toHaveBeenCalledTimes(2)
   })
+  it('is silenced by the same person looking at the room in another window, and not by another person signed in to the same browser', () => {
+    const store = new Map()
+    vi.stubGlobal('localStorage', { getItem: k => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: k => store.delete(k) })
+    const looking = (user) => store.set('rijeka.chat.attending', JSON.stringify({ roomId: 'a', at: Date.now(), by: 'another-window', user }))
+    ready({ messages: {} })
+    looking('them')                                                          // the sender's own window, in this browser, is looking at the room
+    useChatStore.getState().receive(msg('p1'), 'stream')
+    expect(sb.raised, 'the receiver is still told').toHaveBeenCalledTimes(1)
+    looking('me')                                                            // my own second window is looking at it
+    useChatStore.getState().receive(msg('p2'), 'stream')
+    expect(sb.raised).toHaveBeenCalledTimes(1)
+    store.set('rijeka.chat.attending', JSON.stringify({ roomId: 'a', at: Date.now() - 60_000, by: 'another-window', user: 'me' }))
+    useChatStore.getState().receive(msg('p3'), 'stream')
+    expect(sb.raised, 'a window that stopped looking a minute ago silences nothing').toHaveBeenCalledTimes(2)
+  })
   it('does not alert for the conversation being looked at, nor once alerts are switched off', () => {
     ready({ open: true, activeId: 'a' })
     vi.stubGlobal('fetch', vi.fn(async () => ok({})))
