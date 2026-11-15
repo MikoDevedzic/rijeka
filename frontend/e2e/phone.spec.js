@@ -104,7 +104,7 @@ test('a phone: a trade is priced, booked, costed and confirmed in the trade wind
   await win.waitFor()
   const frame = await win.boundingBox()
   expect([Math.round(frame.x), Math.round(frame.y), Math.round(frame.width), Math.round(frame.height)], 'the trade window is the screen').toEqual([0, 0, 390, 844])
-  await expect(win.locator('.tbw-tab[data-tab="CAPITAL"]'), 'no CAPITAL tab on a phone').toBeHidden()
+  await expect(win.locator('.tbw-tab[data-tab="CAPITAL"]'), 'no ticket has a CAPITAL tab').toHaveCount(0)
   await tabsInView(win)
   await win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
   await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)

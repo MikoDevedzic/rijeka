@@ -64,7 +64,7 @@ export default function CapitalPage() {
           </div>
           <div className="pnl-note" style={{ marginTop: 8, lineHeight: 1.6 }}>
             · RWA = RW × EAD (CRE20, CRE52); K CCR = 8 % of RWA; K CVA the reduced basic approach (MAR50); leverage exposure per LEV30; HQLA of IM per LCR30.
-            · The lifetime cost of this stock (KVA, MVA) and the same book under other collateral regimes are under <a href="/risk/collateral" onClick={e => { e.preventDefault(); navigate('/risk/collateral') }}>COLLATERAL</a>; the ticket's CAPITAL tab shows the incremental stock of one trade.
+            · The lifetime cost of this stock (KVA, MVA) and the same book under other collateral regimes are under <a href="/risk/collateral" onClick={e => { e.preventDefault(); navigate('/risk/collateral') }}>COLLATERAL</a>; a single trade's cost of capital is the KVA on its ticket's XVA tab.
           </div>
         </section>
       </>)}

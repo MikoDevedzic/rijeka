@@ -111,7 +111,7 @@ the netting set with the trade, without it and the trade alone on the credit eng
 (seed 7), then per regime (the record's own first, then the presets on the record's terms) the two CSAs,
 the waterfall with the CVA-capital leg per counterparty type, the SA-CCR snapshot at the valuation date,
 the HQLA value and the quote line. The record's own regime is its collateral schedule when one is recorded
-(instruments, rail, yields from market data), else its class-level fields. The ticket's CAPITAL tab shows the
+(instruments, rail, yields from market data), else its class-level fields. The trade's capital answer (`POST /api/capital/trade`) shows the
 regulatory stock only (IM, EAD, RWA, K CCR, K CVA, leverage exposure, HQLA of IM); the lifetime prices of that
 stock (KVA, MVA) and the credit and funding adjustments are valuation adjustments and belong on the XVA tab,
 where they move in the collateral plan's C2. IM is the engine's own estimate, the 99th percentile move of the set's value over the regime's margin period

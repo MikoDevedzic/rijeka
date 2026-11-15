@@ -173,8 +173,6 @@
   .tbw-window [style*="grid-template-columns: repeat("]:not([style*="auto-fit"]):not([style*="auto-fill"]) { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }      /* a grid that already folds by itself is left to */
   .tbw-window .tbw-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
   .tbw-window .tbw-sec { padding-left: 14px; padding-right: 14px; }
-  /* CAPITAL is not part of the phone view */
-  .tbw-tab[data-tab="CAPITAL"] { display: none; }
   .tbw-tabbar { padding-left: 10px; padding-right: 10px; }
   /* the XVA tab and the scenario tab: the inputs, then the results under them */
   .xva-row { flex-direction: column !important; overflow: visible !important; }

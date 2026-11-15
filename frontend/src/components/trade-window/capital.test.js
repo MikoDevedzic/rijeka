@@ -1,4 +1,4 @@
-// trade-window/capital.test.js — the pure helpers behind the CAPITAL tab (capital.js). Run: npm test.
+// trade-window/capital.test.js — the pure helpers behind the capital view (capital.js; its tab is not mounted since 0.39.1). Run: npm test.
 import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null }))

@@ -344,8 +344,8 @@ capital. Those pages still open by their address but are not in the phone's navi
   - a wide table read downwards (`table[data-stack]`, set by `useStackedTables` in `lib/phone.js` for a table of
     five columns or more): each row a block, each cell under its column's heading;
   - a strip folded: the ticket's tabs two rows of three, the figures at the foot three across.
-- **The trade window is the whole screen**: its fields two across and 40px high, its tabs all in view (no
-  CAPITAL), the XVA tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can
+- **The trade window is the whole screen**: its fields two across and 40px high, its tabs all in view, the XVA
+  tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can
   hit. A grid that folds by itself (`auto-fit`) is left to.
 - **An iPhone draws a date field and a dropdown by its own rules** (Safari on iOS; seen in the simulator, 13 November
   2026): a date field takes a width of its own and ran over the field beside it, and a dropdown is drawn shorter
