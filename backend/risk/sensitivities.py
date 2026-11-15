@@ -79,8 +79,8 @@ def curve_points(quotes: list[dict]) -> list[tuple[str, float]]:
 
 def _bumped_point(quotes: list[dict], point: str, bp: float) -> list[dict]:
     """The quotes with every row of one point moved (a surface has ATM, RR25 and BF25 at a tenor; a swaption grid
-    has a row for each underlying at an expiry), written as _bumped writes a bucket: a bucket of one point is the
-    same market, and is priced once."""
+    has a row for each underlying at an expiry), by `bp` (a point is moved a hundredth of the bucket's bump:
+    POINT_MOVE)."""
     return [{**q, "rate": float(q["rate"]) + bp / 100.0} if point_of(q.get("tenor")) == point else dict(q) for q in quotes]
 
 

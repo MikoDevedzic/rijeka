@@ -173,18 +173,16 @@ def lookup_cap_vol(
         # an ATM quote alone: flat in strike, said to be quoted near the money and a fallback away from it
         return atm_vol_bp, ('QUOTED' if abs(spread_bp) < 5 else 'FALLBACK')
 
-    # Build arrays for interpolation
-    spreads = [float(r['strike_spread_bp']) for r in skew_rows]
-    vols    = [float(r['flat_vol_bp'])      for r in skew_rows]
-
+    # Build arrays for interpolation. A distance quoted twice is one point, at the mean of its quotes: two points
+    # at one distance would be a step.
+    by_spread: dict[float, list[float]] = {}
+    for r in skew_rows:
+        by_spread.setdefault(float(r['strike_spread_bp']), []).append(float(r['flat_vol_bp']))
     # Add ATM point at spread=0
-    if 0 not in spreads:
-        spreads = [0.0] + spreads
-        vols    = [atm_vol_bp] + vols
-        # re-sort
-        pairs = sorted(zip(spreads, vols))
-        spreads = [p[0] for p in pairs]
-        vols    = [p[1] for p in pairs]
+    if 0.0 not in by_spread:
+        by_spread[0.0] = [atm_vol_bp]
+    spreads = sorted(by_spread)
+    vols    = [sum(by_spread[x]) / len(by_spread[x]) for x in spreads]
 
     # Interpolate / extrapolate
     if len(spreads) >= 2:

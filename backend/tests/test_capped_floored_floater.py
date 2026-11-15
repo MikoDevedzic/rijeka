@@ -729,6 +729,14 @@ class TestCapVolIsContinuous:
             last = vol
         assert worst <= 0.1 * 0.01 + 1e-9
 
+    def test_a_distance_quoted_twice_is_one_point_and_not_a_step(self):
+        # Emmy, 15 November 2026: two rows at the same distance made the vol jump there
+        from pricing.cap_floor import lookup_cap_vol
+        twice = SKEW + [{"cap_tenor_y": 5.0, "strike_spread_bp": 100.0, "flat_vol_bp": 84.0, "is_atm": False, "source": "TEST"}]
+        at = lambda atm: lookup_cap_vol(strike_rate=0.04, atm_forward=atm, cap_tenor_y=5.0, surface_rows=twice)[0]
+        assert at(0.03) == pytest.approx(82.0)                                        # the mean of 80 and 84
+        assert abs(at(0.03 + 1e-7) - at(0.03 - 1e-7)) < 1e-3
+
     def test_a_caps_rate_risk_does_not_depend_on_the_size_of_the_bump(self):
         # the cap repriced on a curve moved by 1bp and by a hundredth of it: per basis point the two agree to within
         # the cap's own convexity. With the rounding they were a quarter apart on the test book (618 against 845).

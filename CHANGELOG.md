@@ -25,7 +25,9 @@ bucket, and a figure did not say which instrument to hedge with.
   point at a hundredth of it, on the test book's cap). It is now a continuous function: straight lines through
   the quotes. Prices of caps, floors and collars move by a little (at most what half a basis point of distance
   is worth in volatility, more for a strike within five basis points of the money); their rate risk is 624
-  and 619 at the two moves. Found by the model review of this release.
+  and 619 at the two moves. A strike is now labelled QUOTED only within half a basis point of a quote (it was
+  five at the money). The reading of the surface has no independent reference yet, which the model inventory
+  now says, with its conventions. Found by the model review of this release.
 - **Checked.** A single quote's figure against a QuantLib rebootstrap of the same move: 74 comparisons, the worst
   0.034% of a trade's DV01. The reference suite is 521 comparisons. Methodology v1.22 (§14).
 - **Market risk page.** Under the ladder by bucket, the ladder at each quoted tenor: every quote that carries
