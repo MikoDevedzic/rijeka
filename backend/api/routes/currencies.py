@@ -712,6 +712,18 @@ def ndf_fixing_date(settle: date, base: str, quote: str) -> date:
     return settle
 
 
+def fixing_read_date(fixing_date: date, settle: date, crypto: bool, base: str, quote: str) -> date:
+    """The date the rate fixed on `fixing_date` delivers on, which is the date the forward is read at. A digital
+    asset's quoted spot settles at once: the fixing date itself. A currency pair's fixing is its spot rate, quoted
+    for delivery on the spot date of that day (two business days on, one for USDCAD): that spot date, never after
+    the settlement date. With the usual fixing date (ndf_fixing_date) it is the settlement date, and the NDF is
+    worth what the deliverable forward is (found by Emmy, 14 Nov 2026: the first build read a currency NDF at the
+    fixing date itself, two days of carry short)."""
+    if crypto:
+        return fixing_date
+    return min(spot_date(fixing_date, False, base, quote), settle)
+
+
 def spot_date(val_date: date, crypto: bool, base: Optional[str] = None, quote: Optional[str] = None) -> date:
     """The valuation date for a digital asset (its quoted spot settles at once: T+0, as the methodology states); for
     an FX pair the market rule when both currencies are given, weekdays otherwise. USD pair: the pair's lag (T+2,
@@ -741,7 +753,8 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     """`strike_dp`: with no K, the fair forward rounded to that many decimals is the contract rate, so one request
     prices the strike the ticket books; `forward` stays the unrounded fair forward.
     `fixing_date`: a forward settled in cash against a fixing read before its settlement date is priced to that
-    fixing: the forward, its points and its carry are the fixing date's, and the amount is discounted from the
+    fixing: the forward, its points and its carry are those of the date the fixed rate delivers on (fixing_read_date:
+    the fixing date for a digital asset, its spot date for a currency pair), and the amount is discounted from the
     settlement date. A fixing date that is not after the valuation date (the settlement rule's ground) or not before
     the settlement date changes nothing.
     `settle_in_base`: a currency NDF whose amount is paid in the base currency (pricing/currency_forward.py): it
@@ -779,7 +792,8 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     # settles (the amount is then paid on the settlement date: price_currency_forward's payment_date)
     if fixing_date is not None and fixing_date > settle:
         raise HTTPException(status_code=422, detail=f"the fixing date ({fixing_date}) cannot be after the settlement date ({settle})")
-    read_at = fixing_date if (fixing_date is not None and shape != "SPOT" and val_date < fixing_date < settle) else settle
+    fixes_early = fixing_date is not None and shape != "SPOT" and val_date < fixing_date < settle
+    read_at = fixing_read_date(fixing_date, settle, crypto, base, quote) if fixes_early else settle
     paid = {"payment_date": settle, "settle_in_base": bool(settle_in_base) and not crypto} if read_at != settle else {}
     q_curve = _curve(db, user_id, st["quote_curve"], val_date)
     kw: dict[str, Any] = {}
@@ -872,7 +886,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     out["curves"] = {"quote": {"id": st["quote_curve"], "pillars": curve_points(q_curve, val_date)},
                      "base": ({"id": st["base_curve"], "pillars": curve_points(kw["base_curve"], val_date)} if kw.get("base_curve") is not None else None)}
     # a forward priced to its fixing date says so: the date it is read at, and that the amount is paid on settlement
-    out["fixing_date"] = read_at.isoformat() if read_at != settle else None
+    out["fixing_date"] = fixing_date.isoformat() if fixes_early else None
     if shape == "NDF" and not crypto:        # the currency the amount is paid in
         out["settlement_currency"] = base if settle_in_base else quote
     # what the answer calls df_quote is the factor its NPV is discounted with: to the settlement date, where the amount
@@ -881,8 +895,13 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     # forward carries over (to the fixing date) and `t_pay` the time the amount is discounted over.
     out["df_fixing"] = out["df_quote"] if read_at != settle else None
     out["df_quote"] = out["df_pay"]
-    if read_at != settle:
+    if read_at != settle and crypto:
         out["model"] += f"; the forward is read at the fixing date ({read_at.isoformat()}) and the amount paid on {settle.isoformat()} is discounted from there"
+    elif read_at != settle:
+        out["model"] += (f"; the rate fixed on {fixing_date.isoformat()} is for delivery on {read_at.isoformat()}: the forward is read there and the "
+                         f"amount paid on {settle.isoformat()} is discounted from there")
+    elif fixes_early:
+        out["model"] += f"; fixed on {fixing_date.isoformat()} at the spot rate for delivery on the settlement date: worth what the deliverable forward is"
     out["crypto"] = crypto
     out["fund01"] = out.get("ir01_base") if crypto else None
     out["crybasis01"] = crybasis01(out["fund01"])

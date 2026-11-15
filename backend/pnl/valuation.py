@@ -281,7 +281,9 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
     # a forward that fixes before it settles is read at its fixing date and paid on its settlement date, as the ticket
     # prices it (api/routes/currencies._price)
     fixing = t.get("fixing_date")
-    read_at = fixing if (fixing is not None and t["shape"] not in ("OPTION", "SPOT") and val_date < fixing < settle) else settle
+    from api.routes.currencies import fixing_read_date
+    early = fixing is not None and t["shape"] not in ("OPTION", "SPOT") and val_date < fixing < settle
+    read_at = fixing_read_date(fixing, settle, crypto, base, quote) if early else settle      # the date the fixed rate delivers on
     # an NDF settled in its base currency carries the amount from the fixing date to the settlement date on the base curve
     paid = {"payment_date": settle, "settle_in_base": bool(t.get("settle_in_base"))} if read_at != settle else {}
     r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,

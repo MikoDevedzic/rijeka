@@ -115,14 +115,15 @@ def price_currency_forward(
     quoted spot settles (FX pairs); None for an asset whose quoted spot settles at once.
 
     payment_date: for a forward settled in cash against a fixing read BEFORE the cash is paid. `settlement_date` is
-    then the date the forward is read at (the fixing date): F, the points, t and the carry all run to it; and the
+    then the date the forward is read at, the date the fixed rate delivers on (a digital asset's fixing date; the
+    spot date of a currency pair's fixing date): F, the points, t and the carry all run to it; and the
     amount N·(F − K) is paid on `payment_date`, so every value is discounted from there. None, or the same date:
     the forward is read and paid on one date, as every forward was before 0.26.0.
 
     settle_in_base: the cash amount is paid in the BASE currency, N·(F − K)/F at the fixing (a non-deliverable
-    forward on USDJPY settled in dollars). Between the fixing date and the payment date the amount is then base
-    currency, carried on the base curve: converted at the forward of the fixing date, its value in the quote currency
-    is N·(F − K)·DF_b(fixing → payment)·DF_q(fixing). `df_pay` is that product, so NPV = ±N·(F − K)·df_pay reads the
+    forward on USDJPY settled in dollars). Between the date the fixed rate delivers on and the payment date the amount
+    is then base currency, carried on the base curve: converted at the forward of that date, its value in the quote
+    currency is N·(F − K)·DF_b(that date → payment)·DF_q(that date). `df_pay` is that product, so NPV = ±N·(F − K)·df_pay reads the
     same for both. Read and paid on one date it makes no difference, and none is made."""
     d = str(direction or "BUY").upper()
     if d not in DIRECTIONS:

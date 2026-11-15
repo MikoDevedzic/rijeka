@@ -18,7 +18,11 @@ const ORIGIN_TITLE = { FEED: 'stored by the feed', MANUAL: 'entered by a desk', 
 const thL = { fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 10px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }
 const thR = { ...thL, textAlign: 'right' }
 const td = { fontSize: '12.5px', color: 'var(--text)', padding: '5px 10px 5px 0', borderBottom: '1px solid var(--panel-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }
-const tdR = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }
+// a date and a value are figures, set as every figure is (docs/design.md): the mono face, the fields above them alike
+const tdFig = { ...td, fontFamily: 'var(--mono)', fontVariantNumeric: 'tabular-nums' }
+const tdR = { ...tdFig, textAlign: 'right' }
+// a currency desk's day is its own: the local date, never past the date the API counts as today
+const localToday = () => { const d = new Date(); const s = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; const u = utcToday(); return s < u ? s : u }
 
 export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
   const pair = p.pair
@@ -26,7 +30,7 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [source, setSource] = useState('')      // '' = the first of the desk's sources
-  const [date, setDate] = useState(utcToday)
+  const [date, setDate] = useState(() => (p.crypto ? utcToday() : localToday()))
   const [value, setValue] = useState('')
 
   const read = useCallback(() => call(`/api/currency/fixings/${pair}?days=${DAYS}`), [call, pair])
@@ -70,7 +74,7 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
         <SectionLabel sub="a source your desk supplies; a second entry for the same date and source replaces the first">ENTER A FIXING</SectionLabel>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
           <label style={{ display: 'block' }}><span className="lbl">SOURCE</span>
-            <select className="inp" data-testid="fixing-source" style={{ width: 300 }} value={picked} onChange={e => setSource(e.target.value)}>
+            <select className="inp" data-testid="fixing-source" style={{ width: 300, maxWidth: '100%' }} value={picked} onChange={e => setSource(e.target.value)}>
               {desk.map(s => <option key={s.source} value={s.source}>{s.time ? `${s.source} · ${s.time}` : s.source}</option>)}
             </select>
           </label>
@@ -98,7 +102,7 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
           {rows.map((r, i) => {
             const word = originWord(r); const k = `${r.date}|${r.source}|${i}`
             return [
-              <div key={k + 'a'} style={{ ...td, color: 'var(--accent)' }}>{r.date}</div>,
+              <div key={k + 'a'} style={tdFig}>{r.date}</div>,
               <div key={k + 'b'} style={td} title={r.source || ''}>{r.source || '—'}</div>,
               <div key={k + 'c'} style={{ ...td, color: 'var(--text-dim)' }}>{r.time || '—'}</div>,
               <div key={k + 'd'} style={{ ...tdR, color: 'var(--text-hi)' }}>{fmt(r.value, decimals)}</div>,

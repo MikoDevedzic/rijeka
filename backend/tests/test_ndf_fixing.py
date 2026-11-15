@@ -9,6 +9,8 @@ from pricing.curve import Curve
 from pricing.currency_forward import price_currency_forward
 from settlement import rule
 
+# FIX is the date the fixed rate delivers on (the pricer's `settlement_date`): for a currency pair the spot date of the
+# fixing date, which the routes work out (fixing_read_date, tested below); PAY is the date the amount is paid.
 VAL, FIX, PAY = date(2026, 10, 28), date(2027, 1, 26), date(2027, 1, 28)
 N, K, S = 1_000_000.0, 148.0, 150.0
 
@@ -70,6 +72,45 @@ def test_its_sensitivities_are_the_repriced_differences():
     assert r.ir01 == pytest.approx(r.ir01_base + r.ir01_disc, rel=1e-12)
 
 
+def test_with_a_spot_lag_it_is_still_the_base_amount_on_the_base_curve_converted_at_spot():
+    jpy, usd = _c(0.005), _c(0.04)
+    sd = date(2026, 10, 30)                                             # the quoted spot delivers two days on
+    for side, sign in (("BUY", 1.0), ("SELL", -1.0)):
+        r = _fwd(settle_in_base=True, spot_date=sd, direction=side)
+        F = S * (usd.df(FIX) / usd.df(sd)) / (jpy.df(FIX) / jpy.df(sd))
+        assert r.forward == pytest.approx(F, rel=1e-12)
+        # dollars paid on PAY, brought to the spot date on the dollar curve, converted at spot, discounted in yen to today
+        assert r.npv == pytest.approx(sign * N * (1.0 - K / F) * (usd.df(PAY) / usd.df(sd)) * S * jpy.df(sd), rel=1e-12)
+
+
+def test_on_the_eve_of_the_fixing_and_one_day_on_the_value_is_the_same_cash_flow():
+    jpy, usd = _c(0.005), _c(0.04)
+    eve = FIX - timedelta(days=1)
+    kw = dict(valuation_date=eve, quote_curve=Curve(valuation_date=eve, flat_rate=0.005), base_curve=Curve(valuation_date=eve, flat_rate=0.04))
+    r = _fwd(settle_in_base=True, **kw)
+    assert r.npv == pytest.approx(N * (r.forward - K) * (jpy.df(FIX) / jpy.df(eve)) * (usd.df(PAY) / usd.df(FIX)), rel=1e-12)
+    # theta is the value one day later at the same spot and curves: on the fixing date the forward is the spot
+    assert r.npv + r.theta == pytest.approx(N * (S - K) * usd.df(PAY) / usd.df(FIX), rel=1e-12)
+    # and well before the fixing it is the repriced difference
+    far = _fwd(settle_in_base=True)
+    d1 = VAL + timedelta(days=1)
+    later = _fwd(settle_in_base=True, valuation_date=d1, quote_curve=Curve(valuation_date=d1, flat_rate=0.005), base_curve=Curve(valuation_date=d1, flat_rate=0.04))
+    assert far.theta == pytest.approx(later.npv - far.npv, rel=1e-9)
+
+
+# ── the date the fixed rate delivers on ──────────────────────────────────────
+
+def test_a_currency_fixing_is_the_spot_rate_for_delivery_on_its_spot_date_and_a_digital_assets_delivers_at_once():
+    from api.routes.currencies import fixing_read_date, ndf_fixing_date, spot_date
+    settle = date(2027, 1, 29)                                          # a Friday
+    fix = ndf_fixing_date(settle, "EUR", "USD")                         # Wednesday 27 January
+    assert fixing_read_date(fix, settle, False, "EUR", "USD") == settle           # the usual fixing date: the forward is the deliverable one
+    early = date(2026, 12, 29)                                          # a record that fixes a month before it settles
+    assert fixing_read_date(early, settle, False, "EUR", "USD") == spot_date(early, False, "EUR", "USD") == date(2026, 12, 31)
+    assert fixing_read_date(date(2027, 1, 28), settle, False, "EUR", "USD") == settle   # never after the settlement date
+    assert fixing_read_date(early, settle, True, "BTC", "USD") == early                # a digital asset: the fixing date itself
+
+
 # ── the rule: terms, dates, amounts ──────────────────────────────────────────
 
 def test_the_rule_reads_an_ndf_from_its_record():
@@ -77,9 +118,14 @@ def test_the_rule_reads_an_ndf_from_its_record():
     assert (k["pair"], k["shape"], k["notional"], k["strike"], k["settle"], k["fixing_date"]) == ("USDJPY", "FORWARD", N, K, PAY, FIX)
     assert k["source"] == "WM/Reuters 4pm London" and k["settle_in_base"] is True and k["amount_currency"] == "USD"
     assert rule.parse(_ndf(settlement_currency="JPY"))["settle_in_base"] is False
-    # tickets before 0.39.0 wrote USD on every pair: on a pair without it the amount is the quote currency's
-    old = rule.parse(_ndf(currency_pair="EURGBP", settlement_currency="USD"))
-    assert old["settle_in_base"] is False and old["amount_currency"] == "GBP"
+    # tickets before 0.39.0 wrote USD on every pair and the settlement date as the fixing date. The record decides:
+    # an older USDJPY settles in dollars, its base currency; an older EURUSD in dollars, its quote currency; an
+    # older cross, which names neither of its two, in its quote currency
+    older = dict(settlement_currency="USD", fixing_date=PAY.isoformat())
+    assert rule.parse(_ndf(**older))["amount_currency"] == "USD" and rule.parse(_ndf(**older))["settle_in_base"] is True
+    assert rule.parse(_ndf(currency_pair="EURUSD", **older))["settle_in_base"] is False
+    old = rule.parse(_ndf(currency_pair="EURGBP", **older))
+    assert old["settle_in_base"] is False and old["amount_currency"] == "GBP" and old["fixing_date"] == PAY
     # no fixing date, or one after the settlement date: it fixes on its settlement date, as every NDF did before
     assert rule.parse(_ndf(fixing_date=None))["fixing_date"] == PAY
     assert rule.parse(_ndf(fixing_date=(PAY + timedelta(days=1)).isoformat()))["fixing_date"] == PAY

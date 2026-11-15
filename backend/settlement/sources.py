@@ -191,23 +191,17 @@ def check_booked(instrument_type, terms, trade_date=None, maturity_date=None) ->
 
 
 def _check_ndf(terms: dict, trade_date=None, maturity_date=None) -> None:
-    """The booking rule for a currency NDF. Its fixing date (terms.fixing_date) is a date after the trade date and
-    on or before the settlement date (terms.value_date); a record without one fixes on its settlement date. Its
-    fixing source, when it names one, is a desk source (check_desk_source): no feed stores a currency fixing.
-    The settlement currency is not checked: tickets before 0.39.0 wrote USD on every pair, and a confirmed record
-    must still be mirrored; the rule settles such a record in its quote currency (settlement/rule.parse)."""
+    """The booking rule for a currency NDF, one check: a fixing date BEFORE the settlement date (a record that uses
+    the fixing date, which no ticket wrote before 0.39.0) is after the trade date, because a rate known when the
+    trade is struck is not a fixing of it.
+
+    Nothing else is refused, on purpose (Vera, 14 Nov 2026): every NDF booked or confirmed before 0.39.0 names its
+    settlement date as its fixing date, USD as its settlement currency on any pair and whatever source its desk
+    typed, and such a record must still be booked as the mirror of a confirmed one. The settlement rule reads them
+    leniently instead (settlement/rule.parse): a fixing date that is missing, unreadable or after the settlement
+    date fixes on the settlement date; a currency that is not the pair's base is the quote currency; a source no
+    desk can enter a fixing under leaves the amount provisional."""
     settle, traded = _day(terms.get("value_date") or maturity_date), _day(trade_date)
-    if terms.get("fixing_date") not in (None, ""):
-        fixing = _day(terms.get("fixing_date"))
-        if fixing is None:
-            raise ValueError("fixing_date is not a date")
-        if settle is not None and fixing > settle:
-            raise ValueError(f"the fixing date ({fixing}) cannot be after the settlement date ({settle})")
-        if traded is not None and fixing <= traded:
-            raise ValueError(f"the fixing date must be after the trade date (fixing_date {fixing}, trade date {traded})")
-    source = terms.get("fixing_source")
-    if source in (None, ""):
-        return
-    check_desk_source(source)
-    if source != source.strip(" "):
-        raise ValueError("the fixing source has spaces around it")
+    fixing = _day(terms.get("fixing_date"))
+    if fixing is not None and settle is not None and traded is not None and fixing < settle and fixing <= traded:
+        raise ValueError(f"the fixing date must be after the trade date (fixing_date {fixing}, trade date {traded})")

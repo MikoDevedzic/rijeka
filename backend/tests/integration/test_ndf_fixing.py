@@ -18,6 +18,19 @@ def _quote(client, auth, **over):
     return client.post("/api/currency/forward/price", json=body, headers=auth)
 
 
+def _forget_fixings():
+    """The local test database keeps what an earlier run (or a browser journey) stored: this test starts from a pair
+    with no fixing. conftest refuses a hosted database before any test runs."""
+    import psycopg2
+    from tests.integration.conftest import STACK_URL
+    conn = psycopg2.connect(STACK_URL)
+    try:
+        with conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM fixings WHERE pair = 'EURUSD'")
+    finally:
+        conn.close()
+
+
 def _dates():
     """(fixing date, settlement date): the latest business day before today, and its spot date, so the fixing can be
     entered (never a future date) while the settlement date is still ahead."""
@@ -30,42 +43,61 @@ def _dates():
     return fix, spot_date(fix, False, "EUR", "USD")
 
 
-def test_the_ticket_reads_an_ndf_at_its_fixing_date_and_in_its_settlement_currency(client, auth_a, pairs):
-    from api.routes.currencies import ndf_fixing_date
+def test_an_ndf_fixed_two_days_before_it_settles_is_worth_the_deliverable_forward_in_either_currency(client, auth_a, pairs):
+    from api.routes.currencies import ndf_fixing_date, spot_date
+    from pricing.calendars import ccy_to_calendar, joint, next_business_day
     spot = pairs["EURUSD"]["spot"]
-    settle = date.today() + timedelta(days=92)
+    settle = next_business_day(date.today() + timedelta(days=92), joint(ccy_to_calendar("EUR"), ccy_to_calendar("USD")))     # a ticket settles on a business day
     K = round(spot * 0.98, 4)
-    base_paid = _quote(client, auth_a, settlement_date=settle.isoformat(), forward_rate=K, settlement_currency="EUR")       # paid in the base currency
+    q = lambda **over: _quote(client, auth_a, settlement_date=settle.isoformat(), forward_rate=K, **over)
+    base_paid = q(settlement_currency="EUR")
     assert base_paid.status_code == 200, base_paid.text[:300]
-    base_paid = base_paid.json()
-    fix = ndf_fixing_date(settle, "EUR", "USD")
-    assert fix < settle and base_paid["fixing_date"] == fix.isoformat() and base_paid["settlement_currency"] == "EUR"
-    quote_paid = _quote(client, auth_a, settlement_date=settle.isoformat(), forward_rate=K).json()                # no currency named: the quote currency
-    assert quote_paid["settlement_currency"] == "USD" and quote_paid["fixing_date"] == fix.isoformat() and quote_paid["forward"] == base_paid["forward"]
-    # the two differ only by the carry of the amount from the fixing date to the settlement date, on one curve or the other
-    assert base_paid["npv"] != quote_paid["npv"] and abs(base_paid["npv"] / quote_paid["npv"] - 1.0) < 5e-4
-    for q in (base_paid, quote_paid):                                             # the one line every reader rebuilds
-        assert q["npv"] == pytest.approx(N * (q["forward"] - K) * q["df_quote"], rel=1e-9)
-    named = _quote(client, auth_a, settlement_date=settle.isoformat(), forward_rate=K, fixing_date=settle.isoformat()).json()
-    assert named["fixing_date"] is None                              # a fixing date on the settlement date: read and paid on one date
+    base_paid, quote_paid, unnamed = base_paid.json(), q(settlement_currency="USD").json(), q().json()
     deliverable = client.post("/api/currency/forward/price", json={"pair": "EURUSD", "shape": "FORWARD", "base_notional": N, "direction": "BUY",
                                                                    "settlement_date": settle.isoformat(), "forward_rate": K}, headers=auth_a).json()
-    assert deliverable["fixing_date"] is None and "settlement_currency" not in deliverable and deliverable["npv"] == named["npv"]
-    bad = _quote(client, auth_a, settlement_date=settle.isoformat(), settlement_currency="GBP")
+    fix = ndf_fixing_date(settle, "EUR", "USD")
+    assert fix < settle and spot_date(fix, False, "EUR", "USD") <= settle
+    assert deliverable["fixing_date"] is None and "settlement_currency" not in deliverable
+    # the rate fixed on the fixing date is the spot rate for delivery on the settlement date: the same forward, the
+    # same value, whichever of the two currencies the amount is paid in
+    for ndf, ccy in ((base_paid, "EUR"), (quote_paid, "USD"), (unnamed, "USD")):
+        assert ndf["fixing_date"] == fix.isoformat() and ndf["settlement_currency"] == ccy
+        assert ndf["forward"] == deliverable["forward"] and ndf["npv"] == pytest.approx(deliverable["npv"], rel=1e-12)
+        assert ndf["npv"] == pytest.approx(N * (ndf["forward"] - K) * ndf["df_quote"], rel=1e-9)        # the one line every reader rebuilds
+        assert "deliverable forward" in ndf["model"]
+
+    # a record that fixes a month earlier: the forward is the one for delivery on that fixing's spot date, and the
+    # amount is carried from there to the settlement date on the curve of the currency it is paid in
+    early = fix - timedelta(days=28)
+    lands = spot_date(early, False, "EUR", "USD")
+    at_fixing = client.post("/api/currency/forward/price", json={"pair": "EURUSD", "shape": "FORWARD", "base_notional": N, "direction": "BUY",
+                                                                 "settlement_date": lands.isoformat(), "forward_rate": K}, headers=auth_a).json()
+    eur, usd = q(settlement_currency="EUR", fixing_date=early.isoformat()).json(), q(settlement_currency="USD", fixing_date=early.isoformat()).json()
+    assert eur["fixing_date"] == usd["fixing_date"] == early.isoformat() and lands.isoformat() in eur["model"]
+    assert eur["forward"] == usd["forward"] == at_fixing["forward"] != deliverable["forward"]
+    assert eur["npv"] != usd["npv"] and abs(eur["npv"] / usd["npv"] - 1.0) < 5e-3                    # a month of the rate difference
+    for ndf in (eur, usd):
+        assert ndf["npv"] == pytest.approx(N * (ndf["forward"] - K) * ndf["df_quote"], rel=1e-9)
+    assert usd["df_quote"] == pytest.approx(deliverable["df_quote"], rel=1e-12)                       # paid in dollars: discounted from the settlement date
+    on_settle = q(fixing_date=settle.isoformat()).json()
+    assert on_settle["fixing_date"] is None and on_settle["npv"] == pytest.approx(deliverable["npv"], rel=1e-12)
+    bad = q(settlement_currency="GBP")
     assert bad.status_code == 422 and "EUR or USD" in bad.text
 
 
 def test_a_booked_ndf_becomes_one_amount_in_its_settlement_currency_from_its_fixing_date(client, auth_a, ids, pairs):
+    _forget_fixings()
     today = date.today()
     fix, settle = _dates()
     assert fix < today < settle
     spot = pairs["EURUSD"]["spot"]
     K = round(spot * 0.98, 4)
+    K_high = round(spot * 1.03, 4)            # a contract rate above the fixing: we pay
     booked = {}
-    for ccy in ("EUR", "USD"):                # the base currency, the quote currency
-        body = B.fx_forward(ids["a"], f"IT-NDFFIX-{ccy}-{_run_tag()}", pairs["EURUSD"], {"forward": K, "settlement_date": settle.isoformat()}, "NDF")
+    for ccy, k in (("EUR", K), ("USD", K), ("EUR-pays", K_high)):                # the base currency, the quote currency, and a base amount we owe
+        body = B.fx_forward(ids["a"], f"IT-NDFFIX-{ccy}-{_run_tag()}", pairs["EURUSD"], {"forward": k, "settlement_date": settle.isoformat()}, "NDF")
         body["trade_date"] = body["effective_date"] = (fix - timedelta(days=7)).isoformat()
-        body["terms"].update(fixing_date=fix.isoformat(), settlement_currency=ccy, fixing_source=SOURCE)
+        body["terms"].update(fixing_date=fix.isoformat(), settlement_currency=ccy[:3], fixing_source=SOURCE)
         r = client.post("/api/book/trade", json=body, headers=auth_a)
         assert r.status_code == 201, r.text[:400]
         booked[ccy] = r.json()["trade"]["id"]
@@ -78,11 +110,12 @@ def test_a_booked_ndf_becomes_one_amount_in_its_settlement_currency_from_its_fix
     # no fixing stored: the stored spot of the fixing date, and the answer says it is provisional
     for ccy, tid in booked.items():
         p = price(tid)
+        k = K_high if ccy == "EUR-pays" else K
         assert p["state"] == "FIXED" and p["provisional"] is True and p["fixing"] is None and p["fixing_source"] == SOURCE
-        assert p["fixing_date"] == fix.isoformat() and p["settlement_currency"] == ccy and p["crypto"] is False
+        assert p["fixing_date"] == fix.isoformat() and p["settlement_currency"] == ccy[:3] and p["crypto"] is False
         px = p["settlement_price"]
         assert px == pytest.approx(spot, rel=0.05)
-        assert p["settlement_amount"] == pytest.approx(N * (px - K) / (px if ccy == "EUR" else 1.0), rel=1e-9)
+        assert p["settlement_amount"] == pytest.approx(N * (px - k) / (px if ccy != "USD" else 1.0), rel=1e-9)
 
     # the desk enters the fixing of the source the record names: the amount is that fixing's, and final
     V = round(spot * 1.01, 4)
@@ -97,6 +130,15 @@ def test_a_booked_ndf_becomes_one_amount_in_its_settlement_currency_from_its_fix
     # the quote-currency amount is discounted a few days on its curve; the base-currency amount is still base currency, worth spot each
     assert in_quote["npv"] == pytest.approx(in_quote["settlement_amount"], rel=2e-3)
     assert in_base["npv"] == pytest.approx(in_base["settlement_amount"] * spot, rel=1e-2)
+    # exactly: that many euros delivered on the settlement date, which is a deliverable forward on them at a rate of zero
+    owed = price(booked["EUR-pays"])
+    assert owed["settlement_amount"] == pytest.approx(N * (V - K_high) / V, rel=1e-12) and owed["settlement_amount"] < 0 and owed["npv"] < 0
+    for p in (in_base, owed):
+        euros = client.post("/api/currency/forward/price", json={"pair": "EURUSD", "shape": "FORWARD", "base_notional": abs(p["settlement_amount"]),
+                                                                 "direction": "BUY" if p["settlement_amount"] > 0 else "SELL", "forward_rate": 0.0,
+                                                                 "settlement_date": settle.isoformat(), "valuation_date": today.isoformat()}, headers=auth_a).json()
+        assert p["npv"] == pytest.approx(euros["npv"], rel=1e-9)
+        assert p["npv"] == pytest.approx(p["settlement_amount"] * euros["forward"] * euros["df_quote"], rel=1e-9)
     assert "delivered" in in_base["model"] and "paid" in in_quote["model"]
     # the pair lists the benchmark a desk enters itself, and no feed source
     assert client.get("/api/currency/fixings/EURUSD", headers=auth_a).json()["sources"] == [{"source": SOURCE, "time": "16:00 London", "auto": False}]

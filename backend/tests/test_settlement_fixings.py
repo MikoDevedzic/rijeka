@@ -573,12 +573,14 @@ def test_booking_takes_the_pairs_feed_source_or_a_desk_source_at_the_time_that_s
     for inst, terms in ok:
         SRC.check_booked(inst, terms)
     SRC.check_booked("NDF", {"fixing_date": "2027-01-27", "value_date": "2027-01-29"}, "2027-01-26")
-    for terms, traded in (({"fixing_source": "Deribit BTC delivery price."}, None),                  # a name that reads like the feed's
-                          ({"fixing_source": " WM/Reuters 4pm London"}, None), ({"fixing_date": "soon"}, None),
-                          ({"fixing_date": "2027-01-30", "value_date": "2027-01-29"}, None),          # after the settlement date
-                          ({"fixing_date": "2027-01-27", "value_date": "2027-01-29"}, "2027-01-27")):  # a rate known when the trade is struck
-        with pytest.raises(ValueError):
-            SRC.check_booked("NDF", terms, traded)
+    # what was booked and confirmed before 0.39.0 is still booked (a mirror of a confirmed record goes through this
+    # rule): any source a desk typed, a fixing date on or after the settlement date or unreadable, a same-day record
+    for terms, traded in (({"fixing_source": "Deribit BTC delivery price."}, None), ({"fixing_source": " ECB reference rate € " + "x" * 90}, None),
+                          ({"fixing_date": "soon"}, None), ({"fixing_date": "2027-01-30", "value_date": "2027-01-29"}, "2027-01-26"),
+                          ({"fixing_date": "2027-01-29", "value_date": "2027-01-29"}, "2027-01-29")):
+        SRC.check_booked("NDF", terms, traded)
+    with pytest.raises(ValueError, match="after the trade date"):          # the one refusal: a rate known when the trade is struck
+        SRC.check_booked("NDF", {"fixing_date": "2027-01-27", "value_date": "2027-01-29"}, "2027-01-27")
     bad = [_terms(valuation_time="08:00 UTC"),                                     # the benchmark at the venue's time, on a forward
            _terms(settlement_price_source=DELIVERY), _terms(settlement_price_source=DELIVERY, valuation_time=None),      # the venue's price at the benchmark's time, or none
            _terms("CRYPTO_OPTION", settlement_price_source=DELIVERY, valuation_time="16:00 London"),
@@ -628,9 +630,7 @@ def test_booking_takes_the_pairs_feed_source_or_a_desk_source_at_the_time_that_s
                            (_terms(valuation_date="2026-11-01", settlement_date="2027-01-30")[1], "must be after the trade date")):
             with pytest.raises(ValueError, match=why):
                 model(**common, **extra, terms=wrong)
-        assert model(**{**common, "asset_class": "FX", "instrument_type": "NDF"}, **extra, terms={"fixing_source": "WM/Reuters 4pm London"})
-        with pytest.raises(ValueError, match="reads like it"):         # a currency NDF is this rule's too since 0.39.0
-            model(**{**common, "asset_class": "FX", "instrument_type": "NDF"}, **extra, terms={"fixing_source": "Deribit BTC delivery price."})
+        assert model(**{**common, "asset_class": "FX", "instrument_type": "NDF"}, **extra, terms={"fixing_source": "Deribit BTC delivery price."})       # a currency NDF's source is not refused
         early = {**common, "trade_date": "2026-10-28", "effective_date": "2026-10-28"}
         assert model(**early, **extra, terms=old_forward) and model(**{**early, "instrument_type": "CRYPTO_OPTION", "structure": "EUROPEAN"}, **extra, terms=old_option)
 

@@ -24,8 +24,13 @@ is in the currency the record settles in:
     quote currency   sign × N × (fixing − K)
     base currency    sign × N × (fixing − K) / fixing      (the same amount converted at the fixing)
 
-A record that names neither of its pair's currencies (tickets before 0.39.0 wrote USD on every pair) settles in the
-quote currency, the currency the engine has always valued it in.
+The record decides: tickets before 0.39.0 wrote USD on every pair, so an older USDJPY settles in dollars (its base
+currency) and an older EURUSD in dollars (its quote currency), as each says. A record that names neither of its
+pair's two currencies (an older cross, EURGBP with USD) settles in the quote currency.
+
+The fixing of a currency pair is its spot rate, for delivery on the spot date of the fixing date
+(api/routes/currencies.fixing_read_date): fixed two business days before it settles, an NDF is worth what the
+deliverable forward is, in either currency.
 
 Nothing here writes, and nothing here changes a trade."""
 from __future__ import annotations
