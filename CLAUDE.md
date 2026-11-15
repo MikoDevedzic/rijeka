@@ -58,7 +58,7 @@ what changes is who runs it.
 - **Secrets.** Never print tokens, keys, connection strings or `.env` contents. Never enter credentials on a
   hosted site.
 - **Git.** Work on a branch, stage by explicit path (never `git add -A`; another session shares this checkout),
-  never commit `.claude/launch.json`. `main` is protected by five checks.
+  never commit `.claude/launch.json`. `main` is protected, and all six CI jobs are green on the exact commit before it moves.
 - **Frontend.** `npm run lint -- --quiet` before every commit (the same command CI runs, over `src`, the journeys and the config): the build does not catch an undefined variable.
 - **Deploy ahead of migration.** Every new table or column is read through a presence check that tolerates its
   absence and never caches a negative answer; add it to `OPTIONAL_MIGRATIONS` in `backend/api/routes/ops.py`
