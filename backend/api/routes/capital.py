@@ -105,7 +105,7 @@ def capital_grid(sets: dict[str, Optional[dict]], regimes: list[COL.Regime], typ
 
 
 def quote_lines(cells: dict, regimes: list[COL.Regime], types: list[CounterpartyType], notional: float, m_years: float, rate: float) -> dict:
-    """The cost of the incremental charge (CVA + FVA + KVA + MVA, as a positive number) under every regime against the
+    """The cost of the incremental charge (CVA + FCA + KVA + MVA, as a positive number) under every regime against the
     first one, as a running or upfront spread of the trade's notional."""
     if not regimes:
         return {}

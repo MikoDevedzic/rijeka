@@ -122,7 +122,8 @@ def put_policy(body: PolicyBody, db: Session = Depends(get_db), user: dict = Dep
     pol = (body.signoff_policy or signoff_policy(db, user["sub"])).upper()
     if pol not in POLICIES:
         raise HTTPException(status_code=422, detail=f"signoff_policy must be one of {', '.join(POLICIES)}")
-    netted = [x.upper() for x in (body.xva_netted if body.xva_netted is not None else R.xva_policy(db, user["sub"]))]
+    from pnl.xva import policy_keys          # an older browser, or a policy stored before 0.41.0, says FVA for the funding cost
+    netted = list(policy_keys(body.xva_netted if body.xva_netted is not None else R.xva_policy(db, user["sub"])))
     if any(x.lower() not in COMPONENTS for x in netted):
         raise HTTPException(status_code=422, detail=f"xva_netted must be among {', '.join(c.upper() for c in COMPONENTS)}")
     try:

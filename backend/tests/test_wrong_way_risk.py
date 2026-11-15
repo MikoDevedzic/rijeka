@@ -139,13 +139,13 @@ def test_with_the_link_off_every_number_is_the_one_before_and_the_independent_fi
     csa = CSA.from_request({"preset": "BILATERAL"})
     base, m0 = fx_xva.forward_xva(_fwd("SELL"), csa, n_paths=1500)
     one, m1 = fx_xva.forward_xva(_fwd("SELL"), csa, n_paths=1500, cp_hazard_if_halves=1.0, own_hazard_if_halves=1.0)
-    for f in ("cva", "dva", "fva", "fba", "kva", "mva", "colva"):
+    for f in ("cva", "dva", "fca", "fba", "kva", "mva", "colva"):
         assert getattr(one, f) == getattr(base, f), f
     assert m0["wwr"] is None and m1["wwr"] is None
     linked, _ = fx_xva.forward_xva(_fwd("SELL"), csa, n_paths=1500, cp_hazard_if_halves=3.0)
     assert linked.cva_independent == pytest.approx(base.cva, rel=1e-12), "what it would be with independence: the run without the link"
     assert linked.dva == base.dva and linked.dva_independent is None, "our own default was left independent"
-    for f in ("fva", "fba", "kva", "mva", "colva"):
+    for f in ("fca", "fba", "kva", "mva", "colva"):
         assert getattr(linked, f) == getattr(base, f), "only the credit terms move"
 
 

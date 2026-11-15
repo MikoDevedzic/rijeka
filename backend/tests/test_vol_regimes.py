@@ -259,10 +259,10 @@ def test_an_uncollateralised_ticket_moves_little_and_the_way_the_mixture_says():
     for t_years, low, high in ((0.25, 0.015, 0.045), (0.5, 0.010, 0.030), (2.0, 0.000, 0.012)):
         on, _ = fx_xva.forward_xva(_fwd(55, t=t_years), CSA.uncollateralised(), n_paths=40_000)
         off, _ = fx_xva.forward_xva(_fwd(55, t=t_years, regimes=False), CSA.uncollateralised(), n_paths=40_000)
-        for name in ("cva", "fva"):
+        for name in ("cva", "fca"):
             fall = 1.0 - getattr(on, name) / getattr(off, name)
             assert low < fall < high, f"{name} at {t_years}y falls {fall:.2%}"
-        total = lambda w: w.cva + w.dva + w.fva + w.fba + w.kva + w.mva       # noqa: E731
+        total = lambda w: w.cva + w.dva + w.fca + w.fba + w.kva + w.mva       # noqa: E731
         assert abs(total(on) / total(off) - 1.0) < 0.015, "and the total by about 1 % or less (1.1 % at three months)"
 
 

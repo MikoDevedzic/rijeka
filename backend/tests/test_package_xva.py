@@ -28,7 +28,7 @@ def _opt(option_type="CALL", direction="BUY", strike=1.17, style="EUROPEAN", t=0
                                  quote_zero=0.04, vol=0.08, spec=spec, direction=direction, spot01=50000.0)
 
 
-SIX = ("cva", "dva", "fva", "fba", "kva", "mva", "colva")
+SIX = ("cva", "dva", "fca", "fba", "kva", "mva", "colva")
 
 
 @pytest.mark.parametrize("csa", [CSA.uncollateralised(), CSA.from_request({"preset": "BILATERAL"}), CSA.on_chain(im_exchanged=True)])
@@ -75,7 +75,7 @@ def test_the_package_is_the_sum_of_its_legs_on_the_same_paths_and_a_leg_is_nothi
 def test_a_bought_and_a_sold_forward_net_to_nothing_and_netting_never_adds_exposure():
     buy, sell = _fwd(direction="BUY"), _fwd(direction="SELL")
     wf, meta = fx_xva.package_xva([buy, sell], CSA.uncollateralised(), n_paths=500)
-    assert not meta["_paths"].any() and wf.cva == 0 and wf.dva == 0 and wf.fva == 0 and wf.fba == 0 and wf.im_0 == 0
+    assert not meta["_paths"].any() and wf.cva == 0 and wf.dva == 0 and wf.fca == 0 and wf.fba == 0 and wf.im_0 == 0
     # the add-on is SA-CCR's on the legs together: one hedging set, the two deltas cancel, so the capital is nothing too
     assert wf.kva == 0 and "foreign exchange class" in meta["capital_basis"]
     # the older CEM branch still adds the legs' notionals: stated, not hidden

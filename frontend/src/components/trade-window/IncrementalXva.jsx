@@ -10,7 +10,7 @@
 // Stored trade: { counterparty_id, trade_id }  → the marginal effect of removing it
 //
 // Signs as on the P&L page: costs negative, benefits positive
-// (CVA −, DVA +, FVA −, FBA +, KVA −, MVA −).
+// (CVA −, DVA +, FCA −, FBA +, KVA −, MVA −; FVA is FCA + FBA).
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useRef, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
@@ -112,11 +112,12 @@ export default function IncrementalXva({ counterpartyId, counterpartyName, build
               </thead>
               <tbody>
                 {rows.map(r => (
-                  <tr key={r.key} style={r.total ? { borderTop: '1px solid var(--border)' } : undefined}>
-                    <td style={{ ...td, textAlign: 'left', color: 'var(--text-dim)', fontSize: 11, letterSpacing: '0.12em', fontWeight: r.total ? 700 : 600 }}>{r.label}</td>
-                    <td style={{ ...td, fontWeight: r.total ? 700 : 400 }}>{fmtSigned(r.without, ccy)}</td>
-                    <td style={{ ...td, fontWeight: r.total ? 700 : 400 }}>{fmtSigned(r.with, ccy)}</td>
-                    <td style={{ ...td, fontWeight: 700, color: r.total ? 'var(--accent)' : 'var(--text-hi)', fontSize: r.total ? '0.9375rem' : '0.8125rem' }}>{fmtSigned(r.incremental, ccy)}</td>
+                  // FVA is FCA and FBA together: a sum of the two rows above it, set quiet so it is not read as one more part of the total
+                  <tr key={r.key} data-row={r.key} style={r.total ? { borderTop: '1px solid var(--border)' } : undefined}>
+                    <td style={{ ...td, textAlign: 'left', color: r.sum ? 'var(--text-mute)' : 'var(--text-dim)', fontSize: 11, letterSpacing: '0.12em', fontWeight: r.total ? 700 : r.sum ? 400 : 600 }}>{r.label}</td>
+                    <td style={{ ...td, fontWeight: r.total ? 700 : 400, color: r.sum ? 'var(--text-mute)' : undefined }}>{fmtSigned(r.without, ccy)}</td>
+                    <td style={{ ...td, fontWeight: r.total ? 700 : 400, color: r.sum ? 'var(--text-mute)' : undefined }}>{fmtSigned(r.with, ccy)}</td>
+                    <td style={{ ...td, fontWeight: r.sum ? 400 : 700, color: r.total ? 'var(--accent)' : r.sum ? 'var(--text-mute)' : 'var(--text-hi)', fontSize: r.total ? '0.9375rem' : '0.8125rem' }}>{fmtSigned(r.incremental, ccy)}</td>
                   </tr>
                 ))}
               </tbody>

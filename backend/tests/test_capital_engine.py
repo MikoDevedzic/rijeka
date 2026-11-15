@@ -27,7 +27,7 @@ def _run(csa, **kw):
 @pytest.mark.parametrize("csa", [CSA.uncollateralised(), CSA.bilateral(threshold_cp=2e5, mta=5e4), CSA.on_chain()])
 def test_defaults_are_the_previous_engine(csa):
     a, b = _run(csa), _run(csa, reg_csa=None, capital=None, saccr=None)
-    for k in ("cva", "dva", "fva", "fba", "kva", "mva", "ead_0", "capital_0", "im_0", "mf_0"):
+    for k in ("cva", "dva", "fca", "fba", "kva", "mva", "ead_0", "capital_0", "im_0", "mf_0"):
         assert getattr(a, k) == getattr(b, k), k
     assert a.kva_ccr == pytest.approx(a.kva) and a.kva_cva == 0.0 and a.k_cva_0 == 0.0
     assert a.rwa_0 == pytest.approx(a.ead_0) and a.rc_0 >= 0 and 0.05 <= a.multiplier_0 <= 1.0
@@ -38,7 +38,7 @@ def test_an_all_recognised_regime_equals_the_plain_csa():
     r = preset("CASH_GOVT", base)
     r.posted = r.received = {"CASH": 1.0}
     a, b = _run(base), _run(r.economic_csa(), reg_csa=r.regulatory_csa())
-    for k in ("cva", "fva", "kva", "mva", "ead_0"):
+    for k in ("cva", "fca", "kva", "mva", "ead_0"):
         assert getattr(a, k) == pytest.approx(getattr(b, k), rel=1e-12), k
 
 
@@ -47,7 +47,7 @@ def test_an_unrecognised_regime_raises_capital_and_keeps_the_economic_exposure()
     r = preset("PLUS_STABLECOIN", base, netting_enforceable=True)       # exchanged, not recognised
     plain = _run(base)
     reg = _run(r.economic_csa(), reg_csa=r.regulatory_csa())
-    assert reg.cva == pytest.approx(plain.cva) and reg.fva == pytest.approx(plain.fva)   # the economic view is unchanged
+    assert reg.cva == pytest.approx(plain.cva) and reg.fca == pytest.approx(plain.fca)   # the economic view is unchanged
     assert not reg.regulatory_margined and reg.mf_0 == pytest.approx(1.0)                 # unmargined MF at 5y
     assert reg.ead_0 > plain.ead_0 and abs(reg.kva) > abs(plain.kva)
     # unenforceable: the economic exposure goes gross too

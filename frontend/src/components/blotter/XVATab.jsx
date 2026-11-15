@@ -14,7 +14,7 @@ import {
 } from '../trade-window/xva-shared.jsx'
 import {
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtDollar, tipAt, spreadCurvePayload, imUsdValue, imUsdProblem,
-  buildVaRows, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
+  buildVaRows, withFunding, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
 } from '../trade-window/xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -399,7 +399,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
     }
   }
 
-  const xva = simResult?.xva
+  const xva = withFunding(simResult?.xva)
   const tradeN = (() => { try { const n=trade?parseFloat(trade.notional):parseFloat((notionalRef?.current?.value||'10000000').replace(/,/g,'')); return isNaN(n)?10000000:n } catch {return 10000000} })()
   const matY = simResult ? simResult.steps/12 : 5
   const dv01 = tradeN * matY / 10000
@@ -413,7 +413,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
     if (isFinite(p) && p > 0) return p
     try { const r = parseFloat(rateRef?.current?.value); return isFinite(r) && r > 0 ? r : NaN } catch { return NaN }
   })()
-  const xvaTotalBp = xva ? [xva.cva,xva.dva,xva.fva,xva.fba,xva.kva,xva.mva].reduce((s,v)=>s+(v||0),0)/dv01 : 0
+  const xvaTotalBp = xva ? [xva.cva,xva.dva,xva.fca,xva.fba,xva.kva,xva.mva].reduce((s,v)=>s+(v||0),0)/dv01 : 0
   const allInRate = parRate + xvaTotalBp/100
   const vaRows = buildVaRows(xva, { kind: 'rate', dv01, parRate, allInRate })
   const cmpRows = onChainCompareRows(xva, compareResult?.xva)
@@ -589,7 +589,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
         <div style={{flexShrink:0,overflowX:'auto'}} data-testid="xva-outputs">
           <VaStrip rows={vaRows} fmt={fmtDollar} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} runLabel={simResult?.csa?.preset ? String(simResult.csa.preset).replace('_', '-') : 'THIS RUN'} also={cmpRows.map(r => r.oc)} />
           <OnChainCompareRow rows={cmpRows} current={simResult} compare={compareResult} fmt={fmtDollar} saving={saving} />
-          <VaFooter>ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA~ · Click any VA to expand · bp = VA / IR01</VaFooter>
+          <VaFooter>ALL-IN = NPV + CVA + DVA + FVA + KVA + MVA + ColVA~ · FVA = FCA + FBA{xva?.fva != null ? <> = <b data-testid="xva-fva">{fmtDollar(xva.fva)}</b></> : null} · Click any VA to expand · bp = VA / IR01</VaFooter>
         </div>
           {/* what the ticket puts under the results (the incremental charge): above the curves and the assumptions,
               so it is in view on a laptop without scrolling the window */}

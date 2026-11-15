@@ -122,7 +122,7 @@ export function PnlConventions() {
               <div className="pnl-sign-btns">
                 {(pol.xva_components || []).map(c => <button key={c} className={`pnl-btn ghost${(pol.xva_netted || []).includes(c) ? ' on' : ''}`} disabled={!pol.can_write} onClick={() => toggleXva(c)}>{c}</button>)}
               </div>
-              <div className="pnl-note">CVA, DVA, FVA and FBA are mark-to-market reserves and net by default. KVA and MVA are lifetime costs of capital and margin: shown on the P&amp;L page, netted only if the firm says so.</div>
+              <div className="pnl-note">CVA, DVA, FCA and FBA are mark-to-market reserves and net by default (FVA, the funding adjustment, is FCA and FBA together). KVA and MVA are lifetime costs of capital and margin: shown on the P&amp;L page, netted only if the firm says so.</div>
             </div>
           )}
           {msg && <div className="pnl-toast">{msg}</div>}

@@ -622,7 +622,7 @@ def simulate(
         csa,
     )
     ee, ene, pfe = wf.ee, wf.ene, wf.pfe
-    cva, dva, fva, fba_v, kva, mva, colva = wf.cva, wf.dva, wf.fva, wf.fba, wf.kva, wf.mva, wf.colva
+    cva, dva, fca, fba_v, kva, mva, colva = wf.cva, wf.dva, wf.fca, wf.fba, wf.kva, wf.mva, wf.colva
     ead_0, cap_0, im_0, rw_cp = wf.ead_0, wf.capital_0, wf.im_0, body.counterparty_rw
     annuity = float(sum(p0_grid[i + 1] for i in range(T)) * DT)          # Σ DF·Δt on the grid: a running-bp equivalent of an upfront amount
 
@@ -630,7 +630,7 @@ def simulate(
     # return null rather than 0.0 — an all-in that silently ignores the
     # trade's MtM is worse than no number at all.
     npv       = body.npv
-    xva_total = cva + dva + fva + fba_v + kva + mva + colva
+    xva_total = cva + dva + fca + fba_v + kva + mva + colva
     all_in    = (npv + xva_total) if npv is not None else None
 
     # Sample 80 paths for visualisation (evenly spaced)
@@ -659,8 +659,9 @@ def simulate(
             "npv": round(npv, 2) if npv is not None else None,
             "cva": round(cva, 2),
             "dva": round(dva, 2),
-            "fva": round(fva, 2),
+            "fca": round(fca, 2),
             "fba": round(fba_v, 2),
+            "fva": round(fca + fba_v, 2),          # FCA + FBA (until 0.41.0 this key held the cost alone)
             "kva": round(kva, 2),
             "mva": round(mva, 2),
             "colva": round(colva, 2),
@@ -919,8 +920,8 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
         "collateral": [round(v, 2) for v in wf.collateral_mean], "im_profile": [round(v, 2) for v in wf.im_profile],
         "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
         "quote_currency": q["quote_currency"], "pair": pair,
-        "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fva": round(wf.fva, 2),
-                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
+        "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fca": round(wf.fca, 2),
+                "fba": round(wf.fba, 2), "fva": round(wf.fva, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
@@ -1054,8 +1055,8 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
         "collateral": [round(v, 2) for v in wf.collateral_mean], "im_profile": [round(v, 2) for v in wf.im_profile],
         "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
         "quote_currency": q["quote_currency"], "pair": pair, "style": spec.style, "expiry_step": None,
-        "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fva": round(wf.fva, 2),
-                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
+        "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fca": round(wf.fca, 2),
+                "fba": round(wf.fba, 2), "fva": round(wf.fva, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
@@ -1183,8 +1184,8 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
         "collateral": [round(v, 2) for v in wf.collateral_mean], "im_profile": [round(v, 2) for v in wf.im_profile],
         "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
         "quote_currency": quotes[0]["quote_currency"], "pair": pair, "package": True, "legs": legs,
-        "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fva": round(wf.fva, 2),
-                "fba": round(wf.fba, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
+        "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fca": round(wf.fca, 2),
+                "fba": round(wf.fba, 2), "fva": round(wf.fva, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
@@ -1205,7 +1206,7 @@ class IncrementalXvaRequest(BaseModel):
     n_paths: Optional[int] = Field(default=None, ge=200, le=5000)
 
 
-XVA_KEYS = ("cva", "dva", "fva", "fba", "kva", "mva", "colva")
+XVA_KEYS = ("cva", "dva", "fca", "fba", "kva", "mva", "colva")          # the components; FVA is fca + fba and is added where a set is returned
 
 
 def hypothetical_trade(d: dict, counterparty_id, user_id: str):
@@ -1244,10 +1245,11 @@ def hypothetical_trade(d: dict, counterparty_id, user_id: str):
 
 
 def xva_levels(rep: Optional[dict]) -> dict:
-    """The six components and their total from a counterparty report; zeros for an empty set."""
+    """The components, their total, and FVA (FCA + FBA) from a counterparty report; zeros for an empty set."""
     x = (rep or {}).get("xva") or {}
     out = {k: float(x.get(f"{k}_usd") or 0.0) for k in XVA_KEYS}
     out["total"] = sum(out.values())
+    out["fva"] = out["fca"] + out["fba"]            # after the total: FVA is two of the components, not one more
     return out
 
 
@@ -1326,7 +1328,7 @@ def incremental_xva(body: IncrementalXvaRequest, db: Session = Depends(get_db), 
         reasons = "; ".join(f"{x.get('trade_ref')}: {x.get('reason')}" for x in (r1 or {}).get("skipped") or [])
         raise HTTPException(status_code=422, detail=f"The trade cannot be valued on the exposure paths yet. {reasons}".strip())
     w0, w1 = xva_levels(r0), xva_levels(r1)
-    inc = {k: round(w1[k] - w0[k], 2) for k in list(XVA_KEYS) + ["total"]}
+    inc = {k: round(w1[k] - w0[k], 2) for k in list(XVA_KEYS) + ["total", "fva"]}
     notes = ["common random numbers: both runs draw the same paths (seed 7), so the difference is the trade, not the noise",
              "risk-neutral measure: the Hull-White parameters calibrated to the swaption surface, the spots' implied vols, the drift from the curves",
              "the CSA, threshold and MTA are the counterparty record's; IM when the record exchanges it"]

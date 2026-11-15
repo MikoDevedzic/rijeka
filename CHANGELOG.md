@@ -1,7 +1,27 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.22). Commits on `main` are the detail.
+methodology document carries its own version (v1.23). Commits on `main` are the detail.
+
+## 0.41.0 · 15 November 2026
+
+**The funding adjustments under their names, and XVA filed as valuation.** No figure changes.
+
+- **FVA = FCA + FBA.** The cost of funding what is owed to us was called FVA, with the funding benefit FBA beside
+  it. The cost is now FCA everywhere (the engine, the API, the XVA tab, the incremental charge, the reserves, the
+  capital views, the workbooks, the methodology), FBA is as it was, and FVA is the two together: a line under the
+  XVA tab's figures and a sum row in the incremental table, never one more part of the total.
+- **The API.** Every `xva` object carries `fca`, `fba` and `fva`; `fva` is now the sum, where it was the cost.
+  A counterparty run carries `fca_usd` beside `fva_usd` in the same way. A run stored before this release, and a
+  netting policy that says FVA, are read as the cost (FCA): no migration, and the day's XVA P&L across the
+  release is the change, not the level.
+- **XVA is valuation, not counterparty risk.** The methodology reader's syllabus and its list of workbooks had the
+  XVA sections and workbooks under "Counterparty risk"; they are in a group of their own, "Valuation adjustments
+  (XVA)". Counterparty risk keeps netting, EPE, PFE and credit limits. The README says the same.
+- **Signs, written as they are returned.** Methodology v1.23 writes every adjustment signed as its effect on our
+  value, a cost negative and a benefit positive, which is what the engine returns; the formulas had been written
+  as magnitudes.
+- The pinned book's keys follow (`xva.*.fva` is `xva.*.fca`, the same five values).
 
 ## 0.40.0 · 15 November 2026
 

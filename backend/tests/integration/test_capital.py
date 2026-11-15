@@ -9,7 +9,7 @@ import pytest
 
 from tests.integration import bodies as B
 
-METRICS = {"im", "ead", "rwa", "k_ccr", "k_cva", "kva", "mva", "cva", "fva", "leverage", "hqla_im"}
+METRICS = {"im", "ead", "rwa", "k_ccr", "k_cva", "kva", "mva", "cva", "fca", "leverage", "hqla_im"}
 PRESETS = ["CASH_GOVT", "PLUS_STABLECOIN", "PLUS_TOKENISED_FUND", "PLUS_TOKENISED_SOVEREIGN"]
 
 

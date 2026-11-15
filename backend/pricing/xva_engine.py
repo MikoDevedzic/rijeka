@@ -2,7 +2,11 @@
 Rijeka — XVA waterfall engine.
 
 Turns simulated MtM paths into exposure profiles and the XVA waterfall
-(CVA, DVA, FVA, FBA, KVA, MVA) under a given CSA. Pure numpy; no I/O.
+(CVA, DVA, FCA, FBA, KVA, MVA, ColVA) under a given CSA. Pure numpy; no I/O.
+
+Funding: FCA is the cost of funding what is owed to us and is not collateralised, FBA the benefit where we owe,
+and FVA is the two together (FVA = FCA + FBA). Until 0.41.0 the cost alone was called FVA here and on every
+screen; the figures are the same, the names are the ones the taxonomy fixes.
 The route (api/routes/xva.py) generates the paths and hands them here.
 
 Grid convention (inherited from the route)
@@ -114,7 +118,7 @@ class WaterfallResult:
     exposure_paths: np.ndarray      # residual V − C (for visualisation)
     cva: float
     dva: float
-    fva: float
+    fca: float                      # funding cost adjustment (called `fva` until 0.41.0)
     fba: float
     kva: float
     mva: float
@@ -146,7 +150,12 @@ class WaterfallResult:
 
     @property
     def xva_total(self) -> float:
-        return self.cva + self.dva + self.fva + self.fba + self.kva + self.mva + self.colva
+        return self.cva + self.dva + self.fca + self.fba + self.kva + self.mva + self.colva
+
+    @property
+    def fva(self) -> float:
+        """Funding valuation adjustment: the cost and the benefit together."""
+        return self.fca + self.fba
 
 
 # ── Wrong-way risk ───────────────────────────────────────────────────────────
@@ -281,7 +290,7 @@ def run_waterfall(
     Exposure profiles and XVA under `csa`. `paths` are MtM from our side
     (positive = counterparty owes us). p0_grid[k] = P(0, k·dt).
 
-    `csa` is the economic CSA (what is exchanged: CVA, DVA, FVA, FBA, MVA). `reg_csa`, when given, is the
+    `csa` is the economic CSA (what is exchanged: CVA, DVA, FCA, FBA, MVA). `reg_csa`, when given, is the
     regulatory CSA (pricing/collateral.py: recognised collateral at its haircut) and drives the SA-CCR branch;
     None means the two are the same, as before. `saccr` is the netting set as SaccrTrade rows
     (pricing/sa_ccr.py): the add-on is then the multi-class CRE52 add-on along the grid; None keeps the
@@ -304,7 +313,7 @@ def run_waterfall(
     between the grid values themselves (lagged_values), which is Gaussian whatever the value is. `capital` is a CapitalInputs (pricing/capital.py): the risk weight and
     hurdle replace the params' and the BA-CVA capital leg joins KVA; None keeps today's KVA exactly.
 
-    `average_exposure`: CVA, DVA, FVA and FBA are charged on the exposure averaged across each step (the mean of
+    `average_exposure`: CVA, DVA, FCA and FBA are charged on the exposure averaged across each step (the mean of
     the step's two ends, the first step starting from today's exposure) and not on the exposure at the step's end.
     The exposure of a forward grows like the square root of time, and reading it at each step's end overstates
     the charge: by a quarter on a one-month trade on two steps. The profiles reported (ee, ene, pfe) stay the
@@ -415,7 +424,7 @@ def run_waterfall(
     s_post       = float(getattr(csa, "vm_post_carry_bp", 0.0) or 0.0) / 10000.0     # the VM we post earns this over OIS
     s_recv       = float(getattr(csa, "vm_recv_carry_bp", 0.0) or 0.0) / 10000.0     # the VM we hold earns this over the OIS we rebate
 
-    cva = dva = fva = fba = kva = mva = colva = 0.0
+    cva = dva = fca = fba = kva = mva = colva = 0.0
     # wrong-way risk: default probability per step on each path, the credit curves repriced on average
     b_cp = float((wrong_way or {}).get("beta_cp") or 0.0)
     b_ow = float((wrong_way or {}).get("beta_own") or 0.0)
@@ -458,7 +467,7 @@ def run_waterfall(
         dva_ind -= own_lgd * abs(ene_c[i]) * (qow - nqow) * disc
         cva += (lgd * float(np.mean(c_pos[:, i] * dpd_cp[:, i])) * disc * wwr) if dpd_cp is not None else (lgd * ee_c[i] * (qcp - nqcp) * disc * wwr)
         dva -= (own_lgd * float(np.mean(np.abs(c_neg[:, i]) * dpd_ow[:, i])) * disc) if dpd_ow is not None else (own_lgd * abs(ene_c[i]) * (qow - nqow) * disc)
-        fva += ftp_t   * ee_c[i]       * DT * disc
+        fca += ftp_t   * ee_c[i]       * DT * disc
         fba -= fba_s   * abs(ene_c[i]) * DT * disc
 
         # ── Capital profile → KVA ────────────────────────────────────────────
@@ -526,7 +535,7 @@ def run_waterfall(
         ee_gross=ee_g.tolist(), ene_gross=ene_g.tolist(),
         collateral_mean=coll_mean.tolist(), im_profile=im_profile,
         exposure_paths=resid, bridge_noise=bridge,
-        cva=-abs(cva), dva=abs(dva), fva=-abs(fva), fba=abs(fba),
+        cva=-abs(cva), dva=abs(dva), fca=-abs(fca), fba=abs(fba),
         kva=-abs(kva), mva=-abs(mva), colva=float(colva),
         ead_0=ead_0, capital_0=cap_0, im_0=im_0,
         mf_0=mf_0, im_received_profile=[float(x) for x in im_recv], im_basis=im_basis,

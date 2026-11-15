@@ -28,7 +28,7 @@ import {
 import {
   stepWord, stepUnit, stepsShown,
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS,
-  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine, regimesParts,
+  buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine, regimesParts,
 } from './xva-shared'
 import { Note } from '../common/Note'
 
@@ -229,7 +229,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
     } catch (e) { setErr(e.message) } finally { setBusy(false) }
   }
 
-  const xva = res?.xva
+  const xva = withFunding(res?.xva)
   // bp against the notional: the ticket's, or in a package the sum of every leg's
   const notionalQ = pkg && pkg.ready ? [quote, ...pkg.quotes].reduce((a, q) => a + (quoteNotional(q) || 0), 0) : quoteNotional(quote)
   const nLegs = pkg ? pkg.count + 1 : 1
@@ -358,7 +358,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             <VaStrip rows={vaRows} fmt={fmt} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} runLabel={res?.csa?.preset ? String(res.csa.preset).replace('_', '-') : 'THIS RUN'} also={cmpRows.map(r => r.oc)} />
             <OnChainCompareRow rows={cmpRows} current={res} compare={cmp} fmt={fmt} saving={saving} />
             <VaFooter>
-              ALL-IN = NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA · Click any VA to expand · bp = VA / (notional × 1bp)
+              ALL-IN = NPV + CVA + DVA + FVA + KVA + MVA + ColVA · FVA = FCA + FBA{xva?.fva != null ? <> = <b data-testid="xva-fva">{fmt(xva.fva)}</b></> : null} · Click any VA to expand · bp = VA / (notional × 1bp)
               {notionalQ ? <> · notional {fmt(notionalQ).replace(/^\+/, '')} {ccy}</> : null}
               {res && <> · seed {res.seed ?? seed}</>}
             </VaFooter>

@@ -8,7 +8,7 @@ A CSA turns a raw MtM path V(t) into a residual exposure
 
 where C(t) is variation margin held, lagged by the margin period of risk
 (MPoR), and IM is initial margin exchanged under the uncleared margin
-rules. Everything downstream — CVA, DVA, FVA, FBA, SA-CCR EAD for KVA, and
+rules. Everything downstream — CVA, DVA, FCA, FBA, SA-CCR EAD for KVA, and
 the initial margin that drives MVA — is a function of these residuals and of the
 MPoR, so the CSA is the single object that distinguishes an uncollateralised
 bilateral trade, a CSA'd bilateral trade and a continuously-margined

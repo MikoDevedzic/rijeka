@@ -9,7 +9,7 @@ of it. From one regime the engine derives two CSAs:
                       only when recognised variation margin is exchanged and close-out netting is
                       enforceable. Feeds SA-CCR, BA-CVA, the leverage exposure.
     economic CSA    — what is actually exchanged; gross when close-out netting is not enforceable.
-                      Feeds CVA, DVA, FVA, FBA, MVA.
+                      Feeds CVA, DVA, FCA, FBA, MVA.
 
 The catalogue holds asset *classes* with regulatory attributes. A specific instrument is a row a
 firm adds with its own legal findings; nothing here names an issuer.

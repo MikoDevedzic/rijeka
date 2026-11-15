@@ -25,15 +25,24 @@ export const VA_DEFS = {
   npv:    { label:'NPV',    color:T.textHi, desc:'Present value at mid-market. Positive = asset to you. This is the base price before any XVA adjustments.', curve:'none' },
   cva:    { label:'CVA',    color:T.down, desc:'Credit Valuation Adjustment = -LGD x Sum[ EE(t) x (PD_cp(t) - PD_cp(t-dt)) x DF(t) ]. Cost of counterparty default risk over the EE profile. Always negative.', curve:'EE' },
   dva:    { label:'DVA',    color:T.blue, desc:'Debt Valuation Adjustment = +LGD x Sum[ |ENE(t)| x (PD_own(t) - PD_own(t-dt)) x DF(t) ]. Benefit from your own default risk. Always positive. Excluded from regulatory capital.', curve:'ENE' },
-  fva:    { label:'FVA',    color:T.down, desc:'Funding Valuation Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative.', curve:'EE' },
+  fca:    { label:'FCA',    color:T.down, desc:'Funding Cost Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative. FVA, the funding valuation adjustment, is FCA + FBA.', curve:'EE' },
   fba:    { label:'FBA',    color:T.blue, desc:'Funding Benefit Adjustment = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]. Benefit when counterparty funds your negative MTM. FBA/FTP ratio typically 0.5-0.7.', curve:'ENE' },
   kva:    { label:'KVA',    color:T.down, desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
   mva:    { label:'MVA',    color:T.amber, desc:'Margin Valuation Adjustment = -Sum[ IM(t) x max(FTP(t) - pickup, 0) x dt x DF(t) ]. Cost of funding initial margin, less what the asset it is posted in earns over OIS. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
   colva:  { label:'ColVA',  color:T.amber, desc:'Collateral Valuation Adjustment = Sum[ (VM posted(t) x s_post + VM held(t) x s_recv) x dt x DF(t) ]: the carry of the variation margin against cash at OIS. s = what the asset the margin is held in earns over OIS (a Treasury bill at OIS: 0; a stablecoin earning nothing: minus OIS). Cash on both sides: zero. Positive = benefit.', curve:'none' },
-  all_in: { label:'ALL-IN', color:T.textHi, desc:'NPV + CVA + DVA + FVA + FBA + KVA + MVA + ColVA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
+  all_in: { label:'ALL-IN', color:T.textHi, desc:'NPV + CVA + DVA + FVA + KVA + MVA + ColVA, where FVA = FCA + FBA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
 }
 export const VA_INFO = VA_DEFS
 export const VA_KEYS = Object.keys(VA_DEFS)
+
+// The funding adjustments of an `xva` object under today's names: FCA the cost, FBA the benefit, FVA the two together
+// (the taxonomy; 0.41.0). An API from before the rename has the cost under `fva` and no `fca`: it is read as the cost,
+// so the screens are right whichever of the two was deployed first.
+export function withFunding(xva) {
+  if (!xva) return xva
+  const fca = xva.fca ?? xva.fva ?? null, fba = xva.fba ?? null
+  return { ...xva, fca, fva: fca == null && fba == null ? null : (fca || 0) + (fba || 0) }
+}
 
 export const TIPS = {
   a: { title: 'Mean reversion  a',
@@ -53,7 +62,7 @@ export const TIPS = {
   ownCds: { title: 'Own CDS spread (bp)',
     body: 'Your institution\'s CDS spread. Drives DVA.\n\nh_own = ownCDS_bp / (LGD x 10000)\nDVA = +LGD x Sum[ |ENE(t)| x (PD_own(t) - PD_own(t-dt)) x DF(t) ]\n\nDVA = gain from your own default option on negative exposure. Recognised in P&L under IFRS 9 but excluded from regulatory capital. Some desks zero it by policy.' },
   ftp: { title: 'FTP - Funding Transfer Price (bp)',
-    body: 'Internal funding cost charged by treasury for uncollateralised exposure.\n\nFVA = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]\nFBA = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]\n\nFVA: cost of borrowing to fund positive MTM with no CSA.\nFBA: benefit when counterparty funds your negative MTM.\nFTP ~= own CDS + liquidity spread. Typical: 40-70bp.' },
+    body: 'Internal funding cost charged by treasury for uncollateralised exposure.\n\nFCA = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]\nFBA = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]\n\nFVA: cost of borrowing to fund positive MTM with no CSA.\nFBA: benefit when counterparty funds your negative MTM.\nFTP ~= own CDS + liquidity spread. Typical: 40-70bp.' },
   lgd: { title: 'LGD - Loss Given Default (%)',
     body: 'Fraction of exposure lost on default. LGD = 1 - Recovery Rate.\n\nAppears twice:\n1. Loss scaling: CVA proportional to LGD x EE\n2. Hazard rate: h = CDS_bp / (LGD x 10000). Higher LGD -> lower h -> fewer expected defaults. The two effects partially offset.\n\nISDA standard: LGD=40% (60% recovery). With daily VM CSA, effective LGD can be under 5%.' },
   fbaRatio: { title: 'FBA / FTP ratio',
@@ -86,7 +95,7 @@ export const TIPS = {
   fxSurface: { title: 'Surface proof',
     body: 'Where the vol came from on the last run: the surface (or the demo default or a desk input), the mode, the vol used and, in SURFACE mode on a forward, the step vols the paths were drawn with.' },
   fxPaths: { title: 'Monte Carlo paths',
-    body: 'Number of simulated spot scenarios. The steps to settlement are weekly for a trade of a year or less and monthly beyond; CVA, DVA, FVA and FBA are charged on the exposure averaged across each step.\n\nEE(t) = (1/N) x Sum[ max(V_i(t), 0) ], ENE(t) likewise on the negative side; PFE 95th percentile needs ~2,000 paths for a stable tail.\n\nSIMULATE uses seed 42, so it repeats exactly; RE-ROLL draws a fresh seed and the numbers move within the Monte Carlo error.' },
+    body: 'Number of simulated spot scenarios. The steps to settlement are weekly for a trade of a year or less and monthly beyond; CVA, DVA, FCA and FBA are charged on the exposure averaged across each step.\n\nEE(t) = (1/N) x Sum[ max(V_i(t), 0) ], ENE(t) likewise on the negative side; PFE 95th percentile needs ~2,000 paths for a stable tail.\n\nSIMULATE uses seed 42, so it repeats exactly; RE-ROLL draws a fresh seed and the numbers move within the Monte Carlo error.' },
 }
 
 // What a run's steps are called, read from the run's own step length (years) so the words cannot disagree with the
@@ -240,7 +249,8 @@ const signed = (bp) => { const n = parseFloat(bp); return (n > 0 ? '+' : '') + (
 //   'notional' — FX and digital assets: bp = VA / (quote-currency notional × 1bp) on every cell,
 //                ALL-IN's line being the all-in in bp of notional
 // Each row: key, label, color, curve, desc, value (number|null) and sub (the second line) or null.
-export function buildVaRows(xva, basis = { kind: 'rate' }) {
+export function buildVaRows(xvaIn, basis = { kind: 'rate' }) {
+  const xva = withFunding(xvaIn)
   return VA_KEYS.map(key => {
     const def = VA_DEFS[key]
     const val = xva?.[key] ?? null
@@ -272,7 +282,8 @@ export function buildVaRows(xva, basis = { kind: 'rate' }) {
 }
 
 // The ON-CHAIN comparison row: each VA under the on-chain preset against the current run.
-export function onChainCompareRows(xva, cmpXva) {
+export function onChainCompareRows(xvaIn, cmpIn) {
+  const xva = withFunding(xvaIn), cmpXva = withFunding(cmpIn)
   if (!xva || !cmpXva) return []
   return VA_KEYS.map(key => {
     const cur = xva[key], oc = cmpXva[key]

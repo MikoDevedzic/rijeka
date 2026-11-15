@@ -197,13 +197,13 @@ def status_of(signs: list[dict], policy: str = "TWO_PERSON") -> str:
 
 def xva_policy(db: Session, uid: str) -> tuple[str, ...]:
     """Which XVA components net into the signed P&L (risk_settings.xva_netted, comma-separated)."""
-    from pnl.xva import DEFAULT_NETTED
+    from pnl.xva import DEFAULT_NETTED, policy_keys
     try:
         fm = db.execute(text("SELECT firm_id FROM firm_members WHERE user_id = :u LIMIT 1"), {"u": uid}).scalar()
         if fm is None:
             return DEFAULT_NETTED
         v = db.execute(text("SELECT xva_netted FROM risk_settings WHERE firm_id = :f"), {"f": str(fm)}).scalar()
-        return tuple(x.strip().upper() for x in v.split(",") if x.strip()) if v else DEFAULT_NETTED
+        return policy_keys(v.split(",")) if v else DEFAULT_NETTED          # a policy stored before 0.41.0 says FVA for the funding cost: FCA
     except Exception:
         db.rollback(); return DEFAULT_NETTED
 

@@ -9,7 +9,7 @@ from tests.integration import bodies as B
 
 pytestmark = pytest.mark.integration
 
-SIX = ("cva", "dva", "fva", "fba", "kva", "mva")
+SIX = ("cva", "dva", "fca", "fba", "kva", "mva")
 SEVEN = SIX + ("colva",)
 PROFILE = ("sample_paths", "ee", "ene", "pfe", "xva", "capital", "seed", "engine_ms")
 
@@ -246,7 +246,7 @@ def test_capital_is_the_basel_class_of_the_pair_and_the_group_is_the_desks_to_se
     # 2b: α × 50 % of the notional in dollars at spot, whole (the forward is struck at the money: RC is nothing to speak of)
     assert b["capital"]["ead_0"] == pytest.approx(1.4 * 0.5 * 10 * q["spot"], rel=0.05)
     assert b["xva"]["kva"] < a["xva"]["kva"] < -10, "half the notional outright is more than 32 % × sqrt(maturity)"
-    for k in ("cva", "dva", "fva", "fba", "mva"):
+    for k in ("cva", "dva", "fca", "fba", "mva"):
         assert b["xva"][k] == a["xva"][k], "the group moves the capital leg alone"
     sol = client.post("/api/xva/currency", json={"pair": "SOLUSD", "base_notional": 1000, "settlement_date": _settle(91), "paths": 500}, headers=auth_a)
     assert sol.status_code == 200 and sol.json()["capital"]["crypto_group"] == "2b", sol.text[:300]
@@ -267,7 +267,7 @@ def test_wrong_way_risk_on_the_three_currency_routes(client, auth_a, ids, pairs)
     # sold the coin to a counterparty whose credit worsens as it falls: owed when it has fallen, the wrong way
     assert linked["xva"]["cva"] < plain["xva"]["cva"] < 0
     assert linked["wwr"]["cva_independent"] == plain["xva"]["cva"], "the figure with independence is the run without the link"
-    for k in ("fva", "fba", "kva", "mva", "colva", "dva"):
+    for k in ("fca", "fba", "kva", "mva", "colva", "dva"):
         assert linked["xva"][k] == plain["xva"][k], k
     assert linked["xva"]["xva_total"] == pytest.approx(sum(linked["xva"][k] for k in SEVEN), abs=0.05)
     # an option, and a package
@@ -354,7 +354,7 @@ def test_rates_xva_with_collateral_held_in_a_stablecoin(client, auth_a):
     # earns nothing while OIS is rebated: a cost on both sides, every other adjustment unchanged
     js = client.post("/api/xva/simulate", json=_rates_body(collateral={"posted": {"USDC": 1}, "received": {"USDC": 1}}), headers=auth_a).json()
     assert js["xva"]["colva"] < 0 and js["csa"]["vm_post_carry_bp"] < -100 and js["csa"]["vm_recv_carry_bp"] < -100
-    for k in ("cva", "dva", "fva", "fba", "kva"):
+    for k in ("cva", "dva", "fca", "fba", "kva"):
         assert js["xva"][k] == pytest.approx(j0["xva"][k], abs=0.05), k
     assert js["xva"]["mva"] <= j0["xva"]["mva"]                    # the stablecoin is not eligible IM: no pickup, the IM funded in full
     assert js["xva"]["xva_total"] == pytest.approx(j0["xva"]["xva_total"] + js["xva"]["colva"] + (js["xva"]["mva"] - j0["xva"]["mva"]), abs=0.1)

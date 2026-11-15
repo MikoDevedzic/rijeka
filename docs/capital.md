@@ -11,7 +11,7 @@ Every constant carries the paragraph it comes from; `GET /api/capital/collateral
 ## What the tab answers
 
 For a trade in a counterparty's netting set: the initial margin, exposure at default, RWA, CCR and CVA
-capital, KVA, MVA, CVA, FVA, leverage exposure and the HQLA value of the margin posted, under every
+capital, KVA, MVA, CVA, FCA, leverage exposure and the HQLA value of the margin posted, under every
 collateral regime and counterparty type, as the set with the trade, without it (the same paths, seed 7)
 and the trade alone. Columns are regimes, rows are the quantities, a click on a cell opens its
 derivation: the formula, the regime's two CSAs, the counterparty inputs and the SA-CCR snapshot per
@@ -46,7 +46,7 @@ From one regime the engine derives two CSAs:
                      recognised VM is exchanged and the set is enforceable; IM counts as NICA only where it is
                      eligible IM in recognised form. Feeds SA-CCR, BA-CVA, the leverage exposure.
     economic CSA     what is exchanged, at full value; uncollateralised (gross) when not enforceable.
-                     Feeds CVA, DVA, FVA, FBA, MVA. The pickup on posted IM is the eligible part's yield;
+                     Feeds CVA, DVA, FCA, FBA, MVA. The pickup on posted IM is the eligible part's yield;
                      the ineligible part must be replaced by eligible IM funded separately.
 
 The all-recognised regime reproduces the plain CSA field by field (`tests/test_collateral.py`), so
@@ -147,7 +147,7 @@ makes is that channel's attribution. The steps add up to the columns exactly (`t
 | HQLA_L1 | forward | Level 1 liquidity treatment of the margin posted | BCBS 238 / LCR30: a state |
 
 Columns: CSA AS BOOKED, ON-CHAIN under current rules (after IM_ELIGIBILITY), ON-CHAIN with the forward states.
-Per counterparty and for the book: every metric of §4 plus the cost (−(CVA + FVA + KVA + MVA)), the change
+Per counterparty and for the book: every metric of §4 plus the cost (−(CVA + FCA + KVA + MVA)), the change
 against the baseline, and the quote line (the cost difference as a running or upfront spread of notional).
 
 What the arithmetic will and will not show, and is tested to: a record already on cash and government

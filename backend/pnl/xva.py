@@ -4,10 +4,14 @@ and the firm's policy on which components net into the signed figure.
 
     P&L after XVA = clean P&L − Σ_netted (level_today − level_prev)
 
-Levels are costs negative and benefits positive (CVA −, DVA +, FVA −, FBA +, KVA −, MVA −),
+Levels are costs negative and benefits positive (CVA −, DVA +, FCA −, FBA +, KVA −, MVA −),
 so a rising cost is a negative change, which is a loss. Previous levels come from the stored
 daily counterparty run (ccr_daily); without it the levels are shown and the change is not
-invented."""
+invented.
+
+FCA is the funding cost and FBA the funding benefit; FVA is the two together and is not a component of its own.
+Until 0.41.0 the cost was stored and set under the name FVA: a stored run's `fva_usd` with no `fca_usd` beside
+it is that cost, and a netting policy that says FVA means FCA (stored_component, policy_keys)."""
 from __future__ import annotations
 
 import logging
@@ -18,8 +22,29 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 log = logging.getLogger("rijeka.pnl")
-COMPONENTS = ("cva", "dva", "fva", "fba", "kva", "mva", "colva")
-DEFAULT_NETTED = ("CVA", "DVA", "FVA", "FBA")
+COMPONENTS = ("cva", "dva", "fca", "fba", "kva", "mva", "colva")
+DEFAULT_NETTED = ("CVA", "DVA", "FCA", "FBA")
+
+
+def stored_component(x: dict, k: str) -> float:
+    """A component's level in a counterparty run's `xva`, as stored. A run stored before 0.41.0 has the funding
+    cost under `fva_usd` and no `fca_usd`; one stored since has both, `fva_usd` being FCA + FBA."""
+    v = x.get(f"{k}_usd")
+    if v is None and k == "fca":
+        v = x.get("fva_usd")
+    return float(v or 0.0)
+
+
+def policy_keys(netted) -> tuple[str, ...]:
+    """The components a netting policy names, in today's names: a policy set before 0.41.0 says FVA for the
+    funding cost, which is FCA (it never meant the sum: FBA was always named beside it or left out on purpose)."""
+    out = []
+    for k in netted or ():
+        k = str(k).strip().upper()
+        k = "FCA" if k == "FVA" else k
+        if k and k not in out:
+            out.append(k)
+    return tuple(out)
 
 
 def levels_today(db: Session, user: dict, asof: date) -> dict[str, Any]:
@@ -29,7 +54,7 @@ def levels_today(db: Session, user: dict, asof: date) -> dict[str, Any]:
     for c in rep.get("counterparties", []):
         if c.get("empty") or not c.get("xva"):
             continue
-        by_cp[c["counterparty"]] = {k: float(c["xva"].get(f"{k}_usd") or 0.0) for k in COMPONENTS}
+        by_cp[c["counterparty"]] = {k: stored_component(c["xva"], k) for k in COMPONENTS}
     return {"by_counterparty": by_cp, "total": _sum(by_cp.values()), "measure": "RISK_NEUTRAL", "date": rep.get("date"),
             "params": next(({"cp_cds_bp": c["xva"]["cp_cds_bp"], "lgd": c["xva"]["lgd"]} for c in rep.get("counterparties", []) if c.get("xva")), None)}
 
@@ -58,7 +83,7 @@ def stored_levels(db: Session, uid: str, upto: date, strictly_before: bool = Tru
     for r in rows:
         x = (r.report or {}).get("xva") or (r.report or {}).get("cva") or {}
         if x:
-            by_cp[r.counterparty] = {k: float(x.get(f"{k}_usd") or 0.0) for k in COMPONENTS}
+            by_cp[r.counterparty] = {k: stored_component(x, k) for k in COMPONENTS}
     return d, _sum(by_cp.values()), by_cp
 
 
@@ -68,7 +93,7 @@ def section(db: Session, user: dict, asof: date, netted: tuple[str, ...] = DEFAU
     prev = stored_levels(db, uid, asof, strictly_before=True)
     month_base = stored_levels(db, uid, asof.replace(day=1), strictly_before=True)
     year_base = stored_levels(db, uid, asof.replace(month=1, day=1), strictly_before=True)
-    netted_keys = tuple(k.upper() for k in netted)
+    netted_keys = policy_keys(netted)
     def change(base):
         if base is None:
             return None

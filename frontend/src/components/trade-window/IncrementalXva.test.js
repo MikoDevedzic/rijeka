@@ -15,9 +15,9 @@ const response = {
   counterparty: 'RIJEKA DEMO BANK AG', counterparty_id: 'cp-1', asof: '2026-11-02',
   csa: { preset: 'BILATERAL', collateralised: true, threshold_usd: 0, mta_usd: 0, mpor_days: 10, im_exchanged: true },
   measure: 'RISK_NEUTRAL', n_paths: 2000, months: 24, other_trades: 3,
-  without: { cva: -1234.5, dva: 456.7, fva: -89.0, fba: 12.0, kva: -300.0, mva: -150.0, total: -1304.8 },
-  with:    { cva: -1810.2, dva: 601.3, fva: -131.4, fba: 19.5, kva: -412.8, mva: -221.0, total: -1954.6 },
-  incremental: { cva: -575.7, dva: 144.6, fva: -42.4, fba: 7.5, kva: -112.8, mva: -71.0, total: -649.8 },
+  without: { cva: -1234.5, dva: 456.7, fca: -89.0, fba: 12.0, kva: -300.0, mva: -150.0, total: -1304.8 },
+  with:    { cva: -1810.2, dva: 601.3, fca: -131.4, fba: 19.5, kva: -412.8, mva: -221.0, total: -1954.6 },
+  incremental: { cva: -575.7, dva: 144.6, fca: -42.4, fba: 7.5, kva: -112.8, mva: -71.0, total: -649.8 },
   ee: { grid: ['2026-12-02', '2027-01-02'], without: [100, 200], with: [150, 260] },
   notes: ['common random numbers: both runs use the same paths'], seconds: 3.2,
 }
@@ -25,7 +25,7 @@ const response = {
 describe('mockResponse', () => {
   it('has the route\'s shape: with − without = incremental, one EE grid for both lines', () => {
     const m = mockResponse({ counterpartyId: 'cp-1', counterpartyName: 'X', tradeId: null })
-    for (const k of ['cva', 'dva', 'fva', 'fba', 'kva', 'mva', 'total']) expect(m.incremental[k]).toBeCloseTo(m.with[k] - m.without[k], 6)
+    for (const k of ['cva', 'dva', 'fca', 'fba', 'kva', 'mva', 'total']) expect(m.incremental[k]).toBeCloseTo(m.with[k] - m.without[k], 6)
     expect(m.ee.grid.length).toBe(m.months)
     expect(m.ee.without.length).toBe(m.ee.with.length)
   })
@@ -49,11 +49,22 @@ describe('fmtSigned', () => {
 describe('buildRows', () => {
   it('builds CVA…MVA and TOTAL with WITHOUT, WITH and INCREMENTAL from the response', () => {
     const rows = buildRows(response)
-    expect(rows.map(r => r.label)).toEqual(['CVA', 'DVA', 'FVA', 'FBA', 'KVA', 'MVA', 'TOTAL'])
-    expect(rows[0]).toEqual({ key: 'cva', label: 'CVA', without: -1234.5, with: -1810.2, incremental: -575.7, total: false })
-    const total = rows[6]
+    expect(rows.map(r => r.label)).toEqual(['CVA', 'DVA', 'FCA', 'FBA', 'FVA = FCA + FBA', 'KVA', 'MVA', 'TOTAL'])
+    expect(rows[0]).toEqual({ key: 'cva', label: 'CVA', without: -1234.5, with: -1810.2, incremental: -575.7, total: false, sum: false })
+    const total = rows[7]
     expect(total.total).toBe(true)
     expect(total.incremental).toBe(-649.8)
+    // FVA is FCA and FBA together, worked out here where the server does not send it, and marked as a sum
+    const fva = rows[4]
+    expect(fva).toMatchObject({ key: 'fva', sum: true, total: false })
+    expect(fva.without).toBeCloseTo(-89.0 + 12.0, 6); expect(fva.with).toBeCloseTo(-131.4 + 19.5, 6); expect(fva.incremental).toBeCloseTo(-42.4 + 7.5, 6)
+  })
+  it('reads a response from before the rename: the funding cost under `fva` is FCA, and FVA is still the sum', () => {
+    const old = { without: { cva: -100, fva: -10, fba: 4, total: -106 }, with: { cva: -160, fva: -16, fba: 6, total: -170 }, incremental: { cva: -60, fva: -6, fba: 2, total: -64 } }
+    const by = Object.fromEntries(buildRows(old).map(r => [r.key, r]))
+    expect([by.fca.without, by.fca.with, by.fca.incremental]).toEqual([-10, -16, -6])
+    expect([by.fva.without, by.fva.with, by.fva.incremental]).toEqual([-6, -10, -4])
+    expect(by.total.incremental).toBe(-64)
   })
   it('falls back to with − without when the server omits an incremental key, and to nothing when it cannot', () => {
     const rows = buildRows({ without: { cva: -100 }, with: { cva: -160 } })

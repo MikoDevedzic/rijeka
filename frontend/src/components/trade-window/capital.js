@@ -30,7 +30,7 @@ export const DEFAULT_TYPES = [
 
 // money: signed, as the XVA rows; ratio: the multiplier; none: hidden from the grid
 // Stock only: regulatory quantities at today, in the reporting currency. The lifetime prices of that stock
-// (KVA, MVA) and the credit and funding adjustments (CVA, FVA) are valuation adjustments and live on the XVA tab.
+// (KVA, MVA) and the credit and funding adjustments (CVA, FCA) are valuation adjustments and live on the XVA tab.
 export const METRIC_ROWS = [
   ['Initial margin', 'im', 'money'],
   ['SA-CCR EAD', 'ead', 'money'],
@@ -51,10 +51,10 @@ export const FORMULA = {
   kva: 'KVA = −hurdle × Σ (K_CCR(t) + K_CVA(t)) Δt P(0,t) along the exposure path',
   mva: 'MVA = −Σ IM(t) × max(ftp − pickup, 0) Δt P(0,t); pickup the yield of the eligible collateral posted',
   cva: 'CVA = −LGD × Σ EE(t) ΔPD(t) P(0,t) under the economic CSA (gross when close-out netting is unenforceable)',
-  fva: 'FVA = −Σ ftp × EE(t) Δt P(0,t) under the economic CSA',
+  fca: 'FCA = −Σ ftp × EE(t) Δt P(0,t) under the economic CSA (the funding cost; FVA is FCA + FBA)',
   leverage: 'leverage exposure = 1.4 × (max(V − cash VM, 0) + AddOn): only cash variation margin reduces it (LEV30)',
   hqla_im: 'HQLA value of the IM posted: Level 1 at 0 %, Level 2A at 15 %, Level 2B at 50 %, none for unrecognised assets (LCR30)',
-  cost: 'the charge the regime carries: −(CVA + FVA + KVA + MVA)',
+  cost: 'the charge the regime carries: −(CVA + FCA + KVA + MVA)',
 }
 
 export function fmtMoney0(v, ccy = 'USD') {
@@ -64,16 +64,18 @@ export function fmtMoney0(v, ccy = 'USD') {
   return (SYM[ccy] ?? ccy + ' ') + Math.abs(n).toLocaleString('en-US') + (n < 0 ? ' (−)' : '')
 }
 
-// the value shown: costs (kva, mva, cva, fva) keep their sign; exposures and capital are magnitudes
+// the value shown: costs (kva, mva, cva, fca) keep their sign; exposures and capital are magnitudes
 export function cellValue(cell, key) {
   if (!cell) return null
-  if (key === 'cost') return -((cell.cva || 0) + (cell.fva || 0) + (cell.kva || 0) + (cell.mva || 0) + (cell.colva || 0))
+  const fca = cell.fca ?? cell.fva ?? 0          // a report from before 0.41.0 has the funding cost under `fva`
+  if (key === 'cost') return -((cell.cva || 0) + fca + (cell.kva || 0) + (cell.mva || 0) + (cell.colva || 0))
+  if (key === 'fca') return cell.fca ?? cell.fva ?? null
   return cell[key] ?? null
 }
 
 export function fmtCell(v, key, ccy = 'USD') {
   if (v == null) return '—'
-  if (['kva', 'mva', 'cva', 'fva'].includes(key)) return fmtSigned(v, ccy)
+  if (['kva', 'mva', 'cva', 'fca'].includes(key)) return fmtSigned(v, ccy)
   return fmtMoney0(v, ccy)
 }
 
@@ -192,7 +194,7 @@ export function derivation(res, regime, typeKey, key, view = 'INCREMENTAL') {
 export function mockResponse() {
   const types = DEFAULT_TYPES.map(t => ({ ...t, sector: null, rw_override: null, label: null }))
   const mk = (ead, im, scale) => ({ im, ead, rwa: ead * scale, k_ccr: 0.08 * ead * scale, k_cva: 0.02 * ead, kva: -0.012 * ead * scale, kva_ccr: -0.01 * ead * scale, kva_cva: -0.002 * ead * scale,
-    mva: -0.004 * im, cva: -0.03 * ead, dva: 0.01 * ead, fva: -0.005 * ead, fba: 0.002 * ead, xva_total: -0.03 * ead, leverage: 1.4 * ead, hqla_im: im, addon: ead / 1.4, rc: 0, multiplier: 1 })
+    mva: -0.004 * im, cva: -0.03 * ead, dva: 0.01 * ead, fca: -0.005 * ead, fba: 0.002 * ead, xva_total: -0.03 * ead, leverage: 1.4 * ead, hqla_im: im, addon: ead / 1.4, rc: 0, multiplier: 1 })
   const cells = {}
   const regimes = PRESETS.map(name => ({ name, explain: [], economic_csa: { collateralised: name !== 'PLUS_STABLECOIN', threshold_cp: 0, mta: 0, mpor_days: 10, im_exchanged: true }, regulatory_csa: { crm_recognised: name !== 'PLUS_STABLECOIN', collateral_haircut: 0.005, mpor_days: 10, im_exchanged: true } }))
   for (const r of regimes) {

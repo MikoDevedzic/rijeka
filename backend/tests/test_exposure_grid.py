@@ -37,7 +37,7 @@ def test_a_ticket_runs_on_that_grid_and_an_input_can_override_it():
 
 
 def _hand(paths, v0, p0, P, average):
-    """CVA, DVA, FVA, FBA of uncollateralised paths by hand: flat hazard = spread / LGD, the exposure at each step's
+    """CVA, DVA, FCA, FBA of uncollateralised paths by hand: flat hazard = spread / LGD, the exposure at each step's
     end or the mean of the step's two ends (the first step from today's value)."""
     ee, ene = np.maximum(paths, 0).mean(axis=0), np.minimum(paths, 0).mean(axis=0)
     if average:
@@ -45,13 +45,13 @@ def _hand(paths, v0, p0, P, average):
         neg = 0.5 * (np.column_stack((np.full(len(paths), min(v0, 0.0)), np.minimum(paths, 0)[:, :-1])) + np.minimum(paths, 0))
         ee, ene = pos.mean(axis=0), neg.mean(axis=0)
     q = lambda bp, lgd, k: math.exp(-(bp / 1e4 / lgd) * k * P.dt)
-    cva = dva = fva = fba = 0.0
+    cva = dva = fca = fba = 0.0
     for i in range(paths.shape[1]):
         cva -= P.lgd * ee[i] * (q(P.cp_cds_bp, P.lgd, i) - q(P.cp_cds_bp, P.lgd, i + 1)) * p0[i + 1]
         dva += P.own_lgd * abs(ene[i]) * (q(P.own_cds_bp, P.own_lgd, i) - q(P.own_cds_bp, P.own_lgd, i + 1)) * p0[i + 1]
-        fva -= P.ftp_bp / 1e4 * ee[i] * P.dt * p0[i + 1]
+        fca -= P.ftp_bp / 1e4 * ee[i] * P.dt * p0[i + 1]
         fba += P.ftp_bp / 1e4 * P.fba_ratio * abs(ene[i]) * P.dt * p0[i + 1]
-    return cva, dva, fva, fba
+    return cva, dva, fca, fba
 
 
 @pytest.mark.parametrize("v0", [0.0, 40_000.0, -25_000.0])
@@ -64,13 +64,13 @@ def test_the_averaged_charge_is_the_mean_of_each_steps_two_ends_by_hand(v0):
     end = run_waterfall(paths, v0, p0, P, CSA.uncollateralised())
     avg = run_waterfall(paths, v0, p0, P, CSA.uncollateralised(), average_exposure=True)
     for wf, average in ((end, False), (avg, True)):
-        cva, dva, fva, fba = _hand(paths, v0, p0, P, average)
-        assert (abs(wf.cva), abs(wf.dva), abs(wf.fva), abs(wf.fba)) == pytest.approx((abs(cva), abs(dva), abs(fva), abs(fba)), rel=1e-9)
-        assert wf.cva <= 0 <= wf.dva and wf.fva <= 0 <= wf.fba
+        cva, dva, fca, fba = _hand(paths, v0, p0, P, average)
+        assert (abs(wf.cva), abs(wf.dva), abs(wf.fca), abs(wf.fba)) == pytest.approx((abs(cva), abs(dva), abs(fca), abs(fba)), rel=1e-9)
+        assert wf.cva <= 0 <= wf.dva and wf.fca <= 0 <= wf.fba
     # nothing else moves with the rule: the profiles reported are the values at the grid dates, and capital and margin are as they were
     assert avg.ee == end.ee and avg.ene == end.ene and avg.pfe == end.pfe
     assert (avg.kva, avg.mva, avg.colva, avg.ead_0) == (end.kva, end.mva, end.colva, end.ead_0)
-    assert avg.cva != end.cva and avg.fva != end.fva
+    assert avg.cva != end.cva and avg.fca != end.fca
 
 
 def test_under_a_margin_agreement_todays_exposure_is_what_the_collateral_leaves():
@@ -103,10 +103,10 @@ def test_a_step_does_not_start_with_what_was_paid_on_its_date():
     q = lambda k: math.exp(-(P.cp_cds_bp / 1e4 / P.lgd) * k * dt)
     mid = [100.0, 100.0, 0.5 * ((100.0 - 60.0) + 40.0), 40.0]              # the third step starts at 40, not at 100
     assert wf.cva == pytest.approx(-P.lgd * sum(mid[i] * (q(i) - q(i + 1)) * p0[i + 1] for i in range(T)), rel=1e-12)
-    assert wf.fva == pytest.approx(-P.ftp_bp / 1e4 * sum(mid[i] * dt * p0[i + 1] for i in range(T)), rel=1e-12)
+    assert wf.fca == pytest.approx(-P.ftp_bp / 1e4 * sum(mid[i] * dt * p0[i + 1] for i in range(T)), rel=1e-12)
     assert wf.ee == [100.0, 100.0, 40.0, 40.0]                             # the profile shown is still the value at each date
     naive = run_waterfall(paths, 100.0, p0, P, CSA.uncollateralised(), average_exposure=True)
-    assert abs(naive.fva) > abs(wf.fva), "without the settlement the third step would start at 100"
+    assert abs(naive.fca) > abs(wf.fca), "without the settlement the third step would start at 100"
 
 
 @pytest.mark.parametrize("pair", ["BTCUSD", "EURUSD"])
@@ -117,7 +117,7 @@ def test_the_grid_the_app_runs_agrees_with_daily_steps(pair, t):
     exposure at each step's end): +31 %, +23 %, +9 %."""
     app, _ = fx_xva.forward_xva(_fwd(pair, t=t), CSA.uncollateralised(), n_paths=8000)
     daily, _ = fx_xva.forward_xva(_fwd(pair, t=t, grid_per_year=365), CSA.uncollateralised(), n_paths=8000)
-    for f in ("cva", "fva", "dva", "fba"):
+    for f in ("cva", "fca", "dva", "fba"):
         assert getattr(app, f) == pytest.approx(getattr(daily, f), rel=0.07), (f, getattr(app, f), getattr(daily, f))
     assert app.kva == pytest.approx(daily.kva, rel=0.10)
 

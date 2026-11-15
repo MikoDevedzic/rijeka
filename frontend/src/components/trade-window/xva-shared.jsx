@@ -374,6 +374,10 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
   const exp = rows.find(r => r.key === expanded)
   const cols = VA_COLS(rows.length)
   const subName = rows.find(r => r.key === 'cva')?.sub?.caption || rows.find(r => r.sub)?.sub?.caption
+  // FVA is the funding cost and the funding benefit together: shown under the two, as their sum, never as a column of
+  // its own (ALL-IN adds the columns, and would then count it twice)
+  const fcaRow = rows.find(r => r.key === 'fca'), fbaRow = rows.find(r => r.key === 'fba')
+  const fva = fcaRow?.value != null && fbaRow?.value != null ? fcaRow.value + fbaRow.value : null
   const col = (row) => ({
     onClick: () => setExpanded(expanded === row.key ? null : row.key),
     onMouseEnter: () => row.curve !== 'none' && onHighlight(row.curve),
@@ -412,6 +416,19 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
                 {row.sub ? unsigned(row.sub.text).replace(/\s?bp$/, '') : '—'}
               </div>
             ))}
+          </div>
+        )}
+        {fva != null && (
+          <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-fva">
+            <div style={{...VA_NAME,padding:'4px 8px 7px 0'}}>FVA = FCA + FBA</div>
+            {rows.map(row => {
+              const part = row.key === 'fca' || row.key === 'fba'
+              return (
+                <div key={row.key} style={{...VA_SMALL,color:'var(--text-dim)',...(row.key==='all_in'?VA_TOTAL:null),paddingTop:'4px',...(part?{boxShadow:'inset 0 1px 0 var(--border-hi)'}:null)}}>
+                  {row.key === 'fba' ? unsigned(fmt(fva)) : ''}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

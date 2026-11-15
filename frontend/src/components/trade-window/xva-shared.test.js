@@ -11,13 +11,13 @@ vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null, getSess
 
 import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
-  buildVaRows, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
+  buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
   ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS, regimesWords, regimesParts,
   stepWord, stepUnit, stepsShown,
 } from './xva-shared'
 
-const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fva: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
+const xva = { npv: 12500.4, cva: -3200.6, dva: 900.2, fca: -1100, fba: 300, kva: -2400, mva: -800, all_in: 6199 }
 
 describe('fmtMoney', () => {
   it('is the rates tab\'s fmtDollar for USD: signed, rounded, thousands', () => {
@@ -89,7 +89,7 @@ describe('spread curves', () => {
 describe('buildVaRows', () => {
   it('has the nine cells in the strip\'s order', () => {
     expect(buildVaRows(null).map(r => r.key)).toEqual(VA_KEYS)
-    expect(VA_KEYS).toEqual(['npv', 'cva', 'dva', 'fva', 'fba', 'kva', 'mva', 'colva', 'all_in'])
+    expect(VA_KEYS).toEqual(['npv', 'cva', 'dva', 'fca', 'fba', 'kva', 'mva', 'colva', 'all_in'])
   })
   it('rates: bp on rate = VA / IR01, NPV shows the par rate, ALL-IN the all-in rate', () => {
     const rows = buildVaRows(xva, { kind: 'rate', dv01: 5000, parRate: 3.665, allInRate: 3.5389 })
@@ -186,7 +186,7 @@ describe('collateral on the ticket', () => {
 
 describe('bp lines', () => {
   it('a figure that rounds to zero is unsigned, whichever side of zero it came from', () => {
-    const rows = buildVaRows({ npv: 0, cva: -2, dva: 1, fva: 0, fba: 0, kva: -373, mva: -2986, colva: 0, all_in: -3360 }, { kind: 'rate', dv01: 4668, parRate: 3.48, allInRate: 3.47 })
+    const rows = buildVaRows({ npv: 0, cva: -2, dva: 1, fca: 0, fba: 0, kva: -373, mva: -2986, colva: 0, all_in: -3360 }, { kind: 'rate', dv01: 4668, parRate: 3.48, allInRate: 3.47 })
     const sub = Object.fromEntries(rows.filter(r => r.sub).map(r => [r.key, r.sub.text]))
     expect(sub.cva).toBe('0.0bp')            // −2 / 4668 rounds to −0.0: no sign, never "+-0.0bp"
     expect(sub.dva).toBe('0.0bp')
@@ -349,5 +349,19 @@ describe('what the steps of a run are called', () => {
     expect(stepsShown(vols(52)).map(([n]) => n)).toEqual([4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52])
     expect(stepsShown(vols(26))[0]).toEqual([4, 53])
     expect(stepsShown(null)).toEqual([])
+  })
+})
+
+describe('the funding adjustments under their names (0.41.0)', () => {
+  it('FVA is FCA and FBA together, whichever name the API used for the cost', () => {
+    expect(withFunding({ fca: -1100, fba: 300, fva: -800 })).toMatchObject({ fca: -1100, fba: 300, fva: -800 })
+    expect(withFunding({ fva: -1100, fba: 300 })).toMatchObject({ fca: -1100, fba: 300, fva: -800 })      // before the rename: `fva` was the cost
+    expect(withFunding({ cva: -5 })).toMatchObject({ fca: null, fva: null })
+    expect(withFunding(null)).toBeNull()
+  })
+  it('the tiles are the components: FCA and FBA each, and no FVA tile to be added twice into ALL-IN', () => {
+    const rows = buildVaRows({ npv: 0, cva: -2, dva: 1, fva: -9, fba: 3, kva: 0, mva: 0, colva: 0, all_in: -7 }, { kind: 'notional', notional: 1e6 })
+    expect(rows.map(r => r.label)).toEqual(['NPV', 'CVA', 'DVA', 'FCA', 'FBA', 'KVA', 'MVA', 'ColVA', 'ALL-IN'])
+    expect(rows.find(r => r.key === 'fca').value).toBe(-9)
   })
 })

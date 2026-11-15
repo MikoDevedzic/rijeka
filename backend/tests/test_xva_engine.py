@@ -61,7 +61,7 @@ def legacy_waterfall(paths, p0_grid, P: WaterfallParams, im_0):
     ene = np.mean(np.minimum(paths, 0), axis=0).tolist()
     mean_v = np.mean(paths, axis=0)
     ftp_flat = P.ftp_bp / 1e4
-    cva = dva = fva = fba = kva = mva = 0.0
+    cva = dva = fca = fba = kva = mva = 0.0
     qcp = qow = 1.0
     for i in range(T):
         t = (i + 1) * DT; disc = p0_grid[i + 1]
@@ -73,7 +73,7 @@ def legacy_waterfall(paths, p0_grid, P: WaterfallParams, im_0):
         nqow = math.exp(-(ow_s / P.own_lgd) * t)
         cva += P.lgd * ee[i] * (qcp - nqcp) * disc * P.wwr_multiplier
         dva -= P.own_lgd * abs(ene[i]) * (qow - nqow) * disc
-        fva += ftp_t * ee[i] * DT * disc
+        fca += ftp_t * ee[i] * DT * disc
         fba -= fba_s * abs(ene[i]) * DT * disc
         m_t = max(M0 - t + 0.5 * DT, 0.0)          # the remaining life at the middle of the step (0.27.0)
         if m_t > 0:
@@ -88,7 +88,7 @@ def legacy_waterfall(paths, p0_grid, P: WaterfallParams, im_0):
             im_t = im_0 * (m_t / M0)
             mva -= im_t * ftp_t * DT * disc
         qcp, qow = nqcp, nqow
-    return dict(cva=-abs(cva), dva=abs(dva), fva=-abs(fva), fba=abs(fba),
+    return dict(cva=-abs(cva), dva=abs(dva), fca=-abs(fca), fba=abs(fba),
                 kva=-abs(kva), mva=-abs(mva), ee=ee, ene=ene)
 
 
@@ -101,7 +101,7 @@ class TestUncollateralisedParity:
         P = default_params(theta)
         wf  = run_waterfall(paths, 150_000.0, p0, P, CSA.uncollateralised())
         ref = legacy_waterfall(paths, p0, P, im_0=0.0)
-        for k in ("cva", "dva", "fva", "fba", "kva"):
+        for k in ("cva", "dva", "fca", "fba", "kva"):
             assert getattr(wf, k) == pytest.approx(ref[k], rel=1e-12, abs=1e-9), k
         assert wf.mva == 0.0
         np.testing.assert_allclose(wf.ee,  ref["ee"],  rtol=1e-12)
@@ -300,7 +300,7 @@ class TestWaterfallOrdering:
         oc = run_waterfall(paths, v0, p0, P, CSA.on_chain(),          np.random.default_rng(5))
         assert sum(un.ee)  >= sum(bi.ee)  >= sum(oc.ee)
         assert abs(un.cva) >= abs(bi.cva) >= abs(oc.cva)
-        assert abs(un.fva) >= abs(bi.fva) >= abs(oc.fva)
+        assert abs(un.fca) >= abs(bi.fca) >= abs(oc.fca)
         assert abs(un.kva) >= abs(bi.kva) >= abs(oc.kva)
         assert abs(bi.mva) >= abs(oc.mva)                 # sqrt(5/10) IM
         # Bilateral CSA removes most of the credit risk; on-chain a bit more.
@@ -351,12 +351,12 @@ def test_colva_is_zero_for_cash_and_the_closed_form_for_a_spread():
     params = default_params(theta)
     base = CSA.bilateral(threshold_cp=0.0, mta=0.0, im_exchanged=True)
     wf0 = run_waterfall(paths, v0, p0, params, base, np.random.default_rng(1))
-    assert wf0.colva == 0.0 and wf0.xva_total == wf0.cva + wf0.dva + wf0.fva + wf0.fba + wf0.kva + wf0.mva
+    assert wf0.colva == 0.0 and wf0.xva_total == wf0.cva + wf0.dva + wf0.fca + wf0.fba + wf0.kva + wf0.mva
     # the posted VM earns 100 bp over OIS: ColVA = 100 bp · Σ mean(posted) · Δt · DF, a benefit; every other VA is unchanged
     sp = CSA(**{**base.__dict__, "vm_post_carry_bp": 100.0})
     wf1 = run_waterfall(paths, v0, p0, params, sp, np.random.default_rng(1))
     coll = np.array(wf1.collateral_mean)
-    for k in ("cva", "dva", "fva", "fba", "kva", "mva"):
+    for k in ("cva", "dva", "fca", "fba", "kva", "mva"):
         assert getattr(wf1, k) == getattr(wf0, k), k
     assert wf1.colva > 0 and wf1.xva_total == pytest.approx(wf0.xva_total + wf1.colva)
     # the closed form on the engine's own posted mean: mean(max(−C, 0)) per step
@@ -373,3 +373,17 @@ def test_colva_is_zero_for_cash_and_the_closed_form_for_a_spread():
     rc = CSA(**{**base.__dict__, "vm_recv_carry_bp": -400.0})
     wf2 = run_waterfall(paths, v0, p0, params, rc, np.random.default_rng(1))
     assert wf2.colva < 0 and wf2.cva == wf0.cva
+
+
+# ── FVA is the funding cost and the funding benefit together (0.41.0) ────────────────────────────────────────────────
+def test_fva_is_fca_plus_fba_and_is_not_counted_twice_in_the_total():
+    """Until 0.41.0 the funding cost alone was called FVA. The cost is FCA, the benefit FBA, FVA their sum; the total
+    is the seven components, in which FVA is two of them and not an eighth."""
+    from pricing.xva_engine import WaterfallResult
+    import dataclasses
+    names = {f.name for f in dataclasses.fields(WaterfallResult)}
+    assert "fca" in names and "fba" in names and "fva" not in names          # the sum is worked out, never stored beside its parts
+    wf = WaterfallResult(ee=[], ene=[], pfe=[], ee_gross=[], ene_gross=[], collateral_mean=[], im_profile=[], exposure_paths=np.zeros((1, 1)),
+                         cva=-100.0, dva=40.0, fca=-25.0, fba=10.0, kva=-30.0, mva=-5.0, ead_0=0.0, capital_0=0.0, im_0=0.0, mf_0=1.0, colva=2.0)
+    assert wf.fva == -15.0
+    assert wf.xva_total == -100.0 + 40.0 + (-25.0 + 10.0) + (-30.0) + (-5.0) + 2.0 == -108.0

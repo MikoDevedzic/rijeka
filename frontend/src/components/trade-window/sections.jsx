@@ -359,7 +359,7 @@ export function XVASummary() {
       <div className="tbw-sec-header">
         <div>
           <div className="tbw-lbl">XVA</div>
-          <div className="tbw-mut">CVA · DVA · FVA · FBA · KVA · MVA · All-In rate</div>
+          <div className="tbw-mut">CVA · DVA · FVA (FCA + FBA) · KVA · MVA · All-In rate</div>
         </div>
         <div className="tbw-mut">→ SIMULATE in XVA tab</div>
       </div>

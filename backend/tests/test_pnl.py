@@ -111,17 +111,36 @@ def test_role_routes_need_auth():
 def test_xva_section_changes_against_the_stored_run(monkeypatch):
     from datetime import date
     from pnl import xva as X
-    today = {"by_counterparty": {"BANK": {"cva": -300.0, "dva": 250.0, "fva": -200.0, "fba": 190.0, "kva": -11000.0, "mva": -16000.0}},
-             "total": {"cva": -300.0, "dva": 250.0, "fva": -200.0, "fba": 190.0, "kva": -11000.0, "mva": -16000.0}, "measure": "RISK_NEUTRAL", "date": "2026-10-30", "params": None}
-    prev = (date(2026, 10, 29), {"cva": -262.0, "dva": 259.0, "fva": -184.0, "fba": 196.0, "kva": -11086.0, "mva": -16748.0},
-            {"BANK": {"cva": -262.0, "dva": 259.0, "fva": -184.0, "fba": 196.0, "kva": -11086.0, "mva": -16748.0}})
+    today = {"by_counterparty": {"BANK": {"cva": -300.0, "dva": 250.0, "fca": -200.0, "fba": 190.0, "kva": -11000.0, "mva": -16000.0}},
+             "total": {"cva": -300.0, "dva": 250.0, "fca": -200.0, "fba": 190.0, "kva": -11000.0, "mva": -16000.0}, "measure": "RISK_NEUTRAL", "date": "2026-10-30", "params": None}
+    prev = (date(2026, 10, 29), {"cva": -262.0, "dva": 259.0, "fca": -184.0, "fba": 196.0, "kva": -11086.0, "mva": -16748.0},
+            {"BANK": {"cva": -262.0, "dva": 259.0, "fca": -184.0, "fba": 196.0, "kva": -11086.0, "mva": -16748.0}})
     monkeypatch.setattr(X, "levels_today", lambda db, user, asof: today)
     monkeypatch.setattr(X, "stored_levels", lambda db, uid, upto, strictly_before=True: prev)
     sec = X.section(None, {"sub": "u"}, date(2026, 10, 30))
     assert sec["day"]["by_component"]["cva"] == -38.0 and sec["day"]["by_component"]["kva"] == 86.0
-    assert sec["day"]["netted"] == (-38.0) + (-9.0) + (-16.0) + (-6.0)          # CVA, DVA, FVA, FBA only
+    assert sec["day"]["netted"] == (-38.0) + (-9.0) + (-16.0) + (-6.0)          # CVA, DVA, FCA, FBA only
     assert sec["day"]["all"] == sec["day"]["netted"] + 86.0 + 748.0
     sec2 = X.section(None, {"sub": "u"}, date(2026, 10, 30), netted=("CVA", "KVA"))
     assert sec2["day"]["netted"] == -38.0 + 86.0 and sec2["by_counterparty"][0]["change"]["mva"] == 748.0
     monkeypatch.setattr(X, "stored_levels", lambda db, uid, upto, strictly_before=True: None)
     assert X.section(None, {"sub": "u"}, date(2026, 10, 30))["day"] is None
+
+
+# ── the funding cost's name before and after 0.41.0 (pnl/xva.py) ─────────────────────────────────────────────────────
+def test_a_run_stored_before_the_rename_is_read_with_its_funding_cost_where_it_was():
+    from pnl.xva import stored_component, COMPONENTS
+    old = {"cva_usd": -300.0, "dva_usd": 250.0, "fva_usd": -200.0, "fba_usd": 190.0, "kva_usd": -11000.0, "mva_usd": -16000.0}
+    new = {**old, "fca_usd": -200.0, "fva_usd": -10.0}                      # since 0.41.0: the cost under its name, FVA the sum
+    assert "fca" in COMPONENTS and "fva" not in COMPONENTS
+    assert stored_component(old, "fca") == -200.0 == stored_component(new, "fca")
+    assert stored_component(old, "fba") == 190.0 and stored_component(old, "colva") == 0.0      # a component the run predates is nought
+    # so the day's change across the rename is the change, not the whole level
+    assert stored_component(new, "fca") - stored_component(old, "fca") == 0.0
+
+
+def test_a_policy_that_says_fva_means_the_funding_cost():
+    from pnl.xva import policy_keys, DEFAULT_NETTED
+    assert policy_keys(["cva", "DVA", " fva ", "FBA"]) == ("CVA", "DVA", "FCA", "FBA") == DEFAULT_NETTED
+    assert policy_keys(["CVA", "FVA"]) == ("CVA", "FCA")                     # it never meant the sum: FBA was named or left out on purpose
+    assert policy_keys(["FCA", "FVA", "FCA"]) == ("FCA",) and policy_keys(None) == ()

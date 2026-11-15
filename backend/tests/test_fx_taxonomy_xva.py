@@ -55,7 +55,7 @@ def test_forward_xva_profiles_and_signs():
     assert "foreign exchange class" in meta["capital_basis"] and "4 %" in meta["capital_basis"] and meta["crypto_group"] is None
     assert all(e >= 0 for e in wf.ee) and all(n <= 0 for n in wf.ene) and wf.pfe[-1] > wf.ee[-1]
     assert wf.ee[-1] > wf.ee[0]                                        # exposure grows with the vol horizon
-    assert wf.cva < 0 < wf.dva and wf.fva <= 0 and wf.kva <= 0 and wf.mva == 0   # no IM without a CSA
+    assert wf.cva < 0 < wf.dva and wf.fca <= 0 and wf.kva <= 0 and wf.mva == 0   # no IM without a CSA
     assert abs(wf.ee[-1]) < 10_000_000 * 1.12 * 0.25                   # sane for 8 % vol over a year
 
 

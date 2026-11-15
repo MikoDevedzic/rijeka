@@ -5,7 +5,7 @@ A forward's mark-to-market at time t is ±N·(F_t − K)·DF_q(t, T). Under the
 T-forward measure F_t is driftless and lognormal with a flat volatility σ, so
 the exposure paths are simulated directly (no rate model is needed) and
 handed to pricing.xva_engine.run_waterfall, which applies the CSA, initial
-margin and the CVA / DVA / FVA / FBA / KVA / MVA integrals exactly as it does
+margin and the CVA / DVA / FCA / FBA / KVA / MVA integrals exactly as it does
 for a swap. σ is the pair's surface, or a desk input, or the default below
 for a pair with none, and the run says which.
 
@@ -85,7 +85,7 @@ def exposure_grid(t_years: float, per_year: Optional[int] = None) -> tuple[int, 
     """(steps, dt) to the settlement: weekly steps for a trade of up to a year, monthly beyond; at least two.
 
     Weekly since 0.28.0. The exposure of a short trade is far from flat over a month, and on two or three monthly
-    steps CVA and FVA depended on the grid (a one-month digital-asset forward read 31 % above the same run on
+    steps CVA and FCA depended on the grid (a one-month digital-asset forward read 31 % above the same run on
     daily steps). With weekly steps and the charge taken on the exposure averaged across each step
     (run_waterfall's average_exposure) the figure is within 4 % of daily steps from one month to a year. Beyond a
     year the steps stay monthly: at one year the averaged charge on monthly steps is within 3 % of daily steps (not

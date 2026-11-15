@@ -5,7 +5,16 @@
 // the EE polyline and the development mock. No React; tested in IncrementalXva.test.js.
 // ────────────────────────────────────────────────────────────────────────────────────
 
-export const ROWS = [['CVA', 'cva'], ['DVA', 'dva'], ['FVA', 'fva'], ['FBA', 'fba'], ['KVA', 'kva'], ['MVA', 'mva'], ['TOTAL', 'total']]
+// FCA is the funding cost and FBA the funding benefit; FVA is the two together and is shown under them as their sum,
+// not as one more part of the total (the taxonomy; 0.41.0)
+export const ROWS = [['CVA', 'cva'], ['DVA', 'dva'], ['FCA', 'fca'], ['FBA', 'fba'], ['FVA = FCA + FBA', 'fva'], ['KVA', 'kva'], ['MVA', 'mva'], ['TOTAL', 'total']]
+
+// A set of levels under today's names: an API from before the rename has the funding cost under `fva` and no `fca`.
+export function funding(o) {
+  if (!o) return o
+  const fca = o.fca ?? o.fva ?? null, fba = o.fba ?? null
+  return { ...o, fca, fva: fca == null && fba == null ? null : (fca || 0) + (fba || 0) }
+}
 const SYM = { USD: '$', EUR: '€', GBP: '£', JPY: '¥' }
 
 // ── pure helpers (IncrementalXva.test.js) ─────────────────────────────────────────
@@ -23,11 +32,11 @@ export function fmtSigned(v, ccy = 'USD') {
 // reports; if a key is missing it is with − without.
 export function buildRows(resp) {
   if (!resp) return []
-  const w0 = resp.without || {}, w1 = resp.with || {}, inc = resp.incremental || {}
+  const w0 = funding(resp.without || {}), w1 = funding(resp.with || {}), inc = funding(resp.incremental || {})
   return ROWS.map(([label, key]) => {
     const a = w0[key] ?? null, b = w1[key] ?? null
     const d = inc[key] ?? (a != null && b != null ? b - a : null)
-    return { key, label, without: a, with: b, incremental: d, total: key === 'total' }
+    return { key, label, without: a, with: b, incremental: d, total: key === 'total', sum: key === 'fva' }
   })
 }
 
@@ -91,8 +100,8 @@ export function mockResponse({ counterpartyId, counterpartyName, tradeId }) {
   const hump = (i, peak, scale) => scale * Math.exp(-((i - peak) ** 2) / (2 * (months / 3) ** 2))
   const without = grid.map((_, i) => Math.round(hump(i, 9, 180000) + 20000))
   const withT = grid.map((_, i) => Math.round(hump(i, 9, 180000) + 20000 + hump(i, 12, 65000)))
-  const w0 = { cva: -1234.5, dva: 456.7, fva: -89.0, fba: 12.0, kva: -300.0, mva: -150.0 }
-  const w1 = { cva: -1810.2, dva: 601.3, fva: -131.4, fba: 19.5, kva: -412.8, mva: -221.0 }
+  const w0 = { cva: -1234.5, dva: 456.7, fca: -89.0, fba: 12.0, kva: -300.0, mva: -150.0 }
+  const w1 = { cva: -1810.2, dva: 601.3, fca: -131.4, fba: 19.5, kva: -412.8, mva: -221.0 }
   const sum = (o) => Object.values(o).reduce((s, v) => s + v, 0)
   const tot = (o) => ({ ...o, total: Math.round(sum(o) * 100) / 100 })
   const a = tot(w0), b = tot(w1)

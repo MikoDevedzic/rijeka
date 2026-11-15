@@ -51,9 +51,9 @@ def test_netting_set_values_a_hypothetical_swap_from_its_own_legs():
 
 
 def test_levels_and_profiles_align_across_the_two_runs():
-    r0 = {"xva": {"cva_usd": -100.0, "dva_usd": 40.0, "fva_usd": -10.0, "fba_usd": 5.0, "kva_usd": -20.0, "mva_usd": -3.0},
+    r0 = {"xva": {"cva_usd": -100.0, "dva_usd": 40.0, "fca_usd": -10.0, "fba_usd": 5.0, "kva_usd": -20.0, "mva_usd": -3.0},
           "grid": ["2026-12-02", "2027-01-02"], "ee_rn": [10.0, 8.0]}
-    r1 = {"xva": {"cva_usd": -160.0, "dva_usd": 44.0, "fva_usd": -16.0, "fba_usd": 6.0, "kva_usd": -29.0, "mva_usd": -3.0},
+    r1 = {"xva": {"cva_usd": -160.0, "dva_usd": 44.0, "fca_usd": -16.0, "fba_usd": 6.0, "kva_usd": -29.0, "mva_usd": -3.0},
           "grid": ["2026-12-02", "2027-01-02", "2027-02-02"], "ee_rn": [15.0, 12.0, 4.0]}
     w0, w1 = xva_levels(r0), xva_levels(r1)
     assert w0["total"] == pytest.approx(-88.0) and w1["total"] == pytest.approx(-158.0)
@@ -95,7 +95,7 @@ def test_route_runs_the_set_with_and_without_the_trade_on_the_same_engine(monkey
         assert all(len(t._legs) == 2 for t in hyp)
         return {"counterparty": cp_.name, "counterparty_id": str(cp_.id), "n_paths": st["n_paths"], "months": 60 if hyp else 24,
                 "csa_model": {"preset": "ON_CHAIN", "mpor_days": 5}, "skipped": [],
-                "xva": {"cva_usd": -100.0 * n, "dva_usd": 30.0 * n, "fva_usd": -10.0 * n, "fba_usd": 2.0 * n, "kva_usd": -20.0 * n, "mva_usd": -5.0 * n},
+                "xva": {"cva_usd": -100.0 * n, "dva_usd": 30.0 * n, "fca_usd": -10.0 * n, "fba_usd": 2.0 * n, "kva_usd": -20.0 * n, "mva_usd": -5.0 * n},
                 "grid": [f"2027-{m:02d}-02" for m in range(1, (6 if hyp else 3))], "ee_rn": [float(10 * n - k) for k in range(5 if hyp else 2)]}
     monkeypatch.setattr(CR, "counterparty_report", fake_report)
     monkeypatch.setattr(CR, "settings", lambda db, f: {"n_paths": 2000, "cp_cds_bp": 85.0, "lgd": 0.4})

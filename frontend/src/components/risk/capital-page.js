@@ -17,14 +17,14 @@ export const METRICS = [
   ['Initial margin', 'im', 'the engine\'s estimate (not ISDA SIMM): invariant to the collateral, moves only with the margin period of risk'],
   ['KVA', 'kva', 'the capital legs along the exposure path, at the hurdle'],
   ['CVA', 'cva', 'under the economic CSA'],
-  ['FVA', 'fva', 'under the economic CSA'],
+  ['FCA', 'fca', 'the funding cost, under the economic CSA'],
   ['MVA', 'mva', 'IM funded at the spread less the posted asset’s yield'],
   ['ColVA', 'colva', 'the carry of the variation margin against cash at OIS, from what the schedule holds it in'],
-  ['COST', 'cost', '−(CVA + FVA + KVA + MVA + ColVA): the P&L charge'],
+  ['COST', 'cost', '−(CVA + FCA + KVA + MVA + ColVA): the P&L charge'],
   ['LEVERAGE EXP.', 'leverage', '1.4 × (RC with cash VM only + add-on) (LEV30)'],
   ['HQLA OF IM', 'hqla_im', 'the liquidity value of the margin posted (LCR30)'],
 ]
-// Regulatory stock at today, in USD: what Risk → CAPITAL shows for the CSA as booked. Prices (KVA, MVA, CVA, FVA, ColVA)
+// Regulatory stock at today, in USD: what Risk → CAPITAL shows for the CSA as booked. Prices (KVA, MVA, CVA, FCA, ColVA)
 // are valuation adjustments and live in the regimes report under Risk → COLLATERAL and on the ticket's XVA tab.
 export const STOCK_METRICS = [
   ['RWA', 'rwa', 'the counterparty risk weight × SA-CCR EAD (CRE20, CRE52)'],

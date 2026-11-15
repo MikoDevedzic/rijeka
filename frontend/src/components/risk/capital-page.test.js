@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest'
 import { COLUMNS, METRICS, STOCK_METRICS, bars, fmt, fmtBp, fmtPct, fmtSigned, stockRows, stockTotals, tableRows, totalsRow, waterfall } from './capital-page'
 
-const m = (ead, extra = {}) => ({ im: 100, ead, rwa: ead * 0.3, k_ccr: ead * 0.024, k_cva: 5, kva: -10, cva: -20, fva: -3, mva: -2, cost: 35, leverage: ead * 1.4, hqla_im: 100, ...extra })
+const m = (ead, extra = {}) => ({ im: 100, ead, rwa: ead * 0.3, k_ccr: ead * 0.024, k_cva: 5, kva: -10, cva: -20, fca: -3, mva: -2, cost: 35, leverage: ead * 1.4, hqla_im: 100, ...extra })
 const steps = [
   { key: 'BASELINE', delta: {} },
   { key: 'THRESHOLD_MTA', state: 'CURRENT', delta: { ead: -200, cost: -5 }, source: 'CRE52.18' },

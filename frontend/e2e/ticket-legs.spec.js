@@ -434,7 +434,7 @@ test('margin and capital on a digital-asset ticket: no SIMM anywhere; a typed do
   const twoB = await (await asked).json()
   expect(twoB.capital.crypto_group).toBe('2b')
   expect(twoB.xva.kva).toBeLessThan(typed.xva.kva)
-  for (const k of ['cva', 'dva', 'fva', 'fba', 'mva']) expect(twoB.xva[k], k).toBe(typed.xva[k])
+  for (const k of ['cva', 'dva', 'fca', 'fba', 'fva', 'mva']) expect(twoB.xva[k], k).toBe(typed.xva[k])
   await expect(win.getByTestId('xva-capital-basis')).toContainText('SCO60.99')
   await expectNoHorizontalOverflow(win, 'XVA with margin and capital lines')
 

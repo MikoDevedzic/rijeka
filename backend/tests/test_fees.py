@@ -83,7 +83,7 @@ def test_no_fees_changes_nothing(preset):
     a, ma = fx_xva.forward_xva(_fwd(), csa, n_paths=2000)
     for none in (None, []):
         b, mb = fx_xva.forward_xva(_fwd(), csa, n_paths=2000, fees=none)
-        assert (a.cva, a.dva, a.fva, a.kva, a.mva) == (b.cva, b.dva, b.fva, b.kva, b.mva) and np.array_equal(ma["_paths"], mb["_paths"]) and mb["fees"] is None
+        assert (a.cva, a.dva, a.fca, a.kva, a.mva) == (b.cva, b.dva, b.fca, b.kva, b.mva) and np.array_equal(ma["_paths"], mb["_paths"]) and mb["fees"] is None
 
 
 @pytest.mark.parametrize("preset", ["UNCOLLATERALISED", "BILATERAL"])
@@ -96,7 +96,7 @@ def test_a_fee_received_at_settlement_is_the_same_forward_struck_lower(preset):
     with_fee, m1 = fx_xva.forward_xva(_fwd(t=t), csa, n_paths=4000, fees=[(t + 1e-7, a)])
     lower, m2 = fx_xva.forward_xva(_fwd(strike=1.0850 - a / n, t=t), csa, n_paths=4000)
     assert np.allclose(m1["_paths"], m2["_paths"], rtol=1e-9, atol=1e-3) and m1["v0"] == pytest.approx(m2["v0"], rel=1e-7)      # the moment after settlement is 1e-7 of a year of discounting
-    for k in ("cva", "dva", "fva", "fba", "kva", "mva"):
+    for k in ("cva", "dva", "fca", "fba", "kva", "mva"):
         assert getattr(with_fee, k) == pytest.approx(getattr(lower, k), rel=1e-6, abs=1e-6), k
     assert with_fee.im_profile == pytest.approx(lower.im_profile, rel=1e-6)
     assert m1["fees"]["count"] == 1 and m1["fees"]["pv"] == pytest.approx(a * math.exp(-Q * t), rel=1e-6)

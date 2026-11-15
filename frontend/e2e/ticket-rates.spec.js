@@ -87,6 +87,16 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   const savedUsd = Math.round(one.onChain.xva.all_in - first.xva.all_in)
   await expect(saving).toContainText(Math.abs(savedUsd).toLocaleString('en-US'))
   expect(await win.getByTestId('xva-outputs').innerText(), 'one sign per figure, a rounded zero unsigned').not.toMatch(/\+\+|--|−−|\+-|\+−|-\+|−\+/)
+  // the funding adjustments under their names: the cost is FCA, the benefit FBA, and FVA is the two together, said
+  // under the figures and not as a tile that ALL-IN would count twice
+  const out = win.getByTestId('xva-outputs')
+  await expect(out).toContainText('FCA'); await expect(out).toContainText('FBA')
+  await expect(out).toContainText('FVA = FCA + FBA')
+  await expect(out.getByTestId('va-fva'), 'the sum is on the strip, under the two it is made of').toBeVisible()
+  expect(Math.abs(Number((await out.getByTestId('va-fva').innerText()).replace(/[^0-9]/g, '')) - Math.abs(Math.round(first.xva.fva))), 'and is FCA + FBA to the dollar').toBeLessThanOrEqual(1)
+  expect(Math.abs(first.xva.fva - (first.xva.fca + first.xva.fba)), 'the API\'s FVA is FCA + FBA').toBeLessThanOrEqual(0.011)
+  const shown = Number((await out.getByTestId('xva-fva').innerText()).replace(/[^0-9]/g, '')) * (first.xva.fva < 0 ? -1 : 1)
+  expect(Math.abs(shown - first.xva.fva), 'and the figure shown is that sum').toBeLessThanOrEqual(1)
   // the saving line is one row: every part sits on the same line as the label
   const tops = await saving.locator('span:visible').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().bottom)))
   expect(Math.max(...tops) - Math.min(...tops), 'the saving line wraps').toBeLessThanOrEqual(6)
@@ -135,6 +145,8 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   expect((await charged).status(), 'the incremental charge answers').toBe(200)
   await expect(inc.getByRole('button', { name: 'RECOMPUTE' })).toBeVisible()
   await expect(inc).toContainText('WITHOUT')
+  await expect(inc.locator('tr[data-row="fca"]')).toContainText('FCA')
+  await expect(inc.locator('tr[data-row="fva"]'), 'FVA is a sum row of the two above it').toContainText('FVA = FCA + FBA')
   await expectNoHorizontalOverflow(inc, 'the incremental charge, opened')
   await inc.scrollIntoViewIfNeeded()
   await app.screenshot({ path: 'e2e/.out/shots/rates-xva-incremental.png' })

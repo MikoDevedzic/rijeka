@@ -133,7 +133,7 @@ export default function CcrPage() {
             <section className="pnl-panel">
               <header><span>CALIBRATION · REAL-WORLD</span><span className="pnl-sub">measured from the public history; exposure, not price</span></header>
               <Calib c={cur.calibration.real_world} />
-              <div className="pnl-foot">The XVA reserves of this netting set (CVA, DVA, FVA, FBA, KVA, MVA) are valuation, not exposure: they live on the P&amp;L page, computed by the same engine under the risk-neutral measure, and net into the signed P&amp;L by the firm's policy.</div>
+              <div className="pnl-foot">The XVA reserves of this netting set (CVA, DVA, FCA, FBA, KVA, MVA) are valuation, not exposure: they live on the P&amp;L page, computed by the same engine under the risk-neutral measure, and net into the signed P&amp;L by the firm's policy.</div>
             </section>
           </div>
         )}
