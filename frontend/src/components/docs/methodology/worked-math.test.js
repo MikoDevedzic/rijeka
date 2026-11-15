@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cvaLine, ndf, readNumber } from './worked-math'
-import { healthCells, whenSaid, JOINS, PIECES, STEPS } from './architecture-data'
+import { healthCells, whenSaid, JOINS, PIECES, STEPS, STORIES } from './architecture-data'
 
 describe('the worked tables', () => {
   it('reads a number as typed, and nothing else', () => {
@@ -48,7 +48,7 @@ describe('how the system is built', () => {
     const pieces = new Set(PIECES.map(p => p.id)), joins = new Set(JOINS.map(j => j.id))
     for (const j of JOINS) { expect(pieces.has(j.a)).toBe(true); expect(pieces.has(j.b)).toBe(true) }
     for (const s of STEPS) { for (const p of s.pieces) expect(pieces.has(p), `${s.name}: ${p}`).toBe(true); for (const j of s.joins) expect(joins.has(j), `${s.name}: ${j}`).toBe(true) }
-    expect(STEPS.map(s => s.k)).toEqual(['1', '2', '3', '4', '5', '6', '7'])
+    expect(STORIES[0].steps.map(s => s.k), 'the trade keeps the seven steps it had').toEqual(['1', '2', '3', '4', '5', '6', '7'])
   })
   it('says when a batch last ran in the health answer\'s own terms', () => {
     expect(whenSaid('2026-11-10T23:50:22.737093+00:00')).toBe('23:50 UTC')

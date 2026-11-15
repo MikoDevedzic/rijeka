@@ -26,6 +26,38 @@ the outage showed are changed here. No figure moves.
 - `docs/ops/environment.md` says what each hosted piece runs on, and that a plan and a machine size are two
   settings.
 
+## 0.42.0 · 15 November 2026
+
+**How the system is built, drawn around the app.** The methodology's first page was a scene with the API in the
+middle. It is now built around what a trader uses, shows where each piece runs, and follows three things through
+the system. No figure and no route changes.
+
+- **The app in the middle.** The Rijeka app stands in front, larger than the rest, on the trader's browser, where
+  it runs; the API stands behind it as the engine, on Render. Netlify holds the app's files and the public site and
+  hands them out; Supabase holds sign-in and the database; the registry, the market data, the Anthropic API and
+  Telegram stand around them. Each host is a slab, and what runs on it stands on it.
+- **A trade, a change, the clock.** The seven steps of a trade are as they were, with the routes each names. A
+  change to the code is followed from a branch past the reviewers (the browser tester, the numbers guardian, the
+  model validator, the design keeper, the independent reviewer, security, the architect, the database keeper), the
+  six checks GitHub runs on the commit, the API's deploy and the app's build, to the release manager's reading of
+  the commit from production. The clock tells what the scheduler does every minute, every ten minutes, every thirty
+  and every two hours.
+- **How it is drawn.** The eye goes to the pieces a step uses. A line in use takes the colour of the piece that
+  asks and carries a stream of light along it. Each reviewer has a colour of its own, none of them brass, which
+  stays what is on chain; the six checks are the change's green and light one after the other. Two buttons bring the scene closer or take it back; the mouse
+  wheel still scrolls the page.
+- **Held to the sources.** A test reads the six checks from the CI workflow's jobs, each reviewer from its
+  definition, the three cadences from the scheduler's defaults and each route from the API's routers, and fails
+  when the page names one that is not there. Another holds each hosted piece to its host's slab.
+- **Three sentences the page had wrong are put right.** It said the API is the only piece that writes to the
+  database: trades, legs and events are the API's alone, but the app writes a firm's own reference data (its
+  hierarchy, legal entities and counterparties) straight to the database under row-level security, and the
+  picture now has that line. It said the app is always built from the commit the live API reports: that is so when
+  a change touches the API; a change that does not is followed at once. It said the venue's marks are read at 25
+  and 50 delta: they are read at a quarter, a half and three quarters of the forward call delta.
+- The health strip, the fallback for a browser that cannot draw the scene and the behaviour under reduced motion
+  are as they were. On a narrow screen the names a step does not use are left to the cards.
+
 ## 0.41.0 · 15 November 2026
 
 **The funding adjustments under their names, and XVA filed as valuation.** No figure changes.
