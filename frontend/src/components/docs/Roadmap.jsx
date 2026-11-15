@@ -97,7 +97,7 @@ const PHASES = [
     ['DONE', 'Self-host packaging: docker-compose with sign-in, the migration runner with a ledger, a staging stack with 68 API-level integration tests in CI'],
     ['NEXT', 'Firm admin, entitlements and the immutable audit log across every table that changes state'],
     ['NEXT', 'External audit of the registry contract; key custody in a KMS or HSM outside the application host; Ethereum mainnet with the Sepolia registry kept for the demo'],
-    ['NEXT', 'Infrastructure as code, dev/staging/production environments, observability and alerts, tested backup and restore, an on-call rota and a stated SLA for the hosted tier'],
+    ['NEXT', 'Infrastructure as code, dev/staging/production environments, observability and alerts, tested backup and restore'],
     ['NEXT', 'Email confirmations adapter and a confirmations inbox for bank–corporate flow'],
   ]},
   { title: 'PROMETHEUS · AI LAYER', status: 'LIVE', items: [

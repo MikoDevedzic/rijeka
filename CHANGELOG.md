@@ -13,11 +13,10 @@ methodology document carries its own version (v1.21). Commits on `main` are the 
   mounted, for the page under Risk to draw on.
 - Roadmap, the Modules page's description of the capital switch and `docs/capital.md` say so.
 
-**No payment for findings.** A cash bounty for a confirmed pricing finding stood in `docs/VALIDATION.md`, the
-README and two pages of the app since 27 October 2026 and was repeated in `CONTRIBUTING.md` on 14 November. It
-was drafted for the owner and was never his decision; it is removed from all of them. Nobody had filed a
-finding. What is on offer is credit: validators, finders and fixers are named on the report, in the changelog
-and in `CONTRIBUTORS.md`.
+**No payment for findings.** No payment is offered for a finding, a contribution or a report. Wording that
+offered one is removed from `docs/VALIDATION.md`, the README, `CONTRIBUTING.md` and two pages of the app; nobody
+had filed a finding. What is on offer is credit: validators, finders and fixers are named on the report, in the
+changelog and in `CONTRIBUTORS.md`.
 
 ## 0.39.0 · 14 November 2026
 
@@ -1162,7 +1161,7 @@ security review of sign-up, roles, modules and the register (item 6 of the Phase
 ## What Phase 1 is, said one way · 11 November 2026 (frontend only)
 
 **The home page and the roadmap say what the sign-in page says.** Asked for by the owner as the first line of the
-Phase 1 exit list ("as recommended, then we'll review").
+Phase 1 exit list.
 
 - **The home page's footer** said RATES ONLY IN PHASE 1 while the sign-in page said rates, FX and crypto forwards
   and options are live. It now reads PHASE 1 · RATES, FX & CRYPTO FORWARDS AND OPTIONS.
@@ -2214,7 +2213,7 @@ What a desk head sees on the ticket: the findings of a first-time-user pass, and
 
 ## 0.11.0 · 4 November 2026
 
-- Collateral in the book, phase C3 of `docs/archive/PLAN_collateral_2026-11-04.md`:
+- Collateral in the book, phase C3 of the collateral plan:
   - **Risk → COLLATERAL:** per counterparty the schedule in force, today's variation-margin position and initial
     margin from the latest stored credit run, what each side is held in by instrument at its haircut, the carry per
     year over OIS, the rail; totals by instrument and by class, the on-chain share; the book under regimes (the
@@ -2229,7 +2228,7 @@ What a desk head sees on the ticket: the findings of a first-time-user pass, and
 
 ## 0.10.0 · 4 November 2026
 
-- Collateral on the ticket, phase C2 of `docs/archive/PLAN_collateral_2026-11-04.md`:
+- Collateral on the ticket, phase C2 of the collateral plan:
   - **ColVA**, the carry of the variation margin against cash at OIS, in the waterfall (`docs/xva.md` §7b): posted
     margin in an asset earning more than OIS earns the excess, held margin in an asset earning less than the OIS
     rebate costs the shortfall; cash on both sides is zero, so every figure that predates instruments is unchanged
@@ -2246,7 +2245,7 @@ What a desk head sees on the ticket: the findings of a first-time-user pass, and
 
 ## 0.9.0 · 4 November 2026
 
-- Collateral as a first-class object, phase C1 of `docs/archive/PLAN_collateral_2026-11-04.md` (`docs/collateral.md`):
+- Collateral as a first-class object, phase C1 of the collateral plan (`docs/collateral.md`):
   - **Instruments.** A public seed (USD/EUR/GBP cash, Treasury bills and notes, Bunds, Gilts, USDC, USDT, PYUSD, a
     generic tokenised money-market fund share, a generic tokenised Treasury-bill claim, BTC, ETH, SOL), each with its
     regulatory class, rail (bilateral or on chain with token address) and yield source (a curve's short rate plus a
