@@ -7,15 +7,22 @@
 // The ladder's tenor buckets, as backend/pnl/explain.py BUCKETS names and bounds them.
 export const BUCKETS = ['0-1Y', '1-5Y', '5-10Y', '10Y+']
 export const BUCKET_LABEL = { '0-1Y': 'TO 1Y', '1-5Y': '1Y TO 5Y', '5-10Y': '5Y TO 10Y', '10Y+': 'PAST 10Y' }
-const EDGES = [1.0001, 5.0001, 10.0001]
-export const bucketOfYears = (y) => BUCKETS[EDGES.findIndex(e => y < e)] ?? BUCKETS[BUCKETS.length - 1]
+const EDGE_YEARS = [1, 5, 10]
+// A ticket of a round tenor starts at spot and rolls to a business day, so it matures a few days past the
+// anniversary of the day it was dealt; a year is also not 365.25 days. The ladder keeps a ten-year quote in 5-10Y,
+// so a ten-year ticket belongs there too: a bucket ends at the calendar anniversary of the report's date plus a
+// week (Emmy, 14 November 2026: by days over 365.25 a ten-year ticket fell in 10Y+).
+export const GRACE_DAYS = 7
+const day = (iso) => Date.parse(String(iso ?? '').slice(0, 10))
+const plusYears = (ms, n) => { const d = new Date(ms); d.setUTCFullYear(d.getUTCFullYear() + n); return d.getTime() }
 
-// The bucket a trade's maturity falls in, counted from the report's date in years of 365.25 days. Used only to
-// place a sensitivity that has no tenor of its own (a spot delta, a flat curve's one bucket) along the picture.
+// The bucket a trade's maturity falls in, from the report's date. Used only to place a sensitivity that has no
+// tenor of its own (a spot delta, a flat curve's one bucket) along the picture.
 export function maturityBucket(maturityIso, asOfIso) {
-  const a = Date.parse(maturityIso), b = Date.parse(asOfIso)
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return BUCKETS[0]
-  return bucketOfYears(Math.max(0, (a - b) / (365.25 * 864e5)))
+  const m = day(maturityIso), a = day(asOfIso)
+  if (!Number.isFinite(m) || !Number.isFinite(a)) return BUCKETS[0]
+  const i = EDGE_YEARS.findIndex(n => m <= plusYears(a, n) + GRACE_DAYS * 864e5)
+  return BUCKETS[i < 0 ? BUCKETS.length - 1 : i]
 }
 
 // The last year a bucket reaches from the report's date ("to 2031"); the last bucket has no end.
@@ -40,7 +47,7 @@ export function factors(rep, trades = []) {
   const mat = new Map((trades || []).map(t => [String(t.id), maturityBucket(t.maturity_date, rep?.date)]))
   const at = (r) => mat.get(String(r.trade_id)) || BUCKETS[0]
   const blank = () => BUCKETS.map(() => 0)
-  const add = (v, b, x) => { const i = BUCKETS.indexOf(b); if (i >= 0 && Number.isFinite(x)) v[i] += x }
+  const add = (v, b, x) => { const i = BUCKETS.indexOf(b); if (i < 0 || !Number.isFinite(x)) return 0; v[i] += x; return x }       // what was placed: a bucket the picture does not have places nothing
   const out = []
   const push = (f) => {
     if (!f.v.some(x => Math.abs(x) >= EPS)) return
@@ -55,32 +62,57 @@ export function factors(rep, trades = []) {
   for (const row of lad.ladder || []) {
     const v = blank()
     for (const b of BUCKETS) add(v, b, Number(row.buckets?.[b] || 0))
-    if (row.buckets?.FLAT) { let placed = 0; for (const r of rows) { const x = r.kr01?.[row.curve]?.FLAT; if (x) { add(v, at(r), x * r.usd_rate); placed += x * r.usd_rate } } rest(v, Number(row.buckets.FLAT), placed) }
-    const m = sd[row.curve]
+    if (row.buckets?.FLAT) { let placed = 0; for (const r of rows) { const x = r.kr01?.[row.curve]?.FLAT; if (x) placed += add(v, at(r), x * r.usd_rate) } rest(v, Number(row.buckets.FLAT), placed) }
+    // a flat curve (one quote) has no bucket in the history, and the VaR gives it no move: neither does the picture
+    const m = row.buckets?.FLAT ? null : sd[row.curve]
     push({ key: `IR:${row.curve}`, name: pretty(row.curve), measure: 'IR01', factor: 'ir', unit: 'per bp', moveUnit: 'bp', v, move: m ? BUCKETS.map(b => m[b] ?? null) : null })
   }
   for (const [asset, total] of Object.entries(lad.spot01 || {})) {
     const v = blank(); let placed = 0
-    for (const r of rows) { const x = r.spot01?.[asset]; if (x) { add(v, at(r), x * r.usd_rate); placed += x * r.usd_rate } }
+    for (const r of rows) { const x = r.spot01?.[asset]; if (x) placed += add(v, at(r), x * r.usd_rate) }
     rest(v, Number(total), placed)
     const [factor, measure] = spotMeasure(asset), s = sd[`${asset}_SPOT`]?.SPOT
     push({ key: `SPOT:${asset}`, name: asset, measure, factor, unit: 'per 1%', moveUnit: '%', v, move: s != null ? BUCKETS.map(() => s) : null, byMaturity: true })
   }
   for (const [cid, total] of Object.entries(lad.crybasis01 || {})) {
     const v = blank(); let placed = 0
-    for (const r of rows) for (const [b, x] of Object.entries(r.crybasis01?.[cid] || {})) { add(v, b === 'FLAT' ? at(r) : b, x * r.usd_rate); placed += x * r.usd_rate }
+    for (const r of rows) for (const [b, x] of Object.entries(r.crybasis01?.[cid] || {})) placed += add(v, b === 'FLAT' ? at(r) : b, x * r.usd_rate)
     rest(v, Number(total), placed)
     push({ key: `BASIS:${cid}`, name: String(cid).replace(/_FUNDING$/, ''), measure: 'CRYBASIS01', factor: 'basis', unit: 'per bp', moveUnit: 'bp', v, move: null })
   }
   for (const row of lad.vega || []) {
     const v = blank()
     for (const b of BUCKETS) add(v, b, Number(row.buckets?.[b] || 0))
-    if (row.buckets?.FLAT) { let placed = 0; for (const r of rows) { const x = r.vega?.[row.curve]?.FLAT; if (x) { add(v, at(r), x * r.usd_rate); placed += x * r.usd_rate } } rest(v, Number(row.buckets.FLAT), placed) }
-    const m = sd[row.curve], sw = /_SWVOL/.test(row.curve)
+    if (row.buckets?.FLAT) { let placed = 0; for (const r of rows) { const x = r.vega?.[row.curve]?.FLAT; if (x) placed += add(v, at(r), x * r.usd_rate) } rest(v, Number(row.buckets.FLAT), placed) }
+    const m = row.buckets?.FLAT ? null : sd[row.curve], sw = /_SWVOL/.test(row.curve)
     // the report's move for a surface is in hundredths of a point (of a bp of normal vol for a swaption grid), as the VaR multiplies it
     push({ key: `VEGA:${row.curve}`, name: surfaceName(row.curve), measure: 'VEGA', factor: 'vol', unit: sw ? 'per bp of vol' : 'per vol point', moveUnit: sw ? 'bp of vol' : 'pt', v, move: m ? BUCKETS.map(b => m[b] != null ? m[b] / 100 : null) : null })
   }
   return out.sort((a, b) => ORDER[a.factor] - ORDER[b.factor] || a.name.localeCompare(b.name))
+}
+
+// One day's carry of the book in dollars: the pricers' theta of each trade the report valued, added up. Null where
+// no trade reports one.
+export function carry(rep) {
+  const xs = (rep?.ladder_rows || []).filter(r => r.usd_rate != null && Number.isFinite(r.theta)).map(r => r.theta * r.usd_rate)
+  return xs.length ? xs.reduce((a, b) => a + b, 0) : null
+}
+
+// Why a stored report is not the book as it stands, or null when it is: 'older' (stored before the report carried
+// the moves), 'market' (the market data has a later date), 'book' (a live trade it did not value, a valued trade
+// that is no longer live, or a trade booked after it was made). The home then asks for the report again, once.
+const LIVE = new Set(['PENDING', 'CONFIRMED', 'LIVE'])           // backend/pnl/explain.py LIVE: what the ladder values
+export function staleness(rep, trades = [], marketDate = null) {
+  if (!rep || !rep.date) return null
+  if (rep.moves === undefined) return 'older'
+  if (marketDate && String(marketDate).slice(0, 10) > String(rep.date).slice(0, 10)) return 'market'
+  const live = (trades || []).filter(t => LIVE.has(t.status))
+  const seen = new Set((rep.ladder_rows || []).map(r => String(r.trade_id)))
+  const failed = new Set((rep.ladder?.problems || []).map(p => p.trade_ref))
+  const ids = new Set(live.map(t => String(t.id)))
+  if (live.some(t => !seen.has(String(t.id)) && !failed.has(t.trade_ref)) || [...seen].some(id => !ids.has(id))) return 'book'
+  const made = Date.parse(rep.generated_at)
+  return Number.isFinite(made) && live.some(t => Date.parse(t.created_at) > made) ? 'book' : null
 }
 
 // The largest bucket of a factor on the money scale: where it sits and what a usual day moves it by.

@@ -20,8 +20,9 @@ views, and for now every role on a monitor sees it. Three bands, always in the s
   curve's IR01, an asset's FX01 or CRY01, a forward basis, a surface's vega), in that factor's own colour, along
   the ladder's four tenor buckets: above its line the book is long, below it short. Beside it each factor's
   sensitivity, its largest bucket, the VaR and the limits.
-- **Your trades, and the old home's cards behind tabs**: what moved the day's P&L, the policy path, the week
-  ahead, the news, Prometheus's brief. The chain is one line at the foot.
+- **Your trades, and the old home's cards behind tabs**: what moved the day's P&L, the latest confirmations with
+  their proofs (ON CHAIN), the policy path, the week ahead, the news with its summaries, Prometheus's brief. The
+  chain is one line at the foot. The book's mark, one day's carry and gross notional stand under the statement.
 
 A stream's height is, by default, **what a usual day moves that bucket by, in dollars**, so that a basis point of
 SOFR and a percent of bitcoin are drawn on one scale: the sensitivity times the factor's usual daily move. That
@@ -35,12 +36,19 @@ What it is not, said on the page or here:
 
 - The ladder has four tenor buckets (to 1Y, 1Y to 5Y, 5Y to 10Y, past 10Y), so the picture has four columns, not
   the twelve tenors of the mock-up. A finer picture needs a finer ladder, which is a change to the risk engine.
-- A spot delta has no tenor: it is drawn at the maturity of the trade that carries it. The page says so.
+- A spot delta has no tenor: it is drawn at the maturity of the trade that carries it. The page says so. A bucket
+  ends a week after the anniversary of the report's date, so a ten-year ticket (which starts at spot and rolls to a
+  business day) sits with the ten-year quote.
+- The risk on the page is the stored report, shown at once. Where that is not the book as it stands (a trade booked
+  or closed since, later market data, a report stored before it carried the moves) the home asks for it to be run
+  again, once a visit, and shows the new one when it comes; where it cannot be run (the report is four runs a
+  minute an account) the page says what the stored one lacks. Opening the home with trades and no stored report
+  runs the report, as opening the Risk page does.
 - Limits and VaR are the firm's, on the signed-in user's book. A limit or a VaR for each trader does not exist.
 - A phone keeps the home it had. A launch workspace keeps its "start here" home. With Market risk or P&L switched
   off, their parts of the page say so and the rest stands.
-- Gone from the monitor's home: the clocks, the globe, the maturity ladder and the four figures under YOUR BOOK
-  (the streams and the statement say more). The headline figure is 20px, the largest step of the scale.
+- Gone from the monitor's home: the clocks, the globe, the maturity ladder and the book's IR01 as one figure (it is
+  a stream for each curve now). The headline figure is 20px, the largest step of the scale.
 - The methodology document has no paragraph on the usual daily move yet; the model inventory says so, and the
   Methodology page lists it under market risk with what stands behind it.
 

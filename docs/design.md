@@ -293,7 +293,8 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
   beside what needs you; the P&L statement, the risk picture and the factors; your trades beside the tabs. A later
   role's home keeps the bands and changes what is in them.
 - **Where you stand is words first.** One line at 16px, each part with a dot in the colour of what it says: green
-  for inside every limit, amber for close, `--down` for passed, a hollow dot for what is pending. Under it every
+  for inside every limit, amber for close, `--down` for passed, a hollow dot for what is pending; the count of
+  limits that are clear is quiet (dim), because it is the good news already said or the remainder of the bad. Under it every
   limit is a mark on one rail, placed by how much of it is used; the hatched end is past the limit.
 - **One headline figure**, the day's P&L, at 20px (the largest step of the scale) in the colour of its sign.
 - **The risk picture is one stream for each risk factor**, in that factor's colour (`--rf-*`), on a canvas whose
@@ -304,6 +305,10 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
   and the tabs that hold what the old home showed as cards.
 - **Brass on this page is a link to where a thing is dealt with** (OPEN BLOTTER →, THE RISK PAGE →), as on the old
   home. The page has no action of its own, so no brass button.
+- A name of a factor or a limit is a label (11px, or 12.5px in mono beside its stream); a figure is 12.5px, also the
+  one inside a caption ("≈ 89,981 a day"). A trade's row answers the pointer and the keyboard as every row does.
+- The picture's tip follows the pointer and names the bucket under it and each factor's figure there.
+- The rates strip's snapshot line gives way with an ellipsis before it runs off the page.
 - Under 1180px wide the bands stack in the same order; nothing is pushed sideways.
 
 ## The phone

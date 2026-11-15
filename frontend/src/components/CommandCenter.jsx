@@ -237,7 +237,7 @@ function DeskHome({ demo, navigate }) {
     </div>
   )
 
-  if (!phone) return <TraderHome d={d} modules={modules} canEdit={canEdit} onRequest={onRequest} navigate={navigate} strip={strip} path={path} footer={footer} />
+  if (!phone) return <TraderHome d={d} demo={demo} modules={modules} canEdit={canEdit} onRequest={onRequest} navigate={navigate} strip={strip} path={path} chainEmpty={<ChainDiagram />} footer={footer} />
 
   return (
     <div className="dh">

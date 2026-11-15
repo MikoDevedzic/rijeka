@@ -13,7 +13,7 @@ import { useChatStore, selectUnreadTotal } from '../../store/useChatStore'
 import PolicyPath from './PolicyPath'
 import WeekAhead from './WeekAhead'
 import BookBrief from './BookBrief'
-import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, heights, canDay, peak, limitMarks, standing, railLayout, RAIL_MAX, statement, moved, fmt0, signed, tone } from './trader-home'
+import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, heights, canDay, peak, carry, staleness, limitMarks, standing, railLayout, RAIL_MAX, statement, moved, fmt0, signed, tone } from './trader-home'
 import './TraderHome.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -29,22 +29,25 @@ const ago = (iso) => { if (!iso) return ''; const h = (Date.now() - new Date(iso
 const eth = (v) => v == null ? '—' : `${Number(v).toFixed(v < 0.1 ? 4 : 3)} ETH`
 const short = (h) => h ? `${h.slice(0, 8)}…${h.slice(-4)}` : '—'
 const KIND = { COUNTERSIGN: ['SIGN', 'amber'], AWAITING: ['WAIT', ''], MATURITY: ['DUE', 'blue'], OFF_CHAIN: ['OFF-CHAIN', 'red'], WALLET: ['WALLET', 'amber'], NODE: ['NODE', 'red'], LIMIT: ['LIMIT', 'red'], LIMIT_WARN: ['LIMIT', 'amber'], BATCH: ['BATCH', 'amber'], CHAT: ['CHAT', ''] }
+// a refusal for running too often is said in words (the risk report is four runs a minute an account)
+const why429 = (e) => String(e) === '429' ? 'it has been run too often this minute' : e
 const PNL_STATUS = { OPEN: ['OPEN', ''], TRADER_SIGNED: ['TRADER SIGNED', 'amber'], CONTROLLER_SIGNED: ['CONTROLLER SIGNED', 'amber'], FINAL: ['FINAL', 'ok'] }
 
 // One read of an endpoint: { data, err, loading }. `every` asks again on that beat and when the window is looked at.
+async function read(path) {
+  const s = await getSessionMaybe()
+  const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${s?.access_token}` } })
+  if (!r.ok) throw new Error(String(r.status))
+  return r.json()
+}
 function useGet(path, { on = true, every = 0 } = {}) {
-  const [st, setSt] = useState({ data: null, err: null, loading: on })
+  const [st, setSt] = useState({ data: null, err: null })
   useEffect(() => {
     if (!on) return undefined
     let alive = true
     const load = async () => {
-      try {
-        const s = await getSessionMaybe()
-        const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${s?.access_token}` } })
-        if (!r.ok) throw new Error(String(r.status))
-        const j = await r.json()
-        if (alive) setSt({ data: j, err: null, loading: false })
-      } catch (e) { if (alive) setSt(p => ({ data: p.data, err: e.message || 'no answer', loading: false })) }
+      try { const j = await read(path); if (alive) setSt({ data: j, err: null }) }
+      catch (e) { if (alive) setSt(p => ({ data: p.data, err: e.message || 'no answer' })) }
     }
     load()
     if (!every) return () => { alive = false }
@@ -52,8 +55,35 @@ function useGet(path, { on = true, every = 0 } = {}) {
     window.addEventListener('focus', load)
     return () => { alive = false; clearInterval(id); window.removeEventListener('focus', load) }
   }, [path, on, every])
-  return on ? st : { data: null, err: null, loading: false }
+  // loading is worked out, not kept: a read that is switched on later is loading from its first frame (Vera, 14 Nov 2026:
+  // kept as state it was false until the answer, and the page said "no risk" while the report was on its way)
+  return on ? { ...st, loading: st.data == null && st.err == null } : { data: null, err: null, loading: false }
 }
+
+// The risk report: the stored one at once, and where that is not the book as it stands (trader-home.js staleness: a
+// trade booked or closed since, later market data, a report stored before it carried the moves) the live one, asked
+// for once a visit. `behind` says why the report shown is still the stored one: 'running' while the live one is
+// on its way, the reason when it could not be had.
+function useRisk(on, trades, marketDate, known) {
+  const stored = useGet('/api/risk/report', { on })
+  const [live, setLive] = useState({ data: null, err: null })
+  const asked = useRef(false), here = useRef(true)
+  useEffect(() => { here.current = true; return () => { here.current = false } }, [])
+  // a report this browser has just had run is as fresh as one can be: it is not asked for again on the next visit,
+  // whatever the rule above makes of it (a rule that disagreed with the engine would otherwise run it on every visit)
+  const fresh = stored.data?.generated_at && stored.data.generated_at === ran()
+  const why = on && known && !fresh ? staleness(stored.data, trades, marketDate) : null
+  useEffect(() => {
+    if (!why || asked.current) return
+    asked.current = true
+    read('/api/risk/report?live=1').then(j => { ran(j?.generated_at); if (here.current) setLive({ data: j, err: null }) }, e => { if (here.current) setLive({ data: null, err: e.message || 'no answer' }) })
+  }, [why])
+  const behind = !why || live.data ? null : live.err ? why : 'running'
+  return { data: live.data || stored.data, err: stored.err, loading: stored.loading, behind, liveErr: live.err }
+}
+const RAN_KEY = 'rijeka.home.risk.ran'
+function ran(at) { try { if (at) sessionStorage.setItem(RAN_KEY, at); return sessionStorage.getItem(RAN_KEY) } catch { return null } }
+const BEHIND = { book: 'It does not hold the trades booked or closed since', market: 'It is on the market data before the latest', older: null }
 
 function useWidth(ref) {
   const [w, setW] = useState(0)
@@ -65,10 +95,10 @@ function useWidth(ref) {
   return w
 }
 
-export default function TraderHome({ d, modules, canEdit, onRequest = [], navigate, strip, path, footer }) {
+export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], navigate, strip, path, chainEmpty, footer }) {
   const riskOn = modules.MARKET_RISK !== false, pnlOn = modules.PNL !== false
   const trades = useMemo(() => d.trades || [], [d.trades])
-  const risk = useGet('/api/risk/report', { on: riskOn && trades.length > 0 })
+  const risk = useRisk(riskOn && trades.length > 0, trades, d.sofr?.valuation_date, !d.loading)
   const pnl = useGet('/api/pnl/summary', { on: pnlOn && trades.length > 0 })
   const life = useGet('/api/desk/lifecycle', { every: REFRESH_MS })
   const unread = useChatStore(selectUnreadTotal)
@@ -98,7 +128,7 @@ export default function TraderHome({ d, modules, canEdit, onRequest = [], naviga
       <section className="th-st">
         <div className="th-stand" data-testid="th-stand">
           {!trades.length && !d.loading
-            ? <><div className="th-words"><span className="th-w mute"><i />No trades yet</span></div><p className="th-tight">Book one from the blotter. Its price, its risk by tenor, its XVA and its confirmation all follow from it, and this page fills in.</p>{path}</>
+            ? <><div className="th-words"><span className="th-w mute"><i />No trades yet</span></div><p className="th-tight">Book one from the blotter. Its price, its risk by tenor, its XVA and its confirmation all follow from it, and this page fills in.</p></>
             : <>
                 <div className="th-words">
                   {riskOn && rep ? stand.words.map(([c, t]) => <span key={t} className={`th-w ${c}`}><i />{t}</span>)
@@ -106,10 +136,13 @@ export default function TraderHome({ d, modules, canEdit, onRequest = [], naviga
                 </div>
                 {riskOn && rep && <p className="th-tight">{stand.tight || (rep.can_write ? 'A limit on VaR, a 01 or a stress loss is set on the Risk page; it is then drawn here.' : 'Limits are set by your risk manager; they are then drawn here.')}{rep.date ? ` Risk as of ${fmtD(rep.date)}.` : ''}</p>}
                 {riskOn && risk.loading && <p className="th-tight">Measuring the book…</p>}
-                {riskOn && !rep && risk.err && <p className="th-tight">The risk report could not be read ({risk.err}).</p>}
+                {riskOn && rep && risk.behind === 'running' && <p className="th-tight th-behind" data-testid="th-behind">Measuring the book again: this is the report as it was stored.</p>}
+                {riskOn && rep && BEHIND[risk.behind] && <p className="th-tight th-behind warn" data-testid="th-behind">{BEHIND[risk.behind]}, and could not be run again just now ({why429(risk.liveErr)}). The Risk page runs it.</p>}
+                {riskOn && !rep && risk.err && <p className="th-tight">The risk report could not be read ({why429(risk.err)}).</p>}
                 {!riskOn && <p className="th-tight">Limits and risk by tenor are part of Market risk, which is {off('MARKET_RISK')} for this desk.</p>}
                 {marks.length > 0 && <Rail marks={marks} />}
               </>}
+          {path}
         </div>
         <div className="th-needs" data-testid="th-needs">
           <div className="th-k">NEEDS YOU <b className={actions.length ? 'on' : ''}>{life.data || unread ? actions.length : '…'}</b></div>
@@ -132,20 +165,20 @@ export default function TraderHome({ d, modules, canEdit, onRequest = [], naviga
       </section>
 
       <section className="th-hero">
-        <Statement on={pnlOn} off={off('PNL')} st={pnl} rep={rep} trades={trades} pending={pending} confirmed={confirmed} navigate={navigate} />
+        <Statement on={pnlOn} off={off('PNL')} st={pnl} rep={riskOn ? rep : null} trades={trades} pending={pending} confirmed={confirmed} navigate={navigate} />
         <Streams on={riskOn} off={off('MARKET_RISK')} st={risk} list={list} any={trades.length > 0} />
         <Factors on={riskOn} rep={rep} list={list} marks={marks} any={trades.length > 0} navigate={navigate} />
       </section>
 
       <section className="th-two">
         <div className="th-panel" data-testid="th-trades">
-          <div className="th-hd"><span className="th-k">YOUR TRADES</span><button className="dh-link" onClick={() => navigate('/blotter')}>OPEN BLOTTER →</button></div>
+          <div className="th-hd"><span className="th-k">YOUR TRADES</span><span className="th-links"><button className="dh-link" onClick={() => navigate('/configurations/market-data/crypto')}>FX · CRYPTO CURVES →</button><button className="dh-link" onClick={() => navigate('/blotter')}>OPEN BLOTTER →</button></span></div>
           {trades.length > 0
             ? <table className="th-t">
                 <thead><tr><th>TRADE</th><th>WHAT</th><th className="r">NOTIONAL</th><th className="r">MATURITY</th><th className="r">STATUS</th></tr></thead>
                 <tbody>
                   {trades.slice(0, 7).map(t => (
-                    <tr key={t.id} onClick={() => navigate('/blotter')}>
+                    <tr key={t.id} tabIndex={0} onClick={() => navigate('/blotter')} onKeyDown={e => { if (e.key === 'Enter') navigate('/blotter') }}>
                       <td className="fig">{t.trade_ref}</td>
                       <td>{productLabel(t.instrument_type)}</td>
                       <td className="fig r">{t.notional_ccy} {fmtM(t.notional)}</td>
@@ -158,7 +191,7 @@ export default function TraderHome({ d, modules, canEdit, onRequest = [], naviga
             : <div className="lf-empty">{d.loading ? 'Reading the book…' : 'No trades yet. Book one from the blotter.'}</div>}
           {trades.length > 7 && <div className="th-note">the latest 7 of {trades.length}</div>}
         </div>
-        <Tabs pnlOn={pnlOn} pnl={pnl} news={d.news || []} loading={d.loading} hasTrades={trades.length > 0} navigate={navigate} />
+        <Tabs pnlOn={pnlOn} pnl={pnl} news={d.news || []} loading={d.loading} hasTrades={trades.length > 0} life={life} explorer={explorer} demo={demo} chainEmpty={chainEmpty} navigate={navigate} />
       </section>
 
       <div className="th-chain" data-testid="th-chain">
@@ -202,6 +235,8 @@ function Rail({ marks }) {
 function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
   const s = st.data
   const rows = statement(s)
+  const theta = carry(rep)
+  const gross = Object.entries(trades.reduce((m, t) => { const c = t.notional_ccy || 'USD'; m[c] = (m[c] || 0) + Number(t.notional || 0); return m }, {}))
   const [label, tn] = PNL_STATUS[s?.status] || PNL_STATUS.OPEN
   return (
     <div className="th-lead" data-testid="th-pnl">
@@ -217,6 +252,7 @@ function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
           <tbody>{rows.map(([l, a, b, c, kind]) => <tr key={l} className={kind || ''}><td>{l}</td>{[a, b, c].map((x, i) => <td key={i} className={`fig r ${tone(x)}`}>{signed(x)}</td>)}</tr>)}</tbody>
         </table>}
         {rep?.ladder?.npv_usd != null && <div className="th-mark"><span>THE BOOK&apos;S MARK{rep.date ? ` · ${fmtDay(rep.date).toUpperCase()}` : ''}</span><b className={`fig ${tone(rep.ladder.npv_usd)}`}>{signed(rep.ladder.npv_usd)}</b></div>}
+        {theta != null && <div className="th-mark"><span>ONE DAY&apos;S CARRY</span><b className={`fig ${tone(theta)}`}>{signed(theta)}</b></div>}
         {s?.problems > 0 && <div className="th-note">{s.problems} trade{s.problems > 1 ? 's' : ''} not explained · see the P&amp;L page</div>}
         {trades.length > 0 && <button className="dh-link th-more" onClick={() => navigate('/pnl')}>ATTRIBUTION AND SIGN-OFF →</button>}
       </> : <>
@@ -225,7 +261,10 @@ function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
         <div className="th-split"><span>THE BOOK&apos;S MARK{rep?.date ? ` ON ${fmtDay(rep.date).toUpperCase()}` : ''}</span></div>
         <div className="th-note">P&amp;L is {off} for this desk.</div>
       </>}
-      <div className="th-count"><span><b>{trades.length}</b> TRADES</span><span><b>{pending}</b> PENDING</span><span><b>{confirmed}</b> CONFIRMED</span></div>
+      <div className="th-count">
+        <span><b>{trades.length}</b> TRADES</span><span><b>{pending}</b> PENDING</span><span><b>{confirmed}</b> CONFIRMED</span>
+        {gross.length > 0 && <span className="th-gross">GROSS {gross.map(([c, n]) => <b key={c}>{c} {fmtM(n)}</b>)}</span>}
+      </div>
     </div>
   )
 }
@@ -252,10 +291,10 @@ function Streams({ on, off, st, list, any }) {
       {!on && <div className="th-blank">Risk by tenor is part of Market risk, which is {off} for this desk.</div>}
       {on && !any && <div className="th-blank">No risk yet. Book a trade and its risk is drawn here, one stream for each factor.</div>}
       {on && any && st.loading && <div className="th-blank">Measuring the book…</div>}
-      {on && any && st.err && !st.data && <div className="th-blank">The risk report could not be read ({st.err}). The Risk page can run it again.</div>}
+      {on && any && st.err && !st.data && <div className="th-blank">The risk report could not be read ({why429(st.err)}). The Risk page can run it again.</div>}
       {on && any && empty && <div className="th-blank">The book carries no risk the ladder measures on {fmtD(st.data?.date)}.</div>}
       {on && drawn.length > 0 && <River drawn={drawn} mode={mode} asOf={st.data?.date} />}
-      {on && drawn.length > 0 && <div className="th-note">A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
+      {on && drawn.length > 0 && <div className="th-note">A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && heights(drawn, mode).some(h => h.own) ? ' A dashed stream has no usual move measured for it and is drawn to its own scale.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
     </div>
   )
 }
@@ -264,11 +303,12 @@ function Streams({ on, off, st, list, any }) {
 // factor to draw, so the box it measures is there from its first frame.
 function River({ drawn, mode, asOf }) {
   const box = useRef(null), cv = useRef(null), tip = useRef(null), at = useRef({ x: 0, y: 0 }), w = useWidth(box)
+  const hotRef = useRef(-1), redraw = useRef(null)
   const hs = useMemo(() => heights(drawn, mode), [drawn, mode])
   const [hot, setHot] = useState(-1)
   const reach = useMemo(() => bucketReach(asOf), [asOf])
   const AXIS = 40, n = drawn.length
-  const height = Math.max(300, Math.min(460, n * 92)) + AXIS
+  const height = Math.max(300, Math.min(540, n * 80)) + AXIS
 
   useEffect(() => {
     const c = cv.current
@@ -293,6 +333,7 @@ function River({ drawn, mode, asOf }) {
       last = ms
       g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H); g.globalAlpha = 1; g.setLineDash([]); g.shadowBlur = 0; g.globalCompositeOperation = 'source-over'
       g.textAlign = 'center'; g.textBaseline = 'alphabetic'
+      const hot = hotRef.current
       if (hot >= 0) { g.fillStyle = alpha(T.text, 0.035); g.fillRect(colW * hot, top, colW, bottom - top) }
       BUCKETS.forEach((b, i) => {
         if (i) { g.strokeStyle = alpha(T.border, 0.7); g.lineWidth = 1; g.beginPath(); g.moveTo(colW * i, top); g.lineTo(colW * i, bottom + 4); g.stroke() }
@@ -321,8 +362,10 @@ function River({ drawn, mode, asOf }) {
       })
     }
     raf = requestAnimationFrame(draw)
-    return () => cancelAnimationFrame(raf)
-  }, [drawn, hs, w, height, hot, n, reach])
+    redraw.current = still ? () => draw(0) : null          // moving, the next frame reads the bucket; still, it is drawn when it changes
+    return () => { cancelAnimationFrame(raf); redraw.current = null }
+  }, [drawn, hs, w, height, n, reach])
+  useEffect(() => { hotRef.current = hot; redraw.current?.() }, [hot])
 
   // The tip follows the pointer by its own style, not by a render: only entering another bucket draws the page again.
   const place = () => { if (tip.current) { tip.current.style.left = `${at.current.x}px`; tip.current.style.top = `${at.current.y}px` } }
@@ -341,8 +384,7 @@ function River({ drawn, mode, asOf }) {
         {drawn.map((f, k) => (
           <div key={f.key} className="th-lane" data-factor={f.key}>
             <span className="th-lane-n"><span className="rf-mark" style={{ background: `var(${RISK_FACTORS[f.factor].token})` }} />{f.name} · {f.measure}</span>
-            <span className="th-lane-v"><b className={`fig ${tone(f.total)}`}>{signed(f.total)}</b> {f.unit}</span>
-            {hs[k].own && <span className="th-lane-own">no history of its moves: drawn to its own scale</span>}
+            <span className="th-lane-v"><b className={`fig ${tone(f.total)}`}>{signed(f.total)}</b> {f.unit}{hs[k].own && <em className="th-lane-own"> · own scale</em>}</span>
           </div>
         ))}
       </div>
@@ -377,7 +419,7 @@ function Factors({ on, rep, list, marks, any, navigate }) {
           <span className="th-row-n"><span className="rf-mark" style={{ background: `var(${RISK_FACTORS[f.factor].token})` }} />{f.name} <small>{f.measure}</small></span>
           <b className={`fig ${tone(f.total)}`}>{signed(f.total)}</b>
           <span className="th-bar"><i style={{ width: `${top && pk[i] ? Math.max(2, pk[i].usd / top * 100) : 0}%`, background: `var(${RISK_FACTORS[f.factor].token})` }} /></span>
-          <small className="th-row-d">{pk[i] ? `≈ ${fmt0(pk[i].usd)} a day · ${BUCKET_LABEL[pk[i].bucket]}` : 'no history of its moves'}</small>
+          <small className="th-row-d">{pk[i] ? <>≈ <b className="fig">{fmt0(pk[i].usd)}</b> a day · {BUCKET_LABEL[pk[i].bucket]}</> : 'no usual move is measured for it'}</small>
         </div>
       ))}
       {rep && <div className="th-tot" data-testid="th-var">
@@ -399,12 +441,12 @@ function Factors({ on, rep, list, marks, any, navigate }) {
   )
 }
 
-function Tabs({ pnlOn, pnl, news, loading, hasTrades, navigate }) {
+function Tabs({ pnlOn, pnl, news, loading, hasTrades, life, explorer, demo, chainEmpty, navigate }) {
   const mv = moved(pnl.data)
-  const tabs = [pnlOn && hasTrades && ['moved', 'WHAT MOVED'], ['rates', 'RATES'], ['week', 'WEEK AHEAD'], ['news', 'NEWS'], hasTrades && ['brief', 'BRIEF']].filter(Boolean)
+  const tabs = [pnlOn && hasTrades && ['moved', 'WHAT MOVED'], ['chain', 'ON CHAIN'], ['rates', 'RATES'], ['week', 'WEEK AHEAD'], ['news', 'NEWS'], hasTrades && ['brief', 'BRIEF']].filter(Boolean)
   const [tab, setTab] = useState(null)
   const cur = tabs.some(t => t[0] === tab) ? tab : tabs[0][0]
-  const s = pnl.data
+  const s = pnl.data, anchors = life.data?.anchors || []
   return (
     <div className="th-panel" data-testid="th-tabs">
       <div className="tbw-tabs th-tabs" role="tablist">
@@ -427,18 +469,43 @@ function Tabs({ pnlOn, pnl, news, loading, hasTrades, navigate }) {
               </div> : <div className="lf-empty">Nothing moved the book between the two dates.</div>}
             </>
         )}
+        {cur === 'chain' && <>
+          <div className="th-hd"><span className="th-sub">your latest confirmations, each with its proof</span>{anchors.length > 0 && <a className="dh-link" href="https://rijeka.app/verify" target="_blank" rel="noopener noreferrer">REGISTER ↗</a>}</div>
+          {life.err && !life.data && <div className="lf-empty">Could not load the desk feed ({life.err}).</div>}
+          {life.data && !anchors.length && <>
+            {chainEmpty}
+            <div className="dh-text">Both parties sign the canonical record; the registry keeps the hash and both addresses. Anyone can recompute and recover them without asking Rijeka.</div>
+          </>}
+          <ul className="lf-list anchors" data-testid="th-anchors">
+            {anchors.slice(0, 6).map((a, i) => (
+              <li key={a.tx_hash || i}>
+                <span className={`lf-chip ${a.anchored ? (a.bilateral ? 'ok' : '') : 'red'}`}>{a.anchored ? (a.bilateral ? 'BILATERAL' : 'ANCHORED') : 'OFF-CHAIN'}</span>
+                <span className="lf-t"><b>{a.trade_ref}</b><small>{[a.product, a.counterparty].filter(Boolean).join(' · ')}{a.block_number ? ` · block ${Number(a.block_number).toLocaleString()}` : ''}</small></span>
+                <span className="lf-when">{a.explorer_tx || a.tx_hash ? <a href={a.explorer_tx || `${explorer}/tx/${a.tx_hash}`} target="_blank" rel="noopener noreferrer">PROOF ↗</a> : ago(a.confirmed_at)}</span>
+              </li>
+            ))}
+          </ul>
+          {demo?.enabled && <div className="th-note">Demo: Rijeka holds {demo.counterparty?.name || 'the demo bank'}&apos;s key, so a confirmation you make alone is marked ANCHORED, not BILATERAL.</div>}
+        </>}
         {cur === 'rates' && <PolicyPath onCurves={() => navigate('/configurations/market-data/curves')} />}
         {cur === 'week' && <WeekAhead />}
-        {cur === 'news' && (
+        {cur === 'news' && <>
           <ul className="dh-news th-news">
             {news.map(n => (
-              <li key={n.url}><a href={n.url} target="_blank" rel="noopener noreferrer">{n.title}</a><span className="dh-news-meta">{n.source} · {ago(n.published_at)}{n.tags?.[0] ? ` · ${n.tags[0]}` : ''}</span></li>
+              <li key={n.url} className={n.summary ? 'has-summary' : ''}>
+                <a href={n.url} target="_blank" rel="noopener noreferrer">{n.title}</a>
+                {n.summary && <div className="dh-news-sum">
+                  {String(n.summary).split(/\n+/).map((p, i) => <p key={i} className={/^why it matters/i.test(p) ? 'why' : ''}>{p}</p>)}
+                  <span className="dh-news-basis">AI summary · {n.summary_basis === 'article' ? 'from the article' : 'from the feed blurb'}</span>
+                </div>}
+                <span className="dh-news-meta">{n.source} · {ago(n.published_at)}{n.tags?.[0] ? ` · ${n.tags[0]}` : ''}</span>
+              </li>
             ))}
             {!loading && !news.length && <li className="dh-empty">No headlines yet.</li>}
           </ul>
-        )}
+          <button className="dh-link th-more" onClick={() => navigate('/messenger')}>OPEN THE NEWS ROOM →</button>
+        </>}
         {cur === 'brief' && <BookBrief onSheet={() => {}} />}
-        {cur === 'news' && <button className="dh-link th-more" onClick={() => navigate('/messenger')}>OPEN THE NEWS ROOM →</button>}
       </div>
     </div>
   )

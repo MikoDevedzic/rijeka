@@ -1,6 +1,6 @@
 // The trader's home: what it works out from the risk report, the trades and the P&L summary.
 import { describe, expect, it } from 'vitest'
-import { BUCKETS, bucketOfYears, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, limitLabel, limitMarks, standing, railLayout, statement, moved, signed, MAX_LANES } from './trader-home'
+import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, railLayout, statement, moved, signed, MAX_LANES } from './trader-home'
 
 const TRADES = [{ id: 't1', maturity_date: '2027-02-13' }, { id: 't2', maturity_date: '2030-11-13' }, { id: 't3', maturity_date: '2026-12-13' }]
 const REP = {
@@ -22,8 +22,17 @@ const REP = {
 }
 
 describe("the trader's home: a trade's place along the tenor", () => {
-  it('uses the ladder\'s own buckets and bounds', () => {
-    expect([0, 0.5, 1, 1.01, 5, 5.01, 10, 10.01, 30].map(bucketOfYears)).toEqual(['0-1Y', '0-1Y', '0-1Y', '1-5Y', '1-5Y', '5-10Y', '5-10Y', '10Y+', '10Y+'])
+  it('keeps a ticket of a round tenor in the bucket that holds that tenor\'s quote: the anniversary, and a week for spot and a roll', () => {
+    const from = '2026-11-13'
+    expect(maturityBucket('2036-11-13', from), 'ten years to the day (3,653 days: 10.0014 years of 365.25)').toBe('5-10Y')
+    expect(maturityBucket('2036-11-19', from), 'ten years from spot, rolled over a weekend').toBe('5-10Y')
+    expect(maturityBucket('2036-11-20', from), 'the last day of grace').toBe('5-10Y')
+    expect(maturityBucket('2036-11-21', from)).toBe('10Y+')
+    expect(maturityBucket('2027-11-15', from), 'one year, rolled off a Saturday (367 days)').toBe('0-1Y')
+    expect(maturityBucket('2028-03-01', '2027-03-01'), 'one year across a leap day (366 days)').toBe('0-1Y')
+    expect(maturityBucket('2031-11-17', from), 'five years from spot').toBe('1-5Y')
+    expect(maturityBucket('2031-11-21', from)).toBe('5-10Y')
+    expect(maturityBucket('2031-11-17T00:00:00Z', '2026-11-13T09:30:00Z'), 'a timestamp is read by its date').toBe('1-5Y')
   })
   it('places a maturity from the report\'s date, and a past or unreadable one at the near end', () => {
     expect(maturityBucket('2027-02-13', '2026-11-13')).toBe('0-1Y')
@@ -73,9 +82,41 @@ describe("the trader's home: the risk factors", () => {
     expect(canDay(none)).toBe(false); expect(canDay(list)).toBe(true)
     expect(factors(null)).toEqual([]); expect(factors({ ladder: {} })).toEqual([])
   })
+  it('gives a flat curve no usual move, as the VaR gives it none, and places its one bucket at the trade\'s maturity', () => {
+    const rep = { date: '2026-11-13', ladder: { ladder: [{ curve: 'CHF_SARON', buckets: { '0-1Y': 0, '1-5Y': 0, '5-10Y': 0, '10Y+': 0, FLAT: 900 }, total: 900 }] },
+                  ladder_rows: [{ trade_id: 't2', usd_rate: 1, kr01: { CHF_SARON: { FLAT: 900 } }, spot01: {} }], moves: { stdev: { CHF_SARON: { '1-5Y': 4 } } } }
+    const [f] = factors(rep, TRADES)
+    expect(f).toMatchObject({ v: [0, 900, 0, 0], move: null, day: null, hasDay: false })
+  })
+  it('does not count as placed what sits in a bucket the picture does not have: the total is still drawn', () => {
+    const rep = { date: '2026-11-13', ladder: { crybasis01: { BTC_FUNDING: -500 } }, ladder_rows: [{ trade_id: 't1', usd_rate: 1, crybasis01: { BTC_FUNDING: { '3M': -500 } } }], moves: { stdev: {} } }
+    expect(factors(rep, TRADES)[0].v).toEqual([-500, 0, 0, 0])
+  })
+  it('adds up one day\'s carry from the trades the report valued, in dollars', () => {
+    expect(carry({ ladder_rows: [{ usd_rate: 1, theta: 128 }, { usd_rate: 1.07, theta: -100 }, { theta: 999 }, { usd_rate: 1, theta: null }] })).toBeCloseTo(21, 9)
+    expect(carry({ ladder_rows: [{ usd_rate: 1 }] })).toBe(null); expect(carry(null)).toBe(null)
+  })
   it('draws a total at the near end when the report has no rows to place it by', () => {
     const f = factors({ ...REP, ladder_rows: [] }, TRADES).find(x => x.key === 'SPOT:BTC')
     expect(f.v).toEqual([22900, 0, 0, 0])
+  })
+})
+
+describe("the trader's home: a stored report that is not the book as it stands", () => {
+  const live = (id, at = '2026-11-13T10:00:00Z') => ({ id, trade_ref: `TRD-${id}`, status: 'CONFIRMED', created_at: at })
+  const rep = { date: '2026-11-13', generated_at: '2026-11-13T12:00:00Z', moves: null, ladder: { problems: [{ trade_ref: 'TRD-3' }] }, ladder_rows: [{ trade_id: 1 }, { trade_id: 2 }] }
+  it('is the book when every live trade is in it or named as one it could not value', () => {
+    expect(staleness(rep, [live(1), live(2), live(3), { id: 9, status: 'CANCELLED', created_at: '2026-11-13T13:00:00Z' }], '2026-11-13')).toBe(null)
+    expect(staleness(null, [live(1)])).toBe(null)
+  })
+  it('is not the book when a live trade is missing from it, when it values one that is no longer live, or when one was booked after it', () => {
+    expect(staleness(rep, [live(1), live(2), live(4)])).toBe('book')
+    expect(staleness(rep, [live(1)])).toBe('book')
+    expect(staleness({ ...rep, ladder_rows: [{ trade_id: 1 }] }, [live(1, '2026-11-13T12:00:01Z')])).toBe('book')
+  })
+  it('is behind the market when the curves have a later date, and older when it was stored before it carried the moves', () => {
+    expect(staleness(rep, [live(1), live(2)], '2026-11-14')).toBe('market')
+    expect(staleness({ ...rep, moves: undefined }, [live(1), live(2)])).toBe('older')
   })
 })
 

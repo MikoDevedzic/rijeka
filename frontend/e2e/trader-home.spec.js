@@ -42,6 +42,9 @@ test('the home on a monitor: the statement, the risk by tenor, what needs you an
   await expect(side.locator('.th-row', { hasText: 'USD SOFR' })).toBeVisible()
   await expect(side.getByTestId('th-var')).toContainText(/too few for a VaR|[\d,]+/)
 
+  // the report shown holds the swap just booked: a stored one that did not was run again, once
+  await expect(home.getByTestId('th-behind'), 'the report is the book as it stands').toHaveCount(0, { timeout: 120_000 })
+
   // band 1: where you stand, and the desk feed's actions on the right
   await expect(home.locator('.dh-strip'), 'the rates strip keeps its height').toBeVisible()
   expect((await home.locator('.dh-strip').boundingBox()).height).toBeGreaterThan(30)
@@ -53,8 +56,13 @@ test('the home on a monitor: the statement, the risk by tenor, what needs you an
   const trades = home.getByTestId('th-trades')
   await expect(trades.locator('tbody tr').first()).toContainText(/PENDING|CONFIRMED|LIVE/)
   const tabs = home.getByTestId('th-tabs')
-  await expect(tabs.locator('.th-tabs > [role=tab]')).toHaveText(['WHAT MOVED', 'RATES', 'WEEK AHEAD', 'NEWS', 'BRIEF'])
+  await expect(tabs.locator('.th-tabs > [role=tab]')).toHaveText(['WHAT MOVED', 'ON CHAIN', 'RATES', 'WEEK AHEAD', 'NEWS', 'BRIEF'])
   await expect(tabs.getByRole('tab', { name: 'WHAT MOVED' })).toHaveAttribute('aria-selected', 'true')
+  // what the old home's LIFECYCLE card listed: the latest confirmations, each with its proof or its state
+  await tabs.getByRole('tab', { name: 'ON CHAIN' }).click()
+  await expect(tabs.getByTestId('th-anchors').locator('li').first().or(tabs.locator('.dh-text'))).toBeVisible({ timeout: 30_000 })
+  await expectNoHorizontalOverflow(tabs, 'the confirmations in their tab')
+  await shot(tabs, 'tab-chain')
   await tabs.getByRole('tab', { name: 'RATES' }).click()
   await expect(tabs.locator('.dh-plot svg').first()).toBeVisible({ timeout: 30_000 })
   await expectNoHorizontalOverflow(tabs, 'the policy path in its tab')
@@ -97,13 +105,16 @@ test('with a history of moves and limits: the streams share one scale in money, 
   await bookedSwap(app)
   // the report as the API answers it, given what a desk with history and limits has: a usual daily move for each
   // bucket of each curve it carries, a second factor, and three limits (one clear, one close, one passed)
-  await app.route('**/api/risk/report*', async route => {
-    const res = await route.fetch(), j = await res.json()
+  // (the stored report is the one read from the API; a run asked for because a swap was booked since is answered
+  // with the same report, so this journey starts no heavy run and leaves none in flight)
+  let given = null
+  await app.route(url => url.pathname.endsWith('/api/risk/report'), async route => {
+    if (new URL(route.request().url()).search.includes('live=1') && given) return route.fulfill({ json: { ...given, generated_at: new Date().toISOString() } })
+    const res = await route.fetch({ url: route.request().url().replace(/\?.*$/, '') }), j = await res.json()
     const stdev = {}
     for (const row of j.ladder?.ladder || []) stdev[row.curve] = { '0-1Y': 3.2, '1-5Y': 5.1, '5-10Y': 5.6, '10Y+': 5.0 }
     stdev.BTC_SPOT = { SPOT: 3.1 }
-    j.ladder.spot01 = { ...(j.ladder.spot01 || {}), BTC: 22900 }
-    j.ladder_rows = [...(j.ladder_rows || []), { trade_id: 'journey', usd_rate: 1, kr01: {}, spot01: { BTC: 22900 }, vega: {}, fund01: {}, crybasis01: {} }]
+    j.ladder.spot01 = { ...(j.ladder.spot01 || {}), BTC: 22900 }          // a total with no row of its own: drawn at the near end
     j.moves = { stdev, observations: {}, unit: '', method: '' }
     j.var = { ...j.var, var_1d: 183800, enough: true, confidence: 0.99 }
     j.limits = [
@@ -111,6 +122,7 @@ test('with a history of moves and limits: the streams share one scale in money, 
       { id: 'l2', metric: 'SPOT01:BTC', scope: 'ALL', limit: 25000, warn_pct: 80, value: 22900, utilisation_pct: 91.6, status: 'WARN' },
       { id: 'l3', metric: 'IR01', scope: 'ALL', limit: 1000, warn_pct: 80, value: 1100, utilisation_pct: 110, status: 'BREACH' },
     ]
+    given = j
     await route.fulfill({ response: res, json: j })
   })
   await app.goto('/command-center')
@@ -159,10 +171,40 @@ test('an empty book says how to begin, and a phone keeps the home it had', async
   await expect(home.getByTestId('th-river')).toContainText('No risk yet')
   await expect(home.getByTestId('th-pnl').locator('.th-big')).toHaveText('—')
   await expect(home.getByTestId('th-factors')).toContainText('Nothing to measure yet.')
-  await expect(home.getByTestId('th-tabs').locator('.th-tabs > [role=tab]')).toHaveText(['RATES', 'WEEK AHEAD', 'NEWS'])      // nothing that needs a book
+  await expect(home.getByTestId('th-tabs').locator('.th-tabs > [role=tab]')).toHaveText(['ON CHAIN', 'RATES', 'WEEK AHEAD', 'NEWS'])      // nothing that needs a book
   await shot(app, 'empty-1440')
   await app.setViewportSize({ width: 390, height: 844 })
   await expect(app.getByTestId('trader-home')).toHaveCount(0)
   await expect(app.locator('.dh-kpis').first()).toBeVisible({ timeout: 30_000 })
   expectClean(problems)
+})
+
+test('a stored report that misses a trade is run again once; where it cannot be, the page says what it lacks', async ({ app, problems }) => {
+  test.setTimeout(180_000)
+  await app.setViewportSize(MONITOR)
+  await bookedSwap(app)
+  const isStored = (url) => url.pathname.endsWith('/api/risk/report') && !url.search
+  const isLive = (url) => url.pathname.endsWith('/api/risk/report') && url.search.includes('live=1')
+  let real = null, lives = 0
+  // the stored report as it would be had a trade been booked after it: made long ago, and one trade short
+  await app.route(isStored, async route => {
+    const res = await route.fetch(); real = await res.json()
+    await route.fulfill({ response: res, json: { ...real, generated_at: '2026-01-01T00:00:00+00:00', ladder_rows: (real.ladder_rows || []).slice(1) } })
+  })
+  await app.route(isLive, async route => { lives++; await route.fulfill({ status: 429, json: { detail: 'Too many live risk reports this minute.' } }) })
+  await app.goto('/command-center')
+  const home = app.getByTestId('trader-home')
+  await expect(home.getByTestId('th-behind')).toContainText('It does not hold the trades booked or closed since, and could not be run again just now (it has been run too often this minute)', { timeout: 120_000 })
+  await expect(home.getByTestId('th-river').locator('.th-lane').first(), 'the stored report is still drawn').toBeVisible()
+  expect(lives, 'asked for once, not on every render').toBe(1)
+  await shot(app, 'behind-1440')
+
+  // and where it can be run: the live report takes the stored one's place, and nothing is said
+  await app.unroute(isLive)
+  await app.route(isLive, async route => { lives++; await route.fulfill({ json: { ...real, generated_at: new Date().toISOString() } }) })
+  await app.reload()
+  await expect(app.getByTestId('th-river').locator('.th-lane').first()).toBeVisible({ timeout: 120_000 })
+  await expect(app.getByTestId('th-behind')).toHaveCount(0)
+  expect(lives).toBe(2)
+  expect(problems.filter(p => !/HTTP 429 GET .*live=1/.test(p)), 'nothing wrong but the refusal this journey made').toEqual([])
 })
