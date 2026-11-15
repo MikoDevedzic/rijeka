@@ -1,10 +1,22 @@
 # Rijeka
 
+[![ci](https://github.com/MikoDevedzic/rijeka/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MikoDevedzic/rijeka/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/MikoDevedzic/rijeka?color=d9b25c)](https://github.com/MikoDevedzic/rijeka/releases)
+[![engine: Apache-2.0](https://img.shields.io/badge/engine-Apache--2.0-2e7d6b)](LICENSE-APACHE)
+[![platform: BSL 1.1](https://img.shields.io/badge/platform-BSL%201.1-555)](LICENSE-BSL)
+[![live demo](https://img.shields.io/badge/live%20demo-app.rijeka.app-d9b25c)](https://app.rijeka.app)
+
 **Where the trading desk meets the chain.** An open-source OTC derivatives desk: the pricing, risk and bilateral confirmation a trading desk runs on, in open code, with the confirmed record anchored on Ethereum. Rates, FX and digital assets are live; credit, equities and commodities next. Free for everyone.
 
 Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging-market participants and academic researchers operate blind, without the tools to price, hedge or understand the true cost of a trade. Rijeka exists to change that.
 
 Named after a village in Bosnia (*rijeka* means "river" in Bosnian, Croatian and Serbian), it is built on the belief that the mathematics of modern finance should be accessible to anyone with the ambition to use it.
+
+![A five-year swap's XVA tab: simulated exposure, the XVA waterfall under a bilateral CSA, and what confirming the trade on chain saves](docs/img/ticket-xva.png)
+
+*A swap ticket's XVA tab: the exposure paths, the waterfall under a bilateral CSA, and what confirming on chain saves.*
+
+**Try it** at [app.rijeka.app](https://app.rijeka.app) (sign up, a sandbox desk is created for you) · **run it** with one `docker compose` command ([SELF-HOSTING.md](SELF-HOSTING.md)) · **read it**: the [methodology](docs/methodology/rijeka_methodology.pdf), the [validation](docs/VALIDATION.md), the [map of the system](docs/architecture.md) · **check it**: [contribute or validate](CONTRIBUTING.md).
 
 ---
 
@@ -17,22 +29,24 @@ Hosted demo at [app.rijeka.app](https://app.rijeka.app); the in-app **ROADMAP** 
 - **Counterparty credit and XVA.** Netting sets on shared Hull-White and lognormal paths, real-world calibration from public history with historical block sampling, the CSA on the netted value, EE / EPE / PFE and credit limits; the XVA waterfall (CVA, DVA, FVA, FBA, KVA, MVA) under CSA presets with a margin period of risk; initial margin as an amount you set or the engine's own estimate (ISDA SIMM is licensed and is not implemented).
 - **P&L.** Attribution by sequential full revaluation (carry, cash, curves by bucket, spot, points, vol, residual), day / MTD / YTD, trader and controller sign-off, XVA P&L.
 - **Confirmation on chain.** Canonical record v2 → EIP-712 → registry on Sepolia; amend and terminate; a public verifier that trusts nothing of Rijeka's. Messenger with firms, rooms, trade cards and wallet countersigning; Telegram mirror.
-- **Open box.** The methodology (v1.12) names the module for every formula; the Methodology tab exports an Excel replication per product from your own market data, the ticket rebuilt in cells with every number linked to its derivation and a Checks sheet against the engine; the XVA book carries the engine's own Monte Carlo draws.
+- **Open box.** The methodology names the module for every formula; the Methodology tab exports an Excel replication per product from your own market data, the ticket rebuilt in cells with every number linked to its derivation and a Checks sheet against the engine; the XVA book carries the engine's own Monte Carlo draws.
 - **Prometheus.** A read-only assistant inside the messenger: sees your book and the engine, never changes anything.
 
 ## Validation
 
-Every product is repriced in QuantLib on every commit: 424 comparisons in `backend/tests/reference`, each with a tolerance that fails the build when exceeded; 696 Python tests; 16 Foundry tests on the registry contract. What is validated against what, and the open findings ([#31](https://github.com/MikoDevedzic/rijeka/issues/31)–[#36](https://github.com/MikoDevedzic/rijeka/issues/36)), is in [docs/VALIDATION.md](docs/VALIDATION.md); the April 2026 Bloomberg comparison for IRS and OIS (v0.4.2, 38 tests) is kept in `model_validation/` as history. Independent validators are wanted and named on the report: USD 250 for a confirmed S1 or S2 pricing finding.
+Every product is repriced in QuantLib on every commit: more than 400 comparisons in `backend/tests/reference`, each with a tolerance that fails the build when exceeded. Around them, about 1,700 Python tests, 700 frontend tests, 130 browser journeys on a local stack and 16 Foundry tests on the registry contract; six checks gate every commit to `main`. What is validated against what, and the open findings ([#31](https://github.com/MikoDevedzic/rijeka/issues/31)–[#36](https://github.com/MikoDevedzic/rijeka/issues/36)), is in [docs/VALIDATION.md](docs/VALIDATION.md); the April 2026 Bloomberg comparison for IRS and OIS (v0.4.2, 38 tests) is kept in `model_validation/` as history. Independent validators are wanted and named on the report: USD 250 for a confirmed S1 or S2 pricing finding.
 
 ## Public tools
 
-No login required, on [rijeka.app](https://rijeka.app): the IRS pricer with a draggable curve (`/irs`), the XVA simulator (`/xva`) and waterfall (`/xva_ee`), the SABR vol surface scenario (`/vol_surface`), the Bermudan tree, the attribution and SIMM tools, and the verifier (`/verify`). Their source is the landing site, deployed separately from this repository.
+No login required, on [rijeka.app](https://rijeka.app): the IRS pricer with a draggable curve (`/irs`), the XVA simulator (`/xva`) and waterfall (`/xva_ee`), the SABR vol surface scenario (`/vol_surface`), the Bermudan tree, the attribution tool, and the verifier (`/verify`). Their source is the landing site, deployed separately from this repository.
 
-## Desk home
+## Home
+
+On a monitor the home is the trader's: where the book stands against its limits on one rail, the day's P&L, the risk by curve and bucket drawn against the limit that bounds it, what fixes on each coming day, what moved, what is on chain and what needs you. A phone keeps a simpler home, with the desk globe below.
 
 Under the policy path, the next four decisions of the currency's central bank (FOMC, ECB, BoE, SNB, BoJ; published calendars in `backend/market_data/policy_path.py`) show what the curve prices for each: the forward overnight rate between consecutive meetings, the step in basis points against the window before, and the running total. Indicative, from the demo curve, not a forecast.
 
-The desk home opens on the **desk globe**: a turning Earth lit by the real sun, the five desks glowing while their session is open, every live trade drawn as an arc from your entity's home city to the counterparty's, and an orbital ring that holds one satellite per confirmation anchored on the registry. Beside it, chain health (latest block, relayer wallet, registry), an inbox of what needs your action (countersign requests, trades awaiting the other side, maturities inside 30 days, confirmations that never reached the chain, a low relayer wallet) and the latest anchors with their proof links. Land outlines are Natural Earth 110m (public domain); the globe is plain canvas, no 3D library.
+On a phone the home carries the **desk globe**: a turning Earth lit by the real sun, the five desks glowing while their session is open, every live trade drawn as an arc from your entity's home city to the counterparty's, and an orbital ring that holds one satellite per confirmation anchored on the registry. Beside it, chain health (latest block, relayer wallet, registry), an inbox of what needs your action (countersign requests, trades awaiting the other side, maturities inside 30 days, confirmations that never reached the chain, a low relayer wallet) and the latest anchors with their proof links. Land outlines are Natural Earth 110m (public domain); the globe is plain canvas, no 3D library.
 
 **Relayer budget.** The hosted demo pays Sepolia gas from one relayer, so every anchoring action (confirm, countersign, amend, terminate, the chat-card countersign included) is charged to the person who pressed the button before anything is sent, and counted as an attempt, so a reverted or timed-out transaction still counts. Three rolling 24-hour caps: `RIJEKA_CHAIN_DAILY_LIMIT` per user (unset = off, for local and self-hosted), `RIJEKA_CHAIN_FIRM_DAILY_LIMIT` per firm (default three times the user cap), `RIJEKA_CHAIN_GLOBAL_DAILY_LIMIT` for everyone (default 200 once the user cap is set; with no cap set at all the budget is off and nothing is counted). Concurrent clicks serialise on an advisory lock. `RIJEKA_CHAIN_MAX_FEE_GWEI` (default 100) is a ceiling on the fee the relayer will pay; above it nothing is sent. Sends are serialised per process on the pending nonce, and a revert, a timeout or a used nonce is reconciled against the registry: if the record is already there, by this relayer or by the counterparty, it is taken as the anchor rather than retried into the same revert. Attempts are stored in `chain_attempts` (`docs/migrations/2026-10-31_chain_attempts.sql`), in memory until that table exists.
 
@@ -53,27 +67,21 @@ The desk's quant, risk and margin analyst. Reads everything, changes nothing. Li
 
 ---
 
-## Getting Started
+## Getting started
 
-**Backend**
+**Run the whole thing.** One command brings up the database, sign-in, the API and the app ([SELF-HOSTING.md](SELF-HOSTING.md) has the settings to fill in first):
+
 ```bash
-cd backend
-pip install -r requirements.txt
-python -m uvicorn main:app --reload --port 8000
+git clone https://github.com/MikoDevedzic/rijeka && cd rijeka
+cp .env.selfhost.example .env.selfhost
+docker compose --env-file .env.selfhost up --build
 ```
 
-**Frontend**
+**Work on it.** The tests need no network and no hosted service ([CONTRIBUTING.md](CONTRIBUTING.md) has the local stack for the integration tests and the browser journeys):
+
 ```bash
-cd frontend
-npm install
-npm run dev
-```
-
-**Environment variables required:**
-```
-VITE_SUPABASE_URL
-VITE_SUPABASE_ANON_KEY
-VITE_API_URL
+cd backend && pip install -r requirements.txt -r requirements-dev.txt && python -m pytest -q
+cd ../frontend && npm install && npm test
 ```
 
 **Hosted demo.** [app.rijeka.app](https://app.rijeka.app) runs this code on the
@@ -170,7 +178,7 @@ The spread schedules live in one place, `backend/market_data/demo_feed.py`, and 
 
 ## Documentation
 
-- `docs/methodology/rijeka_methodology.pdf` (v1.12, source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
+- `docs/methodology/rijeka_methodology.pdf` (source `.tex` beside it) — curves, every product, market and counterparty risk, XVA, on-chain confirmation, the QuantLib reference; the same file the app's Methodology tab serves
 - `docs/VALIDATION.md` — the validation charter, what is validated against what, and the open findings
 - `docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md` — the per-module notes behind the methodology chapters
 - `docs/ops/deploy.md` — the deploy chain (API first on Render, then the app from the `release` branch)

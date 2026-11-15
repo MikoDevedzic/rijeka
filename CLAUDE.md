@@ -1,8 +1,9 @@
 # Working on Rijeka
 
 Rijeka is an open-source OTC derivatives desk: a FastAPI backend (`backend/`, Render), a React/Vite frontend
-(`frontend/`, Netlify from the `release` branch), a Supabase database that local development and production
-share, and an on-chain confirmation registry. `docs/architecture.md` is the map.
+(`frontend/`, Netlify from the `release` branch), one hosted Supabase database (the owner's
+own environment points at it; contributors, tests and journeys use the local stack), and an on-chain
+confirmation registry. `docs/architecture.md` is the map.
 
 ## Nothing ships that harms what already works
 
@@ -46,7 +47,8 @@ what changes is who runs it.
 
 ## Standing rules
 
-- **Production is shared.** The local `.env` points at the production database. A script that writes is a
+- **Production is shared.** There is one hosted database and the owner's local `.env` points at it; development
+  and every test run on the local stack (`backend/stack/README.md`), never on it. A script that writes is a
   production write. Production writes happen only when the user asks for that write in their own words; show
   the exact statements first. A migration reaches production through the runner (`backend/db/migrate.py`): the
   deployed API applies what is on `backend/db/migrations_approved.txt`, and a line goes on that list only with

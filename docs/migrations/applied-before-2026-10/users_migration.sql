@@ -48,7 +48,7 @@ WHERE p.id = u.id AND p.email IS NULL;
 -- 6. Make your account admin (update with your user ID)
 UPDATE profiles
 SET role = 'admin'
-WHERE email = 'miko.devedzic@gmail.com';
+WHERE email = 'owner@example.com';  -- the owner's address; not kept in the repository
 
 -- 7. RLS on profiles — admin can see all, users see own
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;

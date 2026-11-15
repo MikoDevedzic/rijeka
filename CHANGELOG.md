@@ -5,7 +5,7 @@ methodology document carries its own version (v1.20). Commits on `main` are the 
 
 ## 0.38.0 · 14 November 2026
 
-**Fixings: what resets, day by day.** The owner: "we have to have fixing. traders hadge this all the time. They
+**Fixings: what resets, day by day.** The owner: "we have to have fixing. traders hedge this all the time. They
 have to know how much is resetting and what index for each date/date. on dashboard we can show net fixing...but
 market risk dashboard has to have this fixing risk in there."
 
@@ -60,7 +60,7 @@ What it is not, and what the check of "does it all feed" found:
 **Every curve has a limit, and the trader's home reads a limit on both sides: flat in the middle, short one way,
 long the other.** The owner, of the home with no limits set: "it would be better if we had limits set up. then
 trader knows hows close he is to his 01 limits....keep in mind that risk can be positive and negative"; of the two
-ways to hold a limit, "one number either side"; and then, "each curve has to have abiility to set limit. is should
+ways to hold a limit, "one number either side"; and then, "each curve has to have ability to set limit. is should
 be standard thing. when curve is added then limit is added."
 
 - **A limit for every curve, as standard.** Every curve, asset, volatility surface and forward basis the book
@@ -111,7 +111,7 @@ on a stream, because a stream is the whole book. The size of a share is the one 
 ## 0.36.0 · 14 November 2026
 
 **The home on a monitor is the trader's home.** The owner: "there is maybe a lot of things on the home page. and
-maybe slightly messy... this has to be landng page and has to be the best experience"; then, of the picture at its
+maybe slightly messy... this has to be landing page and has to be the best experience"; then, of the picture at its
 middle, "what about if we make this in terms of risk factors and not trades... each risk factor is its own line...
 and then bucketed risk along"; then, of a home for each role, "build the trader view." It is the first of those
 views, and for now every role on a monitor sees it. Three bands, always in the same place:
