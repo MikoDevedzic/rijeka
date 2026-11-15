@@ -226,6 +226,15 @@ export function scene(list, mode, by) {
 }
 export const canLimit = (list, by) => list.some(f => limitsOf(f, by))
 
+// What is written at a bucket's box: what the bucket carries on the scale being read ('day': what a usual day moves
+// it by, in USD, where the factor has a usual move; otherwise the sensitivity itself). Null where the bucket carries
+// nothing to draw.
+export function bucketFigure(f, i, mode) {
+  if (!f || !(Math.abs(f.v[i]) >= EPS)) return null
+  const day = mode === 'day' && f.hasDay ? f.day?.[i] : null
+  return signed(day != null ? day : f.v[i])
+}
+
 // ── limits ───────────────────────────────────────────────────────────────────
 const round = (n) => Math.round(n)
 export function limitLabel(lim, scenarios = []) {

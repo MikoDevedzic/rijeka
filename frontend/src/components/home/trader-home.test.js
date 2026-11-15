@@ -1,6 +1,6 @@
 // The trader's home: what it works out from the risk report, the trades and the P&L summary.
 import { describe, expect, it } from 'vitest'
-import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
+import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, bucketFigure, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
 
 const TRADES = [{ id: 't1', maturity_date: '2027-02-13' }, { id: 't2', maturity_date: '2030-11-13' }, { id: 't3', maturity_date: '2026-12-13' }]
 const REP = {
@@ -143,6 +143,19 @@ describe("the trader's home: a stream's height", () => {
     const { drawn, rest } = lanes(many)
     expect(drawn).toHaveLength(MAX_LANES); expect(rest.map(f => f.key)).toEqual(['k0', 'k1'])
     expect(lanes(many.slice(0, 3)).rest).toEqual([])
+  })
+})
+
+describe("the trader's home: the figure at a bucket's box", () => {
+  const f = { v: [0, 100.4, -3, 0.2], hasDay: true, day: [0, 5020, -150, 0] }
+  it('is the sensitivity itself, or on the money scale what a usual day moves it by', () => {
+    expect(BUCKETS.map((_, i) => bucketFigure(f, i, 'raw'))).toEqual([null, '+100', '−3', null])
+    expect(BUCKETS.map((_, i) => bucketFigure(f, i, 'limit'))).toEqual([null, '+100', '−3', null])
+    expect(BUCKETS.map((_, i) => bucketFigure(f, i, 'day'))).toEqual([null, '+5,020', '−150', null])
+  })
+  it('stays the sensitivity for a factor with no usual move, which is drawn to its own scale', () => {
+    expect(bucketFigure({ v: [12754, 0, 0, 0], hasDay: false, day: null }, 0, 'day')).toBe('+12,754')
+    expect(bucketFigure({ v: [9, 0, 0, 0], hasDay: true, day: [null, 0, 0, 0] }, 0, 'day')).toBe('+9')
   })
 })
 

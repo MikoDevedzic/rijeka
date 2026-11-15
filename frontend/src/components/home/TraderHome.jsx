@@ -14,7 +14,7 @@ import PolicyPath from './PolicyPath'
 import WeekAhead from './WeekAhead'
 import BookBrief from './BookBrief'
 import Fixings from '../risk/Fixings'
-import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, canDay, peak, carry, staleness, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, statement, moved, fmt0, signed, tone } from './trader-home'
+import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, canDay, peak, carry, staleness, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, bucketFigure, statement, moved, fmt0, signed, tone } from './trader-home'
 import './TraderHome.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -279,8 +279,9 @@ function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
   )
 }
 
-// The picture: one stream for each risk factor, along the tenor bucket the risk sits in. Above its line the book is
-// long that factor, below it short; where there is no risk the line is bare.
+// The picture: one stream for each risk factor, along the tenor bucket the risk sits in: a box for each bucket, as
+// tall as what it carries and with its figure, joined by the stream's line. Above its line the book is long that
+// factor, below it short; where there is no risk the line is bare.
 function Streams({ on, off, st, list, fl, any }) {
   const { drawn, rest } = useMemo(() => lanes(list), [list])
   const day = canDay(list), lim = canLimit(drawn, fl)          // a scale is offered for what is drawn: a limit on a factor too small to draw does not offer it
@@ -305,7 +306,7 @@ function Streams({ on, off, st, list, fl, any }) {
       {on && any && st.err && !st.data && <div className="th-blank">The risk report could not be read ({why429(st.err)}). The Risk page can run it again.</div>}
       {on && any && empty && <div className="th-blank">The book carries no risk the ladder measures on {fmtD(st.data?.date)}.</div>}
       {on && drawn.length > 0 && <River drawn={drawn} mode={mode} fl={fl} asOf={st.data?.date} />}
-      {on && drawn.length > 0 && <div className="th-note">A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && scene(drawn, mode, fl).some(h => h.own) ? ' A dashed stream has no usual move measured for it and is drawn to its own scale.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, with the share used written there. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
+      {on && drawn.length > 0 && <div className="th-note">A box is what one bucket carries, with its figure; the line joins them. A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && scene(drawn, mode, fl).some(h => h.own) ? ' A dashed stream has no usual move measured for it and is drawn to its own scale.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, with the share used written there. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
     </div>
   )
 }
@@ -323,6 +324,7 @@ function River({ drawn, mode, fl, asOf }) {
   const box = useRef(null), cv = useRef(null), tip = useRef(null), at = useRef({ x: 0, y: 0 }), w = useWidth(box)
   const hotRef = useRef(-1), redraw = useRef(null)
   const hs = useMemo(() => scene(drawn, mode, fl), [drawn, mode, fl])
+  const figs = useMemo(() => drawn.map(f => BUCKETS.map((_, i) => bucketFigure(f, i, mode))), [drawn, mode])          // what each box says
   const [hot, setHot] = useState(-1)
   const reach = useMemo(() => bucketReach(asOf), [asOf])
   const AXIS = 40, n = drawn.length
@@ -387,36 +389,48 @@ function River({ drawn, mode, fl, asOf }) {
           g.fillStyle = col; g.fillRect(gx - 2, Math.min(base, base - u * reach), 4, Math.abs(u * reach))
           g.font = `500 11px ${MONO}`; g.textAlign = 'left'; g.fillText(`${Math.round(Math.abs(tot.u) * 100)}%`, gx + 7, tot.u < 0 ? base + 13 : base - 5); g.textAlign = 'center'          // in the gutter beside the gauge, on the side the position is on
         }
-        const grad = g.createLinearGradient(0, base - amp, 0, base + amp)
-        grad.addColorStop(0, alpha(c, 0.4)); grad.addColorStop(0.5, alpha(c, 0)); grad.addColorStop(1, alpha(c, 0.4))
-        g.beginPath(); g.moveTo(xs[0], base); xs.forEach((x, i) => g.lineTo(x, ys[i])); g.lineTo(xs[xs.length - 1], base); g.closePath(); g.fillStyle = grad; g.fill()
-        g.lineWidth = 1; g.strokeStyle = c
-        for (let j = 1; j < 9; j++) {                      // the strands: each a fraction of the way from the line to the edge
-          const fr = j / 9; g.globalAlpha = 0.07 + 0.22 * fr * fr; g.beginPath(); let pen = false
-          xs.forEach((x, i) => { if (!live(i)) { pen = false; return } const y = base - (base - ys[i]) * fr + (still ? 0 : Math.sin(x * 0.02 + j * 1.7 + ms * 0.0007) * 0.8 * (1 - fr)); pen ? g.lineTo(x, y) : g.moveTo(x, y); pen = true })
-          g.stroke()
-        }
         const edge = () => { g.beginPath(); let pen = false; xs.forEach((x, i) => { if (!live(i)) { pen = false; return } pen ? g.lineTo(x, ys[i]) : g.moveTo(x, ys[i]); pen = true }) }
-        g.globalAlpha = 1; g.lineWidth = 1.8; g.setLineDash(own ? [5, 4] : []); g.shadowColor = c; g.shadowBlur = own ? 0 : 14; edge(); g.stroke(); g.shadowBlur = 0; g.setLineDash([])
+        // the stream's line, behind the boxes: it joins them, and the boxes say how much
+        g.strokeStyle = c; g.globalAlpha = 0.5; g.lineWidth = 1.2; g.setLineDash(own ? [5, 4] : []); edge(); g.stroke(); g.setLineDash([])
         if (!still && !own) {                               // light running along the edge, toward the far tenors
           g.globalCompositeOperation = 'lighter'; g.strokeStyle = T.textHi; g.globalAlpha = 0.5; g.lineWidth = 1.6
           g.setLineDash([16, 120]); g.lineDashOffset = -ms * 0.035 - k * 37; edge(); g.stroke(); g.setLineDash([]); g.globalCompositeOperation = 'source-over'
         }
         g.globalAlpha = 1
-        // how much of its limit a bucket uses, in the colour of its state, beside the stream's edge
-        g.font = `500 11px ${MONO}`
-        hs[k].tags.forEach((t, i) => {
-          if (!t) return
-          const y = Math.max(top + 10, Math.min(bottom - 3, base - hs[k].h[i] * amp + (t.u < 0 ? 14 : -7)))
-          g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim
-          g.fillText(`${Math.round(Math.abs(t.u) * 100)}%`, colX(i + 0.5), y)
+        // a box for each bucket, as tall as what the bucket carries on the lane's scale: above the line long, below
+        // it short (a stream on a scale of its own keeps its dash)
+        const bw = Math.min(colW * 0.72, 240), bx = (i) => colX(i + 0.5) - bw / 2
+        const tall = (i) => Math.max(2, Math.abs(hs[k].h[i]) * amp)
+        figs[k].forEach((fig, i) => {
+          if (!fig) return
+          const hgt = tall(i), y = f.v[i] >= 0 ? base - hgt : base
+          g.fillStyle = alpha(c, i === hot ? 0.36 : 0.24); g.fillRect(bx(i), y, bw, hgt)
+          g.strokeStyle = alpha(c, 0.85); g.lineWidth = 1; g.setLineDash(own ? [4, 3] : [])
+          g.strokeRect(bx(i) + 0.5, y + 0.5, bw - 1, Math.max(1, hgt - 1)); g.setLineDash([])
         })
+        // at each box, what it carries; after it, where the bucket has a limit of its own, the share of it used, in
+        // the colour of its state. Beyond the box's far edge, and past the bucket's limit line where that stands there.
+        g.font = `500 11px ${MONO}`; g.textAlign = 'left'
+        figs[k].forEach((fig, i) => {
+          if (!fig) return
+          const t = hs[k].tags[i], sd = f.v[i] >= 0 ? 1 : -1, hgt = tall(i), b = hs[k].bank[i]
+          const far = base - sd * hgt, line = b == null ? null : base - sd * b * amp
+          const out = (edge) => edge - sd * (sd > 0 ? 6 : 13)                    // a figure's baseline just past an edge
+          let y = out(far)
+          if (line != null && Math.abs(line - sd * 2 - (y - 4)) < 12) y = out(sd > 0 ? Math.min(far, line - 4) : Math.max(far, line + 4))
+          y = Math.max(top + 10, Math.min(bottom - 3, y))
+          const pct = t ? ` · ${Math.round(Math.abs(t.u) * 100)}%` : ''
+          const wf = g.measureText(fig).width, x0 = colX(i + 0.5) - (wf + (pct ? g.measureText(pct).width : 0)) / 2
+          g.fillStyle = T.textHi; g.fillText(fig, x0, y)
+          if (pct) { g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim; g.fillText(pct, x0 + wf, y) }
+        })
+        g.textAlign = 'center'
       })
     }
     raf = requestAnimationFrame(draw)
     redraw.current = still ? () => draw(0) : null          // moving, the next frame reads the bucket; still, it is drawn when it changes
     return () => { cancelAnimationFrame(raf); redraw.current = null }
-  }, [drawn, hs, w, height, n, reach, gut])
+  }, [drawn, hs, figs, w, height, n, reach, gut])
   useEffect(() => { hotRef.current = hot; redraw.current?.() }, [hot])
 
   // The tip follows the pointer by its own style, not by a render: only entering another bucket draws the page again.

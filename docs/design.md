@@ -307,8 +307,12 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
 - **One headline figure**, the day's P&L, at 20px (the largest step of the scale) in the colour of its sign.
 - **The risk picture is one stream for each risk factor**, in that factor's colour (`--rf-*`), on a canvas whose
   colours are the tokens (`theme.js`, and the factor tokens read from the page). Above its line is long, below it
-  short. A stream drawn to a scale of its own, because it has no history, is dashed and says so beside its name.
-  The light along a stream's edge moves at thirty frames a second and not at all with "reduce motion".
+  short. **A bucket is a box**: as tall as what the bucket carries on the lane's scale, in the factor's colour (a
+  quarter filled, its edge ruled), with its figure written past its far edge in limestone and, where the bucket has
+  a limit of its own, the share used after it. The stream's line runs behind the boxes and joins them; it says
+  where the risk is, the boxes say how much. A stream drawn to a scale of its own, because it has no history, is
+  dashed (its boxes too) and says so beside its name.
+  The light along a stream's line moves at thirty frames a second and not at all with "reduce motion".
 - **A limit is read on two sides** (since 0.37.0), because a position is long or short and a limit is one number
   on its size. The rail is flat in the middle, short to the left, long to the right, hatched past either end; a 01
   is a dot, a size with no side (VaR, a stress loss) a square read to the right, an exposure a diamond. On a stream
