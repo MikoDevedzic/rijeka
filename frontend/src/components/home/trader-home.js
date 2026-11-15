@@ -57,6 +57,12 @@ export function factors(rep, trades = []) {
     out.push(f)
   }
   // a total with no rows to place it by (an older stored report) is drawn at the near end rather than dropped
+  // a curve's risk at each of its quoted tenors (the report's `points`, since 0.40.0): what a bucket is made of.
+  // An older stored report has none, and the picture then draws the bucket whole.
+  const points = (row, move) => (row.points || []).map(p => {
+    const i = BUCKETS.indexOf(p.bucket), x = Number(p.value)
+    return { tenor: String(p.tenor), years: Number(p.years) || 0, i, x, day: move?.[i] != null ? x * move[i] : null }
+  }).filter(p => p.i >= 0 && Math.abs(p.x) >= EPS)
   const rest = (v, total, placed) => { if (Number.isFinite(total) && Math.abs(total - placed) > Math.max(1, Math.abs(total) * 1e-6)) add(v, BUCKETS[0], total - placed) }
 
   for (const row of lad.ladder || []) {
@@ -65,7 +71,8 @@ export function factors(rep, trades = []) {
     if (row.buckets?.FLAT) { let placed = 0; for (const r of rows) { const x = r.kr01?.[row.curve]?.FLAT; if (x) placed += add(v, at(r), x * r.usd_rate) } rest(v, Number(row.buckets.FLAT), placed) }
     // a flat curve (one quote) has no bucket in the history, and the VaR gives it no move: neither does the picture
     const m = row.buckets?.FLAT ? null : sd[row.curve]
-    push({ key: `IR:${row.curve}`, name: pretty(row.curve), measure: 'IR01', factor: 'ir', unit: 'per bp', moveUnit: 'bp', v, move: m ? BUCKETS.map(b => m[b] ?? null) : null })
+    const move = m ? BUCKETS.map(b => m[b] ?? null) : null
+    push({ key: `IR:${row.curve}`, name: pretty(row.curve), measure: 'IR01', factor: 'ir', unit: 'per bp', moveUnit: 'bp', v, move, pts: points(row, move) })
   }
   for (const [asset, total] of Object.entries(lad.spot01 || {})) {
     const v = blank(); let placed = 0
@@ -86,7 +93,8 @@ export function factors(rep, trades = []) {
     if (row.buckets?.FLAT) { let placed = 0; for (const r of rows) { const x = r.vega?.[row.curve]?.FLAT; if (x) placed += add(v, at(r), x * r.usd_rate) } rest(v, Number(row.buckets.FLAT), placed) }
     const m = row.buckets?.FLAT ? null : sd[row.curve], sw = /_SWVOL/.test(row.curve)
     // the report's move for a surface is in hundredths of a point (of a bp of normal vol for a swaption grid), as the VaR multiplies it
-    push({ key: `VEGA:${row.curve}`, name: surfaceName(row.curve), measure: 'VEGA', factor: 'vol', unit: sw ? 'per bp of vol' : 'per vol point', moveUnit: sw ? 'bp of vol' : 'pt', v, move: m ? BUCKETS.map(b => m[b] != null ? m[b] / 100 : null) : null })
+    const move = m ? BUCKETS.map(b => m[b] != null ? m[b] / 100 : null) : null
+    push({ key: `VEGA:${row.curve}`, name: surfaceName(row.curve), measure: 'VEGA', factor: 'vol', unit: sw ? 'per bp of vol' : 'per vol point', moveUnit: sw ? 'bp of vol' : 'pt', v, move, pts: points(row, move) })
   }
   return out.sort((a, b) => ORDER[a.factor] - ORDER[b.factor] || a.name.localeCompare(b.name))
 }
@@ -140,13 +148,18 @@ export const canDay = (list) => list.some(f => f.hasDay)
 // sensitivity itself, each factor to its own scale. The square root keeps a small bucket in sight beside a large one.
 export function heights(list, mode) {
   const root = (x, top) => top > 0 ? Math.sign(x) * Math.sqrt(Math.abs(x) / top) : 0
-  const big = mode === 'day' ? Math.max(0, ...list.filter(f => f.hasDay).flatMap(f => f.day.map(Math.abs))) : 0
+  const big = mode === 'day' ? dayTop(list) : 0
   return list.map(f => {
-    if (mode === 'day' && f.hasDay) return { h: f.day.map(x => root(x, big)), own: false }
-    const top = Math.max(...f.v.map(Math.abs))
-    return { h: f.v.map(x => root(x, top)), own: mode === 'day' }
+    const pts = f.pts || []
+    if (mode === 'day' && f.hasDay) return { h: f.day.map(x => root(x, big)), ph: pts.map(p => root(p.day, big)), own: false }
+    const top = sizeTop(f)
+    return { h: f.v.map(x => root(x, top)), ph: pts.map(p => root(p.x, top)), own: mode === 'day' }
   })
 }
+// The largest thing a factor draws: a bucket, or one quoted tenor of it (a two-year position against a five-year
+// one nets in the bucket, and each point is then larger than the bucket).
+const sizeTop = (f) => Math.max(0, ...f.v.map(Math.abs), ...(f.pts || []).map(p => Math.abs(p.x)))
+const dayTop = (list) => Math.max(0, ...list.filter(f => f.hasDay).flatMap(f => [...f.day, ...(f.pts || []).map(p => p.day)].map(x => Math.abs(x || 0))))
 
 // ── a factor against its limits ──────────────────────────────────────────────
 // A limit is one number on the size, whichever the sign (backend/risk/limits.py measures |value|), so it stands on
@@ -204,15 +217,19 @@ export function against(f, fl) {
 // of its own is drawn as its share of the total's limit, or, with neither, against the factor's largest limit.
 export function scene(list, mode, by) {
   const hs = heights(list, mode === 'limit' ? 'raw' : mode)
-  const big = mode === 'day' ? Math.max(0, ...list.filter(f => f.hasDay).flatMap(f => f.day.map(Math.abs))) : 0
+  const big = mode === 'day' ? dayTop(list) : 0
   const root = (x, top) => top > 0 ? Math.sqrt(Math.abs(x) / top) : null
   return list.map((f, k) => {
-    const fl = limitsOf(f, by), ag = against(f, fl), top = Math.max(...f.v.map(Math.abs))
-    let h = hs[k].h, own = hs[k].own, none = false
+    const fl = limitsOf(f, by), ag = against(f, fl), top = sizeTop(f), pts = f.pts || []
+    let h = hs[k].h, ph = hs[k].ph, own = hs[k].own, none = false
     if (mode === 'limit') {
       none = !ag; own = false
       const widest = fl ? Math.max(fl.total?.limit || 0, ...fl.buckets.map(b => b?.limit || 0)) : 0
-      h = none ? f.v.map(x => (top ? x / top : 0) * 0.6) : f.v.map((x, i) => ag.per[i] ? ag.per[i].u : x / (fl.total?.limit || widest))
+      // a point is drawn as the share of its bucket's limit it uses on its own: the points of a bucket then stand
+      // against the same line the bucket does
+      const share = (x, i) => none ? (top ? x / top : 0) * 0.6 : x / (fl.buckets[i]?.limit || fl.total?.limit || widest)
+      h = none ? f.v.map(x => share(x)) : f.v.map((x, i) => ag.per[i] ? ag.per[i].u : share(x, i))
+      ph = pts.map(p => share(p.x, p.i))
     }
     const bank = BUCKETS.map((_, i) => {
       const l = fl?.buckets[i]?.limit
@@ -221,17 +238,60 @@ export function scene(list, mode, by) {
       return y != null && y <= LIMIT_MAX + 0.02 ? y : null
     })
     const tags = BUCKETS.map((_, i) => ag?.per[i] && Math.abs(f.v[i]) >= EPS ? ag.per[i] : null)
-    return { h: h.map(x => Math.max(-LIMIT_MAX, Math.min(LIMIT_MAX, x))), own, none, bank, tags, total: ag?.total || null, against: ag }
+    const held = (x) => Math.max(-LIMIT_MAX, Math.min(LIMIT_MAX, x))
+    return { h: h.map(held), ph: ph.map(held), own, none, bank, tags, total: ag?.total || null, against: ag }
   })
 }
 export const canLimit = (list, by) => list.some(f => limitsOf(f, by))
 
-// What is written at a bucket's box: what the bucket carries on the scale being read ('day': what a usual day moves
-// it by, in USD, where the factor has a usual move; otherwise the sensitivity itself). Null where the bucket carries
-// nothing to draw. `short` is the same figure in fewer characters, for a column too narrow for the whole of it.
-export function bucketFigure(f, i, mode, short = false) {
-  if (!f || !(Math.abs(f.v[i]) >= EPS)) return null
-  const x = mode === 'day' && f.hasDay ? f.day[i] : f.v[i]
+// ── the picture's columns ────────────────────────────────────────────────────
+// A quoted tenor has a column of its own where it carries at least this share of its factor's largest point. The
+// rest are not drawn (the Risk page lists every one): a five-year swap is priced a little off every quote before
+// five years, and a column for each would leave no room to read the one that matters.
+export const MATERIAL = 0.03
+
+// The columns of the picture, nearest first: within each bucket one for every quoted tenor that some factor
+// carries materially, or one for the bucket whole where no factor has a point there. `groups` says which columns
+// are each bucket's.
+export function columns(list) {
+  const per = BUCKETS.map(() => new Map())
+  for (const f of list) {
+    const top = Math.max(0, ...(f.pts || []).map(p => Math.abs(p.x)))
+    for (const p of f.pts || []) if (Math.abs(p.x) >= MATERIAL * top) per[p.i].set(p.tenor, p.years)
+  }
+  const slots = [], groups = []
+  per.forEach((m, i) => {
+    const from = slots.length, ts = [...m.entries()].sort((a, b) => a[1] - b[1]).map(([t]) => t)
+    if (ts.length) ts.forEach(tenor => slots.push({ i, tenor })); else slots.push({ i, tenor: null })
+    groups.push({ i, from, to: slots.length })
+  })
+  return { slots, groups }
+}
+
+// What one factor draws, nearest first. A point in a column of its own: { from, to, i, tenor, h, x, day }. A
+// bucket the factor carries with no point in it (a spot delta placed by its trade's maturity, a flat curve, an
+// older report) is drawn whole, across the bucket's columns: the same with `tenor` null. `sc` is the factor's entry
+// in scene(). `left` counts the points given no column.
+export function laneMarks(f, sc, cols) {
+  const slotOf = new Map(cols.slots.map((s, k) => [`${s.i}:${s.tenor}`, k])), pts = f.pts || [], out = []
+  let left = 0
+  pts.forEach((p, j) => {
+    const k = slotOf.get(`${p.i}:${p.tenor}`)
+    if (k == null) { left++; return }
+    out.push({ from: k, to: k + 1, i: p.i, tenor: p.tenor, h: sc.ph[j], x: p.x, day: p.day })
+  })
+  BUCKETS.forEach((_, i) => {
+    if (!(Math.abs(f.v[i]) >= EPS) || pts.some(p => p.i === i)) return
+    out.push({ from: cols.groups[i].from, to: cols.groups[i].to, i, tenor: null, h: sc.h[i], x: f.v[i], day: f.day?.[i] ?? null })
+  })
+  return { marks: out.sort((a, b) => a.from - b.from), left }
+}
+
+// What is written at a box: what it carries on the scale being read ('day': what a usual day moves it by, in USD,
+// where the factor has a usual move; otherwise the sensitivity itself). `short` is the same figure in fewer
+// characters, for a column too narrow for the whole of it.
+export function markFigure(f, m, mode, short = false) {
+  const x = mode === 'day' && f.hasDay && m.day != null ? m.day : m.x
   return short ? signedShort(x) : signed(x)
 }
 export const signedShort = (n) => {
@@ -240,11 +300,12 @@ export const signedShort = (n) => {
   return a >= 999_500 ? `${sg}${(a / 1e6).toFixed(a >= 99_950_000 ? 0 : a >= 9_995_000 ? 1 : 2)}m` : a >= 9_950 ? `${sg}${Math.round(a / 1e3)}k` : signed(n)
 }
 
-// What fits in `room` px at a bucket: the figure and the share of the bucket's limit, then the figure shortened with
-// the share, then the shortened figure alone. `width` measures a string as it will be drawn.
+// What fits in `room` px at a box: the figure and the share of the bucket's limit, then the figure shortened with
+// the share, then the shortened figure alone; null where not even that fits (the tip then says it). `width` measures
+// a string as it will be drawn.
 export function figureFit(full, short, share, room, width) {
   for (const [fig, sh] of [[full, share], [short, share], [short, '']]) if (width(fig + sh) <= room) return { fig, share: sh }
-  return { fig: short, share: '' }
+  return null
 }
 
 // Where a bucket's figure is written: the y of its baseline, and whether that is inside the box. `side` 1 long (the
@@ -316,24 +377,6 @@ export function standing(marks, pending = 0) {
   if (pending) words.push(['hollow', `${pending} to confirm`])
   const t = marks[0]
   return { words, standardOnly: marks.length > 0 && marks.every(m => m.standard), tight: t ? `Closest: ${t.name}${t.side ? (t.side > 0 ? ', long' : ', short') : ''}, at ${t.pct}% of its limit.` : '' }
-}
-// Where each mark and its label go on a rail `width` px wide: flat in the middle, 125% of a limit at either end. A
-// short figure is to the left of the middle, a long one and a size with no side to the right. A label that would
-// run into its neighbour goes up a lane; the rail's own height follows the lanes used.
-export const RAIL_MAX = 1.25
-export const railAt = (m) => 0.5 + (m.side < 0 ? -1 : 1) * Math.min(Math.max(m.u, 0), RAIL_MAX) / RAIL_MAX / 2        // 0 to 1 along the rail
-export function railLayout(marks, width, charW = 6.9) {
-  const out = marks.map(m => ({ ...m, x: railAt(m) * width })).sort((a, b) => a.x - b.x)
-  const ends = []
-  for (const m of out) {
-    m.text = `${m.name} ${m.pct}%`
-    m.w = m.text.length * charW + 6
-    m.cx = Math.max(m.w / 2, Math.min(width - m.w / 2, m.x))
-    let k = 0
-    while (ends[k] != null && m.cx - m.w / 2 < ends[k] + 8) k++
-    ends[k] = m.cx + m.w / 2; m.lane = k
-  }
-  return { marks: out, lanes: Math.max(1, ends.length) }
 }
 
 // ── P&L ──────────────────────────────────────────────────────────────────────

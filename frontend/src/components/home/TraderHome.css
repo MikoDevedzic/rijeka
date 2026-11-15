@@ -31,24 +31,6 @@
 .th .dh-strip-right { min-width: 0; overflow: hidden; text-overflow: ellipsis; }      /* the snapshot's line gives way before it runs off the page */
 .th-stand .dh-path { padding-top: 12px; }
 
-.th-rail { position: relative; margin-top: 12px; }
-.th-rl-labs { position: relative; }
-.th-rl-lab { position: absolute; transform: translateX(-50%); white-space: nowrap; font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; color: var(--text-dim); }
-.th-rl-lab.WARN { color: var(--amber); } .th-rl-lab.BREACH { color: var(--down); }
-.th-rl-stem { position: absolute; width: 1px; background: var(--border-hi); }
-.th-rl-track { position: relative; height: 14px; border-radius: 2px; background: var(--panel-2); margin-top: 2px; }
-.th-rl-zone { position: absolute; top: 0; bottom: 0; width: 10%; background: repeating-linear-gradient(135deg, var(--border-hi) 0 2px, transparent 2px 6px); }      /* past a limit: hatched in a quiet colour; coral is kept for a mark that is there */
-.th-rl-zone.l { right: 0; border-radius: 0 2px 2px 0; border-left: 2px solid var(--text-hi); }
-.th-rl-zone.s { left: 0; border-radius: 2px 0 0 2px; border-right: 2px solid var(--text-hi); }
-.th-rl-mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--text-dim); }
-.th-rl-m { position: absolute; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; box-sizing: border-box; border: 2px solid var(--bg); border-radius: 50%; background: var(--text-dim); }
-.th-rl-m.c { border-radius: 1px; transform: rotate(45deg); }
-.th-rl-m.s { border-radius: 1px; }
-.th-rl-m.WARN { background: var(--amber); } .th-rl-m.BREACH { background: var(--down); }
-.th-rl-ticks { position: relative; height: 16px; margin-top: 4px; font-family: var(--mono); font-size: 11px; color: var(--text-mute); }
-.th-rl-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
-.th-rl-key { display: flex; flex-wrap: wrap; gap: 3px 18px; margin-top: 2px; font-family: var(--mono); font-size: 11px; color: var(--text-mute); }
-.th-rl-key .th-rl-m { position: static; display: inline-block; margin: 0 7px 0 0; width: 9px; height: 9px; border: 0; vertical-align: -1px; }
 .th-needs .lf-list li { padding: 6px 0; font-size: 13px; }
 .th-needs .lf-t small, .th-needs .lf-when, .th-needs .lf-chip, .th-lead .lf-chip { font-size: 11px; }
 .th-needs .lf-empty, .th-panel .lf-empty, .th-side .lf-empty { font-size: 13px; }
@@ -82,8 +64,7 @@ table.th-t { width: 100%; border-collapse: collapse; }
 .th .dh-st { font-size: 11px; }
 
 .th-pic { position: relative; padding: 16px 18px 12px; min-width: 0; display: flex; flex-direction: column; gap: 10px; background: radial-gradient(70% 120% at 40% 50%, var(--panel) 0%, var(--bg) 68%); }
-.th-seg { flex: 0 0 auto; }
-.th-seg .tbw-tab, .th-tabs .tbw-tab { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; cursor: pointer; }
+.th-tabs .tbw-tab { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; cursor: pointer; }
 .th-blank { flex: 1; min-height: 240px; display: grid; place-items: center; text-align: center; color: var(--text-dim); font-size: 13px; padding: 0 24px; }
 .th-river { display: grid; grid-template-columns: 196px minmax(0, 1fr); }
 .th-lanes { display: flex; flex-direction: column; padding-top: 6px; box-sizing: border-box; }

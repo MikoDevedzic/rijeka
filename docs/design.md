@@ -302,25 +302,33 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
   role's home keeps the bands and changes what is in them.
 - **Where you stand is words first.** One line at 16px, each part with a dot in the colour of what it says: green
   for inside every limit, amber for close, `--down` for passed, a hollow dot for what is pending; the count of
-  limits that are clear is quiet (dim), because it is the good news already said or the remainder of the bad. Under it every
-  limit is a mark on one rail, placed by how much of it is used; the hatched end is past the limit.
+  limits that are clear is quiet (dim), because it is the good news already said or the remainder of the bad. Under it one
+  sentence names the closest limit. (Until 0.40.0 a rail under the words carried a mark for every limit; it said
+  again what the words and the gauges beside the factors say, and was removed.)
 - **One headline figure**, the day's P&L, at 20px (the largest step of the scale) in the colour of its sign.
 - **The risk picture is one stream for each risk factor**, in that factor's colour (`--rf-*`), on a canvas whose
   colours are the tokens (`theme.js`, and the factor tokens read from the page). Above its line is long, below it
-  short. **A bucket is a box**: as tall as what the bucket carries on the lane's scale, in the factor's colour (a
-  quarter filled, its edge ruled), with its figure (12.5px, limestone) above the box when long and below it when
-  short and, where the bucket has a limit of its own, the share used after it. A figure stays in its own lane and
-  its own bucket: where the lane has no room past the box, or the bucket's limit line stands there, it is written
-  inside the box; in a column too narrow for it the figure is shortened (741k) before the share is given up. The
-  stream's line runs between the boxes and joins them, never through one; it says where the risk is, the boxes say how
-  much. A stream
-  drawn to a scale of its own, because it has no history, has dashed boxes and says so beside its name.
+  short. **One scale**: a box is the sensitivity itself, each factor to its own scale, so a factor's boxes add up to
+  the figure beside its name. (Until 0.40.0 a switch offered the share of a limit and USD on a usual day as well;
+  three meanings for one height was two too many. What a usual day moves a box by is in the tip.)
+  **Along the picture is a column for each quoted tenor** that some factor carries materially (3% of
+  its factor's largest), nearest first, grouped by the four buckets; the tenor is named under its column
+  as a label (11px) and the bucket under its group. A bucket is at least two columns
+  wide, and takes its short name (5-10Y) where the long one does not fit. **A factor has a box in the column of
+  each tenor it carries**: as tall as what it carries there on the lane's scale, in the factor's colour (a quarter
+  filled, its edge ruled), every point's box as wide as every other's. A factor with no tenor of its own (a spot
+  delta, a flat curve, a report stored before the points were) has one box across the bucket it is placed in.
+  The figure (12.5px, limestone) is above the box when long and below it when short. A figure stays in its own
+  lane and its own column: where the lane has no room past the box, or the bucket's limit line stands there, it
+  is written inside the box; in a column too narrow for it the figure is shortened (741k), and where not even
+  that fits it is left to the tip. The stream's line runs between the boxes and joins them, never through one;
+  it says where the risk is, the boxes say how much.
   The light along a stream's line moves at thirty frames a second and not at all with "reduce motion".
 - **A limit is read on two sides** (since 0.37.0), because a position is long or short and a limit is one number
-  on its size. The rail is flat in the middle, short to the left, long to the right, hatched past either end; a 01
-  is a dot, a size with no side (VaR, a stress loss) a square read to the right, an exposure a diamond. On a stream
+  on its size. On a stream
   a bucket's limit is a ruled line in limestone (`--text-hi`) above the line and below it, hatched on the far
-  side; a dash is kept for the boxes of a stream on a scale of its own. A limit on a factor's total is a gauge at the start of
+  side, across the bucket's columns; on the side the position is on it ends in the share of the limit used (11px). A
+  limit too far off the lane to draw is not written on the picture (the tip and the gauge have it). A limit on a factor's total is a gauge at the start of
   its lane, never a line across the buckets. The share used is written in the colour of its state (quiet, amber
   from the limit's warning level, `--down` past it): on a limit `--down` says "past", and the hatching past a limit
   is quiet so that it is not read as a breach. LONG and SHORT are marked once at the picture's edge. Beside a
@@ -329,13 +337,16 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
   read at a glance against 80 and 100, not to a basis point. A figure under a hundred keeps one decimal where a column mixes small and large (a fixing 01 of 2.8 beside one of
   453), on the Fixings panel. A limit that is the standard size for its kind says
   so (a dashed, quiet chip on the Limits page; ", the standard" on the home): it is a figure to start from.
-- **A segment of two, three or six is the ticket's joined control** (`tbw-tabs`): the picture's OF ITS LIMIT / A USUAL DAY / PER 01,
-  and the tabs that hold what the old home showed as cards.
+- **A segment of two, three or six is the ticket's joined control** (`tbw-tabs`): the tabs that hold what the old
+  home showed as cards.
 - **Brass on this page is a link to where a thing is dealt with** (OPEN BLOTTER →, THE RISK PAGE →), as on the old
   home. The page has no action of its own, so no brass button.
 - A name of a factor or a limit is a label (11px, or 12.5px in mono beside its stream); a figure is 12.5px, also the
   one inside a caption ("≈ 89,981 a day"). A trade's row answers the pointer and the keyboard as every row does.
-- The picture's tip follows the pointer and names the bucket under it and each factor's figure there.
+- The picture's tip follows the pointer and names the column under it (its tenor and bucket) and each factor's
+  figure there; it stays inside the picture, reaching back over the lanes' names where it is wide.
+- **The Market risk page lists the ladder twice**: by bucket, then at each quoted tenor, a row for each curve and a
+  cell for each quote that carries risk (the tenor as a label over its figure).
 - The rates strip's snapshot line gives way with an ellipsis before it runs off the page.
 - Under 1180px wide the bands stack in the same order; nothing is pushed sideways.
 

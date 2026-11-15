@@ -1,6 +1,6 @@
 // The trader's home: what it works out from the risk report, the trades and the P&L summary.
 import { describe, expect, it } from 'vitest'
-import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, bucketFigure, signedShort, figureFit, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
+import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, MATERIAL, signedShort, figureFit, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
 
 const TRADES = [{ id: 't1', maturity_date: '2027-02-13' }, { id: 't2', maturity_date: '2030-11-13' }, { id: 't3', maturity_date: '2026-12-13' }]
 const REP = {
@@ -146,21 +146,82 @@ describe("the trader's home: a stream's height", () => {
   })
 })
 
-describe("the trader's home: the figure at a bucket's box", () => {
-  const f = { v: [0, 100.4, -3, 0.2], hasDay: true, day: [0, 5020, -150, 0] }
+// A book with a two-year position against a five-year one on USD SOFR (they net in the 1-5Y bucket), a little risk
+// at the quotes before them, a ten-year position, a swaption grid's vega at one expiry, and a spot delta.
+const POINTS_REP = {
+  date: '2026-11-13',
+  ladder: {
+    ladder: [{ curve: 'USD_SOFR', buckets: { '0-1Y': -5, '1-5Y': 1500, '5-10Y': 2000, '10Y+': 0 }, total: 3495,
+               points: [{ tenor: '6M', years: 0.5, bucket: '0-1Y', value: 9.5 }, { tenor: '1Y', years: 1, bucket: '0-1Y', value: -14.4 },
+                        { tenor: '2Y', years: 2, bucket: '1-5Y', value: -3000 }, { tenor: '3Y', years: 3, bucket: '1-5Y', value: 0.2 },
+                        { tenor: '5Y', years: 5, bucket: '1-5Y', value: 4500 }, { tenor: '10Y', years: 10, bucket: '5-10Y', value: 2000 }] }],
+    spot01: { BTC: 22900 },
+    vega: [{ curve: 'USD_SWVOL_ATM', buckets: { '0-1Y': 0, '1-5Y': 4200, '5-10Y': 0, '10Y+': 0 }, total: 4200, points: [{ tenor: '5Y', years: 5, bucket: '1-5Y', value: 4200 }] }],
+  },
+  ladder_rows: [{ trade_id: 't1', usd_rate: 1, kr01: {}, spot01: { BTC: 22900 }, vega: {} }],
+  moves: { stdev: { USD_SOFR: { '0-1Y': 3, '1-5Y': 5, '5-10Y': 5.5, '10Y+': 5 }, BTC_SPOT: { SPOT: 3.1 } } },
+}
+
+describe("the trader's home: a curve's risk at each quoted tenor", () => {
+  const list = factors(POINTS_REP, TRADES), sofr = list.find(f => f.key === 'IR:USD_SOFR'), btc = list.find(f => f.key === 'SPOT:BTC'), vol = list.find(f => f.key === 'VEGA:USD_SWVOL_ATM')
+  it('reads the points of a curve and of a surface, each with its bucket and what a usual day moves it by', () => {
+    expect(sofr.pts.map(p => [p.tenor, p.i, p.x, p.day])).toEqual([['6M', 0, 9.5, 28.5], ['1Y', 0, -14.4, -43.2], ['2Y', 1, -3000, -15000], ['5Y', 1, 4500, 22500], ['10Y', 2, 2000, 11000]])
+    expect(vol.pts.map(p => [p.tenor, p.i, p.x, p.day])).toEqual([['5Y', 1, 4200, null]])          // no usual move measured for the surface
+    expect(btc.pts).toBeUndefined()                                                                  // a spot delta has no tenor of its own
+    expect(factors(REP, TRADES).find(f => f.key === 'IR:USD_SOFR').pts).toEqual([])                  // an older stored report: none
+  })
+  it('gives a column to each tenor that matters to some factor, nearest first, and one to a bucket with none', () => {
+    const cols = columns(list)
+    expect(MATERIAL).toBe(0.03)
+    // 6M and 1Y are under 3% of the curve's largest point (4,500) and get no column; the bucket still has its one
+    expect(cols.slots).toEqual([{ i: 0, tenor: null }, { i: 1, tenor: '2Y' }, { i: 1, tenor: '5Y' }, { i: 2, tenor: '10Y' }, { i: 3, tenor: null }])
+    expect(cols.groups).toEqual([{ i: 0, from: 0, to: 1 }, { i: 1, from: 1, to: 3 }, { i: 2, from: 3, to: 4 }, { i: 3, from: 4, to: 5 }])
+    expect(columns(factors(REP, TRADES)).slots).toEqual(BUCKETS.map((_, i) => ({ i, tenor: null })))      // no points: the four buckets, as before
+  })
+  it('draws a point in its tenor\'s column, and a factor with no point in a bucket across the bucket', () => {
+    const cols = columns(list), sc = scene(list, 'raw', new Map())
+    const s = laneMarks(sofr, sc[list.indexOf(sofr)], cols)
+    expect(s.marks.map(m => [m.tenor, m.from, m.to, m.x])).toEqual([['2Y', 1, 2, -3000], ['5Y', 2, 3, 4500], ['10Y', 3, 4, 2000]])
+    expect(s.left).toBe(2)                                                                // 6M and 1Y: said under the picture, listed on the Risk page
+    const b = laneMarks(btc, sc[list.indexOf(btc)], cols)
+    expect(b.marks.map(m => [m.tenor, m.from, m.to, m.x])).toEqual([[null, 0, 1, 22900]])  // the trade matures inside a year
+    const v = laneMarks(vol, sc[list.indexOf(vol)], cols)
+    expect(v.marks.map(m => [m.tenor, m.from, m.to])).toEqual([['5Y', 2, 3]])              // the same column as the curve's five-year point
+    // an older report: every bucket whole
+    const old = factors(REP, TRADES), oc = columns(old), os = scene(old, 'raw', new Map())
+    expect(laneMarks(old[0], os[0], oc).marks.map(m => [m.tenor, m.from, m.x])).toEqual([[null, 0, 100], [null, 1, 4000], [null, 2, -2400]])
+  })
+  it('scales a factor to its largest point, which a bucket that nets is smaller than', () => {
+    const h = heights(list, 'raw')[list.indexOf(sofr)]
+    expect(h.ph.map(x => Number(x.toFixed(4)))).toEqual([0.0459, -0.0566, -0.8165, 1, 0.6667])      // root(x / 4,500)
+    expect(Number(h.h[1].toFixed(4))).toBe(0.5774)                                                     // the bucket, 1,500 of 4,500
+    const d = heights(list, 'day')[list.indexOf(sofr)]
+    expect(Number(d.ph[3].toFixed(4))).toBe(Number(Math.sqrt(22500 / 70990).toFixed(4)))             // on the money scale the book's largest is BTC's 22,900 × 3.1
+  })
+  it('draws a point as the share of its bucket\'s limit that it uses on its own', () => {
+    const by = factorLimits([{ id: 'a', metric: 'KR01:USD_SOFR:1-5Y', limit: 5000, warn_pct: 80, scope: 'ALL' }])
+    const s = scene(list, 'limit', by)[list.indexOf(sofr)]
+    expect(s.ph.slice(2, 4)).toEqual([-0.6, 0.9])                 // 3,000 short and 4,500 long, each against the bucket's 5,000
+    expect(s.h[1]).toBe(0.3)                                      // the bucket itself: 1,500 of 5,000
+    expect(s.ph[4]).toBe(0.4)                                     // a bucket with no limit of its own: against the factor's widest
+  })
+})
+
+describe("the trader's home: the figure at a box", () => {
+  const f = { hasDay: true }
   it('is the sensitivity itself, or on the money scale what a usual day moves it by', () => {
-    expect(BUCKETS.map((_, i) => bucketFigure(f, i, 'raw'))).toEqual([null, '+100', '−3', null])
-    expect(BUCKETS.map((_, i) => bucketFigure(f, i, 'limit'))).toEqual([null, '+100', '−3', null])
-    expect(BUCKETS.map((_, i) => bucketFigure(f, i, 'day'))).toEqual([null, '+5,020', '−150', null])
+    const m = { x: 100.4, day: 5020 }
+    expect(['raw', 'limit', 'day'].map(mode => markFigure(f, m, mode))).toEqual(['+100', '+100', '+5,020'])
+    expect(markFigure(f, { x: -3, day: -150 }, 'day')).toBe('−150')
   })
   it('stays the sensitivity for a factor with no usual move, which is drawn to its own scale', () => {
-    expect(bucketFigure({ v: [12754, 0, 0, 0], hasDay: false, day: null }, 0, 'day')).toBe('+12,754')
+    expect(markFigure({ hasDay: false }, { x: 12754, day: null }, 'day')).toBe('+12,754')
   })
   it('is shortened for a narrow column: thousands from ten thousand, millions from a million', () => {
     expect([871, -9949, 12754, -740717, 999499, 999500, 12_754_000, -153_765_000].map(signedShort))
       .toEqual(['+871', '−9,949', '+13k', '−741k', '+999k', '+1.00m', '+12.8m', '−154m'])
-    expect(bucketFigure(f, 1, 'day', true)).toBe('+5,020')
-    expect(bucketFigure({ v: [740717, 0, 0, 0], hasDay: false, day: null }, 0, 'raw', true)).toBe('+741k')
+    expect(markFigure(f, { x: 100.4, day: 5020 }, 'day', true)).toBe('+5,020')
+    expect(markFigure({ hasDay: false }, { x: 740717, day: null }, 'raw', true)).toBe('+741k')
   })
   it('gives up the whole figure before the share of the limit, and the share last', () => {
     const width = (t) => t.length * 7
@@ -168,6 +229,7 @@ describe("the trader's home: the figure at a bucket's box", () => {
     expect(figureFit('+740,717', '+741k', ' · 80%', 90, width)).toEqual({ fig: '+741k', share: ' · 80%' })
     expect(figureFit('+740,717', '+741k', ' · 80%', 40, width)).toEqual({ fig: '+741k', share: '' })
     expect(figureFit('+871', '+871', '', 100, width)).toEqual({ fig: '+871', share: '' })
+    expect(figureFit('+740,717', '+741k', '', 30, width), 'a column too narrow even for the short figure writes none').toBeNull()
   })
 })
 
@@ -237,17 +299,6 @@ describe("the trader's home: limits", () => {
     expect(s.tight).toBe('Closest: USD SOFR 1-5Y · SWAPS, at 133% of its limit.')
     expect(standing(limitMarks(LIMS.slice(0, 1)), 0).words).toEqual([['ok', 'Inside every limit'], ['dim', '1 clear']])
     expect(standing([], 0)).toEqual({ words: [['mute', 'No limits set']], standardOnly: false, tight: '' })
-  })
-  it('places each mark by how much of its limit is used, holds a mark past 125% at the rail\'s end, and lifts a label off its neighbour', () => {
-    const { marks, lanes: n } = railLayout(limitMarks(LIMS), 1000)
-    const at = Object.fromEntries(marks.map(m => [m.id, m]))
-    // flat is the middle; a size with no side is read to the right: 73.52% of a limit is 0.5 + 0.7352 / 1.25 / 2 of the way
-    expect(at.a.x).toBeCloseTo(794.08, 2); expect(at.e.x).toBeCloseTo(620, 6); expect(at.c.x).toBe(1000)
-    expect(railAt({ u: 0.5, side: -1 })).toBeCloseTo(0.3, 9); expect(railAt({ u: 0.5, side: 1 })).toBeCloseTo(0.7, 9)
-    expect(railAt({ u: 3, side: -1 }), 'far past the short limit is the rail\'s left end').toBe(0); expect(railAt({ u: 0, side: 0 })).toBe(0.5)
-    expect(at.c.cx).toBeLessThanOrEqual(1000 - at.c.w / 2)                 // the label stays on the rail
-    const tight = railLayout([{ id: 1, name: 'AAAAAAAA', u: 0.5, pct: 50 }, { id: 2, name: 'BBBBBBBB', u: 0.51, pct: 51 }], 600)
-    expect(tight.marks.map(m => m.lane)).toEqual([0, 1]); expect(tight.lanes).toBe(2); expect(n).toBeGreaterThanOrEqual(1)
   })
 })
 

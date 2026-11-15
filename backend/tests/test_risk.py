@@ -312,3 +312,83 @@ def test_a_non_deliverable_forward_fixes_once_on_its_fixing_date_signed_by_its_s
     sat = F.settlement_fixing(N, {"notional": 1e7, "direction": "BUY", "settle": date(2027, 2, 13)}, "EURUSD", "WM/Reuters 4pm London", 1.0, date(2026, 11, 2))
     assert sat["date"] == date(2027, 2, 13) and sat["note"] == "its settlement date, a weekend"
     assert F.settlement_fixing(N, {"notional": 10.0, "direction": "BUY", "fixing_date": date(2027, 2, 13)}, "BTCUSD", "CME CF BRR", 1.0, date(2026, 11, 2))["note"] == ""      # a digital asset fixes every day
+
+
+# ── the ladder at each quoted point (risk/sensitivities.py, since 0.40.0) ─────────────────────────────────────────────
+class _Trade:
+    id, trade_ref, instrument_type, desk, book, status = "t1", "TRD-1", "IR_SWAP", "RATES", "MAIN", "CONFIRMED"
+
+
+def _linear_valuer(weights: dict, calls: list):
+    """A value that is linear in every quote: npv = Σ weight(curve, tenor, type) × rate. A +1bp bump of a quote then
+    moves it by exactly weight × 0.01, so a point's figure and a bucket's can be read off the weights."""
+    def valuer(trade, d, mkt):
+        calls.append(mkt)
+        npv = sum(weights.get((cid, q["tenor"], q.get("quote_type") or ""), 0.0) * float(q["rate"]) for cid in mkt.q for q in mkt.q[cid])
+        return {"npv": npv, "ccy": "USD"}
+    return valuer
+
+
+def _ladder(monkeypatch, quotes: dict, weights: dict):
+    from risk import sensitivities as S
+    monkeypatch.setattr(S, "trade_curves", lambda t: list(quotes))
+    monkeypatch.setattr(S, "spot_curve", lambda t: None)
+    calls: list = []
+    row = S.trade_ladder(None, {"sub": "u"}, _Trade(), None, _M(quotes, {}), _linear_valuer(weights, calls))
+    return row, calls
+
+
+def test_a_curve_is_measured_at_each_quoted_point_and_a_buckets_points_add_up_to_it(monkeypatch):
+    sofr = [{"tenor": t, "rate": 4.0} for t in ("ON", "6M", "1Y", "2Y", "5Y", "7Y", "10Y", "30Y")]
+    w = {("USD_SOFR", "2Y", ""): -300.0, ("USD_SOFR", "5Y", ""): 450.0, ("USD_SOFR", "7Y", ""): 20.0}
+    row, calls = _ladder(monkeypatch, {"USD_SOFR": sofr}, w)
+    pts = row["points"]["kr01"]["USD_SOFR"]
+    # a two-year position against a five-year one: the bucket nets them, the points show both
+    assert {k: round(v, 9) for k, v in pts.items()} == {"2Y": -3.0, "5Y": 4.5, "7Y": 0.2}
+    assert round(row["kr01"]["USD_SOFR"]["1-5Y"], 9) == 1.5 == round(pts["2Y"] + pts["5Y"], 9)
+    assert round(row["kr01"]["USD_SOFR"]["5-10Y"], 9) == 0.2
+    # the buckets are measured as before, and add up to the IR01 as before
+    assert round(row["ir01"], 9) == 1.7 and set(row["kr01"]["USD_SOFR"]) == {"0-1Y", "1-5Y", "5-10Y", "10Y+"}
+    # a bucket that does not move the trade has no points and its quotes are not repriced one by one:
+    # the base, four buckets, then 2Y, 5Y, 7Y and 10Y (the two buckets that carry risk)
+    assert len(calls) == 1 + 4 + 4
+    assert row["points"]["vega"] == {} and "fund01" not in row["points"]
+
+
+def test_a_surface_is_measured_by_tenor_and_a_swaption_grid_by_expiry(monkeypatch):
+    fxv = [{"tenor": t, "quote_type": k, "rate": r} for t in ("1M", "1Y") for k, r in (("ATM", 8.0), ("RR25", -0.5), ("BF25", 0.2))]
+    grid = [{"tenor": t, "rate": 90.0} for t in ("1Yx5Y", "1Yx10Y", "5Yx5Y")]
+    w = {("EURUSD_VOL", "1Y", "ATM"): 7.0, ("EURUSD_VOL", "1Y", "RR25"): 1.0, ("USD_SWVOL_ATM", "1Yx5Y", ""): 2.0, ("USD_SWVOL_ATM", "1Yx10Y", ""): 3.0}
+    row, _ = _ladder(monkeypatch, {"EURUSD_VOL": fxv, "USD_SWVOL_ATM": grid}, w)
+    v = row["points"]["vega"]
+    # one vol point on every row of the tenor (ATM, RR25, BF25 together), as a bucket moves them
+    assert {k: round(x, 9) for k, x in v["EURUSD_VOL"].items()} == {"1Y": 8.0}
+    # a grid's rows at one expiry are one point, named for the expiry
+    assert {k: round(x, 9) for k, x in v["USD_SWVOL_ATM"].items()} == {"1Y": 5.0}
+    assert round(row["vega"]["USD_SWVOL_ATM"]["0-1Y"], 9) == 5.0 and row["points"]["kr01"] == {}
+
+
+def test_points_are_named_placed_and_ordered_by_tenor():
+    from risk.sensitivities import bucket_of, curve_points, point_of
+    assert [point_of(t) for t in ("on", " 1Yx5Y", "6M X 10Y", "18M", None)] == ["ON", "1Y", "6M", "18M", ""]
+    assert [bucket_of(y) for y in (0.0, 1.0, 1.5, 5.0, 7.0, 10.0, 12.0)] == ["0-1Y", "0-1Y", "1-5Y", "1-5Y", "5-10Y", "5-10Y", "10Y+"]
+    q = [{"tenor": t} for t in ("10Y", "ON", "TN", "1W", "2Y", "1Y", "2Y")]
+    assert [p for p, _ in curve_points(q)] == ["ON", "TN", "1W", "1Y", "2Y", "10Y"]
+
+
+def test_the_books_points_are_summed_in_the_reporting_currency_nearest_first(monkeypatch):
+    from risk import sensitivities as S
+    rows = iter([
+        {"ccy": "USD", "npv": 0.0, "ir01": 1.5, "kr01": {"USD_SOFR": {"1-5Y": 1.5}}, "spot01": {}, "vega": {}, "fund01": {},
+         "points": {"kr01": {"USD_SOFR": {"5Y": 4.5, "2Y": -3.0}}, "vega": {}}},
+        {"ccy": "EUR", "npv": 0.0, "ir01": 2.0, "kr01": {"USD_SOFR": {"1-5Y": 2.0}}, "spot01": {}, "vega": {"EURUSD_VOL": {"0-1Y": 8.0}}, "fund01": {},
+         "points": {"kr01": {"USD_SOFR": {"2Y": 2.0}}, "vega": {"EURUSD_VOL": {"1Y": 8.0}}}},
+        {"ccy": "USD", "npv": 0.0, "ir01": 0.0, "kr01": {}, "spot01": {}, "vega": {}, "fund01": {}},      # a row with no points (none carried)
+    ])
+    monkeypatch.setattr(S, "trade_ladder", lambda *a, **k: next(rows))
+    t = type("T", (), {"status": "CONFIRMED", "trade_ref": "x"})
+    out = S.book_ladder(None, {"sub": "u"}, [t, t, t], None, None, lambda c: {"USD": 1.0, "EUR": 1.1}[c], valuer=type("V", (), {"calls": 0})())
+    sofr = next(x for x in out["ladder"] if x["curve"] == "USD_SOFR")
+    assert [(p["tenor"], p["bucket"], round(p["value"], 9)) for p in sofr["points"]] == [("2Y", "1-5Y", -0.8), ("5Y", "1-5Y", 4.5)]
+    assert round(sofr["buckets"]["1-5Y"], 9) == 3.7 == round(sum(p["value"] for p in sofr["points"]), 9)
+    assert [(p["tenor"], p["years"], round(p["value"], 9)) for p in out["vega"][0]["points"]] == [("1Y", 1.0, 8.8)]

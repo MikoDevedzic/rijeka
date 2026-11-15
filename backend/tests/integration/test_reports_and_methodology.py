@@ -131,3 +131,65 @@ def test_risk_report_lists_what_fixes_day_by_day_and_it_adds_up_to_the_swaps_own
     assert abs(want) < abs(got) <= abs(most) * (1 + 1e-9), (want, got, most)
     print(f"the swap's floating leg: {periods} periods; a basis point on every fixing still to come is {want:,.2f} without compounding, "
           f"{most:,.2f} with each period's whole; the fixing ladder adds up to {got:,.2f}")
+
+
+def _gaps(j: dict, bump: float = 1.0) -> dict[str, float]:
+    """For each trade of the report: how far the points of its buckets are from the buckets, as a share of the
+    trade's own risk (the sum of the sizes of its points). `bump` is the size of the move the report was made
+    with, in bp: a trade with less than a dollar a basis point of rates risk is left out."""
+    from pnl.explain import tenor_years
+    from risk.sensitivities import bucket_of
+    out = {}
+    for x in j["ladder_rows"]:
+        worst, scale = 0.0, sum(abs(v) for by_point in x["points"]["kr01"].values() for v in by_point.values())
+        for cid, buckets in x["kr01"].items():
+            pts = x["points"]["kr01"].get(cid, {})
+            for b, v in buckets.items():
+                if b != "FLAT":
+                    worst = max(worst, abs(sum(pv for p, pv in pts.items() if bucket_of(tenor_years(p)) == b) - v))
+        if scale > 1.0 * bump:
+            out[f'{x["instrument"]} {x["trade_ref"]}'] = worst / scale
+    return out
+
+
+def test_risk_report_carries_each_curves_risk_at_its_quoted_tenors(client, auth_a, booked, monkeypatch):
+    """The ladder at each quoted tenor (risk/sensitivities.py, since 0.40.0), through the route, the store and the
+    production pricers. A bucket is still measured whole. A swap's points add up to its buckets to within the
+    cross-gamma of a basis point. An option's do not at 1bp (one quote moved alone swings the forwards either side
+    of it by several bp, and a cap is not linear over that); the gap is second order, so at a hundredth of the
+    bump every trade's points add up."""
+    from risk import sensitivities as S
+    r = client.get("/api/risk/report?live=1", headers=auth_a)
+    assert r.status_code == 200, r.text[:400]
+    j = r.json(); lad = j["ladder"]
+    curves = [row for row in lad["ladder"] if any(abs(v) > 1.0 for b, v in row["buckets"].items() if b != "FLAT")]
+    assert curves, "a book with swaps on it has rates risk in the buckets"
+    for row in curves:
+        pts = row["points"]
+        assert pts and [p["years"] for p in pts] == sorted(p["years"] for p in pts), row["curve"]
+        assert len({p["tenor"] for p in pts}) == len(pts) and all(p["bucket"] in lad["buckets"] for p in pts)
+        top_bucket = max(lad["buckets"], key=lambda b: abs(row["buckets"][b]))
+        assert max(pts, key=lambda p: abs(p["value"]))["bucket"] == top_bucket, row["curve"]
+    # the booked swap's own row carries its points, in its own currency, on the curve it is valued on
+    swap = next(x for x in j["ladder_rows"] if x["trade_id"] == booked["IR_SWAP"]["id"])
+    assert swap["points"]["kr01"] and set(swap["points"]["kr01"]) == set(swap["kr01"])
+    # a surface's vega is by tenor too, where the book has options on one
+    for row in lad.get("vega") or []:
+        if any(abs(v) > 1.0 for b, v in row["buckets"].items() if b != "FLAT"):
+            assert row["points"], row["curve"]
+
+    at_1bp = _gaps(j)
+    linear = {k: g for k, g in at_1bp.items() if k.startswith("IR_SWAP ")}
+    assert linear and max(linear.values()) < 1e-3, linear                       # a swap: a tenth of a percent of its risk
+    try:
+        monkeypatch.setattr(S, "BUMP_BP", 0.01)
+        fine = client.get("/api/risk/report?live=1", headers=auth_a)
+        assert fine.status_code == 200, fine.text[:400]
+        at_fine = _gaps(fine.json(), 0.01)
+    finally:
+        monkeypatch.setattr(S, "BUMP_BP", 1.0)
+        assert client.get("/api/risk/report?live=1", headers=auth_a).status_code == 200      # the stored report is the 1bp one again
+    assert set(at_fine) == set(at_1bp) and max(at_fine.values()) < 2e-3, at_fine  # every trade, options too
+    for k, g in at_1bp.items():                                                  # and where a trade is apart at 1bp, it is much less so at a hundredth of it
+        if g > 5e-3:
+            assert at_fine[k] < g / 20, (k, g, at_fine[k])

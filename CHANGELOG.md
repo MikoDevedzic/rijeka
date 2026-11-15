@@ -1,7 +1,37 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.21). Commits on `main` are the detail.
+methodology document carries its own version (v1.22). Commits on `main` are the detail.
+
+## 0.40.0 · 15 November 2026
+
+**Risk at each quoted tenor of a curve.** The ladder measured a curve's risk in four buckets (to 1Y, 1Y to 5Y, 5Y to
+10Y, past 10Y), each bucket's quotes moved together. A two-year position against a five-year one netted inside a
+bucket, and a figure did not say which instrument to hedge with.
+
+- **The measure.** Beside each bucket, every quoted tenor of the curve is moved +1bp on its own and the trade
+  repriced: KR01 by curve and quoted tenor; vega by surface and tenor (a swaption grid by expiry). In the risk
+  report each row of `ladder.ladder` and `ladder.vega` carries `points` (tenor, years, bucket, value in USD), and
+  each trade's row carries its own.
+- **Nothing that was there moves.** A bucket is still measured by moving the bucket whole, so the totals, the
+  limits, the VaR and the P&L explain are as they were. A swap's points add up to their bucket to within the
+  cross-gamma of a basis point (0.02% of DV01 at five years, 0.08% at thirty). An option's do not at 1bp: one
+  quote moved alone swings the forwards either side of it, and a cap is not linear over that (up to 14% of a
+  bucket on the test book; 0.1% at a hundredth of the bump, so second order). They are the size of each hedge,
+  not parts that sum.
+- **Checked.** A single quote's figure against a QuantLib rebootstrap of the same move: 74 comparisons, the worst
+  0.03% of a trade's DV01. The reference suite is 521 comparisons. Methodology v1.22 (§14).
+- **Market risk page.** Under the ladder by bucket, the ladder at each quoted tenor: every quote that carries
+  risk, for each curve and each surface.
+- **The home.** The risk picture has a column for each quoted tenor that some factor carries materially (3% of its
+  factor's largest), grouped by the four buckets, and a box in it for each factor; a spot delta, which has no
+  tenor, is one box across the bucket its trade matures in. A bucket's limit line ends in the share used.
+- **The home, simpler.** The picture has one scale, the sensitivity itself, so a factor's boxes add up to the
+  figure beside its name; the switch between three scales (share of a limit, USD on a usual day, per 01) is gone,
+  and what a usual day moves a box by is in the tip. The rail of limit marks under "where you stand" is gone:
+  the words above it and the gauges beside the factors already said it.
+- A report stored before this has no points: the home draws its buckets whole and the page shows the buckets
+  only, until the report is next run.
 
 ## 0.39.3 · 15 November 2026
 

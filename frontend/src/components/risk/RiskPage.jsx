@@ -92,6 +92,8 @@ export default function RiskPage() {
           <section className="pnl-panel">
             <header><span>LADDER · KEY-RATE IR01 BY CURVE AND BUCKET</span><span className="pnl-sub">{rep.reporting_ccy} per bp</span></header>
             <Ladder ladder={lad.ladder || []} buckets={lad.buckets || []} />
+            <Points title="AT EACH QUOTED TENOR" unit={`${rep.reporting_ccy} per bp`} rows={lad.ladder || []} />
+            <Points title="VEGA AT EACH QUOTED TENOR" unit={`${rep.reporting_ccy} per vol point, or per bp of normal vol`} rows={lad.vega || []} />
             {(lad.unconverted || []).length > 0 && <div className="pnl-note">Unconverted currencies (no spot saved): {lad.unconverted.join(', ')}</div>}
             <div className="rk-h">BY TRADE</div>
             <div className="rk-rows">
@@ -160,7 +162,7 @@ export default function RiskPage() {
         </div>
 
         <div className="pnl-foot">
-          <b>Method.</b> The ladder bumps each tenor bucket of each curve by {lad.bump_bp}bp and reprices every trade through the production pricers; spot deltas are the pricers' PV for +1% spot. VaR reprices the book in full on each historical day's observed changes (bp per quote, log returns for spots, and every quote of each volatility surface the book is valued on, from public sources stored on the template account; the demo's surfaces are scaled by realised vol and labelled). The ladder VaR alongside is linear in the factors (vega × the ATM move), so convexity and the smile's own moves are outside it. Stress reprices the book in full on the shifted market. Limits are the firm's, set by the risk manager, and evaluated against these numbers.
+          <b>Method.</b> The ladder bumps each tenor bucket of each curve by {lad.bump_bp}bp and reprices every trade through the production pricers; under it, each quoted tenor is bumped on its own, which is the risk at the instrument one would hedge with (a bucket's quotes move together: a swap's points add up to their bucket, an option's are the size of each hedge and need not, because one quote moved alone swings the forwards either side of it); spot deltas are the pricers' PV for +1% spot. VaR reprices the book in full on each historical day's observed changes (bp per quote, log returns for spots, and every quote of each volatility surface the book is valued on, from public sources stored on the template account; the demo's surfaces are scaled by realised vol and labelled). The ladder VaR alongside is linear in the factors (vega × the ATM move), so convexity and the smile's own moves are outside it. Stress reprices the book in full on the shifted market. Limits are the firm's, set by the risk manager, and evaluated against these numbers.
         </div>
       </>)}
     </div>
@@ -224,6 +226,27 @@ function Ladder({ ladder, buckets }) {
         <span className={`rk-cell tot ${tone(r.total)}`}><em>{sgn(r.total)}</em></span>
       </div>))}
       {!ladder.length && <span className="pnl-empty" style={{ gridColumn: '1 / -1' }}>No rates risk on the book.</span>}
+    </div>
+  )
+}
+
+// What each bucket is made of: the curve's risk at each of its quoted tenors, every quote moved on its own (the
+// report's `points`, since 0.40.0). A bucket moves its quotes together, so a two-year position against a five-year
+// one nets inside it; here they are two figures. Nothing is shown for a report stored before the points were.
+function Points({ title, unit, rows }) {
+  const shown = rows.map(r => ({ curve: r.curve, pts: (r.points || []).filter(p => Math.abs(p.value) >= 0.5) })).filter(r => r.pts.length)
+  if (!shown.length) return null
+  return (
+    <div className="rk-points" data-testid="rk-points">
+      <div className="rk-h">{title} <small>{unit} · each quote moved on its own</small></div>
+      {shown.map(r => (
+        <div key={r.curve} className="rk-prow" data-curve={r.curve}>
+          <span className="rk-lc">{r.curve}</span>
+          <span className="rk-pcells">
+            {r.pts.map(p => <span key={p.tenor} className="rk-pt" title={`in the ${p.bucket} bucket`}><small>{p.tenor}</small><em className={tone(p.value)}>{sgn(p.value)}</em></span>)}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }

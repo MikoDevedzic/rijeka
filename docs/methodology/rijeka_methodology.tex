@@ -25,7 +25,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.21 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.22 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -45,7 +45,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.21 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.22 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -56,6 +56,7 @@
 \section*{Version history}
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
+\item \textbf{1.22 (15 November 2026).} The ladder at each quoted tenor (\S\ref{sec:mr}): beside the four buckets, every quote of a curve is moved on its own and the trade repriced, which is the risk at the instrument one would hedge with. A bucket's figure is unchanged; a swap's points add up to it to within the cross-gamma of a basis point, an option's are second-order apart (measured and stated). Compared with QuantLib at single quotes (\S\ref{sec:quantlib}).
 \item \textbf{1.21 (14 November 2026).} A currency non-deliverable forward's fixing (\S\ref{sec:fx}): the rate fixed is the spot rate for delivery on the fixing date's spot date, so an NDF fixed two business days before it settles is worth what the deliverable forward is, in the quote currency ($N_b(X-K)$) or the base currency ($N_b(X-K)/X$), and one that fixes earlier is read at that earlier delivery date and carried to the settlement date in the currency it is paid in; from the fixing date the trade is that one amount, on the fixing a desk enters for the source its record names or, until then, on the stored spot and marked provisional. Until this version an NDF never became a fixed amount, and its record named neither a real fixing date nor the currency it settled in.
 \item \textbf{1.20 (12 November 2026).} A backtest of the level a digital asset's exposure paths simulate, against five years of public daily closes (\S\ref{sec:regimes}): against the bands their own simulated histories give, the regimes are outside in 1 cell of 60 and one volatility in 17; and one MVA figure derived apart from the engine. No figure the engine computes changes.
 \item \textbf{1.19 (12 November 2026).} A barrier is watched between the exposure grid's dates as well as on them, by the Brownian bridge's crossing probability, and the desk's record that a barrier was touched is read by the settlement and the valuation (\S\ref{sec:fxo}).
@@ -576,6 +577,8 @@ For an option the tab also draws the pair's surface as the pricer reads it (ATM,
 \subsection{The ladder}
 For every live trade and every curve it is valued on, each tenor bucket's quotes are bumped $+1$bp and the trade repriced on the as-of market through the production pricers; the result is key-rate IR01 by (curve, bucket), the buckets (0--1Y, 1--5Y, 5--10Y, 10Y+) the same the P\&L explain uses. Spot deltas are the pricers' PV for $+1\%$ spot: \code{FX01} on a currency pair, \code{CRY01} on a digital asset. On a digital asset \code{IR01} is the discounting curve's sensitivity alone and the forward basis's is \code{CRYBASIS01} (the negative of the asset-rate bump \code{FUND01}), reported beside the IR01 totals and never summed into them. A volatility surface the trade is valued on (\code{{PAIR}_VOL}, \code{{CCY}_SWVOL_ATM}) is bumped $+1$ vol point per tenor bucket, a swaption grid by expiry, and reported as vega by (surface, bucket). A par bump of every quote is a slightly smaller move in zero rates, so the ladder total sits about 2\% below the ticket's IR01, which bumps zero rates; the bucket values agree with a QuantLib rebootstrap to $0.05\%$ of DV01 (\S\ref{sec:quantlib}).
 
+\textbf{At each quoted tenor.} A bucket moves its quotes together, so a two-year position against a five-year one nets inside the 1--5Y bucket and the ladder by bucket cannot tell it from no position. Beside each bucket the ladder therefore carries the points it is made of: every quoted tenor of the curve is bumped $+1$bp on its own, the curve rebuilt and the trade repriced, giving \code{KR01} by (curve, quoted tenor); a surface is bumped $+1$ vol point at one tenor (all of that tenor's rows, as a bucket moves them) and a swaption grid $+1$bp of normal vol at one expiry, giving vega by (surface, tenor). This is the risk at the instrument one would hedge with. The points of a bucket whose own figure is exactly zero are not repriced: a two-year swap is not priced off the thirty-year quote. A bucket's figure is still measured by moving the bucket whole, so nothing that reads the buckets (the VaR's linear comparison, the limits, the P\&L explain) changes; the points of a bucket add up to it to first order. For a swap what is left is the cross-gamma of a one-basis-point move, $0.02\%$ of the DV01 at five years and $0.08\%$ at thirty. For an option it is more: one par quote moved alone swings the forward rates on either side of it by several basis points in opposite directions, and a cap or floor is not linear over that. On the test book a cap's points differ from its bucket by up to $14\%$ of the bucket at a bump of $1$bp, by $1\%$ at $0.1$bp and by $0.1\%$ at $0.01$bp: the gap is second order, and the points of an option are to be read as the size of each hedge, not as parts that sum. A single quote's figure agrees with a QuantLib rebootstrap of the same move to $0.04\%$ of DV01 (\S\ref{sec:quantlib}). A funding level has one quote and no points; a point that moves a trade by less than a millionth of its currency is not carried. The trader's home draws a column for a tenor that carries at least $3\%$ of its factor's largest point; the Market risk page lists every one.
+
 \subsection{Historical simulation by full revaluation}
 The risk factors are the curve quotes (par rates in basis points, tenor by tenor), the spots (log returns) and the volatility surfaces (every quote of an FX surface: ATM, 25-delta risk reversal and butterfly per tenor; the swaption ATM grid point by point). For each day $i$ of the window today's market $M$ is shifted by that day's observed changes $\Delta_i$ and every trade repriced:
 \begin{equation}
@@ -786,6 +789,8 @@ CCR paths & HW implied vol vs the market vol it replaces & 3 & -17.9 & bp & 40 &
 CCR paths & E[D$\cdot$payoff] vs QuantLib HW zero-bond put & 3 & -1.13 & standard errors & 4 & replica \\
 Key-rate ladder & KR01 (+1bp quotes, rebootstrap) & 20 & 0.0314 & \% of DV01 & 0.5 & convention \\
 Key-rate ladder & ladder total (par +1bp) vs ticket IR01 (zero +1bp) & 5 & -2.14 & \% of DV01 & 3.5 & convention \\
+Key-rate ladder & KR01 at one quote (+1bp, rebootstrap) & 74 & 0.0339 & \% of DV01 & 0.5 & convention \\
+Key-rate ladder & the quotes one at a time add up to the buckets & 5 & 0.0836 & \% of DV01 & 0.1 & replica \\
 \bottomrule
 \end{longtable}}
 

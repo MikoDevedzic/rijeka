@@ -1,8 +1,8 @@
 // The home on a monitor is the trader's (components/home/TraderHome.jsx): where you stand and what needs you, the
 // P&L as a statement, the risk as one stream for each factor along the tenor it sits at, the trades, and behind
 // tabs what the old home showed in cards. The stack has one day of market data, so there is no history of moves:
-// the first journey is the app as the stack answers it (each stream to its own scale); the second gives the
-// report a history and limits, as a desk with a year of data has, to see the one scale and the rail.
+// the first journey is the app as the stack answers it; the second gives the report a history and limits, as a
+// desk with a year of data has, to see what a usual day moves a box by and each limit beside its factor.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,6 +11,16 @@ import { test, expect, expectClean, expectNoHorizontalOverflow, bookedSwap } fro
 const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), '.out', 'trader-home')
 const shot = async (target, name) => { fs.mkdirSync(OUT, { recursive: true }); await target.screenshot({ path: path.join(OUT, `${name}.png`) }) }
 const MONITOR = { width: 1440, height: 1000 }
+// The pointer over the column of the risk picture whose tip is headed `head`: the picture has a column for each quoted
+// tenor that carries risk, grouped by bucket, so where one stands depends on the book.
+async function column(app, river, head) {
+  const box = await river.locator('.th-cv').boundingBox(), tip = river.locator('.th-tip-h')
+  for (let u = 0.03; u < 1; u += 0.02) {
+    await app.mouse.move(box.x + box.width * u, box.y + box.height * 0.4)
+    if (head.test(await tip.textContent({ timeout: 1000 }).catch(() => '') || '')) return
+  }
+  throw new Error(`the risk picture has no column headed ${head}`)
+}
 // how many of a canvas's pixels are drawn on
 const ink = (canvas) => canvas.evaluate(cv => { const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 8) n++; return n })
 
@@ -33,13 +43,19 @@ test('the home on a monitor: the statement, the risk by tenor, what needs you an
   await expect(river.locator('.th-lane', { hasText: 'USD SOFR · IR01' })).toBeVisible({ timeout: 120_000 })
   await expect(river.locator('.th-lane .fig').first()).toHaveText(/^[+−][\d,]+$/)
   await expect.poll(() => ink(river.locator('canvas')), 'the streams are drawn').toBeGreaterThan(2000)
-  // no history of moves on the stack, so no money scale; every curve has a limit (the standard one for its kind until
-  // it is given its own), so the scale against the limit is offered
-  await expect(river.getByTestId('th-mode').getByRole('button')).toHaveText(['OF ITS LIMIT', 'PER 01'])
-  await expect(river).toContainText('each stream to its own scale')
-  await expect(home.getByTestId('th-rail').locator('.th-rl-track .th-rl-m').first(), 'a mark for a curve\'s limit').toBeVisible()
+  // one scale and no switch: the sensitivity at each quoted tenor; every curve has a limit (the standard one for its
+  // kind until it is given its own), shown beside its factor and not on a rail of its own
+  await expect(river).toContainText('the sensitivity at each quoted tenor · each factor to its own scale')
+  await expect(river.getByTestId('th-mode')).toHaveCount(0)
+  await expect(home.getByTestId('th-rail')).toHaveCount(0)
   await expect(home.getByTestId('th-factors').locator('.th-row[data-factor="IR:USD_SOFR"]').getByTestId('th-gauge')).toBeVisible()
   await expect(river.locator('canvas')).toHaveAttribute('aria-label', /USD SOFR IR01 [+−][\d,]+ per bp/)
+  // the swap's risk is at the quoted tenor it matures at, which has a column and a box of its own
+  await expect(river.locator('canvas')).toHaveAttribute('aria-label', /USD SOFR IR01 [+−][\d,]+ per bp \([^)]*\b5Y [+−][\d,]+/)
+  await column(app, river, /^5Y · 1Y TO 5Y/)
+  await expect(river.locator('.th-tip')).toContainText(/USD SOFR IR01[+−][\d,]+/)
+  await app.mouse.move(2, 2)
+  await expect(river).toContainText('A box is what the book carries at one quoted tenor of a curve')
 
   // band 2, right: the factor and the VaR line (too little history says so; it does not print a figure)
   const side = home.getByTestId('th-factors')
@@ -111,7 +127,7 @@ test('the home on a monitor: the statement, the risk by tenor, what needs you an
   expectClean(problems)
 })
 
-test('with a history of moves and limits: the streams share one scale in money, and each limit stands on the rail', async ({ app, problems }) => {
+test('with a history of moves and limits: the tip says what a usual day moves a box by, and each limit stands beside its factor and on its stream', async ({ app, problems }) => {
   test.setTimeout(180_000)
   await app.setViewportSize(MONITOR)
   await bookedSwap(app)
@@ -144,10 +160,8 @@ test('with a history of moves and limits: the streams share one scale in money, 
   const home = app.getByTestId('trader-home'), river = home.getByTestId('th-river')
   await expect(river.locator('.th-lane', { hasText: 'BTC · CRY01' })).toBeVisible({ timeout: 120_000 })
 
-  // one scale, in money, and the switch to the sensitivity itself; the choice is kept by the browser
-  const mode = river.getByTestId('th-mode')
-  await expect(mode.getByRole('button', { name: 'A USUAL DAY' })).toHaveAttribute('aria-pressed', 'true')
-  await expect(river).toContainText('one scale for all')
+  // the boxes are the sensitivity; what a usual day moves one by is in the tip
+  await expect(river.getByTestId('th-mode')).toHaveCount(0)
   await expect.poll(() => ink(river.locator('canvas'))).toBeGreaterThan(2000)
   const box = await river.locator('.th-cv').boundingBox()
   await app.mouse.move(box.x + box.width * 0.1, box.y + box.height * 0.5)
@@ -155,25 +169,13 @@ test('with a history of moves and limits: the streams share one scale in money, 
   await expect(river.locator('.th-tip')).toContainText(/≈ [\d,]+ a day/)
   await shot(app, 'history-hover')
   await app.mouse.move(2, 2)
-  await mode.getByRole('button', { name: 'PER 01' }).click()
-  await expect(river).toContainText('each stream to its own scale')
-  await app.reload()
-  await expect(app.getByTestId('th-mode').getByRole('button', { name: 'PER 01' })).toHaveAttribute('aria-pressed', 'true', { timeout: 120_000 })
-  await app.getByTestId('th-mode').getByRole('button', { name: 'A USUAL DAY' }).click()
 
-  // where you stand: the words, the closest limit, and a mark for each limit
+  // where you stand: the words and the closest limit (the rail of marks under them is gone)
   const stand = app.getByTestId('th-stand')
   await expect(stand).toContainText('1 limit passed')
   await expect(stand).toContainText('2 close')
   await expect(stand).toContainText(/Closest: IR01, (long|short), at 110% of its limit\./)
-  const rail = stand.getByTestId('th-rail')
-  await expect(rail.locator('.th-rl-track .th-rl-m')).toHaveCount(4)
-  await expect(rail.locator('.th-rl-track .th-rl-m.BREACH')).toHaveCount(1)
-  // a limit is read on two sides: flat in the middle, a long figure to the right of it; a VaR has no side and is a square
-  await expect(rail).toContainText('FLAT'); await expect(rail).toContainText('SHORT · THE LIMIT'); await expect(rail).toContainText('LONG · THE LIMIT')
-  await expect(rail.locator('.th-rl-track .th-rl-m.s[data-side="0"]'), 'the VaR').toHaveCount(1)
-  const btcMark = rail.locator('.th-rl-track .th-rl-m.WARN[data-side="1"]').first()
-  expect(parseFloat(await btcMark.evaluate(el => el.style.left)), 'a long figure stands right of the middle').toBeGreaterThan(50)
+  await expect(stand.getByTestId('th-rail')).toHaveCount(0)
   await expect(app.getByTestId('th-limits').locator('.th-lim'), 'the two that are on no stream: the VaR and the book\'s IR01').toHaveCount(2)
   await expect(app.getByTestId('th-factors')).toContainText('OTHER LIMITS')
   // beside its factor: a gauge, the share of the limit used, the side and the room left
@@ -182,18 +184,15 @@ test('with a history of moves and limits: the streams share one scale in money, 
   await expect(btc).toContainText('92% of 25,000 · long')
   await expect(btc).toContainText('2,100 of room')
   await expect(app.getByTestId('th-factors').locator('.th-row', { has: app.getByTestId('th-gauge') }).filter({ hasText: /80% of [\d,]+ · 1Y TO 5Y · (long|short)/ }), 'the curve whose bucket has a limit').toHaveCount(1)
-  // the picture against the limits: a third scale, and the tip names the bucket's limit
-  const scale = app.getByTestId('th-mode')
-  await scale.getByRole('button', { name: 'OF ITS LIMIT' }).click()
-  await expect(app.getByTestId('th-river')).toContainText('each bucket as the share of its limit it uses')
+  // the picture against the limits: a bucket's limit is a ruled line, and the tip names it
   await expect(app.getByTestId('th-river')).toContainText('A ruled line across a bucket is that bucket\'s limit')
-  await expect.poll(() => ink(app.getByTestId('th-river').locator('canvas')), 'drawn again on the new scale').toBeGreaterThan(2000)
   const cvb = await app.getByTestId('th-river').locator('.th-cv').boundingBox()
-  await app.mouse.move(cvb.x + cvb.width * 0.38, cvb.y + cvb.height * 0.4)
-  await expect(app.getByTestId('th-river').locator('.th-tip')).toContainText(/80% of [\d,]+/)
-  await shot(app, 'limits-of-its-limit')
+  expect(cvb.width).toBeGreaterThan(300)
+  // the five-year column: the point there, and the limit of the bucket it belongs to
+  await column(app, app.getByTestId('th-river'), /^5Y · 1Y TO 5Y/)
+  await expect(app.getByTestId('th-river').locator('.th-tip')).toContainText(/its bucket\s*80% of [\d,]+/)
+  await shot(app, 'limits-in-the-tip')
   await app.mouse.move(2, 2)
-  await scale.getByRole('button', { name: 'A USUAL DAY' }).click()
   await expect(app.getByTestId('th-var')).toContainText('183,800')
   await expectNoHorizontalOverflow(app.getByTestId('trader-home'), 'the home with limits')
   await shot(app, 'history-1440')
@@ -342,6 +341,13 @@ test('the Market risk page lists what fixes, day by day: each index, the net tha
   expect(await rows.count()).toBe(before)
   await expect(fix).toContainText('a Friday\'s fixing counts for three days')
   await expectNoHorizontalOverflow(panel, 'the fixings on the Market risk page')
+  // under the ladder by bucket, the ladder at each quoted tenor: the swap's curve, with its five-year point
+  const points = app.getByTestId('rk-points').first()
+  if (!(await points.count())) await app.getByRole('button', { name: /RUN NOW|RECOMPUTE|RUN/ }).first().click()      // a report stored before the points were
+  await expect(points).toContainText('AT EACH QUOTED TENOR', { timeout: 180_000 })
+  await expect(points.locator('.rk-prow[data-curve="USD_SOFR"]')).toContainText(/5Y[+−][\d,]+/)
+  await expectNoHorizontalOverflow(points, 'the ladder at each quoted tenor')
+  await points.scrollIntoViewIfNeeded(); await shot(points, 'risk-points')
   await panel.scrollIntoViewIfNeeded(); await shot(panel, 'risk-fixings')
   expectClean(problems)
 })
@@ -352,8 +358,11 @@ test('trader home: scrolled to its end, the last band is clear of the chat butto
   await expect(home).toBeVisible()
   const launcher = app.locator('.ms-launcher')
   await expect(launcher).toBeVisible()
-  // scroll whatever scrolls the home to its end
-  await home.evaluate(el => {
+  // scroll whatever scrolls the home to its end. The page grows as its reports arrive (the risk picture, the tabs),
+  // so the end is scrolled to again until the last band has stopped moving.
+  const last = home.locator('.th-two')
+  await expect(last).toBeVisible()
+  const toEnd = () => home.evaluate(el => {
     let n = el
     while (n && n !== document.documentElement) {
       if (n.scrollHeight > n.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(n).overflowY)) n.scrollTop = n.scrollHeight
@@ -361,10 +370,11 @@ test('trader home: scrolled to its end, the last band is clear of the chat butto
     }
     window.scrollTo(0, document.documentElement.scrollHeight)
   })
-  const last = home.locator('.th-two')
-  await expect(last).toBeVisible()
-  const [a, b] = [await last.boundingBox(), await launcher.boundingBox()]
-  expect(a.y + a.height, 'the last band ends above the chat button').toBeLessThanOrEqual(b.y)
+  await expect.poll(async () => {
+    await toEnd()
+    const [a, b] = [await last.boundingBox(), await launcher.boundingBox()]
+    return Math.round(a.y + a.height - b.y)
+  }, { message: 'the last band ends above the chat button', timeout: 30_000 }).toBeLessThanOrEqual(0)
   await app.screenshot({ path: 'e2e/.out/shots/trader-home-end.png' })
   expectClean(problems)
 })

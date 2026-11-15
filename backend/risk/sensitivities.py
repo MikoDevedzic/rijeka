@@ -6,16 +6,30 @@ surface ({PAIR}_VOL for FX options, {CCY}_SWVOL_ATM for swaptions) is bumped +1 
 (+1bp of normal vol) per bucket instead: vega by (surface, bucket), kept apart from the rate ladder. Spot deltas come from the currency
 pricer (PV for +1 % spot). Totals: IR01 per curve (sum of the buckets), book IR01, vega
 per surface, spot01 per asset, NPV. The same bucket set as the P&L explain, so a
-day's rates P&L and the ladder speak the same language."""
+day's rates P&L and the ladder speak the same language.
+
+Beside each bucket, the points it is made of (since 0.40.0): every quoted tenor of the curve is bumped on its own
+(+1bp; a surface's tenor, or a swaption grid's expiry, +1 vol point or +1bp of normal vol) and the trade repriced:
+KR01 and vega by (curve, quoted tenor). That is the risk at the instrument one would hedge with; a bucket moves
+its quotes together, so a two-year position against a five-year one nets inside it and only the points show the
+two. A bucket's figure is still measured by moving the bucket whole, as before; its points add up to it to first
+order. For a swap what is left is the cross-gamma of a 1bp move: 0.02% of the DV01 at five years, 0.08% at thirty
+(tests/reference/test_ref_greeks.py). For an option it is more: one par quote moved alone swings the forwards on
+either side of it by several basis points in opposite directions, and a cap is not linear over that, so at 1bp a
+cap's points can differ from its bucket by a tenth of the bucket; the gap is second order and goes with the size
+of the bump (tests/integration/test_reports_and_methodology.py). For a rate curve a point is the move
+ipv.inputs.bumped makes; on a surface the ladder moves a tenor's rows together, as its buckets do, where the
+price verification moves each row. A funding level's FUND01 has one quote and no points."""
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from pnl.explain import BUCKETS, LIVE, Valuer, _bucket_quotes
+from pnl.explain import BUCKETS, LIVE, Valuer, _bucket_quotes, tenor_years
 from pnl.market import Market, is_vol_surface
 from pnl.valuation import points_curve, spot_curve, trade_curves
 
@@ -27,6 +41,40 @@ VOL_BUMP = 100.0        # in the bump unit (bp/100): one volatility point on a {
 def _bumped(quotes: list[dict], lo: float, hi: float, bp: float) -> list[dict]:
     target = [{**q, "rate": float(q["rate"]) + bp / 100.0} for q in quotes]
     return _bucket_quotes(quotes, target, lo, hi)
+
+
+_GRID = re.compile(r"(\d+(?:\.\d+)?\s*[DWMY])\s*X\s*\d", re.I)
+POINT_EPS = 1e-6        # a point that moves the trade by less than a millionth of its currency is not carried
+
+
+def point_of(tenor) -> str:
+    """The quoted point a row of a curve belongs to: its tenor, or for a row of a swaption grid ("1Yx5Y") its
+    expiry, which is what the buckets place it by (pnl.explain.tenor_years)."""
+    t = str(tenor or "").upper().strip()
+    m = _GRID.match(t)
+    return m.group(1).replace(" ", "") if m else t
+
+
+def bucket_of(years: float) -> str:
+    return next((name for name, lo, hi in BUCKETS if lo <= years < hi), BUCKETS[-1][0])
+
+
+def curve_points(quotes: list[dict]) -> list[tuple[str, float]]:
+    """A curve's quoted points in tenor order: (point, years). Points at the same distance keep the order they are
+    quoted in (ON, TN and SN are all at nought)."""
+    seen: dict[str, float] = {}
+    for q in quotes:
+        p = point_of(q.get("tenor"))
+        if p not in seen:
+            seen[p] = tenor_years(p)
+    return sorted(seen.items(), key=lambda kv: kv[1])
+
+
+def _bumped_point(quotes: list[dict], point: str, bp: float) -> list[dict]:
+    """The quotes with every row of one point moved (a surface has ATM, RR25 and BF25 at a tenor; a swaption grid
+    has a row for each underlying at an expiry), written as _bumped writes a bucket: a bucket of one point is the
+    same market, and is priced once."""
+    return [{**q, "rate": float(q["rate"]) + bp / 100.0} if point_of(q.get("tenor")) == point else dict(q) for q in quotes]
 
 
 def _carry_points(trade, mkt: Market, bumped: Market, bp: float) -> Market:
@@ -53,6 +101,7 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
     kr01: dict[str, dict[str, float]] = {}
     vega: dict[str, dict[str, float]] = {}
     fund01: dict[str, dict[str, float]] = {}          # a digital asset's funding rate: the desk's FUND01, kept out of IR01
+    points: dict[str, dict[str, dict[str, float]]] = {"kr01": {}, "vega": {}}      # by (curve, quoted tenor): what each bucket is made of
     for cid in trade_curves(trade):
         q = mkt.quotes(cid)
         if not q:
@@ -71,6 +120,17 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
                 continue
             m = mkt.override(cid, bumped)
             target.setdefault(cid, {})[name] = valuer(trade, d, m)["npv"] - base["npv"]
+        if target is fund01:
+            continue
+        # each quoted point on its own. A bucket that does not move the trade at all has no point that does (a
+        # two-year swap is not priced off the thirty-year quote), so its points are not repriced.
+        live = {name for name, v in target.get(cid, {}).items() if v != 0.0}
+        for p, y in curve_points(q):
+            if bucket_of(y) not in live:
+                continue
+            v = valuer(trade, d, mkt.override(cid, _bumped_point(q, p, bump)))["npv"] - base["npv"]
+            if abs(v) >= POINT_EPS:
+                points["vega" if is_vol else "kr01"].setdefault(cid, {})[p] = v
     spot01: dict[str, float] = {}
     sc = spot_curve(trade)
     if sc and base.get("spot01") is not None:
@@ -78,6 +138,7 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
         spot01[asset_of(sc.replace("_SPOT", ""))[0]] = float(base["spot01"])
     return {"trade_id": str(trade.id), "trade_ref": trade.trade_ref, "instrument": trade.instrument_type, "desk": trade.desk or "UNASSIGNED",
             "book": trade.book or "UNASSIGNED", "ccy": base["ccy"], "npv": base["npv"], "kr01": kr01, "spot01": spot01, "vega": vega, "fund01": fund01,
+            "points": points,
             # CRYBASIS01: +1 bp a year on the forward basis at a fixed spot and USD curve is −1 bp on the funding rate,
             # so each bucket is the negative of its FUND01 bucket (the FUND01 rows themselves are unchanged)
             "crybasis01": {cid: {b: 0.0 - v for b, v in buckets.items()} for cid, buckets in fund01.items()},
@@ -103,6 +164,7 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx, value
     by_curve: dict[str, dict[str, float]] = {}
     by_vol: dict[str, dict[str, float]] = {}
     by_fund: dict[str, float] = {}
+    pts: dict[str, dict[str, dict[str, float]]] = {"kr01": {}, "vega": {}}
     spot01: dict[str, float] = {}
     npv_usd = ir01_usd = vega_usd = fund01_usd = 0.0
     unconverted: set[str] = set()
@@ -120,15 +182,24 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx, value
             for b, v in buckets.items():
                 by_vol.setdefault(cid, {})[b] = by_vol.setdefault(cid, {}).get(b, 0.0) + v * k
                 vega_usd += v * k
+        for kind, curves in (r.get("points") or {}).items():
+            for cid, by_point in curves.items():
+                for p, v in by_point.items():
+                    pts[kind].setdefault(cid, {})[p] = pts[kind].setdefault(cid, {}).get(p, 0.0) + v * k
         for cid, buckets in (r.get("fund01") or {}).items():
             by_fund[cid] = by_fund.get(cid, 0.0) + sum(buckets.values()) * k
             fund01_usd += sum(buckets.values()) * k
         for a, v in r["spot01"].items():
             spot01[a] = spot01.get(a, 0.0) + v * k
+    def _points(kind: str, cid: str) -> list[dict]:
+        """A curve's risk at each quoted tenor, nearest first, each with the bucket it belongs to."""
+        out = [{"tenor": p, "years": tenor_years(p), "bucket": bucket_of(tenor_years(p)), "value": v} for p, v in pts[kind].get(cid, {}).items()]
+        return sorted(out, key=lambda x: x["years"])
+
     ladder = [{"curve": cid, "buckets": {b: by_curve[cid].get(b, 0.0) for b, *_ in BUCKETS} | ({"FLAT": by_curve[cid]["FLAT"]} if "FLAT" in by_curve[cid] else {}),
-               "total": sum(by_curve[cid].values())} for cid in sorted(by_curve)]
+               "total": sum(by_curve[cid].values()), "points": _points("kr01", cid)} for cid in sorted(by_curve)]
     vega_ladder = [{"curve": cid, "buckets": {b: by_vol[cid].get(b, 0.0) for b, *_ in BUCKETS} | ({"FLAT": by_vol[cid]["FLAT"]} if "FLAT" in by_vol[cid] else {}),
-                    "total": sum(by_vol[cid].values())} for cid in sorted(by_vol)]
+                    "total": sum(by_vol[cid].values()), "points": _points("vega", cid)} for cid in sorted(by_vol)]
     return {"rows": rows, "ladder": ladder, "spot01": spot01, "npv_usd": npv_usd, "ir01_usd": ir01_usd, "valuations": valuer.calls,
             "vega": vega_ladder, "vega_usd": vega_usd, "vol_bump": "1 vol point (FX) · 1bp normal vol (swaptions)",
             "fund01": by_fund, "fund01_usd": fund01_usd,

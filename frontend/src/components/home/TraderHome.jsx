@@ -14,12 +14,11 @@ import PolicyPath from './PolicyPath'
 import WeekAhead from './WeekAhead'
 import BookBrief from './BookBrief'
 import Fixings from '../risk/Fixings'
-import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, canDay, peak, carry, staleness, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, bucketFigure, figureFit, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
+import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, peak, carry, staleness, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, figureFit, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
 import './TraderHome.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const REFRESH_MS = 60_000
-const MODE_KEY = 'rijeka.home.height'
 const GUTTER = 46                     // px at the start of the lanes, kept for the totals' gauges where any factor has one
 const NEEDS = 3                      // rows of the desk feed the home shows; the rest are a count
 const FRAME_MS = 33                  // the streams' light moves at thirty frames a second: enough to read as water, half the work
@@ -137,13 +136,12 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
                   {riskOn && rep ? stand.words.map(([c, t]) => <span key={t} className={`th-w ${c}`}><i />{t}</span>)
                     : <>{pending > 0 && <span className="th-w hollow"><i />{pending} to confirm</span>}<span className="th-w dim"><i />{trades.length} trade{trades.length === 1 ? '' : 's'}</span>{confirmed > 0 && <span className="th-w sealed"><i />{confirmed} confirmed</span>}</>}
                 </div>
-                {riskOn && rep && <p className="th-tight">{stand.tight || (rep.can_write ? 'A limit on a 01, on VaR or on a stress loss is set under Configurations, Market risk, Limits; it is then drawn here, on the rail and on its stream.' : 'Limits are set by your risk manager; they are then drawn here.')}{stand.standardOnly ? ' Every curve is at the standard limit for its kind until it is given its own.' : ''}{rep.date ? ` Risk as of ${fmtD(rep.date)}.` : ''}{rep.can_write && <> <button className="dh-link" data-testid="th-set-limits" onClick={() => navigate('/configurations/market-risk/limits')}>{marks.length ? 'LIMITS →' : 'SET LIMITS →'}</button></>}</p>}
+                {riskOn && rep && <p className="th-tight">{stand.tight || (rep.can_write ? 'A limit on a 01, on VaR or on a stress loss is set under Configurations, Market risk, Limits; it is then shown here, beside its factor and on its stream.' : 'Limits are set by your risk manager; they are then drawn here.')}{stand.standardOnly ? ' Every curve is at the standard limit for its kind until it is given its own.' : ''}{rep.date ? ` Risk as of ${fmtD(rep.date)}.` : ''}{rep.can_write && <> <button className="dh-link" data-testid="th-set-limits" onClick={() => navigate('/configurations/market-risk/limits')}>{marks.length ? 'LIMITS →' : 'SET LIMITS →'}</button></>}</p>}
                 {riskOn && risk.loading && <p className="th-tight">Measuring the book…</p>}
                 {riskOn && rep && risk.behind === 'running' && <p className="th-tight th-behind" data-testid="th-behind">Measuring the book again: this is the report as it was stored.</p>}
                 {riskOn && rep && BEHIND[risk.behind] && <p className="th-tight th-behind warn" data-testid="th-behind">{BEHIND[risk.behind]}, and could not be run again just now ({why429(risk.liveErr)}). The Risk page runs it.</p>}
                 {riskOn && !rep && risk.err && <p className="th-tight">The risk report could not be read ({why429(risk.err)}).</p>}
                 {!riskOn && <p className="th-tight">Limits and risk by tenor are part of Market risk, which is {off('MARKET_RISK')} for this desk.</p>}
-                {marks.length > 0 && <Rail marks={marks} />}
               </>}
           {path}
         </div>
@@ -211,37 +209,6 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
   )
 }
 
-// The limits on one rail, flat in the middle: a mark for each, placed by how much of it is used, a short figure to the
-// left and a long one to the right (a limit is one number on the size, so it stands at both ends). A size with no
-// side (a VaR, a stress loss, an exposure) is read to the right. The hatched ends are past a limit.
-const SHAPE = { o: 'a 01 or the book\'s mark, on the side it is on', s: 'a size: VaR, a stress loss, a limit on a desk or a book', c: 'an exposure to a counterparty' }
-function Rail({ marks }) {
-  const ref = useRef(null), w = useWidth(ref)
-  // every limit has a mark; a name is written for those close to or past their limit and for the four most used
-  // (a book with a standard limit on every curve has many marks, most of them near the middle)
-  const named = useMemo(() => marks.filter((m, i) => m.status !== 'OK' || i < 4), [marks])
-  const lay = useMemo(() => railLayout(named, w || 0), [named, w])
-  const LH = 17
-  return (
-    <div className="th-rail" ref={ref} data-testid="th-rail">
-      {w > 0 && <div className="th-rl-labs" style={{ height: lay.lanes * LH + 2 }}>
-        {lay.marks.map(m => (
-          <span key={m.id}>
-            <span className={`th-rl-lab ${m.status}`} style={{ left: m.cx, top: (lay.lanes - 1 - m.lane) * LH }}>{m.text}</span>
-            <i className="th-rl-stem" style={{ left: m.x, top: (lay.lanes - 1 - m.lane) * LH + 14, height: m.lane * LH + 7 }} />
-          </span>
-        ))}
-      </div>}
-      <div className="th-rl-track">
-        <i className="th-rl-zone s" /><i className="th-rl-zone l" /><i className="th-rl-mid" />
-        {marks.map(m => <i key={m.id} className={`th-rl-m ${m.kind} ${m.status}`} data-side={m.side} style={{ left: `${railAt(m) * 100}%` }} title={`${m.name}: ${m.pct}% of its limit${m.side ? (m.side > 0 ? ', long' : ', short') : ''}`} />)}
-      </div>
-      <div className="th-rl-ticks"><span style={{ left: '10%' }}>SHORT · THE LIMIT</span><span style={{ left: '30%' }}>50%</span><span style={{ left: '50%' }}>FLAT</span><span style={{ left: '70%' }}>50%</span><span style={{ left: '90%' }}>LONG · THE LIMIT</span></div>
-      <div className="th-rl-key">{['o', 's', 'c'].filter(k => marks.some(m => m.kind === k)).map(k => <span key={k}><i className={`th-rl-m ${k}`} />{SHAPE[k]}</span>)}</div>
-    </div>
-  )
-}
-
 function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
   const s = st.data
   const rows = statement(s)
@@ -284,21 +251,19 @@ function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
 // factor, below it short; where there is no risk the line is bare.
 function Streams({ on, off, st, list, fl, any }) {
   const { drawn, rest } = useMemo(() => lanes(list), [list])
-  const day = canDay(list), lim = canLimit(drawn, fl)          // a scale is offered for what is drawn: a limit on a factor too small to draw does not offer it
-  const [want, setWant] = useState(() => { try { const m = localStorage.getItem(MODE_KEY); return m === 'raw' || m === 'limit' ? m : 'day' } catch { return 'day' } })
-  const mode = want === 'limit' ? (lim ? 'limit' : day ? 'day' : 'raw') : want === 'day' && !day ? 'raw' : want
-  const pick = (m) => { setWant(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* the choice then lasts for this visit */ } }
+  // One scale: the sensitivity itself, each factor to its own, so a factor's boxes add up to the figure beside its
+  // name. (Until 0.40.0 a switch offered two more: the share of a limit, and USD on a usual day. What a usual day
+  // moves a box by is in the tip; a limit is the ruled line and the gauge.)
+  const mode = 'raw', lim = canLimit(drawn, fl)
   const empty = on && !st.loading && !st.err && drawn.length === 0
+  // for the note under the picture: whether a stream is on a scale of its own, and whether a tenor was left without a column
+  const sc = useMemo(() => scene(drawn, mode, fl), [drawn, mode, fl])
+  const left = useMemo(() => { const cols = columns(drawn); return drawn.some((f, k) => laneMarks(f, sc[k], cols).left > 0) }, [drawn, sc])
   return (
     <div className="th-pic" data-testid="th-river">
       <div className="th-hd">
         <div><span className="th-k">WHERE YOUR RISK SITS</span>
-          <div className="th-sub">{!on ? 'part of Market risk' : mode === 'limit' ? 'each bucket as the share of its limit it uses' : mode === 'day' ? 'USD for a usual day · one scale for all' : 'the sensitivity itself · each stream to its own scale'}</div></div>
-        {on && (day || lim) && <div className="tbw-tabs th-seg" role="group" aria-label="What a stream's height means" data-testid="th-mode">
-          {lim && <button className={`tbw-tab${mode === 'limit' ? ' is-active' : ''}`} aria-pressed={mode === 'limit'} onClick={() => pick('limit')}>OF ITS LIMIT</button>}
-          {day && <button className={`tbw-tab${mode === 'day' ? ' is-active' : ''}`} aria-pressed={mode === 'day'} onClick={() => pick('day')}>A USUAL DAY</button>}
-          <button className={`tbw-tab${mode === 'raw' ? ' is-active' : ''}`} aria-pressed={mode === 'raw'} onClick={() => pick('raw')}>PER 01</button>
-        </div>}
+          <div className="th-sub">{!on ? 'part of Market risk' : 'the sensitivity at each quoted tenor · each factor to its own scale'}</div></div>
       </div>
       {!on && <div className="th-blank">Risk by tenor is part of Market risk, which is {off} for this desk.</div>}
       {on && !any && <div className="th-blank">No risk yet. Book a trade and its risk is drawn here, one stream for each factor.</div>}
@@ -306,7 +271,7 @@ function Streams({ on, off, st, list, fl, any }) {
       {on && any && st.err && !st.data && <div className="th-blank">The risk report could not be read ({why429(st.err)}). The Risk page can run it again.</div>}
       {on && any && empty && <div className="th-blank">The book carries no risk the ladder measures on {fmtD(st.data?.date)}.</div>}
       {on && drawn.length > 0 && <River drawn={drawn} mode={mode} fl={fl} asOf={st.data?.date} />}
-      {on && drawn.length > 0 && <div className="th-note">A box is what one bucket carries, and the figure at it is {mode === 'day' ? 'what a usual day moves it by, in USD' : 'its sensitivity'}; the line joins the boxes. A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && scene(drawn, mode, fl).some(h => h.own) ? ' A dashed box has no usual move measured for it: it is drawn to its own scale and its figure is the sensitivity.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, with the share used written there. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
+      {on && drawn.length > 0 && <div className="th-note">A box is what the book carries at one quoted tenor of a curve, with its sensitivity written at it: a factor's boxes add up to the figure beside its name. The line joins the boxes. A spot delta has no tenor of its own: it is one box across the bucket its trade matures in.{left ? ' A tenor carrying under 3% of its factor\'s largest has no column here; the Risk page lists every one.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, ending in the share used. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
     </div>
   )
 }
@@ -320,17 +285,31 @@ function tipLimit(ag, i) {
 
 // The lanes' names on the left, the drawing on the right, the tip under the pointer. Mounted only when there is a
 // factor to draw, so the box it measures is there from its first frame.
+//
+// Along the picture, nearest first: a column for each quoted tenor some factor carries materially, grouped by the
+// four buckets (trader-home.js columns). In its lane a factor has a box in the column of each tenor it carries; a
+// factor with no tenor of its own (a spot delta, a flat curve) has one box across the bucket it is placed in.
 function River({ drawn, mode, fl, asOf }) {
   const box = useRef(null), cv = useRef(null), tip = useRef(null), at = useRef({ x: 0, y: 0 }), w = useWidth(box)
   const hotRef = useRef(-1), redraw = useRef(null)
   const hs = useMemo(() => scene(drawn, mode, fl), [drawn, mode, fl])
-  // what each box says, whole and shortened (a narrow column takes the short one)
-  const figs = useMemo(() => drawn.map(f => BUCKETS.map((_, i) => { const full = bucketFigure(f, i, mode); return full ? { full, short: bucketFigure(f, i, mode, true) } : null })), [drawn, mode])
+  const cols = useMemo(() => columns(drawn), [drawn])
+  const laid = useMemo(() => drawn.map((f, k) => laneMarks(f, hs[k], cols).marks.map(m => ({ ...m, full: markFigure(f, m, mode), short: markFigure(f, m, mode, true) }))), [drawn, hs, cols, mode])
   const [hot, setHot] = useState(-1)
   const reach = useMemo(() => bucketReach(asOf), [asOf])
-  const AXIS = 40, n = drawn.length
+  const ticks = cols.slots.some(s => s.tenor != null)                // a row of tenors over the buckets' names
+  const AXIS = ticks ? 56 : 40, n = drawn.length
   const gut = hs.some(h => h.total) ? GUTTER : 0          // room at the lanes' start for the gauge of a limit on a total, and its figure
-  const height = Math.max(300, Math.min(540, n * 80)) + AXIS
+  const height = Math.max(300, Math.min(700, n * 96)) + AXIS          // a lane of 96px: a box of a third of it either side of the line, and room past the tallest for its figure
+  // where each column starts: every column of a bucket is as wide as the others', and a bucket is at least two
+  // columns wide, so that its name has room under it
+  const edges = useMemo(() => {
+    const units = cols.groups.map(g => Math.max(2, g.to - g.from)), all = units.reduce((a, b) => a + b, 0), out = []
+    let x = gut
+    cols.groups.forEach((g, gi) => { const each = (w - gut) / all * units[gi] / (g.to - g.from); for (let k = g.from; k < g.to; k++) { out.push(x); x += each } })
+    out.push(w)
+    return out
+  }, [cols, w, gut])
 
   useEffect(() => {
     const c = cv.current
@@ -339,15 +318,23 @@ function River({ drawn, mode, fl, asOf }) {
     c.width = Math.round(W * dpr); c.height = Math.round(H * dpr)
     const g = c.getContext('2d')
     const css = getComputedStyle(document.documentElement)
-    const cols = drawn.map(f => css.getPropertyValue(RISK_FACTORS[f.factor].token).trim() || T.textDim)
-    const top = 6, bottom = H - AXIS, lane = (bottom - top) / n, amp = lane * 0.4, colW = (W - gut) / BUCKETS.length          // 0.4, so a stream held just past its limit stays in its own lane
-    const colX = (i) => gut + colW * i
-    // six nodes across: nothing at either edge, the bucket's height at its middle; a cosine between them, so the
-    // line never rises past a bucket's own figure
-    const nodes = (h) => [[gut, 0], ...h.map((v, i) => [colX(i + 0.5), v]), [W, 0]]
+    const colours = drawn.map(f => css.getPropertyValue(RISK_FACTORS[f.factor].token).trim() || T.textDim)
+    const top = 6, bottom = H - AXIS, lane = (bottom - top) / n, amp = lane / 3          // a third, so the figure of a lane's tallest box is written past it and still in its own lane
+    const gx0 = (i) => edges[cols.groups[i].from], gx1 = (i) => edges[cols.groups[i].to]
+    // a mark's box, about the middle of the columns it stands in. A point's is four fifths of the narrowest column,
+    // so every point's box is as wide as every other's; a bucket drawn whole is four fifths of the bucket.
+    const unit = Math.min(...cols.slots.map((_, k) => edges[k + 1] - edges[k]))
+    const boxOf = (m) => { const x0 = edges[m.from], span = edges[m.to] - x0, bw = Math.min((m.tenor ? unit : span) * 0.8, 260); return { x: x0 + span / 2 - bw / 2, w: bw, cx: x0 + span / 2, span } }
+    // the stream's line: nothing at either edge, each box's height at its middle, the line's own level in a bucket
+    // the factor does not carry; a cosine between them, so the line never rises past a box's own figure
+    const nodes = (ms) => {
+      const pts = ms.map(m => [boxOf(m).cx, m.h])
+      cols.groups.forEach(gr => { if (!ms.some(m => m.i === gr.i)) pts.push([(gx0(gr.i) + gx1(gr.i)) / 2, 0]) })
+      return [[gut, 0], ...pts.sort((a, b) => a[0] - b[0]), [W, 0]]
+    }
     const yAt = (nd, x) => { let k = 0; while (k < nd.length - 2 && x > nd[k + 1][0]) k++; const [x0, y0] = nd[k], [x1, y1] = nd[k + 1], u = Math.max(0, Math.min(1, (x - x0) / (x1 - x0 || 1))); return y0 + (y1 - y0) * (1 - Math.cos(Math.PI * u)) / 2 }
     const xs = []; for (let x = gut; x <= W; x += 4) xs.push(x)
-    const shape = drawn.map((f, k) => { const base = top + lane * (k + 0.5), nd = nodes(hs[k].h); return { base, ys: xs.map(x => base - yAt(nd, x) * amp) } })
+    const shape = drawn.map((f, k) => { const base = top + lane * (k + 0.5), nd = nodes(laid[k]); return { base, ys: xs.map(x => base - yAt(nd, x) * amp) } })
     const still = reduced()
     let raf = 0, last = -FRAME_MS
     const draw = (ms) => {
@@ -356,96 +343,106 @@ function River({ drawn, mode, fl, asOf }) {
       last = ms
       g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H); g.globalAlpha = 1; g.setLineDash([]); g.shadowBlur = 0; g.globalCompositeOperation = 'source-over'
       g.textAlign = 'center'; g.textBaseline = 'alphabetic'
-      const hot = hotRef.current
-      if (hot >= 0) { g.fillStyle = alpha(T.text, 0.035); g.fillRect(colX(hot), top, colW, bottom - top) }
-      BUCKETS.forEach((b, i) => {
-        if (i || gut) { g.strokeStyle = alpha(T.border, 0.7); g.lineWidth = 1; g.beginPath(); g.moveTo(colX(i), top); g.lineTo(colX(i), bottom + 4); g.stroke() }
-        g.font = `11px ${MONO}`; g.fillStyle = i === hot ? T.textHi : T.textDim; g.fillText(BUCKET_LABEL[b], colX(i + 0.5), bottom + 18)
-        g.fillStyle = T.textMute; g.fillText(reach[i], colX(i + 0.5), bottom + 33)
+      const hot = hotRef.current, wide = (t) => g.measureText(t).width
+      if (hot >= 0 && hot < cols.slots.length) { g.fillStyle = alpha(T.text, 0.035); g.fillRect(edges[hot], top, edges[hot + 1] - edges[hot], bottom - top) }
+      // the axis: each column's tenor, then the bucket the columns belong to and the year it reaches
+      g.font = `11px ${MONO}`
+      if (ticks) cols.slots.forEach((sl, k) => {
+        if (!sl.tenor || wide(sl.tenor) > edges[k + 1] - edges[k] - 2) return
+        g.fillStyle = k === hot ? T.textHi : T.text; g.fillText(sl.tenor, (edges[k] + edges[k + 1]) / 2, bottom + 16)
+      })
+      cols.groups.forEach((gr, gi) => {
+        const x0 = gx0(gr.i), x1 = gx1(gr.i), room = x1 - x0 - 6, y = bottom + (ticks ? 34 : 18), lit = hot >= gr.from && hot < gr.to
+        if (gi || gut) { g.strokeStyle = alpha(T.border, 0.7); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, top); g.lineTo(x0, bottom + 4); g.stroke() }
+        const name = wide(BUCKET_LABEL[BUCKETS[gr.i]]) <= room ? BUCKET_LABEL[BUCKETS[gr.i]] : BUCKETS[gr.i]          // a narrow bucket takes its short name
+        g.fillStyle = lit ? T.textHi : T.textDim; g.fillText(name, (x0 + x1) / 2, y)
+        if (wide(reach[gr.i]) <= room) { g.fillStyle = T.textMute; g.fillText(reach[gr.i], (x0 + x1) / 2, y + 15) }
       })
       // which way is which, said once: above a stream's line the book is long, below it short
       g.font = `10px ${MONO}`; g.textAlign = 'right'; g.fillStyle = T.textMute
       g.fillText('LONG ▲', W - 4, top + 10); g.fillText('SHORT ▼', W - 4, top + lane - 5); g.textAlign = 'center'
       drawn.forEach((f, k) => {
-        const { base, ys } = shape[k], c = cols[k], own = hs[k].own || hs[k].none
-        const bw = Math.min(colW * 0.8, 260), bx = (i) => colX(i + 0.5) - bw / 2
-        const tall = (i) => Math.max(2, Math.abs(hs[k].h[i]) * amp), side = (i) => (hs[k].h[i] || f.v[i]) >= 0 ? 1 : -1
+        const { base, ys } = shape[k], c = colours[k], own = hs[k].own || hs[k].none, ms = laid[k]
+        const tall = (m) => Math.max(2, Math.abs(m.h) * amp), side = (m) => (m.h || m.x) >= 0 ? 1 : -1
+        const boxes = ms.map(boxOf)
         // the stream's line is drawn where the stream stands off its base and no box does: it joins the boxes and
         // does not run through one (or through the figure in it)
-        const boxed = (x) => figs[k].some((fig, i) => fig && x > bx(i) && x < bx(i) + bw)
+        const boxed = (x) => boxes.some(b => x > b.x && x < b.x + b.w)
         const live = (i) => Math.abs(ys[i] - base) > 1.2 && !boxed(xs[i])
         g.strokeStyle = alpha(c, 0.28); g.lineWidth = 1; g.beginPath(); g.moveTo(0, base); g.lineTo(W, base); g.stroke()
-        // a bucket's own limit: a ruled line above the stream's line and one below, hatched on the far side (a dash is
-        // kept for a stream on a scale of its own, so the two are not mistaken for one another)
+        // a bucket's own limit: a ruled line across the bucket's columns above the stream's line and one below,
+        // hatched on the far side. On the side the position is on, the line ends in the share of the limit used, in
+        // the colour of its state.
+        g.font = `500 11px ${MONO}`
         hs[k].bank.forEach((b, i) => {
           if (b == null) return
+          const t = hs[k].tags[i], pct = t ? `${Math.round(Math.abs(t.u) * 100)}%` : '', on = t ? (t.u < 0 ? -1 : 1) : 0
           for (const sd of [1, -1]) {
-            const y = base - sd * b * amp, x0 = colX(i) + 5, x1 = colX(i + 1) - 5
+            const y = base - sd * b * amp, x0 = gx0(i) + 5, said = pct && sd === on, x1 = gx1(i) - 5 - (said ? wide(pct) + 5 : 0)
             g.strokeStyle = alpha(T.textHi, 0.6); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke()
             g.strokeStyle = alpha(T.textMute, 0.45)
-            for (let x = x0; x < x1; x += 7) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - sd * 4); g.stroke() }
+            for (let x = x0; x < x1 - 4; x += 7) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - sd * 4); g.stroke() }
+            if (said) { g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim; g.fillText(pct, gx1(i) - 5, y - sd * 2); g.textAlign = 'center'; g.textBaseline = 'alphabetic' }
           }
         })
         // the total against the total's limit: a gauge at the lane's start, the limit a tick at either end
         const tot = hs[k].total
         if (tot) {
-          const reach = amp * 0.85, gx = 6, u = Math.max(-1.18, Math.min(1.18, tot.u)), col = tot.state === 'BREACH' ? T.down : tot.state === 'WARN' ? T.amber : T.textDim
-          g.strokeStyle = alpha(T.borderHi, 0.9); g.lineWidth = 1; g.beginPath(); g.moveTo(gx, base - reach); g.lineTo(gx, base + reach); g.stroke()
+          const far = amp * 0.85, gx = 6, u = Math.max(-1.18, Math.min(1.18, tot.u)), col = tot.state === 'BREACH' ? T.down : tot.state === 'WARN' ? T.amber : T.textDim
+          g.strokeStyle = alpha(T.borderHi, 0.9); g.lineWidth = 1; g.beginPath(); g.moveTo(gx, base - far); g.lineTo(gx, base + far); g.stroke()
           g.strokeStyle = alpha(T.textHi, 0.8); g.lineWidth = 1.5
-          for (const sd of [1, -1]) { g.beginPath(); g.moveTo(gx - 4, base - sd * reach); g.lineTo(gx + 4, base - sd * reach); g.stroke() }
-          g.fillStyle = col; g.fillRect(gx - 2, Math.min(base, base - u * reach), 4, Math.abs(u * reach))
+          for (const sd of [1, -1]) { g.beginPath(); g.moveTo(gx - 4, base - sd * far); g.lineTo(gx + 4, base - sd * far); g.stroke() }
+          g.fillStyle = col; g.fillRect(gx - 2, Math.min(base, base - u * far), 4, Math.abs(u * far))
           g.font = `500 11px ${MONO}`; g.textAlign = 'left'; g.fillText(`${Math.round(Math.abs(tot.u) * 100)}%`, gx + 7, tot.u < 0 ? base + 13 : base - 5); g.textAlign = 'center'          // in the gutter beside the gauge, on the side the position is on
         }
         const edge = () => { g.beginPath(); let pen = false; xs.forEach((x, i) => { if (!live(i)) { pen = false; return } pen ? g.lineTo(x, ys[i]) : g.moveTo(x, ys[i]); pen = true }) }
         // the stream's line, between the boxes: it joins them, and the boxes say how much
         g.strokeStyle = c; g.globalAlpha = own ? 0.35 : 0.5; g.lineWidth = 1.2; edge(); g.stroke()
-        if (!still && !own) {                               // light running along the edge, toward the far tenors
+        if (!still && !own) {                               // light running along the line, toward the far tenors
           g.globalCompositeOperation = 'lighter'; g.strokeStyle = T.textHi; g.globalAlpha = 0.5; g.lineWidth = 1.6
           g.setLineDash([16, 120]); g.lineDashOffset = -ms * 0.035 - k * 37; edge(); g.stroke(); g.setLineDash([]); g.globalCompositeOperation = 'source-over'
         }
         g.globalAlpha = 1
-        // a box for each bucket, as tall as what the bucket carries on the lane's scale, on the side of the line the
-        // stream is on: above it long, below it short (a stream on a scale of its own has dashed boxes)
-        figs[k].forEach((fig, i) => {
-          if (!fig) return
-          const hgt = tall(i), y = side(i) > 0 ? base - hgt : base
-          g.fillStyle = alpha(c, i === hot ? 0.36 : 0.24); g.fillRect(bx(i), y, bw, hgt)
+        // a box for each mark, as tall as what it carries on the lane's scale, on the side of the line the stream is
+        // on: above it long, below it short (a stream on a scale of its own has dashed boxes)
+        ms.forEach((m, j) => {
+          const b = boxes[j], hgt = tall(m), y = side(m) > 0 ? base - hgt : base, lit = hot >= m.from && hot < m.to
+          g.fillStyle = alpha(c, lit ? 0.36 : 0.24); g.fillRect(b.x, y, b.w, hgt)
           g.strokeStyle = alpha(c, 0.85); g.lineWidth = 1; g.setLineDash(own ? [4, 3] : [])
-          g.strokeRect(bx(i) + 0.5, y + 0.5, bw - 1, Math.max(1, hgt - 1)); g.setLineDash([])
+          g.strokeRect(b.x + 0.5, y + 0.5, Math.max(1, b.w - 1), Math.max(1, hgt - 1)); g.setLineDash([])
         })
-        // at each box, what it carries; after it, where the bucket has a limit of its own, the share of it used, in
-        // the colour of its state. Where it stands, and what of it fits the column, are trader-home.js's figureAt
-        // and figureFit: a figure stays in its own lane and its own bucket.
-        g.font = `500 12.5px ${MONO}`; g.textAlign = 'left'
-        const wide = (t) => g.measureText(t).width
-        figs[k].forEach((fig, i) => {
-          if (!fig) return
-          const t = hs[k].tags[i], b = hs[k].bank[i]
-          const at = figureAt({ side: side(i), base, tall: tall(i), line: b == null ? null : b * amp, half: lane / 2 })
-          const fit = figureFit(fig.full, fig.short, t ? ` · ${Math.round(Math.abs(t.u) * 100)}%` : '', (at.inside ? bw : colW) - 6, wide)
-          const y = Math.max(top + 10, Math.min(bottom - 3, at.y)), wf = wide(fit.fig), x0 = colX(i + 0.5) - (wf + (fit.share ? wide(fit.share) : 0)) / 2
-          g.fillStyle = T.textHi; g.fillText(fit.fig, x0, y)
-          if (fit.share) { g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim; g.fillText(fit.share, x0 + wf, y) }
+        // at each box, what it carries. Where it stands, and what of it fits its column, are trader-home.js's
+        // figureAt and figureFit: a figure stays in its own lane and its own column, and one that does not fit is
+        // left to the tip.
+        g.font = `500 12.5px ${MONO}`
+        ms.forEach((m, j) => {
+          const b = boxes[j], line = hs[k].bank[m.i]
+          const at = figureAt({ side: side(m), base, tall: tall(m), line: line == null ? null : line * amp, half: lane / 2 })
+          const fit = figureFit(m.full, m.short, '', (at.inside ? b.w : b.span) - 3, wide)
+          if (fit) { g.fillStyle = T.textHi; g.fillText(fit.fig, b.cx, Math.max(top + 10, Math.min(bottom - 3, at.y))) }
         })
-        g.textAlign = 'center'
       })
     }
     raf = requestAnimationFrame(draw)
-    redraw.current = still ? () => draw(0) : null          // moving, the next frame reads the bucket; still, it is drawn when it changes
+    redraw.current = still ? () => draw(0) : null          // moving, the next frame reads the column; still, it is drawn when it changes
     return () => { cancelAnimationFrame(raf); redraw.current = null }
-  }, [drawn, hs, figs, w, height, n, reach, gut])
+  }, [drawn, hs, laid, cols, edges, ticks, w, height, n, reach, gut, AXIS])
   useEffect(() => { hotRef.current = hot; redraw.current?.() }, [hot])
 
-  // The tip follows the pointer by its own style, not by a render: only entering another bucket draws the page again.
-  const place = () => { if (tip.current) { tip.current.style.left = `${at.current.x}px`; tip.current.style.top = `${at.current.y}px` } }
+  // The tip follows the pointer by its own style, not by a render: only entering another column draws the page again.
+  // (it is kept inside the picture: where it is wider than what is left of the drawing it reaches back over the lanes' names, not over the column beside)
+  const place = () => { const t = tip.current; if (t) { t.style.left = `${Math.min(at.current.x, (box.current?.clientWidth || 0) - t.offsetWidth - 2)}px`; t.style.top = `${at.current.y}px` } }
   useLayoutEffect(place)
   const move = (e) => {
     const r = box.current.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top
-    const i = Math.max(0, Math.min(BUCKETS.length - 1, Math.floor((x - gut) / ((r.width - gut) / BUCKETS.length))))
-    at.current = { x: Math.max(0, Math.min(x + 16, r.width - 300)), y: Math.max(4, Math.min(y - 24, r.height - AXIS - 22 * (n + 1))) }
+    let i = 0; while (i < cols.slots.length - 1 && x >= edges[i + 1]) i++
+    at.current = { x: x + 16, y: Math.max(4, Math.min(y - 24, r.height - AXIS - 22 * (n + 1))) }
     place()
     if (i !== hot) setHot(i)
   }
+  const sl = hot >= 0 ? cols.slots[hot] : null
+  // what each factor carries in the column under the pointer: its point there, or the bucket it is drawn whole in
+  const under = sl ? drawn.map((f, k) => ({ f, k, m: laid[k].find(m => hot >= m.from && hot < m.to) })).filter(x => x.m) : []
 
   return (
     <div className="th-river">
@@ -458,15 +455,16 @@ function River({ drawn, mode, fl, asOf }) {
         ))}
       </div>
       <div className="th-cv" ref={box} style={{ height }} onMouseMove={move} onMouseLeave={() => setHot(-1)}>
-        <canvas ref={cv} style={{ height }} role="img" aria-label={`Risk by factor and tenor bucket: ${drawn.map(f => `${f.name} ${f.measure} ${signed(f.total)} ${f.unit}`).join('; ')}`} />
-        {hot >= 0 && (
+        <canvas ref={cv} style={{ height }} role="img" aria-label={`Risk by factor and quoted tenor: ${drawn.map((f, k) => `${f.name} ${f.measure} ${signed(f.total)} ${f.unit}${laid[k].some(m => m.tenor) ? ` (${laid[k].filter(m => m.tenor).map(m => `${m.tenor} ${signed(m.x)}`).join(', ')})` : ''}`).join('; ')}`} />
+        {sl && (
           <div className="th-tip" ref={tip}>
-            <div className="th-tip-h">{BUCKET_LABEL[BUCKETS[hot]]} · {reach[hot]}</div>
-            {drawn.filter(f => Math.abs(f.v[hot]) >= 0.5).map(f => (
+            <div className="th-tip-h">{sl.tenor ? `${sl.tenor} · ` : ''}{BUCKET_LABEL[BUCKETS[sl.i]]} · {reach[sl.i]}</div>
+            {under.map(({ f, k, m }) => (
               <div key={f.key}><span><span className="rf-mark" style={{ background: `var(${RISK_FACTORS[f.factor].token})` }} />{f.name} {f.measure}</span>
-                <span><b className={`fig ${tone(f.v[hot])}`}>{signed(f.v[hot])}</b>{f.day?.[hot] != null && mode === 'day' ? <em> ≈ {fmt0(f.day[hot])} a day</em> : null}{tipLimit(hs[drawn.indexOf(f)].against, hot)}</span></div>
+                <span><b className={`fig ${tone(m.x)}`}>{signed(m.x)}</b>{m.day != null ? <em> ≈ {fmt0(m.day)} a day</em> : null}
+                  {m.tenor ? (hs[k].against?.per[m.i] ? <em> · its bucket</em> : null) : (sl.tenor ? <em> · across the bucket</em> : null)}{tipLimit(hs[k].against, m.i)}</span></div>
             ))}
-            {!drawn.some(f => Math.abs(f.v[hot]) >= 0.5) && <div><span className="mute">no risk in this bucket</span></div>}
+            {!under.length && <div><span className="mute">{sl.tenor ? 'no risk at this tenor' : 'no risk in this bucket'}</span></div>}
           </div>
         )}
       </div>

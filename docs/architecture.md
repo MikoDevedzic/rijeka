@@ -51,7 +51,7 @@ chat and news, from a bar at the foot. It is installable from a phone's home scr
 
 On a monitor the command centre is the trader's home (`components/home/TraderHome.jsx`, since 0.36.0), the first of
 a home for each role. It computes nothing but a drawing: it reads the trades, the stored risk report
-(`GET /api/risk/report`: the ladder, the limits as evaluated, the VaR, and `moves`, each factor's usual daily move;
+(`GET /api/risk/report`: the ladder by bucket and, since 0.40.0, at each quoted tenor (`points`), the limits as evaluated, the VaR, and `moves`, each factor's usual daily move;
 since 0.37.0 every curve of the book has a limit there, its own or the standard one for its kind, worked out and not
 stored, and a stored report is read against the limits as they stand; since 0.38.0 `fixings`, what resets on each
 coming day by index, read from the periods of the same valuation, `backend/risk/fixings.py`),
