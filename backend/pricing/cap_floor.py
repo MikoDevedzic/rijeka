@@ -28,8 +28,12 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
 
-from scipy.stats import norm as _norm
+import numpy as np
+from scipy.special import ndtr as _ndtr
 from scipy.interpolate import interp1d
+
+
+_SQRT_2PI = np.sqrt(2 * np.pi)
 
 
 # ── Bachelier caplet/floorlet ────────────────────────────────────────────────
@@ -42,7 +46,12 @@ def bachelier_call(F: float, K: float, T: float, sigma: float) -> float:
     if sT < 1e-12:
         return max(F - K, 0.0)
     d = (F - K) / sT
-    return sT * (d * _norm.cdf(d) + _norm.pdf(d))
+    # The normal distribution, read directly. scipy.stats.norm.cdf and .pdf give these same numbers to the last
+    # bit (they are ndtr and exp(-x^2/2)/sqrt(2 pi) inside a wrapper that checks its arguments) and take about
+    # 160 times as long for one number: a caplet is priced three times for its value and its two sensitivities,
+    # and a live risk report on twelve trades asked for 155,000 of them, more than half its time
+    # (15 November 2026). tests/test_capped_floored_floater.py holds the two to each other exactly.
+    return sT * (d * _ndtr(d) + np.exp(-d * d / 2.0) / _SQRT_2PI)
 
 
 def bachelier_put(F: float, K: float, T: float, sigma: float) -> float:
@@ -598,6 +607,8 @@ def _price_strip_core(
     npv_ir_up          = 0.0
     caplets_out        = []
     tiers_seen         = []
+    vol_at: dict = {}        # the surface's answer for a strike: the periods of a strip mostly share one, and the
+                             # forward, the tenor and the surface are the strip's, so it is asked once a strike
 
     for i, p in enumerate(periods_live):
         F   = fwds[i]
@@ -611,14 +622,16 @@ def _price_strip_core(
         if vol_override_bp is not None:
             vol_bp, vol_tier = vol_override_bp, 'OVERRIDE'
         else:
-            vol_bp, vol_tier = lookup_cap_vol(
-                strike_rate=K,
-                atm_forward=atm_forward,
-                cap_tenor_y=swap_tenor_y,
-                surface_rows=surface_rows,
-                fallback_vol_bp=fallback_vol_bp,
-                is_floor=is_floor,
-            )
+            if K not in vol_at:
+                vol_at[K] = lookup_cap_vol(
+                    strike_rate=K,
+                    atm_forward=atm_forward,
+                    cap_tenor_y=swap_tenor_y,
+                    surface_rows=surface_rows,
+                    fallback_vol_bp=fallback_vol_bp,
+                    is_floor=is_floor,
+                )
+            vol_bp, vol_tier = vol_at[K]
         tiers_seen.append(vol_tier)
         sigma = vol_bp / 10000.0
 

@@ -495,6 +495,10 @@ checklist in `docs/ops/release.md`.
 
 ## What runs where, honestly
 
+- What each action costs the one CPU, measured on the integration book (twelve trades) on 15 November 2026: a
+  price about 0.01s, an XVA run about 0.02s, a live P&L or credit report about 0.1s, a live market risk report 1.1s
+  (5.7s until 0.42.3). The risk report is the one to watch as a book grows: it values every trade once for every
+  quoted tenor it is sensitive to.
 - One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account
   (`api/routes/_limits.py`). A larger book moves these to a worker without changing the engines.
 - Job state for background runs (counterparty credit, the risk backfill) is in process memory until the

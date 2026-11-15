@@ -3,6 +3,24 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.23). Commits on `main` are the detail.
 
+## 0.42.3 · 15 November 2026
+
+**A risk report in a fifth of the time, on the same numbers.** The API is one process on one CPU, and a live
+market risk report was by far the dearest thing a visitor could ask of it: 5.7 seconds of that CPU for the twelve
+trades of the integration book, where a price is a hundredth of a second and an XVA run two hundredths. It is 1.1
+seconds now. No figure moves, to the last bit.
+
+- **The normal distribution is read directly.** A caplet's Bachelier value read the normal distribution through
+  `scipy.stats.norm`, whose wrapper checks its arguments at every call and took about 160 times as long as the two
+  functions inside it (`ndtr`, and `exp(-x²/2)/√(2π)`). A report asked for 155,000 of them: more than half its
+  time. The two functions are called themselves. A test prices 20,000 caplets both ways and requires the same
+  number, not a close one.
+- **A strip asks the surface once a strike.** A capped or floored leg looked its volatility up at every period,
+  for one strike, one forward and one surface: a fifth of the report's time. It is looked up once for each strike
+  of the strip.
+- The P&L report is twice as fast for the same reason (0.20s to 0.09s). What is left in a risk report is mostly
+  schedules built again at every valuation; that is not changed here.
+
 ## 0.41.0 · 15 November 2026
 
 **The funding adjustments under their names, and XVA filed as valuation.** No figure changes.

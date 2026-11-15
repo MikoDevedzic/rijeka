@@ -753,3 +753,64 @@ class TestCapVolIsContinuous:
         # two bumps differ
         held = cap(0.0301, vol=base.vol_bp).npv - base.npv
         assert held < wide and (wide - held) > 5 * abs(wide - fine), (held, wide, fine)
+
+
+class TestTheNormalDistributionIsReadDirectly:
+    """bachelier_call reads the normal distribution as ndtr and exp(-x^2/2)/sqrt(2 pi) and no longer through
+    scipy.stats.norm, whose wrapper cost a live risk report more than half its time (15 November 2026). The two
+    must be the same number, not a close one: every cap, floor and collar price rests on it."""
+
+    def test_a_caplet_is_the_same_number_to_the_last_bit(self):
+        import math
+        import random
+        from scipy.stats import norm
+        from pricing.cap_floor import bachelier_call, bachelier_put
+        rng = random.Random(20261115)
+        for _ in range(20000):
+            F, K = rng.uniform(-0.01, 0.09), rng.uniform(-0.01, 0.09)
+            T, sigma = rng.uniform(0.003, 30.0), rng.uniform(0.0005, 0.03)
+            sT = sigma * math.sqrt(T)
+            d = (F - K) / sT
+            was = sT * (d * norm.cdf(d) + norm.pdf(d))
+            assert bachelier_call(F, K, T, sigma) == was, (F, K, T, sigma)
+            assert bachelier_put(F, K, T, sigma) == was - (F - K)
+        # far in and far out of the money, at the money, and an option that has expired
+        for F, K, T, sigma in [(0.03, 0.03, 5.0, 0.008), (0.30, 0.01, 1.0, 0.001), (0.01, 0.30, 1.0, 0.001), (0.03, 0.02, 0.0, 0.008), (0.03, 0.02, 2.0, 0.0)]:
+            if T <= 0 or sigma * math.sqrt(T) < 1e-12:
+                assert bachelier_call(F, K, T, sigma) == max(F - K, 0.0)
+            else:
+                sT = sigma * math.sqrt(T); d = (F - K) / sT
+                assert bachelier_call(F, K, T, sigma) == sT * (d * norm.cdf(d) + norm.pdf(d))
+
+
+class TestAStripAsksTheSurfaceOnceAStrike:
+    def test_a_strip_of_one_strike_reads_the_surface_once_and_prices_as_it_did(self, monkeypatch, swap_periods):
+        import pricing.cap_floor as CF
+        asked = []
+        real = CF.lookup_cap_vol
+        monkeypatch.setattr(CF, "lookup_cap_vol", lambda **kw: asked.append(kw["strike_rate"]) or real(**kw))
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.03)
+        kw = dict(periods=swap_periods, strike_schedule_obj={"direction": "BUY", "schedule": []}, default_strike=0.035, notional_schedule=None,
+                  default_notional=10_000_000, forecast_curve=curve, discount_curve=curve, valuation_date=VAL_DATE, swap_tenor_y=5.0)
+        strip = CF.price_caplet_strip_over_periods(surface_rows=SKEW, **kw)
+        assert strip.n_periods >= 19 and asked == [0.035], "twenty periods at one strike ask the surface once"
+        # the price is the one every period's own question gave: the same volatility at every period. Handed in from
+        # the result's own at-the-money forward, which is kept to eight places, it agrees to a cent on 10m
+        vol, _ = real(strike_rate=0.035, atm_forward=strip.atm_forward, cap_tenor_y=5.0, surface_rows=SKEW)
+        handed = CF.price_caplet_strip_over_periods(surface_rows=SKEW, vol_override_bp=vol, **kw)
+        assert strip.npv > 0 and strip.npv == pytest.approx(handed.npv, abs=0.01) and strip.vega == pytest.approx(handed.vega, abs=0.01)
+        assert {c["vol_bp"] for c in strip.caplets} == {strip.caplets[0]["vol_bp"]}, "one strike, one volatility at every period"
+
+    def test_a_strip_of_stepped_strikes_asks_once_for_each(self, monkeypatch, swap_periods):
+        import pricing.cap_floor as CF
+        asked = []
+        real = CF.lookup_cap_vol
+        monkeypatch.setattr(CF, "lookup_cap_vol", lambda **kw: asked.append(kw["strike_rate"]) or real(**kw))
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.03)
+        half = swap_periods[len(swap_periods) // 2].period_start
+        steps = {"direction": "BUY", "schedule": [{"date": str(swap_periods[0].period_start), "strike": 0.035}, {"date": str(half), "strike": 0.04}]}
+        strip = CF.price_caplet_strip_over_periods(periods=swap_periods, strike_schedule_obj=steps, default_strike=0.035, notional_schedule=None,
+                                                   default_notional=10_000_000, forecast_curve=curve, discount_curve=curve, valuation_date=VAL_DATE,
+                                                   surface_rows=SKEW, swap_tenor_y=5.0)
+        assert sorted(set(asked)) == sorted(asked), "no strike is asked for twice"
+        assert len({c["strike"] for c in strip.caplets}) == len(asked)
