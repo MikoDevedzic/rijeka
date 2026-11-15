@@ -93,6 +93,8 @@ def risk_report(date_: Optional[str] = Query(default=None, alias="date"), live: 
             R.store(db, ctx, rep)
         except Exception as e:          # noqa: BLE001 — a store failure must not hide the report
             db.rollback(); log.info("risk: store after live report failed: %s", e)
+    if rep.get("from_store"):
+        rep = R.with_limits_as_they_stand(db, user["sub"], rep)      # a limit set since the report was stored shows at once
     rep["can_write"] = _can_write(db, user)
     rep["role"] = _role(db, user)
     return rep
@@ -140,6 +142,11 @@ def post_limit(body: LimitBody, db: Session = Depends(get_db), user: dict = Depe
         raise HTTPException(status_code=422, detail="scope_name is required for DESK and BOOK")
     if body.limit <= 0:
         raise HTTPException(status_code=422, detail="limit must be positive")
+    if body.metric.strip().upper().startswith("STANDARD:"):          # the size of a kind is the firm's, for the whole book
+        if body.metric.strip().upper().split(":", 1)[1] not in L.STANDARD_SIZES:
+            raise HTTPException(status_code=422, detail=f"a standard size is for one of {sorted(L.STANDARD_SIZES)}")
+        if body.scope.upper() != "ALL":
+            raise HTTPException(status_code=422, detail="a standard size is set for the whole book (scope ALL)")
     L.add_limit(db, f, body.metric, body.scope, body.scope_name, body.limit, body.warn_pct, body.note, user["sub"], _name(user))
     return {"limits": L.list_limits(db, f)}
 
@@ -167,6 +174,9 @@ def metrics(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
         keys.append(f"IR01:{row['curve']}")
         keys += [f"KR01:{row['curve']}:{b}" for b in row["buckets"]]
     keys += [f"SPOT01:{a}" for a in rep["ladder"].get("spot01", {})]
+    keys += [f"VEGA:{row['curve']}" for row in rep["ladder"].get("vega", [])]
+    keys += [f"CRYBASIS01:{cid}" for cid in (rep["ladder"].get("crybasis01") or {})]
+    keys += [f"STANDARD:{k}" for k in L.STANDARD_SIZES]
     keys += [f"STRESS:{s['id']}" for s in ST.SCENARIOS]
     desks = sorted({r["desk"] for r in rep.get("ladder_rows", [])}); books = sorted({r["book"] for r in rep.get("ladder_rows", [])})
     return {"metrics": keys, "desks": desks, "books": books, "scenarios": [{"id": s["id"], "name": s["name"]} for s in ST.SCENARIOS], "help": L.METRIC_HELP}

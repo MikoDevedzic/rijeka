@@ -72,7 +72,7 @@ MODES = ("MARKET", "IMPLIED")     # MARKET: outright = spot + quoted points; IMP
 FIXING_DEFAULT = {"USDJPY": "WM/Reuters 4pm London", "BTCUSD": "CME CF BRR", "ETHUSD": "CME CF ETHUSD_RR", "SOLUSD": "Coinbase SOL-USD"}
 # The settlement price sources a digital-asset trade may name, with the time each is published (settlement/sources.py:
 # `auto` is the feed's, stored as a shared row; the others are a desk's own entry, POST /api/currency/fixings).
-from settlement.sources import SETTLEMENT_SOURCES, check_desk_source, feed_source, printable  # noqa: E402
+from settlement.sources import SETTLEMENT_SOURCES, check_desk_source, feed_source, listed_sources, printable  # noqa: E402, F401  (SETTLEMENT_SOURCES: read from here by tests and older callers)
 FIXING_VALUE_MAX = 1e12
 FIXING_DAYS_MAX = 366
 FIXING_FLOOR = date(2015, 1, 1)             # no digital-asset fixing this desk settles on is older
@@ -91,8 +91,8 @@ def offered_sources(db: Session, pair: str) -> list[dict]:
     true. Only the offer follows the feed: a record that names the venue's source is still booked, valued and
     mirrored wherever it arrives (settlement/sources.check_booked reads the full list)."""
     from settlement import store
-    listed = SETTLEMENT_SOURCES.get(pair) or []
-    delivering = bool(listed) and store.feed_delivering(db, pair)
+    listed = listed_sources(pair)              # a currency pair lists the benchmark a desk enters itself (no feed)
+    delivering = any(x["auto"] for x in listed) and store.feed_delivering(db, pair)
     return [dict(x) for x in listed if delivering or not x["auto"]]
 
 
@@ -103,6 +103,8 @@ def settlement_default(db: Session, pair: str, offered: Optional[list[dict]] = N
 
     `fixing_default` in the pairs answer is not this: it stays the benchmark, always, because clients older than
     0.14.0 pair it with a hard-coded 16:00 London and would otherwise book a venue price at a benchmark's time."""
+    if pair not in SETTLEMENT_SOURCES:           # a currency pair: its NDF ticket names `fixing_default`, and no feed competes with it
+        return None
     offered = offered_sources(db, pair) if offered is None else offered
     if not offered:
         return None
@@ -494,8 +496,6 @@ def fixings_view(db: Session, user_id, pair: str, days: int = 30) -> dict:
     from settlement import store
     days = max(1, min(int(days), FIXING_DAYS_MAX))
     out = {"pair": pair, "stored": store.tables_present(db), "sources": offered_sources(db, pair)}
-    if pair not in SETTLEMENT_SOURCES:
-        return {**out, "fixings": []}
     if out["stored"]:
         return {**out, "fixings": store.recent(db, pair, days, user_id)}
     rows = db.execute(text("SELECT DISTINCT ON (valuation_date) valuation_date, quotes, source FROM market_data_snapshots "
@@ -521,11 +521,9 @@ class FixingIn(BaseModel):
 
 
 def _fixing_inputs(pair_in: str, value_in: float) -> tuple[str, str, float]:
-    """(pair, asset, value) of a fixing entry, or 422: a digital-asset pair, a positive finite number."""
+    """(pair, base, value) of a fixing entry, or 422: a pair the desk trades, a positive finite number."""
     pair = str(pair_in).upper()
     base, _ = split_pair(pair)
-    if not is_crypto(base) or pair not in SETTLEMENT_SOURCES:
-        raise HTTPException(status_code=422, detail="fixings are stored for digital-asset pairs")
     value = float(value_in)
     if not math.isfinite(value) or value <= 0 or value > FIXING_VALUE_MAX:
         raise HTTPException(status_code=422, detail="value must be a positive, finite number")
@@ -554,7 +552,7 @@ def save_fixing(req: FixingIn, db: Session = Depends(get_db), user: dict = Depen
         raise HTTPException(status_code=422, detail=f"fixing_date cannot be before {FIXING_FLOOR.isoformat()}")
     if not store.tables_present(db):
         raise HTTPException(status_code=409, detail="fixings are not stored on this instance yet (the fixings migration is not applied)")
-    when = next((x["time"] for x in SETTLEMENT_SOURCES[pair] if x["source"] == source), None)
+    when = next((x["time"] for x in listed_sources(pair) if x["source"] == source), None)
     uid = uuid.UUID(user["sub"])
     used = store.own_usage(db, uid, pair, req.fixing_date, source)
     if used["total"] >= store.OWN_TOTAL_MAX:              # a replacement keeps the row it replaces, so it counts too
@@ -620,6 +618,8 @@ def correct_fixing(req: FixingCorrectionIn, db: Session = Depends(get_db), user:
         raise HTTPException(status_code=409, detail="corrections are off until the sign-up role migration is applied")
     pair, base, value = _fixing_inputs(req.pair, req.value)
     source = str(req.source)
+    if feed_source(pair) is None:
+        raise HTTPException(status_code=422, detail=f"no shared fixing is stored for {pair}: a desk enters its own with POST /api/currency/fixings")
     if source != feed_source(pair):
         raise HTTPException(status_code=422, detail=f"a correction is for the shared source of the pair, {feed_source(pair)}; a desk's own source is entered as its own fixing")
     low, high = deribit.DELIVERY_BOUNDS[base]
@@ -661,7 +661,8 @@ class CurrencyPriceRequest(BaseModel):
     settlement_date: Optional[date] = Field(None, description="SPOT: the spot date (T+2, USDCAD T+1); omitted on a digital asset: the first New York business day after today, said in date_notes")
     valuation_date: Optional[date] = None
     forward_rate: Optional[float] = Field(None, description="contract rate K; omitted = at the fair forward")
-    fixing_date: Optional[date] = Field(None, description="a cash-settled forward's fixing date, when it is before the settlement date: the forward is priced to it")
+    fixing_date: Optional[date] = Field(None, description="a cash-settled forward's fixing date, when it is before the settlement date: the forward is priced to it; omitted on a currency NDF: the business day whose spot date is the settlement date")
+    settlement_currency: Optional[str] = Field(None, description="a currency NDF: the currency the amount is paid in, one of the pair's two; omitted = the quote currency")
     direction: str = "BUY"
     spot: Optional[float] = Field(None, gt=0)
     base_rate_pct: Optional[float] = Field(None, description="digital asset only: funding override, % p.a.")
@@ -696,6 +697,33 @@ def spot_lag(pair: str) -> int:
     return 0 if is_crypto(p[:-3]) else FX_SPOT_LAG.get(p, FX_SPOT_LAG_DEFAULT)
 
 
+def ndf_fixing_date(settle: date, base: str, quote: str) -> date:
+    """A currency NDF's fixing date when its record names none: the latest business day of both currencies whose spot
+    date is on or before the settlement date (two business days before it on most pairs, one on USDCAD), so the
+    rate fixed is the spot rate for delivery on the settlement date. The settlement date itself when no such day
+    is found within two weeks."""
+    from pricing.calendars import ccy_to_calendar, is_business_day, joint
+    both = joint(ccy_to_calendar(base), ccy_to_calendar(quote))
+    d = settle
+    for _ in range(14):
+        d -= timedelta(days=1)
+        if is_business_day(d, both) and spot_date(d, False, base, quote) <= settle:
+            return d
+    return settle
+
+
+def fixing_read_date(fixing_date: date, settle: date, crypto: bool, base: str, quote: str) -> date:
+    """The date the rate fixed on `fixing_date` delivers on, which is the date the forward is read at. A digital
+    asset's quoted spot settles at once: the fixing date itself. A currency pair's fixing is its spot rate, quoted
+    for delivery on the spot date of that day (two business days on, one for USDCAD): that spot date, never after
+    the settlement date. With the usual fixing date (ndf_fixing_date) it is the settlement date, and the NDF is
+    worth what the deliverable forward is (found by Emmy, 14 Nov 2026: the first build read a currency NDF at the
+    fixing date itself, two days of carry short)."""
+    if crypto:
+        return fixing_date
+    return min(spot_date(fixing_date, False, base, quote), settle)
+
+
 def spot_date(val_date: date, crypto: bool, base: Optional[str] = None, quote: Optional[str] = None) -> date:
     """The valuation date for a digital asset (its quoted spot settles at once: T+0, as the methodology states); for
     an FX pair the market rule when both currencies are given, weekdays otherwise. USD pair: the pair's lag (T+2,
@@ -720,19 +748,24 @@ def spot_date(val_date: date, crypto: bool, base: Optional[str] = None, quote: O
 
 def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: float, settlement: Optional[date],
            val_date: date, K: Optional[float], direction: str, spot_override: Optional[float],
-           base_rate_pct: Optional[float], strike_dp: Optional[int] = None, fixing_date: Optional[date] = None) -> dict:
+           base_rate_pct: Optional[float], strike_dp: Optional[int] = None, fixing_date: Optional[date] = None,
+           settle_in_base: bool = False) -> dict:
     """`strike_dp`: with no K, the fair forward rounded to that many decimals is the contract rate, so one request
     prices the strike the ticket books; `forward` stays the unrounded fair forward.
     `fixing_date`: a forward settled in cash against a fixing read before its settlement date is priced to that
-    fixing: the forward, its points and its carry are the fixing date's, and the amount is discounted from the
+    fixing: the forward, its points and its carry are those of the date the fixed rate delivers on (fixing_read_date:
+    the fixing date for a digital asset, its spot date for a currency pair), and the amount is discounted from the
     settlement date. A fixing date that is not after the valuation date (the settlement rule's ground) or not before
-    the settlement date changes nothing."""
+    the settlement date changes nothing.
+    `settle_in_base`: a currency NDF whose amount is paid in the base currency (pricing/currency_forward.py): it
+    matters only between the fixing date and the settlement date."""
     if K is None and strike_dp is not None:
         fair = _price(db, user_id, pair, shape=shape, base_notional=base_notional, settlement=settlement, val_date=val_date, K=None,
-                      direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct, fixing_date=fixing_date)
+                      direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct, fixing_date=fixing_date,
+                      settle_in_base=settle_in_base)
         return _price(db, user_id, pair, shape=shape, base_notional=base_notional, settlement=settlement, val_date=val_date,
                       K=round(float(fair["forward"]), int(strike_dp)), direction=direction, spot_override=spot_override, base_rate_pct=base_rate_pct,
-                      fixing_date=fixing_date)
+                      fixing_date=fixing_date, settle_in_base=settle_in_base)
     st = pair_state(db, user_id, pair, settlement=False)
     base, quote, crypto = st["base"], st["quote"], st["crypto"]
     shape = (shape or "FORWARD").upper()
@@ -759,8 +792,9 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     # settles (the amount is then paid on the settlement date: price_currency_forward's payment_date)
     if fixing_date is not None and fixing_date > settle:
         raise HTTPException(status_code=422, detail=f"the fixing date ({fixing_date}) cannot be after the settlement date ({settle})")
-    read_at = fixing_date if (fixing_date is not None and shape != "SPOT" and val_date < fixing_date < settle) else settle
-    paid = {"payment_date": settle} if read_at != settle else {}
+    fixes_early = fixing_date is not None and shape != "SPOT" and val_date < fixing_date < settle
+    read_at = fixing_read_date(fixing_date, settle, crypto, base, quote) if fixes_early else settle
+    paid = {"payment_date": settle, "settle_in_base": bool(settle_in_base) and not crypto} if read_at != settle else {}
     q_curve = _curve(db, user_id, st["quote_curve"], val_date)
     kw: dict[str, Any] = {}
     if crypto:
@@ -852,15 +886,22 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
     out["curves"] = {"quote": {"id": st["quote_curve"], "pillars": curve_points(q_curve, val_date)},
                      "base": ({"id": st["base_curve"], "pillars": curve_points(kw["base_curve"], val_date)} if kw.get("base_curve") is not None else None)}
     # a forward priced to its fixing date says so: the date it is read at, and that the amount is paid on settlement
-    out["fixing_date"] = read_at.isoformat() if read_at != settle else None
+    out["fixing_date"] = fixing_date.isoformat() if fixes_early else None
+    if shape == "NDF" and not crypto:        # the currency the amount is paid in
+        out["settlement_currency"] = base if settle_in_base else quote
     # what the answer calls df_quote is the factor its NPV is discounted with: to the settlement date, where the amount
     # is paid. Every reader rebuilds N·(F − K)·df_quote (the ticket's line, the cashflow row, the scenario tab, an XVA
     # run). The factor to the fixing date, which the forward itself was read with, is beside it; `t` stays the time the
     # forward carries over (to the fixing date) and `t_pay` the time the amount is discounted over.
     out["df_fixing"] = out["df_quote"] if read_at != settle else None
     out["df_quote"] = out["df_pay"]
-    if read_at != settle:
+    if read_at != settle and crypto:
         out["model"] += f"; the forward is read at the fixing date ({read_at.isoformat()}) and the amount paid on {settle.isoformat()} is discounted from there"
+    elif read_at != settle:
+        out["model"] += (f"; the rate fixed on {fixing_date.isoformat()} is for delivery on {read_at.isoformat()}: the forward is read there and the "
+                         f"amount paid on {settle.isoformat()} is discounted from there")
+    elif fixes_early:
+        out["model"] += f"; fixed on {fixing_date.isoformat()} at the spot rate for delivery on the settlement date: worth what the deliverable forward is"
     out["crypto"] = crypto
     out["fund01"] = out.get("ir01_base") if crypto else None
     out["crybasis01"] = crybasis01(out["fund01"])
@@ -897,10 +938,19 @@ def date_check(pair: str, settle: date, expiry: Optional[date] = None) -> dict[s
 def price_forward(req: CurrencyPriceRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     pair = req.pair.upper()
     split_pair(pair)
+    base, quote = split_pair(pair)
     val_date = req.valuation_date or date.today()
+    fixing, in_base = req.fixing_date, False
+    if str(req.shape or "").upper() == "NDF" and not is_crypto(base):
+        ccy = str(req.settlement_currency or quote).upper()
+        if ccy not in (base, quote):
+            raise HTTPException(status_code=422, detail=f"settlement_currency must be {base} or {quote}, the pair's two currencies")
+        in_base = ccy == base
+        if fixing is None and req.settlement_date is not None:
+            fixing = ndf_fixing_date(req.settlement_date, base, quote)
     return _price(db, user["sub"], pair, shape=req.shape, base_notional=req.base_notional, settlement=req.settlement_date,
                   val_date=val_date, K=req.forward_rate, direction=req.direction, spot_override=req.spot,
-                  base_rate_pct=req.base_rate_pct, strike_dp=req.strike_dp, fixing_date=req.fixing_date)
+                  base_rate_pct=req.base_rate_pct, strike_dp=req.strike_dp, fixing_date=fixing, settle_in_base=in_base)
 
 
 class CurrencyOptionRequest(BaseModel):
@@ -1113,7 +1163,7 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
     itype = str(trade.instrument_type or "").upper()
     from settlement import rule
     digital = itype in rule.INSTRUMENTS
-    k = rule.terms_of(trade) if digital else None
+    k = rule.terms_of(trade) if itype in rule.CASH_SETTLED else None          # a digital asset's, or a currency NDF
     reached = k is not None and val_date >= k["fixing_date"]
     if reached and states:
         # the booked valuation, which applies the settlement rule (settlement/rule.py)
@@ -1156,7 +1206,7 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
         if live:
             out["state"] = "LIVE"
         return out
-    booked_fixing = None
+    booked_fixing, in_base = None, False
     try:
         if itype == "CRYPTO_FORWARD":
             k = rule.parse(trade)             # the one reading of a digital asset's terms
@@ -1170,12 +1220,14 @@ def price_booked(trade: Trade, db: Session, user: dict, val_date: date, states: 
             K = float(t["forward_rate"]) if t.get("forward_rate") not in (None, "") else None
             settle = date.fromisoformat(str(t.get("value_date") or trade.maturity_date))
             shape = "SPOT" if itype == "FX_SPOT" else "NDF" if itype == "NDF" else "FORWARD"
+            if k is not None:                 # a currency NDF: priced to its fixing date, in the currency it settles in
+                booked_fixing, in_base = k["fixing_date"], k["settle_in_base"]
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"trade.terms is missing or malformed: {e}")
     split_pair(pair)
     out = _price(db, user["sub"], pair, shape="FORWARD" if shape == "SPOT" else shape, base_notional=notional,
                  settlement=settle, val_date=val_date, K=K, direction=str(t.get("direction") or "BUY"),
-                 spot_override=None, base_rate_pct=None, fixing_date=booked_fixing)
+                 spot_override=None, base_rate_pct=None, fixing_date=booked_fixing, settle_in_base=in_base)
     out.update(trade_id=str(trade.id), trade_ref=trade.trade_ref, instrument_type=itype, npv_ccy=out["quote_currency"],
                legs=[], shape=shape)
     if live:
@@ -1248,12 +1300,13 @@ def _booked_fixed(trade: Trade, db: Session, user: dict, val_date: date, mkt, fi
     z = rule._z
     K = t["K"]
     out = {"state": "SETTLED" if settled else "FIXED", "trade_id": str(trade.id), "trade_ref": trade.trade_ref, "instrument_type": itype,
-           "npv_ccy": quote, "legs": [], "pair": pair, "shape": "OPTION" if option else "NDF", "crypto": True, "base_currency": base,
+           "npv_ccy": quote, "legs": [], "pair": pair, "shape": "OPTION" if option else "NDF", "crypto": is_crypto(base), "base_currency": base,
            "quote_currency": quote, "direction": str(t["direction"]).upper(), "base_notional": float(t["notional"]),
            "quote_notional": float(t["notional"]) * K if K is not None else None,
            "valuation_date": val_date.isoformat(), "settlement_date": t["settle"].isoformat(), "settled": settled, "npv": z(v["npv"]),
            "fixing_date": fix["fixing_date"].isoformat(), "fixing_source": fix["source"] or None,
            **{f: v.get(f) for f in ("fixing", "settlement_amount", "settlement_price", "provisional", "provisional_reason", "provisional_basis")},
+           **({"settlement_currency": v["settlement_currency"]} if v.get("settlement_currency") else {}),
            "ir01": z(v.get("ir01") or 0.0), "ir01_disc": z(v.get("ir01_disc") or 0.0), "fund01": z(v.get("fund01") or 0.0),
            "crybasis01": z(v.get("crybasis01") if v.get("crybasis01") is not None else 0.0 - (v.get("fund01") or 0.0)), "theta": z(v.get("theta") or 0.0),
            "model": v.get("model") or ("settled: the mark is zero from the settlement date; the amount is reported beside it" if settled else None),

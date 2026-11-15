@@ -168,7 +168,7 @@ test('demo: capital is on request; no CAPITAL tab, no Risk → CAPITAL, and KVA 
   await expect(app, 'Risk → CAPITAL is off').toHaveURL(/\/command-center/)
   // the roadmap says so instead of promising the tab
   await app.goto('/roadmap')
-  await expect(app.getByText('(not part of this demo: available on request, write to miko@rijeka.app)', { exact: false })).toHaveCount(2)
+  await expect(app.getByText('(not part of this demo: available on request, write to miko@rijeka.app)', { exact: false })).toHaveCount(3)      // three capital lines since 0.39.1
   // the ticket: no CAPITAL tab beside XVA; KVA is an XVA charge and stays
   const win = await openTicket(app)
   const priced = app.waitForResponse(r => r.url().endsWith('/price/preview') && r.request().method() === 'POST')
@@ -236,7 +236,7 @@ test('an existing firm is untouched: the dashboard, every tab, and the XVA tab a
   await expect(app.getByText('USD SOFR', { exact: true })).toBeVisible()
   await expect(app.getByRole('button', { name: 'RISK', exact: true }).first()).toBeVisible()
   const win = await openTicket(app)
-  await expect(win.getByRole('button', { name: 'CAPITAL', exact: true })).toBeVisible()
+  await expect(win.getByRole('button', { name: 'CAPITAL', exact: true }), 'no ticket has a CAPITAL tab since 0.39.1').toHaveCount(0)
   await win.getByRole('button', { name: 'XVA', exact: true }).click()
   await expect(win.getByTestId('xva-view-toggle')).toHaveText('HIDE MODEL INPUTS')
   await expect(win.getByTestId('xva-advanced')).toBeVisible()

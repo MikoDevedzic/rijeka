@@ -207,6 +207,8 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
   if (!quote) return <Empty what="The terms" />
   const t = terms || {}
   const ndf = quote.shape === 'NDF' || t.settlement_type === 'NON_DELIVERABLE'
+  // the currency a cash-settled forward pays in: the API's word, else the record's when it names the base currency
+  const payCcy = quote.settlement_currency || (t.settlement_currency && t.settlement_currency === quote.base_currency ? quote.base_currency : quote.quote_currency)
   const dp = rateDp(quote)
   const done = settledState(quote)                 // FIXED or SETTLED: the body has the settled facts and no pricing fields
   // AS BOOKED once there is a trade behind these terms: settled, opened from the blotter, or just booked from this quote
@@ -274,8 +276,10 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
         [crypto ? 'FORWARD PRICE (K)' : 'FORWARD RATE (K)', fmt(quote.forward_rate, dp), done ? '' : quote.forward_rate === quote.forward ? 'struck at the fair forward' : `fair ${fmt(quote.forward, dp)}`],
         [done ? 'VALUED ON' : 'TRADE DATE', quote.valuation_date, ''],
         [crypto || ndf ? 'SETTLEMENT DATE' : 'VALUE DATE', quote.settlement_date, done ? (done === 'SETTLED' ? 'settled' : 'fixed, not yet settled') : `T = ${fmt(quote.t, 4)}y · ACT/365`],
-        ['SETTLEMENT', crypto || ndf ? `CASH · ${quote.quote_currency}` : 'PHYSICAL · both currencies', crypto || ndf ? `net of (fixing − K) × ${fmt(quote.base_notional, crypto ? 4 : 0)} ${quote.base_currency}` : 'full exchange of principals'],
-        [crypto || ndf ? 'FIXING SOURCE' : 'FIXING', crypto || ndf ? (t.settlement_price_source || t.fixing_source || quote.fixing_source || '—') : 'none (deliverable)', crypto || ndf ? `on ${t.fixing_date || t.valuation_date || quote.settlement_date}${t.valuation_time ? ' · ' + t.valuation_time : ''}` : ''],
+        ['SETTLEMENT', crypto || ndf ? `CASH · ${payCcy}` : 'PHYSICAL · both currencies', crypto || ndf ? `net of (fixing − K)${payCcy === quote.base_currency ? ' / fixing' : ''} × ${fmt(quote.base_notional, crypto ? 4 : 0)} ${quote.base_currency}` : 'full exchange of principals'],
+        [crypto || ndf ? 'FIXING SOURCE' : 'FIXING', crypto || ndf ? (t.settlement_price_source || t.fixing_source || quote.fixing_source || '—') : 'none (deliverable)', crypto ? `on ${t.fixing_date || t.valuation_date || quote.fixing_date || quote.settlement_date}${t.valuation_time ? ' · ' + t.valuation_time : ''}` : (ndf ? 'the benchmark the record names; a desk enters its fixing under Market data' : '')],
+        // a currency NDF's fixing date is a term of its own: the day its rate is read, before the day it is paid
+        ...(ndf && !crypto ? [['FIXING DATE', t.fixing_date || quote.fixing_date || quote.settlement_date, 'the spot rate published this day is the rate for delivery on its spot date; from this day the trade is one amount']] : []),
         ['CALCULATION AGENT', t.calculation_agent || 'none named', crypto ? (t.disruption_fallback || '') : ''],
       ]} />
       </div><div>

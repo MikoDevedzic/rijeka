@@ -11,3 +11,9 @@ body:
     id: repro
     attributes: { label: How to reproduce, description: "Steps in the app or an API call." }
     validations: { required: true }
+  - type: checkboxes
+    id: credit
+    attributes:
+      label: Credit
+      options:
+        - label: Name me in the changelog and CONTRIBUTORS.md if this is confirmed.

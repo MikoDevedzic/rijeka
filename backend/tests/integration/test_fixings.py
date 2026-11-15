@@ -307,7 +307,7 @@ def test_fixings_from_the_feed_to_the_settled_trade(client, auth_a, auth_b, ids,
         assert post(auth_b, value=55_555.0).status_code == 200                                                   # and theirs is not ours
         assert [f["value"] for f in get(auth_a)["fixings"] if f["own"]] == [110_000.0]
         for refused in (dict(source=DELIVERY), dict(source="Deribit BTC delivery price."), dict(source="Deribit BTC deIivery price"), dict(fixing_date=(today + timedelta(days=3)).isoformat()),
-                        dict(fixing_date="2014-12-31"), dict(pair="EURUSD"), dict(value=-1)):
+                        dict(fixing_date="2014-12-31"), dict(pair="DOGEUSD"), dict(value=-1)):          # a currency pair takes a desk's fixing since 0.39.0 (test_ndf_fixing.py)
             assert post(auth_a, **refused).status_code == 422, refused
         assert not rows("user_id IS NOT NULL AND source LIKE 'Deribit%'") and len(rows("user_id IS NULL AND pair = 'BTCUSD' AND superseded_at IS NULL")) == 10      # the shared rows untouched
         assert store.get(db, "BTCUSD", today, BRR, USER_A)["value"] == 110_000.0 and store.get(db, "BTCUSD", today, BRR, USER_B)["value"] == 55_555.0

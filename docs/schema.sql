@@ -376,7 +376,7 @@ ALTER TABLE ONLY public.cashflows FORCE ROW LEVEL SECURITY;
 -- Name: cashflow_net_by_date; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.cashflow_net_by_date AS
+CREATE VIEW public.cashflow_net_by_date WITH (security_invoker='true') AS
  SELECT trade_id,
     payment_date,
     currency,
@@ -433,7 +433,7 @@ ALTER TABLE ONLY public.trades FORCE ROW LEVEL SECURITY;
 -- Name: cashflows_upcoming; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.cashflows_upcoming AS
+CREATE VIEW public.cashflows_upcoming WITH (security_invoker='true') AS
  SELECT c.id,
     c.trade_id,
     c.leg_id,
@@ -700,7 +700,7 @@ CREATE TABLE public.pnl_snapshots (
 -- Name: pnl_daily_by_desk; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.pnl_daily_by_desk AS
+CREATE VIEW public.pnl_daily_by_desk WITH (security_invoker='true') AS
  SELECT p.snapshot_date,
     t.desk,
     t.asset_class,
@@ -726,7 +726,7 @@ CREATE VIEW public.pnl_daily_by_desk AS
 -- Name: pnl_mtd_by_trade; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.pnl_mtd_by_trade AS
+CREATE VIEW public.pnl_mtd_by_trade WITH (security_invoker='true') AS
  SELECT p.trade_id,
     t.trade_ref,
     t.desk,
@@ -876,7 +876,7 @@ ALTER TABLE ONLY public.trade_events FORCE ROW LEVEL SECURITY;
 -- Name: trade_latest_event; Type: VIEW; Schema: public; Owner: -
 --
 
-CREATE VIEW public.trade_latest_event AS
+CREATE VIEW public.trade_latest_event WITH (security_invoker='true') AS
  SELECT DISTINCT ON (trade_id) trade_id,
     id AS event_id,
     event_type AS latest_event_type,

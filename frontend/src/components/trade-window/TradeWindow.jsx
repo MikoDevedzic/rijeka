@@ -58,7 +58,6 @@ import { cleanFees, withFees, rowsFromTerms } from './fees'
 import FxCryptoPanel from './FxCryptoPanel'
 import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
 import FxXvaPanel from './FxXvaPanel'
-import CapitalTab from './CapitalTab'
 import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
 import { packageGap, packageRisk, packageView } from './fx-package'
 import FxLegs from './FxLegs'
@@ -1393,19 +1392,6 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         </div>
       )}
 
-      {tabsVisited['CAPITAL'] && (
-        <div style={{ display: activeTab === 'CAPITAL' ? 'block' : 'none' }}>
-          <CapitalTab
-            counterpartyId={economics.counterpartyId || null}
-            counterpartyName={counterpartyName}
-            buildTrade={isCurrency ? buildCurrencyTrade : buildRatesTrade}
-            tradeId={incrementalTradeId}
-            priced={isCurrency ? !!fxQuote : !!result}
-            ccy="USD"
-          />
-        </div>
-      )}
-
       {tabsVisited['CURVE SCENARIO'] && !isCurrency && (
         <div style={{ display: activeTab === 'CURVE SCENARIO' ? 'block' : 'none' }}>
           <ScenarioPanel
@@ -1433,6 +1419,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             onVerify={handleVerify}
             onDownloadProof={handleDownloadProof}
             onCopyProofLink={handleCopyProofLink}
+            ownName={refData.entities.find(x => x.id === (bookedTrade?.own_legal_entity_id || economics.ownEntityId))?.name || null}
+            counterpartyName={refData.counterparties.find(c => c.id === (bookedTrade?.counterparty_id || economics.counterpartyId))?.name || counterpartyName}
             onTerminate={handleTerminate}
             terminating={terminating}
             onPartial={handlePartial}
@@ -1457,7 +1445,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         </div>
       )}
 
-      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && activeTab !== 'XVA' && activeTab !== 'CAPITAL' && activeTab !== 'CURVE SCENARIO' && activeTab !== '◆ CONFIRM' && (
+      {activeTab !== 'TRADE' && activeTab !== 'CASHFLOWS' && activeTab !== 'DETAILS' && activeTab !== 'XVA' && activeTab !== 'CURVE SCENARIO' && activeTab !== '◆ CONFIRM' && (
         <div className="tbw-placeholder">
           — {activeTab} tab not yet wired in the unified shell —
         </div>

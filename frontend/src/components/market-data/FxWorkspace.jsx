@@ -260,8 +260,9 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
   const tabs = [{ id: 'points', label: withTenors(p.crypto ? 'Forward points (USD)' : 'Forward points', p.forward_curve?.tenors?.length) },
                 { id: 'vols', label: withTenors('Volatility', p.vol_surface?.tenors?.length) },
                 { id: 'spot', label: p.crypto ? `Spot & ${p.base} rate` : 'Spot' }, { id: 'conv', label: 'Conventions' }]
-  // Fixings: digital assets only, and only when the API lists the pair's settlement sources (an older API has no fixings route)
-  const hasFixings = !!p.crypto && Array.isArray(p.fixing_sources)
+  // Fixings: a digital asset when the API lists the pair's settlement sources (an older API has no fixings route);
+  // a currency pair always, since 0.39.0: its NDFs settle on the fixing a desk enters here
+  const hasFixings = p.crypto ? Array.isArray(p.fixing_sources) : true
   if (hasFixings) tabs.splice(3, 0, { id: 'fixings', label: 'Fixings' })
   const mode = md?.forward_mode || 'MARKET'
   const thL = { fontSize: '11px', color: 'var(--text-dim)', letterSpacing: '.08em', padding: '4px 6px 6px 0', borderBottom: '1px solid var(--border)', textAlign: 'left' }

@@ -59,6 +59,7 @@ for (const [url, expected, where] of PAGES) {
 
 test('the home page\'s policy path is drawn inside its own box, with its labels inside the plot', async ({ app, problems }) => {
   await app.goto('/command-center')
+  await app.getByTestId('th-tabs').getByRole('tab', { name: 'RATES' }).click()          // on a monitor the policy path is behind the home's RATES tab (0.36.0)
   const plot = app.locator('.dh-plot').first()
   await expect(plot.locator('svg')).toBeVisible({ timeout: 30_000 })
   const fit = await plot.evaluate(el => {

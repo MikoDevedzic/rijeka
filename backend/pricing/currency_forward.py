@@ -18,8 +18,12 @@ With no spot date (a digital asset, whose quoted spot settles at once) T_s = 0 a
 F = S * DF_b(T) / DF_q(T). Treating an FX spot as today's rate drops the carry over the
 spot lag: four calendar days from a Friday, about 5.6 pips on a 6-month USDJPY.
 
-Deliverable or non-deliverable makes no difference to the value: an NDF
-pays the same (F - K) * N_base in the settlement currency against a fixing.
+Deliverable or non-deliverable makes no difference to the value while the
+fixing and the payment fall on one date: an NDF pays (F - K) * N_base in the
+quote currency against a fixing, or the same converted at that fixing,
+N_base * (F - K) / F, in the base currency. Fixed before it is paid, the amount
+is carried from the fixing date to the payment date on the curve of the
+currency it is paid in (payment_date, settle_in_base below).
 Spot is a forward with T a few days out.
 
 Greeks a currency desk quotes: delta (NPV change for +1 % spot) and the
@@ -105,14 +109,22 @@ def price_currency_forward(
     pip: float = 1e-4,
     spot_date: Optional[date] = None,
     payment_date: Optional[date] = None,
+    settle_in_base: bool = False,
 ) -> CurrencyForwardResult:
     """Exactly one of base_curve / base_rate gives the base-currency discounting. spot_date: the date the
     quoted spot settles (FX pairs); None for an asset whose quoted spot settles at once.
 
     payment_date: for a forward settled in cash against a fixing read BEFORE the cash is paid. `settlement_date` is
-    then the date the forward is read at (the fixing date): F, the points, t and the carry all run to it; and the
+    then the date the forward is read at, the date the fixed rate delivers on (a digital asset's fixing date; the
+    spot date of a currency pair's fixing date): F, the points, t and the carry all run to it; and the
     amount N·(F − K) is paid on `payment_date`, so every value is discounted from there. None, or the same date:
-    the forward is read and paid on one date, as every forward was before 0.26.0."""
+    the forward is read and paid on one date, as every forward was before 0.26.0.
+
+    settle_in_base: the cash amount is paid in the BASE currency, N·(F − K)/F at the fixing (a non-deliverable
+    forward on USDJPY settled in dollars). Between the date the fixed rate delivers on and the payment date the amount
+    is then base currency, carried on the base curve: converted at the forward of that date, its value in the quote
+    currency is N·(F − K)·DF_b(that date → payment)·DF_q(that date). `df_pay` is that product, so NPV = ±N·(F − K)·df_pay reads the
+    same for both. Read and paid on one date it makes no difference, and none is made."""
     d = str(direction or "BUY").upper()
     if d not in DIRECTIONS:
         raise ValueError("direction must be BUY or SELL (of the base currency)")
@@ -152,17 +164,27 @@ def price_currency_forward(
     K = float(forward_rate) if forward_rate is not None else F
     # the amount is paid on the payment date: the discount factor to it, and the time to it for a shift of the curve
     paid_later = payment_date is not None and payment_date > settlement_date
-    df_pay = float(quote_curve.df(payment_date)) if paid_later else df_q
+    in_base = bool(settle_in_base) and paid_later
+    if in_base:
+        # the amount is base currency from the fixing date to the payment date: the base curve carries it there
+        gap = year_fraction(settlement_date, payment_date)
+        carry_b = (float(base_curve.df(payment_date)) / max(float(base_curve.df(settlement_date)), 1e-12) if base_curve is not None
+                   else math.exp(-float(base_rate) * gap))
+        df_pay = df_q * carry_b
+    else:
+        gap = 0.0
+        df_pay = float(quote_curve.df(payment_date)) if paid_later else df_q
     if df_pay <= 0:
         raise ValueError("discount factors must be positive")
     t_pay = year_fraction(valuation_date, payment_date) if paid_later else t
+    t_disc = t if in_base else t_pay           # the time the quote curve discounts over
     df_read = df_q                              # to the date the forward is read at
     df_q = df_pay                               # every value below is discounted from the payment date
     npv = sign * base_notional * (F - K) * df_q
 
     tau = max(t - t_s, 0.0)
-    npv_b = sign * base_notional * (F * math.exp(-1e-4 * tau) - K) * df_q                          # base curve +1bp
-    npv_q = sign * base_notional * (F * math.exp(1e-4 * tau) - K) * df_q * math.exp(-1e-4 * t_pay)  # quote curve +1bp
+    npv_b = sign * base_notional * (F * math.exp(-1e-4 * tau) - K) * df_q * math.exp(-1e-4 * gap)   # base curve +1bp
+    npv_q = sign * base_notional * (F * math.exp(1e-4 * tau) - K) * df_q * math.exp(-1e-4 * t_disc)  # quote curve +1bp
 
     # One day later, same spot and the same curves: discount factors unwind by one day, and so does the spot date.
     d1 = valuation_date + timedelta(days=1)

@@ -79,7 +79,7 @@ export function summary(s) {
 export function termsFeed(modules = {}) {
   const on = k => modules[k] !== false
   const parts = [on('COUNTERPARTY_CREDIT') && 'the credit report', on('XVA') && "the ticket's XVA tab",
-    on('CAPITAL') && "the ticket's CAPITAL tab", on('CAPITAL') && 'Risk → CAPITAL'].filter(Boolean)
+    on('CAPITAL') && 'Risk → CAPITAL'].filter(Boolean)
   if (!parts.length) return ''
   const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0]
   return `the CSA terms and the collateral schedule feed ${list}`

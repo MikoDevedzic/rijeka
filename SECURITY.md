@@ -7,9 +7,8 @@ the code is treated as production code.
 
 ## Reporting a vulnerability
 
-Email **security@rijeka.app** with what you found, where (file, route, or page), and how
-to reproduce it. You will get an acknowledgement within two business days and a fix or
-a reasoned answer within thirty. Please do not open a public issue for a security
+Email **miko@rijeka.app** (subject: SECURITY) with what you found, where (file, route, or page), and how
+to reproduce it. Every report is read and answered. Please do not open a public issue for a security
 problem until it is fixed, and do not test against accounts that are not yours.
 
 In scope: the API (backend/), the app (frontend/), the registry contracts (chain/),
@@ -36,6 +35,12 @@ GitHub themselves; social engineering; volumetric denial of service.
   enforcing once the report list has stayed empty for a week. No script is loaded from a
   CDN at runtime: three.js and ExcelJS are bundled, and the one static page that still
   references a CDN (`xva.html`) pins it with subresource integrity.
+
+## Credit
+
+The reporter of a confirmed vulnerability is named in the changelog entry of the fix and in
+[CONTRIBUTORS.md](CONTRIBUTORS.md), once the fix is live and not before. Say in your report how you want to be
+named, or that you do not. No payment is offered for reports.
 
 ## Supported versions
 

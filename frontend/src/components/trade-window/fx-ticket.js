@@ -387,7 +387,18 @@ export function priceRequest(t) {
   if (n.fundOv.given && t.crypto) body.base_rate_pct = n.fundOv.value
   // a forward that fixes before it settles is priced to its fixing date: the price is of both dates
   if (t.shape !== 'SPOT' && t.fixingDate && t.settlement && t.fixingDate < t.settlement) body.fixing_date = t.fixingDate
+  // a currency NDF is paid in one of its pair's two currencies: the price is of that too (the API fixes it two
+  // business days before it settles unless a fixing date is sent)
+  if (t.shape === 'NDF' && !t.crypto) body.settlement_currency = ndfSettlementCurrency(t.pair)
   return { path: '/api/currency/forward/price', body }
+}
+
+// The currency a currency NDF's amount is paid in: the dollar when it is one of the pair's two, as that market
+// settles, and the quote currency of a cross.
+export function ndfSettlementCurrency(pair) {
+  const p = String(pair || '').toUpperCase()
+  const base = p.slice(0, 3), quote = p.slice(3)
+  return base === 'USD' || quote === 'USD' ? 'USD' : quote
 }
 
 const horizon = (today) => `${String(Number(today.slice(0, 4)) + MAX_YEARS_OUT).padStart(4, '0')}${today.slice(4)}`

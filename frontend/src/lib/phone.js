@@ -61,6 +61,23 @@ export function installWay(ua = '', platform = '', touchPoints = 0) {
   return v >= 27 ? 'safari-27' : v >= 26 ? 'safari-26' : 'safari'
 }
 
+// How a desktop browser gives the app a window of its own (no address bar, its own icon), for the door's button on a
+// monitor. Chrome and Edge can be asked to (beforeinstallprompt, read by the button) and otherwise have it in their
+// menu; Safari on a Mac has it in its File menu from version 17 (macOS Sonoma) and cannot be asked; Firefox has no
+// way, and neither does a browser this does not know, so they are offered nothing. An iPad or an Android device is
+// not a desktop: null here, and installWay speaks for it. A browser that sends Chrome's user agent and is not Chrome
+// (Brave, Arc, Vivaldi) is told Chrome's menu; the sheet says what to do where that menu has no such line.
+// The menus' words are the makers' own published ones (support.google.com/chrome/answer/9658361, Microsoft's Edge
+// pages, support.apple.com/104996), read on 14 November 2026.
+export function desktopInstallWay(ua = '', platform = '', touchPoints = 0) {
+  if (!ua || isIos(ua, platform, touchPoints) || /Android|Mobile/.test(ua)) return null
+  if (/Firefox\/|OPR\/|YaBrowser|SamsungBrowser/.test(ua)) return null
+  if (/Edg\//.test(ua)) return 'edge'
+  if (/Chrome\//.test(ua)) return 'chrome'
+  if (/Macintosh/.test(ua) && /Safari\//.test(ua) && Number((ua.match(/Version\/(\d+)/) || [])[1] || 0) >= 17) return 'safari-mac'
+  return null
+}
+
 export const STACK_FROM = 5
 const said = (th) => { const c = th.cloneNode(true); c.querySelectorAll('.rj-note, .kc').forEach(n => n.remove()); return (c.textContent || '').replace(/\s+/g, ' ').trim() }
 // The heading each cell of a row stands under: `spans` is the row's cells' column spans. A cell that runs across

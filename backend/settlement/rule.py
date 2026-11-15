@@ -17,6 +17,21 @@ values it and gives its sensitivities, for a forward and an option alike.
     "no fixing stored"          the price is the stored spot (`provisional_basis` names its date), as before the store
     "knock state not recorded"  a barrier or touch option whose fixing does not itself decide whether the barrier was
                                 touched: the amount is the one that holds if it never was
+A currency NDF (instrument NDF) is settled by the same rule since 0.39.0: its fixing date is terms.fixing_date (its
+settlement date when the record names none, or names one after it), its source terms.fixing_source, and its amount
+is in the currency the record settles in:
+
+    quote currency   sign × N × (fixing − K)
+    base currency    sign × N × (fixing − K) / fixing      (the same amount converted at the fixing)
+
+The record decides: tickets before 0.39.0 wrote USD on every pair, so an older USDJPY settles in dollars (its base
+currency) and an older EURUSD in dollars (its quote currency), as each says. A record that names neither of its
+pair's two currencies (an older cross, EURGBP with USD) settles in the quote currency.
+
+The fixing of a currency pair is its spot rate, for delivery on the spot date of the fixing date
+(api/routes/currencies.fixing_read_date): fixed two business days before it settles, an NDF is worth what the
+deliverable forward is, in either currency.
+
 Nothing here writes, and nothing here changes a trade."""
 from __future__ import annotations
 
@@ -35,7 +50,10 @@ NO_FIXING, NO_KNOCK = "no fixing stored", "knock state not recorded"
 NEVER_TOUCHED = "the barrier taken as never touched"
 PAID_AT_HIT = "paid at the hit: nothing is outstanding at expiry"
 
-__all__ = ["INSTRUMENTS", "KNOCK_STYLES", "NO_FIXING", "NO_KNOCK", "parse", "terms_of", "settlement", "forward_amount", "settlement_amount",
+CURRENCY_NDF = "NDF"
+CASH_SETTLED = INSTRUMENTS + (CURRENCY_NDF,)          # every instrument the rule settles: the digital-asset two and the currency NDF
+
+__all__ = ["INSTRUMENTS", "CURRENCY_NDF", "CASH_SETTLED", "KNOCK_STYLES", "NO_FIXING", "NO_KNOCK", "parse", "terms_of", "settlement", "forward_amount", "settlement_amount",
            "option_amount", "knock_state", "with_option_amount", "fixed_cash", "report"]
 
 
@@ -74,17 +92,28 @@ def parse(trade) -> dict:
                "option_type": str(t.get("option_type") or "CALL").upper(), "expiry": date.fromisoformat(str(t["expiration_date"])),
                "settle": date.fromisoformat(str(t.get("settlement_date") or trade.maturity_date)), "style_fields": dict(t)}
         out["fixing_date"] = out["expiry"]
+    elif itype == CURRENCY_NDF:
+        pair = str(t.get("currency_pair") or f"{t.get('base_currency', '')}{t.get('quote_currency', '')}").upper()
+        base = pair[:3]
+        out = {"pair": pair, "shape": "FORWARD", "notional": float(t.get("base_notional") or trade.notional),
+               "strike": float(t["forward_rate"]) if t.get("forward_rate") not in (None, "") else None,
+               "settle": date.fromisoformat(str(t.get("value_date") or trade.maturity_date))}
+        named = _date(t.get("fixing_date"))
+        out["fixing_date"] = named if (named is not None and named <= out["settle"]) else out["settle"]
+        # the currency the amount is paid in: the base currency when the record names it, otherwise the quote currency
+        out["settle_in_base"] = str(t.get("settlement_currency") or "").upper() == base
+        out["amount_currency"] = base if out["settle_in_base"] else pair[3:]
     else:
-        raise ValueError("not a digital-asset forward or option")
+        raise ValueError("not a cash-settled forward or option the rule reads")
     out["direction"] = str(t.get("direction") or "BUY")
-    out["source"] = str(t.get("settlement_price_source") or "").strip()
+    out["source"] = str((t.get("fixing_source") if itype == CURRENCY_NDF else t.get("settlement_price_source")) or "").strip()
     out["trade_date"] = _date(getattr(trade, "trade_date", None))
     return out
 
 
 def terms_of(trade) -> Optional[dict]:
     """parse(), or None for any other trade and for terms that cannot be read."""
-    if str(getattr(trade, "instrument_type", "") or "").upper() not in INSTRUMENTS:
+    if str(getattr(trade, "instrument_type", "") or "").upper() not in CASH_SETTLED:
         return None
     try:
         return parse(trade)
@@ -98,9 +127,11 @@ def _sign(direction) -> float:
     return 1.0 if str(direction).upper() == "BUY" else -1.0
 
 
-def forward_amount(direction: str, notional: float, strike: float, price: float) -> float:
-    """sign × N × (price − K), in the quote currency, from our side."""
-    return _sign(direction) * float(notional) * (float(price) - float(strike))
+def forward_amount(direction: str, notional: float, strike: float, price: float, in_base: bool = False) -> float:
+    """sign × N × (price − K), in the quote currency, from our side; `in_base`: the same converted at the price,
+    sign × N × (price − K) / price, in the base currency (an NDF that settles in its base currency)."""
+    amount = _sign(direction) * float(notional) * (float(price) - float(strike))
+    return amount / float(price) if in_base else amount
 
 
 def settlement_amount(kind: str, direction: str, notional: float, strike: float, price: float) -> float:
@@ -237,14 +268,16 @@ def _stored_spot(db, user_id, pair: str, on: Optional[date], cache: Optional[dic
 
 
 def settlement(db, user_id, trade, val_date: date, *, spot: Optional[float] = None, cache: Optional[dict] = None) -> Optional[dict[str, Any]]:
-    """What a digital-asset trade settles on, once its fixing date is reached; None before it and for other trades.
+    """What a cash-settled trade (a digital-asset forward or option, a currency NDF) settles on, once its fixing date
+    is reached; None before it and for other trades.
 
         fixing              {source, date, time, value, origin, disputed} of the named source's stored fixing, or None
         provisional         True when no fixing is stored (an option's knock state can add to it: with_option_amount)
         provisional_reason  "no fixing stored" then, else None
         provisional_basis   "stored spot of <date>" then: what the price below is
         price               the fixing; without one the stored spot of the fixing date, else `spot` (the caller's)
-        settlement_amount   a forward's sign × N × (price − K), undiscounted; None for an option until
+        settlement_amount   a forward's sign × N × (price − K), undiscounted (an NDF settled in its base currency:
+                            the same divided by the price, in that currency; `amount_currency` names it); None for an option until
                             with_option_amount, and when the terms carry no contract price
         ref_spot            a single touch option only: the stored spot of the trade date, which tells the side of its level
 
@@ -278,7 +311,7 @@ def settlement(db, user_id, trade, val_date: date, *, spot: Optional[float] = No
             price, basis = spot, f"stored spot of {val_date.isoformat()}"
     amount = None
     if k["shape"] == "FORWARD" and price is not None and k["strike"] is not None:
-        amount = forward_amount(k["direction"], k["notional"], k["strike"], price)
+        amount = forward_amount(k["direction"], k["notional"], k["strike"], price, in_base=bool(k.get("settle_in_base")))
     ref = None
     sf = k.get("style_fields") or {}
     if (k["shape"] == "OPTION" and str(sf.get("style") or "").upper() == "TOUCH" and sf.get("knocked") is None
@@ -296,6 +329,8 @@ def report(fix: dict) -> dict[str, Any]:
            "provisional_basis": fix.get("provisional_basis") if fix["provisional"] else None,
            "settlement_amount": _z(fix.get("settlement_amount")), "settlement_price": _z(fix.get("price")),
            "fixing_date": fix["fixing_date"].isoformat(), "fixing_source": fix["source"] or None}
+    if fix.get("amount_currency"):                     # a currency NDF: the currency its record settles in
+        out["settlement_currency"] = fix["amount_currency"]
     if fix.get("provisional_reason") == NO_KNOCK and fix.get("settlement_amount_if_touched") is not None:
         out["settlement_amount_if_touched"] = _z(fix["settlement_amount_if_touched"])
     return out

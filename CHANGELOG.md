@@ -1,12 +1,445 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.20). Commits on `main` are the detail.
+methodology document carries its own version (v1.21). Commits on `main` are the detail.
+
+## 0.39.2 · 15 November 2026
+
+**Five database views read with the caller's rights.** `pnl_daily_by_desk`, `pnl_mtd_by_trade`,
+`trade_latest_event`, `cashflow_net_by_date` and `cashflows_upcoming` were made before October 2026 as plain
+views, which read their tables with the rights of the views' owner: row-level security on the tables did not
+apply to a reader of a view. The database's security advisor reports each as an error. They now read as the
+caller (`security_invoker`), so the tables' own policies decide what a view returns
+(`docs/migrations/2026-11-15_views_security_invoker.sql`, applied by the migration runner).
+
+- No code reads these views, so no screen and no figure changes. Nothing is dropped; no grant or policy changes.
+- Sign-up mail is sent from miko@rijeka.app (`docs/ops/email.md`).
+- **An open project, in its own words** (after the release, the same day). The asks for pilots and the offers of
+  paid help are removed from the site, the guides and the app's roadmap; the licence and the terms are unchanged.
+
+## 0.39.1 · 15 November 2026
+
+**The trade window has no CAPITAL tab.**
+
+- A ticket's tabs are TRADE, DETAILS, CASHFLOWS, XVA, CURVE SCENARIO and CONFIRM. The cost of capital on a trade
+  is the KVA of its XVA tab, as before; the book's regulatory capital is under Risk → CAPITAL, as before.
+- Nothing is computed differently. `POST /api/capital/trade` still answers; the tab's component is kept, not
+  mounted, for the page under Risk to draw on.
+- Roadmap, the Modules page's description of the capital switch and `docs/capital.md` say so.
+
+**No payment for findings.** No payment is offered for a finding, a contribution or a report. Wording that
+offered one is removed from `docs/VALIDATION.md`, the README, `CONTRIBUTING.md` and two pages of the app; nobody
+had filed a finding. What is on offer is credit: validators, finders and fixers are named on the report, in the
+changelog and in `CONTRIBUTORS.md`.
+
+## 0.39.0 · 14 November 2026
+
+**A currency NDF fixes.** Until this
+version a currency NDF was booked with its fixing on its settlement date and USD as its settlement currency on
+every pair, and it never became a fixed amount: its value floated on spot until the day it settled.
+
+- **The fixing date is real.** A ticket's NDF fixes on the business day whose spot date is the settlement date
+  (two business days before it on most pairs, one on USDCAD), and the record carries that date. The rate fixed
+  that day is the spot rate for delivery on the settlement date, so until it fixes the NDF is worth exactly what
+  the deliverable forward is: no value changes for an NDF priced today. A record that fixes earlier is read at
+  the forward for delivery on that fixing's spot date (`currencies.fixing_read_date`).
+- **The settlement currency is real.** The amount is paid in one of the pair's two currencies: the dollar when it
+  is one of them, the quote currency of a cross. In the quote currency it is N × (fixing − K); in the base
+  currency the same converted at the fixing, N × (fixing − K) / fixing. The record decides: an older USDJPY
+  (every ticket wrote USD) settles in dollars, an older cross in its quote currency.
+- **From the fixing date it is one amount.** The settlement rule of the digital-asset forwards
+  (`settlement/rule.py`) now settles a currency NDF: on the fixing of the source its record names, and until one
+  is stored on the stored spot of the fixing date, marked provisional. The ticket of a booked NDF shows FIXED and
+  then SETTLED, with the amount and its currency; an NDF booked before today reports its amount from its settlement date,
+  where it reported none.
+- **A desk enters its fixings.** Market data, a currency pair, has a Fixings tab. No feed stores a currency
+  fixing: the dealers' benchmark is licensed, and the European Central Bank asks that its reference rates not be
+  used to settle transactions.
+- **One booking check.** A fixing date before the settlement date is after the trade date. Nothing booked or
+  confirmed before today is refused: the rule reads an older record leniently instead.
+- **Found in review, before it shipped.** The first build read a currency NDF's forward at the fixing date itself,
+  two days of carry short (0.4 % of the value on a five-month EURUSD): Emmy's validation. The booking check
+  refused sources and dates that older confirmed records carry: Vera's review.
+- **Credit for contributors is written down.** `CONTRIBUTING.md` says how a contributor is named (the changelog
+  entry of the release, `CONTRIBUTORS.md`, the commit), that the finder of a confirmed bug is named beside whoever
+  fixed it, and how to stay unnamed. `SECURITY.md` and the
+  two issue forms say the same; pull requests have a form.
+- Methodology v1.21 (§12, non-deliverable forwards); the model inventory has the row and what it lacks.
+- **Roadmap** (after the release, the same day). Fixed income joins Phase 3 as planned, in the app and on the
+  site: the owner's mission names it,
+  and until now no phase did.
+
+Not built: a public daily currency fixing; a fixing date chosen on the ticket; the amount booked as a cash line;
+exposure paths that stop at the fixing date.
+
+## 0.38.0 · 14 November 2026
+
+**Fixings: what resets, day by day.**
+
+- **Market risk has a FIXINGS panel.** For each index and each coming business day: the notional whose floating
+  rate is set by that day's fixing (what the desk receives, what it pays, the net), and FIXING 01, what one basis
+  point on that one fixing is worth. A picture an index of the net over the next 92 days; the next ten business
+  days as a table, every day on request. Under it, SETTLEMENT FIXINGS: each non-deliverable forward (a currency
+  NDF, a digital-asset forward) on the date it fixes, by pair and source, with the notional that fixes and the
+  value of 1 % on the price.
+- **The home's first tab is FIXINGS**: what resets next, net by index, with the fixing 01.
+- **How it is measured** (`backend/risk/fixings.py`, in the risk report as `fixings`). Every floating period the
+  pricer values is compounded in arrears from an overnight index, so it resets on every business day it runs
+  over, each fixing counting for the calendar days to the next (a Friday's for three), on the business days of the
+  leg's currency. Fixing 01 = notional × leverage × the period's accrual a day × the days the fixing counts for ×
+  the discount factor to the payment × 1bp × the compounding of the period's other days, signed + where the desk
+  receives the floating rate. It is read from the periods the pricer values: one more pricing of each rates trade
+  a report.
+- **Checked three ways.** By hand in the unit tests: a quarter of daily forwards at 5 %, one day moved by 1bp,
+  against the code to two parts in a hundred thousand. On the local stack: the fixing 01s of a booked swap's
+  floating leg lie between the sum worked from the pricer's own cashflows without compounding and that sum with
+  each period's whole compounding. And by Emmy, who moved one day's forward under the real leg pricer: the first
+  version, which left the compounding out, was 1.27 % low on a quarter at 5 %, on every day alike; and 12,000
+  random periods on four calendars put every calendar day on exactly one fixing. The stack check found the first
+  version dropping the opening days of a period that starts on a weekend (it is opened by the fixing of the
+  business day before it); Emmy's found that a leg's leverage was ignored.
+
+What it is not, and what the check of "does it all feed" found:
+
+- **Caps, floors, swaptions and options are not in it**, and the panel counts them: an option on a fixing is a
+  delta, not a notional. Option expiries are not listed.
+- **A floating leg that carries a cap or a floor is listed as the plain reset** it would be without it, and the
+  panel counts such legs. A leg booked at leverage nought (how a cap is booked) has no linear reset and is not
+  listed.
+- **Fixing 01 holds the discounting**: it is the forecast's share of the ladder's IR01. The compounding is written
+  with the period's own rate for each day's, which differs from the exact figure by parts in a hundred thousand.
+- **The 1 % on a settlement fixing is the trade's spot 01**, which is on its forward: equal to 1 % on the fixing
+  only nearly.
+- **An index is the curve a leg is projected on** (USD SOFR, EUR ESTR): a floating leg carries no index name of its
+  own, and there are no term rates. A CMS leg is valued by the pricer as the same compounded forward and is listed
+  the same way.
+- **A currency NDF's fixing date does not reach the valuation**: it is valued to its settlement date, and where the
+  trade names no fixing date the panel lists it on its settlement date and says so. A currency fixing that falls on
+  a weekend is flagged. There is no store of currency fixings (only BTC, ETH and SOL have one), so a currency NDF
+  is not fixed on its fixing date.
+- **A cashflow has no "fixed" state**: realised overnight rates are read from the stored overnight quote of each
+  day, not from a table of fixings.
+- A stored report from before this release has no fixings; the home asks for the report again once, and the Risk
+  page shows them from its next run.
+
+## 0.37.0 · 14 November 2026
+
+**Every curve has a limit, and the trader's home reads a limit on both sides: flat in the middle, short one way,
+long the other.**
+
+- **A limit for every curve, as standard.** Every curve, asset, volatility surface and forward basis the book
+  carries risk on has a limit from its first trade: its own where one has been set, otherwise the standard size for
+  its kind. Nothing is stored for a standard limit; it is worked out with the report (`risk/limits.py`
+  `with_standards`), so there is no migration and nothing to back-fill. The sizes as shipped are round figures to
+  start from (50,000 per bp for a curve, 150,000 per 1% for a currency, 75,000 per 1% for a digital asset, 25,000
+  for a surface's vega, 10,000 per bp for a forward basis), said to be so on the page, and a firm sets its own
+  (`STANDARD:<kind>`). **This raises warnings and breaches where a book is larger than those sizes**, on the Risk
+  page, in the desk feed and on the home, until the sizes are set.
+- **Configurations, Market risk, Limits** opens with A LIMIT FOR EVERY CURVE: one row a curve, its position, its
+  limit (STANDARD or ITS OWN), the share used, and a field to give it its own; STANDARD takes its own off again.
+  Under it, the standard size of each kind. The firm's other limits (VaR, a stress loss, a tenor bucket, a desk or
+  a book) are below, as before.
+- **A limit can be set on a surface's vega and on a forward basis** (`VEGA:<surface>`, `VEGA:<surface>:<bucket>`,
+  `CRYBASIS01:<curve>`), which could not be limited before.
+- **A limit set now shows now**, on the Risk page, the home and the desk feed. A stored report carried the limits
+  of the moment it was made; it is now read against the limits as they stand (`risk/report.py
+  with_limits_as_they_stand`), which costs no valuation. The stored count of breaches (the trend) is still the
+  count of the day it was stored, and from this release it counts a curve past its standard limit.
+- **One limit on one number.** Setting a limit where one stands (the same metric on the same book, desk or whole)
+  takes its place in the same write; until now a second stood beside the first. A standard size is set for the
+  whole book and for a kind there is.
+
+A limit stays one number on the size. How the home draws it:
+
+- **The rail is two-sided.** Flat is the middle; a short position stands to the left by how much of its limit it
+  uses, a long one to the right; both ends are hatched past the limit. A size with no side (a VaR, a stress loss,
+  an exposure, a limit on a desk or a book) is read to the right, as a square where a 01 is a dot.
+- **A limit on a 01 is drawn on its stream.** A limit on a tenor bucket (`KR01:<curve>:<bucket>`) is a ruled line
+  across that bucket, above the stream's line and below it, with the share used written there, amber from the
+  limit's own warning level and red past it. A limit on a curve's total (`IR01:<curve>`) or on an asset's spot 01
+  (`SPOT01:<asset>`) is a gauge at the start of the lane, the limit a tick at either end: a limit on a total is not
+  a limit on each bucket, so it is never drawn as a line across them. LONG and SHORT are marked at the picture's
+  edge.
+- **A third height, OF ITS LIMIT**, where a drawn factor has a limit: a bucket is drawn as the share of its own
+  limit it uses, so a stream that reaches a bucket's line is at that limit; a bucket with no limit of its own is
+  drawn as its share of the total's. A factor with no limit is drawn dashed and says so.
+- **Beside each factor with a limit**: a gauge with flat in the middle, the share used, the side, and the room left
+  in the factor's own unit. A limit shown there is not listed again under it; the rest (VaR, a stress loss, the
+  book's IR01) are OTHER LIMITS. LIMITS → opens the page they are set on, for those who may set them.
+
+What it is not: no limit has a different size for long and short; a curve in the market data that no trade is on
+has no row until its first trade; the limits are the firm's on the user's book, not a trader's own; a limit on a desk or a book is on the rail and not
+on a stream, because a stream is the whole book. The size of a share is the one the API reports for the limit
+(`utilisation_pct`); the side is read from the factor's own figure. No change to the database.
+
+## 0.36.0 · 14 November 2026
+
+**The home on a monitor is the trader's home.** It is the first of the views by role, and for now every role on a monitor sees it. Three bands, always in the same place:
+
+- **Where you stand, and what needs you.** One line of words from the firm's limits as the risk report evaluates
+  them on your book (how many are passed, close and clear), the closest one named, and every limit as a mark on one
+  rail, placed by how much of it is used. Beside it, the desk feed's actions (a trade to sign, one waiting on the
+  other side, a limit, a batch) and unread chat, each opening where it is dealt with.
+- **The P&L as a statement, the risk as a picture, the factors as a list.** P&L for the day, the month and the
+  year: clean, what XVA took, what is left. In the middle, one stream for each risk factor the book carries (a
+  curve's IR01, an asset's FX01 or CRY01, a forward basis, a surface's vega), in that factor's own colour, along
+  the ladder's four tenor buckets: above its line the book is long, below it short. Beside it each factor's
+  sensitivity, its largest bucket, the VaR and the limits.
+- **Your trades, and the old home's cards behind tabs**: what moved the day's P&L, the latest confirmations with
+  their proofs (ON CHAIN), the policy path, the week ahead, the news with its summaries, Prometheus's brief. The
+  chain is one line at the foot. The book's mark, one day's carry and gross notional stand under the statement.
+
+A stream's height is, by default, **what a usual day moves that bucket by, in dollars**, so that a basis point of
+SOFR and a percent of bitcoin are drawn on one scale: the sensitivity times the factor's usual daily move. That
+move is new in the risk report (`moves`, `backend/risk/var.py typical_moves`): the sample standard deviation of
+the factor's daily changes over the window the VaR already reads, per ladder bucket. It is a size for comparing
+buckets, not a loss at a confidence, and the page says "a usual day". PER 01 draws the sensitivity itself, each
+stream to its own scale; the choice is kept by the browser. A factor with no history (a forward basis; any factor
+on a desk with fewer than two days of data) is drawn to its own scale, dashed, and says so.
+
+What it is not, said on the page or here:
+
+- The ladder has four tenor buckets (to 1Y, 1Y to 5Y, 5Y to 10Y, past 10Y), so the picture has four columns, not
+  the twelve tenors of the mock-up. A finer picture needs a finer ladder, which is a change to the risk engine.
+- A spot delta has no tenor: it is drawn at the maturity of the trade that carries it. The page says so. A bucket
+  ends a week after the anniversary of the report's date, so a ten-year ticket (which starts at spot and rolls to a
+  business day) sits with the ten-year quote.
+- The risk on the page is the stored report, shown at once. Where that is not the book as it stands (a trade booked
+  or closed since, later market data, a report stored before it carried the moves) the home asks for it to be run
+  again, once a visit, and shows the new one when it comes; where it cannot be run (the report is four runs a
+  minute an account) the page says what the stored one lacks. Opening the home with trades and no stored report
+  runs the report, as opening the Risk page does.
+- Limits and VaR are the firm's, on the signed-in user's book. A limit or a VaR for each trader does not exist.
+- A phone keeps the home it had. A launch workspace keeps its "start here" home. With Market risk or P&L switched
+  off, their parts of the page say so and the rest stands.
+- Gone from the monitor's home: the clocks, the globe, the maturity ladder and the book's IR01 as one figure (it is
+  a stream for each curve now). The headline figure is 20px, the largest step of the scale.
+- The methodology document has no paragraph on the usual daily move yet; the model inventory says so, and the
+  Methodology page lists it under market risk with what stands behind it.
+
+## 0.35.0 · 14 November 2026
+
+**Rijeka opens as an app on a desktop: a window of its own, with no address bar.** A page cannot open a window with its
+address hidden (browsers stopped allowing it, against phishing), so Rijeka is installed instead, as it already
+could be on a phone.
+
+- On a monitor the sign-in page has one more button under the card, OPEN AS AN APP. Chrome and Edge are asked to
+  install it, in one press, where they have offered to; where they have not, the button shows the browser's own
+  menu steps (Chrome: Cast, save, and share, then Install page as app; Edge: Apps, then Install this site as an
+  app). Safari on a Mac cannot be asked, so it is shown its own (File, Add to Dock; Safari 17 or later).
+- Installed, Rijeka opens from its own icon in a window with no address bar and no tabs; the mark draws itself
+  once as it opens, as it does from a phone's home screen; and the sign-in page no longer shows the button.
+- Firefox cannot install a site, and is shown no button. Nothing else changes there.
+- An iPad, which is wider than a phone and was offered nothing, is shown the phone's button (ADD TO HOME SCREEN)
+  and its taps.
+- A phone is as it was: its button, its sheet and its styles are untouched, and the app's manifest is unchanged
+  (it already said "standalone").
+
+Not checked: that Chrome and Edge offer the install on the hosted site by themselves (the app has no service
+worker; current Chrome does not ask for one, and where it does not offer, the steps are shown); the installed
+window on a real Mac or Windows machine; an iPad itself. The menus' words are the makers' published ones, read on
+14 November 2026, and they do change them. Still so: sign-in is kept per window, so the app asks for it each time
+it is opened; a link in an email opens in the browser, not in the app.
+
+## 0.34.2 · 14 November 2026
+
+**Two people signed in to one browser no longer silence each other's chat alerts.** Found from the owner's first
+try of 0.34.0, both of his accounts side by side in one browser.
+
+- A window in which a conversation is being looked at says so, so that the same person's other windows do not
+  ring for it. The mark did not say whose window it was, and two accounts in one browser share its storage: the
+  sender's window, which is looking at the room as it sends, silenced the alert in the receiver's. The mark now
+  names the person.
+- Two people on two machines, or in two browsers, were never affected.
+
+**The number on the messenger button is chat, and the message box fits.**
+
+- The number on the messenger button (and on CHAT in a phone's bar) counts unread messages and invitations. The
+  news room's headlines no longer count, unless market news is switched on in the alert settings. The news room
+  keeps a count of its own in the list, set quietly. A count past 99 reads 99+.
+- The message box's hint ("To ...") stays on the box's one line; it wrapped, and its second line was cut off by
+  the box. The box is one line high and grows with what is typed, to its limit, then scrolls.
+
+## 0.34.1 · 14 November 2026
+
+**Prometheus is given time to answer.** Found while recording the walkthrough film on the local stack.
+
+- The private Prometheus conversation gave up after twenty seconds, the limit every chat request has, and said
+  "Rijeka didn't answer in time. Try again." A question about the book is several look-ups, each a call to the
+  model: the one asked for the film took about
+  thirty-five seconds, and the server went on to finish an answer nobody was waiting for. Asking again started it
+  again.
+- The private conversation now waits three minutes. Every other chat request keeps twenty seconds.
+- Not changed: an answer in a chat room (`@prometheus`) was never held to this limit; it is posted when it is
+  ready and reaches the room by the stream or the fetch behind it (0.33.1, 0.34.0).
+- Still so: past three minutes the panel gives up as before, and the server finishes regardless (its own limit is
+  three minutes a model call, twelve rounds of look-ups); a second window can ask while the first waits, within the
+  ten asks a minute and the day's allowance.
+- Not checked: how long answers take on production, where the model and the book differ from the local stack's;
+  whether anything between the browser and the API closes a request that is open for minutes.
+## 0.34.0 · 14 November 2026
+
+**Chat says a message arrived, and is no slower than a messenger.**
+
+Alerts:
+
+- A message from another person plays a sound, blinks the messenger button (CHAT in the bar on a phone) until the
+  messenger is looked at, and flashes the browser tab's title while Rijeka is not the window in front. A desktop
+  notification is offered and is off until it is switched on (the browser asks); it names the sender and the
+  room and never carries the text.
+- The sound is a chime of two rising notes, the owner's choice by ear of the four offered; a ship's bell struck twice, a ping and a knock can be chosen instead, at three
+  volumes. They are made in the browser; no file is loaded.
+- The settings are behind ♪ in the messenger's title bar: alerts on or off altogether, each way of alerting, the
+  sound and its volume, and what alerts (messages from people and invitations, Prometheus's answers in a room,
+  signatures and confirmations of a shared trade, market news). Market news is off until asked for. They are kept
+  in the browser (a sound is a matter of the machine a person sits at), and a second Rijeka window follows them.
+- Nothing alerts for one's own message, or for the conversation being looked at, in this window or another. With
+  several windows open the sound is made by one of them, and a burst of messages is one sound.
+
+The lag:
+
+- Since 0.33.1 a message that the live stream did not deliver was fetched every 12 seconds with the chat open and
+  every 48 with it closed. That fetch standing in for a stream that is not delivering is the likeliest cause of
+  the lag; why the stream does not deliver on some machines is still not found.
+- The chat's channel was never built again once it errored, timed out or closed: a window whose channel had died
+  heard nothing more by the stream until it was reloaded. It is now replaced, 2 to 30 seconds later, under a name
+  of its own each time (the client hands back the channel it already has under a name, and a removed one keeps
+  its name until its leaving is acknowledged: found in review, before it shipped).
+- A stream can be joined and silent. The chat now tests it: a message it sent, or one that appeared between two
+  fetches, is expected on the stream within eight seconds (a machine that slept through the wait proves
+  nothing). If it does not come, the stream is not trusted until it delivers again; meanwhile the open room's
+  new messages are fetched every 4 seconds (one small request: `GET /api/chat/rooms/{id}/messages?after=`), the
+  rooms every 12, and every 24 while the page is not in view. The operator is told once a day from a browser
+  where this happens (Configurations › System, browser errors), and the alert settings show the stream's state.
+- The fetch on the tick asks for the last five minutes of the open room, not its latest 200 messages; the whole
+  room is read when the stream joins, when the page is looked at again, and when a room is opened again.
+- A message is on the sender's screen as it is sent, marked as on its way, and no longer waits for the server's
+  answer. If it cannot be sent it is taken back and its text returned to the box. Two messages sent quickly
+  arrive in the order typed, and one that arrives from the other person meanwhile does not push it out of place.
+
+Not checked: the sounds in the app itself (the owner heard them on a page that makes them from the same
+numbers); a desktop notification on a real desktop; the stream's behaviour on the hosted desk, which the local stack cannot show (its realtime delivers
+nothing, so the journeys run the fetch). Still so: a page that a browser has put to sleep fetches when the browser
+lets it.
+
+## 0.33.2 · 13 November 2026
+
+**The owner's account on the hosted desk is an administrator again.**
+
+- No account of the owner's held the admin role on the hosted desk, so nobody could open the Users page to give
+  it back. One migration (`2026-11-13_restore_owner_admin.sql`), applied by the runner, sets it on the one
+  account at the owner's confirmed address.
+- After its reviews (Edgar, Magnus): the approved list is applied by every desk that runs the software, and on
+  a self-hosted desk where someone had signed up at that address the statement would have made that account
+  an administrator. It now acts only where the runner's ledger began before 11 November 2026 (the runner
+  first shipped on 9 November, to the hosted desk); a desk set up later, or one with no ledger, is not
+  touched. Not closed: a self-hosted desk that deployed the runner in those two days.
+- How it was lost is not known: nothing records a role change. The one path in the code that took admin away
+  with no way back was the role chip, which an administrator could press from 29 October until 0.22.1 (11
+  November). No migration applied by the runner changes the role of an existing account, and no record of a
+  role written by hand was found.
+- Still so: an administrator can change their own row on the Users page, and a role change leaves no record.
+  Both are proposed, not built.
+- Not checked: the role as the hosted database holds it, before or after (an agent does not read it). The owner
+  signs out and in, and looks.
+
+## 0.33.1 · 13 November 2026
+
+**Chat fetches what its live stream did not deliver.**
+
+- A message reached another window only through the realtime socket, and so did Prometheus's answer. A socket
+  that is down (a phone that slept, a network that changed, a socket that never joined) is told nothing, and
+  nothing is replayed when it comes back: the message was on the server and not on the screen until a reload.
+  The blotter has had a fetch behind its stream since 0.12; chat had none.
+- Chat now catches up: when the socket joins or joins again, when the page comes back into view or online, when
+  a room is opened again, and on a tick while the page is in view (every 4 seconds while an answer from
+  Prometheus is awaited, 12 while the chat is open, 48 otherwise). It fetches the rooms (their unread counts as
+  the server holds them) and the open room's messages, adds the ones it does not have, and counts none twice.
+- After its review: a message that was missed is put where it belongs by time, not after one that arrived later;
+  a room that waits for Prometheus is fetched although another room is open; the rooms' counts are not replaced
+  by an answer that was already on its way when a message arrived or a room was read.
+- Not found: why the socket did not deliver in the first place. The site's security policy allows it (read from
+  the live headers); the cause is on a device or in the realtime service, which was not seen from here.
+- Not checked: that Prometheus answered on the server. If the answer is still missing after this, it failed
+  there (the server's log would say), not on the screen.
+
+## 0.33.0 · 13 November 2026
+
+**A paper confirmation from the signed record, and the Rijeka mark on the certificate.**
+
+- **PAPER CONFIRMATION** on the certificate, beside the proof pack. It opens the signed record as a sheet over the
+  app, with one button, PRINT OR SAVE AS PDF; printed, the sheet is the only thing on the page. On it: what the
+  trade is, its reference and UTI, the two parties by LEI (and by name where the book knows one), the terms, each
+  leg with who pays whom, the record's hash and where it is anchored, both signatures, and a statement that it is
+  evidence of the terms and not a master agreement.
+- Everything on it comes from the proof pack: the record the parties signed, not the booking as it stands. A
+  number is printed as the record holds it, grouped in thousands and never rounded; a date is written out; a
+  field the record leaves empty is left off (`trade-window/paper-confirmation.js`, with tests).
+- It says what the record is. One whose two signatures Rijeka produced (the demonstration) is stamped "signed
+  with demonstration keys" and carries a line saying it is not a confirmation between two parties; one that is
+  not anchored says so; one since closed says so.
+- It is Rijeka's own sheet, not an ISDA form: ISDA's confirmation templates and definitions are licensed text.
+- After its reviews. A leg of a package has no paper: what was signed there is the package's record, which lists
+  its legs by hash, and the first build would have printed those hashes a character to a row. A rate is moved two
+  places in its text and never through a float (the first build could round one, or print "1e-10 %"). A signed
+  term is printed unless it is at its plain default (leverage of one, a bullet notional, a flat rate): the first
+  build hid a step-up's rate type, a calculation agent, the rate of a zero-coupon leg and a fixed leg's spread.
+  A choice held in capitals is printed as words in the interface face, a code as it is in mono. Each signature
+  is headed by its party's letter and name, as under Parties. One way of writing a date. The foot says where
+  the registry is a test network. PRINT is the sheet's one primary button, and closing returns focus to the
+  button that opened it. The mark is drawn with a shorter river and a larger R and ring. A counterparty's name
+  is the booked trade's, not the form's.
+- Left from the reviews: Tab can reach the app behind the open sheet and the function keys still act; the mark
+  is a canvas and prints at the screen's pixel density; a multi-page print carries no page numbers of its own.
+- Not built: a paper for a trade confirmed off chain. There is no signed record to print from; the mock showed
+  one marked unsigned, and that waits for the owner's answer. No QR code: the app bundles no library for one.
+- **The certificate's mark is the logo**: this trade's river (drawn from the record's hash, so each trade's is
+  its own) running into the ringed R, in the paper's inks. The ring is the seal, as everywhere the mark is drawn:
+  closed where the record stands on a chain, a faint outline and the whole in grey where it is not anchored or
+  is closed (`brand/CertMark.jsx`). The interlaced-rings seal and its code are removed.
+- Checked on the local stack, which has no chain: the swap's journey opens the paper, reads it, and prints it.
+  Not seen: an anchored record's paper and mark in the app (the journeys with a local chain run in CI), a digital
+  asset's or a currency trade's paper on screen (their mapping is unit-tested), the paper on a phone.
+
+## 0.32.4 · 13 November 2026
+
+**A trade's status is changed by an event and by nothing else.**
+
+- What was checked. In the trade window a cancelled trade offers nothing to confirm, and the three routes that
+  confirm (`/api/chain/confirm`, `/api/chain/countersign` and the chat card, `/api/trade-events/confirm`) refuse a
+  trade that is not PENDING. The way round them was `PUT /api/trades/{id}`: it refused a change of status only on
+  a trade already anchored on chain, so on any other it stored whatever it was sent. A cancelled trade set back
+  to PENDING there was then confirmed by the confirm route (its events read BOOKED, CANCELLED, CONFIRMED); a
+  pending trade was set to CONFIRMED with no event and no signature; "NONSENSE" was stored as a status.
+- `PUT /api/trades/{id}` now refuses any change of status, 409, on every trade. An edit that carries the status
+  the trade already has is an edit of the rest, as before.
+- **A second way to the same sequence, found in review:** the confirm route loads the trade and then waits on
+  the chain for up to 25 seconds; a cancel from another window in that time went through, and the confirmation
+  that followed set the trade CONFIRMED over it. A status is now flipped only from the status its caller loaded,
+  read again under a row lock: the later of the two is refused, 409, and nothing is written. (If the transaction
+  has already landed, the registry holds a confirmation of a trade the book calls cancelled; the book says so.)
+- A trade is not cancelled, or confirmed off chain, while a confirmation of it is recorded as in flight; what has
+  landed or failed is settled first, and the refusal names the route that says where it stands.
+- The terms of a trade are edited while it is PENDING and nothing is in flight; a leg is added or edited while its
+  trade is PENDING and is the caller's. After that they change by an amendment. (A confirmed, cancelled or
+  terminated trade's terms and legs were edited by `PUT` with no event; an anchored one then failed `verify`,
+  one confirmed off chain had nothing to fail.) The desk, book and store are not terms and are still edited.
+- The generic `POST /api/trade-events/` takes no `attestation` in a payload (one sent there was read back as the
+  trade's confirmation: an invented record shown as anchored) and none of the events another route writes
+  together with the trade (CANCELLED, TERMINATED, AMENDED, PARTIAL_TERMINATION).
+- The trades store's three writers that went straight to the table from the browser (add, set a status,
+  delete) were used by nothing and are removed.
+- Seven integration tests (`test_status_is_a_fact.py`). The existing confirmation tests caught the lock dropping
+  the UTI a confirmation issues before it was written; it is written first.
+- **Not closed by this change, and the owner's to decide:** the database lets a signed-in user write their own
+  rows of `trades` and `trade_legs` directly (one policy for every command, `docs/schema.sql`), which is the
+  same way round, outside the API. Seen on the local stack, which carries the same policy and the grants a
+  hosted project has by default; production's grants were not read. Closing it is a migration (the browser
+  reads, only the API writes), and a migration reaches production only on his words.
 
 ## 0.32.3 · 13 November 2026
 
-**On a phone the app says it is built for a monitor.** The owner, after the phone fixes: "we do need to have some
-sort of message that this is meant for desktop viewing and not phone viewing".
+**On a phone the app says it is built for a monitor.**
 
 - On the door, under ADD TO HOME SCREEN, one line: "Built for a monitor. A phone shows the essentials." The door
   is still one screen on the narrowest phone.
@@ -18,8 +451,7 @@ sort of message that this is meant for desktop viewing and not phone viewing".
 
 ## 0.32.2 · 13 November 2026
 
-**"Add to Home Screen" says the taps the visitor's own browser has.** The owner, on his phone: "i'm having hard
-time following instrucitons to add to home screen". The sheet said "Tap Share in Safari's bar", which is where
+**"Add to Home Screen" says the taps the visitor's own browser has.** The sheet said "Tap Share in Safari's bar", which is where
 Share sat until iOS 18. Safari has since moved it twice: behind the three dots beside the address bar (26), then
 behind a press and hold on the address bar (27).
 
@@ -35,8 +467,7 @@ behind a press and hold on the address bar (27).
   and "Open Rijeka" are two steps), bold in the line under the list set as in the list, that line's glyph
   at its line's size, numbers quieter than the words, the in-app sheet a sentence and two steps.
 - Left: an in-app browser on Android is still sent to a menu it may not have.
-- Also, after the owner reported fields and text overlapping in the new trade window on his phone ("can i connect
-  the phone to you somehow"): a scan of the trade window (`e2e/perf/overlap.spec.js`: five kinds of ticket, every
+- Also, after the owner reported fields and text overlapping in the new trade window on his phone: a scan of the trade window (`e2e/perf/overlap.spec.js`: five kinds of ticket, every
   tab, before and after pricing, 320 to 440 wide) for boxes that cross, text that is cut, and panels hidden behind
   an edge. It found one, live since 0.32.0: **a swap's CURVE SCENARIO kept its two panels side by side, so its
   figures and its curve were a sliver 30px wide at the edge of the screen.** They are one column now: controls,
@@ -68,10 +499,7 @@ behind a press and hold on the address bar (27).
 
 ## 0.32.1 · 12 November 2026
 
-**On a phone nothing is pushed sideways, and signing in no longer leaves the page enlarged.** The owner, the same
-day the phone view went out: "i dont love the phone version that you have to scroll headers to see and even scroll
-on output left/right... either fit on one screen or scroll down to see it", and "when first log in, it is sort of
-zoomed in all the way to the edges".
+**On a phone nothing is pushed sideways, and signing in no longer leaves the page enlarged.** Nothing on a phone is reached by scrolling sideways, and the page no longer opens zoomed to its edges.
 
 - **The ticket's tabs are two rows of three**, all in view. They were one strip to scroll.
 - **The figures at the foot are three across**, on as many lines as they need. They were one row to scroll.
@@ -106,7 +534,7 @@ zoomed in all the way to the edges".
 
 ## 0.32.0 · 12 November 2026
 
-**The phone view.** On the owner's word ("build the phone view and deploy it right away"), in the scope he set on
+**The phone view.** On the owner's word, in the scope he set on
 11 November: the home, booking a trade through the trade window, chat and news. At 390px the app was about 1,070px
 wide and could not be used; nothing is wider than the screen now.
 
@@ -148,7 +576,7 @@ wide and could not be used; nothing is wider than the screen now.
 
 ## 0.31.1 · 12 November 2026
 
-**The door's way to the site points at /about.** On the owner's word ("deploy everything"). The public site now
+**The door's way to the site points at /about.** On the owner's word. The public site now
 serves its landing page at rijeka.app/about, and rijeka.app itself is to open the door; EXPLORE RIJEKA goes to
 /about so the two do not send a visitor round in a circle. The line beside it names what is there: how it works,
 verify, tools, work with us. The app's page names its own address (app.rijeka.app) as its canonical one, where it
@@ -156,8 +584,7 @@ named rijeka.app, which is about to be a redirect to it.
 
 ## 0.31.0 · 12 November 2026
 
-**The front door.** On the owner's word after two mocks ("when you type rijeka.app it should bring you to login
-screen right away ... or you can click from there to go into site"; "go with recommendation, build it"). The app
+**The front door.** On the owner's word after two mocks. The app
 side is here; the public site's side is staged and waits for its own word.
 
 - **The sign-in page is the door.** It carries the logo (the river into the ringed R) where the name was set in
@@ -186,8 +613,7 @@ side is here; the public site's side is staged and waits for its own word.
 
 ## 0.30.4 · 12 November 2026
 
-**The look on the Configurations pages and the messenger.** Item 2 of the Phase 1 exit list, on the owner's word
-("do them all in order and deploy"). No figure changes; nothing moves.
+**The look on the Configurations pages and the messenger.** Item 2 of the Phase 1 exit list, on the owner's word. No figure changes; nothing moves.
 
 - **Type on the scale.** 210 sizes that were set in rem on the market-data, configuration, onboarding and messenger
   pages are steps of the px scale now (`docs/design.md`): none moves by more than half a pixel. The count of sizes
@@ -262,8 +688,7 @@ word ("do them all in order and deploy"). Every screen a new user meets was pict
 
 ## 0.30.2 · 12 November 2026
 
-**The evidence behind the XVA on digital assets.** Item 11(e) of the Phase 1 exit list, on the owner's word ("do
-them all in order and deploy"). No figure the engine computes changes; methodology v1.20.
+**The evidence behind the XVA on digital assets.** Item 11(e) of the Phase 1 exit list, on the owner's word. No figure the engine computes changes; methodology v1.20.
 
 - **The exposure backtest.** `backend/scripts/backtest_exposure.py`, after the Basel Committee's sound practices for
   backtesting counterparty credit risk models (2010), on five years of public daily closes of BTC, ETH and SOL: on
@@ -291,8 +716,7 @@ them all in order and deploy"). No figure the engine computes changes; methodolo
 
 ## 0.30.1 · 12 November 2026
 
-**The ticket's XVA tab on a laptop.** The rest of item 4 of the Phase 1 exit list, on the owner's word ("do them
-all in order and deploy"). No figure changes.
+**The ticket's XVA tab on a laptop.** The rest of item 4 of the Phase 1 exit list, on the owner's word. No figure changes.
 
 - **The incremental charge is in view.** The counterparty's netting set with and without the trade (CHARGE THIS
   TRADE) sat below the whole tab, under the fold on a laptop. It is now directly under the results, above the
@@ -313,7 +737,7 @@ all in order and deploy"). No figure changes.
 ## 0.30.0 · 12 November 2026
 
 **Barriers: watched between the grid's dates, and a touch the desk can record.** Items 11(c) and 5 of the Phase 1
-exit list, on the owner's word ("do them all in order and deploy").
+exit list, on the owner's word.
 
 - **Watched between dates.** On a ticket's exposure paths a barrier was watched on the grid's dates alone, so a
   level that went out and came back between two dates was never seen. Against the continuous closed forms on a
@@ -348,7 +772,7 @@ exit list, on the owner's word ("do them all in order and deploy").
 
 ## 0.29.0 · 12 November 2026
 
-**Partial termination.** Asked by the owner ("do we have partial termination process?" ... "build it, deploy it").
+**Partial termination.** Asked by the owner.
 The event type and a route that stored it existed; nothing reduced a trade and the ticket offered nothing.
 
 - **On the ticket.** A booked trade's CONFIRM tab has PARTIALLY TERMINATE: the notional that remains and, if one
@@ -384,7 +808,7 @@ The event type and a route that stored it existed; nothing reduced a trade and t
 ## 0.28.0 · 12 November 2026
 
 **XVA on a currency or digital-asset ticket: weekly steps, and the charge on the exposure averaged across each
-step.** Item 11(c) of the Phase 1 exit list, on the owner's word ("weekly and average, build it, deploy it").
+step.** Item 11(c) of the Phase 1 exit list, on the owner's word.
 
 - **What was wrong.** Every run stepped monthly and charged CVA, DVA, FVA and FBA on the exposure at each step's
   end. A forward's exposure grows like the square root of time, so on two or three steps the charge was overstated.
@@ -426,8 +850,7 @@ step.** Item 11(c) of the Phase 1 exit list, on the owner's word ("weekly and av
 
 ## 0.27.1 · 12 November 2026
 
-**The forward on the TRADE tab no longer reads as switched off.** Asked by the owner on 10 November ("the forward
-reads as greyed out"); item 4 of the Phase 1 exit list, first part. The forward is a computed figure, and it sat in
+**The forward on the TRADE tab no longer reads as switched off.** Asked by the owner on 10 November; item 4 of the Phase 1 exit list, first part. The forward is a computed figure, and it sat in
 a dashed box: the only other dashed edge on the ticket is a chip that cannot be pressed. It now has a field's own
 solid edge and no well, as every value that cannot be changed has (`docs/design.md`); the figure was and is at
 full strength. Styles only; `docs/design.md` now says what marks a default (a brass rule once typed over, a dash
@@ -500,9 +923,7 @@ of the Phase 1 exit list).
 
 ## 0.25.0 · 12 November 2026
 
-**Fees are entered with the trade.** Asked for by the owner: "the fee can also be multiple dates or have multiple
-fees. the user should be able to just enter fee cashflow or maybe even some sort of other event type of fee as part
-of the trade", for trade entry, pricing and XVA.
+**Fees are entered with the trade.** Asked for by the owner, for trade entry, pricing and XVA.
 
 - **What was missing.** A currency or digital-asset option booked the model's own price as its premium, dated
   today, with nowhere to type the premium agreed; a rates option took one amount and one date; nothing else could
@@ -589,9 +1010,7 @@ XVA"). It was planned as jumps; fitted to the data, jumps were the wrong model, 
 
 ## 0.23.2 · 11 November 2026
 
-**The hosted demo is the launch set.** Call A of the Phase 1 exit list, asked for by the owner ("we're only going
-live with XVA... we're not gonig to publish capital or margin or pnl or risk", "as recommended", then "do the
-recommendations": the default in code, so nothing has to be set on the host).
+**The hosted demo is the launch set.** Call A of the Phase 1 exit list, asked for by the owner (the default is in code, so nothing has to be set on the host).
 
 - **What a demo holds back by default** is now everything outside the launch set: P&L, market risk, counterparty
   credit, capital, collateral, the XVA reserves and IPV. Until this release it was capital alone, and a demo
@@ -640,7 +1059,7 @@ words for it.
 ## 0.23.0 · 11 November 2026
 
 **The margin on a digital-asset ticket is no longer read low.** First step of finishing the XVA on digital assets,
-asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", then "go ahead with 11 and the rest."
+asked for by the owner.
 
 - **What was wrong.** Collateral and initial margin read the value a margin period before each date. The engine
   took it from a bridge between the grid VALUES, which is Gaussian. A forward's value is a multiple of a lognormal
@@ -756,7 +1175,7 @@ security review of sign-up, roles, modules and the register (item 6 of the Phase
 ## What Phase 1 is, said one way · 11 November 2026 (frontend only)
 
 **The home page and the roadmap say what the sign-in page says.** Asked for by the owner as the first line of the
-Phase 1 exit list ("as recommended, then we'll review").
+Phase 1 exit list.
 
 - **The home page's footer** said RATES ONLY IN PHASE 1 while the sign-in page said rates, FX and crypto forwards
   and options are live. It now reads PHASE 1 · RATES, FX & CRYPTO FORWARDS AND OPTIONS.
@@ -773,10 +1192,8 @@ Phase 1 exit list ("as recommended, then we'll review").
 
 ## The logo · 11 November 2026 (frontend only)
 
-**A logo that simulates, and a confirmation you can watch.** Asked for by the owner: "our Rijeka logo needs to be
-better... just written down seems bit plain", then, choosing step by step from a mock: simulated paths like a Monte
-Carlo run, moving, into an R in a ring that is the name's first letter, and "on confirmation on chain the
-animation should be our logo loading... once trade confirmes the image should finish loading".
+**A logo that simulates, and a confirmation you can watch.** Asked for by the owner, then, choosing step by step from a mock: simulated paths like a Monte
+Carlo run, moving, into an R in a ring that is the name's first letter; on a confirmation the same mark draws itself and is complete when the trade is confirmed on chain.
 
 - **The logo is a river of simulated paths running into the ringed R that begins the name.** Rijeka means river.
   One desk's paths are limestone, the other's blue; they turn brass where they meet and run as one line into the
@@ -795,9 +1212,7 @@ animation should be our logo loading... once trade confirmes the image should fi
 
 ## 0.22.0 · 11 November 2026
 
-**Forward curves to ten years, with what is implied marked as implied.** Asked for by the owner: "we need to be able
-to model all FX to 10y... the derived points on the forward curve has to be differentiated somehow so user knows its
-implied and how... in configurations, user should be able to turn on/off tenors on the curve."
+**Forward curves to ten years, with what is implied marked as implied.** Asked for by the owner.
 
 - **Beyond the last quoted tenor a forward is parity plus that tenor's basis, held flat as a rate.** Until now the
   last points were held flat, so a five-year forward was the two-year one: wrong past the last quote. On a currency
@@ -831,9 +1246,7 @@ implied and how... in configurations, user should be able to turn on/off tenors 
 
 ## 0.21.2 · 11 November 2026
 
-**A swap shows each leg again, and an embedded cap or floor shows its value and its vega.** Reported by the owner:
-"why did we also lose per leg value. i'm looking at IR swap and we only have Net NPV, also, when i'm adding embeded
-optionality it doesnt show me Vega risk or the value of the option value on the swap."
+**A swap shows each leg again, and an embedded cap or floor shows its value and its vega.** Reported by the owner.
 
 - **Each leg's value is in the footer**, on every tab, beside the net: FIXED PV and FLOAT PV (a basis swap's two legs
   by their own names). They were on the TRADE tab until the valuation moved to CASHFLOWS on 10 November, which left
@@ -856,8 +1269,7 @@ optionality it doesnt show me Vega risk or the value of the option value on the 
 
 ## Figures are set one way; a design keeper · 11 November 2026 (frontend only)
 
-Reported by the owner: the forwards page of Configurations and the ticket did not look alike; "the points pips look
-different size than outright"; and nobody was responsible for consistency.
+Reported by the owner: the forwards page of Configurations and the ticket did not look alike, the points and the outright were set in different sizes, and nobody was responsible for consistency.
 
 - **One size of type at every width.** The root size grew with the window (`clamp(14px, 0.75vw, 16px)`), so whatever
   was sized in rem grew on a wide screen and whatever was sized in px did not: a figure and the field beside it
@@ -1815,7 +2227,7 @@ What a desk head sees on the ticket: the findings of a first-time-user pass, and
 
 ## 0.11.0 · 4 November 2026
 
-- Collateral in the book, phase C3 of `docs/archive/PLAN_collateral_2026-11-04.md`:
+- Collateral in the book, phase C3 of the collateral plan:
   - **Risk → COLLATERAL:** per counterparty the schedule in force, today's variation-margin position and initial
     margin from the latest stored credit run, what each side is held in by instrument at its haircut, the carry per
     year over OIS, the rail; totals by instrument and by class, the on-chain share; the book under regimes (the
@@ -1830,7 +2242,7 @@ What a desk head sees on the ticket: the findings of a first-time-user pass, and
 
 ## 0.10.0 · 4 November 2026
 
-- Collateral on the ticket, phase C2 of `docs/archive/PLAN_collateral_2026-11-04.md`:
+- Collateral on the ticket, phase C2 of the collateral plan:
   - **ColVA**, the carry of the variation margin against cash at OIS, in the waterfall (`docs/xva.md` §7b): posted
     margin in an asset earning more than OIS earns the excess, held margin in an asset earning less than the OIS
     rebate costs the shortfall; cash on both sides is zero, so every figure that predates instruments is unchanged
@@ -1847,7 +2259,7 @@ What a desk head sees on the ticket: the findings of a first-time-user pass, and
 
 ## 0.9.0 · 4 November 2026
 
-- Collateral as a first-class object, phase C1 of `docs/archive/PLAN_collateral_2026-11-04.md` (`docs/collateral.md`):
+- Collateral as a first-class object, phase C1 of the collateral plan (`docs/collateral.md`):
   - **Instruments.** A public seed (USD/EUR/GBP cash, Treasury bills and notes, Bunds, Gilts, USDC, USDT, PYUSD, a
     generic tokenised money-market fund share, a generic tokenised Treasury-bill claim, BTC, ETH, SOL), each with its
     regulatory class, rail (bilateral or on chain with token address) and yield source (a curve's short rate plus a

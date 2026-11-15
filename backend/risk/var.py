@@ -108,6 +108,33 @@ def simulate(ladder: list[dict], spot01: dict[str, float], changes: dict[str, li
     return pnl, missing
 
 
+def typical_moves(changes: dict[str, list[tuple[date, dict[str, float]]]]) -> dict[str, Any]:
+    """How far each risk factor usually moves in a day: the sample standard deviation (n − 1) of its daily changes
+    over the window the VaR reads, per factor and per ladder bucket, in the unit the ladder's sensitivity is per
+    (basis points for a curve's bucket, percent for a spot, hundredths of a volatility point for a surface, as
+    `simulate` multiplies them). A sensitivity times this is the money a usual day moves that bucket by: a size to
+    compare buckets and factors on one scale, not a loss at a confidence. Fewer than two changes give no figure."""
+    out: dict[str, dict[str, float]] = {}
+    obs: dict[str, int] = {}
+    for factor, rows in (changes or {}).items():
+        by_bucket: dict[str, list[float]] = {}
+        for _d, ch in rows:
+            for b, v in ch.items():
+                by_bucket.setdefault(b, []).append(float(v))
+        sd = {}
+        for b, vals in by_bucket.items():
+            n = len(vals)
+            if n < 2:
+                continue
+            m = sum(vals) / n
+            sd[b] = math.sqrt(sum((v - m) ** 2 for v in vals) / (n - 1))
+        if sd:
+            out[factor] = sd
+            obs[factor] = max(len(v) for v in by_bucket.values())
+    return {"stdev": out, "observations": obs, "unit": "bp for a curve's bucket, percent for a spot, 1/100 of a vol point for a surface",
+            "method": "sample standard deviation of daily changes over the VaR window"}
+
+
 def quantiles(pnl: list[float], confidence: float) -> dict[str, float]:
     if not pnl:
         return {"var": 0.0, "es": 0.0}
@@ -137,7 +164,8 @@ def compute(db: Session, template_uid, ladder: list[dict], spot01: dict[str, flo
             "var_1d_secondary": second["var"], "es_1d_secondary": second["es"],
             "window_from": pnl[0][0].isoformat() if pnl else None, "window_to": pnl[-1][0].isoformat() if pnl else None,
             "worst_days": [{"date": d.isoformat(), "pnl": v} for d, v in worst], "missing_factors": missing,
-            "histogram": _hist(vals), "series": [{"date": d.isoformat(), "pnl": v} for d, v in pnl]}
+            "histogram": _hist(vals), "series": [{"date": d.isoformat(), "pnl": v} for d, v in pnl],
+            "moves": typical_moves(ch)}
 
 
 def _hist(vals: list[float], bins: int = 24) -> list[dict]:

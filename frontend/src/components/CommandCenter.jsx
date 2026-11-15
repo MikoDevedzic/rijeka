@@ -8,6 +8,8 @@ import WorldClock from './home/WorldClock'
 import PolicyPath from './home/PolicyPath'
 import Lifecycle from './home/Lifecycle'
 import PnlTile from './home/PnlTile'
+import TraderHome from './home/TraderHome'
+import { usePhone } from '../lib/phone'
 import { useModulesStore } from '../store/useModulesStore'
 import WeekAhead from './home/WeekAhead'
 import RoleSwitch from './layout/RoleSwitch'
@@ -137,6 +139,7 @@ function DeskHome({ demo, navigate }) {
   // again after provisioning answered (a user with no firm then gets the desk), or MODULES_WAIT_MS has passed
   // (every module then stays on, as before). Only provisioning that outlasts the wait can still show a launch
   // workspace the desk, and its P&L tile, first.
+  const phone = usePhone()                                  // a phone keeps the home it has; a monitor gets the trader's (home/TraderHome.jsx)
   const [waited, setWaited] = useState(false)
   useEffect(() => { const id = setTimeout(() => setWaited(true), MODULES_WAIT_MS); return () => clearTimeout(id) }, [])
   const session = useAuthStore(s => s.session)
@@ -212,32 +215,39 @@ function DeskHome({ demo, navigate }) {
     </div>
   )
 
+  const strip = (
+    <div className="dh-strip">
+      <span className="dh-strip-k">USD SOFR</span>
+      {['ON', '2Y', '5Y', '10Y', '30Y'].map(t => <span key={t} className={`dh-q${t === '30Y' ? ' dh-q-far' : ''}`}><b>{t}</b>{d.sofr?.exists ? fmtN(quote(d.sofr, t), 3) : '—'}</span>)}
+      <span className="dh-sep" />
+      <span className="dh-strip-k">ATM VOL</span>
+      {[['1Y5Y', '1Yx5Y'], ['5Y5Y', '5Yx5Y'], ['5Y9Y', '5Yx9Y']].map(([l, k]) => <span key={k} className="dh-q"><b>{l}</b>{d.vol?.exists ? `${fmtN(quote(d.vol, k), 1)}bp` : '—'}</span>)}
+      <span className="dh-strip-right">
+        {asOf ? <span className={`dh-asof${stale > 7 ? ' stale' : ''}`}><i className="dh-dot" />SNAPSHOT · {fmtD(asOf)}{stale > 7 ? ` · ${stale}D OLD` : ''}{String(d.sofr?.source || '').startsWith('DEMO') ? ' · DEMO DATA · PUBLIC SOURCES' : ''}</span>
+              : d.loading ? <span className="dh-asof">LOADING…</span> : <span className="dh-asof stale">NO CURVES LOADED</span>}
+      </span>
+    </div>
+  )
+  const path = showPath && (
+    <div className="dh-path">
+      <span className="dh-path-k">START HERE</span>
+      <Step n="1" done={trades.length > 0} text={`Book a swap${demo?.counterparty ? ` against ${demo.counterparty.name}` : ''}, an FX forward or a BTC forward`} onClick={() => navigate('/blotter')} />
+      <Step n="2" done={confirmed > 0} text="Confirm it on Sepolia from the trade's CONFIRM tab" onClick={() => navigate('/blotter')} />
+      <Step n="3" done={false} text="Verify the proof pack, trusting nothing of ours" href="https://rijeka.app/verify" />
+    </div>
+  )
+
+  if (!phone) return <TraderHome d={d} demo={demo} modules={modules} canEdit={canEdit} onRequest={onRequest} navigate={navigate} strip={strip} path={path} chainEmpty={<ChainDiagram />} footer={footer} />
+
   return (
     <div className="dh">
-      <div className="dh-strip">
-        <span className="dh-strip-k">USD SOFR</span>
-        {['ON', '2Y', '5Y', '10Y', '30Y'].map(t => <span key={t} className={`dh-q${t === '30Y' ? ' dh-q-far' : ''}`}><b>{t}</b>{d.sofr?.exists ? fmtN(quote(d.sofr, t), 3) : '—'}</span>)}
-        <span className="dh-sep" />
-        <span className="dh-strip-k">ATM VOL</span>
-        {[['1Y5Y', '1Yx5Y'], ['5Y5Y', '5Yx5Y'], ['5Y9Y', '5Yx9Y']].map(([l, k]) => <span key={k} className="dh-q"><b>{l}</b>{d.vol?.exists ? `${fmtN(quote(d.vol, k), 1)}bp` : '—'}</span>)}
-        <span className="dh-strip-right">
-          {asOf ? <span className={`dh-asof${stale > 7 ? ' stale' : ''}`}><i className="dh-dot" />SNAPSHOT · {fmtD(asOf)}{stale > 7 ? ` · ${stale}D OLD` : ''}{String(d.sofr?.source || '').startsWith('DEMO') ? ' · DEMO DATA · PUBLIC SOURCES' : ''}</span>
-                : d.loading ? <span className="dh-asof">LOADING…</span> : <span className="dh-asof stale">NO CURVES LOADED</span>}
-        </span>
-      </div>
+      {strip}
 
       <DeskNoteHome />
 
       <WorldClock />
 
-      {showPath && (
-        <div className="dh-path">
-          <span className="dh-path-k">START HERE</span>
-          <Step n="1" done={trades.length > 0} text={`Book a swap${demo?.counterparty ? ` against ${demo.counterparty.name}` : ''}, an FX forward or a BTC forward`} onClick={() => navigate('/blotter')} />
-          <Step n="2" done={confirmed > 0} text="Confirm it on Sepolia from the trade's CONFIRM tab" onClick={() => navigate('/blotter')} />
-          <Step n="3" done={false} text="Verify the proof pack, trusting nothing of ours" href="https://rijeka.app/verify" />
-        </div>
-      )}
+      {path}
 
       <div className="dh-hero">
         <PolicyPath onCurves={() => navigate('/configurations/market-data/curves')} />

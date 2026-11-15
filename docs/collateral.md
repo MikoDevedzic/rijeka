@@ -3,7 +3,7 @@
 Collateral is a first-class object: a concrete *instrument* a firm can post or receive, a *schedule* per
 counterparty (the CSA's eligible-collateral annex), and the *regime* the engines derive from the schedule. The
 regulatory classes and their rules are unchanged (`docs/capital.md` §1); this layer names the assets and carries
-their economics. Plan: `docs/archive/PLAN_collateral_2026-11-04.md`. Built from public standards only.
+their economics. Built from public standards only.
 
 ## 1. Instruments (`pricing/collateral.py` `Instrument`, `SEED`)
 
@@ -57,7 +57,7 @@ securities when they are blank.
 A cash-only schedule on the bilateral rail reproduces the class-level regime field for field
 (`tests/test_collateral_instruments.py`), so numbers before and after a schedule is recorded agree.
 
-Where it is used: the first column of the ticket's CAPITAL tab (`/api/capital/trade`), the BASELINE of the book's
+Where it is used: the first column of the trade's capital answer (`/api/capital/trade`; its tab left the ticket in 0.39.1), the BASELINE of the book's
 regimes report (Risk → CAPITAL, `ccr/capital_report.py`), and, from C2, the XVA tab's collateral block.
 
 ## 4. Routes (`api/routes/collateral.py`)

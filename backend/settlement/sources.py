@@ -32,6 +32,11 @@ SETTLEMENT_SOURCES = {
     "SOLUSD": [{"source": "Coinbase SOL-USD", "time": "16:00 London", "auto": False},
                {"source": "Deribit SOL delivery price", "time": "08:00 UTC", "auto": True}],
 }
+# A currency pair (0.39.0): the benchmark a desk is licensed for and enters itself. No feed stores a currency fixing:
+# the European Central Bank asks that its reference rates not be used to settle transactions, and the dealers'
+# benchmark is licensed.
+CURRENCY_SOURCES = [{"source": "WM/Reuters 4pm London", "time": "16:00 London", "auto": False}]
+CURRENCY_NDF = "NDF"
 INSTRUMENTS = ("CRYPTO_FORWARD", "CRYPTO_OPTION")
 SETTLEMENT_FIELDS = ("digital_asset", "settlement_price_source", "valuation_time", "valuation_date", "settlement_date")     # what the rule reads
 SOURCE_MAX = 80
@@ -52,6 +57,11 @@ def skeleton(source) -> str:
 
 VENUE = skeleton(deribit.PROVIDER)
 FEED_SKELETONS = frozenset(skeleton(s["source"]) for srcs in SETTLEMENT_SOURCES.values() for s in srcs if s["auto"])
+
+
+def listed_sources(pair: str) -> list[dict]:
+    """The sources a pair lists: a digital asset's own, and for any other pair the currency benchmark."""
+    return SETTLEMENT_SOURCES.get(str(pair).upper()) or CURRENCY_SOURCES
 
 
 def feed_source(pair: str) -> Optional[str]:
@@ -141,6 +151,8 @@ def check_booked(instrument_type, terms, trade_date=None, maturity_date=None) ->
     (Until 0.26.0 it could be at most seven days before the settlement date, because the forward was carried to the
     settlement date; it is priced to its fixing date now.)"""
     itype = str(instrument_type or "").upper()
+    if itype == CURRENCY_NDF and isinstance(terms, dict):
+        return _check_ndf(terms, trade_date, maturity_date)
     if itype not in INSTRUMENTS or not isinstance(terms, dict):
         return
     if itype == "CRYPTO_FORWARD":
@@ -176,3 +188,20 @@ def check_booked(instrument_type, terms, trade_date=None, maturity_date=None) ->
         allowed.add(LEGACY_OPTION_TIME)
     if terms.get("valuation_time") not in allowed:
         raise ValueError(f"valuation_time must be {hit['time']}, the time {source} is published; the terms say {str(terms.get('valuation_time'))[:40]!r}")
+
+
+def _check_ndf(terms: dict, trade_date=None, maturity_date=None) -> None:
+    """The booking rule for a currency NDF, one check: a fixing date BEFORE the settlement date (a record that uses
+    the fixing date, which no ticket wrote before 0.39.0) is after the trade date, because a rate known when the
+    trade is struck is not a fixing of it.
+
+    Nothing else is refused, on purpose (Vera, 14 Nov 2026): every NDF booked or confirmed before 0.39.0 names its
+    settlement date as its fixing date, USD as its settlement currency on any pair and whatever source its desk
+    typed, and such a record must still be booked as the mirror of a confirmed one. The settlement rule reads them
+    leniently instead (settlement/rule.parse): a fixing date that is missing, unreadable or after the settlement
+    date fixes on the settlement date; a currency that is not the pair's base is the quote currency; a source no
+    desk can enter a fixing under leaves the amount provisional."""
+    settle, traded = _day(terms.get("value_date") or maturity_date), _day(trade_date)
+    fixing = _day(terms.get("fixing_date"))
+    if fixing is not None and settle is not None and traded is not None and fixing < settle and fixing <= traded:
+        raise ValueError(f"the fixing date must be after the trade date (fixing_date {fixing}, trade date {traded})")

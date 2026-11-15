@@ -3,7 +3,8 @@
 // rewrote the whole ticket (1,733 attributes in three seconds on a swap). Frame times are a measurement, taken on a
 // real graphics chip (e2e/perf, local); the number of writes is the same on any machine, so that is what is held.
 // Measured on 12 November 2026: nothing under a pointer on the blotter or a ticket; a drag writes the window's own
-// position and nothing else; on the home, the policy chart's tip and the clocks.
+// position and nothing else; on the home, the policy chart's tip and the clocks (since 0.36.0 the risk picture's
+// tip, and the policy chart's behind the RATES tab; the clocks are a phone's).
 import { test, expect, expectClean } from './fixtures.js'
 
 const frame = (page) => page.evaluate(() => new Promise(r => requestAnimationFrame(() => r())))
@@ -65,14 +66,29 @@ test('the blotter and a ticket rewrite nothing under a moving pointer; a drag wr
   expectClean(problems)
 })
 
-test('the home rewrites only its chart\'s tip and its clocks under a moving pointer', async ({ app, problems }) => {
+test('the home rewrites only its tips under a moving pointer: the risk picture\'s, then the policy chart\'s', async ({ app, problems }) => {
   await app.goto('/command-center')
-  await app.locator('.dh-plot svg').first().waitFor({ timeout: 30_000 })
+  const home = app.getByTestId('trader-home')
+  await home.getByTestId('th-river').waitFor({ timeout: 30_000 })
+  await app.waitForLoadState('networkidle').catch(() => {})
   await app.waitForTimeout(1200)
   const view = app.viewportSize()
   await watch(app)
   await sweep(app, { x: 20, y: 180, width: view.width - 40, height: view.height - 220 })
-  const home = await written(app)
-  expect(count(home, [/^\.dh-plot$/, /^\.dh-tip$/, /^\.dh-clock/, /^\.dh-cross$/, /^\.dh-marker$/]), `the home under a pointer wrote ${say(home)}`).toBeLessThanOrEqual(12)
+  const wrote = await written(app)
+  // the risk picture's tip is placed by the pointer and filled when the pointer enters another tenor bucket; the
+  // picture itself is a canvas, which writes nothing to the page
+  expect(count(wrote, [/^\.th-tip/, /^\.th-cv$/]), `the home under a pointer wrote ${say(wrote)}`).toBeLessThanOrEqual(12)
+  // the policy path is behind the RATES tab since 0.36.0: its tip, cross and marker, as before
+  await home.getByTestId('th-tabs').getByRole('tab', { name: 'RATES' }).click()
+  const plot = home.locator('.dh-plot').first()
+  await plot.locator('svg').waitFor({ timeout: 30_000 })
+  await plot.scrollIntoViewIfNeeded()
+  await app.waitForTimeout(800)
+  const box = await plot.boundingBox()
+  await watch(app)
+  await sweep(app, box)
+  const chart = await written(app)
+  expect(count(chart, [/^\.dh-plot$/, /^\.dh-tip$/, /^\.dh-cross$/, /^\.dh-marker$/, /^\.th-tip/, /^\.th-cv$/]), `the policy chart under a pointer wrote ${say(chart)}`).toBeLessThanOrEqual(12)
   expectClean(problems)
 })

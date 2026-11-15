@@ -44,7 +44,7 @@ describe('collateral schedule helpers', () => {
 
 describe('what a counterparty\'s terms feed', () => {
   it('names only the pages the reader has', () => {
-    expect(termsFeed({})).toBe("the CSA terms and the collateral schedule feed the credit report, the ticket's XVA tab, the ticket's CAPITAL tab and Risk → CAPITAL")
+    expect(termsFeed({})).toBe("the CSA terms and the collateral schedule feed the credit report, the ticket's XVA tab and Risk → CAPITAL")
     // a demo user: capital held back
     expect(termsFeed({ CAPITAL: false })).toBe("the CSA terms and the collateral schedule feed the credit report and the ticket's XVA tab")
     // a launch workspace: no credit report either

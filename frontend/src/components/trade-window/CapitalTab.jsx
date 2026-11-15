@@ -1,5 +1,8 @@
 // trade-window/CapitalTab.jsx
 // ────────────────────────────────────────────────────────────────────────────────────
+// NOT MOUNTED since 0.39.1 (15 November 2026): the tab left the trade window; a trade's cost of capital is the KVA of
+// its XVA tab and regulatory capital is to be one calculation under Risk → CAPITAL. Kept, with capital.js and its
+// tests, for that page to draw on.
 // The CAPITAL tab: the trade's initial margin, exposure at default, RWA, capital, KVA,
 // MVA and leverage exposure under every collateral regime and counterparty type, as the
 // netting set with and without it (common random numbers) and standalone. Every cell

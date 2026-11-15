@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
+import { curveRows, otherLimits, standardRows, parseSize, KIND_NAME } from './limits-page'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
 
@@ -37,6 +38,14 @@ export function LimitsPage() {
     } catch (e) { setMsg(e.message) } finally { setBusy(false) }
   }
   const remove = async (id) => { setBusy(true); try { await api(`/api/risk/limits/${id}`, { method: 'DELETE' }); await load() } catch (e) { setMsg(e.message) } finally { setBusy(false) } }
+  // a curve's own limit, or a kind's standard size: one request, in which the API retires the one that stood there
+  const put = async (metric, size, warn, said) => {
+    setBusy(true); setMsg(null)
+    try {
+      await api('/api/risk/limits', { method: 'POST', body: JSON.stringify({ metric, scope: 'ALL', scope_name: null, limit: size, warn_pct: Number(warn) || 80, note: '' }) })
+      setMsg(said); await load()
+    } catch (e) { setMsg(e.message); await load().catch(() => {}) } finally { setBusy(false) }
+  }
   const canWrite = rep?.can_write
   const scopeNames = form.scope === 'DESK' ? meta?.desks || [] : form.scope === 'BOOK' ? meta?.books || [] : []
   return (
@@ -46,10 +55,11 @@ export function LimitsPage() {
       {msg && <div className="pnl-toast">{msg}</div>}
       {!rep && !msg && <div className="pnl-empty">Loading…</div>}
       {rep && (<>
+        <EveryCurve rep={rep} canWrite={canWrite} busy={busy} put={put} remove={remove} />
         <section className="pnl-panel">
-          <header><span>LIMITS IN FORCE</span><span className="pnl-sub">utilisation on your book as of {rep.date}</span></header>
+          <header><span>OTHER LIMITS IN FORCE</span><span className="pnl-sub">VaR, stress, a tenor bucket, a desk or a book · utilisation on your book as of {rep.date}</span></header>
           <div className="rk-limits">
-            {(rep.limits || []).map(l => (
+            {otherLimits(rep).map(l => (
               <div key={l.id} className={`rk-lim ${String(l.status).toLowerCase()}`} style={{ gridTemplateColumns: '1fr 10rem 9rem 7rem auto' }}>
                 <span className="rk-lm">{l.metric}<small>{l.scope === 'ALL' ? 'book' : `${l.scope.toLowerCase()} ${l.scope_name}`} · warn at {l.warn_pct}% · set by {l.set_by || '—'}{l.note ? ` · ${l.note}` : ''}</small></span>
                 <span className="rk-lbar"><i style={{ width: `${Math.min(100, l.utilisation_pct || 0)}%` }} /><s style={{ left: `${Math.min(100, l.warn_pct)}%` }} /></span>
@@ -58,7 +68,7 @@ export function LimitsPage() {
                 {canWrite ? <button className="pnl-btn ghost" disabled={busy} onClick={() => remove(l.id)}>REMOVE</button> : <span />}
               </div>
             ))}
-            {!(rep.limits || []).length && <div className="pnl-empty">{rep.tables ? 'No limits set yet.' : 'Limits need the market risk tables: ask your administrator to apply the latest database migration.'}</div>}
+            {!otherLimits(rep).length && <div className="pnl-empty">{rep.tables ? 'None set yet.' : 'Limits need the market risk tables: ask your administrator to apply the latest database migration.'}</div>}
           </div>
         </section>
         <section className="pnl-panel" style={{ maxWidth: 900 }}>
@@ -83,12 +93,73 @@ export function LimitsPage() {
   )
 }
 
+// A limit for every curve the book carries: its own, or the standard one for its kind. Typing a size and pressing SET
+// gives the curve its own limit; STANDARD takes its own off again. Under it, the standard size of each kind.
+function EveryCurve({ rep, canWrite, busy, put, remove }) {
+  const rows = curveRows(rep), stds = standardRows(rep)
+  const [typed, setTyped] = useState({})
+  const val = (k) => typed[k] ?? ''
+  const type = (k) => (e) => setTyped(t => ({ ...t, [k]: e.target.value }))
+  const done = (k) => setTyped(t => ({ ...t, [k]: '' }))
+  return (
+    <section className="pnl-panel" data-testid="every-curve">
+      <header><span>A LIMIT FOR EVERY CURVE</span><span className="pnl-sub">its own, or the standard one for its kind · one number on the size, long or short</span></header>
+      <div className="pnl-foot rk-ehow">Every curve, asset, volatility surface and forward basis the book carries has a limit from its first trade. A STANDARD limit is a round figure to start from, not a view of what the desk should run: type a size and press SET to give a curve its own; STANDARD takes its own off again.</div>
+      {!rows.length && <div className="pnl-empty">The book carries no risk on a curve yet. A curve's limit is here from its first trade.</div>}
+      {rows.length > 0 && (
+        <table className="rk-every">
+          <thead><tr><th>CURVE</th><th className="r">POSITION</th><th className="r">LIMIT</th><th /><th>USED</th><th className="r">ITS OWN LIMIT</th><th /></tr></thead>
+          <tbody>
+            {rows.map(r => {
+              const size = parseSize(val(r.metric))
+              return (
+                <tr key={r.metric} data-metric={r.metric} className={String(r.status).toLowerCase()}>
+                  <td>{r.name} <small>{r.measure} · {r.unit}</small></td>
+                  <td className="fig r">{r.value == null ? '—' : fmt(r.value)}</td>
+                  <td className="fig r">{fmt(r.limit)}</td>
+                  <td><span className={`pnl-chip ${r.standard ? 'rk-chip-std' : 'rk-chip-own'}`}>{r.standard ? 'STANDARD' : 'ITS OWN'}</span></td>
+                  <td><span className="rk-ebar"><i style={{ width: `${Math.min(100, r.used || 0)}%` }} /><s style={{ left: `${Math.min(100, r.warn_pct)}%` }} /></span><b className="fig">{r.used == null ? '—' : `${Math.round(r.used)}%`}</b></td>
+                  <td className="r"><input className="rk-ein" inputMode="decimal" aria-label={`A limit of its own for ${r.name} ${r.measure}`} placeholder={r.standard ? 'none' : fmt(r.limit)} value={val(r.metric)} onChange={type(r.metric)} disabled={!canWrite} /></td>
+                  <td className="rk-eact">
+                    <button className="pnl-btn" disabled={busy || !canWrite || !size} onClick={() => put(r.metric, size, r.warn_pct, `${r.name} ${r.measure} is limited at ${fmt(size)}.`).then(() => done(r.metric))}>SET</button>
+                    {!r.standard && <button className="pnl-btn ghost" disabled={busy || !canWrite} onClick={() => remove(r.id)}>STANDARD</button>}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
+      <div className="rk-std" data-testid="standard-sizes">
+        <span className="pnl-kl">THE STANDARD SIZE OF EACH KIND</span>
+        {stds.map(s => {
+          const k = `STANDARD:${s.kind}`, size = parseSize(val(k))
+          return (
+            <label key={s.kind} data-kind={s.kind}>
+              <span>{KIND_NAME[s.kind]} <small>{s.unit}</small></span>
+              <b className="fig">{fmt(s.limit)}</b>
+              <span className={`pnl-chip ${s.built_in ? 'rk-chip-std' : 'rk-chip-own'}`}>{s.built_in ? 'AS SHIPPED' : `SET BY ${String(s.set_by || 'THE FIRM').toUpperCase()}`}</span>
+              <input className="rk-ein" inputMode="decimal" aria-label={`The standard size for ${KIND_NAME[s.kind]}`} placeholder={fmt(s.limit)} value={val(k)} onChange={type(k)} disabled={!canWrite} />
+              <button className="pnl-btn" disabled={busy || !canWrite || !size} onClick={() => put(k, size, s.warn_pct, `The standard size is ${fmt(size)} for ${KIND_NAME[s.kind].toLowerCase()}.`).then(() => done(k))}>SET</button>
+              {!s.built_in && <button className="pnl-btn ghost" disabled={busy || !canWrite} onClick={() => remove(s.id)}>AS SHIPPED</button>}
+            </label>
+          )
+        })}
+        <div className="pnl-foot">The sizes as shipped are round figures to start from, not a view of what a desk should run: set your own. A curve's own limit always takes the standard one's place. The share used is |position| / limit, in whole percent; a warning is raised from 80% of a size as shipped.</div>
+      </div>
+    </section>
+  )
+}
+
 function metricHelp(m, meta) {
   if (!meta) return ''
   const h = meta.help || {}
   if (m.startsWith('IR01:')) return h['IR01:<curve>']
   if (m.startsWith('KR01:')) return h['KR01:<curve>:<bucket>']
   if (m.startsWith('SPOT01:')) return h['SPOT01:<asset>']
+  if (m.startsWith('VEGA:')) return m.split(':').length > 2 ? h['VEGA:<surface>:<bucket>'] : h['VEGA:<surface>']
+  if (m.startsWith('CRYBASIS01:')) return h['CRYBASIS01:<curve>']
+  if (m.startsWith('STANDARD:')) return h['STANDARD:<kind>']
   if (m.startsWith('STRESS:')) return `${h['STRESS:<scenario>']}: ${(meta.scenarios || []).find(s => s.id === m.slice(7))?.name || ''}`
   if (m.startsWith('PFE_PEAK:')) return h['PFE_PEAK:<counterparty>']
   if (m.startsWith('PFE:')) return h['PFE:<counterparty>:<bucket>']

@@ -49,6 +49,15 @@ blotter, the command centre and the messenger. On a screen up to 640px wide the 
 chat and news, from a bar at the foot. It is installable from a phone's home screen (`public/manifest.webmanifest`,
 "standalone"); there is no service worker and nothing is cached for use offline.
 
+On a monitor the command centre is the trader's home (`components/home/TraderHome.jsx`, since 0.36.0), the first of
+a home for each role. It computes nothing but a drawing: it reads the trades, the stored risk report
+(`GET /api/risk/report`: the ladder, the limits as evaluated, the VaR, and `moves`, each factor's usual daily move;
+since 0.37.0 every curve of the book has a limit there, its own or the standard one for its kind, worked out and not
+stored, and a stored report is read against the limits as they stand; since 0.38.0 `fixings`, what resets on each
+coming day by index, read from the periods of the same valuation, `backend/risk/fixings.py`),
+the P&L summary (`GET /api/pnl/summary`) and the desk feed (`GET /api/desk/lifecycle`, every minute), each only
+where its module is on. A phone and a launch workspace keep the homes they had.
+
 The Methodology page reads the methodology document in place. Its pages are not written in the app:
 `frontend/scripts/build-methodology.mjs` (`npm run methodology`) makes
 `frontend/src/components/docs/methodology/methodology.json` from the LaTeX source
@@ -207,7 +216,8 @@ providers.
 A digital-asset forward or option is cash-settled against the settlement price source its record names
 (`settlement_price_source`, hashed as typed in the canonical record; `chain/canonical.py` is not involved in any of
 this). `backend/settlement/store.py` holds fixings in one table: a shared row per pair, date and source written by
-the feed, and a desk's own rows over them. `backend/settlement/rule.py` is the one rule, used by the booked
+the feed, and a desk's own rows over them. `backend/settlement/rule.py` is the one rule (a currency NDF settles by it too since 0.39.0: its fixing date and
+source are `terms.fixing_date` and `terms.fixing_source`, its fixings a desk's own rows, no feed), used by the booked
 valuation (`pnl/valuation.py`); the ticket's view of a booked trade (`currencies.price_booked`) answers from that
 valuation from the fixing date on:
 

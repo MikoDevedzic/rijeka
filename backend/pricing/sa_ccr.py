@@ -2,7 +2,7 @@
 Rijeka — SA-CCR, the standardised approach to counterparty credit risk (Basel CRE52).
 
 One implementation for every asset class, used in two places: the regulatory snapshot of a
-netting set at the valuation date (the ticket's CAPITAL tab) and the add-on along the exposure
+netting set at the valuation date (`POST /api/capital/trade`) and the add-on along the exposure
 grid that feeds KVA in the XVA waterfall. Each function names the paragraph it applies.
 
     EAD = α · (RC + multiplier · AddOn_aggregate),  α = 1.4                 (CRE52.1)

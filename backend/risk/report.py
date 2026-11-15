@@ -17,6 +17,7 @@ from pnl.market import Market
 from pnl.report import REPORTING_CCY, fx_to_usd
 from risk import history as H
 from risk import limits as L
+from risk import fixings as F
 from risk import sensitivities as S
 from risk import stress as ST
 from risk import var as V
@@ -97,11 +98,14 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     mkt = Market(db, uid, d)
     fx = lambda ccy: fx_to_usd(mkt, ccy)
     trades = db.query(Trade).filter(Trade.user_id == uid).all()
-    lad = S.book_ladder(db, user, trades, d, mkt, fx)
+    from pnl.explain import Valuer
+    valuer = Valuer(db, user)                       # the ladder's valuations, read again by the fixings for a forward's spot 01
+    lad = S.book_ladder(db, user, trades, d, mkt, fx, valuer)
     firm_id = firm_of(db, uid)
     st = settings(db, firm_id)
     tpl = template_uid(db)
     var = V.compute(db, tpl, lad["ladder"], lad["spot01"], d, st, vega=lad.get("vega")) if tpl else {"observations": 0, "enough": False, "missing_factors": []}
+    moves = var.pop("moves", None)          # each factor's usual daily move: beside the VaR, not inside it (the home's picture reads it)
     if tpl and st.get("var_method", "FULL_REVAL") == "FULL_REVAL":
         # the headline VaR reprices the book on each historical day; the ladder VaR rides along as the linear comparison
         var = VF.compute(db, user, tpl, trades, d, mkt, fx, st, linear=var)
@@ -109,10 +113,16 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     rep = {"date": d.isoformat(), "dates": [x.isoformat() for x in dates[-40:]], "reporting_ccy": REPORTING_CCY, "settings": st,
            "ladder": {k: v for k, v in lad.items() if k != "rows"}, "ladder_rows": lad["rows"], "var": var, "stress": stress,
            "scenarios": [{k: s[k] for k in ("id", "name", "group")} for s in ST.SCENARIOS],
-           "history": H.status(db, tpl) if tpl else {}, "firm_id": str(firm_id) if firm_id else None,
+           "moves": moves, "history": H.status(db, tpl) if tpl else {}, "firm_id": str(firm_id) if firm_id else None,
            "generated_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        rep["fixings"] = F.book_fixings(db, user, trades, d, mkt, fx, valuer)
+    except Exception as e:              # noqa: BLE001 — the fixing ladder must not cost the day's risk report
+        db.rollback(); log.info("risk: fixings failed: %s", e)
+        rep["fixings"] = {"asof": d.isoformat(), "resets": [], "by_index": [], "settlements": [], "not_covered": {}, "problems": [{"trade_ref": None, "reason": str(e)[:160]}]}
     lims = L.list_limits(db, firm_id)
     rep["limits"] = L.evaluate(lims, rep)
+    rep["standards"] = L.standards(lims)             # the size a curve is limited at until it has a limit of its own
     rep["breaches"] = sum(1 for x in rep["limits"] if x["status"] == "BREACH")
     rep["warnings"] = sum(1 for x in rep["limits"] if x["status"] == "WARN")
     rep["tables"] = L.tables_present(db)
@@ -162,6 +172,20 @@ def stored_report(db: Session, uid: str, d: Optional[date] = None) -> Optional[d
     rep = dict(r.report)
     rep["from_store"] = True
     rep["stored_at"] = r.created_at.isoformat() if r.created_at else None
+    return rep
+
+
+def with_limits_as_they_stand(db: Session, uid: str, rep: dict) -> dict:
+    """The report's own figures against the firm's limits as they are now. A stored report carries the limits of the
+    moment it was made; a limit set since (or a curve's standard one) is then missing until the next report. The
+    figures a limit is measured on are all in the report, so evaluating again costs no valuation."""
+    if not rep.get("date"):
+        return rep
+    lims = L.list_limits(db, firm_of(db, uid))
+    rep["limits"] = L.evaluate(lims, rep)
+    rep["standards"] = L.standards(lims)
+    rep["breaches"] = sum(1 for x in rep["limits"] if x["status"] == "BREACH")
+    rep["warnings"] = sum(1 for x in rep["limits"] if x["status"] == "WARN")
     return rep
 
 

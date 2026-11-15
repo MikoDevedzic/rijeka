@@ -22,8 +22,10 @@ import Roll, { RiskMark } from '../common/Roll'
 import { ASSET_FACTOR, RISK_FACTORS, labelText } from '../../lib/risk-factors'
 import { ariaKey } from '../../lib/shortcuts'
 
-const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CAPITAL','CURVE SCENARIO','◆ CONFIRM']
-const TAB_MODULE = { 'XVA': 'XVA', 'CAPITAL': 'CAPITAL', '◆ CONFIRM': 'CHAIN_CONFIRM' }
+// No CAPITAL tab since 0.39.1: the cost of capital on a trade is the KVA of its XVA tab, and regulatory capital is
+// a calculation over the book, under Risk → CAPITAL (the owner, 15 November 2026)
+const TABS = ['TRADE','DETAILS','CASHFLOWS','XVA','CURVE SCENARIO','◆ CONFIRM']
+const TAB_MODULE = { 'XVA': 'XVA', '◆ CONFIRM': 'CHAIN_CONFIRM' }
 const TAB_KEY = { 'XVA': 'xva', '◆ CONFIRM': 'confirm' }      // the function key that opens a tab (lib/shortcuts.js)
 
 // ── TabBar ─────────────────────────────────────────────────────────────────

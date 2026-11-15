@@ -50,12 +50,20 @@ ticket). The certificate's corner is 2px: it is paper.
 
 The signed record on the CONFIRM tab is the one light surface (`.cert` in `trade-window/styles.css`). Inside it
 the colour tokens are redefined as the paper's inks, so its rows, links and buttons take them without naming a
-colour. The seal (`trade-window/Seal.jsx`, `seal-rings.js`) is drawn from the trade's hash: the same hash always
-draws the same seal. Only a record that stands on chain has the stamp's blue and red and the centre point: one
-that is signed and not anchored, or closed, has a grey seal without it. The ticket keeps a visited tab mounted
-and hidden, where a canvas has no size, so the seal is drawn when it first has one and again whenever it comes
-back into view. The heading says "Both sides signed the same terms" only where the record itself says it is
+colour. Its mark is the logo (`brand/CertMark.jsx`; the owner, 13 November 2026: "that should be that rijeka logo and not
+random circle thing"): this trade's river, drawn from the record's hash so that the same hash always draws the
+same one, running into the ringed R, in the paper's inks. The ring is the seal, as everywhere the mark is drawn:
+closed only for a record that stands on chain; one that is signed and not anchored, or closed, has the ring as a
+faint outline and the whole in the paper's grey. The ticket keeps a visited tab mounted and hidden, where a canvas
+has no size, so the mark is drawn when it first has one and again whenever it comes back into view.
+The heading says "Both sides signed the same terms" only where the record itself says it is
 bilateral.
+
+The paper confirmation (`trade-window/PaperConfirmation.jsx`) is the same paper as a sheet: a `.cert`, so the same
+inks, the certificate's caps and title, figures in mono, rows ruled like the certificate's. It is the one thing
+the app prints: printed, the sheet stands alone on white at the page's own margins. What it says of a record it
+says in words on the sheet (a stamp and, for a record Rijeka signed for both sides, a boxed line): never by colour
+alone, since paper may be printed in one ink.
 
 ## The exposure chart
 
@@ -276,6 +284,46 @@ ticket's tabs, the pages behind the top bar; not yet every state: an anchored or
 chain), for a person to read after a
 change to the look: `npx playwright test -c playwright.perf.config.js look.spec.js`, then `e2e/.out/look/*.png`.
 
+## The home on a monitor
+
+The trader's home (`components/home/TraderHome.jsx`, `trader-home.js`; since 0.36.0), the first of a home for each
+role. A phone keeps its own home (below) and a launch workspace its "start here" page.
+
+- **Three bands, always in the same place**, ruled apart on the page's own ground, with no cards: where you stand
+  beside what needs you; the P&L statement, the risk picture and the factors; your trades beside the tabs. A later
+  role's home keeps the bands and changes what is in them.
+- **Where you stand is words first.** One line at 16px, each part with a dot in the colour of what it says: green
+  for inside every limit, amber for close, `--down` for passed, a hollow dot for what is pending; the count of
+  limits that are clear is quiet (dim), because it is the good news already said or the remainder of the bad. Under it every
+  limit is a mark on one rail, placed by how much of it is used; the hatched end is past the limit.
+- **One headline figure**, the day's P&L, at 20px (the largest step of the scale) in the colour of its sign.
+- **The risk picture is one stream for each risk factor**, in that factor's colour (`--rf-*`), on a canvas whose
+  colours are the tokens (`theme.js`, and the factor tokens read from the page). Above its line is long, below it
+  short. A stream drawn to a scale of its own, because it has no history, is dashed and says so beside its name.
+  The light along a stream's edge moves at thirty frames a second and not at all with "reduce motion".
+- **A limit is read on two sides** (since 0.37.0), because a position is long or short and a limit is one number
+  on its size. The rail is flat in the middle, short to the left, long to the right, hatched past either end; a 01
+  is a dot, a size with no side (VaR, a stress loss) a square read to the right, an exposure a diamond. On a stream
+  a bucket's limit is a ruled line in limestone (`--text-hi`) above the line and below it, hatched on the far
+  side; a dash is kept for a stream on a scale of its own. A limit on a factor's total is a gauge at the start of
+  its lane, never a line across the buckets. The share used is written in the colour of its state (quiet, amber
+  from the limit's warning level, `--down` past it): on a limit `--down` says "past", and the hatching past a limit
+  is quiet so that it is not read as a breach. LONG and SHORT are marked once at the picture's edge. Beside a
+  factor the gauge is flat in the middle with the limit a fifth from either end.
+  The share of a limit that is used is written in whole percent (83%, 110%), here and on the Limits page: it is
+  read at a glance against 80 and 100, not to a basis point. A figure under a hundred keeps one decimal where a column mixes small and large (a fixing 01 of 2.8 beside one of
+  453), on the Fixings panel. A limit that is the standard size for its kind says
+  so (a dashed, quiet chip on the Limits page; ", the standard" on the home): it is a figure to start from.
+- **A segment of two, three or six is the ticket's joined control** (`tbw-tabs`): the picture's OF ITS LIMIT / A USUAL DAY / PER 01,
+  and the tabs that hold what the old home showed as cards.
+- **Brass on this page is a link to where a thing is dealt with** (OPEN BLOTTER →, THE RISK PAGE →), as on the old
+  home. The page has no action of its own, so no brass button.
+- A name of a factor or a limit is a label (11px, or 12.5px in mono beside its stream); a figure is 12.5px, also the
+  one inside a caption ("≈ 89,981 a day"). A trade's row answers the pointer and the keyboard as every row does.
+- The picture's tip follows the pointer and names the bucket under it and each factor's figure there.
+- The rates strip's snapshot line gives way with an ellipsis before it runs off the page.
+- Under 1180px wide the bands stack in the same order; nothing is pushed sideways.
+
 ## The phone
 
 A screen up to 640px wide (`frontend/src/lib/phone.js`, `components/layout/Phone.css`; since 0.32.0). The owner's
@@ -296,8 +344,8 @@ capital. Those pages still open by their address but are not in the phone's navi
   - a wide table read downwards (`table[data-stack]`, set by `useStackedTables` in `lib/phone.js` for a table of
     five columns or more): each row a block, each cell under its column's heading;
   - a strip folded: the ticket's tabs two rows of three, the figures at the foot three across.
-- **The trade window is the whole screen**: its fields two across and 40px high, its tabs all in view (no
-  CAPITAL), the XVA tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can
+- **The trade window is the whole screen**: its fields two across and 40px high, its tabs all in view, the XVA
+  tab's inputs above its results, PRICE and BOOK sharing the foot, one close button a thumb can
   hit. A grid that folds by itself (`auto-fit`) is left to.
 - **An iPhone draws a date field and a dropdown by its own rules** (Safari on iOS; seen in the simulator, 13 November
   2026): a date field takes a width of its own and ran over the field beside it, and a dropdown is drawn shorter
