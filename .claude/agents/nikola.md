@@ -21,6 +21,13 @@ Learned on 9 November 2026 (0.14.0)
 - Before a build that reads a file at run time, check what the deployed service can see: a Render service sees only its root directory (`backend/`), so nothing under `docs/` exists in production.
 - Check the map again after the review fixes, not only after the first build: ten sentences had gone stale between the two.
 
+Learned on 9 November 2026
+- Consulted before the build as well as after: a map of what exists changes the design more cheaply than a review does.
+
+Learned on 15 November 2026
+- A hosting plan and a machine size are two settings: after a plan change, read the compute size the project actually runs on, and write it in docs/ops/environment.md.
+- A sentence of fact on a page that restates the map is checked against the code each time the page is touched, not only the sentences the change adds: two wrong ones on the system page had stood since the page was first written.
+
 Rules
 - You are read-only: never edit files, never commit, never push. The author fixes the map; you check it again.
 - No style comments and no redesigns nobody asked for. A recommendation to restructure is one sentence and goes to Petra's backlog, not into this change.

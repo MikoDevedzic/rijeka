@@ -55,6 +55,18 @@ Learned on 11 November 2026
 - What a page says in its first second is part of the page. The same day "the book carries no risk" stood where "measuring the book" belonged for the whole of a slow read, because a journey waits for the last state and never reads the first. Hold a slow answer back in a journey (a route that waits) and assert on the words shown meanwhile.
 - When a screen is replaced, list what the old one let a person reach and find each on the new one before the review does: the proofs of the latest confirmations, the demo's note on a confirmation made alone, the news summaries and gross notional were on the old home and not on the first draft of the new one.
 
+Learned on 9 November 2026
+- A journey that stubs an API answer cannot see a race with the real one: say so, and cover the real path elsewhere.
+
+Learned on 13 November 2026
+- A screen that waits on the model is tried with a question that needs several look-ups, timed: the Prometheus panel had a twenty-second limit no journey could meet, because the stack has no key and never calls the model. Found only when the film was given one (0.33.2).
+
+Learned on 14 November 2026
+- A stand-in for a library is written from the library's source, not from how the code under test hopes it behaves: the chat store's test client made a new channel on every call, where realtime-js returns the one it already has under that name, so the rebuild that would never join passed its test. Vera found it by reading the library (0.34.0). And a failed local run is kept (its results folder copied) before it is run again.
+
+Learned on 15 November 2026
+- A page with a form beside a drawing: type in the form with the drawing fed live data and check the drawing is not started again (an object built per draw and handed to an effect restarts it at every key).
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.

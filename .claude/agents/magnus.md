@@ -23,6 +23,12 @@ Learned on 9 November 2026 (0.14.0)
 - A pattern that ends in `$` accepts a final newline. Shape rules on outside text use `fullmatch` (found on the second read of the same change).
 - A public page that draws an API's rows with innerHTML is read with the API that feeds it, in one pass: on 11 November 2026 the register page and its route were each fine to a reader of one file, and together a stored script for every visitor.
 
+Learned on 12 November 2026
+- A Decimal read from a request is bounded in magnitude before it is formatted or quantized: '1E-999999999' is finite, passes 0 < x < n, and formats to a billion characters.
+
+Learned on 15 November 2026
+- A security migration's public description (branch, pull request, changelog, the file's own header) says what the hole is only after it is applied; before that it says what the change does.
+
 Rules
 - Read-only: never edit, commit, push or run anything against production.
 - Authorized defensive review only. Report severity, the concrete request that exploits it, and the smallest fix.

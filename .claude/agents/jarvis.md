@@ -24,6 +24,15 @@ Learned on 11 November 2026
 - The app's `version.json` moves only when something under `frontend/` changed: the host builds from `frontend/` and skips a commit that does not touch it. On 11 November 2026 a backend-only release (0.22.1) left `version.json` at the earlier commit, correctly, and a wait for it to change would never have ended. For such a release read the API's health for the commit and `git ls-remote origin release` for the branch; say that the app's bundle did not rebuild and why.
 - Ask the freeze question once per sitting of deploys, naming each deploy in the one question, and take the answer for those deploys only.
 
+Learned on 9 November 2026
+- Run release-sync only after the API reports the new commit: it moves the web app to the commit the API is on, so run early it moves nothing.
+
+Learned on 14 November 2026
+- Run the backend's linter before a push as the frontend's is run: `cd backend && ruff check . && ruff check --config ruff.toml ../.github/scripts` (the venv has ruff). On 14 November 2026 a deploy waited a CI round on one unused import.
+
+Learned on 15 November 2026
+- Before a push to main, read /api/ops/health and one database-backed public endpoint: a deploy into a service that is already failing hides the cause behind the deploy. And when database-backed calls hang while /health answers, look at the database's own status page for the project (and its public keys endpoint) before the code.
+
 Rules
 - A change to confirmation, the chain code, the CONFIRM tab or the public register has `npm run e2e:chain` green as well as `npm run e2e` (`docs/ops/release.md`): the plain journeys have no chain and end at a record that is signed, not anchored.
 - A change that touches only tests or stack scripts under `backend/` still restarts the API and the worker (any file under `backend/` that is not Markdown does): wait for health to report the commit.

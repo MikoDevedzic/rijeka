@@ -20,6 +20,13 @@ How you work
 - For anything measurable, read the computed style in a journey rather than trusting the picture: a field and the figure beside it have the same `fontFamily` and `fontSize`.
 - Report findings as HIGH (the same thing set two ways on one screen), MEDIUM (two screens that disagree) or LOW (a literal where a token exists), each with file, line and the token or step to use. Say which screens you looked at and which you did not.
 
+Learned on 14 November 2026
+- Copy the pictures a design brief names before the agent is launched, not after.
+
+Learned on 15 November 2026
+- A picture given to her must show the whole of the thing changed (an element shot, to its last row and its axis), not the viewport: on the risk picture the defects were below the fold.
+- When one row holds two sets of things told apart by colour, check that no colour is used in both sets.
+
 Rules
 - Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.
 - The local stack only. Never the hosted app, never credentials.

@@ -26,6 +26,22 @@ Learned on 11 November 2026
 - A tenor's pillar is a round count of days and a ticket's tenor date is a calendar date. Check every label and every branch that compares the two at the boundary: on 11 November 2026 a two-year ticket, 731 to 734 days from spot, was called implied beyond a curve quoted at two years (730 days). The figure was right to a few days of carry; the word was wrong.
 - A small difference measured by simulating payoffs carries the payoff's sampling error. On 12 November 2026 the gap between an at-the-money option's mark and what regime paths pay was simulated as −1.9 % at six months and −1.1 % at two years; the coefficients of variation reported beside it (0.31, 0.17) put it at −1.2 % and −0.4 % (−CV²/8), and averaging the closed form over the variance gave exactly those. Where the value given what is random is known in closed form, average the closed form; and check each figure against the others in the same report before it is quoted.
 
+Learned on 9 November 2026
+- A filter is tested against the reviewer's failing cases, plus two stale marks side by side and one at each end of the chain.
+- Dates are models too: every calendar and every tenor rule gets a reference comparison against QuantLib, not a hand-asserted test.
+
+Learned on 10 November 2026
+- Not Emmy's miss, the author's, recorded here because it is about a market input: the owner was told digital-asset vols were synthetic, from an old note; they have come from Deribit's public marks since 9 Nov. Corrected within the hour. A statement about where a number comes from is checked against docs/architecture.md 'Market data, source by source' first.
+
+Learned on 12 November 2026
+- A sum over a time grid is validated by running the same trade on a finer grid: a figure that moves by more than the paths' noise when the steps are refined is not converged, whatever the workbook reproduces. KVA dropped its last step for months because the workbook stated the convention and reproduced it.
+
+Learned on 14 November 2026
+- A currency fixing is a spot rate: the price for delivery on the fixing date's spot date. Do not carry a digital-asset convention (spot settles at once) onto a currency pair without asking what the quoted rate delivers. Emmy caught it before it shipped.
+
+Learned on 15 November 2026
+- When the author explains a gap as 'second order', check that it scales with the bump at every step and that the base figure itself does not move with the bump; a step is a kink or a lookup, not convexity.
+
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
 - Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.

@@ -19,6 +19,18 @@ When a pinned figure moves
 - The pinned book reads the latest stored calibration and market data. A test that saves either (a calibration dated 2099, a desk's points) changes it on the next run of the same local database. When the pinned book fails with nothing in the diff to explain it, look at what earlier tests left behind.
 - Two figures each rounded to a cent agree to a cent and a half, not to a millionth. On 12 November 2026 an integration test that held "twice the margin, twice the MVA" to a relative 1e-6 on two answers rounded to cents failed on `main` with nothing changed: the cents fell the other way that day (−1132.27 against 2 × −566.13). A tolerance is read against the rounding of what it compares, and a test whose inputs come from today's date is run in thought on other days.
 
+Learned on 9 November 2026
+- A file of expected numbers written on one machine is compared on another to a tolerance, never bit for bit: libm rounds erf and exp differently.
+
+Learned on 12 November 2026
+- The whole `npm test` runs before every push, not the folder that changed: the methodology pages are built from the model inventory as well as the .tex, and an inventory edit after the last build failed CI's frontend check on PR 140.
+
+Learned on 14 November 2026
+- A check that uses the same accrual and discount factor on both sides tests that a number feeds, not that it is right: the fixing ladder agreed with the pricer's cashflows to the cent while leaving out the period's compounding and a leg's leverage. Emmy found both by moving one day's forward under the pricer. Bump the input, do not re-add the outputs.
+
+Learned on 15 November 2026
+- Before blaming a release for load, measure it: count the statements and the CPU seconds of the action on the local stack. The suspicion that 0.40.0 overloaded the database did not survive the count.
+
 Rules
 - Public standards only (Basel, ISDA, CFTC text). Nothing from any client engagement enters formulas, tests or fixtures.
 - Report in numbers: before, after, difference, tolerance, cause.

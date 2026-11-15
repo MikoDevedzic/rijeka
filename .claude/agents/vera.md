@@ -48,6 +48,13 @@ Learned on 10 November 2026 (the ticket, easier to read)
 - A test that sends or bounds a date by today takes today from the clock the route reads. The process runs on New York's clock (`backend/main.py`), so `date.today()` and `datetime.now(timezone.utc).date()` differ between 19:00 and midnight New York, and only a CI run in those hours sees it: two tests of 0.30 (the unwind fee's date, the day after a touch) passed every run by day and turned the integration check red on the first evening run (13 November 2026). Where a diff adds a date rule, name the clock on both sides, in the route, the test and the form. A date a test only sends may stay on the process's clock where the route's bound can never be earlier than it; the reason is written beside it.
 - A test that reads live dates from today meets a holiday week one day. `test_tenor_dates` asserted that an option's default delivery is its tenor's forward date, true except when no business day has that date as its spot date (the documented fallback); it failed for exactly one day, 13 November 2026, when the EURUSD 3M delivery could be reached only from Presidents' Day. Where a test takes its dates from today, ask what it asserts in the case the rule calls an exception.
 
+Learned on 14 November 2026
+- A new booking check must be tried against every record already booked and confirmed (the mirror of a confirmed record goes through the booking model). Vera caught it.
+
+Learned on 15 November 2026
+- When a key in an API response changes meaning, ask what a browser tab still running the previous app does with it: the old bundle outlives the deploy by as long as the tab stays open, not by the minutes between the two deploys.
+- When a read is put behind a memo, look at how its loader fails: a loader that swallows its error and returns an empty value turns one failed read into an empty value for the life of the memo.
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.
