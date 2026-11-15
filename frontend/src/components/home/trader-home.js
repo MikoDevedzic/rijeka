@@ -148,6 +148,78 @@ export function heights(list, mode) {
   })
 }
 
+// ── a factor against its limits ──────────────────────────────────────────────
+// A limit is one number on the size, whichever the sign (backend/risk/limits.py measures |value|), so it stands on
+// both sides of a stream's line: the long limit above, the short limit below. The limits that are on a factor the
+// picture draws, for the whole book: a curve's bucket (KR01:<curve>:<bucket>), a curve's total (IR01:<curve>), an
+// asset's spot 01 (SPOT01:<asset>). A limit on a desk or a book is on a part of the book, and is not drawn on it.
+export const LIMIT_MAX = 1.18                              // how far past its limit a stream is still drawn
+const isAll = (l) => String(l?.scope || 'ALL').toUpperCase() === 'ALL'
+const lim = (l) => ({ id: l.id, limit: Number(l.limit), warn: Number.isFinite(Number(l.warn_pct)) ? Number(l.warn_pct) / 100 : 0.8 })
+export function factorLimits(limits = []) {
+  const by = new Map()
+  const at = (key) => { const k = key.toUpperCase(); if (!by.has(k)) by.set(k, { total: null, buckets: BUCKETS.map(() => null) }); return by.get(k) }
+  for (const l of limits || []) {
+    if (!isAll(l) || !(Number(l.limit) > 0)) continue
+    const [head, a, b] = String(l.metric || '').split(':')
+    const h = head.toUpperCase()
+    if (h === 'KR01' && a && BUCKETS.includes(b)) at(`IR:${a}`).buckets[BUCKETS.indexOf(b)] = lim(l)
+    else if (h === 'IR01' && a) at(`IR:${a}`).total = lim(l)
+    else if (h === 'SPOT01' && a) at(`SPOT:${a}`).total = lim(l)
+  }
+  return by
+}
+export const limitsOf = (f, by) => by?.get(String(f.key).toUpperCase()) || null
+// The ids of the limits that stand on one of these factors: the ones the picture and the gauges already show.
+export const shownOn = (list, by) => new Set(list.flatMap(f => { const fl = limitsOf(f, by); return fl ? [fl.total, ...fl.buckets].filter(Boolean).map(l => l.id) : [] }))
+const stateOf = (u, warn) => Math.abs(u) >= 1 ? 'BREACH' : Math.abs(u) >= warn ? 'WARN' : 'OK'
+// How a factor stands against its limits: each bucket's signed use of its own limit (null where the bucket has none),
+// the total's, and the tightest of them with the room left on that side.
+export function against(f, fl) {
+  if (!fl) return null
+  const per = f.v.map((x, i) => fl.buckets[i] ? { u: x / fl.buckets[i].limit, state: stateOf(x / fl.buckets[i].limit, fl.buckets[i].warn), limit: fl.buckets[i].limit, pos: x, bucket: BUCKETS[i] } : null)
+  const tot = fl.total ? { u: f.total / fl.total.limit, state: stateOf(f.total / fl.total.limit, fl.total.warn), limit: fl.total.limit, pos: f.total, bucket: null } : null
+  const all = [...per.filter(Boolean), tot].filter(Boolean)
+  if (!all.length) return null
+  const head = all.reduce((a, b) => Math.abs(b.u) > Math.abs(a.u) ? b : a)
+  return { per, total: tot, head: { ...head, room: head.limit - Math.abs(head.pos) } }
+}
+
+// What the picture draws for each factor: the height of each bucket between −1 and 1 (heights, above), where its
+// limit stands in each bucket on the same scale (null where there is none, or where it is off the lane), and the
+// figure to write at a bucket. 'limit' draws each bucket as the share of its own limit it uses (of the total's
+// where the limit is on the total), so a stream that reaches its dashed line is at its limit on every factor.
+export function scene(list, mode, by) {
+  const hs = heights(list, mode === 'limit' ? 'raw' : mode)
+  const big = mode === 'day' ? Math.max(0, ...list.filter(f => f.hasDay).flatMap(f => f.day.map(Math.abs))) : 0
+  const root = (x, top) => top > 0 ? Math.sqrt(Math.abs(x) / top) : null
+  return list.map((f, k) => {
+    const fl = limitsOf(f, by), ag = against(f, fl), top = Math.max(...f.v.map(Math.abs))
+    const L = (i) => fl?.buckets[i]?.limit ?? fl?.total?.limit ?? null
+    let h = hs[k].h, own = hs[k].own, none = false
+    if (mode === 'limit') {
+      const widest = fl ? Math.max(...BUCKETS.map((_, i) => L(i) || 0)) : 0
+      none = !widest
+      h = none ? f.v.map(x => (top ? x / top : 0) * 0.6) : f.v.map((x, i) => x / (L(i) || widest))
+      own = false
+    }
+    const bank = BUCKETS.map((_, i) => {
+      const l = L(i)
+      if (l == null) return null
+      const y = mode === 'limit' ? 1 : mode === 'day' && f.hasDay ? root(l * f.move[i], big) : root(l, top)
+      return y != null && y <= LIMIT_MAX + 0.02 ? y : null
+    })
+    // the figure at a bucket: its own limit's use; a limit on the total is written once, at the largest bucket
+    const tags = BUCKETS.map(() => null)
+    if (ag) {
+      ag.per.forEach((p, i) => { if (p && Math.abs(f.v[i]) >= EPS) tags[i] = p })
+      if (ag.total && !ag.per.some(Boolean)) { let i = 0; f.v.forEach((x, j) => { if (Math.abs(x) > Math.abs(f.v[i])) i = j }); tags[i] = ag.total }
+    }
+    return { h: h.map(x => Math.max(-LIMIT_MAX, Math.min(LIMIT_MAX, x))), own, none, bank, tags, against: ag }
+  })
+}
+export const canLimit = (list, by) => list.some(f => limitsOf(f, by))
+
 // ── limits ───────────────────────────────────────────────────────────────────
 const round = (n) => Math.round(n)
 export function limitLabel(lim, scenarios = []) {
@@ -157,11 +229,23 @@ export function limitLabel(lim, scenarios = []) {
     : head === 'STRESS' ? `STRESS ${(scenarios.find(s => s.id === a)?.name || a || '').toUpperCase()}` : head === 'PFE_PEAK' ? `PFE ${a || ''}`.trim() : pretty(m)
   return lim?.scope && String(lim.scope).toUpperCase() !== 'ALL' && lim.scope_name ? `${name} · ${String(lim.scope_name).toUpperCase()}` : name
 }
-// One mark per limit that has a figure against it, the closest to its limit first.
-export function limitMarks(limits = [], scenarios = []) {
+// One mark per limit that has a figure against it, the closest to its limit first. `side` says which way the figure
+// it limits points: 1 long, −1 short (read from the factor the limit is on, for the whole book: the API gives the
+// size alone), 0 for a size that has no side (a VaR, a stress loss, an exposure, a limit on part of the book).
+export function limitMarks(limits = [], scenarios = [], list = [], npv = null) {
+  const fac = new Map(list.map(f => [String(f.key).toUpperCase(), f]))
+  const sideOf = (l) => {
+    if (!isAll(l)) return 0
+    const [head, a, b] = String(l.metric || '').split(':'), h = head.toUpperCase(), sgn = (x) => x > 0 ? 1 : x < 0 ? -1 : 0
+    if (h === 'KR01') { const f = fac.get(`IR:${a}`.toUpperCase()), i = BUCKETS.indexOf(b); return f && i >= 0 ? sgn(f.v[i]) : 0 }
+    if (h === 'IR01') return a ? sgn(fac.get(`IR:${a}`.toUpperCase())?.total || 0) : sgn(list.filter(f => f.factor === 'ir').reduce((s, f) => s + f.total, 0))
+    if (h === 'SPOT01') return sgn(fac.get(`SPOT:${a}`.toUpperCase())?.total || 0)
+    if (h === 'NPV') return sgn(npv || 0)
+    return 0
+  }
   return (limits || []).filter(l => Number.isFinite(l?.utilisation_pct)).map(l => ({
-    id: l.id, name: limitLabel(l, scenarios), u: l.utilisation_pct / 100, pct: round(l.utilisation_pct), status: l.status, value: l.value, limit: l.limit,
-    kind: /^(PFE|EPE|CVA|CE)/.test(String(l.metric)) ? 'c' : 'o',
+    id: l.id, name: limitLabel(l, scenarios), u: l.utilisation_pct / 100, pct: round(l.utilisation_pct), status: l.status, value: l.value, limit: l.limit, side: sideOf(l),
+    kind: /^(PFE|EPE|CVA|CE)/.test(String(l.metric)) ? 'c' : /^(VAR|ES|STRESS)/.test(String(l.metric).toUpperCase()) || !isAll(l) ? 's' : 'o',
   })).sort((a, b) => b.u - a.u)
 }
 // Where you stand, in words. A status is the API's (BREACH at or past the limit, WARN at the limit's own warning level).
@@ -175,13 +259,15 @@ export function standing(marks, pending = 0) {
   if (marks.length && clear) words.push(['dim', `${clear} clear`])
   if (pending) words.push(['hollow', `${pending} to confirm`])
   const t = marks[0]
-  return { words, tight: t ? `Closest: ${t.name}, at ${t.pct}% of its limit.` : '' }
+  return { words, tight: t ? `Closest: ${t.name}${t.side ? (t.side > 0 ? ', long' : ', short') : ''}, at ${t.pct}% of its limit.` : '' }
 }
-// Where each mark and its label go on a rail `width` px wide that ends at 125% of a limit. A label that would
+// Where each mark and its label go on a rail `width` px wide: flat in the middle, 125% of a limit at either end. A
+// short figure is to the left of the middle, a long one and a size with no side to the right. A label that would
 // run into its neighbour goes up a lane; the rail's own height follows the lanes used.
 export const RAIL_MAX = 1.25
+export const railAt = (m) => 0.5 + (m.side < 0 ? -1 : 1) * Math.min(Math.max(m.u, 0), RAIL_MAX) / RAIL_MAX / 2        // 0 to 1 along the rail
 export function railLayout(marks, width, charW = 6.9) {
-  const out = marks.map(m => ({ ...m, x: Math.min(Math.max(m.u, 0), RAIL_MAX) / RAIL_MAX * width })).sort((a, b) => a.x - b.x)
+  const out = marks.map(m => ({ ...m, x: railAt(m) * width })).sort((a, b) => a.x - b.x)
   const ends = []
   for (const m of out) {
     m.text = `${m.name} ${m.pct}%`

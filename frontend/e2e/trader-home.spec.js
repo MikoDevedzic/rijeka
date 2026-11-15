@@ -32,7 +32,7 @@ test('the home on a monitor: the statement, the risk by tenor, what needs you an
   const river = home.getByTestId('th-river')
   await expect(river.locator('.th-lane', { hasText: 'USD SOFR · IR01' })).toBeVisible({ timeout: 120_000 })
   await expect(river.locator('.th-lane .fig').first()).toHaveText(/^[+−][\d,]+$/)
-  expect(await ink(river.locator('canvas')), 'the streams are drawn').toBeGreaterThan(2000)
+  await expect.poll(() => ink(river.locator('canvas')), 'the streams are drawn').toBeGreaterThan(2000)
   await expect(river.getByTestId('th-mode'), 'no history of moves on the stack: no money scale is offered').toHaveCount(0)
   await expect(river).toContainText('each stream to its own scale')
   await expect(river.locator('canvas')).toHaveAttribute('aria-label', /USD SOFR IR01 [+−][\d,]+ per bp/)
@@ -122,6 +122,9 @@ test('with a history of moves and limits: the streams share one scale in money, 
       { id: 'l2', metric: 'SPOT01:BTC', scope: 'ALL', limit: 25000, warn_pct: 80, value: 22900, utilisation_pct: 91.6, status: 'WARN' },
       { id: 'l3', metric: 'IR01', scope: 'ALL', limit: 1000, warn_pct: 80, value: 1100, utilisation_pct: 110, status: 'BREACH' },
     ]
+    // and one on a tenor bucket of the first curve the book carries, 80% used, on whichever side the book is
+    const row = (j.ladder.ladder || []).find(r => Math.abs(r.buckets?.['1-5Y'] || 0) > 1)
+    if (row) { const size = Math.abs(row.buckets['1-5Y']); j.limits.push({ id: 'l4', metric: `KR01:${row.curve}:1-5Y`, scope: 'ALL', limit: size / 0.8, warn_pct: 80, value: size, utilisation_pct: 80, status: 'WARN' }) }
     given = j
     await route.fulfill({ response: res, json: j })
   })
@@ -133,7 +136,7 @@ test('with a history of moves and limits: the streams share one scale in money, 
   const mode = river.getByTestId('th-mode')
   await expect(mode.getByRole('button', { name: 'A USUAL DAY' })).toHaveAttribute('aria-pressed', 'true')
   await expect(river).toContainText('one scale for all')
-  expect(await ink(river.locator('canvas'))).toBeGreaterThan(2000)
+  await expect.poll(() => ink(river.locator('canvas'))).toBeGreaterThan(2000)
   const box = await river.locator('.th-cv').boundingBox()
   await app.mouse.move(box.x + box.width * 0.1, box.y + box.height * 0.5)
   await expect(river.locator('.th-tip')).toContainText('TO 1Y')
@@ -149,12 +152,36 @@ test('with a history of moves and limits: the streams share one scale in money, 
   // where you stand: the words, the closest limit, and a mark for each limit
   const stand = app.getByTestId('th-stand')
   await expect(stand).toContainText('1 limit passed')
-  await expect(stand).toContainText('1 close')
-  await expect(stand).toContainText('Closest: IR01, at 110% of its limit.')
-  await expect(stand.locator('.th-rl-m')).toHaveCount(3)
-  await expect(stand.locator('.th-rl-m.BREACH')).toHaveCount(1)
-  await expect(app.getByTestId('th-limits').locator('.th-lim')).toHaveCount(3)
-  await expect(app.getByTestId('th-factors').locator('.th-row', { hasText: /CRY01/ })).toContainText(/≈ [\d,]+ a day · TO 1Y/)
+  await expect(stand).toContainText('2 close')
+  await expect(stand).toContainText(/Closest: IR01, (long|short), at 110% of its limit\./)
+  const rail = stand.getByTestId('th-rail')
+  await expect(rail.locator('.th-rl-track .th-rl-m')).toHaveCount(4)
+  await expect(rail.locator('.th-rl-track .th-rl-m.BREACH')).toHaveCount(1)
+  // a limit is read on two sides: flat in the middle, a long figure to the right of it; a VaR has no side and is a square
+  await expect(rail).toContainText('FLAT'); await expect(rail).toContainText('SHORT · THE LIMIT'); await expect(rail).toContainText('LONG · THE LIMIT')
+  await expect(rail.locator('.th-rl-track .th-rl-m.s[data-side="0"]'), 'the VaR').toHaveCount(1)
+  const btcMark = rail.locator('.th-rl-track .th-rl-m.WARN[data-side="1"]').first()
+  expect(parseFloat(await btcMark.evaluate(el => el.style.left)), 'a long figure stands right of the middle').toBeGreaterThan(50)
+  await expect(app.getByTestId('th-limits').locator('.th-lim'), 'the two that are on no stream: the VaR and the book\'s IR01').toHaveCount(2)
+  await expect(app.getByTestId('th-factors')).toContainText('OTHER LIMITS')
+  // beside its factor: a gauge, the share of the limit used, the side and the room left
+  const btc = app.getByTestId('th-factors').locator('.th-row', { hasText: /CRY01/ })
+  await expect(btc.getByTestId('th-gauge')).toBeVisible()
+  await expect(btc).toContainText('92% of 25,000 · long')
+  await expect(btc).toContainText('2,100 of room')
+  await expect(app.getByTestId('th-factors').locator('.th-row', { has: app.getByTestId('th-gauge') }).filter({ hasText: /80% of [\d,]+ · 1Y TO 5Y · (long|short)/ }), 'the curve whose bucket has a limit').toHaveCount(1)
+  // the picture against the limits: a third scale, and the tip names the bucket's limit
+  const scale = app.getByTestId('th-mode')
+  await scale.getByRole('button', { name: 'OF ITS LIMIT' }).click()
+  await expect(app.getByTestId('th-river')).toContainText('how much of its limit a bucket uses')
+  await expect(app.getByTestId('th-river')).toContainText('The dashed lines across a lane are its limit')
+  await expect.poll(() => ink(app.getByTestId('th-river').locator('canvas')), 'drawn again on the new scale').toBeGreaterThan(2000)
+  const cvb = await app.getByTestId('th-river').locator('.th-cv').boundingBox()
+  await app.mouse.move(cvb.x + cvb.width * 0.38, cvb.y + cvb.height * 0.4)
+  await expect(app.getByTestId('th-river').locator('.th-tip')).toContainText(/80% of [\d,]+/)
+  await shot(app, 'limits-of-its-limit')
+  await app.mouse.move(2, 2)
+  await scale.getByRole('button', { name: 'A USUAL DAY' }).click()
   await expect(app.getByTestId('th-var')).toContainText('183,800')
   await expectNoHorizontalOverflow(app.getByTestId('trader-home'), 'the home with limits')
   await shot(app, 'history-1440')

@@ -3,6 +3,33 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.37.0 · 14 November 2026
+
+**A limit is read on the trader's home on both sides: flat in the middle, short one way, long the other.** The
+owner, of the home with no limits set: "it would be better if we had limits set up. then trader knows hows close
+he is to his 01 limits....keep in mind that risk can be positive and negative"; and of the two ways to hold a
+limit, "one number either side." A limit stays what it was: one number on the size, set under Configurations,
+Market risk, Limits. What changes is how the home draws it.
+
+- **The rail is two-sided.** Flat is the middle; a short position stands to the left by how much of its limit it
+  uses, a long one to the right; both ends are hatched past the limit. A size with no side (a VaR, a stress loss,
+  an exposure, a limit on a desk or a book) is read to the right, as a square where a 01 is a dot.
+- **A limit on a 01 is drawn on its stream**: a dashed line above the stream's line and one below, bucket by
+  bucket for a limit on a tenor bucket (`KR01:<curve>:<bucket>`), across the lane for a limit on a curve's total
+  (`IR01:<curve>`) or an asset's spot 01 (`SPOT01:<asset>`). The figure at a bucket is how much of the limit is
+  used, amber from the limit's own warning level and red past it.
+- **A third height, OF ITS LIMIT**, where any such limit is set: each bucket is drawn as the share of its limit it
+  uses, so a stream that reaches its dashed line is at its limit on every factor alike. A factor with no limit is
+  drawn dashed and says so.
+- **Beside each factor with a limit**: a gauge with flat in the middle, the share used, the side, and the room left
+  in the factor's own unit. A limit shown there is not listed again under it; the rest (VaR, a stress loss, the
+  book's IR01) are OTHER LIMITS. LIMITS → opens the page they are set on, for those who may set them.
+
+What it is not: no limit can yet be set on a vega or a forward basis, or with a different size for long and short;
+the limits are the firm's on the user's book, not a trader's own; a limit on a desk or a book is on the rail and not
+on a stream, because a stream is the whole book. The share drawn is the same ratio the API reports
+(`utilisation_pct`), with the side read from the factor's own figure. No change to the engine or the database.
+
 ## 0.36.0 · 14 November 2026
 
 **The home on a monitor is the trader's home.** The owner: "there is maybe a lot of things on the home page. and

@@ -13,7 +13,7 @@ import { useChatStore, selectUnreadTotal } from '../../store/useChatStore'
 import PolicyPath from './PolicyPath'
 import WeekAhead from './WeekAhead'
 import BookBrief from './BookBrief'
-import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, heights, canDay, peak, carry, staleness, limitMarks, standing, railLayout, RAIL_MAX, statement, moved, fmt0, signed, tone } from './trader-home'
+import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, canDay, peak, carry, staleness, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, statement, moved, fmt0, signed, tone } from './trader-home'
 import './TraderHome.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -104,7 +104,8 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
   const unread = useChatStore(selectUnreadTotal)
   const rep = risk.data
   const list = useMemo(() => factors(rep, trades), [rep, trades])
-  const marks = useMemo(() => limitMarks(rep?.limits, rep?.scenarios), [rep])
+  const marks = useMemo(() => limitMarks(rep?.limits, rep?.scenarios, list, rep?.ladder?.npv_usd), [rep, list])
+  const fl = useMemo(() => factorLimits(rep?.limits), [rep])          // the limits that stand on a factor the picture draws
   const pending = trades.filter(t => t.status === 'PENDING').length, confirmed = trades.filter(t => t.status === 'CONFIRMED').length
   const stand = standing(marks, pending)
   const actions = useMemo(() => {
@@ -134,7 +135,7 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
                   {riskOn && rep ? stand.words.map(([c, t]) => <span key={t} className={`th-w ${c}`}><i />{t}</span>)
                     : <>{pending > 0 && <span className="th-w hollow"><i />{pending} to confirm</span>}<span className="th-w dim"><i />{trades.length} trade{trades.length === 1 ? '' : 's'}</span>{confirmed > 0 && <span className="th-w sealed"><i />{confirmed} confirmed</span>}</>}
                 </div>
-                {riskOn && rep && <p className="th-tight">{stand.tight || (rep.can_write ? 'A limit on VaR, a 01 or a stress loss is set on the Risk page; it is then drawn here.' : 'Limits are set by your risk manager; they are then drawn here.')}{rep.date ? ` Risk as of ${fmtD(rep.date)}.` : ''}</p>}
+                {riskOn && rep && <p className="th-tight">{stand.tight || (rep.can_write ? 'A limit on a 01, on VaR or on a stress loss is set under Configurations, Market risk, Limits; it is then drawn here, on the rail and on its stream.' : 'Limits are set by your risk manager; they are then drawn here.')}{rep.date ? ` Risk as of ${fmtD(rep.date)}.` : ''}{rep.can_write && <> <button className="dh-link" data-testid="th-set-limits" onClick={() => navigate('/configurations/market-risk/limits')}>{marks.length ? 'LIMITS →' : 'SET LIMITS →'}</button></>}</p>}
                 {riskOn && risk.loading && <p className="th-tight">Measuring the book…</p>}
                 {riskOn && rep && risk.behind === 'running' && <p className="th-tight th-behind" data-testid="th-behind">Measuring the book again: this is the report as it was stored.</p>}
                 {riskOn && rep && BEHIND[risk.behind] && <p className="th-tight th-behind warn" data-testid="th-behind">{BEHIND[risk.behind]}, and could not be run again just now ({why429(risk.liveErr)}). The Risk page runs it.</p>}
@@ -166,8 +167,8 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
 
       <section className="th-hero">
         <Statement on={pnlOn} off={off('PNL')} st={pnl} rep={riskOn ? rep : null} trades={trades} pending={pending} confirmed={confirmed} navigate={navigate} />
-        <Streams on={riskOn} off={off('MARKET_RISK')} st={risk} list={list} any={trades.length > 0} />
-        <Factors on={riskOn} rep={rep} list={list} marks={marks} any={trades.length > 0} navigate={navigate} />
+        <Streams on={riskOn} off={off('MARKET_RISK')} st={risk} list={list} fl={fl} any={trades.length > 0} />
+        <Factors on={riskOn} rep={rep} list={list} marks={marks} fl={fl} any={trades.length > 0} navigate={navigate} />
       </section>
 
       <section className="th-two">
@@ -208,7 +209,10 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
   )
 }
 
-// The limits on one rail: a mark for each, placed by how much of it is used. The hatched end is past the limit.
+// The limits on one rail, flat in the middle: a mark for each, placed by how much of it is used, a short figure to the
+// left and a long one to the right (a limit is one number on the size, so it stands at both ends). A size with no
+// side (a VaR, a stress loss, an exposure) is read to the right. The hatched ends are past a limit.
+const SHAPE = { o: 'a 01, on the side it is on', s: 'a size: VaR, a stress loss, a limit on a desk or a book', c: 'an exposure to a counterparty' }
 function Rail({ marks }) {
   const ref = useRef(null), w = useWidth(ref)
   const lay = useMemo(() => railLayout(marks, w || 0), [marks, w])
@@ -224,10 +228,11 @@ function Rail({ marks }) {
         ))}
       </div>}
       <div className="th-rl-track">
-        <i className="th-rl-zone" />
-        {marks.map(m => <i key={m.id} className={`th-rl-m ${m.kind} ${m.status}`} style={{ left: `${Math.min(Math.max(m.u, 0), RAIL_MAX) / RAIL_MAX * 100}%` }} title={`${m.name}: ${m.pct}% of its limit`} />)}
+        <i className="th-rl-zone s" /><i className="th-rl-zone l" /><i className="th-rl-mid" />
+        {marks.map(m => <i key={m.id} className={`th-rl-m ${m.kind} ${m.status}`} data-side={m.side} style={{ left: `${railAt(m) * 100}%` }} title={`${m.name}: ${m.pct}% of its limit${m.side ? (m.side > 0 ? ', long' : ', short') : ''}`} />)}
       </div>
-      <div className="th-rl-ticks"><span style={{ left: 0 }}>0</span><span style={{ left: '40%' }}>50%</span><span style={{ left: '80%' }}>100% · THE LIMIT</span></div>
+      <div className="th-rl-ticks"><span style={{ left: '10%' }}>SHORT · THE LIMIT</span><span style={{ left: '30%' }}>50%</span><span style={{ left: '50%' }}>FLAT</span><span style={{ left: '70%' }}>50%</span><span style={{ left: '90%' }}>LONG · THE LIMIT</span></div>
+      <div className="th-rl-key">{['o', 's', 'c'].filter(k => marks.some(m => m.kind === k)).map(k => <span key={k}><i className={`th-rl-m ${k}`} />{SHAPE[k]}</span>)}</div>
     </div>
   )
 }
@@ -271,10 +276,10 @@ function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
 
 // The picture: one stream for each risk factor, along the tenor bucket the risk sits in. Above its line the book is
 // long that factor, below it short; where there is no risk the line is bare.
-function Streams({ on, off, st, list, any }) {
-  const day = canDay(list)
-  const [want, setWant] = useState(() => { try { return localStorage.getItem(MODE_KEY) === 'raw' ? 'raw' : 'day' } catch { return 'day' } })
-  const mode = day ? want : 'raw'
+function Streams({ on, off, st, list, fl, any }) {
+  const day = canDay(list), lim = canLimit(list, fl)
+  const [want, setWant] = useState(() => { try { const m = localStorage.getItem(MODE_KEY); return m === 'raw' || m === 'limit' ? m : 'day' } catch { return 'day' } })
+  const mode = want === 'limit' ? (lim ? 'limit' : day ? 'day' : 'raw') : want === 'day' && !day ? 'raw' : want
   const pick = (m) => { setWant(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* the choice then lasts for this visit */ } }
   const { drawn, rest } = useMemo(() => lanes(list), [list])
   const empty = on && !st.loading && !st.err && drawn.length === 0
@@ -282,9 +287,10 @@ function Streams({ on, off, st, list, any }) {
     <div className="th-pic" data-testid="th-river">
       <div className="th-hd">
         <div><span className="th-k">WHERE YOUR RISK SITS</span>
-          <div className="th-sub">{!on ? 'part of Market risk' : mode === 'day' ? 'height is USD for a usual day in that factor · one scale for all' : 'height is the sensitivity itself · each stream to its own scale'}</div></div>
-        {on && day && <div className="tbw-tabs th-seg" role="group" aria-label="What a stream's height means" data-testid="th-mode">
-          <button className={`tbw-tab${mode === 'day' ? ' is-active' : ''}`} aria-pressed={mode === 'day'} onClick={() => pick('day')}>A USUAL DAY</button>
+          <div className="th-sub">{!on ? 'part of Market risk' : mode === 'limit' ? 'height is how much of its limit a bucket uses · the dashed lines are the limits' : mode === 'day' ? 'height is USD for a usual day in that factor · one scale for all' : 'height is the sensitivity itself · each stream to its own scale'}</div></div>
+        {on && (day || lim) && <div className="tbw-tabs th-seg" role="group" aria-label="What a stream's height means" data-testid="th-mode">
+          {lim && <button className={`tbw-tab${mode === 'limit' ? ' is-active' : ''}`} aria-pressed={mode === 'limit'} onClick={() => pick('limit')}>OF ITS LIMIT</button>}
+          {day && <button className={`tbw-tab${mode === 'day' ? ' is-active' : ''}`} aria-pressed={mode === 'day'} onClick={() => pick('day')}>A USUAL DAY</button>}
           <button className={`tbw-tab${mode === 'raw' ? ' is-active' : ''}`} aria-pressed={mode === 'raw'} onClick={() => pick('raw')}>PER 01</button>
         </div>}
       </div>
@@ -293,18 +299,25 @@ function Streams({ on, off, st, list, any }) {
       {on && any && st.loading && <div className="th-blank">Measuring the book…</div>}
       {on && any && st.err && !st.data && <div className="th-blank">The risk report could not be read ({why429(st.err)}). The Risk page can run it again.</div>}
       {on && any && empty && <div className="th-blank">The book carries no risk the ladder measures on {fmtD(st.data?.date)}.</div>}
-      {on && drawn.length > 0 && <River drawn={drawn} mode={mode} asOf={st.data?.date} />}
-      {on && drawn.length > 0 && <div className="th-note">A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && heights(drawn, mode).some(h => h.own) ? ' A dashed stream has no usual move measured for it and is drawn to its own scale.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
+      {on && drawn.length > 0 && <River drawn={drawn} mode={mode} fl={fl} asOf={st.data?.date} />}
+      {on && drawn.length > 0 && <div className="th-note">A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && scene(drawn, mode, fl).some(h => h.own) ? ' A dashed stream has no usual move measured for it and is drawn to its own scale.' : ''}{lim ? ' The dashed lines across a lane are its limit: above the line for a long position, below it for a short one; the figure at a bucket is how much of the limit is used.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
     </div>
   )
 }
 
+// What the tip says of a bucket's limit: its own, or that the limit is on the factor's total.
+function tipLimit(ag, i) {
+  const p = ag?.per[i]
+  if (p) return <em className={p.state}> {Math.round(Math.abs(p.u) * 100)}% of {fmt0(p.limit)}</em>
+  return ag?.total ? <em> limit on the total</em> : null
+}
+
 // The lanes' names on the left, the drawing on the right, the tip under the pointer. Mounted only when there is a
 // factor to draw, so the box it measures is there from its first frame.
-function River({ drawn, mode, asOf }) {
+function River({ drawn, mode, fl, asOf }) {
   const box = useRef(null), cv = useRef(null), tip = useRef(null), at = useRef({ x: 0, y: 0 }), w = useWidth(box)
   const hotRef = useRef(-1), redraw = useRef(null)
-  const hs = useMemo(() => heights(drawn, mode), [drawn, mode])
+  const hs = useMemo(() => scene(drawn, mode, fl), [drawn, mode, fl])
   const [hot, setHot] = useState(-1)
   const reach = useMemo(() => bucketReach(asOf), [asOf])
   const AXIS = 40, n = drawn.length
@@ -341,8 +354,18 @@ function River({ drawn, mode, asOf }) {
         g.fillStyle = T.textMute; g.fillText(reach[i], colW * (i + 0.5), bottom + 33)
       })
       drawn.forEach((f, k) => {
-        const { base, ys } = shape[k], c = cols[k], own = hs[k].own, live = (i) => Math.abs(ys[i] - base) > 1.2
+        const { base, ys } = shape[k], c = cols[k], own = hs[k].own || hs[k].none, live = (i) => Math.abs(ys[i] - base) > 1.2
         g.strokeStyle = alpha(c, 0.28); g.lineWidth = 1; g.beginPath(); g.moveTo(0, base); g.lineTo(W, base); g.stroke()
+        // the limit, bucket by bucket: a dashed line above the stream's line and one below, hatched on the far side
+        hs[k].bank.forEach((b, i) => {
+          if (b == null) return
+          for (const sd of [1, -1]) {
+            const y = base - sd * b * amp, x0 = colW * i + 5, x1 = colW * (i + 1) - 5
+            g.strokeStyle = alpha(T.textHi, 0.7); g.lineWidth = 1.2; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.setLineDash([])
+            g.strokeStyle = alpha(T.textMute, 0.45); g.lineWidth = 1
+            for (let x = x0; x < x1; x += 7) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - sd * 4); g.stroke() }
+          }
+        })
         const grad = g.createLinearGradient(0, base - amp, 0, base + amp)
         grad.addColorStop(0, alpha(c, 0.4)); grad.addColorStop(0.5, alpha(c, 0)); grad.addColorStop(1, alpha(c, 0.4))
         g.beginPath(); g.moveTo(xs[0], base); xs.forEach((x, i) => g.lineTo(x, ys[i])); g.lineTo(xs[xs.length - 1], base); g.closePath(); g.fillStyle = grad; g.fill()
@@ -359,6 +382,14 @@ function River({ drawn, mode, asOf }) {
           g.setLineDash([16, 120]); g.lineDashOffset = -ms * 0.035 - k * 37; edge(); g.stroke(); g.setLineDash([]); g.globalCompositeOperation = 'source-over'
         }
         g.globalAlpha = 1
+        // how much of its limit a bucket uses, in the colour of its state, beside the stream's edge
+        g.font = `500 11px ${MONO}`
+        hs[k].tags.forEach((t, i) => {
+          if (!t) return
+          const y = Math.max(top + 10, Math.min(bottom - 3, base - hs[k].h[i] * amp + (t.u < 0 ? 14 : -7)))
+          g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim
+          g.fillText(`${Math.round(Math.abs(t.u) * 100)}%`, colW * (i + 0.5), y)
+        })
       })
     }
     raf = requestAnimationFrame(draw)
@@ -384,7 +415,7 @@ function River({ drawn, mode, asOf }) {
         {drawn.map((f, k) => (
           <div key={f.key} className="th-lane" data-factor={f.key}>
             <span className="th-lane-n"><span className="rf-mark" style={{ background: `var(${RISK_FACTORS[f.factor].token})` }} />{f.name} · {f.measure}</span>
-            <span className="th-lane-v"><b className={`fig ${tone(f.total)}`}>{signed(f.total)}</b> {f.unit}{hs[k].own && <em className="th-lane-own"> · own scale</em>}</span>
+            <span className="th-lane-v"><b className={`fig ${tone(f.total)}`}>{signed(f.total)}</b> {f.unit}{hs[k].own && <em className="th-lane-own"> · own scale</em>}{hs[k].none && <em className="th-lane-own"> · no limit</em>}</span>
           </div>
         ))}
       </div>
@@ -395,7 +426,7 @@ function River({ drawn, mode, asOf }) {
             <div className="th-tip-h">{BUCKET_LABEL[BUCKETS[hot]]} · {reach[hot]}</div>
             {drawn.filter(f => Math.abs(f.v[hot]) >= 0.5).map(f => (
               <div key={f.key}><span><span className="rf-mark" style={{ background: `var(${RISK_FACTORS[f.factor].token})` }} />{f.name} {f.measure}</span>
-                <span><b className={`fig ${tone(f.v[hot])}`}>{signed(f.v[hot])}</b>{f.day?.[hot] != null && mode === 'day' ? <em> ≈ {fmt0(f.day[hot])} a day</em> : null}</span></div>
+                <span><b className={`fig ${tone(f.v[hot])}`}>{signed(f.v[hot])}</b>{f.day?.[hot] != null && mode === 'day' ? <em> ≈ {fmt0(f.day[hot])} a day</em> : null}{tipLimit(hs[drawn.indexOf(f)].against, hot)}</span></div>
             ))}
             {!drawn.some(f => Math.abs(f.v[hot]) >= 0.5) && <div><span className="mute">no risk in this bucket</span></div>}
           </div>
@@ -405,31 +436,40 @@ function River({ drawn, mode, asOf }) {
   )
 }
 
-function Factors({ on, rep, list, marks, any, navigate }) {
+function Factors({ on, rep, list, marks, fl, any, navigate }) {
   if (!on) return <aside className="th-side" data-testid="th-factors"><div className="th-k">YOUR RISK BY FACTOR</div><div className="lf-empty">Shown with Market risk.</div></aside>
   const pk = list.map(peak), top = Math.max(0, ...pk.map(p => p?.usd || 0))
   const v = rep?.var || {}
   const conf = v.confidence != null ? `${Math.round(v.confidence * 1000) / 10}%` : ''
+  const on_ = shownOn(list, fl), others = marks.filter(m => !on_.has(m.id))          // a limit drawn on its factor above is not listed again
   return (
     <aside className="th-side" data-testid="th-factors">
-      <div><div className="th-k">YOUR RISK BY FACTOR</div><div className="th-sub">its sensitivity, and its largest bucket on a usual day</div></div>
+      <div><div className="th-k">YOUR RISK BY FACTOR</div><div className="th-sub">{canLimit(list, fl) ? 'its sensitivity, against its limit where it has one' : 'its sensitivity, and its largest bucket on a usual day'}</div></div>
       {list.length === 0 && <div className="lf-empty">{rep || !any ? 'Nothing to measure yet.' : '…'}</div>}
-      {list.map((f, i) => (
-        <div key={f.key} className="th-row">
-          <span className="th-row-n"><span className="rf-mark" style={{ background: `var(${RISK_FACTORS[f.factor].token})` }} />{f.name} <small>{f.measure}</small></span>
-          <b className={`fig ${tone(f.total)}`}>{signed(f.total)}</b>
-          <span className="th-bar"><i style={{ width: `${top && pk[i] ? Math.max(2, pk[i].usd / top * 100) : 0}%`, background: `var(${RISK_FACTORS[f.factor].token})` }} /></span>
-          <small className="th-row-d">{pk[i] ? <>≈ <b className="fig">{fmt0(pk[i].usd)}</b> a day · {BUCKET_LABEL[pk[i].bucket]}</> : 'no usual move is measured for it'}</small>
-        </div>
-      ))}
+      {list.map((f, i) => {
+        const hd = against(f, limitsOf(f, fl))?.head
+        return (
+          <div key={f.key} className="th-row" data-factor={f.key}>
+            <span className="th-row-n"><span className="rf-mark" style={{ background: `var(${RISK_FACTORS[f.factor].token})` }} />{f.name} <small>{f.measure}</small></span>
+            <b className={`fig ${tone(f.total)}`}>{signed(f.total)}</b>
+            {hd
+              // against its limit: flat in the middle, the limit at a fifth from either end, the position from the middle out
+              ? <span className="th-gauge" data-testid="th-gauge"><i className={hd.state} style={{ [hd.pos < 0 ? 'right' : 'left']: '50%', width: `${Math.min(50, Math.abs(hd.u) * 40)}%` }} /><em style={{ left: '10%' }} /><em style={{ left: '90%' }} /></span>
+              : <span className="th-bar"><i style={{ width: `${top && pk[i] ? Math.max(2, pk[i].usd / top * 100) : 0}%`, background: `var(${RISK_FACTORS[f.factor].token})` }} /></span>}
+            {hd
+              ? <small className="th-row-d th-row-l"><span><b className={`fig ${hd.state}`}>{Math.round(Math.abs(hd.u) * 100)}%</b> of {fmt0(hd.limit)}{hd.bucket ? ` · ${BUCKET_LABEL[hd.bucket]}` : ''} · {hd.pos < 0 ? 'short' : 'long'}</span><span>{hd.room >= 0 ? <><b className="fig">{fmt0(hd.room)}</b> of room</> : <><b className="fig BREACH">{fmt0(-hd.room)}</b> past it</>}</span></small>
+              : <small className="th-row-d">{pk[i] ? <>≈ <b className="fig">{fmt0(pk[i].usd)}</b> a day · {BUCKET_LABEL[pk[i].bucket]}</> : 'no usual move is measured for it'}</small>}
+          </div>
+        )
+      })}
       {rep && <div className="th-tot" data-testid="th-var">
         <span>VaR {conf} · 1 day</span><b className="fig">{v.var_1d != null && v.enough !== false ? fmt0(v.var_1d) : '—'}</b>
         {v.enough === false && <small>{v.observations ?? 0} days of history: too few for a VaR</small>}
       </div>}
-      {marks.length > 0 && <>
-        <div className="th-k th-k2">LIMITS</div>
+      {others.length > 0 && <>
+        <div className="th-k th-k2">{others.length < marks.length ? 'OTHER LIMITS' : 'LIMITS'}</div>
         <div className="th-lims" data-testid="th-limits">
-          {marks.slice(0, 5).map(m => (
+          {others.slice(0, 5).map(m => (
             <div key={m.id} className="th-lim">
               <span>{m.name}</span><span className={`th-use ${m.status}`}><i style={{ width: `${Math.min(100, m.u * 100)}%` }} /></span><b className={`fig ${m.status}`}>{m.pct}%</b>
             </div>

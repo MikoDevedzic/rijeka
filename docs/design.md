@@ -301,7 +301,13 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
   colours are the tokens (`theme.js`, and the factor tokens read from the page). Above its line is long, below it
   short. A stream drawn to a scale of its own, because it has no history, is dashed and says so beside its name.
   The light along a stream's edge moves at thirty frames a second and not at all with "reduce motion".
-- **A segment of two or of five is the ticket's joined control** (`tbw-tabs`): the picture's A USUAL DAY / PER 01,
+- **A limit is read on two sides** (since 0.37.0), because a position is long or short and a limit is one number
+  on its size. The rail is flat in the middle, short to the left, long to the right, hatched past either end; a 01
+  is a dot, a size with no side (VaR, a stress loss) a square read to the right, an exposure a diamond. On a stream
+  the limit is a dashed line in limestone above the line and below it, hatched on the far side; the share used is
+  written at the bucket in the colour of its state (quiet, amber from the limit's warning level, `--down` past it).
+  Beside a factor the gauge is flat in the middle with the limit a fifth from either end.
+- **A segment of two, three or six is the ticket's joined control** (`tbw-tabs`): the picture's OF ITS LIMIT / A USUAL DAY / PER 01,
   and the tabs that hold what the old home showed as cards.
 - **Brass on this page is a link to where a thing is dealt with** (OPEN BLOTTER →, THE RISK PAGE →), as on the old
   home. The page has no action of its own, so no brass button.

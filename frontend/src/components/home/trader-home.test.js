@@ -1,6 +1,6 @@
 // The trader's home: what it works out from the risk report, the trades and the P&L summary.
 import { describe, expect, it } from 'vitest'
-import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, railLayout, statement, moved, signed, MAX_LANES } from './trader-home'
+import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
 
 const TRADES = [{ id: 't1', maturity_date: '2027-02-13' }, { id: 't2', maturity_date: '2030-11-13' }, { id: 't3', maturity_date: '2026-12-13' }]
 const REP = {
@@ -157,10 +157,24 @@ describe("the trader's home: limits", () => {
     expect(LIMS.map(l => limitLabel(l, [{ id: 'RISK_OFF', name: 'Risk-off' }]))).toEqual(['VAR', 'BTC CRY01', 'USD SOFR 1-5Y · SWAPS', 'STRESS RISK-OFF', 'PFE Demo Bank'])
     expect(limitLabel({ metric: 'IR01' })).toBe('IR01'); expect(limitLabel({ metric: 'IR01:EUR_ESTR' })).toBe('IR01 EUR ESTR')
   })
-  it('is one mark for each limit with a figure against it, the closest first', () => {
+  it('is one mark for each limit with a figure against it, the closest first: a 01 on the book, a size, an exposure', () => {
     const m = limitMarks(LIMS)
-    expect(m.map(x => [x.id, x.pct, x.kind])).toEqual([['c', 133, 'o'], ['b', 92, 'o'], ['a', 74, 'o'], ['e', 30, 'c']])
+    expect(m.map(x => [x.id, x.pct, x.kind])).toEqual([['c', 133, 's'], ['b', 92, 'o'], ['a', 74, 's'], ['e', 30, 'c']])      // a limit on a book is on a part: a size
     expect(limitMarks(undefined)).toEqual([])
+  })
+  it('knows which way the figure a limit is on points, from the factor it is on; a VaR or a part of the book has no side', () => {
+    const list = factors(REP, TRADES)
+    const m = limitMarks([
+      { id: 1, metric: 'KR01:USD_SOFR:5-10Y', scope: 'ALL', limit: 5000, utilisation_pct: 48, status: 'OK' },
+      { id: 2, metric: 'KR01:USD_SOFR:1-5Y', scope: 'ALL', limit: 5000, utilisation_pct: 80, status: 'WARN' },
+      { id: 3, metric: 'SPOT01:BTC', scope: 'ALL', limit: 25000, utilisation_pct: 91.6, status: 'WARN' },
+      { id: 4, metric: 'IR01', scope: 'ALL', limit: 4000, utilisation_pct: 42.5, status: 'OK' },
+      { id: 5, metric: 'VAR_99_1D', scope: 'ALL', limit: 1, utilisation_pct: 10, status: 'OK' },
+      { id: 6, metric: 'KR01:USD_SOFR:1-5Y', scope: 'BOOK', scope_name: 'B', limit: 1, utilisation_pct: 5, status: 'OK' },
+      { id: 7, metric: 'NPV', scope: 'ALL', limit: 1, utilisation_pct: 20, status: 'OK' },
+    ], [], list, -5)
+    expect(Object.fromEntries(m.map(x => [x.id, x.side]))).toEqual({ 1: -1, 2: 1, 3: 1, 4: 1, 5: 0, 6: 0, 7: -1 })
+    expect(standing(m, 0).tight).toBe('Closest: BTC CRY01, long, at 92% of its limit.')
   })
   it('says where you stand from the statuses the API gave', () => {
     const s = standing(limitMarks(LIMS), 2)
@@ -172,10 +186,61 @@ describe("the trader's home: limits", () => {
   it('places each mark by how much of its limit is used, holds a mark past 125% at the rail\'s end, and lifts a label off its neighbour', () => {
     const { marks, lanes: n } = railLayout(limitMarks(LIMS), 1000)
     const at = Object.fromEntries(marks.map(m => [m.id, m]))
-    expect(at.a.x).toBeCloseTo(588.16, 2); expect(at.e.x).toBeCloseTo(240, 6); expect(at.c.x).toBe(1000)
+    // flat is the middle; a size with no side is read to the right: 73.52% of a limit is 0.5 + 0.7352 / 1.25 / 2 of the way
+    expect(at.a.x).toBeCloseTo(794.08, 2); expect(at.e.x).toBeCloseTo(620, 6); expect(at.c.x).toBe(1000)
+    expect(railAt({ u: 0.5, side: -1 })).toBeCloseTo(0.3, 9); expect(railAt({ u: 0.5, side: 1 })).toBeCloseTo(0.7, 9)
+    expect(railAt({ u: 3, side: -1 }), 'far past the short limit is the rail\'s left end').toBe(0); expect(railAt({ u: 0, side: 0 })).toBe(0.5)
     expect(at.c.cx).toBeLessThanOrEqual(1000 - at.c.w / 2)                 // the label stays on the rail
     const tight = railLayout([{ id: 1, name: 'AAAAAAAA', u: 0.5, pct: 50 }, { id: 2, name: 'BBBBBBBB', u: 0.51, pct: 51 }], 600)
     expect(tight.marks.map(m => m.lane)).toEqual([0, 1]); expect(tight.lanes).toBe(2); expect(n).toBeGreaterThanOrEqual(1)
+  })
+})
+
+describe("the trader's home: a factor against its limits", () => {
+  const list = factors(REP, TRADES), sofr = list.find(f => f.key === 'IR:USD_SOFR'), btc = list.find(f => f.key === 'SPOT:BTC'), eur = list.find(f => f.key === 'SPOT:EUR')
+  const by = factorLimits([
+    { id: 'k1', metric: 'KR01:USD_SOFR:1-5Y', scope: 'ALL', limit: 5000, warn_pct: 75 },
+    { id: 'k2', metric: 'KR01:USD_SOFR:5-10Y', scope: 'ALL', limit: 2000, warn_pct: 80 },
+    { id: 't', metric: 'IR01:usd_sofr', scope: 'ALL', limit: 10000 },
+    { id: 's', metric: 'SPOT01:BTC', scope: 'ALL', limit: 25000, warn_pct: 90 },
+    { id: 'x', metric: 'SPOT01:EUR', scope: 'DESK', scope_name: 'FX', limit: 1 },          // on a part of the book: not drawn on the whole
+    { id: 'z', metric: 'KR01:USD_SOFR:1-5Y', scope: 'ALL', limit: 0 },                      // no limit
+    { id: 'v', metric: 'VAR_99_1D', scope: 'ALL', limit: 100 },
+  ])
+  it('finds the limits that are on a factor, for the whole book, whatever the case of the key', () => {
+    expect(limitsOf(sofr, by).buckets.map(b => b && b.limit)).toEqual([null, 5000, 2000, null])
+    expect(limitsOf(sofr, by).total).toMatchObject({ limit: 10000, warn: 0.8 })
+    expect(limitsOf(btc, by).total).toMatchObject({ limit: 25000, warn: 0.9 })
+    expect(limitsOf(eur, by)).toBe(null); expect(canLimit(list, by)).toBe(true); expect(canLimit(list, new Map())).toBe(false)
+    expect([...shownOn(list, by)].sort()).toEqual(['k1', 'k2', 's', 't'])          // these are on a stream; the VaR and the desk's are listed beside
+  })
+  it('reads a limit on both sides: long is a share above, short a share below, and the tightest is named with the room left', () => {
+    const a = against(sofr, limitsOf(sofr, by))
+    expect(a.per.map(p => p && [p.u, p.state])).toEqual([null, [0.8, 'WARN'], [-1.2, 'BREACH'], null])      // +4,000 of 5,000 warns at 75%; −2,400 of 2,000 is past, short
+    expect(a.total).toMatchObject({ u: 0.17, state: 'OK' })
+    expect(a.head).toMatchObject({ u: -1.2, bucket: '5-10Y', limit: 2000, pos: -2400, room: -400 })
+    expect(against(btc, limitsOf(btc, by)).head).toMatchObject({ u: 0.916, state: 'WARN', bucket: null, room: 2100 })
+    expect(against(eur, null)).toBe(null)
+  })
+  it('draws each bucket as the share of its limit it uses, with the limit at the lane\'s full height, and writes the figure there', () => {
+    const sc = scene(list, 'limit', by), s = sc[list.indexOf(sofr)], b = sc[list.indexOf(btc)], e = sc[list.indexOf(eur)]
+    expect(s.h).toEqual([0.01, 0.8, -LIMIT_MAX, 0])                      // a bucket with no limit of its own is read against the total's; past a limit is held at the lane's edge
+    expect(s.bank).toEqual([1, 1, 1, 1])
+    expect(s.tags.map(t => t && Math.round(t.u * 100))).toEqual([null, 80, -120, null])
+    expect(b.h.map(x => Math.round(x * 1000) / 1000)).toEqual([0.732, 0.184, 0, 0])
+    expect(b.tags.map(t => t && Math.round(t.u * 1000) / 10)).toEqual([91.6, null, null, null])      // a limit on the total is written once, at the largest bucket
+    expect(e).toMatchObject({ none: true, bank: [null, null, null, null] }); expect(Math.max(...e.h)).toBeCloseTo(0.6, 9)
+  })
+  it('draws the limit on the money scale too: its size times the same usual move, where the lane has room for it', () => {
+    const sc = scene(list, 'day', by), s = sc[list.indexOf(sofr)], hs = heights(list, 'day')
+    expect(s.h).toEqual(hs[list.indexOf(sofr)].h)
+    expect(s.bank[1]).toBeCloseTo(Math.sqrt(5000 * 5 / 56730), 9)       // 5,000 a bp times 5bp, against the page's largest bucket
+    expect(s.bank[2]).toBeCloseTo(Math.sqrt(2000 * 5.5 / 56730), 9)
+    expect(scene(list, 'day', new Map())[0].bank).toEqual([null, null, null, null])
+    const raw = scene(list, 'raw', by)[list.indexOf(sofr)]
+    expect(raw.bank[1]).toBeCloseTo(Math.sqrt(5000 / 4000), 9)          // just past the largest bucket: still on the lane
+    expect(raw.bank[2]).toBeCloseTo(Math.sqrt(2000 / 4000), 9)
+    expect(raw.bank[0]).toBe(null)                                       // the total's 10,000 against a largest bucket of 4,000: off the lane, not drawn
   })
 })
 
