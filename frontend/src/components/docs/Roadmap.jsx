@@ -136,7 +136,6 @@ export default function Roadmap() {
             ['VALIDATE', 'Rebuild a product independently and be named on its report. SABR, the Hull–White tree, XVA, the initial margin estimate and the crypto products are waiting for a first validator. Validators are listed as contributors.', 'https://github.com/MikoDevedzic/rijeka/blob/main/docs/VALIDATION.md', 'THE CHARTER ↗'],
             ['AUDIT', 'A Solidity reviewer for the registry contract before anyone says the word mainnet. 16 Foundry tests and Sourcify verification are the starting point, not the finish.', 'https://github.com/MikoDevedzic/rijeka/tree/main/chain', 'THE CONTRACT ↗'],
             ['CONTRIBUTE', 'Code or docs with a DCO sign-off; engine and standard are Apache-2.0, the platform is BSL 1.1. Pricing changes come with a test, a before/after number and the methodology updated in the same pull request.', 'https://github.com/MikoDevedzic/rijeka/blob/main/CONTRIBUTING.md', 'CONTRIBUTING ↗'],
-            ['PILOT', 'A bank, asset manager or corporate treasury willing to run the confirmation flow with a real counterparty on Sepolia, then mainnet.', 'mailto:miko@rijeka.app?subject=PILOT', 'WRITE TO US'],
             ['TEACH', 'A university or graduate programme that wants to use the desk in a course: students book, price, confirm and verify. Write, and say what the course needs.', 'mailto:miko@rijeka.app?subject=TEACH', 'WRITE TO US'],
           ].map(([t, body, href, cta]) => (
             <article key={t} className="wwu-card">

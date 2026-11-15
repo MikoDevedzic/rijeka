@@ -1,6 +1,6 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Work with us — validate, audit, pilot, teach
+  - name: Work with us — validate, audit, teach
     url: https://github.com/MikoDevedzic/rijeka/blob/main/docs/VALIDATION.md#work-with-us
     about: The specific asks and who to write to.
   - name: Security issue

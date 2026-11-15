@@ -14,6 +14,8 @@ caller (`security_invoker`), so the tables' own policies decide what a view retu
 
 - No code reads these views, so no screen and no figure changes. Nothing is dropped; no grant or policy changes.
 - Sign-up mail is sent from miko@rijeka.app (`docs/ops/email.md`).
+- **An open project, in its own words** (after the release, the same day). The asks for pilots and the offers of
+  paid help are removed from the site, the guides and the app's roadmap; the licence and the terms are unchanged.
 
 ## 0.39.1 · 15 November 2026
 

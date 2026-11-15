@@ -103,8 +103,6 @@ Specific asks get answers, so here are the specific asks. Write to
 - **AUDIT** — a Solidity reviewer for the registry contract before mainnet.
 - **QUANT** — FX options and CDS for Phase 2, each a bounded piece of work with
   its own validation report.
-- **PILOT** — a bank, asset manager or corporate treasury willing to run the
-  confirmation flow with a real counterparty on Sepolia, then mainnet.
 - **TEACH** — a university or graduate programme that wants to use the desk
   in a course: write, and say what the course needs.
 - **DATA** — an openly licensed curve and vol set for teaching, so no classroom
