@@ -88,7 +88,10 @@ const PHASES = [
     ['NEXT', 'Stochastic vol on the exposure paths (Heston; a jump variant for digital assets) behind its own validation gate: today the surface\'s term structure and smile are applied along the paths, its level does not move'],
     ['NEXT', 'CDS and credit options'],
   ]},
-  { title: 'PHASE 3 · EQUITY & COMMODITY', status: 'PLANNED', items: [['NEXT', 'Equity and commodity derivatives on the same pricing and confirmation rails']] },
+  { title: 'PHASE 3 · FIXED INCOME, EQUITY & COMMODITY', status: 'PLANNED', items: [
+    ['NEXT', 'Fixed income: bonds priced on the same curves, with the same risk names and the same trade record'],
+    ['NEXT', 'Equity and commodity derivatives on the same pricing and confirmation rails'],
+  ] },
   { title: 'PHASE 4 · RISK INFRASTRUCTURE', status: 'PLANNED', items: [
     ['DONE', 'Self-host packaging: docker-compose with sign-in, the migration runner with a ledger, a staging stack with 68 API-level integration tests in CI'],
     ['NEXT', 'Firm admin, entitlements and the immutable audit log across every table that changes state'],

@@ -36,6 +36,9 @@ every pair, and it never became a fixed amount: its value floated on spot until 
   fixed it, how to stay unnamed, and that the only money on offer is the validation bounty. `SECURITY.md` and the
   two issue forms say the same; pull requests have a form.
 - Methodology v1.21 (§12, non-deliverable forwards); the model inventory has the row and what it lacks.
+- **Roadmap** (after the release, the same day). Fixed income joins Phase 3 as planned, in the app and on the
+  site: the owner's mission names it ("crypto, fixed income, credit, OTC derivatives ... all on one platform"),
+  and until now no phase did.
 
 Not built: a public daily currency fixing; a fixing date chosen on the ticket; the amount booked as a cash line;
 exposure paths that stop at the fixing date.
