@@ -1,6 +1,7 @@
 # Sign-up email: why it failed and how it is set up
 
-**State on 2026-10-30:** auth email goes out through Resend from `desk@rijeka.app`.
+**State on 2026-11-15:** auth email goes out through Resend from `miko@rijeka.app` (it was `desk@rijeka.app`
+from 30 October until then: an address with no mailbox, so a reply to a sign-up email bounced).
 The domain is verified (DKIM TXT `resend._domainkey`, CNAMEs `send` and `rsend`
 at Namecheap, alongside the iCloud MX and SPF on the root, which were left
 untouched). Supabase custom SMTP: host `smtp.resend.com`, port 465, username
@@ -36,7 +37,7 @@ free tier that covers a demo many times over. Steps, about fifteen minutes:
 3. **Create an API key** at the provider. That key is the SMTP password.
 4. **Supabase → Project Settings → Authentication → SMTP Settings**: enable
    custom SMTP and enter
-   - sender email `desk@rijeka.app`, sender name `Rijeka`
+   - sender email `miko@rijeka.app` (an address that receives mail), sender name `Rijeka`
    - host and port from the provider (Resend: `smtp.resend.com`, port 465;
      Postmark: `smtp.postmarkapp.com`, port 587)
    - username and password as the provider states (Resend: username
