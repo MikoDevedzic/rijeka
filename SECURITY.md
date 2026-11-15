@@ -7,7 +7,7 @@ the code is treated as production code.
 
 ## Reporting a vulnerability
 
-Email **security@rijeka.app** with what you found, where (file, route, or page), and how
+Email **miko@rijeka.app** (subject: SECURITY) with what you found, where (file, route, or page), and how
 to reproduce it. You will get an acknowledgement within two business days and a fix or
 a reasoned answer within thirty. Please do not open a public issue for a security
 problem until it is fixed, and do not test against accounts that are not yours.
