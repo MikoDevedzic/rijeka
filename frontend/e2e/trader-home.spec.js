@@ -338,7 +338,7 @@ test('the Market risk page lists what fixes, day by day: each index, the net tha
   const before = await rows.count()
   await more.click()
   expect(await rows.count()).toBeGreaterThan(before)
-  await fix.getByRole('button', { name: 'THE NEXT 10 DAYS' }).click()
+  await fix.getByRole('button', { name: 'FIRST 10 DAYS' }).click()
   expect(await rows.count()).toBe(before)
   await expect(fix).toContainText('a Friday\'s fixing counts for three days')
   await expectNoHorizontalOverflow(panel, 'the fixings on the Market risk page')

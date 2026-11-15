@@ -134,8 +134,20 @@ def value(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[s
     p = price_trade(req, db, user)
     return {"npv": float(p.get("npv") or 0.0), "ccy": (p.get("npv_ccy") or p.get("currency") or trade.notional_ccy or "USD").upper(),
             "ir01": p.get("ir01"), "ir01_disc": p.get("ir01_disc"), "spot01": None, "theta": p.get("theta"),
-            "asof": {c: mkt.snapshot_date(c) for c in ids}, "fallback": fallback,
-            "legs": p.get("legs")}          # the periods as they were valued: what the fixing ladder reads (risk/fixings.py)
+            "asof": {c: mkt.snapshot_date(c) for c in ids}, "fallback": fallback}
+
+
+def priced_legs(db: Session, user: dict, trade, val_date: date, mkt: Market) -> list[dict]:
+    """A rates trade's legs as the pricer values them on this market, with every cashflow (the fixing ladder reads
+    their periods: risk/fixings.py). One pricing, asked for where it is needed: the legs are not kept in `value`'s
+    result, which is memoised for every date and bumped market a VaR or a ladder reprices on."""
+    from api.routes.pricer import PriceRequest, price_trade
+    ids = trade_curves(trade)
+    if getattr(trade, "_legs", None) is not None:
+        from api.routes.pricer import _remember_trade
+        _remember_trade(str(trade.id), str(user["sub"]), trade, legs_for_pricer(trade))
+    req = PriceRequest(trade_id=str(trade.id), valuation_date=val_date, curves=[_curve_input(c, mkt.quotes(c)) for c in ids])
+    return price_trade(req, db, user).get("legs") or []
 
 
 SWAPTIONS = ("IR_SWAPTION",)

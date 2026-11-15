@@ -18,24 +18,34 @@ market risk dashboard has to have this fixing risk in there."
 - **The home's first tab is FIXINGS**: what resets next, net by index, with the fixing 01.
 - **How it is measured** (`backend/risk/fixings.py`, in the risk report as `fixings`). Every floating period the
   pricer values is compounded in arrears from an overnight index, so it resets on every business day it runs
-  over, each fixing counting for the calendar days to the next (a Friday's for three). Fixing 01 = notional × the
-  period's accrual a day × the days the fixing counts for × the discount factor to the payment × 1bp, signed + where
-  the desk receives the floating rate. Over a period's days it adds up to notional × accrual × discount factor ×
-  1bp. It reads the periods of the valuation the ladder has already made, so it costs no pricing and a trade the
-  desk values is a trade whose fixings are listed.
-- **Checked against the pricer.** On the local stack the fixing 01s of a booked swap's floating leg add up to the
-  same figure worked from the pricer's own cashflows (4,579.95 on both sides for a 10m five-year swap). That check
-  found the first version dropping the opening days of a period that starts on a weekend; such a period is opened
-  by the fixing of the business day before it.
+  over, each fixing counting for the calendar days to the next (a Friday's for three), on the business days of the
+  leg's currency. Fixing 01 = notional × leverage × the period's accrual a day × the days the fixing counts for ×
+  the discount factor to the payment × 1bp × the compounding of the period's other days, signed + where the desk
+  receives the floating rate. It is read from the periods the pricer values: one more pricing of each rates trade
+  a report.
+- **Checked three ways.** By hand in the unit tests: a quarter of daily forwards at 5 %, one day moved by 1bp,
+  against the code to two parts in a hundred thousand. On the local stack: the fixing 01s of a booked swap's
+  floating leg lie between the sum worked from the pricer's own cashflows without compounding and that sum with
+  each period's whole compounding. And by Emmy, who moved one day's forward under the real leg pricer: the first
+  version, which left the compounding out, was 1.27 % low on a quarter at 5 %, on every day alike; and 12,000
+  random periods on four calendars put every calendar day on exactly one fixing. The stack check found the first
+  version dropping the opening days of a period that starts on a weekend (it is opened by the fixing of the
+  business day before it); Emmy's found that a leg's leverage was ignored.
 
 What it is not, and what the check of "does it all feed" found:
 
 - **Caps, floors, swaptions and options are not in it**, and the panel counts them: an option on a fixing is a
   delta, not a notional. Option expiries are not listed.
-- **Compounding between days is left out** of fixing 01 (a fixing's effect on the interest on earlier days'
-  interest): about 1 % of the figure at 5 % over a quarter.
+- **A floating leg that carries a cap or a floor is listed as the plain reset** it would be without it, and the
+  panel counts such legs. A leg booked at leverage nought (how a cap is booked) has no linear reset and is not
+  listed.
+- **Fixing 01 holds the discounting**: it is the forecast's share of the ladder's IR01. The compounding is written
+  with the period's own rate for each day's, which differs from the exact figure by parts in a hundred thousand.
+- **The 1 % on a settlement fixing is the trade's spot 01**, which is on its forward: equal to 1 % on the fixing
+  only nearly.
 - **An index is the curve a leg is projected on** (USD SOFR, EUR ESTR): a floating leg carries no index name of its
-  own, and there are no term rates.
+  own, and there are no term rates. A CMS leg is valued by the pricer as the same compounded forward and is listed
+  the same way.
 - **A currency NDF's fixing date does not reach the valuation**: it is valued to its settlement date, and where the
   trade names no fixing date the panel lists it on its settlement date and says so. A currency fixing that falls on
   a weekend is flagged. There is no store of currency fixings (only BTC, ETH and SOL have one), so a currency NDF

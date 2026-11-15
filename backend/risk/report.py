@@ -99,7 +99,7 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     fx = lambda ccy: fx_to_usd(mkt, ccy)
     trades = db.query(Trade).filter(Trade.user_id == uid).all()
     from pnl.explain import Valuer
-    valuer = Valuer(db, user)                       # one valuation of each trade, for the ladder and for the fixings
+    valuer = Valuer(db, user)                       # the ladder's valuations, read again by the fixings for a forward's spot 01
     lad = S.book_ladder(db, user, trades, d, mkt, fx, valuer)
     firm_id = firm_of(db, uid)
     st = settings(db, firm_id)

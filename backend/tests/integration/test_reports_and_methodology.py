@@ -103,8 +103,9 @@ def test_risk_report_lists_what_fixes_day_by_day_and_it_adds_up_to_the_swaps_own
     assert any(s["pair"] == "BTCUSD" and date.fromisoformat(s["date"]) >= asof and s["net_units"] != 0 for s in fx["settlements"]), fx["settlements"]
 
     # against a pricing of the booked swap on its own: every day still to fix of every floating period of the leg, as
-    # the report reads them, adds up to notional x accrual x discount factor x 1bp for the part of each period that
-    # is left (worked here from the pricer's own cashflows, not by the code under test)
+    # the report reads them, adds up to more than notional x accrual x discount factor x 1bp for the part of each
+    # period that is left, and to no more than that with the period's whole compounding on it (both worked here from
+    # the pricer's own cashflows; the compounding itself is pinned by hand in tests/test_risk.py)
     from risk import fixings as F
     swap = booked["IR_SWAP"]
     ids = [c for c in dict.fromkeys([swap["trade"].get("discount_curve_id"), swap["trade"].get("forecast_curve_id")]) if c] or ["USD_SOFR"]
@@ -112,7 +113,7 @@ def test_risk_report_lists_what_fixes_day_by_day_and_it_adds_up_to_the_swaps_own
     assert p.status_code == 200, p.text[:400]
     legs = [l for l in p.json()["legs"] if l["leg_type"] in ("FLOAT", "OIS")]
     assert legs, "the swap has a floating leg"
-    want, periods = 0.0, 0
+    want, most, periods = 0.0, 0.0, 0
     for leg in legs:
         sign = 1.0 if leg["direction"].startswith("REC") else -1.0
         for cf in leg["cashflows"]:
@@ -122,9 +123,11 @@ def test_risk_report_lists_what_fixes_day_by_day_and_it_adds_up_to_the_swaps_own
             lo = max(s, asof)
             if e <= lo:
                 continue
-            want += sign * cf["notional"] * cf["dcf"] * (e - lo).days / (e - s).days * (cf["df"] or 1.0) * 1e-4
+            plain = sign * cf["notional"] * cf["dcf"] * (e - lo).days / (e - s).days * (cf["df"] or 1.0) * 1e-4
+            want += plain; most += plain * (1.0 + (cf["rate"] or 0.0) * cf["dcf"])
             periods += 1
     got = sum(x["fixing01"] for x in F.trade_resets(legs, {}, ids[-1], asof, date(2100, 1, 1)))
-    assert periods >= 2 and abs(want) > 1.0
-    assert abs(got - want) < 1e-6 * abs(want), (got, want)
-    print(f"the swap's floating leg: {periods} periods, {want:,.2f} a basis point on every fixing still to come; the fixing ladder adds up to {got:,.2f}")
+    assert periods >= 2 and abs(want) > 1.0 and want * most > 0
+    assert abs(want) < abs(got) <= abs(most) * (1 + 1e-9), (want, got, most)
+    print(f"the swap's floating leg: {periods} periods; a basis point on every fixing still to come is {want:,.2f} without compounding, "
+          f"{most:,.2f} with each period's whole; the fixing ladder adds up to {got:,.2f}")

@@ -243,16 +243,59 @@ def test_a_periods_fixing_01s_add_up_to_one_basis_point_on_the_period_and_are_si
     assert F.period_resets({**cf, "dcf": 0}, {"direction": "PAY"}, "X", "NEW_YORK", date(2026, 11, 1), date(2027, 1, 1)) == []
 
 
-def test_a_leg_that_fixes_once_a_period_is_one_reset_and_a_fixed_leg_is_none():
+def test_only_a_floating_legs_coupons_reset_on_the_legs_own_curve_and_on_the_days_of_its_currency():
     cf = {"period_start": "2026-11-16", "period_end": "2027-02-16", "fixing_date": "2026-11-12", "notional": 50e6, "dcf": 0.25, "df": 0.98, "cashflow_type": "COUPON"}
-    one = F.period_resets(cf, {"direction": "RECEIVE", "currency": "EUR", "leg_type": "CMS"}, "EUR_ESTR", "TARGET", date(2026, 11, 2), date(2026, 12, 31))
-    assert len(one) == 1 and one[0]["date"] == date(2026, 11, 12) and abs(one[0]["fixing01"] - 50e6 * 0.25 * 0.98 * 1e-4) < 1e-9
-    assert F.period_resets(cf, {"direction": "RECEIVE", "currency": "EUR", "leg_type": "CMS"}, "EUR_ESTR", "TARGET", date(2026, 11, 13), date(2026, 12, 31)) == []      # made already
     legs = [{"leg_id": "f", "leg_type": "FIXED", "direction": "PAY", "currency": "USD", "cashflows": [cf]},
             {"leg_id": "o", "leg_type": "OIS", "direction": "RECEIVE", "currency": "USD", "cashflows": [cf, {**cf, "cashflow_type": "CAPLET"}]}]
     rows = F.trade_resets(legs, {"o": {"forecast_curve_id": "usd_sofr"}}, "USD_LIBOR", date(2026, 11, 16), date(2026, 11, 20))
     assert {r["index"] for r in rows} == {"USD_SOFR"} and [r["date"].day for r in rows] == [16, 17, 18, 19, 20]                              # the floating leg's coupon only, on its own curve
     assert F.trade_resets(legs[1:], {}, "USD_SOFR", date(2026, 11, 16), date(2026, 11, 16))[0]["index"] == "USD_SOFR"                        # no leg record: the trade's curve
+    # a CMS leg is valued by the pricer as the same compounded forward, and is listed the same way: day by day
+    cms = F.trade_resets([{"leg_id": "c", "leg_type": "CMS", "direction": "RECEIVE", "currency": "USD", "cashflows": [cf]}], {}, "USD_SOFR", date(2026, 11, 16), date(2026, 11, 18))
+    assert [r["date"].day for r in cms] == [16, 17, 18]
+    # the days are the index's own: a euro leg resets on TARGET days whatever calendar its payments roll on.
+    # Thursday 26 Nov 2026 is Thanksgiving in New York and a business day in TARGET
+    eur = [{"leg_id": "e", "leg_type": "FLOAT", "direction": "PAY", "currency": "EUR", "cashflows": [cf]}]
+    days = {r["date"] for r in F.trade_resets(eur, {"e": {"payment_calendar": "NEW_YORK", "forecast_curve_id": "EUR_ESTR"}}, "", date(2026, 11, 23), date(2026, 11, 27))}
+    assert date(2026, 11, 26) in days
+    usd = {r["date"] for r in F.trade_resets(legs[1:], {}, "USD_SOFR", date(2026, 11, 23), date(2026, 11, 27))}
+    assert date(2026, 11, 26) not in usd and date(2026, 11, 25) in usd
+
+
+def test_a_fixing_01_carries_the_compounding_of_the_periods_other_days():
+    """Worked without the code: a quarter of daily overnight forwards at 5 % (ACT/360), 100m, discount factor 0.99.
+    The period pays N x (Π(1 + f·n/360) − 1); moving one day's forward by 1bp changes it by N x n/360 x 1bp x the
+    product over the other days. The code writes that product with the period's own rate for every day's."""
+    from pricing.calendars import is_business_day
+    start, end, n_, df, f = date(2026, 11, 16), date(2027, 2, 16), 100e6, 0.99, 0.05
+    days = F.fixing_days(start, end, start, end, "NEW_YORK")
+    assert all(is_business_day(d, "NEW_YORK") for d, _ in days) and sum(k for _, k in days) == 92
+    grow = 1.0
+    for _, k in days:
+        grow *= 1.0 + f * k / 360.0
+    rate = (grow - 1.0) / (92 / 360.0)                                   # the period's compounded rate, on its own day count
+    cf = {"period_start": start.isoformat(), "period_end": end.isoformat(), "notional": n_, "dcf": 92 / 360.0, "df": df, "rate": rate, "cashflow_type": "COUPON"}
+    rows = F.period_resets(cf, {"direction": "RECEIVE", "currency": "USD", "leg_type": "FLOAT"}, "USD_SOFR", "NEW_YORK", start, end)
+    for (d, k), r in zip(days, rows):
+        exact = n_ * df * (k / 360.0) * 1e-4 * grow / (1.0 + f * k / 360.0)
+        assert r["date"] == d and abs(r["fixing01"] / exact - 1.0) < 2e-5, (d, r["fixing01"], exact)
+    plain = n_ * (92 / 360.0) * df * 1e-4                                # 2,530.00: without the compounding
+    total = sum(r["fixing01"] for r in rows)
+    assert 1.012 < total / plain < 1.013                                 # low by R·τ, about 1.3 % on a quarter at 5 %
+    # with no rate on the cashflow the factor is one, and the days add up to the plain figure
+    assert abs(sum(r["fixing01"] for r in F.period_resets({**cf, "rate": None}, {"direction": "RECEIVE"}, "X", "NEW_YORK", start, end)) - plain) < 1e-6
+
+
+def test_leverage_scales_a_reset_a_leg_at_leverage_nought_has_none_and_a_capped_floater_is_counted():
+    cf = {"period_start": "2026-11-16", "period_end": "2027-02-16", "notional": 100e6, "dcf": 92 / 360, "df": 0.99, "rate": 0.10, "cashflow_type": "COUPON"}
+    leg = [{"leg_id": "x", "leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "cashflows": [cf]}]
+    one = F.trade_resets([{**leg[0], "cashflows": [{**cf, "rate": 0.05}]}], {"x": {"leverage": 1}}, "USD_SOFR", date(2026, 11, 16), date(2026, 11, 16))[0]
+    two = F.trade_resets(leg, {"x": {"leverage": 2}}, "USD_SOFR", date(2026, 11, 16), date(2026, 11, 16))[0]            # twice the index: the cashflow's rate is 2 x 5 %
+    assert two["notional"] == 2 * one["notional"] == 200e6 and abs(two["fixing01"] - 2 * one["fixing01"]) < 1e-9
+    assert F.trade_resets(leg, {"x": {"leverage": 0}}, "USD_SOFR", date(2026, 11, 16), date(2026, 11, 20)) == []        # how a cap is booked: no linear exposure
+    assert F.trade_resets(leg, {"x": {"leverage": None}}, "USD_SOFR", date(2026, 11, 16), date(2026, 11, 16))[0]["notional"] == 100e6
+    assert F.embedded_options({"a": {"leg_type": "FLOAT", "cap_rate": 0.06}, "b": {"leg_type": "FLOAT"}, "c": {"leg_type": "FIXED", "cap_rate": 0.06},
+                               "d": {"leg_type": "OIS", "floor_rate": 0.0, "leverage": 1}, "e": {"leg_type": "FLOAT", "cap_rate": 0.05, "leverage": 0}}) == 2
 
 
 def test_a_non_deliverable_forward_fixes_once_on_its_fixing_date_signed_by_its_side():
@@ -267,5 +310,5 @@ def test_a_non_deliverable_forward_fixes_once_on_its_fixing_date_signed_by_its_s
     class N:                                                  # noqa: D401
         terms = {}
     sat = F.settlement_fixing(N, {"notional": 1e7, "direction": "BUY", "settle": date(2027, 2, 13)}, "EURUSD", "WM/Reuters 4pm London", 1.0, date(2026, 11, 2))
-    assert sat["date"] == date(2027, 2, 13) and sat["note"] == "no fixing date on the trade: its settlement date; a weekend: no currency fixing is published"
+    assert sat["date"] == date(2027, 2, 13) and sat["note"] == "its settlement date, a weekend"
     assert F.settlement_fixing(N, {"notional": 10.0, "direction": "BUY", "fixing_date": date(2027, 2, 13)}, "BTCUSD", "CME CF BRR", 1.0, date(2026, 11, 2))["note"] == ""      # a digital asset fixes every day
