@@ -28,6 +28,11 @@ methodology document carries its own version (v1.23). Commits on `main` are the 
   first frame at every key typed in the email or the password: the page handed it a newly built grid each time it
   was drawn again, and the surface starts over when its grid changes. One grid is now kept for one set of quotes.
   A journey types in the form and counts the surface's starts.
+- **The home's picture after a release that adds to the report, the same day (the app only).** The daily run keeps
+  a day's risk report once it is stored, and the home shows the stored one. A report stored before 0.40.0 has no
+  risk at quoted tenors, so the home went on drawing whole buckets until the market date moved. The home now
+  treats such a report as older, as it does one without the moves or the fixings, and asks for it again once;
+  the report it gets is stored, so the Market risk page has the tenors too.
 
 ## 0.40.0 · 15 November 2026
 

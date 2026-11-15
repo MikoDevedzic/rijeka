@@ -119,6 +119,14 @@ describe("the trader's home: a stored report that is not the book as it stands",
     expect(staleness({ ...rep, moves: undefined }, [live(1), live(2)])).toBe('older')
     expect(staleness({ ...rep, fixings: undefined }, [live(1), live(2)]), 'stored before the report carried the fixings').toBe('older')
   })
+  it('is older when a curve or a surface of its ladder has no risk at quoted tenors, and not when the list is there and empty', () => {
+    const lad = (ladder, vega = []) => ({ ...rep, ladder: { ...rep.ladder, ladder, vega } })
+    const book = [live(1), live(2)]
+    expect(staleness(lad([{ curve: 'USD_SOFR', buckets: { '1-5Y': 17496 }, total: 17496 }]), book), 'stored before 0.40.0').toBe('older')
+    expect(staleness(lad([{ curve: 'USD_SOFR', buckets: {}, points: [] }], [{ curve: 'EURUSD_VOL', buckets: {} }]), book), 'a surface without them').toBe('older')
+    expect(staleness(lad([{ curve: 'USD_SOFR', buckets: {}, points: [{ tenor: '5Y', years: 5, bucket: '1-5Y', value: 17496 }] }], [{ curve: 'EURUSD_VOL', buckets: {}, points: [] }]), book)).toBe(null)
+    expect(staleness(lad([]), book), 'a ladder with no curve says nothing either way').toBe(null)
+  })
 })
 
 describe("the trader's home: a stream's height", () => {

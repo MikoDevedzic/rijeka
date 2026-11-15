@@ -107,12 +107,17 @@ export function carry(rep) {
 }
 
 // Why a stored report is not the book as it stands, or null when it is: 'older' (stored before the report carried
-// the moves), 'market' (the market data has a later date), 'book' (a live trade it did not value, a valued trade
-// that is no longer live, or a trade booked after it was made). The home then asks for the report again, once.
+// the moves, the fixings, or a curve's risk at its quoted tenors), 'market' (the market data has a later date),
+// 'book' (a live trade it did not value, a valued trade that is no longer live, or a trade booked after it was
+// made). The home then asks for the report again, once. The daily run keeps a day's report once it is stored, so
+// without the 'older' rule a report made by the release before stays on the home until the market date moves:
+// the picture drew whole buckets for a day after the tenors were live (15 November 2026).
 const LIVE = new Set(['PENDING', 'CONFIRMED', 'LIVE'])           // backend/pnl/explain.py LIVE: what the ladder values
 export function staleness(rep, trades = [], marketDate = null) {
   if (!rep || !rep.date) return null
   if (rep.moves === undefined || rep.fixings === undefined) return 'older'          // stored before the report carried the moves, or the fixings
+  // since 0.40.0 every curve and surface of the ladder carries `points`, an empty list where it has none to give
+  if ([...(rep.ladder?.ladder || []), ...(rep.ladder?.vega || [])].some(r => r.points === undefined)) return 'older'
   if (marketDate && String(marketDate).slice(0, 10) > String(rep.date).slice(0, 10)) return 'market'
   const live = (trades || []).filter(t => LIVE.has(t.status))
   const seen = new Set((rep.ladder_rows || []).map(r => String(r.trade_id)))
