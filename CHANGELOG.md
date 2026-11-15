@@ -3,6 +3,18 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.21). Commits on `main` are the detail.
 
+## 0.39.2 · 15 November 2026
+
+**Five database views read with the caller's rights.** `pnl_daily_by_desk`, `pnl_mtd_by_trade`,
+`trade_latest_event`, `cashflow_net_by_date` and `cashflows_upcoming` were made before October 2026 as plain
+views, which read their tables with the rights of the views' owner: row-level security on the tables did not
+apply to a reader of a view. The database's security advisor reports each as an error. They now read as the
+caller (`security_invoker`), so the tables' own policies decide what a view returns
+(`docs/migrations/2026-11-15_views_security_invoker.sql`, applied by the migration runner).
+
+- No code reads these views, so no screen and no figure changes. Nothing is dropped; no grant or policy changes.
+- Sign-up mail is sent from miko@rijeka.app (`docs/ops/email.md`).
+
 ## 0.39.1 · 15 November 2026
 
 **The trade window has no CAPITAL tab.**
