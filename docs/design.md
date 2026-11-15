@@ -72,6 +72,11 @@ end (`trade-window/exposure-chart.js`). Three hues that cannot be mistaken for o
 
 ## The shape of a ticket
 
+**A ticket can leave the page.** The green light of its title bar opens it in a browser window of its own (`/ticket`),
+which the ticket fills: it can sit on another screen while the blotter stays where it is. A stored trade moves
+there and leaves the page; a new ticket opens blank there, and the one being typed stays (what is typed is not
+carried). The red light closes the ticket and, there, its window. On a phone the light does nothing.
+
 The same on every product. **TRADE** is what the user sets. **DETAILS** is the detail of it: a swap's period
 schedule; for a forward or an option, the record as it will be booked beside the market it was priced on.
 **CASHFLOWS** is what comes back: the flows as legs with their present values and their net, then the valuation

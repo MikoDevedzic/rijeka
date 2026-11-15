@@ -20,6 +20,7 @@ import AppBar           from './components/layout/AppBar'
 import CfgNav           from './components/layout/CfgNav'
 import BlotterShell     from './components/blotter/BlotterShell'
 import TradeWindow        from './components/trade-window/TradeWindow'
+import TicketWindowPage from './components/trade-window/TicketWindowPage'
 import useBookingStore    from './store/useBookingStore'
 import Shortcuts          from './components/common/Shortcuts'
 import Messenger, { MessengerPage } from './components/messenger/Messenger'
@@ -185,6 +186,7 @@ export default function App() {
           <Route path="/command-center" element={<CommandCenter />} />
           {/* The messenger in its own window, to put on another screen. */}
           <Route path="/messenger" element={<MessengerPage />} />
+          <Route path="/ticket" element={<TicketWindowPage />} />
           <Route element={<BlotterLayout />}>
             <Route path="/blotter" element={<BlotterShell />} />
             {/* the headlines whole: the phone's NEWS tab (a monitor has them in a card on the home) */}

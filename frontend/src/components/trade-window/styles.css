@@ -756,3 +756,11 @@
 .tbw-sec.tbw-sec-line { padding-top: 3px; padding-bottom: 3px; }
 .tbw-sec.tbw-sec-line .tbw-sec-header { margin-bottom: 0; }
 .tbw-sec.tbw-sec-line .tbw-lbl { margin-bottom: 0; }
+
+/* A ticket in a window of its own (/ticket, TicketWindowPage): the browser window is the ticket. It fills the window,
+   is not dragged or resized inside it, and the chat button is left to the main window. */
+html.solo-ticket .tbw-window { left: 0 !important; top: 0 !important; width: 100vw !important; max-width: 100vw !important; min-width: 0 !important;
+  height: 100vh !important; max-height: 100vh !important; border-radius: 0; resize: none; }
+html.solo-ticket .ms-launcher { display: none !important; }
+.tbw-solo-back { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg-deep); color: var(--text-dim); font-size: 13px; }
+button.tbw-light { cursor: pointer; }

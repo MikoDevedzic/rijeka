@@ -21,6 +21,7 @@
 
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
 import { usePhone, useStackedTables } from '../../lib/phone'
+import { popOutTicket, isSoloTicket } from '../../lib/windows'
 import './styles.css'
 
 import { getProduct, listProductsByAssetClass, listAssetClasses } from './registry'
@@ -238,7 +239,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const isCurrency                     = assetClass === 'FX' || assetClass === 'CRYPTO'
   const fxRef                          = useRef(null)
   const winRef                         = useRef(null)
-  useStackedTables(winRef, usePhone())                 // a phone reads a wide table downwards (lib/phone.js, Phone.css)
+  const phoneView = usePhone()
+  const soloTicket = isSoloTicket()                    // this page is a ticket's own window (/ticket): no second pop-out
+  useStackedTables(winRef, phoneView)                 // a phone reads a wide table downwards (lib/phone.js, Phone.css)
   // A manual drag of the resize handle leaves an inline width/height on the
   // window; clear it when the instrument changes so the window fits the new
   // content again (up to max-height, after which it scrolls).
@@ -1179,11 +1182,21 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             onMouseDown={e => e.stopPropagation()}
             title="Minimize (n/a)"
           />
-          <span
-            className="tbw-light tbw-light-g"
-            onMouseDown={e => e.stopPropagation()}
-            title="Maximize (n/a)"
-          />
+          {soloTicket || phoneView
+            ? <span className="tbw-light tbw-light-g" onMouseDown={e => e.stopPropagation()} title={soloTicket ? 'This ticket is in its own window' : 'Maximize (n/a)'} />
+            : <button
+                type="button"
+                className="tbw-light tbw-light-g"
+                data-testid="tbw-popout"
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => {
+                  e.stopPropagation()
+                  // a stored trade moves to its own window; a new ticket stays here (what is typed is not carried) and a blank one opens there
+                  const opened = popOutTicket(bookedTrade?.id || null)
+                  if (opened && bookedTrade?.id && onClose) onClose()
+                }}
+                title={bookedTrade?.id ? 'Open this trade in its own window: drag it to another screen' : 'Open a new ticket in its own window: drag it to another screen (what is typed here stays here)'}
+              />}
         </div>
         <div className="tbw-title" style={bookedTrade && !viewMode ? { color: 'var(--accent)' } : {}}>
           {booking

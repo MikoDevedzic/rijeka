@@ -79,8 +79,11 @@ export const test = base.extend({
       try { window.sessionStorage.setItem(key, value); window.sessionStorage.setItem('rijeka.booted', '1') } catch { /* a page without storage */ }
     }, ['sb-stack-auth-token', JSON.stringify(session)])
 
+    // The stack's addresses are wired on the browser context, not the page, so a window the app opens itself (the
+    // messenger, a ticket in its own window) reaches the stack as the page does.
+    const ctx = page.context()
     // supabase-js REST → the local PostgREST, the caller's own token passed through
-    await page.route(`${STACK}/rest/v1/**`, async route => {
+    await ctx.route(`${STACK}/rest/v1/**`, async route => {
       const req = route.request()
       const url = req.url().replace(`${STACK}/rest/v1`, REST)
       try {
@@ -89,13 +92,13 @@ export const test = base.extend({
       } catch (e) { await route.abort() ; problems.push(`REST ${req.method()} ${url}: ${e.message}`) }
     })
     // the auth host: the user this session belongs to, and a refresh that returns the same session
-    await page.route(`${STACK}/auth/v1/**`, async route => {
+    await ctx.route(`${STACK}/auth/v1/**`, async route => {
       const u = route.request().url()
       const body = u.includes('/token') ? session : u.includes('/logout') ? {} : session.user
       await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body) })
     })
     // realtime: accept the socket, acknowledge joins and heartbeats, send nothing
-    await page.routeWebSocket(/stack\.local\/realtime/, ws => {
+    await ctx.routeWebSocket(/stack\.local\/realtime/, ws => {
       ws.onMessage(raw => {
         let m; try { m = JSON.parse(raw) } catch { return }
         const reply = (response = {}) => ws.send(JSON.stringify({ topic: m.topic, event: 'phx_reply', ref: m.ref, join_ref: m.join_ref, payload: { status: 'ok', response } }))

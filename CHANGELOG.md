@@ -13,6 +13,10 @@ migration runner).
 
 - No page wrote these tables directly, so nothing changes on screen. `GET /api/ops/health` reports the state
   under `schema`.
+- **A ticket in a window of its own** (after the release, the same day). The green light of a trade window opens
+  the ticket in a browser window it fills, to put on another screen; a stored trade moves there, a new ticket
+  opens blank. The page is `/ticket`; nothing is computed differently.
+- The trader home ends above the chat button.
 
 ## 0.39.2 · 15 November 2026
 

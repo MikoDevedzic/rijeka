@@ -67,3 +67,16 @@ export function focusMessengerWindow() {
 export function popOutMessenger() {
   return openAppWindow(MESSENGER_PATH, MESSENGER_WINDOW, { w: 560, h: Math.min(820, (window.screen?.availHeight || 900) - 80) })
 }
+
+// A ticket in a window of its own (/ticket): a stored trade by its id, or a new ticket. A stored trade's window
+// is named for the trade, so a second click brings the same window forward; every new ticket gets its own.
+export const TICKET_PATH = '/ticket'
+export const SOLO_TICKET_CLASS = 'solo-ticket'      // on <html> while the page is a ticket's own window
+export const isSoloTicket = () => typeof document !== 'undefined' && document.documentElement.classList.contains(SOLO_TICKET_CLASS)
+
+export function popOutTicket(tradeId = null) {
+  const path = tradeId ? `${TICKET_PATH}?trade=${encodeURIComponent(tradeId)}` : TICKET_PATH
+  const name = tradeId ? `rijeka-ticket-${tradeId}` : `rijeka-ticket-new-${Date.now()}`
+  const sh = window.screen?.availHeight || 1000
+  return openAppWindow(path, name, { w: 1340, h: Math.min(940, sh - 60) })
+}
