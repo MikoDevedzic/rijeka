@@ -5,11 +5,30 @@ methodology document carries its own version (v1.20). Commits on `main` are the 
 
 ## 0.37.0 · 14 November 2026
 
-**A limit is read on the trader's home on both sides: flat in the middle, short one way, long the other.** The
-owner, of the home with no limits set: "it would be better if we had limits set up. then trader knows hows close
-he is to his 01 limits....keep in mind that risk can be positive and negative"; and of the two ways to hold a
-limit, "one number either side." A limit stays what it was: one number on the size, set under Configurations,
-Market risk, Limits. What changes is how the home draws it.
+**Every curve has a limit, and the trader's home reads a limit on both sides: flat in the middle, short one way,
+long the other.** The owner, of the home with no limits set: "it would be better if we had limits set up. then
+trader knows hows close he is to his 01 limits....keep in mind that risk can be positive and negative"; of the two
+ways to hold a limit, "one number either side"; and then, "each curve has to have abiility to set limit. is should
+be standard thing. when curve is added then limit is added."
+
+- **A limit for every curve, as standard.** Every curve, asset, volatility surface and forward basis the book
+  carries risk on has a limit from its first trade: its own where one has been set, otherwise the standard size for
+  its kind. Nothing is stored for a standard limit; it is worked out with the report (`risk/limits.py`
+  `with_standards`), so there is no migration and nothing to back-fill. The sizes as shipped are round figures to
+  start from (50,000 per bp for a curve, 150,000 per 1% for a currency, 75,000 per 1% for a digital asset, 25,000
+  for a surface's vega, 10,000 per bp for a forward basis), said to be so on the page, and a firm sets its own
+  (`STANDARD:<kind>`). **This raises warnings and breaches where a book is larger than those sizes**, on the Risk
+  page, in the desk feed and on the home, until the sizes are set.
+- **Configurations, Market risk, Limits** opens with A LIMIT FOR EVERY CURVE: one row a curve, its position, its
+  limit (STANDARD or ITS OWN), the share used, and a field to give it its own; STANDARD takes its own off again.
+  Under it, the standard size of each kind. The firm's other limits (VaR, a stress loss, a tenor bucket, a desk or
+  a book) are below, as before.
+- **A limit can be set on a surface's vega and on a forward basis** (`VEGA:<surface>`, `VEGA:<surface>:<bucket>`,
+  `CRYBASIS01:<curve>`), which could not be limited before.
+- **A limit set now shows now.** A stored report carried the limits of the moment it was made; it is now read
+  against the limits as they stand (`risk/report.py with_limits_as_they_stand`), which costs no valuation.
+
+A limit stays one number on the size. How the home draws it:
 
 - **The rail is two-sided.** Flat is the middle; a short position stands to the left by how much of its limit it
   uses, a long one to the right; both ends are hatched past the limit. A size with no side (a VaR, a stress loss,
@@ -27,10 +46,10 @@ Market risk, Limits. What changes is how the home draws it.
   in the factor's own unit. A limit shown there is not listed again under it; the rest (VaR, a stress loss, the
   book's IR01) are OTHER LIMITS. LIMITS → opens the page they are set on, for those who may set them.
 
-What it is not: no limit can yet be set on a vega or a forward basis, or with a different size for long and short;
-the limits are the firm's on the user's book, not a trader's own; a limit on a desk or a book is on the rail and not
+What it is not: no limit has a different size for long and short; a curve in the market data that no trade is on
+has no row until its first trade; the limits are the firm's on the user's book, not a trader's own; a limit on a desk or a book is on the rail and not
 on a stream, because a stream is the whole book. The size of a share is the one the API reports for the limit
-(`utilisation_pct`); the side is read from the factor's own figure. No change to the engine or the database.
+(`utilisation_pct`); the side is read from the factor's own figure. No change to the database.
 
 ## 0.36.0 · 14 November 2026
 

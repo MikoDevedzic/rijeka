@@ -19,6 +19,7 @@ import './TraderHome.css'
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const REFRESH_MS = 60_000
 const MODE_KEY = 'rijeka.home.height'
+const GUTTER = 46                     // px at the start of the lanes, kept for the totals' gauges where any factor has one
 const NEEDS = 3                      // rows of the desk feed the home shows; the rest are a count
 const FRAME_MS = 33                  // the streams' light moves at thirty frames a second: enough to read as water, half the work
 const reduced = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -135,7 +136,7 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
                   {riskOn && rep ? stand.words.map(([c, t]) => <span key={t} className={`th-w ${c}`}><i />{t}</span>)
                     : <>{pending > 0 && <span className="th-w hollow"><i />{pending} to confirm</span>}<span className="th-w dim"><i />{trades.length} trade{trades.length === 1 ? '' : 's'}</span>{confirmed > 0 && <span className="th-w sealed"><i />{confirmed} confirmed</span>}</>}
                 </div>
-                {riskOn && rep && <p className="th-tight">{stand.tight || (rep.can_write ? 'A limit on a 01, on VaR or on a stress loss is set under Configurations, Market risk, Limits; it is then drawn here, on the rail and on its stream.' : 'Limits are set by your risk manager; they are then drawn here.')}{rep.date ? ` Risk as of ${fmtD(rep.date)}.` : ''}{rep.can_write && <> <button className="dh-link" data-testid="th-set-limits" onClick={() => navigate('/configurations/market-risk/limits')}>{marks.length ? 'LIMITS →' : 'SET LIMITS →'}</button></>}</p>}
+                {riskOn && rep && <p className="th-tight">{stand.tight || (rep.can_write ? 'A limit on a 01, on VaR or on a stress loss is set under Configurations, Market risk, Limits; it is then drawn here, on the rail and on its stream.' : 'Limits are set by your risk manager; they are then drawn here.')}{stand.standardOnly ? ' Every curve is at the standard limit for its kind until it is given its own.' : ''}{rep.date ? ` Risk as of ${fmtD(rep.date)}.` : ''}{rep.can_write && <> <button className="dh-link" data-testid="th-set-limits" onClick={() => navigate('/configurations/market-risk/limits')}>{marks.length ? 'LIMITS →' : 'SET LIMITS →'}</button></>}</p>}
                 {riskOn && risk.loading && <p className="th-tight">Measuring the book…</p>}
                 {riskOn && rep && risk.behind === 'running' && <p className="th-tight th-behind" data-testid="th-behind">Measuring the book again: this is the report as it was stored.</p>}
                 {riskOn && rep && BEHIND[risk.behind] && <p className="th-tight th-behind warn" data-testid="th-behind">{BEHIND[risk.behind]}, and could not be run again just now ({why429(risk.liveErr)}). The Risk page runs it.</p>}
@@ -215,7 +216,10 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
 const SHAPE = { o: 'a 01 or the book\'s mark, on the side it is on', s: 'a size: VaR, a stress loss, a limit on a desk or a book', c: 'an exposure to a counterparty' }
 function Rail({ marks }) {
   const ref = useRef(null), w = useWidth(ref)
-  const lay = useMemo(() => railLayout(marks, w || 0), [marks, w])
+  // every limit has a mark; a name is written for those close to or past their limit and for the four most used
+  // (a book with a standard limit on every curve has many marks, most of them near the middle)
+  const named = useMemo(() => marks.filter((m, i) => m.status !== 'OK' || i < 4), [marks])
+  const lay = useMemo(() => railLayout(named, w || 0), [named, w])
   const LH = 17
   return (
     <div className="th-rail" ref={ref} data-testid="th-rail">
@@ -321,6 +325,7 @@ function River({ drawn, mode, fl, asOf }) {
   const [hot, setHot] = useState(-1)
   const reach = useMemo(() => bucketReach(asOf), [asOf])
   const AXIS = 40, n = drawn.length
+  const gut = hs.some(h => h.total) ? GUTTER : 0          // room at the lanes' start for the gauge of a limit on a total, and its figure
   const height = Math.max(300, Math.min(540, n * 80)) + AXIS
 
   useEffect(() => {
@@ -331,12 +336,13 @@ function River({ drawn, mode, fl, asOf }) {
     const g = c.getContext('2d')
     const css = getComputedStyle(document.documentElement)
     const cols = drawn.map(f => css.getPropertyValue(RISK_FACTORS[f.factor].token).trim() || T.textDim)
-    const top = 6, bottom = H - AXIS, lane = (bottom - top) / n, amp = lane * 0.4, colW = W / BUCKETS.length          // 0.4, so a stream held just past its limit stays in its own lane
+    const top = 6, bottom = H - AXIS, lane = (bottom - top) / n, amp = lane * 0.4, colW = (W - gut) / BUCKETS.length          // 0.4, so a stream held just past its limit stays in its own lane
+    const colX = (i) => gut + colW * i
     // six nodes across: nothing at either edge, the bucket's height at its middle; a cosine between them, so the
     // line never rises past a bucket's own figure
-    const nodes = (h) => [[0, 0], ...h.map((v, i) => [colW * (i + 0.5), v]), [W, 0]]
+    const nodes = (h) => [[gut, 0], ...h.map((v, i) => [colX(i + 0.5), v]), [W, 0]]
     const yAt = (nd, x) => { let k = 0; while (k < nd.length - 2 && x > nd[k + 1][0]) k++; const [x0, y0] = nd[k], [x1, y1] = nd[k + 1], u = Math.max(0, Math.min(1, (x - x0) / (x1 - x0 || 1))); return y0 + (y1 - y0) * (1 - Math.cos(Math.PI * u)) / 2 }
-    const xs = []; for (let x = 0; x <= W; x += 4) xs.push(x)
+    const xs = []; for (let x = gut; x <= W; x += 4) xs.push(x)
     const shape = drawn.map((f, k) => { const base = top + lane * (k + 0.5), nd = nodes(hs[k].h); return { base, ys: xs.map(x => base - yAt(nd, x) * amp) } })
     const still = reduced()
     let raf = 0, last = -FRAME_MS
@@ -347,11 +353,11 @@ function River({ drawn, mode, fl, asOf }) {
       g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H); g.globalAlpha = 1; g.setLineDash([]); g.shadowBlur = 0; g.globalCompositeOperation = 'source-over'
       g.textAlign = 'center'; g.textBaseline = 'alphabetic'
       const hot = hotRef.current
-      if (hot >= 0) { g.fillStyle = alpha(T.text, 0.035); g.fillRect(colW * hot, top, colW, bottom - top) }
+      if (hot >= 0) { g.fillStyle = alpha(T.text, 0.035); g.fillRect(colX(hot), top, colW, bottom - top) }
       BUCKETS.forEach((b, i) => {
-        if (i) { g.strokeStyle = alpha(T.border, 0.7); g.lineWidth = 1; g.beginPath(); g.moveTo(colW * i, top); g.lineTo(colW * i, bottom + 4); g.stroke() }
-        g.font = `11px ${MONO}`; g.fillStyle = i === hot ? T.textHi : T.textDim; g.fillText(BUCKET_LABEL[b], colW * (i + 0.5), bottom + 18)
-        g.fillStyle = T.textMute; g.fillText(reach[i], colW * (i + 0.5), bottom + 33)
+        if (i || gut) { g.strokeStyle = alpha(T.border, 0.7); g.lineWidth = 1; g.beginPath(); g.moveTo(colX(i), top); g.lineTo(colX(i), bottom + 4); g.stroke() }
+        g.font = `11px ${MONO}`; g.fillStyle = i === hot ? T.textHi : T.textDim; g.fillText(BUCKET_LABEL[b], colX(i + 0.5), bottom + 18)
+        g.fillStyle = T.textMute; g.fillText(reach[i], colX(i + 0.5), bottom + 33)
       })
       // which way is which, said once: above a stream's line the book is long, below it short
       g.font = `10px ${MONO}`; g.textAlign = 'right'; g.fillStyle = T.textMute
@@ -364,7 +370,7 @@ function River({ drawn, mode, fl, asOf }) {
         hs[k].bank.forEach((b, i) => {
           if (b == null) return
           for (const sd of [1, -1]) {
-            const y = base - sd * b * amp, x0 = colW * i + 5, x1 = colW * (i + 1) - 5
+            const y = base - sd * b * amp, x0 = colX(i) + 5, x1 = colX(i + 1) - 5
             g.strokeStyle = alpha(T.textHi, 0.6); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke()
             g.strokeStyle = alpha(T.textMute, 0.45)
             for (let x = x0; x < x1; x += 7) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - sd * 4); g.stroke() }
@@ -378,7 +384,7 @@ function River({ drawn, mode, fl, asOf }) {
           g.strokeStyle = alpha(T.textHi, 0.8); g.lineWidth = 1.5
           for (const sd of [1, -1]) { g.beginPath(); g.moveTo(gx - 4, base - sd * reach); g.lineTo(gx + 4, base - sd * reach); g.stroke() }
           g.fillStyle = col; g.fillRect(gx - 2, Math.min(base, base - u * reach), 4, Math.abs(u * reach))
-          g.font = `500 11px ${MONO}`; g.textAlign = 'left'; g.fillText(`${Math.round(Math.abs(tot.u) * 100)}%`, gx - 4, tot.u < 0 ? base + reach + 12 : base - reach - 5); g.textAlign = 'center'          // past the tick on its own side, clear of the stream
+          g.font = `500 11px ${MONO}`; g.textAlign = 'left'; g.fillText(`${Math.round(Math.abs(tot.u) * 100)}%`, gx + 7, tot.u < 0 ? base + 13 : base - 5); g.textAlign = 'center'          // in the gutter beside the gauge, on the side the position is on
         }
         const grad = g.createLinearGradient(0, base - amp, 0, base + amp)
         grad.addColorStop(0, alpha(c, 0.4)); grad.addColorStop(0.5, alpha(c, 0)); grad.addColorStop(1, alpha(c, 0.4))
@@ -402,14 +408,14 @@ function River({ drawn, mode, fl, asOf }) {
           if (!t) return
           const y = Math.max(top + 10, Math.min(bottom - 3, base - hs[k].h[i] * amp + (t.u < 0 ? 14 : -7)))
           g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim
-          g.fillText(`${Math.round(Math.abs(t.u) * 100)}%`, colW * (i + 0.5), y)
+          g.fillText(`${Math.round(Math.abs(t.u) * 100)}%`, colX(i + 0.5), y)
         })
       })
     }
     raf = requestAnimationFrame(draw)
     redraw.current = still ? () => draw(0) : null          // moving, the next frame reads the bucket; still, it is drawn when it changes
     return () => { cancelAnimationFrame(raf); redraw.current = null }
-  }, [drawn, hs, w, height, n, reach])
+  }, [drawn, hs, w, height, n, reach, gut])
   useEffect(() => { hotRef.current = hot; redraw.current?.() }, [hot])
 
   // The tip follows the pointer by its own style, not by a render: only entering another bucket draws the page again.
@@ -417,7 +423,7 @@ function River({ drawn, mode, fl, asOf }) {
   useLayoutEffect(place)
   const move = (e) => {
     const r = box.current.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top
-    const i = Math.max(0, Math.min(BUCKETS.length - 1, Math.floor(x / (r.width / BUCKETS.length))))
+    const i = Math.max(0, Math.min(BUCKETS.length - 1, Math.floor((x - gut) / ((r.width - gut) / BUCKETS.length))))
     at.current = { x: Math.max(0, Math.min(x + 16, r.width - 300)), y: Math.max(4, Math.min(y - 24, r.height - AXIS - 22 * (n + 1))) }
     place()
     if (i !== hot) setHot(i)
@@ -471,7 +477,7 @@ function Factors({ on, rep, list, marks, fl, any, navigate }) {
               ? <span className="th-gauge" data-testid="th-gauge"><i className={hd.state} style={{ [hd.pos < 0 ? 'right' : 'left']: '50%', width: `${Math.min(50, Math.abs(hd.u) * 40)}%` }} /><em style={{ left: '10%' }} /><em style={{ left: '90%' }} /></span>
               : <span className="th-bar"><i style={{ width: `${top && pk[i] ? Math.max(2, pk[i].usd / top * 100) : 0}%`, background: `var(${RISK_FACTORS[f.factor].token})` }} /></span>}
             {hd
-              ? <small className="th-row-d th-row-l"><span><b className={`fig ${hd.state}`}>{Math.round(Math.abs(hd.u) * 100)}%</b> of {fmt0(hd.limit)}{hd.bucket ? ` · ${BUCKET_LABEL[hd.bucket]}` : ''} · {hd.pos < 0 ? 'short' : 'long'}</span><span>{hd.room >= 0 ? <><b className="fig">{fmt0(hd.room)}</b> of room</> : <><b className="fig BREACH">{fmt0(-hd.room)}</b> past it</>}</span></small>
+              ? <small className="th-row-d th-row-l"><span><b className={`fig ${hd.state}`}>{Math.round(Math.abs(hd.u) * 100)}%</b> of {fmt0(hd.limit)}{hd.standard ? ', the standard' : ''}{hd.bucket ? ` · ${BUCKET_LABEL[hd.bucket]}` : ''} · {hd.pos < 0 ? 'short' : 'long'}</span><span>{hd.room >= 0 ? <><b className="fig">{fmt0(hd.room)}</b> of room</> : <><b className="fig BREACH">{fmt0(-hd.room)}</b> past it</>}</span></small>
               : <small className="th-row-d">{pk[i] ? <>≈ <b className="fig">{fmt0(pk[i].usd)}</b> a day · {BUCKET_LABEL[pk[i].bucket]}</> : 'no usual move is measured for it'}</small>}
           </div>
         )

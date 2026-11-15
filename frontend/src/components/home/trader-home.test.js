@@ -181,7 +181,7 @@ describe("the trader's home: limits", () => {
     expect(s.words).toEqual([['over', '1 limit passed'], ['near', '1 close'], ['dim', '2 clear'], ['hollow', '2 to confirm']])
     expect(s.tight).toBe('Closest: USD SOFR 1-5Y · SWAPS, at 133% of its limit.')
     expect(standing(limitMarks(LIMS.slice(0, 1)), 0).words).toEqual([['ok', 'Inside every limit'], ['dim', '1 clear']])
-    expect(standing([], 0)).toEqual({ words: [['mute', 'No limits set']], tight: '' })
+    expect(standing([], 0)).toEqual({ words: [['mute', 'No limits set']], standardOnly: false, tight: '' })
   })
   it('places each mark by how much of its limit is used, holds a mark past 125% at the rail\'s end, and lifts a label off its neighbour', () => {
     const { marks, lanes: n } = railLayout(limitMarks(LIMS), 1000)
@@ -255,6 +255,28 @@ describe("the trader's home: a factor against its limits", () => {
     expect(raw.bank[1]).toBeCloseTo(Math.sqrt(5000 / 4000), 9)          // just past the largest bucket: still on the lane
     expect(raw.bank[2]).toBeCloseTo(Math.sqrt(2000 / 4000), 9)
     expect(raw.bank[0]).toBe(null)                                       // no limit of its own on this bucket
+  })
+})
+
+describe("the trader's home: a limit for every curve", () => {
+  const list = factors(REP, TRADES)
+  const limits = [
+    { id: 'standard:IR01:USD_SOFR', metric: 'IR01:USD_SOFR', scope: 'ALL', limit: 50000, warn_pct: 80, utilisation_pct: 3.4, status: 'OK', standard: true },
+    { id: 'standard:VEGA:USD_SWVOL_ATM', metric: 'VEGA:USD_SWVOL_ATM', scope: 'ALL', limit: 25000, warn_pct: 80, utilisation_pct: 16.8, status: 'OK', standard: true },
+    { id: 'vb', metric: 'VEGA:USD_SWVOL_ATM:1-5Y', scope: 'ALL', limit: 5000, warn_pct: 80, utilisation_pct: 84, status: 'WARN' },
+    { id: 'standard:CRYBASIS01:BTC_FUNDING', metric: 'CRYBASIS01:BTC_FUNDING', scope: 'ALL', limit: 10000, warn_pct: 80, utilisation_pct: 14.6, status: 'OK', standard: true },
+  ]
+  it('draws a limit on a surface\'s vega and on a forward basis as it does a curve\'s, and knows a standard one', () => {
+    const by = factorLimits(limits), vega = list.find(f => f.key === 'VEGA:USD_SWVOL_ATM'), basis = list.find(f => f.key === 'BASIS:BTC_FUNDING')
+    expect(limitsOf(vega, by).total).toMatchObject({ limit: 25000, standard: true }); expect(limitsOf(vega, by).buckets[1]).toMatchObject({ limit: 5000, standard: false })
+    expect(against(vega, limitsOf(vega, by)).head).toMatchObject({ u: 0.84, state: 'WARN', bucket: '1-5Y', standard: false })
+    expect(against(basis, limitsOf(basis, by)).head).toMatchObject({ u: -0.146, standard: true, bucket: null })      // short the basis: the left of the rail, below the line
+  })
+  it('names them on the rail, on the side the figure is on, and says when every limit there is a standard one', () => {
+    const m = limitMarks(limits, [], list)
+    expect(m.map(x => [x.name, x.side, x.standard])).toEqual([['USD SWAPTIONS VEGA 1-5Y', 1, false], ['USD SWAPTIONS VEGA', 1, true], ['BTC CRYBASIS01', -1, true], ['IR01 USD SOFR', 1, true]])
+    expect(standing(m, 0).standardOnly).toBe(false)
+    expect(standing(m.filter(x => x.standard), 0).standardOnly).toBe(true)
   })
 })
 

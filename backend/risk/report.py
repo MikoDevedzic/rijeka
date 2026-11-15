@@ -114,6 +114,7 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
            "generated_at": datetime.now(timezone.utc).isoformat()}
     lims = L.list_limits(db, firm_id)
     rep["limits"] = L.evaluate(lims, rep)
+    rep["standards"] = L.standards(lims)             # the size a curve is limited at until it has a limit of its own
     rep["breaches"] = sum(1 for x in rep["limits"] if x["status"] == "BREACH")
     rep["warnings"] = sum(1 for x in rep["limits"] if x["status"] == "WARN")
     rep["tables"] = L.tables_present(db)
@@ -163,6 +164,20 @@ def stored_report(db: Session, uid: str, d: Optional[date] = None) -> Optional[d
     rep = dict(r.report)
     rep["from_store"] = True
     rep["stored_at"] = r.created_at.isoformat() if r.created_at else None
+    return rep
+
+
+def with_limits_as_they_stand(db: Session, uid: str, rep: dict) -> dict:
+    """The report's own figures against the firm's limits as they are now. A stored report carries the limits of the
+    moment it was made; a limit set since (or a curve's standard one) is then missing until the next report. The
+    figures a limit is measured on are all in the report, so evaluating again costs no valuation."""
+    if not rep.get("date"):
+        return rep
+    lims = L.list_limits(db, firm_of(db, uid))
+    rep["limits"] = L.evaluate(lims, rep)
+    rep["standards"] = L.standards(lims)
+    rep["breaches"] = sum(1 for x in rep["limits"] if x["status"] == "BREACH")
+    rep["warnings"] = sum(1 for x in rep["limits"] if x["status"] == "WARN")
     return rep
 
 

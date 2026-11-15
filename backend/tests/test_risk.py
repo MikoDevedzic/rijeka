@@ -131,3 +131,60 @@ def test_the_report_carries_the_moves_beside_the_var_and_the_var_is_as_it_was():
     sd = V.typical_moves(ch)["stdev"]["USD_SOFR"]["1-5Y"]
     assert abs(sd - 3.0276503541) < 1e-9                                          # stdev of −4 … 5
     assert abs(1000.0 * sd - 3027.6503541) < 1e-6                                 # what a usual day moves that bucket by
+
+
+def _book():
+    """A report's ladder and rows for a book on two curves, a currency, a digital asset, a surface and a forward basis."""
+    rows = [{"desk": "RATES", "book": "G10", "npv": 0.0, "ir01": 4000.0, "usd_rate": 1.0, "kr01": {"USD_SOFR": {"1-5Y": 3000.0, "5-10Y": 1000.0}}, "spot01": {},
+             "vega": {"USD_SWVOL_ATM": {"1-5Y": 1200.0, "5-10Y": -200.0}}, "fund01": {}},
+            {"desk": "DIGITAL", "book": "BTC", "npv": 0.0, "ir01": 0.0, "usd_rate": 2.0, "kr01": {"EUR_ESTR": {"0-1Y": -400.0}}, "spot01": {"BTC": 30000.0, "EUR": -5000.0},
+             "vega": {}, "fund01": {"BTC_FUNDING": {"FLAT": 600.0}}}]
+    return {"ladder_rows": rows, "var": {}, "stress": [],
+            "ladder": {"ladder": [{"curve": "EUR_ESTR", "buckets": {}, "total": -800.0}, {"curve": "USD_SOFR", "buckets": {}, "total": 4000.0}],
+                       "spot01": {"BTC": 60000.0, "EUR": -10000.0}, "vega": [{"curve": "USD_SWVOL_ATM", "buckets": {}, "total": 1000.0}],
+                       "crybasis01": {"BTC_FUNDING": -1200.0}}}
+
+
+def test_a_limit_can_be_set_on_a_surfaces_vega_and_on_a_forward_basis():
+    rep = _book()
+    assert L.metric_value("VEGA:USD_SWVOL_ATM", rep, rep["ladder_rows"]) == 1000.0                 # 1,200 − 200, the size
+    assert L.metric_value("VEGA:USD_SWVOL_ATM:5-10Y", rep, rep["ladder_rows"]) == 200.0
+    assert L.metric_value("VEGA:NOPE", rep, rep["ladder_rows"]) == 0.0
+    assert L.metric_value("CRYBASIS01:BTC_FUNDING", rep, rep["ladder_rows"]) == 1200.0             # 600 in a currency at 2 to the dollar
+    ev = L.evaluate([{"id": "v", "metric": "VEGA:USD_SWVOL_ATM", "scope": "ALL", "scope_name": None, "limit": 1250.0, "warn_pct": 80.0},
+                     {"id": "b", "metric": "CRYBASIS01:BTC_FUNDING", "scope": "ALL", "scope_name": None, "limit": 1000.0, "warn_pct": 80.0}], rep)
+    by = {e["metric"]: e for e in ev}
+    assert by["VEGA:USD_SWVOL_ATM"]["status"] == "WARN" and round(by["VEGA:USD_SWVOL_ATM"]["utilisation_pct"], 6) == 80.0
+    assert by["CRYBASIS01:BTC_FUNDING"]["status"] == "BREACH" and round(by["CRYBASIS01:BTC_FUNDING"]["utilisation_pct"], 6) == 120.0
+
+
+def test_every_curve_of_the_book_has_a_limit_its_own_or_the_standard_one_for_its_kind():
+    rep = _book()
+    ev = L.evaluate([], rep)
+    got = {e["metric"]: (e["limit"], e.get("standard"), e.get("kind"), round(e["utilisation_pct"], 4), e["status"]) for e in ev}
+    assert got == {"IR01:EUR_ESTR": (50000.0, True, "IR01", 1.6, "OK"), "IR01:USD_SOFR": (50000.0, True, "IR01", 8.0, "OK"),
+                   "SPOT01:BTC": (75000.0, True, "CRY01", 80.0, "WARN"), "SPOT01:EUR": (150000.0, True, "FX01", 6.6667, "OK"),
+                   "VEGA:USD_SWVOL_ATM": (25000.0, True, "VEGA", 4.0, "OK"), "CRYBASIS01:BTC_FUNDING": (10000.0, True, "CRYBASIS01", 12.0, "OK")}
+    # a curve's own limit on its total takes the standard one's place; a limit on one of its buckets does not
+    own = [{"id": "1", "metric": "ir01:usd_sofr", "scope": "ALL", "scope_name": None, "limit": 4000.0, "warn_pct": 80.0},
+           {"id": "2", "metric": "KR01:EUR_ESTR:0-1Y", "scope": "ALL", "scope_name": None, "limit": 1000.0, "warn_pct": 80.0},
+           {"id": "3", "metric": "SPOT01:BTC", "scope": "DESK", "scope_name": "DIGITAL", "limit": 1.0, "warn_pct": 80.0}]
+    ev = L.evaluate(own, rep)
+    sofr = [e for e in ev if e["metric"].upper() == "IR01:USD_SOFR"]
+    assert len(sofr) == 1 and sofr[0]["limit"] == 4000.0 and not sofr[0].get("standard") and sofr[0]["status"] == "BREACH"
+    assert sum(1 for e in ev if e["metric"] == "IR01:EUR_ESTR" and e.get("standard")) == 1          # still limited as a whole
+    assert sum(1 for e in ev if e["metric"] == "SPOT01:BTC" and e.get("standard")) == 1             # a desk's limit is not the book's
+    assert len(ev) == 3 + 5
+
+
+def test_a_firm_sets_the_standard_size_of_a_kind_and_it_is_not_itself_a_limit_on_anything():
+    rep = _book()
+    lims = [{"id": "s", "metric": "STANDARD:IR01", "scope": "ALL", "scope_name": None, "limit": 5000.0, "warn_pct": 70.0, "set_by": "RISK"}]
+    std = L.standards(lims)
+    assert std["IR01"] == {"kind": "IR01", "limit": 5000.0, "warn_pct": 70.0, "id": "s", "set_by": "RISK", "built_in": False, "unit": "per bp, a curve"}
+    assert std["VEGA"]["built_in"] and std["VEGA"]["limit"] == L.STANDARD_SIZES["VEGA"] and set(std) == set(L.STANDARD_SIZES)
+    ev = {e["metric"]: e for e in L.evaluate(lims, rep)}
+    assert "STANDARD:IR01" not in ev
+    assert ev["IR01:USD_SOFR"]["limit"] == 5000.0 and ev["IR01:USD_SOFR"]["status"] == "WARN" and ev["IR01:USD_SOFR"]["warn_pct"] == 70.0      # 80% used, warned from 70%
+    assert ev["IR01:EUR_ESTR"]["limit"] == 5000.0 and ev["SPOT01:BTC"]["limit"] == L.STANDARD_SIZES["CRY01"]
+    assert L.evaluate([], {"ladder_rows": [], "var": {}, "stress": []}) == []                       # a report with no ladder has no curves to limit

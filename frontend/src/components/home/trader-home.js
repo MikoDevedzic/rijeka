@@ -159,7 +159,7 @@ const isAll = (l) => String(l?.scope || 'ALL').toUpperCase() === 'ALL'
 // draws that, so the two cannot disagree (a flat curve's risk, which the picture places in a bucket, is not in the
 // figure a bucket's limit is measured on).
 const lim = (l) => ({ id: l.id, limit: Number(l.limit), warn: Number.isFinite(Number(l.warn_pct)) ? Number(l.warn_pct) / 100 : 0.8,
-                      used: Number.isFinite(l.utilisation_pct) ? l.utilisation_pct / 100 : null })
+                      used: Number.isFinite(l.utilisation_pct) ? l.utilisation_pct / 100 : null, standard: !!l.standard })
 export function factorLimits(limits = []) {
   const by = new Map()
   const at = (key) => { const k = key.toUpperCase(); if (!by.has(k)) by.set(k, { total: null, buckets: BUCKETS.map(() => null) }); return by.get(k) }
@@ -170,6 +170,9 @@ export function factorLimits(limits = []) {
     if (h === 'KR01' && a && BUCKETS.includes(b)) at(`IR:${a}`).buckets[BUCKETS.indexOf(b)] = lim(l)
     else if (h === 'IR01' && a) at(`IR:${a}`).total = lim(l)
     else if (h === 'SPOT01' && a) at(`SPOT:${a}`).total = lim(l)
+    else if (h === 'VEGA' && a && BUCKETS.includes(b)) at(`VEGA:${a}`).buckets[BUCKETS.indexOf(b)] = lim(l)
+    else if (h === 'VEGA' && a && !b) at(`VEGA:${a}`).total = lim(l)
+    else if (h === 'CRYBASIS01' && a) at(`BASIS:${a}`).total = lim(l)
   }
   return by
 }
@@ -184,7 +187,7 @@ export function against(f, fl) {
   if (!fl) return null
   const one = (l, pos, bucket) => {
     const size = l.used != null ? l.used : Math.abs(pos) / l.limit, u = (pos < 0 ? -1 : 1) * size
-    return { u, state: stateOf(u, l.warn), limit: l.limit, pos, bucket, room: l.limit * (1 - size) }
+    return { u, state: stateOf(u, l.warn), limit: l.limit, pos, bucket, room: l.limit * (1 - size), standard: l.standard }
   }
   const per = f.v.map((x, i) => fl.buckets[i] ? one(fl.buckets[i], x, BUCKETS[i]) : null)
   const total = fl.total ? one(fl.total, f.total, null) : null
@@ -229,7 +232,8 @@ export function limitLabel(lim, scenarios = []) {
   const m = String(lim?.metric || ''), [head, a, b] = m.split(':')
   const name = head === 'VAR_99_1D' ? 'VAR' : head === 'VAR_95_1D' ? 'VAR 2ND' : head === 'ES_99_1D' ? 'ES' : head === 'VAR_H' ? 'VAR HORIZON'
     : head === 'IR01' ? (a ? `IR01 ${pretty(a)}` : 'IR01') : head === 'KR01' ? `${pretty(a)} ${b || ''}`.trim() : head === 'SPOT01' ? `${a} ${spotMeasure(a)[1]}`
-    : head === 'STRESS' ? `STRESS ${(scenarios.find(s => s.id === a)?.name || a || '').toUpperCase()}` : head === 'PFE_PEAK' ? `PFE ${a || ''}`.trim() : pretty(m)
+    : head === 'STRESS' ? `STRESS ${(scenarios.find(s => s.id === a)?.name || a || '').toUpperCase()}` : head === 'PFE_PEAK' ? `PFE ${a || ''}`.trim()
+    : head === 'VEGA' && a ? `${surfaceName(a).toUpperCase()} VEGA${b ? ` ${b}` : ''}` : head === 'CRYBASIS01' && a ? `${a.replace(/_FUNDING$/, '')} CRYBASIS01` : pretty(m)
   return lim?.scope && String(lim.scope).toUpperCase() !== 'ALL' && lim.scope_name ? `${name} · ${String(lim.scope_name).toUpperCase()}` : name
 }
 // One mark per limit that has a figure against it, the closest to its limit first. `side` says which way the figure
@@ -243,11 +247,13 @@ export function limitMarks(limits = [], scenarios = [], list = [], npv = null) {
     if (h === 'KR01') { const f = fac.get(`IR:${a}`.toUpperCase()), i = BUCKETS.indexOf(b); return f && i >= 0 ? sgn(f.v[i]) : 0 }
     if (h === 'IR01') return a ? sgn(fac.get(`IR:${a}`.toUpperCase())?.total || 0) : sgn(list.filter(f => f.factor === 'ir').reduce((s, f) => s + f.total, 0))
     if (h === 'SPOT01') return sgn(fac.get(`SPOT:${a}`.toUpperCase())?.total || 0)
+    if (h === 'VEGA') { const f = fac.get(`VEGA:${a}`.toUpperCase()), i = BUCKETS.indexOf(b); return !f ? 0 : i >= 0 ? sgn(f.v[i]) : sgn(f.total) }
+    if (h === 'CRYBASIS01') return sgn(fac.get(`BASIS:${a}`.toUpperCase())?.total || 0)
     if (h === 'NPV') return sgn(npv || 0)
     return 0
   }
   return (limits || []).filter(l => Number.isFinite(l?.utilisation_pct)).map(l => ({
-    id: l.id, name: limitLabel(l, scenarios), u: l.utilisation_pct / 100, pct: round(l.utilisation_pct), status: l.status, value: l.value, limit: l.limit, side: sideOf(l),
+    id: l.id, name: limitLabel(l, scenarios), u: l.utilisation_pct / 100, pct: round(l.utilisation_pct), status: l.status, value: l.value, limit: l.limit, side: sideOf(l), standard: !!l.standard,
     kind: /^(PFE|EPE|CVA|CE)/.test(String(l.metric)) ? 'c' : /^(VAR|ES|STRESS)/.test(String(l.metric).toUpperCase()) || !isAll(l) ? 's' : 'o',
   })).sort((a, b) => b.u - a.u)
 }
@@ -262,7 +268,7 @@ export function standing(marks, pending = 0) {
   if (marks.length && clear) words.push(['dim', `${clear} clear`])
   if (pending) words.push(['hollow', `${pending} to confirm`])
   const t = marks[0]
-  return { words, tight: t ? `Closest: ${t.name}${t.side ? (t.side > 0 ? ', long' : ', short') : ''}, at ${t.pct}% of its limit.` : '' }
+  return { words, standardOnly: marks.length > 0 && marks.every(m => m.standard), tight: t ? `Closest: ${t.name}${t.side ? (t.side > 0 ? ', long' : ', short') : ''}, at ${t.pct}% of its limit.` : '' }
 }
 // Where each mark and its label go on a rail `width` px wide: flat in the middle, 125% of a limit at either end. A
 // short figure is to the left of the middle, a long one and a size with no side to the right. A label that would

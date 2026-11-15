@@ -33,8 +33,12 @@ test('the home on a monitor: the statement, the risk by tenor, what needs you an
   await expect(river.locator('.th-lane', { hasText: 'USD SOFR · IR01' })).toBeVisible({ timeout: 120_000 })
   await expect(river.locator('.th-lane .fig').first()).toHaveText(/^[+−][\d,]+$/)
   await expect.poll(() => ink(river.locator('canvas')), 'the streams are drawn').toBeGreaterThan(2000)
-  await expect(river.getByTestId('th-mode'), 'no history of moves on the stack: no money scale is offered').toHaveCount(0)
+  // no history of moves on the stack, so no money scale; every curve has a limit (the standard one for its kind until
+  // it is given its own), so the scale against the limit is offered
+  await expect(river.getByTestId('th-mode').getByRole('button')).toHaveText(['OF ITS LIMIT', 'PER 01'])
   await expect(river).toContainText('each stream to its own scale')
+  await expect(home.getByTestId('th-rail').locator('.th-rl-track .th-rl-m').first(), 'a mark for a curve\'s limit').toBeVisible()
+  await expect(home.getByTestId('th-factors').locator('.th-row[data-factor="IR:USD_SOFR"]').getByTestId('th-gauge')).toBeVisible()
   await expect(river.locator('canvas')).toHaveAttribute('aria-label', /USD SOFR IR01 [+−][\d,]+ per bp/)
 
   // band 2, right: the factor and the VaR line (too little history says so; it does not print a figure)
@@ -242,4 +246,60 @@ test('a stored report that misses a trade is run again once; where it cannot be,
   await expect(app.getByTestId('th-behind')).toHaveCount(0)
   expect(lives).toBe(2)
   expect(problems.filter(p => !/HTTP 429 GET .*live=1/.test(p)), 'nothing wrong but the refusal this journey made').toEqual([])
+})
+
+test('a curve has a limit from its first trade; its own is set on the Limits page and stands on the home at once', async ({ app, problems }) => {
+  test.setTimeout(240_000)
+  await app.setViewportSize(MONITOR)
+  await bookedSwap(app)
+  const num = (t) => Number(String(t).replace(/[^0-9.]/g, ''))
+  const say = (n) => n.toLocaleString('en-US')
+  await app.goto('/configurations/market-risk/limits')
+  const every = app.getByTestId('every-curve'), row = every.locator('tr[data-metric="IR01:USD_SOFR"]')
+  await expect(row, 'the curve the swap is on has a row').toBeVisible({ timeout: 120_000 })
+  // as it starts: the standard size for a curve, as shipped
+  const stdIr = app.getByTestId('standard-sizes').locator('label[data-kind="IR01"]'), chip = stdIr.locator('.pnl-chip')
+  // (a run that stopped half way leaves its own limit or its own standard behind in the stack's database: put both back)
+  if (await stdIr.getByRole('button', { name: 'AS SHIPPED', exact: true }).count()) { await stdIr.getByRole('button', { name: 'AS SHIPPED', exact: true }).click(); await expect(chip).toHaveText('AS SHIPPED', { timeout: 30_000 }) }
+  if (await row.getByRole('button', { name: 'STANDARD', exact: true }).count()) { await row.getByRole('button', { name: 'STANDARD', exact: true }).click(); await expect(row.locator('.pnl-chip')).toHaveText('STANDARD', { timeout: 30_000 }) }
+  await expect(chip).toHaveText('AS SHIPPED')
+  const shipped = num(await stdIr.locator('b.fig').innerText())
+  await expect(row).toContainText('STANDARD')
+  await expect(row.locator('td').nth(2)).toHaveText(say(shipped))
+  await shot(app, 'limits-page')
+
+  // its own limit, sized so that the position uses about nine tenths of it
+  const pos = num(await row.locator('td').nth(1).innerText())
+  expect(pos, 'the swap carries IR01 on its curve').toBeGreaterThan(0)
+  const own = Math.ceil(pos / 0.9 / 100) * 100
+  await row.locator('input').fill(String(own))
+  await row.getByRole('button', { name: 'SET', exact: true }).click()
+  await expect(row).toContainText('ITS OWN', { timeout: 30_000 })
+  await expect(row.locator('td').nth(2)).toHaveText(say(own))
+  await expect(row).toHaveClass(/warn/)
+  await shot(app, 'limits-page-own')
+
+  // on the home at once, with no report run for it: the gauge beside the curve, the share and the room
+  await app.goto('/command-center')
+  const factor = app.getByTestId('th-factors').locator('.th-row[data-factor="IR:USD_SOFR"]')
+  await expect(factor).toContainText(`of ${say(own)}`, { timeout: 120_000 })
+  await expect(factor).not.toContainText('the standard')
+  await expect(factor.getByTestId('th-gauge').locator('i')).toHaveClass(/WARN/)
+  await expect(app.getByTestId('th-stand')).toContainText(/\d+ close/)
+  await shot(app, 'home-own-limit')
+
+  // back to the standard, and the standard size itself changed and put back
+  await app.goto('/configurations/market-risk/limits')
+  await expect(row).toContainText('ITS OWN', { timeout: 120_000 })
+  await row.getByRole('button', { name: 'STANDARD', exact: true }).click()
+  await expect(row).toContainText('STANDARD', { timeout: 30_000 })
+  await expect(row.locator('td').nth(2)).toHaveText(say(shipped))
+  await stdIr.locator('input').fill(String(shipped * 2))
+  await stdIr.getByRole('button', { name: 'SET', exact: true }).click()
+  await expect(chip).toHaveText(/^SET BY /, { timeout: 30_000 })
+  await expect(row.locator('td').nth(2), 'a curve at the standard follows it').toHaveText(say(shipped * 2))
+  await stdIr.getByRole('button', { name: 'AS SHIPPED', exact: true }).click()
+  await expect(chip).toHaveText('AS SHIPPED', { timeout: 30_000 })
+  await expect(row.locator('td').nth(2)).toHaveText(say(shipped))
+  expectClean(problems)
 })

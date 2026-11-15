@@ -22,6 +22,9 @@ METRIC_HELP = {
     "VAR_H": "VaR over the configured horizon", "IR01": "book IR01, all curves, absolute", "IR01:<curve>": "IR01 of one curve, absolute",
     "KR01:<curve>:<bucket>": "one tenor bucket of one curve, absolute", "SPOT01:<asset>": "PV for +1% spot in one asset, absolute",
     "NPV": "book mark, absolute", "STRESS:<scenario>": "loss under a named scenario",
+    "VEGA:<surface>": "vega of one volatility surface, absolute", "VEGA:<surface>:<bucket>": "one expiry bucket of one surface, absolute",
+    "CRYBASIS01:<curve>": "forward basis of one digital asset (its funding curve), absolute",
+    "STANDARD:<kind>": "the size every curve of a kind is limited at until it has a limit of its own (IR01, FX01, CRY01, VEGA, CRYBASIS01)",
     "PFE_PEAK:<counterparty>": "peak 95% PFE of the netting set (real-world)", "PFE:<counterparty>:<bucket>": "largest 95% PFE inside the tenor bucket",
     "EPE:<counterparty>": "expected positive exposure, first year", "CVA:<counterparty>": "CVA of the netting set (risk-neutral), absolute", "CE:<counterparty>": "current exposure after collateral",
 }
@@ -79,6 +82,13 @@ def metric_value(metric: str, rep: dict, scope_rows: list[dict]) -> Optional[flo
     if m.startswith("SPOT01:"):
         a = m.split(":", 1)[1]
         return abs(sum(r["spot01"].get(a, 0.0) * r.get("usd_rate", 0.0) for r in scope_rows))
+    if m.startswith("VEGA:"):
+        _, cid, b = (m.split(":") + [None, None])[:3]
+        return abs(sum((((r.get("vega") or {}).get(cid) or {}).get(b, 0.0) if b else sum(((r.get("vega") or {}).get(cid) or {}).values())) * r.get("usd_rate", 0.0)
+                       for r in scope_rows))
+    if m.startswith("CRYBASIS01:"):
+        cid = m.split(":", 1)[1]            # the basis is the negative of the funding 01: one size
+        return abs(sum(sum(((r.get("fund01") or {}).get(cid) or {}).values()) * r.get("usd_rate", 0.0) for r in scope_rows))
     if m.startswith("STRESS:"):
         sid = m.split(":", 1)[1]
         s = next((x for x in rep.get("stress", []) if x["id"] == sid), None)
@@ -100,10 +110,49 @@ def metric_value(metric: str, rep: dict, scope_rows: list[dict]) -> Optional[flo
     return None
 
 
+# ── a limit for every curve ──────────────────────────────────────────────────
+# Every curve the book carries risk on has a limit from its first trade: its own where one has been set, otherwise
+# the standard size for its kind. The standard is a firm's `STANDARD:<kind>` limit where it has set one, and the
+# size below where it has not: arbitrary round figures to start from, said to be so wherever they are shown, not a
+# view of what a desk should run. Nothing is stored for a standard limit: it is worked out with the report.
+STANDARD_SIZES = {"IR01": 50_000.0, "FX01": 150_000.0, "CRY01": 75_000.0, "VEGA": 25_000.0, "CRYBASIS01": 10_000.0}
+STANDARD_WARN_PCT = 80.0
+STANDARD_UNIT = {"IR01": "per bp, a curve", "FX01": "per 1%, a currency", "CRY01": "per 1%, a digital asset", "VEGA": "per point, a surface", "CRYBASIS01": "per bp, a forward basis"}
+_FIAT = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "ZAR", "SGD", "HKD", "CNH", "CNY", "TRY", "BRL", "INR", "KRW"}
+
+
+def standards(limits: list[dict]) -> dict[str, dict]:
+    """The standard size of each kind: the firm's own where it has set one, the built-in one where it has not."""
+    own = {l["metric"].upper().split(":", 1)[1]: l for l in limits if l["metric"].upper().startswith("STANDARD:") and l["scope"].upper() == "ALL"}
+    return {k: ({"kind": k, "limit": float(own[k]["limit"]), "warn_pct": float(own[k]["warn_pct"]), "id": own[k]["id"], "set_by": own[k].get("set_by"), "built_in": False}
+                if k in own else {"kind": k, "limit": v, "warn_pct": STANDARD_WARN_PCT, "id": None, "set_by": None, "built_in": True}) | {"unit": STANDARD_UNIT[k]}
+            for k, v in STANDARD_SIZES.items()}
+
+
+def factor_metrics(rep: dict) -> list[tuple[str, str]]:
+    """(kind, metric) for every curve, spot, surface and forward basis the book's ladder reports."""
+    lad = rep.get("ladder") or {}
+    out = [("IR01", f"IR01:{row['curve']}") for row in lad.get("ladder", [])]
+    out += [("FX01" if str(a).upper() in _FIAT else "CRY01", f"SPOT01:{a}") for a in (lad.get("spot01") or {})]
+    out += [("VEGA", f"VEGA:{row['curve']}") for row in lad.get("vega", [])]
+    out += [("CRYBASIS01", f"CRYBASIS01:{cid}") for cid in (lad.get("crybasis01") or lad.get("fund01") or {})]
+    return [(k, m.upper()) for k, m in out]
+
+
+def with_standards(limits: list[dict], rep: dict) -> list[dict]:
+    """The firm's limits, and a standard one for each curve of the book that has no limit of its own on its total."""
+    own = {l["metric"].upper() for l in limits if l["scope"].upper() == "ALL"}
+    std = standards(limits)
+    extra = [{"id": f"standard:{m}", "metric": m, "scope": "ALL", "scope_name": None, "limit": std[k]["limit"], "warn_pct": std[k]["warn_pct"],
+              "note": "", "set_by": std[k]["set_by"], "created_at": None, "standard": True, "kind": k}
+             for k, m in factor_metrics(rep) if m not in own]
+    return [l for l in limits if not l["metric"].upper().startswith("STANDARD:")] + extra
+
+
 def evaluate(limits: list[dict], rep: dict) -> list[dict]:
     rows = rep.get("ladder_rows") or []
     out = []
-    for lim in limits:
+    for lim in with_standards(limits, rep):
         scope = lim["scope"].upper()
         in_scope = rows if scope == "ALL" else [r for r in rows if (r["desk"] if scope == "DESK" else r["book"]) == lim["scope_name"]]
         if scope != "ALL" and lim["metric"].upper().startswith(("VAR", "ES", "STRESS", "PFE", "EPE", "CVA", "CE")):
