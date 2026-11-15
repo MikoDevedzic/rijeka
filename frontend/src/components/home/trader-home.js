@@ -228,11 +228,49 @@ export const canLimit = (list, by) => list.some(f => limitsOf(f, by))
 
 // What is written at a bucket's box: what the bucket carries on the scale being read ('day': what a usual day moves
 // it by, in USD, where the factor has a usual move; otherwise the sensitivity itself). Null where the bucket carries
-// nothing to draw.
-export function bucketFigure(f, i, mode) {
+// nothing to draw. `short` is the same figure in fewer characters, for a column too narrow for the whole of it.
+export function bucketFigure(f, i, mode, short = false) {
   if (!f || !(Math.abs(f.v[i]) >= EPS)) return null
-  const day = mode === 'day' && f.hasDay ? f.day?.[i] : null
-  return signed(day != null ? day : f.v[i])
+  const x = mode === 'day' && f.hasDay ? f.day[i] : f.v[i]
+  return short ? signedShort(x) : signed(x)
+}
+export const signedShort = (n) => {
+  const a = Math.abs(Number(n)), sg = n > 0 ? '+' : '−'
+  if (!Number.isFinite(a)) return '—'
+  return a >= 999_500 ? `${sg}${(a / 1e6).toFixed(a >= 99_950_000 ? 0 : a >= 9_995_000 ? 1 : 2)}m` : a >= 9_950 ? `${sg}${Math.round(a / 1e3)}k` : signed(n)
+}
+
+// What fits in `room` px at a bucket: the figure and the share of the bucket's limit, then the figure shortened with
+// the share, then the shortened figure alone. `width` measures a string as it will be drawn.
+export function figureFit(full, short, share, room, width) {
+  for (const [fig, sh] of [[full, share], [short, share], [short, '']]) if (width(fig + sh) <= room) return { fig, share: sh }
+  return { fig: short, share: '' }
+}
+
+// Where a bucket's figure is written: the y of its baseline, and whether that is inside the box. `side` 1 long (the
+// box stands above the stream's line at `base`), −1 short; `tall` the box's height; `line` how far from `base` the
+// bucket's own limit line stands on that side (null with none); `half` half the lane's height; `text` the figure's
+// height. Tried in turn: just past the box's far edge; past the limit line where that is in the way; inside the box,
+// at its far edge (nearer the stream's line than the limit line where that crosses the box). A figure never leaves
+// its lane, so it cannot be written over the lane beside it.
+export function figureAt({ side, base, tall, line = null, half, text = 10 }) {
+  const far = base - side * tall, lineY = line == null ? null : base - side * line
+  const past = (edge) => side > 0 ? edge - 5 : edge + 5 + text
+  const fits = (y) => side > 0 ? y - text >= base - half : y <= base + half
+  // the limit line and the hatching on its far side take five px; a figure is kept two px clear of them
+  const hits = (y) => lineY != null && (side > 0 ? y >= lineY - 7 && y - text <= lineY + 3 : y - text <= lineY + 7 && y >= lineY - 3)
+  const out = past(far)
+  if (fits(out) && !hits(out)) return { y: out, inside: false }
+  if (lineY != null) {
+    const beyond = past(side > 0 ? Math.min(far, lineY - 4) : Math.max(far, lineY + 4))
+    if (fits(beyond)) return { y: beyond, inside: false }
+  }
+  if (tall >= text + 9) {
+    let y = side > 0 ? far + text + 4 : far - 5
+    if (hits(y) && line >= text + 12) y = side > 0 ? lineY + text + 5 : lineY - 6
+    return { y, inside: true }
+  }
+  return { y: side > 0 ? Math.max(out, base - half + text) : Math.min(out, base + half), inside: false }
 }
 
 // ── limits ───────────────────────────────────────────────────────────────────

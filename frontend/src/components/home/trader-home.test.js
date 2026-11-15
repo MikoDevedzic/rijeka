@@ -1,6 +1,6 @@
 // The trader's home: what it works out from the risk report, the trades and the P&L summary.
 import { describe, expect, it } from 'vitest'
-import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, bucketFigure, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
+import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, bucketFigure, signedShort, figureFit, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
 
 const TRADES = [{ id: 't1', maturity_date: '2027-02-13' }, { id: 't2', maturity_date: '2030-11-13' }, { id: 't3', maturity_date: '2026-12-13' }]
 const REP = {
@@ -155,7 +155,48 @@ describe("the trader's home: the figure at a bucket's box", () => {
   })
   it('stays the sensitivity for a factor with no usual move, which is drawn to its own scale', () => {
     expect(bucketFigure({ v: [12754, 0, 0, 0], hasDay: false, day: null }, 0, 'day')).toBe('+12,754')
-    expect(bucketFigure({ v: [9, 0, 0, 0], hasDay: true, day: [null, 0, 0, 0] }, 0, 'day')).toBe('+9')
+  })
+  it('is shortened for a narrow column: thousands from ten thousand, millions from a million', () => {
+    expect([871, -9949, 12754, -740717, 999499, 999500, 12_754_000, -153_765_000].map(signedShort))
+      .toEqual(['+871', '−9,949', '+13k', '−741k', '+999k', '+1.00m', '+12.8m', '−154m'])
+    expect(bucketFigure(f, 1, 'day', true)).toBe('+5,020')
+    expect(bucketFigure({ v: [740717, 0, 0, 0], hasDay: false, day: null }, 0, 'raw', true)).toBe('+741k')
+  })
+  it('gives up the whole figure before the share of the limit, and the share last', () => {
+    const width = (t) => t.length * 7
+    expect(figureFit('+740,717', '+741k', ' · 80%', 127, width)).toEqual({ fig: '+740,717', share: ' · 80%' })
+    expect(figureFit('+740,717', '+741k', ' · 80%', 90, width)).toEqual({ fig: '+741k', share: ' · 80%' })
+    expect(figureFit('+740,717', '+741k', ' · 80%', 40, width)).toEqual({ fig: '+741k', share: '' })
+    expect(figureFit('+871', '+871', '', 100, width)).toEqual({ fig: '+871', share: '' })
+  })
+})
+
+describe("the trader's home: where a bucket's figure is written", () => {
+  const lane = { base: 100, half: 38, text: 10 }                      // a lane of 76px: its edges at 62 and 138
+  const span = (at) => [at.y - 10, at.y]                               // the figure's top and its baseline
+  it('stands just past a small box, above it long and below it short', () => {
+    expect(figureAt({ ...lane, side: 1, tall: 12 })).toEqual({ y: 83, inside: false })
+    expect(figureAt({ ...lane, side: -1, tall: 12 })).toEqual({ y: 127, inside: false })
+  })
+  it('goes inside a box too tall to leave room in the lane, so it never reaches the lane beside it', () => {
+    for (const side of [1, -1]) for (const tall of [2, 8, 14, 20, 24, 28, 30.4, 36]) {
+      const at = figureAt({ ...lane, side, tall }), [a, b] = span(at)
+      expect(a, `side ${side}, a box of ${tall}`).toBeGreaterThanOrEqual(62)
+      expect(b).toBeLessThanOrEqual(138)
+      if (at.inside) { expect(Math.min(a, b)).toBeGreaterThanOrEqual(Math.min(100, 100 - side * tall)); expect(Math.max(a, b)).toBeLessThanOrEqual(Math.max(100, 100 - side * tall)) }
+    }
+    expect(figureAt({ ...lane, side: 1, tall: 30.4 }).inside).toBe(true)
+  })
+  it('keeps clear of the bucket\'s limit line: past it where the lane has room, inside the box where it has not', () => {
+    const clear = (at, lineY) => { const [a, b] = span(at); return b < lineY - 5 || a > lineY + 1 }      // a long side's line and its hatching
+    const near = figureAt({ ...lane, side: 1, tall: 12, line: 18 })     // the line 6px past the box: the figure goes past the line
+    expect(near.inside).toBe(false); expect(clear(near, 82)).toBe(true); expect(near.y).toBeLessThan(82)
+    const high = figureAt({ ...lane, side: 1, tall: 27, line: 30.4 })   // no room past the line: inside the box
+    expect(high.inside).toBe(true); expect(clear(high, 69.6)).toBe(true)
+    const over = figureAt({ ...lane, side: 1, tall: 35.8, line: 30.4 }) // past its limit: the line crosses the box, the figure is under it
+    expect(over.inside).toBe(true); expect(clear(over, 69.6)).toBe(true); expect(over.y).toBeLessThanOrEqual(100)
+    const short = figureAt({ ...lane, side: -1, tall: 27, line: 30.4 })
+    expect(short.inside).toBe(true); expect(short.y).toBeLessThan(130.4 - 3)
   })
 })
 

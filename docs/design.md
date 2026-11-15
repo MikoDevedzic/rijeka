@@ -308,16 +308,19 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
 - **The risk picture is one stream for each risk factor**, in that factor's colour (`--rf-*`), on a canvas whose
   colours are the tokens (`theme.js`, and the factor tokens read from the page). Above its line is long, below it
   short. **A bucket is a box**: as tall as what the bucket carries on the lane's scale, in the factor's colour (a
-  quarter filled, its edge ruled), with its figure written past its far edge in limestone and, where the bucket has
-  a limit of its own, the share used after it. The stream's line runs behind the boxes and joins them; it says
-  where the risk is, the boxes say how much. A stream drawn to a scale of its own, because it has no history, is
-  dashed (its boxes too) and says so beside its name.
+  quarter filled, its edge ruled), with its figure (12.5px, limestone) above the box when long and below it when
+  short and, where the bucket has a limit of its own, the share used after it. A figure stays in its own lane and
+  its own bucket: where the lane has no room past the box, or the bucket's limit line stands there, it is written
+  inside the box; in a column too narrow for it the figure is shortened (741k) before the share is given up. The
+  stream's line runs between the boxes and joins them, never through one; it says where the risk is, the boxes say how
+  much. A stream
+  drawn to a scale of its own, because it has no history, has dashed boxes and says so beside its name.
   The light along a stream's line moves at thirty frames a second and not at all with "reduce motion".
 - **A limit is read on two sides** (since 0.37.0), because a position is long or short and a limit is one number
   on its size. The rail is flat in the middle, short to the left, long to the right, hatched past either end; a 01
   is a dot, a size with no side (VaR, a stress loss) a square read to the right, an exposure a diamond. On a stream
   a bucket's limit is a ruled line in limestone (`--text-hi`) above the line and below it, hatched on the far
-  side; a dash is kept for a stream on a scale of its own. A limit on a factor's total is a gauge at the start of
+  side; a dash is kept for the boxes of a stream on a scale of its own. A limit on a factor's total is a gauge at the start of
   its lane, never a line across the buckets. The share used is written in the colour of its state (quiet, amber
   from the limit's warning level, `--down` past it): on a limit `--down` says "past", and the hatching past a limit
   is quiet so that it is not read as a breach. LONG and SHORT are marked once at the picture's edge. Beside a

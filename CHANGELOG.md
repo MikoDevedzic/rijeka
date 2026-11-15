@@ -22,7 +22,7 @@ migration runner).
 - The trader home ends above the chat button.
 - **The home's risk picture has a box for each bucket**: as tall as what the bucket carries, with its figure
   written at it (on A USUAL DAY, what a usual day moves it by; otherwise the sensitivity), and the share of the
-  bucket's own limit after it. The stream's line stays behind the boxes. Nothing is computed differently.
+  bucket's own limit after it. The stream's line stays, between the boxes. Nothing is computed differently.
 
 ## 0.39.2 · 15 November 2026
 

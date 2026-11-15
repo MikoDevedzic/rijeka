@@ -14,7 +14,7 @@ import PolicyPath from './PolicyPath'
 import WeekAhead from './WeekAhead'
 import BookBrief from './BookBrief'
 import Fixings from '../risk/Fixings'
-import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, canDay, peak, carry, staleness, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, bucketFigure, statement, moved, fmt0, signed, tone } from './trader-home'
+import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, canDay, peak, carry, staleness, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, bucketFigure, figureFit, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
 import './TraderHome.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -306,7 +306,7 @@ function Streams({ on, off, st, list, fl, any }) {
       {on && any && st.err && !st.data && <div className="th-blank">The risk report could not be read ({why429(st.err)}). The Risk page can run it again.</div>}
       {on && any && empty && <div className="th-blank">The book carries no risk the ladder measures on {fmtD(st.data?.date)}.</div>}
       {on && drawn.length > 0 && <River drawn={drawn} mode={mode} fl={fl} asOf={st.data?.date} />}
-      {on && drawn.length > 0 && <div className="th-note">A box is what one bucket carries, with its figure; the line joins them. A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && scene(drawn, mode, fl).some(h => h.own) ? ' A dashed stream has no usual move measured for it and is drawn to its own scale.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, with the share used written there. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
+      {on && drawn.length > 0 && <div className="th-note">A box is what one bucket carries, and the figure at it is {mode === 'day' ? 'what a usual day moves it by, in USD' : 'its sensitivity'}; the line joins the boxes. A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && scene(drawn, mode, fl).some(h => h.own) ? ' A dashed box has no usual move measured for it: it is drawn to its own scale and its figure is the sensitivity.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, with the share used written there. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
     </div>
   )
 }
@@ -324,7 +324,8 @@ function River({ drawn, mode, fl, asOf }) {
   const box = useRef(null), cv = useRef(null), tip = useRef(null), at = useRef({ x: 0, y: 0 }), w = useWidth(box)
   const hotRef = useRef(-1), redraw = useRef(null)
   const hs = useMemo(() => scene(drawn, mode, fl), [drawn, mode, fl])
-  const figs = useMemo(() => drawn.map(f => BUCKETS.map((_, i) => bucketFigure(f, i, mode))), [drawn, mode])          // what each box says
+  // what each box says, whole and shortened (a narrow column takes the short one)
+  const figs = useMemo(() => drawn.map(f => BUCKETS.map((_, i) => { const full = bucketFigure(f, i, mode); return full ? { full, short: bucketFigure(f, i, mode, true) } : null })), [drawn, mode])
   const [hot, setHot] = useState(-1)
   const reach = useMemo(() => bucketReach(asOf), [asOf])
   const AXIS = 40, n = drawn.length
@@ -366,7 +367,13 @@ function River({ drawn, mode, fl, asOf }) {
       g.font = `10px ${MONO}`; g.textAlign = 'right'; g.fillStyle = T.textMute
       g.fillText('LONG ▲', W - 4, top + 10); g.fillText('SHORT ▼', W - 4, top + lane - 5); g.textAlign = 'center'
       drawn.forEach((f, k) => {
-        const { base, ys } = shape[k], c = cols[k], own = hs[k].own || hs[k].none, live = (i) => Math.abs(ys[i] - base) > 1.2
+        const { base, ys } = shape[k], c = cols[k], own = hs[k].own || hs[k].none
+        const bw = Math.min(colW * 0.8, 260), bx = (i) => colX(i + 0.5) - bw / 2
+        const tall = (i) => Math.max(2, Math.abs(hs[k].h[i]) * amp), side = (i) => (hs[k].h[i] || f.v[i]) >= 0 ? 1 : -1
+        // the stream's line is drawn where the stream stands off its base and no box does: it joins the boxes and
+        // does not run through one (or through the figure in it)
+        const boxed = (x) => figs[k].some((fig, i) => fig && x > bx(i) && x < bx(i) + bw)
+        const live = (i) => Math.abs(ys[i] - base) > 1.2 && !boxed(xs[i])
         g.strokeStyle = alpha(c, 0.28); g.lineWidth = 1; g.beginPath(); g.moveTo(0, base); g.lineTo(W, base); g.stroke()
         // a bucket's own limit: a ruled line above the stream's line and one below, hatched on the far side (a dash is
         // kept for a stream on a scale of its own, so the two are not mistaken for one another)
@@ -390,39 +397,35 @@ function River({ drawn, mode, fl, asOf }) {
           g.font = `500 11px ${MONO}`; g.textAlign = 'left'; g.fillText(`${Math.round(Math.abs(tot.u) * 100)}%`, gx + 7, tot.u < 0 ? base + 13 : base - 5); g.textAlign = 'center'          // in the gutter beside the gauge, on the side the position is on
         }
         const edge = () => { g.beginPath(); let pen = false; xs.forEach((x, i) => { if (!live(i)) { pen = false; return } pen ? g.lineTo(x, ys[i]) : g.moveTo(x, ys[i]); pen = true }) }
-        // the stream's line, behind the boxes: it joins them, and the boxes say how much
-        g.strokeStyle = c; g.globalAlpha = 0.5; g.lineWidth = 1.2; g.setLineDash(own ? [5, 4] : []); edge(); g.stroke(); g.setLineDash([])
+        // the stream's line, between the boxes: it joins them, and the boxes say how much
+        g.strokeStyle = c; g.globalAlpha = own ? 0.35 : 0.5; g.lineWidth = 1.2; edge(); g.stroke()
         if (!still && !own) {                               // light running along the edge, toward the far tenors
           g.globalCompositeOperation = 'lighter'; g.strokeStyle = T.textHi; g.globalAlpha = 0.5; g.lineWidth = 1.6
           g.setLineDash([16, 120]); g.lineDashOffset = -ms * 0.035 - k * 37; edge(); g.stroke(); g.setLineDash([]); g.globalCompositeOperation = 'source-over'
         }
         g.globalAlpha = 1
-        // a box for each bucket, as tall as what the bucket carries on the lane's scale: above the line long, below
-        // it short (a stream on a scale of its own keeps its dash)
-        const bw = Math.min(colW * 0.72, 240), bx = (i) => colX(i + 0.5) - bw / 2
-        const tall = (i) => Math.max(2, Math.abs(hs[k].h[i]) * amp)
+        // a box for each bucket, as tall as what the bucket carries on the lane's scale, on the side of the line the
+        // stream is on: above it long, below it short (a stream on a scale of its own has dashed boxes)
         figs[k].forEach((fig, i) => {
           if (!fig) return
-          const hgt = tall(i), y = f.v[i] >= 0 ? base - hgt : base
+          const hgt = tall(i), y = side(i) > 0 ? base - hgt : base
           g.fillStyle = alpha(c, i === hot ? 0.36 : 0.24); g.fillRect(bx(i), y, bw, hgt)
           g.strokeStyle = alpha(c, 0.85); g.lineWidth = 1; g.setLineDash(own ? [4, 3] : [])
           g.strokeRect(bx(i) + 0.5, y + 0.5, bw - 1, Math.max(1, hgt - 1)); g.setLineDash([])
         })
         // at each box, what it carries; after it, where the bucket has a limit of its own, the share of it used, in
-        // the colour of its state. Beyond the box's far edge, and past the bucket's limit line where that stands there.
-        g.font = `500 11px ${MONO}`; g.textAlign = 'left'
+        // the colour of its state. Where it stands, and what of it fits the column, are trader-home.js's figureAt
+        // and figureFit: a figure stays in its own lane and its own bucket.
+        g.font = `500 12.5px ${MONO}`; g.textAlign = 'left'
+        const wide = (t) => g.measureText(t).width
         figs[k].forEach((fig, i) => {
           if (!fig) return
-          const t = hs[k].tags[i], sd = f.v[i] >= 0 ? 1 : -1, hgt = tall(i), b = hs[k].bank[i]
-          const far = base - sd * hgt, line = b == null ? null : base - sd * b * amp
-          const out = (edge) => edge - sd * (sd > 0 ? 6 : 13)                    // a figure's baseline just past an edge
-          let y = out(far)
-          if (line != null && Math.abs(line - sd * 2 - (y - 4)) < 12) y = out(sd > 0 ? Math.min(far, line - 4) : Math.max(far, line + 4))
-          y = Math.max(top + 10, Math.min(bottom - 3, y))
-          const pct = t ? ` · ${Math.round(Math.abs(t.u) * 100)}%` : ''
-          const wf = g.measureText(fig).width, x0 = colX(i + 0.5) - (wf + (pct ? g.measureText(pct).width : 0)) / 2
-          g.fillStyle = T.textHi; g.fillText(fig, x0, y)
-          if (pct) { g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim; g.fillText(pct, x0 + wf, y) }
+          const t = hs[k].tags[i], b = hs[k].bank[i]
+          const at = figureAt({ side: side(i), base, tall: tall(i), line: b == null ? null : b * amp, half: lane / 2 })
+          const fit = figureFit(fig.full, fig.short, t ? ` · ${Math.round(Math.abs(t.u) * 100)}%` : '', (at.inside ? bw : colW) - 6, wide)
+          const y = Math.max(top + 10, Math.min(bottom - 3, at.y)), wf = wide(fit.fig), x0 = colX(i + 0.5) - (wf + (fit.share ? wide(fit.share) : 0)) / 2
+          g.fillStyle = T.textHi; g.fillText(fit.fig, x0, y)
+          if (fit.share) { g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim; g.fillText(fit.share, x0 + wf, y) }
         })
         g.textAlign = 'center'
       })
