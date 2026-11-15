@@ -32,6 +32,7 @@ Learned on 14 November 2026
 
 Learned on 15 November 2026
 - Before a push to main, read /api/ops/health and one database-backed public endpoint: a deploy into a service that is already failing hides the cause behind the deploy. And when database-backed calls hang while /health answers, look at the database's own status page for the project (and its public keys endpoint) before the code.
+- Before blaming a release for load, measure it: count the statements and the CPU seconds of the action on the local stack. The suspicion that 0.40.0 overloaded the database did not survive the count.
 
 Rules
 - A change to confirmation, the chain code, the CONFIRM tab or the public register has `npm run e2e:chain` green as well as `npm run e2e` (`docs/ops/release.md`): the plain journeys have no chain and end at a record that is signed, not anchored.

@@ -33,22 +33,18 @@ Learned on 9 November 2026
 Learned on 10 November 2026
 - Not Emmy's miss, the author's, recorded here because it is about a market input: the owner was told digital-asset vols were synthetic, from an old note; they have come from Deribit's public marks since 9 Nov. Corrected within the hour. A statement about where a number comes from is checked against docs/architecture.md 'Market data, source by source' first.
 
-Learned on 12 November 2026
-- A sum over a time grid is validated by running the same trade on a finer grid: a figure that moves by more than the paths' noise when the steps are refined is not converged, whatever the workbook reproduces. KVA dropped its last step for months because the workbook stated the convention and reproduced it.
-
 Learned on 14 November 2026
 - A currency fixing is a spot rate: the price for delivery on the fixing date's spot date. Do not carry a digital-asset convention (spot settles at once) onto a currency pair without asking what the quoted rate delivers. Emmy caught it before it shipped.
 
 Learned on 15 November 2026
 - When the author explains a gap as 'second order', check that it scales with the bump at every step and that the base figure itself does not move with the bump; a step is a kink or a lookup, not convexity.
 
-Rules
-- You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
-- Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.
-- A gap honestly stated passes; a gap not stated does not. You do not block a release for a missing workbook, you make sure the inventory says it is missing.
-
 Learned on 12 November 2026 (KVA's last step)
 - A sum over a time grid is validated by running the same trade on a finer grid. KVA charged nothing for the last grid step from the day it was written: the workbook stated the convention and reproduced it cell by cell, every reference row passed, and a one-month trade on its two monthly steps carried half its KVA. A figure that moves by more than the paths' noise when the steps are refined is not converged, whatever reproduces it. On any change to exposure, a charge or a profile: monthly, weekly, daily, one short trade and one long.
 - Where a closed form exists for a corner (a trade dealt at fair value has no replacement cost, so its KVA is the add-on's integral), ask for it as a tight test, not a band.
 - A test that rebuilds the thing it checks proves nothing about it. On 12 November 2026 the exposure backtest's band was recomputed inside its own test, so a 90 % band passed where 95 % was claimed. For evidence code (a backtest, a calibration, a reference check), break the procedure on purpose in a scratch copy (the quantile, a look-ahead, the band) and report which test fails for each; a break no test sees is a finding.
 
+Rules
+- You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
+- Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.
+- A gap honestly stated passes; a gap not stated does not. You do not block a release for a missing workbook, you make sure the inventory says it is missing.

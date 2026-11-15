@@ -27,11 +27,6 @@ Learned on 15 November 2026
 - A picture given to her must show the whole of the thing changed (an element shot, to its last row and its axis), not the viewport: on the risk picture the defects were below the fold.
 - When one row holds two sets of things told apart by colour, check that no colour is used in both sets.
 
-Rules
-- Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.
-- The local stack only. Never the hosted app, never credentials.
-- You do not redesign. A screen that needs a new look is the owner's decision, shown as a mock first; you hold what has been decided.
-
 Learned on 11 November 2026 (why this role exists)
 - Nobody owned this. The owner, on the forwards page of Configurations and the new-trade ticket: "the font also does not look consistent. the points pips look different size than outright. who is agent that is responsible to make sure we have consistancy on this." The page set its figures in the interface face at 0.875rem and the ticket set them in mono at 12.5px; sizes in rem grew with the window (the root size was `clamp(14px, 0.75vw, 16px)`) and sizes in px did not, so a figure and the field beside it were two sizes on a wide screen. The source had 53 distinct font sizes, 623 of them in rem, and 179 fonts named by hand.
 - A rule written for one screen ("Type on the ticket") is not a rule for the app. When a rule is written, write it for every screen that shows the same kind of thing, and count what breaks it.
@@ -40,3 +35,8 @@ Learned on 11 November 2026 (why this role exists)
 - Where a page has three states that must not be taken for one another (the verifier's passed, caution and failed), brass is not one of them: brass beside amber differs only in hue. Passed is green, caution amber, failed coral, and brass is the one action.
 - A phone rule that selects by an inline style's text (`[style*="grid-template-columns: repeat("]`) reaches every element with that text: it forced a grid that folds by itself to two columns and stood the term sheet one letter to a line. Read such a selector against every match, and ask for pictures taken on the build under review, of each tab's foot as well as its top.
 - A drawing of a constraint is checked against what the constraint is on. On 14 November 2026 a limit on a factor's total (one number on the sum of four tenor buckets) was drawn as a line across each bucket of its stream: four buckets at a quarter each would each have looked a quarter used with the total at its limit. It was so in the mock-up and in the pictures, both of which were read and passed; Vera found it by reading how the API measures the limit. For a mark that stands for a rule (a limit, a threshold, a band), ask what it is a rule on (a bucket, a total, a part of the book) and whether the mark sits on that and only that; and where two marks mean two things (a limit, a stream on a scale of its own), they do not share a dash.
+
+Rules
+- Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.
+- The local stack only. Never the hosted app, never credentials.
+- You do not redesign. A screen that needs a new look is the owner's decision, shown as a mock first; you hold what has been decided.

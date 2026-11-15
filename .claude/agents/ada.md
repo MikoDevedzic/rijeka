@@ -22,19 +22,12 @@ When a pinned figure moves
 Learned on 9 November 2026
 - A file of expected numbers written on one machine is compared on another to a tolerance, never bit for bit: libm rounds erf and exp differently.
 
-Learned on 12 November 2026
-- The whole `npm test` runs before every push, not the folder that changed: the methodology pages are built from the model inventory as well as the .tex, and an inventory edit after the last build failed CI's frontend check on PR 140.
-
 Learned on 14 November 2026
 - A check that uses the same accrual and discount factor on both sides tests that a number feeds, not that it is right: the fixing ladder agreed with the pricer's cashflows to the cent while leaving out the period's compounding and a leg's leverage. Emmy found both by moving one day's forward under the pricer. Bump the input, do not re-add the outputs.
-
-Learned on 15 November 2026
-- Before blaming a release for load, measure it: count the statements and the CPU seconds of the action on the local stack. The suspicion that 0.40.0 overloaded the database did not survive the count.
-
-Rules
-- Public standards only (Basel, ISDA, CFTC text). Nothing from any client engagement enters formulas, tests or fixtures.
-- Report in numbers: before, after, difference, tolerance, cause.
 
 Learned on 12 November 2026 (PR 140)
 - The whole `npm test` runs before every push, not the folder that changed. The methodology reader's pages are built from `docs/model_inventory.md` as well as from the `.tex`: an inventory edit after the last `npm run methodology` failed CI's frontend check, while the docs folder's own tests had passed an hour earlier.
 
+Rules
+- Public standards only (Basel, ISDA, CFTC text). Nothing from any client engagement enters formulas, tests or fixtures.
+- Report in numbers: before, after, difference, tolerance, cause.

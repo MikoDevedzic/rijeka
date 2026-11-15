@@ -71,5 +71,40 @@ what changes is who runs it.
 - **Say what is verified.** "Live" means the commit was read back from production. "Tested" names the suite.
   What was not checked is stated. A rule written on the map or in the changelog ("X is never overwritten") is
   checked against every writer of that table, not only the one the change added.
-- **Lessons.** A role does not remember its last run. What a role missed, and a later check caught, is written
-  into that role's definition in the same week; `_docs/team/ledger.json` (local) records the run and the lesson.
+- **Lessons.** A role does not remember its last run, so the definitions are how this project learns: it is meant
+  to get better at its own work each time it is caught out. The owner's rule of 15 November 2026: a lesson is
+  written into its role's definition when it is learned, in the same change that mends what was missed, never
+  owed for later; `_docs/team/ledger.json` (local) records the run and the lesson. A lesson that belongs to no
+  role is told to the owner as a role that is missing, with what the role would look for and when it would run.
+  What the builder (the author of a change) has learned is at the end of this file and is added to the same way.
+
+## What the builder has learned
+
+The author of a change has no definition of its own; these are its lessons, each from a miss that a reviewer, a
+journey or the owner caught. One line each; the ledger has the day and the case.
+
+- An action that removes a user's data is first designed so that it removes nothing: hand back, do not delete.
+- A fix that describes an unpatched weakness is not pushed to the public repository until production is patched.
+- Before building anything that reads a file at run time, check what the deployed service can see: Render serves
+  only `backend/`.
+- Before a release a new user will see, a fresh first-time visitor's pass over pictures of every screen, with the
+  arithmetic checked from the screen. It finds what journeys and readers of code do not.
+- A blanket change (a colour map, a rename) is tried on one page and its pictures read before it is run
+  everywhere; and a rule about words ("no SIMM on the public site") includes the pictures.
+- A picture of a state is drawn for every state the thing can be in: write the state as a pure function of its
+  inputs and test each case before drawing it.
+- Fit before sizing; and "does not move" is measured component by component, not on the total.
+- A new input that feeds two places is checked at the edge they treat differently, and a date in a run comes from
+  the run's valuation date, never the server's.
+- A field of an answer that screens multiply back into a value keeps its meaning when the formula changes; a new
+  meaning gets a new name.
+- When a grid changes, grep for every place that turns a step index into a time and every guard sized in the old
+  steps, before the reviewer does.
+- After an action that changes a booked trade, look at every tab of the ticket, not only the one the action is on.
+- A film's frame size is read from the encoded file, and a caption is read against the frame under it.
+- When a release adds something to a stored report, add in the same release the rule by which an older stored
+  report counts as out of date: the home drew whole buckets for a day after the tenors were live (0.40.0).
+- When production fails near a deploy, read when the first error was logged before suspecting the deploy, and
+  measure a suspected load before naming it the cause (15 November 2026: neither suspicion survived).
+- What is offered to the owner as next is checked against what he has already decided and when: a piece he
+  scheduled for after the launch was offered for the same evening.
