@@ -162,7 +162,7 @@ export default function RiskPage() {
         </div>
 
         <div className="pnl-foot">
-          <b>Method.</b> The ladder bumps each tenor bucket of each curve by {lad.bump_bp}bp and reprices every trade through the production pricers; under it, each quoted tenor is bumped on its own, which is the risk at the instrument one would hedge with (a bucket's quotes move together: a swap's points add up to their bucket, an option's are the size of each hedge and need not, because one quote moved alone swings the forwards either side of it); spot deltas are the pricers' PV for +1% spot. VaR reprices the book in full on each historical day's observed changes (bp per quote, log returns for spots, and every quote of each volatility surface the book is valued on, from public sources stored on the template account; the demo's surfaces are scaled by realised vol and labelled). The ladder VaR alongside is linear in the factors (vega × the ATM move), so convexity and the smile's own moves are outside it. Stress reprices the book in full on the shifted market. Limits are the firm's, set by the risk manager, and evaluated against these numbers.
+          <b>Method.</b> The ladder bumps each tenor bucket of each curve by {lad.bump_bp}bp and reprices every trade through the production pricers; under it, each quoted tenor is bumped on its own, which is the risk at the instrument one would hedge with (a bucket's quotes move together: a swap's points add up to their bucket, an option's are the size of each hedge and need not; a figure a thousandth of the curve's largest is within what the curve's interpolation moves, and is not a position); spot deltas are the pricers' PV for +1% spot. VaR reprices the book in full on each historical day's observed changes (bp per quote, log returns for spots, and every quote of each volatility surface the book is valued on, from public sources stored on the template account; the demo's surfaces are scaled by realised vol and labelled). The ladder VaR alongside is linear in the factors (vega × the ATM move), so convexity and the smile's own moves are outside it. Stress reprices the book in full on the shifted market. Limits are the firm's, set by the risk manager, and evaluated against these numbers.
         </div>
       </>)}
     </div>
@@ -214,6 +214,8 @@ function Card({ label, big, sub, note, warn }) {
   return <div className="pnl-card"><span className="pnl-kl">{label}</span><b className={`pnl-big rk-big${warn ? ' warn' : ''}`}>{big}</b><span className="rk-sub">{sub}</span>{note && <span className="pnl-note">{note}</span>}</div>
 }
 
+const curveName = (id) => String(id).replace(/_/g, ' ')          // USD SOFR, as the fixings panel and the home write it
+
 function Ladder({ ladder, buckets }) {
   const cols = buckets.concat(ladder.some(r => r.buckets.FLAT != null) ? ['FLAT'] : [])
   const max = Math.max(1, ...ladder.flatMap(r => cols.map(b => Math.abs(r.buckets[b] || 0))))
@@ -221,7 +223,7 @@ function Ladder({ ladder, buckets }) {
     <div className="rk-ladder" style={{ gridTemplateColumns: `10rem repeat(${cols.length}, 1fr) 7rem` }}>
       <span className="rk-lh">CURVE</span>{cols.map(b => <span key={b} className="rk-lh r">{b}</span>)}<span className="rk-lh r">TOTAL</span>
       {ladder.map(r => (<div key={r.curve} className="rk-lrow" style={{ gridTemplateColumns: `10rem repeat(${cols.length}, 1fr) 7rem` }}>
-        <span className="rk-lc">{r.curve}</span>
+        <span className="rk-lc">{curveName(r.curve)}</span>
         {cols.map(b => { const x = r.buckets[b]; return <span key={b} className={`rk-cell ${tone(x)}`}><i style={{ width: `${Math.abs(x || 0) / max * 100}%` }} className={tone(x)} /><em>{x == null ? '' : sgn(x)}</em></span> })}
         <span className={`rk-cell tot ${tone(r.total)}`}><em>{sgn(r.total)}</em></span>
       </div>))}
@@ -241,7 +243,7 @@ function Points({ title, unit, rows }) {
       <div className="rk-h">{title} <small>{unit} · each quote moved on its own</small></div>
       {shown.map(r => (
         <div key={r.curve} className="rk-prow" data-curve={r.curve}>
-          <span className="rk-lc">{r.curve}</span>
+          <span className="rk-lc">{curveName(r.curve)}</span>
           <span className="rk-pcells">
             {r.pts.map(p => <span key={p.tenor} className="rk-pt" title={`in the ${p.bucket} bucket`}><small>{p.tenor}</small><em className={tone(p.value)}>{sgn(p.value)}</em></span>)}
           </span>

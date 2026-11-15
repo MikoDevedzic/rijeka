@@ -308,8 +308,8 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
 - **One headline figure**, the day's P&L, at 20px (the largest step of the scale) in the colour of its sign.
 - **The risk picture is one stream for each risk factor**, in that factor's colour (`--rf-*`), on a canvas whose
   colours are the tokens (`theme.js`, and the factor tokens read from the page). Above its line is long, below it
-  short. **One scale**: a box is the sensitivity itself, each factor to its own scale, so a factor's boxes add up to
-  the figure beside its name. (Until 0.40.0 a switch offered the share of a limit and USD on a usual day as well;
+  short. **One scale**: a box is the sensitivity itself, each factor to its own scale, so a box's figure is in the
+  unit of the figure beside the factor's name and a part of it. (Until 0.40.0 a switch offered the share of a limit and USD on a usual day as well;
   three meanings for one height was two too many. What a usual day moves a box by is in the tip.)
   **Along the picture is a column for each quoted tenor** that some factor carries materially (3% of
   its factor's largest), nearest first, grouped by the four buckets; the tenor is named under its column
@@ -317,11 +317,14 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
   wide, and takes its short name (5-10Y) where the long one does not fit. **A factor has a box in the column of
   each tenor it carries**: as tall as what it carries there on the lane's scale, in the factor's colour (a quarter
   filled, its edge ruled), every point's box as wide as every other's. A factor with no tenor of its own (a spot
-  delta, a flat curve, a report stored before the points were) has one box across the bucket it is placed in.
-  The figure (12.5px, limestone) is above the box when long and below it when short. A figure stays in its own
-  lane and its own column: where the lane has no room past the box, or the bucket's limit line stands there, it
-  is written inside the box; in a column too narrow for it the figure is shortened (741k), and where not even
-  that fits it is left to the tip. The stream's line runs between the boxes and joins them, never through one;
+  delta, a flat curve, a report stored before the points were) has one box across the bucket it is placed in; so
+  has a bucket whose points are all too small for a column, so that nothing a factor carries is left off.
+  The figure (12.5px, limestone) is above the box when long and below it when short, and stays in its own lane:
+  it goes past the bucket's limit line where that stands in its way and the lane has room; where it has not,
+  the figure stands on the line, which is drawn with a break for it and without the share used (a box close to its
+  limit reads so; the tip and the gauge beside the factor have the share); with no
+  room past the box at all it is written inside the box. A lane's largest boxes are written first, whole; a figure that would run into one already written, or
+  into another box, is shortened (741k), and one that still would is left to the tip. The stream's line runs between the boxes and joins them, never through one;
   it says where the risk is, the boxes say how much.
   The light along a stream's line moves at thirty frames a second and not at all with "reduce motion".
 - **A limit is read on two sides** (since 0.37.0), because a position is long or short and a limit is one number

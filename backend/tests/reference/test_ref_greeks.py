@@ -20,7 +20,7 @@ from pricing.bootstrap import bootstrap_curve
 from tests.reference import test_ref_swaps as S
 from tests.reference.refmarket import USD_SOFR, VAL, Row, assert_rows, market_curve, rijeka_quotes, set_eval
 
-POINT_TOL = 0.5                      # % of the trade's DV01, as for a bucket
+POINT_TOL = 0.1                      # % of the trade's DV01: three times the worst seen (0.034), a fifth of a bucket's
 CASES = [c for c in S.CASES if c[0].split(",")[0] in ("5Y IRS spot", "10Y OIS spot", "30Y OIS spot", "1Y x 5Y forward start",
                                                          "5Y amortising")]
 

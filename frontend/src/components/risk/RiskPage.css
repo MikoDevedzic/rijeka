@@ -63,7 +63,7 @@
 
 /* the ladder at each quoted tenor: a row for each curve, a cell for each quote that carries risk, nearest first */
 .rk-points { margin-top: 10px; }
-.rk-points .rk-h small { font-weight: 400; color: var(--text-mute); letter-spacing: 0.04em; margin-left: 8px; }
+.rk-points .rk-h small { font-size: 11px; font-weight: 400; color: var(--text-mute); letter-spacing: 0.04em; margin-left: 8px; }
 .rk-prow { display: grid; grid-template-columns: 140px 1fr; gap: 8px; align-items: start; padding: 5px 0; border-bottom: 1px solid var(--border); font-family: var(--mono); }
 .rk-pcells { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .rk-pt { display: inline-flex; flex-direction: column; align-items: flex-end; min-width: 58px; }

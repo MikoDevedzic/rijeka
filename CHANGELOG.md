@@ -15,21 +15,27 @@ bucket, and a figure did not say which instrument to hedge with.
   each trade's row carries its own.
 - **Nothing that was there moves.** A bucket is still measured by moving the bucket whole, so the totals, the
   limits, the VaR and the P&L explain are as they were. A swap's points add up to their bucket to within the
-  cross-gamma of a basis point (0.02% of DV01 at five years, 0.08% at thirty). An option's do not at 1bp: one
-  quote moved alone swings the forwards either side of it, and a cap is not linear over that (up to 14% of a
-  bucket on the test book; 0.1% at a hundredth of the bump, so second order). They are the size of each hedge,
-  not parts that sum.
+  cross-gamma of a basis point (0.02% of DV01 at five years, 0.08% at thirty). An option's do not at 1bp: on
+  the test book a cap's were up to 14% of a bucket away, 1% at a tenth of the bump and 0.1% at a hundredth. One
+  quote moved alone swings the forwards either side of it, which is part of it; the cap's own bucket figure
+  also depends on the size of the bump (618 at 1bp, 845 a basis point at 0.01bp), which was so before this
+  release and whose cause is not established (`docs/model_inventory.md`). An option's points are the size of
+  each hedge, not parts that sum.
 - **Checked.** A single quote's figure against a QuantLib rebootstrap of the same move: 74 comparisons, the worst
-  0.03% of a trade's DV01. The reference suite is 521 comparisons. Methodology v1.22 (§14).
+  0.034% of a trade's DV01. The reference suite is 521 comparisons. Methodology v1.22 (§14).
 - **Market risk page.** Under the ladder by bucket, the ladder at each quoted tenor: every quote that carries
   risk, for each curve and each surface.
 - **The home.** The risk picture has a column for each quoted tenor that some factor carries materially (3% of its
   factor's largest), grouped by the four buckets, and a box in it for each factor; a spot delta, which has no
   tenor, is one box across the bucket its trade matures in. A bucket's limit line ends in the share used.
-- **The home, simpler.** The picture has one scale, the sensitivity itself, so a factor's boxes add up to the
-  figure beside its name; the switch between three scales (share of a limit, USD on a usual day, per 01) is gone,
+- **The home, simpler.** The picture has one scale, the sensitivity itself, so a box's figure is in the unit of
+  the figure beside its factor's name; the switch between three scales (share of a limit, USD on a usual day, per 01) is gone,
   and what a usual day moves a box by is in the tip. The rail of limit marks under "where you stand" is gone:
   the words above it and the gauges beside the factors already said it.
+- **What it costs.** Each point is a pricing. A bucket that carries under 1% of a trade's risk on a curve is
+  not broken into its points (unless an uneven move of it shows points that cancel); even so the risk report
+  takes about twice as long to compute: 2.9 s to 6.1 s on the 12-trade test book. Not measured on a large book
+  or on the hosted API.
 - A report stored before this has no points: the home draws its buckets whole and the page shows the buckets
   only, until the report is next run.
 

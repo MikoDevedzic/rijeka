@@ -12,12 +12,15 @@ Beside each bucket, the points it is made of (since 0.40.0): every quoted tenor 
 (+1bp; a surface's tenor, or a swaption grid's expiry, +1 vol point or +1bp of normal vol) and the trade repriced:
 KR01 and vega by (curve, quoted tenor). That is the risk at the instrument one would hedge with; a bucket moves
 its quotes together, so a two-year position against a five-year one nets inside it and only the points show the
-two. A bucket's figure is still measured by moving the bucket whole, as before; its points add up to it to first
+two. A bucket carrying under a hundredth of a trade's largest bucket on the curve is not broken into its points
+(its own figure stands), unless an uneven move of it shows that points inside it cancel. A bucket's figure is still measured by moving the bucket whole, as before; its points add up to it to first
 order. For a swap what is left is the cross-gamma of a 1bp move: 0.02% of the DV01 at five years, 0.08% at thirty
-(tests/reference/test_ref_greeks.py). For an option it is more: one par quote moved alone swings the forwards on
-either side of it by several basis points in opposite directions, and a cap is not linear over that, so at 1bp a
-cap's points can differ from its bucket by a tenth of the bucket; the gap is second order and goes with the size
-of the bump (tests/integration/test_reports_and_methodology.py). For a rate curve a point is the move
+(tests/reference/test_ref_greeks.py). For an option it is more: at 1bp a cap's points were up to 14% of a bucket
+away from it on the test book, 1% at 0.1bp and 0.1% at 0.01bp (tests/integration/test_reports_and_methodology.py).
+One par quote moved alone swings the forwards on either side of it by several basis points in opposite directions,
+which is part of it; but the cap's own bucket figure also depends on the size of the bump (618 at 1bp against 845
+a basis point at 0.01bp), which smooth convexity does not explain, and the cause is not established (docs/
+model_inventory.md). An option's points are the size of each hedge, not parts that sum. For a rate curve a point is the move
 ipv.inputs.bumped makes; on a surface the ladder moves a tenor's rows together, as its buckets do, where the
 price verification moves each row. A funding level's FUND01 has one quote and no points."""
 from __future__ import annotations
@@ -45,6 +48,7 @@ def _bumped(quotes: list[dict], lo: float, hi: float, bp: float) -> list[dict]:
 
 _GRID = re.compile(r"(\d+(?:\.\d+)?\s*[DWMY])\s*X\s*\d", re.I)
 POINT_EPS = 1e-6        # a point that moves the trade by less than a millionth of its currency is not carried
+SMALL_BUCKET = 0.01     # a bucket under this share of the trade's largest bucket on the curve is not broken into its points
 
 
 def point_of(tenor) -> str:
@@ -75,6 +79,14 @@ def _bumped_point(quotes: list[dict], point: str, bp: float) -> list[dict]:
     has a row for each underlying at an expiry), written as _bumped writes a bucket: a bucket of one point is the
     same market, and is priced once."""
     return [{**q, "rate": float(q["rate"]) + bp / 100.0} if point_of(q.get("tenor")) == point else dict(q) for q in quotes]
+
+
+def _tilted(quotes: list[dict], lo: float, hi: float, bp: float) -> list[dict]:
+    """A bucket's quotes moved unevenly: its first point by one bump, its second by two, and so on. A trade that
+    this does not move either is not priced off the bucket; one whose points merely cancel under an even move is.
+    A bucket of one point is the same market as the bucket's own bump, and is priced once."""
+    step = {p: k + 1 for k, (p, y) in enumerate((p, y) for p, y in curve_points(quotes) if lo <= y < hi)}
+    return [{**q, "rate": float(q["rate"]) + step[point_of(q.get("tenor"))] * bp / 100.0} if point_of(q.get("tenor")) in step else dict(q) for q in quotes]
 
 
 def _carry_points(trade, mkt: Market, bumped: Market, bp: float) -> Market:
@@ -122,10 +134,26 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
             target.setdefault(cid, {})[name] = valuer(trade, d, m)["npv"] - base["npv"]
         if target is fund01:
             continue
-        # each quoted point on its own. A bucket that does not move the trade at all has no point that does (a
-        # two-year swap is not priced off the thirty-year quote), so its points are not repriced.
-        live = {name for name, v in target.get(cid, {}).items() if v != 0.0}
-        for p, y in curve_points(q):
+        # each quoted point on its own, in the buckets that matter to the trade. A bucket carrying under a hundredth
+        # of the trade's largest bucket on this curve is not broken into its points (a five-year swap is priced a
+        # little off each of the sixteen quotes of its first year, and not at all off the thirty-year one): its own
+        # figure stands, and the points would cost a pricing each. A small figure could also be large points that
+        # cancel (a two-year position against a five-year one), so such a bucket is first moved once more, unevenly,
+        # and is broken into its points if that moves the trade.
+        moved, pts_all = target.get(cid, {}), curve_points(q)
+        top = max((abs(v) for v in moved.values()), default=0.0)
+        live = set()
+        for name, lo, hi in BUCKETS:
+            if name not in moved:
+                continue
+            if abs(moved[name]) > SMALL_BUCKET * top:
+                live.add(name)
+                continue
+            n = sum(1 for _, y in pts_all if lo <= y < hi)
+            uneven = valuer(trade, d, mkt.override(cid, _tilted(q, lo, hi, bump)))["npv"] - base["npv"]
+            if abs(uneven) > SMALL_BUCKET * top * n:
+                live.add(name)
+        for p, y in pts_all:
             if bucket_of(y) not in live:
                 continue
             v = valuer(trade, d, mkt.override(cid, _bumped_point(q, p, bump)))["npv"] - base["npv"]

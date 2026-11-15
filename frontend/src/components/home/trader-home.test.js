@@ -1,6 +1,6 @@
 // The trader's home: what it works out from the risk report, the trades and the P&L summary.
 import { describe, expect, it } from 'vitest'
-import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, MATERIAL, signedShort, figureFit, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
+import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, MATERIAL, signedShort, laneFigures, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
 
 const TRADES = [{ id: 't1', maturity_date: '2027-02-13' }, { id: 't2', maturity_date: '2030-11-13' }, { id: 't3', maturity_date: '2026-12-13' }]
 const REP = {
@@ -181,8 +181,16 @@ describe("the trader's home: a curve's risk at each quoted tenor", () => {
   it('draws a point in its tenor\'s column, and a factor with no point in a bucket across the bucket', () => {
     const cols = columns(list), sc = scene(list, 'raw', new Map())
     const s = laneMarks(sofr, sc[list.indexOf(sofr)], cols)
-    expect(s.marks.map(m => [m.tenor, m.from, m.to, m.x])).toEqual([['2Y', 1, 2, -3000], ['5Y', 2, 3, 4500], ['10Y', 3, 4, 2000]])
-    expect(s.left).toBe(2)                                                                // 6M and 1Y: said under the picture, listed on the Risk page
+    // 6M and 1Y are too small for a column, so the bucket they are in (−5) is drawn whole: nothing the factor carries
+    // in a bucket is left off the picture
+    expect(s.marks.map(m => [m.tenor, m.from, m.to, m.x])).toEqual([[null, 0, 1, -5], ['2Y', 1, 2, -3000], ['5Y', 2, 3, 4500], ['10Y', 3, 4, 2000]])
+    expect(s.left).toBe(0)
+    // a point too small for a column in a bucket where another point has one is left off, and counted: it is said
+    // under the picture and listed on the Risk page
+    const mixed = { v: [0, 1520, 0, 0], pts: [{ tenor: '2Y', years: 2, i: 1, x: -3000 }, { tenor: '3Y', years: 3, i: 1, x: 20 }, { tenor: '5Y', years: 5, i: 1, x: 4500 }] }
+    const mc = columns([mixed]), ms = laneMarks(mixed, scene([mixed], 'raw', new Map())[0], mc)
+    expect(mc.slots.filter(x => x.tenor).map(x => x.tenor)).toEqual(['2Y', '5Y'])
+    expect(ms.marks.map(m => m.tenor)).toEqual(['2Y', '5Y']); expect(ms.left).toBe(1)
     const b = laneMarks(btc, sc[list.indexOf(btc)], cols)
     expect(b.marks.map(m => [m.tenor, m.from, m.to, m.x])).toEqual([[null, 0, 1, 22900]])  // the trade matures inside a year
     const v = laneMarks(vol, sc[list.indexOf(vol)], cols)
@@ -223,13 +231,38 @@ describe("the trader's home: the figure at a box", () => {
     expect(markFigure(f, { x: 100.4, day: 5020 }, 'day', true)).toBe('+5,020')
     expect(markFigure({ hasDay: false }, { x: 740717, day: null }, 'raw', true)).toBe('+741k')
   })
-  it('gives up the whole figure before the share of the limit, and the share last', () => {
-    const width = (t) => t.length * 7
-    expect(figureFit('+740,717', '+741k', ' · 80%', 127, width)).toEqual({ fig: '+740,717', share: ' · 80%' })
-    expect(figureFit('+740,717', '+741k', ' · 80%', 90, width)).toEqual({ fig: '+741k', share: ' · 80%' })
-    expect(figureFit('+740,717', '+741k', ' · 80%', 40, width)).toEqual({ fig: '+741k', share: '' })
-    expect(figureFit('+871', '+871', '', 100, width)).toEqual({ fig: '+871', share: '' })
-    expect(figureFit('+740,717', '+741k', '', 30, width), 'a column too narrow even for the short figure writes none').toBeNull()
+})
+
+describe("the trader's home: which figures of a lane are written", () => {
+  const width = (t) => t.length * 7, room = { x0: 0, x1: 400 }
+  // three boxes of 30px side by side on a line at y=100, their figures above them
+  const box = (left, tall, full, short = full) => ({ cx: left + 15, y: 100 - tall - 5, inside: false, box: [left, 100 - tall, left + 30, 100], full, short, size: tall })
+  it('writes every figure whole where the figures do not meet', () => {
+    const out = laneFigures([box(40, 4, '+108'), box(120, 8, '+197'), box(200, 30, '+1,582')], width, room)
+    expect(out.map(f => f.fig)).toEqual(['+108', '+197', '+1,582'])
+    expect(out[2].x).toBe(200 + 15 - 21)                                  // about its box's middle, though wider than its box
+  })
+  it('writes the largest box first, shortens a neighbour, and leaves one with no room to the tip', () => {
+    // three boxes edge to edge, all as tall: the largest takes its whole figure (56px over a 30px box); the next
+    // largest is shortened to stay clear of it; the smallest, between them, has no room even shortened
+    const a = { ...box(40, 30, '+740,717', '+741k') }, b = { ...box(70, 30, '+612,345', '+612k') }, c = { ...box(100, 30, '+598,000', '+598k') }
+    a.size = 30; b.size = 10; c.size = 20
+    const out = laneFigures([a, b, c], width, room)
+    expect(out[0].fig).toBe('+740,717'); expect(out[2].fig).toBe('+598k'); expect(out[1]).toBeNull()
+  })
+  it('does not write a figure over another box, and one inside its box must fit it', () => {
+    // a short box beside a tall one: the short box's figure, just above it, would lie across the tall box
+    const low = box(40, 6, '+12,345', '+12k'), high = box(74, 60, '+900')
+    const out = laneFigures([low, high], width, room)
+    expect(out[1].fig).toBe('+900')
+    expect(out[0].fig, 'shortened, it stays clear of the tall box').toBe('+12k'); expect(out[0].x + width('+12k')).toBeLessThanOrEqual(74 - 1)
+    const inside = { cx: 60, y: 60, inside: true, box: [40, 40, 80, 100], full: '+36,498', short: '+36k', size: 60 }
+    expect(laneFigures([inside], width, room)[0].fig).toBe('+36k')        // 40px of box holds four characters, not seven
+    expect(laneFigures([{ ...inside, short: '+36,498' }], width, room)[0]).toBeNull()
+  })
+  it('keeps a figure between the picture\'s edges', () => {
+    expect(laneFigures([box(0, 10, '+969,401')], width, { x0: 6, x1: 400 })[0].x).toBe(6)
+    expect(laneFigures([box(380, 10, '+969,401')], width, { x0: 0, x1: 400 })[0].x).toBe(400 - 56)
   })
 })
 
@@ -257,6 +290,9 @@ describe("the trader's home: where a bucket's figure is written", () => {
     expect(high.inside).toBe(true); expect(clear(high, 69.6)).toBe(true)
     const over = figureAt({ ...lane, side: 1, tall: 35.8, line: 30.4 }) // past its limit: the line crosses the box, the figure is under it
     expect(over.inside).toBe(true); expect(clear(over, 69.6)).toBe(true); expect(over.y).toBeLessThanOrEqual(100)
+    // a taller lane: room past the box but not past the line. The figure stands on the line, which gives way to it
+    const on = figureAt({ base: 100, half: 48, text: 10, side: 1, tall: 32, line: 35.8 })
+    expect(on).toEqual({ y: 63, inside: false, onLine: true })
     const short = figureAt({ ...lane, side: -1, tall: 27, line: 30.4 })
     expect(short.inside).toBe(true); expect(short.y).toBeLessThan(130.4 - 3)
   })

@@ -134,8 +134,8 @@ def test_risk_report_lists_what_fixes_day_by_day_and_it_adds_up_to_the_swaps_own
 
 
 def _gaps(j: dict, bump: float = 1.0) -> dict[str, float]:
-    """For each trade of the report: how far the points of its buckets are from the buckets, as a share of the
-    trade's own risk (the sum of the sizes of its points). `bump` is the size of the move the report was made
+    """For each trade of the report: how far the points of its buckets are from the buckets that have points, as a
+    share of the trade's own risk (the sum of the sizes of its points). `bump` is the size of the move the report was made
     with, in bp: a trade with less than a dollar a basis point of rates risk is left out."""
     from pnl.explain import tenor_years
     from risk.sensitivities import bucket_of
@@ -145,8 +145,9 @@ def _gaps(j: dict, bump: float = 1.0) -> dict[str, float]:
         for cid, buckets in x["kr01"].items():
             pts = x["points"]["kr01"].get(cid, {})
             for b, v in buckets.items():
-                if b != "FLAT":
-                    worst = max(worst, abs(sum(pv for p, pv in pts.items() if bucket_of(tenor_years(p)) == b) - v))
+                inside = [pv for p, pv in pts.items() if bucket_of(tenor_years(p)) == b]
+                if b != "FLAT" and inside:              # a bucket that hardly matters to the trade is not broken into points
+                    worst = max(worst, abs(sum(inside) - v))
         if scale > 1.0 * bump:
             out[f'{x["instrument"]} {x["trade_ref"]}'] = worst / scale
     return out

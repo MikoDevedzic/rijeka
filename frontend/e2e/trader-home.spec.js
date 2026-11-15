@@ -56,6 +56,7 @@ test('the home on a monitor: the statement, the risk by tenor, what needs you an
   await expect(river.locator('.th-tip')).toContainText(/USD SOFR IR01[+−][\d,]+/)
   await app.mouse.move(2, 2)
   await expect(river).toContainText('A box is what the book carries at one quoted tenor of a curve')
+  await shot(river, 'river-stack')
 
   // band 2, right: the factor and the VaR line (too little history says so; it does not print a figure)
   const side = home.getByTestId('th-factors')
@@ -193,6 +194,7 @@ test('with a history of moves and limits: the tip says what a usual day moves a 
   await expect(app.getByTestId('th-river').locator('.th-tip')).toContainText(/its bucket\s*80% of [\d,]+/)
   await shot(app, 'limits-in-the-tip')
   await app.mouse.move(2, 2)
+  await shot(app.getByTestId('th-river'), 'river-history')          // the whole picture: every lane, the tenors and the buckets under its columns
   await expect(app.getByTestId('th-var')).toContainText('183,800')
   await expectNoHorizontalOverflow(app.getByTestId('trader-home'), 'the home with limits')
   await shot(app, 'history-1440')
@@ -362,6 +364,7 @@ test('trader home: scrolled to its end, the last band is clear of the chat butto
   // so the end is scrolled to again until the last band has stopped moving.
   const last = home.locator('.th-two')
   await expect(last).toBeVisible()
+  await expect(home.getByTestId('th-river'), 'the risk picture has been drawn or has said why not').not.toContainText('Measuring the book…', { timeout: 120_000 })
   const toEnd = () => home.evaluate(el => {
     let n = el
     while (n && n !== document.documentElement) {

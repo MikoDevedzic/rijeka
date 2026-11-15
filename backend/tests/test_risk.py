@@ -321,11 +321,16 @@ class _Trade:
 
 def _linear_valuer(weights: dict, calls: list):
     """A value that is linear in every quote: npv = Σ weight(curve, tenor, type) × rate. A +1bp bump of a quote then
-    moves it by exactly weight × 0.01, so a point's figure and a bucket's can be read off the weights."""
+    moves it by exactly weight × 0.01, so a point's figure and a bucket's can be read off the weights. `calls`
+    collects each market that was priced."""
+    memo: dict = {}
+
     def valuer(trade, d, mkt):
-        calls.append(mkt)
-        npv = sum(weights.get((cid, q["tenor"], q.get("quote_type") or ""), 0.0) * float(q["rate"]) for cid in mkt.q for q in mkt.q[cid])
-        return {"npv": npv, "ccy": "USD"}
+        key = repr(sorted(mkt.q.items()))          # as pnl.explain.Valuer: the same market is priced once
+        if key not in memo:
+            calls.append(mkt)
+            memo[key] = sum(weights.get((cid, q["tenor"], q.get("quote_type") or ""), 0.0) * float(q["rate"]) for cid in mkt.q for q in mkt.q[cid])
+        return {"npv": memo[key], "ccy": "USD"}
     return valuer
 
 
@@ -349,10 +354,42 @@ def test_a_curve_is_measured_at_each_quoted_point_and_a_buckets_points_add_up_to
     assert round(row["kr01"]["USD_SOFR"]["5-10Y"], 9) == 0.2
     # the buckets are measured as before, and add up to the IR01 as before
     assert round(row["ir01"], 9) == 1.7 and set(row["kr01"]["USD_SOFR"]) == {"0-1Y", "1-5Y", "5-10Y", "10Y+"}
-    # a bucket that does not move the trade has no points and its quotes are not repriced one by one:
-    # the base, four buckets, then 2Y, 5Y, 7Y and 10Y (the two buckets that carry risk)
-    assert len(calls) == 1 + 4 + 4
+    # a bucket that does not move the trade has no points and its quotes are not repriced one by one: the base,
+    # four buckets, an uneven move of the 0-1Y bucket to be sure of it (the 10Y+ bucket has one point, which is its
+    # own bump again), then 2Y, 5Y, 7Y and 10Y (the two buckets that carry risk)
+    assert len(calls) == 1 + 4 + 1 + 4
     assert row["points"]["vega"] == {} and "fund01" not in row["points"]
+
+
+def test_a_bucket_whose_points_cancel_exactly_still_shows_them(monkeypatch):
+    # Emmy, 2026-11-15: a two-year position against an equal five-year one is exactly nought in the 1-5Y bucket, and
+    # it is the position the points exist to show. The bucket is moved once more, unevenly, before it is left out.
+    sofr = [{"tenor": t, "rate": 4.0} for t in ("1Y", "2Y", "5Y", "10Y", "30Y")]
+    w = {("USD_SOFR", "2Y", ""): -300.0, ("USD_SOFR", "5Y", ""): 300.0}
+    row, calls = _ladder(monkeypatch, {"USD_SOFR": sofr}, w)
+    assert row["kr01"]["USD_SOFR"]["1-5Y"] == 0.0
+    assert {k: round(v, 9) for k, v in row["points"]["kr01"]["USD_SOFR"].items()} == {"2Y": -3.0, "5Y": 3.0}
+    # the base, four buckets, one uneven move of the 1-5Y bucket (the others have one point, and are their own
+    # bump again), then its two points
+    assert len(calls) == 1 + 4 + 1 + 2
+
+
+def test_a_bucket_that_hardly_matters_to_a_trade_is_not_broken_into_its_points(monkeypatch):
+    # a five-year swap is priced a little off the quotes of its first year: the bucket's figure stands, and its
+    # points are not priced one by one (sixteen pricings for a thousandth of the risk)
+    sofr = [{"tenor": t, "rate": 4.0} for t in ("3M", "6M", "1Y", "2Y", "5Y", "10Y")]
+    w = {("USD_SOFR", "6M", ""): 1.0, ("USD_SOFR", "5Y", ""): 450.0}
+    row, calls = _ladder(monkeypatch, {"USD_SOFR": sofr}, w)
+    assert round(row["kr01"]["USD_SOFR"]["0-1Y"], 9) == 0.01                    # a 450th of the 1-5Y bucket
+    assert {k: round(v, 9) for k, v in row["points"]["kr01"]["USD_SOFR"].items()} == {"5Y": 4.5}
+    # the base, the three buckets that have a quote, an uneven move of the 0-1Y bucket (which shows nothing hidden
+    # in it), then 2Y and 5Y
+    assert len(calls) == 1 + 3 + 1 + 2
+    # the same small net figure made of two large points that cancel is broken into them
+    w2 = {("USD_SOFR", "3M", ""): -300.0, ("USD_SOFR", "6M", ""): 301.0, ("USD_SOFR", "5Y", ""): 450.0}
+    row2, _ = _ladder(monkeypatch, {"USD_SOFR": sofr}, w2)
+    assert round(row2["kr01"]["USD_SOFR"]["0-1Y"], 9) == 0.01
+    assert {k: round(v, 9) for k, v in row2["points"]["kr01"]["USD_SOFR"].items()} == {"3M": -3.0, "6M": 3.01, "5Y": 4.5}
 
 
 def test_a_surface_is_measured_by_tenor_and_a_swaption_grid_by_expiry(monkeypatch):

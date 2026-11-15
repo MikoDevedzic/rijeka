@@ -14,7 +14,7 @@ import PolicyPath from './PolicyPath'
 import WeekAhead from './WeekAhead'
 import BookBrief from './BookBrief'
 import Fixings from '../risk/Fixings'
-import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, peak, carry, staleness, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, figureFit, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
+import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, peak, carry, staleness, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, laneFigures, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
 import './TraderHome.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -251,9 +251,9 @@ function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
 // factor, below it short; where there is no risk the line is bare.
 function Streams({ on, off, st, list, fl, any }) {
   const { drawn, rest } = useMemo(() => lanes(list), [list])
-  // One scale: the sensitivity itself, each factor to its own, so a factor's boxes add up to the figure beside its
-  // name. (Until 0.40.0 a switch offered two more: the share of a limit, and USD on a usual day. What a usual day
-  // moves a box by is in the tip; a limit is the ruled line and the gauge.)
+  // One scale: the sensitivity itself, each factor to its own, so a box's figure is in the unit of the figure
+  // beside the factor's name and a part of it. (Until 0.40.0 a switch offered two more: the share of a limit, and
+  // USD on a usual day. What a usual day moves a box by is in the tip; a limit is the ruled line and the gauge.)
   const mode = 'raw', lim = canLimit(drawn, fl)
   const empty = on && !st.loading && !st.err && drawn.length === 0
   // for the note under the picture: whether a stream is on a scale of its own, and whether a tenor was left without a column
@@ -271,7 +271,7 @@ function Streams({ on, off, st, list, fl, any }) {
       {on && any && st.err && !st.data && <div className="th-blank">The risk report could not be read ({why429(st.err)}). The Risk page can run it again.</div>}
       {on && any && empty && <div className="th-blank">The book carries no risk the ladder measures on {fmtD(st.data?.date)}.</div>}
       {on && drawn.length > 0 && <River drawn={drawn} mode={mode} fl={fl} asOf={st.data?.date} />}
-      {on && drawn.length > 0 && <div className="th-note">A box is what the book carries at one quoted tenor of a curve, with its sensitivity written at it: a factor's boxes add up to the figure beside its name. The line joins the boxes. A spot delta has no tenor of its own: it is one box across the bucket its trade matures in.{left ? ' A tenor carrying under 3% of its factor\'s largest has no column here; the Risk page lists every one.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, ending in the share used. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
+      {on && drawn.length > 0 && <div className="th-note">A box is what the book carries at one quoted tenor of a curve, with its sensitivity written at it, in the unit beside the factor's name. The line joins the boxes. A spot delta has no tenor of its own: it is one box across the bucket its trade matures in.{left ? ' A tenor carrying under 3% of its factor\'s largest has no column here, so a lane\'s boxes can come to less than the figure beside its name; the Risk page lists every one.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, ending in the share used. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
     </div>
   )
 }
@@ -369,6 +369,18 @@ function River({ drawn, mode, fl, asOf }) {
         // does not run through one (or through the figure in it)
         const boxed = (x) => boxes.some(b => x > b.x && x < b.x + b.w)
         const live = (i) => Math.abs(ys[i] - base) > 1.2 && !boxed(xs[i])
+        // which figures are written, and where: figureAt (in its own lane, clear of the bucket's limit line where
+        // it can be) and laneFigures (the largest boxes first; one that would run into another figure or another
+        // box is left to the tip). Worked out before the limit lines are drawn: a figure that has to stand on a
+        // line is given a break in it.
+        g.font = `500 12.5px ${MONO}`
+        const items = ms.map((m, j) => {
+          const b = boxes[j], line = hs[k].bank[m.i], hgt = tall(m), sd = side(m)
+          const at = figureAt({ side: sd, base, tall: hgt, line: line == null ? null : line * amp, half: lane / 2 })
+          return { cx: b.cx, y: Math.max(top + 10, Math.min(bottom - 3, at.y)), inside: at.inside, onLine: !!at.onLine, i: m.i, sd, box: [b.x, sd > 0 ? base - hgt : base, b.x + b.w, sd > 0 ? base : base + hgt], full: m.full, short: m.short, size: m.h }
+        })
+        const figs = laneFigures(items, wide, { x0: gut + 2, x1: W - 2 })
+        const breaks = (i, sd) => figs.map((fg, j) => fg && items[j].onLine && items[j].i === i && items[j].sd === sd ? [fg.x - 4, fg.x + fg.w + 4] : null).filter(Boolean)
         g.strokeStyle = alpha(c, 0.28); g.lineWidth = 1; g.beginPath(); g.moveTo(0, base); g.lineTo(W, base); g.stroke()
         // a bucket's own limit: a ruled line across the bucket's columns above the stream's line and one below,
         // hatched on the far side. On the side the position is on, the line ends in the share of the limit used, in
@@ -378,10 +390,18 @@ function River({ drawn, mode, fl, asOf }) {
           if (b == null) return
           const t = hs[k].tags[i], pct = t ? `${Math.round(Math.abs(t.u) * 100)}%` : '', on = t ? (t.u < 0 ? -1 : 1) : 0
           for (const sd of [1, -1]) {
-            const y = base - sd * b * amp, x0 = gx0(i) + 5, said = pct && sd === on, x1 = gx1(i) - 5 - (said ? wide(pct) + 5 : 0)
-            g.strokeStyle = alpha(T.textHi, 0.6); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke()
-            g.strokeStyle = alpha(T.textMute, 0.45)
-            for (let x = x0; x < x1 - 4; x += 7) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - sd * 4); g.stroke() }
+            // the line in pieces, either side of a figure that stands on it; the share is then left to the tip and to
+            // the gauge beside the factor (a figure and a share do not both fit on a bucket's line)
+            const cuts = breaks(i, sd).sort((p, q) => p[0] - q[0]), parts = []
+            const y = base - sd * b * amp, x0 = gx0(i) + 5, said = pct && sd === on && !cuts.length, x1 = gx1(i) - 5 - (said ? wide(pct) + 5 : 0)
+            let from = x0
+            for (const [l, r] of cuts) { if (l - from >= 12) parts.push([from, Math.min(l, x1)]); from = Math.max(from, r) }          // a piece under 12px would read as a stray mark
+            if (x1 - from >= 12) parts.push([from, x1])
+            for (const [l, r] of parts) {
+              g.strokeStyle = alpha(T.textHi, 0.6); g.lineWidth = 1; g.beginPath(); g.moveTo(l, y); g.lineTo(r, y); g.stroke()
+              g.strokeStyle = alpha(T.textMute, 0.45)
+              for (let x = l; x < r - 4; x += 7) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - sd * 4); g.stroke() }
+            }
             if (said) { g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillStyle = t.state === 'BREACH' ? T.down : t.state === 'WARN' ? T.amber : T.textDim; g.fillText(pct, gx1(i) - 5, y - sd * 2); g.textAlign = 'center'; g.textBaseline = 'alphabetic' }
           }
         })
@@ -411,16 +431,10 @@ function River({ drawn, mode, fl, asOf }) {
           g.strokeStyle = alpha(c, 0.85); g.lineWidth = 1; g.setLineDash(own ? [4, 3] : [])
           g.strokeRect(b.x + 0.5, y + 0.5, Math.max(1, b.w - 1), Math.max(1, hgt - 1)); g.setLineDash([])
         })
-        // at each box, what it carries. Where it stands, and what of it fits its column, are trader-home.js's
-        // figureAt and figureFit: a figure stays in its own lane and its own column, and one that does not fit is
-        // left to the tip.
-        g.font = `500 12.5px ${MONO}`
-        ms.forEach((m, j) => {
-          const b = boxes[j], line = hs[k].bank[m.i]
-          const at = figureAt({ side: side(m), base, tall: tall(m), line: line == null ? null : line * amp, half: lane / 2 })
-          const fit = figureFit(m.full, m.short, '', (at.inside ? b.w : b.span) - 3, wide)
-          if (fit) { g.fillStyle = T.textHi; g.fillText(fit.fig, b.cx, Math.max(top + 10, Math.min(bottom - 3, at.y))) }
-        })
+        // at each box, what it carries (laid out above, before the limit lines)
+        g.font = `500 12.5px ${MONO}`; g.textAlign = 'left'
+        figs.forEach((fg, j) => { if (fg) { g.fillStyle = T.textHi; g.fillText(fg.fig, fg.x, items[j].y) } })
+        g.textAlign = 'center'
       })
     }
     raf = requestAnimationFrame(draw)

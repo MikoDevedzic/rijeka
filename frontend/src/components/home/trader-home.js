@@ -269,21 +269,25 @@ export function columns(list) {
 }
 
 // What one factor draws, nearest first. A point in a column of its own: { from, to, i, tenor, h, x, day }. A
-// bucket the factor carries with no point in it (a spot delta placed by its trade's maturity, a flat curve, an
-// older report) is drawn whole, across the bucket's columns: the same with `tenor` null. `sc` is the factor's entry
-// in scene(). `left` counts the points given no column.
+// bucket the factor carries with no point of its own drawn in it is drawn whole, across the bucket's columns (the
+// same with `tenor` null): a spot delta placed by its trade's maturity, a flat curve, an older report, and a
+// bucket whose points are all too small for a column, so that what a factor carries in a bucket is never left off
+// the picture (Vera, 15 November 2026). `sc` is the factor's entry in scene(). `left` counts the points given no
+// column in a bucket where another point of the factor has one.
 export function laneMarks(f, sc, cols) {
   const slotOf = new Map(cols.slots.map((s, k) => [`${s.i}:${s.tenor}`, k])), pts = f.pts || [], out = []
-  let left = 0
+  const drawn = new Set()                                   // the buckets in which a point of this factor has a column
   pts.forEach((p, j) => {
     const k = slotOf.get(`${p.i}:${p.tenor}`)
-    if (k == null) { left++; return }
+    if (k == null) return
+    drawn.add(p.i)
     out.push({ from: k, to: k + 1, i: p.i, tenor: p.tenor, h: sc.ph[j], x: p.x, day: p.day })
   })
   BUCKETS.forEach((_, i) => {
-    if (!(Math.abs(f.v[i]) >= EPS) || pts.some(p => p.i === i)) return
+    if (!(Math.abs(f.v[i]) >= EPS) || drawn.has(i)) return
     out.push({ from: cols.groups[i].from, to: cols.groups[i].to, i, tenor: null, h: sc.h[i], x: f.v[i], day: f.day?.[i] ?? null })
   })
+  const left = pts.filter(p => drawn.has(p.i) && !slotOf.has(`${p.i}:${p.tenor}`)).length
   return { marks: out.sort((a, b) => a.from - b.from), left }
 }
 
@@ -300,20 +304,38 @@ export const signedShort = (n) => {
   return a >= 999_500 ? `${sg}${(a / 1e6).toFixed(a >= 99_950_000 ? 0 : a >= 9_995_000 ? 1 : 2)}m` : a >= 9_950 ? `${sg}${Math.round(a / 1e3)}k` : signed(n)
 }
 
-// What fits in `room` px at a box: the figure and the share of the bucket's limit, then the figure shortened with
-// the share, then the shortened figure alone; null where not even that fits (the tip then says it). `width` measures
-// a string as it will be drawn.
-export function figureFit(full, short, share, room, width) {
-  for (const [fig, sh] of [[full, share], [short, share], [short, '']]) if (width(fig + sh) <= room) return { fig, share: sh }
-  return null
+// Which figures of one lane are written, and where each starts. `items`, one for each box: { cx, y, inside, box:
+// [left, top, right, bottom], full, short, size }, where `y` is the figure's baseline (figureAt), `cx` the box's
+// middle and `size` what the box carries. The largest boxes are written first, whole if there is room and
+// shortened if not; a figure that would run into one already written, or into another box, is left to the tip. A
+// figure inside its box must fit the box. `width` measures a string as it will be drawn; figures stay between `x0`
+// and `x1`. Returns, for each item, { fig, x, w } (the figure, where it starts and how wide it is) or null.
+export function laneFigures(items, width, { x0, x1, text = 10, gap = 5 }) {
+  const hit = (r, q, g) => r[0] < q[2] + g && q[0] < r[2] + g && r[1] < q[3] && q[1] < r[3]
+  const out = items.map(() => null), written = []
+  const order = items.map((_, k) => k).sort((p, q) => Math.abs(items[q].size) - Math.abs(items[p].size))
+  for (const k of order) {
+    const it = items[k]
+    for (const fig of it.full === it.short ? [it.full] : [it.full, it.short]) {
+      const w = width(fig)
+      if (it.inside && w > it.box[2] - it.box[0] - 6) continue
+      const x = Math.max(x0, Math.min(x1 - w, it.cx - w / 2)), r = [x, it.y - text, x + w, it.y]
+      if (written.some(q => hit(r, q, gap))) continue
+      if (!it.inside && items.some((o, j) => j !== k && hit(r, o.box, 1))) continue
+      out[k] = { fig, x, w }; written.push(r)
+      break
+    }
+  }
+  return out
 }
 
 // Where a bucket's figure is written: the y of its baseline, and whether that is inside the box. `side` 1 long (the
 // box stands above the stream's line at `base`), −1 short; `tall` the box's height; `line` how far from `base` the
 // bucket's own limit line stands on that side (null with none); `half` half the lane's height; `text` the figure's
-// height. Tried in turn: just past the box's far edge; past the limit line where that is in the way; inside the box,
-// at its far edge (nearer the stream's line than the limit line where that crosses the box). A figure never leaves
-// its lane, so it cannot be written over the lane beside it.
+// height. Tried in turn: just past the box's far edge; past the limit line where that is in the way; just past the
+// box though the limit line is there (`onLine`: the line is then drawn with a break for the figure, which is how a
+// box close to its limit reads); inside the box, at its far edge (nearer the stream's line than the limit line
+// where that crosses the box). A figure never leaves its lane, so it cannot be written over the lane beside it.
 export function figureAt({ side, base, tall, line = null, half, text = 10 }) {
   const far = base - side * tall, lineY = line == null ? null : base - side * line
   const past = (edge) => side > 0 ? edge - 5 : edge + 5 + text
@@ -325,6 +347,7 @@ export function figureAt({ side, base, tall, line = null, half, text = 10 }) {
   if (lineY != null) {
     const beyond = past(side > 0 ? Math.min(far, lineY - 4) : Math.max(far, lineY + 4))
     if (fits(beyond)) return { y: beyond, inside: false }
+    if (fits(out)) return { y: out, inside: false, onLine: true }          // on the line, which gives way to it
   }
   if (tall >= text + 9) {
     let y = side > 0 ? far + text + 4 : far - 5
