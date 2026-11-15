@@ -711,7 +711,7 @@ class TestCapVolIsContinuous:
         assert self._vol(0.0450, 0.0300) == (pytest.approx(79.0), "INTERP")
         assert self._vol(0.0600, 0.0300) == (pytest.approx(76.0), "INTERP")              # beyond the last quote, on its line
         assert self._vol(0.0250, 0.0300) == (pytest.approx(90.0), "INTERP")
-        assert self._vol(0.0250, 0.0300, floor=True)[0] == pytest.approx(82.5)           # a floor: by the size of the distance
+        assert self._vol(0.0250, 0.0300, floor=True) == self._vol(0.0250, 0.0300)        # a floor is read where a cap at its strike is
 
     def test_a_strike_a_few_basis_points_from_the_money_is_not_given_the_atm_vol(self):
         # 3bp above the money: 3% of the way from 85 to 80. It used to be 85 until 5bp, then 84.75 at once.
@@ -753,3 +753,48 @@ class TestCapVolIsContinuous:
         # two bumps differ
         held = cap(0.0301, vol=base.vol_bp).npv - base.npv
         assert held < wide and (wide - held) > 5 * abs(wide - fine), (held, wide, fine)
+
+
+class TestOneStrikeOneVolatility:
+    """Until 0.42.2 a floor was read at the size of its distance from the money: a floor struck 50bp below it took the
+    volatility 50bp above (82.5 on SKEW) while a cap at that strike read 50bp below (90). One strike then had two
+    volatilities, and a cap less a floor at one strike was not the swap at that strike (Emmy, 15 November 2026)."""
+
+    ABOVE = [r for r in SKEW if r["strike_spread_bp"] >= 0]          # quoted at the money and above it only
+    BELOW = [r for r in SKEW if r["strike_spread_bp"] <= 0]          # quoted at the money and below it only
+
+    def _vol(self, strike, rows, floor):
+        from pricing.cap_floor import lookup_cap_vol
+        return lookup_cap_vol(strike_rate=strike, atm_forward=0.03, cap_tenor_y=5.0, surface_rows=rows, is_floor=floor)
+
+    def test_a_cap_and_a_floor_at_one_strike_are_read_at_one_point_on_either_side_of_the_money(self):
+        for strike, vol, tier in [(0.0200, 95.0, "QUOTED"), (0.0250, 90.0, "INTERP"), (0.0300, 85.0, "QUOTED"), (0.0350, 82.5, "INTERP"), (0.0400, 80.0, "QUOTED")]:
+            for floor in (False, True):
+                assert self._vol(strike, SKEW, floor) == (pytest.approx(vol), tier), (strike, floor)
+
+    def test_a_surface_quoted_on_one_side_only_is_mirrored_for_a_strike_on_the_other(self):
+        for floor in (False, True):
+            # nothing is quoted below the money: 50bp below is read 50bp above, 100bp below at the quote 100bp above
+            assert self._vol(0.0250, self.ABOVE, floor) == (pytest.approx(82.5), "INTERP")
+            assert self._vol(0.0200, self.ABOVE, floor) == (pytest.approx(80.0), "QUOTED")
+            # and the other way about
+            assert self._vol(0.0350, self.BELOW, floor) == (pytest.approx(90.0), "INTERP")
+            # on the side that is quoted nothing changes
+            assert self._vol(0.0350, self.ABOVE, floor) == (pytest.approx(82.5), "INTERP")
+            assert self._vol(0.0250, self.BELOW, floor) == (pytest.approx(90.0), "INTERP")
+
+    def test_a_cap_less_a_floor_at_one_strike_is_worth_the_same_whatever_the_surface(self):
+        # Put-call parity: cap(K) - floor(K) is the swap at K, which has no volatility in it. Priced off the surface
+        # and priced at any one volatility handed in, the difference is the same number; with the floor read on the
+        # other side of the money it was not (a 5Y floor at 2.5% on SKEW was priced at 82.5bp, its cap at 90bp).
+        from pricing.cap_floor import price_cap, price_floor
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.03)
+        def both(strike, rows, vol=None):
+            kw = dict(notional=10_000_000, tenor_y=5.0, discount_curve=curve, valuation_date=VAL_DATE, surface_rows=rows, vol_override_bp=vol)
+            return price_cap(cap_rate=strike, **kw), price_floor(floor_rate=strike, **kw)
+        for strike in (0.0200, 0.0250, 0.0290, 0.0310, 0.0350, 0.0400):
+            cap, floor = both(strike, SKEW)
+            flat_cap, flat_floor = both(strike, SKEW, vol=60.0)
+            assert cap.vol_bp == pytest.approx(floor.vol_bp), strike
+            assert cap.npv - floor.npv == pytest.approx(flat_cap.npv - flat_floor.npv, abs=0.05), strike      # premiums are kept to the cent
+            assert abs(cap.vol_bp - 60.0) > 1.0, "the surface's volatility is not the one handed in, so the test says something"

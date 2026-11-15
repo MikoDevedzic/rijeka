@@ -1,7 +1,24 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.23). Commits on `main` are the detail.
+methodology document carries its own version (v1.24). Commits on `main` are the detail.
+
+## 0.42.2 · 15 November 2026
+
+**A floor is read where a cap at its strike is.** The volatility of a cap or a floor is read from the cap surface
+at the strike's distance from the at-the-money forward. A floor was read at the size of that distance: a floor
+struck 100bp below the money took the volatility quoted 100bp above it, and never read the quotes below the money,
+while a cap at that same strike read them. On a surface that is not the same on both sides, one strike had two
+volatilities and a cap less a floor at one strike was not the swap at that strike.
+
+- **One strike, one volatility.** The distance is signed for a floor as it is for a cap. A surface quoted on one
+  side of the money only is mirrored for a strike on the other side.
+- **What moves.** A floor, and the floor of a collar or of a floored leg, struck on the other side of the money
+  from where it was read, on a surface that differs between the two sides. The hosted demo's surface is the same on
+  both sides, so nothing moves there; the pinned sample book is unchanged.
+- **Held by parity.** A cap less a floor at one strike is worth the same priced off the surface and priced at any
+  one volatility handed in. The test fails on the old reading. Methodology v1.24 and the model inventory say how
+  the surface is read; the reading still has no outside reference.
 
 ## 0.41.0 · 15 November 2026
 
