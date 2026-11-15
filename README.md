@@ -186,7 +186,6 @@ The spread schedules live in one place, `backend/market_data/demo_feed.py`, and 
 - `docs/market_risk.md`, `docs/ccr.md`, `docs/pnl_attribution.md`, `docs/xva.md` — the per-module notes behind the methodology chapters
 - `docs/ops/deploy.md` — the deploy chain (API first on Render, then the app from the `release` branch)
 - `docs/architecture.md` — the map of the pieces and the data flow of a trade; `docs/ops/environment.md` — every environment variable; `docs/model_inventory.md` — every model with its validation status; `docs/glossary.md` — the names on every screen; `CHANGELOG.md`
-- `docs/archive/AUDIT_launch_2026-11-02.md` — the launch audit and the plan it set
 
 ---
 

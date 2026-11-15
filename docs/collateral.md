@@ -3,7 +3,7 @@
 Collateral is a first-class object: a concrete *instrument* a firm can post or receive, a *schedule* per
 counterparty (the CSA's eligible-collateral annex), and the *regime* the engines derive from the schedule. The
 regulatory classes and their rules are unchanged (`docs/capital.md` §1); this layer names the assets and carries
-their economics. Plan: `docs/archive/PLAN_collateral_2026-11-04.md`. Built from public standards only.
+their economics. Built from public standards only.
 
 ## 1. Instruments (`pricing/collateral.py` `Instrument`, `SEED`)
 

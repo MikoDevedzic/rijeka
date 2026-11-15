@@ -137,8 +137,7 @@ export default function Roadmap() {
             ['AUDIT', 'A Solidity reviewer for the registry contract before anyone says the word mainnet. 16 Foundry tests and Sourcify verification are the starting point, not the finish.', 'https://github.com/MikoDevedzic/rijeka/tree/main/chain', 'THE CONTRACT ↗'],
             ['CONTRIBUTE', 'Code or docs with a DCO sign-off; engine and standard are Apache-2.0, the platform is BSL 1.1. Pricing changes come with a test, a before/after number and the methodology updated in the same pull request.', 'https://github.com/MikoDevedzic/rijeka/blob/main/CONTRIBUTING.md', 'CONTRIBUTING ↗'],
             ['PILOT', 'A bank, asset manager or corporate treasury willing to run the confirmation flow with a real counterparty on Sepolia, then mainnet.', 'mailto:miko@rijeka.app?subject=PILOT', 'WRITE TO US'],
-            ['TEACH', 'A university or graduate programme that wants the cohort labs. We set up the firms and the market data; students book, price, confirm and verify.', 'mailto:miko@rijeka.app?subject=TEACH', 'WRITE TO US'],
-            ['SPONSOR', 'Two concrete items: the external audit of the registry contract, and a year of hosting for university cohorts. Sponsors are named on the project page and have no say over validation.', 'https://github.com/sponsors/MikoDevedzic', 'GITHUB SPONSORS ↗'],
+            ['TEACH', 'A university or graduate programme that wants to use the desk in a course: students book, price, confirm and verify. Write, and say what the course needs.', 'mailto:miko@rijeka.app?subject=TEACH', 'WRITE TO US'],
           ].map(([t, body, href, cta]) => (
             <article key={t} className="wwu-card">
               <h3>{t}</h3><p>{body}</p>

@@ -5,8 +5,7 @@ methodology document carries its own version (v1.21). Commits on `main` are the 
 
 ## 0.39.1 · 15 November 2026
 
-**The trade window has no CAPITAL tab.** The owner: "i think we need to remove 'capital' from new trade window.
-doesnt make sene. we have KVA componnet. capital we will have to calculate completely under myabe risk tab."
+**The trade window has no CAPITAL tab.**
 
 - A ticket's tabs are TRADE, DETAILS, CASHFLOWS, XVA, CURVE SCENARIO and CONFIRM. The cost of capital on a trade
   is the KVA of its XVA tab, as before; the book's regulatory capital is under Risk → CAPITAL, as before.
@@ -22,7 +21,7 @@ and in `CONTRIBUTORS.md`.
 
 ## 0.39.0 · 14 November 2026
 
-**A currency NDF fixes.** The owner: "fix the currency NDF fixing and also contributor credit wording". Until this
+**A currency NDF fixes.** Until this
 version a currency NDF was booked with its fixing on its settlement date and USD as its settlement currency on
 every pair, and it never became a fixed amount: its value floated on spot until the day it settled.
 
@@ -54,7 +53,7 @@ every pair, and it never became a fixed amount: its value floated on spot until 
   two issue forms say the same; pull requests have a form.
 - Methodology v1.21 (§12, non-deliverable forwards); the model inventory has the row and what it lacks.
 - **Roadmap** (after the release, the same day). Fixed income joins Phase 3 as planned, in the app and on the
-  site: the owner's mission names it ("crypto, fixed income, credit, OTC derivatives ... all on one platform"),
+  site: the owner's mission names it,
   and until now no phase did.
 
 Not built: a public daily currency fixing; a fixing date chosen on the ticket; the amount booked as a cash line;
@@ -62,9 +61,7 @@ exposure paths that stop at the fixing date.
 
 ## 0.38.0 · 14 November 2026
 
-**Fixings: what resets, day by day.** The owner: "we have to have fixing. traders hedge this all the time. They
-have to know how much is resetting and what index for each date/date. on dashboard we can show net fixing...but
-market risk dashboard has to have this fixing risk in there."
+**Fixings: what resets, day by day.**
 
 - **Market risk has a FIXINGS panel.** For each index and each coming business day: the notional whose floating
   rate is set by that day's fixing (what the desk receives, what it pays, the net), and FIXING 01, what one basis
@@ -115,10 +112,7 @@ What it is not, and what the check of "does it all feed" found:
 ## 0.37.0 · 14 November 2026
 
 **Every curve has a limit, and the trader's home reads a limit on both sides: flat in the middle, short one way,
-long the other.** The owner, of the home with no limits set: "it would be better if we had limits set up. then
-trader knows hows close he is to his 01 limits....keep in mind that risk can be positive and negative"; of the two
-ways to hold a limit, "one number either side"; and then, "each curve has to have ability to set limit. is should
-be standard thing. when curve is added then limit is added."
+long the other.**
 
 - **A limit for every curve, as standard.** Every curve, asset, volatility surface and forward basis the book
   carries risk on has a limit from its first trade: its own where one has been set, otherwise the standard size for
@@ -167,11 +161,7 @@ on a stream, because a stream is the whole book. The size of a share is the one 
 
 ## 0.36.0 · 14 November 2026
 
-**The home on a monitor is the trader's home.** The owner: "there is maybe a lot of things on the home page. and
-maybe slightly messy... this has to be landing page and has to be the best experience"; then, of the picture at its
-middle, "what about if we make this in terms of risk factors and not trades... each risk factor is its own line...
-and then bucketed risk along"; then, of a home for each role, "build the trader view." It is the first of those
-views, and for now every role on a monitor sees it. Three bands, always in the same place:
+**The home on a monitor is the trader's home.** It is the first of the views by role, and for now every role on a monitor sees it. Three bands, always in the same place:
 
 - **Where you stand, and what needs you.** One line of words from the firm's limits as the risk report evaluates
   them on your book (how many are passed, close and clear), the closest one named, and every limit as a mark on one
@@ -216,8 +206,7 @@ What it is not, said on the page or here:
 
 ## 0.35.0 · 14 November 2026
 
-**Rijeka opens as an app on a desktop: a window of its own, with no address bar.** The owner: "i want user to
-feel like they actualy entered seperate system and not just some website." A page cannot open a window with its
+**Rijeka opens as an app on a desktop: a window of its own, with no address bar.** A page cannot open a window with its
 address hidden (browsers stopped allowing it, against phishing), so Rijeka is installed instead, as it already
 could be on a phone.
 
@@ -250,9 +239,7 @@ try of 0.34.0, both of his accounts side by side in one browser.
   names the person.
 - Two people on two machines, or in two browsers, were never affected.
 
-**The number on the messenger button is chat, and the message box fits.** The owner: "i see number below and
-its for news. 829 news...lets only make it chat", and "the chat box where you type messages also is not really
-fitting the default there fully and looks awkward".
+**The number on the messenger button is chat, and the message box fits.**
 
 - The number on the messenger button (and on CHAT in a phone's bar) counts unread messages and invitations. The
   news room's headlines no longer count, unless market news is switched on in the alert settings. The news room
@@ -266,7 +253,7 @@ fitting the default there fully and looks awkward".
 
 - The private Prometheus conversation gave up after twenty seconds, the limit every chat request has, and said
   "Rijeka didn't answer in time. Try again." A question about the book is several look-ups, each a call to the
-  model: the one asked for the film ("Is the bitcoin forward I just confirmed still what was signed?") took about
+  model: the one asked for the film took about
   thirty-five seconds, and the server went on to finish an answer nobody was waiting for. Asking again started it
   again.
 - The private conversation now waits three minutes. Every other chat request keeps twenty seconds.
@@ -279,10 +266,7 @@ fitting the default there fully and looks awkward".
   whether anything between the browser and the API closes a request that is open for minutes.
 ## 0.34.0 · 14 November 2026
 
-**Chat says a message arrived, and is no slower than a messenger.** The owner: "yesterday i messaged with Edis on
-our chat and there was seemingly more lag than typical message communcation", and then: "we also need alert system
-when you get message on there. maybe play sound or just blink...something unique. also there needs to bet settings
-for it when people can turn it off or set up setting chat alerts to how they want."
+**Chat says a message arrived, and is no slower than a messenger.**
 
 Alerts:
 
@@ -290,8 +274,7 @@ Alerts:
   messenger is looked at, and flashes the browser tab's title while Rijeka is not the window in front. A desktop
   notification is offered and is off until it is switched on (the browser asks); it names the sender and the
   room and never carries the text.
-- The sound is a chime of two rising notes, the owner's choice by ear of the four offered ("chime i think,
-  normal and blink isfine"); a ship's bell struck twice, a ping and a knock can be chosen instead, at three
+- The sound is a chime of two rising notes, the owner's choice by ear of the four offered; a ship's bell struck twice, a ping and a knock can be chosen instead, at three
   volumes. They are made in the browser; no file is loaded.
 - The settings are behind ♪ in the messenger's title bar: alerts on or off altogether, each way of alerting, the
   sound and its volume, and what alerts (messages from people and invitations, Prometheus's answers in a room,
@@ -328,8 +311,7 @@ lets it.
 
 ## 0.33.2 · 13 November 2026
 
-**The owner's account on the hosted desk is an administrator again.** The owner: "looks like i lost my 'admin'
-view", and, asked how: "i never manually removed it. so it must have been you. you add it back."
+**The owner's account on the hosted desk is an administrator again.**
 
 - No account of the owner's held the admin role on the hosted desk, so nobody could open the Users page to give
   it back. One migration (`2026-11-13_restore_owner_admin.sql`), applied by the runner, sets it on the one
@@ -350,9 +332,7 @@ view", and, asked how: "i never manually removed it. so it must have been you. y
 
 ## 0.33.1 · 13 November 2026
 
-**Chat fetches what its live stream did not deliver.** The owner, in a chat with another firm: "when i send him
-message he has to refresh to get the messages", and "i asked prometheus soemthing in chat and it didnt return me
-answer".
+**Chat fetches what its live stream did not deliver.**
 
 - A message reached another window only through the realtime socket, and so did Prometheus's answer. A socket
   that is down (a phone that slept, a network that changed, a socket that never joined) is told nothing, and
@@ -372,10 +352,7 @@ answer".
 
 ## 0.33.0 · 13 November 2026
 
-**A paper confirmation from the signed record, and the Rijeka mark on the certificate.** The owner: "we also need
-paper confirm....when trade is confiemd and proof pack is avaialble i think there hsould be button that generates
-paper confirm of the trad edetails like currently markets do", and of the certificate's seal: "that should be that
-rijeka logo and not random circle thing".
+**A paper confirmation from the signed record, and the Rijeka mark on the certificate.**
 
 - **PAPER CONFIRMATION** on the certificate, beside the proof pack. It opens the signed record as a sheet over the
   app, with one button, PRINT OR SAVE AS PDF; printed, the sheet is the only thing on the page. On it: what the
@@ -413,8 +390,7 @@ rijeka logo and not random circle thing".
 
 ## 0.32.4 · 13 November 2026
 
-**A trade's status is changed by an event and by nothing else.** The owner: "i think you are able to cancel the
-trade and then confirm it. can you check logic on this."
+**A trade's status is changed by an event and by nothing else.**
 
 - What was checked. In the trade window a cancelled trade offers nothing to confirm, and the three routes that
   confirm (`/api/chain/confirm`, `/api/chain/countersign` and the chat card, `/api/trade-events/confirm`) refuse a
@@ -450,8 +426,7 @@ trade and then confirm it. can you check logic on this."
 
 ## 0.32.3 · 13 November 2026
 
-**On a phone the app says it is built for a monitor.** The owner, after the phone fixes: "we do need to have some
-sort of message that this is meant for desktop viewing and not phone viewing".
+**On a phone the app says it is built for a monitor.**
 
 - On the door, under ADD TO HOME SCREEN, one line: "Built for a monitor. A phone shows the essentials." The door
   is still one screen on the narrowest phone.
@@ -463,8 +438,7 @@ sort of message that this is meant for desktop viewing and not phone viewing".
 
 ## 0.32.2 · 13 November 2026
 
-**"Add to Home Screen" says the taps the visitor's own browser has.** The owner, on his phone: "i'm having hard
-time following instrucitons to add to home screen". The sheet said "Tap Share in Safari's bar", which is where
+**"Add to Home Screen" says the taps the visitor's own browser has.** The sheet said "Tap Share in Safari's bar", which is where
 Share sat until iOS 18. Safari has since moved it twice: behind the three dots beside the address bar (26), then
 behind a press and hold on the address bar (27).
 
@@ -480,8 +454,7 @@ behind a press and hold on the address bar (27).
   and "Open Rijeka" are two steps), bold in the line under the list set as in the list, that line's glyph
   at its line's size, numbers quieter than the words, the in-app sheet a sentence and two steps.
 - Left: an in-app browser on Android is still sent to a menu it may not have.
-- Also, after the owner reported fields and text overlapping in the new trade window on his phone ("can i connect
-  the phone to you somehow"): a scan of the trade window (`e2e/perf/overlap.spec.js`: five kinds of ticket, every
+- Also, after the owner reported fields and text overlapping in the new trade window on his phone: a scan of the trade window (`e2e/perf/overlap.spec.js`: five kinds of ticket, every
   tab, before and after pricing, 320 to 440 wide) for boxes that cross, text that is cut, and panels hidden behind
   an edge. It found one, live since 0.32.0: **a swap's CURVE SCENARIO kept its two panels side by side, so its
   figures and its curve were a sliver 30px wide at the edge of the screen.** They are one column now: controls,
@@ -513,10 +486,7 @@ behind a press and hold on the address bar (27).
 
 ## 0.32.1 · 12 November 2026
 
-**On a phone nothing is pushed sideways, and signing in no longer leaves the page enlarged.** The owner, the same
-day the phone view went out: "i dont love the phone version that you have to scroll headers to see and even scroll
-on output left/right... either fit on one screen or scroll down to see it", and "when first log in, it is sort of
-zoomed in all the way to the edges".
+**On a phone nothing is pushed sideways, and signing in no longer leaves the page enlarged.** Nothing on a phone is reached by scrolling sideways, and the page no longer opens zoomed to its edges.
 
 - **The ticket's tabs are two rows of three**, all in view. They were one strip to scroll.
 - **The figures at the foot are three across**, on as many lines as they need. They were one row to scroll.
@@ -551,7 +521,7 @@ zoomed in all the way to the edges".
 
 ## 0.32.0 · 12 November 2026
 
-**The phone view.** On the owner's word ("build the phone view and deploy it right away"), in the scope he set on
+**The phone view.** On the owner's word, in the scope he set on
 11 November: the home, booking a trade through the trade window, chat and news. At 390px the app was about 1,070px
 wide and could not be used; nothing is wider than the screen now.
 
@@ -593,7 +563,7 @@ wide and could not be used; nothing is wider than the screen now.
 
 ## 0.31.1 · 12 November 2026
 
-**The door's way to the site points at /about.** On the owner's word ("deploy everything"). The public site now
+**The door's way to the site points at /about.** On the owner's word. The public site now
 serves its landing page at rijeka.app/about, and rijeka.app itself is to open the door; EXPLORE RIJEKA goes to
 /about so the two do not send a visitor round in a circle. The line beside it names what is there: how it works,
 verify, tools, work with us. The app's page names its own address (app.rijeka.app) as its canonical one, where it
@@ -601,8 +571,7 @@ named rijeka.app, which is about to be a redirect to it.
 
 ## 0.31.0 · 12 November 2026
 
-**The front door.** On the owner's word after two mocks ("when you type rijeka.app it should bring you to login
-screen right away ... or you can click from there to go into site"; "go with recommendation, build it"). The app
+**The front door.** On the owner's word after two mocks. The app
 side is here; the public site's side is staged and waits for its own word.
 
 - **The sign-in page is the door.** It carries the logo (the river into the ringed R) where the name was set in
@@ -631,8 +600,7 @@ side is here; the public site's side is staged and waits for its own word.
 
 ## 0.30.4 · 12 November 2026
 
-**The look on the Configurations pages and the messenger.** Item 2 of the Phase 1 exit list, on the owner's word
-("do them all in order and deploy"). No figure changes; nothing moves.
+**The look on the Configurations pages and the messenger.** Item 2 of the Phase 1 exit list, on the owner's word. No figure changes; nothing moves.
 
 - **Type on the scale.** 210 sizes that were set in rem on the market-data, configuration, onboarding and messenger
   pages are steps of the px scale now (`docs/design.md`): none moves by more than half a pixel. The count of sizes
@@ -707,8 +675,7 @@ word ("do them all in order and deploy"). Every screen a new user meets was pict
 
 ## 0.30.2 · 12 November 2026
 
-**The evidence behind the XVA on digital assets.** Item 11(e) of the Phase 1 exit list, on the owner's word ("do
-them all in order and deploy"). No figure the engine computes changes; methodology v1.20.
+**The evidence behind the XVA on digital assets.** Item 11(e) of the Phase 1 exit list, on the owner's word. No figure the engine computes changes; methodology v1.20.
 
 - **The exposure backtest.** `backend/scripts/backtest_exposure.py`, after the Basel Committee's sound practices for
   backtesting counterparty credit risk models (2010), on five years of public daily closes of BTC, ETH and SOL: on
@@ -736,8 +703,7 @@ them all in order and deploy"). No figure the engine computes changes; methodolo
 
 ## 0.30.1 · 12 November 2026
 
-**The ticket's XVA tab on a laptop.** The rest of item 4 of the Phase 1 exit list, on the owner's word ("do them
-all in order and deploy"). No figure changes.
+**The ticket's XVA tab on a laptop.** The rest of item 4 of the Phase 1 exit list, on the owner's word. No figure changes.
 
 - **The incremental charge is in view.** The counterparty's netting set with and without the trade (CHARGE THIS
   TRADE) sat below the whole tab, under the fold on a laptop. It is now directly under the results, above the
@@ -758,7 +724,7 @@ all in order and deploy"). No figure changes.
 ## 0.30.0 · 12 November 2026
 
 **Barriers: watched between the grid's dates, and a touch the desk can record.** Items 11(c) and 5 of the Phase 1
-exit list, on the owner's word ("do them all in order and deploy").
+exit list, on the owner's word.
 
 - **Watched between dates.** On a ticket's exposure paths a barrier was watched on the grid's dates alone, so a
   level that went out and came back between two dates was never seen. Against the continuous closed forms on a
@@ -793,7 +759,7 @@ exit list, on the owner's word ("do them all in order and deploy").
 
 ## 0.29.0 · 12 November 2026
 
-**Partial termination.** Asked by the owner ("do we have partial termination process?" ... "build it, deploy it").
+**Partial termination.** Asked by the owner.
 The event type and a route that stored it existed; nothing reduced a trade and the ticket offered nothing.
 
 - **On the ticket.** A booked trade's CONFIRM tab has PARTIALLY TERMINATE: the notional that remains and, if one
@@ -829,7 +795,7 @@ The event type and a route that stored it existed; nothing reduced a trade and t
 ## 0.28.0 · 12 November 2026
 
 **XVA on a currency or digital-asset ticket: weekly steps, and the charge on the exposure averaged across each
-step.** Item 11(c) of the Phase 1 exit list, on the owner's word ("weekly and average, build it, deploy it").
+step.** Item 11(c) of the Phase 1 exit list, on the owner's word.
 
 - **What was wrong.** Every run stepped monthly and charged CVA, DVA, FVA and FBA on the exposure at each step's
   end. A forward's exposure grows like the square root of time, so on two or three steps the charge was overstated.
@@ -871,8 +837,7 @@ step.** Item 11(c) of the Phase 1 exit list, on the owner's word ("weekly and av
 
 ## 0.27.1 · 12 November 2026
 
-**The forward on the TRADE tab no longer reads as switched off.** Asked by the owner on 10 November ("the forward
-reads as greyed out"); item 4 of the Phase 1 exit list, first part. The forward is a computed figure, and it sat in
+**The forward on the TRADE tab no longer reads as switched off.** Asked by the owner on 10 November; item 4 of the Phase 1 exit list, first part. The forward is a computed figure, and it sat in
 a dashed box: the only other dashed edge on the ticket is a chip that cannot be pressed. It now has a field's own
 solid edge and no well, as every value that cannot be changed has (`docs/design.md`); the figure was and is at
 full strength. Styles only; `docs/design.md` now says what marks a default (a brass rule once typed over, a dash
@@ -945,9 +910,7 @@ of the Phase 1 exit list).
 
 ## 0.25.0 · 12 November 2026
 
-**Fees are entered with the trade.** Asked for by the owner: "the fee can also be multiple dates or have multiple
-fees. the user should be able to just enter fee cashflow or maybe even some sort of other event type of fee as part
-of the trade", for trade entry, pricing and XVA.
+**Fees are entered with the trade.** Asked for by the owner, for trade entry, pricing and XVA.
 
 - **What was missing.** A currency or digital-asset option booked the model's own price as its premium, dated
   today, with nowhere to type the premium agreed; a rates option took one amount and one date; nothing else could
@@ -1034,9 +997,7 @@ XVA"). It was planned as jumps; fitted to the data, jumps were the wrong model, 
 
 ## 0.23.2 · 11 November 2026
 
-**The hosted demo is the launch set.** Call A of the Phase 1 exit list, asked for by the owner ("we're only going
-live with XVA... we're not gonig to publish capital or margin or pnl or risk", "as recommended", then "do the
-recommendations": the default in code, so nothing has to be set on the host).
+**The hosted demo is the launch set.** Call A of the Phase 1 exit list, asked for by the owner (the default is in code, so nothing has to be set on the host).
 
 - **What a demo holds back by default** is now everything outside the launch set: P&L, market risk, counterparty
   credit, capital, collateral, the XVA reserves and IPV. Until this release it was capital alone, and a demo
@@ -1085,7 +1046,7 @@ words for it.
 ## 0.23.0 · 11 November 2026
 
 **The margin on a digital-asset ticket is no longer read low.** First step of finishing the XVA on digital assets,
-asked for by the owner: "lets not hide the KVA and MVA... has to be full XVA", then "go ahead with 11 and the rest."
+asked for by the owner.
 
 - **What was wrong.** Collateral and initial margin read the value a margin period before each date. The engine
   took it from a bridge between the grid VALUES, which is Gaussian. A forward's value is a multiple of a lognormal
@@ -1218,10 +1179,8 @@ Phase 1 exit list ("as recommended, then we'll review").
 
 ## The logo · 11 November 2026 (frontend only)
 
-**A logo that simulates, and a confirmation you can watch.** Asked for by the owner: "our Rijeka logo needs to be
-better... just written down seems bit plain", then, choosing step by step from a mock: simulated paths like a Monte
-Carlo run, moving, into an R in a ring that is the name's first letter, and "on confirmation on chain the
-animation should be our logo loading... once trade confirmes the image should finish loading".
+**A logo that simulates, and a confirmation you can watch.** Asked for by the owner, then, choosing step by step from a mock: simulated paths like a Monte
+Carlo run, moving, into an R in a ring that is the name's first letter; on a confirmation the same mark draws itself and is complete when the trade is confirmed on chain.
 
 - **The logo is a river of simulated paths running into the ringed R that begins the name.** Rijeka means river.
   One desk's paths are limestone, the other's blue; they turn brass where they meet and run as one line into the
@@ -1240,9 +1199,7 @@ animation should be our logo loading... once trade confirmes the image should fi
 
 ## 0.22.0 · 11 November 2026
 
-**Forward curves to ten years, with what is implied marked as implied.** Asked for by the owner: "we need to be able
-to model all FX to 10y... the derived points on the forward curve has to be differentiated somehow so user knows its
-implied and how... in configurations, user should be able to turn on/off tenors on the curve."
+**Forward curves to ten years, with what is implied marked as implied.** Asked for by the owner.
 
 - **Beyond the last quoted tenor a forward is parity plus that tenor's basis, held flat as a rate.** Until now the
   last points were held flat, so a five-year forward was the two-year one: wrong past the last quote. On a currency
@@ -1276,9 +1233,7 @@ implied and how... in configurations, user should be able to turn on/off tenors 
 
 ## 0.21.2 · 11 November 2026
 
-**A swap shows each leg again, and an embedded cap or floor shows its value and its vega.** Reported by the owner:
-"why did we also lose per leg value. i'm looking at IR swap and we only have Net NPV, also, when i'm adding embeded
-optionality it doesnt show me Vega risk or the value of the option value on the swap."
+**A swap shows each leg again, and an embedded cap or floor shows its value and its vega.** Reported by the owner.
 
 - **Each leg's value is in the footer**, on every tab, beside the net: FIXED PV and FLOAT PV (a basis swap's two legs
   by their own names). They were on the TRADE tab until the valuation moved to CASHFLOWS on 10 November, which left
@@ -1301,8 +1256,7 @@ optionality it doesnt show me Vega risk or the value of the option value on the 
 
 ## Figures are set one way; a design keeper · 11 November 2026 (frontend only)
 
-Reported by the owner: the forwards page of Configurations and the ticket did not look alike; "the points pips look
-different size than outright"; and nobody was responsible for consistency.
+Reported by the owner: the forwards page of Configurations and the ticket did not look alike, the points and the outright were set in different sizes, and nobody was responsible for consistency.
 
 - **One size of type at every width.** The root size grew with the window (`clamp(14px, 0.75vw, 16px)`), so whatever
   was sized in rem grew on a wide screen and whatever was sized in px did not: a figure and the field beside it

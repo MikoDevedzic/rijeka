@@ -66,14 +66,11 @@ shown on the Methodology tab of the application.
 
 - Named sign-off in the product's validation report and in the methodology
   document's acknowledgements, if you want it.
-- Co-authorship of the next validation report for a product you validated end
-  to end.
 - A line in [CONTRIBUTORS.md](../CONTRIBUTORS.md) and in the changelog entry of
   the fix, for a finding that is confirmed.
 
 No money changes hands: validators are not paid, for a finding or for a clean
-bill of health, and sponsors have no say over validation. The two are kept
-apart on purpose.
+bill of health.
 
 ## Current status by product
 
@@ -108,12 +105,9 @@ Specific asks get answers, so here are the specific asks. Write to
   its own validation report.
 - **PILOT** — a bank, asset manager or corporate treasury willing to run the
   confirmation flow with a real counterparty on Sepolia, then mainnet.
-- **TEACH** — a university or graduate programme that wants the cohort labs;
-  we set up the firms and the market data.
+- **TEACH** — a university or graduate programme that wants to use the desk
+  in a course: write, and say what the course needs.
 - **DATA** — an openly licensed curve and vol set for teaching, so no classroom
   depends on a Bloomberg seat.
-- **SPONSOR** — two concrete items: the external audit of the registry
-  contract, and a year of hosting for university cohorts. Sponsors are named
-  on the project page; they do not direct validation.
 
 Nothing here is an offer of employment or equity.

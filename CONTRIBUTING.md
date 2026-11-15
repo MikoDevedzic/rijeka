@@ -8,7 +8,7 @@ its own door so nobody has to guess.
 | **Validate a model** independently and be named on the report | [docs/VALIDATION.md](docs/VALIDATION.md) and the [validation issues](https://github.com/MikoDevedzic/rijeka/issues?q=label%3Avalidation) |
 | **Report a pricing or risk bug** | [New pricing-bug issue](https://github.com/MikoDevedzic/rijeka/issues/new?template=pricing_bug.yml) |
 | **Contribute code or docs** | this page, then a pull request |
-| **Sponsor, pilot, or teach with it** | [docs/VALIDATION.md#work-with-us](docs/VALIDATION.md#work-with-us) or miko@rijeka.app |
+| **Pilot or teach with it** | [docs/VALIDATION.md#work-with-us](docs/VALIDATION.md#work-with-us) or miko@rijeka.app |
 
 ## Ground rules for code
 
@@ -53,8 +53,8 @@ need PostgREST; `npm run e2e:chain` adds a local test chain and needs Foundry's 
 
 ## Review
 
-One maintainer review for docs and UI; two for anything under `pricing/`, `chain/` or the registry
-contract. Pricing pull requests are checked against the validation reports before merge.
+Every pull request is reviewed by the maintainer. Pricing pull requests are checked against the validation
+reports before merge.
 
 ## Credit
 
