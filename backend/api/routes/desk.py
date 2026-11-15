@@ -252,9 +252,12 @@ def lifecycle(db: Session, user: dict) -> dict:
                      "notional": float(t.notional) if t.notional else None, "ccy": t.notional_ccy})
     # 5. Limit breaches and warnings from the last stored risk report (the daily run, or RUN NOW on the risk page).
     try:
-        from risk.report import latest_stored
-        last = latest_stored(db, str(uid))
-        for lim in (last or {}).get("limits", []):
+        # against the limits as they stand, as the Risk page and the home read them: a limit set since the report was
+        # stored is in the feed at once, and a curve's standard limit is there too
+        from risk.report import stored_report, with_limits_as_they_stand
+        last = stored_report(db, str(uid))
+        last = with_limits_as_they_stand(db, str(uid), last) if last else None
+        for lim in [x for x in (last or {}).get("limits", []) if x.get("status") in ("BREACH", "WARN")]:
             kind = "LIMIT" if lim.get("status") == "BREACH" else "LIMIT_WARN"
             where = "book" if lim.get("scope") == "ALL" else f"{lim.get('scope', '').lower()} {lim.get('scope_name')}"
             actions.append({"kind": kind, "title": f"{lim.get('metric')} {'breached' if kind == 'LIMIT' else 'near limit'} on {where}",

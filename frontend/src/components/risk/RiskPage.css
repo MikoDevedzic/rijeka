@@ -43,16 +43,20 @@
 .rk-every td { font-size: 13px; color: var(--text-hi); padding: 6px 10px 6px 0; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
 .rk-every td small { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--text-mute); margin-left: 6px; }
 .rk-every .r { text-align: right; }
-.rk-every td.fig { color: var(--text); }
+.rk-every td.fig { color: var(--text); font-size: 12.5px; }      /* a figure is 12.5px, as the field beside it */
+.rk-every td:first-child, .rk-every th:first-child { padding-left: 10px; }
 .rk-every td b.fig { font-weight: 400; color: var(--text-dim); margin-left: 10px; }
 .rk-every tr.warn td b.fig { color: var(--amber); } .rk-every tr.breach td b.fig { color: var(--down); }
 .rk-ebar { display: inline-block; vertical-align: middle; position: relative; width: 150px; height: 8px; background: var(--border); }
 .rk-ebar i { display: block; height: 100%; background: var(--text-dim); } .rk-ebar s { position: absolute; top: -2px; width: 1px; height: 12px; background: var(--text-dim); }
 .rk-every tr.warn .rk-ebar i { background: var(--amber); } .rk-every tr.breach .rk-ebar i { background: var(--down); }
 .rk-ein { width: 120px; text-align: right; font-family: var(--mono); font-size: 12.5px; padding: 5px 8px; border-radius: var(--r-1); }
-.rk-eact { display: flex; gap: 6px; }
-.rk-std { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); max-width: 900px; }
-.rk-std label { display: grid; grid-template-columns: minmax(0, 1fr) 90px 150px 120px auto auto; gap: 10px; align-items: center; font-size: 13px; color: var(--text-hi); }
+.rk-eact { display: flex; gap: 6px; min-width: 170px; }      /* room for both buttons, so the table does not move when a row gains one */
+.rk-chip-std { border-style: dashed; color: var(--text-mute); }      /* a starting size, not a view */
+.rk-chip-own { color: var(--text-hi); border-color: var(--border-glow); }
+.rk-every tbody tr:hover .rk-ein { background: var(--fld-bg-hover); }
+.rk-std { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+.rk-std label { display: grid; grid-template-columns: minmax(0, 420px) 90px minmax(150px, auto) 120px auto auto; justify-content: start; justify-items: start; gap: 10px; align-items: center; font-size: 13px; color: var(--text-hi); }
 .rk-std label small { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--text-mute); margin-left: 6px; }
-.rk-std label b.fig { text-align: right; font-weight: 400; }
+.rk-std label b.fig { justify-self: end; font-weight: 400; }
 .rk-ehow { margin: 0 0 8px; }

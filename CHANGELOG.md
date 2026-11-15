@@ -25,8 +25,13 @@ be standard thing. when curve is added then limit is added."
   a book) are below, as before.
 - **A limit can be set on a surface's vega and on a forward basis** (`VEGA:<surface>`, `VEGA:<surface>:<bucket>`,
   `CRYBASIS01:<curve>`), which could not be limited before.
-- **A limit set now shows now.** A stored report carried the limits of the moment it was made; it is now read
-  against the limits as they stand (`risk/report.py with_limits_as_they_stand`), which costs no valuation.
+- **A limit set now shows now**, on the Risk page, the home and the desk feed. A stored report carried the limits
+  of the moment it was made; it is now read against the limits as they stand (`risk/report.py
+  with_limits_as_they_stand`), which costs no valuation. The stored count of breaches (the trend) is still the
+  count of the day it was stored, and from this release it counts a curve past its standard limit.
+- **One limit on one number.** Setting a limit where one stands (the same metric on the same book, desk or whole)
+  takes its place in the same write; until now a second stood beside the first. A standard size is set for the
+  whole book and for a kind there is.
 
 A limit stays one number on the size. How the home draws it:
 

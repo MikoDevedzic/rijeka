@@ -31,7 +31,7 @@ export function bucketReach(asOfIso) {
   return [`to ${y + 1}`, `to ${y + 5}`, `to ${y + 10}`, `after ${y + 10}`]
 }
 
-const FIAT = new Set(['USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF', 'MXN', 'ZAR', 'SGD', 'HKD', 'CNH', 'CNY', 'TRY', 'BRL', 'INR', 'KRW'])
+const FIAT = new Set(['XAU', 'XAG', 'XPT', 'XPD', 'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'AUD', 'CAD', 'NZD', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'HUF', 'MXN', 'ZAR', 'SGD', 'HKD', 'CNH', 'CNY', 'TRY', 'BRL', 'INR', 'KRW'])
 // A spot delta is FX01 on a currency and CRY01 on a digital asset (lib/risk-factors.js: two factors, two colours).
 export const spotMeasure = (asset) => FIAT.has(String(asset).toUpperCase()) ? ['fx', 'FX01'] : ['cry', 'CRY01']
 const pretty = (id) => String(id).replace(/_/g, ' ')

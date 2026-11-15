@@ -142,6 +142,11 @@ def post_limit(body: LimitBody, db: Session = Depends(get_db), user: dict = Depe
         raise HTTPException(status_code=422, detail="scope_name is required for DESK and BOOK")
     if body.limit <= 0:
         raise HTTPException(status_code=422, detail="limit must be positive")
+    if body.metric.strip().upper().startswith("STANDARD:"):          # the size of a kind is the firm's, for the whole book
+        if body.metric.strip().upper().split(":", 1)[1] not in L.STANDARD_SIZES:
+            raise HTTPException(status_code=422, detail=f"a standard size is for one of {sorted(L.STANDARD_SIZES)}")
+        if body.scope.upper() != "ALL":
+            raise HTTPException(status_code=422, detail="a standard size is set for the whole book (scope ALL)")
     L.add_limit(db, f, body.metric, body.scope, body.scope_name, body.limit, body.warn_pct, body.note, user["sub"], _name(user))
     return {"limits": L.list_limits(db, f)}
 

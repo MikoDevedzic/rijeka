@@ -48,6 +48,12 @@ def list_limits(db: Session, firm_id) -> list[dict]:
 
 
 def add_limit(db: Session, firm_id, metric: str, scope: str, scope_name: Optional[str], limit: float, warn_pct: float, note: str, set_by: str, set_by_name: str) -> dict:
+    # one limit on one number: a limit set where one stands (the same metric, on the same book, desk or whole) takes
+    # its place in the same write, as REMOVE would have retired it (active = false; the row stays as the record).
+    # Until 0.37.0 a second one stood beside the first and the page showed both.
+    db.execute(text("UPDATE risk_limits SET active = false WHERE firm_id = :f AND active AND upper(metric) = :m AND upper(scope) = :s "
+                    "AND coalesce(scope_name, '') = coalesce(:sn, '')"),
+               {"f": str(firm_id), "m": metric.strip().upper(), "s": scope.upper(), "sn": scope_name})
     db.execute(text("INSERT INTO risk_limits (id, firm_id, metric, scope, scope_name, limit_value, warn_pct, note, set_by, set_by_name, active) "
                     "VALUES (:id, :f, :m, :s, :sn, :l, :w, :n, :b, :bn, true)"),
                {"id": str(uuid.uuid4()), "f": str(firm_id), "m": metric.strip().upper(), "s": scope.upper(), "sn": scope_name, "l": limit, "w": warn_pct, "n": note or "", "b": set_by, "bn": set_by_name})
@@ -56,6 +62,10 @@ def add_limit(db: Session, firm_id, metric: str, scope: str, scope_name: Optiona
 
 
 def remove_limit(db: Session, firm_id, limit_id: str) -> int:
+    try:
+        uuid.UUID(str(limit_id))
+    except ValueError:                 # a standard limit's id ("standard:IR01:USD_SOFR") is not a stored row: nothing to remove, and no query to fail on it
+        return 0
     r = db.execute(text("UPDATE risk_limits SET active = false WHERE id = :id AND firm_id = :f"), {"id": limit_id, "f": str(firm_id)})
     db.commit()
     return r.rowcount or 0
@@ -117,13 +127,16 @@ def metric_value(metric: str, rep: dict, scope_rows: list[dict]) -> Optional[flo
 # view of what a desk should run. Nothing is stored for a standard limit: it is worked out with the report.
 STANDARD_SIZES = {"IR01": 50_000.0, "FX01": 150_000.0, "CRY01": 75_000.0, "VEGA": 25_000.0, "CRYBASIS01": 10_000.0}
 STANDARD_WARN_PCT = 80.0
-STANDARD_UNIT = {"IR01": "per bp, a curve", "FX01": "per 1%, a currency", "CRY01": "per 1%, a digital asset", "VEGA": "per point, a surface", "CRYBASIS01": "per bp, a forward basis"}
-_FIAT = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "ZAR", "SGD", "HKD", "CNH", "CNY", "TRY", "BRL", "INR", "KRW"}
+STANDARD_UNIT = {"IR01": "per bp, a curve", "FX01": "per 1%, a currency or a metal", "CRY01": "per 1%, a digital asset",
+                 "VEGA": "per vol point, a surface (per bp of vol on a swaption grid)", "CRYBASIS01": "per bp, a forward basis"}
+# what is not a digital asset: currencies and the metals quoted as one (anything else that has a spot here is a digital asset)
+_FIAT = {"XAU", "XAG", "XPT", "XPD", "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "SEK", "NOK", "DKK", "PLN", "CZK", "HUF", "MXN", "ZAR", "SGD", "HKD", "CNH", "CNY", "TRY", "BRL", "INR", "KRW"}
 
 
 def standards(limits: list[dict]) -> dict[str, dict]:
     """The standard size of each kind: the firm's own where it has set one, the built-in one where it has not."""
-    own = {l["metric"].upper().split(":", 1)[1]: l for l in limits if l["metric"].upper().startswith("STANDARD:") and l["scope"].upper() == "ALL"}
+    own = {l["metric"].upper().split(":", 1)[1]: l for l in limits if l["metric"].upper().startswith("STANDARD:") and l["scope"].upper() == "ALL"
+           and l["metric"].upper().split(":", 1)[1] in STANDARD_SIZES}
     return {k: ({"kind": k, "limit": float(own[k]["limit"]), "warn_pct": float(own[k]["warn_pct"]), "id": own[k]["id"], "set_by": own[k].get("set_by"), "built_in": False}
                 if k in own else {"kind": k, "limit": v, "warn_pct": STANDARD_WARN_PCT, "id": None, "set_by": None, "built_in": True}) | {"unit": STANDARD_UNIT[k]}
             for k, v in STANDARD_SIZES.items()}

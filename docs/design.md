@@ -310,6 +310,9 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
   from the limit's warning level, `--down` past it): on a limit `--down` says "past", and the hatching past a limit
   is quiet so that it is not read as a breach. LONG and SHORT are marked once at the picture's edge. Beside a
   factor the gauge is flat in the middle with the limit a fifth from either end.
+  The share of a limit that is used is written in whole percent (83%, 110%), here and on the Limits page: it is
+  read at a glance against 80 and 100, not to a basis point. A limit that is the standard size for its kind says
+  so (a dashed, quiet chip on the Limits page; ", the standard" on the home): it is a figure to start from.
 - **A segment of two, three or six is the ticket's joined control** (`tbw-tabs`): the picture's OF ITS LIMIT / A USUAL DAY / PER 01,
   and the tabs that hold what the old home showed as cards.
 - **Brass on this page is a link to where a thing is dealt with** (OPEN BLOTTER →, THE RISK PAGE →), as on the old

@@ -188,3 +188,14 @@ def test_a_firm_sets_the_standard_size_of_a_kind_and_it_is_not_itself_a_limit_on
     assert ev["IR01:USD_SOFR"]["limit"] == 5000.0 and ev["IR01:USD_SOFR"]["status"] == "WARN" and ev["IR01:USD_SOFR"]["warn_pct"] == 70.0      # 80% used, warned from 70%
     assert ev["IR01:EUR_ESTR"]["limit"] == 5000.0 and ev["SPOT01:BTC"]["limit"] == L.STANDARD_SIZES["CRY01"]
     assert L.evaluate([], {"ladder_rows": [], "var": {}, "stress": []}) == []                       # a report with no ladder has no curves to limit
+
+
+def test_a_standard_limit_has_no_row_to_remove_and_a_kind_that_is_not_one_sets_no_size():
+    assert L.remove_limit(None, "firm", "standard:IR01:USD_SOFR") == 0          # no query is made: a database that is not there is not touched
+    assert L.remove_limit(None, "firm", "") == 0
+    lims = [{"id": "x", "metric": "STANDARD:NOPE", "scope": "ALL", "scope_name": None, "limit": 1.0, "warn_pct": 80.0},
+            {"id": "y", "metric": "STANDARD:IR01", "scope": "DESK", "scope_name": "RATES", "limit": 1.0, "warn_pct": 80.0}]
+    std = L.standards(lims)
+    assert set(std) == set(L.STANDARD_SIZES) and all(v["built_in"] for v in std.values())
+    assert all(not e["metric"].upper().startswith("STANDARD:") for e in L.evaluate(lims, _book()))
+    assert "XAU" in L._FIAT and [k for k, m in L.factor_metrics({"ladder": {"spot01": {"XAU": 1.0, "SOL": 1.0}}})] == ["FX01", "CRY01"]

@@ -38,11 +38,10 @@ export function LimitsPage() {
     } catch (e) { setMsg(e.message) } finally { setBusy(false) }
   }
   const remove = async (id) => { setBusy(true); try { await api(`/api/risk/limits/${id}`, { method: 'DELETE' }); await load() } catch (e) { setMsg(e.message) } finally { setBusy(false) } }
-  // a curve's own limit, or a kind's standard size: the stored one (if any) is taken off and the new one set in its place
-  const put = async (metric, size, warn, old, said) => {
+  // a curve's own limit, or a kind's standard size: one request, in which the API retires the one that stood there
+  const put = async (metric, size, warn, said) => {
     setBusy(true); setMsg(null)
     try {
-      if (old) await api(`/api/risk/limits/${old}`, { method: 'DELETE' })
       await api('/api/risk/limits', { method: 'POST', body: JSON.stringify({ metric, scope: 'ALL', scope_name: null, limit: size, warn_pct: Number(warn) || 80, note: '' }) })
       setMsg(said); await load()
     } catch (e) { setMsg(e.message); await load().catch(() => {}) } finally { setBusy(false) }
@@ -105,7 +104,7 @@ function EveryCurve({ rep, canWrite, busy, put, remove }) {
   return (
     <section className="pnl-panel" data-testid="every-curve">
       <header><span>A LIMIT FOR EVERY CURVE</span><span className="pnl-sub">its own, or the standard one for its kind · one number on the size, long or short</span></header>
-      <div className="pnl-foot rk-ehow">Every curve, asset, volatility surface and forward basis the book carries has a limit from its first trade. Type a size and press SET to give one its own; STANDARD takes its own off again.</div>
+      <div className="pnl-foot rk-ehow">Every curve, asset, volatility surface and forward basis the book carries has a limit from its first trade. A STANDARD limit is a round figure to start from, not a view of what the desk should run: type a size and press SET to give a curve its own; STANDARD takes its own off again.</div>
       {!rows.length && <div className="pnl-empty">The book carries no risk on a curve yet. A curve's limit is here from its first trade.</div>}
       {rows.length > 0 && (
         <table className="rk-every">
@@ -118,11 +117,11 @@ function EveryCurve({ rep, canWrite, busy, put, remove }) {
                   <td>{r.name} <small>{r.measure} · {r.unit}</small></td>
                   <td className="fig r">{r.value == null ? '—' : fmt(r.value)}</td>
                   <td className="fig r">{fmt(r.limit)}</td>
-                  <td><span className={`pnl-chip ${r.standard ? '' : 'ok'}`}>{r.standard ? 'STANDARD' : 'ITS OWN'}</span></td>
+                  <td><span className={`pnl-chip ${r.standard ? 'rk-chip-std' : 'rk-chip-own'}`}>{r.standard ? 'STANDARD' : 'ITS OWN'}</span></td>
                   <td><span className="rk-ebar"><i style={{ width: `${Math.min(100, r.used || 0)}%` }} /><s style={{ left: `${Math.min(100, r.warn_pct)}%` }} /></span><b className="fig">{r.used == null ? '—' : `${Math.round(r.used)}%`}</b></td>
                   <td className="r"><input className="rk-ein" inputMode="decimal" aria-label={`A limit of its own for ${r.name} ${r.measure}`} placeholder={r.standard ? 'none' : fmt(r.limit)} value={val(r.metric)} onChange={type(r.metric)} disabled={!canWrite} /></td>
                   <td className="rk-eact">
-                    <button className="pnl-btn" disabled={busy || !canWrite || !size} onClick={() => put(r.metric, size, r.standard ? 80 : r.warn_pct, r.standard ? null : r.id, `${r.name} ${r.measure} is limited at ${fmt(size)}.`).then(() => done(r.metric))}>SET</button>
+                    <button className="pnl-btn" disabled={busy || !canWrite || !size} onClick={() => put(r.metric, size, r.warn_pct, `${r.name} ${r.measure} is limited at ${fmt(size)}.`).then(() => done(r.metric))}>SET</button>
                     {!r.standard && <button className="pnl-btn ghost" disabled={busy || !canWrite} onClick={() => remove(r.id)}>STANDARD</button>}
                   </td>
                 </tr>
@@ -139,14 +138,14 @@ function EveryCurve({ rep, canWrite, busy, put, remove }) {
             <label key={s.kind} data-kind={s.kind}>
               <span>{KIND_NAME[s.kind]} <small>{s.unit}</small></span>
               <b className="fig">{fmt(s.limit)}</b>
-              <span className="pnl-chip">{s.built_in ? 'AS SHIPPED' : `SET BY ${String(s.set_by || 'THE FIRM').toUpperCase()}`}</span>
+              <span className={`pnl-chip ${s.built_in ? 'rk-chip-std' : 'rk-chip-own'}`}>{s.built_in ? 'AS SHIPPED' : `SET BY ${String(s.set_by || 'THE FIRM').toUpperCase()}`}</span>
               <input className="rk-ein" inputMode="decimal" aria-label={`The standard size for ${KIND_NAME[s.kind]}`} placeholder={fmt(s.limit)} value={val(k)} onChange={type(k)} disabled={!canWrite} />
-              <button className="pnl-btn" disabled={busy || !canWrite || !size} onClick={() => put(k, size, s.warn_pct, s.id, `The standard size is ${fmt(size)} for ${KIND_NAME[s.kind].toLowerCase()}.`).then(() => done(k))}>SET</button>
+              <button className="pnl-btn" disabled={busy || !canWrite || !size} onClick={() => put(k, size, s.warn_pct, `The standard size is ${fmt(size)} for ${KIND_NAME[s.kind].toLowerCase()}.`).then(() => done(k))}>SET</button>
               {!s.built_in && <button className="pnl-btn ghost" disabled={busy || !canWrite} onClick={() => remove(s.id)}>AS SHIPPED</button>}
             </label>
           )
         })}
-        <div className="pnl-foot">The sizes as shipped are round figures to start from, not a view of what a desk should run: set your own. A curve's own limit always takes the standard one's place. The share used is |position| / limit; a warning is raised from 80% of a standard limit.</div>
+        <div className="pnl-foot">The sizes as shipped are round figures to start from, not a view of what a desk should run: set your own. A curve's own limit always takes the standard one's place. The share used is |position| / limit, in whole percent; a warning is raised from 80% of a size as shipped.</div>
       </div>
     </section>
   )
