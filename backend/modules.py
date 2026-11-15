@@ -22,7 +22,7 @@ MODULES: list[dict[str, Any]] = [
     {"key": "XVA", "label": "XVA on the ticket", "effects": "the XVA tab: stand-alone and incremental charges"},
     {"key": "MARKET_RISK", "label": "Market risk", "effects": "Risk → Market risk, the nightly ladder, VaR, stress and limits batch"},
     {"key": "COUNTERPARTY_CREDIT", "label": "Counterparty credit", "effects": "Risk → Counterparty credit, the nightly netting-set run and credit limits"},
-    {"key": "CAPITAL", "label": "Capital", "effects": "Risk → Capital and the ticket's CAPITAL tab"},
+    {"key": "CAPITAL", "label": "Capital", "effects": "Risk → Capital"},
     {"key": "PROMETHEUS", "label": "Prometheus", "effects": "the read-only assistant and the book brief"},
     {"key": "NEWS", "label": "News room", "effects": "the news feed and its summaries"},
     {"key": "COLLATERAL", "label": "Collateral", "effects": "Risk → Collateral (schedules, requirements, what is held, carry, the book under regimes) and the firm's collateral instruments under Configurations (the collateral block on the ticket's XVA tab is part of XVA and stays)"},

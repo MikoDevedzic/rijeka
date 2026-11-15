@@ -8,7 +8,7 @@ BODY_TMPL='**Module:** `%s`
 
 **How to take this:** read [docs/VALIDATION.md](https://github.com/MikoDevedzic/rijeka/blob/main/docs/VALIDATION.md), export the Excel replication for the product from the Methodology tab (or build the default trade yourself from [the methodology document](https://github.com/MikoDevedzic/rijeka/blob/main/docs/methodology/rijeka_methodology.pdf)), rebuild the number independently, and file each difference as a separate **validation finding** with a severity. Comment here to say you are on it, so two people do not duplicate the work.
 
-Confirmed S1/S2 pricing findings carry a USD 250 bounty. Validators are named on the report.'
+Validators are named on the report and listed as contributors.'
 while IFS='|' read -r name mod st; do
   [ -z "$name" ] && continue
   gh issue create --repo MikoDevedzic/rijeka --title "[validation] $name" --label validation --label "help wanted" \

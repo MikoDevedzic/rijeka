@@ -3,6 +3,23 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.21). Commits on `main` are the detail.
 
+## 0.39.1 · 15 November 2026
+
+**The trade window has no CAPITAL tab.** The owner: "i think we need to remove 'capital' from new trade window.
+doesnt make sene. we have KVA componnet. capital we will have to calculate completely under myabe risk tab."
+
+- A ticket's tabs are TRADE, DETAILS, CASHFLOWS, XVA, CURVE SCENARIO and CONFIRM. The cost of capital on a trade
+  is the KVA of its XVA tab, as before; the book's regulatory capital is under Risk → CAPITAL, as before.
+- Nothing is computed differently. `POST /api/capital/trade` still answers; the tab's component is kept, not
+  mounted, for the page under Risk to draw on.
+- Roadmap, the Modules page's description of the capital switch and `docs/capital.md` say so.
+
+**No payment for findings.** A cash bounty for a confirmed pricing finding stood in `docs/VALIDATION.md`, the
+README and two pages of the app since 27 October 2026 and was repeated in `CONTRIBUTING.md` on 14 November. It
+was drafted for the owner and was never his decision; it is removed from all of them. Nobody had filed a
+finding. What is on offer is credit: validators, finders and fixers are named on the report, in the changelog
+and in `CONTRIBUTORS.md`.
+
 ## 0.39.0 · 14 November 2026
 
 **A currency NDF fixes.** The owner: "fix the currency NDF fixing and also contributor credit wording". Until this
@@ -33,7 +50,7 @@ every pair, and it never became a fixed amount: its value floated on spot until 
   refused sources and dates that older confirmed records carry: Vera's review.
 - **Credit for contributors is written down.** `CONTRIBUTING.md` says how a contributor is named (the changelog
   entry of the release, `CONTRIBUTORS.md`, the commit), that the finder of a confirmed bug is named beside whoever
-  fixed it, how to stay unnamed, and that the only money on offer is the validation bounty. `SECURITY.md` and the
+  fixed it, and how to stay unnamed. `SECURITY.md` and the
   two issue forms say the same; pull requests have a form.
 - Methodology v1.21 (§12, non-deliverable forwards); the model inventory has the row and what it lacks.
 - **Roadmap** (after the release, the same day). Fixed income joins Phase 3 as planned, in the app and on the

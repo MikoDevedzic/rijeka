@@ -1,4 +1,8 @@
-# Capital: collateral regimes, SA-CCR by asset class, CVA capital, the ticket's CAPITAL tab
+# Capital: collateral regimes, SA-CCR by asset class, CVA capital
+
+> Since 0.39.1 (15 November 2026) the trade window has no CAPITAL tab. `POST /api/capital/trade` still answers; the
+> book's capital is under Risk → CAPITAL, and a trade's cost of capital is the KVA on its XVA tab. Where this page
+> says "the ticket's CAPITAL tab" it describes that calculation, which is to be shown under Risk.
 
 Modules: `pricing/collateral.py`, `pricing/sa_ccr.py`, `pricing/capital.py`, `ccr/saccr_map.py`,
 `api/routes/capital.py`; the waterfall's capital legs in `pricing/xva_engine.py`. Methodology §16.

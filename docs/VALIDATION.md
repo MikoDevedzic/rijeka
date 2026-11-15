@@ -68,11 +68,12 @@ shown on the Methodology tab of the application.
   document's acknowledgements, if you want it.
 - Co-authorship of the next validation report for a product you validated end
   to end.
-- For a confirmed S1 or S2 pricing finding, a bounty of USD 250, paid on fix.
+- A line in [CONTRIBUTORS.md](../CONTRIBUTORS.md) and in the changelog entry of
+  the fix, for a finding that is confirmed.
 
-Validators are never paid for a *result*. There is no payment for a clean bill
-of health, and sponsors have no say over validation. The two are kept apart on
-purpose.
+No money changes hands: validators are not paid, for a finding or for a clean
+bill of health, and sponsors have no say over validation. The two are kept
+apart on purpose.
 
 ## Current status by product
 

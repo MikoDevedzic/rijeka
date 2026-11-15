@@ -41,7 +41,7 @@ GitHub themselves; social engineering; volumetric denial of service.
 
 The reporter of a confirmed vulnerability is named in the changelog entry of the fix and in
 [CONTRIBUTORS.md](CONTRIBUTORS.md), once the fix is live and not before. Say in your report how you want to be
-named, or that you do not. There is no bounty for security reports at present.
+named, or that you do not. No payment is offered for reports.
 
 ## Supported versions
 

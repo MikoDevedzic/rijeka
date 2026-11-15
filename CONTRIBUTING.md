@@ -64,13 +64,13 @@ Work on Rijeka is credited by name, in the places a reader looks.
 |---|---|
 | **had a pull request merged** | in the `CHANGELOG.md` entry of the release it ships in and in [CONTRIBUTORS.md](CONTRIBUTORS.md). The commit on `main` keeps you as its author; when a maintainer finishes or reworks your change, the commit carries a `Co-authored-by:` line with your name. |
 | **found a bug that was confirmed**, whoever fixed it | beside the fix: "found by" in the changelog entry, a `Reported-by:` line on the commit, and a line in CONTRIBUTORS.md. Finding it counts as much as fixing it. |
-| **made a validation finding** | in the product's validation report and the methodology's acknowledgements, with USD 250 for a confirmed S1 or S2 pricing finding ([docs/VALIDATION.md](docs/VALIDATION.md)). |
+| **made a validation finding** | in the product's validation report, the methodology's acknowledgements and CONTRIBUTORS.md ([docs/VALIDATION.md](docs/VALIDATION.md)). |
 | **reported a security problem** | in the changelog entry of the fix and in CONTRIBUTORS.md, once the fix is live and not before ([SECURITY.md](SECURITY.md)). |
 
 The name is your GitHub handle, or the one you ask for in the pull request or the issue. Credit is the default and
 the choice is yours: say there if you would rather not be named. The maintainer adds the lines when the change
-merges; if you were missed, open an issue or write to miko@rijeka.app and it is corrected. The validation bounty
-is the only payment on offer.
+merges; if you were missed, open an issue or write to miko@rijeka.app and it is corrected. Credit is what is
+on offer: no contribution, finding or report is paid.
 
 ## Conduct
 

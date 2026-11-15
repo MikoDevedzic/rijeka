@@ -22,7 +22,7 @@ export default function ValidationLog() {
       <header>
         <div>
           <h2>INDEPENDENT VALIDATION · FINDINGS LOG</h2>
-          <p>Anyone can rebuild a Rijeka number outside Rijeka and file what they find. Every finding is answered in public and closed with the fixing commit or recorded as a known limitation. Confirmed S1 and S2 pricing findings carry a USD 250 bounty. Validators are named on the report; sponsors have no say over validation.</p>
+          <p>Anyone can rebuild a Rijeka number outside Rijeka and file what they find. Every finding is answered in public and closed with the fixing commit or recorded as a known limitation. Validators are named on the report and listed as contributors; no finding is paid; sponsors have no say over validation.</p>
         </div>
         <div className="vl-actions">
           <a className="doc-btn primary" href={NEW} target="_blank" rel="noopener noreferrer">FILE A FINDING ↗</a>

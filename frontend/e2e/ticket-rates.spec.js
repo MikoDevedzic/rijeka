@@ -1,9 +1,9 @@
 // The rates ticket, end to end, as a trader uses it: a new swap against the demo bank, priced; the XVA tab under
-// a bilateral CSA with the on-chain comparison and the collateral choice; the CAPITAL tab; booked; confirmed.
+// a bilateral CSA with the on-chain comparison and the collateral choice; booked; confirmed.
 // Layout is part of the journey: nothing is clipped, nothing scrolls inside itself.
 import { test, expect, expectClean, expectFullyInView, expectNoHorizontalOverflow, expectZero, simulateWithComparison, API } from './fixtures.js'
 
-test('rates ticket: price, XVA with the saving on chain, collateral, capital, book, confirm', async ({ app, problems }) => {
+test('rates ticket: price, XVA with the saving on chain, collateral, book, confirm', async ({ app, problems }) => {
   // the par solve answers a second and a half late, so the PRICE click below is certain to come before the coupon
   let parAnswered = 0
   await app.route(`${API}/api/price/par-rate`, async route => {
@@ -139,20 +139,8 @@ test('rates ticket: price, XVA with the saving on chain, collateral, capital, bo
   await inc.scrollIntoViewIfNeeded()
   await app.screenshot({ path: 'e2e/.out/shots/rates-xva-incremental.png' })
 
-  // CAPITAL: regulatory stock only, chips whole, no sideways scroll
-  await win.getByRole('button', { name: 'CAPITAL', exact: true }).click()
-  await expectNoHorizontalOverflow(win.getByTestId('capital-left'), 'CAPITAL left column')
-  const cap = app.waitForResponse(r => r.url().includes('/api/capital/trade'), { timeout: 120_000 })
-  await win.getByRole('button', { name: /CAPITAL UNDER EVERY REGIME/ }).click()
-  expect((await cap).status()).toBe(200)
-  const grid = win.getByTestId('capital-grid')
-  await expect(grid).toContainText('SA-CCR EAD')
-  await expect(grid).toContainText('RWA')
-  await expect(grid).toContainText('AS RECORDED')
-  const rows = await grid.locator('tbody tr').count()
-  expect(rows, 'seven stock rows, no prices').toBe(7)
-  expect(await grid.innerText()).not.toMatch(/\bKVA\b|\bMVA\b|QUOTE VS/)
-  await app.screenshot({ path: 'e2e/.out/shots/rates-capital.png' })
+  // no CAPITAL tab on a ticket since 0.39.1: the trade's cost of capital is the KVA above, regulatory capital is under Risk
+  await expect(win.getByRole('button', { name: 'CAPITAL', exact: true })).toHaveCount(0)
 
   // book, then confirm (the local stack signs both sides and has no chain: signed, not anchored)
   await win.getByRole('button', { name: 'TRADE', exact: true }).click()
