@@ -3,7 +3,7 @@
 // zeros and discount factors, the confirmation pipeline with the live block,
 // and the maths that runs underneath. Nine seconds each, cross-fade, dots to
 // jump, pause on hover, static first scene under prefers-reduced-motion.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import VolSurface3D from './VolSurface3D'
 import { toGrid } from './volGrid'
 
@@ -150,7 +150,11 @@ function MathScene() {
 
 // ── Carousel ──────────────────────────────────────────────────────────────
 export default function Scenes({ pulse, failed }) {
-  const grid = toGrid(pulse?.vol?.quotes)
+  // One grid for one set of quotes. The surface starts its drawing again whenever it is handed a new grid, and this
+  // component is drawn again at every key typed in the form beside it: a grid built afresh each time sent the
+  // surface back to its first frame at every letter.
+  const volQuotes = pulse?.vol?.quotes
+  const grid = useMemo(() => toGrid(volQuotes), [volQuotes])
   const chain = pulse?.chain || {}
   const liveLabel = (date) => date ? `SNAPSHOT ${date}` : failed ? 'OFFLINE · ILLUSTRATIVE' : 'CONNECTING'
   const scenes = [

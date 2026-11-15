@@ -75,3 +75,37 @@ test('a visitor who is signed in does not meet the door', async ({ app, problems
   await expect(app).toHaveURL(/\/command-center$/)
   expectClean(problems)
 })
+
+// The surface is drawn from the day's quotes. It is started when it comes into view and when the quotes arrive; a
+// key pressed in the form beside it is neither, and must not start it again (it did: each letter of an email sent
+// the drawing back to its first frame).
+test('typing in the sign-in form leaves the volatility surface turning: a key does not start it again', async ({ page, problems }) => {
+  await signedOut(page)
+  await page.addInitScript(() => {
+    window.__surfaceStarts = 0
+    const observe = ResizeObserver.prototype.observe
+    ResizeObserver.prototype.observe = function (el, ...rest) {
+      if (el?.classList?.contains('au-vol')) window.__surfaceStarts += 1     // the drawing watches its canvas once per start
+      return observe.call(this, el, ...rest)
+    }
+  })
+  // the day's quotes, so the surface is the live one and not the stand-in drawn when there are none
+  await page.route(/\/api\/public\/pulse/, async (route) => {
+    const response = await route.fetch()
+    const body = await response.json()
+    const quotes = []
+    for (const [e, level] of [[1, 96], [2, 101], [5, 98]]) for (const [t, add] of [[1, 0], [5, 6], [10, 9]]) quotes.push({ tenor: `${e}Yx${t}Y`, rate: level + add })
+    await route.fulfill({ response, json: { ...body, vol: { valuation_date: '2026-11-13', quotes } } })
+  })
+  await page.goto('/login')
+  await expect(page.locator('canvas.au-vol')).toBeVisible()
+  await expect(page.locator('.au-live'), 'the live surface, not the stand-in').toContainText('SNAPSHOT 2026-11-13')
+  const starts = () => page.evaluate(() => window.__surfaceStarts)
+  const before = await starts()
+  expect(before, 'the surface was started').toBeGreaterThanOrEqual(1)
+  await page.getByLabel('Email').pressSequentially('desk@example.com')
+  await page.getByLabel('Password', { exact: true }).pressSequentially('a-long-pass')
+  expect(await starts(), 'the surface was started again while the form was typed in').toBe(before)
+  await expect(page.getByLabel('Email'), 'and the form kept what was typed').toHaveValue('desk@example.com')
+  expectClean(problems)
+})

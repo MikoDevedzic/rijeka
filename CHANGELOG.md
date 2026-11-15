@@ -24,6 +24,10 @@ methodology document carries its own version (v1.23). Commits on `main` are the 
   value, a cost negative and a benefit positive, which is what the engine returns; the formulas had been written
   as magnitudes.
 - The pinned book's keys follow (`xva.*.fva` is `xva.*.fca`, the same five values).
+- **The sign-in door, the same day (the app only).** The volatility surface beside the form went back to its
+  first frame at every key typed in the email or the password: the page handed it a newly built grid each time it
+  was drawn again, and the surface starts over when its grid changes. One grid is now kept for one set of quotes.
+  A journey types in the form and counts the surface's starts.
 
 ## 0.40.0 · 15 November 2026
 
