@@ -26,7 +26,7 @@ flowchart LR
   TG[Telegram<br/>mirror of trade cards]
   APP -- "HTTPS, Bearer JWT" --> API
   APP -- "sign-in, realtime" --> AUTH
-  APP -- "realtime (RLS)" --> PG
+  APP -- "realtime, and a firm's reference data (RLS)" --> PG
   API -- "SQLAlchemy, pooler 6543" --> PG
   API -- "verifies tokens by public key" --> AUTH
   API -- "relayer (anchor, amend, terminate)" --> CHAIN
@@ -42,7 +42,9 @@ flowchart LR
 
 **The app** (`frontend/`): React 18 with Vite, a static build on Netlify. It talks to the API with the
 user's Supabase JWT and subscribes to the `trades` table over Supabase realtime (filtered by row-level
-security) so the blotter follows bookings and confirmations without a reload. Heavy libraries
+security) so the blotter follows bookings and confirmations without a reload. A firm's own reference data (its
+hierarchy, legal entities and counterparties) the app reads and writes straight through Supabase, under row-level
+security; trades, legs and events are written by the API alone. Heavy libraries
 (three.js, ExcelJS) and the secondary pages are code-split; the first screen after sign-in is the
 blotter, the command centre and the messenger. On a screen up to 640px wide the same app shows its phone view
 (`frontend/src/lib/phone.js`, `components/layout/Phone.css`, `PhoneNav.jsx`): the home, the trades, the trade window,
@@ -67,9 +69,14 @@ prints of one source (the PDF by `tectonic`, the tracked copy the app serves und
 pages) and a change to the `.tex` is finished when all three are rebuilt (`docs/ops/release.md` has the line). Each
 section has an address (`/methodology/:section`). `katex` is a frontend dependency for this page alone: the build
 script sets the formulas with it, and the browser loads only its stylesheet and fonts. The first page draws this
-map (`architecture-data.js` restates it, and `architecture.test.js` holds its route names and batch cadences to the
-API's own source; `Architecture.jsx` draws it with three.js through `lib/three.js`) and shows the API's public
-health answer under it, fetched without a token. Nothing on the page is asked of the Rijeka API except the list of
+map as a scene (`Architecture.jsx`, with three.js through `lib/three.js`): the app a trader uses in the middle, the
+API behind it, each piece on a slab for the host it runs on (the trader's browser, Netlify, Render, Supabase,
+GitHub), and three things followed through them step by step: a trade, a change to the code past its reviewers and
+the six checks to production, and what the scheduler does by itself. `architecture-data.js` restates this page, and
+`architecture.test.js` holds it to the sources: each route it names to the API's routers, the batch cadences to
+the scheduler's defaults, the six checks to the jobs of `.github/workflows/ci.yml`, each reviewer drawn to a
+definition in `.claude/agents`, and each hosted piece to its host's slab. It shows the API's public
+health answer under the scene, fetched without a token. Nothing on the page is asked of the Rijeka API except the list of
 workbooks and that health answer; the findings log reads GitHub's public issues, as it did. The System page
 (`configurations/SystemPage.jsx`) reads the same health answer with labels of its own: two wordings of one body,
 to be made one.
@@ -501,6 +508,10 @@ checklist in `docs/ops/release.md`.
   quoted tenor it is sensitive to.
 - One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account
   (`api/routes/_limits.py`). A larger book moves these to a worker without changing the engines.
+- A report (market risk, P&L, counterparty credit) values each trade many times and reads once what none of those
+  valuations changes: the cap surface for the date, a swaption's legs (`db/reading.py`). The scheduler asks the
+  database one question before a group of batches and does not start a group that gets no answer; the group runs
+  at the next pass.
 - Job state for background runs (counterparty credit, the risk backfill) is in process memory until the
   stored row lands; a deploy mid-run loses the "running" flag, not the data.
 - The hosted demo prices on public-source market data rebuilt daily and, for digital assets, on a venue's option

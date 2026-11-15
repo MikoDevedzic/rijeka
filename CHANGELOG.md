@@ -1,7 +1,7 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.23). Commits on `main` are the detail.
+methodology document carries its own version (v1.24). Commits on `main` are the detail.
 
 ## 0.42.3 · 15 November 2026
 
@@ -20,6 +20,87 @@ seconds now. No figure moves, to the last bit.
   of the strip.
 - The P&L report is twice as fast for the same reason (0.20s to 0.09s). What is left in a risk report is mostly
   schedules built again at every valuation; that is not changed here.
+
+## 0.42.2 · 15 November 2026
+
+**A floor is read where a cap at its strike is.** The volatility of a cap or a floor is read from the cap surface
+at the strike's distance from the at-the-money forward. A floor was read at the size of that distance: a floor
+struck 100bp below the money took the volatility quoted 100bp above it, and never read the quotes below the money,
+while a cap at that same strike read them. On a surface that is not the same on both sides, one strike had two
+volatilities and a cap less a floor at one strike was not the swap at that strike.
+
+- **One strike, one volatility.** The distance is signed for a floor as it is for a cap. A surface quoted on one
+  side of the money only is mirrored for a strike on the other side.
+- **What moves.** A floor, and the floor of a collar or of a floored leg, struck on the other side of the money
+  from where it was read, on a surface that differs between the two sides: a 5Y floor at 2.5% with the money at
+  2.97% and 95bp quoted 100bp below, 80bp 100bp above, is read at 89.7bp where it was read at 82.6bp, and its
+  premium on 10m is 155,680 where it was 137,711. And a cap struck on a side of the money where the surface has no
+  quote at all: it was read on the straight line carried through the money and is now read on the mirrored smile
+  (87.5bp and 82.5bp, 50bp below the money, on a surface quoted at the money and above it only). The hosted
+  demo's surface is quoted on both sides and is the same on both, so nothing moves there; the pinned sample book
+  is unchanged. A surface a desk has saved itself may be neither.
+- **Held by parity.** A cap less a floor at one strike is worth the same priced off the surface and priced at any
+  one volatility handed in. The test fails on the old reading. The model validator priced the floor above and
+  the cap at its strike in a script of her own, to the cent, and found the cap less the floor equal to the swap
+  at two strikes, one each side of the money.
+- The ticket's footer for caps and floors said the volatility was read at the size of the distance; it says how
+  it is read now. Methodology v1.24 and the model inventory say how
+  the surface is read; the reading still has no outside reference.
+
+## 0.42.1 · 15 November 2026
+
+**After the outage of 15 November.** The database stopped answering from 19:32 to 21:50 UTC: it was still on the
+smallest machine after the plan had changed, and had been in swap all day. It is on a larger one now. Three things
+the outage showed are changed here. No figure moves.
+
+- **A report reads once what none of its valuations changes.** The ladder values each trade once for every bump
+  (since 0.40.0, every quoted tenor too), and each valuation asked the database again for the cap surface of the
+  date and for a swaption's legs. A live risk report on the integration book sent 233 statements, 129 of them the
+  cap surface and 57 a trade's legs; it sends 54. The market risk, P&L and counterparty credit reports each make
+  one reading (`backend/db/reading.py`); a price asked for from the ticket still reads the surface as it stands. A
+  test counts the statements.
+- **A batch is not started against a database that does not answer.** During the outage two scheduled steps were
+  recorded as having run, with "apply the migration" for their result: their presence checks had read a timeout as
+  a missing table. The scheduler now asks the database one cheap question before a group; when there is no
+  answer every step of the group is recorded as failed, saying so. The group is not marked as run, so it runs at
+  the next pass, a minute later, when the database is back, and not at its next turn (two hours, for the daily
+  one: the market data missed at 21:16 was rebuilt at 23:12).
+- **Production is looked at before a release is pushed** (`docs/ops/release.md`): the release of that afternoon
+  went out onto a service that had already failed, which hid the cause for an hour.
+- `docs/ops/environment.md` says what each hosted piece runs on, and that a plan and a machine size are two
+  settings.
+
+## 0.42.0 · 15 November 2026
+
+**How the system is built, drawn around the app.** The methodology's first page was a scene with the API in the
+middle. It is now built around what a trader uses, shows where each piece runs, and follows three things through
+the system. No figure and no route changes.
+
+- **The app in the middle.** The Rijeka app stands in front, larger than the rest, on the trader's browser, where
+  it runs; the API stands behind it as the engine, on Render. Netlify holds the app's files and the public site and
+  hands them out; Supabase holds sign-in and the database; the registry, the market data, the Anthropic API and
+  Telegram stand around them. Each host is a slab, and what runs on it stands on it.
+- **A trade, a change, the clock.** The seven steps of a trade are as they were, with the routes each names. A
+  change to the code is followed from a branch past the reviewers (the browser tester, the numbers guardian, the
+  model validator, the design keeper, the independent reviewer, security, the architect, the database keeper), the
+  six checks GitHub runs on the commit, the API's deploy and the app's build, to the release manager's reading of
+  the commit from production. The clock tells what the scheduler does every minute, every ten minutes, every thirty
+  and every two hours.
+- **How it is drawn.** The eye goes to the pieces a step uses. A line in use takes the colour of the piece that
+  asks and carries a stream of light along it. Each reviewer has a colour of its own, none of them brass, which
+  stays what is on chain; the six checks are the change's green and light one after the other. Two buttons bring the scene closer or take it back; the mouse
+  wheel still scrolls the page.
+- **Held to the sources.** A test reads the six checks from the CI workflow's jobs, each reviewer from its
+  definition, the three cadences from the scheduler's defaults and each route from the API's routers, and fails
+  when the page names one that is not there. Another holds each hosted piece to its host's slab.
+- **Three sentences the page had wrong are put right.** It said the API is the only piece that writes to the
+  database: trades, legs and events are the API's alone, but the app writes a firm's own reference data (its
+  hierarchy, legal entities and counterparties) straight to the database under row-level security, and the
+  picture now has that line. It said the app is always built from the commit the live API reports: that is so when
+  a change touches the API; a change that does not is followed at once. It said the venue's marks are read at 25
+  and 50 delta: they are read at a quarter, a half and three quarters of the forward call delta.
+- The health strip, the fallback for a browser that cannot draw the scene and the behaviour under reduced motion
+  are as they were. On a narrow screen the names a step does not use are left to the cards.
 
 ## 0.41.0 · 15 November 2026
 

@@ -141,13 +141,14 @@ def lookup_cap_vol(
     cap_tenor_y: float,          # cap tenor in years (1,2,3,5,7,10)
     surface_rows: list[dict],    # rows from cap_vol_surface for this date
     fallback_vol_bp: float = 85.0,
-    is_floor: bool = False,      # if True, use abs spread (put-call vol symmetry)
+    is_floor: bool = False,      # kept for its callers; since 0.42.2 it does not change the volatility read
 ) -> tuple[float, str]:
     """
     Look up flat cap vol from surface given absolute strike and tenor.
-    For floors: vol is looked up using abs(strike - ATM) since the cap vol surface
-    is quoted for OTM options. In the Normal model, put-call vol symmetry holds:
-    vol(floor at K) = vol(cap at K) for the same K.
+    One strike has one volatility, whichever option is struck there: a cap and a floor at the same strike are read
+    at the same point of the surface, the strike's signed distance from the at-the-money forward. Only then is a
+    cap less a floor at one strike worth the swap at that strike, whatever the volatility (put-call parity).
+    A surface quoted on one side of the money only is mirrored for a strike on the other side.
     Returns (vol_bp, tier) where tier is 'QUOTED', 'INTERP', or 'FALLBACK'.
     """
     # Filter to this tenor
@@ -160,8 +161,18 @@ def lookup_cap_vol(
     atm_row = next((r for r in tenor_rows if r.get('is_atm')), None)
     atm_vol_bp = float(atm_row['flat_vol_bp']) if atm_row else fallback_vol_bp
 
-    # Strike spread vs ATM forward, as it is: not rounded.
-    # For floors: use absolute value of spread (put-call symmetry in Normal model)
+    # Strike spread vs ATM forward, as it is: not rounded, and signed.
+    #
+    # Until 0.42.2 a floor was read at the size of its distance: a floor struck 100bp below the money took the
+    # volatility quoted 100bp above it and never read the quotes below the money, while a cap at that same strike
+    # read the signed distance. On a surface that is not symmetric the two volatilities differed, and a cap less
+    # a floor at one strike was not the swap (Emmy, 15 November 2026). The distance is now signed for both. The
+    # one case where it is mirrored is a strike on a side of the money where the surface has no quote at all: a
+    # surface quoted above the money only says nothing below it, and its smile is taken to be the same on both
+    # sides, where a straight line carried through the money would run on downward. That holds for a cap as for a
+    # floor: until 0.42.2 a cap struck on the unquoted side was read on that straight line (87.5bp at 50bp below
+    # the money on a surface of 85 at the money and 80 at +100; 82.5bp now). One quote on a side is enough for
+    # that side to be read as quoted: the line from the money to that quote, carried on beyond it.
     #
     # The volatility is a continuous function of the spread: straight lines through the quoted spreads and the ATM
     # point, carried on in a straight line beyond the last quote. Until 0.40.0 the spread was rounded to a whole
@@ -171,13 +182,14 @@ def lookup_cap_vol(
     # the test book's cap; Emmy, 15 November 2026). The tier is a label and does not change the number: QUOTED
     # within half a basis point of a quoted spread, INTERP between or beyond them.
     raw_spread_bp = (strike_rate - atm_forward) * 10000
-    spread_bp = abs(raw_spread_bp) if is_floor else raw_spread_bp
 
     # Get non-ATM rows, sorted by spread
     skew_rows = sorted(
         [r for r in tenor_rows if not r.get('is_atm')],
         key=lambda r: float(r['strike_spread_bp'])
     )
+    this_side = any(float(r['strike_spread_bp']) * raw_spread_bp > 0 for r in skew_rows)
+    spread_bp = raw_spread_bp if this_side or raw_spread_bp == 0 else -raw_spread_bp
     if not skew_rows:
         # an ATM quote alone: flat in strike, said to be quoted near the money and a fallback away from it
         return atm_vol_bp, ('QUOTED' if abs(spread_bp) < 5 else 'FALLBACK')
@@ -722,7 +734,7 @@ def price_floorlet_strip_over_periods(
     vol_override_bp=None,
 ):
     """Price a strip of Bachelier put floorlets aligned to swap periods.
-    Vol lookup uses abs(K-ATM) spread for put-call symmetry.
+    The vol is read at the strike's signed distance from the money, where a cap at that strike is (lookup_cap_vol).
     Returns StripResult with SIGNED npv (direction from strike_schedule_obj)."""
     return _price_strip_core(
         periods=periods, strike_schedule_obj=strike_schedule_obj,
