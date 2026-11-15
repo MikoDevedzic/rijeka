@@ -14,10 +14,19 @@ volatilities and a cap less a floor at one strike was not the swap at that strik
 - **One strike, one volatility.** The distance is signed for a floor as it is for a cap. A surface quoted on one
   side of the money only is mirrored for a strike on the other side.
 - **What moves.** A floor, and the floor of a collar or of a floored leg, struck on the other side of the money
-  from where it was read, on a surface that differs between the two sides. The hosted demo's surface is the same on
-  both sides, so nothing moves there; the pinned sample book is unchanged.
+  from where it was read, on a surface that differs between the two sides: a 5Y floor at 2.5% with the money at
+  2.97% and 95bp quoted 100bp below, 80bp 100bp above, is read at 89.7bp where it was read at 82.6bp, and its
+  premium on 10m is 155,680 where it was 137,711. And a cap struck on a side of the money where the surface has no
+  quote at all: it was read on the straight line carried through the money and is now read on the mirrored smile
+  (87.5bp and 82.5bp, 50bp below the money, on a surface quoted at the money and above it only). The hosted
+  demo's surface is quoted on both sides and is the same on both, so nothing moves there; the pinned sample book
+  is unchanged. A surface a desk has saved itself may be neither.
 - **Held by parity.** A cap less a floor at one strike is worth the same priced off the surface and priced at any
-  one volatility handed in. The test fails on the old reading. Methodology v1.24 and the model inventory say how
+  one volatility handed in. The test fails on the old reading. The model validator priced the floor above and
+  the cap at its strike in a script of her own, to the cent, and found the cap less the floor equal to the swap
+  at two strikes, one each side of the money.
+- The ticket's footer for caps and floors said the volatility was read at the size of the distance; it says how
+  it is read now. Methodology v1.24 and the model inventory say how
   the surface is read; the reading still has no outside reference.
 
 ## 0.41.0 · 15 November 2026

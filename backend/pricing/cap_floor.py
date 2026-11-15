@@ -160,7 +160,10 @@ def lookup_cap_vol(
     # a floor at one strike was not the swap (Emmy, 15 November 2026). The distance is now signed for both. The
     # one case where it is mirrored is a strike on a side of the money where the surface has no quote at all: a
     # surface quoted above the money only says nothing below it, and its smile is taken to be the same on both
-    # sides, where a straight line carried through the money would run on downward.
+    # sides, where a straight line carried through the money would run on downward. That holds for a cap as for a
+    # floor: until 0.42.2 a cap struck on the unquoted side was read on that straight line (87.5bp at 50bp below
+    # the money on a surface of 85 at the money and 80 at +100; 82.5bp now). One quote on a side is enough for
+    # that side to be read as quoted: the line from the money to that quote, carried on beyond it.
     #
     # The volatility is a continuous function of the spread: straight lines through the quoted spreads and the ATM
     # point, carried on in a straight line beyond the last quote. Until 0.40.0 the spread was rounded to a whole
@@ -718,7 +721,7 @@ def price_floorlet_strip_over_periods(
     vol_override_bp=None,
 ):
     """Price a strip of Bachelier put floorlets aligned to swap periods.
-    Vol lookup uses abs(K-ATM) spread for put-call symmetry.
+    The vol is read at the strike's signed distance from the money, where a cap at that strike is (lookup_cap_vol).
     Returns StripResult with SIGNED npv (direction from strike_schedule_obj)."""
     return _price_strip_core(
         periods=periods, strike_schedule_obj=strike_schedule_obj,

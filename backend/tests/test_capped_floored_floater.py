@@ -798,3 +798,21 @@ class TestOneStrikeOneVolatility:
             assert cap.vol_bp == pytest.approx(floor.vol_bp), strike
             assert cap.npv - floor.npv == pytest.approx(flat_cap.npv - flat_floor.npv, abs=0.05), strike      # premiums are kept to the cent
             assert abs(cap.vol_bp - 60.0) > 1.0, "the surface's volatility is not the one handed in, so the test says something"
+
+    def test_the_edges_a_strike_at_the_money_a_surface_of_one_quote_and_a_collars_floor(self):
+        from pricing.cap_floor import lookup_cap_vol, price_collar, price_floor
+        for floor in (False, True):
+            # at the money nothing is mirrored and the at-the-money quote is read, on any surface
+            for rows in (SKEW, self.ABOVE, self.BELOW):
+                assert self._vol(0.03, rows, floor) == (85.0, "QUOTED")
+            # a surface that is the at-the-money quote alone is flat, on both sides
+            atm_only = [r for r in SKEW if r["is_atm"]]
+            assert lookup_cap_vol(strike_rate=0.025, atm_forward=0.03, cap_tenor_y=5.0, surface_rows=atm_only, is_floor=floor)[0] == 85.0
+            assert lookup_cap_vol(strike_rate=0.035, atm_forward=0.03, cap_tenor_y=5.0, surface_rows=atm_only, is_floor=floor)[0] == 85.0
+        # the floor of a collar is the floor on its own: read below the money, where its strike is
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.03)
+        kw = dict(notional=10_000_000, tenor_y=5.0, discount_curve=curve, valuation_date=VAL_DATE, surface_rows=SKEW)
+        collar = price_collar(cap_rate=0.035, floor_rate=0.025, **kw)
+        alone = price_floor(floor_rate=0.025, **kw)
+        assert alone.vol_bp > 85.0, "below the money this surface is above its at-the-money quote: the old reading gave less"
+        assert collar["floor"].vol_bp == pytest.approx(alone.vol_bp) and collar["floor"].npv == pytest.approx(alone.npv)
