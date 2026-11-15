@@ -216,4 +216,4 @@ def test_a_live_risk_report_reads_once_what_no_valuation_changes(client, auth_a,
     said = "; ".join(f"{n} x {stmt[:60]}" for stmt, n in Counter(seen).most_common(6))
     assert sum("FROM cap_vol_surface" in stmt for stmt in seen) <= 2, f"the cap surface is read once for the date (twice when it falls back): {said}"
     assert sum(stmt.startswith("SELECT trade_legs.") for stmt in seen) <= trades, f"a trade's legs are read once: {said}"
-    assert len(seen) <= 100, f"{len(seen)} statements for {trades} trades: {said}"
+    assert len(seen) <= 80, f"{len(seen)} statements for {trades} trades: {said}"

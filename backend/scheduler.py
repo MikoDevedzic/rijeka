@@ -132,6 +132,7 @@ def due(group: str, now: Optional[float] = None) -> bool:
 
 
 NO_ANSWER = "the database did not answer; the group runs at the next pass"
+ASK_AGAIN_S = 2.0                     # between the two times the question is asked
 
 
 def database_answers(session_factory=None) -> bool:
@@ -148,10 +149,18 @@ def database_answers(session_factory=None) -> bool:
         return False
     try:
         from sqlalchemy import text
-        db.execute(text("SELECT 1"))
-        return True
-    except Exception as e:                # noqa: BLE001 — whatever it is, the database did not answer
-        log.warning("scheduler: the database did not answer: %s", type(e).__name__)
+        for again in (False, True):       # asked twice: one dropped connection is not a database that is down
+            try:
+                db.execute(text("SELECT 1"))
+                return True
+            except Exception as e:        # noqa: BLE001 — whatever it is, the database did not answer
+                log.warning("scheduler: the database did not answer%s: %s", " a second time" if again else "", type(e).__name__)
+                try:
+                    db.rollback()
+                except Exception:         # noqa: BLE001
+                    pass
+                if not again:
+                    time.sleep(ASK_AGAIN_S)
         return False
     finally:
         try:
@@ -195,7 +204,8 @@ def run_cycle(steps=None, now: Optional[float] = None, session_factory=None) -> 
     now = time.time() if now is None else now
     secret = os.getenv("RIJEKA_CRON_SECRET", "")
     ran: list[str] = []
-    answers: Optional[bool] = None        # asked once a pass, and only when a group is due
+    answers: Optional[bool] = None        # asked once a pass, when a group that has jobs is due (the every-pass group
+                                          # always is, so on the hosted API that is once a minute)
     for group in GROUPS:
         if not due(group, now):
             continue

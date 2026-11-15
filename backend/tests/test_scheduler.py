@@ -162,6 +162,23 @@ class _Silent(_Db):
     def execute(self, *a, **k): raise OSError("the database is not there")
 
 
+class _Hiccup(_Db):
+    """A database that drops the first question and answers the second."""
+    asked = 0
+    def execute(self, *a, **k):
+        type(self).asked += 1
+        if type(self).asked == 1:
+            raise OSError("connection reset")
+        return None
+
+
+def test_one_dropped_question_is_asked_again_and_a_healthy_database_is_not_called_down(monkeypatch):
+    monkeypatch.setattr(S, "ASK_AGAIN_S", 0.0)
+    _Hiccup.asked = 0
+    assert S.database_answers(_Hiccup) is True and _Hiccup.asked == 2
+    assert S.database_answers(_Silent) is False
+
+
 def test_a_group_is_not_started_against_a_database_that_does_not_answer_and_runs_when_it_does(monkeypatch):
     monkeypatch.setenv("RIJEKA_CRON_SECRET", "s3")
     monkeypatch.setattr(S, "_last_group_run", {})
@@ -169,6 +186,7 @@ def test_a_group_is_not_started_against_a_database_that_does_not_answer_and_runs
     called = []
     steps = [("market_data", "daily", lambda db, s: called.append("market_data") or {"ok": 1}),
              ("pnl", "daily", lambda db, s: called.append("pnl") or {"persisted": False, "reason": "tables missing"})]
+    monkeypatch.setattr(S, "ASK_AGAIN_S", 0.0)
     # the database is silent: nothing runs, each step says so, and nothing is recorded as a table that is missing
     assert S.run_cycle(steps, now=9000, session_factory=_Silent) == []
     assert called == []
@@ -192,3 +210,8 @@ def test_the_question_is_asked_once_a_pass_and_not_at_all_when_nothing_is_due(mo
     assert asked == [1]
     S.run_cycle(steps, now=160, session_factory=_Db)
     assert asked == [1]
+    # with a job that runs at every pass (the hosted API has one), it is asked at every pass, once
+    steps.append(("chain_reconcile", "every_cycle", lambda db, s: 1))
+    S.run_cycle(steps, now=220, session_factory=_Db)
+    S.run_cycle(steps, now=280, session_factory=_Db)
+    assert asked == [1, 1, 1]
