@@ -3,6 +3,17 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.21). Commits on `main` are the detail.
 
+## 0.39.3 · 15 November 2026
+
+**Trades, legs and events are written by the API only.** The browser reads a user's own trades, trade legs and
+trade events, as the blotter and its live updates do; it may no longer insert, change or delete them. Booking,
+amending, terminating and confirming already went through the API, which checks each one; the database now
+refuses a write that does not (`docs/migrations/2026-11-13_trades_written_by_the_api.sql`, applied by the
+migration runner).
+
+- No page wrote these tables directly, so nothing changes on screen. `GET /api/ops/health` reports the state
+  under `schema`.
+
 ## 0.39.2 · 15 November 2026
 
 **Five database views read with the caller's rights.** `pnl_daily_by_desk`, `pnl_mtd_by_trade`,

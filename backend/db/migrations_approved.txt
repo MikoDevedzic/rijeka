@@ -39,3 +39,4 @@
 2026-11-09_is_admin_search_path.sql  ffce77dd418cec51198960390c0ca6d6030666e3d0ee289dc7b15e907951a123  -  # Miko Devedzic, 2026-11-09: "apply the admin fix."
 2026-11-13_restore_owner_admin.sql  f2f26a8af6c8307a6d6f4a147996b7bd71d87661b53855d807a8fc2369dcc563  -  # Miko Devedzic, 2026-11-13: "i never manually removed it. so it must have been you. you add it back."
 2026-11-15_views_security_invoker.sql  6f2a69669830a39ff61ace1610de551554595caed86c2ce350b98256701fd4fe  -  # Miko Devedzic, 2026-11-15: "ok. apply the seucrity" (the five views that read past row-level security)
+2026-11-13_trades_written_by_the_api.sql  75a3812856f3e5483a15834acb4a24d26fc4edd866e12233ceca508a0900c4a1  -  # Miko Devedzic, 2026-11-15: "ok fix the trades change" (the browser reads trades, legs and events; only the API writes them)
