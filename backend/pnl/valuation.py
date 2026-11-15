@@ -162,9 +162,14 @@ def _trade_legs(db: Session, user: dict, trade) -> list[dict]:
         return legs_for_pricer(trade)
     from api.routes.pricer import _leg_to_dict
     from db.models import TradeLeg
-    rows = (db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id, TradeLeg.user_id == trade.user_id)
-            .order_by(TradeLeg.leg_seq).all())
-    return [_leg_to_dict(r) for r in rows]
+    from db.reading import read_once
+
+    def read() -> list[dict]:
+        rows = (db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id, TradeLeg.user_id == trade.user_id)
+                .order_by(TradeLeg.leg_seq).all())
+        return [_leg_to_dict(r) for r in rows]
+    # inside a report a trade's legs are read once (db/reading.py); each caller gets legs of its own to complete
+    return [dict(l) for l in read_once(("legs", str(trade.id), str(trade.user_id)), read)]
 
 
 def _value_swaption(db: Session, user: dict, trade, val_date: date, mkt: Market) -> Optional[dict[str, Any]]:

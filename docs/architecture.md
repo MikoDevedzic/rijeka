@@ -497,6 +497,10 @@ checklist in `docs/ops/release.md`.
 
 - One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account
   (`api/routes/_limits.py`). A larger book moves these to a worker without changing the engines.
+- A report (market risk, P&L, counterparty credit) values each trade many times and reads once what none of those
+  valuations changes: the cap surface for the date, a swaption's legs (`db/reading.py`). The scheduler asks the
+  database one question before a group of batches and does not start a group that gets no answer; the group runs
+  at the next pass.
 - Job state for background runs (counterparty credit, the risk backfill) is in process memory until the
   stored row lands; a deploy mid-run loses the "running" flag, not the data.
 - The hosted demo prices on public-source market data rebuilt daily and, for digital assets, on a venue's option

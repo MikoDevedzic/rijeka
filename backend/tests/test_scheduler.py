@@ -36,6 +36,7 @@ class _Db:
     def commit(self): self.committed = True
     def rollback(self): self.rolled = True
     def close(self): self.closed = True
+    def execute(self, *a, **k): return None          # the question the scheduler asks before a group: answered
 
 
 def test_a_failing_step_is_recorded_and_the_cycle_continues(monkeypatch):
@@ -54,7 +55,8 @@ def test_a_failing_step_is_recorded_and_the_cycle_continues(monkeypatch):
     st = S.status()["steps"]
     assert st["news"]["ok"] is False and "RuntimeError" in st["news"]["detail"] and "feed down" not in st["news"]["detail"]   # the record is public
     assert st["spots"]["ok"] is True and "posted" in st["spots"]["detail"]
-    assert dbs[0].rolled and dbs[1].committed and all(d.closed for d in dbs)
+    # the first session is the one question asked of the database before a group; then one session a step
+    assert not dbs[0].rolled and not dbs[0].committed and dbs[1].rolled and dbs[2].committed and all(d.closed for d in dbs)
     # nothing is due a minute later; the daily group waits two hours
     assert S.run_cycle(steps, now=5060, session_factory=factory) == []
     assert S.run_cycle(steps, now=5000 + 1800, session_factory=factory) == ["news", "spots"]
@@ -154,3 +156,39 @@ def test_health_body_carries_the_scheduler_state():
     from fastapi.testclient import TestClient
     body = TestClient(main.app).get("/api/ops/health").json()
     assert "scheduler" in body and set(body["scheduler"]) >= {"enabled", "steps", "release_sync"}
+
+
+class _Silent(_Db):
+    def execute(self, *a, **k): raise OSError("the database is not there")
+
+
+def test_a_group_is_not_started_against_a_database_that_does_not_answer_and_runs_when_it_does(monkeypatch):
+    monkeypatch.setenv("RIJEKA_CRON_SECRET", "s3")
+    monkeypatch.setattr(S, "_last_group_run", {})
+    monkeypatch.setattr(S, "_state", {"enabled": True, "started_at": None, "last_cycle": None, "steps": {}, "release_sync": None})
+    called = []
+    steps = [("market_data", "daily", lambda db, s: called.append("market_data") or {"ok": 1}),
+             ("pnl", "daily", lambda db, s: called.append("pnl") or {"persisted": False, "reason": "tables missing"})]
+    # the database is silent: nothing runs, each step says so, and nothing is recorded as a table that is missing
+    assert S.run_cycle(steps, now=9000, session_factory=_Silent) == []
+    assert called == []
+    for name in ("market_data", "pnl"):
+        assert S._state["steps"][name]["ok"] is False and S._state["steps"][name]["detail"] == S.NO_ANSWER
+    # the group was not marked as run: a minute later, the database back, it runs (not two hours later)
+    assert S.run_cycle(steps, now=9060, session_factory=_Db) == ["market_data", "pnl"]
+    assert called == ["market_data", "pnl"] and S._state["steps"]["market_data"]["ok"] is True
+    # and then it keeps its own cadence
+    assert S.run_cycle(steps, now=9120, session_factory=_Db) == []
+
+
+def test_the_question_is_asked_once_a_pass_and_not_at_all_when_nothing_is_due(monkeypatch):
+    monkeypatch.setenv("RIJEKA_CRON_SECRET", "s3")
+    monkeypatch.setattr(S, "_last_group_run", {})
+    monkeypatch.setattr(S, "_state", {"enabled": True, "started_at": None, "last_cycle": None, "steps": {}, "release_sync": None})
+    asked = []
+    monkeypatch.setattr(S, "database_answers", lambda f=None: asked.append(1) or True)
+    steps = [("news", "half_hourly", lambda db, s: 1), ("crypto_marks", "marks", lambda db, s: 1), ("pnl", "daily", lambda db, s: 1)]
+    S.run_cycle(steps, now=100, session_factory=_Db)
+    assert asked == [1]
+    S.run_cycle(steps, now=160, session_factory=_Db)
+    assert asked == [1]

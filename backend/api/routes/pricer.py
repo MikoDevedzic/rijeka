@@ -1437,7 +1437,14 @@ class CapFloorRequest(BaseModel):
 
 
 def _load_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
-    """Load cap vol surface rows for a given date, user-scoped. Falls back to most recent user-owned date if not found."""
+    """Load cap vol surface rows for a given date, user-scoped. Falls back to most recent user-owned date if not found.
+    Inside a report it is read once for the date (db/reading.py); each caller gets rows of its own."""
+    from db.reading import read_once
+    rows = read_once(("cap_surface", str(user_id), str(val_date)), lambda: _read_cap_surface(db, val_date, user_id))
+    return [dict(r) for r in rows]
+
+
+def _read_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
     try:
         rows = db.execute(
             text("""

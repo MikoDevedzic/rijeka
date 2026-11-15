@@ -248,6 +248,14 @@ def stored_rows(db: Session, uid: str, d1: date) -> tuple[list[dict], dict]:
 
 
 def report(db: Session, user: dict, d1: Optional[date] = None, prefer_stored: bool = False, overrides: Optional[dict] = None) -> dict:
+    """The P&L report for a book (see `_report`), made with one reading of what its valuations read unchanged
+    (db/reading.py)."""
+    from db.reading import one_reading
+    with one_reading():
+        return _report(db, user, d1, prefer_stored, overrides)
+
+
+def _report(db: Session, user: dict, d1: Optional[date] = None, prefer_stored: bool = False, overrides: Optional[dict] = None) -> dict:
     """prefer_stored: open the persisted day when there is one (instant); otherwise, and always when
     False, value every trade on the as-of markets (the live explain)."""
     uid = user["sub"]

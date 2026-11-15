@@ -3,6 +3,29 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.23). Commits on `main` are the detail.
 
+## 0.42.1 · 15 November 2026
+
+**After the outage of 15 November.** The database stopped answering from 19:32 to 21:50 UTC: it was still on the
+smallest machine after the plan had changed, and had been in swap all day. It is on a larger one now. Three things
+the outage showed are changed here. No figure moves.
+
+- **A report reads once what none of its valuations changes.** The ladder values each trade once for every bump
+  (since 0.40.0, every quoted tenor too), and each valuation asked the database again for the cap surface of the
+  date and for a swaption's legs. A live risk report on the integration book sent 233 statements, 129 of them the
+  cap surface and 57 a trade's legs; it sends 54. The market risk, P&L and counterparty credit reports each make
+  one reading (`backend/db/reading.py`); a price asked for from the ticket still reads the surface as it stands. A
+  test counts the statements.
+- **A batch is not started against a database that does not answer.** During the outage two scheduled steps were
+  recorded as having run, with "apply the migration" for their result: their presence checks had read a timeout as
+  a missing table. The scheduler now asks the database one cheap question before a group; when there is no
+  answer every step of the group is recorded as failed, saying so. The group is not marked as run, so it runs at
+  the next pass, a minute later, when the database is back, and not at its next turn (two hours, for the daily
+  one: the market data missed at 21:16 was rebuilt at 23:12).
+- **Production is looked at before a release is pushed** (`docs/ops/release.md`): the release of that afternoon
+  went out onto a service that had already failed, which hid the cause for an hour.
+- `docs/ops/environment.md` says what each hosted piece runs on, and that a plan and a machine size are two
+  settings.
+
 ## 0.41.0 · 15 November 2026
 
 **The funding adjustments under their names, and XVA filed as valuation.** No figure changes.
