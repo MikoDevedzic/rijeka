@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import useBookingStore from '../../store/useBookingStore'
 import { matchShortcut, runTicketShortcut, shortcutsOff, keyLabel } from '../../lib/shortcuts'
+import { isSoloTicket } from '../../lib/windows'
 
 export default function Shortcuts() {
   const navigate = useNavigate()
@@ -23,6 +24,8 @@ export default function Shortcuts() {
       if (!s || shortcutsOff()) return
       let taken = false
       if (s.scope === 'ticket') taken = runTicketShortcut(s.id, document, touched).taken
+      // a ticket's own window holds one ticket and no pages: the page keys are taken there and do nothing
+      else if (isSoloTicket()) taken = true
       else if (s.id === 'new-trade') {
         document.activeElement?.blur?.()          // the focus does not stay in a field of the ticket about to be covered
         useBookingStore.getState().open(); taken = true

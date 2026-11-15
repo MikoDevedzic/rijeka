@@ -180,6 +180,8 @@
 .tbw-tab:focus-visible { outline-offset: -2px; }
 
 /* NOTES: every figure's note written out, or behind its mark (common/Note.jsx) */
+.tbw-tabbar-tools { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.tbw-tabbar-tools .tbw-notes-toggle { margin-left: 0; }
 .tbw-notes-toggle {
   margin-left: auto; display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
   padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--r-2); background: transparent;
@@ -763,4 +765,8 @@ html.solo-ticket .tbw-window { left: 0 !important; top: 0 !important; width: 100
   height: 100vh !important; max-height: 100vh !important; border-radius: 0; resize: none; }
 html.solo-ticket .ms-launcher { display: none !important; }
 .tbw-solo-back { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg-deep); color: var(--text-dim); font-size: 13px; }
-button.tbw-light { cursor: pointer; }
+html.solo-ticket .ph-nav { display: none !important; }
+/* a light that does nothing is dim; the green one opens the ticket in its own window and answers the pointer */
+.tbw-light.is-off { opacity: 0.35; cursor: default; }
+button.tbw-light-g:hover { filter: brightness(1.2); }
+button.tbw-light:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import useBookingStore from '../../store/useBookingStore'
 import { useTradesStore } from '../../store/useTradesStore'
-import { SOLO_TICKET_CLASS } from '../../lib/windows'
+import { SOLO_TICKET_CLASS, TRADES_CHANGED, broadcast } from '../../lib/windows'
 import { supabase } from '../../lib/supabase'
 
 export default function TicketWindowPage() {
@@ -27,7 +27,13 @@ export default function TicketWindowPage() {
   useEffect(() => {
     const { open, closeAll } = useBookingStore.getState()
     closeAll()                                           // this window holds one ticket
-    let seen = false, dead = false
+    let seen = false, dead = false, ready = false, said = null
+    // what this window does to the book (a booking, a confirmation, a cancellation) is told to the other windows,
+    // which read the trades again: their stores are their own
+    const unsubTrades = useTradesStore.subscribe((s, was) => {
+      if (!ready || dead || s.trades === was.trades) return
+      clearTimeout(said); said = setTimeout(() => broadcast({ type: TRADES_CHANGED }), 250)
+    })
     // the ticket was closed: so is its window (a window the visitor opened by hand cannot be closed by the page)
     const unsub = useBookingStore.subscribe(s => {
       if (s.windows.length > 0) { seen = true; return }
@@ -46,15 +52,17 @@ export default function TicketWindowPage() {
       if (dead) return
       if (!trade) { setState('missing'); return }
       open(trade)
+      ready = true
       setState('open')
     }
-    if (!tradeId) open(null)
+    if (!tradeId) { open(null); ready = true }
     else load().catch(() => { if (!dead) setState('missing') })
-    return () => { dead = true; unsub() }
+    // leaving the page (the sign-in ended) takes the ticket with it: it is this page's, not the next one's
+    return () => { dead = true; unsub(); unsubTrades(); useBookingStore.getState().closeAll() }
   }, [tradeId])
 
   const say = state === 'loading' ? 'Opening the ticket…'
     : state === 'missing' ? 'This trade is not in your book.'
     : state === 'closed' ? 'The ticket is closed. You can close this window.' : null
-  return <div className="tbw-solo-back" data-testid="ticket-window" data-state={state}>{say && <p>{say}</p>}</div>
+  return <div className="tbw-solo-back" role="status" data-testid="ticket-window" data-state={state}>{say && <p>{say}</p>}</div>
 }

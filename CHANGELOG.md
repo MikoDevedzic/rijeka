@@ -13,9 +13,12 @@ migration runner).
 
 - No page wrote these tables directly, so nothing changes on screen. `GET /api/ops/health` reports the state
   under `schema`.
-- **A ticket in a window of its own** (after the release, the same day). The green light of a trade window opens
-  the ticket in a browser window it fills, to put on another screen; a stored trade moves there, a new ticket
-  opens blank. The page is `/ticket`; nothing is computed differently.
+- **A ticket in a window of its own** (after the release, the same day). OWN WINDOW on a trade window's tab bar,
+  and the green light of its title bar, open the ticket in a browser window it fills, to put on another screen; a
+  stored trade moves there (asking again brings that window forward), a new ticket opens blank. What that window
+  books or confirms, the other windows read again; the page keys do nothing in it. The page is `/ticket`; nothing
+  is computed differently. Known: each window renews its sign-in on its own, as the messenger's and a module's
+  window already do; keeping them in step is not in this change.
 - The trader home ends above the chat button.
 
 ## 0.39.2 · 15 November 2026

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { passesFilters } from '../lib/blotter-filter'
 import { supabase } from '../lib/supabase'
 import { getSessionMaybe } from '../lib/session'
+import { onBroadcast, isSoloTicket, TRADES_CHANGED } from '../lib/windows'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -87,3 +88,12 @@ export const useTradesStore = create((set, get) => ({
     return trades.filter(t => passesFilters(t, filters, get().theirRefs[t.id]?.trade_ref))
   },
 }))
+
+// A ticket in a window of its own (lib/windows.js popOutTicket) books and confirms into its own copy of this store.
+// It says so, and every other window of the same user reads the trades again (a ticket's window does not: it is the
+// one that spoke, or it holds one ticket and no list).
+onBroadcast(async (msg) => {
+  if (msg.type !== TRADES_CHANGED || isSoloTicket()) return
+  if (!(await getSessionMaybe())?.access_token) return
+  useTradesStore.getState().fetchTrades({ quiet: true })
+})

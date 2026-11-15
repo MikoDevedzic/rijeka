@@ -30,7 +30,7 @@ const TAB_KEY = { 'XVA': 'xva', '◆ CONFIRM': 'confirm' }      // the function 
 
 // ── TabBar ─────────────────────────────────────────────────────────────────
 
-export function TabBar({ active = 'TRADE', onTab = () => {} }) {
+export function TabBar({ active = 'TRADE', onTab = () => {}, onPopOut = null, popOutTitle = '', popOutBlocked = false }) {
   const modules = useModulesStore(s => s.modules)
   const tabs = TABS.filter(t => !TAB_MODULE[t] || modules[TAB_MODULE[t]] !== false)
   // The switches can arrive (or be read again) while a ticket is open: a tab that has just gone is not left showing
@@ -45,7 +45,17 @@ export function TabBar({ active = 'TRADE', onTab = () => {} }) {
                   onClick={() => onTab(t)}>{t}{TAB_KEY[t] && <Keycap id={TAB_KEY[t]} />}</button>
         ))}
       </div>
-      <NotesToggle />
+      <div className="tbw-tabbar-tools">
+        {/* the ticket in a browser window of its own (the title bar's green light does the same) */}
+        {onPopOut && (
+          <button type="button" className="tbw-notes-toggle" data-testid="tbw-popout-btn" title={popOutBlocked
+              ? 'The browser did not open the window. Allow pop-ups for this site and press again.' : popOutTitle}
+            onClick={onPopOut}>
+            <span aria-hidden="true">⧉</span>{popOutBlocked ? 'POP-UPS ARE BLOCKED' : 'OWN WINDOW'}
+          </button>
+        )}
+        <NotesToggle />
+      </div>
     </div>
   )
 }

@@ -488,6 +488,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const [bookedTrade, setBookedTrade] = useState(initialTrade || null)
   const [booking,     setBooking]     = useState(false)
   const [bookErr,     setBookErr]     = useState('')
+  const [popBlocked,  setPopBlocked]  = useState(false)      // the browser refused the ticket's own window
 
   // Sprint 12 item 3 — lifecycle state (PENDING -> CONFIRMED | CANCELLED)
   const [confirming, setConfirming] = useState(false)
@@ -1161,6 +1162,19 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // The ticket in a browser window of its own (lib/windows.js): a stored trade moves there and leaves this page; a
+  // new ticket stays here (what is typed is not carried) and a blank one opens there. A browser that refuses the
+  // window is said so on the button.
+  const canPopOut = !soloTicket && !phoneView
+  const popOutTitle = bookedTrade?.id
+    ? 'Open this trade in its own window: drag it to another screen'
+    : 'Open a new ticket in its own window: drag it to another screen (what is typed here stays here)'
+  const popOutHere = () => {
+    const opened = popOutTicket(bookedTrade?.id || null)
+    setPopBlocked(!opened)
+    if (opened && bookedTrade?.id && onClose) onClose()
+  }
+
   return (
     <div
       ref={winRef}
@@ -1177,25 +1191,18 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             onClick={e => { e.stopPropagation(); onClose && onClose() }}
             title="Close"
           />
-          <span
-            className="tbw-light tbw-light-y"
-            onMouseDown={e => e.stopPropagation()}
-            title="Minimize (n/a)"
-          />
-          {soloTicket || phoneView
-            ? <span className="tbw-light tbw-light-g" onMouseDown={e => e.stopPropagation()} title={soloTicket ? 'This ticket is in its own window' : 'Maximize (n/a)'} />
+          {/* the yellow light does nothing here: it is dim and says nothing */}
+          <span className="tbw-light tbw-light-y is-off" aria-hidden="true" onMouseDown={e => e.stopPropagation()} />
+          {!canPopOut
+            ? <span className="tbw-light tbw-light-g is-off" aria-hidden="true" onMouseDown={e => e.stopPropagation()}
+                    title={soloTicket ? 'This ticket is in its own window' : undefined} />
             : <button
                 type="button"
                 className="tbw-light tbw-light-g"
                 data-testid="tbw-popout"
                 onMouseDown={e => e.stopPropagation()}
-                onClick={e => {
-                  e.stopPropagation()
-                  // a stored trade moves to its own window; a new ticket stays here (what is typed is not carried) and a blank one opens there
-                  const opened = popOutTicket(bookedTrade?.id || null)
-                  if (opened && bookedTrade?.id && onClose) onClose()
-                }}
-                title={bookedTrade?.id ? 'Open this trade in its own window: drag it to another screen' : 'Open a new ticket in its own window: drag it to another screen (what is typed here stays here)'}
+                onClick={e => { e.stopPropagation(); popOutHere() }}
+                title={popOutTitle} aria-label={popOutTitle}
               />}
         </div>
         <div className="tbw-title" style={bookedTrade && !viewMode ? { color: 'var(--accent)' } : {}}>
@@ -1245,7 +1252,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         )}
       </div>
 
-      <TabBar active={activeTab} onTab={setActiveTab} />
+      <TabBar active={activeTab} onTab={setActiveTab} onPopOut={canPopOut ? popOutHere : null} popOutTitle={popOutTitle} popOutBlocked={popBlocked} />
 
       {/* TRADE content stays mounted (hidden when tab != TRADE) so auto-fetch
           effects in SwapTermsBody don't re-fire every tab switch. */}

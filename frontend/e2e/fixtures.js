@@ -34,41 +34,48 @@ const NOT_THE_APPS = [/stack\.local/, /ERR_NAME_NOT_RESOLVED/, /WebSocket connec
 // Chromium, Firefox, WebKit
 const CANCELLED = /ERR_ABORTED|NS_BINDING_ABORTED|^(cancelled|Load request cancelled)\.?$/i
 
+// What a page does wrong goes on the list: an uncaught error, a console error, a 4xx or 5xx from the API or the REST
+// layer, a request the API never answered, an API path sent to the page's own host. The journey's own page is
+// watched by the `problems` fixture; a window the app opens is watched by the journey that opened it.
+export function watchPage(page, problems, browserName) {
+  // Safari words a fetch the page left behind when it navigated as a failed access check, and raises it as an
+  // uncaught error; a real refusal by the API's CORS would stop every engine, and Chromium's run would say so
+  const leftBehind = (m) => browserName === 'webkit' && /due to access control checks\.?$/.test(m)
+  page.on('pageerror', e => { if (!leftBehind(e.message)) problems.push(`uncaught: ${e.message}`) })
+  page.on('console', m => {
+    if (m.type() !== 'error') return
+    const t = m.text()
+    if (NOT_THE_APPS.some(rx => rx.test(t))) return
+    problems.push(`console.error: ${t.slice(0, 400)}`)
+  })
+  page.on('response', r => {
+    const u = r.url()
+    // every 4xx and 5xx from the API or the REST layer is a problem, except a 404 on the reads the pages treat as
+    // "nothing stored yet" (NOTHING_STORED: each one named, so a mistyped route is still caught)
+    const st = r.status(), m = r.request().method()
+    const handled = st === 404 && m === 'GET' && NOTHING_STORED.some(rx => rx.test(u))
+    if (st >= 400 && !handled && (u.startsWith(API) || u.startsWith(STACK))) problems.push(`HTTP ${st} ${m} ${u}`)
+  })
+  // a request that never got an answer from the API (it died, or refused the connection); a navigation that
+  // cancels an in-flight request is not that
+  page.on('requestfailed', r => {
+    const why = r.failure()?.errorText || ''
+    if (r.url().startsWith(API) && !CANCELLED.test(why)) problems.push(`no answer: ${r.method()} ${r.url()} (${why})`)
+  })
+  // an API path sent to the page's own host: the relative-path mistake, which the static host answers with HTML
+  page.on('request', r => {
+    const u = new URL(r.url())
+    if (u.origin === WEB && /^\/(api|auth)\//.test(u.pathname)) problems.push(`API path sent to the page's own host: ${r.method()} ${u.pathname}`)
+  })
+}
+
 export const test = base.extend({
   // who is signed in: 'USER.A' (firm ADMIN, the template account with market data) unless a journey says otherwise
   who: ['USER.A', { option: true }],
 
   problems: async ({ page, browserName }, use) => {
     const problems = []
-    // Safari words a fetch the page left behind when it navigated as a failed access check, and raises it as an
-    // uncaught error; a real refusal by the API's CORS would stop every engine, and Chromium's run would say so
-    const leftBehind = (m) => browserName === 'webkit' && /due to access control checks\.?$/.test(m)
-    page.on('pageerror', e => { if (!leftBehind(e.message)) problems.push(`uncaught: ${e.message}`) })
-    page.on('console', m => {
-      if (m.type() !== 'error') return
-      const t = m.text()
-      if (NOT_THE_APPS.some(rx => rx.test(t))) return
-      problems.push(`console.error: ${t.slice(0, 400)}`)
-    })
-    page.on('response', r => {
-      const u = r.url()
-      // every 4xx and 5xx from the API or the REST layer is a problem, except a 404 on the reads the pages treat as
-      // "nothing stored yet" (NOTHING_STORED: each one named, so a mistyped route is still caught)
-      const st = r.status(), m = r.request().method()
-      const handled = st === 404 && m === 'GET' && NOTHING_STORED.some(rx => rx.test(u))
-      if (st >= 400 && !handled && (u.startsWith(API) || u.startsWith(STACK))) problems.push(`HTTP ${st} ${m} ${u}`)
-    })
-    // a request that never got an answer from the API (it died, or refused the connection); a navigation that
-    // cancels an in-flight request is not that
-    page.on('requestfailed', r => {
-      const why = r.failure()?.errorText || ''
-      if (r.url().startsWith(API) && !CANCELLED.test(why)) problems.push(`no answer: ${r.method()} ${r.url()} (${why})`)
-    })
-    // an API path sent to the page's own host: the relative-path mistake, which the static host answers with HTML
-    page.on('request', r => {
-      const u = new URL(r.url())
-      if (u.origin === WEB && /^\/(api|auth)\//.test(u.pathname)) problems.push(`API path sent to the page's own host: ${r.method()} ${u.pathname}`)
-    })
+    watchPage(page, problems, browserName)
     await use(problems)
   },
 

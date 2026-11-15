@@ -74,9 +74,20 @@ export const TICKET_PATH = '/ticket'
 export const SOLO_TICKET_CLASS = 'solo-ticket'      // on <html> while the page is a ticket's own window
 export const isSoloTicket = () => typeof document !== 'undefined' && document.documentElement.classList.contains(SOLO_TICKET_CLASS)
 
+const ticketWindows = new Map()      // trade id -> the window this page opened for it
+
 export function popOutTicket(tradeId = null) {
+  // the trade's window is already open: bring it forward as it is (opening it again by name would load it afresh
+  // and drop whatever was under way in it)
+  const held = tradeId ? ticketWindows.get(String(tradeId)) : null
+  if (held && !held.closed) { held.focus(); return held }
   const path = tradeId ? `${TICKET_PATH}?trade=${encodeURIComponent(tradeId)}` : TICKET_PATH
   const name = tradeId ? `rijeka-ticket-${tradeId}` : `rijeka-ticket-new-${Date.now()}`
   const sh = window.screen?.availHeight || 1000
-  return openAppWindow(path, name, { w: 1340, h: Math.min(940, sh - 60) })
+  const win = openAppWindow(path, name, { w: 1340, h: Math.min(940, sh - 60) })
+  if (tradeId) { if (win) ticketWindows.set(String(tradeId), win); else ticketWindows.delete(String(tradeId)) }
+  return win
 }
+
+// A ticket's own window changed the book (booked, confirmed, amended, cancelled): the other windows read it again.
+export const TRADES_CHANGED = 'trades:changed'
