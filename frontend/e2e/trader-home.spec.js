@@ -187,13 +187,21 @@ test('a stored report that misses a trade is run again once; where it cannot be,
   const isLive = (url) => url.pathname.endsWith('/api/risk/report') && url.search.includes('live=1')
   let real = null, lives = 0
   // the stored report as it would be had a trade been booked after it: made long ago, and one trade short
+  let release
+  const held = new Promise(r => { release = r })
   await app.route(isStored, async route => {
     const res = await route.fetch(); real = await res.json()
+    await held                                                              // a slow read: the page is looked at while it waits
     await route.fulfill({ response: res, json: { ...real, generated_at: '2026-01-01T00:00:00+00:00', ladder_rows: (real.ladder_rows || []).slice(1) } })
   })
   await app.route(isLive, async route => { lives++; await route.fulfill({ status: 429, json: { detail: 'Too many live risk reports this minute.' } }) })
   await app.goto('/command-center')
   const home = app.getByTestId('trader-home')
+  // while the report is on its way the page says so; it does not say the book carries no risk
+  await expect(home.getByTestId('th-river')).toContainText('Measuring the book…', { timeout: 60_000 })
+  await expect(home.getByTestId('th-stand')).toContainText('Measuring the book…')
+  await expect(home.getByTestId('th-river')).not.toContainText('carries no risk')
+  release()
   await expect(home.getByTestId('th-behind')).toContainText('It does not hold the trades booked or closed since, and could not be run again just now (it has been run too often this minute)', { timeout: 120_000 })
   await expect(home.getByTestId('th-river').locator('.th-lane').first(), 'the stored report is still drawn').toBeVisible()
   expect(lives, 'asked for once, not on every render').toBe(1)
