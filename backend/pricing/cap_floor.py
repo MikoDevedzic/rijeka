@@ -151,14 +151,18 @@ def lookup_cap_vol(
     atm_row = next((r for r in tenor_rows if r.get('is_atm')), None)
     atm_vol_bp = float(atm_row['flat_vol_bp']) if atm_row else fallback_vol_bp
 
-    # Strike spread vs ATM forward
+    # Strike spread vs ATM forward, as it is: not rounded.
     # For floors: use absolute value of spread (put-call symmetry in Normal model)
+    #
+    # The volatility is a continuous function of the spread: straight lines through the quoted spreads and the ATM
+    # point, carried on in a straight line beyond the last quote. Until 0.40.0 the spread was rounded to a whole
+    # basis point, a strike within 5bp of the money took the ATM vol and one within 1bp of a quote took that
+    # quote: three steps. A move of the curve moves the ATM forward, so each step made the price jump, and a cap's
+    # rate risk depended on the size of the bump it was measured with (618 at 1bp, 845 a basis point at 0.01bp on
+    # the test book's cap; Emmy, 15 November 2026). The tier is a label and does not change the number: QUOTED
+    # within half a basis point of a quoted spread, INTERP between or beyond them.
     raw_spread_bp = (strike_rate - atm_forward) * 10000
-    strike_spread_bp = round(abs(raw_spread_bp) if is_floor else raw_spread_bp)
-
-    # ATM: return ATM vol directly
-    if abs(strike_spread_bp) < 5:
-        return atm_vol_bp, 'QUOTED'
+    spread_bp = abs(raw_spread_bp) if is_floor else raw_spread_bp
 
     # Get non-ATM rows, sorted by spread
     skew_rows = sorted(
@@ -166,7 +170,8 @@ def lookup_cap_vol(
         key=lambda r: float(r['strike_spread_bp'])
     )
     if not skew_rows:
-        return atm_vol_bp, 'FALLBACK'
+        # an ATM quote alone: flat in strike, said to be quoted near the money and a fallback away from it
+        return atm_vol_bp, ('QUOTED' if abs(spread_bp) < 5 else 'FALLBACK')
 
     # Build arrays for interpolation
     spreads = [float(r['strike_spread_bp']) for r in skew_rows]
@@ -181,18 +186,14 @@ def lookup_cap_vol(
         spreads = [p[0] for p in pairs]
         vols    = [p[1] for p in pairs]
 
-    # Check if exact match
-    for s, v in zip(spreads, vols):
-        if abs(s - strike_spread_bp) < 1:
-            return v, 'QUOTED'
-
     # Interpolate / extrapolate
     if len(spreads) >= 2:
         try:
             f = interp1d(spreads, vols, kind='linear', fill_value='extrapolate')
-            vol = float(f(strike_spread_bp))
+            vol = float(f(spread_bp))
             vol = max(1.0, min(vol, 500.0))
-            return vol, 'INTERP'
+            quoted = any(abs(s - spread_bp) < 0.5 for s in spreads)
+            return vol, ('QUOTED' if quoted else 'INTERP')
         except Exception:
             pass
 

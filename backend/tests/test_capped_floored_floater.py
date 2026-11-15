@@ -683,3 +683,65 @@ class TestEmbeddedOptionFiguresOnTheLeg:
         assert _options_summary([mk(), mk()]) == {"option_pv": None, "vega": None, "option_vol_tier": None, "option_errors": []}
         s = _options_summary([mk(), mk(option_pv=-120.5, vega=-3.25, option_vol_tier="QUOTED"), mk(option_pv=40.0, vega=1.0, option_vol_tier="FALLBACK", option_errors=["floor: x"])])
         assert s == {"option_pv": pytest.approx(-80.5), "vega": pytest.approx(-2.25), "option_vol_tier": "FALLBACK", "option_errors": ["floor: x"]}
+
+
+# ── the volatility of a cap is a continuous function of the strike's distance from the money (0.40.0) ────────────────
+SKEW = [
+    {"cap_tenor_y": 5.0, "strike_spread_bp": 0.0, "flat_vol_bp": 85.0, "is_atm": True, "source": "TEST"},
+    {"cap_tenor_y": 5.0, "strike_spread_bp": -100.0, "flat_vol_bp": 95.0, "is_atm": False, "source": "TEST"},
+    {"cap_tenor_y": 5.0, "strike_spread_bp": 100.0, "flat_vol_bp": 80.0, "is_atm": False, "source": "TEST"},
+    {"cap_tenor_y": 5.0, "strike_spread_bp": 200.0, "flat_vol_bp": 78.0, "is_atm": False, "source": "TEST"},
+]
+
+
+class TestCapVolIsContinuous:
+    """Until 0.40.0 the lookup rounded the strike's distance from the at-the-money forward to a whole basis point,
+    gave a strike within 5bp of the money the ATM vol, and one within 1bp of a quote that quote: three steps. A
+    move of the curve moves the ATM forward, so a cap's price jumped at each, and its rate risk depended on the
+    size of the bump (Emmy, 15 November 2026)."""
+
+    def _vol(self, strike, atm, floor=False):
+        from pricing.cap_floor import lookup_cap_vol
+        return lookup_cap_vol(strike_rate=strike, atm_forward=atm, cap_tenor_y=5.0, surface_rows=SKEW, is_floor=floor)
+
+    def test_the_quotes_are_returned_at_their_spreads_and_straight_lines_run_between_them(self):
+        assert self._vol(0.0300, 0.0300) == (85.0, "QUOTED")
+        assert self._vol(0.0400, 0.0300) == (pytest.approx(80.0), "QUOTED")
+        assert self._vol(0.0350, 0.0300) == (pytest.approx(82.5), "INTERP")              # halfway from 85 to 80
+        assert self._vol(0.0450, 0.0300) == (pytest.approx(79.0), "INTERP")
+        assert self._vol(0.0600, 0.0300) == (pytest.approx(76.0), "INTERP")              # beyond the last quote, on its line
+        assert self._vol(0.0250, 0.0300) == (pytest.approx(90.0), "INTERP")
+        assert self._vol(0.0250, 0.0300, floor=True)[0] == pytest.approx(82.5)           # a floor: by the size of the distance
+
+    def test_a_strike_a_few_basis_points_from_the_money_is_not_given_the_atm_vol(self):
+        # 3bp above the money: 3% of the way from 85 to 80. It used to be 85 until 5bp, then 84.75 at once.
+        vol, tier = self._vol(0.0303, 0.0300)
+        assert vol == pytest.approx(84.85) and tier == "INTERP"
+
+    def test_the_vol_does_not_step_as_the_forward_moves(self):
+        # the forward moved a hundredth of a basis point at a time across two quotes and the money: every step of the
+        # vol is the slope of its line times the move, never a jump (the largest slope here is 0.1bp of vol per bp)
+        strike, last, worst = 0.0350, None, 0.0
+        for k in range(0, 30001):
+            vol, _ = self._vol(strike, 0.0200 + k * 1e-6)                 # the forward from 2.00% to 5.00%
+            if last is not None:
+                worst = max(worst, abs(vol - last))
+            last = vol
+        assert worst <= 0.1 * 0.01 + 1e-9
+
+    def test_a_caps_rate_risk_does_not_depend_on_the_size_of_the_bump(self):
+        # the cap repriced on a curve moved by 1bp and by a hundredth of it: per basis point the two agree to within
+        # the cap's own convexity. With the rounding they were a quarter apart on the test book (618 against 845).
+        from pricing.cap_floor import price_cap
+        def cap(rate, vol=None):
+            return price_cap(notional=10_000_000, cap_rate=0.0345, tenor_y=5.0, discount_curve=Curve(valuation_date=VAL_DATE, flat_rate=rate),
+                             valuation_date=VAL_DATE, surface_rows=SKEW, vol_override_bp=vol)
+        base = cap(0.03)
+        wide, fine = (cap(0.0301).npv - base.npv) / 1.0, (cap(0.030001).npv - base.npv) / 0.01
+        assert wide > 0 and fine > 0
+        assert abs(wide - fine) / fine < 0.01, (wide, fine)                # 1,587 and 1,580 here
+        # and it carries the smile's move with the forward. On this surface the vol rises as the forward comes up
+        # towards the strike, so with the vol held where it was the figure is smaller (1,461), by far more than the
+        # two bumps differ
+        held = cap(0.0301, vol=base.vol_bp).npv - base.npv
+        assert held < wide and (wide - held) > 5 * abs(wide - fine), (held, wide, fine)

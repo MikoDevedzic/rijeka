@@ -133,10 +133,10 @@ def test_risk_report_lists_what_fixes_day_by_day_and_it_adds_up_to_the_swaps_own
           f"{most:,.2f} with each period's whole; the fixing ladder adds up to {got:,.2f}")
 
 
-def _gaps(j: dict, bump: float = 1.0) -> dict[str, float]:
+def _gaps(j: dict) -> dict[str, float]:
     """For each trade of the report: how far the points of its buckets are from the buckets that have points, as a
-    share of the trade's own risk (the sum of the sizes of its points). `bump` is the size of the move the report was made
-    with, in bp: a trade with less than a dollar a basis point of rates risk is left out."""
+    share of the trade's own risk (the sum of the sizes of its points). A trade with less than a dollar a basis point
+    of rates risk is left out."""
     from pnl.explain import tenor_years
     from risk.sensitivities import bucket_of
     out = {}
@@ -148,18 +148,17 @@ def _gaps(j: dict, bump: float = 1.0) -> dict[str, float]:
                 inside = [pv for p, pv in pts.items() if bucket_of(tenor_years(p)) == b]
                 if b != "FLAT" and inside:              # a bucket that hardly matters to the trade is not broken into points
                     worst = max(worst, abs(sum(inside) - v))
-        if scale > 1.0 * bump:
+        if scale > 1.0:
             out[f'{x["instrument"]} {x["trade_ref"]}'] = worst / scale
     return out
 
 
-def test_risk_report_carries_each_curves_risk_at_its_quoted_tenors(client, auth_a, booked, monkeypatch):
+def test_risk_report_carries_each_curves_risk_at_its_quoted_tenors(client, auth_a, booked):
     """The ladder at each quoted tenor (risk/sensitivities.py, since 0.40.0), through the route, the store and the
-    production pricers. A bucket is still measured whole. A swap's points add up to its buckets to within the
-    cross-gamma of a basis point. An option's do not at 1bp (one quote moved alone swings the forwards either side
-    of it by several bp, and a cap is not linear over that); the gap is second order, so at a hundredth of the
-    bump every trade's points add up."""
-    from risk import sensitivities as S
+    production pricers. A bucket is still measured whole, by a basis point. A point is the slope at one quote. So a
+    trade's points add up to its buckets to within the buckets' own convexity over a basis point: next to nothing
+    for a swap, about one percent for a cap, a floor or a collar (it was 14% for the cap while its volatility was
+    read at a rounded distance from the money and each point was moved a whole basis point)."""
     r = client.get("/api/risk/report?live=1", headers=auth_a)
     assert r.status_code == 200, r.text[:400]
     j = r.json(); lad = j["ladder"]
@@ -179,18 +178,9 @@ def test_risk_report_carries_each_curves_risk_at_its_quoted_tenors(client, auth_
         if any(abs(v) > 1.0 for b, v in row["buckets"].items() if b != "FLAT"):
             assert row["points"], row["curve"]
 
-    at_1bp = _gaps(j)
-    linear = {k: g for k, g in at_1bp.items() if k.startswith("IR_SWAP ")}
+    gaps = _gaps(j)
+    linear = {k: g for k, g in gaps.items() if k.startswith("IR_SWAP ")}
     assert linear and max(linear.values()) < 1e-3, linear                       # a swap: a tenth of a percent of its risk
-    try:
-        monkeypatch.setattr(S, "BUMP_BP", 0.01)
-        fine = client.get("/api/risk/report?live=1", headers=auth_a)
-        assert fine.status_code == 200, fine.text[:400]
-        at_fine = _gaps(fine.json(), 0.01)
-    finally:
-        monkeypatch.setattr(S, "BUMP_BP", 1.0)
-        assert client.get("/api/risk/report?live=1", headers=auth_a).status_code == 200      # the stored report is the 1bp one again
-    assert set(at_fine) == set(at_1bp) and max(at_fine.values()) < 2e-3, at_fine  # every trade, options too
-    for k, g in at_1bp.items():                                                  # and where a trade is apart at 1bp, it is much less so at a hundredth of it
-        if g > 5e-3:
-            assert at_fine[k] < g / 20, (k, g, at_fine[k])
+    options = {k: g for k, g in gaps.items() if k.split()[0] in ("IR_CAP", "IR_FLOOR", "IR_COLLAR")}
+    assert len(options) >= 3 and max(options.values()) < 2e-2, options          # the buckets' own convexity over 1bp
+    assert max(gaps.values()) < 2e-2, gaps

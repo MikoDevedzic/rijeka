@@ -13,17 +13,16 @@ Beside each bucket, the points it is made of (since 0.40.0): every quoted tenor 
 KR01 and vega by (curve, quoted tenor). That is the risk at the instrument one would hedge with; a bucket moves
 its quotes together, so a two-year position against a five-year one nets inside it and only the points show the
 two. A bucket carrying under a hundredth of a trade's largest bucket on the curve is not broken into its points
-(its own figure stands), unless an uneven move of it shows that points inside it cancel. A bucket's figure is still measured by moving the bucket whole, as before; its points add up to it to first
-order. For a swap what is left is the cross-gamma of a 1bp move: 0.02% of the DV01 at five years, 0.08% at thirty
-(tests/reference/test_ref_greeks.py). For a cap, floor or collar it is more: at 1bp a cap's points were up to 14%
-of a bucket away from it on the test book, 1% at 0.1bp and 0.1% at 0.01bp (tests/integration/
-test_reports_and_methodology.py). The cause is the cap's volatility lookup (pricing/cap_floor.py lookup_cap_vol),
-which reads the surface at the strike's distance from the at-the-money forward rounded to a whole bp: a 1bp move of
-the curve re-reads the volatility and a smaller move does not, so the cap's own bucket figure depends on the size
-of the bump (618 at 1bp against 845 a basis point at 0.01bp; 914 and 907 with the volatility held), and one quote
-moved alone, which moves the at-the-money forward by a fraction of a bp, sometimes carries the smile's move and
-sometimes not (docs/model_inventory.md). Until the lookup is continuous a cap's points are the size of each hedge,
-not parts that sum. For a rate curve a point is the move
+(its own figure stands), unless an uneven move of it shows that points inside it cancel. A bucket's figure is still measured by moving the bucket whole by a basis point, as before. A point is measured
+as a slope: the quote is moved by a hundredth of a basis point and the change scaled to one, because one par quote
+moved alone by a whole basis point swings the forwards on either side of it by several, in opposite directions,
+and an option is not linear over that (a cap's points came to 13.5% more than its bucket when each was moved a
+whole basis point, 0.13% at a hundredth). So a trade's points add up to its bucket to within the bucket's own
+convexity over a basis point: 0.03% for a five-year swap, about 1% for the test book's cap (tests/integration/
+test_reports_and_methodology.py). The rate risk of a cap carries the move of its volatility with the forward: the
+cap surface is held by distance from the money (pricing/cap_floor.py lookup_cap_vol, continuous since 0.40.0), so
+a higher forward reads a different volatility. The ticket's IR01 holds the volatility where it was, and is
+larger or smaller by that. For a rate curve a point is the move
 ipv.inputs.bumped makes; on a surface the ladder moves a tenor's rows together, as its buckets do, where the
 price verification moves each row. A funding level's FUND01 has one quote and no points."""
 from __future__ import annotations
@@ -52,6 +51,7 @@ def _bumped(quotes: list[dict], lo: float, hi: float, bp: float) -> list[dict]:
 _GRID = re.compile(r"(\d+(?:\.\d+)?\s*[DWMY])\s*X\s*\d", re.I)
 POINT_EPS = 1e-6        # a point that moves the trade by less than a millionth of its currency is not carried
 SMALL_BUCKET = 0.01     # a bucket under this share of the trade's largest bucket on the curve is not broken into its points
+POINT_MOVE = 0.01       # a point is moved by this share of the bucket's bump, and the change divided by it
 
 
 def point_of(tenor) -> str:
@@ -159,7 +159,10 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
         for p, y in pts_all:
             if bucket_of(y) not in live:
                 continue
-            v = valuer(trade, d, mkt.override(cid, _bumped_point(q, p, bump)))["npv"] - base["npv"]
+            # the slope at the point, for one bump: the quote is moved by a hundredth of the bump and the change
+            # scaled up. One par quote moved alone by a whole basis point swings the forwards on either side of it
+            # by several, in opposite directions, and an option is not linear over that.
+            v = (valuer(trade, d, mkt.override(cid, _bumped_point(q, p, bump * POINT_MOVE)))["npv"] - base["npv"]) / POINT_MOVE
             if abs(v) >= POINT_EPS:
                 points["vega" if is_vol else "kr01"].setdefault(cid, {})[p] = v
     spot01: dict[str, float] = {}

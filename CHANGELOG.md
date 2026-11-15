@@ -13,15 +13,19 @@ bucket, and a figure did not say which instrument to hedge with.
   repriced: KR01 by curve and quoted tenor; vega by surface and tenor (a swaption grid by expiry). In the risk
   report each row of `ladder.ladder` and `ladder.vega` carries `points` (tenor, years, bucket, value in USD), and
   each trade's row carries its own.
-- **Nothing that was there moves.** A bucket is still measured by moving the bucket whole, so the totals, the
-  limits, the VaR and the P&L explain are as they were. A swap's points add up to their bucket to within the
-  cross-gamma of a basis point (0.02% of DV01 at five years, 0.08% at thirty). An option's do not at 1bp: on
-  the test book a cap's were up to 14% of a bucket away, 1% at a tenth of the bump and 0.1% at a hundredth. The
-  cause is older than this release: a cap's volatility is read at the strike's distance from the at-the-money
-  forward rounded to a whole basis point, so a 1bp move of the curve re-reads the volatility and a smaller
-  move does not (the cap's own bucket figure is 618 at 1bp and 845 a basis point at 0.01bp; 914 and 907 with
-  the volatility held). Not changed here: it is a pricing change for caps, floors and collars. Until then
-  their points are the size of each hedge, not parts that sum.
+- **What moves and what does not.** A bucket is still measured by moving the bucket whole by a basis point, so the
+  totals, the limits, the VaR and the P&L explain of swaps, forwards and FX options are as they were. A point
+  is the slope at its quote (the quote moved a hundredth of a basis point, the change scaled to one), so a
+  trade's points add up to its bucket to within the bucket's own convexity: 0.03% for a five-year swap, about
+  1% for a cap.
+- **A cap's volatility is read without steps** (`pricing/cap_floor.py`). It was read at the strike's distance
+  from the at-the-money forward rounded to a whole basis point, with the at-the-money volatility for any strike
+  within five basis points of the money. A move of the curve moves that forward, so the price jumped at each
+  step and a cap's rate risk depended on the size of the move it was measured with (618 at 1bp, 845 a basis
+  point at a hundredth of it, on the test book's cap). It is now a continuous function: straight lines through
+  the quotes. Prices of caps, floors and collars move by a little (at most what half a basis point of distance
+  is worth in volatility, more for a strike within five basis points of the money); their rate risk is 624
+  and 619 at the two moves. Found by the model review of this release.
 - **Checked.** A single quote's figure against a QuantLib rebootstrap of the same move: 74 comparisons, the worst
   0.034% of a trade's DV01. The reference suite is 521 comparisons. Methodology v1.22 (§14).
 - **Market risk page.** Under the ladder by bucket, the ladder at each quoted tenor: every quote that carries
