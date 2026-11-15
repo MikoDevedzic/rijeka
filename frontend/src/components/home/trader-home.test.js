@@ -218,17 +218,31 @@ describe("the trader's home: a factor against its limits", () => {
     const a = against(sofr, limitsOf(sofr, by))
     expect(a.per.map(p => p && [p.u, p.state])).toEqual([null, [0.8, 'WARN'], [-1.2, 'BREACH'], null])      // +4,000 of 5,000 warns at 75%; −2,400 of 2,000 is past, short
     expect(a.total).toMatchObject({ u: 0.17, state: 'OK' })
-    expect(a.head).toMatchObject({ u: -1.2, bucket: '5-10Y', limit: 2000, pos: -2400, room: -400 })
-    expect(against(btc, limitsOf(btc, by)).head).toMatchObject({ u: 0.916, state: 'WARN', bucket: null, room: 2100 })
+    expect(a.head).toMatchObject({ u: -1.2, bucket: '5-10Y', limit: 2000, pos: -2400 }); expect(a.head.room).toBeCloseTo(-400, 6)
+    expect(against(btc, limitsOf(btc, by)).head).toMatchObject({ u: 0.916, state: 'WARN', bucket: null }); expect(against(btc, limitsOf(btc, by)).head.room).toBeCloseTo(2100, 6)
     expect(against(eur, null)).toBe(null)
+  })
+  it('takes the size of a share from the API where it reports one, and the side from the factor: the two cannot disagree', () => {
+    // the API measures a bucket's limit on the bucket's own quotes; the picture also places a flat curve's risk there
+    const api = factorLimits([{ id: 'k', metric: 'KR01:USD_SOFR:1-5Y', scope: 'ALL', limit: 5000, warn_pct: 80, utilisation_pct: 50 },
+                              { id: 'n', metric: 'KR01:USD_SOFR:5-10Y', scope: 'ALL', limit: 4000, warn_pct: 80, utilisation_pct: 85 }])
+    const a = against(sofr, limitsOf(sofr, api))
+    expect(a.per[1]).toMatchObject({ u: 0.5, state: 'OK', room: 2500 })          // not the 80% its own 4,000 would make
+    expect(a.per[2]).toMatchObject({ u: -0.85, state: 'WARN' })                  // short, by the factor's own sign
+    expect(scene(list, 'limit', api)[list.indexOf(sofr)].h.slice(1, 3)).toEqual([0.5, -0.85])
   })
   it('draws each bucket as the share of its limit it uses, with the limit at the lane\'s full height, and writes the figure there', () => {
     const sc = scene(list, 'limit', by), s = sc[list.indexOf(sofr)], b = sc[list.indexOf(btc)], e = sc[list.indexOf(eur)]
-    expect(s.h).toEqual([0.01, 0.8, -LIMIT_MAX, 0])                      // a bucket with no limit of its own is read against the total's; past a limit is held at the lane's edge
-    expect(s.bank).toEqual([1, 1, 1, 1])
+    expect(s.h).toEqual([0.01, 0.8, -LIMIT_MAX, 0])                      // a bucket with no limit of its own is its share of the total's; past a limit is held at the lane's edge
+    expect(s.bank, 'a line only where the bucket has a limit of its own').toEqual([null, 1, 1, null])
     expect(s.tags.map(t => t && Math.round(t.u * 100))).toEqual([null, 80, -120, null])
+    expect(s.total).toMatchObject({ u: 0.17, state: 'OK' })               // both are drawn: the buckets' lines and the total's gauge
+    // a limit on the total is not a limit on each bucket: no line across them (four buckets at a quarter each would
+    // each look a quarter used while the total stood at its limit), the buckets as shares of it, the total as a gauge
     expect(b.h.map(x => Math.round(x * 1000) / 1000)).toEqual([0.732, 0.184, 0, 0])
-    expect(b.tags.map(t => t && Math.round(t.u * 1000) / 10)).toEqual([91.6, null, null, null])      // a limit on the total is written once, at the largest bucket
+    expect(b.h[0] + b.h[1]).toBeCloseTo(b.total.u, 9)
+    expect(b.bank).toEqual([null, null, null, null]); expect(b.tags).toEqual([null, null, null, null])
+    expect(b.total).toMatchObject({ u: 0.916, state: 'WARN' })
     expect(e).toMatchObject({ none: true, bank: [null, null, null, null] }); expect(Math.max(...e.h)).toBeCloseTo(0.6, 9)
   })
   it('draws the limit on the money scale too: its size times the same usual move, where the lane has room for it', () => {
@@ -240,7 +254,7 @@ describe("the trader's home: a factor against its limits", () => {
     const raw = scene(list, 'raw', by)[list.indexOf(sofr)]
     expect(raw.bank[1]).toBeCloseTo(Math.sqrt(5000 / 4000), 9)          // just past the largest bucket: still on the lane
     expect(raw.bank[2]).toBeCloseTo(Math.sqrt(2000 / 4000), 9)
-    expect(raw.bank[0]).toBe(null)                                       // the total's 10,000 against a largest bucket of 4,000: off the lane, not drawn
+    expect(raw.bank[0]).toBe(null)                                       // no limit of its own on this bucket
   })
 })
 

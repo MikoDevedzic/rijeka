@@ -155,7 +155,11 @@ export function heights(list, mode) {
 // asset's spot 01 (SPOT01:<asset>). A limit on a desk or a book is on a part of the book, and is not drawn on it.
 export const LIMIT_MAX = 1.18                              // how far past its limit a stream is still drawn
 const isAll = (l) => String(l?.scope || 'ALL').toUpperCase() === 'ALL'
-const lim = (l) => ({ id: l.id, limit: Number(l.limit), warn: Number.isFinite(Number(l.warn_pct)) ? Number(l.warn_pct) / 100 : 0.8 })
+// `used` is the share the API itself reports for the limit (utilisation_pct), where it reports one: the picture
+// draws that, so the two cannot disagree (a flat curve's risk, which the picture places in a bucket, is not in the
+// figure a bucket's limit is measured on).
+const lim = (l) => ({ id: l.id, limit: Number(l.limit), warn: Number.isFinite(Number(l.warn_pct)) ? Number(l.warn_pct) / 100 : 0.8,
+                      used: Number.isFinite(l.utilisation_pct) ? l.utilisation_pct / 100 : null })
 export function factorLimits(limits = []) {
   const by = new Map()
   const at = (key) => { const k = key.toUpperCase(); if (!by.has(k)) by.set(k, { total: null, buckets: BUCKETS.map(() => null) }); return by.get(k) }
@@ -173,49 +177,48 @@ export const limitsOf = (f, by) => by?.get(String(f.key).toUpperCase()) || null
 // The ids of the limits that stand on one of these factors: the ones the picture and the gauges already show.
 export const shownOn = (list, by) => new Set(list.flatMap(f => { const fl = limitsOf(f, by); return fl ? [fl.total, ...fl.buckets].filter(Boolean).map(l => l.id) : [] }))
 const stateOf = (u, warn) => Math.abs(u) >= 1 ? 'BREACH' : Math.abs(u) >= warn ? 'WARN' : 'OK'
-// How a factor stands against its limits: each bucket's signed use of its own limit (null where the bucket has none),
-// the total's, and the tightest of them with the room left on that side.
+// How a factor stands against its limits: each bucket's signed share of its own limit (null where the bucket has
+// none), the total's share of the total's limit, and the tightest of them with the room left. The size of a share is
+// the API's where it gave one; the side is the sign of the factor's own figure.
 export function against(f, fl) {
   if (!fl) return null
-  const per = f.v.map((x, i) => fl.buckets[i] ? { u: x / fl.buckets[i].limit, state: stateOf(x / fl.buckets[i].limit, fl.buckets[i].warn), limit: fl.buckets[i].limit, pos: x, bucket: BUCKETS[i] } : null)
-  const tot = fl.total ? { u: f.total / fl.total.limit, state: stateOf(f.total / fl.total.limit, fl.total.warn), limit: fl.total.limit, pos: f.total, bucket: null } : null
-  const all = [...per.filter(Boolean), tot].filter(Boolean)
+  const one = (l, pos, bucket) => {
+    const size = l.used != null ? l.used : Math.abs(pos) / l.limit, u = (pos < 0 ? -1 : 1) * size
+    return { u, state: stateOf(u, l.warn), limit: l.limit, pos, bucket, room: l.limit * (1 - size) }
+  }
+  const per = f.v.map((x, i) => fl.buckets[i] ? one(fl.buckets[i], x, BUCKETS[i]) : null)
+  const total = fl.total ? one(fl.total, f.total, null) : null
+  const all = [...per, total].filter(Boolean)
   if (!all.length) return null
-  const head = all.reduce((a, b) => Math.abs(b.u) > Math.abs(a.u) ? b : a)
-  return { per, total: tot, head: { ...head, room: head.limit - Math.abs(head.pos) } }
+  return { per, total, head: all.reduce((a, b) => Math.abs(b.u) > Math.abs(a.u) ? b : a) }
 }
 
-// What the picture draws for each factor: the height of each bucket between −1 and 1 (heights, above), where its
-// limit stands in each bucket on the same scale (null where there is none, or where it is off the lane), and the
-// figure to write at a bucket. 'limit' draws each bucket as the share of its own limit it uses (of the total's
-// where the limit is on the total), so a stream that reaches its dashed line is at its limit on every factor.
+// What the picture draws for each factor: the height of each bucket between −1 and 1 (heights, above), where a
+// bucket's own limit stands on the same scale (null where the bucket has none, or where it is off the lane), the
+// share to write at a bucket, and the total against the total's limit (drawn as a gauge at the lane's start: a limit
+// on a total is not a limit on each bucket, so it is never a line across them). 'limit' draws each bucket as the
+// share of its own limit it uses, so a stream that reaches a bucket's line is at that limit; a bucket with no limit
+// of its own is drawn as its share of the total's limit, or, with neither, against the factor's largest limit.
 export function scene(list, mode, by) {
   const hs = heights(list, mode === 'limit' ? 'raw' : mode)
   const big = mode === 'day' ? Math.max(0, ...list.filter(f => f.hasDay).flatMap(f => f.day.map(Math.abs))) : 0
   const root = (x, top) => top > 0 ? Math.sqrt(Math.abs(x) / top) : null
   return list.map((f, k) => {
     const fl = limitsOf(f, by), ag = against(f, fl), top = Math.max(...f.v.map(Math.abs))
-    const L = (i) => fl?.buckets[i]?.limit ?? fl?.total?.limit ?? null
     let h = hs[k].h, own = hs[k].own, none = false
     if (mode === 'limit') {
-      const widest = fl ? Math.max(...BUCKETS.map((_, i) => L(i) || 0)) : 0
-      none = !widest
-      h = none ? f.v.map(x => (top ? x / top : 0) * 0.6) : f.v.map((x, i) => x / (L(i) || widest))
-      own = false
+      none = !ag; own = false
+      const widest = fl ? Math.max(fl.total?.limit || 0, ...fl.buckets.map(b => b?.limit || 0)) : 0
+      h = none ? f.v.map(x => (top ? x / top : 0) * 0.6) : f.v.map((x, i) => ag.per[i] ? ag.per[i].u : x / (fl.total?.limit || widest))
     }
     const bank = BUCKETS.map((_, i) => {
-      const l = L(i)
+      const l = fl?.buckets[i]?.limit
       if (l == null) return null
       const y = mode === 'limit' ? 1 : mode === 'day' && f.hasDay ? root(l * f.move[i], big) : root(l, top)
       return y != null && y <= LIMIT_MAX + 0.02 ? y : null
     })
-    // the figure at a bucket: its own limit's use; a limit on the total is written once, at the largest bucket
-    const tags = BUCKETS.map(() => null)
-    if (ag) {
-      ag.per.forEach((p, i) => { if (p && Math.abs(f.v[i]) >= EPS) tags[i] = p })
-      if (ag.total && !ag.per.some(Boolean)) { let i = 0; f.v.forEach((x, j) => { if (Math.abs(x) > Math.abs(f.v[i])) i = j }); tags[i] = ag.total }
-    }
-    return { h: h.map(x => Math.max(-LIMIT_MAX, Math.min(LIMIT_MAX, x))), own, none, bank, tags, against: ag }
+    const tags = BUCKETS.map((_, i) => ag?.per[i] && Math.abs(f.v[i]) >= EPS ? ag.per[i] : null)
+    return { h: h.map(x => Math.max(-LIMIT_MAX, Math.min(LIMIT_MAX, x))), own, none, bank, tags, total: ag?.total || null, against: ag }
   })
 }
 export const canLimit = (list, by) => list.some(f => limitsOf(f, by))

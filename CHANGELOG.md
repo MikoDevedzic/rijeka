@@ -14,21 +14,23 @@ Market risk, Limits. What changes is how the home draws it.
 - **The rail is two-sided.** Flat is the middle; a short position stands to the left by how much of its limit it
   uses, a long one to the right; both ends are hatched past the limit. A size with no side (a VaR, a stress loss,
   an exposure, a limit on a desk or a book) is read to the right, as a square where a 01 is a dot.
-- **A limit on a 01 is drawn on its stream**: a dashed line above the stream's line and one below, bucket by
-  bucket for a limit on a tenor bucket (`KR01:<curve>:<bucket>`), across the lane for a limit on a curve's total
-  (`IR01:<curve>`) or an asset's spot 01 (`SPOT01:<asset>`). The figure at a bucket is how much of the limit is
-  used, amber from the limit's own warning level and red past it.
-- **A third height, OF ITS LIMIT**, where any such limit is set: each bucket is drawn as the share of its limit it
-  uses, so a stream that reaches its dashed line is at its limit on every factor alike. A factor with no limit is
-  drawn dashed and says so.
+- **A limit on a 01 is drawn on its stream.** A limit on a tenor bucket (`KR01:<curve>:<bucket>`) is a ruled line
+  across that bucket, above the stream's line and below it, with the share used written there, amber from the
+  limit's own warning level and red past it. A limit on a curve's total (`IR01:<curve>`) or on an asset's spot 01
+  (`SPOT01:<asset>`) is a gauge at the start of the lane, the limit a tick at either end: a limit on a total is not
+  a limit on each bucket, so it is never drawn as a line across them. LONG and SHORT are marked at the picture's
+  edge.
+- **A third height, OF ITS LIMIT**, where a drawn factor has a limit: a bucket is drawn as the share of its own
+  limit it uses, so a stream that reaches a bucket's line is at that limit; a bucket with no limit of its own is
+  drawn as its share of the total's. A factor with no limit is drawn dashed and says so.
 - **Beside each factor with a limit**: a gauge with flat in the middle, the share used, the side, and the room left
   in the factor's own unit. A limit shown there is not listed again under it; the rest (VaR, a stress loss, the
   book's IR01) are OTHER LIMITS. LIMITS → opens the page they are set on, for those who may set them.
 
 What it is not: no limit can yet be set on a vega or a forward basis, or with a different size for long and short;
 the limits are the firm's on the user's book, not a trader's own; a limit on a desk or a book is on the rail and not
-on a stream, because a stream is the whole book. The share drawn is the same ratio the API reports
-(`utilisation_pct`), with the side read from the factor's own figure. No change to the engine or the database.
+on a stream, because a stream is the whole book. The size of a share is the one the API reports for the limit
+(`utilisation_pct`); the side is read from the factor's own figure. No change to the engine or the database.
 
 ## 0.36.0 · 14 November 2026
 

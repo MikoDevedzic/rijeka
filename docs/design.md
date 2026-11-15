@@ -304,9 +304,12 @@ role. A phone keeps its own home (below) and a launch workspace its "start here"
 - **A limit is read on two sides** (since 0.37.0), because a position is long or short and a limit is one number
   on its size. The rail is flat in the middle, short to the left, long to the right, hatched past either end; a 01
   is a dot, a size with no side (VaR, a stress loss) a square read to the right, an exposure a diamond. On a stream
-  the limit is a dashed line in limestone above the line and below it, hatched on the far side; the share used is
-  written at the bucket in the colour of its state (quiet, amber from the limit's warning level, `--down` past it).
-  Beside a factor the gauge is flat in the middle with the limit a fifth from either end.
+  a bucket's limit is a ruled line in limestone (`--text-hi`) above the line and below it, hatched on the far
+  side; a dash is kept for a stream on a scale of its own. A limit on a factor's total is a gauge at the start of
+  its lane, never a line across the buckets. The share used is written in the colour of its state (quiet, amber
+  from the limit's warning level, `--down` past it): on a limit `--down` says "past", and the hatching past a limit
+  is quiet so that it is not read as a breach. LONG and SHORT are marked once at the picture's edge. Beside a
+  factor the gauge is flat in the middle with the limit a fifth from either end.
 - **A segment of two, three or six is the ticket's joined control** (`tbw-tabs`): the picture's OF ITS LIMIT / A USUAL DAY / PER 01,
   and the tabs that hold what the old home showed as cards.
 - **Brass on this page is a link to where a thing is dealt with** (OPEN BLOTTER →, THE RISK PAGE →), as on the old

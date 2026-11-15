@@ -37,7 +37,7 @@
 .th-rl-lab.WARN { color: var(--amber); } .th-rl-lab.BREACH { color: var(--down); }
 .th-rl-stem { position: absolute; width: 1px; background: var(--border-hi); }
 .th-rl-track { position: relative; height: 14px; border-radius: 2px; background: var(--panel-2); margin-top: 2px; }
-.th-rl-zone { position: absolute; top: 0; bottom: 0; width: 10%; background: repeating-linear-gradient(135deg, rgb(var(--down-rgb) / 0.5) 0 2px, transparent 2px 6px); }
+.th-rl-zone { position: absolute; top: 0; bottom: 0; width: 10%; background: repeating-linear-gradient(135deg, var(--border-hi) 0 2px, transparent 2px 6px); }      /* past a limit: hatched in a quiet colour; coral is kept for a mark that is there */
 .th-rl-zone.l { right: 0; border-radius: 0 2px 2px 0; border-left: 2px solid var(--text-hi); }
 .th-rl-zone.s { left: 0; border-radius: 2px 0 0 2px; border-right: 2px solid var(--text-hi); }
 .th-rl-mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--text-dim); }

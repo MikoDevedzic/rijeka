@@ -212,7 +212,7 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
 // The limits on one rail, flat in the middle: a mark for each, placed by how much of it is used, a short figure to the
 // left and a long one to the right (a limit is one number on the size, so it stands at both ends). A size with no
 // side (a VaR, a stress loss, an exposure) is read to the right. The hatched ends are past a limit.
-const SHAPE = { o: 'a 01, on the side it is on', s: 'a size: VaR, a stress loss, a limit on a desk or a book', c: 'an exposure to a counterparty' }
+const SHAPE = { o: 'a 01 or the book\'s mark, on the side it is on', s: 'a size: VaR, a stress loss, a limit on a desk or a book', c: 'an exposure to a counterparty' }
 function Rail({ marks }) {
   const ref = useRef(null), w = useWidth(ref)
   const lay = useMemo(() => railLayout(marks, w || 0), [marks, w])
@@ -277,17 +277,17 @@ function Statement({ on, off, st, rep, trades, pending, confirmed, navigate }) {
 // The picture: one stream for each risk factor, along the tenor bucket the risk sits in. Above its line the book is
 // long that factor, below it short; where there is no risk the line is bare.
 function Streams({ on, off, st, list, fl, any }) {
-  const day = canDay(list), lim = canLimit(list, fl)
+  const { drawn, rest } = useMemo(() => lanes(list), [list])
+  const day = canDay(list), lim = canLimit(drawn, fl)          // a scale is offered for what is drawn: a limit on a factor too small to draw does not offer it
   const [want, setWant] = useState(() => { try { const m = localStorage.getItem(MODE_KEY); return m === 'raw' || m === 'limit' ? m : 'day' } catch { return 'day' } })
   const mode = want === 'limit' ? (lim ? 'limit' : day ? 'day' : 'raw') : want === 'day' && !day ? 'raw' : want
   const pick = (m) => { setWant(m); try { localStorage.setItem(MODE_KEY, m) } catch { /* the choice then lasts for this visit */ } }
-  const { drawn, rest } = useMemo(() => lanes(list), [list])
   const empty = on && !st.loading && !st.err && drawn.length === 0
   return (
     <div className="th-pic" data-testid="th-river">
       <div className="th-hd">
         <div><span className="th-k">WHERE YOUR RISK SITS</span>
-          <div className="th-sub">{!on ? 'part of Market risk' : mode === 'limit' ? 'height is how much of its limit a bucket uses · the dashed lines are the limits' : mode === 'day' ? 'height is USD for a usual day in that factor · one scale for all' : 'height is the sensitivity itself · each stream to its own scale'}</div></div>
+          <div className="th-sub">{!on ? 'part of Market risk' : mode === 'limit' ? 'each bucket as the share of its limit it uses' : mode === 'day' ? 'USD for a usual day · one scale for all' : 'the sensitivity itself · each stream to its own scale'}</div></div>
         {on && (day || lim) && <div className="tbw-tabs th-seg" role="group" aria-label="What a stream's height means" data-testid="th-mode">
           {lim && <button className={`tbw-tab${mode === 'limit' ? ' is-active' : ''}`} aria-pressed={mode === 'limit'} onClick={() => pick('limit')}>OF ITS LIMIT</button>}
           {day && <button className={`tbw-tab${mode === 'day' ? ' is-active' : ''}`} aria-pressed={mode === 'day'} onClick={() => pick('day')}>A USUAL DAY</button>}
@@ -300,7 +300,7 @@ function Streams({ on, off, st, list, fl, any }) {
       {on && any && st.err && !st.data && <div className="th-blank">The risk report could not be read ({why429(st.err)}). The Risk page can run it again.</div>}
       {on && any && empty && <div className="th-blank">The book carries no risk the ladder measures on {fmtD(st.data?.date)}.</div>}
       {on && drawn.length > 0 && <River drawn={drawn} mode={mode} fl={fl} asOf={st.data?.date} />}
-      {on && drawn.length > 0 && <div className="th-note">A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && scene(drawn, mode, fl).some(h => h.own) ? ' A dashed stream has no usual move measured for it and is drawn to its own scale.' : ''}{lim ? ' The dashed lines across a lane are its limit: above the line for a long position, below it for a short one; the figure at a bucket is how much of the limit is used.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
+      {on && drawn.length > 0 && <div className="th-note">A spot delta has no tenor of its own: it is drawn at the maturity of the trade that carries it.{mode === 'day' && scene(drawn, mode, fl).some(h => h.own) ? ' A dashed stream has no usual move measured for it and is drawn to its own scale.' : ''}{lim ? ' A ruled line across a bucket is that bucket\'s limit, above the stream\'s line for a long position and below it for a short one, with the share used written there. A limit on a factor\'s total is the gauge at the start of its lane.' : ''}{rest.length ? ` Not drawn, smaller: ${rest.map(f => `${f.name} ${f.measure}`).join(', ')}.` : ''}</div>}
     </div>
   )
 }
@@ -309,7 +309,7 @@ function Streams({ on, off, st, list, fl, any }) {
 function tipLimit(ag, i) {
   const p = ag?.per[i]
   if (p) return <em className={p.state}> {Math.round(Math.abs(p.u) * 100)}% of {fmt0(p.limit)}</em>
-  return ag?.total ? <em> limit on the total</em> : null
+  return ag?.total ? <em> its limit is on the total</em> : null
 }
 
 // The lanes' names on the left, the drawing on the right, the tip under the pointer. Mounted only when there is a
@@ -331,7 +331,7 @@ function River({ drawn, mode, fl, asOf }) {
     const g = c.getContext('2d')
     const css = getComputedStyle(document.documentElement)
     const cols = drawn.map(f => css.getPropertyValue(RISK_FACTORS[f.factor].token).trim() || T.textDim)
-    const top = 6, bottom = H - AXIS, lane = (bottom - top) / n, amp = lane * 0.44, colW = W / BUCKETS.length
+    const top = 6, bottom = H - AXIS, lane = (bottom - top) / n, amp = lane * 0.4, colW = W / BUCKETS.length          // 0.4, so a stream held just past its limit stays in its own lane
     // six nodes across: nothing at either edge, the bucket's height at its middle; a cosine between them, so the
     // line never rises past a bucket's own figure
     const nodes = (h) => [[0, 0], ...h.map((v, i) => [colW * (i + 0.5), v]), [W, 0]]
@@ -353,19 +353,33 @@ function River({ drawn, mode, fl, asOf }) {
         g.font = `11px ${MONO}`; g.fillStyle = i === hot ? T.textHi : T.textDim; g.fillText(BUCKET_LABEL[b], colW * (i + 0.5), bottom + 18)
         g.fillStyle = T.textMute; g.fillText(reach[i], colW * (i + 0.5), bottom + 33)
       })
+      // which way is which, said once: above a stream's line the book is long, below it short
+      g.font = `10px ${MONO}`; g.textAlign = 'right'; g.fillStyle = T.textMute
+      g.fillText('LONG ▲', W - 4, top + 10); g.fillText('SHORT ▼', W - 4, top + lane - 5); g.textAlign = 'center'
       drawn.forEach((f, k) => {
         const { base, ys } = shape[k], c = cols[k], own = hs[k].own || hs[k].none, live = (i) => Math.abs(ys[i] - base) > 1.2
         g.strokeStyle = alpha(c, 0.28); g.lineWidth = 1; g.beginPath(); g.moveTo(0, base); g.lineTo(W, base); g.stroke()
-        // the limit, bucket by bucket: a dashed line above the stream's line and one below, hatched on the far side
+        // a bucket's own limit: a ruled line above the stream's line and one below, hatched on the far side (a dash is
+        // kept for a stream on a scale of its own, so the two are not mistaken for one another)
         hs[k].bank.forEach((b, i) => {
           if (b == null) return
           for (const sd of [1, -1]) {
             const y = base - sd * b * amp, x0 = colW * i + 5, x1 = colW * (i + 1) - 5
-            g.strokeStyle = alpha(T.textHi, 0.7); g.lineWidth = 1.2; g.setLineDash([5, 4]); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.setLineDash([])
-            g.strokeStyle = alpha(T.textMute, 0.45); g.lineWidth = 1
+            g.strokeStyle = alpha(T.textHi, 0.6); g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke()
+            g.strokeStyle = alpha(T.textMute, 0.45)
             for (let x = x0; x < x1; x += 7) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + 4, y - sd * 4); g.stroke() }
           }
         })
+        // the total against the total's limit: a gauge at the lane's start, the limit a tick at either end
+        const tot = hs[k].total
+        if (tot) {
+          const reach = amp * 0.85, gx = 6, u = Math.max(-1.18, Math.min(1.18, tot.u)), col = tot.state === 'BREACH' ? T.down : tot.state === 'WARN' ? T.amber : T.textDim
+          g.strokeStyle = alpha(T.borderHi, 0.9); g.lineWidth = 1; g.beginPath(); g.moveTo(gx, base - reach); g.lineTo(gx, base + reach); g.stroke()
+          g.strokeStyle = alpha(T.textHi, 0.8); g.lineWidth = 1.5
+          for (const sd of [1, -1]) { g.beginPath(); g.moveTo(gx - 4, base - sd * reach); g.lineTo(gx + 4, base - sd * reach); g.stroke() }
+          g.fillStyle = col; g.fillRect(gx - 2, Math.min(base, base - u * reach), 4, Math.abs(u * reach))
+          g.font = `500 11px ${MONO}`; g.textAlign = 'left'; g.fillText(`${Math.round(Math.abs(tot.u) * 100)}%`, gx - 4, tot.u < 0 ? base + reach + 12 : base - reach - 5); g.textAlign = 'center'          // past the tick on its own side, clear of the stream
+        }
         const grad = g.createLinearGradient(0, base - amp, 0, base + amp)
         grad.addColorStop(0, alpha(c, 0.4)); grad.addColorStop(0.5, alpha(c, 0)); grad.addColorStop(1, alpha(c, 0.4))
         g.beginPath(); g.moveTo(xs[0], base); xs.forEach((x, i) => g.lineTo(x, ys[i])); g.lineTo(xs[xs.length - 1], base); g.closePath(); g.fillStyle = grad; g.fill()
@@ -444,7 +458,7 @@ function Factors({ on, rep, list, marks, fl, any, navigate }) {
   const on_ = shownOn(list, fl), others = marks.filter(m => !on_.has(m.id))          // a limit drawn on its factor above is not listed again
   return (
     <aside className="th-side" data-testid="th-factors">
-      <div><div className="th-k">YOUR RISK BY FACTOR</div><div className="th-sub">{canLimit(list, fl) ? 'its sensitivity, against its limit where it has one' : 'its sensitivity, and its largest bucket on a usual day'}</div></div>
+      <div><div className="th-k">YOUR RISK BY FACTOR</div><div className="th-sub">{canLimit(list, fl) ? 'against its limit, where it has one' : 'its sensitivity, and its largest bucket on a usual day'}</div></div>
       {list.length === 0 && <div className="lf-empty">{rep || !any ? 'Nothing to measure yet.' : '…'}</div>}
       {list.map((f, i) => {
         const hd = against(f, limitsOf(f, fl))?.head

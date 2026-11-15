@@ -173,8 +173,8 @@ test('with a history of moves and limits: the streams share one scale in money, 
   // the picture against the limits: a third scale, and the tip names the bucket's limit
   const scale = app.getByTestId('th-mode')
   await scale.getByRole('button', { name: 'OF ITS LIMIT' }).click()
-  await expect(app.getByTestId('th-river')).toContainText('how much of its limit a bucket uses')
-  await expect(app.getByTestId('th-river')).toContainText('The dashed lines across a lane are its limit')
+  await expect(app.getByTestId('th-river')).toContainText('each bucket as the share of its limit it uses')
+  await expect(app.getByTestId('th-river')).toContainText('A ruled line across a bucket is that bucket\'s limit')
   await expect.poll(() => ink(app.getByTestId('th-river').locator('canvas')), 'drawn again on the new scale').toBeGreaterThan(2000)
   const cvb = await app.getByTestId('th-river').locator('.th-cv').boundingBox()
   await app.mouse.move(cvb.x + cvb.width * 0.38, cvb.y + cvb.height * 0.4)
