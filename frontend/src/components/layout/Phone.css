@@ -129,6 +129,9 @@
   .ph-flip > :first-child > * { text-align: left !important; padding-left: 0 !important; }                                   /* the names, down the left */
   .ph-flip > * > :first-child { align-self: end; font-size: 10px !important; line-height: 1.3; color: var(--text-mute); border-bottom-color: var(--border-hi); }      /* what each column is */
   .ph-flip > * > :last-child { border-bottom: 0; }
+  /* a sum of two columns (FVA = FCA + FBA under the XVA strip) has no line of its own when the strip is on its side:
+     it would be a column of blanks with one figure. It is left to the note under the strip and to the incremental table. */
+  .ph-flip > .va-sum { display: none !important; }
 
   /* a wide table read downwards (table[data-stack], lib/phone.js): each row a block, each cell under its heading */
   .tbw-window table[data-stack] { display: block !important; width: 100% !important; min-width: 0 !important; }

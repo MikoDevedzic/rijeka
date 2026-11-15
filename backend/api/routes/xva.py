@@ -661,7 +661,7 @@ def simulate(
             "dva": round(dva, 2),
             "fca": round(fca, 2),
             "fba": round(fba_v, 2),
-            "fva": round(fca + fba_v, 2),          # FCA + FBA (until 0.41.0 this key held the cost alone)
+            "fva": round(fca, 2),                  # LEGACY, the cost again: what an app from before 0.41.0 reads as FVA (LEGACY_FVA below)
             "kva": round(kva, 2),
             "mva": round(mva, 2),
             "colva": round(colva, 2),
@@ -921,7 +921,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
         "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
         "quote_currency": q["quote_currency"], "pair": pair,
         "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fca": round(wf.fca, 2),
-                "fba": round(wf.fba, 2), "fva": round(wf.fva, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
+                "fba": round(wf.fba, 2), "fva": round(wf.fca, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
@@ -1056,7 +1056,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
         "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
         "quote_currency": q["quote_currency"], "pair": pair, "style": spec.style, "expiry_step": None,
         "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fca": round(wf.fca, 2),
-                "fba": round(wf.fba, 2), "fva": round(wf.fva, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
+                "fba": round(wf.fba, 2), "fva": round(wf.fca, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
@@ -1185,7 +1185,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
         "csa": csa.to_dict(), "steps": meta["steps"], "dt": meta["dt"], "n_paths": meta["n_paths"],
         "quote_currency": quotes[0]["quote_currency"], "pair": pair, "package": True, "legs": legs,
         "xva": {"npv": round(npv, 2), "cva": round(wf.cva, 2), "dva": round(wf.dva, 2), "fca": round(wf.fca, 2),
-                "fba": round(wf.fba, 2), "fva": round(wf.fva, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
+                "fba": round(wf.fba, 2), "fva": round(wf.fca, 2), "kva": round(wf.kva, 2), "mva": round(wf.mva, 2), "colva": round(wf.colva, 2),
                 "xva_total": round(wf.xva_total, 2), "all_in": round(npv + wf.xva_total, 2),
                 "annuity": round(float(sum(meta["p0_grid"][1:1 + meta["steps"]]) * meta["dt"]), 6) if meta.get("p0_grid") else None,
                 "im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2)},
@@ -1206,7 +1206,13 @@ class IncrementalXvaRequest(BaseModel):
     n_paths: Optional[int] = Field(default=None, ge=200, le=5000)
 
 
-XVA_KEYS = ("cva", "dva", "fca", "fba", "kva", "mva", "colva")          # the components; FVA is fca + fba and is added where a set is returned
+XVA_KEYS = ("cva", "dva", "fca", "fba", "kva", "mva", "colva")          # the components
+# LEGACY_FVA. FVA is FCA + FBA (the taxonomy; 0.41.0). The key `fva` in a response does not say that yet: it is still
+# the funding cost, the same number as `fca`, because a browser tab opened before the release keeps running the old
+# app, which reads `fva` as the cost and adds FBA beside it. Had `fva` become the sum under it, that tab would have
+# counted FBA twice in its strip, its capital cost and its incremental table (Vera, 15 November 2026). The app since
+# 0.41.0 reads `fca` and `fba` and works FVA out itself; it never reads `fva`. To be dropped, or made the sum, in a
+# later release, when no tab from before can be open.
 
 
 def hypothetical_trade(d: dict, counterparty_id, user_id: str):
@@ -1245,11 +1251,12 @@ def hypothetical_trade(d: dict, counterparty_id, user_id: str):
 
 
 def xva_levels(rep: Optional[dict]) -> dict:
-    """The components, their total, and FVA (FCA + FBA) from a counterparty report; zeros for an empty set."""
+    """The components and their total from a counterparty report (and `fva`, the cost again, for an older app:
+    LEGACY_FVA); zeros for an empty set."""
     x = (rep or {}).get("xva") or {}
     out = {k: float(x.get(f"{k}_usd") or 0.0) for k in XVA_KEYS}
     out["total"] = sum(out.values())
-    out["fva"] = out["fca"] + out["fba"]            # after the total: FVA is two of the components, not one more
+    out["fva"] = out["fca"]                         # after the total, and not part of it: LEGACY_FVA
     return out
 
 

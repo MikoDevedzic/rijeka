@@ -94,6 +94,7 @@ def cva(V_rn: np.ndarray, t: np.ndarray, p0: list[float], csa: CSA, notional_usd
     params = WaterfallParams(notional=max(notional_usd, 1.0), maturity_y=float(t[-1]), dt=dt, theta=max(theta, 1e-6), cp_cds_bp=cp_cds_bp, lgd=lgd)
     wf = run_waterfall(V_rn[:, 1:], v0, p0, params, csa)
     f = lambda x: float(x)
-    return {"cva_usd": f(wf.cva), "dva_usd": f(wf.dva), "fca_usd": f(wf.fca), "fba_usd": f(wf.fba), "fva_usd": f(wf.fca + wf.fba), "kva_usd": f(wf.kva), "mva_usd": f(wf.mva),
+    return {"cva_usd": f(wf.cva), "dva_usd": f(wf.dva), "fca_usd": f(wf.fca), "fba_usd": f(wf.fba), "fva_usd": f(wf.fca),          # the cost again, for an app from before 0.41.0 (api/routes/xva.py LEGACY_FVA); pnl/xva.py reads fca_usd
+             "kva_usd": f(wf.kva), "mva_usd": f(wf.mva),
             "colva_usd": f(wf.colva), "total_usd": f(wf.cva + wf.dva + wf.fca + wf.fba + wf.kva + wf.mva + wf.colva), "cp_cds_bp": cp_cds_bp, "lgd": lgd,
             "ee_rn": [f(x) for x in wf.ee], "pfe95_rn": [f(x) for x in wf.pfe]}

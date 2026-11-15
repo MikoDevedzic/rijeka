@@ -6,7 +6,8 @@ Turns simulated MtM paths into exposure profiles and the XVA waterfall
 
 Funding: FCA is the cost of funding what is owed to us and is not collateralised, FBA the benefit where we owe,
 and FVA is the two together (FVA = FCA + FBA). Until 0.41.0 the cost alone was called FVA here and on every
-screen; the figures are the same, the names are the ones the taxonomy fixes.
+screen; the figures are the same, the names are the ones the taxonomy fixes. (`WaterfallResult.fva` is the sum.
+The key `fva` in an API response is not, yet: api/routes/xva.py LEGACY_FVA.)
 The route (api/routes/xva.py) generates the paths and hands them here.
 
 Grid convention (inherited from the route)

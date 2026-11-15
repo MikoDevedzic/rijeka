@@ -419,7 +419,7 @@ export function VaStrip({ rows, fmt = fmtDollar, expanded, setExpanded, onHighli
           </div>
         )}
         {fva != null && (
-          <div style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-fva">
+          <div className="va-sum" style={{...VA_ROW,gridTemplateColumns:cols}} data-testid="va-fva">
             <div style={{...VA_NAME,padding:'4px 8px 7px 0'}}>FVA = FCA + FBA</div>
             {rows.map(row => {
               const part = row.key === 'fca' || row.key === 'fba'

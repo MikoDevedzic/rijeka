@@ -228,6 +228,9 @@ One rule for the whole app, held by Iris (`.claude/agents/iris.md`) and by a che
   step of the scale at the fixed root of 14px, a tie upward (0.75rem, 10.5px, is a label's 11; 0.875rem, 12.25px,
   is a value's 12.5; a rail's link is 12). The next pages are P&L and Risk, each with pictures before and after
   (`LOOK_TAG=before npx playwright test -c playwright.perf.config.js look.spec.js`).
+- **A sum of what stands beside it** (FVA = FCA + FBA) is a row of its own under its parts, named by its formula,
+  quiet, with a rule over the columns it adds. It is never a column of the total and is never added twice. On a
+  phone, where the strip is turned on its side, it is left out and the note under the strip says it.
 
 ## Type on the ticket
 

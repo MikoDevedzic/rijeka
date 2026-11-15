@@ -207,3 +207,30 @@ def test_a_fresh_seed_moves_the_numbers_within_the_monte_carlo_error_and_the_sam
     b, _ = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=2000, seed=42)
     c, _ = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=2000, seed=7)
     assert a.cva == b.cva and a.cva != c.cva and abs(a.cva - c.cva) < 0.15 * abs(a.cva)
+
+
+# ── the funding adjustments in what the API returns (0.41.0) ─────────────────────────────────────────────────────────
+def test_the_total_is_the_seven_components_and_the_old_key_is_the_cost_again_not_one_more():
+    """FVA is FCA + FBA, and is no part of a total of its own. The key `fva` an older app reads is kept for it, as
+    the cost, beside the components and outside the total (api/routes/xva.py LEGACY_FVA)."""
+    from api.routes.xva import XVA_KEYS
+    assert "fca" in XVA_KEYS and "fba" in XVA_KEYS and "fva" not in XVA_KEYS
+    r = {"xva": {"cva_usd": -100.0, "dva_usd": 40.0, "fca_usd": -10.0, "fba_usd": 5.0, "fva_usd": -10.0, "kva_usd": -20.0, "mva_usd": -3.0, "colva_usd": 1.5}}
+    w = xva_levels(r)
+    assert w["total"] == pytest.approx(-100.0 + 40.0 - 10.0 + 5.0 - 20.0 - 3.0 + 1.5)          # FBA once, the cost once
+    assert w["fva"] == w["fca"] == -10.0
+    assert set(w) == set(XVA_KEYS) | {"total", "fva"}
+    # a run made before the rename has no fca_usd: the levels still read, with nothing for the cost, and the route
+    # only ever reads runs it has just made
+    assert xva_levels({"xva": {"cva_usd": -1.0}})["fca"] == 0.0
+
+
+def test_a_counterparty_runs_xva_names_the_cost_twice_with_one_number_and_totals_it_once():
+    import numpy as np
+    from ccr.exposure import cva as run_xva
+    from pricing.csa import CSA
+    t = np.array([0.0, 0.5, 1.0])
+    V = np.array([[100.0, 150.0, 40.0], [100.0, -60.0, -20.0], [100.0, 20.0, 90.0], [100.0, -10.0, 10.0]]) * 1e4
+    x = run_xva(V, t, [1.0, 0.98, 0.96], CSA(), 1e7)
+    assert x["fca_usd"] < 0 < x["fba_usd"] and x["fva_usd"] == x["fca_usd"]
+    assert x["total_usd"] == pytest.approx(x["cva_usd"] + x["dva_usd"] + x["fca_usd"] + x["fba_usd"] + x["kva_usd"] + x["mva_usd"] + x["colva_usd"])

@@ -28,7 +28,8 @@ DEFAULT_NETTED = ("CVA", "DVA", "FCA", "FBA")
 
 def stored_component(x: dict, k: str) -> float:
     """A component's level in a counterparty run's `xva`, as stored. A run stored before 0.41.0 has the funding
-    cost under `fva_usd` and no `fca_usd`; one stored since has both, `fva_usd` being FCA + FBA."""
+    cost under `fva_usd` and no `fca_usd`; one stored since has both, with the same number (api/routes/xva.py
+    LEGACY_FVA)."""
     v = x.get(f"{k}_usd")
     if v is None and k == "fca":
         v = x.get("fva_usd")

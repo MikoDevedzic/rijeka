@@ -11,10 +11,12 @@ methodology document carries its own version (v1.23). Commits on `main` are the 
   it. The cost is now FCA everywhere (the engine, the API, the XVA tab, the incremental charge, the reserves, the
   capital views, the workbooks, the methodology), FBA is as it was, and FVA is the two together: a line under the
   XVA tab's figures and a sum row in the incremental table, never one more part of the total.
-- **The API.** Every `xva` object carries `fca`, `fba` and `fva`; `fva` is now the sum, where it was the cost.
-  A counterparty run carries `fca_usd` beside `fva_usd` in the same way. A run stored before this release, and a
-  netting policy that says FVA, are read as the cost (FCA): no migration, and the day's XVA P&L across the
-  release is the change, not the level.
+- **The API.** Every `xva` object carries `fca` and `fba`. The key `fva` is still there and is still the funding
+  cost, the same number as `fca`: a browser tab opened before this release keeps running the old app, which
+  reads `fva` as the cost, and a change of meaning under it would have had it count FBA twice. Read `fca`;
+  `fva` will be dropped or made the sum in a later release. The app works FVA out from `fca` and `fba`. A run
+  stored before this release, and a netting policy that says FVA, are read as the cost (FCA): no migration, and
+  the day's XVA P&L across the release is the change, not the level.
 - **XVA is valuation, not counterparty risk.** The methodology reader's syllabus and its list of workbooks had the
   XVA sections and workbooks under "Counterparty risk"; they are in a group of their own, "Valuation adjustments
   (XVA)". Counterparty risk keeps netting, EPE, PFE and credit limits. The README says the same.

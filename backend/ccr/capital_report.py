@@ -94,7 +94,8 @@ def metrics_of(wf, regime: COL.Regime, cash_vm_fraction: float) -> dict:
     lev = CAP.leverage_exposure(wf.v_mean_0, wf.coll_mean_0 * cash_vm_fraction, wf.addon_0)
     hq = regime.hqla_value(wf.im_0, "posted")["total"] if wf.im_0 else 0.0
     m = {"im": wf.im_0, "ead": wf.ead_0, "rwa": wf.rwa_0, "k_ccr": wf.capital_0, "k_cva": wf.k_cva_0,
-         "kva": wf.kva, "kva_ccr": wf.kva_ccr, "kva_cva": wf.kva_cva, "mva": wf.mva, "cva": wf.cva, "dva": wf.dva, "fca": wf.fca, "fba": wf.fba, "fva": wf.fca + wf.fba, "colva": wf.colva,
+         "kva": wf.kva, "kva_ccr": wf.kva_ccr, "kva_cva": wf.kva_cva, "mva": wf.mva, "cva": wf.cva, "dva": wf.dva, "fca": wf.fca, "fba": wf.fba, "fva": wf.fca, "colva": wf.colva,          # `fva`: the cost again, for an older app (LEGACY_FVA)
+        
          "xva_total": wf.xva_total, "leverage": lev, "hqla_im": hq, "addon": wf.addon_0, "rc": wf.rc_0, "multiplier": wf.multiplier_0}
     m["cost"] = -sum(m[k] for k in COST_KEYS)
     return m
