@@ -345,3 +345,26 @@ test('the Market risk page lists what fixes, day by day: each index, the net tha
   await panel.scrollIntoViewIfNeeded(); await shot(panel, 'risk-fixings')
   expectClean(problems)
 })
+
+test('trader home: scrolled to its end, the last band is clear of the chat button', async ({ app, problems }) => {
+  await app.goto('/command-center')
+  const home = app.getByTestId('trader-home')
+  await expect(home).toBeVisible()
+  const launcher = app.locator('.ms-launcher')
+  await expect(launcher).toBeVisible()
+  // scroll whatever scrolls the home to its end
+  await home.evaluate(el => {
+    let n = el
+    while (n && n !== document.documentElement) {
+      if (n.scrollHeight > n.clientHeight + 1 && /(auto|scroll)/.test(getComputedStyle(n).overflowY)) n.scrollTop = n.scrollHeight
+      n = n.parentElement
+    }
+    window.scrollTo(0, document.documentElement.scrollHeight)
+  })
+  const last = home.locator('.th-two')
+  await expect(last).toBeVisible()
+  const [a, b] = [await last.boundingBox(), await launcher.boundingBox()]
+  expect(a.y + a.height, 'the last band ends above the chat button').toBeLessThanOrEqual(b.y)
+  await app.screenshot({ path: 'e2e/.out/shots/trader-home-end.png' })
+  expectClean(problems)
+})

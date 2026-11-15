@@ -2,7 +2,7 @@
    apart, on the page's own ground. Sizes are steps of the scale in px (docs/design.md): a label 11, a value 12.5,
    words 13 to 16, the one headline figure 20. Colour is by meaning: a sign, a caution (amber), past a limit
    (--down), a risk factor's own colour on its name and its stream. */
-.th { gap: 0; }
+.th { gap: 0; padding-bottom: 96px; }   /* the page ends above the chat button (fixed, 50px, 28px from the corner): scrolled to its end, nothing of the last band lies under it */
 .th > * { flex-shrink: 0; }                 /* the page is a column that may scroll: no band gives way to another (the rates strip has no least height of its own) */
 .th-k { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--text-dim); text-transform: uppercase; }
 .th-k b { font-weight: 500; margin-left: 6px; color: var(--text-mute); }
