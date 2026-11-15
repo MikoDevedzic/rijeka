@@ -70,7 +70,7 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
         <SectionLabel sub="a source your desk supplies; a second entry for the same date and source replaces the first">ENTER A FIXING</SectionLabel>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end', marginBottom: 12 }}>
           <label style={{ display: 'block' }}><span className="lbl">SOURCE</span>
-            <select className="inp" data-testid="fixing-source" style={{ width: 240 }} value={picked} onChange={e => setSource(e.target.value)}>
+            <select className="inp" data-testid="fixing-source" style={{ width: 300 }} value={picked} onChange={e => setSource(e.target.value)}>
               {desk.map(s => <option key={s.source} value={s.source}>{s.time ? `${s.source} · ${s.time}` : s.source}</option>)}
             </select>
           </label>

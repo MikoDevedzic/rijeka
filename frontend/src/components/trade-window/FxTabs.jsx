@@ -278,6 +278,8 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
         [crypto || ndf ? 'SETTLEMENT DATE' : 'VALUE DATE', quote.settlement_date, done ? (done === 'SETTLED' ? 'settled' : 'fixed, not yet settled') : `T = ${fmt(quote.t, 4)}y · ACT/365`],
         ['SETTLEMENT', crypto || ndf ? `CASH · ${payCcy}` : 'PHYSICAL · both currencies', crypto || ndf ? `net of (fixing − K)${payCcy === quote.base_currency ? ' / fixing' : ''} × ${fmt(quote.base_notional, crypto ? 4 : 0)} ${quote.base_currency}` : 'full exchange of principals'],
         [crypto || ndf ? 'FIXING SOURCE' : 'FIXING', crypto || ndf ? (t.settlement_price_source || t.fixing_source || quote.fixing_source || '—') : 'none (deliverable)', crypto || ndf ? `on ${t.fixing_date || t.valuation_date || quote.fixing_date || quote.settlement_date}${t.valuation_time ? ' · ' + t.valuation_time : ''}` : ''],
+        // a currency NDF's fixing date is a term of its own: the day its rate is read, before the day it is paid
+        ...(ndf && !crypto ? [['FIXING DATE', t.fixing_date || quote.fixing_date || quote.settlement_date, 'the rate fixed is the spot rate for delivery on the settlement date; from this date the trade is one amount']] : []),
         ['CALCULATION AGENT', t.calculation_agent || 'none named', crypto ? (t.disruption_fallback || '') : ''],
       ]} />
       </div><div>
