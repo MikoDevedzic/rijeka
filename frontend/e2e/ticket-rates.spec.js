@@ -91,10 +91,10 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   // under the figures and not as a tile that ALL-IN would count twice
   const out = win.getByTestId('xva-outputs')
   await expect(out).toContainText('FCA'); await expect(out).toContainText('FBA')
+  const fvaSum = first.xva.fca + first.xva.fba
   await expect(out).toContainText('FVA = FCA + FBA')
   await expect(out.getByTestId('va-fva'), 'the sum is on the strip, under the two it is made of').toBeVisible()
   expect(Math.abs(Number((await out.getByTestId('va-fva').innerText()).replace(/[^0-9]/g, '')) - Math.abs(Math.round(fvaSum))), 'and is FCA + FBA to the dollar').toBeLessThanOrEqual(1)
-  const fvaSum = first.xva.fca + first.xva.fba
   expect(first.xva.fva, 'the API still answers an older app with the cost under its old key').toBe(first.xva.fca)
   // the saving line is one row: every part sits on the same line as the label
   const tops = await saving.locator('span:visible').evaluateAll(els => els.map(e => Math.round(e.getBoundingClientRect().bottom)))
