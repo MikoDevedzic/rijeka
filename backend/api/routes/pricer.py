@@ -1437,35 +1437,45 @@ class CapFloorRequest(BaseModel):
 
 
 def _load_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
-    """Load cap vol surface rows for a given date, user-scoped. Falls back to most recent user-owned date if not found."""
+    """Load cap vol surface rows for a given date, user-scoped. Falls back to most recent user-owned date if not found.
+    Inside a report it is read once for the date (db/reading.py); each caller gets rows of its own. A read that
+    fails gives no rows, as it always has, and is not kept: the next valuation of the report asks again (a surface
+    that could not be read once must not be an empty surface for every trade after it)."""
+    from db.reading import read_once
     try:
-        rows = db.execute(
-            text("""
-                SELECT cap_tenor_y, strike_spread_bp, flat_vol_bp, is_atm, source
-                FROM   cap_vol_surface
-                WHERE  valuation_date = :vd AND user_id = :user_id
-                ORDER  BY cap_tenor_y, strike_spread_bp
-            """),
-            {"vd": val_date, "user_id": user_id}
-        ).mappings().all()
-        if rows:
-            return [dict(r) for r in rows]
-        # Fallback to most recent available date owned by this user
-        rows = db.execute(
-            text("""
-                SELECT cap_tenor_y, strike_spread_bp, flat_vol_bp, is_atm, source
-                FROM   cap_vol_surface
-                WHERE  valuation_date = (
-                    SELECT MAX(valuation_date) FROM cap_vol_surface WHERE user_id = :user_id
-                )
-                  AND  user_id = :user_id
-                ORDER  BY cap_tenor_y, strike_spread_bp
-            """),
-            {"user_id": user_id}
-        ).mappings().all()
-        return [dict(r) for r in rows]
+        rows = read_once(("cap_surface", str(user_id), str(val_date)), lambda: _read_cap_surface(db, val_date, user_id))
     except Exception:
         return []
+    return [dict(r) for r in rows]
+
+
+def _read_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
+    """The rows as the database has them; raises when the database does not give them."""
+    rows = db.execute(
+        text("""
+            SELECT cap_tenor_y, strike_spread_bp, flat_vol_bp, is_atm, source
+            FROM   cap_vol_surface
+            WHERE  valuation_date = :vd AND user_id = :user_id
+            ORDER  BY cap_tenor_y, strike_spread_bp
+        """),
+        {"vd": val_date, "user_id": user_id}
+    ).mappings().all()
+    if rows:
+        return [dict(r) for r in rows]
+    # Fallback to most recent available date owned by this user
+    rows = db.execute(
+        text("""
+            SELECT cap_tenor_y, strike_spread_bp, flat_vol_bp, is_atm, source
+            FROM   cap_vol_surface
+            WHERE  valuation_date = (
+                SELECT MAX(valuation_date) FROM cap_vol_surface WHERE user_id = :user_id
+            )
+              AND  user_id = :user_id
+            ORDER  BY cap_tenor_y, strike_spread_bp
+        """),
+        {"user_id": user_id}
+    ).mappings().all()
+    return [dict(r) for r in rows]
 
 
 @router.post("/api/price/cap")

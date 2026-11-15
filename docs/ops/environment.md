@@ -127,3 +127,21 @@ Read at build time by Vite; set them in Netlify's build environment or a local `
 | `RIJEKA_WORKER_NAME` | `worker.py` | host:pid (Render's instance id) | The name in `worker_heartbeat`, shown on `/api/ops/health` under `worker`. |
 | `RIJEKA_CHAIN_SYNC_WAIT_S` | `chain/pending.py` | `25` (the backend's full timeout when the `pending_anchors` table is missing or the value is `0`) | Seconds `POST /api/chain/confirm` waits for the receipt before answering 202 and leaving the anchor to reconciliation. Not read by `POST /api/chain/confirm-package`, which waits in the request (docs/ops/deploy.md). |
 
+## The machines
+
+What the hosted demo runs on, so that a size is read here and not guessed.
+
+| Piece | Host | Size | Where it is set |
+|---|---|---|---|
+| The API | Render, `rijeka-api` | 1 CPU, 2 GB, one instance | `render.yaml` and the service's Settings |
+| The database | Supabase | Small compute (2 GB), since 15 November 2026 | the project's Settings, Infrastructure |
+| The app, the public site | Netlify | static files | nothing to size |
+
+A plan and a size are two settings. The Supabase organisation went to the Pro plan on the morning of 15 November
+2026 and the project stayed on the Nano machine it had (0.5 GB), because a change of size restarts the database
+and is never made for you. That afternoon the database, in swap all day, stopped answering for two hours and
+twenty minutes. After any change of plan, read the size the project is on.
+
+`rijeka-worker` on Render has been suspended since 7 November 2026 and nothing uses it: the batches run in the
+API's own process (`backend/scheduler.py`).
+

@@ -131,6 +131,44 @@ def due(group: str, now: Optional[float] = None) -> bool:
     return last is None or now - last >= period - 5
 
 
+NO_ANSWER = "the database did not answer; the group runs at the next pass"
+ASK_AGAIN_S = 2.0                     # between the two times the question is asked
+
+
+def database_answers(session_factory=None) -> bool:
+    """One cheap question before a group runs. In the outage of 15 November 2026 every statement timed out, and the
+    batches' own presence checks read that as tables that were not there: two steps were recorded as having run,
+    with 'apply the migration' for their result. A group is not started against a database that does not answer."""
+    if session_factory is None:
+        from db.session import SessionLocal
+        session_factory = SessionLocal
+    try:
+        db = session_factory()
+    except Exception as e:                # noqa: BLE001
+        log.warning("scheduler: no session for the database: %s", type(e).__name__)
+        return False
+    try:
+        from sqlalchemy import text
+        for again in (False, True):       # asked twice: one dropped connection is not a database that is down
+            try:
+                db.execute(text("SELECT 1"))
+                return True
+            except Exception as e:        # noqa: BLE001 — whatever it is, the database did not answer
+                log.warning("scheduler: the database did not answer%s: %s", " a second time" if again else "", type(e).__name__)
+                try:
+                    db.rollback()
+                except Exception:         # noqa: BLE001
+                    pass
+                if not again:
+                    time.sleep(ASK_AGAIN_S)
+        return False
+    finally:
+        try:
+            db.close()
+        except Exception:                 # noqa: BLE001
+            pass
+
+
 def run_step(name: str, fn: Callable[..., Any], secret: str, session_factory=None) -> bool:
     """One batch in its own session; the result or the error is recorded, never raised."""
     if not secret:
@@ -166,9 +204,21 @@ def run_cycle(steps=None, now: Optional[float] = None, session_factory=None) -> 
     now = time.time() if now is None else now
     secret = os.getenv("RIJEKA_CRON_SECRET", "")
     ran: list[str] = []
+    answers: Optional[bool] = None        # asked once a pass, when a group that has jobs is due (the every-pass group
+                                          # always is, so on the hosted API that is once a minute)
     for group in GROUPS:
         if not due(group, now):
             continue
+        if secret and any(g == group for _, g, _fn in steps):
+            if answers is None:
+                answers = database_answers(session_factory)
+            if not answers:
+                # Not marked as run: the group is due again at the next pass (a minute), so what an outage cost is
+                # made up when the database is back, not at the group's next turn (two hours, for the daily one).
+                for name, g, _ in steps:
+                    if g == group:
+                        _record(name, False, NO_ANSWER)
+                continue
         _last_group_run[group] = now
         for name, g, fn in steps:
             if g != group:

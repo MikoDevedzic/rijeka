@@ -169,6 +169,14 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
 
 
 def report(db: Session, user: dict, asof: Optional[date] = None, only_counterparty: Optional[str] = None, progress: Optional[dict] = None, exposure: bool = True) -> dict[str, Any]:
+    """The counterparty credit report for a book, made with one reading of what its valuations read unchanged
+    (db/reading.py)."""
+    from db.reading import one_reading
+    with one_reading():
+        return _report(db, user, asof, only_counterparty, progress, exposure)
+
+
+def _report(db: Session, user: dict, asof: Optional[date] = None, only_counterparty: Optional[str] = None, progress: Optional[dict] = None, exposure: bool = True) -> dict[str, Any]:
     uid = user["sub"]
     from risk.report import firm_of, template_uid
     dates = Market.dates(db, uid, upto=asof or date.today())

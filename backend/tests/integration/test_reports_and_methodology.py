@@ -184,3 +184,36 @@ def test_risk_report_carries_each_curves_risk_at_its_quoted_tenors(client, auth_
     options = {k: g for k, g in gaps.items() if k.split()[0] in ("IR_CAP", "IR_FLOOR", "IR_COLLAR")}
     assert len(options) >= 3 and max(options.values()) < 2e-2, options          # the buckets' own convexity over 1bp
     assert max(gaps.values()) < 2e-2, gaps
+
+
+def _statements(client, url: str, headers: dict):
+    """The SQL statements one request sends to the database, as the engine sees them: (the answer, [statement])."""
+    import db.session as s
+    from sqlalchemy import event
+    seen: list[str] = []
+
+    def note(conn, cursor, statement, parameters, context, executemany):
+        seen.append(" ".join(str(statement).split())[:90])
+
+    event.listen(s.engine, "before_cursor_execute", note)
+    try:
+        r = client.get(url, headers=headers)
+    finally:
+        event.remove(s.engine, "before_cursor_execute", note)
+    return r, seen
+
+
+def test_a_live_risk_report_reads_once_what_no_valuation_changes(client, auth_a, booked):
+    """The ladder values each trade once for every bump (since 0.40.0, every quoted tenor too). What the pricer reads
+    from the database for a valuation is the same each time: the cap surface for the date, a swaption's legs. Before
+    db/reading.py this report sent 233 statements for the twelve trades booked here, 129 of them the cap surface and
+    57 a trade's legs; it now sends 54. The bounds leave room for a larger book, not for a read inside the loop."""
+    from collections import Counter
+    r, seen = _statements(client, "/api/risk/report?live=1", auth_a)
+    assert r.status_code == 200, r.text
+    trades = len(r.json().get("ladder_rows") or [])
+    assert trades >= 10, "the book this test counts on"
+    said = "; ".join(f"{n} x {stmt[:60]}" for stmt, n in Counter(seen).most_common(6))
+    assert sum("FROM cap_vol_surface" in stmt for stmt in seen) <= 2, f"the cap surface is read once for the date (twice when it falls back): {said}"
+    assert sum(stmt.startswith("SELECT trade_legs.") for stmt in seen) <= trades, f"a trade's legs are read once: {said}"
+    assert len(seen) <= 80, f"{len(seen)} statements for {trades} trades: {said}"
