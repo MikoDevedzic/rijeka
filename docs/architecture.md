@@ -67,9 +67,14 @@ prints of one source (the PDF by `tectonic`, the tracked copy the app serves und
 pages) and a change to the `.tex` is finished when all three are rebuilt (`docs/ops/release.md` has the line). Each
 section has an address (`/methodology/:section`). `katex` is a frontend dependency for this page alone: the build
 script sets the formulas with it, and the browser loads only its stylesheet and fonts. The first page draws this
-map (`architecture-data.js` restates it, and `architecture.test.js` holds its route names and batch cadences to the
-API's own source; `Architecture.jsx` draws it with three.js through `lib/three.js`) and shows the API's public
-health answer under it, fetched without a token. Nothing on the page is asked of the Rijeka API except the list of
+map as a scene (`Architecture.jsx`, with three.js through `lib/three.js`): the app a trader uses in the middle, the
+API behind it, each piece on a slab for the host it runs on (the trader's browser, Netlify, Render, Supabase,
+GitHub), and three things followed through them step by step: a trade, a change to the code past its reviewers and
+the six checks to production, and what the scheduler does by itself. `architecture-data.js` restates this page, and
+`architecture.test.js` holds it to the sources: each route it names to the API's routers, the batch cadences to
+the scheduler's defaults, the six checks to the jobs of `.github/workflows/ci.yml`, each reviewer drawn to a
+definition in `.claude/agents`, and each hosted piece to its host's slab. It shows the API's public
+health answer under the scene, fetched without a token. Nothing on the page is asked of the Rijeka API except the list of
 workbooks and that health answer; the findings log reads GitHub's public issues, as it did. The System page
 (`configurations/SystemPage.jsx`) reads the same health answer with labels of its own: two wordings of one body,
 to be made one.

@@ -1,9 +1,9 @@
-// The methodology read in place: how the system is built (a trade followed through the pieces, the API's own
-// health answer under it), the document's nineteen sections with their formulas and the PDF's numbering, the
+// The methodology read in place: how the system is built (a trade, a change to the code and the clock followed
+// through the pieces, each on its host; the API's own health answer under it), the document's nineteen sections with their formulas and the PDF's numbering, the
 // evidence beside a section, a worked table that reprices, and a reference in the text that goes where it says.
 import { test, expect, expectClean, expectNoHorizontalOverflow } from './fixtures.js'
 
-test('methodology: the system page follows a trade, names a piece, and shows the API\'s own health answer', async ({ app, problems }) => {
+test('methodology: the system page follows a trade, a change and the clock, names a piece, and shows the API\'s own health answer', async ({ app, problems }) => {
   const asked = app.waitForResponse(r => r.url().endsWith('/api/ops/health'))
   await app.goto('/methodology')
   await expect(app.getByRole('heading', { level: 1, name: 'How the system is built' })).toBeVisible()
@@ -16,7 +16,11 @@ test('methodology: the system page follows a trade, names a piece, and shows the
   const box = await app.getByTestId('mr-piece-api').boundingBox(), frame = await stage.boundingBox()
   expect(box.x - frame.x, 'the API\'s name is placed in the scene').toBeGreaterThan(100)
   // every piece has its name, whichever way the scene is shown
-  for (const id of ['app', 'land', 'api', 'auth', 'pg', 'chain', 'pub', 'venue', 'ai', 'tg']) await expect(app.getByTestId(`mr-piece-${id}`)).toBeVisible()
+  for (const id of ['app', 'files', 'land', 'api', 'auth', 'pg', 'chain', 'pub', 'venue', 'ai', 'tg', 'branch', 'vera', 'ci', 'main', 'jarvis', 'release']) await expect(app.getByTestId(`mr-piece-${id}`)).toBeVisible()
+  // the app is what the picture is built around: it stands nearer the reader than the API behind it, and neither name covers the other
+  const appName = await app.getByTestId('mr-piece-app').boundingBox()
+  expect(appName.y, 'the app stands in front of the API').toBeGreaterThan(box.y + box.height)
+  await stage.screenshot({ path: 'e2e/.out/shots/system-whole.png' })
 
   // a step says what happens and names its routes
   const say = app.getByTestId('mr-say')
@@ -39,6 +43,37 @@ test('methodology: the system page follows a trade, names a piece, and shows the
   await expect(app.getByTestId('mr-tour')).toHaveText('▶ FOLLOW A TRADE')
   await app.getByTestId('mr-step-all').click()
   await expect(say).toContainText('THE WHOLE MAP')
+  await app.getByTestId('mr-step-4').click()
+  await app.waitForTimeout(400)
+  await stage.screenshot({ path: 'e2e/.out/shots/system-book.png' })
+
+  // a change to the code: past the reviewers, each named and each in a colour of its own, then the six checks
+  await app.getByTestId('mr-story-change').click()
+  await expect(app.getByTestId('mr-story-change')).toHaveAttribute('aria-pressed', 'true')
+  await expect(say).toContainText('1 · PROPOSE')
+  await expect(app.getByTestId('mr-tour')).toHaveText('▶ FOLLOW A CHANGE')
+  await app.getByTestId('mr-step-c2').click()
+  await expect(say).toContainText('2 · THE GATES')
+  for (const id of ['quinn', 'ada', 'emmy', 'iris', 'vera', 'magnus', 'nikola', 'edgar']) await expect(app.getByTestId(`mr-piece-${id}`), `${id} is passed`).toHaveClass(/\bpass\b/, { timeout: 15_000 })
+  const colours = await app.evaluate(() => ['quinn', 'ada', 'emmy', 'iris', 'vera', 'magnus', 'nikola', 'edgar'].map(id => getComputedStyle(document.querySelector(`[data-testid="mr-piece-${id}"] .nm`)).color))
+  expect(new Set(colours).size, 'eight reviewers, eight colours').toBe(8)
+  await stage.screenshot({ path: 'e2e/.out/shots/system-gates.png' })
+  await app.getByTestId('mr-step-c3').click()
+  await expect(app.getByTestId('mr-check')).toContainText('all six', { timeout: 15_000 })
+  await stage.screenshot({ path: 'e2e/.out/shots/system-checks.png' })
+  await app.getByTestId('mr-piece-vera').click()
+  await expect(app.getByTestId('mr-piece')).toContainText('VERA · INDEPENDENT REVIEWER')
+  await app.getByTestId('mr-piece-vera').click()
+  // the clock: what runs by itself
+  await app.getByTestId('mr-story-clock').click()
+  await expect(say).toContainText('1 · EVERY 10 MINUTES')
+  await app.getByTestId('mr-zoom-in').click()
+  await app.getByTestId('mr-zoom-out').click()
+  // back to the trade, where the page began
+  await app.getByTestId('mr-story-trade').click()
+  await expect(say).toContainText('1 · SIGN IN')
+  await app.getByTestId('mr-step-all').click()
+  await app.getByTestId('mr-architecture').screenshot({ path: 'e2e/.out/shots/system-page.png' })
 
   // the strip is the API's own answer: the version it reports, and the batches by their own names
   const health = app.getByTestId('mr-health')
@@ -127,6 +162,27 @@ test('methodology: a section reads as the document does, with its evidence, a wo
   await app.getByTestId('mr-prev').click()
   await expect(app).toHaveURL(/\/methodology\/findings$/)
   await app.goBack()
+  expectClean(problems)
+})
+
+test('methodology: on a phone the system page keeps to the screen, and a step names only the pieces it uses', async ({ app, problems }) => {
+  await app.setViewportSize({ width: 390, height: 844 })
+  await app.goto('/methodology')
+  const stage = app.getByTestId('mr-stage')
+  await expect(stage).toHaveAttribute('data-scene', 'on', { timeout: 20_000 })
+  await expect(stage.locator('canvas')).toHaveAttribute('data-ready', 'true')
+  // the whole map: the pieces are named, the reviewers are left to the cards
+  await expect(app.getByTestId('mr-piece-app')).toBeVisible()
+  await expect(app.getByTestId('mr-piece-vera')).toBeHidden()
+  await expectNoHorizontalOverflow(app.getByTestId('mr'), 'the system page on a phone')
+  await stage.screenshot({ path: 'e2e/.out/shots/system-phone-whole.png' })
+  await app.getByTestId('mr-story-change').click()
+  await app.getByTestId('mr-step-c2').click()
+  await expect(app.getByTestId('mr-piece-vera')).toBeVisible()
+  await expect(app.getByTestId('mr-piece-pg'), 'a piece the step does not use is not named').toBeHidden()
+  await expectNoHorizontalOverflow(app.getByTestId('mr'), 'the gates on a phone')
+  await app.waitForTimeout(600)
+  await stage.screenshot({ path: 'e2e/.out/shots/system-phone-gates.png' })
   expectClean(problems)
 })
 

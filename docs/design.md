@@ -161,8 +161,13 @@ two colours carry a late and an on-time batch in the health strip.
 
 How the system is built is a scene, not a diagram: a colour for each kind of piece (what people open in
 limestone, the API in teal, where things are kept in blue, market data coming in in violet, other services in
-rose) and brass for the registry alone. A step lights its pieces and its joins in limestone; only a join that
-reaches the registry is brass. The names are buttons set over the canvas in the interface face, so they stay
+rose, how a change ships in green) and brass for the registry alone. A step lights its pieces; only a join that
+reaches the registry is brass. A line in use takes the colour of the piece that asks and carries a steady stream
+of light along it; nothing in the scene pulses outward or glows in a ring. The app stands in the middle, larger
+than the rest, and keeps its plate; every other name stands without a plate and without its second line until its
+piece is in use or picked, because there are two dozen of them. How a change ships is green, and within it each
+reviewer and each of the six checks has a colour of its own, taken from the tokens (never brass), so that eight
+figures in a row can be told apart. The names are buttons set over the canvas in the interface face, so they stay
 sharp at any size and are read by a screen reader. There is no flat view to choose; where a browser cannot draw
 the scene the names stand in a row and the steps still say what happens.
 

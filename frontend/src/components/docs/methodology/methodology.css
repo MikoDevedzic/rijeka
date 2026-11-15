@@ -117,7 +117,10 @@
 .mr-step .k { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
 .mr-step[aria-pressed="true"] { background: var(--panel-3); border-color: var(--border-glow); color: var(--text-hi); }
 .mr-step.go { color: var(--text-hi); border-color: var(--border-glow); background: var(--panel-2); }
-.mr-stage { position: relative; height: clamp(400px, 60vh, 640px); border: 1px solid var(--border); border-radius: var(--r-3); overflow: hidden;
+/* what is followed (a trade, a change, the clock), and in a line with it what that story is */
+.mr-stories { margin-bottom: 6px; align-items: center; }
+.mr-lede { font-size: 12.5px; color: var(--text-mute); margin-left: 8px; }
+.mr-stage { position: relative; height: clamp(440px, 68vh, 760px); border: 1px solid var(--border); border-radius: var(--r-3); overflow: hidden;
   background: radial-gradient(ellipse 80% 70% at 50% 38%, #10302a 0%, var(--bg-deep) 72%); }
 .mr-stage canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: pan-y; }
 .mr-stage canvas.drag { cursor: grabbing; }
@@ -129,6 +132,25 @@
 .mr-l3.on { border-color: var(--border-glow); background: rgba(22, 51, 45, 0.92); }
 .mr-l3.dim { opacity: 0.38; }
 .mr-l3.sel { border-color: var(--text-hi); }
+/* in the scene a name stands without its plate, and without its second line, until its piece is in use or picked:
+   there are two dozen pieces, and a plate over each would cover what it names */
+.mr-stage[data-scene="on"] .mr-l3:not(.on):not(.sel):not(.hero) { background: none; border-color: transparent; }
+.mr-stage[data-scene="on"] .mr-l3:not(.on):not(.sel):not(.hero) .sb { display: none; }
+.mr-stage[data-scene="on"] .mr-l3:not(.on):not(.sel):not(.hero) .nm { text-shadow: 0 0 6px rgba(8, 23, 20, 0.95), 0 0 2px rgba(8, 23, 20, 0.95); }
+/* the app, which the picture is built around */
+.mr-l3.hero .nm { font-size: 12.5px; letter-spacing: 0.16em; }
+/* a reviewer and a branch are named in their own colour, without a plate: there are many of them in one row */
+.mr-l3.ag, .mr-l3.pl { background: none; border-color: transparent; padding: 1px 4px; }
+.mr-l3.ag .nm, .mr-l3.pl .nm { font-size: 10px; letter-spacing: 0.1em; color: var(--c, var(--text-hi)); }
+.mr-l3.ag .nm::before, .mr-l3.pl .nm::before { display: none; }
+.mr-l3.ag.sel, .mr-l3.pl.sel { border-color: var(--text-hi); background: rgba(8, 23, 20, 0.74); }
+.mr-l3.ag.pass .nm::after { content: " ✓"; }
+/* a host's name, lying at the edge of its slab */
+.mr-h3 { position: absolute; left: 0; top: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.22em; color: var(--text-mute); white-space: nowrap; pointer-events: none; }
+/* the check that has just passed, in its own colour */
+.mr-e3.mr-ck { color: var(--c, var(--text-hi)); border: 1px solid var(--c, var(--border-hi)); }
+.mr-zoom { position: absolute; right: 10px; top: 10px; display: flex; gap: 4px; }
+.mr-zoom .mr-step { padding: 3px 10px; font-size: 14px; letter-spacing: 0; background: rgba(8, 23, 20, 0.74); }
 /* before the scene is drawn, and where it cannot be: the names in a plain wrapping row */
 .mr-stage[data-scene="loading"] .mr-labels, .mr-stage[data-scene="off"] .mr-labels { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; padding: 14px; overflow: auto; }
 .mr-l3.flow { position: static; }
@@ -141,6 +163,7 @@
 .mr-key { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 11px; letter-spacing: 0.08em; color: var(--text-mute); }
 .mr-key span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
 .mr-key i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.mr-key .more { white-space: normal; }
 .mr-side { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; margin-top: 14px; }
 .mr-card { border: 1px solid var(--border); border-radius: var(--r-3); background: var(--panel); padding: 13px 15px; }
 .mr-card h3 { font-size: 11.5px; font-weight: 600; letter-spacing: 0.12em; color: var(--text-hi); margin: 0 0 6px; }
@@ -167,4 +190,8 @@
   .mr-title { font-size: 22px; }
   .mr-stage { height: 330px; }
   .mr-l3 { padding: 2px 6px 3px; } .mr-l3 .sb { display: none; } .mr-l3 .nm { font-size: 10px; letter-spacing: 0.06em; }
+  /* a narrow stage has no room for every name. A step names the pieces it uses; the whole map names the hosts, the
+     app, the API, the database and the registry, and the rest are read from the cards when pressed */
+  .mr-stage[data-scene="on"] .mr-l3.dim, .mr-stage[data-scene="on"][data-step="all"] .mr-l3:not(.anc):not(.sel), .mr-stage[data-scene="on"] .mr-e3 { display: none; }
+  .mr-lede { display: block; margin: 0; flex-basis: 100%; }
 }

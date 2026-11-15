@@ -1,7 +1,10 @@
-// How the system is built, as the methodology's first page draws it: the pieces, what joins them, and a trade's
-// way through. Every sentence here restates docs/architecture.md (the map the architect keeps); when the map
-// changes, this changes with it. architecture.test.js holds each route named here to the API's own routers and
-// the batch cadences to the scheduler's defaults; the sentences themselves are held by the architect's reading.
+// How the system is built, as the methodology's first page draws it: the app a trader uses in the middle, the API
+// behind it, each piece on the host it runs on, and three things followed through them step by step: a trade, a
+// change to the code on its way to production, and what the scheduler does by itself. Every sentence here restates
+// docs/architecture.md (the map the architect keeps); when the map changes, this changes with it.
+// architecture.test.js holds each route named here to the API's own routers, the batch cadences to the scheduler's
+// defaults, the six checks to the CI workflow's jobs and each gate to its definition in .claude/agents; the
+// sentences themselves are held by the architect's reading.
 //
 // A colour says which kind of piece it is. Brass stays what it is everywhere in Rijeka: what is on chain.
 export const KINDS = {
@@ -11,68 +14,153 @@ export const KINDS = {
   chain:  { name: 'ON CHAIN', css: 'var(--accent-hi)', line: 0xf1d488, body: 0x4f4118, lit: 0x6e5a1f },
   feed:   { name: 'MARKET DATA COMING IN', css: 'var(--purple)', line: 0xc1a6ee, body: 0x393263, lit: 0x4f458a },
   other:  { name: 'OTHER SERVICES', css: 'var(--rf-basis)', line: 0xe8a6d0, body: 0x4a2f43, lit: 0x66405c },
+  ship:   { name: 'HOW A CHANGE SHIPS', css: 'var(--up)', line: 0x8fe0ae, body: 0x1f4a35, lit: 0x2c6a4b },
 }
 
-// p: where it stands (x across, z toward the reader); shape: what it is drawn as; h: how high its name sits; cy: where its joins meet it
-export const PIECES = [
-  { id: 'app', kind: 'people', name: 'THE APP', sub: 'app.rijeka.app', p: [-7.2, -2.4], shape: 'screen', h: 2.45, cy: 1.2,
-    note: 'React with Vite, a static build served from Netlify. It talks to the API with the user\'s token and follows the trades table over realtime, so the blotter moves without a reload.' },
-  { id: 'land', kind: 'people', name: 'PUBLIC SITE + VERIFIER', sub: 'rijeka.app', p: [-7.6, 3.4], shape: 'screen', small: true, h: 2.0, cy: 1.0,
-    note: 'The landing pages, the public tools and the verifier, deployed separately from the app. The verifier reads the registry directly; nothing in it trusts Rijeka\'s servers.' },
-  { id: 'api', kind: 'core', name: 'THE API', sub: 'FastAPI, one process', p: [0, 0], shape: 'core', h: 2.75, cy: 1.0,
-    note: 'One FastAPI process, in the same region as the database. Pricing is numpy and scipy on the request path, with curve and trade caches. The scheduler runs the batches inside the same process: digital-asset marks every ten minutes; spots, news and digital-asset fixings every thirty; market data, marks, P&L, risk and credit every two hours, one row a day.' },
-  { id: 'auth', kind: 'store', name: 'SIGN-IN', sub: 'Supabase Auth', p: [4.6, -5.8], shape: 'token', h: 0.95, cy: 0.4,
-    note: 'Supabase Auth issues short-lived signed tokens. The API never sees a password: it checks each token against the public key.' },
-  { id: 'pg', kind: 'store', name: 'DATABASE', sub: 'Postgres', p: [8.6, -2.6], shape: 'db', h: 1.85, cy: 0.75,
-    note: 'Postgres, with row-level security on every table, so a firm reads only its own rows whichever road the request takes. A schema change reaches it only through the API\'s own migration runner, from an approved list.' },
-  { id: 'chain', kind: 'chain', name: 'THE REGISTRY', sub: 'Sepolia', p: [6.4, 1.9], shape: 'blocks', h: 2.0, cy: 0.8,
-    note: 'The registry contract on Sepolia. No owner, no administrative function. A confirmation is the keccak256 hash of the canonical record, signed by both parties under EIP-712.' },
-  { id: 'pub', kind: 'feed', name: 'PUBLIC MARKET DATA', sub: 'central banks, treasuries', p: [-3.6, 6.2], shape: 'hex', h: 0.9, cy: 0.3,
-    note: 'Rates from central banks and treasuries, FX spot from ECB reference rates, digital-asset spot from Coinbase. Curves are rebuilt every two hours, one row a day. On the hosted demo the rates and G10 FX vol surfaces are synthetic and labelled as such.' },
-  { id: 'venue', kind: 'feed', name: 'DERIBIT', sub: 'option marks, forwards', p: [0.3, 6.8], shape: 'hex', h: 0.9, cy: 0.3,
-    note: 'Deribit\'s public API: option marks read at 25 and 50 delta for each expiry, the forward of each expiry, and the daily delivery price at 08:00 UTC, for BTC, ETH and SOL. Three requests every ten minutes.' },
-  { id: 'ai', kind: 'other', name: 'ANTHROPIC API', sub: 'Prometheus, read-only tools', p: [4.2, 6.6], shape: 'hex', h: 0.9, cy: 0.3,
-    note: 'Prometheus, the news summaries and the book brief. It reads the desk\'s tables through read-only tools and changes nothing.' },
-  { id: 'tg', kind: 'other', name: 'TELEGRAM', sub: 'a mirror of trade cards', p: [9.4, 5.6], shape: 'hex', h: 0.9, cy: 0.3,
-    note: 'A mirror of the messenger\'s trade cards, when a desk has it configured.' },
+// The hosts: what stands on a slab runs there. x, z: its middle; w, d: its size; side: its name stands beside it.
+export const HOSTS = [
+  { id: 'github', name: 'GITHUB', x: -3.7, z: -9.6, w: 21.0, d: 3.6 },
+  { id: 'netlify', name: 'NETLIFY', x: -9.6, z: 3.4, w: 5.6, d: 4.4 },
+  { id: 'browser', name: 'THE TRADER\'S BROWSER', x: 0, z: 5.0, w: 6.4, d: 3.6 },
+  { id: 'render', name: 'RENDER', x: 0, z: -2.6, w: 7.0, d: 4.6, side: true },
+  { id: 'supabase', name: 'SUPABASE', x: 9.9, z: -1.8, w: 6.2, d: 5.0 },
 ]
 
-// each join, from the piece that asks to the piece that answers; lift: where the arc must clear what stands between
+// The reviewers a change passes (CLAUDE.md, .claude/agents): each has one job and is called when a change touches
+// its area. A colour of its own, from the tokens; none is brass.
+export const GATES = [
+  { id: 'quinn', name: 'QUINN', role: 'Browser tester', css: 'var(--cyan)', line: 0x7fd3cc, note: 'Clicks through the real app on a local copy of the whole system before a change ships.' },
+  { id: 'ada', name: 'ADA', role: 'Numbers guardian', css: 'var(--rf-vol)', line: 0xcfe08a, note: 'Runs the QuantLib reference suite, the Excel replications and the pinned sample book. Every number that moved is explained.' },
+  { id: 'emmy', name: 'EMMY', role: 'Model validator', css: 'var(--purple)', line: 0xc1a6ee, note: 'Each calculation has a reference comparison, an Excel replication and a methodology section, or the model inventory says which is missing.' },
+  { id: 'iris', name: 'IRIS', role: 'Design keeper', css: 'var(--rf-basis)', line: 0xe8a6d0, note: 'One way of setting type, figures and colour on every screen.' },
+  { id: 'vera', name: 'VERA', role: 'Independent reviewer', css: 'var(--text-hi)', line: 0xf6f1e4, note: 'Reads the change cold, without the author\'s reasoning, and looks for what it breaks in code that already works.' },
+  { id: 'magnus', name: 'MAGNUS', role: 'Security reviewer', css: 'var(--red)', line: 0xf0828c, note: 'Sign-in, roles, tenancy, keys, public endpoints and anything that shows user-supplied text.' },
+  { id: 'nikola', name: 'NIKOLA', role: 'Architect', css: 'var(--blue)', line: 0x8fc1e6, note: 'Keeps this map true to the code, and each new piece in the pattern the system already has for its kind.' },
+  { id: 'edgar', name: 'EDGAR', role: 'Database keeper', css: 'var(--amber)', line: 0xe9975a, note: 'Migrations are one feature each, safe to run again and locked down; the schema file agrees with them.' },
+]
+// The six checks GitHub runs on the commit that ships (.github/workflows/ci.yml: each is a job's name).
+export const CHECKS = [
+  { name: 'backend tests', css: 'var(--cyan)', line: 0x7fd3cc },
+  { name: 'frontend build', css: 'var(--blue)', line: 0x8fc1e6 },
+  { name: 'registry contract tests', css: 'var(--purple)', line: 0xc1a6ee },
+  { name: 'integration tests', css: 'var(--rf-basis)', line: 0xe8a6d0 },
+  { name: 'browser journeys', css: 'var(--amber)', line: 0xe9975a },
+  { name: 'self-host smoke', css: 'var(--rf-vol)', line: 0xcfe08a },
+]
+
+// p: where it stands (x across, z toward the reader); shape: what it is drawn as; h: how high its name sits; cy: where
+// its joins meet it; big: drawn larger (the app, which the picture is built around); plain: named without a second
+// line; agent: a reviewer, drawn as a figure; gate: its place in the line a change passes; css, line: a colour of its own
+export const PIECES = [
+  { id: 'app', kind: 'people', name: 'THE RIJEKA APP', sub: 'app.rijeka.app, in the trader\'s browser', p: [0, 5.0], shape: 'screen', h: 3.05, cy: 1.5, big: true,
+    note: 'React with Vite, a static build served from Netlify. It talks to the API with the user\'s token and follows the trades table over realtime, so the blotter moves without a reload.' },
+  { id: 'files', kind: 'people', name: 'APP FILES', sub: 'a static build', p: [-10.7, 2.6], shape: 'files', h: 1.5, cy: 0.6,
+    note: 'The app built into static files. Netlify hands them to the browser and computes nothing: the app runs in the browser, and every figure on it comes from the API.' },
+  { id: 'land', kind: 'people', name: 'PUBLIC SITE + VERIFIER', sub: 'rijeka.app', p: [-8.5, 4.4], shape: 'files', h: 1.2, cy: 0.45, small: true,
+    note: 'The landing pages, the public tools and the verifier, deployed separately from the app. The verifier reads the registry directly; nothing in it trusts Rijeka\'s servers.' },
+  { id: 'api', kind: 'core', name: 'THE API', sub: 'the engine: Python, one process', p: [0, -2.6], shape: 'core', h: 2.5, cy: 1.0,
+    note: 'One FastAPI process, in the same region as the database. Pricing is numpy and scipy on the request path, with curve and trade caches. The scheduler runs the batches inside the same process: digital-asset marks every ten minutes; spots, news and digital-asset fixings every thirty; market data, marks, P&L, risk and credit every two hours, one row a day.' },
+  { id: 'auth', kind: 'store', name: 'SIGN-IN', sub: 'Supabase Auth', p: [8.6, -3.0], shape: 'token', h: 1.0, cy: 0.4,
+    note: 'Supabase Auth issues short-lived signed tokens. The API never sees a password: it checks each token against the public key.' },
+  { id: 'pg', kind: 'store', name: 'DATABASE', sub: 'Postgres', p: [11.1, -1.0], shape: 'db', h: 1.9, cy: 0.75,
+    note: 'Postgres, with row-level security on every table, so a firm reads only its own rows whichever road the request takes. A schema change reaches it only through the API\'s own migration runner, from an approved list.' },
+  { id: 'chain', kind: 'chain', name: 'THE REGISTRY', sub: 'Sepolia', p: [10.8, 6.0], shape: 'blocks', h: 2.1, cy: 0.8,
+    note: 'The registry contract on Sepolia. No owner, no administrative function. A confirmation is the keccak256 hash of the canonical record, signed by both parties under EIP-712.' },
+  { id: 'pub', kind: 'feed', name: 'PUBLIC MARKET DATA', sub: 'central banks, treasuries', p: [-8.6, -3.4], shape: 'hex', h: 0.95, cy: 0.3,
+    note: 'Rates from central banks and treasuries, FX spot from ECB reference rates, digital-asset spot from Coinbase. Curves are rebuilt every two hours, one row a day. On the hosted demo the rates and G10 FX vol surfaces are synthetic and labelled as such.' },
+  { id: 'venue', kind: 'feed', name: 'DERIBIT', sub: 'option marks, forwards', p: [-5.6, -5.2], shape: 'hex', h: 0.95, cy: 0.3,
+    note: 'Deribit\'s public API: option marks read at 25 and 50 delta for each expiry, the forward of each expiry, and the daily delivery price at 08:00 UTC, for BTC, ETH and SOL. Three requests every ten minutes.' },
+  { id: 'ai', kind: 'other', name: 'ANTHROPIC API', sub: 'Prometheus, read-only tools', p: [4.9, -5.6], shape: 'hex', h: 0.95, cy: 0.3,
+    note: 'Prometheus, the news summaries and the book brief. It reads the desk\'s tables through read-only tools and changes nothing.' },
+  { id: 'tg', kind: 'other', name: 'TELEGRAM', sub: 'a mirror of trade cards', p: [5.9, 8.0], shape: 'hex', h: 0.95, cy: 0.3,
+    note: 'A mirror of the messenger\'s trade cards, when a desk has it configured.' },
+  { id: 'branch', kind: 'ship', name: 'A BRANCH', sub: 'one change', p: [-13.1, -9.4], shape: 'node', h: 1.15, cy: 0.5, plain: true,
+    note: 'Every change is made on a branch. Nothing on a branch touches production.' },
+  { id: 'petra', kind: 'ship', name: 'PETRA', sub: 'Project manager', p: [-12.0, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--text-dim)', line: 0xa9b9ae,
+    note: 'Records every proposal and decision, with its status, before work starts.' },
+  ...GATES.map((g, i) => ({ id: g.id, kind: 'ship', name: g.name, sub: g.role, p: [-10.7 + 1.2 * i, -10.2], shape: 'agent', h: i % 2 ? 2.15 : 1.6, cy: 0.9, agent: true, gate: i, css: g.css, line: g.line, note: g.note })),
+  { id: 'ci', kind: 'ship', name: 'SIX CHECKS', sub: 'on the commit that ships', p: [-0.5, -9.4], shape: 'checks', h: 1.25, cy: 0.5, plain: true,
+    note: 'Backend tests, frontend build, registry contract tests, integration tests, browser journeys and a self-host smoke test, run by GitHub on the commit that ships. All six must pass.' },
+  { id: 'main', kind: 'ship', name: 'MAIN', sub: 'protected, forward only', p: [1.9, -9.4], shape: 'node', h: 1.15, cy: 0.5, plain: true,
+    note: 'The branch production is built from. It is protected: it moves only forward, and only to a commit whose six checks passed.' },
+  { id: 'jarvis', kind: 'ship', name: 'JARVIS', sub: 'Release manager', p: [3.6, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--rf-fx)', line: 0x6fd0c0,
+    note: 'Follows the release checklist and reads the commit back from production before anything is called live.' },
+  { id: 'release', kind: 'ship', name: 'RELEASE', sub: 'what the app is built from', p: [5.7, -9.4], shape: 'node', h: 1.15, cy: 0.5, plain: true,
+    note: 'The branch the app is built from. It moves to a commit only after the live API reports that commit, so the app never runs ahead of its API.' },
+]
+
+// each join, from the piece that asks to the piece that answers; lift: where the arc must clear what stands between;
+// flat: a straight line along the ground (the line a change travels past the gates)
 export const JOINS = [
-  { id: 'app_api', a: 'app', b: 'api', says: 'HTTPS, the user\'s token' },
-  { id: 'app_auth', a: 'app', b: 'auth', lift: 3.0, says: 'sign-in' },
-  { id: 'pg_app', a: 'pg', b: 'app', lift: 3.6, says: 'realtime, filtered by row-level security' },
+  { id: 'files_app', a: 'files', b: 'app', lift: 2.4, says: 'the app\'s files, once' },
+  { id: 'app_api', a: 'app', b: 'api', lift: 2.2, says: 'HTTPS, the user\'s token' },
+  { id: 'app_auth', a: 'app', b: 'auth', lift: 4.6, says: 'sign-in' },
+  { id: 'pg_app', a: 'pg', b: 'app', lift: 5.6, says: 'realtime, filtered by row-level security' },
   { id: 'api_pg', a: 'api', b: 'pg', says: 'SQL' },
   { id: 'api_auth', a: 'api', b: 'auth', says: 'checks the token by public key' },
-  { id: 'api_chain', a: 'api', b: 'chain', says: 'anchor, amend, terminate' },
+  { id: 'api_chain', a: 'api', b: 'chain', lift: 3.4, says: 'anchor, amend, terminate' },
   { id: 'api_ai', a: 'api', b: 'ai', says: 'read-only tools' },
-  { id: 'api_tg', a: 'api', b: 'tg', lift: 2.2, says: '' },
+  { id: 'api_tg', a: 'api', b: 'tg', lift: 4.4, says: '' },
   { id: 'api_pub', a: 'pub', b: 'api', says: 'rebuilt every 2 hours, spots' },
   { id: 'api_venue', a: 'venue', b: 'api', says: 'every 10 minutes' },
-  { id: 'land_api', a: 'land', b: 'api', says: 'pulse, calendar, register' },
-  { id: 'land_chain', a: 'land', b: 'chain', lift: 5.2, says: 'reads the registry directly' },
+  { id: 'land_api', a: 'land', b: 'api', lift: 3.0, says: 'pulse, calendar, register' },
+  { id: 'land_chain', a: 'land', b: 'chain', lift: 5.6, says: 'reads the registry directly' },
+  { id: 'gate', a: 'branch', b: 'ci', flat: true, says: 'past each gate' },
+  { id: 'ci_main', a: 'ci', b: 'main', says: '' },
+  { id: 'main_api', a: 'main', b: 'api', says: 'Render rebuilds the API' },
+  { id: 'api_rel', a: 'api', b: 'release', lift: 2.6, says: 'reports its commit' },
+  { id: 'rel_files', a: 'release', b: 'files', lift: 6.4, says: 'Netlify rebuilds the app' },
 ]
 
-export const STEPS = [
-  { k: '1', name: 'SIGN IN', pieces: ['app', 'auth', 'api'], joins: ['app_auth', 'app_api', 'api_auth'],
-    say: 'The app signs in and gets a short-lived token. Every request to the API carries it, and the API checks it against the sign-in service\'s public key. The API never sees a password.' },
-  { k: '2', name: 'PRICE', pieces: ['app', 'api', 'pg'], joins: ['app_api', 'api_pg'],
-    say: 'The ticket posts its terms. The pricer bootstraps the account\'s latest market snapshot and returns the value, the sensitivities and the cashflows. Nothing is saved.',
-    routes: ['POST /price', 'POST /api/currency/forward/price', 'POST /api/currency/option/price'] },
-  { k: '3', name: 'XVA', pieces: ['app', 'api', 'pg'], joins: ['app_api', 'api_pg'],
-    say: 'The counterparty\'s netting set is simulated with the trade and without it, on the same paths. The difference, term by term, is the charge the desk quotes. The Monte Carlo runs inside the request.',
-    routes: ['POST /api/xva/incremental'] },
-  { k: '4', name: 'BOOK', pieces: ['app', 'api', 'pg'], joins: ['app_api', 'api_pg', 'pg_app'],
-    say: 'The trade, its legs and its BOOKED event are written in one transaction. A package of legs is booked whole or not at all, under one trade ID with a leg ID for each. The blotter hears of it over realtime.',
-    routes: ['POST /api/book/trade', 'POST /api/book/package'] },
-  { k: '5', name: 'CONFIRM', pieces: ['app', 'api', 'chain', 'pg', 'tg'], joins: ['app_api', 'api_chain', 'api_pg', 'api_tg'],
-    say: 'Both parties derive the same canonical record from their own bookings and each signs it. The API\'s relayer anchors the pair of signatures on the registry and pays the gas. The CONFIRMED event carries the transaction.',
-    routes: ['POST /api/chain/confirm/{id}', 'POST /api/chain/confirm-package'] },
-  { k: '6', name: 'VERIFY', pieces: ['land', 'chain'], joins: ['land_chain'],
-    say: 'Anyone with the proof can check it. The verifier is a static page: it re-derives the record\'s hash and reads the registry itself. It asks Rijeka\'s servers for nothing.' },
-  { k: '7', name: 'THE BATCHES', pieces: ['api', 'pub', 'venue', 'pg', 'ai'], joins: ['api_pub', 'api_venue', 'api_pg', 'api_ai'],
-    say: 'Every two hours the scheduler rebuilds market data from public sources and stores, one row a day, a mark for each trade, the attributed P&L, the risk report and the counterparty-credit run. The venue\'s marks are read every ten minutes; spots, news and digital-asset fixings every thirty. Prometheus reads the same tables through read-only tools.' },
+// What can be followed. A step: k (its test id), name, the pieces and joins it uses, what it says, the routes it
+// names; gates: the change is travelling past the gates; passed: the gates are behind it; checks: the six checks
+// are running; checked: they have passed.
+export const STORIES = [
+  { id: 'trade', name: 'A TRADE', follow: 'FOLLOW A TRADE', lede: 'One trade, from the password to the block.', steps: [
+      { k: '1', name: 'SIGN IN', pieces: ['files', 'app', 'auth', 'api'], joins: ['files_app', 'app_auth', 'app_api', 'api_auth'],
+        say: 'The browser loads the app\'s files from Netlify, once. The app signs in and gets a short-lived token. Every request to the API carries it, and the API checks it against the sign-in service\'s public key. The API never sees a password.' },
+      { k: '2', name: 'PRICE', pieces: ['app', 'api', 'pg'], joins: ['app_api', 'api_pg'],
+        say: 'The ticket posts its terms. The pricer bootstraps the account\'s latest market snapshot and returns the value, the sensitivities and the cashflows. Nothing is saved.',
+        routes: ['POST /price', 'POST /api/currency/forward/price', 'POST /api/currency/option/price'] },
+      { k: '3', name: 'XVA', pieces: ['app', 'api', 'pg'], joins: ['app_api', 'api_pg'],
+        say: 'The counterparty\'s netting set is simulated with the trade and without it, on the same paths. The difference, term by term, is the charge the desk quotes. The Monte Carlo runs inside the request.',
+        routes: ['POST /api/xva/incremental'] },
+      { k: '4', name: 'BOOK', pieces: ['app', 'api', 'pg'], joins: ['app_api', 'api_pg', 'pg_app'],
+        say: 'The trade, its legs and its BOOKED event are written in one transaction. A package of legs is booked whole or not at all, under one trade ID with a leg ID for each. The blotter hears of it over realtime.',
+        routes: ['POST /api/book/trade', 'POST /api/book/package'] },
+      { k: '5', name: 'CONFIRM', pieces: ['app', 'api', 'chain', 'pg', 'tg'], joins: ['app_api', 'api_chain', 'api_pg', 'api_tg'],
+        say: 'Both parties derive the same canonical record from their own bookings and each signs it. The API\'s relayer anchors the pair of signatures on the registry and pays the gas. The CONFIRMED event carries the transaction.',
+        routes: ['POST /api/chain/confirm/{id}', 'POST /api/chain/confirm-package'] },
+      { k: '6', name: 'VERIFY', pieces: ['land', 'chain'], joins: ['land_chain'],
+        say: 'Anyone with the proof can check it. The verifier is a static page: it re-derives the record\'s hash and reads the registry itself. It asks Rijeka\'s servers for nothing.' },
+      { k: '7', name: 'THE BATCHES', pieces: ['api', 'pub', 'venue', 'pg', 'ai'], joins: ['api_pub', 'api_venue', 'api_pg', 'api_ai'],
+        say: 'Every two hours the scheduler rebuilds market data from public sources and stores, one row a day, a mark for each trade, the attributed P&L, the risk report and the counterparty-credit run. The venue\'s marks are read every ten minutes; spots, news and digital-asset fixings every thirty. Prometheus reads the same tables through read-only tools.' },
+  ] },
+  { id: 'change', name: 'A CHANGE', follow: 'FOLLOW A CHANGE', lede: 'A change to the code on its way to production, and who looks at it on the way.', steps: [
+    { k: 'c1', name: 'PROPOSE', pieces: ['petra', 'branch'], joins: [],
+      say: 'A change starts as a recorded decision and a branch. Nothing on a branch touches production.' },
+    { k: 'c2', name: 'THE GATES', pieces: ['branch', ...GATES.map(g => g.id)], joins: ['gate'], gates: true,
+      say: 'Each gate is a reviewer with one job, called when a change touches its area: the app in a real browser, the numbers, the models, the design, a cold read of the change, security, the architecture, the database. What a gate finds is fixed or answered before the change goes on.' },
+    { k: 'c3', name: 'SIX CHECKS', pieces: ['ci', 'main'], joins: ['ci_main'], passed: true, checks: true,
+      say: 'GitHub runs six checks on the commit that ships: backend tests, frontend build, registry contract tests, integration tests, browser journeys and a self-host smoke test. Main is protected and moves only when all six pass.' },
+    { k: 'c4', name: 'THE API DEPLOYS', pieces: ['main', 'api', 'pg'], joins: ['main_api', 'api_pg'], passed: true, checked: true,
+      say: 'Render rebuilds the API from main when a change touches it. As it starts, the API applies the database changes on an approved list and nothing else.' },
+    { k: 'c5', name: 'THE APP FOLLOWS', pieces: ['api', 'release', 'files'], joins: ['api_rel', 'rel_files'], passed: true, checked: true,
+      say: 'Once the live API reports the new commit, the release branch moves to it and Netlify rebuilds the app from that branch. The app never runs ahead of its API.' },
+    { k: 'c6', name: 'READ BACK', pieces: ['jarvis', 'api', 'files', 'app'], joins: ['files_app', 'app_api'], passed: true, checked: true,
+      say: 'The release manager reads the commit back from the live API and the live app. Only then is the change called live.' },
+  ] },
+  { id: 'clock', name: 'THE CLOCK', follow: 'FOLLOW THE CLOCK', lede: 'What the system does by itself, with nobody signed in. The scheduler runs inside the API.', steps: [
+    { k: 't1', name: 'EVERY 10 MINUTES', pieces: ['venue', 'api', 'pg'], joins: ['api_venue', 'api_pg'],
+      say: 'Every ten minutes: three requests to the venue for option marks and forwards on BTC, ETH and SOL, and three for the spot, stored as the digital-asset surfaces.' },
+    { k: 't2', name: 'EVERY 30 MINUTES', pieces: ['pub', 'api', 'pg', 'ai'], joins: ['api_pub', 'api_pg', 'api_ai'],
+      say: 'Every thirty minutes: FX and digital-asset spot, the news feeds and their summaries, and the fixings of digital-asset trades that have reached their date.' },
+    { k: 't3', name: 'EVERY 2 HOURS', pieces: ['pub', 'api', 'pg'], joins: ['api_pub', 'api_pg'],
+      say: 'Every two hours: market data is rebuilt from central banks and treasuries, one row a day, and the day\'s marks, P&L, market risk and counterparty credit are computed and stored for every book.' },
+  ] },
 ]
+// every step of every story, for what is true of all of them
+export const STEPS = STORIES.flatMap(s => s.steps)
 
 // The API's health answer (GET /api/ops/health), as the strip under the scene words it.
 export const HEALTH_CHECKS = [
