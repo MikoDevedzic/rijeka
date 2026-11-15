@@ -6,7 +6,7 @@ from datetime import date, timedelta
 import pytest
 
 from tests.integration import bodies as B
-from tests.integration.conftest import _run_tag
+from tests.integration.conftest import USER_A, _run_tag
 
 pytestmark = pytest.mark.integration
 SOURCE = "WM/Reuters 4pm London"
@@ -142,3 +142,49 @@ def test_a_booked_ndf_becomes_one_amount_in_its_settlement_currency_from_its_fix
     assert "delivered" in in_base["model"] and "paid" in in_quote["model"]
     # the pair lists the benchmark a desk enters itself, and no feed source
     assert client.get("/api/currency/fixings/EURUSD", headers=auth_a).json()["sources"] == [{"source": SOURCE, "time": "16:00 London", "auto": False}]
+
+
+def test_the_valuation_pnl_and_risk_run_agrees_with_the_ticket_before_and_after_the_fixing(client, auth_a, ids, pairs):
+    """pnl/valuation.value is what P&L, the ladders and VaR price a booked trade with; the ticket goes through
+    currencies._price. One NDF that fixes a month early and is paid in euros (the read date before the settlement
+    date, the carry on the base curve), and the three fixed ones of the test above."""
+    from api.routes.currencies import ndf_fixing_date
+    from db.models import Trade
+    from db.session import SessionLocal
+    from pnl.market import Market
+    from pnl.valuation import value
+    from pricing.calendars import ccy_to_calendar, joint, next_business_day
+    today = date.today()
+    spot = pairs["EURUSD"]["spot"]
+    K = round(spot * 0.98, 4)
+    settle = next_business_day(today + timedelta(days=92), joint(ccy_to_calendar("EUR"), ccy_to_calendar("USD")))
+    early = ndf_fixing_date(settle, "EUR", "USD") - timedelta(days=28)
+    body = B.fx_forward(ids["a"], f"IT-NDFEARLY-{_run_tag()}", pairs["EURUSD"], {"forward": K, "settlement_date": settle.isoformat()}, "NDF")
+    body["terms"].update(fixing_date=early.isoformat(), settlement_currency="EUR", fixing_source=SOURCE)
+    r = client.post("/api/book/trade", json=body, headers=auth_a)
+    assert r.status_code == 201, r.text[:400]
+    tid = r.json()["trade"]["id"]
+    quote = _quote(client, auth_a, settlement_date=settle.isoformat(), forward_rate=K, settlement_currency="EUR", fixing_date=early.isoformat(),
+                   valuation_date=today.isoformat()).json()
+    plain = _quote(client, auth_a, settlement_date=settle.isoformat(), forward_rate=K, settlement_currency="EUR", valuation_date=today.isoformat()).json()
+    ticket = client.post("/price", json={"trade_id": tid, "valuation_date": today.isoformat(), "curves": [{"curve_id": "USD_SOFR"}], "states": True}, headers=auth_a).json()
+    assert ticket["fixing_date"] == early.isoformat() and ticket["npv"] == pytest.approx(quote["npv"], rel=1e-9) and quote["npv"] != plain["npv"]
+    db = SessionLocal()
+    try:
+        v = value(db, {"sub": USER_A}, db.query(Trade).filter(Trade.id == tid).first(), today, Market(db, USER_A, today))
+        assert v["npv"] == pytest.approx(quote["npv"], rel=1e-9) and v["spot01"] == pytest.approx(quote["spot01"], rel=1e-9)
+        assert v["ir01"] == pytest.approx(quote["ir01"], rel=1e-9) and not v.get("settled") and "settlement_amount" not in v
+        # the fixed ones: the same amount and value the ticket shows; a euro amount still moves 1 % for 1 % of spot, a dollar amount does not
+        fixed = db.query(Trade).filter(Trade.user_id == USER_A, Trade.trade_ref.like("IT-NDFFIX-%")).order_by(Trade.created_at.desc()).limit(3).all()
+        assert len(fixed) == 3
+        for t in fixed:
+            shown = client.post("/price", json={"trade_id": str(t.id), "valuation_date": today.isoformat(), "curves": [{"curve_id": "USD_SOFR"}], "states": True}, headers=auth_a).json()
+            v = value(db, {"sub": USER_A}, t, today, Market(db, USER_A, today))
+            assert v["npv"] == pytest.approx(shown["npv"], rel=1e-9) and v["settlement_amount"] == pytest.approx(shown["settlement_amount"], rel=1e-12)
+            assert v["settlement_currency"] == shown["settlement_currency"] and v["provisional"] is False
+            if shown["settlement_currency"] == "EUR":
+                assert v["spot01"] == pytest.approx(0.01 * v["npv"], rel=1e-9) and v["npv"] * shown["settlement_amount"] > 0
+            else:
+                assert v["spot01"] == 0.0
+    finally:
+        db.close()
