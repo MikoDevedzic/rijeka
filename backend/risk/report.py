@@ -102,6 +102,7 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     st = settings(db, firm_id)
     tpl = template_uid(db)
     var = V.compute(db, tpl, lad["ladder"], lad["spot01"], d, st, vega=lad.get("vega")) if tpl else {"observations": 0, "enough": False, "missing_factors": []}
+    moves = var.pop("moves", None)          # each factor's usual daily move: beside the VaR, not inside it (the home's picture reads it)
     if tpl and st.get("var_method", "FULL_REVAL") == "FULL_REVAL":
         # the headline VaR reprices the book on each historical day; the ladder VaR rides along as the linear comparison
         var = VF.compute(db, user, tpl, trades, d, mkt, fx, st, linear=var)
@@ -109,7 +110,7 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     rep = {"date": d.isoformat(), "dates": [x.isoformat() for x in dates[-40:]], "reporting_ccy": REPORTING_CCY, "settings": st,
            "ladder": {k: v for k, v in lad.items() if k != "rows"}, "ladder_rows": lad["rows"], "var": var, "stress": stress,
            "scenarios": [{k: s[k] for k in ("id", "name", "group")} for s in ST.SCENARIOS],
-           "history": H.status(db, tpl) if tpl else {}, "firm_id": str(firm_id) if firm_id else None,
+           "moves": moves, "history": H.status(db, tpl) if tpl else {}, "firm_id": str(firm_id) if firm_id else None,
            "generated_at": datetime.now(timezone.utc).isoformat()}
     lims = L.list_limits(db, firm_id)
     rep["limits"] = L.evaluate(lims, rep)

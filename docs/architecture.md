@@ -49,6 +49,12 @@ blotter, the command centre and the messenger. On a screen up to 640px wide the 
 chat and news, from a bar at the foot. It is installable from a phone's home screen (`public/manifest.webmanifest`,
 "standalone"); there is no service worker and nothing is cached for use offline.
 
+On a monitor the command centre is the trader's home (`components/home/TraderHome.jsx`, since 0.36.0), the first of
+a home for each role. It computes nothing but a drawing: it reads the trades, the stored risk report
+(`GET /api/risk/report`: the ladder, the limits as evaluated, the VaR, and `moves`, each factor's usual daily move),
+the P&L summary (`GET /api/pnl/summary`) and the desk feed (`GET /api/desk/lifecycle`, every minute), each only
+where its module is on. A phone and a launch workspace keep the homes they had.
+
 The Methodology page reads the methodology document in place. Its pages are not written in the app:
 `frontend/scripts/build-methodology.mjs` (`npm run methodology`) makes
 `frontend/src/components/docs/methodology/methodology.json` from the LaTeX source

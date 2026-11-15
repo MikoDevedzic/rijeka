@@ -284,6 +284,28 @@ ticket's tabs, the pages behind the top bar; not yet every state: an anchored or
 chain), for a person to read after a
 change to the look: `npx playwright test -c playwright.perf.config.js look.spec.js`, then `e2e/.out/look/*.png`.
 
+## The home on a monitor
+
+The trader's home (`components/home/TraderHome.jsx`, `trader-home.js`; since 0.36.0), the first of a home for each
+role. A phone keeps its own home (below) and a launch workspace its "start here" page.
+
+- **Three bands, always in the same place**, ruled apart on the page's own ground, with no cards: where you stand
+  beside what needs you; the P&L statement, the risk picture and the factors; your trades beside the tabs. A later
+  role's home keeps the bands and changes what is in them.
+- **Where you stand is words first.** One line at 16px, each part with a dot in the colour of what it says: green
+  for inside every limit, amber for close, `--down` for passed, a hollow dot for what is pending. Under it every
+  limit is a mark on one rail, placed by how much of it is used; the hatched end is past the limit.
+- **One headline figure**, the day's P&L, at 20px (the largest step of the scale) in the colour of its sign.
+- **The risk picture is one stream for each risk factor**, in that factor's colour (`--rf-*`), on a canvas whose
+  colours are the tokens (`theme.js`, and the factor tokens read from the page). Above its line is long, below it
+  short. A stream drawn to a scale of its own, because it has no history, is dashed and says so beside its name.
+  The light along a stream's edge moves at thirty frames a second and not at all with "reduce motion".
+- **A segment of two or of five is the ticket's joined control** (`tbw-tabs`): the picture's A USUAL DAY / PER 01,
+  and the tabs that hold what the old home showed as cards.
+- **Brass on this page is a link to where a thing is dealt with** (OPEN BLOTTER →, THE RISK PAGE →), as on the old
+  home. The page has no action of its own, so no brass button.
+- Under 1180px wide the bands stack in the same order; nothing is pushed sideways.
+
 ## The phone
 
 A screen up to 640px wide (`frontend/src/lib/phone.js`, `components/layout/Phone.css`; since 0.32.0). The owner's

@@ -3,6 +3,47 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.36.0 · 14 November 2026
+
+**The home on a monitor is the trader's home.** The owner: "there is maybe a lot of things on the home page. and
+maybe slightly messy... this has to be landng page and has to be the best experience"; then, of the picture at its
+middle, "what about if we make this in terms of risk factors and not trades... each risk factor is its own line...
+and then bucketed risk along"; then, of a home for each role, "build the trader view." It is the first of those
+views, and for now every role on a monitor sees it. Three bands, always in the same place:
+
+- **Where you stand, and what needs you.** One line of words from the firm's limits as the risk report evaluates
+  them on your book (how many are passed, close and clear), the closest one named, and every limit as a mark on one
+  rail, placed by how much of it is used. Beside it, the desk feed's actions (a trade to sign, one waiting on the
+  other side, a limit, a batch) and unread chat, each opening where it is dealt with.
+- **The P&L as a statement, the risk as a picture, the factors as a list.** P&L for the day, the month and the
+  year: clean, what XVA took, what is left. In the middle, one stream for each risk factor the book carries (a
+  curve's IR01, an asset's FX01 or CRY01, a forward basis, a surface's vega), in that factor's own colour, along
+  the ladder's four tenor buckets: above its line the book is long, below it short. Beside it each factor's
+  sensitivity, its largest bucket, the VaR and the limits.
+- **Your trades, and the old home's cards behind tabs**: what moved the day's P&L, the policy path, the week
+  ahead, the news, Prometheus's brief. The chain is one line at the foot.
+
+A stream's height is, by default, **what a usual day moves that bucket by, in dollars**, so that a basis point of
+SOFR and a percent of bitcoin are drawn on one scale: the sensitivity times the factor's usual daily move. That
+move is new in the risk report (`moves`, `backend/risk/var.py typical_moves`): the sample standard deviation of
+the factor's daily changes over the window the VaR already reads, per ladder bucket. It is a size for comparing
+buckets, not a loss at a confidence, and the page says "a usual day". PER 01 draws the sensitivity itself, each
+stream to its own scale; the choice is kept by the browser. A factor with no history (a forward basis; any factor
+on a desk with fewer than two days of data) is drawn to its own scale, dashed, and says so.
+
+What it is not, said on the page or here:
+
+- The ladder has four tenor buckets (to 1Y, 1Y to 5Y, 5Y to 10Y, past 10Y), so the picture has four columns, not
+  the twelve tenors of the mock-up. A finer picture needs a finer ladder, which is a change to the risk engine.
+- A spot delta has no tenor: it is drawn at the maturity of the trade that carries it. The page says so.
+- Limits and VaR are the firm's, on the signed-in user's book. A limit or a VaR for each trader does not exist.
+- A phone keeps the home it had. A launch workspace keeps its "start here" home. With Market risk or P&L switched
+  off, their parts of the page say so and the rest stands.
+- Gone from the monitor's home: the clocks, the globe, the maturity ladder and the four figures under YOUR BOOK
+  (the streams and the statement say more). The headline figure is 20px, the largest step of the scale.
+- The methodology document has no paragraph on the usual daily move yet; the model inventory says so, and the
+  Methodology page lists it under market risk with what stands behind it.
+
 ## 0.35.0 · 14 November 2026
 
 **Rijeka opens as an app on a desktop: a window of its own, with no address bar.** The owner: "i want user to

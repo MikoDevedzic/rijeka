@@ -102,3 +102,32 @@ def test_stored_report_carries_no_nan():
     nan = float("nan")
     assert finite({"a": nan, "b": [1.0, float("inf"), {"c": nan}], "d": "x", "e": 2.5}) == {"a": None, "b": [1.0, None, {"c": None}], "d": "x", "e": 2.5}
     assert finite(nan) is None and finite(3.0) == 3.0
+
+
+def test_typical_moves_are_the_sample_standard_deviation_of_each_buckets_daily_changes():
+    """Worked by hand: 1, 3, 5, 7 has mean 4 and squared deviations 9 + 1 + 1 + 9 = 20; over n − 1 = 3 that is 6.6667,
+    whose root is 2.58199. A spot's 2, −2 has mean 0 and 8 / 1 = 8, root 2.82843. One change alone gives no figure."""
+    days = [date(2026, 1, d) for d in (5, 6, 7, 8)]
+    ch = {"USD_SOFR": [(d, {"0-1Y": v, "1-5Y": 2 * v}) for d, v in zip(days, (1.0, 3.0, 5.0, 7.0))],
+          "BTC_SPOT": [(days[0], {"SPOT": 2.0}), (days[1], {"SPOT": -2.0})],
+          "EUR_ESTR": [(days[0], {"0-1Y": 4.0})],
+          "EMPTY": []}
+    m = V.typical_moves(ch)
+    assert abs(m["stdev"]["USD_SOFR"]["0-1Y"] - 2.581988897) < 1e-9
+    assert abs(m["stdev"]["USD_SOFR"]["1-5Y"] - 2 * 2.581988897) < 1e-9          # twice the changes, twice the move
+    assert abs(m["stdev"]["BTC_SPOT"]["SPOT"] - 2.828427125) < 1e-9
+    assert "EUR_ESTR" not in m["stdev"] and "EMPTY" not in m["stdev"]             # nothing is said from one change
+    assert m["observations"] == {"USD_SOFR": 4, "BTC_SPOT": 2}
+    assert V.typical_moves({})["stdev"] == {} and V.typical_moves(None)["stdev"] == {}
+
+
+def test_the_report_carries_the_moves_beside_the_var_and_the_var_is_as_it_was():
+    """The ladder VaR's own figures do not change by being read for the moves: same P&L vector, same quantile."""
+    days = [date(2026, 1, d) for d in range(5, 15)]
+    ch = {"USD_SOFR": [(d, {"1-5Y": float(i - 4)}) for i, d in enumerate(days)]}
+    ladder = [{"curve": "USD_SOFR", "buckets": {"1-5Y": -1000.0}, "total": -1000.0}]
+    pnl, missing = V.simulate(ladder, {}, ch)
+    assert not missing and [v for _, v in pnl] == [-1000.0 * (i - 4) for i in range(10)]
+    sd = V.typical_moves(ch)["stdev"]["USD_SOFR"]["1-5Y"]
+    assert abs(sd - 3.0276503541) < 1e-9                                          # stdev of −4 … 5
+    assert abs(1000.0 * sd - 3027.6503541) < 1e-6                                 # what a usual day moves that bucket by
