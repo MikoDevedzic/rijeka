@@ -4,7 +4,7 @@ Two hosts deploy from this repository:
 
 - **rijeka-api** on Render deploys every commit that reaches `main` (`autoDeployTrigger:
   commit`), a few minutes after the push. CI is enforced before that, by branch protection:
-  nothing reaches `main` without the three checks. Until 2 November 2026 Render waited for the
+  nothing reaches `main` without the six checks (three until 14 November 2026). Until 2 November 2026 Render waited for the
   checks again itself and missed GitHub's check-suite event on three of four pushes, leaving
   the API undeployed until a manual deploy.
 - **app.rijeka.app** on Netlify builds the **`release`** branch, not `main`.

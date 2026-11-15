@@ -1,7 +1,7 @@
 # CI — what a pull request must pass before it can merge to main.
 # Backend tests (no database, no network), frontend build and registry contract
-# tests are the three branch protection on main requires; the deploy chain reads
-# all six jobs green on the exact commit before main moves (docs/ops/release.md).
+# tests, and the three below: branch protection on main requires all six jobs
+# (since 14 November 2026), green on the exact commit before main moves.
 # Three more run alongside: the API-level integration tests on a postgres:16
 # service built by backend/stack (the pinned sample book among them), the
 # browser journeys on the same stack (frontend/e2e), and the self-host smoke

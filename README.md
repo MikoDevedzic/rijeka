@@ -6,7 +6,9 @@
 [![platform: BSL 1.1](https://img.shields.io/badge/platform-BSL%201.1-555)](LICENSE-BSL)
 [![live demo](https://img.shields.io/badge/live%20demo-app.rijeka.app-d9b25c)](https://app.rijeka.app)
 
-**Where the trading desk meets the chain.** An open-source OTC derivatives desk: the pricing, risk and bilateral confirmation a trading desk runs on, in open code, with the confirmed record anchored on Ethereum. Rates, FX and digital assets are live; credit, equities and commodities next. Free for everyone. The engine and the standard are open source under Apache-2.0; the platform's source is open under the Business Source License 1.1 (free to run and to change for your own organisation, for teaching and for research, not to be resold as a service) and each version becomes Apache-2.0 four years after it is published.
+**The black box, opened.** Rijeka is one open system for all of trading: every asset, from the ticket to risk to operations, in code anyone can read, check and make their own. One taxonomy for risk, one record for a trade, one methodology that names the module behind every number: a common language a desk, its counterparty and its regulator can all read.
+
+**Live today:** rates, FX and digital-asset derivatives, with pricing, risk, XVA, P&L and bilateral confirmation anchored on Ethereum. **Next:** credit, fixed income, equities, commodities, and the operations that follow a trade. Free to run for your own desk. The engine and the standard are open source under Apache-2.0; the platform's source is open under the Business Source License 1.1 (free to run and to change for your own organisation, for teaching and for research, not to be resold as a service) and each version becomes Apache-2.0 four years after it is published.
 
 Most of the world's derivatives intelligence sits behind proprietary systems at a handful of large banks. Smaller institutions, emerging-market participants and academic researchers operate blind, without the tools to price, hedge or understand the true cost of a trade. Rijeka exists to change that.
 
