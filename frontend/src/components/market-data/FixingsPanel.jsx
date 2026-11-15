@@ -1,4 +1,5 @@
-// The Fixings tab of a digital-asset pair (Market data › FX · Crypto): the prices cash-settled trades settle on,
+// The Fixings tab of a pair (Market data › FX · Crypto; a digital asset, and since 0.39.0 a currency pair, whose
+// NDFs settle here): the prices cash-settled trades settle on,
 // per settlement price source, for the last 30 days, and the form a desk uses to enter the fixing of a source
 // the feed does not store. The table is read from GET /api/currency/fixings/{pair}; the form posts to
 // POST /api/currency/fixings. The pure parts (order, the origin word, the form's check) are in fixings.js.
@@ -58,7 +59,7 @@ export default function FixingsPanel({ p, call, flash, active, decimals = 2 }) {
   return (
     <div style={{ maxWidth: 1040 }}>
       <DescBox>
-        A fixing is the price a cash-settled trade settles on: the value its settlement price source publishes on the trade's valuation date.
+        A fixing is the {p.crypto ? 'price' : 'rate'} a cash-settled trade settles on: the value its {p.crypto ? 'settlement price source' : 'fixing source'} publishes on the trade's {p.crypto ? 'valuation' : 'fixing'} date.
         A trade settles on the fixing of the one source its record names. Until that fixing is stored, an expired trade is valued on the stored spot of the day and marked provisional.
         {sources.length > 0 && <> {sources.length === 1 ? `The source for ${pair}` : `The ${sources.length} sources for ${pair}`}: {sources.map((s, i) => (
           <span key={s.source}>{i ? '; ' : ''}<b>{s.source}</b>{s.time ? ` (${s.time})` : ''}, {s.auto ? 'stored automatically each day' : 'entered by your desk'}</span>

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import { ndfSettlementCurrency } from './fx-ticket'
 import { priceable, priceRequest, styleFields, styleSends, seedLevels, roundLevel, seedVolPct, surfaceAtmPct, yearsTo, annualisedBasis, forwardCaption, ticketToday, isIsoDate,
          tenorDate, tenorOf, tenorLabel, firstDate, lastDate, holdToLast,
          TENORS, MAX_CRYPTO_TENOR, MAX_CRYPTO_FORWARD_TENOR, CRYPTO_LIMIT_NOTE, CRYPTO_FORWARD_LIMIT_NOTE, tenorsFor, SPOT_HINT, STYLES, MAX_FUNDING_PCT, GATED_STYLES, NOT_A_NUMBER,
@@ -1111,5 +1112,22 @@ describe('what the option is, in one sentence', () => {
     expect(say({ style: 'BARRIER', barrierType: 'DOWN_IN', barrier: 60000 })).toBe('we hold the right to buy BTC against USD; knocked in if BTC trades below 60,000.00 before expiry')
     expect(say({ style: 'DOUBLE_BARRIER', barrierType: 'KNOCK_OUT' })).toBe('we hold the right to buy BTC against USD; knocked out if BTC trades through 65,000.00 or 85,000.00 before expiry')
     expect(say({ style: 'DOUBLE_BARRIER', barrierType: 'KNOCK_IN' })).toMatch(/^we hold the right to buy BTC against USD; knocked in if/)
+  })
+})
+
+describe('a currency NDF names the currency it pays in', () => {
+  it('the dollar when it is one of the pair, the quote currency of a cross', () => {
+    expect(ndfSettlementCurrency('EURUSD')).toBe('USD')
+    expect(ndfSettlementCurrency('USDJPY')).toBe('USD')
+    expect(ndfSettlementCurrency('usdcad')).toBe('USD')
+    expect(ndfSettlementCurrency('EURGBP')).toBe('GBP')
+  })
+  it('its price request says so, and a deliverable forward and a digital asset say nothing', () => {
+    expect(priceRequest(fxFwd({ shape: 'NDF', pair: 'USDJPY' })).body.settlement_currency).toBe('USD')
+    expect(priceRequest(fxFwd({ shape: 'NDF', pair: 'EURGBP' })).body.settlement_currency).toBe('GBP')
+    expect('settlement_currency' in priceRequest(fxFwd()).body).toBe(false)
+    expect('settlement_currency' in priceRequest(fwd()).body).toBe(false)
+    // no fixing date is sent: the API reads the forward at the business day whose spot date is the settlement date
+    expect('fixing_date' in priceRequest(fxFwd({ shape: 'NDF' })).body).toBe(false)
   })
 })

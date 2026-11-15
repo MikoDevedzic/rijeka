@@ -216,7 +216,8 @@ providers.
 A digital-asset forward or option is cash-settled against the settlement price source its record names
 (`settlement_price_source`, hashed as typed in the canonical record; `chain/canonical.py` is not involved in any of
 this). `backend/settlement/store.py` holds fixings in one table: a shared row per pair, date and source written by
-the feed, and a desk's own rows over them. `backend/settlement/rule.py` is the one rule, used by the booked
+the feed, and a desk's own rows over them. `backend/settlement/rule.py` is the one rule (a currency NDF settles by it too since 0.39.0: its fixing date and
+source are `terms.fixing_date` and `terms.fixing_source`, its fixings a desk's own rows, no feed), used by the booked
 valuation (`pnl/valuation.py`); the ticket's view of a booked trade (`currencies.price_booked`) answers from that
 valuation from the fixing date on:
 

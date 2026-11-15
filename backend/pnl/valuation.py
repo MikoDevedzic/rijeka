@@ -77,6 +77,10 @@ def _currency_terms(trade) -> tuple[str, dict]:
         terms = {"notional": float(t.get("base_notional") or trade.notional), "K": float(t["forward_rate"]) if t.get("forward_rate") not in (None, "") else None,
                  "settle": date.fromisoformat(str(t.get("value_date") or trade.maturity_date)),
                  "shape": "SPOT" if itype == "FX_SPOT" else "NDF" if itype == "NDF" else "FORWARD"}
+        k = rule.terms_of(trade) if itype == rule.CURRENCY_NDF else None
+        if k is not None:
+            # a currency NDF's fixing date and the currency it settles in, as the settlement rule reads them
+            terms["fixing_date"], terms["settle_in_base"] = k["fixing_date"], k["settle_in_base"]
     terms["direction"] = str(t.get("direction") or "BUY")
     return pair, terms
 
@@ -237,10 +241,11 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
             flat = mkt.single(f"{base}_FLAT", "FLAT")
             kw["base_rate"] = float(flat if flat is not None else POLICY_RATE_PCT.get(base, 0.0)) / 100.0
     settle = t["settle"] if t["shape"] != "SPOT" else spot_date(val_date, crypto, base, quote)
-    # A digital-asset trade from its fixing date on: the stored fixing of the source its terms name, or the stored
-    # spot flagged provisional (settlement/rule.py, the one rule; None before the fixing date, and nothing changes).
-    fix = None
-    if crypto:
+    # A cash-settled trade (a digital asset's, a currency NDF) from its fixing date on: the stored fixing of the source
+    # its terms name, or the stored spot flagged provisional (settlement/rule.py, the one rule; None before the fixing
+    # date, and nothing changes).
+    fix, fixed_model = None, None
+    if crypto or t["shape"] == "NDF":
         from settlement import rule
         fix = rule.settlement(db, user["sub"], trade, val_date, spot=S, cache=getattr(mkt, "_cache", None))
     if settle <= val_date or (t["shape"] == "OPTION" and t["expiry"] <= val_date and settle <= val_date):
@@ -261,15 +266,24 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
         # same cash flow (until 2026-11-10 a provisional forward kept the live value beside an amount on another spot).
         on = (f"fixed {fix['fixing_date']} at {fix['fixing']['value']:g} ({fix['source']})" if fix["fixing"] else
               f"fixing date {fix['fixing_date']} reached, no {fix['source'] or 'named source'} fixing stored: provisional on the {fix['provisional_basis']}")
-        return _taxonomy({**rule.fixed_cash(fix["settlement_amount"], val_date, settle, q_curve.df), "ccy": quote,
-                          "asof": {qid: mkt.snapshot_date(qid)}, "fallback": fallback, "settled": False,
-                          "model": f"{on}: the settlement amount, paid {settle}", **rule.report(fix)}, crypto)
+        in_base = bool(fix.get("settle_in_base")) and abs(float(fix["settlement_amount"])) > 1e-9
+        if not in_base:
+            return _taxonomy({**rule.fixed_cash(fix["settlement_amount"], val_date, settle, q_curve.df), "ccy": quote,
+                              "asof": {qid: mkt.snapshot_date(qid)}, "fallback": fallback, "settled": False,
+                              "model": f"{on}: the settlement amount, paid {settle}", **rule.report(fix)}, crypto)
+        # An NDF that settles in its base currency: from the fixing date it is that many units of the base currency on
+        # the settlement date, which is a forward on them at a contract rate of zero. Valued below as one, so its
+        # value in the quote currency still moves with spot and with both curves until it is paid.
+        amount = float(fix["settlement_amount"])
+        fixed_model = f"{on}: {amount:,.2f} {base} paid {settle}, valued as that amount of {base} delivered on that date"
+        t = {**t, "notional": abs(amount), "K": 0.0, "direction": "BUY" if amount > 0 else "SELL", "fixing_date": None, "settle_in_base": False}
     fx_spot = None if crypto else spot_date(val_date, False, base, quote)   # an FX spot quote settles T+2; the forward carries from there
     # a forward that fixes before it settles is read at its fixing date and paid on its settlement date, as the ticket
     # prices it (api/routes/currencies._price)
     fixing = t.get("fixing_date")
     read_at = fixing if (fixing is not None and t["shape"] not in ("OPTION", "SPOT") and val_date < fixing < settle) else settle
-    paid = {"payment_date": settle} if read_at != settle else {}
+    # an NDF settled in its base currency carries the amount from the fixing date to the settlement date on the base curve
+    paid = {"payment_date": settle, "settle_in_base": bool(t.get("settle_in_base"))} if read_at != settle else {}
     r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=t["notional"], forward_rate=t["K"], spot=S,
                                valuation_date=val_date, settlement_date=read_at, quote_curve=q_curve, direction=t["direction"], pip=pip, **paid,
                                spot_date=fx_spot, **kw)
@@ -304,9 +318,11 @@ def _value_currency(db: Session, user: dict, trade, val_date: date, mkt: Market)
     out = {"npv": float(r.npv), "ccy": quote, "ir01": getattr(r, "ir01", None), "ir01_disc": getattr(r, "ir01_disc", None),
            "ir01_base": getattr(r, "ir01_base", None), "spot01": getattr(r, "spot01", None), "theta": getattr(r, "theta", None),
            "asof": {qid: mkt.snapshot_date(qid), f"{pair}_SPOT": mkt.snapshot_date(f"{pair}_SPOT")}, "fallback": fallback}
-    if fix is not None:               # the fixing date is reached and the terms carry no contract price to fix against: the value above, flagged
+    if fix is not None:               # the fixing date is reached: no contract price to fix against (the value above, flagged), or an amount in the base currency
         from settlement import rule
         out.update(settled=False, **rule.report(fix))
+        if fixed_model:
+            out["model"] = fixed_model
     return _taxonomy(out, crypto)
 
 

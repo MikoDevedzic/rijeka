@@ -1,7 +1,40 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.20). Commits on `main` are the detail.
+methodology document carries its own version (v1.21). Commits on `main` are the detail.
+
+## 0.39.0 · 14 November 2026
+
+**A currency NDF fixes.** The owner: "fix the currency NDF fixing and also contributor credit wording". Until this
+version a currency NDF was booked with its fixing on its settlement date, valued to that date whatever its record
+said, never became a fixed amount, and its record said it settled in USD on every pair.
+
+- **The fixing date is real.** A ticket's NDF is read at the business day whose spot date is the settlement date
+  (two business days before it on most pairs, one on USDCAD), and the record carries that date; a booked NDF is
+  priced to the fixing date its record names, on the ticket, in the valuation, in P&L and in risk. NDFs already
+  booked name their settlement date and are valued as they were.
+- **The settlement currency is real.** The amount is paid in one of the pair's two currencies: the dollar when it
+  is one of them, the quote currency of a cross. In the quote currency it is N × (fixing − K); in the base
+  currency the same converted at the fixing, N × (fixing − K) / fixing, and between the fixing and the settlement
+  date it is carried on that currency's curve (`pricing/currency_forward.py`, `settle_in_base`). A record that
+  names neither currency of its pair (every cross booked before today) settles in the quote currency.
+- **From the fixing date it is one amount.** The settlement rule of the digital-asset forwards
+  (`settlement/rule.py`) now settles a currency NDF: on the fixing of the source its record names, and until one
+  is stored on the stored spot of the fixing date, marked provisional. The ticket of a booked NDF shows FIXED and
+  then SETTLED, with the amount and its currency.
+- **A desk enters its fixings.** Market data, a currency pair, has a Fixings tab. No feed stores a currency
+  fixing: the dealers' benchmark is licensed, and the European Central Bank asks that its reference rates not be
+  used to settle transactions.
+- **An NDF's booking is checked.** Its fixing date is after the trade date and on or before the settlement date,
+  and its source is a name a desk may enter a fixing under.
+- **Credit for contributors is written down.** `CONTRIBUTING.md` says how a contributor is named (the changelog
+  entry of the release, `CONTRIBUTORS.md`, the commit), that the finder of a confirmed bug is named beside whoever
+  fixed it, how to stay unnamed, and that the only money on offer is the validation bounty. `SECURITY.md` and the
+  two issue forms say the same; pull requests have a form.
+- Methodology v1.21 (§12, non-deliverable forwards); the model inventory has the row and what it lacks.
+
+Not built: a public daily currency fixing; a fixing date chosen on the ticket; the amount booked as a cash line;
+exposure paths that stop at the fixing date.
 
 ## 0.38.0 · 14 November 2026
 

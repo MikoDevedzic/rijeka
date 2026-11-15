@@ -31,7 +31,8 @@ import { settlementOptions, settlementTerms, settlementLabel, settlementNote, de
 import { TENORS, CRYPTO_LIMIT_NOTE, CRYPTO_FORWARD_LIMIT_NOTE, tenorsFor, priceRequest, priceable, styleFields as styleFieldsOf, styleSends, seedLevels, seedVolPct, yearsTo, forwardCaption, ticketToday,
          tenorDate, tenorOf, tenorLabel, firstDate, lastDate, holdToLast, formatRead, formatInput, readNumbers, unreadable, overrideNote, quoteFor, createTicketPricer,
          tenorDates, tenorDateFor, tenorSettlement, rollDate, rollRule, rolledTag, spotDateFor, spotLagLabel, bookedNotional, dateCap, closedWhy,
-         bookedStrike, apiRoundsStrike, notionalSent, payoutStyle, SENS_UNITS, crybasis01, premiumLine, optionSentence } from './fx-ticket'
+         bookedStrike, apiRoundsStrike, notionalSent, payoutStyle, SENS_UNITS, crybasis01, premiumLine, optionSentence,
+         ndfSettlementCurrency } from './fx-ticket'
 import DefaultedInput, { NumberInput } from './DefaultedInput'
 
 // A sensitivity's name with its unit after it, smaller and muted: "CRY01 · 1 % spot" (the footer in TradeWindow
@@ -357,7 +358,11 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         direction: side, currency_pair: pair, base_currency: cur?.base, quote_currency: cur?.quote,
         base_notional: String(N), forward_rate: str(K), value_date: settleDate,
         settlement_type: ndf ? 'NON_DELIVERABLE' : 'DELIVERABLE',
-        ...(ndf ? { settlement_currency: 'USD', fixing_source: cur?.fixing_default, fixing_date: settleDate } : {}),
+        // the currency the quote was priced in and the date it was read at: the API's default fixing date is the
+        // business day whose spot date is the settlement date (an older API answers neither: the quote currency's
+        // amount on the settlement date, as every NDF was booked before 0.39.0)
+        ...(ndf ? { settlement_currency: q?.settlement_currency || ndfSettlementCurrency(pair), fixing_source: cur?.fixing_default,
+                    fixing_date: q?.fixing_date || settleDate } : {}),
         calculation_agent: null,
       },
     }

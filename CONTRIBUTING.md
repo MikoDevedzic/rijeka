@@ -24,7 +24,7 @@ its own door so nobody has to guess.
 - **No silent methodology changes.** If a formula changes, `docs/methodology/rijeka_methodology.tex`
   changes in the same pull request, and the known-limitations section is updated if a limitation is
   removed or added.
-- **Risk vocabulary is ISDA SIMM's.** `IR01`, `IR01_DISC`, `FX01` / `CRY01`, `FUND01`, `VEGA`, `THETA`, `GAMMA`: the one table is [docs/glossary.md](docs/glossary.md). Not PV01, not DV01.
+- **One risk vocabulary.** `IR01`, `IR01_DISC`, `FX01` / `CRY01`, `FUND01`, `VEGA`, `THETA`, `GAMMA`: the one table is [docs/glossary.md](docs/glossary.md). Not PV01, not DV01.
 - **Nothing in the app may depend on Rijeka's servers to verify a confirmation.** The verifier stays
   self-contained.
 
@@ -55,6 +55,22 @@ need PostgREST; `npm run e2e:chain` adds a local test chain and needs Foundry's 
 
 One maintainer review for docs and UI; two for anything under `pricing/`, `chain/` or the registry
 contract. Pricing pull requests are checked against the validation reports before merge.
+
+## Credit
+
+Work on Rijeka is credited by name, in the places a reader looks.
+
+| You… | You are named… |
+|---|---|
+| **had a pull request merged** | in the `CHANGELOG.md` entry of the release it ships in and in [CONTRIBUTORS.md](CONTRIBUTORS.md). The commit on `main` keeps you as its author; when a maintainer finishes or reworks your change, the commit carries a `Co-authored-by:` line with your name. |
+| **found a bug that was confirmed**, whoever fixed it | beside the fix: "found by" in the changelog entry, a `Reported-by:` line on the commit, and a line in CONTRIBUTORS.md. Finding it counts as much as fixing it. |
+| **made a validation finding** | in the product's validation report and the methodology's acknowledgements, with USD 250 for a confirmed S1 or S2 pricing finding ([docs/VALIDATION.md](docs/VALIDATION.md)). |
+| **reported a security problem** | in the changelog entry of the fix and in CONTRIBUTORS.md, once the fix is live and not before ([SECURITY.md](SECURITY.md)). |
+
+The name is your GitHub handle, or the one you ask for in the pull request or the issue. Credit is the default and
+the choice is yours: say there if you would rather not be named. The maintainer adds the lines when the change
+merges; if you were missed, open an issue or write to miko@rijeka.app and it is corrected. The validation bounty
+is the only payment on offer.
 
 ## Conduct
 

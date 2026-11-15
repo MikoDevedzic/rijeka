@@ -37,6 +37,12 @@ GitHub themselves; social engineering; volumetric denial of service.
   CDN at runtime: three.js and ExcelJS are bundled, and the one static page that still
   references a CDN (`xva.html`) pins it with subresource integrity.
 
+## Credit
+
+The reporter of a confirmed vulnerability is named in the changelog entry of the fix and in
+[CONTRIBUTORS.md](CONTRIBUTORS.md), once the fix is live and not before. Say in your report how you want to be
+named, or that you do not. There is no bounty for security reports at present.
+
 ## Supported versions
 
 The `main` branch is the supported version. Hosted demo deploys follow it after CI.
